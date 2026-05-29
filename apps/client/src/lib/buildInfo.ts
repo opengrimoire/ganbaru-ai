@@ -1,1 +1,1 @@
-export const BUILD_REF = __GANBARUAI_BUILD_REF__;
+export const BUILD_REF = __GANBARU_AI_BUILD_REF__;

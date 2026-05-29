@@ -95,7 +95,7 @@ This is friction by design. The cost of blindly running a malicious snippet on a
 
 Sync uses end-to-end encryption via libsodium (see `data/sync.md`). Local data on disk is not application-encrypted; the app trusts the OS to handle disk encryption (LUKS, BitLocker, FileVault). This is the right tradeoff because:
 
-- Application-level local encryption complicates backups and external tool access (the `ganbaruai` CLI would need the key to do anything useful).
+- Application-level local encryption complicates backups and external tool access (the `ganbaru-ai` CLI would need the key to do anything useful).
 - The OS already offers strong full-disk encryption that the user is more likely to have configured for everything else, not just Ganbaru AI.
 
 Sensitive in-memory state (API keys, session tokens) is held in OS-level credential stores where available (libsecret on Linux, Keychain on macOS, Credential Manager on Windows), not in plain config files.

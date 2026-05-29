@@ -6,7 +6,7 @@
  * `docs/PERFORMANCE.md`. Each scenario declares whether it measures startup,
  * memory, or feature latency so the runner avoids unrelated waits. Both
  * passes run after a cold restart against an isolated
- * `ganbaruai-benchmark.db` so the user's real DB and vault are never
+ * `ganbaru-ai-benchmark.db` so the user's real DB and vault are never
  * touched. The rationale lives in `docs/features/performance-benchmark.md`.
  */
 import type { CalendarEvent } from "$lib/components/calendar/types";
@@ -258,7 +258,7 @@ export interface BenchmarkState {
   anchorDate: string;
   /**
    * Which DB the next boot should open. `"benchmark"` routes
-   * `db.ts:resolveUrl()` to the isolated `ganbaruai-benchmark.db`; the
+   * `db.ts:resolveUrl()` to the isolated `ganbaru-ai-benchmark.db`; the
    * user's real DB stays untouched. Always `"benchmark"` for the current
    * harness; the field exists to make the boot path's decision explicit
    * and to leave room for future scenarios that need user-DB access.

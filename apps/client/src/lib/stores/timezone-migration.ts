@@ -4,11 +4,10 @@
  * local) into UTC ISO 8601 with a Z suffix, and populates the `timezone`
  * column with the device's IANA zone.
  *
- * The SQL migration v8 (in src-tauri/src/db.rs) already backfills empty
- * timezone columns to 'UTC' so the parser cannot trip over a row written
- * before the column had a meaning. This hydrator does the actual wall-clock
- * rewrite, which cannot run in pure SQL because SQLite has no IANA tz
- * database.
+ * The baseline SQLite schema defaults empty timezone columns to 'UTC' so the
+ * parser cannot trip over a row written before the column had a meaning.
+ * This hydrator does the actual wall-clock rewrite, which cannot run in pure
+ * SQL because SQLite has no IANA tz database.
  *
  * Idempotency: a marker preference (`preferences.calendarTimezoneMigratedV8`)
  * is set to true on success. Subsequent boots short-circuit. The marker
@@ -133,11 +132,10 @@ export async function hydrateCalendarEventTimezones(): Promise<void> {
       const endLegacy = isLegacyWallClock(row.end_time);
       if (!startLegacy && !endLegacy) continue;
 
-      // Treat the row's wall clock as device-local. The v8 SQL migration
-      // backfilled empty timezones to 'UTC' as a defensive default, but
-      // the actual authoring zone for legacy rows is the device's current
-      // zone (the user wrote the event in their local time before zone
-      // awareness existed).
+      // Treat the row's wall clock as device-local. Legacy rows may have a
+      // defensive UTC timezone value, but the actual authoring zone is the
+      // device's current zone because the user wrote the event in local time
+      // before zone awareness existed.
       const homeZone = deviceZone;
       const newStart = startLegacy
         ? legacyToUtcIso(row.start_time, homeZone)

@@ -2,14 +2,14 @@
 
 This is the Chromium-based anti-doomscrolling extension.
 
-During development it runs as an unpacked extension and talks to the local native messaging host named `org.opengrimoire.ganbaruai.doomscrolling`.
+During development it runs as an unpacked extension and talks to the local native messaging host named `org.opengrimoire.ganbaru_ai.doomscrolling`. Chromium native messaging host names allow underscores but not hyphens, so this identifier intentionally uses `ganbaru_ai`.
 
 ## What gets installed
 
 There are two local pieces:
 
 - The extension folder: `extensions/chrome`. This is what Chrome, Chromium, Brave, or Edge loads in developer mode.
-- The native host binary: `target/debug/ganbaruai-native-messaging`. This small local program lets the browser ask Ganbaru AI whether a page should be blocked.
+- The native host binary: `target/debug/ganbaru-ai-native-messaging`. This small local program lets the browser ask Ganbaru AI whether a page should be blocked.
 
 The browser also needs a native host manifest that contains the extension id. That id is created by the browser after the unpacked extension is loaded.
 

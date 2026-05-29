@@ -512,7 +512,7 @@ impl PlaybackController {
     fn with_core(core: PlayerCore) -> Self {
         let (sender, receiver) = mpsc::channel::<BackendMessage>();
         let worker = thread::Builder::new()
-            .name("ganbaruai-media-player".to_string())
+            .name("ganbaru-ai-media-player".to_string())
             .spawn(move || playback_worker(receiver, core))
             .expect("failed to start media player worker thread");
         Self {
@@ -1010,7 +1010,7 @@ mod tests {
     #[test]
     fn mp4_probe_reads_leading_empty_edit_start() {
         let path =
-            std::env::temp_dir().join(format!("ganbaruai-media-probe-{}.mp4", std::process::id()));
+            std::env::temp_dir().join(format!("ganbaru-ai-media-probe-{}.mp4", std::process::id()));
         std::fs::write(&path, minimal_mp4_with_leading_empty_edit(62_561)).unwrap();
 
         let start_ms = probe_mp4_leading_empty_edit_ms(&path);

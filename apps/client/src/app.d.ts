@@ -8,7 +8,7 @@
 // declaration can be replaced by the standard ES type once it is published.
 import type { Temporal as TemporalPolyfill } from "@js-temporal/polyfill";
 declare global {
-  const __GANBARUAI_BUILD_REF__: string;
+  const __GANBARU_AI_BUILD_REF__: string;
 
   // eslint-disable-next-line no-var
   var Temporal: typeof TemporalPolyfill;

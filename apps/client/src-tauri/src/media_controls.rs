@@ -172,7 +172,7 @@ mod linux {
     use std::sync::{LazyLock, Mutex};
     use tauri::Manager;
 
-    const BUS_NAME: &str = "org.mpris.MediaPlayer2.ganbaruai";
+    const BUS_NAME: &str = "org.mpris.MediaPlayer2.ganbaru-ai";
     const OBJECT_PATH: &str = "/org/mpris/MediaPlayer2";
     const CURRENT_TRACK_PATH: &str = "/org/mpris/MediaPlayer2/current";
     const PLAYER_INTERFACE: &str = "org.mpris.MediaPlayer2.Player";
@@ -547,7 +547,7 @@ mod linux {
             "CanRaise" => true.to_variant(),
             "HasTrackList" => false.to_variant(),
             "Identity" => "Ganbaru AI".to_variant(),
-            "DesktopEntry" => "ganbaruai".to_variant(),
+            "DesktopEntry" => "ganbaru-ai".to_variant(),
             "SupportedUriSchemes" => Vec::<String>::new().to_variant(),
             "SupportedMimeTypes" => Vec::<String>::new().to_variant(),
             _ => ().to_variant(),
@@ -1071,7 +1071,7 @@ mod windows {
         }
 
         display.SetType(MediaPlaybackType::Music)?;
-        display.SetAppMediaId(&HSTRING::from("ganbaruai"))?;
+        display.SetAppMediaId(&HSTRING::from("ganbaru-ai"))?;
         let properties = display.MusicProperties()?;
         properties.SetTitle(&HSTRING::from(
             state.title.as_deref().unwrap_or("Ganbaru AI").trim(),

@@ -378,7 +378,7 @@ async function main() {
       rootPath: CLIENT_ROOT,
       rootUri: pathToFileURL(CLIENT_ROOT).href,
       workspaceFolders: [{
-        name: "@ganbaruai/client",
+        name: "@ganbaru-ai/client",
         uri: pathToFileURL(CLIENT_ROOT).href,
       }],
       capabilities: {

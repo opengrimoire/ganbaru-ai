@@ -1,4 +1,4 @@
-import type { PomodoroPhase } from "@ganbaruai/shared-types";
+import type { PomodoroPhase } from "@ganbaru-ai/shared-types";
 import type {
   PauseInterval,
   PauseReason,
@@ -1813,7 +1813,7 @@ function initListeners() {
   listenersInitialized = true;
 
   listen("pomodoro-skip-break", () => {
-    document.dispatchEvent(new Event("ganbaruai-clear-snap"));
+    document.dispatchEvent(new Event("ganbaru-ai-clear-snap"));
     if (phase === "short_break" || phase === "long_break") {
       const occurredAt = nowIso();
       if (activeRunId) {
@@ -1835,7 +1835,7 @@ function initListeners() {
   }).catch((e) => console.warn("Failed to listen for pomodoro-skip-break:", e));
 
   listen("pomodoro-break-acknowledged", () => {
-    document.dispatchEvent(new Event("ganbaruai-clear-snap"));
+    document.dispatchEvent(new Event("ganbaru-ai-clear-snap"));
     if (phase === "short_break" || phase === "long_break") {
       markSegment(currentSegmentIndex, "completed", true, cappedActiveBreakEndIso());
       startFocusSession();

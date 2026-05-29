@@ -43,7 +43,7 @@
   let lastPlaylistAutoScrollIdentity: string | null = null;
   let playlistScrollRequestId = 0;
 
-  const mediaSurfaceFullscreenEvent = "ganbaruai-music-media-surface-fullscreen";
+  const mediaSurfaceFullscreenEvent = "ganbaru-ai-music-media-surface-fullscreen";
   const volumeMax = $derived(player.volumeMax);
   const volumeSliderProgress = $derived(volumeMax > 0
     ? `${Math.min(100, Math.max(0, (player.volumeControlValue / volumeMax) * 100))}%`

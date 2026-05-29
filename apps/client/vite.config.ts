@@ -7,7 +7,7 @@ import path from "path";
 import { fileURLToPath } from "node:url";
 
 const host = process.env.TAURI_DEV_HOST;
-const TAURI_DEV_READY_PATH = "/__ganbaruai_dev_ready";
+const TAURI_DEV_READY_PATH = "/__ganbaru-ai_dev_ready";
 const configDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(configDir, "../..");
 const appVersion = readAppVersion();
@@ -103,7 +103,7 @@ async function warmTauriDevEntry(server: ViteDevServer): Promise<void> {
 function tauriDevReady(): Plugin {
   let readyPromise: Promise<void> | null = null;
   return {
-    name: "ganbaruai:tauri-dev-ready",
+    name: "ganbaru-ai:tauri-dev-ready",
     apply: "serve",
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
@@ -155,7 +155,7 @@ function skipSvelteStyleVirtuals(plugins: Plugin[]): Plugin[] {
 export default defineConfig({
   plugins: [tauriDevReady(), ...skipSvelteStyleVirtuals(tailwindcss()), svelte()],
   define: {
-    __GANBARUAI_BUILD_REF__: JSON.stringify(buildRef),
+    __GANBARU_AI_BUILD_REF__: JSON.stringify(buildRef),
   },
   resolve: {
     alias: {

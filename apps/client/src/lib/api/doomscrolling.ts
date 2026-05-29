@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { PomodoroPhase } from "@ganbaruai/shared-types";
+import type { PomodoroPhase } from "@ganbaru-ai/shared-types";
 
 export interface DoomscrollingRuntimeState {
   active: boolean;
@@ -69,7 +69,7 @@ export interface DoomscrollingLimitStateItem {
 export interface DoomscrollingLimitState {
   localDate: string;
   updatedAt: string;
-  databaseFileName: "ganbaruai.db" | "ganbaruai-dev.db" | "ganbaruai-benchmark.db";
+  databaseFileName: "ganbaru-ai.db" | "ganbaru-ai-dev.db" | "ganbaru-ai-benchmark.db";
   limits: DoomscrollingLimitStateItem[];
 }
 

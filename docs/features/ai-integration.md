@@ -36,12 +36,12 @@ MCP is **not** the path for internal agent interaction. Internal agents (the emb
 
 ## The CLI as the data bridge
 
-The `ganbaruai` CLI is a Rust binary that reads the same SQLite database the app uses. Agents call it via Bash:
+The `ganbaru-ai` CLI is a Rust binary that reads the same SQLite database the app uses. Agents call it via Bash:
 
 ```
-ganbaruai task list --project foo --status in_progress
-ganbaruai event create --start 2026-04-20T14:00 --duration 90m --project foo
-ganbaruai export projects --project foo
+ganbaru-ai task list --project foo --status in_progress
+ganbaru-ai event create --start 2026-04-20T14:00 --duration 90m --project foo
+ganbaru-ai export projects --project foo
 ```
 
 This is the bridge between AI agents and Ganbaru AI's data. It works with any agent that can run a shell command (Codex, Cursor, custom scripts), with no plugin or MCP server required for the local case.

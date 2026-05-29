@@ -233,9 +233,9 @@ describe("flushConfig", () => {
 describe("migrateFromLocalStorage", () => {
   it("copies legacy keys into the config and removes them", async () => {
     const ls = installLocalStorage();
-    ls.setItem("ganbaruai-theme", "midnight");
-    ls.setItem("ganbaruai-font-family", "monospace");
-    ls.setItem("ganbaruai-font-scale", "1.15");
+    ls.setItem("ganbaru-ai-theme", "midnight");
+    ls.setItem("ganbaru-ai-font-family", "monospace");
+    ls.setItem("ganbaru-ai-font-scale", "1.15");
 
     const { ensureConfigLoaded, getConfigKey } = await loadModule();
     await ensureConfigLoaded();
@@ -244,14 +244,14 @@ describe("migrateFromLocalStorage", () => {
     expect(getConfigKey("preferences.fontFamilyId", "")).toBe("monospace");
     expect(getConfigKey("preferences.fontScale", 0)).toBe(1.15);
 
-    expect(ls.store.has("ganbaruai-theme")).toBe(false);
-    expect(ls.store.has("ganbaruai-font-family")).toBe(false);
-    expect(ls.store.has("ganbaruai-font-scale")).toBe(false);
+    expect(ls.store.has("ganbaru-ai-theme")).toBe(false);
+    expect(ls.store.has("ganbaru-ai-font-family")).toBe(false);
+    expect(ls.store.has("ganbaru-ai-font-scale")).toBe(false);
   });
 
   it("does not overwrite existing config values", async () => {
     const ls = installLocalStorage();
-    ls.setItem("ganbaruai-theme", "midnight");
+    ls.setItem("ganbaru-ai-theme", "midnight");
     setReadResponse(JSON.stringify({ theme: { activeId: "solarized" } }));
 
     const { ensureConfigLoaded, getConfigKey } = await loadModule();
@@ -259,16 +259,16 @@ describe("migrateFromLocalStorage", () => {
 
     expect(getConfigKey("theme.activeId", "")).toBe("solarized");
     // Legacy key should still be cleared even though it did not win.
-    expect(ls.store.has("ganbaruai-theme")).toBe(false);
+    expect(ls.store.has("ganbaru-ai-theme")).toBe(false);
   });
 
   it("rejects non-numeric font-scale legacy values", async () => {
     const ls = installLocalStorage();
-    ls.setItem("ganbaruai-font-scale", "garbage");
+    ls.setItem("ganbaru-ai-font-scale", "garbage");
     const { ensureConfigLoaded, getConfigKey } = await loadModule();
     await ensureConfigLoaded();
     expect(getConfigKey("preferences.fontScale", "fallback")).toBe("fallback");
-    expect(ls.store.has("ganbaruai-font-scale")).toBe(false);
+    expect(ls.store.has("ganbaru-ai-font-scale")).toBe(false);
   });
 
   it("triggers a write only when something migrated", async () => {
@@ -286,7 +286,7 @@ describe("migrateFromLocalStorage", () => {
   it("writes after a legacy migration so the migrated state hits disk", async () => {
     vi.useFakeTimers();
     const ls = installLocalStorage();
-    ls.setItem("ganbaruai-theme", "midnight");
+    ls.setItem("ganbaru-ai-theme", "midnight");
     const { ensureConfigLoaded } = await loadModule();
     await ensureConfigLoaded();
     const writes = invokeMock.mock.calls.filter(

@@ -1429,7 +1429,7 @@ pub fn show_event_notification(
             .action("open", action_label)
             .timeout(15_000)
             .hint(Hint::Category("calendar".into()))
-            .hint(Hint::DesktopEntry("ganbaruai".into()))
+            .hint(Hint::DesktopEntry("ganbaru-ai".into()))
             .hint(Hint::Transient(true))
             .hint(Hint::SoundName("message-new-instant".into()))
             .show();
@@ -1506,7 +1506,7 @@ pub fn show_doomscrolling_desktop_block_notification(app: tauri::AppHandle, app_
             .action("default", "Open desktop apps")
             .timeout(10_000)
             .hint(Hint::Category("device".into()))
-            .hint(Hint::DesktopEntry("ganbaruai".into()))
+            .hint(Hint::DesktopEntry("ganbaru-ai".into()))
             .hint(Hint::Transient(true))
             .hint(Hint::SoundName("message-new-instant".into()))
             .show();
@@ -1557,7 +1557,7 @@ mod tests {
             .expect("system clock is before Unix epoch")
             .as_nanos();
         std::env::temp_dir().join(format!(
-            "ganbaruai-{name}-{}-{now}.json",
+            "ganbaru-ai-{name}-{}-{now}.json",
             std::process::id()
         ))
     }

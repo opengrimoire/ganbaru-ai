@@ -145,11 +145,11 @@ Local-first media playback integrated into the productivity workflow.
 
 ## Phase 7: CLI and integrated terminal
 
-The agent integration layer. The `ganbaruai` CLI and an embedded terminal bring AI assistance into the core workflow.
+The agent integration layer. The `ganbaru-ai` CLI and an embedded terminal bring AI assistance into the core workflow.
 
 **Includes:**
 
-- `ganbaruai` CLI: Rust binary linking to the same SQLite, human-readable and JSON output, commands for projects, tasks, calendar, workspace, pomodoro, import/export
+- `ganbaru-ai` CLI: Rust binary linking to the same SQLite, human-readable and JSON output, commands for projects, tasks, calendar, workspace, pomodoro, import/export
 - Integrated terminal: xterm.js embedded in Tauri webview, runs Codex or another CLI coding agent
 - Context injection: Ganbaru AI assembles project/task context and passes it through the launch prompt or standard input. `AGENTS.md` stays as project-level conventions, per-task context is dynamic.
 - Session management: per-project conversation threads in SQLite, calendar-driven automatic switching (save current session, resume the session for the new calendar event's project)
@@ -295,7 +295,7 @@ Every system from the product spec is accounted for:
 | Browser extension (Chrome)                                       | 4             |
 | Gamification (Will, skill tree, XP, contracts, badges, capsules) | 5 (deferred)  |
 | Music player (local + YouTube)                                   | 6             |
-| `ganbaruai` CLI                                                  | 7             |
+| `ganbaru-ai` CLI                                                  | 7             |
 | Integrated terminal (xterm.js + Codex)                           | 7             |
 | AI session management (calendar-driven switching)                | 7             |
 | Context injection and workflow phase prompts                     | 7             |

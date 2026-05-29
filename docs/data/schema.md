@@ -12,6 +12,8 @@ Persisted data is a user-owned contract. Any schema, config, JSON, import/export
 
 Do not leave obsolete persistent data behind. If a column, row key, config key, or JSON field stops having meaning, add a narrow migration or cleanup path and document why it is safe. Migrations should be idempotent, preserve user-authored values that still map to current behavior, and delete only data that is dead or derivable from current canonical data.
 
+SQLite migrations live in `apps/client/src-tauri/migrations/` and are embedded into the desktop binary through `sqlx::migrate!("./migrations")`. The current `20260529180656_baseline_schema.sql` file is the fresh-start schema created before the app had users. Future schema changes must add a new UTC timestamped SQL file in `YYYYMMDDHHMMSS_description.sql` form and avoid editing an already-applied migration. Do not manually register migration files; the SQLx macro discovers them at compile time. SQLx also creates `_sqlx_migrations` to track applied versions and checksums; that table is migration metadata, not app data.
+
 ## Calendar
 
 ### `calendars`
@@ -35,7 +37,7 @@ The `local` row is seeded on first boot (`INSERT OR IGNORE`) and can never be de
 
 ### `icalendar_objects`
 
-Lossless import preservation table introduced by migration v12. One row stores one top-level imported iCalendar object for a calendar source. The normal calendar render path does not read this table.
+Lossless import preservation table. One row stores one top-level imported iCalendar object for a calendar source. The normal calendar render path does not read this table.
 
 Fields:
 
@@ -53,7 +55,7 @@ Indexes: `(calendar_id)`, `(calendar_id, source_kind, source_name)`, and `(sourc
 
 ### `icalendar_components`
 
-Lossless component preservation table introduced by migration v12. One row stores one component from an imported object, including unsupported components such as `VTODO`, `VJOURNAL`, `VFREEBUSY`, nested `VALARM`, and `STANDARD` or `DAYLIGHT` blocks. Migration v13 links projected rows back to these components. The normal calendar render path does not read this table.
+Lossless component preservation table. One row stores one component from an imported object, including unsupported components such as `VTODO`, `VJOURNAL`, `VFREEBUSY`, nested `VALARM`, and `STANDARD` or `DAYLIGHT` blocks. Projected rows link back to these components. The normal calendar render path does not read this table.
 
 Fields:
 
@@ -324,12 +326,12 @@ One row per user theme. Carries identity, the active blend canvas (the bg dimmed
 |---|---|---|
 | `id` | text | Primary key. `CHECK (id NOT IN ('light', 'dark'))` so an import cannot shadow a built-in. Duplicate user-theme IDs are rejected by the primary key. |
 | `display_name` | text | User-visible name. Trimmed and length-capped at 60 chars by the client. |
-| `icon_label` | text or null | `'light'` or `'dark'`. Purely decorative sun/moon tag ("was this theme meant for day or night use?"); does not affect the runtime `.dark` class or calendar contrast behavior. Nullable for backward compatibility (rows from before migration v5 are filled in on hydrate via canvas luminance). Previously named `scheme`; renamed to `icon_label` in migration v7 to make clear it is a label, not a rendering switch. The dropped `base` column previously played the same role for legacy imports, but the snapshot model derives any required fallback from canvas luminance at hydrate time, so it was removed in migration v6. |
+| `icon_label` | text or null | `'light'` or `'dark'`. Purely decorative sun/moon tag ("was this theme meant for day or night use?"); does not affect the runtime `.dark` class or calendar contrast behavior. Nullable so dev databases and imported legacy theme rows can be normalized on hydrate via canvas luminance. |
 | `seed_icon_label` | text or null | Clone-time snapshot of `icon_label` for "Reset all". Nullable on the same grounds. |
 | `blend_canvas` | text | Hex bg the dimmed event variants blend toward. Auto-tracks `--cal-bg` whenever that token is non-isolated, otherwise the user pins it directly. |
 | `seed_blend_canvas` | text | Clone-time snapshot of `blend_canvas` for "Reset all". |
 | `derivation_engine_version` | integer | The `DERIVATION_ENGINE_VERSION` constant in force when the snapshot was written. The editor surfaces a rebake banner when this trails the code constant and no row in `theme_upgrade_dismissals` matches. |
-| `calendar_default_mode` | text | One of `'light'`, `'dark'`, `'app-canvas'`, or `'custom'`. Selects the default bundle used for the internal calendar surface, event palette, and calendar details. Migration v11 backfills existing themes to `'app-canvas'`, preserving the previous behavior. |
+| `calendar_default_mode` | text | One of `'light'`, `'dark'`, `'app-canvas'`, or `'custom'`. Selects the default bundle used for the internal calendar surface, event palette, and calendar details. |
 | `calendar_default_custom` | text | Hex basis used when `calendar_default_mode = 'custom'`. |
 | `seed_calendar_default_mode` | text | Clone-time snapshot of `calendar_default_mode` for "Reset all". |
 | `seed_calendar_default_custom` | text | Clone-time snapshot of `calendar_default_custom` for "Reset all". |

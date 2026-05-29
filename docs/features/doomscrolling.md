@@ -9,7 +9,7 @@ Doomscrolling is not a separate productivity tool. It is a guardrail attached to
 The current desktop implementation is an early Chrome and Brave development slice:
 
 - `extensions/chrome` is a Manifest V3 unpacked extension named Ganbaru AI.
-- `ganbaruai-native-messaging` is a repo-owned native messaging host binary built from Rust.
+- `ganbaru-ai-native-messaging` is a repo-owned native messaging host binary built from Rust.
 - The app writes a small runtime state file when Pomodoro state changes.
 - The native host reads the runtime state and `vault/config.json`, then decides whether a requested website should be blocked.
 - The native host writes a small local connection status file each time the extension contacts it. The app uses this to show whether a browser extension has connected recently.

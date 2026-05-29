@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const HOST_NAME = "org.opengrimoire.ganbaruai.doomscrolling";
+// Chromium native messaging host names allow underscores but not hyphens.
+const HOST_NAME = "org.opengrimoire.ganbaru_ai.doomscrolling";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../..");
 
@@ -20,8 +21,8 @@ if (!extensionId || !/^[a-p]{32}$/.test(extensionId)) {
 }
 
 const binaryName = process.platform === "win32"
-  ? "ganbaruai-native-messaging.exe"
-  : "ganbaruai-native-messaging";
+  ? "ganbaru-ai-native-messaging.exe"
+  : "ganbaru-ai-native-messaging";
 const hostPath = join(repoRoot, "target", "debug", binaryName);
 
 if (!existsSync(hostPath)) {

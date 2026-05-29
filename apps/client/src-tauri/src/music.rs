@@ -1429,7 +1429,7 @@ fn youtube_host_html() -> &'static str {
       const duration = player.getDuration();
       const metadata = videoMetadata();
       send({
-        type: "ganbaruai-youtube-state",
+        type: "ganbaru-ai-youtube-state",
         status: status || playbackStatus(player.getPlayerState()),
         positionMs: Math.max(0, Math.round(player.getCurrentTime() * 1000)),
         durationMs: Number.isFinite(duration) && duration > 0 ? Math.round(duration * 1000) : null,
@@ -1456,7 +1456,7 @@ fn youtube_host_html() -> &'static str {
       const videoIds = currentPlaylistIds();
       if (videoIds.length > 0) {
         send({
-          type: "ganbaruai-youtube-playlist",
+          type: "ganbaru-ai-youtube-playlist",
           playlistId: activeSource.playlistId,
           videoIds,
           index: currentPlaylistIndex()
@@ -1478,7 +1478,7 @@ fn youtube_host_html() -> &'static str {
       if (!activeSource || !activeSource.playlistId || playlistErrorSent) return;
       playlistErrorSent = true;
       send({
-        type: "ganbaruai-youtube-playlist-error",
+        type: "ganbaru-ai-youtube-playlist-error",
         playlistId: activeSource.playlistId
       });
     }
@@ -1590,7 +1590,7 @@ fn youtube_host_html() -> &'static str {
             sendPlaylistSnapshot(30);
           },
           onError(event) {
-            send({ type: "ganbaruai-youtube-error", code: event.data });
+            send({ type: "ganbaru-ai-youtube-error", code: event.data });
           }
         }
       };
@@ -1632,7 +1632,7 @@ fn youtube_host_html() -> &'static str {
 
     window.onYouTubeIframeAPIReady = () => {
       apiReady = true;
-      send({ type: "ganbaruai-youtube-ready" });
+      send({ type: "ganbaru-ai-youtube-ready" });
       const initialLoad = initialPayloadFromParams();
       if (initialLoad) {
         loadSource(initialLoad);
@@ -1641,7 +1641,7 @@ fn youtube_host_html() -> &'static str {
 
     window.addEventListener("message", (event) => {
       const data = event.data;
-      if (!data || data.token !== token || data.type !== "ganbaruai-youtube-command") return;
+      if (!data || data.token !== token || data.type !== "ganbaru-ai-youtube-command") return;
       handleCommand(data);
     });
 
@@ -1728,7 +1728,7 @@ mod tests {
         assert!(host.contains("params.get(\"playlistId\")"));
         assert!(host.contains("const initialLoad = initialPayloadFromParams()"));
         assert!(host.contains("load: loadId"));
-        assert!(host.contains("ganbaruai-youtube-playlist-error"));
+        assert!(host.contains("ganbaru-ai-youtube-playlist-error"));
         assert!(host.contains("activeSource.kind !== \"youtube-playlist\""));
         assert!(host.contains("if (source.kind === \"youtube-video\" || source.videoId)"));
         assert!(!host.contains("videoId: source.kind"));
@@ -1790,7 +1790,7 @@ mod tests {
 
     #[test]
     fn music_folder_start_directory_uses_only_existing_directories() {
-        let root = unique_temp_dir("ganbaruai-music-start-dir");
+        let root = unique_temp_dir("ganbaru-ai-music-start-dir");
         let music_dir = root.join("localized-audio");
         let file_path = root.join("not-a-directory");
         fs::create_dir_all(&music_dir).unwrap();
@@ -1832,7 +1832,7 @@ mod tests {
 
     #[test]
     fn artwork_lookup_uses_parent_album_front_image() {
-        let root = unique_temp_dir("ganbaruai-artwork-parent");
+        let root = unique_temp_dir("ganbaru-ai-artwork-parent");
         let album_dir = root.join("Anime/Made in Abyss/2017 - Made in Abyss OST");
         let disc_dir = album_dir.join("CD 1");
         fs::create_dir_all(&disc_dir).unwrap();
@@ -1850,7 +1850,7 @@ mod tests {
 
     #[test]
     fn artwork_lookup_prefers_matching_sidecar_image() {
-        let root = unique_temp_dir("ganbaruai-artwork-sidecar");
+        let root = unique_temp_dir("ganbaru-ai-artwork-sidecar");
         fs::create_dir_all(&root).unwrap();
         let track = root.join("02 - Focus.mp3");
         let sidecar = root.join("02 - Focus.jpg");
@@ -1915,7 +1915,7 @@ mod tests {
 
     #[test]
     fn mp4_cover_atom_parser_extracts_cover_art() {
-        let root = unique_temp_dir("ganbaruai-artwork-mp4");
+        let root = unique_temp_dir("ganbaru-ai-artwork-mp4");
         fs::create_dir_all(&root).unwrap();
         let path = root.join("theme.m4a");
         let mut data_content = Vec::new();

@@ -136,9 +136,9 @@ describe("normalizeDoomscrollingAppName", () => {
 
   it("recognizes protected Ganbaru AI app names", () => {
     expect(isProtectedDoomscrollingDesktopAppName("Ganbaru AI")).toBe(true);
-    expect(isProtectedDoomscrollingDesktopAppName("ganbaruai")).toBe(true);
-    expect(isProtectedDoomscrollingDesktopAppName("org.opengrimoire.ganbaruai")).toBe(true);
-    expect(isProtectedDoomscrollingDesktopAppName("org.opengrimoire.ganbaruai.dev")).toBe(true);
+    expect(isProtectedDoomscrollingDesktopAppName("ganbaru-ai")).toBe(true);
+    expect(isProtectedDoomscrollingDesktopAppName("org.opengrimoire.ganbaru-ai")).toBe(true);
+    expect(isProtectedDoomscrollingDesktopAppName("org.opengrimoire.ganbaru-ai.dev")).toBe(true);
     expect(isProtectedDoomscrollingDesktopAppName("Steam")).toBe(false);
   });
 
@@ -293,7 +293,7 @@ describe("normalizeDoomscrollingConfig", () => {
           { name: "Terminal", matchNames: ["gnome-terminal"] },
         ],
         allowedApps: [
-          "ganbaruai",
+          "ganbaru-ai",
           "Visual Studio Code",
           { name: "Firefox", enabled: false },
         ],

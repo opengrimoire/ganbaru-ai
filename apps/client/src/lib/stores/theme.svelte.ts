@@ -226,9 +226,9 @@ export async function hydrateUserThemes(): Promise<void> {
   for (const read of reads) {
     const theme = userThemeFromRead(read);
     customThemes[theme.id] = theme;
-    // One-time backfill: rows created before migration v5 carry NULL
-    // icon_label/seed_icon_label. `userThemeFromRead` derived a value from
-    // canvas luminance; persist it so subsequent reads do not need to derive.
+    // One-time backfill: legacy rows can carry NULL icon_label/
+    // seed_icon_label. `userThemeFromRead` derived a value from canvas
+    // luminance; persist it so subsequent reads do not need to derive.
     if (
       read.theme.icon_label === null ||
       read.theme.seed_icon_label === null
@@ -448,9 +448,8 @@ function userThemeFromRead(read: UserThemeRead): UserTheme {
   );
   const eventPalette = paletteFromRows(read.palette, fallbackBase);
   const seedEventPalette = paletteFromRows(read.seedPalette, seedFallbackBase);
-  // Rows created before migration v5 carry NULL for icon_label/
-  // seed_icon_label. Default both from canvas luminance so the icon picks
-  // the same value the editor used to render before this field existed.
+  // Legacy rows can carry NULL for icon_label/seed_icon_label. Default both
+  // from canvas luminance so the icon picks a stable value.
   const iconLabel: "light" | "dark" =
     read.theme.icon_label === "light" || read.theme.icon_label === "dark"
       ? read.theme.icon_label

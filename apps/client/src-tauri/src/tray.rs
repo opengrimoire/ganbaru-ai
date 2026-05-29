@@ -438,13 +438,13 @@ fn linux_tray_icon_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
 #[cfg(target_os = "linux")]
 fn linux_tray_icon_name(icon_key: TrayIconKey) -> String {
     match icon_key {
-        TrayIconKey::Empty => format!("ganbaruai-tray-v{LINUX_TRAY_ICON_VERSION}-empty.png"),
+        TrayIconKey::Empty => format!("ganbaru-ai-tray-v{LINUX_TRAY_ICON_VERSION}-empty.png"),
         TrayIconKey::Progress(step) => {
-            format!("ganbaruai-tray-v{LINUX_TRAY_ICON_VERSION}-progress-{step:03}.png")
+            format!("ganbaru-ai-tray-v{LINUX_TRAY_ICON_VERSION}-progress-{step:03}.png")
         }
         TrayIconKey::PausedProgress { step, frame } => {
             format!(
-                "ganbaruai-tray-v{LINUX_TRAY_ICON_VERSION}-progress-{step:03}-pause-{frame}.png"
+                "ganbaru-ai-tray-v{LINUX_TRAY_ICON_VERSION}-progress-{step:03}-pause-{frame}.png"
             )
         }
     }

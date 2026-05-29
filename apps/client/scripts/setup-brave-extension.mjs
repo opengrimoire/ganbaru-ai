@@ -24,7 +24,7 @@ function findBraveCommand() {
   return null;
 }
 
-const build = spawnSync("cargo", ["build", "--bin", "ganbaruai-native-messaging"], {
+const build = spawnSync("cargo", ["build", "--bin", "ganbaru-ai-native-messaging"], {
   cwd: repoRoot,
   stdio: "inherit",
 });

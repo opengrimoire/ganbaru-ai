@@ -479,7 +479,9 @@ mod tests {
         let pid = std::process::id();
         let seq = SEQ.fetch_add(1, Ordering::Relaxed);
         let mut path = std::env::temp_dir();
-        path.push(format!("ganbaruai-vault-test-{pid}-{nanos}-{seq}-{suffix}"));
+        path.push(format!(
+            "ganbaru-ai-vault-test-{pid}-{nanos}-{seq}-{suffix}"
+        ));
         path
     }
 

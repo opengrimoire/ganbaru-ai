@@ -6,7 +6,7 @@ import { isDetachableTabView, viewLabel } from "$lib/navigation";
 export const DETACHED_VIEW_WINDOW_PREFIX = "view";
 export const DETACHED_VIEW_WINDOW_CHANGED_EVENT = "detached-view-window-changed";
 export const DETACHED_VIEW_REATTACH_REQUESTED_EVENT = "detached-view-reattach-requested";
-export const DETACHED_VIEW_DRAG_MIME = "application/x-ganbaruai-detached-view";
+export const DETACHED_VIEW_DRAG_MIME = "application/x-ganbaru-ai-detached-view";
 
 export interface DetachedViewWindowChange {
   view: DetachableTabView;

@@ -10,8 +10,11 @@ use std::{
 };
 use tauri::{AppHandle, Manager, Runtime};
 
-const ALLOWED_SQLITE_FILES: &[&str] =
-    &["ganbaruai.db", "ganbaruai-dev.db", "ganbaruai-benchmark.db"];
+const ALLOWED_SQLITE_FILES: &[&str] = &[
+    "ganbaru-ai.db",
+    "ganbaru-ai-dev.db",
+    "ganbaru-ai-benchmark.db",
+];
 
 #[derive(Clone, Default)]
 pub struct DatabaseState {

@@ -96,7 +96,7 @@ The vault folder still defaults to `app_config_dir / "vault"` and is created on 
 
 The frontend bridge (`lib/vault/config.ts`) loads the config once at boot, exposes synchronous reads against an in-memory cache, and debounces writes (250 ms) so rapid edits coalesce into one disk write. Stores hydrate from the cache on first read, keeping first paint synchronous for the small prefs that still live there. User themes load asynchronously: `apps/client/src/main.ts` awaits `ensureConfigLoaded()` and then `hydrateUserThemes()` before mounting the app, so first paint always matches what the user has on disk.
 
-The first vault load runs a one-time migration that copies the legacy `ganbaruai-theme`, `ganbaruai-font-family`, and `ganbaruai-font-scale` keys out of `localStorage` and removes them. The migration is idempotent. See "Migration from vault to SQLite" below for the second one-time migration that copies the legacy `themes.user` blob into the new tables.
+The first vault load runs a one-time migration that copies the legacy `ganbaru-ai-theme`, `ganbaru-ai-font-family`, and `ganbaru-ai-font-scale` keys out of `localStorage` and removes them. The migration is idempotent. See "Migration from vault to SQLite" below for the second one-time migration that copies the legacy `themes.user` blob into the new tables.
 
 Built-in themes still pass through `validateThemeJson` on load (defense in depth against tampered config files). Unknown or invalid theme IDs fall back to the default (`dark`).
 
@@ -170,7 +170,7 @@ All three mutators are pure in-memory; the buffer flushes to SQLite when the edi
 
 Imported themes route unknown keys to be dropped: only user-editable keys present in `APP_TOKEN_KEYS` / `CALENDAR_TOKEN_KEYS` (and only valid hex values) survive validation. Older exports that contain former implementation-detail keys import without those keys. Older exports that contain isolated flags for destructive, confirm, or warning family tokens import those token values as source fallbacks when a text source is missing, then drop the flags because those rows are no longer independently editable.
 
-Existing SQLite themes are cleaned by migrations v9, v10, and v11. Migrations v9 and v10 delete obsolete live and seed rows for former implementation-detail app tokens and former date-picker today chip tokens. Migration v11 moves existing `--cal-header-bg` rows from calendar tokens to app tokens and adds calendar default mode/custom columns. The schema shape stays generic, but persisted rows track the current editable token catalog.
+SQLite themes start from the current baseline schema. When the token catalog changes after release, add a focused timestamped SQL migration under `apps/client/src-tauri/migrations/` to delete obsolete live and seed rows or map old rows into the current editable token catalog.
 
 ### Token catalog changes
 

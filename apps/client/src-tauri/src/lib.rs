@@ -2,28 +2,6 @@ use std::path::PathBuf;
 use std::process::Stdio;
 use tauri::Manager;
 
-extern crate self as sqlx;
-
-pub use sqlx_core::acquire::Acquire;
-pub use sqlx_core::connection::{ConnectOptions, Connection};
-pub use sqlx_core::database::Database;
-pub use sqlx_core::error::{Error, Result};
-pub use sqlx_core::executor::{Execute, Executor};
-pub use sqlx_core::from_row::FromRow;
-pub use sqlx_core::pool::Pool;
-pub use sqlx_core::query::query;
-pub use sqlx_core::query_as::query_as;
-pub use sqlx_core::query_scalar::query_scalar;
-pub use sqlx_core::raw_sql::raw_sql;
-pub use sqlx_core::row::Row;
-pub use sqlx_core::transaction::{Transaction, TransactionManager};
-pub use sqlx_core::Either;
-pub use sqlx_sqlite::{Sqlite, SqliteConnection, SqliteExecutor, SqlitePool, SqliteTransaction};
-
-pub mod sqlite {
-    pub use sqlx_sqlite::*;
-}
-
 #[macro_use]
 mod sqlite_row;
 mod benchmark_seed;
@@ -48,7 +26,7 @@ mod vault;
 
 static PROCESS_START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
 static PLATFORM_LABEL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-const DELAYED_RELAUNCH_MS_ENV: &str = "GANBARUAI_DELAYED_RELAUNCH_MS";
+const DELAYED_RELAUNCH_MS_ENV: &str = "GANBARU_AI_DELAYED_RELAUNCH_MS";
 const DELAYED_RELAUNCH_MAX_MS: u64 = 10 * 60 * 1000;
 
 #[cfg(any(target_os = "linux", target_os = "macos", windows))]
@@ -80,9 +58,9 @@ async fn reset_database(app: tauri::AppHandle) -> Result<(), String> {
     db_path::close_all_sqlite_pools(&app).await?;
     let mut db_path = app.path().app_config_dir().map_err(|e| e.to_string())?;
     let db_file = if cfg!(debug_assertions) {
-        "ganbaruai-dev.db"
+        "ganbaru-ai-dev.db"
     } else {
-        "ganbaruai.db"
+        "ganbaru-ai.db"
     };
     db_path.push(db_file);
 
@@ -116,7 +94,7 @@ fn benchmark_state_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 /// the summary is closed.
 fn benchmark_db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let mut p = app.path().app_config_dir().map_err(|e| e.to_string())?;
-    p.push("ganbaruai-benchmark.db");
+    p.push("ganbaru-ai-benchmark.db");
     Ok(p)
 }
 
@@ -141,7 +119,7 @@ fn delete_benchmark_db_files(app: &tauri::AppHandle) -> Result<(), String> {
 /// previous run does not feed stale data into Phase A.
 #[tauri::command]
 async fn prepare_benchmark_db(app: tauri::AppHandle) -> Result<(), String> {
-    db_path::close_sqlite_pool(&app, "sqlite:ganbaruai-benchmark.db").await?;
+    db_path::close_sqlite_pool(&app, "sqlite:ganbaru-ai-benchmark.db").await?;
     delete_benchmark_db_files(&app)
 }
 
@@ -149,7 +127,7 @@ async fn prepare_benchmark_db(app: tauri::AppHandle) -> Result<(), String> {
 /// clarity at the call site (run-finished cleanup vs run-starting cleanup).
 #[tauri::command]
 async fn teardown_benchmark_db(app: tauri::AppHandle) -> Result<(), String> {
-    db_path::close_sqlite_pool(&app, "sqlite:ganbaruai-benchmark.db").await?;
+    db_path::close_sqlite_pool(&app, "sqlite:ganbaru-ai-benchmark.db").await?;
     delete_benchmark_db_files(&app)
 }
 
@@ -668,7 +646,7 @@ mod tests {
             "relative-binary"
         )));
         assert!(!is_valid_relaunch_target(std::path::Path::new(
-            "/definitely/not/ganbaruai"
+            "/definitely/not/ganbaru-ai"
         )));
         let current_exe = std::env::current_exe().expect("test executable path should exist");
         assert!(is_valid_relaunch_target(&current_exe));

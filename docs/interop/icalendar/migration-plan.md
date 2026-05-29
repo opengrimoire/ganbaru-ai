@@ -58,9 +58,9 @@ Migration action:
 
 Implementation order:
 
-1. Add preservation tables with no effect on current reads. Implemented in migration v12.
+1. Add preservation tables with no effect on current reads. Implemented in the baseline schema.
 2. Add write path for new imports to populate preservation tables. Implemented for structured jCal-like object and component storage.
-3. Add projection links for imported `VEVENT`s, attendees, alarms, and overrides. Implemented in migration v13.
+3. Add projection links for imported `VEVENT`s, attendees, alarms, and overrides. Implemented in the baseline schema.
 4. Add export merger for linked components. Implemented for linked `VEVENT` and nested `VALARM` components, including unsupported parameters, inert URI attachments, imported `DURATION` shape, floating date-time shape, and `RECURRENCE-ID;RANGE=THISANDFUTURE`. Preserved `VTIMEZONE` definitions export before generated stubs.
 5. Pass through preserved non-event components while they have no app projection. Implemented for top-level non-`VEVENT` and non-`VTIMEZONE` components.
 6. Add diagnostics and repair surfaces. Projection warnings are stored now, and old imported rows without preserved components are surfaced as `regenerated` on full-event loads. A user-facing repair surface is still future work.

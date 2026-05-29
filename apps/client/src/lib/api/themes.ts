@@ -52,8 +52,8 @@ export interface ThemeRow {
   seed_calendar_default_custom: string;
   /**
    * Decorative sun/moon tag for the theme list and editor icon. Nullable
-   * because rows created before migration v5 do not carry it; the hydrate
-   * path backfills NULLs from canvas luminance.
+   * so dev databases and imported legacy theme rows can be normalized from
+   * canvas luminance.
    */
   icon_label: "light" | "dark" | null;
   seed_icon_label: "light" | "dark" | null;
@@ -352,9 +352,9 @@ export async function resetThemeToSeed(id: string): Promise<void> {
 }
 
 /**
- * Backfill a NULL icon_label/seed_icon_label on a legacy row created before
- * migration v5. Called once per affected theme during hydrate; subsequent
- * writes go through `replaceThemeContent` which always supplies a value.
+ * Backfill a NULL icon_label/seed_icon_label on a legacy row. Called once
+ * per affected theme during hydrate; subsequent writes go through
+ * `replaceThemeContent` which always supplies a value.
  */
 export async function backfillIconLabel(
   id: string,

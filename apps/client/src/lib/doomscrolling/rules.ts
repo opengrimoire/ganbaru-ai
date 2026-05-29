@@ -27,12 +27,12 @@ interface DoomscrollingCategoryDefinition {
 
 export const DOOMSCROLLING_PROTECTED_DESKTOP_APP_NAMES = [
   "Ganbaru AI",
-  "ganbaruai",
-  "ganbaruai-dev",
+  "ganbaru-ai",
+  "ganbaru-ai-dev",
   "Ganbaru AI Dev",
   "Ganbaru AI (dev)",
-  "org.opengrimoire.ganbaruai",
-  "org.opengrimoire.ganbaruai.dev",
+  "org.opengrimoire.ganbaru-ai",
+  "org.opengrimoire.ganbaru-ai.dev",
   "Activity Monitor",
   "Advanced Network Configuration",
   "Calculator",

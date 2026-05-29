@@ -1,11 +1,11 @@
 {
-  "name": "ganbaruai",
+  "name": "ganbaru-ai",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
-    "build:native-host": "cargo build --bin ganbaruai-native-messaging",
+    "build:native-host": "cargo build --bin ganbaru-ai-native-messaging",
     "setup:brave-extension": "node apps/client/scripts/setup-brave-extension.mjs",
     "check": "turbo check && cargo fmt --check && cargo clippy --workspace -- -D warnings",
     "editor-check": "pnpm --dir apps/client run editor-check",

@@ -201,7 +201,7 @@ Resuming would mean reopening a run that was closed during recovery, undoing som
 
 External tools (CLI exports, analytics scripts, backup utilities) might read the database while the app is not running, including immediately after a crash before the user has reopened the app. To produce correct data, external readers should treat any run where `ended_at IS NULL` and `last_heartbeat` is older than 60 seconds as a crashed session, applying the same logic (use `last_heartbeat` as the true end time) before computing analytics.
 
-The `ganbaruai` CLI is expected to handle this automatically. Third-party scripts that read the database directly are responsible for their own recovery handling. The schema documentation calls this out so authors of such scripts know what to do.
+The `ganbaru-ai` CLI is expected to handle this automatically. Third-party scripts that read the database directly are responsible for their own recovery handling. The schema documentation calls this out so authors of such scripts know what to do.
 
 ## Why the state machine is the source of truth
 

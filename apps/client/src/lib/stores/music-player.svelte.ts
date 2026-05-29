@@ -83,7 +83,7 @@ interface LoadSourceOptions {
 interface YouTubeHostStateMessage {
   token: string;
   load: string;
-  type: "ganbaruai-youtube-state";
+  type: "ganbaru-ai-youtube-state";
   status: PlaybackStatus;
   positionMs: number;
   durationMs: number | null;
@@ -94,20 +94,20 @@ interface YouTubeHostStateMessage {
 interface YouTubeHostReadyMessage {
   token: string;
   load: string;
-  type: "ganbaruai-youtube-ready";
+  type: "ganbaru-ai-youtube-ready";
 }
 
 interface YouTubeHostErrorMessage {
   token: string;
   load: string;
-  type: "ganbaruai-youtube-error";
+  type: "ganbaru-ai-youtube-error";
   code: number;
 }
 
 interface YouTubeHostPlaylistMessage {
   token: string;
   load: string;
-  type: "ganbaruai-youtube-playlist";
+  type: "ganbaru-ai-youtube-playlist";
   playlistId: string;
   videoIds: string[];
   index: number | null;
@@ -116,7 +116,7 @@ interface YouTubeHostPlaylistMessage {
 interface YouTubeHostPlaylistErrorMessage {
   token: string;
   load: string;
-  type: "ganbaruai-youtube-playlist-error";
+  type: "ganbaru-ai-youtube-playlist-error";
   playlistId: string;
 }
 
@@ -138,7 +138,7 @@ interface MusicPlayerSettings {
 export type MusicStaleVisual =
   { kind: "image"; url: string; title: string };
 
-const SETTINGS_KEY = "ganbaruai-music-player";
+const SETTINGS_KEY = "ganbaru-ai-music-player";
 const progressMaxFallback = 1;
 const YOUTUBE_OPTIMISTIC_PAUSE_MS = 1_500;
 const YOUTUBE_PLAYLIST_RESOLVE_TIMEOUT_MS = 18_000;
@@ -1435,11 +1435,11 @@ class MusicPlayerStore {
     if (!this.youtubeFrame?.contentWindow || event.source !== this.youtubeFrame.contentWindow) return;
     const message = this.parseYouTubeHostMessage(event.data);
     if (!message || message.token !== this.youtubeHostToken || message.load !== this.youtubeHostLoadId) return;
-    if (message.type === "ganbaruai-youtube-ready") {
+    if (message.type === "ganbaru-ai-youtube-ready") {
       this.youtubeHostReady = true;
       return;
     }
-    if (message.type === "ganbaruai-youtube-error") {
+    if (message.type === "ganbaru-ai-youtube-error") {
       this.clearYouTubePlaylistResolution();
       this.playerError = youtubeErrorMessage(message.code);
       this.snapshot = { ...this.snapshot, status: "error", error: this.playerError };
@@ -1447,11 +1447,11 @@ class MusicPlayerStore {
       this.updateMusicTray();
       return;
     }
-    if (message.type === "ganbaruai-youtube-playlist") {
+    if (message.type === "ganbaru-ai-youtube-playlist") {
       void this.applyYouTubePlaylist(message);
       return;
     }
-    if (message.type === "ganbaruai-youtube-playlist-error") {
+    if (message.type === "ganbaru-ai-youtube-playlist-error") {
       this.failYouTubePlaylistResolution(message.playlistId);
       return;
     }
@@ -1490,14 +1490,14 @@ class MusicPlayerStore {
       || typeof record.load !== "string"
       || typeof record.type !== "string"
     ) return null;
-    if (record.type === "ganbaruai-youtube-ready") {
-      return { token: record.token, load: record.load, type: "ganbaruai-youtube-ready" };
+    if (record.type === "ganbaru-ai-youtube-ready") {
+      return { token: record.token, load: record.load, type: "ganbaru-ai-youtube-ready" };
     }
-    if (record.type === "ganbaruai-youtube-error" && typeof record.code === "number") {
-      return { token: record.token, load: record.load, type: "ganbaruai-youtube-error", code: record.code };
+    if (record.type === "ganbaru-ai-youtube-error" && typeof record.code === "number") {
+      return { token: record.token, load: record.load, type: "ganbaru-ai-youtube-error", code: record.code };
     }
     if (
-      record.type === "ganbaruai-youtube-playlist"
+      record.type === "ganbaru-ai-youtube-playlist"
       && typeof record.playlistId === "string"
       && Array.isArray(record.videoIds)
       && record.videoIds.every((id) => typeof id === "string" && id.length > 0)
@@ -1506,25 +1506,25 @@ class MusicPlayerStore {
       return {
         token: record.token,
         load: record.load,
-        type: "ganbaruai-youtube-playlist",
+        type: "ganbaru-ai-youtube-playlist",
         playlistId: record.playlistId,
         videoIds: record.videoIds,
         index: record.index,
       };
     }
     if (
-      record.type === "ganbaruai-youtube-playlist-error"
+      record.type === "ganbaru-ai-youtube-playlist-error"
       && typeof record.playlistId === "string"
     ) {
       return {
         token: record.token,
         load: record.load,
-        type: "ganbaruai-youtube-playlist-error",
+        type: "ganbaru-ai-youtube-playlist-error",
         playlistId: record.playlistId,
       };
     }
     if (
-      record.type === "ganbaruai-youtube-state"
+      record.type === "ganbaru-ai-youtube-state"
       && isPlaybackStatus(record.status)
       && typeof record.positionMs === "number"
       && (typeof record.durationMs === "number" || record.durationMs === null)
@@ -1534,7 +1534,7 @@ class MusicPlayerStore {
       return {
         token: record.token,
         load: record.load,
-        type: "ganbaruai-youtube-state",
+        type: "ganbaru-ai-youtube-state",
         status: record.status,
         positionMs: record.positionMs,
         durationMs: record.durationMs,
@@ -1663,7 +1663,7 @@ class MusicPlayerStore {
   private postYouTubeCommand(payload: Record<string, unknown> & { action: YouTubeCommandAction | "snapshot" }): void {
     if (!this.youtubeFrame?.contentWindow || !this.youtubeHostToken) return;
     this.youtubeFrame.contentWindow.postMessage({
-      type: "ganbaruai-youtube-command",
+      type: "ganbaru-ai-youtube-command",
       token: this.youtubeHostToken,
       ...payload,
     }, this.youtubeHostUrl ? new URL(this.youtubeHostUrl).origin : "*");

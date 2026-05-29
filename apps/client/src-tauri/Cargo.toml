@@ -1,11 +1,11 @@
 [package]
-name = "ganbaruai"
+name = "ganbaru-ai"
 version = "0.1.0"
 description = "Ganbaru AI desktop app"
 authors = ["Ganbaru AI"]
 license = "AGPL-3.0-only"
 edition = "2021"
-default-run = "ganbaruai"
+default-run = "ganbaru-ai"
 
 [lib]
 name = "desktop_lib"
@@ -29,8 +29,7 @@ rodio = { version = "0.22.2", default-features = false, features = [
   "symphonia-wav",
   "symphonia-pcm",
 ] }
-sqlx-core = { version = "0.8", default-features = false, features = ["_rt-tokio", "json", "migrate", "offline"] }
-sqlx-sqlite = { version = "0.8", default-features = false, features = ["bundled", "json"] }
+sqlx = { version = "0.8", default-features = false, features = ["sqlite", "runtime-tokio", "macros", "migrate", "json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", default-features = false, features = ["std", "serde"] }

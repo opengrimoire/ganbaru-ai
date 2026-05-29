@@ -93,7 +93,7 @@ export function buildCreateDisplay(
     start: startStr,
     end: endStr,
     timezone: "",
-    calendarId: "ganbaruai",
+    calendarId: "ganbaru-ai",
     color: changeOr(changes, "color", preview.color),
     recurrence: changeOr(changes, "recurrence", preview.recurrence),
     pomodoroConfig: changes.pomodoroConfig,

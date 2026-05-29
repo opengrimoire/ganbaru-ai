@@ -1185,8 +1185,8 @@ export function isThemeDark(theme: Theme): boolean {
 
 /**
  * Pick the default decorative iconLabel for a canvas hex. Used by the clone
- * path, the v1 validator's missing-iconLabel fallback, and the legacy DB
- * row backfill when a row created before migration v5 is loaded.
+ * path, the v1 validator's missing-iconLabel fallback, and legacy DB row
+ * backfill.
  */
 export function defaultIconLabelFromCanvas(
   canvasHex: string,

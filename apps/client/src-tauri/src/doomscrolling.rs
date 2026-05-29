@@ -12,18 +12,21 @@ const STATE_FILE: &str = "doomscrolling-state.json";
 const EXTENSION_CONNECTION_FILE: &str = "doomscrolling-extension-status.json";
 const LIMIT_STATE_FILE: &str = "doomscrolling-limit-state.json";
 const EXTENSION_CONNECTION_STALE_SECONDS: i64 = 60;
-const ALLOWED_USAGE_DATABASE_FILES: &[&str] =
-    &["ganbaruai.db", "ganbaruai-dev.db", "ganbaruai-benchmark.db"];
+const ALLOWED_USAGE_DATABASE_FILES: &[&str] = &[
+    "ganbaru-ai.db",
+    "ganbaru-ai-dev.db",
+    "ganbaru-ai-benchmark.db",
+];
 const EXTENSION_INSTALL_README_URL: &str =
     "https://github.com/opengrimoire/GanbaruAI/blob/dev/extensions/chrome/README.md";
 const PROTECTED_DESKTOP_APP_NAMES: &[&str] = &[
     "Ganbaru AI",
-    "ganbaruai",
-    "ganbaruai-dev",
+    "ganbaru-ai",
+    "ganbaru-ai-dev",
     "Ganbaru AI Dev",
     "Ganbaru AI (dev)",
-    "org.opengrimoire.ganbaruai",
-    "org.opengrimoire.ganbaruai.dev",
+    "org.opengrimoire.ganbaru-ai",
+    "org.opengrimoire.ganbaru-ai.dev",
     "Activity Monitor",
     "Advanced Network Configuration",
     "Calculator",
@@ -1504,7 +1507,7 @@ mod tests {
         let state = DoomscrollingLimitState {
             local_date: "today".to_string(),
             updated_at: "2026-05-28T00:00:00.000Z".to_string(),
-            database_file_name: "ganbaruai-dev.db".to_string(),
+            database_file_name: "ganbaru-ai-dev.db".to_string(),
             limits: vec![DoomscrollingLimitStateItem {
                 id: "youtube".to_string(),
                 used_seconds: 60,

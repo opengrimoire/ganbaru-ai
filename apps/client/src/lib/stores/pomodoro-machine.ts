@@ -1,4 +1,4 @@
-import type { PomodoroPhase } from "@ganbaruai/shared-types";
+import type { PomodoroPhase } from "@ganbaru-ai/shared-types";
 
 // Types
 

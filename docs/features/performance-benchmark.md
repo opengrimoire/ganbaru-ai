@@ -24,7 +24,7 @@ The harness fires a desktop notification when it reaches summary or error state.
 
 ## Data safety
 
-The harness uses `app_config_dir/ganbaruai-benchmark.db` for the whole run. The user's real database and vault are not opened during benchmark passes.
+The harness uses `app_config_dir/ganbaru-ai-benchmark.db` for the whole run. The user's real database and vault are not opened during benchmark passes.
 
 Safety mechanisms:
 
@@ -65,7 +65,7 @@ The benchmark boot path intentionally differs from normal app boot so it can mea
 
 On normal boots, `App.svelte` loads calendar metadata, runs the timezone hydrator, then loads the user's current calendar window.
 
-On benchmark boots, `App.svelte` first reads `benchmark-state.json`. If a benchmark state exists, the app resolves the DB URL before the runner flips the state from pending to running. This caches `sqlite:ganbaruai-benchmark.db` for valid pending benchmark boots, while stale, invalid, or interrupted running states still resolve to the user DB and are discarded by the runner. The benchmark overlay and runner then load before normal calendar hydration starts. When the runner claims the pending state, normal current-week hydration is skipped for that process. The scenario setup then loads calendar metadata and the run anchor window itself.
+On benchmark boots, `App.svelte` first reads `benchmark-state.json`. If a benchmark state exists, the app resolves the DB URL before the runner flips the state from pending to running. This caches `sqlite:ganbaru-ai-benchmark.db` for valid pending benchmark boots, while stale, invalid, or interrupted running states still resolve to the user DB and are discarded by the runner. The benchmark overlay and runner then load before normal calendar hydration starts. When the runner claims the pending state, normal current-week hydration is skipped for that process. The scenario setup then loads calendar metadata and the run anchor window itself.
 
 This matters for memory comparability. Without this gate, a benchmark run could preload the real current week and then load the benchmark week, measuring two calendar windows instead of the scenario window.
 

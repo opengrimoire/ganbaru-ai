@@ -24,7 +24,7 @@ The rule is one-directional: structured data may be exported as markdown for col
 
 ## Vault layout
 
-Everything the app produces lives under one folder, the vault. The user picks the path. Defaults are platform-conventional (`~/Documents/GanbaruAI` or similar) but never hardcoded; code reads the path from user config.
+Everything the app produces lives under one folder, the vault. The user picks the path. Defaults are platform-conventional (`~/Documents/ganbaru-ai` or similar) but never hardcoded; code reads the path from user config.
 
 ```
 vault/
@@ -47,7 +47,7 @@ Backups go to a user-specified path **outside** the vault. Backing up the vault 
 
 ## Database files
 
-In development the app uses `ganbaruai-dev.db`. In production it uses `ganbaruai.db`. Both live next to the vault root by default. Lazy initialization: the database connection is opened on first use, not at app startup, to keep cold start time low and to allow the vault to be on a slower-than-disk path (e.g. an encrypted volume) without delaying the UI.
+In development the app uses `ganbaru-ai-dev.db`. In production it uses `ganbaru-ai.db`. Both live next to the vault root by default. Lazy initialization: the database connection is opened on first use, not at app startup, to keep cold start time low and to allow the vault to be on a slower-than-disk path (e.g. an encrypted volume) without delaying the UI.
 
 The Tauri integration owns SQLite in Rust through focused `sqlx` commands. Higher-level ORMs were considered and rejected: they add code to maintain, do not earn enough productivity for an app this small, and obscure the actual queries that show up in performance profiles. Plain SQL with typed command wrappers keeps the call sites direct.
 
@@ -55,7 +55,7 @@ The Tauri integration owns SQLite in Rust through focused `sqlx` commands. Highe
 
 The app is not the only thing that needs to read this data. AI agents (Codex or another CLI coding agent in the integrated terminal, MCP clients), backup tools, scripts, and human collaborators all interact with the same store.
 
-The bridge is the `ganbaruai` CLI (Rust binary, reads the same SQLite). It exposes structured commands (`task list`, `event get`, `export kanban`) that AI agents call via Bash. This keeps three properties:
+The bridge is the `ganbaru-ai` CLI (Rust binary, reads the same SQLite). It exposes structured commands (`task list`, `event get`, `export kanban`) that AI agents call via Bash. This keeps three properties:
 
 1. One source of truth. The CLI reads what the app writes. There is no duplicate authoritative store for agents.
 2. Markdown exports stay derivative. The CLI can write kanban snapshots or generated reports to a git repo for collaborators who never install the app, but those files are regenerated from the database; editing them by hand is supported only via an explicit import command where the export type supports imports.

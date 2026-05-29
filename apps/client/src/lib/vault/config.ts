@@ -27,14 +27,14 @@ const LEGACY_LOCALSTORAGE_MIGRATIONS: ReadonlyArray<{
   configKey: string;
   parse: (raw: string) => unknown;
 }> = [
-  { legacyKey: "ganbaruai-theme", configKey: "theme.activeId", parse: (s) => s },
+  { legacyKey: "ganbaru-ai-theme", configKey: "theme.activeId", parse: (s) => s },
   {
-    legacyKey: "ganbaruai-font-family",
+    legacyKey: "ganbaru-ai-font-family",
     configKey: "preferences.fontFamilyId",
     parse: (s) => s,
   },
   {
-    legacyKey: "ganbaruai-font-scale",
+    legacyKey: "ganbaru-ai-font-scale",
     configKey: "preferences.fontScale",
     parse: (s) => {
       const n = parseFloat(s);

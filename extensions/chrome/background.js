@@ -1,4 +1,5 @@
-const HOST_NAME = "org.opengrimoire.ganbaruai.doomscrolling";
+// Chromium native messaging host names allow underscores but not hyphens.
+const HOST_NAME = "org.opengrimoire.ganbaru_ai.doomscrolling";
 const STATUS_STORAGE_KEY = "status";
 const BLOCKED_PAGE_STORAGE_PREFIX = "blockedPage:";
 const ACTIVE_USAGE_STORAGE_KEY = "activeUsage";
@@ -370,9 +371,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 void sendNativeMessage({ type: "get_state" }).then(updateStatus);
 void refreshActiveUsage();
-chrome.alarms.create("ganbaruai-state-poll", { periodInMinutes: 0.5 });
+chrome.alarms.create("ganbaru-ai-state-poll", { periodInMinutes: 0.5 });
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name !== "ganbaruai-state-poll") return;
+  if (alarm.name !== "ganbaru-ai-state-poll") return;
   void refreshActiveUsage({ forceFlush: true });
   void sendNativeMessage({ type: "get_state" }).then(updateStatus);
 });

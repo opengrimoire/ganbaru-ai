@@ -66,6 +66,7 @@ apps/
     scripts/: repo-owned maintenance and diagnostics scripts
     src-tauri/: Rust backend
       src/: main.rs (entry), lib.rs (commands), media_player.rs (Rust local audio playback and media probing), mobile.rs (mobile logic)
+      migrations/: embedded SQLx SQLite migrations
       gen/: auto-generated mobile projects
       capabilities/: permission declarations (desktop/mobile)
       icons/: app icons
@@ -113,7 +114,7 @@ Music files stay wherever the user keeps them; vault stores only playlist defini
 - **License:** AGPL 3.0
 - **Data architecture:** two categories of data with different storage. Documents (notes, diary, project docs) are markdown files on disk; SQLite indexes them for fast queries but the file is the source of truth. Structured data (calendar events, future project tasks, workspace configs, pomodoro configs, runs, segments, pauses, and run events) lives in SQLite as the source of truth. Never store structured data as markdown or document content in SQLite.
 - **AI integration:** three paths. (1) Integrated terminal (xterm.js) running Codex or another CLI coding agent, with calendar-driven session switching, per-project conversation threads, and task context passed through the agent prompt or standard input. (2) BYOK chat widget for non-developer users (OpenAI API, OpenAI-compatible API, Ollama for local models, and other user-configured providers). (3) MCP for external AI clients only (ChatGPT, teammate agents, etc.), not for internal agent interaction.
-- **Agent data bridge:** a `ganbaruai` CLI (Rust, reads the same SQLite) is the primary bridge between AI agents and Ganbaru AI's data. Agents call it via Bash. The CLI exports project state as markdown to git repos for collaborators and agents without the CLI. These exports are views of the database, not the source of truth.
+- **Agent data bridge:** a `ganbaru-ai` CLI (Rust, reads the same SQLite) is the primary bridge between AI agents and Ganbaru AI's data. Agents call it via Bash. The CLI exports project state as markdown to git repos for collaborators and agents without the CLI. These exports are views of the database, not the source of truth.
 - **State management:** Svelte 5 runes ($state, $derived, $effect), no external state manager
 - **Sync:** Yjs + Hocuspocus (CRDT-based, E2E encrypted, self-hosted by the user)
 - **Build tool:** Vite (default with Tauri + Svelte scaffold)
@@ -154,7 +155,11 @@ After `pnpm -w run validate` passes, finish the task without extra dev-server, T
 
 - Treat stored user data as durable. Any change to SQLite schema, persisted JSON, config keys, theme tokens, import/export formats, or generated vault data must consider existing installs, older exports, stale rows, removed fields, renamed keys, seed/reset data, and rollback or fallback behavior.
 - Do not leave dead persistent data behind. If a field, row key, config key, or JSON property becomes obsolete, add an explicit migration, cleanup path, or validator drop rule, then document it in the relevant data or feature spec.
-- Keep migrations idempotent and narrowly scoped. Preserve user-authored values whenever those values still have meaning, and only delete data that is truly obsolete or derivable from current canonical data.
+- SQLite migrations live in `apps/client/src-tauri/migrations/` and are embedded into the Rust binary through `sqlx::migrate!("./migrations")`. Use SQLx file names with a UTC timestamp prefix, `YYYYMMDDHHMMSS_description.sql`, such as `20260601103000_add_project_tables.sql`. Do not manually register migration files; the SQLx macro discovers them at compile time.
+- `20260529180656_baseline_schema.sql` is the fresh-start schema for the pre-user reset. Do not edit it after a released build can have applied it. Add a new timestamped migration file instead.
+- Keep `apps/client/src-tauri/src/db.rs` focused on migration execution. Put schema and migration invariant tests in `apps/client/src-tauri/src/db/tests.rs`.
+- Keep migrations idempotent and narrowly scoped when practical, but remember that SQLx validates applied migration checksums. Never rewrite an applied migration to fix a live install. Preserve user-authored values whenever those values still have meaning, and only delete data that is truly obsolete or derivable from current canonical data.
+- For local development before users exist, a baseline squash is acceptable only when Victor explicitly approves a clean reinstall or purge. Document the reset in this file and the relevant data docs.
 
 ### Theme and color tokens
 

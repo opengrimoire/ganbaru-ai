@@ -1,15 +1,16 @@
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sqlx_core::raw_sql::raw_sql;
-use sqlx_sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+use sqlx::raw_sql;
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::collections::HashSet;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::OnceLock;
 
-const HOST_NAME: &str = "org.opengrimoire.ganbaruai.doomscrolling";
+// Chromium native messaging host names allow underscores but not hyphens.
+const HOST_NAME: &str = "org.opengrimoire.ganbaru_ai.doomscrolling";
 const STATE_FILE: &str = "doomscrolling-state.json";
 const LIMIT_STATE_FILE: &str = "doomscrolling-limit-state.json";
 const EXTENSION_CONNECTION_FILE: &str = "doomscrolling-extension-status.json";
@@ -17,8 +18,11 @@ const EVENTS_FILE: &str = "doomscrolling-events.jsonl";
 const CONFIG_FILE: &str = "vault/config.json";
 const STALE_STATE_SECONDS: i64 = 180;
 const LIMIT_STATE_STALE_SECONDS: i64 = 300;
-const ALLOWED_USAGE_DATABASE_FILES: &[&str] =
-    &["ganbaruai.db", "ganbaruai-dev.db", "ganbaruai-benchmark.db"];
+const ALLOWED_USAGE_DATABASE_FILES: &[&str] = &[
+    "ganbaru-ai.db",
+    "ganbaru-ai-dev.db",
+    "ganbaru-ai-benchmark.db",
+];
 const USAGE_SAMPLE_TABLE_SQL: &str = "
     CREATE TABLE IF NOT EXISTS doomscrolling_usage_samples (
         id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
@@ -385,13 +389,13 @@ fn load_snapshot() -> StateSnapshot {
 }
 
 fn config_dir_candidates() -> Vec<PathBuf> {
-    if let Ok(dir) = std::env::var("GANBARUAI_CONFIG_DIR") {
+    if let Ok(dir) = std::env::var("GANBARU_AI_CONFIG_DIR") {
         return vec![PathBuf::from(dir)];
     }
 
     let ids = [
-        "org.opengrimoire.ganbaruai.dev",
-        "org.opengrimoire.ganbaruai",
+        "org.opengrimoire.ganbaru-ai.dev",
+        "org.opengrimoire.ganbaru-ai",
     ];
     let mut candidates = Vec::new();
 
@@ -740,8 +744,8 @@ fn normalize_app_name(input: &str) -> Option<String> {
 fn is_protected_app_name(name: &str) -> bool {
     let key = name.trim().to_lowercase();
     let protected = [
-        "ganbaruai",
-        "ganbaruai-dev",
+        "ganbaru-ai",
+        "ganbaru-ai-dev",
         "terminal",
         "gnome-terminal",
         "system monitor",
@@ -1274,9 +1278,9 @@ fn fallback_usage_database_file_name(config_dir: &Path) -> &'static str {
         .and_then(|name| name.to_str())
         .unwrap_or_default();
     if file_name.ends_with(".dev") {
-        "ganbaruai-dev.db"
+        "ganbaru-ai-dev.db"
     } else {
-        "ganbaruai.db"
+        "ganbaru-ai.db"
     }
 }
 
@@ -1328,7 +1332,7 @@ fn record_usage_sample(
             .execute(&pool)
             .await
             .map_err(|e| format!("ensure usage sample table: {e}"))?;
-        sqlx_core::query::query(
+        sqlx::query(
             "INSERT OR IGNORE INTO doomscrolling_usage_samples
                 (id, source_type, source_key, display_name, started_at, elapsed_seconds, local_date, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -1589,7 +1593,7 @@ mod tests {
         let limit_state = super::LimitState {
             local_date: "2026-05-28".to_string(),
             updated_at: super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
-            database_file_name: Some("ganbaruai-dev.db".to_string()),
+            database_file_name: Some("ganbaru-ai-dev.db".to_string()),
             limits: vec![super::LimitStateItem {
                 id: "youtube".to_string(),
                 used_seconds: 600,
@@ -1633,7 +1637,7 @@ mod tests {
         let limit_state = super::LimitState {
             local_date: "2026-05-28".to_string(),
             updated_at: super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
-            database_file_name: Some("ganbaruai-dev.db".to_string()),
+            database_file_name: Some("ganbaru-ai-dev.db".to_string()),
             limits: vec![super::LimitStateItem {
                 id: "reddit".to_string(),
                 used_seconds: 600,
@@ -1660,32 +1664,32 @@ mod tests {
 
     #[test]
     fn uses_limit_state_database_file_for_usage_samples() {
-        let config_dir = std::path::Path::new("/tmp/org.opengrimoire.ganbaruai");
+        let config_dir = std::path::Path::new("/tmp/org.opengrimoire.ganbaru-ai");
         let limit_state = super::LimitState {
             local_date: "2026-05-28".to_string(),
             updated_at: super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
-            database_file_name: Some("ganbaruai-dev.db".to_string()),
+            database_file_name: Some("ganbaru-ai-dev.db".to_string()),
             limits: Vec::new(),
         };
 
         assert_eq!(
             super::usage_db_path(config_dir, Some(&limit_state)),
-            config_dir.join("ganbaruai-dev.db")
+            config_dir.join("ganbaru-ai-dev.db")
         );
     }
 
     #[test]
     fn falls_back_to_config_dir_database_file_for_old_limit_state() {
-        let prod_config_dir = std::path::Path::new("/tmp/org.opengrimoire.ganbaruai");
-        let dev_config_dir = std::path::Path::new("/tmp/org.opengrimoire.ganbaruai.dev");
+        let prod_config_dir = std::path::Path::new("/tmp/org.opengrimoire.ganbaru-ai");
+        let dev_config_dir = std::path::Path::new("/tmp/org.opengrimoire.ganbaru-ai.dev");
 
         assert_eq!(
             super::usage_db_path(prod_config_dir, None),
-            prod_config_dir.join("ganbaruai.db")
+            prod_config_dir.join("ganbaru-ai.db")
         );
         assert_eq!(
             super::usage_db_path(dev_config_dir, None),
-            dev_config_dir.join("ganbaruai-dev.db")
+            dev_config_dir.join("ganbaru-ai-dev.db")
         );
     }
 

@@ -15,9 +15,9 @@ import { getDoomscrolling } from "$lib/stores/doomscrolling.svelte";
 
 const REFRESH_INTERVAL_MS = 5_000;
 const ALLOWED_DATABASE_FILE_NAMES = [
-  "ganbaruai.db",
-  "ganbaruai-dev.db",
-  "ganbaruai-benchmark.db",
+  "ganbaru-ai.db",
+  "ganbaru-ai-dev.db",
+  "ganbaru-ai-benchmark.db",
 ] as const;
 
 let localDate = $state(todayLocalDate());

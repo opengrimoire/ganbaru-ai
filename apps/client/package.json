@@ -1,5 +1,5 @@
 {
-  "name": "@ganbaruai/client",
+  "name": "@ganbaru-ai/client",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -17,7 +17,7 @@
   "license": "AGPL-3.0-only",
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
-    "@ganbaruai/shared-types": "workspace:*",
+    "@ganbaru-ai/shared-types": "workspace:*",
     "@js-temporal/polyfill": "^0.5.0",
     "@tauri-apps/api": "2.11.0",
     "dompurify": "^3.4.0",
