@@ -1,6 +1,6 @@
 <script lang="ts">
   import { cn } from "$lib/utils";
-  import type { DoomscrollingSettingsTab } from "./types";
+  import type { DoomscrollingLimitEditorTarget, DoomscrollingSettingsTab } from "./types";
   import DoomscrollingBrowserSettings from "./DoomscrollingBrowserSettings.svelte";
   import DoomscrollingMobileSettings from "./DoomscrollingMobileSettings.svelte";
   import DoomscrollingDesktopSettings from "./DoomscrollingDesktopSettings.svelte";
@@ -8,8 +8,10 @@
 
   let {
     initialTab = "limits",
+    onOpenLimitEditor = () => {},
   }: {
     initialTab?: DoomscrollingSettingsTab;
+    onOpenLimitEditor?: (target: DoomscrollingLimitEditorTarget) => void;
   } = $props();
 
   const tabs: ReadonlyArray<{
@@ -55,7 +57,7 @@
   </div>
 
   {#if activeTab === "limits"}
-    <DoomscrollingLimitsSettings />
+    <DoomscrollingLimitsSettings {onOpenLimitEditor} />
   {:else if activeTab === "browser"}
     <DoomscrollingBrowserSettings />
   {:else if activeTab === "mobile"}

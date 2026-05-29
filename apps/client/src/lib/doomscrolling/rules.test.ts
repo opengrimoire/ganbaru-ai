@@ -6,7 +6,7 @@ import {
   evaluateDoomscrollingWebsiteLimit,
   evaluateDoomscrollingUrl,
   isProtectedDoomscrollingDesktopAppName,
-  matchesDoomscrollingLimitSource,
+  matchesDoomscrollingLimitEntry,
   normalizeDoomscrollingAppName,
   normalizeDoomscrollingConfig,
   normalizeDoomscrollingHost,
@@ -66,9 +66,14 @@ function limit(partial: Partial<DoomscrollingUsageLimit>): DoomscrollingUsageLim
     id: "limit-1",
     name: "Daily limit",
     enabled: true,
-    kind: "individual",
     minutesPerDay: 30,
-    sources: [{ type: "website", host: "youtube.com" }],
+    entries: [{
+      id: "entry-1",
+      name: null,
+      websiteHost: "youtube.com",
+      mobileAppName: null,
+      desktopAppName: null,
+    }],
     ...partial,
   };
 }
@@ -307,7 +312,7 @@ describe("normalizeDoomscrollingConfig", () => {
     });
   });
 
-  it("normalizes valid and legacy daily usage limits", () => {
+  it("normalizes valid daily usage limits", () => {
     const normalized = normalizeDoomscrollingConfig({
       limits: {
         enabled: true,
@@ -316,14 +321,15 @@ describe("normalizeDoomscrollingConfig", () => {
             id: "youtube",
             name: "  YouTube  ",
             enabled: false,
-            kind: "individual",
             minutesPerDay: 45.8,
-            sources: [
-              "https://youtube.com/watch?v=1",
-              { kind: "desktopApp", name: "FreeTube", matchNames: ["freetube"] },
-              { kind: "builtInCategory", id: "streaming" },
-              { kind: "customCategoryStack", id: "research-traps" },
-              { kind: "mobileApp", name: "YouTube", platform: "Android" },
+            entries: [
+              {
+                id: "youtube-main",
+                name: "  YouTube main  ",
+                websiteHost: "https://youtube.com/watch?v=1",
+                desktopAppName: "FreeTube",
+                mobileAppName: "YouTube",
+              },
             ],
           },
         ],
@@ -335,14 +341,15 @@ describe("normalizeDoomscrollingConfig", () => {
         id: "youtube",
         name: "YouTube",
         enabled: false,
-        kind: "individual",
         minutesPerDay: 45,
-        sources: [
-          { type: "website", host: "youtube.com" },
-          { type: "desktop-app", name: "FreeTube", matchNames: ["FreeTube"] },
-          { type: "category", id: "streaming" },
-          { type: "custom-stack", id: "research-traps" },
-          { type: "mobile-app", name: "YouTube", platform: "android" },
+        entries: [
+          {
+            id: "youtube-main",
+            name: "YouTube main",
+            websiteHost: "youtube.com",
+            mobileAppName: "YouTube",
+            desktopAppName: "FreeTube",
+          },
         ],
       },
     ]);
@@ -352,19 +359,32 @@ describe("normalizeDoomscrollingConfig", () => {
     const normalized = normalizeDoomscrollingConfig({
       limits: {
         items: [
-          { id: "bad-minutes", name: "Bad", minutesPerDay: 0, sources: ["youtube.com"] },
-          { id: "bad-name", name: "   ", minutesPerDay: 30, sources: ["youtube.com"] },
+          {
+            id: "bad-minutes",
+            name: "Bad",
+            minutesPerDay: 0,
+            entries: [{ id: "entry-1", websiteHost: "youtube.com" }],
+          },
+          {
+            id: "bad-name",
+            name: "   ",
+            minutesPerDay: 30,
+            entries: [{ id: "entry-1", websiteHost: "youtube.com" }],
+          },
           {
             id: "duplicate-sources",
             name: "Duplicate sources",
             minutesPerDay: 30,
-            sources: ["youtube.com", "https://youtube.com/watch?v=1"],
+            entries: [
+              { id: "entry-1", websiteHost: "youtube.com" },
+              { id: "entry-2", websiteHost: "https://youtube.com/watch?v=1" },
+            ],
           },
           {
             id: "protected-app",
             name: "Protected app",
             minutesPerDay: 30,
-            sources: [{ type: "desktop-app", name: "Terminal" }],
+            entries: [{ id: "entry-1", desktopAppName: "Terminal" }],
           },
         ],
       },
@@ -375,41 +395,47 @@ describe("normalizeDoomscrollingConfig", () => {
 });
 
 describe("Doomscrolling usage limit matching", () => {
-  it("matches website hosts, subdomains, categories, custom stacks, and desktop app names", () => {
-    const cfg = config({
-      customCategoryStacks: [
-        {
-          id: "research-traps",
-          name: "Research traps",
-          enabled: true,
-          hosts: [hostRule("news.ycombinator.com")],
-        },
-      ],
-    });
-
-    expect(matchesDoomscrollingLimitSource(
-      { type: "website", host: "youtube.com" },
+  it("matches website hosts, subdomains, mobile apps, and desktop app names", () => {
+    expect(matchesDoomscrollingLimitEntry(
+      {
+        id: "youtube",
+        name: null,
+        websiteHost: "youtube.com",
+        mobileAppName: null,
+        desktopAppName: null,
+      },
       websiteSample("music.youtube.com", 60),
-      cfg,
     )).toBe(true);
-    expect(matchesDoomscrollingLimitSource(
-      { type: "category", id: "streaming" },
-      websiteSample("watch-anime.example", 60),
-      cfg,
+    expect(matchesDoomscrollingLimitEntry(
+      {
+        id: "youtube",
+        name: null,
+        websiteHost: null,
+        mobileAppName: "YouTube",
+        desktopAppName: null,
+      },
+      {
+        sourceType: "mobile-app",
+        sourceKey: "youtube",
+        displayName: "YouTube",
+        elapsedSeconds: 60,
+        startedAt: 1_779_923_600_000,
+        localDate: "2026-05-28",
+      },
     )).toBe(true);
-    expect(matchesDoomscrollingLimitSource(
-      { type: "custom-stack", id: "research-traps" },
-      websiteSample("news.ycombinator.com", 60),
-      cfg,
-    )).toBe(true);
-    expect(matchesDoomscrollingLimitSource(
-      { type: "desktop-app", name: "FreeTube", matchNames: ["FreeTube", "freetube"] },
+    expect(matchesDoomscrollingLimitEntry(
+      {
+        id: "youtube",
+        name: null,
+        websiteHost: null,
+        mobileAppName: null,
+        desktopAppName: "FreeTube",
+      },
       desktopSample("freetube", 60),
-      cfg,
     )).toBe(true);
   });
 
-  it("sums linked sources into one individual limit", () => {
+  it("sums linked sources into one daily limit", () => {
     const cfg = config({
       limits: {
         enabled: true,
@@ -417,11 +443,15 @@ describe("Doomscrolling usage limit matching", () => {
           limit({
             id: "youtube",
             name: "YouTube",
-            kind: "individual",
             minutesPerDay: 10,
-            sources: [
-              { type: "website", host: "youtube.com" },
-              { type: "desktop-app", name: "FreeTube", matchNames: ["FreeTube", "freetube"] },
+            entries: [
+              {
+                id: "youtube-main",
+                name: null,
+                websiteHost: "youtube.com",
+                mobileAppName: null,
+                desktopAppName: "FreeTube",
+              },
             ],
           }),
         ],
@@ -437,7 +467,7 @@ describe("Doomscrolling usage limit matching", () => {
     expect(totals).toMatchObject([{ limitId: "youtube", usedSeconds: 360 }]);
   });
 
-  it("sums several sources into one group limit", () => {
+  it("sums several sources into one daily limit", () => {
     const cfg = config({
       limits: {
         enabled: true,
@@ -445,11 +475,22 @@ describe("Doomscrolling usage limit matching", () => {
           limit({
             id: "social",
             name: "Social media",
-            kind: "group",
             minutesPerDay: 60,
-            sources: [
-              { type: "category", id: "social-media" },
-              { type: "website", host: "discord.com" },
+            entries: [
+              {
+                id: "reddit",
+                name: "Reddit",
+                websiteHost: "reddit.com",
+                mobileAppName: null,
+                desktopAppName: null,
+              },
+              {
+                id: "discord",
+                name: "Discord",
+                websiteHost: "discord.com",
+                mobileAppName: null,
+                desktopAppName: null,
+              },
             ],
           }),
         ],

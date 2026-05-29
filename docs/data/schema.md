@@ -452,7 +452,7 @@ Indexes:
 - `(local_date, source_type, source_key)` for current-day totals and source-specific analysis.
 - `(started_at)` for timeline and cleanup queries.
 
-Daily totals are derived from samples and the current `doomscrolling.limits.items` definitions. This means editing a limit changes how today's historical samples roll up, without rewriting the samples themselves. A local `doomscrolling-limit-state.json` snapshot in the app config directory contains derived totals and the active SQLite filename for the native browser host so URL decisions stay fast and usage samples are recorded into the same database the UI reads.
+Daily totals are derived from samples and the current `doomscrolling.limits.items` definitions, including each limit entry's website, mobile app, and desktop app fields. This means editing a limit changes how today's historical samples roll up, without rewriting the samples themselves. A local `doomscrolling-limit-state.json` snapshot in the app config directory contains derived totals and the active SQLite filename for the native browser host so URL decisions stay fast and usage samples are recorded into the same database the UI reads.
 
 ## Other features (stub)
 

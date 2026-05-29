@@ -185,7 +185,7 @@
     </div>
   {/if}
   <div class="flex items-center justify-end gap-1.5 max-[480px]:justify-between">
-    <div class={cn("relative min-w-0 max-[480px]:flex-1", className)}>
+    <div class={cn("relative min-w-0 w-44 max-[480px]:flex-1", className)}>
       <button
         bind:this={triggerEl}
         type="button"
@@ -193,7 +193,7 @@
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel ?? label}
-        class="flex h-7 w-44 max-w-full items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent max-[480px]:w-full dark:bg-transparent"
+        class="flex h-7 w-full max-w-full items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent max-[480px]:w-full dark:bg-transparent"
       >
         <span class="truncate" style={current?.style}>{current?.label ?? value}</span>
         <ChevronDown

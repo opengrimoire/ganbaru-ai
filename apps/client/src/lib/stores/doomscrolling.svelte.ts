@@ -1,11 +1,13 @@
 import {
   DEFAULT_DOOMSCROLLING_CONFIG,
   isProtectedDoomscrollingDesktopAppName,
-  doomscrollingLimitSourceKey,
+  doomscrollingLimitEntrySourceKeys,
   normalizeDoomscrollingAppName,
   normalizeDoomscrollingConfig,
   normalizeDoomscrollingCustomCategoryStackName,
+  normalizeDoomscrollingLimitEntryName,
   normalizeDoomscrollingUsageLimitName,
+  normalizeDoomscrollingHost,
   parseDoomscrollingHosts,
   type DoomscrollingAppRule,
   type DoomscrollingCategoryId,
@@ -14,10 +16,9 @@ import {
   type DoomscrollingCustomCategoryStack,
   type DoomscrollingDesktopConfig,
   type DoomscrollingHostRule,
-  type DoomscrollingLimitSource,
+  type DoomscrollingLimitEntry,
   type DoomscrollingMode,
   type DoomscrollingUsageLimit,
-  type DoomscrollingUsageLimitKind,
 } from "$lib/doomscrolling";
 import { getConfigKey, setConfigKey } from "$lib/vault/config";
 
@@ -47,9 +48,16 @@ export type SaveDoomscrollingUsageLimitResult =
 
 export interface DoomscrollingUsageLimitDraft {
   name: string;
-  kind: DoomscrollingUsageLimitKind;
   minutesPerDay: number;
-  sources: readonly DoomscrollingLimitSource[];
+  entries: readonly DoomscrollingUsageLimitEntryDraft[];
+}
+
+export interface DoomscrollingUsageLimitEntryDraft {
+  id: string;
+  name: string;
+  websiteHost: string;
+  mobileAppName: string;
+  desktopAppName: string;
 }
 
 function loadSavedConfig(): DoomscrollingConfig {
@@ -225,37 +233,82 @@ function createUsageLimitId(name: string): string {
   return `${base}-${suffix}`;
 }
 
-function limitSourceHasProtectedDesktopApp(source: DoomscrollingLimitSource): boolean {
-  return source.type === "desktop-app"
-    && (
-      isProtectedDoomscrollingDesktopAppName(source.name)
-      || source.matchNames.some((name) => isProtectedDoomscrollingDesktopAppName(name))
-    );
+function normalizeUsageLimitEntryId(value: string): string | null {
+  const id = value.trim();
+  if (!/^[a-z0-9][a-z0-9_-]{0,79}$/i.test(id)) return null;
+  return id;
+}
+
+function websiteDisplayName(host: string): string {
+  const firstLabel = host.replace(/^www\./, "").split(".", 1)[0] ?? host;
+  if (!firstLabel) return host;
+  return `${firstLabel.charAt(0).toUpperCase()}${firstLabel.slice(1)}`;
+}
+
+function derivedEntryName(entry: DoomscrollingLimitEntry): string {
+  return entry.name
+    ?? entry.mobileAppName
+    ?? entry.desktopAppName
+    ?? (entry.websiteHost ? websiteDisplayName(entry.websiteHost) : "Daily limit");
+}
+
+function normalizeLimitDraftEntry(
+  draft: DoomscrollingUsageLimitEntryDraft,
+): DoomscrollingLimitEntry | "invalid-sources" | "protected-source" {
+  const id = normalizeUsageLimitEntryId(draft.id);
+  if (!id) return "invalid-sources";
+  const name = normalizeDoomscrollingLimitEntryName(draft.name);
+  const websiteHost = draft.websiteHost.trim()
+    ? normalizeDoomscrollingHost(draft.websiteHost)
+    : null;
+  const mobileAppName = draft.mobileAppName.trim()
+    ? normalizeDoomscrollingAppName(draft.mobileAppName)
+    : null;
+  const desktopAppName = draft.desktopAppName.trim()
+    ? normalizeDoomscrollingAppName(draft.desktopAppName)
+    : null;
+  if (!websiteHost && !mobileAppName && !desktopAppName) return "invalid-sources";
+  if (desktopAppName && isProtectedDoomscrollingDesktopAppName(desktopAppName)) {
+    return "protected-source";
+  }
+  return {
+    id,
+    name,
+    websiteHost,
+    mobileAppName,
+    desktopAppName,
+  };
 }
 
 function normalizeLimitDraft(
   draft: DoomscrollingUsageLimitDraft,
 ): SaveDoomscrollingUsageLimitResult | Omit<DoomscrollingUsageLimit, "id" | "enabled"> {
-  const name = normalizeDoomscrollingUsageLimitName(draft.name);
-  if (!name) return "invalid-name";
   if (!Number.isFinite(draft.minutesPerDay)) return "invalid-minutes";
   const minutesPerDay = Math.trunc(draft.minutesPerDay);
   if (minutesPerDay < 1 || minutesPerDay > 24 * 60) return "invalid-minutes";
-  if (draft.sources.length === 0) return "invalid-sources";
+  if (draft.entries.length === 0) return "invalid-sources";
   const seenSources = new Set<string>();
-  const sources: DoomscrollingLimitSource[] = [];
-  for (const source of draft.sources) {
-    if (limitSourceHasProtectedDesktopApp(source)) return "protected-source";
-    const key = doomscrollingLimitSourceKey(source);
-    if (seenSources.has(key)) return "duplicate-source";
-    seenSources.add(key);
-    sources.push(source);
+  const seenEntryIds = new Set<string>();
+  const entries: DoomscrollingLimitEntry[] = [];
+  for (const draftEntry of draft.entries) {
+    const entry = normalizeLimitDraftEntry(draftEntry);
+    if (entry === "invalid-sources" || entry === "protected-source") return entry;
+    if (seenEntryIds.has(entry.id)) return "duplicate-source";
+    seenEntryIds.add(entry.id);
+    for (const key of doomscrollingLimitEntrySourceKeys(entry)) {
+      if (seenSources.has(key)) return "duplicate-source";
+      seenSources.add(key);
+    }
+    entries.push(entry);
   }
+  const firstEntry = entries[0];
+  if (!firstEntry) return "invalid-sources";
+  const name = normalizeDoomscrollingUsageLimitName(draft.name) ?? derivedEntryName(firstEntry);
+  if (!name) return "invalid-name";
   return {
     name,
-    kind: draft.kind === "group" ? "group" : "individual",
     minutesPerDay,
-    sources,
+    entries,
   };
 }
 

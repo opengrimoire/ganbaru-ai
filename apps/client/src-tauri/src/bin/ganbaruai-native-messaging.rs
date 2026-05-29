@@ -141,23 +141,12 @@ struct CustomCategoryStack {
 }
 
 #[derive(Debug, Clone)]
-enum UsageLimitSource {
-    Website {
-        host: String,
-    },
-    DesktopApp {
-        name: String,
-        match_names: Vec<String>,
-    },
-    Category {
-        id: String,
-    },
-    CustomStack {
-        id: String,
-    },
-    MobileApp {
-        name: String,
-    },
+struct UsageLimitEntry {
+    id: String,
+    name: Option<String>,
+    website_host: Option<String>,
+    mobile_app_name: Option<String>,
+    desktop_app_name: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -166,7 +155,7 @@ struct UsageLimit {
     name: String,
     enabled: bool,
     minutes_per_day: i64,
-    sources: Vec<UsageLimitSource>,
+    entries: Vec<UsageLimitEntry>,
 }
 
 #[derive(Debug, Clone)]
@@ -632,13 +621,13 @@ fn read_usage_limit(item: &Value) -> Option<UsageLimit> {
     if !(1..=1440).contains(&minutes_per_day) {
         return None;
     }
-    let sources = read_usage_limit_sources(record.get("sources")?)?;
+    let entries = read_usage_limit_entries(record.get("entries")?)?;
     Some(UsageLimit {
         id,
         name,
         enabled: record.get("enabled").and_then(Value::as_bool) != Some(false),
         minutes_per_day,
-        sources,
+        entries,
     })
 }
 
@@ -670,107 +659,67 @@ fn normalize_usage_limit_name(input: &str) -> Option<String> {
     }
 }
 
-fn read_usage_limit_sources(value: &Value) -> Option<Vec<UsageLimitSource>> {
+fn read_usage_limit_entries(value: &Value) -> Option<Vec<UsageLimitEntry>> {
     let Value::Array(items) = value else {
         return None;
     };
-    let mut sources = Vec::new();
+    let mut entries = Vec::new();
     let mut seen = HashSet::new();
+    let mut seen_ids = HashSet::new();
     for item in items {
-        let Some(source) = read_usage_limit_source(item) else {
+        let Some(entry) = read_usage_limit_entry(item) else {
             continue;
         };
-        let key = usage_limit_source_key(&source);
-        if !seen.insert(key) {
+        if !seen_ids.insert(entry.id.clone()) {
             return None;
         }
-        sources.push(source);
+        for key in usage_limit_entry_source_keys(&entry) {
+            if !seen.insert(key) {
+                return None;
+            }
+        }
+        entries.push(entry);
     }
-    (!sources.is_empty()).then_some(sources)
+    (!entries.is_empty()).then_some(entries)
 }
 
-fn source_type(record: &serde_json::Map<String, Value>) -> Option<&str> {
-    let raw = record
-        .get("type")
-        .or_else(|| record.get("kind"))
-        .or_else(|| record.get("sourceType"))?
-        .as_str()?;
-    match raw {
-        "website" => Some("website"),
-        "desktop-app" | "desktopApp" => Some("desktop-app"),
-        "category" | "builtInCategory" => Some("category"),
-        "custom-stack" | "customCategoryStack" => Some("custom-stack"),
-        "mobile-app" | "mobileApp" => Some("mobile-app"),
-        _ => None,
-    }
-}
-
-fn string_field<'a>(record: &'a serde_json::Map<String, Value>, primary: &str) -> Option<&'a str> {
-    record
-        .get(primary)
-        .or_else(|| record.get("value"))
-        .and_then(Value::as_str)
-}
-
-fn read_usage_limit_source(item: &Value) -> Option<UsageLimitSource> {
-    if let Value::String(host) = item {
-        return normalize_host_rule(host).map(|host| UsageLimitSource::Website { host });
-    }
+fn read_usage_limit_entry(item: &Value) -> Option<UsageLimitEntry> {
     let Value::Object(record) = item else {
         return None;
     };
-    match source_type(record)? {
-        "website" => {
-            let host = normalize_host_rule(string_field(record, "host")?)?;
-            Some(UsageLimitSource::Website { host })
-        }
-        "desktop-app" => {
-            let name = normalize_app_name(string_field(record, "name")?)?;
-            if is_protected_app_name(&name) {
-                return None;
-            }
-            let mut match_names = Vec::new();
-            let mut seen = HashSet::new();
-            for candidate in std::iter::once(name.as_str()).chain(
-                record
-                    .get("matchNames")
-                    .and_then(Value::as_array)
-                    .into_iter()
-                    .flatten()
-                    .filter_map(Value::as_str),
-            ) {
-                let Some(match_name) = normalize_app_name(candidate) else {
-                    continue;
-                };
-                if is_protected_app_name(&match_name) {
-                    continue;
-                }
-                let key = match_name.to_lowercase();
-                if seen.insert(key) {
-                    match_names.push(match_name);
-                }
-            }
-            if match_names.is_empty() {
-                return None;
-            }
-            Some(UsageLimitSource::DesktopApp { name, match_names })
-        }
-        "category" => {
-            let id = string_field(record, "id")?;
-            built_in_category(id).map(|category| UsageLimitSource::Category {
-                id: category.id.clone(),
-            })
-        }
-        "custom-stack" => {
-            let id = normalize_limit_id(string_field(record, "id")?)?;
-            Some(UsageLimitSource::CustomStack { id })
-        }
-        "mobile-app" => {
-            let name = normalize_app_name(string_field(record, "name")?)?;
-            Some(UsageLimitSource::MobileApp { name })
-        }
-        _ => None,
+    let id = normalize_limit_id(record.get("id").and_then(Value::as_str)?)?;
+    let name = record
+        .get("name")
+        .and_then(Value::as_str)
+        .and_then(normalize_usage_limit_name);
+    let website_host = record
+        .get("websiteHost")
+        .and_then(Value::as_str)
+        .and_then(normalize_host_rule);
+    let mobile_app_name = record
+        .get("mobileAppName")
+        .and_then(Value::as_str)
+        .and_then(normalize_app_name);
+    let desktop_app_name = record
+        .get("desktopAppName")
+        .and_then(Value::as_str)
+        .and_then(normalize_app_name);
+    if website_host.is_none() && mobile_app_name.is_none() && desktop_app_name.is_none() {
+        return None;
     }
+    if desktop_app_name
+        .as_deref()
+        .is_some_and(is_protected_app_name)
+    {
+        return None;
+    }
+    Some(UsageLimitEntry {
+        id,
+        name,
+        website_host,
+        mobile_app_name,
+        desktop_app_name,
+    })
 }
 
 fn normalize_app_name(input: &str) -> Option<String> {
@@ -809,20 +758,18 @@ fn is_protected_app_name(name: &str) -> bool {
     protected.iter().any(|name| *name == key)
 }
 
-fn usage_limit_source_key(source: &UsageLimitSource) -> String {
-    match source {
-        UsageLimitSource::Website { host } => format!("website:{host}"),
-        UsageLimitSource::DesktopApp { name, match_names } => {
-            format!(
-                "desktop-app:{}:{}",
-                name.to_lowercase(),
-                match_names.join("|").to_lowercase()
-            )
-        }
-        UsageLimitSource::Category { id } => format!("category:{id}"),
-        UsageLimitSource::CustomStack { id } => format!("custom-stack:{id}"),
-        UsageLimitSource::MobileApp { name } => format!("mobile-app:{}", name.to_lowercase()),
+fn usage_limit_entry_source_keys(entry: &UsageLimitEntry) -> Vec<String> {
+    let mut keys = Vec::new();
+    if let Some(host) = &entry.website_host {
+        keys.push(format!("website:{host}"));
     }
+    if let Some(name) = &entry.mobile_app_name {
+        keys.push(format!("mobile-app:{}", name.to_lowercase()));
+    }
+    if let Some(name) = &entry.desktop_app_name {
+        keys.push(format!("desktop-app:{}", name.to_lowercase()));
+    }
+    keys
 }
 
 fn normalize_custom_category_stack_name(input: &str) -> String {
@@ -1098,9 +1045,9 @@ fn decide_url_limit(
             continue;
         }
         if limit
-            .sources
+            .entries
             .iter()
-            .any(|source| limit_source_matches_host(source, host, config))
+            .any(|entry| limit_entry_matches_host(entry, host))
         {
             return HostDecision {
                 blocked: true,
@@ -1114,28 +1061,11 @@ fn decide_url_limit(
     }
 }
 
-fn limit_source_matches_host(
-    source: &UsageLimitSource,
-    host: &str,
-    config: &DoomscrollingConfig,
-) -> bool {
-    match source {
-        UsageLimitSource::Website { host: source_host } => host_matches_rule(host, source_host),
-        UsageLimitSource::Category { id } => {
-            built_in_category(id).is_some_and(|category| category_matches_host(host, category))
-        }
-        UsageLimitSource::CustomStack { id } => config
-            .custom_category_stacks
-            .iter()
-            .find(|stack| &stack.id == id)
-            .is_some_and(|stack| {
-                stack
-                    .hosts
-                    .iter()
-                    .any(|stack_host| host_matches_rule(host, stack_host))
-            }),
-        UsageLimitSource::DesktopApp { .. } | UsageLimitSource::MobileApp { .. } => false,
-    }
+fn limit_entry_matches_host(entry: &UsageLimitEntry, host: &str) -> bool {
+    entry
+        .website_host
+        .as_deref()
+        .is_some_and(|source_host| host_matches_rule(host, source_host))
 }
 
 fn category_matches_url(host: &str, url: Option<&str>, category: &BuiltInCategory) -> bool {
@@ -1163,17 +1093,6 @@ fn category_matches_url(host: &str, url: Option<&str>, category: &BuiltInCategor
         .reddit_subreddit_keywords
         .iter()
         .any(|keyword| subreddit.contains(keyword))
-}
-
-fn category_matches_host(host: &str, category: &BuiltInCategory) -> bool {
-    category
-        .hosts
-        .iter()
-        .any(|category_host| host_matches_rule(host, category_host))
-        || category
-            .domain_keywords
-            .iter()
-            .any(|keyword| host.contains(keyword))
 }
 
 impl DoomscrollingMode {
@@ -1233,8 +1152,14 @@ fn rules_fingerprint(config: &DoomscrollingConfig, limit_state: Option<&LimitSta
         feed_fingerprint(&mut hash, &limit.name);
         feed_fingerprint_bool(&mut hash, limit.enabled);
         feed_fingerprint(&mut hash, &limit.minutes_per_day.to_string());
-        for source in &limit.sources {
-            feed_fingerprint(&mut hash, &usage_limit_source_key(source));
+        for entry in &limit.entries {
+            feed_fingerprint(&mut hash, &entry.id);
+            if let Some(name) = &entry.name {
+                feed_fingerprint(&mut hash, name);
+            }
+            for key in usage_limit_entry_source_keys(entry) {
+                feed_fingerprint(&mut hash, &key);
+            }
         }
     }
     if let Some(limit_state) = limit_state {
@@ -1653,8 +1578,12 @@ mod tests {
             name: "YouTube".to_string(),
             enabled: true,
             minutes_per_day: 10,
-            sources: vec![super::UsageLimitSource::Website {
-                host: "youtube.com".to_string(),
+            entries: vec![super::UsageLimitEntry {
+                id: "youtube-website".to_string(),
+                name: None,
+                website_host: Some("youtube.com".to_string()),
+                mobile_app_name: None,
+                desktop_app_name: None,
             }],
         }];
         let limit_state = super::LimitState {
@@ -1693,8 +1622,12 @@ mod tests {
             name: "Reddit limit".to_string(),
             enabled: true,
             minutes_per_day: 10,
-            sources: vec![super::UsageLimitSource::Website {
-                host: "reddit.com".to_string(),
+            entries: vec![super::UsageLimitEntry {
+                id: "reddit-website".to_string(),
+                name: None,
+                website_host: Some("reddit.com".to_string()),
+                mobile_app_name: None,
+                desktop_app_name: None,
             }],
         }];
         let limit_state = super::LimitState {

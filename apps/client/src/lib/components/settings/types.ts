@@ -6,3 +6,7 @@
 export type SectionId = "appearance" | "calendars" | "music" | "doomscrolling" | "shortcuts";
 
 export type DoomscrollingSettingsTab = "limits" | "browser" | "mobile" | "desktop";
+
+export type DoomscrollingLimitEditorTarget =
+  | { mode: "create" }
+  | { mode: "edit"; limitId: string };

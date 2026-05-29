@@ -16,7 +16,7 @@ The current desktop implementation is an early Chrome and Brave development slic
 - Settings > Doomscrolling is split into Limits, Browser, Mobile apps, and Desktop apps. Limits are daily usage budgets that apply whenever GanbaruAI is running. Browser supports enable or disable, blocking during focus, blocking during short breaks, blocking during long breaks, Blacklist mode, Whitelist mode, blocked websites, blocked categories, custom category stacks, exceptions, and allowed websites. Mobile apps is a work-in-progress placeholder.
 - The Desktop apps tab uses the same schedule controls for local app rules, but desktop app blocking is blocklist-only. Adding an app opens an on-demand installed-app picker, so the app does not continuously scan the system. The picker omits system and basic utility apps because they are not procrastination targets. Adding or removing an app from the picker requires confirmation because blocked apps can be closed automatically during configured Pomodoro phases. GanbaruAI, system utilities, shell processes, desktop shell processes, and generic runtimes are protected and cannot be added to blocked apps or closed by stale rules. On Linux, active blocked apps are closed automatically during protected Pomodoro phases and the app shows an OS notification explaining where to change the setting, capped to five notifications per minute.
 - Blacklist mode presents built-in and custom categories as category pills. The New category pill opens the custom category form, websites are entered as list items, and custom category deletion lives inside the edit form.
-- The current browser `doomscrolling` config uses `enabled`, `blockDuringFocus`, `blockDuringShortBreaks`, `blockDuringLongBreaks`, `mode`, `blockedCategories`, `customCategoryStacks`, `blockedHosts`, `exceptionHosts`, and `allowedHosts`. Built-in categories are enabled by default. Website entries store `host` and `enabled` so users can disable a rule without deleting it. Category stacks store a name, enabled state, and normalized hosts. Legacy string website entries load as enabled rules, and legacy configs without `mode` treat old `allowedHosts` values as Blacklist mode exceptions. Desktop app rules live under `doomscrolling.desktop` with the same enable and phase schedule toggles plus a blocked app list. Daily usage limits live under `doomscrolling.limits` with `enabled` and `items`. Each limit stores `id`, `name`, `enabled`, `kind`, `minutesPerDay`, and normalized sources. Legacy desktop `mode` and `allowedApps` fields are ignored.
+- The current browser `doomscrolling` config uses `enabled`, `blockDuringFocus`, `blockDuringShortBreaks`, `blockDuringLongBreaks`, `mode`, `blockedCategories`, `customCategoryStacks`, `blockedHosts`, `exceptionHosts`, and `allowedHosts`. Built-in categories are enabled by default. Website entries store `host` and `enabled` so users can disable a rule without deleting it. Category stacks store a name, enabled state, and normalized hosts. Legacy string website entries load as enabled rules, and legacy configs without `mode` treat old `allowedHosts` values as Blacklist mode exceptions. Desktop app rules live under `doomscrolling.desktop` with the same enable and phase schedule toggles plus a blocked app list. Daily usage limits live under `doomscrolling.limits` with `enabled` and `items`. Each limit stores `id`, `name`, `enabled`, `minutesPerDay`, and linked entries with optional website, mobile app, and desktop app fields. Legacy desktop `mode` and `allowedApps` fields are ignored.
 - The extension tracks focused active tab time for HTTP and HTTPS pages while the browser window is focused. Browser locked state pauses tracking, but passive focused use such as fullscreen video still counts. It reports only normalized website host, elapsed seconds, local date, and sample timing through native messaging. Extension block pages, unsupported browser pages, and non-HTTP URLs are never counted as website usage.
 - The app stores usage samples in SQLite, derives daily totals for the user's local day, and writes a small local limit snapshot for the native host. The snapshot includes the active SQLite filename so extension samples go into the same database the UI reads during dev, production, and benchmark modes. The native host includes the current limit totals in its rules fingerprint so the extension can recheck already open tabs when limits change or become exhausted.
 - Built-in browser category definitions live in `apps/client/src/lib/doomscrolling/categories.json`, which is shared by the frontend rule model and the Rust native messaging host. This avoids separate browser and native-host category lists drifting apart.
@@ -29,24 +29,18 @@ This is intentionally smaller than the full spec below. It supports domain-level
 
 Daily usage limits are budget rules, not Pomodoro phase rules. They apply whenever GanbaruAI is running and reset at local midnight.
 
-Limit kinds:
+Each limit can link one or many entries that share the same daily budget. Each entry represents a product or habit across browser, mobile, and desktop, for example `facebook.com`, the Facebook mobile app, and the Facebook desktop app. The limit name is optional in the editor. If it is empty, GanbaruAI derives it from the first linked entry using this priority: entry name, mobile app name, desktop app name, then website name with the first letter capitalized.
 
-- **Individual limit.** One product or habit. It can link several sources that should count as the same usage, such as `youtube.com` and a matching desktop app.
-- **Group limit.** Several products, sites, apps, built-in categories, or custom category stacks that share one budget, such as social media for 1 hour per day.
-
-Supported source types:
-
-- Website host.
-- Desktop app rule.
-- Built-in browser category.
-- Custom category stack.
-- Mobile app placeholder. This is visible as pending but is not configurable yet.
+Categories are not configurable in daily usage limits for now. Built-in categories and custom category stacks remain browser-blocking tools only.
 
 Config shape under `doomscrolling.limits`:
 
 - `enabled`: global usage-limit toggle.
 - `items`: ordered list of limit definitions.
-- Each item has `id`, `name`, `enabled`, `kind`, `minutesPerDay`, and `sources`.
+- Each item has `id`, `name`, `enabled`, `minutesPerDay`, and `entries`.
+- Each entry has `id`, optional `name`, optional `websiteHost`, optional `mobileAppName`, and optional `desktopAppName`.
+- At least one of `websiteHost`, `mobileAppName`, or `desktopAppName` is required for every entry.
+- Mobile app entries are stored for future mobile support, but mobile usage is not counted or enforced yet.
 
 Limits count active use only:
 
@@ -55,7 +49,7 @@ Limits count active use only:
 - A blocked extension page does not count as website usage.
 - Desktop app usage counts only foreground active app time where the OS exposes it.
 - If foreground desktop app detection is unavailable, desktop limits show unavailable and do not count background running processes.
-- Deleting a limit does not delete today's usage samples. Recreating a limit with the same matching sources rolls up the already recorded samples again, so deleting and re-adding a limit cannot reset today's budget.
+- Deleting a limit does not delete today's usage samples. Recreating a limit with the same matching website or app fields rolls up the already recorded samples again, so deleting and re-adding a limit cannot reset today's budget.
 
 Browser counting cases:
 

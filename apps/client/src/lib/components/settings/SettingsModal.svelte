@@ -12,11 +12,16 @@
   import CalendarScrollbar from "../calendar/CalendarScrollbar.svelte";
   import MusicSection from "./MusicSection.svelte";
   import DoomscrollingSection from "./DoomscrollingSection.svelte";
+  import DoomscrollingLimitEditor from "./DoomscrollingLimitEditor.svelte";
   import ShortcutsSection from "./ShortcutsSection.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { hasOnlyShortcutModifier } from "$lib/keyboard-shortcuts";
-  import type { DoomscrollingSettingsTab, SectionId } from "./types";
+  import type {
+    DoomscrollingLimitEditorTarget,
+    DoomscrollingSettingsTab,
+    SectionId,
+  } from "./types";
 
   let {
     onClose,
@@ -54,6 +59,7 @@
   ];
 
   let activeSection = $state<SectionId>("appearance");
+  let detailView = $state<DoomscrollingLimitEditorTarget | null>(null);
   let settingsScrollEl: HTMLElement | undefined = $state();
   const useTopNav = $derived(viewport.below("compact"));
   const useIconRail = $derived(!useTopNav && viewport.below("regular"));
@@ -79,7 +85,10 @@
   // most once per open and never overrides a subsequent sidebar click (the
   // prop does not change during the modal's lifetime).
   $effect.pre(() => {
-    if (initialSection) activeSection = initialSection;
+    if (initialSection) {
+      activeSection = initialSection;
+      detailView = null;
+    }
   });
 
   $effect(() => {
@@ -92,6 +101,29 @@
     );
     input?.focus();
     input?.select();
+  }
+
+  function scrollSettingsToTop(): void {
+    queueMicrotask(() => {
+      settingsScrollEl?.scrollTo({ top: 0 });
+    });
+  }
+
+  function selectSection(section: SectionId): void {
+    activeSection = section;
+    detailView = null;
+    scrollSettingsToTop();
+  }
+
+  function openDoomscrollingLimitEditor(target: DoomscrollingLimitEditorTarget): void {
+    activeSection = "doomscrolling";
+    detailView = target;
+    scrollSettingsToTop();
+  }
+
+  function closeDetailView(): void {
+    detailView = null;
+    scrollSettingsToTop();
   }
 
   onMount(() => {
@@ -111,12 +143,16 @@
       if (e.key === "F1") {
         e.preventDefault();
         e.stopPropagation();
-        activeSection = "shortcuts";
+        selectSection("shortcuts");
         return;
       }
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
+        if (detailView) {
+          closeDetailView();
+          return;
+        }
         onClose();
         return;
       }
@@ -160,7 +196,7 @@
             {@const Icon = section.icon}
             <button
               onclick={() => {
-                activeSection = section.id;
+                selectSection(section.id);
               }}
               class={cn(
                 "flex h-8 shrink-0 items-center gap-1.5 rounded px-2.5 text-[0.8rem] font-medium transition-colors",
@@ -214,7 +250,7 @@
             {@const Icon = section.icon}
             <button
               onclick={() => {
-                activeSection = section.id;
+                selectSection(section.id);
               }}
               aria-label={section.label}
               data-app-tooltip-disabled="true"
@@ -247,7 +283,13 @@
           useTopNav ? "px-3 py-4" : useIconRail ? "px-5 py-5" : "p-8",
         )}
       >
-        {#if activeSection === "appearance"}
+        {#if detailView}
+          <DoomscrollingLimitEditor
+            target={detailView}
+            onDone={closeDetailView}
+            onCancel={closeDetailView}
+          />
+        {:else if activeSection === "appearance"}
           <AppearanceSection />
         {:else if activeSection === "calendars"}
           {#if CalendarsSection}
@@ -257,7 +299,10 @@
         {:else if activeSection === "music"}
           <MusicSection />
         {:else if activeSection === "doomscrolling"}
-          <DoomscrollingSection initialTab={initialDoomscrollingTab} />
+          <DoomscrollingSection
+            initialTab={initialDoomscrollingTab}
+            onOpenLimitEditor={openDoomscrollingLimitEditor}
+          />
         {:else if activeSection === "shortcuts"}
           <ShortcutsSection />
         {/if}
