@@ -21,12 +21,16 @@
     target,
     onDone,
     onCancel,
+    compactLayout = false,
+    iconRailLayout = false,
     onScrollContainerChange = () => {},
     onScrollbarInsetsChange = () => {},
   }: {
     target: DoomscrollingLimitEditorTarget;
     onDone: () => void;
     onCancel: () => void;
+    compactLayout?: boolean;
+    iconRailLayout?: boolean;
     onScrollContainerChange?: (scrollContainer: HTMLElement | undefined) => void;
     onScrollbarInsetsChange?: (insets: { top: number; bottom: number }) => void;
   } = $props();
@@ -58,6 +62,9 @@
   let editorRootEl: HTMLElement | undefined = $state();
   let editorScrollEl: HTMLElement | undefined = $state();
   let hydratedKey = "";
+  const contentPaddingX = $derived(compactLayout ? "0.75rem" : iconRailLayout ? "1.25rem" : "2rem");
+  const contentPaddingTop = $derived(compactLayout ? "1rem" : iconRailLayout ? "1.25rem" : "2rem");
+  const contentPaddingBottom = $derived(compactLayout ? "1rem" : iconRailLayout ? "1.25rem" : "2rem");
 
   const targetLimit = $derived.by<DoomscrollingUsageLimit | null>(() => {
     if (target.mode !== "edit") return null;
@@ -273,22 +280,30 @@
 </script>
 
 <div bind:this={editorRootEl} class="flex h-full min-h-0 flex-col">
-  <header class="flex min-w-0 items-start justify-between gap-3 border-b border-border/70 pb-4">
-    <div class="min-w-0">
-      <h1 class="truncate text-[1rem] font-semibold text-foreground">
-        {target.mode === "edit" ? "Edit usage limit" : "Add usage limit"}
-      </h1>
-      <p class="mt-1 max-w-2xl text-[0.866667rem] text-muted-foreground">
-        Link every source that should share the same daily budget.
-      </p>
-    </div>
-  </header>
-
   <main
     bind:this={editorScrollEl}
-    class="hide-scrollbar min-h-0 flex-1 overflow-y-auto py-6"
+    class="hide-scrollbar min-h-0 flex-1 overflow-y-auto"
   >
-    <div class="flex flex-col gap-6 pb-6">
+    <header
+      class="shrink-0"
+      style="padding-left: {contentPaddingX}; padding-right: {contentPaddingX}; padding-top: {contentPaddingTop};"
+    >
+      <div class="flex min-w-0 items-start justify-between gap-3 border-b border-border/70 pb-4">
+        <div class="min-w-0">
+          <h1 class="truncate text-[1rem] font-semibold text-foreground">
+            {target.mode === "edit" ? "Edit usage limit" : "Add usage limit"}
+          </h1>
+          <p class="mt-1 max-w-2xl text-[0.866667rem] text-muted-foreground">
+            Link every source that should share the same daily budget.
+          </p>
+        </div>
+      </div>
+    </header>
+
+    <div
+      class="flex flex-col gap-6 py-6"
+      style="padding-left: {contentPaddingX}; padding-right: {contentPaddingX};"
+    >
       <section class="flex flex-col gap-4">
         <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Limit details</h2>
 
@@ -412,24 +427,29 @@
       {#if formError}
         <div class="text-[0.8rem] text-destructive">{formError}</div>
       {/if}
-      </div>
-    </main>
+    </div>
+  </main>
 
-  <footer class="flex shrink-0 flex-wrap justify-end gap-2 border-t border-border/70 pt-3">
-    <button
-      type="button"
-      onclick={onCancel}
-      class="flex h-8 items-center justify-center rounded-md border border-border bg-card px-3 text-[0.8rem] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
-    >
-      Cancel
-    </button>
-    <button
-      type="button"
-      onclick={saveLimit}
-      class="flex h-8 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-[0.8rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-    >
-      <Save size={13} strokeWidth={2.25} />
-      <span>Save</span>
-    </button>
+  <footer
+    class="shrink-0"
+    style="padding-left: {contentPaddingX}; padding-right: {contentPaddingX}; padding-bottom: {contentPaddingBottom};"
+  >
+    <div class="flex flex-wrap justify-end gap-2 border-t border-border/70 pt-3">
+      <button
+        type="button"
+        onclick={onCancel}
+        class="flex h-8 items-center justify-center rounded-md border border-border bg-card px-3 text-[0.8rem] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        onclick={saveLimit}
+        class="flex h-8 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-[0.8rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+      >
+        <Save size={13} strokeWidth={2.25} />
+        <span>Save</span>
+      </button>
+    </div>
   </footer>
 </div>

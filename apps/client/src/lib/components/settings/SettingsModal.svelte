@@ -67,6 +67,7 @@
   const useTopNav = $derived(viewport.below("compact"));
   const useIconRail = $derived(!useTopNav && viewport.below("regular"));
   const settingsScrollbarInset = $derived(useTopNav ? 12 : useIconRail ? 16 : 24);
+  const settingsContentPaddingClass = $derived(useTopNav ? "px-3 py-4" : useIconRail ? "px-5 py-5" : "p-8");
   type CalendarsSectionComponent = typeof import("./CalendarsSection.svelte").default;
   let CalendarsSection = $state<CalendarsSectionComponent | null>(null);
   let loadingCalendarsSection: Promise<void> | null = null;
@@ -297,7 +298,7 @@
           detailView || activeSection === "shortcuts"
             ? "overflow-hidden"
             : "hide-scrollbar overflow-y-auto",
-          useTopNav ? "px-3 py-4" : useIconRail ? "px-5 py-5" : "p-8",
+          detailView ? "p-0" : settingsContentPaddingClass,
         )}
       >
         {#if detailView}
@@ -305,6 +306,8 @@
             target={detailView}
             onDone={closeDetailView}
             onCancel={closeDetailView}
+            compactLayout={useTopNav}
+            iconRailLayout={useIconRail}
             onScrollContainerChange={(scrollContainer) => {
               detailScrollEl = scrollContainer;
             }}
