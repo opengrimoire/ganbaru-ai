@@ -25,11 +25,11 @@ const MIN_EVENT_HEIGHT = 4;
 // Date parsing and formatting
 
 export function parseCalendarDate(str: string): Date {
-  // "YYYY-MM-DD HH:MM" -> Date
+  // "YYYY-MM-DD HH:MM" or "YYYY-MM-DD HH:MM:SS" -> Date
   const [datePart, timePart] = str.split(" ");
   const [y, m, d] = datePart.split("-").map(Number);
-  const [h, min] = (timePart ?? "00:00").split(":").map(Number);
-  return new Date(y, m - 1, d, h, min);
+  const [h, min, sec] = (timePart ?? "00:00").split(":").map(Number);
+  return new Date(y, m - 1, d, h, min, sec || 0);
 }
 
 export function formatCalendarDate(date: Date): string {
@@ -41,14 +41,10 @@ export function formatCalendarDate(date: Date): string {
   return `${y}-${m}-${d} ${h}:${min}`;
 }
 
-export function formatCalendarDateCeilMinute(date: Date): string {
-  const rounded = new Date(date);
-  if (rounded.getSeconds() > 0 || rounded.getMilliseconds() > 0) {
-    rounded.setMinutes(rounded.getMinutes() + 1, 0, 0);
-  } else {
-    rounded.setSeconds(0, 0);
-  }
-  return formatCalendarDate(rounded);
+export function formatCalendarDateWithSeconds(date: Date): string {
+  const base = formatCalendarDate(date);
+  const sec = String(date.getSeconds()).padStart(2, "0");
+  return `${base}:${sec}`;
 }
 
 export function formatDatePart(date: Date): string {
@@ -83,9 +79,9 @@ export function wallClockToUtcIso(wallClock: string, zone: string): string {
 }
 
 /**
- * Convert a UTC ISO 8601 instant to a "YYYY-MM-DD HH:MM" wall clock in
- * `zone`. The seconds and sub-second components are dropped; the calendar
- * UI works at minute granularity.
+ * Convert a UTC ISO 8601 instant to a wall clock in `zone`. Minute precision
+ * stays the default shape, but non-zero seconds are preserved for exact event
+ * cuts that must stop scheduler behavior immediately.
  */
 export function utcIsoToWallClock(utcIso: string, zone: string): string {
   const instant = Temporal.Instant.from(utcIso);
@@ -95,13 +91,19 @@ export function utcIsoToWallClock(utcIso: string, zone: string): string {
   const d = String(zoned.day).padStart(2, "0");
   const h = String(zoned.hour).padStart(2, "0");
   const min = String(zoned.minute).padStart(2, "0");
-  return `${y}-${m}-${d} ${h}:${min}`;
+  const base = `${y}-${m}-${d} ${h}:${min}`;
+  if (zoned.second === 0 && zoned.millisecond === 0 && zoned.microsecond === 0 && zoned.nanosecond === 0) {
+    return base;
+  }
+  return `${base}:${String(zoned.second).padStart(2, "0")}`;
 }
 
 /**
- * Sanitize a calendar time string to ensure clean "YYYY-MM-DD HH:MM" format.
+ * Sanitize a calendar time string to ensure clean "YYYY-MM-DD HH:MM" or
+ * "YYYY-MM-DD HH:MM:SS" format.
  * Handles:
  * - Floating point minutes (rounds them)
+ * - Explicit seconds (preserves them for exact cut timestamps)
  * - Missing time part (defaults to 00:00)
  * - Out of range values (clamps them)
  * Returns null if the input is completely invalid.
@@ -124,19 +126,23 @@ export function sanitizeCalendarTime(str: string): string | null {
 
   let hour = parseFloat(timeParts[0]);
   let minute = parseFloat(timeParts[1]);
+  let second = timeParts[2] !== undefined ? parseFloat(timeParts[2]) : null;
 
   // Handle NaN
   if (isNaN(hour)) hour = 0;
   if (isNaN(minute)) minute = 0;
+  if (second !== null && isNaN(second)) second = 0;
 
   // Round and clamp
   hour = Math.max(0, Math.min(23, Math.round(hour)));
   minute = Math.max(0, Math.min(59, Math.round(minute)));
+  if (second !== null) second = Math.max(0, Math.min(59, Math.round(second)));
 
   const hh = String(hour).padStart(2, "0");
   const mm = String(minute).padStart(2, "0");
+  const ss = second !== null ? String(second).padStart(2, "0") : null;
 
-  return `${datePart} ${hh}:${mm}`;
+  return ss === null ? `${datePart} ${hh}:${mm}` : `${datePart} ${hh}:${mm}:${ss}`;
 }
 
 // Week / day helpers
@@ -291,8 +297,8 @@ export function computeViewWindow(
 
 export function minuteOfDay(dateStr: string): number {
   const timePart = dateStr.split(" ")[1] ?? "00:00";
-  const [h, m] = timePart.split(":").map(Number);
-  return h * 60 + m;
+  const [h, m, s] = timePart.split(":").map(Number);
+  return h * 60 + m + (s || 0) / 60;
 }
 
 export function durationMinutes(start: string, end: string): number {

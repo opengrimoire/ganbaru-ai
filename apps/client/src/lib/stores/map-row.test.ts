@@ -73,6 +73,16 @@ describe("mapRow", () => {
     expect(result.createdAt).toBe("2026-03-15T08:00:00Z");
   });
 
+  it("preserves non-zero seconds from canonical UTC event times", () => {
+    const result = mapRow(makeDbRow({
+      start_time: "2026-03-15T13:30:00Z",
+      end_time: "2026-03-15T14:30:45Z",
+    }));
+
+    expect(result.start).toBe("2026-03-15 09:30");
+    expect(result.end).toBe("2026-03-15 10:30:45");
+  });
+
   it("returns undefined for default values", () => {
     const result = mapRow(makeDbRow());
     expect(result.color).toBeUndefined();

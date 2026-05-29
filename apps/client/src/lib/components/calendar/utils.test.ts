@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   parseCalendarDate,
   formatCalendarDate,
-  formatCalendarDateCeilMinute,
+  formatCalendarDateWithSeconds,
   formatDatePart,
   startOfWeek,
   getWeekDays,
@@ -63,6 +63,13 @@ describe("parseCalendarDate", () => {
     expect(d.getMinutes()).toBe(30);
   });
 
+  it("parses optional seconds", () => {
+    const d = parseCalendarDate("2026-03-13 14:30:45");
+    expect(d.getHours()).toBe(14);
+    expect(d.getMinutes()).toBe(30);
+    expect(d.getSeconds()).toBe(45);
+  });
+
   it("defaults time to 00:00 if missing", () => {
     const d = parseCalendarDate("2026-01-01");
     expect(d.getHours()).toBe(0);
@@ -82,20 +89,10 @@ describe("formatCalendarDate", () => {
   });
 });
 
-describe("formatCalendarDateCeilMinute", () => {
-  it("keeps an exact minute unchanged", () => {
-    const d = new Date(2026, 2, 13, 14, 30, 0, 0);
-    expect(formatCalendarDateCeilMinute(d)).toBe("2026-03-13 14:30");
-  });
-
-  it("rounds seconds up to the next calendar minute", () => {
-    const d = new Date(2026, 2, 13, 14, 30, 1, 0);
-    expect(formatCalendarDateCeilMinute(d)).toBe("2026-03-13 14:31");
-  });
-
-  it("rounds across day boundaries", () => {
-    const d = new Date(2026, 2, 13, 23, 59, 59, 999);
-    expect(formatCalendarDateCeilMinute(d)).toBe("2026-03-14 00:00");
+describe("formatCalendarDateWithSeconds", () => {
+  it("formats a Date to YYYY-MM-DD HH:MM:SS", () => {
+    const d = new Date(2026, 2, 13, 14, 30, 5, 999);
+    expect(formatCalendarDateWithSeconds(d)).toBe("2026-03-13 14:30:05");
   });
 });
 
@@ -225,6 +222,10 @@ describe("minuteOfDay", () => {
     expect(minuteOfDay("2026-03-13 23:59")).toBe(1439);
   });
 
+  it("includes seconds as fractional minutes", () => {
+    expect(minuteOfDay("2026-03-13 14:30:30")).toBe(870.5);
+  });
+
   it("defaults to 0 if no time part", () => {
     expect(minuteOfDay("2026-03-13")).toBe(0);
   });
@@ -234,6 +235,10 @@ describe("durationMinutes", () => {
   it("calculates duration between two calendar dates", () => {
     expect(durationMinutes("2026-03-13 14:00", "2026-03-13 15:30")).toBe(90);
     expect(durationMinutes("2026-03-13 08:00", "2026-03-13 08:30")).toBe(30);
+  });
+
+  it("preserves second-level duration", () => {
+    expect(durationMinutes("2026-03-13 14:00:00", "2026-03-13 14:00:30")).toBe(0.5);
   });
 
   it("returns 0 for same start and end", () => {
@@ -682,6 +687,7 @@ describe("sanitizeCalendarTime", () => {
   it("passes through valid times unchanged", () => {
     expect(sanitizeCalendarTime("2026-03-13 14:30")).toBe("2026-03-13 14:30");
     expect(sanitizeCalendarTime("2026-01-01 00:00")).toBe("2026-01-01 00:00");
+    expect(sanitizeCalendarTime("2026-03-13 14:30:45")).toBe("2026-03-13 14:30:45");
   });
 
   it("rounds floating point minutes", () => {
@@ -700,6 +706,7 @@ describe("sanitizeCalendarTime", () => {
     expect(sanitizeCalendarTime("2026-03-13 -1:30")).toBe("2026-03-13 00:30");
     expect(sanitizeCalendarTime("2026-03-13 14:70")).toBe("2026-03-13 14:59");
     expect(sanitizeCalendarTime("2026-03-13 14:-5")).toBe("2026-03-13 14:00");
+    expect(sanitizeCalendarTime("2026-03-13 14:30:70")).toBe("2026-03-13 14:30:59");
   });
 
   it("defaults missing time to 00:00", () => {

@@ -713,15 +713,21 @@ async fn close_run_tx(
     tx: &mut Transaction<'_, Sqlite>,
     closure: &PomodoroRunClosure,
 ) -> Result<(), String> {
+    let ended_at = normalized_close_run_ended_at(tx, closure).await?;
+
     sqlx::query(
         "UPDATE pomodoro_pauses
-         SET ended_at = ?
+         SET ended_at = CASE
+           WHEN started_at > ? THEN started_at
+           ELSE ?
+         END
          WHERE ended_at IS NULL
            AND segment_id IN (
              SELECT id FROM pomodoro_segments WHERE run_id = ?
            )",
     )
-    .bind(&closure.ended_at)
+    .bind(&ended_at)
+    .bind(&ended_at)
     .bind(&closure.run_id)
     .execute(&mut **tx)
     .await
@@ -729,11 +735,17 @@ async fn close_run_tx(
 
     sqlx::query(
         "UPDATE pomodoro_segments
-         SET status = ?, actual_end = COALESCE(actual_end, ?), end_reason = ?
+         SET status = ?,
+             actual_end = COALESCE(actual_end, CASE
+               WHEN actual_start IS NOT NULL AND actual_start > ? THEN actual_start
+               ELSE ?
+             END),
+             end_reason = ?
          WHERE run_id = ? AND status = 'active'",
     )
     .bind(&closure.segment_status)
-    .bind(&closure.ended_at)
+    .bind(&ended_at)
+    .bind(&ended_at)
     .bind(&closure.segment_end_reason)
     .bind(&closure.run_id)
     .execute(&mut **tx)
@@ -745,9 +757,9 @@ async fn close_run_tx(
          SET ended_at = ?, end_reason = ?, last_heartbeat = ?
          WHERE id = ? AND ended_at IS NULL",
     )
-    .bind(&closure.ended_at)
+    .bind(&ended_at)
     .bind(&closure.end_reason)
-    .bind(&closure.ended_at)
+    .bind(&ended_at)
     .bind(&closure.run_id)
     .execute(&mut **tx)
     .await
@@ -762,13 +774,34 @@ async fn close_run_tx(
             run_id: &closure.run_id,
             segment_id: None,
             event_type: &closure.event_type,
-            occurred_at: &closure.ended_at,
+            occurred_at: &ended_at,
             phase: None,
             reason: Some(&closure.end_reason),
             duration_seconds: None,
         },
     )
     .await
+}
+
+async fn normalized_close_run_ended_at(
+    tx: &mut Transaction<'_, Sqlite>,
+    closure: &PomodoroRunClosure,
+) -> Result<String, String> {
+    let active_start = sqlx::query_scalar::<_, String>(
+        "SELECT actual_start
+         FROM pomodoro_segments
+         WHERE run_id = ? AND status = 'active'
+         ORDER BY actual_start DESC
+         LIMIT 1",
+    )
+    .bind(&closure.run_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|e| format!("load active pomodoro segment start: {e}"))?;
+
+    Ok(active_start
+        .filter(|start| iso_is_before(&closure.ended_at, start))
+        .unwrap_or_else(|| closure.ended_at.clone()))
 }
 
 async fn load_segment_event_context(
@@ -1289,12 +1322,15 @@ fn normalize_segment_update(mut segment: PomodoroSegmentUpdate) -> PomodoroSegme
 
 #[cfg(test)]
 mod tests {
+    use crate::db::run_migrations;
+
     use super::{
-        canonical_event_id, normalize_segment_update, validate_event_type, validate_pause_reason,
-        validate_phase, validate_run_end_reason, validate_run_window_update,
-        validate_segment_end_reason, validate_status, PomodoroPauseWrite, PomodoroRunWindowUpdate,
-        PomodoroSegmentUpdate,
+        canonical_event_id, close_run_tx, normalize_segment_update, validate_event_type,
+        validate_pause_reason, validate_phase, validate_run_end_reason, validate_run_window_update,
+        validate_segment_end_reason, validate_status, PomodoroPauseWrite, PomodoroRunClosure,
+        PomodoroRunWindowUpdate, PomodoroSegmentUpdate,
     };
+    use sqlx::Row;
 
     #[test]
     fn validates_segment_enums() {
@@ -1332,6 +1368,95 @@ mod tests {
             normalized.pauses[0].ended_at,
             Some("2026-05-29T10:05:00Z".to_string())
         );
+    }
+
+    #[test]
+    fn close_run_clamps_end_to_active_segment_start() {
+        tauri::async_runtime::block_on(async {
+            let pool = sqlx::sqlite::SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect("sqlite::memory:")
+                .await
+                .unwrap();
+            sqlx::raw_sql("PRAGMA foreign_keys=ON")
+                .execute(&pool)
+                .await
+                .unwrap();
+            run_migrations(&pool).await.unwrap();
+
+            sqlx::query(
+                "INSERT INTO calendar_events (id, title, start_time, end_time)
+                 VALUES ('event-1', 'Focus block', '2026-05-29T10:00:00Z', '2026-05-29T11:00:00Z')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO pomodoro_runs
+                    (id, event_id, original_event_id, event_date, planned_start, planned_end,
+                     started_at, focus_duration_minutes, short_break_minutes, long_break_minutes,
+                     pomodoro_count, last_heartbeat, start_trigger)
+                 VALUES ('run-1', 'event-1', 'event-1', '2026-05-29',
+                         '2026-05-29T10:00:00Z', '2026-05-29T11:00:00Z',
+                         '2026-05-29T10:05:00Z', 40, 5, 10, 4,
+                         '2026-05-29T10:05:00Z', 'manual')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO pomodoro_segments
+                    (id, event_id, event_date, run_id, cycle_number, phase,
+                     planned_start, planned_end, actual_start, status)
+                 VALUES ('segment-1', 'event-1', '2026-05-29', 'run-1', 1, 'focus',
+                         '2026-05-29T10:00:00Z', '2026-05-29T10:40:00Z',
+                         '2026-05-29T10:05:00Z', 'active')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO pomodoro_pauses (id, segment_id, started_at, reason)
+                 VALUES ('pause-1', 'segment-1', '2026-05-29T10:05:00Z', 'idle')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+
+            let mut tx = pool.begin().await.unwrap();
+            close_run_tx(
+                &mut tx,
+                &PomodoroRunClosure {
+                    run_id: "run-1".to_string(),
+                    ended_at: "2026-05-29T10:00:00Z".to_string(),
+                    end_reason: "completed".to_string(),
+                    segment_status: "interrupted".to_string(),
+                    segment_end_reason: "event_expired".to_string(),
+                    event_type: "complete".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+
+            let row = sqlx::query(
+                "SELECT r.ended_at AS run_end, s.actual_end AS segment_end, p.ended_at AS pause_end
+                 FROM pomodoro_runs r
+                 JOIN pomodoro_segments s ON s.run_id = r.id
+                 JOIN pomodoro_pauses p ON p.segment_id = s.id
+                 WHERE r.id = 'run-1'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+            let run_end: String = row.try_get("run_end").unwrap();
+            let segment_end: String = row.try_get("segment_end").unwrap();
+            let pause_end: String = row.try_get("pause_end").unwrap();
+            assert_eq!(run_end, "2026-05-29T10:05:00Z");
+            assert_eq!(segment_end, "2026-05-29T10:05:00Z");
+            assert_eq!(pause_end, "2026-05-29T10:05:00Z");
+        });
     }
 
     #[test]

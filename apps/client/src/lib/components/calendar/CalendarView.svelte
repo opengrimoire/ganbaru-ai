@@ -6,7 +6,7 @@
   } from "./types";
   import {
     addDays, adjacentWorkCycleAnchor, computeViewWindow, formatCalendarDate, formatDatePart,
-    formatCalendarDateCeilMinute, getWeekDays, getWorkCycleDays,
+    formatCalendarDateWithSeconds, getWeekDays, getWorkCycleDays,
     getEventSurfaceStatusForIdentity, getLocalTimezone, parseCalendarDate,
   } from "./utils";
   import type { TimezoneAbbrMode } from "./utils";
@@ -1866,7 +1866,7 @@
     if (s.mode !== "edit" || !isSelectedActiveOccurrence(s)) return;
 
     const actualEnd = new Date();
-    const end = formatCalendarDateCeilMinute(actualEnd);
+    const end = formatCalendarDateWithSeconds(actualEnd);
     const endedData: PanelSaveData = { ...data, end };
     const endIso = actualEnd.toISOString();
     const saveFreeze = buildSaveDisplayFreeze(endedData, scope);

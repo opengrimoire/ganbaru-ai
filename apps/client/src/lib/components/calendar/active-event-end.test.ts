@@ -57,6 +57,21 @@ describe("active event end helpers", () => {
     )).toBe(false);
   });
 
+  it("treats second-precision event ends as no longer overlapping after the cut", () => {
+    const selected = event();
+    const cut = event({
+      id: "cut",
+      start: "2026-05-24 10:00",
+      end: "2026-05-24 10:30:15",
+    });
+
+    expect(endActiveEventWouldStopProductivity(
+      selected,
+      [selected, cut],
+      new Date("2026-05-24T10:30:16"),
+    )).toBe(true);
+  });
+
   it("treats a template first occurrence and synthetic occurrence on the same date as the same concrete event", () => {
     const template = event({
       id: "template-1",

@@ -167,14 +167,17 @@ export interface CalendarEvent {
   id: string;
   title: string;
   /**
-   * Wall clock "YYYY-MM-DD HH:MM" in the current render zone (device zone by
-   * default). The DB source of truth is `start_time` as a UTC ISO 8601
-   * instant. `mapRow` converts UTC to render-zone wall clock at load time;
-   * round-trip on save uses the event's home zone (`timezone`) to convert
-   * back to UTC.
+   * Wall clock "YYYY-MM-DD HH:MM" or "YYYY-MM-DD HH:MM:SS" in the current
+   * render zone (device zone by default). The DB source of truth is
+   * `start_time` as a UTC ISO 8601 instant. `mapRow` converts UTC to
+   * render-zone wall clock at load time; round-trip on save uses the event's
+   * home zone (`timezone`) to convert back to UTC.
    */
   start: string;
-  /** Wall clock "YYYY-MM-DD HH:MM" in the current render zone. See `start`. */
+  /**
+   * Wall clock "YYYY-MM-DD HH:MM" or "YYYY-MM-DD HH:MM:SS" in the current
+   * render zone. See `start`.
+   */
   end: string;
   /** IANA zone (e.g. "America/New_York") used for recurrence math and ICS re-export. */
   timezone: string;

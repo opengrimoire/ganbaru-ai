@@ -657,11 +657,17 @@ async function closeActiveRun(
   segmentStatus: "completed" | "interrupted",
   segmentEndReason: PomodoroSegmentEndReason,
   eventType: PomodoroRunEventType,
+  throwOnError = false,
 ): Promise<void> {
   const closure = runClosure(endedAt, endReason, segmentStatus, segmentEndReason, eventType);
   stopHeartbeat();
-  activeRunId = null;
-  if (closure) await closeRunInBackend(closure);
+  try {
+    if (closure) await closeRunInBackend(closure, "Failed to close pomodoro run:", throwOnError);
+    activeRunId = null;
+  } catch (error) {
+    if (activeRunId) startHeartbeat();
+    throw error;
+  }
 }
 
 function actualPhaseElapsedSeconds(): number {
@@ -1036,6 +1042,7 @@ function persistSegmentsToBackend(
   warning: string,
   bumpSegmentVersion: boolean,
   occurredAt: string | null = null,
+  throwOnError = false,
 ): Promise<void> {
   const persisted = updatedSegments.filter((segment) => segment.status !== "planned" && segment.status !== "skipped");
   if (persisted.length === 0) return Promise.resolve();
@@ -1048,7 +1055,10 @@ function persistSegmentsToBackend(
       segmentVersion++;
       publishWindowSnapshot();
     }
-  }).catch((e) => console.warn(warning, e));
+  }).catch((e) => {
+    console.warn(warning, e);
+    if (throwOnError) throw e;
+  });
 }
 
 function persistSegmentToBackend(
@@ -1056,8 +1066,9 @@ function persistSegmentToBackend(
   warning: string,
   bumpSegmentVersion: boolean,
   occurredAt: string | null = null,
+  throwOnError = false,
 ): Promise<void> {
-  return persistSegmentsToBackend([seg], warning, bumpSegmentVersion, occurredAt);
+  return persistSegmentsToBackend([seg], warning, bumpSegmentVersion, occurredAt, throwOnError);
 }
 
 async function insertSegmentsToBackend(newSegments: PersistedSegment[]) {
@@ -1106,7 +1117,11 @@ async function transitionRunInBackend(
   });
 }
 
-function closeRunInBackend(closure: PomodoroRunClosure, warning = "Failed to close pomodoro run:"): Promise<void> {
+function closeRunInBackend(
+  closure: PomodoroRunClosure,
+  warning = "Failed to close pomodoro run:",
+  throwOnError = false,
+): Promise<void> {
   return enqueuePomodoroWrite(async () => {
     await invoke("pomodoro_close_run", {
       dbUrl: dbUrl(),
@@ -1114,7 +1129,10 @@ function closeRunInBackend(closure: PomodoroRunClosure, warning = "Failed to clo
     });
     segmentVersion++;
     publishWindowSnapshot();
-  }).catch((e) => console.warn(warning, e));
+  }).catch((e) => {
+    console.warn(warning, e);
+    if (throwOnError) throw e;
+  });
 }
 
 function updateRunWindowInBackend(update: PomodoroRunWindowUpdate): void {
@@ -1217,6 +1235,7 @@ function markSegment(
   setActualEnd: boolean = false,
   actualEndIso: string = nowIso(),
   endReason: PomodoroSegmentEndReason | null = null,
+  throwOnError = false,
 ): Promise<void> {
   if (index < 0 || index >= segments.length) return Promise.resolve();
   const seg = segments[index];
@@ -1229,7 +1248,13 @@ function markSegment(
   closeLastPause(seg, seg.actualEnd ?? normalizedActualEndIso);
 
   publishWindowSnapshot();
-  return persistSegmentToBackend(seg, "Failed to update segment:", true, normalizedActualEndIso);
+  return persistSegmentToBackend(
+    seg,
+    "Failed to update segment:",
+    true,
+    normalizedActualEndIso,
+    throwOnError,
+  );
 }
 
 function activateSegment(index: number): Promise<void> {
@@ -2592,11 +2617,25 @@ async function completeActiveBlockAtInternal(endIso: string = nowIso()): Promise
     await markSegment(currentSegmentIndex, "interrupted", true, normalizedEndIso, "event_expired");
     await skipPlannedSegmentsAfter(currentSegmentIndex, "Failed to skip segment:");
   } else if (activeRunId) {
-    await closeActiveRun(normalizedEndIso, "completed", "interrupted", "event_expired", "complete");
+    await closeActiveRun(
+      normalizedEndIso,
+      "completed",
+      "interrupted",
+      "event_expired",
+      "complete",
+      true,
+    );
   }
 
   if (activeRunId) {
-    await closeActiveRun(normalizedEndIso, "completed", "interrupted", "event_expired", "complete");
+    await closeActiveRun(
+      normalizedEndIso,
+      "completed",
+      "interrupted",
+      "event_expired",
+      "complete",
+      true,
+    );
   }
 
   if (intervalId) {

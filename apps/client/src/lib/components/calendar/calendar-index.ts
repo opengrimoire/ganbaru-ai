@@ -14,7 +14,7 @@ import { expandTemplate } from "./recurrence";
 export interface ExpansionIndex {
   /** Templates with `recurrence` or non-empty `rdate`. Walked exhaustively per query. */
   recurring: CalendarEvent[];
-  /** Non-recurring events, sorted ascending by `start` (lex order = chronological for `YYYY-MM-DD HH:MM`). */
+  /** Non-recurring events, sorted ascending by `start` (lex order is chronological for supported wall clocks). */
   nonRecurringSorted: CalendarEvent[];
   /** Parallel `start` strings to `nonRecurringSorted`, for binary search without re-reading event objects. */
   nonRecurringStarts: string[];

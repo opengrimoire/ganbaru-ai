@@ -35,6 +35,17 @@ describe("selectActivePomodoroBlock", () => {
     ).toBeUndefined();
   });
 
+  it("treats second-precision event ends as expired immediately after the cut second", () => {
+    expect(
+      selectActivePomodoroBlock(
+        [
+          event({ id: "cut", start: "2026-05-25 10:00", end: "2026-05-25 10:15:30" }),
+        ],
+        { now: new Date(2026, 4, 25, 10, 15, 31), activeBlockId: null },
+      ),
+    ).toBeUndefined();
+  });
+
   it("keeps the current active block when it is still a candidate", () => {
     const long = event({ id: "long", start: "2026-05-25 09:00", end: "2026-05-25 12:00" });
     const short = event({ id: "short", start: "2026-05-25 10:00", end: "2026-05-25 10:30" });
