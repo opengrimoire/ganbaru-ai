@@ -108,6 +108,8 @@ Each pause within a segment is its own row in `pomodoro_pauses`. The fields:
 
 Multiple pauses can exist on the same segment (a segment can be interrupted multiple times). At any moment, at most one pause per segment has `ended_at = NULL` (the currently active pause).
 
+Pause and segment timestamps are normalized before persistence. A pause cannot start before its segment's `actual_start`, and a closed pause cannot end before its normalized start. A finalized segment cannot have `actual_end` before `actual_start`. This protects focus history from operating-system idle timestamps that predate an auto-started segment and from minute-granularity calendar end actions.
+
 ### Why pauses are rows, not JSON
 
 Storing pauses as a JSON array on the segment row would cause three problems:

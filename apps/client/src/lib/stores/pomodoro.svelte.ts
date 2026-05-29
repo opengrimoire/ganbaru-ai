@@ -10,6 +10,11 @@ import { writeDoomscrollingRuntimeState } from "$lib/api/doomscrolling";
 import { getMusicPlayer } from "$lib/stores/music-player.svelte";
 import { getPreferences } from "$lib/stores/preferences.svelte";
 import { computePlannedSegments } from "$lib/utils/pomodoro-segments";
+import {
+  normalizePauseForSegment,
+  normalizePausesForSegment,
+  normalizeSegmentEndIso,
+} from "./pomodoro-segment-intervals";
 import { emit, listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -629,9 +634,10 @@ function runClosure(
   eventType: PomodoroRunEventType,
 ): PomodoroRunClosure | null {
   if (!activeRunId) return null;
+  const normalizedEndedAt = normalizedActiveSegmentEndIso(endedAt);
   return {
     runId: activeRunId,
-    endedAt,
+    endedAt: normalizedEndedAt,
     endReason,
     segmentStatus,
     segmentEndReason,
@@ -1006,7 +1012,7 @@ function segmentWrite(seg: PersistedSegment): PomodoroSegmentWrite {
     plannedEnd: seg.plannedEnd,
     actualStart: seg.actualStart,
     actualEnd: seg.actualEnd,
-    pauses: seg.pauseLog,
+    pauses: normalizePausesForSegment(seg, seg.pauseLog),
     status: seg.status,
     endReason: null,
   };
@@ -1021,7 +1027,7 @@ function segmentUpdate(seg: PersistedSegment, occurredAt: string | null = null):
     actualEnd: seg.actualEnd,
     endReason: segmentEndReasonFor(seg),
     occurredAt,
-    pauses: seg.pauseLog,
+    pauses: normalizePausesForSegment(seg, seg.pauseLog),
   };
 }
 
@@ -1185,16 +1191,24 @@ function timestampMs(value: string): number {
 }
 
 function appendPause(seg: PersistedSegment, startedAt: string, reason: PauseReason, endedAt: string | null = null) {
-  seg.pauseLog = [...seg.pauseLog, { startedAt, endedAt, reason }];
+  seg.pauseLog = [
+    ...seg.pauseLog,
+    normalizePauseForSegment(seg, { startedAt, endedAt, reason }),
+  ];
 }
 
 function closeLastPause(seg: PersistedSegment, endedAt: string): boolean {
   const lastPause = seg.pauseLog[seg.pauseLog.length - 1];
   if (!lastPause || lastPause.endedAt !== null) return false;
   const updated = [...seg.pauseLog];
-  updated[updated.length - 1] = { ...lastPause, endedAt };
+  updated[updated.length - 1] = normalizePauseForSegment(seg, { ...lastPause, endedAt });
   seg.pauseLog = updated;
   return true;
+}
+
+function normalizedActiveSegmentEndIso(requestedEndIso: string): string {
+  const seg = activeSegment();
+  return seg ? normalizeSegmentEndIso(seg, requestedEndIso) : requestedEndIso;
 }
 
 function markSegment(
@@ -1208,13 +1222,14 @@ function markSegment(
   const seg = segments[index];
   seg.status = status;
   if (endReason) segmentEndReasons.set(seg.id, endReason);
-  if (setActualEnd) seg.actualEnd = actualEndIso;
+  const normalizedActualEndIso = normalizeSegmentEndIso(seg, actualEndIso);
+  if (setActualEnd) seg.actualEnd = normalizedActualEndIso;
 
   // Close any open pause interval
-  closeLastPause(seg, seg.actualEnd ?? actualEndIso);
+  closeLastPause(seg, seg.actualEnd ?? normalizedActualEndIso);
 
   publishWindowSnapshot();
-  return persistSegmentToBackend(seg, "Failed to update segment:", true, actualEndIso);
+  return persistSegmentToBackend(seg, "Failed to update segment:", true, normalizedActualEndIso);
 }
 
 function activateSegment(index: number): Promise<void> {

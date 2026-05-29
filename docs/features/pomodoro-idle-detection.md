@@ -42,7 +42,7 @@ When the system detects idle, it shows the idle overlay: a fullscreen window sim
 The overlay says, in effect, "you have been idle for X minutes; the timer has paused; here is what to do." The user has three options:
 
 - **Resume.** Closes the overlay, resumes the timer where it paused. The pause row is closed (`ended_at = now`).
-- **Stop the session.** Ends the run with `end_reason = stopped`. The active segment is marked interrupted with `actual_end = now`. The pause row is closed with the same timestamp.
+- **Stop the session.** Ends the run with `end_reason = stopped`. The active segment is marked interrupted at the idle pause start, so time spent away does not count as focus. If the operating system reports an idle start before the segment started, the timestamp is clamped to the segment start instead of writing an impossible negative interval.
 - **Ignore (close the overlay without choosing).** The timer remains paused. The user can come back later and resume or stop.
 
 Like the break screen, the overlay has two surfaces: a GTK native overlay on Linux, a webview fallback elsewhere. See `features/pomodoro-break-screen.md` for the rationale.
@@ -52,7 +52,7 @@ Like the break screen, the overlay has two surfaces: a GTK native overlay on Lin
 When the system declares idle:
 
 1. The current focus segment continues to exist (it is not marked completed). The active segment is still active; only paused.
-2. A pause row is created with `started_at = now`, `ended_at = NULL`, `reason = idle`, `segment_id` pointing at the current segment.
+2. A pause row is created with `started_at` set to the detected idle start, clamped to the segment start if needed, `ended_at = NULL`, `reason = idle`, and `segment_id` pointing at the current segment.
 3. The timer pauses. The countdown stops decrementing.
 4. The idle overlay appears.
 5. The rail's green fill for the current segment now ends at the pause's `started_at`. The empty rail background extends from there.

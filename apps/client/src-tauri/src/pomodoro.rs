@@ -360,6 +360,10 @@ pub async fn pomodoro_update_segments<R: Runtime>(
     db_url: String,
     segments: Vec<PomodoroSegmentUpdate>,
 ) -> Result<(), String> {
+    let segments = segments
+        .into_iter()
+        .map(normalize_segment_update)
+        .collect::<Vec<_>>();
     for segment in &segments {
         validate_segment_update(segment)?;
     }
@@ -1248,12 +1252,48 @@ fn iso_seconds_between(start: &str, end: &str) -> Option<i64> {
     Some((end - start).num_seconds())
 }
 
+fn iso_is_before(left: &str, right: &str) -> bool {
+    let Some(left) = DateTime::parse_from_rfc3339(left).ok() else {
+        return false;
+    };
+    let Some(right) = DateTime::parse_from_rfc3339(right).ok() else {
+        return false;
+    };
+    left < right
+}
+
+fn normalize_pause_write(mut pause: PomodoroPauseWrite) -> PomodoroPauseWrite {
+    if pause
+        .ended_at
+        .as_deref()
+        .is_some_and(|ended_at| iso_is_before(ended_at, &pause.started_at))
+    {
+        pause.ended_at = Some(pause.started_at.clone());
+    }
+    pause
+}
+
+fn normalize_segment_update(mut segment: PomodoroSegmentUpdate) -> PomodoroSegmentUpdate {
+    if let (Some(start), Some(end)) = (&segment.actual_start, &segment.actual_end) {
+        if iso_is_before(end, start) {
+            segment.actual_end = Some(start.clone());
+        }
+    }
+    segment.pauses = segment
+        .pauses
+        .into_iter()
+        .map(normalize_pause_write)
+        .collect();
+    segment
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        canonical_event_id, validate_event_type, validate_pause_reason, validate_phase,
-        validate_run_end_reason, validate_run_window_update, validate_segment_end_reason,
-        validate_status, PomodoroRunWindowUpdate,
+        canonical_event_id, normalize_segment_update, validate_event_type, validate_pause_reason,
+        validate_phase, validate_run_end_reason, validate_run_window_update,
+        validate_segment_end_reason, validate_status, PomodoroPauseWrite, PomodoroRunWindowUpdate,
+        PomodoroSegmentUpdate,
     };
 
     #[test]
@@ -1265,6 +1305,33 @@ mod tests {
         assert!(validate_status("interrupted").is_ok());
         assert!(validate_status("planned").is_err());
         assert!(validate_status("wrong").is_err());
+    }
+
+    #[test]
+    fn normalizes_inverted_segment_update_intervals() {
+        let normalized = normalize_segment_update(PomodoroSegmentUpdate {
+            id: "segment-1".to_string(),
+            status: "interrupted".to_string(),
+            planned_end: "2026-05-29T10:40:00Z".to_string(),
+            actual_start: Some("2026-05-29T10:05:00Z".to_string()),
+            actual_end: Some("2026-05-29T10:00:00Z".to_string()),
+            end_reason: Some("stopped".to_string()),
+            occurred_at: Some("2026-05-29T10:00:00Z".to_string()),
+            pauses: vec![PomodoroPauseWrite {
+                started_at: "2026-05-29T10:05:00Z".to_string(),
+                ended_at: Some("2026-05-29T10:04:00Z".to_string()),
+                reason: "idle".to_string(),
+            }],
+        });
+
+        assert_eq!(
+            normalized.actual_end,
+            Some("2026-05-29T10:05:00Z".to_string())
+        );
+        assert_eq!(
+            normalized.pauses[0].ended_at,
+            Some("2026-05-29T10:05:00Z".to_string())
+        );
     }
 
     #[test]

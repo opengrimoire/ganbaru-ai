@@ -41,6 +41,16 @@ export function formatCalendarDate(date: Date): string {
   return `${y}-${m}-${d} ${h}:${min}`;
 }
 
+export function formatCalendarDateCeilMinute(date: Date): string {
+  const rounded = new Date(date);
+  if (rounded.getSeconds() > 0 || rounded.getMilliseconds() > 0) {
+    rounded.setMinutes(rounded.getMinutes() + 1, 0, 0);
+  } else {
+    rounded.setSeconds(0, 0);
+  }
+  return formatCalendarDate(rounded);
+}
+
 export function formatDatePart(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");

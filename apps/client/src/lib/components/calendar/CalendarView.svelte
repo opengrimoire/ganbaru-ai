@@ -6,7 +6,7 @@
   } from "./types";
   import {
     addDays, adjacentWorkCycleAnchor, computeViewWindow, formatCalendarDate, formatDatePart,
-    getWeekDays, getWorkCycleDays,
+    formatCalendarDateCeilMinute, getWeekDays, getWorkCycleDays,
     getEventSurfaceStatusForIdentity, getLocalTimezone, parseCalendarDate,
   } from "./utils";
   import type { TimezoneAbbrMode } from "./utils";
@@ -1865,9 +1865,10 @@
     const s = session.state;
     if (s.mode !== "edit" || !isSelectedActiveOccurrence(s)) return;
 
-    const end = formatCalendarDate(new Date());
+    const actualEnd = new Date();
+    const end = formatCalendarDateCeilMinute(actualEnd);
     const endedData: PanelSaveData = { ...data, end };
-    const endIso = parseCalendarDate(end).toISOString();
+    const endIso = actualEnd.toISOString();
     const saveFreeze = buildSaveDisplayFreeze(endedData, scope);
     let saveRefreshedVisibleWindow = false;
     const suppressPomodoroAutoStart = pomodoro.isActive && !!pomodoro.activeBlockId;

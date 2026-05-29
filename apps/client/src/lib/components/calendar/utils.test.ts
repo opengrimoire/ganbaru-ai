@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   parseCalendarDate,
   formatCalendarDate,
+  formatCalendarDateCeilMinute,
   formatDatePart,
   startOfWeek,
   getWeekDays,
@@ -78,6 +79,23 @@ describe("formatCalendarDate", () => {
   it("zero-pads single digit values", () => {
     const d = new Date(2026, 0, 5, 3, 7);
     expect(formatCalendarDate(d)).toBe("2026-01-05 03:07");
+  });
+});
+
+describe("formatCalendarDateCeilMinute", () => {
+  it("keeps an exact minute unchanged", () => {
+    const d = new Date(2026, 2, 13, 14, 30, 0, 0);
+    expect(formatCalendarDateCeilMinute(d)).toBe("2026-03-13 14:30");
+  });
+
+  it("rounds seconds up to the next calendar minute", () => {
+    const d = new Date(2026, 2, 13, 14, 30, 1, 0);
+    expect(formatCalendarDateCeilMinute(d)).toBe("2026-03-13 14:31");
+  });
+
+  it("rounds across day boundaries", () => {
+    const d = new Date(2026, 2, 13, 23, 59, 59, 999);
+    expect(formatCalendarDateCeilMinute(d)).toBe("2026-03-14 00:00");
   });
 });
 
