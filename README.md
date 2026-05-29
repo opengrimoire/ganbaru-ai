@@ -1,6 +1,6 @@
 <div align="center">
-  <img src="apps/client/static/icon.png" alt="GanbaruAI icon" width="20%" />
-  <h1>GanbaruAI</h1>
+  <img src="apps/client/static/icon.png" alt="Ganbaru AI icon" width="20%" />
+  <h1>Ganbaru AI</h1>
 
 Anti-procrastination project manager for life and work. Free, local, open-source, privacy-first, lightweight with opt-in AI.
 
@@ -125,11 +125,11 @@ Contributions are welcome, but keep in mind:
 
 ## License
 
-GanbaruAI is licensed under [AGPL-3.0](LICENSE).
+Ganbaru AI is licensed under [AGPL-3.0](LICENSE).
 
 ## Funding
 
-GanbaruAI is donation-funded. Sponsorship will be set up after a minimum stable version is ready for Linux, Windows, and Android.
+Ganbaru AI is donation-funded. Sponsorship will be set up after a minimum stable version is ready for Linux, Windows, and Android.
 
 ## Acknowledgments
 

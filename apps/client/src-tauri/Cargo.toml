@@ -1,8 +1,8 @@
 [package]
 name = "ganbaruai"
 version = "0.1.0"
-description = "GanbaruAI desktop app"
-authors = ["GanbaruAI"]
+description = "Ganbaru AI desktop app"
+authors = ["Ganbaru AI"]
 license = "AGPL-3.0-only"
 edition = "2021"
 default-run = "ganbaruai"

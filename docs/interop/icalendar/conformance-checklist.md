@@ -2,7 +2,7 @@
 
 This checklist tracks standards coverage. It is intentionally broader than the current implementation. Each item should eventually carry these status fields in implementation notes, tests, or issues:
 
-- **Projected:** mapped into GanbaruAI normalized rows.
+- **Projected:** mapped into Ganbaru AI normalized rows.
 - **Preserved:** retained in structured iCalendar storage.
 - **Exported:** emitted in standards-compliant output.
 - **Editable:** user can edit it without corrupting preserved data.
@@ -16,7 +16,7 @@ Status values:
 - `no`: not currently supported.
 - `preserve-only`: stored and exported, but not app-editable.
 - `planned`: not implemented yet.
-- `not-applicable`: not meaningful for GanbaruAI UI, but may still be preserved.
+- `not-applicable`: not meaningful for Ganbaru AI UI, but may still be preserved.
 
 ## Current audit baseline
 
@@ -142,7 +142,7 @@ Current implementation summary:
 
 Current object-level import status:
 
-- `PRODID`: stored in object metadata. Export uses GanbaruAI's generated `PRODID`.
+- `PRODID`: stored in object metadata. Export uses Ganbaru AI's generated `PRODID`.
 - `VERSION`: stored in object metadata. Export emits `VERSION:2.0`.
 - `CALSCALE`: stored in object metadata. Export emits `CALSCALE:GREGORIAN`.
 - `METHOD`: stored in object metadata. Export reuses it only when all preserved objects in the exported calendar agree on one method; otherwise export emits `PUBLISH`.

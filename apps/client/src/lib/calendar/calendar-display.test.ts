@@ -9,7 +9,7 @@ import {
 function makeCalendar(overrides: Partial<Calendar> = {}): Calendar {
   return {
     id: "cal-1",
-    name: "GanbaruAI",
+    name: "Ganbaru AI",
     color: "",
     source: "local",
     visible: true,

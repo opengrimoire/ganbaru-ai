@@ -1,12 +1,12 @@
-# GanbaruAI: complete product specification
+# Ganbaru AI: complete product specification
 
-This document describes every system in GanbaruAI, how each system works internally, and how all systems interact with each other. It is the single source of truth for understanding the product's design intent before implementation. The tech stack is documented separately. This document covers what the app does and why, not how it is built.
+This document describes every system in Ganbaru AI, how each system works internally, and how all systems interact with each other. It is the single source of truth for understanding the product's design intent before implementation. The tech stack is documented separately. This document covers what the app does and why, not how it is built.
 
 ---
 
 ## App identity
 
-GanbaruAI is a free, open-source (AGPL 3.0), privacy-first, local-first productivity app for desktop and mobile. It unifies a calendar, Kanban board, Pomodoro system, note-taking, sleep alarm, daily diary, Doomscrolling, music player, work environment management, and project management into one interconnected experience.
+Ganbaru AI is a free, open-source (AGPL 3.0), privacy-first, local-first productivity app for desktop and mobile. It unifies a calendar, Kanban board, Pomodoro system, note-taking, sleep alarm, daily diary, Doomscrolling, music player, work environment management, and project management into one interconnected experience.
 
 Desktop (Windows, Linux) is the primary target. Mobile (iOS, Android via Tauri v2) is a first-class secondary target that shares the same codebase but offers a focused subset of features.
 
@@ -137,17 +137,17 @@ Design principle: minimize clicks. Every action reachable from the edge panel sh
 
 ### Integrated AI panel
 
-The AI panel is GanbaruAI's conversational interface for working with AI assistants. It appears as a panel in the app, supporting two modes: an embedded terminal running Codex or another CLI coding agent (developer path) and a chat widget connecting to BYOK LLM providers (general user path). All AI features are opt-in. The app is fully functional without any AI.
+The AI panel is Ganbaru AI's conversational interface for working with AI assistants. It appears as a panel in the app, supporting two modes: an embedded terminal running Codex or another CLI coding agent (developer path) and a chat widget connecting to BYOK LLM providers (general user path). All AI features are opt-in. The app is fully functional without any AI.
 
 **One conversation per project, calendar-driven switching.** Each project has its own persistent conversation thread stored in SQLite. When a calendar event starts, the AI panel automatically saves the current conversation and resumes (or starts) the conversation for the new event's project. A developer working on four different projects in a week has four conversation threads, each resuming exactly where they left off. Manual override is always available.
 
-**Context injection from app state.** When a session starts or switches, GanbaruAI assembles context from the active project, current kanban tasks, recent progress, calendar events, and related notes. For the terminal, context is passed through the launch prompt or standard input, depending on the selected agent. For the chat widget, context is sent as the system prompt in API calls. `AGENTS.md` stays as project-level conventions; per-task context comes from GanbaruAI dynamically.
+**Context injection from app state.** When a session starts or switches, Ganbaru AI assembles context from the active project, current kanban tasks, recent progress, calendar events, and related notes. For the terminal, context is passed through the launch prompt or standard input, depending on the selected agent. For the chat widget, context is sent as the system prompt in API calls. `AGENTS.md` stays as project-level conventions; per-task context comes from Ganbaru AI dynamically.
 
 **Kanban task activation.** Clicking "Start" on a kanban task injects that task's details (title, description, priority, branch, related calendar events, related notes) into the current AI conversation. The agent immediately knows what the user is working on without any explanation needed.
 
-**Developer path (Codex terminal):** an xterm.js terminal emulator running Codex or another CLI coding agent with full capabilities (file editing, bash, subagents). The user installs the agent themselves and signs in with their own account or API key. GanbaruAI provides context injection, session management, and workflow prompt buttons. Background agents run through the selected agent's documented non-interactive mode, with `codex exec` as the default target for Codex.
+**Developer path (Codex terminal):** an xterm.js terminal emulator running Codex or another CLI coding agent with full capabilities (file editing, bash, subagents). The user installs the agent themselves and signs in with their own account or API key. Ganbaru AI provides context injection, session management, and workflow prompt buttons. Background agents run through the selected agent's documented non-interactive mode, with `codex exec` as the default target for Codex.
 
-**General user path (BYOK chat widget):** a chat interface connecting to the user's chosen LLM provider. Three provider categories cover most users: OpenAI API, OpenAI-compatible APIs (Groq, Together, Mistral, and any provider using a compatible chat format), and Ollama for local models (Llama, Mistral, Gemma, running entirely on the user's machine with no API key needed). Other provider APIs can be added when users supply their own credentials. The chat widget can read/write GanbaruAI data but cannot edit arbitrary files or run bash commands.
+**General user path (BYOK chat widget):** a chat interface connecting to the user's chosen LLM provider. Three provider categories cover most users: OpenAI API, OpenAI-compatible APIs (Groq, Together, Mistral, and any provider using a compatible chat format), and Ollama for local models (Llama, Mistral, Gemma, running entirely on the user's machine with no API key needed). Other provider APIs can be added when users supply their own credentials. The chat widget can read/write Ganbaru AI data but cannot edit arbitrary files or run bash commands.
 
 **Workflow phase prompts.** Each project management phase has a structured system prompt that adapts the AI's behavior: brainstorming mode guides structured ideation, evaluation mode helps assess ideas against Want/Can/Need criteria, planning mode assists with specifications and resource estimation, execution mode helps with implementation and blockers. These prompts work with both the terminal and the chat widget. One general agent per project carries context across all phases.
 
@@ -179,7 +179,7 @@ When implemented, these features will include:
 
 ### The quest chain structure
 
-The project management system presents project lifecycle phases as a sequential quest chain, guided by NPCs. This is where GanbaruAI becomes a ClickUp/Jira/Asana alternative, wrapped in a narrative structure that makes the inherently dry process of project planning feel guided and purposeful.
+The project management system presents project lifecycle phases as a sequential quest chain, guided by NPCs. This is where Ganbaru AI becomes a ClickUp/Jira/Asana alternative, wrapped in a narrative structure that makes the inherently dry process of project planning feel guided and purposeful.
 
 **First-time experience:** the NPC walks the user through each phase sequentially in visual novel style. The user fills in templates, answers guided questions, and builds their project specification step by step. This is not a cutscene; it is an interactive form-filling experience where the NPC explains each section contextually.
 
@@ -267,7 +267,7 @@ Three NPCs are planned as an aesthetic layer on top of the project management wo
 
 ## System interactions map
 
-This section documents how every system connects to every other system. These interactions are the core differentiator of GanbaruAI. No individual feature is unique, but the interconnection between all features in a single app is.
+This section documents how every system connects to every other system. These interactions are the core differentiator of Ganbaru AI. No individual feature is unique, but the interconnection between all features in a single app is.
 
 ### Calendar → Work environment
 
@@ -367,12 +367,12 @@ When the NPC visual layer is implemented, NPCs appear contextually during guided
 
 ### Project management → Software repositories
 
-When a project is a software repository, GanbaruAI bridges its internal data with the repo's own documentation:
+When a project is a software repository, Ganbaru AI bridges its internal data with the repo's own documentation:
 
 - **Calendar events** for the project carry pomodoro presets, music, blocker rules, and workspace settings. Starting a calendar event for "Project X" auto-opens the right browser tabs, switches the terminal to the project directory, loads the project's notes, and activates the project's kanban board.
 - **Kanban tasks** are the live task layer. The kanban tab auto-switches based on the active calendar event's project. Agents and collaborators see the same tasks.
-- **The `ganbaruai` CLI** exports repo-facing markdown views such as `KANBAN.md` and generated reports into the git repository. This makes project context available to collaborators who don't use GanbaruAI and to AI agents that read the repo natively. The export is a view of the database, not the source of truth. Changes made to exported markdown by agents or humans can be imported back when the export type supports imports.
-- **AI agents** interact with GanbaruAI via the CLI: querying tasks, creating calendar events, updating progress. This works with Codex, Cursor, and any agent that can run shell commands, with no MCP server or plugin required.
+- **The `ganbaruai` CLI** exports repo-facing markdown views such as `KANBAN.md` and generated reports into the git repository. This makes project context available to collaborators who don't use Ganbaru AI and to AI agents that read the repo natively. The export is a view of the database, not the source of truth. Changes made to exported markdown by agents or humans can be imported back when the export type supports imports.
+- **AI agents** interact with Ganbaru AI via the CLI: querying tasks, creating calendar events, updating progress. This works with Codex, Cursor, and any agent that can run shell commands, with no MCP server or plugin required.
 
 The data split: documents (notes, diary, project docs) are markdown files on disk. Structured data (events, tasks, workspace configs) is SQLite. The CLI bridges the two worlds. See TECH_STACK.md for the full technical rationale.
 
@@ -400,7 +400,7 @@ The integrated AI panel (terminal and BYOK chat) provides the foundation. These 
 
 **Local LLM diary analysis:** small local models (via Ollama) analyze diary language for goal-setting patterns, reflection quality, and mood trends without any API calls or data leaving the device.
 
-**MCP for external access:** exposes GanbaruAI's data (calendar, tasks, notes) to external AI clients (ChatGPT, teammate agents, and other MCP-compatible clients) that don't run locally. Also consumes external MCP servers for integrations (email, external calendars). MCP is not used for internal agent interaction; that's handled by the CLI and direct process spawning.
+**MCP for external access:** exposes Ganbaru AI's data (calendar, tasks, notes) to external AI clients (ChatGPT, teammate agents, and other MCP-compatible clients) that don't run locally. Also consumes external MCP servers for integrations (email, external calendars). MCP is not used for internal agent interaction; that's handled by the CLI and direct process spawning.
 
 ---
 

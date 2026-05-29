@@ -421,7 +421,7 @@ fn screensaver_inhibit() -> Option<u32> {
             "/org/freedesktop/ScreenSaver",
             "--method",
             "org.freedesktop.ScreenSaver.Inhibit",
-            "GanbaruAI",
+            "Ganbaru AI",
             "Break timer active",
         ],
         1024,
@@ -1420,10 +1420,10 @@ pub fn show_event_notification(
         let action_label = if opens_calendar {
             "Open calendar"
         } else {
-            "Open GanbaruAI"
+            "Open Ganbaru AI"
         };
         let result = Notification::new()
-            .appname("GanbaruAI")
+            .appname("Ganbaru AI")
             .summary(&summary)
             .body(&body)
             .action("open", action_label)
@@ -1500,8 +1500,8 @@ pub fn show_doomscrolling_desktop_block_notification(app: tauri::AppHandle, app_
             "{app_name} was closed because it is blocked by your desktop rules. Change this in Settings > Doomscrolling > Desktop apps (or click this notification)"
         ));
         let result = Notification::new()
-            .appname("GanbaruAI")
-            .summary("App closed by GanbaruAI")
+            .appname("Ganbaru AI")
+            .summary("App closed by Ganbaru AI")
             .body(&body)
             .action("default", "Open desktop apps")
             .timeout(10_000)

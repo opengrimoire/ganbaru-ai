@@ -1,6 +1,6 @@
 # Delete undo
 
-GanbaruAI does not provide a general calendar undo or redo stack. Calendar creates, edits, moves, resizes, and recurrence edits are committed directly.
+Ganbaru AI does not provide a general calendar undo or redo stack. Calendar creates, edits, moves, resizes, and recurrence edits are committed directly.
 
 Delete and archive are the only reversible calendar actions in the UI. When an event delete or archive starts, the panel closes and the calendar shows a bottom toast with `Deleting...` or `Archiving...`. After persistence succeeds, the same toast becomes the undo toast for 5 seconds:
 

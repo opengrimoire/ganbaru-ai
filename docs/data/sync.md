@@ -1,6 +1,6 @@
 # Sync
 
-Sync turns GanbaruAI from a local app into a multi-device, optionally collaborative one. The user provisions and hosts the sync server themselves; GanbaruAI does not run shared infrastructure. CRDTs handle conflict resolution automatically. End-to-end encryption ensures the server never sees the user's data in cleartext.
+Sync turns Ganbaru AI from a local app into a multi-device, optionally collaborative one. The user provisions and hosts the sync server themselves; Ganbaru AI does not run shared infrastructure. CRDTs handle conflict resolution automatically. End-to-end encryption ensures the server never sees the user's data in cleartext.
 
 This doc is a placeholder. Deeper design comes in a later pass, alongside phase 9 of the roadmap.
 
@@ -8,7 +8,7 @@ This doc is a placeholder. Deeper design comes in a later pass, alongside phase 
 
 **Yjs CRDTs.** Yjs provides conflict-free replicated data types for collaborative editing. Each piece of mutable state (a calendar event, a kanban task, a note) lives in a Yjs document. Edits are encoded as operations that converge to the same final state regardless of order or connectivity.
 
-**Hocuspocus server.** A self-hostable Yjs sync server. The user runs it themselves on a VPS, a home server, or any host they control. GanbaruAI connects to the server via WebSocket.
+**Hocuspocus server.** A self-hostable Yjs sync server. The user runs it themselves on a VPS, a home server, or any host they control. Ganbaru AI connects to the server via WebSocket.
 
 **End-to-end encryption.** Encryption uses libsodium. The server stores ciphertext only; only authorized clients (with the user's keys) can read. The server can route messages and persist state without ever decrypting it.
 
@@ -33,13 +33,13 @@ A small number of app-specific tiebreakers layer on top:
 
 ## Self-hosting
 
-The user is responsible for the sync server. GanbaruAI provides:
+The user is responsible for the sync server. Ganbaru AI provides:
 
 - A Hocuspocus server image (Docker, with a documented Compose file).
 - A setup guide accessible to non-technical users (step-by-step for a few common providers).
 - A health check the app can run to confirm the server is reachable.
 
-GanbaruAI does **not** offer a hosted sync service. The project is donation-funded and cannot guarantee uptime or operate user data infrastructure. This is documented prominently so users understand what they are choosing when they enable sync.
+Ganbaru AI does **not** offer a hosted sync service. The project is donation-funded and cannot guarantee uptime or operate user data infrastructure. This is documented prominently so users understand what they are choosing when they enable sync.
 
 ## Backups
 

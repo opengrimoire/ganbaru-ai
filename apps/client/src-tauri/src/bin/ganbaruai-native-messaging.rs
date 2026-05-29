@@ -233,7 +233,7 @@ fn main() {
             host: None,
             matched_rule_name: None,
             reason: Some(reason),
-            environment_name: "GanbaruAI",
+            environment_name: "Ganbaru AI",
         },
     };
 
@@ -847,7 +847,7 @@ fn response_from_snapshot(snapshot: &StateSnapshot) -> NativeResponse {
         host: None,
         matched_rule_name: None,
         reason,
-        environment_name: "GanbaruAI",
+        environment_name: "Ganbaru AI",
     }
 }
 
@@ -1481,7 +1481,7 @@ mod tests {
             host: None,
             matched_rule_name: None,
             reason: None,
-            environment_name: "GanbaruAI",
+            environment_name: "Ganbaru AI",
         }
     }
 

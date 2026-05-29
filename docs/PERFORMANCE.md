@@ -1,6 +1,6 @@
 # Performance
 
-This file is the canonical performance record for GanbaruAI. It exists so future agents can reason about RAM, startup time, interaction speed, and package size without reconstructing old debugging sessions.
+This file is the canonical performance record for Ganbaru AI. It exists so future agents can reason about RAM, startup time, interaction speed, and package size without reconstructing old debugging sessions.
 
 ## Index
 
@@ -20,7 +20,7 @@ Use benchmark-generated output as the source of truth. Manual copies from the di
 To capture a comparable run:
 
 1. Build and install a release package.
-2. Open GanbaruAI from the installed app, not `pnpm tauri dev`. This is important because Tauri uses more resources in dev mode.
+2. Open Ganbaru AI from the installed app, not `pnpm tauri dev`. This is important because Tauri uses more resources in dev mode.
 3. Open diagnostics with `Ctrl + Shift + D` or the optional title-bar button.
 4. Under Benchmarks, click `Run core benchmarks`, `Run backend benchmarks`, or `Run all benchmarks` depending on the change being measured.
 5. Do not interact with the app while the overlay is running.
@@ -225,7 +225,7 @@ Use the compact scalar table for one-off values that are themselves the measurem
 
 ## Performance principles
 
-GanbaruAI should feel lightweight even though it uses Tauri plus a WebView. The floor is higher than a fully native UI, so app code should avoid adding avoidable RAM and startup cost.
+Ganbaru AI should feel lightweight even though it uses Tauri plus a WebView. The floor is higher than a fully native UI, so app code should avoid adding avoidable RAM and startup cost.
 
 General rules:
 
@@ -269,7 +269,7 @@ Copied diagnostics output includes the metric name, and chart CSV exports use a 
 | Frontend | WebKit or WebView2 renderer plus Svelte app, DOM, CSS, JS heap |
 | Network | WebKit or WebView2 network process |
 
-The frontend number includes the browser engine. It cannot be split cleanly into "WebKit baseline" and "GanbaruAI app code" at runtime.
+The frontend number includes the browser engine. It cannot be split cleanly into "WebKit baseline" and "Ganbaru AI app code" at runtime.
 
 ### Diagnostics panel
 

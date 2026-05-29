@@ -34,7 +34,7 @@ One row per imported or generated top-level iCalendar object.
 Suggested fields:
 
 - `id`: primary key.
-- `calendar_id`: owning GanbaruAI calendar row.
+- `calendar_id`: owning Ganbaru AI calendar row.
 - `source_kind`: `import-file`, `import-zip-entry`, `local-export-base`, `subscription`, or future source.
 - `source_name`: file basename, zip entry name, URL label, or user-visible origin.
 - `source_fingerprint`: hash of source text or normalized object for dedupe and diagnostics.

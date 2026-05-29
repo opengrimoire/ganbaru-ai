@@ -25,7 +25,7 @@ Migration must not invent these values. Re-importing the original source file af
 
 ### Local normalized events
 
-Events created directly in GanbaruAI have no original iCalendar component. They can continue to export through generated components.
+Events created directly in Ganbaru AI have no original iCalendar component. They can continue to export through generated components.
 
 Migration action:
 

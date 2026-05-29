@@ -1,6 +1,6 @@
-# GanbaruAI
+# Ganbaru AI
 
-GanbaruAI is an anti-procrastination project manager for life and work. Free, local, open-source (AGPL 3.0), privacy-first, lightweight with opt-in AI (Codex and BYOK for any LLM). It's built with Tauri v2 (Rust) and Svelte 5 with multi-platform in mind (Linux, Windows, macOS, and in the future Android and iOS).
+Ganbaru AI is an anti-procrastination project manager for life and work. Free, local, open-source (AGPL 3.0), privacy-first, lightweight with opt-in AI (Codex and BYOK for any LLM). It's built with Tauri v2 (Rust) and Svelte 5 with multi-platform in mind (Linux, Windows, macOS, and in the future Android and iOS).
 
 Features a highly interconnected:
 - Calendar
@@ -113,7 +113,7 @@ Music files stay wherever the user keeps them; vault stores only playlist defini
 - **License:** AGPL 3.0
 - **Data architecture:** two categories of data with different storage. Documents (notes, diary, project docs) are markdown files on disk; SQLite indexes them for fast queries but the file is the source of truth. Structured data (calendar events, future project tasks, workspace configs, pomodoro configs, runs, segments, pauses, and run events) lives in SQLite as the source of truth. Never store structured data as markdown or document content in SQLite.
 - **AI integration:** three paths. (1) Integrated terminal (xterm.js) running Codex or another CLI coding agent, with calendar-driven session switching, per-project conversation threads, and task context passed through the agent prompt or standard input. (2) BYOK chat widget for non-developer users (OpenAI API, OpenAI-compatible API, Ollama for local models, and other user-configured providers). (3) MCP for external AI clients only (ChatGPT, teammate agents, etc.), not for internal agent interaction.
-- **Agent data bridge:** a `ganbaruai` CLI (Rust, reads the same SQLite) is the primary bridge between AI agents and GanbaruAI's data. Agents call it via Bash. The CLI exports project state as markdown to git repos for collaborators and agents without the CLI. These exports are views of the database, not the source of truth.
+- **Agent data bridge:** a `ganbaruai` CLI (Rust, reads the same SQLite) is the primary bridge between AI agents and Ganbaru AI's data. Agents call it via Bash. The CLI exports project state as markdown to git repos for collaborators and agents without the CLI. These exports are views of the database, not the source of truth.
 - **State management:** Svelte 5 runes ($state, $derived, $effect), no external state manager
 - **Sync:** Yjs + Hocuspocus (CRDT-based, E2E encrypted, self-hosted by the user)
 - **Build tool:** Vite (default with Tauri + Svelte scaffold)

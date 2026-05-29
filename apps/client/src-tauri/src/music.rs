@@ -1349,7 +1349,7 @@ fn youtube_host_html() -> &'static str {
   <meta charset="utf-8">
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>GanbaruAI YouTube player</title>
+  <title>Ganbaru AI YouTube player</title>
   <style>
     html, body, #player-root, #player { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #000; }
   </style>

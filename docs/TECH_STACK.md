@@ -36,7 +36,7 @@ Key Tauri v2 capabilities used in this project:
 
 - **Multi-window management.** Separate windows for the main app, the edge panel, the fullscreen break overlay, and custom notifications. Each independently configured (frameless, transparent, always-on-top, positioned to screen edges or center).
 - **Detached module windows.** Primary title-bar tabs can be moved into app-owned secondary windows. While a tab is detached, the main window hides that tab and the detached window locks navigation to that view. The tab can be reattached from the detached window's context menu or by dragging it back onto the main title bar. Detached windows bridge live state through app events: theme changes apply everywhere, calendar mutations reload other windows from SQLite, and the main window coordinates the Pomodoro timer so secondary windows mirror and control the same session.
-- **Single-instance enforcement.** Linux desktop bundles declare `SingleMainWindow=true` and `X-GNOME-SingleWindow=true` so GNOME-style docks know GanbaruAI is a single-main-window app. The Tauri single-instance plugin enforces the runtime rule: a second launch focuses the existing main window and exits the extra process.
+- **Single-instance enforcement.** Linux desktop bundles declare `SingleMainWindow=true` and `X-GNOME-SingleWindow=true` so GNOME-style docks know Ganbaru AI is a single-main-window app. The Tauri single-instance plugin enforces the runtime rule: a second launch focuses the existing main window and exits the extra process.
 - **`set_always_on_top`**. Used for the notification window and fullscreen Pomodoro overlay to appear above all other apps including the Windows taskbar.
 - **`set_fullscreen` + `set_decorations(false)` + `set_transparent`**. Combined to produce the fullscreen break screen that covers the taskbar and acts as a custom screen saver during Pomodoro breaks.
 - **`setIgnoreCursorEvents`**. Allows the custom notification window to be non-interactive when desired, so it does not interrupt work in other apps.
@@ -196,7 +196,7 @@ Module-level `$state` objects exposed through getter functions (e.g. `getPomodor
 
 ## Data architecture: documents vs structured data
 
-GanbaruAI has two fundamentally different categories of data, and each uses the storage format that fits it. Mixing them up (e.g., storing calendar events as markdown, or storing notes in SQLite) would compromise both.
+Ganbaru AI has two fundamentally different categories of data, and each uses the storage format that fits it. Mixing them up (e.g., storing calendar events as markdown, or storing notes in SQLite) would compromise both.
 
 ### Documents: markdown on disk, SQLite indexes
 
@@ -206,7 +206,7 @@ Why markdown for documents:
 
 - Human-readable. Users can open their notes in Obsidian, VS Code, or any text editor.
 - Git-friendly. Diffs are meaningful, merges are possible, history is inspectable.
-- Portable. No lock-in. If the user stops using GanbaruAI, their writing is intact.
+- Portable. No lock-in. If the user stops using Ganbaru AI, their writing is intact.
 - AI-agent-friendly. Any AI coding agent can read and write markdown natively, with no tools or plugins required.
 
 Why NOT SQLite for document content: binary format that can't be diffed, can't be opened in external editors, creates lock-in, and makes the vault opaque.
@@ -249,7 +249,7 @@ A separate SQLite database per project was also rejected: it fragments data, mak
 
 ### Why a CLI instead of MCP
 
-All of GanbaruAI's data operations are local: reading SQLite, writing SQLite, reading/writing vault files. For local operations, a CLI is strictly simpler than MCP:
+All of Ganbaru AI's data operations are local: reading SQLite, writing SQLite, reading/writing vault files. For local operations, a CLI is strictly simpler than MCP:
 
 - **No running server.** MCP requires a persistent process listening for connections. A CLI starts, runs the query, returns the result, and exits.
 - **Zero setup.** Codex and other CLI agents call CLI tools via Bash natively. No plugin installation, no MCP configuration, no `.mcp.json` files.
@@ -297,9 +297,9 @@ ganbaruai export kanban --project ganbaruai
 
 ### Markdown export for software project repositories
 
-When a user manages a software project with GanbaruAI, the structured data (tasks, calendar events, workspace configs) lives in GanbaruAI's vault SQLite. But the project's git repository also needs project context for:
+When a user manages a software project with Ganbaru AI, the structured data (tasks, calendar events, workspace configs) lives in Ganbaru AI's vault SQLite. But the project's git repository also needs project context for:
 
-- **Collaborators who don't use GanbaruAI.** They read exported kanban snapshots and reports to understand what's happening.
+- **Collaborators who don't use Ganbaru AI.** They read exported kanban snapshots and reports to understand what's happening.
 - **AI agents without the CLI installed.** They read markdown natively without any tooling.
 - **Code review context.** A PR description can reference task numbers from the exported kanban.
 - **Onboarding.** New contributors read the project state to orient themselves.
@@ -314,7 +314,7 @@ ganbaruai export kanban --project ganbaruai > KANBAN.md
 Example output of `ganbaruai export kanban`:
 
 ```markdown
-# Kanban: GanbaruAI
+# Kanban: Ganbaru AI
 
 ## In progress
 - #42: Tiptap rich text editor [high] (assigned calendar: Mon/Wed 10:00-12:00)
@@ -331,26 +331,26 @@ Example output of `ganbaruai export kanban`:
 
 **This export is a view of the database, not the source of truth.** The flow is:
 
-1. User manages tasks and events in GanbaruAI's UI (or via CLI). SQLite stores the data.
+1. User manages tasks and events in Ganbaru AI's UI (or via CLI). SQLite stores the data.
 2. `ganbaruai export kanban` writes the current task state as markdown to the project repo.
 3. Collaborators and agents read the markdown. It is always up to date because the export runs on commit (via a git hook) or on demand.
 4. If a user edits an exported kanban snapshot directly, an explicit import command can validate and apply those changes back to SQLite.
 
 This is the same model as GitHub: the issue database is the source of truth, but issues are viewable as markdown and editable via API. The markdown is portable and useful on its own, but it is derived from the structured data.
 
-### The virtuous cycle: GanbaruAI developing itself
+### The virtuous cycle: Ganbaru AI developing itself
 
-GanbaruAI's own development follows this exact workflow across four stages:
+Ganbaru AI's own development follows this exact workflow across four stages:
 
 **Stage 1 (now, pre-CLI):** ROADMAP.md, AGENTS.md, and feature docs are hand-maintained markdown files in the repo. Codex agents read and write them directly. This works because markdown is the universal baseline that requires no tooling.
 
-**Stage 2 (CLI exists):** GanbaruAI's project management data moves into its own database. The CLI exports kanban snapshots and generated reports to the repo automatically (via git hook or CI). Agents can use either the CLI's structured output for queries or read the exported markdown for simple context.
+**Stage 2 (CLI exists):** Ganbaru AI's project management data moves into its own database. The CLI exports kanban snapshots and generated reports to the repo automatically (via git hook or CI). Agents can use either the CLI's structured output for queries or read the exported markdown for simple context.
 
-**Stage 3 (full UI):** Development sessions are calendar events with pomodoro configs and workspace settings. Starting a "GanbaruAI dev" calendar event auto-opens VS Code at the project root, switches the terminal, loads project notes, and activates the right blocker rules. The kanban tracks features and bugs across phases. Each PR links to a task.
+**Stage 3 (full UI):** Development sessions are calendar events with pomodoro configs and workspace settings. Starting a "Ganbaru AI dev" calendar event auto-opens VS Code at the project root, switches the terminal, loads project notes, and activates the right blocker rules. The kanban tracks features and bugs across phases. Each PR links to a task.
 
-**Stage 4 (agent integration, post-MVP):** Agents query the database via CLI before starting work, create calendar events for their planned work sessions, update task status as they complete items, and export repo-facing context on commit. The developer reviews agent work from the calendar and kanban views in GanbaruAI's UI, not by reading raw git logs.
+**Stage 4 (agent integration, post-MVP):** Agents query the database via CLI before starting work, create calendar events for their planned work sessions, update task status as they complete items, and export repo-facing context on commit. The developer reviews agent work from the calendar and kanban views in Ganbaru AI's UI, not by reading raw git logs.
 
-The feedback loop: every workflow friction discovered while building GanbaruAI with GanbaruAI becomes a feature improvement. The tool's own development is the primary test case for its project management system, its agent integration, and its markdown export format.
+The feedback loop: every workflow friction discovered while building Ganbaru AI with Ganbaru AI becomes a feature improvement. The tool's own development is the primary test case for its project management system, its agent integration, and its markdown export format.
 
 The repo-facing markdown format is a portability layer, not the canonical store. The source of truth stays in SQLite; generated markdown exists to make project state readable in tools that only understand files.
 
@@ -397,7 +397,7 @@ The custom block page is a minimal, fully designed HTML page served by the exten
 
 ### Native Messaging API
 
-The protocol connecting the browser extension to the local Rust native host via stdin/stdout JSON messages. The host reads GanbaruAI's local config and Pomodoro runtime state, then returns allow or block decisions to the extension. This keeps browser data local and avoids adding a separate browser bridge dependency.
+The protocol connecting the browser extension to the local Rust native host via stdin/stdout JSON messages. The host reads Ganbaru AI's local config and Pomodoro runtime state, then returns allow or block decisions to the extension. This keeps browser data local and avoids adding a separate browser bridge dependency.
 
 ---
 
@@ -520,13 +520,13 @@ All AI features are opt-in and BYOK. The app is fully functional without any AI 
 
 An xterm.js terminal emulator embedded in the Tauri webview. Runs Codex by default, or another CLI-based AI agent when the user chooses one. This is the power-user path for developers and supports file editing, shell commands, tests, subagents, and repository-aware workflows.
 
-xterm.js is the same terminal emulator used by VS Code. It handles color, Unicode, resize, selection, and all standard terminal behavior. The user installs Codex or another supported agent themselves and signs in with their own account or API key. GanbaruAI provides a specialized terminal that is context-aware, not a redistribution of any agent.
+xterm.js is the same terminal emulator used by VS Code. It handles color, Unicode, resize, selection, and all standard terminal behavior. The user installs Codex or another supported agent themselves and signs in with their own account or API key. Ganbaru AI provides a specialized terminal that is context-aware, not a redistribution of any agent.
 
-**Context injection from app state.** `AGENTS.md` stays as project-level conventions. Task-specific context comes from GanbaruAI dynamically and is passed through the launch prompt, standard input, or the selected agent's SDK.
+**Context injection from app state.** `AGENTS.md` stays as project-level conventions. Task-specific context comes from Ganbaru AI dynamically and is passed through the launch prompt, standard input, or the selected agent's SDK.
 
 ```bash
 # User clicks "Start" on kanban task #42.
-# GanbaruAI assembles project context and launches Codex.
+# Ganbaru AI assembles project context and launches Codex.
 ganbaruai project context ganbaruai | codex exec "Start implementing kanban task #42"
 
 # Background agent for delegated work.
@@ -540,7 +540,7 @@ Key Codex capabilities for programmatic control:
 
 | Capability | Purpose |
 |---|---|
-| `codex exec` | Run non-interactive agents from scripts, CI, or GanbaruAI background jobs |
+| `codex exec` | Run non-interactive agents from scripts, CI, or Ganbaru AI background jobs |
 | Codex SDK | Control local Codex agents from an application or internal tool |
 | `AGENTS.md` | Load persistent project conventions before work starts |
 | Subagents | Delegate specialized work in parallel |
@@ -552,7 +552,7 @@ Key Codex capabilities for programmatic control:
 
 Per-project conversation threads stored in SQLite. The calendar drives automatic session switching.
 
-When a calendar event starts (e.g., "Project X: auth module"), GanbaruAI:
+When a calendar event starts (e.g., "Project X: auth module"), Ganbaru AI:
 1. Saves the current AI session (session ID, conversation state)
 2. Checks if a previous session exists for the new event's project
 3. Resumes the previous session when the selected agent supports resumable threads, or starts a new one with project context
@@ -564,7 +564,7 @@ Manual override is always available: the user can stay in the current conversati
 
 ### BYOK chat widget (general user path)
 
-A chat interface inside GanbaruAI's UI for users who don't use the developer terminal. Same session management (calendar-driven switching, per-project threads) but with a web-based chat widget instead of a terminal.
+A chat interface inside Ganbaru AI's UI for users who don't use the developer terminal. Same session management (calendar-driven switching, per-project threads) but with a web-based chat widget instead of a terminal.
 
 Three LLM provider categories, covering most users:
 
@@ -573,7 +573,7 @@ Three LLM provider categories, covering most users:
 - **Ollama** (local models via localhost REST API). Runs Llama, Mistral, Gemma, and other open models entirely on the user's machine. No API key needed, no data leaves the device.
 - **Other provider APIs** when users supply their own credentials and the integration is implemented explicitly.
 
-Context injection works the same way as the terminal path: GanbaruAI assembles project/task context and sends it as the system prompt in API calls. The chat widget can read/write GanbaruAI data via internal Tauri commands but cannot edit arbitrary files or run bash commands.
+Context injection works the same way as the terminal path: Ganbaru AI assembles project/task context and sends it as the system prompt in API calls. The chat widget can read/write Ganbaru AI data via internal Tauri commands but cannot edit arbitrary files or run bash commands.
 
 BYOK configuration UI: API key management (stored locally, never transmitted except to the configured provider), model selection, provider setup with guided instructions, and consent controls for what context is sent to the LLM.
 
@@ -595,24 +595,24 @@ Non-interactive agents for delegated or parallel work. The user can delegate a k
 - Terminal path: `codex exec` or the Codex SDK runs as a separate process or controlled local agent
 - BYOK path: direct LLM API calls from the Rust backend
 - Results appear as notifications, update kanban tasks directly, or create PRs
-- Multiple background agents can run in parallel, each with isolated context from GanbaruAI's prompt builder
+- Multiple background agents can run in parallel, each with isolated context from Ganbaru AI's prompt builder
 
 ### CLI as the live data bridge
 
-The `ganbaruai` CLI (detailed in the "CLI for agent integration" section above) serves as the bridge between AI agents and GanbaruAI's data. Inside the integrated terminal, Codex calls `ganbaruai task list`, `ganbaruai calendar today`, etc. to query live data. Background agents use the CLI for structured queries. The CLI is also available to any external script or automation.
+The `ganbaruai` CLI (detailed in the "CLI for agent integration" section above) serves as the bridge between AI agents and Ganbaru AI's data. Inside the integrated terminal, Codex calls `ganbaruai task list`, `ganbaruai calendar today`, etc. to query live data. Background agents use the CLI for structured queries. The CLI is also available to any external script or automation.
 
 ### MCP (external access only)
 
-MCP is reserved for a single use case: letting external AI clients that don't run locally access GanbaruAI's data. This includes ChatGPT, teammate agents, or any MCP-compatible client that connects remotely.
+MCP is reserved for a single use case: letting external AI clients that don't run locally access Ganbaru AI's data. This includes ChatGPT, teammate agents, or any MCP-compatible client that connects remotely.
 
 MCP is not used for:
-- How Codex interacts with GanbaruAI (that's the CLI)
+- How Codex interacts with Ganbaru AI (that's the CLI)
 - How the integrated terminal works (that's direct process spawning)
 - How the BYOK chat widget works (that's direct API calls)
 
-MCP adds value when: a user wants their ChatGPT session to see their GanbaruAI calendar, or a teammate's agent needs to query project tasks without having the CLI installed locally. This is a post-MVP feature.
+MCP adds value when: a user wants their ChatGPT session to see their Ganbaru AI calendar, or a teammate's agent needs to query project tasks without having the CLI installed locally. This is a post-MVP feature.
 
-GanbaruAI can also consume external MCP servers for integrations (email, external calendars, etc.) when those integrations require real-time bidirectional connections.
+Ganbaru AI can also consume external MCP servers for integrations (email, external calendars, etc.) when those integrations require real-time bidirectional connections.
 
 ---
 
@@ -665,6 +665,6 @@ Everything is free. The project is sustained by donations via GitHub Sponsors.
 | Mobile alarm              | iOS `UNNotificationRequest` / Android `AlarmManager` | Sleep alarm triggering diary flows and morning routines                            |
 | Mobile app blocking       | iOS Screen Time API / Android UsageStatsManager      | App-level blocking during focus times within platform sandbox constraints          |
 | Agent integration (CRUD)  | `ganbaruai` CLI (Rust)                               | Direct SQLite access, no server, works with any agent/script                       |
-| Agent integration (external) | MCP (post-MVP)                                    | External AI clients accessing GanbaruAI data remotely                              |
+| Agent integration (external) | MCP (post-MVP)                                    | External AI clients accessing Ganbaru AI data remotely                              |
 | Backend language          | Rust                                                 | Required by Tauri, OS-level APIs, media engine                                     |
 | Frontend language         | TypeScript                                           | Type safety across interconnected state                                            |

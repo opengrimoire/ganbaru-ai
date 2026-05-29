@@ -53,7 +53,7 @@ console.log("2. Click Load unpacked.");
 console.log("3. Select this folder:");
 console.log(extensionDir);
 console.log("");
-console.log("After the GanbaruAI card appears, copy its extension id and run:");
+console.log("After the Ganbaru AI card appears, copy its extension id and run:");
 console.log("node apps/client/scripts/install-chrome-native-host.mjs <extension-id> brave");
 
 spawnSync(brave, ["brave://extensions"], {

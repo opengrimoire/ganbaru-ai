@@ -37,7 +37,7 @@ describe("serializeCalendarToIcs", () => {
 		it("emits BEGIN/END VCALENDAR with required headers", () => {
 			const ics = serializeCalendarToIcs(baseCalendar, [makeEvent()], "UTC");
 			expect(ics).toMatch(/^BEGIN:VCALENDAR\r\n/);
-			expect(ics).toContain("PRODID:-//GanbaruAI//Calendar//EN");
+			expect(ics).toContain("PRODID:-//Ganbaru AI//Calendar//EN");
 			expect(ics).toContain("VERSION:2.0");
 			expect(ics).toContain("CALSCALE:GREGORIAN");
 			expect(ics).toContain("METHOD:PUBLISH");

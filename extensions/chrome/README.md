@@ -1,4 +1,4 @@
-# GanbaruAI Chromium extension
+# Ganbaru AI Chromium extension
 
 This is the Chromium-based anti-doomscrolling extension.
 
@@ -9,7 +9,7 @@ During development it runs as an unpacked extension and talks to the local nativ
 There are two local pieces:
 
 - The extension folder: `extensions/chrome`. This is what Chrome, Chromium, Brave, or Edge loads in developer mode.
-- The native host binary: `target/debug/ganbaruai-native-messaging`. This small local program lets the browser ask GanbaruAI whether a page should be blocked.
+- The native host binary: `target/debug/ganbaruai-native-messaging`. This small local program lets the browser ask Ganbaru AI whether a page should be blocked.
 
 The browser also needs a native host manifest that contains the extension id. That id is created by the browser after the unpacked extension is loaded.
 
@@ -40,7 +40,7 @@ In Brave:
    extensions/chrome
    ```
 
-4. Copy the extension id from the GanbaruAI extension card.
+4. Copy the extension id from the Ganbaru AI extension card.
 
 Back in the repo root, register the native host with that id:
 
@@ -61,7 +61,7 @@ cd apps/client
 pnpm tauri dev
 ```
 
-Open GanbaruAI, go to Settings > Doomscrolling, keep Blacklist mode selected, enable browser blocking, keep Block during focus enabled, and add blocked websites such as:
+Open Ganbaru AI, go to Settings > Doomscrolling, keep Blacklist mode selected, enable browser blocking, keep Block during focus enabled, and add blocked websites such as:
 
 ```text
 reddit.com
@@ -82,21 +82,21 @@ You do not need to remove the extension for normal changes.
   pnpm -w run build:native-host
   ```
 
-- Extension HTML, CSS, JS, manifest, or icon changes need the reload button on the GanbaruAI card in the browser's extensions page.
+- Extension HTML, CSS, JS, manifest, or icon changes need the reload button on the Ganbaru AI card in the browser's extensions page.
 - Changing Doomscrolling modes, categories, or website lists while a focus or break phase is active is picked up by the extension on the next state poll.
 - Removing and adding the unpacked extension gives it a new id. If that happens, run the native host registration command again with the new id.
 
 ## Smoke test checklist
 
-1. Start GanbaruAI with `pnpm tauri dev`.
+1. Start Ganbaru AI with `pnpm tauri dev`.
 2. Confirm the extension popup says connected.
-3. In GanbaruAI, open Settings > Doomscrolling.
+3. In Ganbaru AI, open Settings > Doomscrolling.
 4. Keep Blacklist mode selected, enable browser blocking, keep Block during focus enabled, and add `reddit.com` to blocked websites.
 5. Start a Pomodoro focus phase.
 6. Open `https://reddit.com`.
-7. Confirm the browser redirects to the GanbaruAI block page.
+7. Confirm the browser redirects to the Ganbaru AI block page.
 8. Click the extension popup and confirm the last blocked website is shown.
-9. Add another blocked website in GanbaruAI while focus is still active, wait for the next state poll, and confirm an already open tab for that website redirects.
+9. Add another blocked website in Ganbaru AI while focus is still active, wait for the next state poll, and confirm an already open tab for that website redirects.
 10. Stop the Pomodoro session and confirm the site is allowed again.
 
 ## Manual install
@@ -123,7 +123,7 @@ You do not need to remove the extension for normal changes.
 
    Add `chromium`, `brave`, or `edge` as the second argument when testing in those browsers.
 
-5. Start GanbaruAI, open Settings, then Doomscrolling. Keep Blacklist mode selected, enable browser blocking, keep Block during focus enabled, and add blocked websites such as:
+5. Start Ganbaru AI, open Settings, then Doomscrolling. Keep Blacklist mode selected, enable browser blocking, keep Block during focus enabled, and add blocked websites such as:
 
    ```text
    reddit.com
@@ -146,17 +146,17 @@ node apps/client/scripts/install-chrome-native-host.mjs <extension-id> <chrome|c
 
 **The extension is loaded but never blocks.**
 
-Check that GanbaruAI is running, browser blocking and Block during focus are enabled in Settings > Doomscrolling, the blocked website is saved without `https://`, and a Pomodoro focus phase is active.
+Check that Ganbaru AI is running, browser blocking and Block during focus are enabled in Settings > Doomscrolling, the blocked website is saved without `https://`, and a Pomodoro focus phase is active.
 
 **Usage limits stay at zero.**
 
-Reload the GanbaruAI extension card after extension changes, and rebuild the native host after Rust native host changes:
+Reload the Ganbaru AI extension card after extension changes, and rebuild the native host after Rust native host changes:
 
 ```sh
 pnpm -w run build:native-host
 ```
 
-Keep GanbaruAI running while browsing. The extension records focused `http` and `https` tab time through native messaging, including fullscreen video while the browser window stays focused. The Limits UI refreshes from SQLite every few seconds, and browser samples are flushed roughly every 30 seconds.
+Keep Ganbaru AI running while browsing. The extension records focused `http` and `https` tab time through native messaging, including fullscreen video while the browser window stays focused. The Limits UI refreshes from SQLite every few seconds, and browser samples are flushed roughly every 30 seconds.
 
 **The app window opens but looks blank.**
 
@@ -164,4 +164,4 @@ Stop `pnpm tauri dev` with `Ctrl+C` and start it again. If this happens after a 
 
 **A changed extension file does not show up.**
 
-Click the reload button on the GanbaruAI extension card in the browser's extensions page.
+Click the reload button on the Ganbaru AI extension card in the browser's extensions page.

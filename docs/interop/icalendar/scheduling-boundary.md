@@ -4,7 +4,7 @@ iCalendar scheduling metadata is data. Sending scheduling messages is a separate
 
 ## Offline compatibility
 
-GanbaruAI can parse, preserve, edit carefully, and export scheduling-related fields offline:
+Ganbaru AI can parse, preserve, edit carefully, and export scheduling-related fields offline:
 
 - `METHOD`
 - `ORGANIZER`
@@ -47,7 +47,7 @@ No transport should be required for base import/export compatibility.
 
 ## UI policy
 
-Until GanbaruAI has an identity model:
+Until Ganbaru AI has an identity model:
 
 - attendee response status is read-only.
 - the app must not let a user accept, decline, or tentatively accept as another attendee.

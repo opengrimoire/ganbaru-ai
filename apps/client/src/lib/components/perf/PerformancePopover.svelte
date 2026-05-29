@@ -300,13 +300,13 @@
       const fallback = report.metric.slug === "pss_rss"
         ? " Some processes used RSS fallback because PSS was unavailable."
         : "";
-      return `In Linux, 'Total' uses PSS for GanbaruAI plus WebKit.${fallback} PSS shares common RAM fairly, so it is closer to the real app cost. To compare with another app, measure that app's PSS too. If you use System Monitor's RSS, compare RSS with RSS, but as I said, that is less accurate.`;
+      return `In Linux, 'Total' uses PSS for Ganbaru AI plus WebKit.${fallback} PSS shares common RAM fairly, so it is closer to the real app cost. To compare with another app, measure that app's PSS too. If you use System Monitor's RSS, compare RSS with RSS, but as I said, that is less accurate.`;
     }
     if (report.metric.slug === "working_set") {
-      return "In Windows, 'Total' uses Working Set for GanbaruAI plus WebView2. Working Set includes private and shared RAM currently in memory. Task Manager's Memory shows private working set, so it leaves shared RAM out. To compare with another app, measure that app's Working Set too. If you use Task Manager's Memory, compare Task Manager with Task Manager, but as I said, that is less accurate.";
+      return "In Windows, 'Total' uses Working Set for Ganbaru AI plus WebView2. Working Set includes private and shared RAM currently in memory. Task Manager's Memory shows private working set, so it leaves shared RAM out. To compare with another app, measure that app's Working Set too. If you use Task Manager's Memory, compare Task Manager with Task Manager, but as I said, that is less accurate.";
     }
     if (report.metric.slug === "unavailable") {
-      return "In macOS, 'Total' should be the physical footprint sum for GanbaruAI plus WebView processes. It is not implemented yet.";
+      return "In macOS, 'Total' should be the physical footprint sum for Ganbaru AI plus WebView processes. It is not implemented yet.";
     }
 
     return `${report.metric.name}: ${report.metric.description}`;

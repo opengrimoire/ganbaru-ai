@@ -6,7 +6,7 @@ Full iCalendar compatibility should not turn every standard field into always-lo
 
 - Preserve every legal imported iCalendar component, property, parameter, value type, and extension.
 - Keep calendar startup and visible-window queries close to the current cost.
-- Let GanbaruAI render and edit the supported event subset without corrupting unsupported data.
+- Let Ganbaru AI render and edit the supported event subset without corrupting unsupported data.
 - Export standards-shaped `.ics` files from preserved components plus current projected edits.
 - Keep scheduling transports optional and user-configured.
 

@@ -546,7 +546,7 @@ mod linux {
             "CanQuit" => false.to_variant(),
             "CanRaise" => true.to_variant(),
             "HasTrackList" => false.to_variant(),
-            "Identity" => "GanbaruAI".to_variant(),
+            "Identity" => "Ganbaru AI".to_variant(),
             "DesktopEntry" => "ganbaruai".to_variant(),
             "SupportedUriSchemes" => Vec::<String>::new().to_variant(),
             "SupportedMimeTypes" => Vec::<String>::new().to_variant(),
@@ -1074,7 +1074,7 @@ mod windows {
         display.SetAppMediaId(&HSTRING::from("ganbaruai"))?;
         let properties = display.MusicProperties()?;
         properties.SetTitle(&HSTRING::from(
-            state.title.as_deref().unwrap_or("GanbaruAI").trim(),
+            state.title.as_deref().unwrap_or("Ganbaru AI").trim(),
         ))?;
         properties.SetArtist(&HSTRING::from(
             state
@@ -1082,7 +1082,7 @@ mod windows {
                 .as_deref()
                 .map(str::trim)
                 .filter(|label| !label.is_empty())
-                .unwrap_or("GanbaruAI"),
+                .unwrap_or("Ganbaru AI"),
         ))?;
         display.Update()?;
         Ok(())

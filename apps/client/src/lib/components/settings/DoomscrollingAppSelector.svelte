@@ -248,7 +248,7 @@
 {#if pendingAddApp}
   <ConfirmDialog
     title={`Block ${pendingAddApp.name}?`}
-    message="GanbaruAI will automatically close this app during focus sessions"
+    message="Ganbaru AI will automatically close this app during focus sessions"
     confirmLabel="Block (Enter)"
     cancelLabel="Cancel (Esc)"
     onConfirm={confirmAdd}

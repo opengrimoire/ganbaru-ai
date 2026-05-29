@@ -6,7 +6,7 @@ Proton Calendar is a practical compatibility target. Its encryption and product 
 
 - Proton documents importing calendars from other services.
 - Proton documents exporting a calendar as an iCalendar `.ics` file.
-- Proton's import/export flow is account-based, but GanbaruAI's base `.ics` compatibility does not depend on Proton account access.
+- Proton's import/export flow is account-based, but Ganbaru AI's base `.ics` compatibility does not depend on Proton account access.
 
 Sources:
 
@@ -24,7 +24,7 @@ Sources:
 - imported calendar exported again from Proton
 - non-ASCII text
 
-## Import into GanbaruAI
+## Import into Ganbaru AI
 
 Expected handling:
 
@@ -33,16 +33,16 @@ Expected handling:
 - Preserve recurrence and timezone data.
 - Preserve alarms even if Proton has limited alarm import/export behavior.
 
-## Export from GanbaruAI into Proton Calendar
+## Export from Ganbaru AI into Proton Calendar
 
 Manual checks:
 
 1. Create a disposable Proton calendar.
-2. Import GanbaruAI-generated fixtures from `apps/client/test-fixtures/ics/rfc5545/` through Proton's import/export screen.
+2. Import Ganbaru AI-generated fixtures from `apps/client/test-fixtures/ics/rfc5545/` through Proton's import/export screen.
 3. Verify all-day and timed event dates.
 4. Verify recurrence, exceptions, and overrides.
 5. Export the Proton calendar as `.ics`.
-6. Import back into GanbaruAI.
+6. Import back into Ganbaru AI.
 7. Compare semantic results.
 
 ## Behavior to verify
@@ -56,7 +56,7 @@ Manual checks:
 
 ## Observed behavior log
 
-No manual GanbaruAI compatibility run recorded yet.
+No manual Ganbaru AI compatibility run recorded yet.
 
 Record:
 

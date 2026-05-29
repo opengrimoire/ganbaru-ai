@@ -114,11 +114,11 @@ Manual tests use disposable calendars. Never test with the user's primary calend
 For each client:
 
 1. Create a disposable calendar.
-2. Import GanbaruAI-generated fixtures from `apps/client/test-fixtures/ics/rfc5545/`, plus any client-specific raw fixtures.
+2. Import Ganbaru AI-generated fixtures from `apps/client/test-fixtures/ics/rfc5545/`, plus any client-specific raw fixtures.
 3. Inspect visual behavior.
 4. Export the same calendar back to `.ics`.
 5. Store the raw export as a dated fixture.
-6. Re-import into GanbaruAI.
+6. Re-import into Ganbaru AI.
 7. Record differences in the relevant `clients/*.md` file.
 
 Record:

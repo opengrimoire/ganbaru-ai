@@ -124,7 +124,7 @@ phase-a-running or phase-b-running on boot
   continue on the user's real DB
 ```
 
-Baseline-and-dense scenarios cost one baseline pass plus one pass per dense dataset. Dense-only scenarios skip the measured baseline pass and run only the practical dense dataset. The startup scenario records five process launches per dataset, so it costs five baseline restarts and five restarts for each dense dataset. Each startup relaunch exits the app, waits 10 seconds in a helper process, then opens GanbaruAI again. A full suite adds the cost of each registered scenario.
+Baseline-and-dense scenarios cost one baseline pass plus one pass per dense dataset. Dense-only scenarios skip the measured baseline pass and run only the practical dense dataset. The startup scenario records five process launches per dataset, so it costs five baseline restarts and five restarts for each dense dataset. Each startup relaunch exits the app, waits 10 seconds in a helper process, then opens Ganbaru AI again. A full suite adds the cost of each registered scenario.
 
 If the process is killed during a benchmark pass, the partial result is not comparable. The next boot discards the isolated benchmark DB instead of trying to resume from data that may contain half-finished setup or workload state. Explicit Cancel still aborts the active run and restarts on the user's real DB.
 

@@ -37,7 +37,7 @@ function hasConfigOverride(args) {
 }
 
 /**
- * Adds GanbaruAI's dev identity to desktop dev runs by default.
+ * Adds Ganbaru AI's dev identity to desktop dev runs by default.
  *
  * @param {string[]} args CLI arguments.
  * @returns {string[]} Arguments to pass to the Tauri CLI.

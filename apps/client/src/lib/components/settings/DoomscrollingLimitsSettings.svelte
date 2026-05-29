@@ -252,7 +252,7 @@
     <div class="flex flex-col gap-3">
       <ToggleSetting
         label="Enable usage limits"
-        description="Apply daily budgets whenever GanbaruAI is running"
+        description="Apply daily budgets whenever Ganbaru AI is running"
         checked={doomscrolling.limitsEnabled}
         onChange={requestGlobalEnabledChange}
       />

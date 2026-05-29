@@ -2,19 +2,19 @@
 
 Doomscrolling enforces the browsing and app rules that belong to the user's current work context. On desktop, the first implementation is a Chrome extension for Chromium-based browsers. Firefox follows later with the same product behavior where the browser APIs allow it. On mobile, the same feature becomes app-level blocking through platform-specific screen time APIs.
 
-Doomscrolling is not a separate productivity tool. It is a guardrail attached to the calendar, Pomodoro, and work environment systems. The user plans the work context once, then GanbaruAI applies the matching rules while the session is active.
+Doomscrolling is not a separate productivity tool. It is a guardrail attached to the calendar, Pomodoro, and work environment systems. The user plans the work context once, then Ganbaru AI applies the matching rules while the session is active.
 
 ## Current implementation status
 
 The current desktop implementation is an early Chrome and Brave development slice:
 
-- `extensions/chrome` is a Manifest V3 unpacked extension named GanbaruAI.
+- `extensions/chrome` is a Manifest V3 unpacked extension named Ganbaru AI.
 - `ganbaruai-native-messaging` is a repo-owned native messaging host binary built from Rust.
 - The app writes a small runtime state file when Pomodoro state changes.
 - The native host reads the runtime state and `vault/config.json`, then decides whether a requested website should be blocked.
 - The native host writes a small local connection status file each time the extension contacts it. The app uses this to show whether a browser extension has connected recently.
-- Settings > Doomscrolling is split into Limits, Browser, Mobile apps, and Desktop apps. Limits are daily usage budgets that apply whenever GanbaruAI is running. Browser supports enable or disable, blocking during focus, blocking during short breaks, blocking during long breaks, Blacklist mode, Whitelist mode, blocked websites, blocked categories, custom category stacks, exceptions, and allowed websites. Mobile apps is a work-in-progress placeholder.
-- The Desktop apps tab uses the same schedule controls for local app rules, but desktop app blocking is blocklist-only. Adding an app opens an on-demand installed-app picker, so the app does not continuously scan the system. The picker omits system and basic utility apps because they are not procrastination targets. Adding or removing an app from the picker requires confirmation because blocked apps can be closed automatically during configured Pomodoro phases. GanbaruAI, system utilities, shell processes, desktop shell processes, and generic runtimes are protected and cannot be added to blocked apps or closed by stale rules. On Linux, active blocked apps are closed automatically during protected Pomodoro phases and the app shows an OS notification explaining where to change the setting, capped to five notifications per minute.
+- Settings > Doomscrolling is split into Limits, Browser, Mobile apps, and Desktop apps. Limits are daily usage budgets that apply whenever Ganbaru AI is running. Browser supports enable or disable, blocking during focus, blocking during short breaks, blocking during long breaks, Blacklist mode, Whitelist mode, blocked websites, blocked categories, custom category stacks, exceptions, and allowed websites. Mobile apps is a work-in-progress placeholder.
+- The Desktop apps tab uses the same schedule controls for local app rules, but desktop app blocking is blocklist-only. Adding an app opens an on-demand installed-app picker, so the app does not continuously scan the system. The picker omits system and basic utility apps because they are not procrastination targets. Adding or removing an app from the picker requires confirmation because blocked apps can be closed automatically during configured Pomodoro phases. Ganbaru AI, system utilities, shell processes, desktop shell processes, and generic runtimes are protected and cannot be added to blocked apps or closed by stale rules. On Linux, active blocked apps are closed automatically during protected Pomodoro phases and the app shows an OS notification explaining where to change the setting, capped to five notifications per minute.
 - Blacklist mode presents built-in and custom categories as category pills. The New category pill opens the custom category form, websites are entered as list items, and custom category deletion lives inside the edit form.
 - The current browser `doomscrolling` config uses `enabled`, `blockDuringFocus`, `blockDuringShortBreaks`, `blockDuringLongBreaks`, `mode`, `blockedCategories`, `customCategoryStacks`, `blockedHosts`, `exceptionHosts`, and `allowedHosts`. Built-in categories are enabled by default. Website entries store `host` and `enabled` so users can disable a rule without deleting it. Category stacks store a name, enabled state, and normalized hosts. Legacy string website entries load as enabled rules, and legacy configs without `mode` treat old `allowedHosts` values as Blacklist mode exceptions. Desktop app rules live under `doomscrolling.desktop` with the same enable and phase schedule toggles plus a blocked app list. Daily usage limits live under `doomscrolling.limits` with `enabled` and `items`. Each limit stores `id`, `name`, `enabled`, `minutesPerDay`, and linked entries with optional website, mobile app, and desktop app fields. Legacy desktop `mode` and `allowedApps` fields are ignored.
 - The extension tracks focused active tab time for HTTP and HTTPS pages while the browser window is focused. Browser locked state pauses tracking, but passive focused use such as fullscreen video still counts. It reports only normalized website host, elapsed seconds, local date, and sample timing through native messaging. Extension block pages, unsupported browser pages, and non-HTTP URLs are never counted as website usage.
@@ -27,9 +27,9 @@ This is intentionally smaller than the full spec below. It supports domain-level
 
 ## Daily usage limits
 
-Daily usage limits are budget rules, not Pomodoro phase rules. They apply whenever GanbaruAI is running and reset at local midnight.
+Daily usage limits are budget rules, not Pomodoro phase rules. They apply whenever Ganbaru AI is running and reset at local midnight.
 
-Each limit can link one or many entries that share the same daily budget. Each entry represents a product or habit across browser, mobile, and desktop, for example `facebook.com`, the Facebook mobile app, and the Facebook desktop app. The limit name is optional in the editor. If it is empty, GanbaruAI derives it from the first linked entry using this priority: entry name, mobile app name, desktop app name, then website name with the first letter capitalized.
+Each limit can link one or many entries that share the same daily budget. Each entry represents a product or habit across browser, mobile, and desktop, for example `facebook.com`, the Facebook mobile app, and the Facebook desktop app. The limit name is optional in the editor. If it is empty, Ganbaru AI derives it from the first linked entry using this priority: entry name, mobile app name, desktop app name, then website name with the first letter capitalized.
 
 Categories are not configurable in daily usage limits for now. Built-in categories and custom category stacks remain browser-blocking tools only.
 
@@ -60,7 +60,7 @@ Browser counting cases:
 - If the site is the active tab in the focused browser window, passive use counts. This includes fullscreen video, reading, and watching without keyboard or mouse input.
 - Usage samples are flushed roughly every 30 seconds, so switching away can leave a small rounding window before the current interval is stored.
 
-When a website limit is exhausted, the native host blocks matching sites and the extension block page says `[host] reached today's limit`. The page has no bypass button. When a desktop app limit is exhausted on a platform with foreground detection and safe close support, GanbaruAI should close the matching foreground app and show a notification that opens Settings > Doomscrolling > Limits.
+When a website limit is exhausted, the native host blocks matching sites and the extension block page says `[host] reached today's limit`. The page has no bypass button. When a desktop app limit is exhausted on a platform with foreground detection and safe close support, Ganbaru AI should close the matching foreground app and show a notification that opens Settings > Doomscrolling > Limits.
 
 ## Purpose
 
@@ -93,7 +93,7 @@ It should make the desired action easier than the distracted action. It should n
 
 **Logs are signals, not punishment.** Block events feed analytics and future recommendations. They should help the user tune rules, not create shame.
 
-**Local-first is non-negotiable.** The extension only talks to the local GanbaruAI backend through native messaging. It does not send URLs, rule matches, or page content to any remote endpoint.
+**Local-first is non-negotiable.** The extension only talks to the local Ganbaru AI backend through native messaging. It does not send URLs, rule matches, or page content to any remote endpoint.
 
 ## Activation model
 
@@ -200,7 +200,7 @@ The extension must not inject UI into normal pages for basic blocking. Redirecti
 
 ## Native messaging protocol
 
-Native messaging connects the extension to GanbaruAI's local backend. The protocol should be versioned from the first implementation.
+Native messaging connects the extension to Ganbaru AI's local backend. The protocol should be versioned from the first implementation.
 
 The extension sends:
 
@@ -235,7 +235,7 @@ A future strict mode can fail closed during focus, but it must be explicit, easy
 
 When the app is running but the extension is missing or disconnected, the app should show a small setup warning on Pomodoro and work environment surfaces. It should not block the user from starting focus.
 
-The current app settings view shows this as a recent connection check for the current app session. A fresh timestamp from this app run means the extension is installed, enabled, and able to talk to GanbaruAI. A missing, stale, or older-session timestamp means the browser is closed, the extension is disabled or missing, or native messaging is not registered. The app should not claim to know which of those is true unless the browser reports it directly.
+The current app settings view shows this as a recent connection check for the current app session. A fresh timestamp from this app run means the extension is installed, enabled, and able to talk to Ganbaru AI. A missing, stale, or older-session timestamp means the browser is closed, the extension is disabled or missing, or native messaging is not registered. The app should not claim to know which of those is true unless the browser reports it directly.
 
 ## Block page UX
 
@@ -248,7 +248,7 @@ The block page is intentionally minimal. It should show:
 
 It should not show:
 
-- The GanbaruAI name as page content.
+- The Ganbaru AI name as page content.
 - The blocked URL more than once.
 - Motivation quotes.
 - XP, streaks, badges, or character dialogue.
@@ -264,7 +264,7 @@ The block page itself must not become a reward or distraction.
 
 The block page should not offer quick bypass controls. The default recovery action is to close the tab and continue the session.
 
-When the user hit a false positive or needs a blocked site for the current task, the change should happen in GanbaruAI settings where the rule context is visible. Future access-change flows can support:
+When the user hit a false positive or needs a blocked site for the current task, the change should happen in Ganbaru AI settings where the rule context is visible. Future access-change flows can support:
 
 - Adding an exception in Blacklist mode.
 - Adding a site to Whitelist mode.
@@ -283,7 +283,7 @@ The popup is a compact status surface. It should show:
 - Pomodoro phase and remaining time when active.
 - Current rule mode: strict focus, relaxed break, manual environment, morning routine, inactive.
 - Last blocked domain, if any, without query string.
-- Buttons: open GanbaruAI and test the current page.
+- Buttons: open Ganbaru AI and test the current page.
 
 The popup should not expose full rule editing. It can link to the app's environment editor. Keeping editing in the app avoids duplicated settings UI and keeps the browser extension small.
 
@@ -304,7 +304,7 @@ The environment editor should include a blocker section with:
 
 ## Suggested defaults
 
-GanbaruAI should ship with built-in category presets plus user-created custom category stacks. Built-in presets are maintained by the project and should not be shown as a browsing catalogue in the normal settings UI. If a built-in category is too broad for a user, the expected path is to disable that category and create a custom stack with the exact sites they want blocked.
+Ganbaru AI should ship with built-in category presets plus user-created custom category stacks. Built-in presets are maintained by the project and should not be shown as a browsing catalogue in the normal settings UI. If a built-in category is too broad for a user, the expected path is to disable that category and create a custom stack with the exact sites they want blocked.
 
 Initial built-in presets:
 
@@ -397,11 +397,11 @@ Firefox support should not require changing the data model or user-facing rule s
 
 Some browser pages should never be blocked:
 
-- Extension pages owned by GanbaruAI.
+- Extension pages owned by Ganbaru AI.
 - Browser preference pages and extension management pages.
 - New tab pages.
 - Local files, unless the user explicitly enables local file matching later.
-- Native messaging setup pages or local GanbaruAI setup pages.
+- Native messaging setup pages or local Ganbaru AI setup pages.
 - Authentication pages required for the user's configured AI or sync provider.
 
 The safety allowlist should be built in and shown as `browser safety allowlist` when the app explains a blocked page.

@@ -34,7 +34,7 @@ export function detachableTabViewFromWindowLabel(label: string): DetachableTabVi
 }
 
 export function detachedViewWindowTitle(view: DetachableTabView): string {
-  return `GanbaruAI: ${viewLabel(view)}`;
+  return `Ganbaru AI: ${viewLabel(view)}`;
 }
 
 export function detachedViewWindowUrl(view: DetachableTabView): string {

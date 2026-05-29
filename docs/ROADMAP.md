@@ -1,6 +1,6 @@
 # Roadmap
 
-Phased development plan for GanbaruAI. Each phase produces a working, testable increment. Phases are sequential; each builds on prior phases.
+Phased development plan for Ganbaru AI. Each phase produces a working, testable increment. Phases are sequential; each builds on prior phases.
 
 ---
 
@@ -72,7 +72,7 @@ Daily touchpoints and engagement mechanics that make the app habit-forming.
 
 ## Phase 4: desktop experience
 
-Multi-window desktop features that make GanbaruAI an always-present productivity companion.
+Multi-window desktop features that make Ganbaru AI an always-present productivity companion.
 
 **Includes:**
 
@@ -151,7 +151,7 @@ The agent integration layer. The `ganbaruai` CLI and an embedded terminal bring 
 
 - `ganbaruai` CLI: Rust binary linking to the same SQLite, human-readable and JSON output, commands for projects, tasks, calendar, workspace, pomodoro, import/export
 - Integrated terminal: xterm.js embedded in Tauri webview, runs Codex or another CLI coding agent
-- Context injection: GanbaruAI assembles project/task context and passes it through the launch prompt or standard input. `AGENTS.md` stays as project-level conventions, per-task context is dynamic.
+- Context injection: Ganbaru AI assembles project/task context and passes it through the launch prompt or standard input. `AGENTS.md` stays as project-level conventions, per-task context is dynamic.
 - Session management: per-project conversation threads in SQLite, calendar-driven automatic switching (save current session, resume the session for the new calendar event's project)
 - Kanban task activation: clicking "Start" on a task injects its details into the current AI conversation
 - Workflow phase prompts: structured system prompts for brainstorming, evaluation, planning, execution modes
@@ -260,7 +260,7 @@ The general-user AI path, advanced AI capabilities, and external access layer. B
 - Mood-aware motivation: using diary mood/energy baselines, AI adapts communication and suggests schedule adjustments
 - Content-specific browsing relevance detection: LLM analyzes page content (not just URLs) for task relevance, smarter blocking on YouTube and similar platforms
 - Local LLM diary analysis: small local models (via Ollama) analyze diary language for goal-setting, reflection quality, mood trends, no data leaves the device
-- MCP server: exposes GanbaruAI data to external AI clients (ChatGPT, teammate agents, and other MCP-compatible clients) that don't run locally
+- MCP server: exposes Ganbaru AI data to external AI clients (ChatGPT, teammate agents, and other MCP-compatible clients) that don't run locally
 - MCP client: consumes external MCP servers for integrations (email, external calendars)
 - Firefox browser extension: port of Chrome extension to Firefox manifest
 - Edge panel global mouse trigger: rdev / Win32 / X11 polling for cursor position (replaces keyboard shortcut from phase 4), Wayland detection and graceful fallback

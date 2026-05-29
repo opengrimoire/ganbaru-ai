@@ -8,7 +8,7 @@ Primary standards:
 
 - **RFC 5545, iCalendar:** the core file format and data model for components, properties, parameters, value types, recurrence, `VTIMEZONE`, and line serialization.
 - **RFC 6868, parameter value encoding:** caret escaping for parameter values, including names with quotes and newlines.
-- **RFC 5546, iCalendar scheduling:** invitation and reply semantics. GanbaruAI should preserve this metadata offline, but must not act on it without a configured transport.
+- **RFC 5546, iCalendar scheduling:** invitation and reply semantics. Ganbaru AI should preserve this metadata offline, but must not act on it without a configured transport.
 - **RFC 7265, jCal:** JSON representation of iCalendar. This is the parser and serializer interchange shape, while SQLite stores the same model in relational component, property, parameter, and value rows.
 
 Useful extension standards to track:
@@ -28,7 +28,7 @@ This is the main goal.
 
 ### Semantic app support
 
-The app understands the data well enough to render, edit, search, notify, expand recurrence, and connect it to pomodoro. This applies first to `VEVENT`, then optionally to `VTODO`, `VJOURNAL`, and `VFREEBUSY` as GanbaruAI grows.
+The app understands the data well enough to render, edit, search, notify, expand recurrence, and connect it to pomodoro. This applies first to `VEVENT`, then optionally to `VTODO`, `VJOURNAL`, and `VFREEBUSY` as Ganbaru AI grows.
 
 This can be incremental. Unsupported semantics must still be preserved.
 
@@ -40,7 +40,7 @@ This requires a transport and identity. It is not required for offline `.ics` co
 
 ## Current supported subset
 
-GanbaruAI currently projects a `VEVENT`-focused subset into `calendar_events` and preserves broader iCalendar data in structured storage. Current support handles:
+Ganbaru AI currently projects a `VEVENT`-focused subset into `calendar_events` and preserves broader iCalendar data in structured storage. Current support handles:
 
 - all-day exclusive `DTEND`
 - `STATUS`, `TRANSP`, and visual status rendering

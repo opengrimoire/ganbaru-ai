@@ -1,6 +1,6 @@
 # AI integration
 
-GanbaruAI's AI features are entirely opt-in. The app is fully functional with no AI configured. When users do opt in, three paths cover different audiences: an integrated terminal for developers, a BYOK chat widget for non-developer users, and MCP for external clients only.
+Ganbaru AI's AI features are entirely opt-in. The app is fully functional with no AI configured. When users do opt in, three paths cover different audiences: an integrated terminal for developers, a BYOK chat widget for non-developer users, and MCP for external clients only.
 
 This doc is a placeholder. Deeper design comes in a later pass.
 
@@ -8,14 +8,14 @@ This doc is a placeholder. Deeper design comes in a later pass.
 
 ### 1. Integrated terminal (developer path)
 
-An xterm.js terminal embedded in the app, running Codex or another CLI coding agent with full capabilities (file editing, bash, subagents). The user installs the agent separately and signs in with their own account or API key. GanbaruAI provides:
+An xterm.js terminal embedded in the app, running Codex or another CLI coding agent with full capabilities (file editing, bash, subagents). The user installs the agent separately and signs in with their own account or API key. Ganbaru AI provides:
 
 - **Context injection** through the launch prompt or standard input, populated from the active project, current project tasks, recent progress, calendar events, and related notes.
 - **Per-project conversation threads** persisted in SQLite. When a calendar event starts, the terminal saves the current conversation and resumes the conversation for the new event's project.
 - **Background agents** for delegated or parallel work, run through the selected agent's documented non-interactive mode. Codex uses `codex exec`.
 - **Workflow phase prompts** that adapt the agent's behavior to the current project phase (brainstorming, evaluation, planning, execution).
 
-`AGENTS.md` remains as project-level conventions. Per-task context comes from GanbaruAI dynamically, not from the markdown file.
+`AGENTS.md` remains as project-level conventions. Per-task context comes from Ganbaru AI dynamically, not from the markdown file.
 
 ### 2. BYOK chat widget (general-user path)
 
@@ -26,11 +26,11 @@ A chat interface that connects to the user's chosen LLM provider. Three provider
 - **Ollama** for local models (Llama, Mistral, Gemma) running on the user's machine, no API key needed.
 - Other provider APIs when users supply their own credentials and the integration is implemented explicitly.
 
-The chat widget can read and write GanbaruAI data (calendar events, project tasks, notes) via the same CLI bridge the terminal uses. It cannot edit arbitrary files or run arbitrary bash commands; the developer path is the surface for those capabilities.
+The chat widget can read and write Ganbaru AI data (calendar events, project tasks, notes) via the same CLI bridge the terminal uses. It cannot edit arbitrary files or run arbitrary bash commands; the developer path is the surface for those capabilities.
 
 ### 3. MCP (external clients only)
 
-GanbaruAI exposes calendar, project, and notes data via an MCP server for use by external AI clients (ChatGPT, teammate agents, and other MCP-compatible clients on a different machine). MCP is also consumed for integrations with external systems (email, external calendars).
+Ganbaru AI exposes calendar, project, and notes data via an MCP server for use by external AI clients (ChatGPT, teammate agents, and other MCP-compatible clients on a different machine). MCP is also consumed for integrations with external systems (email, external calendars).
 
 MCP is **not** the path for internal agent interaction. Internal agents (the embedded terminal, background agents) use the CLI directly, which is faster, simpler, and avoids the JSON-RPC overhead.
 
@@ -44,7 +44,7 @@ ganbaruai event create --start 2026-04-20T14:00 --duration 90m --project foo
 ganbaruai export projects --project foo
 ```
 
-This is the bridge between AI agents and GanbaruAI's data. It works with any agent that can run a shell command (Codex, Cursor, custom scripts), with no plugin or MCP server required for the local case.
+This is the bridge between AI agents and Ganbaru AI's data. It works with any agent that can run a shell command (Codex, Cursor, custom scripts), with no plugin or MCP server required for the local case.
 
 ## Workflow phase prompts
 
@@ -67,7 +67,7 @@ The UI shows contextual action buttons alongside the AI panel: "Plan this sprint
 - The BYOK path: data flows to whatever provider the user configured. Local providers (Ollama) keep all data on-device.
 - The MCP path: external clients receive only the data the user authorizes them to see.
 
-No AI features are required to use GanbaruAI. All data is processed locally by default. AI is an enhancement, not an infrastructure dependency.
+No AI features are required to use Ganbaru AI. All data is processed locally by default. AI is an enhancement, not an infrastructure dependency.
 
 ## Team features and the AI as data fiduciary (deferred)
 

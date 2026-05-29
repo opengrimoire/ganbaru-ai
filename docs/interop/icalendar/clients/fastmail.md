@@ -25,26 +25,26 @@ Source:
 - non-ASCII text
 - custom `X-*` fields
 
-## Import into GanbaruAI
+## Import into Ganbaru AI
 
 Expected handling:
 
 - Preserve Fastmail-exported events.
-- Preserve missing alarm behavior as a client observation, not a GanbaruAI rule.
+- Preserve missing alarm behavior as a client observation, not a Ganbaru AI rule.
 - Project supported `VEVENT` rows.
 - Preserve attendees, organizer, and recurrence data.
 
-## Export from GanbaruAI into Fastmail
+## Export from Ganbaru AI into Fastmail
 
 Manual checks:
 
 1. Create a disposable Fastmail calendar.
-2. Import GanbaruAI-generated fixtures from `apps/client/test-fixtures/ics/rfc5545/`.
+2. Import Ganbaru AI-generated fixtures from `apps/client/test-fixtures/ics/rfc5545/`.
 3. Verify all-day and timed date behavior.
 4. Verify recurrence and exceptions.
 5. Verify whether alarms are dropped as documented.
 6. Export the Fastmail calendar.
-7. Import back into GanbaruAI.
+7. Import back into Ganbaru AI.
 8. Compare semantic results and note any alarm loss.
 
 ## Behavior to verify
@@ -57,7 +57,7 @@ Manual checks:
 
 ## Observed behavior log
 
-No manual GanbaruAI compatibility run recorded yet.
+No manual Ganbaru AI compatibility run recorded yet.
 
 Record:
 

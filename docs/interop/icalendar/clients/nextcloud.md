@@ -26,7 +26,7 @@ Sources:
 - custom `X-*` properties
 - timezone definitions from a self-hosted server
 
-## Import into GanbaruAI
+## Import into Ganbaru AI
 
 Expected handling:
 
@@ -36,15 +36,15 @@ Expected handling:
 - Project supported `VEVENT` rows.
 - Keep scheduling metadata inert unless future transport is configured.
 
-## Export from GanbaruAI into Nextcloud
+## Export from Ganbaru AI into Nextcloud
 
 Manual checks:
 
 1. Create a disposable Nextcloud calendar.
-2. Import GanbaruAI-generated fixtures from `apps/client/test-fixtures/ics/rfc5545/`.
+2. Import Ganbaru AI-generated fixtures from `apps/client/test-fixtures/ics/rfc5545/`.
 3. Verify all-day, timed, recurrence, alarms, and attendees.
 4. Export events or the calendar from Nextcloud.
-5. Import back into GanbaruAI.
+5. Import back into Ganbaru AI.
 6. Compare semantic results and preserved fields.
 
 ## Behavior to verify
@@ -58,7 +58,7 @@ Manual checks:
 
 ## Observed behavior log
 
-No manual GanbaruAI compatibility run recorded yet.
+No manual Ganbaru AI compatibility run recorded yet.
 
 Record:
 

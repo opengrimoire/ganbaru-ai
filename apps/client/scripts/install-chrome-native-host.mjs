@@ -72,7 +72,7 @@ mkdirSync(dir, { recursive: true });
 const manifestPath = join(dir, `${HOST_NAME}.json`);
 const manifest = {
   name: HOST_NAME,
-  description: "GanbaruAI doomscrolling native host",
+  description: "Ganbaru AI doomscrolling native host",
   path: hostPath,
   type: "stdio",
   allowed_origins: [`chrome-extension://${extensionId}/`],

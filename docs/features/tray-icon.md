@@ -1,6 +1,6 @@
 # Tray icon
 
-The tray icon is GanbaruAI's OS-level glance surface. It stays available when the main window is hidden, minimized, or behind other windows, and it exposes compact Pomodoro and Music controls without requiring the user to return to the app.
+The tray icon is Ganbaru AI's OS-level glance surface. It stays available when the main window is hidden, minimized, or behind other windows, and it exposes compact Pomodoro and Music controls without requiring the user to return to the app.
 
 This doc covers the tray icon's user-visible behavior and the platform-specific implementation details that are easy to lose during maintenance.
 
@@ -42,7 +42,7 @@ The active `100%` state maps back to the empty ring. At that point the current f
 
 The ring redraw is quantized to 1% progress steps. That is frequent enough to feel current while avoiding needless tray icon churn.
 
-While a focus session is manually paused, the tray ring animates a slow color beat so the user can notice that focus is waiting to resume. The beat is limited to the focus phase and stops immediately on resume, stop, phase change, idle pause, or suspend pause. The tray cannot animate like the title bar SVG, so GanbaruAI switches between a small set of cached PNG frames instead of trying to drive a high-frame-rate animation. The pulse holds at the full white and dim gray endpoints, with smoother transitions between them.
+While a focus session is manually paused, the tray ring animates a slow color beat so the user can notice that focus is waiting to resume. The beat is limited to the focus phase and stops immediately on resume, stop, phase change, idle pause, or suspend pause. The tray cannot animate like the title bar SVG, so Ganbaru AI switches between a small set of cached PNG frames instead of trying to drive a high-frame-rate animation. The pulse holds at the full white and dim gray endpoints, with smoother transitions between them.
 
 ## Menu behavior
 
@@ -69,7 +69,7 @@ Controls remain visible but disabled when unavailable. This keeps the menu stabl
 
 Linux tray support goes through Tauri's `tray-icon` stack and AppIndicator. On Ubuntu, AppIndicator resolves tray images from PNG paths. Tauri's normal Linux `set_icon` path removes the previous PNG before publishing the next one. During that gap, Ubuntu can briefly show its missing-icon placeholder, which appears as three dots.
 
-GanbaruAI avoids that gap on Linux:
+Ganbaru AI avoids that gap on Linux:
 
 1. Render the next tray icon as RGBA pixels.
 2. Convert it to a PNG in the app cache under `tray-icons`.

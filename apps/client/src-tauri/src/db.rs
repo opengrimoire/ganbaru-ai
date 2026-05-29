@@ -14,7 +14,7 @@ const CALENDAR_HARDENING_SQL: &str = r#"
         (id, name, color, source, visible, read_only, created_at, updated_at)
     VALUES (
         'local',
-        'GanbaruAI',
+        'Ganbaru AI',
         '',
         'local',
         1,
@@ -62,7 +62,7 @@ const CALENDAR_HARDENING_SQL: &str = r#"
         (id, name, color, source, visible, read_only, created_at, updated_at)
     VALUES (
         'local',
-        'GanbaruAI',
+        'Ganbaru AI',
         '',
         'local',
         1,
@@ -1039,7 +1039,7 @@ pub fn migrations() -> Vec<Migration> {
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
             INSERT OR IGNORE INTO calendars (id, name, color, source)
-                VALUES ('local', 'GanbaruAI', '', 'local');
+                VALUES ('local', 'Ganbaru AI', '', 'local');
 
             -- calendar events
             CREATE TABLE IF NOT EXISTS calendar_events (
@@ -2207,12 +2207,23 @@ pub fn migrations() -> Vec<Migration> {
             CREATE INDEX IF NOT EXISTS idx_doomscrolling_usage_samples_started
                 ON doomscrolling_usage_samples(started_at);
         ",
+    },
+    Migration {
+        version: 27,
+        description: "rename default local calendar display name",
+        sql: "
+            UPDATE calendars
+            SET name = 'Ganbaru AI',
+                updated_at = datetime('now')
+            WHERE id = 'local'
+              AND name = 'GanbaruAI';
+        ",
     }]
 }
 
 #[cfg(test)]
 mod tests {
-    use super::run_migrations;
+    use super::{migrations, run_migrations};
     use sqlx::{Row, SqlitePool};
 
     async fn migrated_memory_pool() -> SqlitePool {
@@ -2256,6 +2267,74 @@ mod tests {
         .bind(id)
         .execute(pool)
         .await
+    }
+
+    #[test]
+    fn migration_renames_default_local_calendar_display_name() {
+        tauri::async_runtime::block_on(async {
+            let pool = sqlx::sqlite::SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect("sqlite::memory:")
+                .await
+                .unwrap();
+
+            sqlx::raw_sql(
+                "CREATE TABLE calendars (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE ganbaruai_schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    description TEXT NOT NULL,
+                    installed_at TEXT NOT NULL DEFAULT (datetime('now'))
+                );",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+
+            sqlx::query(
+                "INSERT INTO calendars (id, name, updated_at)
+                 VALUES
+                    ('local', 'GanbaruAI', '2026-05-29T00:00:00Z'),
+                    ('custom', 'GanbaruAI', '2026-05-29T00:00:00Z')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+
+            for migration in migrations()
+                .into_iter()
+                .filter(|migration| migration.version < 27)
+            {
+                sqlx::query(
+                    "INSERT INTO ganbaruai_schema_migrations (version, description)
+                     VALUES (?, ?)",
+                )
+                .bind(migration.version)
+                .bind(migration.description)
+                .execute(&pool)
+                .await
+                .unwrap();
+            }
+
+            run_migrations(&pool).await.unwrap();
+
+            let local_name: String =
+                sqlx::query_scalar("SELECT name FROM calendars WHERE id = 'local'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            let custom_name: String =
+                sqlx::query_scalar("SELECT name FROM calendars WHERE id = 'custom'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+
+            assert_eq!(local_name, "Ganbaru AI");
+            assert_eq!(custom_name, "GanbaruAI");
+        });
     }
 
     #[test]

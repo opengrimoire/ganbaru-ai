@@ -4,7 +4,7 @@ Recurrence and timezones are the highest-risk part of iCalendar compatibility. T
 
 ## Time value categories
 
-GanbaruAI must distinguish:
+Ganbaru AI must distinguish:
 
 - date-only values, such as `DTSTART;VALUE=DATE:20260513`
 - UTC date-time values, such as `DTSTART:20260513T150000Z`
@@ -17,7 +17,7 @@ Projection can convert these to app row fields, but preservation must retain the
 
 ## All-day events
 
-All-day iCalendar `DTEND;VALUE=DATE` is exclusive. GanbaruAI's internal all-day visible end date is inclusive.
+All-day iCalendar `DTEND;VALUE=DATE` is exclusive. Ganbaru AI's internal all-day visible end date is inclusive.
 
 Required conversions:
 

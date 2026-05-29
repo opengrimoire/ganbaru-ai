@@ -17,11 +17,11 @@ const ALLOWED_USAGE_DATABASE_FILES: &[&str] =
 const EXTENSION_INSTALL_README_URL: &str =
     "https://github.com/opengrimoire/GanbaruAI/blob/dev/extensions/chrome/README.md";
 const PROTECTED_DESKTOP_APP_NAMES: &[&str] = &[
-    "GanbaruAI",
+    "Ganbaru AI",
     "ganbaruai",
     "ganbaruai-dev",
-    "GanbaruAI Dev",
-    "GanbaruAI (dev)",
+    "Ganbaru AI Dev",
+    "Ganbaru AI (dev)",
     "org.opengrimoire.ganbaruai",
     "org.opengrimoire.ganbaruai.dev",
     "Activity Monitor",
@@ -1450,7 +1450,7 @@ mod tests {
 
     #[test]
     fn recognizes_protected_desktop_app_and_process_names() {
-        assert!(super::is_protected_desktop_app_name("GanbaruAI"));
+        assert!(super::is_protected_desktop_app_name("Ganbaru AI"));
         assert!(super::is_protected_desktop_app_name("Terminal"));
         assert!(super::is_protected_desktop_app_name("gnome-shell"));
         assert!(super::is_protected_desktop_app_name("python3.12"));

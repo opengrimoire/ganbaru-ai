@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ganbaruai",
+  "productName": "Ganbaru AI",
   "mainBinaryName": "ganbaruai",
   "version": "0.1.0",
   "identifier": "org.opengrimoire.ganbaruai",
@@ -13,7 +13,7 @@
   "app": {
     "windows": [
       {
-        "title": "GanbaruAI",
+        "title": "Ganbaru AI",
         "width": 1200,
         "height": 800,
         "minWidth": 280,

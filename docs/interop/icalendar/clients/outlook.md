@@ -7,7 +7,7 @@ Outlook is a practical compatibility target, not the source of truth for iCalend
 - Microsoft documents importing `.ics` files into Outlook calendars and subscribing to iCalendar feeds.
 - Microsoft notes that an imported `.ics` file does not refresh if the source calendar later changes.
 - Outlook desktop can export an iCalendar file through calendar sharing APIs, with detail controlled by sharing settings.
-- Outlook commonly emits Windows timezone names, which GanbaruAI currently maps to IANA names for projection.
+- Outlook commonly emits Windows timezone names, which Ganbaru AI currently maps to IANA names for projection.
 
 Sources:
 
@@ -25,7 +25,7 @@ Sources:
 - cancellation and update messages
 - all-day single and multi-day events
 
-## Import into GanbaruAI
+## Import into Ganbaru AI
 
 Expected handling:
 
@@ -35,18 +35,18 @@ Expected handling:
 - Preserve organizer, attendees, and scheduling metadata.
 - Preserve attachments as inert data until the user explicitly opens them.
 
-## Export from GanbaruAI into Outlook
+## Export from Ganbaru AI into Outlook
 
 Manual checks:
 
 1. Create a disposable Outlook calendar.
-2. Import GanbaruAI-generated fixtures from `apps/client/test-fixtures/ics/rfc5545/`.
+2. Import Ganbaru AI-generated fixtures from `apps/client/test-fixtures/ics/rfc5545/`.
 3. Verify all-day date spans.
 4. Verify zoned recurrence across DST.
 5. Verify reminders and attachments.
 6. Verify attendee fields display without implying sent invitations.
 7. Export or save as iCalendar from Outlook when possible.
-8. Re-import into GanbaruAI and compare semantic results.
+8. Re-import into Ganbaru AI and compare semantic results.
 
 ## Behavior to verify
 
@@ -59,7 +59,7 @@ Manual checks:
 
 ## Observed behavior log
 
-No manual GanbaruAI compatibility run recorded yet.
+No manual Ganbaru AI compatibility run recorded yet.
 
 Record separate results for:
 

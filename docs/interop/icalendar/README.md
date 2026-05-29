@@ -1,8 +1,8 @@
 # iCalendar compatibility
 
-This folder is the planning hub for full iCalendar (`.ics`) compatibility in GanbaruAI. It describes how the app can accept, preserve, edit where possible, and export highly compatible calendar files without depending on Google, Outlook, CalDAV, email, or any hosted service.
+This folder is the planning hub for full iCalendar (`.ics`) compatibility in Ganbaru AI. It describes how the app can accept, preserve, edit where possible, and export highly compatible calendar files without depending on Google, Outlook, CalDAV, email, or any hosted service.
 
-The target is file-format compatibility first. GanbaruAI should eventually be able to import every legal RFC 5545 iCalendar object, preserve the parts the app does not yet understand, project supported `VEVENT` data into the existing calendar UI, and export data without corrupting unsupported fields.
+The target is file-format compatibility first. Ganbaru AI should eventually be able to import every legal RFC 5545 iCalendar object, preserve the parts the app does not yet understand, project supported `VEVENT` data into the existing calendar UI, and export data without corrupting unsupported fields.
 
 ## Non-goals
 

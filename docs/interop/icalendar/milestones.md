@@ -105,7 +105,7 @@ Exit criteria:
 
 ## Milestone 7: non-event components
 
-Goal: preserve all legal component types and project them when GanbaruAI has a relevant feature surface.
+Goal: preserve all legal component types and project them when Ganbaru AI has a relevant feature surface.
 
 Deliverables:
 

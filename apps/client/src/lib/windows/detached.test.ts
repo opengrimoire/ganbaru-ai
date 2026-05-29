@@ -23,9 +23,9 @@ describe("detached view windows", () => {
   });
 
   it("uses view-specific window titles", () => {
-    expect(detachedViewWindowTitle("calendar")).toBe("GanbaruAI: Calendar");
-    expect(detachedViewWindowTitle("projects")).toBe("GanbaruAI: Projects");
-    expect(detachedViewWindowTitle("notes")).toBe("GanbaruAI: Notes");
+    expect(detachedViewWindowTitle("calendar")).toBe("Ganbaru AI: Calendar");
+    expect(detachedViewWindowTitle("projects")).toBe("Ganbaru AI: Projects");
+    expect(detachedViewWindowTitle("notes")).toBe("Ganbaru AI: Notes");
   });
 
   it("parses detachable views from detached window labels only", () => {

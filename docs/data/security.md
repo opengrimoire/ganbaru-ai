@@ -1,6 +1,6 @@
 # Security
 
-GanbaruAI handles deeply personal data: calendar, notes, mood, work patterns, and conversations with AI. Security here is not a feature checklist; it is a constraint on every other design decision. This doc covers the threat model, supply chain rules, sandboxing, the no-phone-home guarantee, and how to handle code copied from web sources.
+Ganbaru AI handles deeply personal data: calendar, notes, mood, work patterns, and conversations with AI. Security here is not a feature checklist; it is a constraint on every other design decision. This doc covers the threat model, supply chain rules, sandboxing, the no-phone-home guarantee, and how to handle code copied from web sources.
 
 ## Threat model
 
@@ -16,7 +16,7 @@ The app does **not** attempt to defend against:
 
 - The user themselves modifying their own database files. The user owns their data.
 - A determined attacker with physical access and unencrypted disk. Disk encryption is the OS's job.
-- AI providers logging or training on the data the user sends them. This is the provider's policy; GanbaruAI documents the choice and lets the user pick.
+- AI providers logging or training on the data the user sends them. This is the provider's policy; Ganbaru AI documents the choice and lets the user pick.
 
 ## Supply chain rules
 
@@ -61,7 +61,7 @@ The dependency refresh on 2026-05-14 updated the Tauri family to the latest comp
 - `RUSTSEC-2024-0370`: `proc-macro-error` is unmaintained. This remains through `gtk3-macros` and `glib-macros`. Remove it when the GTK stack no longer pulls that macro crate.
 - `RUSTSEC-2025-0057`: `fxhash` is unmaintained. This remains through `tauri-utils` → `kuchikiki` → `selectors`. Remove it when Tauri's utility parser stack replaces that dependency.
 - `RUSTSEC-2025-0075`, `RUSTSEC-2025-0080`, `RUSTSEC-2025-0081`, `RUSTSEC-2025-0098`, and `RUSTSEC-2025-0100`: `unic-*` crates are unmaintained. These remain through `tauri-utils` → `urlpattern`. Remove them when Tauri updates that URL pattern dependency path.
-- `RUSTSEC-2026-0097`: `rand` 0.7.3 is unsound when a custom logger reenters thread-local RNG calls during reseeding. The remaining path is `tauri-utils` → `kuchikiki` → `selectors` → `phf_codegen` → `rand` 0.7.3. GanbaruAI does not install a custom logger that uses `rand::thread_rng`; remove this warning when the upstream parser chain no longer depends on `rand` 0.7.
+- `RUSTSEC-2026-0097`: `rand` 0.7.3 is unsound when a custom logger reenters thread-local RNG calls during reseeding. The remaining path is `tauri-utils` → `kuchikiki` → `selectors` → `phf_codegen` → `rand` 0.7.3. Ganbaru AI does not install a custom logger that uses `rand::thread_rng`; remove this warning when the upstream parser chain no longer depends on `rand` 0.7.
 - `uds_windows` 1.2.0 is yanked through `notify-rust` → `zbus`. It is a transitive Windows crate in the notification stack. Remove it when `notify-rust` or `zbus` releases a compatible path without the yanked package.
 
 The npm audit on 2026-05-14 reported no known vulnerabilities at the moderate level.
@@ -75,7 +75,7 @@ The app does not initiate any network traffic without an explicit user-configure
 - Doomscrolling extension only talks to the local Tauri backend.
 - No update check, no crash report, no usage analytics, no font loading from CDNs, no analytics scripts in the webview.
 
-A network filter (e.g. Little Snitch on macOS, an outbound firewall on Linux) should see no traffic from GanbaruAI when the user has not configured sync or AI. This is testable, and it is part of the project's brand.
+A network filter (e.g. Little Snitch on macOS, an outbound firewall on Linux) should see no traffic from Ganbaru AI when the user has not configured sync or AI. This is testable, and it is part of the project's brand.
 
 ## Handling code copied from web sources
 
@@ -96,6 +96,6 @@ This is friction by design. The cost of blindly running a malicious snippet on a
 Sync uses end-to-end encryption via libsodium (see `data/sync.md`). Local data on disk is not application-encrypted; the app trusts the OS to handle disk encryption (LUKS, BitLocker, FileVault). This is the right tradeoff because:
 
 - Application-level local encryption complicates backups and external tool access (the `ganbaruai` CLI would need the key to do anything useful).
-- The OS already offers strong full-disk encryption that the user is more likely to have configured for everything else, not just GanbaruAI.
+- The OS already offers strong full-disk encryption that the user is more likely to have configured for everything else, not just Ganbaru AI.
 
 Sensitive in-memory state (API keys, session tokens) is held in OS-level credential stores where available (libsecret on Linux, Keychain on macOS, Credential Manager on Windows), not in plain config files.

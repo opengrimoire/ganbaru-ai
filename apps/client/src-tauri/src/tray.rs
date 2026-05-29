@@ -327,7 +327,7 @@ fn tray_tooltip(state: &TrayState) -> String {
         "No active session".to_string()
     };
     let music = music_status_text(&state.music);
-    format!("GanbaruAI\n{pomodoro}\n{music}")
+    format!("Ganbaru AI\n{pomodoro}\n{music}")
 }
 
 fn menu_shape(state: &TrayState) -> MenuShape {
@@ -572,7 +572,7 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 
     let _tray = TrayIconBuilder::with_id("main")
         .icon(icon)
-        .tooltip("GanbaruAI")
+        .tooltip("Ganbaru AI")
         .menu(&menu)
         .on_menu_event(move |app, event| match event.id().as_ref() {
             "pause_resume" => {

@@ -1,6 +1,6 @@
 # Edit merge policy
 
-This policy defines how GanbaruAI edits projected calendar data while preserving full iCalendar components.
+This policy defines how Ganbaru AI edits projected calendar data while preserving full iCalendar components.
 
 ## Core rule
 
@@ -75,7 +75,7 @@ If the component is part of a recurring series:
 
 ## Attendee behavior
 
-GanbaruAI currently has no account identity model. Therefore:
+Ganbaru AI currently has no account identity model. Therefore:
 
 - attendee response status imported from `.ics` is read-only by default.
 - the app must not let the user RSVP as another attendee.
