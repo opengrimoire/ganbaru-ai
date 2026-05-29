@@ -55,6 +55,7 @@ The day, work-cycle, and week views support direct manipulation:
 
 - **Click and drag on empty space** creates a new event. The drag defines the time range. Releasing opens the edit panel anchored at the new block.
 - **Click on empty space** creates a one-hour event starting at the half-hour band under the pointer. The first half of an hour starts at `:00`; the second half starts at `:30`.
+- **Click on a day name** opens day view for that date. In day view, clicking the day name returns to the most recent non-day view, such as week after a week drilldown or work-cycle after a work-cycle drilldown.
 - **Click on an event** opens the edit panel anchored at the block.
 - **Drag an event body** moves it. The pointer snaps to a configurable minute granularity.
 - **Drag the top or bottom edge** resizes from that side. The opposite edge stays put.

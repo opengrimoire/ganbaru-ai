@@ -50,6 +50,11 @@
   import { activeRootId } from "./occurrence-protection";
   import { getCalendarEventEditLock } from "./event-edit-permissions";
   import {
+    DEFAULT_DAY_HEADER_RETURN_MODE,
+    nextDayHeaderReturnMode,
+    type DayHeaderReturnMode,
+  } from "./view-navigation";
+  import {
     buildCalendarDeleteArchivePlan,
     type CalendarDeleteArchiveOutcome,
     type CalendarDeleteArchivePlan,
@@ -240,6 +245,7 @@
   type ViewState = { mode: CalendarViewMode; date: Date };
 
   let viewMode: CalendarViewMode = $state("week");
+  let dayHeaderReturnMode: DayHeaderReturnMode = $state(DEFAULT_DAY_HEADER_RETURN_MODE);
   let anchorDate: Date = $state(new Date());
   let timezones: string[] = $state([getLocalTimezone()]);
   let tzAbbrMode: TimezoneAbbrMode = $state("acronym");
@@ -1321,6 +1327,7 @@
 
         if (options.history) pushHistory(normalizedTarget.mode, normalizedTarget.date);
         applyPersistedSegmentsSnapshot(segmentSnapshot);
+        dayHeaderReturnMode = nextDayHeaderReturnMode(dayHeaderReturnMode, normalizedTarget.mode);
         viewMode = normalizedTarget.mode;
         anchorDate = normalizedTarget.date;
         void calendarStore.loadWindow(targetWindow.start, targetWindow.end)
@@ -2015,7 +2022,7 @@
 
   function handleDayHeaderClick() {
     void requestCalendarTarget(
-      { mode: "workweek", date: currentTargetState().date },
+      { mode: dayHeaderReturnMode, date: currentTargetState().date },
       { history: true, reason: "view" },
     );
   }
