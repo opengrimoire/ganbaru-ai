@@ -1,0 +1,13 @@
+[advisories]
+# Reviewed on May 29, 2026. SQLx locks its optional MySQL backend for macro
+# support, but Ganbaru AI only uses SQLite and the app target has no active
+# `rsa` path. See docs/data/security.md before changing this ignore.
+ignore = [
+  "RUSTSEC-2023-0071",
+]
+
+[output]
+deny = []
+format = "terminal"
+quiet = false
+show_tree = false

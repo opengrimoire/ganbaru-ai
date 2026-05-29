@@ -28,7 +28,7 @@ These rules are enforced globally on the developer environment and reiterated in
 
 **pip: only-binary.** Source-distributed packages cannot run their `setup.py` at install time; only pre-built wheels are accepted. This blocks the analogous Python attack vector.
 
-**cargo-audit.** Run on every dependency change. Known vulnerable crate versions are flagged.
+**cargo-audit.** Run through `pnpm -w run audit:rust` on every dependency change and as part of `pnpm -w run validate`. Known vulnerable crate versions are flagged. Reviewed exceptions live in `.cargo/audit.toml`; each exception must stay narrow, have a written rationale in this document, and be removed when it is no longer needed.
 
 **No analytics, no telemetry.** No SDK that phones home is acceptable. Even "anonymous usage statistics" libraries are rejected; the app must work fully offline and emit no network traffic the user did not initiate.
 
@@ -54,17 +54,17 @@ Calendar descriptions are the current app-owned rich HTML surface. The frontend 
 
 ## Current audit posture
 
-The dependency refresh on 2026-05-14 updated the Tauri family to the latest compatible 2.x releases available to this workspace (`tauri` 2.11.1, `tauri-build` 2.6.1, `tauri-runtime` 2.11.1, `tauri-runtime-wry` 2.11.1, `tauri-utils` 2.9.1, `tauri-plugin-dialog` 2.7.1, `tauri-plugin-fs` 2.5.1, and related windowing crates). `cargo audit` reports no vulnerability findings, but it still reports allowed upstream warnings that are not removed by safe updates inside the current Tauri, Wry, GTK3, and parser dependency families:
+As of May 29, 2026, `pnpm -w run validate` runs npm and Rust dependency audits before type checks, linting, tests, and editor diagnostics. `pnpm -w run audit:deps` reports no known npm vulnerabilities at the low advisory level. `pnpm -w run audit:rust` uses `.cargo/audit.toml` and reports no unreviewed Rust vulnerability findings. The audit output omits dependency trees so routine validation stays readable; use `cargo tree` when reviewing a new advisory path. The current Rust audit still reports one reviewed vulnerability ignore and allowed upstream warnings that are not removed by safe updates inside the current SQLx, Tauri, Wry, GTK3, and parser dependency families:
+
+- `RUSTSEC-2023-0071`: `rsa` 0.9.10 has a timing side-channel vulnerability. It appears through `sqlx-mysql`, which SQLx keeps in Cargo.lock for optional MySQL macro support. Ganbaru AI uses SQLite only, and `cargo tree` for the app target shows no active `sqlx-mysql` or `rsa` path. This advisory is ignored in `.cargo/audit.toml` because there is no fixed `rsa` upgrade in that SQLx path and the affected backend is not used by the app. Remove the ignore before enabling MySQL, when SQLx stops locking the optional backend path, or when a compatible fixed dependency path exists.
 
 - `RUSTSEC-2024-0411`, `RUSTSEC-2024-0412`, `RUSTSEC-2024-0413`, `RUSTSEC-2024-0414`, `RUSTSEC-2024-0415`, `RUSTSEC-2024-0416`, `RUSTSEC-2024-0417`, `RUSTSEC-2024-0418`, `RUSTSEC-2024-0419`, and `RUSTSEC-2024-0420`: gtk-rs GTK3 bindings are unmaintained. These remain through the Linux Tauri/Wry WebKit stack and the app's direct GTK overlay code (`gtk` and `gdk`). They should be removed when the upstream Tauri/Wry Linux stack and the local overlay implementation can move to maintained GTK4 bindings without replacing the runtime with a lower-trust alternative.
 - `RUSTSEC-2024-0429`: `glib` 0.18.5 has an unsound iterator implementation. This remains through GTK3/WebKit dependencies. The app does not directly use the affected `VariantStrIter` APIs. Remove this warning when the GTK/WebKit stack reaches a `glib` release with the fix.
 - `RUSTSEC-2024-0370`: `proc-macro-error` is unmaintained. This remains through `gtk3-macros` and `glib-macros`. Remove it when the GTK stack no longer pulls that macro crate.
-- `RUSTSEC-2025-0057`: `fxhash` is unmaintained. This remains through `tauri-utils` → `kuchikiki` → `selectors`. Remove it when Tauri's utility parser stack replaces that dependency.
-- `RUSTSEC-2025-0075`, `RUSTSEC-2025-0080`, `RUSTSEC-2025-0081`, `RUSTSEC-2025-0098`, and `RUSTSEC-2025-0100`: `unic-*` crates are unmaintained. These remain through `tauri-utils` → `urlpattern`. Remove them when Tauri updates that URL pattern dependency path.
-- `RUSTSEC-2026-0097`: `rand` 0.7.3 is unsound when a custom logger reenters thread-local RNG calls during reseeding. The remaining path is `tauri-utils` → `kuchikiki` → `selectors` → `phf_codegen` → `rand` 0.7.3. Ganbaru AI does not install a custom logger that uses `rand::thread_rng`; remove this warning when the upstream parser chain no longer depends on `rand` 0.7.
-- `uds_windows` 1.2.0 is yanked through `notify-rust` → `zbus`. It is a transitive Windows crate in the notification stack. Remove it when `notify-rust` or `zbus` releases a compatible path without the yanked package.
-
-The npm audit on 2026-05-14 reported no known vulnerabilities at the moderate level.
+- `RUSTSEC-2025-0057`: `fxhash` is unmaintained. This remains through `tauri-utils`, `kuchikiki`, and `selectors`. Remove it when Tauri's utility parser stack replaces that dependency.
+- `RUSTSEC-2025-0075`, `RUSTSEC-2025-0080`, `RUSTSEC-2025-0081`, `RUSTSEC-2025-0098`, and `RUSTSEC-2025-0100`: `unic-*` crates are unmaintained. These remain through `tauri-utils` and `urlpattern`. Remove them when Tauri updates that URL pattern dependency path.
+- `RUSTSEC-2026-0097`: `rand` 0.7.3 is unsound when a custom logger reenters thread-local RNG calls during reseeding. The remaining path is `tauri-utils`, `kuchikiki`, `selectors`, `phf_codegen`, and `rand` 0.7.3. Ganbaru AI does not install a custom logger that uses `rand::thread_rng`; remove this warning when the upstream parser chain no longer depends on `rand` 0.7.
+- `uds_windows` 1.2.0 is yanked through `notify-rust` and `zbus`. It is a transitive Windows crate in the notification stack. Remove it when `notify-rust` or `zbus` releases a compatible path without the yanked package.
 
 ## No phone home
 
