@@ -134,7 +134,8 @@ Music files stay wherever the user keeps them; vault stores only playlist defini
 - `pnpm -w run check`: fast feedback (types, format, lint). Use while coding.
 - `pnpm -w run editor-check`: editor-style diagnostics, including Tailwind canonical class checks.
 - `pnpm -w run test`: all tests (vitest + cargo test). Use after changes to tested code.
-- `pnpm -w run validate`: everything (check + test + editor-check). Run before reporting a task as complete. All errors must be fixed; do not report a task as done if validate fails.
+- `pnpm -w run audit:deps`: npm advisory audit for workspace dependencies. This is the local pre-push check for the same npm dependency advisory class Dependabot reports on GitHub.
+- `pnpm -w run validate`: everything (audit:deps + check + test + editor-check). Run before reporting a task as complete. All errors must be fixed; do not report a task as done if validate fails.
 - `pnpm test:coverage` (from apps/client): coverage report to see what's tested.
 
 After `pnpm -w run validate` passes, finish the task without extra dev-server, Tauri launch, status, or diff checks unless they are directly required for the request, a commit, or an unexpected issue.
