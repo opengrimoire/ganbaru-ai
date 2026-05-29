@@ -18,7 +18,7 @@ const ALLOWED_USAGE_DATABASE_FILES: &[&str] = &[
     "ganbaru-ai-benchmark.db",
 ];
 const EXTENSION_INSTALL_README_URL: &str =
-    "https://github.com/opengrimoire/GanbaruAI/blob/dev/extensions/chrome/README.md";
+    "https://github.com/opengrimoire/ganbaru-ai/blob/dev/extensions/chrome/README.md";
 const PROTECTED_DESKTOP_APP_NAMES: &[&str] = &[
     "Ganbaru AI",
     "ganbaru-ai",

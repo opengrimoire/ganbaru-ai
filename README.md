@@ -51,8 +51,8 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for the full phased development plan.
 ### Setup
 
 ```bash
-git clone https://github.com/opengrimoire/GanbaruAI.git
-cd GanbaruAI
+git clone https://github.com/opengrimoire/ganbaru-ai.git
+cd ganbaru-ai
 corepack enable
 pnpm install
 ```
