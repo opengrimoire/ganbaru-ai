@@ -60,6 +60,9 @@
 
   let activeSection = $state<SectionId>("appearance");
   let detailView = $state<DoomscrollingLimitEditorTarget | null>(null);
+  let detailScrollEl: HTMLElement | undefined = $state();
+  let detailScrollbarInsetTop = $state(0);
+  let detailScrollbarInsetBottom = $state(0);
   let settingsScrollEl: HTMLElement | undefined = $state();
   const useTopNav = $derived(viewport.below("compact"));
   const useIconRail = $derived(!useTopNav && viewport.below("regular"));
@@ -88,6 +91,9 @@
     if (initialSection) {
       activeSection = initialSection;
       detailView = null;
+      detailScrollEl = undefined;
+      detailScrollbarInsetTop = 0;
+      detailScrollbarInsetBottom = 0;
     }
   });
 
@@ -112,17 +118,26 @@
   function selectSection(section: SectionId): void {
     activeSection = section;
     detailView = null;
+    detailScrollEl = undefined;
+    detailScrollbarInsetTop = 0;
+    detailScrollbarInsetBottom = 0;
     scrollSettingsToTop();
   }
 
   function openDoomscrollingLimitEditor(target: DoomscrollingLimitEditorTarget): void {
     activeSection = "doomscrolling";
     detailView = target;
+    detailScrollEl = undefined;
+    detailScrollbarInsetTop = 0;
+    detailScrollbarInsetBottom = 0;
     scrollSettingsToTop();
   }
 
   function closeDetailView(): void {
     detailView = null;
+    detailScrollEl = undefined;
+    detailScrollbarInsetTop = 0;
+    detailScrollbarInsetBottom = 0;
     scrollSettingsToTop();
   }
 
@@ -279,7 +294,9 @@
         data-settings-content
         class={cn(
           "h-full min-h-0 bg-background/40 dark:bg-black/20",
-          activeSection === "shortcuts" ? "overflow-hidden" : "hide-scrollbar overflow-y-auto",
+          detailView || activeSection === "shortcuts"
+            ? "overflow-hidden"
+            : "hide-scrollbar overflow-y-auto",
           useTopNav ? "px-3 py-4" : useIconRail ? "px-5 py-5" : "p-8",
         )}
       >
@@ -288,6 +305,13 @@
             target={detailView}
             onDone={closeDetailView}
             onCancel={closeDetailView}
+            onScrollContainerChange={(scrollContainer) => {
+              detailScrollEl = scrollContainer;
+            }}
+            onScrollbarInsetsChange={(insets) => {
+              detailScrollbarInsetTop = insets.top;
+              detailScrollbarInsetBottom = insets.bottom;
+            }}
           />
         {:else if activeSection === "appearance"}
           <AppearanceSection />
@@ -307,7 +331,14 @@
           <ShortcutsSection />
         {/if}
       </section>
-      {#if activeSection !== "shortcuts"}
+      {#if detailView}
+        <CalendarScrollbar
+          scrollContainer={detailScrollEl}
+          stickyTop={detailScrollbarInsetTop}
+          stickyBottom={detailScrollbarInsetBottom}
+          wheelPassthrough
+        />
+      {:else if activeSection !== "shortcuts"}
         <CalendarScrollbar
           scrollContainer={settingsScrollEl}
           stickyTop={settingsScrollbarInset}

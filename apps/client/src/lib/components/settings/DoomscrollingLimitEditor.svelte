@@ -21,10 +21,14 @@
     target,
     onDone,
     onCancel,
+    onScrollContainerChange = () => {},
+    onScrollbarInsetsChange = () => {},
   }: {
     target: DoomscrollingLimitEditorTarget;
     onDone: () => void;
     onCancel: () => void;
+    onScrollContainerChange?: (scrollContainer: HTMLElement | undefined) => void;
+    onScrollbarInsetsChange?: (insets: { top: number; bottom: number }) => void;
   } = $props();
 
   const doomscrolling = getDoomscrolling();
@@ -51,6 +55,8 @@
   let draftCustomMinutes = $state("30");
   let draftEntries = $state<DoomscrollingUsageLimitEntryDraft[]>([]);
   let formError = $state("");
+  let editorRootEl: HTMLElement | undefined = $state();
+  let editorScrollEl: HTMLElement | undefined = $state();
   let hydratedKey = "";
 
   const targetLimit = $derived.by<DoomscrollingUsageLimit | null>(() => {
@@ -148,6 +154,46 @@
     hydrateDraft();
   });
 
+  $effect(() => {
+    onScrollContainerChange(editorScrollEl);
+    reportScrollbarInsets();
+
+    const contentEl = editorRootEl?.closest<HTMLElement>("[data-settings-content]");
+    if (!editorRootEl || !editorScrollEl || !contentEl) {
+      return () => {
+        onScrollContainerChange(undefined);
+        onScrollbarInsetsChange({ top: 0, bottom: 0 });
+      };
+    }
+
+    const observer = new ResizeObserver(reportScrollbarInsets);
+    observer.observe(editorRootEl);
+    observer.observe(editorScrollEl);
+    observer.observe(contentEl);
+    window.addEventListener("resize", reportScrollbarInsets);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", reportScrollbarInsets);
+      onScrollContainerChange(undefined);
+      onScrollbarInsetsChange({ top: 0, bottom: 0 });
+    };
+  });
+
+  function reportScrollbarInsets(): void {
+    const contentEl = editorRootEl?.closest<HTMLElement>("[data-settings-content]");
+    if (!editorScrollEl || !contentEl) {
+      onScrollbarInsetsChange({ top: 0, bottom: 0 });
+      return;
+    }
+    const contentRect = contentEl.getBoundingClientRect();
+    const scrollRect = editorScrollEl.getBoundingClientRect();
+    onScrollbarInsetsChange({
+      top: Math.max(0, scrollRect.top - contentRect.top),
+      bottom: Math.max(0, contentRect.bottom - scrollRect.bottom),
+    });
+  }
+
   function addEntry(): void {
     draftEntries = [...draftEntries, createEntryDraft()];
     formError = "";
@@ -226,7 +272,7 @@
   }
 </script>
 
-<div class="flex flex-col gap-6">
+<div bind:this={editorRootEl} class="flex h-full min-h-0 flex-col">
   <header class="flex min-w-0 items-start justify-between gap-3 border-b border-border/70 pb-4">
     <div class="min-w-0">
       <h1 class="truncate text-[1rem] font-semibold text-foreground">
@@ -238,131 +284,138 @@
     </div>
   </header>
 
-  <section class="flex flex-col gap-4">
-    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Limit details</h2>
+  <main
+    bind:this={editorScrollEl}
+    class="hide-scrollbar min-h-0 flex-1 overflow-y-auto py-6"
+  >
+    <div class="flex flex-col gap-6 pb-6">
+      <section class="flex flex-col gap-4">
+        <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Limit details</h2>
 
-    <div class="flex items-center justify-between gap-4 px-1 py-1 max-[480px]:flex-col max-[480px]:items-stretch max-[480px]:gap-2">
-      <div class="min-w-0 flex-1">
-        <label for="doomscrolling-limit-name" class="text-[0.866667rem] text-foreground">Limit name</label>
-        <div class="mt-0.5 text-[0.8rem] text-muted-foreground">Optional. Empty names use the first linked row.</div>
-      </div>
-      <input
-        id="doomscrolling-limit-name"
-        bind:value={draftName}
-        oninput={() => {
-          formError = "";
-        }}
-        class="h-7 w-72 max-w-full rounded-md border border-border bg-card px-2.5 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring max-[480px]:w-full dark:bg-transparent"
-        placeholder="YouTube"
-      />
-    </div>
-
-    <CustomSelect
-      label="Daily budget"
-      description="Presets cover common limits"
-      value={draftDurationMode}
-      options={durationOptions}
-      onChange={setDraftDurationMode}
-      class="w-72 max-[480px]:w-full"
-    />
-
-    {#if draftDurationMode === "custom"}
-      <div class="flex items-center justify-between gap-4 px-1 py-1 max-[480px]:flex-col max-[480px]:items-stretch max-[480px]:gap-2">
-        <div class="min-w-0 flex-1">
-          <label for="doomscrolling-limit-custom-minutes" class="text-[0.866667rem] text-foreground">Custom minutes</label>
-          <div class="mt-0.5 text-[0.8rem] text-muted-foreground">Use a whole number from 1 to 1440</div>
-        </div>
-        <input
-          id="doomscrolling-limit-custom-minutes"
-          bind:value={draftCustomMinutes}
-          oninput={() => {
-            formError = "";
-          }}
-          type="text"
-          inputmode="numeric"
-          pattern="[0-9]*"
-          class="h-7 w-28 max-w-full rounded-md border border-border bg-card px-2.5 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring max-[480px]:w-full dark:bg-transparent"
-          placeholder="75"
-        />
-      </div>
-    {/if}
-  </section>
-
-  <div class="h-px bg-border/70" aria-hidden="true"></div>
-
-  <section class="flex flex-col gap-4">
-    <div class="min-w-0 px-1">
-      <h2 class="text-[0.866667rem] font-semibold text-foreground">Linked sources</h2>
-      <div class="mt-0.5 text-[0.8rem] text-muted-foreground">
-        Each row can connect the same product across browser, mobile, and desktop.
-      </div>
-    </div>
-
-    <div class="overflow-x-auto px-1">
-      <div class="min-w-full overflow-hidden rounded-md border border-border">
-        <div class="grid grid-cols-[minmax(8rem,1fr)_minmax(10rem,1fr)_minmax(10rem,1fr)_minmax(10rem,1fr)_2.5rem] border-b border-border bg-muted/30 text-[0.733333rem] font-medium text-muted-foreground">
-          <div class="px-2 py-1.5">Name</div>
-          <div class="px-2 py-1.5">Website domain</div>
-          <div class="px-2 py-1.5">Mobile app</div>
-          <div class="px-2 py-1.5">Desktop app</div>
-          <div aria-hidden="true"></div>
-        </div>
-        {#each draftEntries as entry (entry.id)}
-          <div class="grid grid-cols-[minmax(8rem,1fr)_minmax(10rem,1fr)_minmax(10rem,1fr)_minmax(10rem,1fr)_2.5rem] items-center border-b border-border/70 last:border-b-0">
-            <input
-              value={entry.name}
-              oninput={(event) => updateEntry(entry.id, "name", event.currentTarget.value)}
-              class="h-9 min-w-0 border-0 border-r border-border/70 bg-transparent px-2 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:bg-accent/35"
-              placeholder="Facebook"
-            />
-            <input
-              value={entry.websiteHost}
-              oninput={(event) => updateEntry(entry.id, "websiteHost", event.currentTarget.value)}
-              class="h-9 min-w-0 border-0 border-r border-border/70 bg-transparent px-2 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:bg-accent/35"
-              placeholder="facebook.com"
-            />
-            <input
-              value={entry.mobileAppName}
-              oninput={(event) => updateEntry(entry.id, "mobileAppName", event.currentTarget.value)}
-              class="h-9 min-w-0 border-0 border-r border-border/70 bg-transparent px-2 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:bg-accent/35"
-              placeholder="Facebook"
-            />
-            <input
-              value={entry.desktopAppName}
-              oninput={(event) => updateEntry(entry.id, "desktopAppName", event.currentTarget.value)}
-              class="h-9 min-w-0 border-0 border-r border-border/70 bg-transparent px-2 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:bg-accent/35"
-              placeholder="Facebook"
-            />
-            <button
-              type="button"
-              onclick={() => removeEntry(entry.id)}
-              aria-label="Remove linked source row"
-              class="flex h-9 w-full items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              <X size={13} strokeWidth={2.25} />
-            </button>
+        <div class="flex items-center justify-between gap-4 px-1 py-1 max-[480px]:flex-col max-[480px]:items-stretch max-[480px]:gap-2">
+          <div class="min-w-0 flex-1">
+            <label for="doomscrolling-limit-name" class="text-[0.866667rem] text-foreground">Limit name</label>
+            <div class="mt-0.5 text-[0.8rem] text-muted-foreground">Optional. Empty names use the first linked row.</div>
           </div>
-        {/each}
+          <input
+            id="doomscrolling-limit-name"
+            bind:value={draftName}
+            oninput={() => {
+              formError = "";
+            }}
+            class="h-7 w-72 max-w-full rounded-md border border-border bg-card px-2.5 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring max-[480px]:w-full dark:bg-transparent"
+            placeholder="YouTube"
+          />
+        </div>
+
+        <CustomSelect
+          label="Daily budget"
+          description="Presets cover common limits"
+          value={draftDurationMode}
+          options={durationOptions}
+          onChange={setDraftDurationMode}
+          class="w-72 max-[480px]:w-full"
+        />
+
+        {#if draftDurationMode === "custom"}
+          <div class="flex items-center justify-between gap-4 px-1 py-1 max-[480px]:flex-col max-[480px]:items-stretch max-[480px]:gap-2">
+            <div class="min-w-0 flex-1">
+              <label for="doomscrolling-limit-custom-minutes" class="text-[0.866667rem] text-foreground">Custom minutes</label>
+              <div class="mt-0.5 text-[0.8rem] text-muted-foreground">Use a whole number from 1 to 1440</div>
+            </div>
+            <input
+              id="doomscrolling-limit-custom-minutes"
+              bind:value={draftCustomMinutes}
+              oninput={() => {
+                formError = "";
+              }}
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              class="h-7 w-28 max-w-full rounded-md border border-border bg-card px-2.5 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring max-[480px]:w-full dark:bg-transparent"
+              placeholder="75"
+            />
+          </div>
+        {/if}
+      </section>
+
+      <div class="h-px bg-border/70" aria-hidden="true"></div>
+
+      <section class="flex flex-col gap-4">
+        <div class="min-w-0 px-1">
+          <h2 class="text-[0.866667rem] font-semibold text-foreground">Linked sources</h2>
+          <div class="mt-0.5 text-[0.8rem] text-muted-foreground">
+            Each row can connect the same product across browser, mobile, and desktop.
+          </div>
+        </div>
+
+        <div class="overflow-x-auto px-1">
+          <div class="min-w-full overflow-hidden rounded-md border border-border">
+            <div class="grid grid-cols-[minmax(8rem,1fr)_minmax(10rem,1fr)_minmax(10rem,1fr)_minmax(10rem,1fr)_2.5rem] border-b border-border bg-muted/30 text-[0.733333rem] font-medium text-muted-foreground">
+              <div class="px-2 py-1.5">Name</div>
+              <div class="px-2 py-1.5">Website domain</div>
+              <div class="px-2 py-1.5">Mobile app</div>
+              <div class="px-2 py-1.5">Desktop app</div>
+              <div aria-hidden="true"></div>
+            </div>
+            {#each draftEntries as entry (entry.id)}
+              <div class="grid grid-cols-[minmax(8rem,1fr)_minmax(10rem,1fr)_minmax(10rem,1fr)_minmax(10rem,1fr)_2.5rem] items-center border-b border-border/70 last:border-b-0">
+                <input
+                  value={entry.name}
+                  oninput={(event) => updateEntry(entry.id, "name", event.currentTarget.value)}
+                  class="h-9 min-w-0 border-0 border-r border-border/70 bg-transparent px-2 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:bg-accent/35"
+                  placeholder="Facebook"
+                />
+                <input
+                  value={entry.websiteHost}
+                  oninput={(event) => updateEntry(entry.id, "websiteHost", event.currentTarget.value)}
+                  class="h-9 min-w-0 border-0 border-r border-border/70 bg-transparent px-2 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:bg-accent/35"
+                  placeholder="facebook.com"
+                />
+                <input
+                  value={entry.mobileAppName}
+                  oninput={(event) => updateEntry(entry.id, "mobileAppName", event.currentTarget.value)}
+                  class="h-9 min-w-0 border-0 border-r border-border/70 bg-transparent px-2 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:bg-accent/35"
+                  placeholder="Facebook"
+                />
+                <input
+                  value={entry.desktopAppName}
+                  oninput={(event) => updateEntry(entry.id, "desktopAppName", event.currentTarget.value)}
+                  class="h-9 min-w-0 border-0 border-r border-border/70 bg-transparent px-2 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:bg-accent/35"
+                  placeholder="Facebook"
+                />
+                <button
+                  type="button"
+                  onclick={() => removeEntry(entry.id)}
+                  aria-label="Remove linked source row"
+                  class="flex h-9 w-full items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <X size={13} strokeWidth={2.25} />
+                </button>
+              </div>
+            {/each}
+          </div>
+        </div>
+
+        <div class="flex justify-end px-1">
+          <button
+            type="button"
+            onclick={addEntry}
+            class="flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+          >
+            <Plus size={13} strokeWidth={2.25} />
+            <span>Add row</span>
+          </button>
+        </div>
+      </section>
+
+      {#if formError}
+        <div class="text-[0.8rem] text-destructive">{formError}</div>
+      {/if}
       </div>
-    </div>
+    </main>
 
-    <div class="flex justify-end px-1">
-      <button
-        type="button"
-        onclick={addEntry}
-        class="flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
-      >
-        <Plus size={13} strokeWidth={2.25} />
-        <span>Add row</span>
-      </button>
-    </div>
-  </section>
-
-  {#if formError}
-    <div class="text-[0.8rem] text-destructive">{formError}</div>
-  {/if}
-
-  <footer class="flex flex-wrap justify-end gap-2 border-t border-border/70 pt-3">
+  <footer class="flex shrink-0 flex-wrap justify-end gap-2 border-t border-border/70 pt-3">
     <button
       type="button"
       onclick={onCancel}
