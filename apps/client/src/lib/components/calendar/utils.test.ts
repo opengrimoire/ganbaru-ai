@@ -36,6 +36,7 @@ import {
   getTimezoneCity,
   getTimezoneRegion,
   getTimezoneOffsetMinutes,
+  getTimezoneInfo,
   listAllTimezones,
   searchTimezones,
   deriveAcronymFromLongName,
@@ -1140,8 +1141,8 @@ describe("searchTimezones", () => {
   it("sorts the empty-query result by UTC offset ascending", () => {
     const result = searchTimezones("", []);
     for (let i = 1; i < result.length; i++) {
-      const prev = getTimezoneOffsetMinutes(result[i - 1]);
-      const curr = getTimezoneOffsetMinutes(result[i]);
+      const prev = getTimezoneInfo(result[i - 1]).offsetMinutes;
+      const curr = getTimezoneInfo(result[i]).offsetMinutes;
       expect(prev).toBeLessThanOrEqual(curr);
     }
   });

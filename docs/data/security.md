@@ -28,7 +28,7 @@ These rules are enforced globally on the developer environment and reiterated in
 
 **pip: only-binary.** Source-distributed packages cannot run their `setup.py` at install time; only pre-built wheels are accepted. This blocks the analogous Python attack vector.
 
-**cargo-audit.** Run through `pnpm -w run audit:rust` on every dependency change and as part of `pnpm -w run validate`. Known vulnerable crate versions are flagged. Reviewed exceptions live in `.cargo/audit.toml`; each exception must stay narrow, have a written rationale in this document, and be removed when it is no longer needed.
+**cargo-audit.** Run through `pnpm -w run audit:rust` on every dependency or lockfile change and as part of `pnpm -w run validate:full`. Known vulnerable crate versions are flagged. Reviewed exceptions live in `.cargo/audit.toml`; each exception must stay narrow, have a written rationale in this document, and be removed when it is no longer needed.
 
 **No analytics, no telemetry.** No SDK that phones home is acceptable. Even "anonymous usage statistics" libraries are rejected; the app must work fully offline and emit no network traffic the user did not initiate.
 
@@ -54,7 +54,7 @@ Calendar descriptions are the current app-owned rich HTML surface. The frontend 
 
 ## Current audit posture
 
-As of May 29, 2026, `pnpm -w run validate` runs npm and Rust dependency audits before type checks, linting, tests, and editor diagnostics. `pnpm -w run audit:deps` reports no known npm vulnerabilities at the low advisory level. `pnpm -w run audit:rust` uses `.cargo/audit.toml` and reports no unreviewed Rust vulnerability findings. The audit output omits dependency trees so routine validation stays readable; use `cargo tree` when reviewing a new advisory path. The current Rust audit still reports one reviewed vulnerability ignore and allowed upstream warnings that are not removed by safe updates inside the current SQLx, Tauri, Wry, GTK3, and parser dependency families:
+As of May 29, 2026, `pnpm -w run validate` is the normal code gate: type checks, linting, tests, and editor diagnostics. Dependency audits are separated into `pnpm -w run audit` and included in `pnpm -w run validate:full`, which is the gate for dependency or lockfile changes, PRs, releases, and explicit security checks. `pnpm -w run audit:deps` reports no known npm vulnerabilities at the low advisory level. `pnpm -w run audit:rust` uses `.cargo/audit.toml` and reports no unreviewed Rust vulnerability findings. The audit output omits dependency trees so routine validation stays readable; use `cargo tree` when reviewing a new advisory path. The current Rust audit still reports one reviewed vulnerability ignore and allowed upstream warnings that are not removed by safe updates inside the current SQLx, Tauri, Wry, GTK3, and parser dependency families:
 
 - `RUSTSEC-2023-0071`: `rsa` 0.9.10 has a timing side-channel vulnerability. It appears through `sqlx-mysql`, which SQLx keeps in Cargo.lock for optional MySQL macro support. Ganbaru AI uses SQLite only, and `cargo tree` for the app target shows no active `sqlx-mysql` or `rsa` path. This advisory is ignored in `.cargo/audit.toml` because there is no fixed `rsa` upgrade in that SQLx path and the affected backend is not used by the app. Remove the ignore before enabling MySQL, when SQLx stops locking the optional backend path, or when a compatible fixed dependency path exists.
 

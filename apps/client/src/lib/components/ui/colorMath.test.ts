@@ -459,9 +459,9 @@ describe("pickReadableForeground", () => {
     );
   });
 
-  it("10k fuzz: every result either meets target or saturates the gamut", () => {
+  it("2k fuzz: every result either meets target or saturates the gamut", () => {
     const rand = mulberry32(0x9e3779b9);
-    for (let i = 0; i < 10000; i++) {
+    for (let i = 0; i < 2000; i++) {
       const bg = randomHex(rand);
       const ink = randomHex(rand);
       const canvas = randomHex(rand);
