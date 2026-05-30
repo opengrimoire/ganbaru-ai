@@ -135,6 +135,88 @@ Ganbaru AI is donation-funded. Sponsorship will be set up after a minimum stable
 
 ### Sound effects
 
-Sound effects sourced from [Freesound](https://freesound.org/) under Attribution and CC0 licenses.
+Sound effects live in `apps/client/static/sfx/`. App assets are stored as 16-bit PCM WAV files and are sourced from [Freesound](https://freesound.org/) under Attribution 4.0 and CC0 licenses.
 
-<!-- Add attributions as sounds are added: "sound name" by author (license) - URL -->
+<table>
+  <thead>
+    <tr>
+      <th>App use</th>
+      <th>Filename</th>
+      <th>Source sound</th>
+      <th>Author</th>
+      <th>License</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Event notification</td>
+      <td><code>event-notification.wav</code></td>
+      <td><a href="https://freesound.org/people/FunWithSound/sounds/456965/">Short Success Sound Glockenspiel Treasure Video Game.mp3</a></td>
+      <td><a href="https://freesound.org/people/FunWithSound/">FunWithSound</a></td>
+      <td>Creative Commons 0</td>
+    </tr>
+    <tr>
+      <td>Idle alert</td>
+      <td><code>idle-alert.wav</code></td>
+      <td><a href="https://freesound.org/people/CogFireStudios/sounds/619837/">Soft Short App Melody</a></td>
+      <td><a href="https://freesound.org/people/CogFireStudios/">CogFireStudios</a></td>
+      <td>Creative Commons 0</td>
+    </tr>
+    <tr>
+      <td>Focus failure after long idle</td>
+      <td><code>focus-session-failed-long-idle.wav</code></td>
+      <td><a href="https://freesound.org/people/SilverIllusionist/sounds/562103/">Game Over 8 (One wrong step) .aif</a></td>
+      <td><a href="https://freesound.org/people/SilverIllusionist/">SilverIllusionist</a></td>
+      <td>Attribution 4.0</td>
+    </tr>
+    <tr>
+      <td>One minute before break</td>
+      <td><code>focus-ending-warning.wav</code></td>
+      <td><a href="https://freesound.org/people/MATUSTRM/sounds/848972/">sfx_rpg_ui_focus</a></td>
+      <td><a href="https://freesound.org/people/MATUSTRM/">MATUSTRM</a></td>
+      <td>Creative Commons 0</td>
+    </tr>
+    <tr>
+      <td>Break start</td>
+      <td><code>break-start.wav</code></td>
+      <td><a href="https://freesound.org/people/rhodesmas/sounds/322930/">Success 03</a></td>
+      <td><a href="https://freesound.org/people/rhodesmas/">rhodesmas</a></td>
+      <td>Attribution 4.0</td>
+    </tr>
+    <tr>
+      <td>Break finish</td>
+      <td><code>break-finished.wav</code></td>
+      <td><a href="https://freesound.org/people/CogFireStudios/sounds/619838/">Achievement Happy Beeps Jingle</a></td>
+      <td><a href="https://freesound.org/people/CogFireStudios/">CogFireStudios</a></td>
+      <td>Attribution 4.0</td>
+    </tr>
+    <tr>
+      <td>Event finish</td>
+      <td><code>event-finished.wav</code></td>
+      <td><a href="https://freesound.org/people/SilverIllusionist/sounds/843310/">Reflective Guitar Chords #1</a></td>
+      <td><a href="https://freesound.org/people/SilverIllusionist/">SilverIllusionist</a></td>
+      <td>Creative Commons 0</td>
+    </tr>
+    <tr>
+      <td>Pomodoro day complete</td>
+      <td><code>pomodoro-day-complete.wav</code></td>
+      <td><a href="https://freesound.org/people/SilverIllusionist/sounds/669323/">Victory Fanfare (Light Wills Ever) no drums</a></td>
+      <td><a href="https://freesound.org/people/SilverIllusionist/">SilverIllusionist</a></td>
+      <td>Attribution 4.0</td>
+    </tr>
+    <tr>
+      <td>Pomodoro workweek complete</td>
+      <td><code>pomodoro-workweek-complete.wav</code></td>
+      <td><a href="https://freesound.org/people/SilverIllusionist/sounds/659751/">Victory Fanfare (RPG or High Fantasy)</a></td>
+      <td><a href="https://freesound.org/people/SilverIllusionist/">SilverIllusionist</a></td>
+      <td>Attribution 4.0</td>
+    </tr>
+    <tr>
+      <td>AI response finished</td>
+      <td><code>ai-response-finished.wav</code></td>
+      <td><a href="https://freesound.org/people/eqylizer/sounds/624599/">Three-Note Doorbell or Notification</a></td>
+      <td><a href="https://freesound.org/people/eqylizer/">eqylizer</a></td>
+      <td>Creative Commons 0</td>
+    </tr>
+  </tbody>
+</table>
