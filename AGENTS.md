@@ -77,6 +77,7 @@ packages/
   shared-types/: TypeScript types shared across workspaces
 extensions/
   chrome/: Chrome extension (manifest v3)
+  chrome-dev/: generated dev extension copy (ignored)
   firefox/: (planned) Firefox extension
 Cargo.toml: cargo workspace root
 turbo.json: Turborepo task config

@@ -1,5 +1,5 @@
-// Chromium native messaging host names allow underscores but not hyphens.
-const HOST_NAME = "org.opengrimoire.ganbaru_ai.doomscrolling";
+import { HOST_NAME } from "./host-config.js";
+
 const STATUS_STORAGE_KEY = "status";
 const BLOCKED_PAGE_STORAGE_PREFIX = "blockedPage:";
 const ACTIVE_USAGE_STORAGE_KEY = "activeUsage";

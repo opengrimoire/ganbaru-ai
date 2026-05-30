@@ -11,6 +11,7 @@ use std::sync::OnceLock;
 
 // Chromium native messaging host names allow underscores but not hyphens.
 const HOST_NAME: &str = "org.opengrimoire.ganbaru_ai.doomscrolling";
+const DEV_HOST_NAME: &str = "org.opengrimoire.ganbaru_ai.doomscrolling_dev";
 const STATE_FILE: &str = "doomscrolling-state.json";
 const LIMIT_STATE_FILE: &str = "doomscrolling-limit-state.json";
 const EXTENSION_CONNECTION_FILE: &str = "doomscrolling-extension-status.json";
@@ -109,7 +110,7 @@ struct NativeRequest {
 struct NativeResponse {
     #[serde(rename = "type")]
     message_type: &'static str,
-    host_name: &'static str,
+    host_name: String,
     connected: bool,
     active: bool,
     phase: String,
@@ -227,7 +228,7 @@ fn main() {
         Ok(response) => response,
         Err(reason) => NativeResponse {
             message_type: "error",
-            host_name: HOST_NAME,
+            host_name: native_host_name(),
             connected: false,
             active: false,
             phase: "inactive".to_string(),
@@ -243,6 +244,13 @@ fn main() {
 
     if let Err(err) = write_native_message(&response) {
         eprintln!("failed to write native messaging response: {err}");
+    }
+}
+
+fn native_host_name() -> String {
+    match std::env::var("GANBARU_AI_NATIVE_HOST_NAME") {
+        Ok(value) if value == DEV_HOST_NAME => value,
+        _ => HOST_NAME.to_string(),
     }
 }
 
@@ -394,8 +402,8 @@ fn config_dir_candidates() -> Vec<PathBuf> {
     }
 
     let ids = [
-        "org.opengrimoire.ganbaru-ai.dev",
         "org.opengrimoire.ganbaru-ai",
+        "org.opengrimoire.ganbaru-ai.dev",
     ];
     let mut candidates = Vec::new();
 
@@ -841,7 +849,7 @@ fn response_from_snapshot(snapshot: &StateSnapshot) -> NativeResponse {
     let (active, phase, remaining_seconds, reason) = runtime_status(snapshot);
     NativeResponse {
         message_type: "decision",
-        host_name: HOST_NAME,
+        host_name: native_host_name(),
         connected: snapshot.config_dir.is_some(),
         active,
         phase,
@@ -1475,7 +1483,7 @@ mod tests {
     fn response_for_phase(phase: &str) -> NativeResponse {
         NativeResponse {
             message_type: "decision",
-            host_name: super::HOST_NAME,
+            host_name: super::HOST_NAME.to_string(),
             connected: true,
             active: true,
             phase: phase.to_string(),

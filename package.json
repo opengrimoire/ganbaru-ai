@@ -6,6 +6,7 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "build:native-host": "cargo build --bin ganbaru-ai-native-messaging",
+    "setup:chromium-extension": "node apps/client/scripts/setup-chromium-extension.mjs",
     "setup:brave-extension": "node apps/client/scripts/setup-brave-extension.mjs",
     "audit:deps": "pnpm audit --audit-level low",
     "audit:rust": "cargo audit",

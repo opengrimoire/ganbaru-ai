@@ -41,7 +41,7 @@ Key Tauri v2 capabilities used in this project:
 - **`set_fullscreen` + `set_decorations(false)` + `set_transparent`**. Combined to produce the fullscreen break screen that covers the taskbar and acts as a custom screen saver during Pomodoro breaks.
 - **`setIgnoreCursorEvents`**. Allows the custom notification window to be non-interactive when desired, so it does not interrupt work in other apps.
 - **Tray icon API.** The app lives in the system tray when not focused, essential for an always-running productivity tool.
-- **Native messaging host binary.** The repo-owned `ganbaru-ai-native-messaging` Rust binary lets Chromium-based browser extensions ask the local app state whether a page should be blocked.
+- **Native messaging host binary.** The repo-owned `ganbaru-ai-native-messaging` Rust binary lets Chromium-based browser extensions ask the local app state whether a page should be blocked. Local setup generates separate app and dev native-host launchers so the normal extension and dev extension can be installed at the same time without sharing app config.
 - **File system plugin.** Reading and writing markdown files and vault assets to disk.
 
 **Desktop-only features** (not available on mobile due to OS sandboxing): process management, native messaging, global mouse position polling, always-on-top multi-window, edge panel, work environment switching, fullscreen break overlay, desktop activity monitoring.

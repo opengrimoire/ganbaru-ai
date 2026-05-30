@@ -70,22 +70,22 @@ pnpm tauri ios dev          # iOS (planned)
 
 The Doomscrolling extension is tested as an unpacked Chromium extension during development. The same flow applies to Chrome, Chromium, Brave, and Edge. The browser-specific parts are the extensions page URL and the last argument passed to the native host registration script.
 
-From the repo root, build the native messaging host:
+From the repo root, build the native messaging host and generate the dev extension folder:
 
 ```bash
-pnpm -w run build:native-host
+pnpm -w run setup:chromium-extension
 ```
 
-Open the browser's extensions page, enable developer mode, load the `extensions/chrome` folder as an unpacked extension, copy the extension id, then register the native host:
+Open the browser's extensions page, enable developer mode, load `extensions/chrome` as the normal unpacked extension, copy the extension id, then register the native host:
 
 ```bash
-node apps/client/scripts/install-chrome-native-host.mjs <extension-id> <chrome|chromium|brave|edge>
+node apps/client/scripts/install-chrome-native-host.mjs <extension-id> <chrome|chromium|brave|edge> app
 ```
 
-For Brave, this helper builds the native host and opens the extensions page:
+To test the extension against `pnpm tauri dev` while keeping the normal extension connected, load the generated `extensions/chrome-dev` folder as a second unpacked extension, copy its extension id, then register the dev host:
 
 ```bash
-pnpm -w run setup:brave-extension
+node apps/client/scripts/install-chrome-native-host.mjs <dev-extension-id> <chrome|chromium|brave|edge> dev
 ```
 
 After first setup, keep `pnpm tauri dev` running, configure Settings > Doomscrolling > Browser in the app, keep Blacklist mode selected, start a Pomodoro focus session, and open a blocked website such as `reddit.com`.
