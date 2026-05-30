@@ -5,6 +5,7 @@ import {
   buildEditPanelInitialChanges,
   fieldEqual,
   isDirtyDiff,
+  minuteOffsetFromDateStart,
 } from "./edit-session.svelte";
 
 describe("fieldEqual", () => {
@@ -253,5 +254,15 @@ describe("panel initial changes", () => {
       pomodoroCount: 4,
       idleTimeoutMinutes: 1,
     });
+  });
+});
+
+describe("minuteOffsetFromDateStart", () => {
+  it("keeps next-day midnight as the start day's 1440 minute boundary", () => {
+    expect(minuteOffsetFromDateStart("2026-04-16", "2026-04-17 00:00")).toBe(1440);
+  });
+
+  it("keeps same-day midnight as the zero minute boundary", () => {
+    expect(minuteOffsetFromDateStart("2026-04-16", "2026-04-16 00:00")).toBe(0);
   });
 });

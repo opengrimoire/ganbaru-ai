@@ -726,6 +726,11 @@ describe("sanitizeCalendarTime", () => {
     expect(sanitizeCalendarTime("2026-03-13 23:59")).toBe("2026-03-13 23:59");
     expect(sanitizeCalendarTime("  2026-03-13 14:30  ")).toBe("2026-03-13 14:30"); // trims whitespace
   });
+
+  it("rolls exact 24:00 end-of-day input to next-day midnight", () => {
+    expect(sanitizeCalendarTime("2026-03-13 24:00")).toBe("2026-03-14 00:00");
+    expect(sanitizeCalendarTime("2026-03-13 24:00:00")).toBe("2026-03-14 00:00:00");
+  });
 });
 
 describe("normalizeEventColor", () => {

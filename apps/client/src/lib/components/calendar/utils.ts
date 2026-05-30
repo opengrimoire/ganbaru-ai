@@ -133,10 +133,20 @@ export function sanitizeCalendarTime(str: string): string | null {
   if (isNaN(minute)) minute = 0;
   if (second !== null && isNaN(second)) second = 0;
 
+  const roundedMinute = Math.round(minute);
+  const roundedSecond = second !== null ? Math.round(second) : null;
+
+  if (hour === 24 && roundedMinute === 0 && (roundedSecond ?? 0) === 0) {
+    const nextDay = parseCalendarDate(`${datePart} 00:00`);
+    nextDay.setDate(nextDay.getDate() + 1);
+    const nextDatePart = formatDatePart(nextDay);
+    return roundedSecond === null ? `${nextDatePart} 00:00` : `${nextDatePart} 00:00:00`;
+  }
+
   // Round and clamp
   hour = Math.max(0, Math.min(23, Math.round(hour)));
-  minute = Math.max(0, Math.min(59, Math.round(minute)));
-  if (second !== null) second = Math.max(0, Math.min(59, Math.round(second)));
+  minute = Math.max(0, Math.min(59, roundedMinute));
+  if (second !== null) second = Math.max(0, Math.min(59, roundedSecond ?? 0));
 
   const hh = String(hour).padStart(2, "0");
   const mm = String(minute).padStart(2, "0");

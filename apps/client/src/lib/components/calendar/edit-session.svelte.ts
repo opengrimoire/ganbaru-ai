@@ -2,6 +2,7 @@ import type {
   CalendarEvent, EventColor, GuestPermissions, PomodoroConfig, RecurrenceConfig, RecurringScope,
 } from "./types";
 import { recurrenceConfigsEqual } from "./rrule";
+import { parseCalendarDate } from "./utils";
 
 export type PanelAnchor = { x: number; y: number; width: number; height: number };
 
@@ -137,6 +138,13 @@ export function buildCreatePanelInitialChanges(start: string, end: string, allDa
   };
 }
 
+export function minuteOffsetFromDateStart(dateStr: string, value: string): number {
+  const base = parseCalendarDate(`${dateStr} 00:00`).getTime();
+  const target = parseCalendarDate(value).getTime();
+  const offset = (target - base) / 60000;
+  return Number.isFinite(offset) ? Math.round(offset) : 0;
+}
+
 /**
  * Returns true if `changes` represents any meaningful deviation from `baseline`.
  * Uses merge semantics: the "final" event is `{ ...baseline, ...changes }`,
@@ -185,13 +193,11 @@ export function createEditSession() {
       if (data.recurrence !== undefined) updated.recurrence = data.recurrence;
       if (data.start) {
         const dateStr = data.start.split(" ")[0];
-        const [sh, sm] = (data.start.split(" ")[1] ?? "0:0").split(":").map(Number);
         updated.dateStr = dateStr;
-        updated.startMinute = sh * 60 + sm;
+        updated.startMinute = minuteOffsetFromDateStart(dateStr, data.start);
       }
       if (data.end) {
-        const [eh, em] = (data.end.split(" ")[1] ?? "0:0").split(":").map(Number);
-        updated.endMinute = eh * 60 + em;
+        updated.endMinute = minuteOffsetFromDateStart(updated.dateStr, data.end);
       }
       createPreview = updated;
     }
@@ -250,12 +256,10 @@ export function createEditSession() {
 
       const dateStr = start.split(" ")[0];
       const endDateStr = end.split(" ")[0];
-      const [sh, sm] = (start.split(" ")[1] ?? "0:0").split(":").map(Number);
-      const [eh, em] = (end.split(" ")[1] ?? "0:0").split(":").map(Number);
       createPreview = {
         dateStr,
-        startMinute: sh * 60 + sm,
-        endMinute: eh * 60 + em,
+        startMinute: minuteOffsetFromDateStart(dateStr, start),
+        endMinute: minuteOffsetFromDateStart(dateStr, end),
         allDay,
         endDateStr: allDay ? endDateStr : undefined,
       };

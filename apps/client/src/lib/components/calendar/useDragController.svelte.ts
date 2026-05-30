@@ -598,23 +598,19 @@ export function useDragController(config: DragControllerConfig) {
   ): PositionedEvent {
     const start = Math.round(startMinute);
     const end = Math.round(Math.min(endMinute, 1440));
-    const sh = String(Math.floor(start / 60)).padStart(2, "0");
-    const sm = String(start % 60).padStart(2, "0");
-    const eh = String(Math.floor(end / 60)).padStart(2, "0");
-    const em = String(end % 60).padStart(2, "0");
 
     return {
       event: {
         id: "__create__",
         title: title ?? "",
-        start: `${dateStr} ${sh}:${sm}`,
-        end: `${dateStr} ${eh}:${em}`,
+        start: minuteOffsetToDateStr(dateStr, start),
+        end: minuteOffsetToDateStr(dateStr, end),
         color,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         calendarId: "default",
       },
-      startMinute,
-      durationMinutes: endMinute - startMinute,
+      startMinute: start,
+      durationMinutes: end - start,
       left: 0,
       width: 100,
       column: 0,

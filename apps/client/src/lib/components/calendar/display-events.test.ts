@@ -106,6 +106,15 @@ describe("buildCreateDisplay", () => {
     expect(created?.meetingEnabled).toBe(true);
   });
 
+  it("rolls a timed create preview ending at 1440 to next-day midnight", () => {
+    const preview = { dateStr: "2026-03-20", startMinute: 1320, endMinute: 1440 };
+    const result = buildCreateDisplay([], preview, {}, TEST_WINDOW);
+
+    const created = result.events.find((e) => e.id === PENDING_CREATE_ID);
+    expect(created?.start).toBe("2026-03-20 22:00");
+    expect(created?.end).toBe("2026-03-21 00:00");
+  });
+
   it("lets a timed toggle override an all-day create preview", () => {
     const preview = {
       dateStr: "2026-03-20",

@@ -13,10 +13,10 @@ import {
   type DisplayResult,
   type ExpansionWindow,
 } from "./recurrence-edit-plan";
+import { minuteOffsetToDateStr } from "./utils";
 
 const PENDING_CREATE_ID = "__pending_create__";
 const pad2 = (n: number) => String(n).padStart(2, "0");
-const fmtMin = (m: number) => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
 const fmtDate = (d: Date) =>
   `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 const fmtTime = (d: Date) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
@@ -70,12 +70,14 @@ export function buildCreateDisplay(
   const isAllDay = hasChange(changes, "allDay")
     ? changes.allDay === true
     : preview.allDay === true;
-  const startStr = changes.start ? String(changes.start) : `${preview.dateStr} ${fmtMin(preview.startMinute)}`;
+  const startStr = changes.start
+    ? String(changes.start)
+    : minuteOffsetToDateStr(preview.dateStr, preview.startMinute);
   const endStr = changes.end
     ? String(changes.end)
     : isAllDay && preview.endDateStr
       ? `${preview.endDateStr} 00:00`
-      : `${preview.dateStr} ${fmtMin(preview.endMinute)}`;
+      : minuteOffsetToDateStr(preview.dateStr, preview.endMinute);
 
   // If a real event with the same start/end already exists in the store,
   // the save operation has completed. Return closedDisplay to avoid
