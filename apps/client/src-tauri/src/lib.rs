@@ -674,6 +674,7 @@ pub fn run() {
             notification::show_doomscrolling_desktop_block_notification,
             notification::show_break_overlay,
             notification::get_idle_status,
+            notification::play_app_sound,
             notification::play_alert_sound,
             notification::show_idle_overlay,
             music::music_get_playback_state,

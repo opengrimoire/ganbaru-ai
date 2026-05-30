@@ -1,8 +1,9 @@
 use notify_rust::{Hint, Notification};
+use rodio::{cpal::BufferSize, Decoder, DeviceSinkBuilder, Player};
 use serde::{Deserialize, Serialize};
 #[cfg(target_os = "linux")]
 use std::collections::{HashMap, HashSet};
-use std::io::Read;
+use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use tauri::{Emitter, Manager};
@@ -10,6 +11,113 @@ use tauri::{Emitter, Manager};
 #[derive(Clone, Serialize)]
 struct AddTimePayload {
     seconds: u32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AppSound {
+    EventNotification,
+    IdleAlert,
+    FocusSessionFailedLongIdle,
+    FocusEndingWarning,
+    BreakStart,
+    BreakFinished,
+    EventFinished,
+    PomodoroDayComplete,
+    PomodoroWorkweekComplete,
+}
+
+impl AppSound {
+    fn from_id(id: &str) -> Result<Self, String> {
+        match id {
+            "event-notification" => Ok(Self::EventNotification),
+            "idle-alert" => Ok(Self::IdleAlert),
+            "focus-session-failed-long-idle" => Ok(Self::FocusSessionFailedLongIdle),
+            "focus-ending-warning" => Ok(Self::FocusEndingWarning),
+            "break-start" => Ok(Self::BreakStart),
+            "break-finished" => Ok(Self::BreakFinished),
+            "event-finished" => Ok(Self::EventFinished),
+            "pomodoro-day-complete" => Ok(Self::PomodoroDayComplete),
+            "pomodoro-workweek-complete" => Ok(Self::PomodoroWorkweekComplete),
+            _ => Err(format!("unknown app sound: {id}")),
+        }
+    }
+
+    fn id(self) -> &'static str {
+        match self {
+            Self::EventNotification => "event-notification",
+            Self::IdleAlert => "idle-alert",
+            Self::FocusSessionFailedLongIdle => "focus-session-failed-long-idle",
+            Self::FocusEndingWarning => "focus-ending-warning",
+            Self::BreakStart => "break-start",
+            Self::BreakFinished => "break-finished",
+            Self::EventFinished => "event-finished",
+            Self::PomodoroDayComplete => "pomodoro-day-complete",
+            Self::PomodoroWorkweekComplete => "pomodoro-workweek-complete",
+        }
+    }
+
+    fn bytes(self) -> &'static [u8] {
+        match self {
+            Self::EventNotification => include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../static/sfx/event-notification.wav"
+            )),
+            Self::IdleAlert => include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../static/sfx/idle-alert.wav"
+            )),
+            Self::FocusSessionFailedLongIdle => include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../static/sfx/focus-session-failed-long-idle.wav"
+            )),
+            Self::FocusEndingWarning => include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../static/sfx/focus-ending-warning.wav"
+            )),
+            Self::BreakStart => include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../static/sfx/break-start.wav"
+            )),
+            Self::BreakFinished => include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../static/sfx/break-finished.wav"
+            )),
+            Self::EventFinished => include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../static/sfx/event-finished.wav"
+            )),
+            Self::PomodoroDayComplete => include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../static/sfx/pomodoro-day-complete.wav"
+            )),
+            Self::PomodoroWorkweekComplete => include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../static/sfx/pomodoro-workweek-complete.wav"
+            )),
+        }
+    }
+}
+
+fn play_app_sound_blocking(sound: AppSound) -> Result<(), String> {
+    let decoder = Decoder::try_from(Cursor::new(sound.bytes()))
+        .map_err(|e| format!("decode app sound {}: {e}", sound.id()))?;
+    let mut sink = DeviceSinkBuilder::from_default_device()
+        .map(|builder| builder.with_buffer_size(BufferSize::Fixed(1024)))
+        .and_then(|builder| builder.open_sink_or_fallback())
+        .map_err(|e| format!("open audio output for app sound {}: {e}", sound.id()))?;
+    sink.log_on_drop(false);
+    let player = Player::connect_new(sink.mixer());
+    player.append(decoder);
+    player.sleep_until_end();
+    Ok(())
+}
+
+fn play_app_sound_async(sound: AppSound) {
+    std::thread::spawn(move || {
+        if let Err(e) = play_app_sound_blocking(sound) {
+            eprintln!("Failed to play app sound: {e}");
+        }
+    });
 }
 
 fn fixed_command_output(program: &str, args: &[&str], max_bytes: usize) -> Result<String, String> {
@@ -912,6 +1020,7 @@ pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<boo
         let app = app_for_setup;
         let inhibit_cookie = std::rc::Rc::new(std::cell::Cell::new(screensaver_inhibit()));
         let dismissed = std::rc::Rc::new(std::cell::Cell::new(false));
+        let focus_failed = std::rc::Rc::new(std::cell::Cell::new(false));
         let display = gdk::Display::default()
             .ok_or_else(|| "no GDK display is available for the idle overlay".to_string())?;
         let saved = std::rc::Rc::new(SavedShortcuts::save_and_disable(&app)?);
@@ -950,6 +1059,7 @@ pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<boo
         // Timer (counts up from idle_seconds)
         let timer_label = gtk::Label::new(None);
         let elapsed = std::rc::Rc::new(std::cell::Cell::new(idle_seconds as u64));
+        let overlay_elapsed = std::rc::Rc::new(std::cell::Cell::new(0u64));
         let display_str = format_remaining(idle_seconds as u64);
         set_markup_text(&timer_label, "Sans Light 72", "#FFFFFF", &display_str);
 
@@ -1097,45 +1207,48 @@ pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<boo
             });
         }
 
-        // Count-up timer and periodic alert sound
+        // Count-up timer and periodic app sounds.
         {
             let elapsed = elapsed.clone();
+            let overlay_elapsed = overlay_elapsed.clone();
             let timer_label = timer_label.clone();
             let dismissed = dismissed.clone();
+            let focus_failed = focus_failed.clone();
+            let title_label = title_label.clone();
+            let idle_label = idle_label.clone();
+            let space_hint = space_hint.clone();
+            let app = app.clone();
             gtk::glib::timeout_add_seconds_local(1, move || {
                 if dismissed.get() {
                     return gtk::glib::ControlFlow::Break;
                 }
                 let e = elapsed.get() + 1;
                 elapsed.set(e);
+                let overlay_e = overlay_elapsed.get() + 1;
+                overlay_elapsed.set(overlay_e);
                 let display_str = format_remaining(e);
                 set_markup_text(&timer_label, "Sans Light 72", "#FFFFFF", &display_str);
-                // Play alert every 15 seconds
-                if e.is_multiple_of(15) {
-                    std::thread::spawn(|| {
-                        let ok = fixed_command_status("canberra-gtk-play", &["--id", "bell"]);
-                        if !ok {
-                            let _ = fixed_command_status(
-                                "paplay",
-                                &["/usr/share/sounds/freedesktop/stereo/bell.oga"],
-                            );
-                        }
-                    });
+
+                if !focus_failed.get() && overlay_e >= 60 {
+                    focus_failed.set(true);
+                    title_label.set_markup(
+                        "<span font='Sans 13' foreground='#FCA5A5'>FOCUS SESSION FAILED</span>",
+                    );
+                    idle_label
+                        .set_markup("<span font='Sans 14' foreground='#FCA5A5'>focus lost</span>");
+                    space_hint.set_markup(
+                        "<span font='Sans 11' foreground='#9CA3AF'>Press <span foreground='#FFFFFF'>Space</span> to restart focus</span>"
+                    );
+                    play_app_sound_async(AppSound::FocusSessionFailedLongIdle);
+                    let _ = app.emit("idle-overlay-focus-failed", ());
+                } else if !focus_failed.get() && overlay_e.is_multiple_of(10) {
+                    play_app_sound_async(AppSound::IdleAlert);
                 }
                 gtk::glib::ControlFlow::Continue
             });
         }
 
-        // Play alert sound immediately
-        std::thread::spawn(|| {
-            let ok = fixed_command_status("canberra-gtk-play", &["--id", "bell"]);
-            if !ok {
-                let _ = fixed_command_status(
-                    "paplay",
-                    &["/usr/share/sounds/freedesktop/stereo/bell.oga"],
-                );
-            }
-        });
+        play_app_sound_async(AppSound::IdleAlert);
 
         // Send notification
         let _ = notify_rust::Notification::new()
@@ -1143,7 +1256,6 @@ pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<boo
             .body("No activity detected. Return to resume your session.")
             .timeout(10_000)
             .hint(notify_rust::Hint::Transient(true))
-            .hint(notify_rust::Hint::SoundName("message-new-instant".into()))
             .show();
 
         for (_, sw) in secondary_windows.iter() {
@@ -1374,36 +1486,15 @@ pub fn show_break_overlay(_app: tauri::AppHandle, _break_seconds: u32) -> Result
 // ── Alert sound ──────────────────────────────────────────────────
 
 #[tauri::command]
+pub fn play_app_sound(sound_id: String) -> Result<(), String> {
+    let sound = AppSound::from_id(&sound_id)?;
+    play_app_sound_async(sound);
+    Ok(())
+}
+
+#[tauri::command]
 pub fn play_alert_sound() {
-    std::thread::spawn(|| {
-        #[cfg(target_os = "linux")]
-        {
-            // Try canberra-gtk-play first (most desktop environments), then paplay
-            let ok = fixed_command_status("canberra-gtk-play", &["--id", "bell"]);
-            if !ok {
-                let _ = fixed_command_status(
-                    "paplay",
-                    &["/usr/share/sounds/freedesktop/stereo/bell.oga"],
-                );
-            }
-        }
-        #[cfg(target_os = "windows")]
-        {
-            let _ = fixed_command_status(
-                "powershell",
-                &[
-                    "-NoProfile",
-                    "-NonInteractive",
-                    "-Command",
-                    "[System.Media.SystemSounds]::Exclamation.Play()",
-                ],
-            );
-        }
-        #[cfg(target_os = "macos")]
-        {
-            let _ = fixed_command_status("afplay", &["/System/Library/Sounds/Glass.aiff"]);
-        }
-    });
+    play_app_sound_async(AppSound::EventNotification);
 }
 
 #[tauri::command]
@@ -1412,8 +1503,12 @@ pub fn show_event_notification(
     title: String,
     body: String,
     open_calendar: Option<bool>,
+    play_sound: Option<bool>,
 ) {
     std::thread::spawn(move || {
+        if play_sound.unwrap_or(true) {
+            play_app_sound_async(AppSound::EventNotification);
+        }
         let summary = notification_summary(&title);
         let body = escape_notification_markup(&body);
         let opens_calendar = open_calendar.unwrap_or(false);
@@ -1431,7 +1526,6 @@ pub fn show_event_notification(
             .hint(Hint::Category("calendar".into()))
             .hint(Hint::DesktopEntry("ganbaru-ai".into()))
             .hint(Hint::Transient(true))
-            .hint(Hint::SoundName("message-new-instant".into()))
             .show();
 
         match result {
@@ -1455,6 +1549,7 @@ pub fn show_event_notification(
 #[tauri::command]
 pub fn show_benchmark_notification(app: tauri::AppHandle, title: String, body: String) {
     std::thread::spawn(move || {
+        play_app_sound_async(AppSound::EventNotification);
         let result = Notification::new()
             .summary(&title)
             .body(&body)
@@ -1462,7 +1557,6 @@ pub fn show_benchmark_notification(app: tauri::AppHandle, title: String, body: S
             .timeout(10_000)
             .id(9002)
             .hint(Hint::Transient(true))
-            .hint(Hint::SoundName("message-new-instant".into()))
             .show();
 
         match result {
@@ -1483,6 +1577,7 @@ pub fn show_benchmark_notification(app: tauri::AppHandle, title: String, body: S
 #[tauri::command]
 pub fn show_doomscrolling_desktop_block_notification(app: tauri::AppHandle, app_name: String) {
     std::thread::spawn(move || {
+        play_app_sound_async(AppSound::EventNotification);
         let app_name = app_name
             .lines()
             .next()
@@ -1508,7 +1603,6 @@ pub fn show_doomscrolling_desktop_block_notification(app: tauri::AppHandle, app_
             .hint(Hint::Category("device".into()))
             .hint(Hint::DesktopEntry("ganbaru-ai".into()))
             .hint(Hint::Transient(true))
-            .hint(Hint::SoundName("message-new-instant".into()))
             .show();
 
         match result {
@@ -1549,6 +1643,25 @@ mod tests {
                 "['<Alt>F4']".to_string(),
             )],
         }
+    }
+
+    #[test]
+    fn app_sound_ids_cover_wired_sounds() {
+        for id in [
+            "event-notification",
+            "idle-alert",
+            "focus-session-failed-long-idle",
+            "focus-ending-warning",
+            "break-start",
+            "break-finished",
+            "event-finished",
+            "pomodoro-day-complete",
+            "pomodoro-workweek-complete",
+        ] {
+            assert!(AppSound::from_id(id).is_ok(), "{id} should be wired");
+        }
+
+        assert!(AppSound::from_id("ai-response-finished").is_err());
     }
 
     fn unique_restore_file(name: &str) -> PathBuf {
@@ -1690,6 +1803,7 @@ pub fn show_pomodoro_notification(
     let timeout_ms = remaining_seconds * 1000;
 
     std::thread::spawn(move || {
+        play_app_sound_async(AppSound::FocusEndingWarning);
         let mut notification = Notification::new();
         notification.summary("Focus session ending in 1 minute");
         if allow_add_time.unwrap_or(true) {
@@ -1699,7 +1813,6 @@ pub fn show_pomodoro_notification(
             .timeout(timeout_ms as i32)
             .id(9001)
             .hint(Hint::Transient(true))
-            .hint(Hint::SoundName("message-new-instant".into()))
             .show();
 
         match result {

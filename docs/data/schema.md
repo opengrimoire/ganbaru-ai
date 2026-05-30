@@ -229,7 +229,7 @@ One row per uninterrupted stretch of focus or break. A row is only created when 
 | `actual_start` | ISO datetime | When the segment actually started. Always set; a row exists only if the phase ran. |
 | `actual_end` | ISO datetime or null | When the segment ended. Null if still running. |
 | `status` | enum | `active`, `completed`, `interrupted`. See below. |
-| `end_reason` | enum or null | `completed`, `stopped`, `skipped_by_user`, `event_expired`, `reconfigured`, `block_transition`, `crash_recovery`. Null while active. |
+| `end_reason` | enum or null | `completed`, `stopped`, `skipped_by_user`, `event_expired`, `focus_failed`, `reconfigured`, `block_transition`, `crash_recovery`. Null while active. |
 | `created_at` | ISO datetime | Row creation time. |
 
 Indexes: `(event_id, event_date)`, `(run_id)`, `(run_id, actual_start)`, plus a partial unique index that allows only one active segment globally.
@@ -242,7 +242,7 @@ Why a row is only written when the phase begins (lazy segment creation): writing
 |---|---|
 | `active` | Currently running. Exactly one at a time across the whole database (invariant 2). |
 | `completed` | Finished normally. Focus reached the planned end, or break was acknowledged. |
-| `interrupted` | Started but cut short. App closed, session stopped, event time expired mid-segment. |
+| `interrupted` | Started but cut short. App closed, session stopped, event time expired mid-segment, or long idle failed the focus session. |
 
 There are no `planned` or `skipped` statuses. A skipped break is detected from the gap between two consecutive focus segments on the same run (no break row in between). Adding `skipped` would duplicate this signal and create two ways to express the same fact.
 
@@ -277,7 +277,7 @@ Append-only event log for lifecycle moments that are useful for audit and analyt
 | `id` | UUID | Primary key. |
 | `run_id` | UUID | FK to `pomodoro_runs` (CASCADE delete). |
 | `segment_id` | UUID or null | FK to `pomodoro_segments` (SET NULL). Null for run-level events. |
-| `event_type` | enum | `start`, `phase_start`, `phase_complete`, `pause_start`, `pause_end`, `idle_detected`, `suspend_detected`, `skip_break`, `extend_focus`, `reconfigure`, `block_transition`, `stop`, `complete`, `crash_recovery`. |
+| `event_type` | enum | `start`, `phase_start`, `phase_complete`, `pause_start`, `pause_end`, `idle_detected`, `focus_failed`, `suspend_detected`, `skip_break`, `extend_focus`, `reconfigure`, `block_transition`, `stop`, `complete`, `crash_recovery`. |
 | `occurred_at` | ISO datetime | When the event happened. |
 | `phase` | enum or null | `focus`, `short_break`, `long_break`, or null for run-level events. |
 | `reason` | text or null | Optional reason or trigger detail. |

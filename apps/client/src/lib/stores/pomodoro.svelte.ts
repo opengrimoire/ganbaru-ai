@@ -7,6 +7,7 @@ import type {
 } from "$lib/components/calendar/types";
 import { dbUrl } from "$lib/api/db";
 import { writeDoomscrollingRuntimeState } from "$lib/api/doomscrolling";
+import { APP_SOUND_IDS, playAppSound } from "$lib/app-sounds";
 import { getMusicPlayer } from "$lib/stores/music-player.svelte";
 import { getPreferences } from "$lib/stores/preferences.svelte";
 import { computePlannedSegments } from "$lib/utils/pomodoro-segments";
@@ -28,6 +29,8 @@ import {
   MAX_BREAK_EXTENSION_SECONDS,
   BREAK_OVERTIME_RAIL_GRACE_SECONDS,
   MAX_BREAK_OVERTIME_SECONDS,
+  IDLE_FOCUS_FAILURE_DELAY_SECONDS,
+  BREAK_FINISHED_ALERT_INTERVAL_SECONDS,
   limitRemainingSecondsToBlockEnd,
   phaseDurationSeconds,
   isPomodoroSessionActive,
@@ -68,7 +71,16 @@ interface PomodoroWindowSnapshot {
   blockExpired: boolean;
   focusExtensionUsed: boolean;
   suspendedAway: { awaySeconds: number } | null;
-  idlePaused: { idleSeconds: number; nativeOverlay: boolean } | null;
+  idlePaused: IdlePauseState | null;
+}
+
+interface IdlePauseState {
+  idleSeconds: number;
+  nativeOverlay: boolean;
+  idleStartMs: number;
+  overlayStartedAtMs: number;
+  focusFailed: boolean;
+  focusFailedAtMs: number | null;
 }
 
 type PomodoroWindowCommand =
@@ -86,6 +98,7 @@ type PomodoroWindowCommand =
     }
   | { kind: "dismiss-suspend"; resume: boolean }
   | { kind: "dismiss-idle"; resume: boolean }
+  | { kind: "mark-idle-focus-failed" }
   | { kind: "complete-active-block-at"; endIso: string }
   | { kind: "stop-session" }
   | { kind: "pause" }
@@ -159,7 +172,7 @@ let suspendedAway = $state<{ awaySeconds: number } | null>(null);
 // Idle detection
 let idleTimeoutMs: number | null = null; // null = disabled
 let idleCheckIntervalId: ReturnType<typeof setInterval> | null = null;
-let idlePaused = $state<{ idleSeconds: number; nativeOverlay: boolean } | null>(null);
+let idlePaused = $state<IdlePauseState | null>(null);
 let lastDoomscrollingStateKey = "";
 
 function writeCurrentDoomscrollingRuntimeState(force = false): void {
@@ -307,7 +320,11 @@ function isPomodoroWindowSnapshot(value: unknown): value is PomodoroWindowSnapsh
     (
       isRecord(idlePausedValue) &&
       isNonNegativeNumber(idlePausedValue.idleSeconds) &&
-      typeof idlePausedValue.nativeOverlay === "boolean"
+      typeof idlePausedValue.nativeOverlay === "boolean" &&
+      isNonNegativeNumber(idlePausedValue.idleStartMs) &&
+      isNonNegativeNumber(idlePausedValue.overlayStartedAtMs) &&
+      typeof idlePausedValue.focusFailed === "boolean" &&
+      isNullableNumber(idlePausedValue.focusFailedAtMs)
     );
 
   return (
@@ -492,6 +509,7 @@ type PomodoroSegmentEndReason =
   | "stopped"
   | "skipped_by_user"
   | "event_expired"
+  | "focus_failed"
   | "reconfigured"
   | "block_transition"
   | "crash_recovery";
@@ -502,6 +520,7 @@ type PomodoroRunEventType =
   | "pause_start"
   | "pause_end"
   | "idle_detected"
+  | "focus_failed"
   | "suspend_detected"
   | "skip_break"
   | "extend_focus"
@@ -821,11 +840,46 @@ function expirePausedBlockAtDeadline(): void {
   refreshPausedOpportunityRemaining(activeBlockEndMs);
 
   if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
-    void markSegment(currentSegmentIndex, "interrupted", true, endIso, "event_expired");
+    const segment = segments[currentSegmentIndex];
+    if (segment.status === "active") {
+      void markSegment(currentSegmentIndex, "interrupted", true, endIso, "event_expired");
+    }
     void skipPlannedSegmentsAfter(currentSegmentIndex, "Failed to skip segment:");
   }
 
   void closeActiveRun(endIso, "completed", "interrupted", "event_expired", "complete");
+  sessionStartTime = null;
+
+  if (intervalId) {
+    clearInterval(intervalId);
+    intervalId = null;
+  }
+  stopOvertime();
+  stopIdleChecking();
+  isRunning = false;
+  lastTickMs = null;
+  phaseEndTime = null;
+  remainingSeconds = 0;
+  blockExpired = true;
+  updateTray();
+}
+
+async function expirePausedBlockAtDeadlineAndWait(): Promise<void> {
+  if (activeBlockEndMs === null) return;
+  clearMusicPausedByPomodoro();
+  const endIso = new Date(activeBlockEndMs).toISOString();
+  stopPausedOpportunityCountdown();
+  refreshPausedOpportunityRemaining(activeBlockEndMs);
+
+  if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
+    const segment = segments[currentSegmentIndex];
+    if (segment.status === "active") {
+      await markSegment(currentSegmentIndex, "interrupted", true, endIso, "event_expired");
+    }
+    await skipPlannedSegmentsAfter(currentSegmentIndex, "Failed to skip segment:");
+  }
+
+  await closeActiveRun(endIso, "completed", "interrupted", "event_expired", "complete");
   sessionStartTime = null;
 
   if (intervalId) {
@@ -1798,6 +1852,9 @@ function handleWindowCommand(command: PomodoroWindowCommand): void {
     case "dismiss-idle":
       void dismissIdle(command.resume);
       return;
+    case "mark-idle-focus-failed":
+      void markIdleFocusFailed();
+      return;
     case "complete-active-block-at":
       void completeActiveBlockAtInternal(command.endIso);
       return;
@@ -1893,6 +1950,10 @@ function initListeners() {
   listen("idle-overlay-stop", () => {
     if (idlePaused) void dismissIdle(false);
   }).catch((e) => console.warn("Failed to listen for idle-overlay-stop:", e));
+
+  listen("idle-overlay-focus-failed", () => {
+    if (idlePaused) void markIdleFocusFailed();
+  }).catch((e) => console.warn("Failed to listen for idle-overlay-focus-failed:", e));
 
   listen("tray-pause-resume", () => {
     if (suspendedAway || idlePaused) return;
@@ -2067,6 +2128,125 @@ function stopIdleChecking() {
   }
 }
 
+function idleFocusFailedAtMs(state: IdlePauseState): number {
+  return state.overlayStartedAtMs + IDLE_FOCUS_FAILURE_DELAY_SECONDS * 1000;
+}
+
+function failedIdleSegmentEndIso(state: IdlePauseState): string {
+  const seg = activeSegment();
+  const lastPause = seg?.pauseLog[seg.pauseLog.length - 1];
+  return lastPause?.startedAt ?? new Date(state.idleStartMs).toISOString();
+}
+
+async function markIdleFocusFailed(failedAtMs: number | null = null): Promise<void> {
+  const state = idlePaused;
+  if (!state || state.focusFailed) return;
+  const normalizedFailedAtMs = failedAtMs ?? idleFocusFailedAtMs(state);
+  idlePaused = {
+    ...state,
+    focusFailed: true,
+    focusFailedAtMs: normalizedFailedAtMs,
+  };
+  stopPausedOpportunityCountdown();
+  stopIdleChecking();
+
+  const seg = activeSegment();
+  if (seg && seg.status === "active" && currentSegmentIndex >= 0) {
+    const endIso = failedIdleSegmentEndIso(state);
+    await markSegment(currentSegmentIndex, "interrupted", true, endIso, "focus_failed");
+  }
+
+  if (activeRunId) {
+    recordRunEvent({
+      runId: activeRunId,
+      segmentId: seg?.id ?? null,
+      eventType: "focus_failed",
+      occurredAt: new Date(normalizedFailedAtMs).toISOString(),
+      phase: "focus",
+      reason: "long_idle",
+      durationSeconds: IDLE_FOCUS_FAILURE_DELAY_SECONDS,
+    }, "Failed to record focus failure:");
+  }
+  updateTray();
+}
+
+async function restartFocusAfterFailedIdle(): Promise<void> {
+  if (!idlePaused) return;
+
+  if (activeBlockDeadlineReached()) {
+    idlePaused = null;
+    await expirePausedBlockAtDeadlineAndWait();
+    return;
+  }
+
+  const blockId = activeBlockId;
+  const runId = activeRunId;
+  const eventDate = activeSegment()?.eventDate ?? (blockId ? eventDateFromBlockId(blockId) : null);
+  if (!blockId || !runId || !eventDate || activeBlockEndMs === null) {
+    await dismissIdle(false);
+    return;
+  }
+
+  clearMusicPausedByPomodoro();
+  stopPausedOpportunityCountdown();
+  stopOvertime();
+  phase = "focus";
+  resetFocusNotificationState();
+  const nowMs = Date.now();
+  const remaining = setPhaseRemainingSeconds(config.focusMinutes * TIME_MULTIPLIER, 0, nowMs);
+  if (remaining <= 0) {
+    idlePaused = null;
+    await expirePausedBlockAtDeadlineAndWait();
+    return;
+  }
+
+  const now = new Date(nowMs).toISOString();
+  const phaseEndMs = nowMs + remaining * 1000;
+  const newSegment: PersistedSegment = {
+    id: crypto.randomUUID(),
+    eventId: blockId,
+    eventDate,
+    runId,
+    cycleNumber: currentCycle,
+    phase: "focus",
+    plannedStart: now,
+    plannedEnd: new Date(phaseEndMs).toISOString(),
+    actualStart: now,
+    actualEnd: null,
+    pauseLog: [],
+    status: "active",
+  };
+  const kept = segments.filter(
+    (segment, index) =>
+      index <= currentSegmentIndex &&
+      (segment.status === "completed" || segment.status === "interrupted"),
+  );
+  const previousPhase = phase;
+  phase = "focus";
+  const afterMinutes = Math.max(0, (activeBlockEndMs - phaseEndMs) / 60000);
+  const futureSegments = plannedSegmentsAfterCurrentPhase(
+    blockId,
+    eventDate,
+    runId,
+    newSegment.plannedEnd,
+    afterMinutes,
+  );
+  phase = previousPhase;
+
+  segments = [...kept, newSegment, ...futureSegments];
+  currentSegmentIndex = kept.length;
+  idlePaused = null;
+  isRunning = true;
+  phaseEndTime = phaseEndMs;
+  sessionStartTime = now;
+  lastTickMs = nowMs;
+  if (intervalId) clearInterval(intervalId);
+  intervalId = setInterval(tick, 1000);
+  startIdleChecking();
+  await insertSegmentsToBackend([newSegment]);
+  updateTray();
+}
+
 async function checkIdle() {
   try {
     const status = await invoke<IdleStatus>("get_idle_status");
@@ -2120,7 +2300,15 @@ async function checkIdle() {
       console.warn("Failed to show idle overlay:", e);
     }
 
-    idlePaused = { idleSeconds: result.idleSeconds, nativeOverlay };
+    const overlayStartedAtMs = Date.now();
+    idlePaused = {
+      idleSeconds: result.idleSeconds,
+      nativeOverlay,
+      idleStartMs: result.idleStartMs,
+      overlayStartedAtMs,
+      focusFailed: false,
+      focusFailedAtMs: null,
+    };
     updateTray();
   } catch (e) {
     console.warn("Idle check failed:", e);
@@ -2129,7 +2317,12 @@ async function checkIdle() {
 
 async function dismissIdle(resume: boolean): Promise<void> {
   stopPausedOpportunityCountdown();
+  const state = idlePaused;
   if (resume) {
+    if (state?.focusFailed) {
+      await restartFocusAfterFailedIdle();
+      return;
+    }
     // Close the open pause interval
     if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
       const seg = segments[currentSegmentIndex];
@@ -2152,7 +2345,9 @@ async function dismissIdle(resume: boolean): Promise<void> {
     const lastPause = seg?.pauseLog[seg.pauseLog.length - 1];
     const endIso = lastPause ? lastPause.startedAt : nowIso();
     if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
-      await markSegment(currentSegmentIndex, "interrupted", true, endIso, "stopped");
+      if (segments[currentSegmentIndex].status === "active") {
+        await markSegment(currentSegmentIndex, "interrupted", true, endIso, "stopped");
+      }
       await skipPlannedSegmentsAfter(currentSegmentIndex, "Failed to skip segment:");
     }
     await closeActiveRun(endIso, "stopped", "interrupted", "stopped", "stop");
@@ -2294,9 +2489,10 @@ function tick() {
         }, 1000);
       }
       if (!overtimeAlertIntervalId) {
+        playAppSound(APP_SOUND_IDS.breakFinished).catch(() => {});
         overtimeAlertIntervalId = setInterval(() => {
-          invoke("play_alert_sound").catch(() => {});
-        }, 60_000);
+          playAppSound(APP_SOUND_IDS.breakFinished).catch(() => {});
+        }, BREAK_FINISHED_ALERT_INTERVAL_SECONDS * 1000);
       }
       return;
     }
@@ -2395,7 +2591,7 @@ function advancePhase() {
         activateSegment(breakIdx);
       }
 
-      invoke("play_alert_sound").catch(() => {});
+      playAppSound(APP_SOUND_IDS.breakStart).catch(() => {});
       showBreakOverlay(remainingSeconds);
       break;
     }
@@ -2411,7 +2607,7 @@ function advancePhase() {
         activateSegment(breakIdx);
       }
 
-      invoke("play_alert_sound").catch(() => {});
+      playAppSound(APP_SOUND_IDS.breakStart).catch(() => {});
       showBreakOverlay(remainingSeconds);
       break;
     }
@@ -2833,6 +3029,10 @@ export function getPomodoro() {
     async dismissIdle(resume: boolean) {
       if (forwardWindowCommand({ kind: "dismiss-idle", resume })) return;
       await dismissIdle(resume);
+    },
+    async markIdleFocusFailed() {
+      if (forwardWindowCommand({ kind: "mark-idle-focus-failed" })) return;
+      await markIdleFocusFailed();
     },
     async startFromBlock(
       blockId: string,

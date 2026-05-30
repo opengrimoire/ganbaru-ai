@@ -238,6 +238,38 @@ fn schema_allows_only_one_active_pomodoro_segment() {
 }
 
 #[test]
+fn schema_accepts_focus_failed_pomodoro_history() {
+    tauri::async_runtime::block_on(async {
+        let pool = migrated_memory_pool().await;
+        insert_event(&pool).await;
+        insert_open_run(&pool, "run-1").await.unwrap();
+
+        sqlx::query(
+            "INSERT INTO pomodoro_segments
+                (id, event_id, event_date, run_id, cycle_number, phase,
+                 planned_start, planned_end, actual_start, actual_end, status, end_reason)
+             VALUES ('segment-1', 'event-1', '2026-05-23', 'run-1', 1, 'focus',
+                     '2026-05-23T09:00:00Z', '2026-05-23T09:40:00Z',
+                     '2026-05-23T09:00:00Z', '2026-05-23T09:10:00Z',
+                     'interrupted', 'focus_failed')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO pomodoro_run_events
+                (id, run_id, segment_id, event_type, occurred_at, phase, reason, duration_seconds)
+             VALUES ('event-1', 'run-1', 'segment-1', 'focus_failed',
+                     '2026-05-23T09:11:00Z', 'focus', 'long_idle', 60)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+    });
+}
+
+#[test]
 fn deleting_calendar_event_preserves_pomodoro_segments() {
     tauri::async_runtime::block_on(async {
         let pool = migrated_memory_pool().await;

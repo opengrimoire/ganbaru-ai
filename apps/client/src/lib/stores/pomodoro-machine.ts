@@ -39,6 +39,9 @@ export const BREAK_EXTENSION_SECONDS = 60;
 export const MAX_BREAK_EXTENSION_SECONDS = 180;
 export const BREAK_OVERTIME_RAIL_GRACE_SECONDS = 10;
 export const MAX_BREAK_OVERTIME_SECONDS = 1800;
+export const IDLE_ALERT_INTERVAL_SECONDS = 10;
+export const IDLE_FOCUS_FAILURE_DELAY_SECONDS = 60;
+export const BREAK_FINISHED_ALERT_INTERVAL_SECONDS = 10;
 
 // Utility functions
 
@@ -512,4 +515,17 @@ export function decideIdleCheck(
   }
 
   return { kind: "skip" };
+}
+
+export function shouldTriggerIdleFocusFailure(overlayElapsedSeconds: number): boolean {
+  return overlayElapsedSeconds >= IDLE_FOCUS_FAILURE_DELAY_SECONDS;
+}
+
+export function shouldPlayRepeatingSoundAtElapsedSecond(
+  elapsedSeconds: number,
+  intervalSeconds: number,
+): boolean {
+  if (elapsedSeconds < 0) return false;
+  if (elapsedSeconds === 0) return true;
+  return elapsedSeconds % intervalSeconds === 0;
 }

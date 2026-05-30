@@ -8,7 +8,7 @@ This doc covers what idle means from the user's perspective, how it is detected,
 
 The whole point of tracking focus time is to have a record of when the user was actually focused. If the rail's green fill includes time when the user was on a phone call, in a meeting in another room, or making coffee, the analytical signal is destroyed: focus stats become a measure of "time the timer was running" rather than "time spent working."
 
-Idle detection keeps the green honest. When the user is away, the timer pauses, the active segment splits around the pause, and the rail visibly shows the gap. When the user comes back, the timer resumes from where it paused, not from where it would have been if it had kept running.
+Idle detection keeps the green honest. When the user is away, the timer pauses, the active segment splits around the pause, and the rail visibly shows the gap. When the user comes back quickly, the timer resumes from where it paused. When the idle overlay has been visible for 60 seconds, the focus attempt is considered failed and the next return restarts a full focus period in the same Pomodoro cycle.
 
 ## Idle threshold
 
@@ -39,9 +39,10 @@ The two reasons are recorded separately because they have different analytical m
 
 When the system detects idle, it shows the idle overlay: a fullscreen window similar to the break screen but with different content.
 
-The overlay says, in effect, "you have been idle for X minutes; the timer has paused; here is what to do." The user has three options:
+The overlay says, in effect, "you have been idle for X minutes; the timer has paused; here is what to do." The idle sound plays immediately, then every 10 seconds while the overlay is in the paused state. After 60 seconds on the overlay, the focus-failed sound plays once, the repeated idle sound stops, and the copy changes to a failed-focus state. The user has three options:
 
 - **Resume.** Closes the overlay, resumes the timer where it paused. The pause row is closed (`ended_at = now`).
+- **Restart after focus failure.** If the overlay has been visible for 60 seconds, Space starts a fresh full focus timer in the same open run and the same Pomodoro cycle. The previous partial focus segment is preserved as `interrupted` with `end_reason = focus_failed`; the idle gap remains empty.
 - **Stop the session.** Ends the run with `end_reason = stopped`. The active segment is marked interrupted at the idle pause start, so time spent away does not count as focus. If the operating system reports an idle start before the segment started, the timestamp is clamped to the segment start instead of writing an impossible negative interval.
 - **Ignore (close the overlay without choosing).** The timer remains paused. The user can come back later and resume or stop.
 
@@ -59,9 +60,11 @@ When the system declares idle:
 
 The segment's `actual_end` is not set during the pause. The segment is still active; it has just been split around the pause for rendering purposes.
 
+If the overlay remains visible for 60 seconds, the active segment is marked `interrupted` with `end_reason = focus_failed`, and a `focus_failed` run event with reason `long_idle` is recorded. The segment's `actual_end` remains the idle pause start, so neither the idle minute nor the time after it counts as focus. The run stays open until the user either returns or stops the session.
+
 ## Resume flow
 
-When the user resumes (via the overlay or by returning to input after the overlay was dismissed):
+When the user resumes before focus failure:
 
 1. The pause row is closed (`ended_at = now`).
 2. The timer resumes from the same remaining seconds. If 15 minutes were left when the pause started, 15 minutes are still left.
@@ -69,6 +72,13 @@ When the user resumes (via the overlay or by returning to input after the overla
 4. The rail's green fill picks up again from `now`. The segment now has two green bands: from `actual_start` to the pause's `started_at`, and from the pause's `ended_at` onward.
 
 The segment is the same segment, with the same `id`. Pauses split the segment for rendering; they do not split it as data. This keeps analytics joins simple: one segment row, multiple pause rows.
+
+When the user returns after focus failure:
+
+1. The failed segment stays in history as an interrupted focus segment.
+2. A new active focus segment is inserted in the same run.
+3. The timer restarts from the full configured focus duration, limited by the active event end time.
+4. The Pomodoro cycle count does not advance and the long-break cadence is not reset.
 
 ## When idle detection does not fire
 

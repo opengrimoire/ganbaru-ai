@@ -1215,8 +1215,8 @@ fn validate_run_end_reason(reason: &str) -> Result<(), String> {
 
 fn validate_segment_end_reason(reason: &str) -> Result<(), String> {
     match reason {
-        "completed" | "stopped" | "skipped_by_user" | "event_expired" | "reconfigured"
-        | "block_transition" | "crash_recovery" => Ok(()),
+        "completed" | "stopped" | "skipped_by_user" | "event_expired" | "focus_failed"
+        | "reconfigured" | "block_transition" | "crash_recovery" => Ok(()),
         _ => Err(format!("invalid pomodoro segment end reason: {reason}")),
     }
 }
@@ -1231,8 +1231,8 @@ fn validate_start_trigger(trigger: &str) -> Result<(), String> {
 fn validate_event_type(event_type: &str) -> Result<(), String> {
     match event_type {
         "start" | "phase_start" | "phase_complete" | "pause_start" | "pause_end"
-        | "idle_detected" | "suspend_detected" | "skip_break" | "extend_focus" | "reconfigure"
-        | "block_transition" | "stop" | "complete" | "crash_recovery" => Ok(()),
+        | "idle_detected" | "focus_failed" | "suspend_detected" | "skip_break" | "extend_focus"
+        | "reconfigure" | "block_transition" | "stop" | "complete" | "crash_recovery" => Ok(()),
         _ => Err(format!("invalid pomodoro run event type: {event_type}")),
     }
 }
@@ -1472,6 +1472,7 @@ mod tests {
         assert!(validate_run_end_reason("completed").is_ok());
         assert!(validate_run_end_reason("crash_recovery").is_err());
         assert!(validate_segment_end_reason("crash_recovery").is_ok());
+        assert!(validate_segment_end_reason("focus_failed").is_ok());
         assert!(validate_segment_end_reason("unknown").is_err());
     }
 
@@ -1493,6 +1494,7 @@ mod tests {
     fn validates_run_event_types() {
         assert!(validate_event_type("skip_break").is_ok());
         assert!(validate_event_type("extend_focus").is_ok());
+        assert!(validate_event_type("focus_failed").is_ok());
         assert!(validate_event_type("unknown").is_err());
     }
 

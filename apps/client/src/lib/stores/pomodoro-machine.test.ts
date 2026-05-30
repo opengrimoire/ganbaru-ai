@@ -10,10 +10,14 @@ import {
   decideStartFromBlock,
   decideReconfigure,
   decideIdleCheck,
+  shouldPlayRepeatingSoundAtElapsedSecond,
+  shouldTriggerIdleFocusFailure,
   DEFAULT_CONFIG,
   TIME_MULTIPLIER,
   SUSPEND_THRESHOLD_MS,
   NOTIFICATION_THRESHOLD,
+  BREAK_FINISHED_ALERT_INTERVAL_SECONDS,
+  IDLE_ALERT_INTERVAL_SECONDS,
   type TimerSnapshot,
   type PomodoroConfig,
   type TransitionInput,
@@ -65,6 +69,28 @@ describe("configEquals", () => {
 
   it("returns false when cyclesBeforeLongBreak differs", () => {
     expect(configEquals(DEFAULT_CONFIG, { ...DEFAULT_CONFIG, cyclesBeforeLongBreak: 2 })).toBe(false);
+  });
+});
+
+describe("sound cadence helpers", () => {
+  it("triggers idle focus failure at 60 seconds after the overlay appears", () => {
+    expect(shouldTriggerIdleFocusFailure(59)).toBe(false);
+    expect(shouldTriggerIdleFocusFailure(60)).toBe(true);
+    expect(shouldTriggerIdleFocusFailure(61)).toBe(true);
+  });
+
+  it("plays idle alerts immediately and every 10 seconds", () => {
+    expect(shouldPlayRepeatingSoundAtElapsedSecond(0, IDLE_ALERT_INTERVAL_SECONDS)).toBe(true);
+    expect(shouldPlayRepeatingSoundAtElapsedSecond(9, IDLE_ALERT_INTERVAL_SECONDS)).toBe(false);
+    expect(shouldPlayRepeatingSoundAtElapsedSecond(10, IDLE_ALERT_INTERVAL_SECONDS)).toBe(true);
+    expect(shouldPlayRepeatingSoundAtElapsedSecond(20, IDLE_ALERT_INTERVAL_SECONDS)).toBe(true);
+  });
+
+  it("plays break-finished alerts immediately and every 10 seconds", () => {
+    expect(shouldPlayRepeatingSoundAtElapsedSecond(0, BREAK_FINISHED_ALERT_INTERVAL_SECONDS)).toBe(true);
+    expect(shouldPlayRepeatingSoundAtElapsedSecond(9, BREAK_FINISHED_ALERT_INTERVAL_SECONDS)).toBe(false);
+    expect(shouldPlayRepeatingSoundAtElapsedSecond(10, BREAK_FINISHED_ALERT_INTERVAL_SECONDS)).toBe(true);
+    expect(shouldPlayRepeatingSoundAtElapsedSecond(20, BREAK_FINISHED_ALERT_INTERVAL_SECONDS)).toBe(true);
   });
 });
 

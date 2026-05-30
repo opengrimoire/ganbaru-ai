@@ -40,12 +40,12 @@ There is no "stop the session" control on the break screen. Stopping the session
 
 ## Overtime
 
-If the user does not interact with the break screen and the break timer reaches 0, the system enters overtime. The break segment's `actual_end` is not set yet; the segment continues to be the active segment, but the timer counts up instead of down.
+If the user does not interact with the break screen and the break timer reaches 0, the system enters overtime. The break-finished sound plays immediately, then every 10 seconds until the user acknowledges the screen or the system auto-advances. The break segment's `actual_end` is not set yet; the segment continues to be the active segment, but the timer counts up instead of down.
 
 Overtime is capped at `MAX_BREAK_OVERTIME_SECONDS` (1800 seconds = 30 minutes). During overtime:
 
 - The break mark on the rail keeps growing for 10 seconds. After that grace window, the extra waiting time is empty on the rail, matching idle and pause gaps.
-- A reminder alert fires every 60 seconds prompting the user to start the next focus phase.
+- A reminder alert fires every 10 seconds prompting the user to start the next focus phase.
 - After 30 minutes of overtime, the system auto-advances to focus. The break segment is marked completed, with `actual_end` capped at 10 seconds after the planned break end.
 
 The rail gives the user 10 seconds of grace to return without treating a long absence as break time. The 30 minute cap prevents the break screen from waiting forever if the user never comes back.

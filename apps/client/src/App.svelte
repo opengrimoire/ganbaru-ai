@@ -17,8 +17,13 @@
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { getDetachedWindows } from "$lib/stores/detached-windows.svelte";
   import { selectActivePomodoroBlock } from "$lib/stores/pomodoro-scheduler";
+  import {
+    classifyPomodoroCompletion,
+    type PomodoroCompletionKind,
+  } from "$lib/stores/pomodoro-completion";
   import { detachableTabViewFromWindowLabel } from "$lib/windows/detached";
   import { ensureDbUrl } from "$lib/api/db";
+  import { APP_SOUND_IDS, playAppSound, type AppSoundId } from "$lib/app-sounds";
   import "$lib/stores/app-session";
   import { parseCalendarDate } from "$lib/components/calendar/utils";
   import type { CalendarEvent } from "$lib/components/calendar/types";
@@ -31,6 +36,7 @@
   import TitleBar from "$lib/components/TitleBar.svelte";
   import WindowResizeHandles from "$lib/components/WindowResizeHandles.svelte";
   import CalendarView from "$lib/components/calendar/CalendarView.svelte";
+  import CompletionOverlay from "$lib/components/pomodoro/CompletionOverlay.svelte";
   import MusicPlaybackHost from "$lib/components/music/MusicPlaybackHost.svelte";
   import MusicView from "$lib/components/music/MusicView.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
@@ -69,6 +75,7 @@
   const DESKTOP_BLOCKING_CHECK_INTERVAL_MS = 5_000;
 
   let isMaximized = $state(true);
+  let completionOverlay = $state<{ kind: PomodoroCompletionKind } | null>(null);
   type BenchmarkOverlayComponent = typeof import("$lib/components/benchmark/BenchmarkOverlay.svelte").default;
   type IdleOverlayComponent = typeof import("$lib/components/pomodoro/IdleOverlay.svelte").default;
   let BenchmarkOverlay = $state<BenchmarkOverlayComponent | null>(null);
@@ -428,6 +435,29 @@
     });
   }
 
+  function soundForCompletionKind(kind: PomodoroCompletionKind): AppSoundId {
+    if (kind === "workweek") return APP_SOUND_IDS.pomodoroWorkweekComplete;
+    if (kind === "day") return APP_SOUND_IDS.pomodoroDayComplete;
+    return APP_SOUND_IDS.eventFinished;
+  }
+
+  async function showNaturalPomodoroCompletion(block: CalendarEvent | null): Promise<void> {
+    if (!block) return;
+    let kind: PomodoroCompletionKind = "event";
+    try {
+      const dateText = block.start.split(" ")[0];
+      const date = Temporal.PlainDate.from(dateText);
+      const events = await calendar.loadPomodoroSchedulerEvents(date, date);
+      kind = classifyPomodoroCompletion(block, events);
+    } catch (e) {
+      console.warn("Failed to classify pomodoro completion:", e);
+    }
+    completionOverlay = { kind };
+    playAppSound(soundForCompletionKind(kind)).catch((e) =>
+      console.warn("Failed to play pomodoro completion sound:", e),
+    );
+  }
+
   let trackedBlockSnapshot: CalendarEvent | null = null;
   let activeBlockCheckRunning = false;
   let activeBlockCheckQueued = false;
@@ -465,7 +495,8 @@
       );
       trackedBlockSnapshot = { ...activeBlock };
     } else if (pomodoro.activeBlockId && pomodoro.blockExpired) {
-      // Block naturally ended, no successor: stop silently (no dialog)
+      // Block naturally ended, no successor: stop the timer and show a terminal notice.
+      await showNaturalPomodoroCompletion(trackedBlockSnapshot);
       pomodoro.clearBlockExpired();
       trackedBlockSnapshot = null;
       pomodoro.stopSession();
@@ -478,6 +509,7 @@
       // has naturally passed, finish it silently instead of offering an edit
       // rollback that would not change anything useful.
       savedBlockState = null;
+      await showNaturalPomodoroCompletion(trackedBlockSnapshot);
       trackedBlockSnapshot = null;
       pomodoro.stopSession();
     } else if (pomodoro.activeBlockId && trackedBlockSnapshot) {
@@ -649,11 +681,20 @@
     <Idle
       idleSeconds={idleInfo.idleSeconds}
       nativeOverlay={idleInfo.nativeOverlay}
+      focusFailed={idleInfo.focusFailed}
       onResume={() => pomodoro.dismissIdle(true)}
       onStop={async () => {
         pomodoro.dismissedBlockId = pomodoro.activeBlockId;
         await pomodoro.dismissIdle(false);
       }}
+      onFocusFailed={() => pomodoro.markIdleFocusFailed()}
+    />
+  {/if}
+
+  {#if completionOverlay}
+    <CompletionOverlay
+      kind={completionOverlay.kind}
+      onDismiss={() => { completionOverlay = null; }}
     />
   {/if}
 

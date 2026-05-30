@@ -100,13 +100,15 @@ Transitions never happen across midnight or across non-pomodoro gaps. If the nex
 
 The system shows two notifications related to the timer, in addition to whatever the OS shows for calendar events.
 
-**Pre-break notification.** When 60 seconds remain in the current focus period, the system shows a desktop notification reminding the user that a break is coming. The threshold is named `NOTIFICATION_THRESHOLD` (60 seconds) in the state machine. The point of the heads-up is to let the user reach a stopping point in their work rather than being yanked out of context the moment focus ends.
+**Pre-break notification.** When 60 seconds remain in the current focus period, the system shows a desktop notification and plays the focus-ending warning sound. The threshold is named `NOTIFICATION_THRESHOLD` (60 seconds) in the state machine. The point of the heads-up is to let the user reach a stopping point in their work rather than being yanked out of context the moment focus ends.
 
 The focus controls can offer `Extend focus 3 minutes` once per focus period when the current event window still has room to extend the visible timer. The action is available from the title bar ring, from the tray ring, and from the first pre-break notification. If the user uses it from any surface, the timer extends the current focus opportunity, updates the active focus segment's planned end, records an `extend_focus` run event, rearms the 60-second pre-break notification, and marks the extension as used for that focus period. Later controls and notifications in the same focus period do not offer another extension, so the user still gets a final warning without accidentally chaining extra focus time.
 
-**Break-end behavior.** When a break ends, the break screen handles acknowledgement (see `features/pomodoro-break-screen.md`). No separate notification is shown.
+**Break behavior.** When focus turns into a break, the app plays the break-start sound and shows the break screen. When the break ends, the break screen handles acknowledgement and the app plays the break-finished sound immediately, then every 10 seconds until acknowledgement or auto-advance (see `features/pomodoro-break-screen.md`). No separate notification is shown.
 
-Calendar event notifications (configured per event, in minutes before start) are independent of the pomodoro system. They fire whether or not the event has a pomodoro config.
+**Event completion screens.** When a Pomodoro calendar event naturally expires and no active successor event takes over, the app shows a terminal completion screen. If later Pomodoro events remain on the same local date, it uses the event-finished sound. If no later Pomodoro events remain that day, it uses the Pomodoro day-complete sound. On Friday, the day-complete case uses the Pomodoro workweek-complete sound instead. Manual End event actions do not show this screen.
+
+Calendar event notifications (configured per event, in minutes before start) are independent of the pomodoro system. They fire whether or not the event has a pomodoro config, using the app's event notification sound.
 
 ## Linkage to calendar
 
