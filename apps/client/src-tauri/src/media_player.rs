@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use rodio::{cpal::BufferSize, Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, Source};
+use rodio::{Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, SampleRate, Source};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -193,7 +193,7 @@ impl LocalAudioFactory for RodioAudioFactory {
             MediaPlayerError::decode_failed(format!("Failed to decode local audio file: {e}"))
         })?;
         let duration_ms = duration_to_ms(decoder.total_duration());
-        let mut sink = open_low_latency_sink()?;
+        let mut sink = open_playback_sink(decoder.sample_rate())?;
         sink.log_on_drop(false);
         let player = Player::connect_new(sink.mixer());
         player.pause();
@@ -921,9 +921,9 @@ fn media_kind_from_extension(extension: &str) -> MediaKind {
     }
 }
 
-fn open_low_latency_sink() -> Result<MixerDeviceSink, MediaPlayerError> {
+fn open_playback_sink(sample_rate: SampleRate) -> Result<MixerDeviceSink, MediaPlayerError> {
     DeviceSinkBuilder::from_default_device()
-        .map(|builder| builder.with_buffer_size(BufferSize::Fixed(1024)))
+        .map(|builder| builder.with_sample_rate(sample_rate))
         .and_then(|builder| builder.open_sink_or_fallback())
         .map_err(|e| {
             MediaPlayerError::audio_device(format!("Failed to open local audio output: {e}"))

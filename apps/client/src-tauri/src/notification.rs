@@ -1,12 +1,23 @@
 use notify_rust::{Hint, Notification};
-use rodio::{cpal::BufferSize, Decoder, DeviceSinkBuilder, Player};
+use rodio::{ChannelCount, Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, SampleRate};
 use serde::{Deserialize, Serialize};
 #[cfg(target_os = "linux")]
 use std::collections::{HashMap, HashSet};
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use tauri::{Emitter, Manager};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    mpsc::{self, Receiver, SyncSender, TrySendError},
+    Arc, Mutex,
+};
+use std::thread::JoinHandle;
+use tauri::{Emitter, Manager, State};
+
+const APP_SOUND_COMMAND_QUEUE_LIMIT: usize = 32;
+const APP_SOUND_PLAYER_QUEUE_LIMIT: usize = 8;
+const APP_SOUND_OUTPUT_SAMPLE_RATE_HZ: u32 = 48_000;
+const APP_SOUND_OUTPUT_CHANNELS: u16 = 2;
 
 #[derive(Clone, Serialize)]
 struct AddTimePayload {
@@ -98,26 +109,209 @@ impl AppSound {
     }
 }
 
-fn play_app_sound_blocking(sound: AppSound) -> Result<(), String> {
+pub(crate) struct AppSoundState {
+    controller: Mutex<Option<AppSoundController>>,
+}
+
+impl Default for AppSoundState {
+    fn default() -> Self {
+        Self {
+            controller: Mutex::new(None),
+        }
+    }
+}
+
+impl AppSoundState {
+    fn play(&self, sound: AppSound) {
+        self.handle().play(sound);
+    }
+
+    fn handle(&self) -> AppSoundHandle {
+        let mut controller = self
+            .controller
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if controller.is_none() {
+            *controller = Some(AppSoundController::new());
+        }
+        controller
+            .as_ref()
+            .expect("app sound controller should exist")
+            .handle()
+    }
+}
+
+impl Drop for AppSoundState {
+    fn drop(&mut self) {
+        if let Ok(mut controller) = self.controller.lock() {
+            controller.take();
+        }
+    }
+}
+
+#[derive(Clone)]
+struct AppSoundHandle {
+    sender: SyncSender<AppSoundMessage>,
+}
+
+impl AppSoundHandle {
+    fn play(&self, sound: AppSound) {
+        match self.sender.try_send(AppSoundMessage::Play(sound)) {
+            Ok(()) => {}
+            Err(TrySendError::Full(_)) => {
+                eprintln!("Dropped app sound {} because the queue is full", sound.id());
+            }
+            Err(TrySendError::Disconnected(_)) => {
+                eprintln!(
+                    "Dropped app sound {} because the audio worker stopped",
+                    sound.id()
+                );
+            }
+        }
+    }
+}
+
+struct AppSoundController {
+    sender: Option<SyncSender<AppSoundMessage>>,
+    worker: Option<JoinHandle<()>>,
+}
+
+impl AppSoundController {
+    fn new() -> Self {
+        let (sender, receiver) = mpsc::sync_channel(APP_SOUND_COMMAND_QUEUE_LIMIT);
+        let worker = std::thread::Builder::new()
+            .name("ganbaru-ai-app-sounds".to_string())
+            .spawn(move || app_sound_worker(receiver))
+            .expect("failed to start app sound worker thread");
+        Self {
+            sender: Some(sender),
+            worker: Some(worker),
+        }
+    }
+
+    fn handle(&self) -> AppSoundHandle {
+        AppSoundHandle {
+            sender: self
+                .sender
+                .as_ref()
+                .expect("app sound controller sender should exist")
+                .clone(),
+        }
+    }
+}
+
+impl Drop for AppSoundController {
+    fn drop(&mut self) {
+        let shutdown_sent = self
+            .sender
+            .take()
+            .map(|sender| {
+                let sent = match sender.try_send(AppSoundMessage::Shutdown) {
+                    Ok(()) => true,
+                    Err(TrySendError::Full(_)) => false,
+                    Err(TrySendError::Disconnected(_)) => true,
+                };
+                drop(sender);
+                sent
+            })
+            .unwrap_or(true);
+
+        if shutdown_sent {
+            if let Some(worker) = self.worker.take() {
+                let _ = worker.join();
+            }
+        }
+    }
+}
+
+enum AppSoundMessage {
+    Play(AppSound),
+    Shutdown,
+}
+
+struct AppSoundOutput {
+    _sink: MixerDeviceSink,
+    player: Player,
+    stream_failed: Arc<AtomicBool>,
+}
+
+impl AppSoundOutput {
+    fn open() -> Result<Self, String> {
+        let stream_failed = Arc::new(AtomicBool::new(false));
+        let stream_failed_for_callback = stream_failed.clone();
+        let mut sink = DeviceSinkBuilder::from_default_device()
+            .map(|builder| {
+                builder
+                    .with_sample_rate(nonzero_sample_rate(APP_SOUND_OUTPUT_SAMPLE_RATE_HZ))
+                    .with_channels(nonzero_channels(APP_SOUND_OUTPUT_CHANNELS))
+                    .with_error_callback(move |e| {
+                        stream_failed_for_callback.store(true, Ordering::Release);
+                        eprintln!("App sound audio output error: {e}");
+                    })
+            })
+            .and_then(|builder| builder.open_sink_or_fallback())
+            .map_err(|e| format!("open audio output for app sounds: {e}"))?;
+        sink.log_on_drop(false);
+        let player = Player::connect_new(sink.mixer());
+        Ok(Self {
+            _sink: sink,
+            player,
+            stream_failed,
+        })
+    }
+
+    fn should_reopen(&self) -> bool {
+        self.stream_failed.load(Ordering::Acquire)
+    }
+}
+
+fn app_sound_worker(receiver: Receiver<AppSoundMessage>) {
+    let mut output: Option<AppSoundOutput> = None;
+    while let Ok(message) = receiver.recv() {
+        match message {
+            AppSoundMessage::Play(sound) => {
+                if let Err(e) = queue_app_sound(&mut output, sound) {
+                    output = None;
+                    eprintln!("Failed to play app sound: {e}");
+                }
+            }
+            AppSoundMessage::Shutdown => break,
+        }
+    }
+}
+
+fn queue_app_sound(output: &mut Option<AppSoundOutput>, sound: AppSound) -> Result<(), String> {
+    if output.as_ref().is_some_and(AppSoundOutput::should_reopen) {
+        *output = None;
+    }
+
+    if output.is_none() {
+        *output = Some(AppSoundOutput::open()?);
+    }
+
+    let output = output
+        .as_ref()
+        .expect("app sound output should exist after opening");
+    if output.player.len() >= APP_SOUND_PLAYER_QUEUE_LIMIT {
+        eprintln!(
+            "Dropped app sound {} because too many sounds are queued",
+            sound.id()
+        );
+        return Ok(());
+    }
+
     let decoder = Decoder::try_from(Cursor::new(sound.bytes()))
         .map_err(|e| format!("decode app sound {}: {e}", sound.id()))?;
-    let mut sink = DeviceSinkBuilder::from_default_device()
-        .map(|builder| builder.with_buffer_size(BufferSize::Fixed(1024)))
-        .and_then(|builder| builder.open_sink_or_fallback())
-        .map_err(|e| format!("open audio output for app sound {}: {e}", sound.id()))?;
-    sink.log_on_drop(false);
-    let player = Player::connect_new(sink.mixer());
-    player.append(decoder);
-    player.sleep_until_end();
+    output.player.append(decoder);
     Ok(())
 }
 
-fn play_app_sound_async(sound: AppSound) {
-    std::thread::spawn(move || {
-        if let Err(e) = play_app_sound_blocking(sound) {
-            eprintln!("Failed to play app sound: {e}");
-        }
-    });
+fn nonzero_sample_rate(value: u32) -> SampleRate {
+    SampleRate::new(value).expect("sample rate must be greater than zero")
+}
+
+fn nonzero_channels(value: u16) -> ChannelCount {
+    ChannelCount::new(value).expect("channel count must be greater than zero")
 }
 
 fn fixed_command_output(program: &str, args: &[&str], max_bytes: usize) -> Result<String, String> {
@@ -1014,6 +1208,7 @@ pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(
 #[tauri::command]
 pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<bool, String> {
     let app_for_setup = app.clone();
+    let app_sounds = app.state::<AppSoundState>().handle();
     run_main_thread_setup(&app, move || {
         use gtk::prelude::*;
 
@@ -1218,6 +1413,7 @@ pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<boo
             let idle_label = idle_label.clone();
             let space_hint = space_hint.clone();
             let app = app.clone();
+            let app_sounds = app_sounds.clone();
             gtk::glib::timeout_add_seconds_local(1, move || {
                 if dismissed.get() {
                     return gtk::glib::ControlFlow::Break;
@@ -1239,16 +1435,16 @@ pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<boo
                     space_hint.set_markup(
                         "<span font='Sans 11' foreground='#9CA3AF'>Press <span foreground='#FFFFFF'>Space</span> to restart focus</span>"
                     );
-                    play_app_sound_async(AppSound::FocusSessionFailedLongIdle);
+                    app_sounds.play(AppSound::FocusSessionFailedLongIdle);
                     let _ = app.emit("idle-overlay-focus-failed", ());
                 } else if !focus_failed.get() && overlay_e.is_multiple_of(10) {
-                    play_app_sound_async(AppSound::IdleAlert);
+                    app_sounds.play(AppSound::IdleAlert);
                 }
                 gtk::glib::ControlFlow::Continue
             });
         }
 
-        play_app_sound_async(AppSound::IdleAlert);
+        app_sounds.play(AppSound::IdleAlert);
 
         // Send notification
         let _ = notify_rust::Notification::new()
@@ -1486,15 +1682,18 @@ pub fn show_break_overlay(_app: tauri::AppHandle, _break_seconds: u32) -> Result
 // ── Alert sound ──────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn play_app_sound(sound_id: String) -> Result<(), String> {
+pub fn play_app_sound(
+    sound_id: String,
+    app_sounds: State<'_, AppSoundState>,
+) -> Result<(), String> {
     let sound = AppSound::from_id(&sound_id)?;
-    play_app_sound_async(sound);
+    app_sounds.play(sound);
     Ok(())
 }
 
 #[tauri::command]
-pub fn play_alert_sound() {
-    play_app_sound_async(AppSound::EventNotification);
+pub fn play_alert_sound(app_sounds: State<'_, AppSoundState>) {
+    app_sounds.play(AppSound::EventNotification);
 }
 
 #[tauri::command]
@@ -1504,11 +1703,12 @@ pub fn show_event_notification(
     body: String,
     open_calendar: Option<bool>,
     play_sound: Option<bool>,
+    app_sounds: State<'_, AppSoundState>,
 ) {
+    if play_sound.unwrap_or(true) {
+        app_sounds.play(AppSound::EventNotification);
+    }
     std::thread::spawn(move || {
-        if play_sound.unwrap_or(true) {
-            play_app_sound_async(AppSound::EventNotification);
-        }
         let summary = notification_summary(&title);
         let body = escape_notification_markup(&body);
         let opens_calendar = open_calendar.unwrap_or(false);
@@ -1547,9 +1747,14 @@ pub fn show_event_notification(
 }
 
 #[tauri::command]
-pub fn show_benchmark_notification(app: tauri::AppHandle, title: String, body: String) {
+pub fn show_benchmark_notification(
+    app: tauri::AppHandle,
+    title: String,
+    body: String,
+    app_sounds: State<'_, AppSoundState>,
+) {
+    app_sounds.play(AppSound::EventNotification);
     std::thread::spawn(move || {
-        play_app_sound_async(AppSound::EventNotification);
         let result = Notification::new()
             .summary(&title)
             .body(&body)
@@ -1575,9 +1780,13 @@ pub fn show_benchmark_notification(app: tauri::AppHandle, title: String, body: S
 }
 
 #[tauri::command]
-pub fn show_doomscrolling_desktop_block_notification(app: tauri::AppHandle, app_name: String) {
+pub fn show_doomscrolling_desktop_block_notification(
+    app: tauri::AppHandle,
+    app_name: String,
+    app_sounds: State<'_, AppSoundState>,
+) {
+    app_sounds.play(AppSound::EventNotification);
     std::thread::spawn(move || {
-        play_app_sound_async(AppSound::EventNotification);
         let app_name = app_name
             .lines()
             .next()
@@ -1799,11 +2008,12 @@ pub fn show_pomodoro_notification(
     app: tauri::AppHandle,
     remaining_seconds: u32,
     allow_add_time: Option<bool>,
+    app_sounds: State<'_, AppSoundState>,
 ) {
     let timeout_ms = remaining_seconds * 1000;
 
+    app_sounds.play(AppSound::FocusEndingWarning);
     std::thread::spawn(move || {
-        play_app_sound_async(AppSound::FocusEndingWarning);
         let mut notification = Notification::new();
         notification.summary("Focus session ending in 1 minute");
         if allow_add_time.unwrap_or(true) {

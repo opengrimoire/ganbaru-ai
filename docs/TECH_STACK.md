@@ -14,6 +14,8 @@ Desktop (Windows, Linux) is the primary target. Mobile (iOS, Android via Tauri v
 
 The backend of the Tauri app. Handles everything that requires OS-level access: process management, global mouse polling, file system operations, native messaging with the browser extension, system tray, local file I/O for the markdown vault, Rust-backed local audio playback through the internal media player module, the local video loopback fallback, and desktop activity monitoring (active window tracking, idle detection, app-switch counting). Rust is not optional here; it is the layer that makes the OS-level features possible from a web-based frontend.
 
+Short app sound effects are also played from Rust. The packaged app sounds are standardized as 48 kHz stereo 16-bit PCM WAV files and use a dedicated app-sound output path separate from the user media player. See `docs/features/app-sounds.md`.
+
 On mobile, Rust still runs as the Tauri core but OS-level features like process management, global mouse events, and desktop activity monitoring are unavailable or sandboxed. The mobile Rust layer focuses on file system access, SQLite, the Yjs persistence layer, and audio playback.
 
 ### TypeScript

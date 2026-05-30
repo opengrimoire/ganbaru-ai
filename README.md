@@ -135,7 +135,7 @@ Ganbaru AI is donation-funded. Sponsorship will be set up after a minimum stable
 
 ### Sound effects
 
-Sound effects live in `apps/client/static/sfx/`. App assets are stored as 16-bit PCM WAV files and are sourced from [Freesound](https://freesound.org/) under Attribution 4.0 and CC0 licenses.
+Sound effects live in `apps/client/static/sfx/`. App assets are stored as 48 kHz stereo 16-bit PCM WAV files and are sourced from [Freesound](https://freesound.org/) under Attribution 4.0 and CC0 licenses. See `docs/features/app-sounds.md` for the asset format and playback rules.
 
 <table>
   <thead>

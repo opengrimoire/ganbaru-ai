@@ -665,6 +665,7 @@ pub fn run() {
             focus_main_window_for_second_launch(app);
         }))
         .manage(db_path::DatabaseState::default())
+        .manage(notification::AppSoundState::default())
         .manage(media_player::MediaPlayerState::default())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
