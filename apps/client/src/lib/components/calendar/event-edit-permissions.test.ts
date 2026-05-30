@@ -3,6 +3,7 @@ import type { Calendar, CalendarEvent } from "./types";
 import {
   getCalendarEventEditLock,
   hasCalendarEventEnded,
+  hasCalendarEventStarted,
   isImportedCalendar,
 } from "./event-edit-permissions";
 
@@ -52,9 +53,34 @@ describe("calendar event edit permissions", () => {
     }), NOW)).toBe(true);
   });
 
+  it("detects started cross-midnight events before they end", () => {
+    const activeOvernight = event({
+      start: "2026-05-25 21:00",
+      end: "2026-05-26 05:00",
+    });
+    const duringEvent = new Date("2026-05-26T01:30:00");
+
+    expect(hasCalendarEventStarted(activeOvernight, duringEvent)).toBe(true);
+    expect(hasCalendarEventEnded(activeOvernight, duringEvent)).toBe(false);
+  });
+
+  it("uses the calendar date for all-day started detection", () => {
+    expect(hasCalendarEventStarted(event({
+      allDay: true,
+      start: "2026-05-26 00:00",
+      end: "2026-05-26 00:00",
+    }), NOW)).toBe(true);
+
+    expect(hasCalendarEventStarted(event({
+      allDay: true,
+      start: "2026-05-27 00:00",
+      end: "2026-05-27 00:00",
+    }), NOW)).toBe(false);
+  });
+
   it("locks past imported events while allowing archive from the read-only panel", () => {
     const lock = getCalendarEventEditLock(
-      event({ calendarId: "ics", end: "2026-05-25 11:00" }),
+      event({ calendarId: "ics", start: "2026-05-25 10:00", end: "2026-05-25 11:00" }),
       [calendar({ id: "ics", source: "ics" })],
       { now: NOW },
     );
@@ -76,9 +102,36 @@ describe("calendar event edit permissions", () => {
     expect(lock.locked).toBe(false);
   });
 
+  it("locks started local events while allowing archive from the read-only panel", () => {
+    const lock = getCalendarEventEditLock(
+      event({
+        start: "2026-05-25 21:00",
+        end: "2026-05-26 15:00",
+      }),
+      [calendar()],
+      { now: NOW },
+    );
+
+    expect(lock).toEqual({
+      locked: true,
+      reason: "started",
+      allowArchive: true,
+    });
+  });
+
+  it("keeps future local events editable", () => {
+    const lock = getCalendarEventEditLock(
+      event({ start: "2026-05-27 10:00", end: "2026-05-27 11:00" }),
+      [calendar()],
+      { now: NOW },
+    );
+
+    expect(lock.locked).toBe(false);
+  });
+
   it("locks read-only calendars before source-specific rules", () => {
     const lock = getCalendarEventEditLock(
-      event({ calendarId: "ics", end: "2026-05-25 11:00" }),
+      event({ calendarId: "ics", start: "2026-05-25 10:00", end: "2026-05-25 11:00" }),
       [calendar({ id: "ics", source: "ics", readOnly: true })],
       { now: NOW },
     );
@@ -93,6 +146,7 @@ describe("calendar event edit permissions", () => {
   it("keeps the existing past pomodoro archive affordance for local events", () => {
     const lock = getCalendarEventEditLock(
       event({
+        start: "2026-05-25 10:00",
         end: "2026-05-25 11:00",
         pomodoroConfig: {
           focusDurationMinutes: 25,
@@ -111,5 +165,25 @@ describe("calendar event edit permissions", () => {
       reason: "past-pomodoro",
       allowArchive: true,
     });
+  });
+
+  it("keeps active pomodoro events editable so they can be ended", () => {
+    const lock = getCalendarEventEditLock(
+      event({
+        start: "2026-05-25 10:00",
+        end: "2026-05-25 11:00",
+        pomodoroConfig: {
+          focusDurationMinutes: 25,
+          shortBreakMinutes: 5,
+          longBreakMinutes: 15,
+          pomodoroCount: 4,
+          idleTimeoutMinutes: null,
+        },
+      }),
+      [calendar()],
+      { now: NOW, isActivePomodoroEvent: true },
+    );
+
+    expect(lock).toEqual({ locked: false, allowArchive: false });
   });
 });

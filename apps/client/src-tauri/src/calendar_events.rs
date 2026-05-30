@@ -614,7 +614,7 @@ async fn apply_recurrence_commit_operations_tx(
     for operation in operations {
         match operation {
             CalendarRecurrenceCommitOperation::UpdateEvent { patch } => {
-                update_calendar_event_tx(tx, &patch).await?;
+                update_calendar_event_unchecked_tx(tx, &patch).await?;
             }
             CalendarRecurrenceCommitOperation::DetachInstance { input } => {
                 detach_calendar_instance_tx(tx, &input).await?;
@@ -1169,6 +1169,19 @@ async fn ensure_no_open_runs_for_event(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     context: &CalendarEventMutationContext,
 ) -> Result<(), String> {
+    if event_has_open_pomodoro_run(tx, context).await? {
+        return Err(format!(
+            "calendar event '{}' has an active pomodoro run; stop it before deleting or archiving",
+            context.id
+        ));
+    }
+    Ok(())
+}
+
+async fn event_has_open_pomodoro_run(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    context: &CalendarEventMutationContext,
+) -> Result<bool, String> {
     let count: i64 = if context.synthetic {
         let occurrence_date = context
             .occurrence_date
@@ -1200,13 +1213,7 @@ async fn ensure_no_open_runs_for_event(
         .await
         .map_err(|e| format!("count active pomodoro runs: {e}"))?
     };
-    if count > 0 {
-        return Err(format!(
-            "calendar event '{}' has an active pomodoro run; stop it before deleting or archiving",
-            context.id
-        ));
-    }
-    Ok(())
+    Ok(count > 0)
 }
 
 async fn ensure_no_open_runs_for_scope(
@@ -1753,6 +1760,14 @@ async fn update_calendar_event_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     patch: &CalendarEventUpdate,
 ) -> Result<(), String> {
+    ensure_calendar_event_update_allowed(tx, patch).await?;
+    update_calendar_event_unchecked_tx(tx, patch).await
+}
+
+async fn update_calendar_event_unchecked_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    patch: &CalendarEventUpdate,
+) -> Result<(), String> {
     validate_event_update(patch)?;
     for field in &patch.fields {
         apply_update_field(tx, &patch.id, field).await?;
@@ -1847,6 +1862,29 @@ async fn update_calendar_event_tx(
         return Err(format!("calendar event '{}' not found", patch.id));
     }
     Ok(())
+}
+
+async fn ensure_calendar_event_update_allowed(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    patch: &CalendarEventUpdate,
+) -> Result<(), String> {
+    let target = CalendarEventMutationTarget {
+        id: patch.id.clone(),
+        occurrence_start: None,
+        occurrence_end: None,
+    };
+    let now = current_utc_iso(tx).await?;
+    let context = load_mutation_context(tx, &target).await?;
+    if !is_protected_event(tx, &context, &now).await? {
+        return Ok(());
+    }
+    if event_has_open_pomodoro_run(tx, &context).await? {
+        return Ok(());
+    }
+    Err(format!(
+        "calendar event '{}' is protected; archive it instead",
+        context.id
+    ))
 }
 
 #[tauri::command]
@@ -2925,12 +2963,12 @@ mod tests {
         apply_delete_archive_operations_tx, apply_recurrence_commit_operations_tx,
         apply_update_field, archive_calendar_event_tx, cap_calendar_series_tx,
         delete_calendar_event_tx, filter_excluded_dates, insert_calendar_event_row,
-        restore_archived_calendar_event_tx, sanitize_stored_event_description, validate_color,
-        validate_event_create, validate_non_negative, validate_positive, validate_priority,
-        validate_update_field, CalendarActiveEventReferenceTransfer,
-        CalendarDeleteArchiveOperation, CalendarDetachInstance, CalendarEventCreate,
-        CalendarEventMutationTarget, CalendarEventUpdate, CalendarEventUpdateField,
-        CalendarRecurrenceCommitOperation,
+        restore_archived_calendar_event_tx, sanitize_stored_event_description,
+        update_calendar_event_tx, validate_color, validate_event_create, validate_non_negative,
+        validate_positive, validate_priority, validate_update_field,
+        CalendarActiveEventReferenceTransfer, CalendarDeleteArchiveOperation,
+        CalendarDetachInstance, CalendarEventCreate, CalendarEventMutationTarget,
+        CalendarEventUpdate, CalendarEventUpdateField, CalendarRecurrenceCommitOperation,
     };
 
     fn event_create() -> CalendarEventCreate {
@@ -3155,6 +3193,115 @@ mod tests {
             .unwrap();
             assert_eq!(live_count, 0);
             assert_eq!(archived_title, "");
+        });
+    }
+
+    #[test]
+    fn protected_event_update_rejects_without_open_run() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event_at(
+                &pool,
+                "event-1",
+                "2000-05-09T10:00:00Z",
+                "2000-05-09T11:00:00Z",
+                None,
+            )
+            .await;
+
+            let mut tx = pool.begin().await.unwrap();
+            let err = update_calendar_event_tx(
+                &mut tx,
+                &CalendarEventUpdate {
+                    id: "event-1".to_string(),
+                    updated_at: "2026-05-09T10:30:00Z".to_string(),
+                    fields: vec![CalendarEventUpdateField::Title("Changed".to_string())],
+                    attendees: None,
+                    alarms: None,
+                    pomodoro_config: None,
+                },
+            )
+            .await
+            .unwrap_err();
+            tx.rollback().await.unwrap();
+
+            assert!(err.contains("protected"));
+            let title: String =
+                sqlx::query_scalar("SELECT title FROM calendar_events WHERE id = 'event-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(title, "");
+        });
+    }
+
+    #[test]
+    fn future_event_update_succeeds() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event_at(
+                &pool,
+                "event-1",
+                "2999-05-09T10:00:00Z",
+                "2999-05-09T11:00:00Z",
+                None,
+            )
+            .await;
+
+            let mut tx = pool.begin().await.unwrap();
+            update_calendar_event_tx(
+                &mut tx,
+                &CalendarEventUpdate {
+                    id: "event-1".to_string(),
+                    updated_at: "2026-05-09T10:30:00Z".to_string(),
+                    fields: vec![CalendarEventUpdateField::Title("Changed".to_string())],
+                    attendees: None,
+                    alarms: None,
+                    pomodoro_config: None,
+                },
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+
+            let title: String =
+                sqlx::query_scalar("SELECT title FROM calendar_events WHERE id = 'event-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(title, "Changed");
+        });
+    }
+
+    #[test]
+    fn active_pomodoro_event_update_succeeds() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event(&pool, "event-1", "").await;
+            insert_test_open_pomodoro_run(&pool).await;
+
+            let mut tx = pool.begin().await.unwrap();
+            update_calendar_event_tx(
+                &mut tx,
+                &CalendarEventUpdate {
+                    id: "event-1".to_string(),
+                    updated_at: "2026-05-09T10:30:00Z".to_string(),
+                    fields: vec![CalendarEventUpdateField::Title("Changed".to_string())],
+                    attendees: None,
+                    alarms: None,
+                    pomodoro_config: None,
+                },
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+
+            let title: String =
+                sqlx::query_scalar("SELECT title FROM calendar_events WHERE id = 'event-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(title, "Changed");
         });
     }
 

@@ -4,7 +4,8 @@ import { formatDatePart, parseCalendarDate } from "./utils";
 export type CalendarEventEditLockReason =
   | "read-only-calendar"
   | "past-imported"
-  | "past-pomodoro";
+  | "past-pomodoro"
+  | "started";
 
 export interface CalendarEventEditLock {
   locked: boolean;
@@ -26,6 +27,15 @@ export function hasCalendarEventEnded(event: CalendarEvent, now: Date = new Date
   return Number.isFinite(endMs) && endMs < now.getTime();
 }
 
+export function hasCalendarEventStarted(event: CalendarEvent, now: Date = new Date()): boolean {
+  if (event.allDay) {
+    return event.start.split(" ")[0] <= formatDatePart(now);
+  }
+
+  const startMs = parseCalendarDate(event.start).getTime();
+  return Number.isFinite(startMs) && startMs <= now.getTime();
+}
+
 export function isImportedCalendar(calendar: Calendar | undefined): boolean {
   return calendar !== undefined && calendar.source !== "local";
 }
@@ -40,14 +50,18 @@ export function getCalendarEventEditLock(
     return { locked: true, reason: "read-only-calendar", allowArchive: false };
   }
 
-  const ended = hasCalendarEventEnded(event, options.now ?? new Date());
-  if (ended && isImportedCalendar(calendar)) {
+  const started = hasCalendarEventStarted(event, options.now ?? new Date());
+  if (!started || options.isActivePomodoroEvent === true) {
+    return { locked: false, allowArchive: false };
+  }
+
+  if (isImportedCalendar(calendar)) {
     return { locked: true, reason: "past-imported", allowArchive: true };
   }
 
-  if (ended && event.pomodoroConfig && options.isActivePomodoroEvent !== true) {
+  if (event.pomodoroConfig) {
     return { locked: true, reason: "past-pomodoro", allowArchive: true };
   }
 
-  return { locked: false, allowArchive: false };
+  return { locked: true, reason: "started", allowArchive: true };
 }
