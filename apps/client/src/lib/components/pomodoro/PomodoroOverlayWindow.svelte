@@ -1,19 +1,24 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { emit } from "@tauri-apps/api/event";
+  import { emit, listen } from "@tauri-apps/api/event";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { APP_SOUND_IDS, playAppSound } from "$lib/app-sounds";
   import { IDLE_FOCUS_FAILURE_DELAY_SECONDS } from "$lib/stores/pomodoro-machine";
   import {
+    POMODORO_OVERLAY_BLOCKER_ACTION_EVENT,
     delayUntil,
     elapsedSecondsSince,
     nextIntervalTargetAfter,
+    parsePomodoroOverlayBlockerAction,
     remainingSecondsUntil,
     shouldScheduleIdleAlert,
   } from "./blocked-screen";
   import PomodoroBlockedScreen from "./PomodoroBlockedScreen.svelte";
-  import type { PomodoroBlockedScreenState } from "./blocked-screen";
+  import type {
+    PomodoroOverlayBlockerAction,
+    PomodoroBlockedScreenState,
+  } from "./blocked-screen";
 
   const IDLE_ALERT_INTERVAL_MS = 10_000;
   const MAX_BREAK_EXTENSION_MINUTES = 3;
@@ -191,13 +196,14 @@
     closeOverlay();
   }
 
-  function handleKeydown(event: KeyboardEvent): void {
-    event.preventDefault();
-    event.stopPropagation();
-    event.stopImmediatePropagation();
-
+  function handleKeyCommand(command: {
+    code: string;
+    key: string;
+    ctrlKey: boolean;
+    shiftKey: boolean;
+  }): void {
     if (mode.kind === "idle") {
-      if (event.code === "Space") {
+      if (command.code === "Space") {
         void resumeIdle();
       }
       return;
@@ -208,12 +214,12 @@
       return;
     }
 
-    if (event.code === "Space" && event.ctrlKey && event.shiftKey) {
+    if (command.code === "Space" && command.ctrlKey && command.shiftKey) {
       void extendBreak();
       return;
     }
 
-    if (event.key === "Escape") {
+    if (command.key === "Escape") {
       escPresses = Math.min(3, escPresses + 1);
       if (escPresses >= 3) {
         void skipBreak();
@@ -224,10 +230,35 @@
     escPresses = 0;
   }
 
+  function handleKeydown(event: KeyboardEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    handleKeyCommand({
+      code: event.code,
+      key: event.key,
+      ctrlKey: event.ctrlKey,
+      shiftKey: event.shiftKey,
+    });
+  }
+
   function handleClick(): void {
     if (mode.kind === "break" && screenState === "break_finished") {
       void acknowledgeBreak();
     }
+  }
+
+  function handleBlockerAction(action: PomodoroOverlayBlockerAction): void {
+    if (action.kind === "pointer") {
+      if (mode.kind === "break" && screenState === "break_finished") {
+        void acknowledgeBreak();
+      } else {
+        reinforceFullscreen();
+      }
+      return;
+    }
+
+    handleKeyCommand(action);
   }
 
   function afterNextPaint(callback: () => void): () => void {
@@ -257,6 +288,16 @@
       setTimeout(reinforceFullscreen, 1000),
     ];
     const focusIntervalId = setInterval(reinforceFullscreen, 2000);
+    const unlistenBlockerActionPromise = listen<unknown>(
+      POMODORO_OVERLAY_BLOCKER_ACTION_EVENT,
+      (event) => {
+        const action = parsePomodoroOverlayBlockerAction(event.payload);
+        if (action !== null) handleBlockerAction(action);
+      },
+    ).catch((error) => {
+      console.warn("Failed to listen for pomodoro blocker actions:", error);
+      return null;
+    });
     tick();
     window.addEventListener("keydown", handleKeydown, true);
 
@@ -282,6 +323,9 @@
 
       return () => {
         cancelIdlePaintSideEffects();
+        void unlistenBlockerActionPromise.then((unlisten) => {
+          unlisten?.();
+        });
         for (const id of fullscreenTimerIds) clearTimeout(id);
         clearInterval(focusIntervalId);
         window.removeEventListener("keydown", handleKeydown, true);
@@ -297,6 +341,9 @@
 
     return () => {
       cancelBreakStartSound();
+      void unlistenBlockerActionPromise.then((unlisten) => {
+        unlisten?.();
+      });
       for (const id of fullscreenTimerIds) clearTimeout(id);
       clearInterval(focusIntervalId);
       window.removeEventListener("keydown", handleKeydown, true);

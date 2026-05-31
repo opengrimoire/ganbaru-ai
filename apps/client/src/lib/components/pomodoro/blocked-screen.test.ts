@@ -6,6 +6,7 @@ import {
   formatBlockedScreenDateTime,
   formatBlockedScreenDuration,
   nextIntervalTargetAfter,
+  parsePomodoroOverlayBlockerAction,
   parsePomodoroBlockedScreenState,
   pomodoroBlockedScreenPalette,
   pomodoroBlockedScreenCopy,
@@ -65,6 +66,28 @@ describe("blocked pomodoro screen helpers", () => {
     expect(parsePomodoroBlockedScreenState("unknown")).toBe("break_countdown");
     expect(pomodoroBlockedScreenStateFromOverlayKind("idle")).toBe("idle");
     expect(pomodoroBlockedScreenStateFromOverlayKind("break")).toBe("break_countdown");
+  });
+
+  it("parses blocker actions from unknown event payloads", () => {
+    expect(parsePomodoroOverlayBlockerAction({ kind: "pointer" })).toEqual({
+      kind: "pointer",
+    });
+    expect(
+      parsePomodoroOverlayBlockerAction({
+        kind: "keydown",
+        code: "Space",
+        key: " ",
+        ctrlKey: true,
+      }),
+    ).toEqual({
+      kind: "keydown",
+      code: "Space",
+      key: " ",
+      ctrlKey: true,
+      shiftKey: false,
+    });
+    expect(parsePomodoroOverlayBlockerAction({ kind: "keydown", code: "Space" })).toBeNull();
+    expect(parsePomodoroOverlayBlockerAction(null)).toBeNull();
   });
 
   it("computes remaining seconds from an absolute target", () => {

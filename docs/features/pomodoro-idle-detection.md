@@ -47,7 +47,7 @@ The overlay says, in effect, "you have been idle for X minutes; the timer has pa
 
 The idle overlay does not expose a stop action. To stop the focus session intentionally, the user must cut the active block event from the event panel.
 
-Like the break screen, the idle overlay uses a Svelte visual surface inside a Rust/Tauri-enforced fullscreen overlay window. The primary monitor shows the interactive idle state, and additional monitors use fullscreen blocker windows with the same state background color. See `features/pomodoro-break-screen.md` for the enforcement model.
+Like the break screen, the idle overlay uses a Svelte visual surface inside a Rust/Tauri-enforced fullscreen overlay window. The primary monitor shows the interactive idle state, and additional monitors use fullscreen blocker windows with the same state background color. Secondary blocker clicks refocus the main overlay, and Svelte blocker keydown forwarding is best-effort on platforms that use webview blockers. See `features/pomodoro-break-screen.md` for the enforcement model.
 
 ## What happens when idle is detected
 

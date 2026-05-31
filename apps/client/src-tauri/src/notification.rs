@@ -766,6 +766,7 @@ fn screensaver_inhibit() -> Option<u32> {
 fn screensaver_uninhibit(_cookie: u32) {}
 
 const POMODORO_OVERLAY_MAIN_LABEL: &str = "pomodoro-overlay-main";
+const POMODORO_OVERLAY_BLOCKER_ACTION_EVENT: &str = "pomodoro-overlay-blocker-action";
 const POMODORO_OVERLAY_STATE_CHANGED_EVENT: &str = "pomodoro-overlay-state-changed";
 #[cfg(not(target_os = "linux"))]
 const POMODORO_OVERLAY_BLOCKER_PREFIX: &str = "pomodoro-overlay-blocker";
@@ -806,6 +807,11 @@ struct OverlayColor {
 #[derive(Clone, Serialize)]
 struct PomodoroOverlayStateChangedPayload {
     state: String,
+}
+
+#[derive(Clone, Serialize)]
+struct PomodoroOverlayBlockerActionPayload {
+    kind: String,
 }
 
 impl OverlayColor {
@@ -1170,6 +1176,7 @@ fn linux_primary_monitor_index(
 
 #[cfg(target_os = "linux")]
 fn build_linux_native_blocker_windows(
+    app: &tauri::AppHandle,
     primary_monitor: &tauri::window::Monitor,
     background_color: OverlayColor,
 ) -> Result<(), String> {
@@ -1199,6 +1206,7 @@ fn build_linux_native_blocker_windows(
         window.set_app_paintable(true);
         window.set_accept_focus(false);
         window.set_focus_on_map(false);
+        window.add_events(gtk::gdk::EventMask::BUTTON_PRESS_MASK);
         let color = std::rc::Rc::new(std::cell::Cell::new(background_color));
         let draw_color = std::rc::Rc::clone(&color);
         window.connect_draw(move |_, cr| {
@@ -1207,6 +1215,18 @@ fn build_linux_native_blocker_windows(
             cr.set_source_rgb(red, green, blue);
             let _ = cr.paint();
             gtk::glib::Propagation::Proceed
+        });
+        let click_app = app.clone();
+        window.connect_button_press_event(move |_, event| {
+            if event.button() == 1 {
+                let _ = click_app.emit(
+                    POMODORO_OVERLAY_BLOCKER_ACTION_EVENT,
+                    PomodoroOverlayBlockerActionPayload {
+                        kind: "pointer".to_string(),
+                    },
+                );
+            }
+            gtk::glib::Propagation::Stop
         });
         window.fullscreen_on_monitor(&screen, index);
         window.show_all();
@@ -1249,7 +1269,9 @@ fn show_pomodoro_overlay(app: tauri::AppHandle, kind: PomodoroOverlayKind) -> Re
         let primary_monitor = &monitors[primary_idx];
 
         #[cfg(target_os = "linux")]
-        if let Err(err) = build_linux_native_blocker_windows(primary_monitor, background_color) {
+        if let Err(err) =
+            build_linux_native_blocker_windows(&app_for_setup, primary_monitor, background_color)
+        {
             eprintln!("failed to create Linux secondary monitor blockers: {err}");
         }
 

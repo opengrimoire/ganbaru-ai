@@ -1,10 +1,12 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { listen } from "@tauri-apps/api/event";
+  import { emit, listen } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import {
+    POMODORO_OVERLAY_BLOCKER_ACTION_EVENT,
     parsePomodoroBlockedScreenState,
     pomodoroBlockedScreenPalette,
+    type PomodoroOverlayBlockerAction,
     type PomodoroBlockedScreenState,
   } from "./blocked-screen";
 
@@ -35,6 +37,28 @@
     if ("stopImmediatePropagation" in event) event.stopImmediatePropagation();
   }
 
+  function emitBlockerAction(payload: PomodoroOverlayBlockerAction): void {
+    emit(POMODORO_OVERLAY_BLOCKER_ACTION_EVENT, payload).catch((error) => {
+      console.warn("Failed to forward pomodoro blocker action:", error);
+    });
+  }
+
+  function handleClick(event: MouseEvent): void {
+    blockEvent(event);
+    emitBlockerAction({ kind: "pointer" });
+  }
+
+  function handleKeydown(event: KeyboardEvent): void {
+    blockEvent(event);
+    emitBlockerAction({
+      kind: "keydown",
+      code: event.code,
+      key: event.key,
+      ctrlKey: event.ctrlKey,
+      shiftKey: event.shiftKey,
+    });
+  }
+
   onMount(() => {
     const appWindow = getCurrentWindow();
     const unlistenPromise = listen<PomodoroOverlayStateChangedPayload>(
@@ -56,14 +80,16 @@
       setTimeout(reinforce, 500),
       setTimeout(reinforce, 1000),
     ];
-    window.addEventListener("keydown", blockEvent, true);
+    window.addEventListener("click", handleClick, true);
+    window.addEventListener("keydown", handleKeydown, true);
     window.addEventListener("contextmenu", blockEvent, true);
     return () => {
       void unlistenPromise.then((unlisten) => {
         unlisten?.();
       });
       for (const id of timerIds) clearTimeout(id);
-      window.removeEventListener("keydown", blockEvent, true);
+      window.removeEventListener("click", handleClick, true);
+      window.removeEventListener("keydown", handleKeydown, true);
       window.removeEventListener("contextmenu", blockEvent, true);
     };
   });

@@ -20,6 +20,8 @@ The break screen has one visual implementation and a native enforcement layer.
 
 For multi-monitor setups, the primary monitor gets the full Svelte overlay UI. Additional monitors get fullscreen blocker windows using the active state's background color. They do not carry controls; they exist to remove useful work surfaces while the break is enforced. On Linux these blockers use the native GTK/GDK monitor APIs because they are more reliable than webview monitor placement on Wayland.
 
+Secondary blockers forward safe input back to the main overlay. A click on a secondary blocker acknowledges the break if the break-complete screen is active; otherwise it refocuses the main overlay. On platforms where secondary blockers are Svelte webviews, blocker keydown events are forwarded to the main overlay as best-effort input. On Linux native blockers, keyboard handling stays owned by the main overlay because taking focus on secondary blockers would make shortcut behavior less predictable.
+
 The countdown is anchored to an absolute break end timestamp, not to a relative duration captured before the overlay opens. If the webview takes time to appear, the displayed time reflects the real phase time that has already passed. The break-start sound is triggered by the Svelte overlay after the surface has painted, so the user hears it with the blocked screen instead of before it.
 
 During the countdown, the top of the screen shows the current date and time using the user's runtime locale. The break-complete screen hides this timestamp because it is an acknowledgement state, not a timed break state.

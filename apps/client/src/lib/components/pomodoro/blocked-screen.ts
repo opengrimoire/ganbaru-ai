@@ -4,6 +4,9 @@ export type PomodoroBlockedScreenState =
   | "break_countdown"
   | "break_finished";
 
+export const POMODORO_OVERLAY_BLOCKER_ACTION_EVENT =
+  "pomodoro-overlay-blocker-action";
+
 export interface PomodoroBlockedScreenActionHint {
   key: string;
   label: string;
@@ -24,6 +27,45 @@ export interface PomodoroBlockedScreenPalette {
   mainText: string;
   mutedText: string;
   subtleText: string;
+}
+
+export type PomodoroOverlayBlockerAction =
+  | { kind: "pointer" }
+  | {
+      kind: "keydown";
+      code: string;
+      key: string;
+      ctrlKey: boolean;
+      shiftKey: boolean;
+    };
+
+function isPayloadRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function optionalBoolean(value: unknown): boolean {
+  return typeof value === "boolean" ? value : false;
+}
+
+export function parsePomodoroOverlayBlockerAction(
+  payload: unknown,
+): PomodoroOverlayBlockerAction | null {
+  if (!isPayloadRecord(payload)) return null;
+  if (payload.kind === "pointer") return { kind: "pointer" };
+  if (
+    payload.kind === "keydown" &&
+    typeof payload.code === "string" &&
+    typeof payload.key === "string"
+  ) {
+    return {
+      kind: "keydown",
+      code: payload.code,
+      key: payload.key,
+      ctrlKey: optionalBoolean(payload.ctrlKey),
+      shiftKey: optionalBoolean(payload.shiftKey),
+    };
+  }
+  return null;
 }
 
 function hexToRgba(hex: string, alpha: number): string {
