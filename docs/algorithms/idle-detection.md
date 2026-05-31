@@ -57,11 +57,13 @@ When idle is detected:
 1. Read the active run's `id` and the active segment's `id`.
 2. Create a row in `pomodoro_pauses`:
    - `segment_id = active_segment.id`
-   - `started_at = now`
+   - `started_at = detected_idle_start` (`now - os_reported_idle_time`, clamped to the active segment start if needed)
    - `ended_at = NULL`
    - `reason = idle`
 3. Pause the timer (the application state stops decrementing remaining seconds). The active segment's `actual_end` is not set; the segment is still active, just paused.
 4. Show the idle overlay (see `features/pomodoro-idle-detection.md`).
+
+The idle pause is backdated to the detected idle start, not stamped at the detection moment. This keeps the database, rail, and visible idle timer aligned with the real time the user stopped interacting.
 
 Multiple idle pauses within a single segment are allowed. If the user becomes idle, returns, becomes idle again (each time exceeding the threshold), each idle period gets its own pause row.
 
@@ -74,22 +76,21 @@ This differs from idle, where `ended_at` is null until the user explicitly resum
 
 ## Resume flow
 
-When the user provides input after an idle pause:
-
-1. The system detects input via the OS's input layer (the same mechanism as the activity sensor).
-2. The active idle pause is closed: `ended_at = now`.
-3. The timer resumes: the remaining seconds from the moment of pause are restored, and the countdown continues.
-4. The idle overlay is dismissed if it was still showing.
-5. The rail's green fill picks up from `now`. The segment now has two green bands separated by the pause.
-
-If the user clicks the "stop" option on the idle overlay instead of resuming:
+When the user resumes from the idle overlay before focus failure:
 
 1. The active idle pause is closed: `ended_at = now`.
-2. The active segment is marked interrupted: `status = interrupted`, `actual_end = now`.
-3. The run is ended: `ended_at = now`, `end_reason = stopped`.
-4. The overlay is dismissed.
+2. The timer resumes from the remaining seconds at the detected idle start.
+3. The idle overlay is dismissed.
+4. The rail's green fill picks up from `now`. The segment now has two green bands separated by the pause.
 
-If the user dismisses the overlay without choosing (e.g. clicks outside, presses Esc once), the timer remains paused. The user can return at any time and resume or stop. The pause row stays open until a resume or stop happens.
+If the idle overlay remains visible for 60 seconds, focus failure is recorded:
+
+1. The active segment is marked interrupted: `status = interrupted`, `end_reason = focus_failed`, `actual_end = detected_idle_start`.
+2. A `focus_failed` run event is recorded with reason `long_idle`.
+3. The run stays open.
+4. When the user resumes, a fresh focus segment starts in the same run and Pomodoro cycle, with the full configured focus duration limited by the active event end time.
+
+The idle overlay does not expose a stop action or outside-click dismissal. Intentional stopping must go through the active block event's cut flow, not through the enforced idle surface.
 
 For suspend pauses, the flow is simpler: the pause is already closed by the time the user sees anything (the wake-detecting tick closed it). The system shows the suspend dialog, and the user chooses to resume or stop. If they resume, the timer continues from where it was. If they stop, the run ends with `end_reason = stopped` and the segment is marked interrupted with `actual_end = now`.
 

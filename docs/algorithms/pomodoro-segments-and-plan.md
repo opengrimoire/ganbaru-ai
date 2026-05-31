@@ -173,20 +173,19 @@ Same config, fresh session at 10:00. Idle threshold = 5 minutes.
 |------|-------|
 | 10:00 | Run created. Segment 1 created: focus, cycle 1, active. |
 | 10:15 | User steps away. No input. |
-| 10:20 | Idle detected (5 minutes of inactivity). Pause 1 created: `segment_id = Segment 1`, `started_at = 10:20`, `ended_at = NULL`, `reason = idle`. Timer pauses. |
-| 10:30 | User returns, clicks resume. Pause 1 updated: `ended_at = 10:30`. Timer resumes with the same remaining seconds (15 minutes). |
-| 10:45 | Focus completes (10:00 + 25 + 10 minutes pause = 10:35, wait, let me recompute). |
+| 10:20 | Idle detected (5 minutes of inactivity). Pause 1 created: `segment_id = Segment 1`, `started_at = 10:15`, `ended_at = NULL`, `reason = idle`. Timer pauses with 10 minutes remaining. |
+| 10:30 | User returns and resumes. Pause 1 updated: `ended_at = 10:30`. Timer resumes with the same remaining seconds (10 minutes). |
 
-Let me recompute. Focus duration is 25 minutes. The user worked 10:00-10:20 (20 min), paused 10:20-10:30, then resumed with 5 minutes of focus remaining. Focus completes at 10:35. The segment's `actual_end = 10:35`. Total elapsed time of the segment: 35 minutes. Total focus time: 25 minutes (5 of pause excluded).
+Focus duration is 25 minutes. The user worked 10:00-10:15 (15 minutes), paused 10:15-10:30, then resumed with 10 minutes of focus remaining. Focus completes at 10:40. The segment's `actual_end = 10:40`. Total elapsed time of the segment: 40 minutes. Total focus time: 25 minutes (15 minutes of pause excluded).
 
 Continuing:
 
 | Time | Event |
 |------|-------|
-| 10:35 | Focus complete. Segment 1: completed, `actual_end = 10:35`. Segment 2: short break, cycle 1, active. |
-| 10:40 | Break complete. Segment 2: completed. Segment 3: focus, cycle 2, active. |
+| 10:40 | Focus complete. Segment 1: completed, `actual_end = 10:40`. Segment 2: short break, cycle 1, active. |
+| 10:45 | Break complete. Segment 2: completed. Segment 3: focus, cycle 2, active. |
 
-The rail for Segment 1 shows green 10:00-10:20 and 10:30-10:35, with empty 10:20-10:30 (the pause).
+The rail for Segment 1 shows green 10:00-10:15 and 10:30-10:40, with empty 10:15-10:30 (the pause).
 
 ### Session interrupted by event end
 

@@ -63,7 +63,7 @@ The segment's `actual_end` is not set during the pause. The segment is still act
 
 Idle data and overlay timing use different anchors on purpose. The pause row is backdated to the operating system's detected idle start, so the database and rail do not count away time as focus. The 60-second focus-failure timer starts when the overlay becomes visible, so slow webview startup does not make the failure feel early or late to the user.
 
-If the overlay remains visible for 60 seconds, the active segment is marked `interrupted` with `end_reason = focus_failed`, and a `focus_failed` run event with reason `long_idle` is recorded. The segment's `actual_end` remains the idle pause start, so neither the idle minute nor the time after it counts as focus. The run stays open until the user either returns or stops the session.
+If the overlay remains visible for 60 seconds, the active segment is marked `interrupted` with `end_reason = focus_failed`, and a `focus_failed` run event with reason `long_idle` is recorded. The segment's `actual_end` remains the idle pause start, so neither the idle minute nor the time after it counts as focus. The run stays open until the user returns; intentional session stopping stays outside the idle overlay and must go through the active block event's cut flow.
 
 ## Resume flow
 
@@ -94,17 +94,17 @@ Idle detection is suppressed in several cases:
 
 ## App wake dialog
 
-When the app wakes from suspend (distinct from a focus idle pause), the system shows a small dialog instead of the full overlay: "the system was suspended for X minutes; the focus timer has been paused. What do you want to do?" The options are the same: resume, stop, or close the dialog.
+When the app wakes from suspend (distinct from a focus idle pause), the system shows a small dialog instead of the full overlay: "the system was suspended for X minutes; the focus timer has been paused. What do you want to do?" Suspend can offer resume, stop, or close because it is a recovery confirmation, not the enforced idle overlay.
 
 The dialog is less invasive than the overlay because suspend is a known external event, not a user behavior pattern. The user already knows the system was asleep; the dialog is a confirmation, not an enforcement.
 
 ## Example: idle pause and green fill splitting
 
-The user starts focus at 10:00 with a 5-minute idle threshold. They work until 10:15, then step away from the keyboard without pausing. At 10:20 (5 minutes of continuous inactivity), the system detects idle, creates a pause row (`started_at = 10:20, reason = idle`), pauses the timer, and shows the idle overlay. The user returns at 10:30 and clicks resume. The pause row gets `ended_at = 10:30`.
+The user starts focus at 10:00 with a 5-minute idle threshold. They work until 10:15, then step away from the keyboard without pausing. At 10:20 (5 minutes of continuous inactivity), the system detects idle, creates a pause row backdated to the operating system's detected idle start (`started_at = 10:15, reason = idle`), pauses the timer, and shows the idle overlay. The user returns at 10:30 and resumes. The pause row gets `ended_at = 10:30`.
 
-On the rail, the green fill for this segment shows two bands: 10:00-10:20 (working) and 10:30 onward (working again). The 10:20-10:30 gap is empty, honestly reflecting that the user was away. The timer resumes where it paused: if 15 minutes were remaining at 10:20, the timer still shows 15 minutes at 10:30.
+On the rail, the green fill for this segment shows two bands: 10:00-10:15 (working) and 10:30 onward (working again). The 10:15-10:30 gap is empty, honestly reflecting that the user was away. The timer resumes where the real focus ended: if 10 minutes were remaining at 10:15, the timer still shows 10 minutes at 10:30.
 
-Analytics later can compute: this segment had 1 idle pause of 10 minutes, total focus time was elapsed minus pauses.
+Analytics later can compute: this segment had 1 idle pause of 15 minutes, total focus time was elapsed minus pauses.
 
 ## Example: laptop suspend during focus
 
