@@ -3,6 +3,11 @@ import type {
 } from "./types";
 import { recurrenceConfigsEqual } from "./rrule";
 import { parseCalendarDate } from "./utils";
+import {
+  DEFAULT_FOCUS_IDLE_PAUSE_ON_EVENT_CREATE,
+  DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
+  clampFocusIdleThresholdMinutes,
+} from "$lib/stores/preferences";
 
 export type PanelAnchor = { x: number; y: number; width: number; height: number };
 
@@ -30,7 +35,26 @@ export interface CreatePreview {
   endDateStr?: string;
 }
 
-const IDLE_TIMEOUT_DEFAULT = 1;
+export interface FocusIdleEventDefaults {
+  pauseWhenIdle: boolean;
+  thresholdMinutes: number;
+}
+
+const STATIC_FOCUS_IDLE_DEFAULTS: FocusIdleEventDefaults = {
+  pauseWhenIdle: DEFAULT_FOCUS_IDLE_PAUSE_ON_EVENT_CREATE,
+  thresholdMinutes: DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
+};
+
+function normalizeFocusIdleDefaults(
+  defaults?: Partial<FocusIdleEventDefaults>,
+): FocusIdleEventDefaults {
+  return {
+    pauseWhenIdle: defaults?.pauseWhenIdle ?? STATIC_FOCUS_IDLE_DEFAULTS.pauseWhenIdle,
+    thresholdMinutes: clampFocusIdleThresholdMinutes(
+      defaults?.thresholdMinutes ?? STATIC_FOCUS_IDLE_DEFAULTS.thresholdMinutes,
+    ),
+  };
+}
 
 /**
  * Deep-equal comparison for a single field of a CalendarEvent patch.
@@ -51,14 +75,18 @@ function normalizeNotifications(notifications?: number[]): number[] | undefined 
   return [...new Set(notifications)].sort((a, b) => a - b);
 }
 
-function normalizePomodoroConfig(config?: PomodoroConfig): PomodoroConfig | undefined {
+function normalizePomodoroConfig(
+  config: PomodoroConfig | undefined,
+  focusIdleDefaults?: Partial<FocusIdleEventDefaults>,
+): PomodoroConfig | undefined {
   if (!config) return undefined;
+  const { thresholdMinutes } = normalizeFocusIdleDefaults(focusIdleDefaults);
   return {
     focusDurationMinutes: config.focusDurationMinutes,
     shortBreakMinutes: config.shortBreakMinutes,
     longBreakMinutes: config.longBreakMinutes,
     pomodoroCount: 4,
-    idleTimeoutMinutes: config.idleTimeoutMinutes !== null ? IDLE_TIMEOUT_DEFAULT : null,
+    idleTimeoutMinutes: config.idleTimeoutMinutes !== null ? thresholdMinutes : null,
   };
 }
 
@@ -83,7 +111,10 @@ function hasMeetingState(event: CalendarEvent): boolean {
  * mount, which otherwise makes event-panel opens wait for a second Svelte
  * flush before they can paint.
  */
-export function buildEditPanelInitialChanges(event: CalendarEvent): Partial<CalendarEvent> {
+export function buildEditPanelInitialChanges(
+  event: CalendarEvent,
+  focusIdleDefaults?: Partial<FocusIdleEventDefaults>,
+): Partial<CalendarEvent> {
   const meetingEnabled = hasMeetingState(event);
   return {
     title: event.title.trim(),
@@ -93,7 +124,7 @@ export function buildEditPanelInitialChanges(event: CalendarEvent): Partial<Cale
     description: event.description ?? "",
     recurrence: event.recurrence,
     notifications: normalizeNotifications(event.notifications),
-    pomodoroConfig: normalizePomodoroConfig(event.pomodoroConfig),
+    pomodoroConfig: normalizePomodoroConfig(event.pomodoroConfig, focusIdleDefaults),
     allDay: event.allDay || undefined,
     meetingEnabled: meetingEnabled || undefined,
     location: meetingEnabled && event.location ? event.location : undefined,
@@ -111,7 +142,13 @@ export function buildEditPanelInitialChanges(event: CalendarEvent): Partial<Cale
   };
 }
 
-export function buildCreatePanelInitialChanges(start: string, end: string, allDay?: boolean): Partial<CalendarEvent> {
+export function buildCreatePanelInitialChanges(
+  start: string,
+  end: string,
+  allDay?: boolean,
+  focusIdleDefaults?: Partial<FocusIdleEventDefaults>,
+): Partial<CalendarEvent> {
+  const { pauseWhenIdle, thresholdMinutes } = normalizeFocusIdleDefaults(focusIdleDefaults);
   return {
     title: "",
     start,
@@ -125,7 +162,7 @@ export function buildCreatePanelInitialChanges(start: string, end: string, allDa
       shortBreakMinutes: 5,
       longBreakMinutes: 10,
       pomodoroCount: 4,
-      idleTimeoutMinutes: IDLE_TIMEOUT_DEFAULT,
+      idleTimeoutMinutes: pauseWhenIdle ? thresholdMinutes : null,
     },
     allDay: allDay || undefined,
     meetingEnabled: undefined,
@@ -172,7 +209,9 @@ export function isDirtyDiff(
   return false;
 }
 
-export function createEditSession() {
+export function createEditSession(
+  getFocusIdleDefaults: () => Partial<FocusIdleEventDefaults> = () => STATIC_FOCUS_IDLE_DEFAULTS,
+) {
   let state = $state<EditSessionState>({ mode: "closed" });
   let changes = $state<Partial<CalendarEvent>>({});
   let baseline = $state<Partial<CalendarEvent>>({});
@@ -225,8 +264,10 @@ export function createEditSession() {
       anchor: PanelAnchor,
       instanceEvent?: CalendarEvent,
       detailsLoaded = false,
-      initialChanges = buildEditPanelInitialChanges(event),
+      initialChanges?: Partial<CalendarEvent>,
     ) {
+      const panelInitialChanges = initialChanges
+        ?? buildEditPanelInitialChanges(event, getFocusIdleDefaults());
       const templateId = event.recurringParentId ?? event.id;
       state = {
         mode: "edit",
@@ -237,8 +278,8 @@ export function createEditSession() {
         detailsLoaded,
         anchor,
       };
-      changes = { ...initialChanges };
-      baseline = { ...initialChanges };
+      changes = { ...panelInitialChanges };
+      baseline = { ...panelInitialChanges };
       scope = "this";
       createPreview = null;
     },
@@ -250,7 +291,12 @@ export function createEditSession() {
       // Seed the full panel baseline before mount. This keeps create preview
       // data available on the first frame and avoids a parent callback from
       // EventPanel during the opening flush.
-      const initial = buildCreatePanelInitialChanges(start, end, allDay);
+      const initial = buildCreatePanelInitialChanges(
+        start,
+        end,
+        allDay,
+        getFocusIdleDefaults(),
+      );
       changes = { ...initial };
       baseline = { ...initial };
 

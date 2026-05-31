@@ -34,9 +34,9 @@ A pomodoro config has five fields:
 | `shortBreakMinutes` | 5 | Break between focus periods within a cycle |
 | `longBreakMinutes` | 10 | Break after `pomodoroCount` focus periods |
 | `pomodoroCount` | 4 | Number of focus periods before a long break |
-| `idleTimeoutMinutes` | null | Auto-pause threshold; null disables idle detection |
+| `idleTimeoutMinutes` | 3 | Auto-pause threshold; null disables idle detection |
 
-Defaults are set globally in user settings. Each event can override any field. The override is per-event, not per-recurrence-instance: changing the config on a recurring template applies to all instances; changing it on a detached or split instance applies only to that instance and its forward continuations (see `features/calendar-recurrence.md`).
+Defaults are set globally in user settings. Focus settings control the idle threshold for new Pomodoro events and whether new events start with Pause on inactivity enabled. That default is enabled at 3 minutes, with a warning confirmation before turning it off. Each event stores its own config; the event panel can still turn Pause on inactivity off, which writes `null`. The override is per-event, not per-recurrence-instance: changing the config on a recurring template applies to all instances; changing it on a detached or split instance applies only to that instance and its forward continuations (see `features/calendar-recurrence.md`).
 
 Built-in presets give the user a starting point without dialing in numbers:
 

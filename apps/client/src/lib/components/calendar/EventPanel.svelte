@@ -214,7 +214,14 @@
   let shortBreak = $state(5);
   let longBreak = $state(10);
   let idleTimeoutEnabled = $state(true);
-  const IDLE_TIMEOUT_DEFAULT = 1;
+
+  function applyDefaultIdleTimeoutPreference(): void {
+    idleTimeoutEnabled = preferences.focusIdlePauseOnEventCreate;
+  }
+
+  function idleTimeoutMinutesForPayload(): number | null {
+    return idleTimeoutEnabled ? preferences.focusIdleThresholdMinutes : null;
+  }
 
   // ─── Notifications ──────────────────────────────────────────────
   let notifEnabled = $state(false);
@@ -649,7 +656,7 @@
     } else {
       // Enable with defaults
       if (s === "meeting") { meetingEnabled = true; emitChange(); handleExpand("meeting"); return; }
-      if (s === "pomodoro") { pomodoroEnabled = true; pomodoroPreset = "auto"; focusDuration = 40; shortBreak = 5; longBreak = 10; idleTimeoutEnabled = true; }
+      if (s === "pomodoro") { pomodoroEnabled = true; pomodoroPreset = "auto"; focusDuration = 40; shortBreak = 5; longBreak = 10; applyDefaultIdleTimeoutPreference(); }
       if (s === "notifications") { notifEnabled = true; notifSelected = new Set([0]); }
       if (s === "repeat") recurrence = { frequency: "daily", interval: 1, end: { type: "never" } };
     }
@@ -859,7 +866,7 @@
       } else {
         focusDuration = 40; shortBreak = 5; longBreak = 10;
         pomodoroPreset = "auto";
-        idleTimeoutEnabled = true;
+        applyDefaultIdleTimeoutPreference();
       }
 
       const notifs = event.notifications;
@@ -898,7 +905,7 @@
       pomodoroEnabled = true;
       pomodoroPreset = "auto";
       focusDuration = 40; shortBreak = 5; longBreak = 10;
-      idleTimeoutEnabled = true;
+      applyDefaultIdleTimeoutPreference();
       notifEnabled = true;
       notifSelected = new Set([0]);
       customNotifs = [];
@@ -1135,7 +1142,7 @@
         shortBreakMinutes: shortBreak,
         longBreakMinutes: longBreak,
         pomodoroCount: 4,
-        idleTimeoutMinutes: idleTimeoutEnabled ? IDLE_TIMEOUT_DEFAULT : null,
+        idleTimeoutMinutes: idleTimeoutMinutesForPayload(),
       } : undefined,
       allDay: allDay || undefined,
       meetingEnabled: meetingEnabled || undefined,
@@ -1277,7 +1284,7 @@
         shortBreakMinutes: shortBreak,
         longBreakMinutes: longBreak,
         pomodoroCount: 4,
-        idleTimeoutMinutes: idleTimeoutEnabled ? IDLE_TIMEOUT_DEFAULT : null,
+        idleTimeoutMinutes: idleTimeoutMinutesForPayload(),
       } : undefined,
       allDay: allDay || undefined,
       meetingEnabled: meetingEnabled || undefined,

@@ -8,8 +8,13 @@ import {
   DEFAULT_CALENDAR_DIM_PAST_EVENTS,
   DEFAULT_MUSIC_PAUSE_ON_POMODORO_PAUSE,
   DEFAULT_CALENDAR_TIME_FORMAT,
+  DEFAULT_FOCUS_IDLE_PAUSE_ON_EVENT_CREATE,
+  DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
+  FOCUS_IDLE_THRESHOLD_MINUTES_MAX,
+  FOCUS_IDLE_THRESHOLD_MINUTES_MIN,
   DEFAULT_TITLE_BAR_VISIBILITY,
   TITLE_BAR_CONTROL_IDS,
+  clampFocusIdleThresholdMinutes,
   clampFontScale,
   getFontFamilyById,
   isCalendarTimeFormat,
@@ -136,6 +141,32 @@ describe("calendar appearance preferences", () => {
 describe("music pomodoro preferences", () => {
   it("pauses music on pomodoro pause by default", () => {
     expect(DEFAULT_MUSIC_PAUSE_ON_POMODORO_PAUSE).toBe(true);
+  });
+});
+
+describe("focus preferences", () => {
+  it("defaults idle pause to enabled with a 3 minute threshold", () => {
+    expect(DEFAULT_FOCUS_IDLE_PAUSE_ON_EVENT_CREATE).toBe(true);
+    expect(DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES).toBe(3);
+  });
+
+  it("clamps idle threshold minutes to the supported list", () => {
+    expect(clampFocusIdleThresholdMinutes(FOCUS_IDLE_THRESHOLD_MINUTES_MIN)).toBe(
+      FOCUS_IDLE_THRESHOLD_MINUTES_MIN,
+    );
+    expect(clampFocusIdleThresholdMinutes(FOCUS_IDLE_THRESHOLD_MINUTES_MAX)).toBe(
+      FOCUS_IDLE_THRESHOLD_MINUTES_MAX,
+    );
+    expect(clampFocusIdleThresholdMinutes(0)).toBe(FOCUS_IDLE_THRESHOLD_MINUTES_MIN);
+    expect(clampFocusIdleThresholdMinutes(16)).toBe(FOCUS_IDLE_THRESHOLD_MINUTES_MAX);
+  });
+
+  it("rounds fractional values and falls back for non-finite inputs", () => {
+    expect(clampFocusIdleThresholdMinutes(4.4)).toBe(4);
+    expect(clampFocusIdleThresholdMinutes(4.5)).toBe(5);
+    expect(clampFocusIdleThresholdMinutes(Number.NaN)).toBe(
+      DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
+    );
   });
 });
 

@@ -16,6 +16,7 @@
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
+  import { getPreferences } from "$lib/stores/preferences.svelte";
   import { onDestroy, onMount, tick } from "svelte";
   import CalendarHeader from "./CalendarHeader.svelte";
   import WeekView from "./WeekView.svelte";
@@ -73,6 +74,7 @@
   const pomodoro = getPomodoro();
   const calZoom = getCalendarZoom();
   const theme = getTheme();
+  const preferences = getPreferences();
 
   type EventPanelComponent = typeof import("./EventPanel.svelte").default;
   type ParkedPanelSnapshot =
@@ -250,8 +252,15 @@
   let timezones: string[] = $state([getLocalTimezone()]);
   let tzAbbrMode: TimezoneAbbrMode = $state("acronym");
 
+  function getFocusIdleDefaults() {
+    return {
+      pauseWhenIdle: preferences.focusIdlePauseOnEventCreate,
+      thresholdMinutes: preferences.focusIdleThresholdMinutes,
+    };
+  }
+
   // Edit session (replaces panelState, panelDirty, lastPanelChanges, etc.)
-  const session = createEditSession();
+  const session = createEditSession(getFocusIdleDefaults);
 
   $effect(() => {
     if (session.state.mode === "create" || session.state.mode === "edit") {

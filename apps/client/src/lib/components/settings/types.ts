@@ -3,7 +3,7 @@
  * so external launchers (the calendar header, future feature surfaces) can
  * type their requests against the same identifier set.
  */
-export type SectionId = "appearance" | "calendars" | "music" | "doomscrolling" | "shortcuts";
+export type SectionId = "appearance" | "calendars" | "focus" | "music" | "doomscrolling" | "shortcuts";
 
 export type DoomscrollingSettingsTab = "limits" | "browser" | "mobile" | "desktop";
 

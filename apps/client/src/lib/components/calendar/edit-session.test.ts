@@ -221,7 +221,7 @@ describe("panel initial changes", () => {
       shortBreakMinutes: 5,
       longBreakMinutes: 10,
       pomodoroCount: 4,
-      idleTimeoutMinutes: 1,
+      idleTimeoutMinutes: 3,
     });
     expect(result.location).toBe("Office");
     expect(result.meetingEnabled).toBe(true);
@@ -252,8 +252,42 @@ describe("panel initial changes", () => {
       shortBreakMinutes: 5,
       longBreakMinutes: 10,
       pomodoroCount: 4,
-      idleTimeoutMinutes: 1,
+      idleTimeoutMinutes: 3,
     });
+  });
+
+  it("uses focus idle defaults when seeding a create baseline", () => {
+    const result = buildCreatePanelInitialChanges(
+      "2026-04-16 09:00",
+      "2026-04-16 10:00",
+      false,
+      { pauseWhenIdle: false, thresholdMinutes: 7 },
+    );
+
+    expect(result.pomodoroConfig).toEqual({
+      focusDurationMinutes: 40,
+      shortBreakMinutes: 5,
+      longBreakMinutes: 10,
+      pomodoroCount: 4,
+      idleTimeoutMinutes: null,
+    });
+  });
+
+  it("normalizes enabled edit baselines to the focus idle threshold", () => {
+    const result = buildEditPanelInitialChanges(
+      makeEvent({
+        pomodoroConfig: {
+          focusDurationMinutes: 40,
+          shortBreakMinutes: 5,
+          longBreakMinutes: 10,
+          pomodoroCount: 2,
+          idleTimeoutMinutes: 15,
+        },
+      }),
+      { pauseWhenIdle: true, thresholdMinutes: 7 },
+    );
+
+    expect(result.pomodoroConfig?.idleTimeoutMinutes).toBe(7);
   });
 });
 

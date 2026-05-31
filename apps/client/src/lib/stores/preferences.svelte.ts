@@ -6,10 +6,13 @@ import {
   DEFAULT_CALENDAR_DIM_PAST_EVENTS,
   DEFAULT_MUSIC_PAUSE_ON_POMODORO_PAUSE,
   DEFAULT_CALENDAR_TIME_FORMAT,
+  DEFAULT_FOCUS_IDLE_PAUSE_ON_EVENT_CREATE,
+  DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
   DEFAULT_TITLE_BAR_VISIBILITY,
   type CalendarTimeFormat,
   type TitleBarControlId,
   type TitleBarVisibility,
+  clampFocusIdleThresholdMinutes,
   clampFontScale,
   getFontFamilyById,
   isCalendarTimeFormat,
@@ -25,6 +28,8 @@ const FONT_SCALE_CONFIG_KEY = "preferences.fontScale";
 const EVENT_TZ_DISPLAY_KEY = "preferences.eventTimezoneDisplay";
 const CALENDAR_TIME_FORMAT_CONFIG_KEY = "preferences.calendarTimeFormat";
 const CALENDAR_DIM_PAST_EVENTS_CONFIG_KEY = "preferences.calendarDimPastEvents";
+const FOCUS_IDLE_THRESHOLD_MINUTES_CONFIG_KEY = "preferences.focusIdleThresholdMinutes";
+const FOCUS_IDLE_PAUSE_ON_EVENT_CREATE_CONFIG_KEY = "preferences.focusIdlePauseOnEventCreate";
 const MUSIC_PAUSE_ON_POMODORO_PAUSE_CONFIG_KEY = "preferences.musicPauseOnPomodoroPause";
 const TITLE_BAR_VISIBILITY_CONFIG_KEY = "preferences.titleBarVisibility";
 
@@ -61,6 +66,18 @@ function loadSavedCalendarDimPastEvents(): boolean {
   return DEFAULT_CALENDAR_DIM_PAST_EVENTS;
 }
 
+function loadSavedFocusIdleThresholdMinutes(): number {
+  const saved = getConfigKey<unknown>(FOCUS_IDLE_THRESHOLD_MINUTES_CONFIG_KEY, undefined);
+  if (typeof saved === "number") return clampFocusIdleThresholdMinutes(saved);
+  return DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES;
+}
+
+function loadSavedFocusIdlePauseOnEventCreate(): boolean {
+  const saved = getConfigKey<unknown>(FOCUS_IDLE_PAUSE_ON_EVENT_CREATE_CONFIG_KEY, undefined);
+  if (typeof saved === "boolean") return saved;
+  return DEFAULT_FOCUS_IDLE_PAUSE_ON_EVENT_CREATE;
+}
+
 function loadSavedMusicPauseOnPomodoroPause(): boolean {
   const saved = getConfigKey<unknown>(MUSIC_PAUSE_ON_POMODORO_PAUSE_CONFIG_KEY, undefined);
   if (typeof saved === "boolean") return saved;
@@ -81,6 +98,8 @@ let fontScale = $state<number>(loadSavedFontScale());
 let eventTimezoneDisplay = $state<EventTimezoneDisplay>(loadSavedEventTzDisplay());
 let calendarTimeFormat = $state<CalendarTimeFormat>(loadSavedCalendarTimeFormat());
 let calendarDimPastEvents = $state<boolean>(loadSavedCalendarDimPastEvents());
+let focusIdleThresholdMinutes = $state<number>(loadSavedFocusIdleThresholdMinutes());
+let focusIdlePauseOnEventCreate = $state<boolean>(loadSavedFocusIdlePauseOnEventCreate());
 let musicPauseOnPomodoroPause = $state<boolean>(loadSavedMusicPauseOnPomodoroPause());
 let titleBarVisibility = $state<TitleBarVisibility>(loadSavedTitleBarVisibility());
 
@@ -125,6 +144,17 @@ function setCalendarTimeFormat(value: CalendarTimeFormat): void {
 function setCalendarDimPastEvents(value: boolean): void {
   calendarDimPastEvents = value;
   setConfigKey(CALENDAR_DIM_PAST_EVENTS_CONFIG_KEY, value);
+}
+
+function setFocusIdleThresholdMinutes(value: number): void {
+  const clamped = clampFocusIdleThresholdMinutes(value);
+  focusIdleThresholdMinutes = clamped;
+  setConfigKey(FOCUS_IDLE_THRESHOLD_MINUTES_CONFIG_KEY, clamped);
+}
+
+function setFocusIdlePauseOnEventCreate(value: boolean): void {
+  focusIdlePauseOnEventCreate = value;
+  setConfigKey(FOCUS_IDLE_PAUSE_ON_EVENT_CREATE_CONFIG_KEY, value);
 }
 
 function setMusicPauseOnPomodoroPause(value: boolean): void {
@@ -172,6 +202,12 @@ export function getPreferences() {
     get calendarDimPastEvents(): boolean {
       return calendarDimPastEvents;
     },
+    get focusIdleThresholdMinutes(): number {
+      return focusIdleThresholdMinutes;
+    },
+    get focusIdlePauseOnEventCreate(): boolean {
+      return focusIdlePauseOnEventCreate;
+    },
     get musicPauseOnPomodoroPause(): boolean {
       return musicPauseOnPomodoroPause;
     },
@@ -183,6 +219,8 @@ export function getPreferences() {
     setEventTimezoneDisplay,
     setCalendarTimeFormat,
     setCalendarDimPastEvents,
+    setFocusIdleThresholdMinutes,
+    setFocusIdlePauseOnEventCreate,
     setMusicPauseOnPomodoroPause,
     setTitleBarControlVisible,
     toggleTitleBarControl,
@@ -200,6 +238,12 @@ export function getPreferences() {
     },
     resetCalendarDimPastEvents() {
       setCalendarDimPastEvents(DEFAULT_CALENDAR_DIM_PAST_EVENTS);
+    },
+    resetFocusIdleThresholdMinutes() {
+      setFocusIdleThresholdMinutes(DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES);
+    },
+    resetFocusIdlePauseOnEventCreate() {
+      setFocusIdlePauseOnEventCreate(DEFAULT_FOCUS_IDLE_PAUSE_ON_EVENT_CREATE);
     },
     resetMusicPauseOnPomodoroPause() {
       setMusicPauseOnPomodoroPause(DEFAULT_MUSIC_PAUSE_ON_POMODORO_PAUSE);

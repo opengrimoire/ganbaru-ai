@@ -7,9 +7,11 @@
   import Keyboard from "@lucide/svelte/icons/keyboard";
   import Music from "@lucide/svelte/icons/music";
   import SettingsIcon from "@lucide/svelte/icons/settings";
+  import Timer from "@lucide/svelte/icons/timer";
   import X from "@lucide/svelte/icons/x";
   import AppearanceSection from "./AppearanceSection.svelte";
   import CalendarScrollbar from "../calendar/CalendarScrollbar.svelte";
+  import FocusSection from "./FocusSection.svelte";
   import MusicSection from "./MusicSection.svelte";
   import DoomscrollingSection from "./DoomscrollingSection.svelte";
   import DoomscrollingLimitEditor from "./DoomscrollingLimitEditor.svelte";
@@ -53,6 +55,7 @@
   const SECTIONS: SectionMeta[] = [
     { id: "appearance", label: "Appearance", icon: Palette },
     { id: "calendars", label: "Calendar", icon: CalendarDays },
+    { id: "focus", label: "Focus", icon: Timer },
     { id: "music", label: "Music", icon: Music },
     { id: "doomscrolling", label: "Doomscrolling", icon: GlobeOff },
     { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
@@ -323,6 +326,8 @@
             {@const Section = CalendarsSection}
             <Section />
           {/if}
+        {:else if activeSection === "focus"}
+          <FocusSection />
         {:else if activeSection === "music"}
           <MusicSection />
         {:else if activeSection === "doomscrolling"}
