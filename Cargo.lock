@@ -1401,7 +1401,6 @@ version = "0.1.0"
 dependencies = [
  "ammonia",
  "chrono",
- "gdk",
  "gtk",
  "notify-rust",
  "rodio",

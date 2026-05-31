@@ -23,6 +23,13 @@ interface BenchmarkBootProbe {
   updatedAt?: string;
 }
 
+function preparePomodoroOverlayDocument(): void {
+  const app = document.getElementById("app");
+  document.documentElement.style.backgroundColor = "#000";
+  document.body.style.backgroundColor = "#000";
+  if (app) app.style.backgroundColor = "#000";
+}
+
 async function hasFreshBenchmarkResumeState(): Promise<boolean> {
   try {
     const json = await invoke<string | null>("read_benchmark_state");
@@ -50,6 +57,26 @@ async function hasFreshBenchmarkResumeState(): Promise<boolean> {
 // and on first run only the calendar grid waits while the rest of the
 // chrome paints immediately.
 const appPromise = (async () => {
+  const windowKind = new URLSearchParams(window.location.search).get("ganbaruWindow");
+  if (windowKind === "pomodoroOverlay") {
+    preparePomodoroOverlayDocument();
+    const { default: PomodoroOverlayWindow } = await import(
+      "$lib/components/pomodoro/PomodoroOverlayWindow.svelte"
+    );
+    return mount(PomodoroOverlayWindow, {
+      target: document.getElementById("app")!,
+    });
+  }
+  if (windowKind === "pomodoroOverlayBlocker") {
+    preparePomodoroOverlayDocument();
+    const { default: PomodoroOverlayBlocker } = await import(
+      "$lib/components/pomodoro/PomodoroOverlayBlocker.svelte"
+    );
+    return mount(PomodoroOverlayBlocker, {
+      target: document.getElementById("app")!,
+    });
+  }
+
   await ensureConfigLoaded();
   const benchmarkResumePending = await hasFreshBenchmarkResumeState();
   if (!benchmarkResumePending) {

@@ -2036,6 +2036,7 @@ function resumeMusicFromPomodoroPause(): void {
 }
 
 function startFocusSession() {
+  closePomodoroOverlay();
   clearMusicPausedByPomodoro();
   stopPausedOpportunityCountdown();
   if (intervalId) {
@@ -2292,7 +2293,8 @@ async function checkIdle() {
     isRunning = false;
     lastTickMs = null;
 
-    // Show fullscreen idle overlay (GTK on Linux, returns false on other platforms)
+    // Show the enforced fullscreen idle overlay. If native setup fails,
+    // the main window falls back to the Svelte overlay component.
     let nativeOverlay = false;
     try {
       nativeOverlay = await invoke<boolean>("show_idle_overlay", { idleSeconds: result.idleSeconds });
@@ -2316,6 +2318,7 @@ async function checkIdle() {
 }
 
 async function dismissIdle(resume: boolean): Promise<void> {
+  closePomodoroOverlay();
   stopPausedOpportunityCountdown();
   const state = idlePaused;
   if (resume) {
@@ -2379,6 +2382,12 @@ function showBreakOverlay(breakSeconds: number) {
   );
 }
 
+function closePomodoroOverlay(): void {
+  invoke("close_pomodoro_overlay").catch((e) =>
+    console.warn("Failed to close pomodoro overlay:", e),
+  );
+}
+
 function showNotification() {
   if (notificationShown) return;
   notificationShown = true;
@@ -2400,6 +2409,7 @@ function tick() {
 
   switch (result.kind) {
     case "suspend_and_block_expired": {
+      closePomodoroOverlay();
       // Record synthetic pause
       if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
         const seg = segments[currentSegmentIndex];
@@ -2448,6 +2458,7 @@ function tick() {
     }
 
     case "block_expired": {
+      closePomodoroOverlay();
       lastTickMs = now;
       recordRunningPhaseProgress(0);
       const endIso = new Date(activeBlockEndMs!).toISOString();
@@ -2761,6 +2772,7 @@ async function startFromBlockInternal(
 }
 
 async function stopSessionInternal(): Promise<void> {
+  closePomodoroOverlay();
   clearMusicPausedByPomodoro();
   stopPausedOpportunityCountdown();
   if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
@@ -2802,6 +2814,7 @@ async function stopSessionInternal(): Promise<void> {
 }
 
 async function completeActiveBlockAtInternal(endIso: string = nowIso()): Promise<void> {
+  closePomodoroOverlay();
   const parsedEndMs = Date.parse(endIso);
   const normalizedEndIso = Number.isFinite(parsedEndMs)
     ? new Date(parsedEndMs).toISOString()

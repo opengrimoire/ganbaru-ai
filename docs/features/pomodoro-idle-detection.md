@@ -46,7 +46,7 @@ The overlay says, in effect, "you have been idle for X minutes; the timer has pa
 - **Stop the session.** Ends the run with `end_reason = stopped`. The active segment is marked interrupted at the idle pause start, so time spent away does not count as focus. If the operating system reports an idle start before the segment started, the timestamp is clamped to the segment start instead of writing an impossible negative interval.
 - **Ignore (close the overlay without choosing).** The timer remains paused. The user can come back later and resume or stop.
 
-Like the break screen, the overlay has two surfaces: a GTK native overlay on Linux, a webview fallback elsewhere. See `features/pomodoro-break-screen.md` for the rationale.
+Like the break screen, the idle overlay uses a Svelte visual surface inside a Rust/Tauri-enforced fullscreen overlay window. The primary monitor shows the interactive idle state, and additional monitors use black blocker windows. See `features/pomodoro-break-screen.md` for the enforcement model.
 
 ## What happens when idle is detected
 

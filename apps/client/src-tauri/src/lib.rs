@@ -47,7 +47,14 @@ fn get_startup_elapsed_ms() -> u64 {
 }
 
 #[tauri::command]
-fn force_quit(app: tauri::AppHandle) {
+fn force_quit(
+    app: tauri::AppHandle,
+    overlays: tauri::State<'_, notification::PomodoroOverlayState>,
+) {
+    if overlays.is_active() {
+        overlays.focus(&app);
+        return;
+    }
     app.exit(0);
 }
 
@@ -666,14 +673,25 @@ pub fn run() {
         }))
         .manage(db_path::DatabaseState::default())
         .manage(notification::AppSoundState::default())
+        .manage(notification::PomodoroOverlayState::default())
         .manage(media_player::MediaPlayerState::default())
         .plugin(tauri_plugin_dialog::init())
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let overlays = window.state::<notification::PomodoroOverlayState>();
+                if overlays.is_active() {
+                    api.prevent_close();
+                    overlays.focus(window);
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             notification::show_pomodoro_notification,
             notification::show_event_notification,
             notification::show_benchmark_notification,
             notification::show_doomscrolling_desktop_block_notification,
             notification::show_break_overlay,
+            notification::close_pomodoro_overlay,
             notification::get_idle_status,
             notification::play_app_sound,
             notification::play_alert_sound,

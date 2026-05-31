@@ -12,7 +12,7 @@ use std::sync::{
     Arc, Mutex,
 };
 use std::thread::JoinHandle;
-use tauri::{Emitter, Manager, State};
+use tauri::{window::Color, Emitter, Manager, Runtime, State, WebviewUrl, WebviewWindowBuilder};
 
 const APP_SOUND_COMMAND_QUEUE_LIMIT: usize = 32;
 const APP_SOUND_PLAYER_QUEUE_LIMIT: usize = 8;
@@ -696,7 +696,6 @@ pub fn restore_stale_shortcuts(_app: &tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(target_os = "linux")]
 fn run_main_thread_setup<F>(app: &tauri::AppHandle, setup: F) -> Result<(), String>
 where
     F: FnOnce() -> Result<(), String> + Send + 'static,
@@ -758,717 +757,436 @@ fn screensaver_uninhibit(cookie: u32) {
     );
 }
 
-#[cfg(target_os = "linux")]
-fn format_remaining(secs: u64) -> String {
-    format!("{:02}:{:02}", secs / 60, secs % 60)
-}
-
-#[cfg(target_os = "linux")]
-const MAX_BREAK_EXTENSION_MINUTES: u32 = 3;
-
-#[cfg(target_os = "linux")]
-fn set_markup_text(label: &gtk::Label, font: &str, color: &str, text: &str) {
-    use gtk::prelude::LabelExt;
-
-    let escaped = gtk::glib::markup_escape_text(text);
-    label.set_markup(&format!(
-        "<span font='{font}' foreground='{color}'>{escaped}</span>"
-    ));
-}
-
-#[cfg(target_os = "linux")]
-#[tauri::command]
-pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(), String> {
-    let app_for_setup = app.clone();
-    run_main_thread_setup(&app, move || {
-        use gtk::prelude::*;
-        use std::time::{Duration, SystemTime};
-
-        let app = app_for_setup;
-        let inhibit_cookie = std::rc::Rc::new(std::cell::Cell::new(screensaver_inhibit()));
-        let end_time = SystemTime::now() + Duration::from_secs(break_seconds as u64);
-        let end_time = std::rc::Rc::new(std::cell::Cell::new(end_time));
-        let display = gdk::Display::default()
-            .ok_or_else(|| "no GDK display is available for the break overlay".to_string())?;
-        let saved = std::rc::Rc::new(SavedShortcuts::save_and_disable(&app)?);
-        let restore_path = std::rc::Rc::new(shortcut_restore_path(&app)?);
-        let screen = display.default_screen();
-        let n_monitors = display.n_monitors();
-        let primary_idx = match display.primary_monitor() {
-            Some(primary) => (0..n_monitors)
-                .find(|&i| display.monitor(i).as_ref() == Some(&primary))
-                .unwrap_or(0),
-            None => 0,
-        };
-        let ui_margin = {
-            let geom = display
-                .monitor(primary_idx)
-                .map(|m| m.geometry())
-                .unwrap_or(gdk::Rectangle::new(0, 0, 1920, 1080));
-            ((geom.height().min(geom.width()) as f64 * 0.03).max(16.0)) as i32
-        };
-
-        let window = gtk::Window::new(gtk::WindowType::Toplevel);
-        window.set_decorated(false);
-        window.set_keep_above(true);
-        window.set_app_paintable(true);
-
-        window.connect_draw(move |_, cr| {
-            cr.set_source_rgb(0.0, 0.0, 0.0);
-            cr.paint().unwrap();
-            gtk::glib::Propagation::Proceed
-        });
-
-        // Timer (centered)
-        let timer_label = gtk::Label::new(None);
-        let display_str = format_remaining(break_seconds as u64);
-        set_markup_text(&timer_label, "Sans Light 72", "#FFFFFF", &display_str);
-
-        let timer_container = gtk::Box::new(gtk::Orientation::Vertical, 0);
-        timer_container.set_halign(gtk::Align::Center);
-        timer_container.set_valign(gtk::Align::Center);
-        timer_container.add(&timer_label);
-
-        // Hint lines (bottom center)
-        let extend_hint = gtk::Label::new(None);
-        extend_hint.set_markup(
-            "<span font='Sans 11' foreground='#9CA3AF'>Press Ctrl+Shift+Space to extend the break 1 minute (not recommended)</span>"
-        );
-        let esc_hint = gtk::Label::new(None);
-        esc_hint.set_markup(
-            "<span font='Sans 11' foreground='#9CA3AF'>Press 3x Esc to skip the break entirely (not recommended)</span>"
-        );
-
-        let keys_container = gtk::Box::new(gtk::Orientation::Vertical, 4);
-        keys_container.set_halign(gtk::Align::Center);
-        keys_container.set_valign(gtk::Align::End);
-        keys_container.set_margin_bottom(ui_margin * 2);
-        keys_container.add(&extend_hint);
-        keys_container.add(&esc_hint);
-
-        // Finished container (centered, hidden until break ends)
-        let finished_container = gtk::Box::new(gtk::Orientation::Vertical, 16);
-        finished_container.set_halign(gtk::Align::Center);
-        finished_container.set_valign(gtk::Align::Center);
-        let finished_title = gtk::Label::new(None);
-        finished_title
-            .set_markup("<span font='Sans Light 48' foreground='#FFFFFF'>Break complete</span>");
-        let finished_subtitle = gtk::Label::new(None);
-        finished_subtitle.set_markup(
-            "<span font='Sans 14' foreground='#9CA3AF'>press any key or click to continue</span>",
-        );
-        finished_container.add(&finished_title);
-        finished_container.add(&finished_subtitle);
-        finished_container.set_no_show_all(true);
-
-        // Overlay layout
-        let overlay = gtk::Overlay::new();
-        let base = gtk::Box::new(gtk::Orientation::Vertical, 0);
-        overlay.add(&base);
-        overlay.add_overlay(&timer_container);
-        overlay.add_overlay(&keys_container);
-        overlay.add_overlay(&finished_container);
-        window.add(&overlay);
-
-        window.fullscreen_on_monitor(&screen, primary_idx);
-
-        let is_hidden = std::rc::Rc::new(std::cell::Cell::new(false));
-        let break_finished = std::rc::Rc::new(std::cell::Cell::new(false));
-        let esc_press = std::rc::Rc::new(std::cell::Cell::new(0u32));
-        let extra_break_mins = std::rc::Rc::new(std::cell::Cell::new(0u32));
-
-        // Black overlay windows for non-primary monitors
-        let secondary_windows: std::rc::Rc<Vec<(i32, gtk::Window)>> = {
-            let mut wins = Vec::new();
-            for i in 0..n_monitors {
-                if i == primary_idx {
-                    continue;
-                }
-                let sw = gtk::Window::new(gtk::WindowType::Toplevel);
-                sw.set_decorated(false);
-                sw.set_keep_above(true);
-                sw.set_app_paintable(true);
-                sw.connect_draw(|_, cr| {
-                    cr.set_source_rgb(0.0, 0.0, 0.0);
-                    cr.paint().unwrap();
-                    gtk::glib::Propagation::Proceed
-                });
-                sw.fullscreen_on_monitor(&screen, i);
-                wins.push((i, sw));
-            }
-            std::rc::Rc::new(wins)
-        };
-
-        // Restore shortcuts, uninhibit screensaver, and re-focus main window on destroy
-        // gsettings restore runs in a background thread to avoid blocking the UI
-        {
-            let saved = saved.clone();
-            let restore_path = restore_path.clone();
-            let cookie = inhibit_cookie.clone();
-            let sec = secondary_windows.clone();
-            window.connect_destroy(move |_| {
-                for (_, sw) in sec.iter() {
-                    sw.hide();
-                    sw.close();
-                }
-                let saved = (*saved).clone();
-                let restore_path = (*restore_path).clone();
-                let cookie_val = cookie.get();
-                std::thread::spawn(move || {
-                    restore_shortcuts(&saved);
-                    if let Some(c) = cookie_val {
-                        screensaver_uninhibit(c);
-                    }
-                    clear_shortcut_restore(&restore_path);
-                });
-            });
-        }
-
-        // Key handler: Space x3 = work 3 more min, Esc x3 = skip, Ctrl+Shift+Space = extend break
-        {
-            let break_finished = break_finished.clone();
-            let esc_press = esc_press.clone();
-            let extra_break = extra_break_mins.clone();
-            let end_time = end_time.clone();
-            let w = window.clone();
-            let app = app.clone();
-            let sec = secondary_windows.clone();
-            let exh = extend_hint.clone();
-            let eh = esc_hint.clone();
-            window.connect_key_press_event(move |_, event| {
-                if break_finished.get() {
-                    let _ = app.emit("pomodoro-break-acknowledged", ());
-                    for (_, sw) in sec.iter() { sw.hide(); sw.close(); }
-                    w.hide();
-                    w.close();
-                    return gtk::glib::Propagation::Stop;
-                }
-
-                let key = event.keyval();
-                let state = event.state();
-                let ctrl = state.contains(gdk::ModifierType::CONTROL_MASK);
-                let shift = state.contains(gdk::ModifierType::SHIFT_MASK);
-
-                if key == gdk::keys::constants::space && ctrl && shift {
-                    // Ctrl+Shift+Space: extend break by 1 minute.
-                    esc_press.set(0);
-                    eh.set_markup(
-                        "<span font='Sans 11' foreground='#9CA3AF'>Press 3x Esc to skip the break entirely (not recommended)</span>"
-                    );
-                    let added = extra_break.get();
-                    if added < MAX_BREAK_EXTENSION_MINUTES {
-                        extra_break.set(added + 1);
-                        let et = end_time.get();
-                        end_time.set(et + std::time::Duration::from_secs(60));
-                        let _ = app.emit("pomodoro-break-extended", AddTimePayload { seconds: 60 });
-                        let total = added + 1;
-                        let remain = MAX_BREAK_EXTENSION_MINUTES - total;
-                        if remain > 0 {
-                            set_markup_text(
-                                &exh,
-                                "Sans 11",
-                                "#9CA3AF",
-                                &format!(
-                                    "Break extended by {total} min, press Ctrl+Shift+Space to add more ({remain} left, not recommended)"
-                                ),
-                            );
-                        } else {
-                            set_markup_text(
-                                &exh,
-                                "Sans 11",
-                                "#9CA3AF",
-                                &format!(
-                                    "Break extended by {MAX_BREAK_EXTENSION_MINUTES} minutes (maximum reached)"
-                                ),
-                            );
-                        }
-                    }
-                } else if key == gdk::keys::constants::Escape {
-                    let count = esc_press.get() + 1;
-                    esc_press.set(count);
-                    let remaining = 3 - count;
-                    set_markup_text(
-                        &eh,
-                        "Sans 11",
-                        "#9CA3AF",
-                        &format!(
-                            "Press {remaining}x Esc to skip the break entirely (not recommended)"
-                        ),
-                    );
-                    if count >= 3 {
-                        esc_press.set(0);
-                        let _ = app.emit("pomodoro-skip-break", ());
-                        for (_, sw) in sec.iter() { sw.hide(); sw.close(); }
-                        w.hide();
-                        w.close();
-                    }
-                } else {
-                    esc_press.set(0);
-                    eh.set_markup(
-                        "<span font='Sans 11' foreground='#9CA3AF'>Press 3x Esc to skip the break entirely (not recommended)</span>"
-                    );
-                }
-                gtk::glib::Propagation::Stop
-            });
-        }
-
-        // Click handler: close overlay when break is finished
-        {
-            let break_finished = break_finished.clone();
-            let w = window.clone();
-            let app = app.clone();
-            let sec = secondary_windows.clone();
-            window.add_events(gdk::EventMask::BUTTON_PRESS_MASK);
-            window.connect_button_press_event(move |_, _| {
-                if break_finished.get() {
-                    let _ = app.emit("pomodoro-break-acknowledged", ());
-                    for (_, sw) in sec.iter() {
-                        sw.hide();
-                        sw.close();
-                    }
-                    w.hide();
-                    w.close();
-                }
-                gtk::glib::Propagation::Stop
-            });
-        }
-
-        // Key and click handlers on secondary monitors
-        for (_, sw) in secondary_windows.iter() {
-            {
-                let break_finished = break_finished.clone();
-                let esc_press = esc_press.clone();
-                let main = window.clone();
-                let app = app.clone();
-                let sec = secondary_windows.clone();
-                let eh = esc_hint.clone();
-                sw.connect_key_press_event(move |_, event| {
-                    if break_finished.get() {
-                        let _ = app.emit("pomodoro-break-acknowledged", ());
-                        for (_, s) in sec.iter() { s.hide(); s.close(); }
-                        main.hide();
-                        main.close();
-                        return gtk::glib::Propagation::Stop;
-                    }
-                    let key = event.keyval();
-                    if key == gdk::keys::constants::Escape {
-                        let count = esc_press.get() + 1;
-                        esc_press.set(count);
-                        let remaining = 3 - count;
-                        set_markup_text(
-                            &eh,
-                            "Sans 11",
-                            "#9CA3AF",
-                            &format!(
-                                "Press {remaining}x Esc to skip the break entirely (not recommended)"
-                            ),
-                        );
-                        if count >= 3 {
-                            esc_press.set(0);
-                            let _ = app.emit("pomodoro-skip-break", ());
-                            for (_, s) in sec.iter() { s.hide(); s.close(); }
-                            main.hide();
-                            main.close();
-                        }
-                    } else {
-                        esc_press.set(0);
-                        eh.set_markup(
-                            "<span font='Sans 11' foreground='#9CA3AF'>Press 3x Esc to skip the break entirely (not recommended)</span>"
-                        );
-                    }
-                    gtk::glib::Propagation::Stop
-                });
-            }
-            {
-                let break_finished = break_finished.clone();
-                let main = window.clone();
-                let app = app.clone();
-                let sec = secondary_windows.clone();
-                sw.add_events(gdk::EventMask::BUTTON_PRESS_MASK);
-                sw.connect_button_press_event(move |_, _| {
-                    if break_finished.get() {
-                        let _ = app.emit("pomodoro-break-acknowledged", ());
-                        for (_, s) in sec.iter() {
-                            s.hide();
-                            s.close();
-                        }
-                        main.hide();
-                        main.close();
-                    }
-                    gtk::glib::Propagation::Stop
-                });
-            }
-        }
-
-        // Countdown using wall clock time (survives suspend)
-        {
-            let end_time = end_time.clone();
-            let is_hidden = is_hidden.clone();
-            let break_finished = break_finished.clone();
-            let w = window.clone();
-            let sec = secondary_windows.clone();
-            let screen_ref = screen.clone();
-            let timer_label = timer_label.clone();
-            let timer_ctr = timer_container.clone();
-            let keys_ctr = keys_container.clone();
-            let finished_ctr = finished_container.clone();
-            gtk::glib::timeout_add_seconds_local(1, move || {
-                if break_finished.get() {
-                    return gtk::glib::ControlFlow::Break;
-                }
-
-                let now = SystemTime::now();
-                let et = end_time.get();
-                let remaining = et.duration_since(now).unwrap_or(Duration::ZERO);
-                let secs = remaining.as_secs();
-
-                if secs == 0 {
-                    break_finished.set(true);
-
-                    // Hide timer, show centered finished message
-                    timer_ctr.set_no_show_all(true);
-                    timer_ctr.hide();
-                    keys_ctr.set_no_show_all(true);
-                    keys_ctr.hide();
-                    finished_ctr.set_no_show_all(false);
-                    finished_ctr.show_all();
-
-                    // If hidden (space x3), re-show the overlay
-                    if is_hidden.get() {
-                        is_hidden.set(false);
-                        for (idx, sw) in sec.iter() {
-                            sw.show_all();
-                            sw.fullscreen_on_monitor(&screen_ref, *idx);
-                        }
-                        w.show();
-                        w.fullscreen();
-                        w.present();
-                    }
-                    return gtk::glib::ControlFlow::Break;
-                }
-                if !is_hidden.get() {
-                    let display_str = format_remaining(secs);
-                    set_markup_text(&timer_label, "Sans Light 72", "#FFFFFF", &display_str);
-                }
-                gtk::glib::ControlFlow::Continue
-            });
-        }
-
-        // Re-show overlay after 30s of system inactivity when hidden
-        {
-            let end_time = end_time.clone();
-            let is_hidden = is_hidden.clone();
-            let inhibit_cookie = inhibit_cookie.clone();
-            let w = window.clone();
-            let sec = secondary_windows.clone();
-            let screen_ref = screen.clone();
-            let timer_label = timer_label.clone();
-            gtk::glib::timeout_add_seconds_local(5, move || {
-                let now = SystemTime::now();
-                let et = end_time.get();
-                if now >= et {
-                    return gtk::glib::ControlFlow::Break;
-                }
-                if !is_hidden.get() {
-                    return gtk::glib::ControlFlow::Continue;
-                }
-
-                let idle_ms = get_idle_time_ms().unwrap_or(0);
-                if idle_ms >= 30_000 {
-                    is_hidden.set(false);
-                    inhibit_cookie.set(screensaver_inhibit());
-
-                    let remaining = et.duration_since(now).unwrap_or(Duration::ZERO);
-                    let display_str = format_remaining(remaining.as_secs());
-                    set_markup_text(&timer_label, "Sans Light 72", "#FFFFFF", &display_str);
-                    for (idx, sw) in sec.iter() {
-                        sw.show_all();
-                        sw.fullscreen_on_monitor(&screen_ref, *idx);
-                    }
-                    w.show();
-                    w.fullscreen();
-                    w.present();
-                }
-
-                gtk::glib::ControlFlow::Continue
-            });
-        }
-
-        for (_, sw) in secondary_windows.iter() {
-            sw.show_all();
-        }
-        window.show_all();
-        Ok(())
-    })
-}
-
-// ── Idle overlay (Linux) ──────────────────────────────────────────
-
-#[cfg(target_os = "linux")]
-#[tauri::command]
-pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<bool, String> {
-    let app_for_setup = app.clone();
-    let app_sounds = app.state::<AppSoundState>().handle();
-    run_main_thread_setup(&app, move || {
-        use gtk::prelude::*;
-
-        let app = app_for_setup;
-        let inhibit_cookie = std::rc::Rc::new(std::cell::Cell::new(screensaver_inhibit()));
-        let dismissed = std::rc::Rc::new(std::cell::Cell::new(false));
-        let focus_failed = std::rc::Rc::new(std::cell::Cell::new(false));
-        let display = gdk::Display::default()
-            .ok_or_else(|| "no GDK display is available for the idle overlay".to_string())?;
-        let saved = std::rc::Rc::new(SavedShortcuts::save_and_disable(&app)?);
-        let restore_path = std::rc::Rc::new(shortcut_restore_path(&app)?);
-        let screen = display.default_screen();
-        let n_monitors = display.n_monitors();
-        let primary_idx = match display.primary_monitor() {
-            Some(primary) => (0..n_monitors)
-                .find(|&i| display.monitor(i).as_ref() == Some(&primary))
-                .unwrap_or(0),
-            None => 0,
-        };
-        let ui_margin = {
-            let geom = display
-                .monitor(primary_idx)
-                .map(|m| m.geometry())
-                .unwrap_or(gdk::Rectangle::new(0, 0, 1920, 1080));
-            ((geom.height().min(geom.width()) as f64 * 0.03).max(16.0)) as i32
-        };
-
-        let window = gtk::Window::new(gtk::WindowType::Toplevel);
-        window.set_decorated(false);
-        window.set_keep_above(true);
-        window.set_app_paintable(true);
-        window.connect_draw(|_, cr| {
-            cr.set_source_rgb(0.0, 0.0, 0.0);
-            cr.paint().unwrap();
-            gtk::glib::Propagation::Proceed
-        });
-
-        // Title
-        let title_label = gtk::Label::new(None);
-        title_label
-            .set_markup("<span font='Sans 13' foreground='#9CA3AF'>FOCUS SESSION PAUSED</span>");
-
-        // Timer (counts up from idle_seconds)
-        let timer_label = gtk::Label::new(None);
-        let elapsed = std::rc::Rc::new(std::cell::Cell::new(idle_seconds as u64));
-        let overlay_elapsed = std::rc::Rc::new(std::cell::Cell::new(0u64));
-        let display_str = format_remaining(idle_seconds as u64);
-        set_markup_text(&timer_label, "Sans Light 72", "#FFFFFF", &display_str);
-
-        let idle_label = gtk::Label::new(None);
-        idle_label.set_markup("<span font='Sans 14' foreground='#9CA3AF'>idle</span>");
-
-        let timer_container = gtk::Box::new(gtk::Orientation::Vertical, 16);
-        timer_container.set_halign(gtk::Align::Center);
-        timer_container.set_valign(gtk::Align::Center);
-        timer_container.add(&title_label);
-        timer_container.add(&timer_label);
-        timer_container.add(&idle_label);
-
-        // Hint lines (bottom center)
-        let space_hint = gtk::Label::new(None);
-        space_hint.set_markup(
-            "<span font='Sans 11' foreground='#9CA3AF'>Press <span foreground='#FFFFFF'>Space</span> to resume focus</span>"
-        );
-        let esc_hint = gtk::Label::new(None);
-        esc_hint.set_markup(
-            "<span font='Sans 11' foreground='#9CA3AF'>Press <span foreground='#FFFFFF'>Esc</span> to stop session</span>"
-        );
-
-        let keys_container = gtk::Box::new(gtk::Orientation::Vertical, 4);
-        keys_container.set_halign(gtk::Align::Center);
-        keys_container.set_valign(gtk::Align::End);
-        keys_container.set_margin_bottom(ui_margin * 2);
-        keys_container.add(&space_hint);
-        keys_container.add(&esc_hint);
-
-        let overlay = gtk::Overlay::new();
-        let base = gtk::Box::new(gtk::Orientation::Vertical, 0);
-        overlay.add(&base);
-        overlay.add_overlay(&timer_container);
-        overlay.add_overlay(&keys_container);
-        window.add(&overlay);
-
-        window.fullscreen_on_monitor(&screen, primary_idx);
-
-        // Secondary monitor black windows
-        let secondary_windows: std::rc::Rc<Vec<(i32, gtk::Window)>> = {
-            let mut wins = Vec::new();
-            for i in 0..n_monitors {
-                if i == primary_idx {
-                    continue;
-                }
-                let sw = gtk::Window::new(gtk::WindowType::Toplevel);
-                sw.set_decorated(false);
-                sw.set_keep_above(true);
-                sw.set_app_paintable(true);
-                sw.connect_draw(|_, cr| {
-                    cr.set_source_rgb(0.0, 0.0, 0.0);
-                    cr.paint().unwrap();
-                    gtk::glib::Propagation::Proceed
-                });
-                sw.fullscreen_on_monitor(&screen, i);
-                wins.push((i, sw));
-            }
-            std::rc::Rc::new(wins)
-        };
-
-        // Cleanup on destroy
-        {
-            let saved = saved.clone();
-            let restore_path = restore_path.clone();
-            let cookie = inhibit_cookie.clone();
-            let sec = secondary_windows.clone();
-            window.connect_destroy(move |_| {
-                for (_, sw) in sec.iter() {
-                    sw.hide();
-                    sw.close();
-                }
-                let saved = (*saved).clone();
-                let restore_path = (*restore_path).clone();
-                let cookie_val = cookie.get();
-                std::thread::spawn(move || {
-                    restore_shortcuts(&saved);
-                    if let Some(c) = cookie_val {
-                        screensaver_uninhibit(c);
-                    }
-                    clear_shortcut_restore(&restore_path);
-                });
-            });
-        }
-
-        // Key handler: Space = resume, Esc = stop
-        {
-            let w = window.clone();
-            let app = app.clone();
-            let sec = secondary_windows.clone();
-            let dismissed = dismissed.clone();
-            window.connect_key_press_event(move |_, event| {
-                let key = event.keyval();
-                if key == gdk::keys::constants::space {
-                    dismissed.set(true);
-                    let _ = app.emit("idle-overlay-resume", ());
-                    for (_, sw) in sec.iter() {
-                        sw.hide();
-                        sw.close();
-                    }
-                    w.hide();
-                    w.close();
-                } else if key == gdk::keys::constants::Escape {
-                    dismissed.set(true);
-                    let _ = app.emit("idle-overlay-stop", ());
-                    for (_, sw) in sec.iter() {
-                        sw.hide();
-                        sw.close();
-                    }
-                    w.hide();
-                    w.close();
-                }
-                gtk::glib::Propagation::Stop
-            });
-        }
-
-        // Key handler on secondary monitors
-        for (_, sw) in secondary_windows.iter() {
-            let w = window.clone();
-            let app = app.clone();
-            let sec = secondary_windows.clone();
-            let dismissed = dismissed.clone();
-            sw.connect_key_press_event(move |_, event| {
-                let key = event.keyval();
-                if key == gdk::keys::constants::space {
-                    dismissed.set(true);
-                    let _ = app.emit("idle-overlay-resume", ());
-                    for (_, s) in sec.iter() {
-                        s.hide();
-                        s.close();
-                    }
-                    w.hide();
-                    w.close();
-                } else if key == gdk::keys::constants::Escape {
-                    dismissed.set(true);
-                    let _ = app.emit("idle-overlay-stop", ());
-                    for (_, s) in sec.iter() {
-                        s.hide();
-                        s.close();
-                    }
-                    w.hide();
-                    w.close();
-                }
-                gtk::glib::Propagation::Stop
-            });
-        }
-
-        // Count-up timer and periodic app sounds.
-        {
-            let elapsed = elapsed.clone();
-            let overlay_elapsed = overlay_elapsed.clone();
-            let timer_label = timer_label.clone();
-            let dismissed = dismissed.clone();
-            let focus_failed = focus_failed.clone();
-            let title_label = title_label.clone();
-            let idle_label = idle_label.clone();
-            let space_hint = space_hint.clone();
-            let app = app.clone();
-            let app_sounds = app_sounds.clone();
-            gtk::glib::timeout_add_seconds_local(1, move || {
-                if dismissed.get() {
-                    return gtk::glib::ControlFlow::Break;
-                }
-                let e = elapsed.get() + 1;
-                elapsed.set(e);
-                let overlay_e = overlay_elapsed.get() + 1;
-                overlay_elapsed.set(overlay_e);
-                let display_str = format_remaining(e);
-                set_markup_text(&timer_label, "Sans Light 72", "#FFFFFF", &display_str);
-
-                if !focus_failed.get() && overlay_e >= 60 {
-                    focus_failed.set(true);
-                    title_label.set_markup(
-                        "<span font='Sans 13' foreground='#FCA5A5'>FOCUS SESSION FAILED</span>",
-                    );
-                    idle_label
-                        .set_markup("<span font='Sans 14' foreground='#FCA5A5'>focus lost</span>");
-                    space_hint.set_markup(
-                        "<span font='Sans 11' foreground='#9CA3AF'>Press <span foreground='#FFFFFF'>Space</span> to restart focus</span>"
-                    );
-                    app_sounds.play(AppSound::FocusSessionFailedLongIdle);
-                    let _ = app.emit("idle-overlay-focus-failed", ());
-                } else if !focus_failed.get() && overlay_e.is_multiple_of(10) {
-                    app_sounds.play(AppSound::IdleAlert);
-                }
-                gtk::glib::ControlFlow::Continue
-            });
-        }
-
-        app_sounds.play(AppSound::IdleAlert);
-
-        // Send notification
-        let _ = notify_rust::Notification::new()
-            .summary("Focus session paused")
-            .body("No activity detected. Return to resume your session.")
-            .timeout(10_000)
-            .hint(notify_rust::Hint::Transient(true))
-            .show();
-
-        for (_, sw) in secondary_windows.iter() {
-            sw.show_all();
-        }
-        window.show_all();
-        Ok(())
-    })?;
-
-    Ok(true)
+#[cfg(not(target_os = "linux"))]
+fn screensaver_inhibit() -> Option<u32> {
+    None
 }
 
 #[cfg(not(target_os = "linux"))]
+fn screensaver_uninhibit(_cookie: u32) {}
+
+const POMODORO_OVERLAY_MAIN_LABEL: &str = "pomodoro-overlay-main";
+#[cfg(not(target_os = "linux"))]
+const POMODORO_OVERLAY_BLOCKER_PREFIX: &str = "pomodoro-overlay-blocker";
+
+#[cfg(target_os = "linux")]
+thread_local! {
+    static POMODORO_GTK_BLOCKERS: std::cell::RefCell<Vec<gtk::Window>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[derive(Clone, Copy)]
+enum PomodoroOverlayKind {
+    Break,
+    Idle,
+}
+
+pub(crate) struct PomodoroOverlayState {
+    active: AtomicBool,
+    cleanup: Mutex<Option<PomodoroOverlayCleanup>>,
+}
+
+impl Default for PomodoroOverlayState {
+    fn default() -> Self {
+        Self {
+            active: AtomicBool::new(false),
+            cleanup: Mutex::new(None),
+        }
+    }
+}
+
+struct PomodoroOverlayCleanup {
+    labels: Vec<String>,
+    inhibit_cookie: Option<u32>,
+    #[cfg(target_os = "linux")]
+    saved_shortcuts: Option<SavedShortcuts>,
+    #[cfg(target_os = "linux")]
+    shortcut_restore_path: Option<PathBuf>,
+}
+
+impl PomodoroOverlayState {
+    pub(crate) fn is_active(&self) -> bool {
+        self.active.load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn focus<R: Runtime, M: Manager<R>>(&self, manager: &M) {
+        if let Some(window) = manager.get_webview_window(POMODORO_OVERLAY_MAIN_LABEL) {
+            let _ = window.show();
+            let _ = window.unminimize();
+            let _ = window.set_always_on_top(true);
+            let _ = window.set_focus();
+        }
+    }
+
+    fn begin(&self, app: &tauri::AppHandle) {
+        self.close(app);
+        let inhibit_cookie = screensaver_inhibit();
+        #[cfg(target_os = "linux")]
+        let (saved_shortcuts, shortcut_restore_path) = match shortcut_restore_path(app)
+            .and_then(|path| SavedShortcuts::save_and_disable(app).map(|saved| (saved, path)))
+        {
+            Ok((saved, path)) => (Some(saved), Some(path)),
+            Err(err) => {
+                eprintln!("failed to disable Linux overlay shortcuts: {err}");
+                (None, None)
+            }
+        };
+
+        let cleanup = PomodoroOverlayCleanup {
+            labels: Vec::new(),
+            inhibit_cookie,
+            #[cfg(target_os = "linux")]
+            saved_shortcuts,
+            #[cfg(target_os = "linux")]
+            shortcut_restore_path,
+        };
+        *self
+            .cleanup
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(cleanup);
+        self.active.store(true, Ordering::SeqCst);
+    }
+
+    fn set_labels(&self, labels: Vec<String>) {
+        let mut cleanup = self
+            .cleanup
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(cleanup) = cleanup.as_mut() {
+            cleanup.labels = labels;
+        }
+    }
+
+    fn close(&self, app: &tauri::AppHandle) {
+        self.active.store(false, Ordering::SeqCst);
+        let cleanup = self
+            .cleanup
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take();
+        let Some(cleanup) = cleanup else {
+            return;
+        };
+
+        destroy_overlay_windows(app, &cleanup.labels);
+        restore_overlay_cleanup(cleanup);
+    }
+}
+
+fn destroy_overlay_windows(app: &tauri::AppHandle, labels: &[String]) {
+    let labels = labels.to_vec();
+    let app_for_setup = app.clone();
+    if let Err(err) = run_main_thread_setup(app, move || {
+        #[cfg(target_os = "linux")]
+        destroy_linux_native_blocker_windows();
+
+        for label in labels {
+            if let Some(window) = app_for_setup.get_webview_window(&label) {
+                let _ = window.destroy();
+            }
+        }
+        Ok(())
+    }) {
+        eprintln!("failed to destroy pomodoro overlay windows: {err}");
+    }
+}
+
+fn restore_overlay_cleanup(cleanup: PomodoroOverlayCleanup) {
+    std::thread::spawn(move || {
+        #[cfg(target_os = "linux")]
+        {
+            if let Some(saved) = cleanup.saved_shortcuts.as_ref() {
+                restore_shortcuts(saved);
+            }
+            if let Some(path) = cleanup.shortcut_restore_path.as_ref() {
+                clear_shortcut_restore(path);
+            }
+        }
+        if let Some(cookie) = cleanup.inhibit_cookie {
+            screensaver_uninhibit(cookie);
+        }
+    });
+}
+
+fn overlay_url(kind: PomodoroOverlayKind, seconds: u32) -> WebviewUrl {
+    let query = match kind {
+        PomodoroOverlayKind::Break => {
+            format!(
+                "index.html?ganbaruWindow=pomodoroOverlay&overlayKind=break&breakSeconds={seconds}"
+            )
+        }
+        PomodoroOverlayKind::Idle => {
+            format!(
+                "index.html?ganbaruWindow=pomodoroOverlay&overlayKind=idle&idleSeconds={seconds}"
+            )
+        }
+    };
+    WebviewUrl::App(query.into())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn blocker_url() -> WebviewUrl {
+    WebviewUrl::App("index.html?ganbaruWindow=pomodoroOverlayBlocker".into())
+}
+
+fn monitor_matches(a: &tauri::window::Monitor, b: &tauri::window::Monitor) -> bool {
+    a.position().x == b.position().x
+        && a.position().y == b.position().y
+        && a.size().width == b.size().width
+        && a.size().height == b.size().height
+}
+
+fn monitor_logical_geometry(monitor: &tauri::window::Monitor) -> (f64, f64, f64, f64) {
+    let scale = monitor.scale_factor().max(1.0);
+    (
+        monitor.position().x as f64 / scale,
+        monitor.position().y as f64 / scale,
+        monitor.size().width as f64 / scale,
+        monitor.size().height as f64 / scale,
+    )
+}
+
+fn destroy_existing_window(app: &tauri::AppHandle, label: &str) {
+    if let Some(existing) = app.get_webview_window(label) {
+        let _ = existing.destroy();
+    }
+}
+
+fn build_svelte_overlay_window(
+    app: &tauri::AppHandle,
+    label: &str,
+    url: WebviewUrl,
+    title: &str,
+    monitor: &tauri::window::Monitor,
+    focused: bool,
+) -> Result<(), String> {
+    destroy_existing_window(app, label);
+
+    let (x, y, width, height) = monitor_logical_geometry(monitor);
+    let window = WebviewWindowBuilder::new(app, label, url)
+        .title(title)
+        .position(x, y)
+        .inner_size(width, height)
+        .decorations(false)
+        .transparent(false)
+        .background_color(Color(0, 0, 0, 255))
+        .resizable(false)
+        .maximizable(false)
+        .minimizable(false)
+        .closable(false)
+        .always_on_top(false)
+        .visible_on_all_workspaces(false)
+        .skip_taskbar(false)
+        .focused(focused)
+        .fullscreen(false)
+        .visible(false)
+        .build()
+        .map_err(|e| format!("create pomodoro overlay window {label}: {e}"))?;
+
+    let _ = window.set_background_color(Some(Color(0, 0, 0, 255)));
+    let _ = window.set_shadow(false);
+    let _ = window.set_fullscreen(true);
+    let _ = window.set_always_on_top(true);
+    let _ = window.show();
+    let _ = window.set_fullscreen(true);
+    let _ = window.set_skip_taskbar(true);
+    let _ = window.set_visible_on_all_workspaces(true);
+    if focused {
+        let _ = window.set_focus();
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn destroy_linux_native_blocker_windows() {
+    use gtk::prelude::*;
+
+    POMODORO_GTK_BLOCKERS.with(|blockers| {
+        for window in blockers.borrow_mut().drain(..) {
+            window.hide();
+            window.close();
+        }
+    });
+}
+
+#[cfg(target_os = "linux")]
+fn gdk_monitor_matches_tauri(
+    gdk_monitor: &gtk::gdk::Monitor,
+    tauri_monitor: &tauri::window::Monitor,
+) -> bool {
+    use gtk::prelude::MonitorExt;
+
+    let geometry = gdk_monitor.geometry();
+    let (x, y, width, height) = monitor_logical_geometry(tauri_monitor);
+    let tolerance = 2.0;
+
+    (geometry.x() as f64 - x).abs() <= tolerance
+        && (geometry.y() as f64 - y).abs() <= tolerance
+        && (geometry.width() as f64 - width).abs() <= tolerance
+        && (geometry.height() as f64 - height).abs() <= tolerance
+}
+
+#[cfg(target_os = "linux")]
+fn linux_primary_monitor_index(
+    display: &gtk::gdk::Display,
+    tauri_primary: &tauri::window::Monitor,
+) -> i32 {
+    let n_monitors = display.n_monitors();
+    if let Some(index) = (0..n_monitors).find(|&index| {
+        display
+            .monitor(index)
+            .is_some_and(|monitor| gdk_monitor_matches_tauri(&monitor, tauri_primary))
+    }) {
+        return index;
+    }
+
+    match display.primary_monitor() {
+        Some(primary) => (0..n_monitors)
+            .find(|&index| display.monitor(index).as_ref() == Some(&primary))
+            .unwrap_or(0),
+        None => 0,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn build_linux_native_blocker_windows(
+    primary_monitor: &tauri::window::Monitor,
+) -> Result<(), String> {
+    use gtk::prelude::*;
+
+    destroy_linux_native_blocker_windows();
+
+    let display = gtk::gdk::Display::default()
+        .ok_or_else(|| "no GDK display is available for secondary monitor blockers".to_string())?;
+    let screen = display.default_screen();
+    let n_monitors = display.n_monitors();
+    if n_monitors <= 1 {
+        return Ok(());
+    }
+
+    let primary_idx = linux_primary_monitor_index(&display, primary_monitor);
+    let mut windows = Vec::new();
+
+    for index in 0..n_monitors {
+        if index == primary_idx {
+            continue;
+        }
+
+        let window = gtk::Window::new(gtk::WindowType::Toplevel);
+        window.set_decorated(false);
+        window.set_keep_above(true);
+        window.set_app_paintable(true);
+        window.set_accept_focus(false);
+        window.set_focus_on_map(false);
+        window.connect_draw(|_, cr| {
+            cr.set_source_rgb(0.0, 0.0, 0.0);
+            let _ = cr.paint();
+            gtk::glib::Propagation::Proceed
+        });
+        window.fullscreen_on_monitor(&screen, index);
+        window.show_all();
+        window.fullscreen_on_monitor(&screen, index);
+        windows.push(window);
+    }
+
+    POMODORO_GTK_BLOCKERS.with(|blockers| {
+        *blockers.borrow_mut() = windows;
+    });
+
+    Ok(())
+}
+
+fn show_pomodoro_overlay(
+    app: tauri::AppHandle,
+    kind: PomodoroOverlayKind,
+    seconds: u32,
+) -> Result<(), String> {
+    let overlay_state = app.state::<PomodoroOverlayState>();
+    overlay_state.begin(&app);
+
+    let app_for_setup = app.clone();
+    let setup_result = run_main_thread_setup(&app, move || {
+        let monitors = app_for_setup
+            .available_monitors()
+            .map_err(|e| e.to_string())?;
+        if monitors.is_empty() {
+            return Err("no monitors are available for the pomodoro overlay".to_string());
+        }
+        let primary_idx = app_for_setup
+            .primary_monitor()
+            .map_err(|e| e.to_string())?
+            .and_then(|primary| {
+                monitors
+                    .iter()
+                    .position(|monitor| monitor_matches(monitor, &primary))
+            })
+            .unwrap_or(0);
+
+        let mut labels = Vec::with_capacity(monitors.len());
+        let primary_monitor = &monitors[primary_idx];
+
+        #[cfg(target_os = "linux")]
+        if let Err(err) = build_linux_native_blocker_windows(primary_monitor) {
+            eprintln!("failed to create Linux secondary monitor blockers: {err}");
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        for (index, monitor) in monitors.iter().enumerate() {
+            if index == primary_idx {
+                continue;
+            }
+            let label = format!("{POMODORO_OVERLAY_BLOCKER_PREFIX}-{index}");
+            if let Err(err) = build_svelte_overlay_window(
+                &app_for_setup,
+                &label,
+                blocker_url(),
+                "Ganbaru AI blocker",
+                monitor,
+                false,
+            ) {
+                eprintln!("failed to create secondary monitor blocker {label}: {err}");
+                continue;
+            }
+            labels.push(label);
+        }
+
+        build_svelte_overlay_window(
+            &app_for_setup,
+            POMODORO_OVERLAY_MAIN_LABEL,
+            overlay_url(kind, seconds),
+            "Ganbaru AI pomodoro",
+            primary_monitor,
+            true,
+        )?;
+        labels.push(POMODORO_OVERLAY_MAIN_LABEL.to_string());
+        app_for_setup
+            .state::<PomodoroOverlayState>()
+            .set_labels(labels);
+        Ok(())
+    });
+
+    if let Err(err) = setup_result {
+        app.state::<PomodoroOverlayState>().close(&app);
+        return Err(err);
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
-pub fn show_idle_overlay(_app: tauri::AppHandle, _idle_seconds: u32) -> Result<bool, String> {
-    // Non-Linux: handled by the Svelte IdleOverlay component (fullscreen webview)
-    Ok(false)
+pub fn close_pomodoro_overlay(app: tauri::AppHandle, overlays: State<'_, PomodoroOverlayState>) {
+    overlays.close(&app);
+}
+
+#[tauri::command]
+pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(), String> {
+    show_pomodoro_overlay(app, PomodoroOverlayKind::Break, break_seconds)
+}
+
+#[tauri::command]
+pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<bool, String> {
+    show_pomodoro_overlay(app, PomodoroOverlayKind::Idle, idle_seconds)?;
+    Ok(true)
 }
 
 #[cfg(target_os = "linux")]
@@ -1671,12 +1389,6 @@ pub fn get_idle_status() -> IdleStatus {
         idle_ms: 0,
         webcam_in_use: false,
     }
-}
-
-#[cfg(not(target_os = "linux"))]
-#[tauri::command]
-pub fn show_break_overlay(_app: tauri::AppHandle, _break_seconds: u32) -> Result<(), String> {
-    Err("Break overlay not yet implemented for this platform".into())
 }
 
 // ── Alert sound ──────────────────────────────────────────────────

@@ -24,7 +24,7 @@ Used throughout the Svelte frontend. Provides type safety across the heavily int
 
 ### HTML / CSS
 
-Standard web rendering inside the Tauri webview. CSS handles a significant part of the ambient UI: backdrop blur, transitions on the edge panel and overlays, fullscreen break screen aesthetics, the Notion-like editor layout, visual novel dialogue presentation (planned). Global app tooltips keep the hover delay, then paint at their final opacity and position with no entrance animation.
+Standard web rendering inside the Tauri webview. CSS handles a significant part of the ambient UI: backdrop blur, transitions on the edge panel and overlays, fullscreen Pomodoro blocked-screen aesthetics, the Notion-like editor layout, visual novel dialogue presentation (planned). Global app tooltips keep the hover delay, then paint at their final opacity and position with no entrance animation.
 
 ---
 
@@ -36,11 +36,11 @@ The desktop and mobile shell. Wraps the Svelte frontend in a native window and e
 
 Key Tauri v2 capabilities used in this project:
 
-- **Multi-window management.** Separate windows for the main app, the edge panel, the fullscreen break overlay, and custom notifications. Each independently configured (frameless, transparent, always-on-top, positioned to screen edges or center).
+- **Multi-window management.** Separate windows for the main app, the edge panel, the fullscreen Pomodoro overlay, secondary monitor blockers, and custom notifications. Each independently configured (frameless, transparent, always-on-top, positioned to screen edges or center). On Linux, secondary Pomodoro blockers use native GTK/GDK black windows for more reliable Wayland multi-monitor coverage.
 - **Detached module windows.** Primary title-bar tabs can be moved into app-owned secondary windows. While a tab is detached, the main window hides that tab and the detached window locks navigation to that view. The tab can be reattached from the detached window's context menu or by dragging it back onto the main title bar. Detached windows bridge live state through app events: theme changes apply everywhere, calendar mutations reload other windows from SQLite, and the main window coordinates the Pomodoro timer so secondary windows mirror and control the same session.
 - **Single-instance enforcement.** Linux desktop bundles declare `SingleMainWindow=true` and `X-GNOME-SingleWindow=true` so GNOME-style docks know Ganbaru AI is a single-main-window app. The Tauri single-instance plugin enforces the runtime rule: a second launch focuses the existing main window and exits the extra process.
 - **`set_always_on_top`**. Used for the notification window and fullscreen Pomodoro overlay to appear above all other apps including the Windows taskbar.
-- **`set_fullscreen` + `set_decorations(false)` + `set_transparent`**. Combined to produce the fullscreen break screen that covers the taskbar and acts as a custom screen saver during Pomodoro breaks.
+- **`set_fullscreen` + `set_decorations(false)` + `set_transparent`**. Combined to produce the fullscreen Pomodoro overlay that covers the taskbar during break and idle blocked states.
 - **`setIgnoreCursorEvents`**. Allows the custom notification window to be non-interactive when desired, so it does not interrupt work in other apps.
 - **Tray icon API.** The app lives in the system tray when not focused, essential for an always-running productivity tool.
 - **Native messaging host binary.** The repo-owned `ganbaru-ai-native-messaging` Rust binary lets Chromium-based browser extensions ask the local app state whether a page should be blocked. Local setup generates separate app and dev native-host launchers so the normal extension and dev extension can be installed at the same time without sharing app config.
@@ -475,7 +475,7 @@ All implemented as secondary Tauri windows for fully custom UI rather than OS no
 | Feature                          | Implementation                                                                                                                                                          |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Pomodoro completion notification | Small frameless always-on-top window at bottom-right corner, auto-dismissed after N seconds                                                                             |
-| Fullscreen break screen          | Fullscreen frameless always-on-top window covering the taskbar, semi-transparent dark overlay + looping video background, custom Svelte UI with break timer and options |
+| Fullscreen Pomodoro blocked screen | Rust/Tauri-enforced fullscreen always-on-top Svelte overlay for break and idle states, with native black blocker windows on secondary monitors |
 | Edge panel                       | Narrow always-on-top window anchored to the right screen edge, shown/hidden based on global cursor position polled from Rust                                            |
 | Session summary screen           | Displayed during Pomodoro breaks with session completion stats                                                                                                          |
 

@@ -338,7 +338,7 @@
   const idleInfo = $derived(pomodoro.idlePaused);
 
   $effect(() => {
-    if (idleInfo) void loadIdleOverlay();
+    if (idleInfo && !idleInfo.nativeOverlay) void loadIdleOverlay();
   });
 
   function formatAwayDuration(totalSeconds: number): string {
@@ -676,7 +676,7 @@
     />
   {/if}
 
-  {#if idleInfo && IdleOverlay}
+  {#if idleInfo && !idleInfo.nativeOverlay && IdleOverlay}
     {@const Idle = IdleOverlay}
     <Idle
       idleSeconds={idleInfo.idleSeconds}

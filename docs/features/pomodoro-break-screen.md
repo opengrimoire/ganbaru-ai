@@ -12,15 +12,15 @@ This is not arbitrary friction. It mirrors physical interventions like stretchin
 
 ## Surfaces
 
-The break screen has two implementations, picked at runtime based on platform capabilities.
+The break screen has one visual implementation and a native enforcement layer.
 
-**GTK native overlay (Linux preferred).** A native GTK window covering all displays, configured as a fullscreen always-on-top window with no decorations. Rendering is done with native widgets so the window appears instantly without webview startup latency, and behaves correctly with multi-monitor setups, virtual desktops, and tiling window managers.
+**Svelte overlay window.** A dedicated Tauri webview window mounts the Pomodoro blocked-screen UI. This is the canonical visual surface for the break countdown, break finished state, idle paused state, and idle focus-failed state. Keeping the UI in Svelte makes the blocked screens share the same component system as the rest of the app and avoids maintaining separate per-OS UI implementations.
 
-**Webview fallback (everything else).** A Tauri webview window covering the primary display, fullscreen, always-on-top. The contents are a small Svelte component that mirrors the GTK version's controls. Used on Windows, macOS, and Linux distros where the GTK approach is not available.
+**Rust/Tauri enforcement.** Rust creates a fullscreen, undecorated, always-on-top overlay window for the primary display and marks the overlay as active until the Pomodoro state machine closes it. While active, app-level quit and window-close paths refocus the overlay instead of exiting. On Linux, the app also inhibits the screensaver, temporarily disables configured desktop shortcuts, and uses native black blocker windows for secondary monitors while the overlay is active, then restores them when the overlay closes.
 
-The webview fallback has a brief startup delay (the webview must mount), which is why GTK is preferred on Linux. Functionally the two are equivalent.
+For multi-monitor setups, the primary monitor gets the full Svelte overlay UI. Additional monitors get fullscreen black blocker windows. They do not carry controls; they exist to remove useful work surfaces while the break is enforced. On Linux these blockers use the native GTK/GDK monitor APIs because they are more reliable than webview monitor placement on Wayland.
 
-For multi-monitor setups, the GTK overlay covers all displays. The webview fallback covers the primary display only; this is a known limitation of the webview approach and an accepted tradeoff for the simpler implementation.
+This does not try to defeat a user with OS-level control of the machine. A forced process kill, power-off, or desktop environment action outside the app's control can still terminate Ganbaru AI. The goal is to block normal app switching, accidental dismissal, and ordinary close paths without turning the app into hostile system software.
 
 ## Controls
 
@@ -64,9 +64,9 @@ The break screen does not need special suspend handling beyond what the rest of 
 
 ## Display change mid-break
 
-If a monitor is connected or disconnected during a break (common on laptops being plugged into an external display), the break screen may need to redraw. The GTK overlay handles this natively: it updates its window list to cover whatever displays are present at the time. The webview fallback covers only the primary display, so a display change does not affect coverage in the same way.
+If a monitor is connected or disconnected during a break (common on laptops being plugged into an external display), the overlay remains tied to the displays that existed when it was created. The main overlay window continues to enforce the break on its assigned monitor, but new or reconfigured displays may need the overlay to be recreated before coverage is perfect again.
 
-If the primary display changes (the user disconnects the laptop's external display while it was the primary), the webview window may temporarily lose its always-on-top status until the OS settles the display configuration. This is a brief window measured in seconds and is an accepted tradeoff for the simpler webview implementation.
+If the primary display changes while the overlay is active, the window may temporarily lose its always-on-top status until the OS settles the display configuration. This is a brief window measured in seconds and is an accepted tradeoff until the app adds explicit display-change reconciliation.
 
 ## When the break screen is hidden
 

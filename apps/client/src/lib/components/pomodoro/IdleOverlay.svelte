@@ -3,6 +3,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { APP_SOUND_IDS, playAppSound } from "$lib/app-sounds";
+  import PomodoroBlockedScreen from "./PomodoroBlockedScreen.svelte";
 
   let {
     idleSeconds,
@@ -30,16 +31,6 @@
   let localFocusFailed = $state(false);
 
   const overlayFocusFailed = $derived(focusFailed || localFocusFailed);
-
-  function formatDuration(totalSeconds: number): string {
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const secs = totalSeconds % 60;
-    if (hours > 0) {
-      return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-    }
-    return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-  }
 
   function clearAlertTimer() {
     if (alertIntervalId !== null) {
@@ -105,7 +96,7 @@
   onMount(() => {
     elapsed = idleSeconds;
 
-    // When the GTK overlay is active (Linux), it handles fullscreen, sounds,
+    // When the native overlay window is active, it handles fullscreen, sounds,
     // notifications, and key capture. Skip those side effects here.
     if (!nativeOverlay) {
       enterFullscreen();
@@ -126,7 +117,7 @@
     }, 1000);
 
     function handleKeydown(e: KeyboardEvent) {
-      if (nativeOverlay) return; // GTK overlay captures keys
+      if (nativeOverlay) return; // Native overlay captures keys.
       if (e.code === "Space") {
         e.preventDefault();
         e.stopPropagation();
@@ -148,42 +139,9 @@
   });
 </script>
 
-<div class="fixed inset-0 z-60 flex flex-col items-center justify-center bg-black select-none">
-  <div class="flex flex-col items-center gap-8">
-    <p class="idle-copy text-sm tracking-wide uppercase" class:failed={overlayFocusFailed}>
-      {overlayFocusFailed ? "Focus session failed" : "Focus session paused"}
-    </p>
-
-    <p class="idle-timer text-7xl font-light tabular-nums">
-      {formatDuration(elapsed)}
-    </p>
-
-    <p class="idle-copy text-base" class:failed={overlayFocusFailed}>
-      {overlayFocusFailed ? "focus lost" : "idle"}
-    </p>
-  </div>
-
-  <div class="mt-16 flex flex-col items-center gap-3">
-    <p class="idle-copy text-sm">
-      Press <span class="idle-key">Space</span> to {overlayFocusFailed ? "restart focus" : "resume focus"}
-    </p>
-    <p class="idle-copy text-sm">
-      Press <span class="idle-key">Esc</span> to stop session
-    </p>
-  </div>
+<div class="fixed inset-0 z-60">
+  <PomodoroBlockedScreen
+    state={overlayFocusFailed ? "idle_failed" : "idle"}
+    seconds={elapsed}
+  />
 </div>
-
-<style>
-  .idle-copy {
-    color: #9CA3AF;
-  }
-
-  .idle-copy.failed {
-    color: #FCA5A5;
-  }
-
-  .idle-timer,
-  .idle-key {
-    color: #FFFFFF;
-  }
-</style>

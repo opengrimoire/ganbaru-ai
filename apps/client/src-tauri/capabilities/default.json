@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for app-owned windows",
-  "windows": ["main", "view-*"],
+  "windows": ["main", "view-*", "pomodoro-overlay-*"],
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
