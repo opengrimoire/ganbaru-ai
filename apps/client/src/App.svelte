@@ -683,10 +683,6 @@
       nativeOverlay={idleInfo.nativeOverlay}
       focusFailed={idleInfo.focusFailed}
       onResume={() => pomodoro.dismissIdle(true)}
-      onStop={async () => {
-        pomodoro.dismissedBlockId = pomodoro.activeBlockId;
-        await pomodoro.dismissIdle(false);
-      }}
       onFocusFailed={(failedAtMs) => pomodoro.markIdleFocusFailed(failedAtMs)}
     />
   {/if}

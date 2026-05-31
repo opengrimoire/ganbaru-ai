@@ -3,7 +3,12 @@
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { APP_SOUND_IDS, playAppSound } from "$lib/app-sounds";
-  import { delayUntil, elapsedSecondsSince, nextIntervalTargetAfter } from "./blocked-screen";
+  import {
+    delayUntil,
+    elapsedSecondsSince,
+    nextIntervalTargetAfter,
+    shouldScheduleIdleAlert,
+  } from "./blocked-screen";
   import PomodoroBlockedScreen from "./PomodoroBlockedScreen.svelte";
 
   let {
@@ -11,14 +16,12 @@
     nativeOverlay = false,
     focusFailed = false,
     onResume,
-    onStop,
     onFocusFailed,
   }: {
     idleSeconds: number;
     nativeOverlay?: boolean;
     focusFailed?: boolean;
     onResume: () => void | Promise<void>;
-    onStop: () => void | Promise<void>;
     onFocusFailed: (failedAtMs: number) => void | Promise<void>;
   } = $props();
 
@@ -54,9 +57,14 @@
   }
 
   function scheduleNextIdleAlert(targetMs: number) {
+    if (!shouldScheduleIdleAlert(targetMs, focusFailureDueAtMs)) return;
     alertTimeoutId = setTimeout(() => {
       alertTimeoutId = null;
       if (localFocusFailed || focusFailed) return;
+      if (!shouldScheduleIdleAlert(Date.now(), focusFailureDueAtMs)) {
+        triggerFocusFailure();
+        return;
+      }
       playIdleAlert();
       scheduleNextIdleAlert(
         nextIntervalTargetAfter(targetMs, IDLE_ALERT_INTERVAL_MS, Date.now()),
@@ -69,6 +77,7 @@
     localFocusFailed = true;
     clearAlertTimer();
     clearFailureTimer();
+    elapsed = idleSeconds + elapsedSecondsSince(overlayVisibleAtMs, focusFailureDueAtMs);
     playAppSound(APP_SOUND_IDS.focusSessionFailedLongIdle).catch(() => {});
     void onFocusFailed(focusFailureDueAtMs);
   }
@@ -101,10 +110,6 @@
 
   function handleResume() {
     void exitFullscreen().then(() => onResume());
-  }
-
-  function handleStop() {
-    void exitFullscreen().then(() => onStop());
   }
 
   function afterNextPaint(callback: () => void): () => void {
@@ -160,10 +165,6 @@
         e.preventDefault();
         e.stopPropagation();
         handleResume();
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        handleStop();
       }
     }
     window.addEventListener("keydown", handleKeydown, true);

@@ -1,6 +1,6 @@
 # Pomodoro break screen
 
-When a focus phase ends, a break begins. The break screen is the surface that enforces it. The screen covers the user's display, prevents them from continuing to work, and offers a small set of controls (extend by a minute, skip the break, take longer than planned). The aim is to make ignoring the break harder than taking it, without making the app feel hostile.
+When a focus phase ends, a break begins. The break screen is the surface that enforces it. The screen covers the user's display, prevents them from continuing to work, and offers a small set of controls (extend the break, skip the break, take longer than planned). The aim is to make ignoring the break harder than taking it, without making the app feel hostile.
 
 This doc covers the surfaces, controls, overtime behavior, and edge cases.
 
@@ -24,7 +24,7 @@ The countdown is anchored to an absolute break end timestamp, not to a relative 
 
 During the countdown, the top of the screen shows the current date and time using the user's runtime locale. The break-complete screen hides this timestamp because it is an acknowledgement state, not a timed break state.
 
-The countdown timer uses the same runtime UI font as the rest of the app, with bold tabular numerals and oversized display sizing so it is readable from a distance.
+The countdown timer uses the same runtime UI font as the rest of the app, with bold tabular numerals and oversized display sizing so it is readable from a distance. Supporting date, label, and control text is intentionally large enough to read from a distance without competing with the timer.
 
 Break countdown uses `#035B33` as the background and white as the main text color. Break complete uses `#EEBA04` as the background and `#0D0502` as the main text color. Secondary labels and hints reuse the main text color at lower opacity so the state remains readable from a distance without competing with the main message.
 
@@ -37,12 +37,12 @@ The break screen has a small, deliberate control set.
 | Control | Effect |
 |---------|--------|
 | Default (no input) | When the break timer reaches 0, the screen waits for the user to start the next focus phase. |
-| `Ctrl+Shift+Space` | Adds 1 minute to the current break. Maximum 3 minutes added per break. |
+| `Ctrl+Shift+Space` | Extends the current break. The hint remains stable until the maximum extension is reached, then it disappears. |
 | Three `Esc` presses in succession | Skips the break. The next focus phase starts immediately. |
 
 The three-press skip is intentionally awkward. A single Esc would let the user dismiss breaks reflexively, defeating the purpose. Three presses are fast enough that a determined user can skip in under two seconds, but slow enough that an absentminded press does not skip by accident.
 
-The Ctrl+Shift+Space chord adds a minute at a time, capped at 3 added minutes per break. This handles the common case where the user is mid-stretch or mid-conversation when the break would end and needs slightly more time. The cap prevents the user from indefinitely extending the break and losing the rhythm.
+The Ctrl+Shift+Space chord extends the current break, capped at 3 added minutes per break. This handles the common case where the user is mid-stretch or mid-conversation when the break would end and needs slightly more time. The cap prevents the user from indefinitely extending the break and losing the rhythm.
 
 There is no "stop the session" control on the break screen. Stopping the session must go through the main window, which makes it a deliberate action rather than an impulse during a moment of resistance.
 

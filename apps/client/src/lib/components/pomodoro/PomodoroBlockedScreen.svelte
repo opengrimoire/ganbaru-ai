@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import {
+    formatBreakExtensionHint,
     formatBlockedScreenDateTime,
     formatBlockedScreenDuration,
     pomodoroBlockedScreenPalette,
@@ -35,13 +36,7 @@
   );
   const extensionHint = $derived.by(() => {
     if (screenState !== "break_countdown") return null;
-    if (extensionMinutes <= 0) {
-      return "Press Ctrl+Shift+Space to extend the break 1 minute";
-    }
-    if (extensionMinutes >= maxExtensionMinutes) {
-      return `Break extended by ${maxExtensionMinutes} minutes (maximum reached)`;
-    }
-    return `Break extended by ${extensionMinutes} min, press Ctrl+Shift+Space to add more (${maxExtensionMinutes - extensionMinutes} left)`;
+    return formatBreakExtensionHint(extensionMinutes, maxExtensionMinutes);
   });
   const skipHint = $derived.by(() => {
     if (screenState !== "break_countdown") return null;
@@ -71,7 +66,7 @@
   style={screenStyle}
 >
   {#if showDateTime}
-    <p class="blocked-muted absolute inset-x-0 top-8 mx-auto max-w-[calc(100vw-3rem)] px-6 text-center text-sm">
+    <p class="blocked-date-time blocked-muted absolute inset-x-0 top-8 mx-auto max-w-[calc(100vw-3rem)] px-6 text-center">
       {dateTimeLabel}
     </p>
   {/if}
@@ -81,7 +76,7 @@
       <p
         class={screenState === "break_finished"
           ? "blocked-finished-title blocked-main"
-          : "blocked-muted text-sm font-medium uppercase tracking-wide"}
+          : "blocked-kicker blocked-muted font-medium uppercase tracking-wide"}
       >
         {copy.title}
       </p>
@@ -94,20 +89,20 @@
     {/if}
 
     {#if copy.status}
-      <p class="blocked-muted text-base">
+      <p class="blocked-status blocked-muted">
         {copy.status}
       </p>
     {/if}
 
     {#if copy.subtitle}
-      <p class="blocked-muted text-sm">
+      <p class="blocked-subtitle blocked-muted">
         {copy.subtitle}
       </p>
     {/if}
   </div>
 
   {#if screenState !== "break_finished"}
-    <div class="blocked-subtle absolute inset-x-0 bottom-12 flex flex-col items-center gap-3 px-6 text-center text-sm">
+    <div class="blocked-hints blocked-subtle absolute inset-x-0 bottom-12 flex flex-col items-center gap-3 px-6 text-center">
       {#if screenState === "break_countdown"}
         {#if extensionHint}
           <p>{extensionHint}</p>
@@ -155,6 +150,19 @@
     color: var(--blocked-subtle-text);
   }
 
+  .blocked-date-time,
+  .blocked-kicker,
+  .blocked-subtitle,
+  .blocked-hints {
+    font-size: 1.75rem;
+    line-height: 1.25;
+  }
+
+  .blocked-status {
+    font-size: 2rem;
+    line-height: 1.2;
+  }
+
   .blocked-timer {
     font-family: inherit;
     font-size: 13rem;
@@ -179,6 +187,17 @@
     .blocked-finished-title {
       font-size: 4rem;
     }
+
+    .blocked-date-time,
+    .blocked-kicker,
+    .blocked-subtitle,
+    .blocked-hints {
+      font-size: 1.4rem;
+    }
+
+    .blocked-status {
+      font-size: 1.6rem;
+    }
   }
 
   @media (max-width: 640px), (max-height: 460px) {
@@ -188,6 +207,17 @@
 
     .blocked-finished-title {
       font-size: 3rem;
+    }
+
+    .blocked-date-time,
+    .blocked-kicker,
+    .blocked-subtitle,
+    .blocked-hints {
+      font-size: 1.1rem;
+    }
+
+    .blocked-status {
+      font-size: 1.25rem;
     }
   }
 
@@ -199,6 +229,17 @@
     .blocked-finished-title {
       font-size: 2rem;
     }
+
+    .blocked-date-time,
+    .blocked-kicker,
+    .blocked-subtitle,
+    .blocked-hints {
+      font-size: 0.85rem;
+    }
+
+    .blocked-status {
+      font-size: 0.95rem;
+    }
   }
 
   @media (max-width: 300px), (max-height: 220px) {
@@ -208,6 +249,17 @@
 
     .blocked-finished-title {
       font-size: 1.5rem;
+    }
+
+    .blocked-date-time,
+    .blocked-kicker,
+    .blocked-subtitle,
+    .blocked-hints {
+      font-size: 0.7rem;
+    }
+
+    .blocked-status {
+      font-size: 0.8rem;
     }
   }
 </style>

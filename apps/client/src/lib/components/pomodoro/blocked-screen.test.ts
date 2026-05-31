@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   delayUntil,
   elapsedSecondsSince,
+  formatBreakExtensionHint,
   formatBlockedScreenDateTime,
   formatBlockedScreenDuration,
   nextIntervalTargetAfter,
@@ -10,6 +11,7 @@ import {
   pomodoroBlockedScreenCopy,
   pomodoroBlockedScreenStateFromOverlayKind,
   remainingSecondsUntil,
+  shouldScheduleIdleAlert,
   shouldShowBlockedScreenDateTime,
 } from "./blocked-screen";
 
@@ -89,15 +91,39 @@ describe("blocked pomodoro screen helpers", () => {
     expect(nextIntervalTargetAfter(10_000, 10_000, 30_000)).toBe(40_000);
   });
 
+  it("keeps the exact focus failure boundary for the failure sound", () => {
+    expect(shouldScheduleIdleAlert(59_999, 60_000)).toBe(true);
+    expect(shouldScheduleIdleAlert(60_000, 60_000)).toBe(false);
+    expect(shouldScheduleIdleAlert(60_001, 60_000)).toBe(false);
+  });
+
+  it("keeps break extension hint stable until the cap is reached", () => {
+    expect(formatBreakExtensionHint(0, 3)).toBe(
+      "Press Ctrl+Shift+Space to extend the break",
+    );
+    expect(formatBreakExtensionHint(1, 3)).toBe(
+      "Press Ctrl+Shift+Space to extend the break",
+    );
+    expect(formatBreakExtensionHint(3, 3)).toBeNull();
+  });
+
   it("uses restart copy for failed idle sessions", () => {
     const copy = pomodoroBlockedScreenCopy("idle_failed");
     expect(copy.title).toBe("Focus session failed");
+    expect(copy.status).toBeNull();
     expect(copy.primaryHint?.label).toBe("restart focus");
+    expect(copy.secondaryHint).toBeNull();
   });
 
-  it("keeps break completion dismissible by key or click", () => {
+  it("does not expose a stop action on idle screens", () => {
+    expect(pomodoroBlockedScreenCopy("idle").status).toBeNull();
+    expect(pomodoroBlockedScreenCopy("idle").secondaryHint).toBeNull();
+    expect(pomodoroBlockedScreenCopy("idle_failed").secondaryHint).toBeNull();
+  });
+
+  it("uses generic break completion acknowledgement copy", () => {
     const copy = pomodoroBlockedScreenCopy("break_finished");
     expect(copy.title).toBe("Break complete");
-    expect(copy.subtitle).toBe("press any key or click to continue");
+    expect(copy.subtitle).toBe("acknowledge when ready");
   });
 });

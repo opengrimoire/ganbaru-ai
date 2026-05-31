@@ -1952,10 +1952,6 @@ function initListeners() {
     if (idlePaused) void dismissIdle(true);
   }).catch((e) => console.warn("Failed to listen for idle-overlay-resume:", e));
 
-  listen("idle-overlay-stop", () => {
-    if (idlePaused) void dismissIdle(false);
-  }).catch((e) => console.warn("Failed to listen for idle-overlay-stop:", e));
-
   listen<{ failedAtMs?: number }>("idle-overlay-focus-failed", (event) => {
     if (!idlePaused) return;
     const failedAtMs = event.payload.failedAtMs;

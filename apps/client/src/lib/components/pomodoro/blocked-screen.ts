@@ -120,6 +120,20 @@ export function delayUntil(targetMs: number, nowMs: number): number {
   return Math.max(0, targetMs - nowMs);
 }
 
+export function formatBreakExtensionHint(
+  extensionMinutes: number,
+  maxExtensionMinutes: number,
+): string | null {
+  const safeExtensionMinutes = Math.max(0, Math.floor(extensionMinutes));
+  const safeMaxExtensionMinutes = Math.max(0, Math.floor(maxExtensionMinutes));
+  if (safeExtensionMinutes >= safeMaxExtensionMinutes) return null;
+  return "Press Ctrl+Shift+Space to extend the break";
+}
+
+export function shouldScheduleIdleAlert(targetMs: number, failureDueAtMs: number): boolean {
+  return targetMs < failureDueAtMs;
+}
+
 export function nextIntervalTargetAfter(
   currentTargetMs: number,
   intervalMs: number,
@@ -141,20 +155,20 @@ export function pomodoroBlockedScreenCopy(
     case "idle":
       return {
         title: "Focus session paused",
-        status: "idle",
+        status: null,
         subtitle: null,
         tone: "neutral",
         primaryHint: { key: "Space", label: "resume focus" },
-        secondaryHint: { key: "Esc", label: "stop session", tone: "danger" },
+        secondaryHint: null,
       };
     case "idle_failed":
       return {
         title: "Focus session failed",
-        status: "focus lost",
+        status: null,
         subtitle: null,
         tone: "danger",
         primaryHint: { key: "Space", label: "restart focus" },
-        secondaryHint: { key: "Esc", label: "stop session", tone: "danger" },
+        secondaryHint: null,
       };
     case "break_countdown":
       return {
@@ -162,14 +176,14 @@ export function pomodoroBlockedScreenCopy(
         status: null,
         subtitle: null,
         tone: "neutral",
-        primaryHint: { key: "Ctrl+Shift+Space", label: "extend the break 1 minute" },
+        primaryHint: { key: "Ctrl+Shift+Space", label: "extend the break" },
         secondaryHint: { key: "3x Esc", label: "skip the break entirely", tone: "danger" },
       };
     case "break_finished":
       return {
         title: "Break complete",
         status: null,
-        subtitle: "press any key or click to continue",
+        subtitle: "acknowledge when ready",
         tone: "neutral",
         primaryHint: null,
         secondaryHint: null,

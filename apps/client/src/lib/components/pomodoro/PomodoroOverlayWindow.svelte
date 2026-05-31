@@ -10,6 +10,7 @@
     elapsedSecondsSince,
     nextIntervalTargetAfter,
     remainingSecondsUntil,
+    shouldScheduleIdleAlert,
   } from "./blocked-screen";
   import PomodoroBlockedScreen from "./PomodoroBlockedScreen.svelte";
   import type { PomodoroBlockedScreenState } from "./blocked-screen";
@@ -100,9 +101,14 @@
   }
 
   function scheduleNextIdleAlert(targetMs: number): void {
+    if (!shouldScheduleIdleAlert(targetMs, idleFailureDueAtMs)) return;
     idleAlertTimeoutId = setTimeout(() => {
       idleAlertTimeoutId = null;
       if (closed || screenState !== "idle") return;
+      if (!shouldScheduleIdleAlert(Date.now(), idleFailureDueAtMs)) {
+        triggerFocusFailure();
+        return;
+      }
       playIdleAlert();
       scheduleNextIdleAlert(
         nextIntervalTargetAfter(targetMs, IDLE_ALERT_INTERVAL_MS, Date.now()),
@@ -122,6 +128,10 @@
     focusFailureSent = true;
     screenState = "idle_failed";
     clearIdleTimers();
+    if (mode.kind === "idle") {
+      seconds =
+        mode.initialIdleSeconds + elapsedSecondsSince(overlayStartedAtMs, idleFailureDueAtMs);
+    }
     playAppSound(APP_SOUND_IDS.focusSessionFailedLongIdle).catch(() => {});
     const payload: IdleFocusFailedPayload = { failedAtMs: idleFailureDueAtMs };
     emit("idle-overlay-focus-failed", payload).catch((error) => {
@@ -181,12 +191,6 @@
     closeOverlay();
   }
 
-  async function stopIdle(): Promise<void> {
-    clearIdleTimers();
-    await emit("idle-overlay-stop");
-    closeOverlay();
-  }
-
   function handleKeydown(event: KeyboardEvent): void {
     event.preventDefault();
     event.stopPropagation();
@@ -195,8 +199,6 @@
     if (mode.kind === "idle") {
       if (event.code === "Space") {
         void resumeIdle();
-      } else if (event.key === "Escape") {
-        void stopIdle();
       }
       return;
     }
