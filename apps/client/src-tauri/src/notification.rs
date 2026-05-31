@@ -766,12 +766,19 @@ fn screensaver_inhibit() -> Option<u32> {
 fn screensaver_uninhibit(_cookie: u32) {}
 
 const POMODORO_OVERLAY_MAIN_LABEL: &str = "pomodoro-overlay-main";
+const POMODORO_OVERLAY_STATE_CHANGED_EVENT: &str = "pomodoro-overlay-state-changed";
 #[cfg(not(target_os = "linux"))]
 const POMODORO_OVERLAY_BLOCKER_PREFIX: &str = "pomodoro-overlay-blocker";
 
 #[cfg(target_os = "linux")]
+struct LinuxNativeBlocker {
+    window: gtk::Window,
+    color: std::rc::Rc<std::cell::Cell<OverlayColor>>,
+}
+
+#[cfg(target_os = "linux")]
 thread_local! {
-    static POMODORO_GTK_BLOCKERS: std::cell::RefCell<Vec<gtk::Window>> =
+    static POMODORO_GTK_BLOCKERS: std::cell::RefCell<Vec<LinuxNativeBlocker>> =
         const { std::cell::RefCell::new(Vec::new()) };
 }
 
@@ -779,6 +786,91 @@ thread_local! {
 enum PomodoroOverlayKind {
     Break { ends_at_ms: u64 },
     Idle { seconds: u32 },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PomodoroOverlayVisualState {
+    Idle,
+    IdleFailed,
+    BreakCountdown,
+    BreakFinished,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct OverlayColor {
+    red: u8,
+    green: u8,
+    blue: u8,
+}
+
+#[derive(Clone, Serialize)]
+struct PomodoroOverlayStateChangedPayload {
+    state: String,
+}
+
+impl OverlayColor {
+    fn tauri(self) -> Color {
+        Color(self.red, self.green, self.blue, 255)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn gtk_rgb(self) -> (f64, f64, f64) {
+        (
+            f64::from(self.red) / 255.0,
+            f64::from(self.green) / 255.0,
+            f64::from(self.blue) / 255.0,
+        )
+    }
+}
+
+impl PomodoroOverlayKind {
+    fn initial_visual_state(self) -> PomodoroOverlayVisualState {
+        match self {
+            Self::Break { .. } => PomodoroOverlayVisualState::BreakCountdown,
+            Self::Idle { .. } => PomodoroOverlayVisualState::Idle,
+        }
+    }
+}
+
+impl PomodoroOverlayVisualState {
+    fn from_id(id: &str) -> Result<Self, String> {
+        match id {
+            "idle" => Ok(Self::Idle),
+            "idle_failed" => Ok(Self::IdleFailed),
+            "break_countdown" => Ok(Self::BreakCountdown),
+            "break_finished" => Ok(Self::BreakFinished),
+            _ => Err(format!("unknown pomodoro overlay state: {id}")),
+        }
+    }
+
+    fn id(self) -> &'static str {
+        match self {
+            Self::Idle => "idle",
+            Self::IdleFailed => "idle_failed",
+            Self::BreakCountdown => "break_countdown",
+            Self::BreakFinished => "break_finished",
+        }
+    }
+
+    fn background_color(self) -> OverlayColor {
+        match self {
+            Self::Idle | Self::IdleFailed => OverlayColor {
+                red: 0xA3,
+                green: 0x37,
+                blue: 0x28,
+            },
+            Self::BreakCountdown => OverlayColor {
+                red: 0x03,
+                green: 0x5B,
+                blue: 0x33,
+            },
+            Self::BreakFinished => OverlayColor {
+                red: 0xEE,
+                green: 0xBA,
+                blue: 0x04,
+            },
+        }
+    }
 }
 
 pub(crate) struct PomodoroOverlayState {
@@ -857,6 +949,15 @@ impl PomodoroOverlayState {
         }
     }
 
+    fn labels(&self) -> Vec<String> {
+        self.cleanup
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .as_ref()
+            .map(|cleanup| cleanup.labels.clone())
+            .unwrap_or_default()
+    }
+
     fn close(&self, app: &tauri::AppHandle) {
         self.active.store(false, Ordering::SeqCst);
         let cleanup = self
@@ -925,8 +1026,14 @@ fn overlay_url(kind: PomodoroOverlayKind) -> WebviewUrl {
 }
 
 #[cfg(not(target_os = "linux"))]
-fn blocker_url() -> WebviewUrl {
-    WebviewUrl::App("index.html?ganbaruWindow=pomodoroOverlayBlocker".into())
+fn blocker_url(state: PomodoroOverlayVisualState) -> WebviewUrl {
+    WebviewUrl::App(
+        format!(
+            "index.html?ganbaruWindow=pomodoroOverlayBlocker&screenState={}",
+            state.id()
+        )
+        .into(),
+    )
 }
 
 fn monitor_matches(a: &tauri::window::Monitor, b: &tauri::window::Monitor) -> bool {
@@ -958,6 +1065,7 @@ fn build_svelte_overlay_window(
     url: WebviewUrl,
     title: &str,
     monitor: &tauri::window::Monitor,
+    background_color: OverlayColor,
     focused: bool,
 ) -> Result<(), String> {
     destroy_existing_window(app, label);
@@ -969,7 +1077,6 @@ fn build_svelte_overlay_window(
         .inner_size(width, height)
         .decorations(false)
         .transparent(false)
-        .background_color(Color(0, 0, 0, 255))
         .resizable(false)
         .maximizable(false)
         .minimizable(false)
@@ -980,10 +1087,11 @@ fn build_svelte_overlay_window(
         .focused(focused)
         .fullscreen(false)
         .visible(false)
+        .background_color(background_color.tauri())
         .build()
         .map_err(|e| format!("create pomodoro overlay window {label}: {e}"))?;
 
-    let _ = window.set_background_color(Some(Color(0, 0, 0, 255)));
+    let _ = window.set_background_color(Some(background_color.tauri()));
     let _ = window.set_shadow(false);
     let _ = window.set_fullscreen(true);
     let _ = window.set_always_on_top(true);
@@ -1002,9 +1110,21 @@ fn destroy_linux_native_blocker_windows() {
     use gtk::prelude::*;
 
     POMODORO_GTK_BLOCKERS.with(|blockers| {
-        for window in blockers.borrow_mut().drain(..) {
-            window.hide();
-            window.close();
+        for blocker in blockers.borrow_mut().drain(..) {
+            blocker.window.hide();
+            blocker.window.close();
+        }
+    });
+}
+
+#[cfg(target_os = "linux")]
+fn repaint_linux_native_blocker_windows(background_color: OverlayColor) {
+    use gtk::prelude::WidgetExt;
+
+    POMODORO_GTK_BLOCKERS.with(|blockers| {
+        for blocker in blockers.borrow().iter() {
+            blocker.color.set(background_color);
+            blocker.window.queue_draw();
         }
     });
 }
@@ -1051,6 +1171,7 @@ fn linux_primary_monitor_index(
 #[cfg(target_os = "linux")]
 fn build_linux_native_blocker_windows(
     primary_monitor: &tauri::window::Monitor,
+    background_color: OverlayColor,
 ) -> Result<(), String> {
     use gtk::prelude::*;
 
@@ -1078,15 +1199,19 @@ fn build_linux_native_blocker_windows(
         window.set_app_paintable(true);
         window.set_accept_focus(false);
         window.set_focus_on_map(false);
-        window.connect_draw(|_, cr| {
-            cr.set_source_rgb(0.0, 0.0, 0.0);
+        let color = std::rc::Rc::new(std::cell::Cell::new(background_color));
+        let draw_color = std::rc::Rc::clone(&color);
+        window.connect_draw(move |_, cr| {
+            let color = draw_color.get();
+            let (red, green, blue) = color.gtk_rgb();
+            cr.set_source_rgb(red, green, blue);
             let _ = cr.paint();
             gtk::glib::Propagation::Proceed
         });
         window.fullscreen_on_monitor(&screen, index);
         window.show_all();
         window.fullscreen_on_monitor(&screen, index);
-        windows.push(window);
+        windows.push(LinuxNativeBlocker { window, color });
     }
 
     POMODORO_GTK_BLOCKERS.with(|blockers| {
@@ -1099,6 +1224,8 @@ fn build_linux_native_blocker_windows(
 fn show_pomodoro_overlay(app: tauri::AppHandle, kind: PomodoroOverlayKind) -> Result<(), String> {
     let overlay_state = app.state::<PomodoroOverlayState>();
     overlay_state.begin(&app);
+    let visual_state = kind.initial_visual_state();
+    let background_color = visual_state.background_color();
 
     let app_for_setup = app.clone();
     let setup_result = run_main_thread_setup(&app, move || {
@@ -1122,7 +1249,7 @@ fn show_pomodoro_overlay(app: tauri::AppHandle, kind: PomodoroOverlayKind) -> Re
         let primary_monitor = &monitors[primary_idx];
 
         #[cfg(target_os = "linux")]
-        if let Err(err) = build_linux_native_blocker_windows(primary_monitor) {
+        if let Err(err) = build_linux_native_blocker_windows(primary_monitor, background_color) {
             eprintln!("failed to create Linux secondary monitor blockers: {err}");
         }
 
@@ -1135,9 +1262,10 @@ fn show_pomodoro_overlay(app: tauri::AppHandle, kind: PomodoroOverlayKind) -> Re
             if let Err(err) = build_svelte_overlay_window(
                 &app_for_setup,
                 &label,
-                blocker_url(),
+                blocker_url(visual_state),
                 "Ganbaru AI blocker",
                 monitor,
+                background_color,
                 false,
             ) {
                 eprintln!("failed to create secondary monitor blocker {label}: {err}");
@@ -1152,6 +1280,7 @@ fn show_pomodoro_overlay(app: tauri::AppHandle, kind: PomodoroOverlayKind) -> Re
             overlay_url(kind),
             "Ganbaru AI pomodoro",
             primary_monitor,
+            background_color,
             true,
         )?;
         labels.push(POMODORO_OVERLAY_MAIN_LABEL.to_string());
@@ -1172,6 +1301,41 @@ fn show_pomodoro_overlay(app: tauri::AppHandle, kind: PomodoroOverlayKind) -> Re
 #[tauri::command]
 pub fn close_pomodoro_overlay(app: tauri::AppHandle, overlays: State<'_, PomodoroOverlayState>) {
     overlays.close(&app);
+}
+
+#[tauri::command]
+pub fn set_pomodoro_overlay_state(
+    app: tauri::AppHandle,
+    overlays: State<'_, PomodoroOverlayState>,
+    state: String,
+) -> Result<(), String> {
+    let visual_state = PomodoroOverlayVisualState::from_id(&state)?;
+    let background_color = visual_state.background_color();
+    let labels = overlays.labels();
+    let app_for_setup = app.clone();
+
+    if let Err(err) = run_main_thread_setup(&app, move || {
+        #[cfg(target_os = "linux")]
+        repaint_linux_native_blocker_windows(background_color);
+
+        for label in labels {
+            if let Some(window) = app_for_setup.get_webview_window(&label) {
+                let _ = window.set_background_color(Some(background_color.tauri()));
+            }
+        }
+        Ok(())
+    }) {
+        eprintln!("failed to recolor pomodoro overlay windows: {err}");
+    }
+
+    app.emit(
+        POMODORO_OVERLAY_STATE_CHANGED_EVENT,
+        PomodoroOverlayStateChangedPayload {
+            state: visual_state.id().to_string(),
+        },
+    )
+    .map_err(|e| format!("emit pomodoro overlay state change: {e}"))?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -1589,6 +1753,40 @@ mod tests {
         }
 
         assert!(AppSound::from_id("ai-response-finished").is_err());
+    }
+
+    #[test]
+    fn pomodoro_overlay_visual_states_have_expected_backgrounds() {
+        assert_eq!(
+            PomodoroOverlayVisualState::from_id("idle")
+                .unwrap()
+                .background_color(),
+            OverlayColor {
+                red: 0xA3,
+                green: 0x37,
+                blue: 0x28,
+            }
+        );
+        assert_eq!(
+            PomodoroOverlayVisualState::from_id("break_countdown")
+                .unwrap()
+                .background_color(),
+            OverlayColor {
+                red: 0x03,
+                green: 0x5B,
+                blue: 0x33,
+            }
+        );
+        assert_eq!(
+            PomodoroOverlayVisualState::from_id("break_finished")
+                .unwrap()
+                .background_color(),
+            OverlayColor {
+                red: 0xEE,
+                green: 0xBA,
+                blue: 0x04,
+            }
+        );
     }
 
     fn unique_restore_file(name: &str) -> PathBuf {

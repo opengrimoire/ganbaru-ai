@@ -16,11 +16,17 @@ The break screen has one visual implementation and a native enforcement layer.
 
 **Svelte overlay window.** A dedicated Tauri webview window mounts the Pomodoro blocked-screen UI. This is the canonical visual surface for the break countdown, break finished state, idle paused state, and idle focus-failed state. Keeping the UI in Svelte makes the blocked screens share the same component system as the rest of the app and avoids maintaining separate per-OS UI implementations.
 
-**Rust/Tauri enforcement.** Rust creates a fullscreen, undecorated, always-on-top overlay window for the primary display and marks the overlay as active until the Pomodoro state machine closes it. While active, app-level quit and window-close paths refocus the overlay instead of exiting. On Linux, the app also inhibits the screensaver, temporarily disables configured desktop shortcuts, and uses native black blocker windows for secondary monitors while the overlay is active, then restores them when the overlay closes.
+**Rust/Tauri enforcement.** Rust creates a fullscreen, undecorated, always-on-top overlay window for the primary display and marks the overlay as active until the Pomodoro state machine closes it. While active, app-level quit and window-close paths refocus the overlay instead of exiting. On Linux, the app also inhibits the screensaver, temporarily disables configured desktop shortcuts, and uses native blocker windows with the active state background color for secondary monitors while the overlay is active, then restores them when the overlay closes.
 
-For multi-monitor setups, the primary monitor gets the full Svelte overlay UI. Additional monitors get fullscreen black blocker windows. They do not carry controls; they exist to remove useful work surfaces while the break is enforced. On Linux these blockers use the native GTK/GDK monitor APIs because they are more reliable than webview monitor placement on Wayland.
+For multi-monitor setups, the primary monitor gets the full Svelte overlay UI. Additional monitors get fullscreen blocker windows using the active state's background color. They do not carry controls; they exist to remove useful work surfaces while the break is enforced. On Linux these blockers use the native GTK/GDK monitor APIs because they are more reliable than webview monitor placement on Wayland.
 
 The countdown is anchored to an absolute break end timestamp, not to a relative duration captured before the overlay opens. If the webview takes time to appear, the displayed time reflects the real phase time that has already passed. The break-start sound is triggered by the Svelte overlay after the surface has painted, so the user hears it with the blocked screen instead of before it.
+
+During the countdown, the top of the screen shows the current date and time using the user's runtime locale. The break-complete screen hides this timestamp because it is an acknowledgement state, not a timed break state.
+
+The countdown timer uses the same runtime UI font as the rest of the app, with bold tabular numerals and oversized display sizing so it is readable from a distance.
+
+Break countdown uses `#035B33` as the background and white as the main text color. Break complete uses `#EEBA04` as the background and `#0D0502` as the main text color. Secondary labels and hints reuse the main text color at lower opacity so the state remains readable from a distance without competing with the main message.
 
 This does not try to defeat a user with OS-level control of the machine. A forced process kill, power-off, or desktop environment action outside the app's control can still terminate Ganbaru AI. The goal is to block normal app switching, accidental dismissal, and ordinary close paths without turning the app into hostile system software.
 

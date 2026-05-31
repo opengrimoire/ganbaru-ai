@@ -19,6 +19,66 @@ export interface PomodoroBlockedScreenCopy {
   secondaryHint: PomodoroBlockedScreenActionHint | null;
 }
 
+export interface PomodoroBlockedScreenPalette {
+  background: string;
+  mainText: string;
+  mutedText: string;
+  subtleText: string;
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const normalized = hex.replace("#", "");
+  const red = Number.parseInt(normalized.slice(0, 2), 16);
+  const green = Number.parseInt(normalized.slice(2, 4), 16);
+  const blue = Number.parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function palette(background: string, mainText: string): PomodoroBlockedScreenPalette {
+  return {
+    background,
+    mainText,
+    mutedText: hexToRgba(mainText, 0.72),
+    subtleText: hexToRgba(mainText, 0.56),
+  };
+}
+
+const BLOCKED_SCREEN_PALETTES: Record<
+  PomodoroBlockedScreenState,
+  PomodoroBlockedScreenPalette
+> = {
+  idle: palette("#A33728", "#F9D573"),
+  idle_failed: palette("#A33728", "#F9D573"),
+  break_countdown: palette("#035B33", "#FFFFFF"),
+  break_finished: palette("#EEBA04", "#0D0502"),
+};
+
+export function parsePomodoroBlockedScreenState(
+  value: string | null,
+): PomodoroBlockedScreenState {
+  switch (value) {
+    case "idle":
+    case "idle_failed":
+    case "break_countdown":
+    case "break_finished":
+      return value;
+    default:
+      return "break_countdown";
+  }
+}
+
+export function pomodoroBlockedScreenStateFromOverlayKind(
+  overlayKind: string | null,
+): PomodoroBlockedScreenState {
+  return overlayKind === "idle" ? "idle" : "break_countdown";
+}
+
+export function pomodoroBlockedScreenPalette(
+  state: PomodoroBlockedScreenState,
+): PomodoroBlockedScreenPalette {
+  return BLOCKED_SCREEN_PALETTES[state];
+}
+
 export function formatBlockedScreenDuration(totalSeconds: number): string {
   const safeSeconds = Math.max(0, Math.floor(totalSeconds));
   const hours = Math.floor(safeSeconds / 3600);
@@ -30,6 +90,22 @@ export function formatBlockedScreenDuration(totalSeconds: number): string {
   }
 
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+export function shouldShowBlockedScreenDateTime(state: PomodoroBlockedScreenState): boolean {
+  return state !== "break_finished";
+}
+
+export function formatBlockedScreenDateTime(
+  date: Date,
+  locales?: Intl.LocalesArgument,
+  options: Intl.DateTimeFormatOptions = {},
+): string {
+  return new Intl.DateTimeFormat(locales, {
+    dateStyle: "full",
+    timeStyle: "short",
+    ...options,
+  }).format(date);
 }
 
 export function remainingSecondsUntil(targetMs: number, nowMs: number): number {

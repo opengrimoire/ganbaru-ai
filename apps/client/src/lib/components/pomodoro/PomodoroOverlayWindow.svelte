@@ -74,6 +74,7 @@
   let idleAlertTimeoutId: ReturnType<typeof setTimeout> | null = null;
   let idleFailureTimeoutId: ReturnType<typeof setTimeout> | null = null;
   let tickIntervalId: ReturnType<typeof setInterval> | null = null;
+  let syncedScreenState: PomodoroBlockedScreenState | null = null;
 
   function closeOverlay(): void {
     if (closed) return;
@@ -300,6 +301,14 @@
       clearIdleTimers();
       if (tickIntervalId !== null) clearInterval(tickIntervalId);
     };
+  });
+
+  $effect(() => {
+    if (screenState === syncedScreenState) return;
+    syncedScreenState = screenState;
+    invoke("set_pomodoro_overlay_state", { state: screenState }).catch((error) => {
+      console.warn("Failed to sync pomodoro overlay state:", error);
+    });
   });
 </script>
 

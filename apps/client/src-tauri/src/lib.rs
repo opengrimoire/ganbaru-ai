@@ -692,6 +692,7 @@ pub fn run() {
             notification::show_doomscrolling_desktop_block_notification,
             notification::show_break_overlay,
             notification::close_pomodoro_overlay,
+            notification::set_pomodoro_overlay_state,
             notification::get_idle_status,
             notification::play_app_sound,
             notification::play_alert_sound,

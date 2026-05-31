@@ -13,6 +13,12 @@ import {
   isFreshBenchmarkPendingAge,
   isFreshBenchmarkTotalAge,
 } from "./lib/benchmark/types";
+import {
+  parsePomodoroBlockedScreenState,
+  pomodoroBlockedScreenPalette,
+  pomodoroBlockedScreenStateFromOverlayKind,
+  type PomodoroBlockedScreenState,
+} from "./lib/components/pomodoro/blocked-screen";
 
 interface BenchmarkBootProbe {
   vaultMode?: "user" | "benchmark";
@@ -23,11 +29,23 @@ interface BenchmarkBootProbe {
   updatedAt?: string;
 }
 
+function pomodoroOverlayInitialStateFromLocation(): PomodoroBlockedScreenState {
+  const params = new URLSearchParams(window.location.search);
+  const screenState = params.get("screenState");
+  if (screenState !== null) {
+    return parsePomodoroBlockedScreenState(screenState);
+  }
+  return pomodoroBlockedScreenStateFromOverlayKind(params.get("overlayKind"));
+}
+
 function preparePomodoroOverlayDocument(): void {
+  const { background } = pomodoroBlockedScreenPalette(
+    pomodoroOverlayInitialStateFromLocation(),
+  );
   const app = document.getElementById("app");
-  document.documentElement.style.backgroundColor = "#000";
-  document.body.style.backgroundColor = "#000";
-  if (app) app.style.backgroundColor = "#000";
+  document.documentElement.style.backgroundColor = background;
+  document.body.style.backgroundColor = background;
+  if (app) app.style.backgroundColor = background;
 }
 
 async function hasFreshBenchmarkResumeState(): Promise<boolean> {

@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   delayUntil,
   elapsedSecondsSince,
+  formatBlockedScreenDateTime,
   formatBlockedScreenDuration,
   nextIntervalTargetAfter,
+  parsePomodoroBlockedScreenState,
+  pomodoroBlockedScreenPalette,
   pomodoroBlockedScreenCopy,
+  pomodoroBlockedScreenStateFromOverlayKind,
   remainingSecondsUntil,
+  shouldShowBlockedScreenDateTime,
 } from "./blocked-screen";
 
 describe("blocked pomodoro screen helpers", () => {
@@ -22,6 +27,42 @@ describe("blocked pomodoro screen helpers", () => {
 
   it("clamps invalid negative timers", () => {
     expect(formatBlockedScreenDuration(-12)).toBe("00:00");
+  });
+
+  it("formats date and time through Intl", () => {
+    const date = new Date("2026-05-31T13:45:00Z");
+    const label = formatBlockedScreenDateTime(date, "en-US", { timeZone: "UTC" });
+    expect(label).toBe("Sunday, May 31, 2026 at 1:45 PM");
+  });
+
+  it("shows date and time except on the break finished screen", () => {
+    expect(shouldShowBlockedScreenDateTime("break_countdown")).toBe(true);
+    expect(shouldShowBlockedScreenDateTime("idle")).toBe(true);
+    expect(shouldShowBlockedScreenDateTime("idle_failed")).toBe(true);
+    expect(shouldShowBlockedScreenDateTime("break_finished")).toBe(false);
+  });
+
+  it("uses distinct state palettes", () => {
+    expect(pomodoroBlockedScreenPalette("idle")).toMatchObject({
+      background: "#A33728",
+      mainText: "#F9D573",
+    });
+    expect(pomodoroBlockedScreenPalette("break_countdown")).toMatchObject({
+      background: "#035B33",
+      mainText: "#FFFFFF",
+    });
+    expect(pomodoroBlockedScreenPalette("break_finished")).toMatchObject({
+      background: "#EEBA04",
+      mainText: "#0D0502",
+    });
+  });
+
+  it("maps overlay query state to blocked screen state", () => {
+    expect(parsePomodoroBlockedScreenState("idle_failed")).toBe("idle_failed");
+    expect(parsePomodoroBlockedScreenState("break_finished")).toBe("break_finished");
+    expect(parsePomodoroBlockedScreenState("unknown")).toBe("break_countdown");
+    expect(pomodoroBlockedScreenStateFromOverlayKind("idle")).toBe("idle");
+    expect(pomodoroBlockedScreenStateFromOverlayKind("break")).toBe("break_countdown");
   });
 
   it("computes remaining seconds from an absolute target", () => {
