@@ -24,7 +24,7 @@ Secondary blockers forward safe input back to the main overlay. A click on a sec
 
 The countdown is anchored to an absolute break end timestamp, not to a relative duration captured before the overlay opens. If the webview takes time to appear, the displayed time reflects the real phase time that has already passed. The break-start sound is triggered by the Svelte overlay after the surface has painted, so the user hears it with the blocked screen instead of before it.
 
-During the countdown, the top of the screen shows the current date and time using the user's runtime locale. The break-complete screen hides this timestamp because it is an acknowledgement state, not a timed break state.
+During the countdown, the top of the screen shows the current date and time using the user's runtime locale, with date and time separated by `|`. The break-complete screen hides this timestamp because it is an acknowledgement state, not a timed break state.
 
 The countdown timer uses the same runtime UI font as the rest of the app, with bold tabular numerals and oversized display sizing so it is readable from a distance. Supporting date, label, and control text is intentionally large enough to read from a distance without competing with the timer.
 

@@ -35,7 +35,7 @@ describe("blocked pomodoro screen helpers", () => {
   it("formats date and time through Intl", () => {
     const date = new Date("2026-05-31T13:45:00Z");
     const label = formatBlockedScreenDateTime(date, "en-US", { timeZone: "UTC" });
-    expect(label).toBe("Sunday, May 31, 2026 at 1:45 PM");
+    expect(label).toBe("Sunday, May 31, 2026 | 1:45 PM");
   });
 
   it("shows date and time except on the break finished screen", () => {

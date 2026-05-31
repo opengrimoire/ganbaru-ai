@@ -143,11 +143,16 @@ export function formatBlockedScreenDateTime(
   locales?: Intl.LocalesArgument,
   options: Intl.DateTimeFormatOptions = {},
 ): string {
-  return new Intl.DateTimeFormat(locales, {
-    dateStyle: "full",
-    timeStyle: "short",
-    ...options,
+  const { dateStyle, timeStyle, ...sharedOptions } = options;
+  const formattedDate = new Intl.DateTimeFormat(locales, {
+    ...sharedOptions,
+    dateStyle: dateStyle ?? "full",
   }).format(date);
+  const formattedTime = new Intl.DateTimeFormat(locales, {
+    ...sharedOptions,
+    timeStyle: timeStyle ?? "short",
+  }).format(date);
+  return `${formattedDate} | ${formattedTime}`;
 }
 
 export function remainingSecondsUntil(targetMs: number, nowMs: number): number {
