@@ -23,6 +23,8 @@ The threshold is per-event (via the pomodoro config), so different work modes ca
 
 The threshold applies only to focus phases. Breaks do not pause for idle, because being away during a break is the entire point of a break.
 
+Idle checks use a threshold-aware scheduler. While the user is far from the configured threshold, the app checks coarsely. Once the operating system reports an idle duration near the threshold, the next check is scheduled close to that threshold, with a 1-second minimum. This avoids polling the operating system every second through the full focus period while keeping the overlay close to the user's configured idle time. The per-OS detection sources and scheduler constants live in `algorithms/idle-detection.md`.
+
 ## Idle vs suspend distinction
 
 Idle and suspend look superficially similar (the user was not at the computer for some time), but they differ in how they happen and what the system can know about them.
@@ -39,12 +41,10 @@ The two reasons are recorded separately because they have different analytical m
 
 When the system detects idle, it shows the idle overlay: a fullscreen window similar to the break screen but with different content.
 
-The overlay says, in effect, "you have been idle for X minutes; the timer has paused; here is what to do." Its displayed idle duration starts from the operating system's detected idle duration, so it includes the configured idle threshold instead of starting at zero when the overlay appears. The idle sound plays once the overlay has mounted and painted, then every 10 seconds while the overlay is in the paused state. After 60 seconds on the visible overlay, the focus-failed sound plays once, the repeated idle sound stops, and the copy changes to a failed-focus state. The user has three options:
+The overlay says, in effect, "you have been idle for X minutes; the timer has paused; here is what to do." Its displayed idle duration starts from the operating system's detected idle duration, so it includes the configured idle threshold instead of starting at zero when the overlay appears. The idle sound plays once the overlay has mounted and painted, then every 10 seconds while the overlay is in the paused state. After 60 seconds on the visible overlay, the focus-failed sound plays once, the repeated idle sound stops, and the copy changes to a failed-focus state. The user has two direct controls:
 
-- **Resume.** Closes the overlay, resumes the timer where it paused. The pause row is closed (`ended_at = now`).
-- **Restart after focus failure.** If the overlay has been visible for 60 seconds, Space starts a fresh full focus timer in the same open run and the same Pomodoro cycle. The previous partial focus segment is preserved as `interrupted` with `end_reason = focus_failed`; the idle gap remains empty.
-- **Stop the session.** Ends the run with `end_reason = stopped`. The active segment is marked interrupted at the idle pause start, so time spent away does not count as focus. If the operating system reports an idle start before the segment started, the timestamp is clamped to the segment start instead of writing an impossible negative interval.
-- **Ignore (close the overlay without choosing).** The timer remains paused. The user can come back later and resume or stop.
+- **Space.** Before focus failure, closes the overlay and resumes the timer where it paused. The pause row is closed (`ended_at = now`). After focus failure, starts a fresh full focus timer in the same open run and the same Pomodoro cycle. The previous partial focus segment is preserved as `interrupted` with `end_reason = focus_failed`; the idle gap remains empty.
+- **Esc.** Stops the session with `end_reason = stopped`. The active segment is marked interrupted at the idle pause start, so time spent away does not count as focus. If the operating system reports an idle start before the segment started, the timestamp is clamped to the segment start instead of writing an impossible negative interval.
 
 Like the break screen, the idle overlay uses a Svelte visual surface inside a Rust/Tauri-enforced fullscreen overlay window. The primary monitor shows the interactive idle state, and additional monitors use black blocker windows. See `features/pomodoro-break-screen.md` for the enforcement model.
 
