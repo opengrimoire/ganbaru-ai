@@ -1,3 +1,5 @@
+import { formatShortcut } from "$lib/keyboard-shortcuts";
+
 export type PomodoroBlockedScreenState =
   | "idle"
   | "idle_failed"
@@ -36,8 +38,11 @@ export type PomodoroOverlayBlockerAction =
       code: string;
       key: string;
       ctrlKey: boolean;
+      metaKey: boolean;
       shiftKey: boolean;
     };
+
+const BREAK_EXTENSION_SHORTCUT = "Mod + Shift + Space";
 
 function isPayloadRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -62,6 +67,7 @@ export function parsePomodoroOverlayBlockerAction(
       code: payload.code,
       key: payload.key,
       ctrlKey: optionalBoolean(payload.ctrlKey),
+      metaKey: optionalBoolean(payload.metaKey),
       shiftKey: optionalBoolean(payload.shiftKey),
     };
   }
@@ -170,11 +176,16 @@ export function delayUntil(targetMs: number, nowMs: number): number {
 export function formatBreakExtensionHint(
   extensionMinutes: number,
   maxExtensionMinutes: number,
+  platform?: string,
 ): string | null {
   const safeExtensionMinutes = Math.max(0, Math.floor(extensionMinutes));
   const safeMaxExtensionMinutes = Math.max(0, Math.floor(maxExtensionMinutes));
   if (safeExtensionMinutes >= safeMaxExtensionMinutes) return null;
-  return "Press Ctrl+Shift+Space to extend the break";
+  return `Press ${formatBreakExtensionShortcut(platform)} to extend the break`;
+}
+
+export function formatBreakExtensionShortcut(platform?: string): string {
+  return formatShortcut(BREAK_EXTENSION_SHORTCUT, platform);
 }
 
 export function shouldScheduleIdleAlert(targetMs: number, failureDueAtMs: number): boolean {
@@ -223,14 +234,14 @@ export function pomodoroBlockedScreenCopy(
         status: null,
         subtitle: null,
         tone: "neutral",
-        primaryHint: { key: "Ctrl+Shift+Space", label: "extend the break" },
-        secondaryHint: { key: "3x Esc", label: "skip the break entirely", tone: "danger" },
+        primaryHint: { key: BREAK_EXTENSION_SHORTCUT, label: "extend the break" },
+        secondaryHint: { key: "3x Esc", label: "end your break now", tone: "danger" },
       };
     case "break_finished":
       return {
         title: "Break complete",
         status: null,
-        subtitle: "acknowledge when ready",
+        subtitle: "press any key to continue",
         tone: "neutral",
         primaryHint: null,
         secondaryHint: null,

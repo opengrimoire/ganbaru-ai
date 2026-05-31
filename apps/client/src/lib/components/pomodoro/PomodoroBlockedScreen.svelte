@@ -4,6 +4,7 @@
     formatBreakExtensionHint,
     formatBlockedScreenDateTime,
     formatBlockedScreenDuration,
+    formatBreakExtensionShortcut,
     pomodoroBlockedScreenPalette,
     pomodoroBlockedScreenCopy,
     shouldShowBlockedScreenDateTime,
@@ -30,18 +31,19 @@
   const timerLabel = $derived(formatBlockedScreenDuration(seconds));
   const showDateTime = $derived(shouldShowBlockedScreenDateTime(screenState));
   const dateTimeLabel = $derived(formatBlockedScreenDateTime(now));
+  const extensionShortcutLabel = $derived(formatBreakExtensionShortcut());
   const showTimer = $derived(screenState !== "break_finished");
   const screenStyle = $derived(
     `--blocked-screen-bg: ${colors.background}; --blocked-main-text: ${colors.mainText}; --blocked-muted-text: ${colors.mutedText}; --blocked-subtle-text: ${colors.subtleText};`,
   );
-  const extensionHint = $derived.by(() => {
-    if (screenState !== "break_countdown") return null;
-    return formatBreakExtensionHint(extensionMinutes, maxExtensionMinutes);
+  const showExtensionHint = $derived.by(() => {
+    if (screenState !== "break_countdown") return false;
+    return formatBreakExtensionHint(extensionMinutes, maxExtensionMinutes) !== null;
   });
-  const skipHint = $derived.by(() => {
+  const skipHintKey = $derived.by(() => {
     if (screenState !== "break_countdown") return null;
-    if (escPresses <= 0) return "Press 3x Esc to skip the break entirely";
-    return `Press ${Math.max(0, 3 - escPresses)}x Esc to skip the break entirely`;
+    if (escPresses <= 0) return "3x Esc";
+    return `${Math.max(0, 3 - escPresses)}x Esc`;
   });
 
   onMount(() => {
@@ -66,7 +68,7 @@
   style={screenStyle}
 >
   {#if showDateTime}
-    <p class="blocked-date-time blocked-muted absolute inset-x-0 top-8 mx-auto max-w-[calc(100vw-3rem)] px-6 text-center">
+    <p class="blocked-date-time blocked-main absolute inset-x-0 top-8 mx-auto max-w-[calc(100vw-3rem)] px-6 text-center">
       {dateTimeLabel}
     </p>
   {/if}
@@ -104,11 +106,15 @@
   {#if screenState !== "break_finished"}
     <div class="blocked-hints blocked-subtle absolute inset-x-0 bottom-12 flex flex-col items-center gap-3 px-6 text-center">
       {#if screenState === "break_countdown"}
-        {#if extensionHint}
-          <p>{extensionHint}</p>
+        {#if showExtensionHint}
+          <p>
+            Press <span class="blocked-main">{extensionShortcutLabel}</span> to extend the break
+          </p>
         {/if}
-        {#if skipHint}
-          <p>{skipHint}</p>
+        {#if skipHintKey}
+          <p>
+            Press <span class="blocked-main">{skipHintKey}</span> to end your break now
+          </p>
         {/if}
       {:else}
         {#if copy.primaryHint}

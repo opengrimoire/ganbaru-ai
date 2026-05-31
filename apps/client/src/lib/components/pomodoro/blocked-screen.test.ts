@@ -3,6 +3,7 @@ import {
   delayUntil,
   elapsedSecondsSince,
   formatBreakExtensionHint,
+  formatBreakExtensionShortcut,
   formatBlockedScreenDateTime,
   formatBlockedScreenDuration,
   nextIntervalTargetAfter,
@@ -75,17 +76,19 @@ describe("blocked pomodoro screen helpers", () => {
     expect(
       parsePomodoroOverlayBlockerAction({
         kind: "keydown",
-        code: "Space",
-        key: " ",
-        ctrlKey: true,
-      }),
-    ).toEqual({
-      kind: "keydown",
       code: "Space",
       key: " ",
       ctrlKey: true,
-      shiftKey: false,
-    });
+      metaKey: true,
+    }),
+  ).toEqual({
+    kind: "keydown",
+    code: "Space",
+    key: " ",
+    ctrlKey: true,
+    metaKey: true,
+    shiftKey: false,
+  });
     expect(parsePomodoroOverlayBlockerAction({ kind: "keydown", code: "Space" })).toBeNull();
     expect(parsePomodoroOverlayBlockerAction(null)).toBeNull();
   });
@@ -121,13 +124,24 @@ describe("blocked pomodoro screen helpers", () => {
   });
 
   it("keeps break extension hint stable until the cap is reached", () => {
-    expect(formatBreakExtensionHint(0, 3)).toBe(
-      "Press Ctrl+Shift+Space to extend the break",
+    expect(formatBreakExtensionHint(0, 3, "Linux x86_64")).toBe(
+      "Press Ctrl + Shift + Space to extend the break",
     );
-    expect(formatBreakExtensionHint(1, 3)).toBe(
-      "Press Ctrl+Shift+Space to extend the break",
+    expect(formatBreakExtensionHint(1, 3, "MacIntel")).toBe(
+      "Press Cmd + Shift + Space to extend the break",
     );
     expect(formatBreakExtensionHint(3, 3)).toBeNull();
+  });
+
+  it("formats the break extension shortcut for the platform", () => {
+    expect(formatBreakExtensionShortcut("Linux x86_64")).toBe("Ctrl + Shift + Space");
+    expect(formatBreakExtensionShortcut("MacIntel")).toBe("Cmd + Shift + Space");
+  });
+
+  it("uses direct break countdown action copy", () => {
+    const copy = pomodoroBlockedScreenCopy("break_countdown");
+    expect(copy.primaryHint?.label).toBe("extend the break");
+    expect(copy.secondaryHint?.label).toBe("end your break now");
   });
 
   it("uses restart copy for failed idle sessions", () => {
@@ -147,6 +161,6 @@ describe("blocked pomodoro screen helpers", () => {
   it("uses generic break completion acknowledgement copy", () => {
     const copy = pomodoroBlockedScreenCopy("break_finished");
     expect(copy.title).toBe("Break complete");
-    expect(copy.subtitle).toBe("acknowledge when ready");
+    expect(copy.subtitle).toBe("press any key to continue");
   });
 });

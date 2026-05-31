@@ -55,6 +55,7 @@
       code: event.code,
       key: event.key,
       ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
       shiftKey: event.shiftKey,
     });
   }

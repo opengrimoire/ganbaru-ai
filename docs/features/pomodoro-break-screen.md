@@ -20,7 +20,7 @@ The break screen has one visual implementation and a native enforcement layer.
 
 On Linux, the app inhibits the screensaver, temporarily disables configured desktop shortcuts, and uses native blocker windows with the active state background color for secondary monitors while the overlay is active, then restores them when the overlay closes.
 
-On Windows 10 and 11, Tauri still owns the Svelte overlay windows, and Rust reinforces them with native `HWND_TOPMOST` placement after creation. A scoped low-level keyboard hook blocks ordinary shell escape chords while the overlay is active, including Alt+Tab, Alt+Esc, the Windows key, Win+D, Win+M, Win+Tab, Win+number shortcuts, and Ctrl+Esc. Non-blocked keys are passed through immediately so overlay controls such as Space, Esc counting, and Ctrl+Shift+Space keep working. The app also uses `SetThreadExecutionState` to request that the system and display stay awake while the overlay is active, then resets the execution state on cleanup.
+On Windows 10 and 11, Tauri still owns the Svelte overlay windows, and Rust reinforces them with native `HWND_TOPMOST` placement after creation. A scoped low-level keyboard hook blocks ordinary shell escape chords while the overlay is active, including Alt+Tab, Alt+Esc, the Windows key, Win+D, Win+M, Win+Tab, Win+number shortcuts, and Ctrl+Esc. Non-blocked keys are passed through immediately so overlay controls such as Space, Esc counting, and the break extension shortcut keep working. The app also uses `SetThreadExecutionState` to request that the system and display stay awake while the overlay is active, then resets the execution state on cleanup.
 
 On currently supported macOS versions, Rust sets overlay windows to the screen saver window level and applies AppKit presentation options while the overlay is active: full screen, hidden Dock, hidden menu bar, disabled process switching, disabled Force Quit panel, disabled session termination, and disabled hide application. The previous presentation options are restored on cleanup. The app also creates IOKit assertions for user-idle display sleep and system sleep, then releases them when the overlay closes.
 
@@ -47,12 +47,12 @@ The break screen has a small, deliberate control set.
 | Control | Effect |
 |---------|--------|
 | Default (no input) | When the break timer reaches 0, the screen waits for the user to start the next focus phase. |
-| `Ctrl+Shift+Space` | Extends the current break. The hint remains stable until the maximum extension is reached, then it disappears. |
+| `Mod + Shift + Space` | Extends the current break. `Mod` means Ctrl on Windows and Linux, and Cmd on macOS. The hint remains stable until the maximum extension is reached, then it disappears. |
 | Three `Esc` presses in succession | Skips the break. The next focus phase starts immediately. |
 
 The three-press skip is intentionally awkward. A single Esc would let the user dismiss breaks reflexively, defeating the purpose. Three presses are fast enough that a determined user can skip in under two seconds, but slow enough that an absentminded press does not skip by accident.
 
-The Ctrl+Shift+Space chord extends the current break, capped at 3 added minutes per break. This handles the common case where the user is mid-stretch or mid-conversation when the break would end and needs slightly more time. The cap prevents the user from indefinitely extending the break and losing the rhythm.
+The `Mod + Shift + Space` chord extends the current break, capped at 3 added minutes per break. This handles the common case where the user is mid-stretch or mid-conversation when the break would end and needs slightly more time. The cap prevents the user from indefinitely extending the break and losing the rhythm.
 
 There is no "stop the session" control on the break screen. Stopping the session must go through the main window, which makes it a deliberate action rather than an impulse during a moment of resistance.
 

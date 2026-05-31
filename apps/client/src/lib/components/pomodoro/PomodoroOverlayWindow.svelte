@@ -4,6 +4,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { APP_SOUND_IDS, playAppSound } from "$lib/app-sounds";
+  import { hasShortcutModifier } from "$lib/keyboard-shortcuts";
   import { IDLE_FOCUS_FAILURE_DELAY_SECONDS } from "$lib/stores/pomodoro-machine";
   import {
     POMODORO_OVERLAY_BLOCKER_ACTION_EVENT,
@@ -200,6 +201,7 @@
     code: string;
     key: string;
     ctrlKey: boolean;
+    metaKey: boolean;
     shiftKey: boolean;
   }): void {
     if (mode.kind === "idle") {
@@ -214,7 +216,7 @@
       return;
     }
 
-    if (command.code === "Space" && command.ctrlKey && command.shiftKey) {
+    if (command.code === "Space" && command.shiftKey && hasShortcutModifier(command)) {
       void extendBreak();
       return;
     }
@@ -238,6 +240,7 @@
       code: event.code,
       key: event.key,
       ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
       shiftKey: event.shiftKey,
     });
   }
