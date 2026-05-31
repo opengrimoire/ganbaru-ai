@@ -20,6 +20,8 @@ The break screen has one visual implementation and a native enforcement layer.
 
 For multi-monitor setups, the primary monitor gets the full Svelte overlay UI. Additional monitors get fullscreen black blocker windows. They do not carry controls; they exist to remove useful work surfaces while the break is enforced. On Linux these blockers use the native GTK/GDK monitor APIs because they are more reliable than webview monitor placement on Wayland.
 
+The countdown is anchored to an absolute break end timestamp, not to a relative duration captured before the overlay opens. If the webview takes time to appear, the displayed time reflects the real phase time that has already passed. The break-start sound is triggered by the Svelte overlay after the surface has painted, so the user hears it with the blocked screen instead of before it.
+
 This does not try to defeat a user with OS-level control of the machine. A forced process kill, power-off, or desktop environment action outside the app's control can still terminate Ganbaru AI. The goal is to block normal app switching, accidental dismissal, and ordinary close paths without turning the app into hostile system software.
 
 ## Controls

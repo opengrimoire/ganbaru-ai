@@ -28,7 +28,7 @@ The system reads "time since last user input" from the OS. The exact APIs vary.
 
 The chosen strategy is to use the native API for each OS where available, with a documented fallback if the API is unavailable (e.g. Wayland without a compositor-specific idle interface).
 
-The polling cadence is `IDLE_CHECK_INTERVAL_MS = 15000` (15 seconds). This is frequent enough to detect idle within a reasonable window of the threshold and infrequent enough to avoid measurable battery impact.
+The polling cadence is threshold-aware. While the user is far from the idle threshold, the scheduler waits up to `IDLE_CHECK_MAX_INTERVAL_MS = 15000` (15 seconds) between checks. When the OS-reported idle duration gets close enough that another maximum wait would overshoot the threshold, the next check is scheduled for the threshold window, bounded by `IDLE_CHECK_MIN_INTERVAL_MS = 1000` (1 second). This keeps normal focus sessions on a low polling cadence while making the overlay appear close to the configured idle threshold.
 
 ## Idle threshold
 

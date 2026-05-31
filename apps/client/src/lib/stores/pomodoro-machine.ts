@@ -42,6 +42,8 @@ export const MAX_BREAK_OVERTIME_SECONDS = 1800;
 export const IDLE_ALERT_INTERVAL_SECONDS = 10;
 export const IDLE_FOCUS_FAILURE_DELAY_SECONDS = 60;
 export const BREAK_FINISHED_ALERT_INTERVAL_SECONDS = 10;
+export const IDLE_CHECK_MIN_INTERVAL_MS = 1_000;
+export const IDLE_CHECK_MAX_INTERVAL_MS = 15_000;
 
 // Utility functions
 
@@ -515,6 +517,28 @@ export function decideIdleCheck(
   }
 
   return { kind: "skip" };
+}
+
+export function nextIdleCheckDelayMs({
+  idleTimeoutMs,
+  idleMs,
+  webcamInUse,
+  minIntervalMs = IDLE_CHECK_MIN_INTERVAL_MS,
+  maxIntervalMs = IDLE_CHECK_MAX_INTERVAL_MS,
+}: {
+  idleTimeoutMs: number;
+  idleMs: number;
+  webcamInUse: boolean;
+  minIntervalMs?: number;
+  maxIntervalMs?: number;
+}): number {
+  const minMs = Math.max(1, Math.floor(minIntervalMs));
+  const maxMs = Math.max(minMs, Math.floor(maxIntervalMs));
+  if (webcamInUse) return maxMs;
+
+  const remainingMs = idleTimeoutMs - idleMs;
+  if (remainingMs <= 0) return minMs;
+  return Math.min(maxMs, Math.max(minMs, Math.ceil(remainingMs)));
 }
 
 export function shouldTriggerIdleFocusFailure(overlayElapsedSeconds: number): boolean {

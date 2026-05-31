@@ -32,6 +32,32 @@ export function formatBlockedScreenDuration(totalSeconds: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+export function remainingSecondsUntil(targetMs: number, nowMs: number): number {
+  return Math.max(0, Math.ceil((targetMs - nowMs) / 1000));
+}
+
+export function elapsedSecondsSince(startMs: number, nowMs: number): number {
+  return Math.max(0, Math.floor((nowMs - startMs) / 1000));
+}
+
+export function delayUntil(targetMs: number, nowMs: number): number {
+  return Math.max(0, targetMs - nowMs);
+}
+
+export function nextIntervalTargetAfter(
+  currentTargetMs: number,
+  intervalMs: number,
+  nowMs: number,
+): number {
+  const safeIntervalMs = Math.max(1, Math.floor(intervalMs));
+  let nextTargetMs = currentTargetMs + safeIntervalMs;
+  if (nextTargetMs <= nowMs) {
+    const missedIntervals = Math.floor((nowMs - nextTargetMs) / safeIntervalMs) + 1;
+    nextTargetMs += missedIntervals * safeIntervalMs;
+  }
+  return nextTargetMs;
+}
+
 export function pomodoroBlockedScreenCopy(
   state: PomodoroBlockedScreenState,
 ): PomodoroBlockedScreenCopy {

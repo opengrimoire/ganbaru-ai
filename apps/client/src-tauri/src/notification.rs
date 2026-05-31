@@ -777,8 +777,8 @@ thread_local! {
 
 #[derive(Clone, Copy)]
 enum PomodoroOverlayKind {
-    Break,
-    Idle,
+    Break { ends_at_ms: u64 },
+    Idle { seconds: u32 },
 }
 
 pub(crate) struct PomodoroOverlayState {
@@ -908,14 +908,14 @@ fn restore_overlay_cleanup(cleanup: PomodoroOverlayCleanup) {
     });
 }
 
-fn overlay_url(kind: PomodoroOverlayKind, seconds: u32) -> WebviewUrl {
+fn overlay_url(kind: PomodoroOverlayKind) -> WebviewUrl {
     let query = match kind {
-        PomodoroOverlayKind::Break => {
+        PomodoroOverlayKind::Break { ends_at_ms } => {
             format!(
-                "index.html?ganbaruWindow=pomodoroOverlay&overlayKind=break&breakSeconds={seconds}"
+                "index.html?ganbaruWindow=pomodoroOverlay&overlayKind=break&breakEndsAtMs={ends_at_ms}"
             )
         }
-        PomodoroOverlayKind::Idle => {
+        PomodoroOverlayKind::Idle { seconds } => {
             format!(
                 "index.html?ganbaruWindow=pomodoroOverlay&overlayKind=idle&idleSeconds={seconds}"
             )
@@ -1096,11 +1096,7 @@ fn build_linux_native_blocker_windows(
     Ok(())
 }
 
-fn show_pomodoro_overlay(
-    app: tauri::AppHandle,
-    kind: PomodoroOverlayKind,
-    seconds: u32,
-) -> Result<(), String> {
+fn show_pomodoro_overlay(app: tauri::AppHandle, kind: PomodoroOverlayKind) -> Result<(), String> {
     let overlay_state = app.state::<PomodoroOverlayState>();
     overlay_state.begin(&app);
 
@@ -1153,7 +1149,7 @@ fn show_pomodoro_overlay(
         build_svelte_overlay_window(
             &app_for_setup,
             POMODORO_OVERLAY_MAIN_LABEL,
-            overlay_url(kind, seconds),
+            overlay_url(kind),
             "Ganbaru AI pomodoro",
             primary_monitor,
             true,
@@ -1179,13 +1175,23 @@ pub fn close_pomodoro_overlay(app: tauri::AppHandle, overlays: State<'_, Pomodor
 }
 
 #[tauri::command]
-pub fn show_break_overlay(app: tauri::AppHandle, break_seconds: u32) -> Result<(), String> {
-    show_pomodoro_overlay(app, PomodoroOverlayKind::Break, break_seconds)
+pub fn show_break_overlay(app: tauri::AppHandle, break_ends_at_ms: u64) -> Result<(), String> {
+    show_pomodoro_overlay(
+        app,
+        PomodoroOverlayKind::Break {
+            ends_at_ms: break_ends_at_ms,
+        },
+    )
 }
 
 #[tauri::command]
 pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<bool, String> {
-    show_pomodoro_overlay(app, PomodoroOverlayKind::Idle, idle_seconds)?;
+    show_pomodoro_overlay(
+        app,
+        PomodoroOverlayKind::Idle {
+            seconds: idle_seconds,
+        },
+    )?;
     Ok(true)
 }
 

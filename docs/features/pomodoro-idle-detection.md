@@ -39,7 +39,7 @@ The two reasons are recorded separately because they have different analytical m
 
 When the system detects idle, it shows the idle overlay: a fullscreen window similar to the break screen but with different content.
 
-The overlay says, in effect, "you have been idle for X minutes; the timer has paused; here is what to do." The idle sound plays immediately, then every 10 seconds while the overlay is in the paused state. After 60 seconds on the overlay, the focus-failed sound plays once, the repeated idle sound stops, and the copy changes to a failed-focus state. The user has three options:
+The overlay says, in effect, "you have been idle for X minutes; the timer has paused; here is what to do." Its displayed idle duration starts from the operating system's detected idle duration, so it includes the configured idle threshold instead of starting at zero when the overlay appears. The idle sound plays once the overlay has mounted and painted, then every 10 seconds while the overlay is in the paused state. After 60 seconds on the visible overlay, the focus-failed sound plays once, the repeated idle sound stops, and the copy changes to a failed-focus state. The user has three options:
 
 - **Resume.** Closes the overlay, resumes the timer where it paused. The pause row is closed (`ended_at = now`).
 - **Restart after focus failure.** If the overlay has been visible for 60 seconds, Space starts a fresh full focus timer in the same open run and the same Pomodoro cycle. The previous partial focus segment is preserved as `interrupted` with `end_reason = focus_failed`; the idle gap remains empty.
@@ -59,6 +59,8 @@ When the system declares idle:
 5. The rail's green fill for the current segment now ends at the pause's `started_at`. The empty rail background extends from there.
 
 The segment's `actual_end` is not set during the pause. The segment is still active; it has just been split around the pause for rendering purposes.
+
+Idle data and overlay timing use different anchors on purpose. The pause row is backdated to the operating system's detected idle start, so the database and rail do not count away time as focus. The 60-second focus-failure timer starts when the overlay becomes visible, so slow webview startup does not make the failure feel early or late to the user.
 
 If the overlay remains visible for 60 seconds, the active segment is marked `interrupted` with `end_reason = focus_failed`, and a `focus_failed` run event with reason `long_idle` is recorded. The segment's `actual_end` remains the idle pause start, so neither the idle minute nor the time after it counts as focus. The run stays open until the user either returns or stops the session.
 

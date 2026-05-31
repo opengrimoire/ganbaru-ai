@@ -57,7 +57,7 @@ The reason for the bridge segment: a reconfiguration mid-focus should let the us
 
 ### `decideIdleCheck`
 
-Called periodically (every ~15 seconds during focus).
+Called by the threshold-aware idle scheduler during focus.
 
 **Inputs:** the current run, the active segment, the user's idle time (from per-OS detection sources, see `algorithms/idle-detection.md`), the run's config (`idle_timeout_minutes`).
 
@@ -119,7 +119,8 @@ Without the heartbeat, recovery would have to use the active segment's planned e
 | `MAX_BREAK_OVERTIME_SECONDS` | 1800 (30 minutes) | break-end logic | Caps overtime at 30 minutes. After that, the system auto-advances to focus to prevent indefinite breaks from corrupting analytics. |
 | `HEARTBEAT_INTERVAL_MS` | 30000 (30 seconds) | heartbeat scheduler | Bounds crash recovery error to ~30 seconds. |
 | `AUTO_START_POLL_MS` | 1000 (1 second) | auto-start scheduler | Catches calendar boundary crossings promptly enough that event-start notifications and pomodoro auto-start feel aligned with the system clock. |
-| `IDLE_CHECK_INTERVAL_MS` | 15000 (15 seconds) | idle scheduler | Frequent enough to detect idle within a reasonable window of the threshold; infrequent enough to not poll the OS constantly. |
+| `IDLE_CHECK_MIN_INTERVAL_MS` | 1000 (1 second) | idle scheduler | Bounds threshold detection delay without polling every second during the full focus period. |
+| `IDLE_CHECK_MAX_INTERVAL_MS` | 15000 (15 seconds) | idle scheduler | Keeps normal active-focus polling coarse until OS-reported idle time gets close to the configured threshold. |
 
 These values are constants, not user settings, because changing them changes the meaning of the timestamps in the database. Users who want different thresholds (e.g. longer suspend tolerance) would need a code change. The trade is intentional: a stable schema is more valuable than a knob no one will turn.
 

@@ -3,6 +3,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { APP_SOUND_IDS, playAppSound } from "$lib/app-sounds";
+  import { delayUntil, elapsedSecondsSince, nextIntervalTargetAfter } from "./blocked-screen";
   import PomodoroBlockedScreen from "./PomodoroBlockedScreen.svelte";
 
   let {
@@ -18,14 +19,16 @@
     focusFailed?: boolean;
     onResume: () => void | Promise<void>;
     onStop: () => void | Promise<void>;
-    onFocusFailed: () => void | Promise<void>;
+    onFocusFailed: (failedAtMs: number) => void | Promise<void>;
   } = $props();
 
   const IDLE_ALERT_INTERVAL_MS = 10_000;
   const FOCUS_FAILURE_DELAY_MS = 60_000;
 
   let elapsed = $state(0);
-  let alertIntervalId: ReturnType<typeof setInterval> | null = null;
+  let overlayVisibleAtMs = Date.now();
+  let focusFailureDueAtMs = overlayVisibleAtMs + FOCUS_FAILURE_DELAY_MS;
+  let alertTimeoutId: ReturnType<typeof setTimeout> | null = null;
   let failureTimeoutId: ReturnType<typeof setTimeout> | null = null;
   let tickIntervalId: ReturnType<typeof setInterval> | null = null;
   let localFocusFailed = $state(false);
@@ -33,9 +36,9 @@
   const overlayFocusFailed = $derived(focusFailed || localFocusFailed);
 
   function clearAlertTimer() {
-    if (alertIntervalId !== null) {
-      clearInterval(alertIntervalId);
-      alertIntervalId = null;
+    if (alertTimeoutId !== null) {
+      clearTimeout(alertTimeoutId);
+      alertTimeoutId = null;
     }
   }
 
@@ -50,13 +53,24 @@
     playAppSound(APP_SOUND_IDS.idleAlert).catch(() => {});
   }
 
+  function scheduleNextIdleAlert(targetMs: number) {
+    alertTimeoutId = setTimeout(() => {
+      alertTimeoutId = null;
+      if (localFocusFailed || focusFailed) return;
+      playIdleAlert();
+      scheduleNextIdleAlert(
+        nextIntervalTargetAfter(targetMs, IDLE_ALERT_INTERVAL_MS, Date.now()),
+      );
+    }, delayUntil(targetMs, Date.now()));
+  }
+
   function triggerFocusFailure() {
     if (localFocusFailed || focusFailed) return;
     localFocusFailed = true;
     clearAlertTimer();
     clearFailureTimer();
     playAppSound(APP_SOUND_IDS.focusSessionFailedLongIdle).catch(() => {});
-    void onFocusFailed();
+    void onFocusFailed(focusFailureDueAtMs);
   }
 
   let wasFullscreen = false;
@@ -93,12 +107,33 @@
     void exitFullscreen().then(() => onStop());
   }
 
+  function afterNextPaint(callback: () => void): () => void {
+    let cancelled = false;
+    let firstFrameId = 0;
+    let secondFrameId = 0;
+    firstFrameId = requestAnimationFrame(() => {
+      secondFrameId = requestAnimationFrame(() => {
+        if (!cancelled) callback();
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(firstFrameId);
+      cancelAnimationFrame(secondFrameId);
+    };
+  }
+
   onMount(() => {
     elapsed = idleSeconds;
-
     // When the native overlay window is active, it handles fullscreen, sounds,
     // notifications, and key capture. Skip those side effects here.
-    if (!nativeOverlay) {
+    const cancelPaintSideEffects = afterNextPaint(() => {
+      overlayVisibleAtMs = Date.now();
+      focusFailureDueAtMs = overlayVisibleAtMs + FOCUS_FAILURE_DELAY_MS;
+      elapsed = idleSeconds;
+
+      if (nativeOverlay) return;
       enterFullscreen();
 
       invoke("show_event_notification", {
@@ -108,12 +143,15 @@
       }).catch(() => {});
 
       playIdleAlert();
-      alertIntervalId = setInterval(playIdleAlert, IDLE_ALERT_INTERVAL_MS);
-      failureTimeoutId = setTimeout(triggerFocusFailure, FOCUS_FAILURE_DELAY_MS);
-    }
+      scheduleNextIdleAlert(overlayVisibleAtMs + IDLE_ALERT_INTERVAL_MS);
+      failureTimeoutId = setTimeout(
+        triggerFocusFailure,
+        delayUntil(focusFailureDueAtMs, Date.now()),
+      );
+    });
 
     tickIntervalId = setInterval(() => {
-      elapsed += 1;
+      elapsed = idleSeconds + elapsedSecondsSince(overlayVisibleAtMs, Date.now());
     }, 1000);
 
     function handleKeydown(e: KeyboardEvent) {
@@ -131,6 +169,7 @@
     window.addEventListener("keydown", handleKeydown, true);
 
     return () => {
+      cancelPaintSideEffects();
       window.removeEventListener("keydown", handleKeydown, true);
       clearAlertTimer();
       clearFailureTimer();

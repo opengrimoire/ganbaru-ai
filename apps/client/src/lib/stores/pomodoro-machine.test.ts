@@ -10,6 +10,7 @@ import {
   decideStartFromBlock,
   decideReconfigure,
   decideIdleCheck,
+  nextIdleCheckDelayMs,
   shouldPlayRepeatingSoundAtElapsedSecond,
   shouldTriggerIdleFocusFailure,
   DEFAULT_CONFIG,
@@ -1340,5 +1341,39 @@ describe("decideIdleCheck", () => {
       );
       expect(result.kind).toBe("skip");
     });
+  });
+});
+
+describe("nextIdleCheckDelayMs", () => {
+  it("uses the maximum interval while far from the idle threshold", () => {
+    expect(nextIdleCheckDelayMs({
+      idleTimeoutMs: 60_000,
+      idleMs: 10_000,
+      webcamInUse: false,
+    })).toBe(15_000);
+  });
+
+  it("targets the threshold once the next maximum interval would overshoot it", () => {
+    expect(nextIdleCheckDelayMs({
+      idleTimeoutMs: 60_000,
+      idleMs: 52_000,
+      webcamInUse: false,
+    })).toBe(8_000);
+  });
+
+  it("keeps a minimum delay near the threshold", () => {
+    expect(nextIdleCheckDelayMs({
+      idleTimeoutMs: 60_000,
+      idleMs: 59_750,
+      webcamInUse: false,
+    })).toBe(1_000);
+  });
+
+  it("uses the maximum interval while webcam use suppresses idle", () => {
+    expect(nextIdleCheckDelayMs({
+      idleTimeoutMs: 60_000,
+      idleMs: 59_750,
+      webcamInUse: true,
+    })).toBe(15_000);
   });
 });

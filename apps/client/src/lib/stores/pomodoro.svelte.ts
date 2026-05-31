@@ -30,6 +30,7 @@ import {
   BREAK_OVERTIME_RAIL_GRACE_SECONDS,
   MAX_BREAK_OVERTIME_SECONDS,
   IDLE_FOCUS_FAILURE_DELAY_SECONDS,
+  IDLE_CHECK_MAX_INTERVAL_MS,
   BREAK_FINISHED_ALERT_INTERVAL_SECONDS,
   limitRemainingSecondsToBlockEnd,
   phaseDurationSeconds,
@@ -40,6 +41,7 @@ import {
   decideStartFromBlock,
   decideReconfigure,
   decideIdleCheck,
+  nextIdleCheckDelayMs,
 } from "./pomodoro-machine";
 import {
   createWindowSyncEnvelope,
@@ -98,7 +100,7 @@ type PomodoroWindowCommand =
     }
   | { kind: "dismiss-suspend"; resume: boolean }
   | { kind: "dismiss-idle"; resume: boolean }
-  | { kind: "mark-idle-focus-failed" }
+  | { kind: "mark-idle-focus-failed"; failedAtMs?: number }
   | { kind: "complete-active-block-at"; endIso: string }
   | { kind: "stop-session" }
   | { kind: "pause" }
@@ -171,7 +173,8 @@ let suspendedAway = $state<{ awaySeconds: number } | null>(null);
 
 // Idle detection
 let idleTimeoutMs: number | null = null; // null = disabled
-let idleCheckIntervalId: ReturnType<typeof setInterval> | null = null;
+let idleCheckTimeoutId: ReturnType<typeof setTimeout> | null = null;
+let idleCheckGeneration = 0;
 let idlePaused = $state<IdlePauseState | null>(null);
 let lastDoomscrollingStateKey = "";
 
@@ -363,6 +366,8 @@ function isPomodoroWindowCommand(value: unknown): value is PomodoroWindowCommand
     case "skip":
     case "cleanup-orphans":
       return true;
+    case "mark-idle-focus-failed":
+      return value.failedAtMs === undefined || isNonNegativeNumber(value.failedAtMs);
     case "add-focus-time":
       return isPositiveNumber(value.seconds);
     case "set-dismissed-block-id":
@@ -1853,7 +1858,7 @@ function handleWindowCommand(command: PomodoroWindowCommand): void {
       void dismissIdle(command.resume);
       return;
     case "mark-idle-focus-failed":
-      void markIdleFocusFailed();
+      void markIdleFocusFailed(command.failedAtMs ?? null);
       return;
     case "complete-active-block-at":
       void completeActiveBlockAtInternal(command.endIso);
@@ -1951,8 +1956,12 @@ function initListeners() {
     if (idlePaused) void dismissIdle(false);
   }).catch((e) => console.warn("Failed to listen for idle-overlay-stop:", e));
 
-  listen("idle-overlay-focus-failed", () => {
-    if (idlePaused) void markIdleFocusFailed();
+  listen<{ failedAtMs?: number }>("idle-overlay-focus-failed", (event) => {
+    if (!idlePaused) return;
+    const failedAtMs = event.payload.failedAtMs;
+    void markIdleFocusFailed(
+      typeof failedAtMs === "number" && Number.isFinite(failedAtMs) ? failedAtMs : null,
+    );
   }).catch((e) => console.warn("Failed to listen for idle-overlay-focus-failed:", e));
 
   listen("tray-pause-resume", () => {
@@ -2118,15 +2127,34 @@ interface IdleStatus {
 
 function startIdleChecking() {
   stopIdleChecking();
-  if (idleTimeoutMs === null) return;
-  idleCheckIntervalId = setInterval(checkIdle, 15_000);
+  if (!shouldRunIdleChecks()) return;
+  scheduleIdleCheck(0, idleCheckGeneration);
 }
 
 function stopIdleChecking() {
-  if (idleCheckIntervalId !== null) {
-    clearInterval(idleCheckIntervalId);
-    idleCheckIntervalId = null;
+  idleCheckGeneration += 1;
+  if (idleCheckTimeoutId !== null) {
+    clearTimeout(idleCheckTimeoutId);
+    idleCheckTimeoutId = null;
   }
+}
+
+function shouldRunIdleChecks(): boolean {
+  return (
+    isRunning &&
+    phase === "focus" &&
+    suspendedAway === null &&
+    idlePaused === null &&
+    idleTimeoutMs !== null
+  );
+}
+
+function scheduleIdleCheck(delayMs: number, generation: number): void {
+  if (idleCheckTimeoutId !== null) clearTimeout(idleCheckTimeoutId);
+  idleCheckTimeoutId = setTimeout(() => {
+    idleCheckTimeoutId = null;
+    void checkIdle(generation);
+  }, Math.max(0, Math.floor(delayMs)));
 }
 
 function idleFocusFailedAtMs(state: IdlePauseState): number {
@@ -2248,10 +2276,20 @@ async function restartFocusAfterFailedIdle(): Promise<void> {
   updateTray();
 }
 
-async function checkIdle() {
+async function checkIdle(generation: number = idleCheckGeneration) {
+  if (generation !== idleCheckGeneration || !shouldRunIdleChecks()) return;
+  let nextDelayMs = IDLE_CHECK_MAX_INTERVAL_MS;
   try {
     const status = await invoke<IdleStatus>("get_idle_status");
+    if (generation !== idleCheckGeneration || !shouldRunIdleChecks()) return;
     const nowMs = Date.now();
+    const currentIdleTimeoutMs = idleTimeoutMs;
+    if (currentIdleTimeoutMs === null) return;
+    nextDelayMs = nextIdleCheckDelayMs({
+      idleTimeoutMs: currentIdleTimeoutMs,
+      idleMs: status.idle_ms,
+      webcamInUse: status.webcam_in_use,
+    });
 
     const result = decideIdleCheck(
       {
@@ -2259,7 +2297,7 @@ async function checkIdle() {
         phase,
         suspendedAway: suspendedAway !== null,
         idlePaused: idlePaused !== null,
-        idleTimeoutMs,
+        idleTimeoutMs: currentIdleTimeoutMs,
         webcamInUse: status.webcam_in_use,
         idleMs: status.idle_ms,
         phaseEndTime,
@@ -2297,7 +2335,9 @@ async function checkIdle() {
     // the main window falls back to the Svelte overlay component.
     let nativeOverlay = false;
     try {
-      nativeOverlay = await invoke<boolean>("show_idle_overlay", { idleSeconds: result.idleSeconds });
+      nativeOverlay = await invoke<boolean>("show_idle_overlay", {
+        idleSeconds: result.idleSeconds,
+      });
     } catch (e) {
       console.warn("Failed to show idle overlay:", e);
     }
@@ -2314,6 +2354,10 @@ async function checkIdle() {
     updateTray();
   } catch (e) {
     console.warn("Idle check failed:", e);
+  } finally {
+    if (generation === idleCheckGeneration && shouldRunIdleChecks()) {
+      scheduleIdleCheck(nextDelayMs, generation);
+    }
   }
 }
 
@@ -2377,7 +2421,11 @@ async function dismissIdle(resume: boolean): Promise<void> {
 
 function showBreakOverlay(breakSeconds: number) {
   initListeners();
-  invoke("show_break_overlay", { breakSeconds }).catch((e) =>
+  const breakEndsAtMs = Math.max(
+    0,
+    Math.floor(phaseEndTime ?? (Date.now() + breakSeconds * 1000)),
+  );
+  invoke("show_break_overlay", { breakEndsAtMs }).catch((e) =>
     console.warn("Failed to show break overlay:", e),
   );
 }
@@ -2601,8 +2649,6 @@ function advancePhase() {
       if (breakIdx < segments.length && segments[breakIdx].phase === "long_break") {
         activateSegment(breakIdx);
       }
-
-      playAppSound(APP_SOUND_IDS.breakStart).catch(() => {});
       showBreakOverlay(remainingSeconds);
       break;
     }
@@ -2617,8 +2663,6 @@ function advancePhase() {
       if (breakIdx < segments.length && segments[breakIdx].phase === "short_break") {
         activateSegment(breakIdx);
       }
-
-      playAppSound(APP_SOUND_IDS.breakStart).catch(() => {});
       showBreakOverlay(remainingSeconds);
       break;
     }
@@ -3043,9 +3087,12 @@ export function getPomodoro() {
       if (forwardWindowCommand({ kind: "dismiss-idle", resume })) return;
       await dismissIdle(resume);
     },
-    async markIdleFocusFailed() {
-      if (forwardWindowCommand({ kind: "mark-idle-focus-failed" })) return;
-      await markIdleFocusFailed();
+    async markIdleFocusFailed(failedAtMs: number | null = null) {
+      if (forwardWindowCommand({
+        kind: "mark-idle-focus-failed",
+        failedAtMs: failedAtMs ?? undefined,
+      })) return;
+      await markIdleFocusFailed(failedAtMs);
     },
     async startFromBlock(
       blockId: string,

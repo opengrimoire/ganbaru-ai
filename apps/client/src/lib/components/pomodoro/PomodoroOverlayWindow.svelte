@@ -5,6 +5,12 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { APP_SOUND_IDS, playAppSound } from "$lib/app-sounds";
   import { IDLE_FOCUS_FAILURE_DELAY_SECONDS } from "$lib/stores/pomodoro-machine";
+  import {
+    delayUntil,
+    elapsedSecondsSince,
+    nextIntervalTargetAfter,
+    remainingSecondsUntil,
+  } from "./blocked-screen";
   import PomodoroBlockedScreen from "./PomodoroBlockedScreen.svelte";
   import type { PomodoroBlockedScreenState } from "./blocked-screen";
 
@@ -12,11 +18,15 @@
   const MAX_BREAK_EXTENSION_MINUTES = 3;
 
   type OverlayMode =
-    | { kind: "idle"; idleSeconds: number }
-    | { kind: "break"; breakSeconds: number };
+    | { kind: "idle"; initialIdleSeconds: number }
+    | { kind: "break"; breakEndsAtMs: number };
 
   interface BreakExtendedPayload {
     seconds: number;
+  }
+
+  interface IdleFocusFailedPayload {
+    failedAtMs: number;
   }
 
   function numberParam(params: URLSearchParams, name: string, fallback: number): number {
@@ -29,18 +39,29 @@
     if (params.get("overlayKind") === "idle") {
       return {
         kind: "idle",
-        idleSeconds: numberParam(params, "idleSeconds", 0),
+        initialIdleSeconds: numberParam(params, "idleSeconds", 0),
       };
     }
 
+    const fallbackBreakSeconds = numberParam(params, "breakSeconds", 0);
     return {
       kind: "break",
-      breakSeconds: numberParam(params, "breakSeconds", 0),
+      breakEndsAtMs: numberParam(
+        params,
+        "breakEndsAtMs",
+        Date.now() + fallbackBreakSeconds * 1000,
+      ),
     };
   }
 
   const mode = overlayModeFromLocation();
-  let seconds = $state(mode.kind === "idle" ? mode.idleSeconds : mode.breakSeconds);
+  let overlayStartedAtMs = Date.now();
+  let idleFailureDueAtMs = overlayStartedAtMs + IDLE_FOCUS_FAILURE_DELAY_SECONDS * 1000;
+  let seconds = $state(
+    mode.kind === "idle"
+      ? mode.initialIdleSeconds
+      : remainingSecondsUntil(mode.breakEndsAtMs, Date.now()),
+  );
   let screenState = $state<PomodoroBlockedScreenState>(
     mode.kind === "idle" ? "idle" : "break_countdown",
   );
@@ -48,9 +69,9 @@
   let escPresses = $state(0);
   let closed = false;
   let focusFailureSent = false;
-  let breakEndMs = Date.now() + (mode.kind === "break" ? mode.breakSeconds : 0) * 1000;
+  let breakEndMs = mode.kind === "break" ? mode.breakEndsAtMs : 0;
   let breakFinishedAtMs: number | null = null;
-  let idleAlertIntervalId: ReturnType<typeof setInterval> | null = null;
+  let idleAlertTimeoutId: ReturnType<typeof setTimeout> | null = null;
   let idleFailureTimeoutId: ReturnType<typeof setTimeout> | null = null;
   let tickIntervalId: ReturnType<typeof setInterval> | null = null;
 
@@ -63,9 +84,9 @@
   }
 
   function clearIdleTimers(): void {
-    if (idleAlertIntervalId !== null) {
-      clearInterval(idleAlertIntervalId);
-      idleAlertIntervalId = null;
+    if (idleAlertTimeoutId !== null) {
+      clearTimeout(idleAlertTimeoutId);
+      idleAlertTimeoutId = null;
     }
     if (idleFailureTimeoutId !== null) {
       clearTimeout(idleFailureTimeoutId);
@@ -75,6 +96,17 @@
 
   function playIdleAlert(): void {
     playAppSound(APP_SOUND_IDS.idleAlert).catch(() => {});
+  }
+
+  function scheduleNextIdleAlert(targetMs: number): void {
+    idleAlertTimeoutId = setTimeout(() => {
+      idleAlertTimeoutId = null;
+      if (closed || screenState !== "idle") return;
+      playIdleAlert();
+      scheduleNextIdleAlert(
+        nextIntervalTargetAfter(targetMs, IDLE_ALERT_INTERVAL_MS, Date.now()),
+      );
+    }, delayUntil(targetMs, Date.now()));
   }
 
   function reinforceFullscreen(): void {
@@ -90,7 +122,8 @@
     screenState = "idle_failed";
     clearIdleTimers();
     playAppSound(APP_SOUND_IDS.focusSessionFailedLongIdle).catch(() => {});
-    emit("idle-overlay-focus-failed").catch((error) => {
+    const payload: IdleFocusFailedPayload = { failedAtMs: idleFailureDueAtMs };
+    emit("idle-overlay-focus-failed", payload).catch((error) => {
       console.warn("Failed to emit idle focus failure:", error);
     });
   }
@@ -104,7 +137,7 @@
 
   function tick(): void {
     if (mode.kind === "idle") {
-      seconds += 1;
+      seconds = mode.initialIdleSeconds + elapsedSecondsSince(overlayStartedAtMs, Date.now());
       return;
     }
 
@@ -115,7 +148,7 @@
       return;
     }
 
-    const remaining = Math.max(0, Math.ceil((breakEndMs - Date.now()) / 1000));
+    const remaining = remainingSecondsUntil(breakEndMs, Date.now());
     seconds = remaining;
     if (remaining <= 0) enterBreakFinished();
   }
@@ -136,7 +169,7 @@
     if (extensionMinutes >= MAX_BREAK_EXTENSION_MINUTES) return;
     extensionMinutes += 1;
     breakEndMs += 60_000;
-    seconds = Math.max(0, Math.ceil((breakEndMs - Date.now()) / 1000));
+    seconds = remainingSecondsUntil(breakEndMs, Date.now());
     const payload: BreakExtendedPayload = { seconds: 60 };
     await emit("pomodoro-break-extended", payload);
   }
@@ -194,7 +227,26 @@
     }
   }
 
+  function afterNextPaint(callback: () => void): () => void {
+    let cancelled = false;
+    let firstFrameId = 0;
+    let secondFrameId = 0;
+    firstFrameId = requestAnimationFrame(() => {
+      secondFrameId = requestAnimationFrame(() => {
+        if (!cancelled) callback();
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(firstFrameId);
+      cancelAnimationFrame(secondFrameId);
+    };
+  }
+
   onMount(() => {
+    overlayStartedAtMs = Date.now();
+    idleFailureDueAtMs = overlayStartedAtMs + IDLE_FOCUS_FAILURE_DELAY_SECONDS * 1000;
     reinforceFullscreen();
     const fullscreenTimerIds = [
       setTimeout(reinforceFullscreen, 100),
@@ -206,22 +258,42 @@
     window.addEventListener("keydown", handleKeydown, true);
 
     if (mode.kind === "idle") {
-      invoke("show_event_notification", {
-        title: "Focus session paused",
-        body: "No activity detected. Return to resume your session.",
-        playSound: false,
-      }).catch(() => {});
-      playIdleAlert();
-      idleAlertIntervalId = setInterval(playIdleAlert, IDLE_ALERT_INTERVAL_MS);
-      idleFailureTimeoutId = setTimeout(
-        triggerFocusFailure,
-        IDLE_FOCUS_FAILURE_DELAY_SECONDS * 1000,
-      );
+      const cancelIdlePaintSideEffects = afterNextPaint(() => {
+        overlayStartedAtMs = Date.now();
+        idleFailureDueAtMs = overlayStartedAtMs + IDLE_FOCUS_FAILURE_DELAY_SECONDS * 1000;
+        seconds = mode.initialIdleSeconds;
+        invoke("show_event_notification", {
+          title: "Focus session paused",
+          body: "No activity detected. Return to resume your session.",
+          playSound: false,
+        }).catch(() => {});
+        playIdleAlert();
+        scheduleNextIdleAlert(overlayStartedAtMs + IDLE_ALERT_INTERVAL_MS);
+        idleFailureTimeoutId = setTimeout(
+          triggerFocusFailure,
+          delayUntil(idleFailureDueAtMs, Date.now()),
+        );
+      });
+
+      tickIntervalId = setInterval(tick, 1000);
+
+      return () => {
+        cancelIdlePaintSideEffects();
+        for (const id of fullscreenTimerIds) clearTimeout(id);
+        clearInterval(focusIntervalId);
+        window.removeEventListener("keydown", handleKeydown, true);
+        clearIdleTimers();
+        if (tickIntervalId !== null) clearInterval(tickIntervalId);
+      };
     }
 
+    const cancelBreakStartSound = afterNextPaint(() => {
+      playAppSound(APP_SOUND_IDS.breakStart).catch(() => {});
+    });
     tickIntervalId = setInterval(tick, 1000);
 
     return () => {
+      cancelBreakStartSound();
       for (const id of fullscreenTimerIds) clearTimeout(id);
       clearInterval(focusIntervalId);
       window.removeEventListener("keydown", handleKeydown, true);

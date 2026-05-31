@@ -687,7 +687,7 @@
         pomodoro.dismissedBlockId = pomodoro.activeBlockId;
         await pomodoro.dismissIdle(false);
       }}
-      onFocusFailed={() => pomodoro.markIdleFocusFailed()}
+      onFocusFailed={(failedAtMs) => pomodoro.markIdleFocusFailed(failedAtMs)}
     />
   {/if}
 
