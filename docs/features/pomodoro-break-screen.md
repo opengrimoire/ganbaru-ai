@@ -16,9 +16,17 @@ The break screen has one visual implementation and a native enforcement layer.
 
 **Svelte overlay window.** A dedicated Tauri webview window mounts the Pomodoro blocked-screen UI. This is the canonical visual surface for the break countdown, break finished state, idle paused state, and idle focus-failed state. Keeping the UI in Svelte makes the blocked screens share the same component system as the rest of the app and avoids maintaining separate per-OS UI implementations.
 
-**Rust/Tauri enforcement.** Rust creates a fullscreen, undecorated, always-on-top overlay window for the primary display and marks the overlay as active until the Pomodoro state machine closes it. While active, app-level quit and window-close paths refocus the overlay instead of exiting. On Linux, the app also inhibits the screensaver, temporarily disables configured desktop shortcuts, and uses native blocker windows with the active state background color for secondary monitors while the overlay is active, then restores them when the overlay closes.
+**Rust/Tauri enforcement.** Rust creates a fullscreen, undecorated, always-on-top overlay window for the primary display and marks the overlay as active until the Pomodoro state machine closes it. The overlay is protected by a scoped enforcement guard that starts before windows are shown and stops when the Pomodoro state machine closes the overlay. The guard owns cleanup for window labels, power assertions, shortcut restoration, native platform state, and monitor reconciliation, so starting a new overlay first closes any previous guard and cleanup remains safe after partial setup.
+
+On Linux, the app inhibits the screensaver, temporarily disables configured desktop shortcuts, and uses native blocker windows with the active state background color for secondary monitors while the overlay is active, then restores them when the overlay closes.
+
+On Windows 10 and 11, Tauri still owns the Svelte overlay windows, and Rust reinforces them with native `HWND_TOPMOST` placement after creation. A scoped low-level keyboard hook blocks ordinary shell escape chords while the overlay is active, including Alt+Tab, Alt+Esc, the Windows key, Win+D, Win+M, Win+Tab, Win+number shortcuts, and Ctrl+Esc. Non-blocked keys are passed through immediately so overlay controls such as Space, Esc counting, and Ctrl+Shift+Space keep working. The app also uses `SetThreadExecutionState` to request that the system and display stay awake while the overlay is active, then resets the execution state on cleanup.
+
+On currently supported macOS versions, Rust sets overlay windows to the screen saver window level and applies AppKit presentation options while the overlay is active: full screen, hidden Dock, hidden menu bar, disabled process switching, disabled Force Quit panel, disabled session termination, and disabled hide application. The previous presentation options are restored on cleanup. The app also creates IOKit assertions for user-idle display sleep and system sleep, then releases them when the overlay closes.
 
 For multi-monitor setups, the primary monitor gets the full Svelte overlay UI. Additional monitors get fullscreen blocker windows using the active state's background color. They do not carry controls; they exist to remove useful work surfaces while the break is enforced. On Linux these blockers use the native GTK/GDK monitor APIs because they are more reliable than webview monitor placement on Wayland.
+
+While the overlay is active, Rust reconciles monitor geometry at a low frequency. If displays are connected, disconnected, moved, or resized, the primary overlay is moved or recreated and secondary blockers are recreated or removed as needed.
 
 Secondary blockers forward safe input back to the main overlay. A click on a secondary blocker acknowledges the break if the break-complete screen is active; otherwise it refocuses the main overlay. On platforms where secondary blockers are Svelte webviews, blocker keydown events are forwarded to the main overlay as best-effort input. On Linux native blockers, keyboard handling stays owned by the main overlay because taking focus on secondary blockers would make shortcut behavior less predictable.
 
@@ -30,7 +38,7 @@ The countdown timer uses the same runtime UI font as the rest of the app, with b
 
 Break countdown uses `#035B33` as the background and white as the main text color. Break complete uses `#EEBA04` as the background and `#0D0502` as the main text color. Secondary labels and hints reuse the main text color at lower opacity so the state remains readable from a distance without competing with the main message.
 
-This does not try to defeat a user with OS-level control of the machine. A forced process kill, power-off, or desktop environment action outside the app's control can still terminate Ganbaru AI. The goal is to block normal app switching, accidental dismissal, and ordinary close paths without turning the app into hostile system software.
+This does not try to defeat a user with OS-level control of the machine. A forced process kill, power-off, Windows Ctrl+Alt+Del, macOS security prompts, or desktop environment action outside the app's control can still terminate or bypass Ganbaru AI. The goal is to block normal app switching, accidental dismissal, and ordinary close paths without turning the app into hostile system software.
 
 ## Controls
 
@@ -74,9 +82,9 @@ The break screen does not need special suspend handling beyond what the rest of 
 
 ## Display change mid-break
 
-If a monitor is connected or disconnected during a break (common on laptops being plugged into an external display), the overlay remains tied to the displays that existed when it was created. The main overlay window continues to enforce the break on its assigned monitor, but new or reconfigured displays may need the overlay to be recreated before coverage is perfect again.
+If a monitor is connected or disconnected during a break (common on laptops being plugged into an external display), the enforcement guard reconciles the overlay against the current monitor list. The main overlay is kept on the current primary monitor when possible, and secondary blockers are recreated for every non-primary monitor.
 
-If the primary display changes while the overlay is active, the window may temporarily lose its always-on-top status until the OS settles the display configuration. This is a brief window measured in seconds and is an accepted tradeoff until the app adds explicit display-change reconciliation.
+If the operating system is still settling a display configuration, the overlay can briefly lag behind the final geometry. The next reconciliation pass refreshes blocker coverage and reinforces native topmost or screen-saver-level state on platforms that need it.
 
 ## When the break screen is hidden
 

@@ -14,6 +14,11 @@ use std::sync::{
 use std::thread::JoinHandle;
 use tauri::{window::Color, Emitter, Manager, Runtime, State, WebviewUrl, WebviewWindowBuilder};
 
+use crate::pomodoro_enforcement::{
+    reinforce_overlay_windows, start_overlay_enforcement, OverlayEnforcementGuard,
+    OverlayReconcileGuard,
+};
+
 const APP_SOUND_COMMAND_QUEUE_LIMIT: usize = 32;
 const APP_SOUND_PLAYER_QUEUE_LIMIT: usize = 8;
 const APP_SOUND_OUTPUT_SAMPLE_RATE_HZ: u32 = 48_000;
@@ -696,9 +701,10 @@ pub fn restore_stale_shortcuts(_app: &tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-fn run_main_thread_setup<F>(app: &tauri::AppHandle, setup: F) -> Result<(), String>
+fn run_main_thread_setup<T, F>(app: &tauri::AppHandle, setup: F) -> Result<T, String>
 where
-    F: FnOnce() -> Result<(), String> + Send + 'static,
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
 {
     let (tx, rx) = std::sync::mpsc::sync_channel(1);
     app.run_on_main_thread(move || {
@@ -895,11 +901,19 @@ impl Default for PomodoroOverlayState {
 
 struct PomodoroOverlayCleanup {
     labels: Vec<String>,
-    inhibit_cookie: Option<u32>,
-    #[cfg(target_os = "linux")]
-    saved_shortcuts: Option<SavedShortcuts>,
-    #[cfg(target_os = "linux")]
-    shortcut_restore_path: Option<PathBuf>,
+    kind: PomodoroOverlayKind,
+    visual_state: PomodoroOverlayVisualState,
+    monitor_signature: Option<MonitorSignature>,
+    enforcement: OverlayEnforcementGuard,
+    reconcile_guard: Option<OverlayReconcileGuard>,
+}
+
+#[derive(Clone)]
+struct PomodoroOverlaySnapshot {
+    labels: Vec<String>,
+    kind: PomodoroOverlayKind,
+    visual_state: PomodoroOverlayVisualState,
+    monitor_signature: Option<MonitorSignature>,
 }
 
 impl PomodoroOverlayState {
@@ -916,27 +930,46 @@ impl PomodoroOverlayState {
         }
     }
 
-    fn begin(&self, app: &tauri::AppHandle) {
+    fn begin(
+        &self,
+        app: &tauri::AppHandle,
+        kind: PomodoroOverlayKind,
+        visual_state: PomodoroOverlayVisualState,
+    ) {
         self.close(app);
-        let inhibit_cookie = screensaver_inhibit();
+
+        let mut enforcement = start_overlay_enforcement(app, &[], POMODORO_OVERLAY_MAIN_LABEL);
+
+        if let Some(cookie) = screensaver_inhibit() {
+            enforcement.push_cleanup(move || {
+                screensaver_uninhibit(cookie);
+                Ok(())
+            });
+        }
+
         #[cfg(target_os = "linux")]
-        let (saved_shortcuts, shortcut_restore_path) = match shortcut_restore_path(app)
+        match shortcut_restore_path(app)
             .and_then(|path| SavedShortcuts::save_and_disable(app).map(|saved| (saved, path)))
         {
-            Ok((saved, path)) => (Some(saved), Some(path)),
+            Ok((saved, path)) => {
+                enforcement.push_cleanup(move || {
+                    restore_shortcuts(&saved);
+                    clear_shortcut_restore(&path);
+                    Ok(())
+                });
+            }
             Err(err) => {
                 eprintln!("failed to disable Linux overlay shortcuts: {err}");
-                (None, None)
             }
         };
 
         let cleanup = PomodoroOverlayCleanup {
             labels: Vec::new(),
-            inhibit_cookie,
-            #[cfg(target_os = "linux")]
-            saved_shortcuts,
-            #[cfg(target_os = "linux")]
-            shortcut_restore_path,
+            kind,
+            visual_state,
+            monitor_signature: None,
+            enforcement,
+            reconcile_guard: None,
         };
         *self
             .cleanup
@@ -945,13 +978,38 @@ impl PomodoroOverlayState {
         self.active.store(true, Ordering::SeqCst);
     }
 
-    fn set_labels(&self, labels: Vec<String>) {
+    fn set_overlay_session(
+        &self,
+        app: &tauri::AppHandle,
+        labels: Vec<String>,
+        monitor_signature: MonitorSignature,
+    ) {
         let mut cleanup = self
             .cleanup
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         if let Some(cleanup) = cleanup.as_mut() {
+            cleanup
+                .enforcement
+                .set_window_labels(labels.clone(), POMODORO_OVERLAY_MAIN_LABEL);
             cleanup.labels = labels;
+            cleanup.monitor_signature = Some(monitor_signature);
+            if cleanup.reconcile_guard.is_none() {
+                let app_for_reconcile = app.clone();
+                match OverlayReconcileGuard::start(move || {
+                    let overlays = app_for_reconcile.state::<PomodoroOverlayState>();
+                    if !overlays.is_active() {
+                        return false;
+                    }
+                    overlays.reconcile(&app_for_reconcile);
+                    true
+                }) {
+                    Ok(guard) => cleanup.reconcile_guard = Some(guard),
+                    Err(err) => {
+                        eprintln!("failed to start Pomodoro overlay monitor reconciler: {err}");
+                    }
+                }
+            }
         }
     }
 
@@ -964,6 +1022,85 @@ impl PomodoroOverlayState {
             .unwrap_or_default()
     }
 
+    fn snapshot(&self) -> Option<PomodoroOverlaySnapshot> {
+        self.cleanup
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .as_ref()
+            .map(|cleanup| PomodoroOverlaySnapshot {
+                labels: cleanup.labels.clone(),
+                kind: cleanup.kind,
+                visual_state: cleanup.visual_state,
+                monitor_signature: cleanup.monitor_signature.clone(),
+            })
+    }
+
+    fn set_visual_state(&self, visual_state: PomodoroOverlayVisualState) {
+        if let Some(cleanup) = self
+            .cleanup
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .as_mut()
+        {
+            cleanup.visual_state = visual_state;
+        }
+    }
+
+    fn reconcile(&self, app: &tauri::AppHandle) {
+        let Some(snapshot) = self.snapshot() else {
+            return;
+        };
+        let existing_labels = snapshot.labels.clone();
+        let app_for_setup = app.clone();
+
+        let setup_result = run_main_thread_setup(app, move || {
+            let monitors = app_for_setup
+                .available_monitors()
+                .map_err(|e| e.to_string())?;
+            if monitors.is_empty() {
+                return Ok(None);
+            }
+            let primary_idx = primary_monitor_index(&app_for_setup, &monitors)?;
+            let signature = monitor_signature(&monitors, primary_idx);
+            let missing_overlay_window = snapshot
+                .labels
+                .iter()
+                .any(|label| app_for_setup.get_webview_window(label).is_none());
+            if snapshot.monitor_signature.as_ref() == Some(&signature) && !missing_overlay_window {
+                return Ok(None);
+            }
+            let labels = reconcile_overlay_windows(
+                &app_for_setup,
+                snapshot.kind,
+                snapshot.visual_state,
+                &snapshot.labels,
+                &monitors,
+                primary_idx,
+            )?;
+            Ok(Some((labels, signature)))
+        });
+
+        match setup_result {
+            Ok(Some((labels, signature))) => {
+                if !self.is_active() {
+                    destroy_overlay_windows(app, &labels);
+                    return;
+                }
+                reinforce_overlay_windows(app, &labels, POMODORO_OVERLAY_MAIN_LABEL);
+                self.set_overlay_session(app, labels, signature);
+            }
+            Ok(None) => {
+                if !self.is_active() {
+                    return;
+                }
+                reinforce_overlay_windows(app, &existing_labels, POMODORO_OVERLAY_MAIN_LABEL);
+            }
+            Err(err) => {
+                eprintln!("failed to reconcile Pomodoro overlay monitors: {err}");
+            }
+        }
+    }
+
     fn close(&self, app: &tauri::AppHandle) {
         self.active.store(false, Ordering::SeqCst);
         let cleanup = self
@@ -971,10 +1108,13 @@ impl PomodoroOverlayState {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .take();
-        let Some(cleanup) = cleanup else {
+        let Some(mut cleanup) = cleanup else {
             return;
         };
 
+        if let Some(reconcile_guard) = cleanup.reconcile_guard.take() {
+            reconcile_guard.stop();
+        }
         destroy_overlay_windows(app, &cleanup.labels);
         restore_overlay_cleanup(cleanup);
     }
@@ -998,20 +1138,9 @@ fn destroy_overlay_windows(app: &tauri::AppHandle, labels: &[String]) {
     }
 }
 
-fn restore_overlay_cleanup(cleanup: PomodoroOverlayCleanup) {
+fn restore_overlay_cleanup(mut cleanup: PomodoroOverlayCleanup) {
     std::thread::spawn(move || {
-        #[cfg(target_os = "linux")]
-        {
-            if let Some(saved) = cleanup.saved_shortcuts.as_ref() {
-                restore_shortcuts(saved);
-            }
-            if let Some(path) = cleanup.shortcut_restore_path.as_ref() {
-                clear_shortcut_restore(path);
-            }
-        }
-        if let Some(cookie) = cleanup.inhibit_cookie {
-            screensaver_uninhibit(cookie);
-        }
+        cleanup.enforcement.stop();
     });
 }
 
@@ -1042,11 +1171,57 @@ fn blocker_url(state: PomodoroOverlayVisualState) -> WebviewUrl {
     )
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct MonitorSignature {
+    primary_idx: usize,
+    monitors: Vec<MonitorSnapshot>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct MonitorSnapshot {
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+    scale_bits: u64,
+}
+
 fn monitor_matches(a: &tauri::window::Monitor, b: &tauri::window::Monitor) -> bool {
     a.position().x == b.position().x
         && a.position().y == b.position().y
         && a.size().width == b.size().width
         && a.size().height == b.size().height
+}
+
+fn primary_monitor_index(
+    app: &tauri::AppHandle,
+    monitors: &[tauri::window::Monitor],
+) -> Result<usize, String> {
+    Ok(app
+        .primary_monitor()
+        .map_err(|e| e.to_string())?
+        .and_then(|primary| {
+            monitors
+                .iter()
+                .position(|monitor| monitor_matches(monitor, &primary))
+        })
+        .unwrap_or(0))
+}
+
+fn monitor_signature(monitors: &[tauri::window::Monitor], primary_idx: usize) -> MonitorSignature {
+    MonitorSignature {
+        primary_idx,
+        monitors: monitors
+            .iter()
+            .map(|monitor| MonitorSnapshot {
+                x: monitor.position().x,
+                y: monitor.position().y,
+                width: monitor.size().width,
+                height: monitor.size().height,
+                scale_bits: monitor.scale_factor().to_bits(),
+            })
+            .collect(),
+    }
 }
 
 fn monitor_logical_geometry(monitor: &tauri::window::Monitor) -> (f64, f64, f64, f64) {
@@ -1062,6 +1237,29 @@ fn monitor_logical_geometry(monitor: &tauri::window::Monitor) -> (f64, f64, f64,
 fn destroy_existing_window(app: &tauri::AppHandle, label: &str) {
     if let Some(existing) = app.get_webview_window(label) {
         let _ = existing.destroy();
+    }
+}
+
+fn configure_svelte_overlay_window(
+    window: &tauri::WebviewWindow,
+    monitor: &tauri::window::Monitor,
+    background_color: OverlayColor,
+    focused: bool,
+) {
+    let (x, y, width, height) = monitor_logical_geometry(monitor);
+    let _ = window.set_fullscreen(false);
+    let _ = window.set_position(tauri::LogicalPosition::new(x, y));
+    let _ = window.set_size(tauri::LogicalSize::new(width, height));
+    let _ = window.set_background_color(Some(background_color.tauri()));
+    let _ = window.set_shadow(false);
+    let _ = window.set_fullscreen(true);
+    let _ = window.set_always_on_top(true);
+    let _ = window.show();
+    let _ = window.set_fullscreen(true);
+    let _ = window.set_skip_taskbar(true);
+    let _ = window.set_visible_on_all_workspaces(true);
+    if focused {
+        let _ = window.set_focus();
     }
 }
 
@@ -1097,17 +1295,7 @@ fn build_svelte_overlay_window(
         .build()
         .map_err(|e| format!("create pomodoro overlay window {label}: {e}"))?;
 
-    let _ = window.set_background_color(Some(background_color.tauri()));
-    let _ = window.set_shadow(false);
-    let _ = window.set_fullscreen(true);
-    let _ = window.set_always_on_top(true);
-    let _ = window.show();
-    let _ = window.set_fullscreen(true);
-    let _ = window.set_skip_taskbar(true);
-    let _ = window.set_visible_on_all_workspaces(true);
-    if focused {
-        let _ = window.set_focus();
-    }
+    configure_svelte_overlay_window(&window, monitor, background_color, focused);
     Ok(())
 }
 
@@ -1241,10 +1429,92 @@ fn build_linux_native_blocker_windows(
     Ok(())
 }
 
+fn reconcile_overlay_windows(
+    app: &tauri::AppHandle,
+    kind: PomodoroOverlayKind,
+    visual_state: PomodoroOverlayVisualState,
+    old_labels: &[String],
+    monitors: &[tauri::window::Monitor],
+    primary_idx: usize,
+) -> Result<Vec<String>, String> {
+    let background_color = visual_state.background_color();
+    let primary_monitor = &monitors[primary_idx];
+    let mut labels = Vec::with_capacity(monitors.len());
+    #[cfg(not(target_os = "linux"))]
+    let mut created_labels = Vec::new();
+    #[cfg(target_os = "linux")]
+    let _ = old_labels;
+
+    #[cfg(target_os = "linux")]
+    if let Err(err) = build_linux_native_blocker_windows(app, primary_monitor, background_color) {
+        eprintln!("failed to reconcile Linux secondary monitor blockers: {err}");
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let mut desired_blocker_labels = Vec::new();
+        for (index, monitor) in monitors.iter().enumerate() {
+            if index == primary_idx {
+                continue;
+            }
+            let label = format!("{POMODORO_OVERLAY_BLOCKER_PREFIX}-{index}");
+            desired_blocker_labels.push(label.clone());
+            if let Some(window) = app.get_webview_window(&label) {
+                configure_svelte_overlay_window(&window, monitor, background_color, false);
+            } else if let Err(err) = build_svelte_overlay_window(
+                app,
+                &label,
+                blocker_url(visual_state),
+                "Ganbaru AI blocker",
+                monitor,
+                background_color,
+                false,
+            ) {
+                eprintln!("failed to reconcile secondary monitor blocker {label}: {err}");
+                continue;
+            } else {
+                created_labels.push(label.clone());
+            }
+            labels.push(label);
+        }
+
+        for label in old_labels {
+            if label.starts_with(POMODORO_OVERLAY_BLOCKER_PREFIX)
+                && !desired_blocker_labels
+                    .iter()
+                    .any(|desired| desired == label)
+            {
+                destroy_existing_window(app, label);
+            }
+        }
+    }
+
+    if let Some(window) = app.get_webview_window(POMODORO_OVERLAY_MAIN_LABEL) {
+        configure_svelte_overlay_window(&window, primary_monitor, background_color, true);
+    } else if let Err(err) = build_svelte_overlay_window(
+        app,
+        POMODORO_OVERLAY_MAIN_LABEL,
+        overlay_url(kind),
+        "Ganbaru AI pomodoro",
+        primary_monitor,
+        background_color,
+        true,
+    ) {
+        #[cfg(not(target_os = "linux"))]
+        for label in created_labels {
+            destroy_existing_window(app, &label);
+        }
+        return Err(err);
+    }
+
+    labels.push(POMODORO_OVERLAY_MAIN_LABEL.to_string());
+    Ok(labels)
+}
+
 fn show_pomodoro_overlay(app: tauri::AppHandle, kind: PomodoroOverlayKind) -> Result<(), String> {
     let overlay_state = app.state::<PomodoroOverlayState>();
-    overlay_state.begin(&app);
     let visual_state = kind.initial_visual_state();
+    overlay_state.begin(&app, kind, visual_state);
     let background_color = visual_state.background_color();
 
     let app_for_setup = app.clone();
@@ -1255,15 +1525,8 @@ fn show_pomodoro_overlay(app: tauri::AppHandle, kind: PomodoroOverlayKind) -> Re
         if monitors.is_empty() {
             return Err("no monitors are available for the pomodoro overlay".to_string());
         }
-        let primary_idx = app_for_setup
-            .primary_monitor()
-            .map_err(|e| e.to_string())?
-            .and_then(|primary| {
-                monitors
-                    .iter()
-                    .position(|monitor| monitor_matches(monitor, &primary))
-            })
-            .unwrap_or(0);
+        let primary_idx = primary_monitor_index(&app_for_setup, &monitors)?;
+        let signature = monitor_signature(&monitors, primary_idx);
 
         let mut labels = Vec::with_capacity(monitors.len());
         let primary_monitor = &monitors[primary_idx];
@@ -1296,7 +1559,7 @@ fn show_pomodoro_overlay(app: tauri::AppHandle, kind: PomodoroOverlayKind) -> Re
             labels.push(label);
         }
 
-        build_svelte_overlay_window(
+        if let Err(err) = build_svelte_overlay_window(
             &app_for_setup,
             POMODORO_OVERLAY_MAIN_LABEL,
             overlay_url(kind),
@@ -1304,17 +1567,24 @@ fn show_pomodoro_overlay(app: tauri::AppHandle, kind: PomodoroOverlayKind) -> Re
             primary_monitor,
             background_color,
             true,
-        )?;
+        ) {
+            destroy_overlay_windows(&app_for_setup, &labels);
+            return Err(err);
+        }
         labels.push(POMODORO_OVERLAY_MAIN_LABEL.to_string());
-        app_for_setup
-            .state::<PomodoroOverlayState>()
-            .set_labels(labels);
-        Ok(())
+        Ok((labels, signature))
     });
 
-    if let Err(err) = setup_result {
-        app.state::<PomodoroOverlayState>().close(&app);
-        return Err(err);
+    match setup_result {
+        Ok((labels, signature)) => {
+            reinforce_overlay_windows(&app, &labels, POMODORO_OVERLAY_MAIN_LABEL);
+            app.state::<PomodoroOverlayState>()
+                .set_overlay_session(&app, labels, signature);
+        }
+        Err(err) => {
+            app.state::<PomodoroOverlayState>().close(&app);
+            return Err(err);
+        }
     }
 
     Ok(())
@@ -1332,8 +1602,10 @@ pub fn set_pomodoro_overlay_state(
     state: String,
 ) -> Result<(), String> {
     let visual_state = PomodoroOverlayVisualState::from_id(&state)?;
+    overlays.set_visual_state(visual_state);
     let background_color = visual_state.background_color();
     let labels = overlays.labels();
+    let labels_for_reinforce = labels.clone();
     let app_for_setup = app.clone();
 
     if let Err(err) = run_main_thread_setup(&app, move || {
@@ -1349,6 +1621,7 @@ pub fn set_pomodoro_overlay_state(
     }) {
         eprintln!("failed to recolor pomodoro overlay windows: {err}");
     }
+    reinforce_overlay_windows(&app, &labels_for_reinforce, POMODORO_OVERLAY_MAIN_LABEL);
 
     app.emit(
         POMODORO_OVERLAY_STATE_CHANGED_EVENT,

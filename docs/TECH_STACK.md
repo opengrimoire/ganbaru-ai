@@ -475,7 +475,7 @@ All implemented as secondary Tauri windows for fully custom UI rather than OS no
 | Feature                          | Implementation                                                                                                                                                          |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Pomodoro completion notification | Small frameless always-on-top window at bottom-right corner, auto-dismissed after N seconds                                                                             |
-| Fullscreen Pomodoro blocked screen | Rust/Tauri-enforced fullscreen always-on-top Svelte overlay for break and idle states, with native black blocker windows on secondary monitors |
+| Fullscreen Pomodoro blocked screen | Svelte overlay for break and idle states with Rust/Tauri enforcement: fullscreen always-on-top windows, secondary monitor blockers, monitor reconciliation, Linux shortcut and screensaver guards, Windows `HWND_TOPMOST` plus scoped shell-shortcut filtering and execution-state assertions, and macOS screen-saver-level windows plus presentation options and IOKit sleep assertions |
 | Edge panel                       | Narrow always-on-top window anchored to the right screen edge, shown/hidden based on global cursor position polled from Rust                                            |
 | Session summary screen           | Displayed during Pomodoro breaks with session completion stats                                                                                                          |
 

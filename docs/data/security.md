@@ -52,6 +52,16 @@ The Tauri webview itself is hardened: production CSP allows bundled local assets
 
 Calendar descriptions are the current app-owned rich HTML surface. The frontend and Rust backend both cap and sanitize descriptions before rendering or persistence, and closed event panels render only plain text previews in the main DOM.
 
+## Native overlay enforcement
+
+The Pomodoro break and idle overlays use native desktop APIs only while a blocked screen is active. This is kiosk-lite enforcement, not OS policy control. The Svelte overlay remains the visual surface, and Rust owns temporary platform state through a guard that restores everything when the overlay closes or when the app restarts after stale Linux shortcut state.
+
+On Windows, the app reinforces overlay webviews with `HWND_TOPMOST`, installs a scoped `WH_KEYBOARD_LL` hook to block normal shell switching chords, and uses `SetThreadExecutionState` to request that the display and system stay awake. The hook passes all non-blocked keys through immediately and does not use `BlockInput`, so keyboard and mouse input are not globally disabled. Secure attention and OS-level escape routes such as Ctrl+Alt+Del remain outside the app's control.
+
+On macOS, the app sets overlay windows to the screen saver level, applies temporary AppKit presentation options that hide the Dock and menu bar and disable normal process switching and quit surfaces, and creates IOKit assertions for display and system idle sleep. The implementation does not use event taps, Accessibility permission, Input Monitoring permission, root access, or persistent profile or policy changes.
+
+The direct macOS Objective-C bridge crates are target-only dependencies used for AppKit and Core Foundation calls in this enforcement layer. They are not loaded on Linux or Windows. The IOKit power calls use minimal FFI because the locked crates do not provide a cleaner high-level wrapper for these assertion APIs.
+
 ## Current audit posture
 
 As of May 29, 2026, `pnpm -w run validate` is the normal code gate: type checks, linting, tests, and editor diagnostics. Dependency audits are separated into `pnpm -w run audit` and included in `pnpm -w run validate:full`, which is the gate for dependency or lockfile changes, PRs, releases, and explicit security checks. `pnpm -w run audit:deps` reports no known npm vulnerabilities at the low advisory level. `pnpm -w run audit:rust` uses `.cargo/audit.toml` and reports no unreviewed Rust vulnerability findings. The audit output omits dependency trees so routine validation stays readable; use `cargo tree` when reviewing a new advisory path. The current Rust audit still reports one reviewed vulnerability ignore and allowed upstream warnings that are not removed by safe updates inside the current SQLx, Tauri, Wry, GTK3, and parser dependency families:

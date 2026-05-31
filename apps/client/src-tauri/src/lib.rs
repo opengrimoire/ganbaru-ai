@@ -18,6 +18,7 @@ mod media_player;
 mod music;
 mod notification;
 mod pomodoro;
+mod pomodoro_enforcement;
 mod recurrence;
 mod themes;
 mod timezone_migration;
