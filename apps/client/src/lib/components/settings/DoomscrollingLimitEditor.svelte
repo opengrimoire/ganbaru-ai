@@ -1,5 +1,6 @@
 <script lang="ts">
   import Plus from "@lucide/svelte/icons/plus";
+  import Eraser from "@lucide/svelte/icons/eraser";
   import Save from "@lucide/svelte/icons/save";
   import X from "@lucide/svelte/icons/x";
   import {
@@ -438,19 +439,19 @@
                   value={entry.name}
                   oninput={(event) => updateEntry(entry.id, "name", event.currentTarget.value)}
                   class="h-9 min-w-0 border-0 border-r border-border/70 bg-transparent px-2 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:bg-accent/35"
-                  placeholder="Facebook"
+                  placeholder="Name..."
                 />
                 <input
                   value={entry.websiteHost}
                   oninput={(event) => updateEntry(entry.id, "websiteHost", event.currentTarget.value)}
                   class="h-9 min-w-0 border-0 border-r border-border/70 bg-transparent px-2 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:bg-accent/35"
-                  placeholder="facebook.com"
+                  placeholder="domain.com"
                 />
                 <input
                   value={entry.mobileAppName}
                   oninput={(event) => updateEntry(entry.id, "mobileAppName", event.currentTarget.value)}
                   class="h-9 min-w-0 border-0 border-r border-border/70 bg-transparent px-2 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:bg-accent/35"
-                  placeholder="Facebook"
+                  placeholder="App name..."
                 />
                 <div class="flex h-9 min-w-0 items-center gap-1 border-r border-border/70 px-1.5">
                   <button
@@ -461,7 +462,7 @@
                       entry.desktopAppName ? "text-foreground" : "text-muted-foreground",
                     ]}
                   >
-                    {entry.desktopAppName || "Choose app"}
+                    {entry.desktopAppName || "Choose app..."}
                   </button>
                   {#if entry.desktopAppName}
                     <button
@@ -470,7 +471,7 @@
                       aria-label="Clear desktop app"
                       class="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                     >
-                      <X size={12} strokeWidth={2.25} />
+                      <Eraser size={12} strokeWidth={2.25} />
                     </button>
                   {/if}
                 </div>

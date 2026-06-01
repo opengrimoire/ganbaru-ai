@@ -5,24 +5,21 @@
   import CircleCheck from "@lucide/svelte/icons/circle-check";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
-  import {
-    getDoomscrollingExtensionStatus,
-    type DoomscrollingExtensionStatus,
-  } from "$lib/api/doomscrolling";
   import { appSessionStartedAt } from "$lib/stores/app-session";
+  import { getDoomscrollingExtensionConnection } from "$lib/stores/doomscrolling-extension-status.svelte";
   import { cn } from "$lib/utils";
 
-  const EXTENSION_STATUS_POLL_MS = 15_000;
   const EXTENSION_STARTUP_GRACE_MS = 45_000;
   const EXTENSION_STARTUP_PENDING_REASONS = new Set([
     "connection is from an older app session",
     "no extension connection has been recorded",
   ]);
 
-  let extensionStatus = $state<DoomscrollingExtensionStatus | null>(null);
-  let extensionStatusLoading = $state(true);
-  let extensionStatusError = $state<string | null>(null);
+  const extensionConnection = getDoomscrollingExtensionConnection();
 
+  const extensionStatus = $derived(extensionConnection.status);
+  const extensionStatusLoading = $derived(extensionConnection.loading);
+  const extensionStatusError = $derived(extensionConnection.error);
   const extensionStatusConnected = $derived(extensionStatus?.connected === true);
   const extensionStatusWaitingForFirstConnection = $derived.by(() => {
     if (!extensionStatus || extensionStatus.connected) return false;
@@ -57,25 +54,8 @@
     }
   }
 
-  async function refreshExtensionStatus(): Promise<void> {
-    if (!extensionStatus) extensionStatusLoading = true;
-    try {
-      extensionStatus = await getDoomscrollingExtensionStatus(appSessionStartedAt);
-      extensionStatusError = null;
-    } catch (err) {
-      console.warn("Failed to read browser extension connection status:", err);
-      extensionStatusError = err instanceof Error ? err.message : String(err);
-    } finally {
-      extensionStatusLoading = false;
-    }
-  }
-
   onMount(() => {
-    void refreshExtensionStatus();
-    const intervalId = setInterval(() => {
-      void refreshExtensionStatus();
-    }, EXTENSION_STATUS_POLL_MS);
-    return () => clearInterval(intervalId);
+    return extensionConnection.start();
   });
 </script>
 

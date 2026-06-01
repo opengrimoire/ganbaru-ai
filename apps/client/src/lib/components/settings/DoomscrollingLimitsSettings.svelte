@@ -77,14 +77,6 @@
       ?? (entry.websiteHost ? websiteDisplayName(entry.websiteHost) : "Linked source");
   }
 
-  function entrySourceSummary(entry: DoomscrollingLimitEntry): string {
-    const parts: string[] = [];
-    if (entry.websiteHost) parts.push(`Website ${entry.websiteHost}`);
-    if (entry.mobileAppName) parts.push(`Mobile ${entry.mobileAppName}`);
-    if (entry.desktopAppName) parts.push(`Desktop ${entry.desktopAppName}`);
-    return parts.join(" · ");
-  }
-
   function requestLimitEnabledChange(limit: DoomscrollingUsageLimit, enabled: boolean): void {
     if (enabled) {
       doomscrolling.setUsageLimitEnabled(limit.id, true);
@@ -230,9 +222,8 @@
 
           <div class="flex min-w-0 flex-wrap gap-1.5">
             {#each limit.entries as entry (doomscrollingLimitEntryKey(entry))}
-              <span class="inline-flex max-w-full items-center gap-1 rounded-full border border-border bg-transparent px-2 py-1 text-[0.733333rem] text-muted-foreground">
-                <span class="shrink-0 text-foreground">{entryLabel(entry)}</span>
-                <span class="truncate text-muted-foreground">{entrySourceSummary(entry)}</span>
+              <span class="inline-flex max-w-full items-center rounded-full border border-border bg-transparent px-2 py-1 text-[0.733333rem] text-foreground">
+                <span class="truncate">{entryLabel(entry)}</span>
               </span>
             {/each}
           </div>
@@ -278,9 +269,9 @@
           <div class="min-w-0 text-[0.8rem]">{desktopAvailabilityMessage}</div>
         </div>
       </section>
-    {/if}
 
-    <div class="h-px bg-border/70" aria-hidden="true"></div>
+      <div class="h-px bg-border/70" aria-hidden="true"></div>
+    {/if}
 
     {@render limitList()}
   </fieldset>
