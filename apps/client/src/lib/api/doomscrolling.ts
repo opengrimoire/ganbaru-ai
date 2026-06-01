@@ -3,6 +3,7 @@ import type { PomodoroPhase } from "@ganbaru-ai/shared-types";
 
 export interface DoomscrollingRuntimeState {
   active: boolean;
+  paused: boolean;
   phase: PomodoroPhase | "inactive";
   activeRunId: string | null;
   activeBlockId: string | null;

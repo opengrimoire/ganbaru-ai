@@ -16,6 +16,7 @@ function sendNativeMessage(message) {
           type: "error",
           connected: false,
           active: false,
+          paused: false,
           blocked: false,
           reason: error.message,
         });
@@ -74,6 +75,7 @@ async function clearActiveUsage() {
 async function updateStatus(status) {
   const nextEnforcementStateKey = [
     status?.active === true ? "1" : "0",
+    status?.paused === true ? "1" : "0",
     typeof status?.phase === "string" ? status.phase : "inactive",
     typeof status?.rulesFingerprint === "string" ? status.rulesFingerprint : "unknown",
   ].join("|");
@@ -85,6 +87,7 @@ async function updateStatus(status) {
     [STATUS_STORAGE_KEY]: {
       connected: status?.connected === true,
       active: status?.active === true,
+      paused: status?.paused === true,
       phase: typeof status?.phase === "string" ? status.phase : "inactive",
       remainingSeconds: typeof status?.remainingSeconds === "number" ? status.remainingSeconds : null,
       reason: typeof status?.reason === "string" ? status.reason : null,

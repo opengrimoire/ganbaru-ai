@@ -48,7 +48,7 @@
     host: string;
   }
 
-  type BrowserConfigurationToggle = "enabled" | "focus" | "shortBreaks" | "longBreaks";
+  type BrowserConfigurationToggle = "enabled" | "focus" | "shortBreaks" | "longBreaks" | "pause";
 
   interface PendingBrowserConfigurationAction {
     toggle: BrowserConfigurationToggle;
@@ -348,8 +348,10 @@
       doomscrolling.setBlockDuringFocus(checked);
     } else if (toggle === "shortBreaks") {
       doomscrolling.setBlockDuringShortBreaks(checked);
-    } else {
+    } else if (toggle === "longBreaks") {
       doomscrolling.setBlockDuringLongBreaks(checked);
+    } else {
+      doomscrolling.setPauseDuringFocusPause(checked);
     }
   }
 
@@ -408,7 +410,8 @@
       if (action.action.toggle === "enabled") return "Turn off browser blocking?";
       if (action.action.toggle === "focus") return "Allow websites during focus?";
       if (action.action.toggle === "shortBreaks") return "Allow websites during short breaks?";
-      return "Allow websites during long breaks?";
+      if (action.action.toggle === "longBreaks") return "Allow websites during long breaks?";
+      return "Keep browser blocking active while paused?";
     }
     if (action.target === "category") {
       const category = getDoomscrollingCategoryDefinition(action.action.categoryId);
@@ -440,7 +443,10 @@
       if (action.action.toggle === "shortBreaks") {
         return "Website rules will not apply during short breaks until you enable this again";
       }
-      return "Website rules will not apply during long breaks until you enable this again";
+      if (action.action.toggle === "longBreaks") {
+        return "Website rules will not apply during long breaks until you enable this again";
+      }
+      return "Website rules will continue applying while a focus session is paused";
     }
     if (action.target === "category") {
       return "This category will stop blocking its websites until you enable it again";
@@ -704,12 +710,14 @@
     blockDuringFocus={doomscrolling.blockDuringFocus}
     blockDuringShortBreaks={doomscrolling.blockDuringShortBreaks}
     blockDuringLongBreaks={doomscrolling.blockDuringLongBreaks}
+    pauseDuringFocusPause={doomscrolling.pauseDuringFocusPause}
     mode={doomscrolling.mode}
     enabledLabel="Enable browser blocking"
     enabledDescription="Allow website rules to run during selected Pomodoro phases"
     focusDescription="Apply website rules while a focus session is running"
     shortBreakDescription="Apply website rules during short breaks"
     longBreakDescription="Apply website rules during long breaks"
+    pauseDescription="Pause website blocking while focus is paused, then resume when focus continues"
     modeHeading="Website mode"
     modeDescription="Choose whether listed websites are blocked or allowed"
     blacklistDescription="Blocks listed websites"

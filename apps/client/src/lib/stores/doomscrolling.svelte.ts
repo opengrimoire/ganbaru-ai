@@ -363,6 +363,9 @@ export function getDoomscrolling() {
     get blockDuringLongBreaks(): boolean {
       return config.blockDuringLongBreaks;
     },
+    get pauseDuringFocusPause(): boolean {
+      return config.pauseDuringFocusPause;
+    },
     get blockedCategories(): readonly DoomscrollingCategoryRule[] {
       return config.blockedCategories;
     },
@@ -389,6 +392,9 @@ export function getDoomscrolling() {
     },
     get desktopBlockDuringLongBreaks(): boolean {
       return config.desktop.blockDuringLongBreaks;
+    },
+    get desktopPauseDuringFocusPause(): boolean {
+      return config.desktop.pauseDuringFocusPause;
     },
     get blockedApps(): readonly DoomscrollingAppRule[] {
       return config.desktop.blockedApps;
@@ -417,6 +423,9 @@ export function getDoomscrolling() {
     setBlockDuringLongBreaks(blockDuringLongBreaks: boolean): void {
       update({ blockDuringLongBreaks });
     },
+    setPauseDuringFocusPause(pauseDuringFocusPause: boolean): void {
+      update({ pauseDuringFocusPause });
+    },
     setDesktopEnabled(enabled: boolean): void {
       updateDesktop({ enabled });
     },
@@ -428,6 +437,9 @@ export function getDoomscrolling() {
     },
     setDesktopBlockDuringLongBreaks(blockDuringLongBreaks: boolean): void {
       updateDesktop({ blockDuringLongBreaks });
+    },
+    setDesktopPauseDuringFocusPause(pauseDuringFocusPause: boolean): void {
+      updateDesktop({ pauseDuringFocusPause });
     },
     setLimitsEnabled(enabled: boolean): void {
       updateLimits({ enabled });

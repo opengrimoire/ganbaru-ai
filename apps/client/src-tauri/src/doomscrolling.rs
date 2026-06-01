@@ -150,6 +150,7 @@ const PROTECTED_DESKTOP_PROCESS_NAMES: &[&str] = &[
 #[serde(rename_all = "camelCase")]
 pub struct DoomscrollingRuntimeState {
     active: bool,
+    paused: bool,
     phase: String,
     active_run_id: Option<String>,
     active_block_id: Option<String>,
@@ -2119,6 +2120,7 @@ mod tests {
     fn state(phase: &str) -> DoomscrollingRuntimeState {
         DoomscrollingRuntimeState {
             active: phase != "inactive",
+            paused: false,
             phase: phase.to_string(),
             active_run_id: None,
             active_block_id: None,

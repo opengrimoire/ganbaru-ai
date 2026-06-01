@@ -54,7 +54,7 @@ interface OpenAppUsageSnapshot {
 }
 
 let localDate = $state(todayLocalDate());
-let weekStartLocalDate = $state(doomscrollingWeekStartLocalDate(localDate));
+let weekStartLocalDate = $state(doomscrollingWeekStartLocalDate(todayLocalDate()));
 let totals = $state<DoomscrollingLimitTotal[]>([]);
 let samples = $state<DoomscrollingUsageSample[]>([]);
 let refreshRunning = false;

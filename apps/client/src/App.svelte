@@ -290,6 +290,7 @@
     const _focus = doomscrolling.desktopBlockDuringFocus;
     const _shortBreaks = doomscrolling.desktopBlockDuringShortBreaks;
     const _longBreaks = doomscrolling.desktopBlockDuringLongBreaks;
+    const _pause = doomscrolling.desktopPauseDuringFocusPause;
     const _rules = doomscrolling.blockedApps;
     checkDesktopAppBlocking();
   });
@@ -351,7 +352,8 @@
   }
 
   function desktopAppBlockingActive(): boolean {
-    if (!isMainWindow || !pomodoro.isRunning || !doomscrolling.desktopEnabled) return false;
+    if (!isMainWindow || !pomodoro.isActive || !doomscrolling.desktopEnabled) return false;
+    if (!pomodoro.isRunning && doomscrolling.desktopPauseDuringFocusPause) return false;
     if (pomodoro.phase === "focus") return doomscrolling.desktopBlockDuringFocus;
     if (pomodoro.phase === "short_break") return doomscrolling.desktopBlockDuringShortBreaks;
     if (pomodoro.phase === "long_break") return doomscrolling.desktopBlockDuringLongBreaks;

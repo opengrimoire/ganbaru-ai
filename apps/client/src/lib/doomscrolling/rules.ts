@@ -257,6 +257,7 @@ export interface DoomscrollingDesktopConfig {
   blockDuringFocus: boolean;
   blockDuringShortBreaks: boolean;
   blockDuringLongBreaks: boolean;
+  pauseDuringFocusPause: boolean;
   blockedApps: DoomscrollingAppRule[];
 }
 
@@ -290,6 +291,7 @@ export interface DoomscrollingConfig {
   blockDuringFocus: boolean;
   blockDuringShortBreaks: boolean;
   blockDuringLongBreaks: boolean;
+  pauseDuringFocusPause: boolean;
   blockedCategories: DoomscrollingCategoryRule[];
   customCategoryStacks: DoomscrollingCustomCategoryStack[];
   blockedHosts: DoomscrollingHostRule[];
@@ -359,6 +361,7 @@ function defaultDesktopConfig(): DoomscrollingDesktopConfig {
     blockDuringFocus: true,
     blockDuringShortBreaks: true,
     blockDuringLongBreaks: true,
+    pauseDuringFocusPause: true,
     blockedApps: [],
   };
 }
@@ -387,6 +390,7 @@ export const DEFAULT_DOOMSCROLLING_CONFIG: DoomscrollingConfig = Object.freeze({
   blockDuringFocus: true,
   blockDuringShortBreaks: true,
   blockDuringLongBreaks: true,
+  pauseDuringFocusPause: true,
   blockedCategories: defaultCategoryRules(),
   customCategoryStacks: [],
   blockedHosts: [],
@@ -832,6 +836,9 @@ function normalizeDesktopConfig(value: unknown): DoomscrollingDesktopConfig {
     blockDuringLongBreaks: typeof record.blockDuringLongBreaks === "boolean"
       ? record.blockDuringLongBreaks
       : legacyBlockDuringBreaks ?? true,
+    pauseDuringFocusPause: typeof record.pauseDuringFocusPause === "boolean"
+      ? record.pauseDuringFocusPause
+      : true,
     blockedApps: normalizeAppRules(record.blockedApps),
   };
 }
@@ -866,6 +873,9 @@ export function normalizeDoomscrollingConfig(value: unknown): DoomscrollingConfi
     blockDuringLongBreaks: typeof record.blockDuringLongBreaks === "boolean"
       ? record.blockDuringLongBreaks
       : legacyBlockDuringBreaks ?? DEFAULT_DOOMSCROLLING_CONFIG.blockDuringLongBreaks,
+    pauseDuringFocusPause: typeof record.pauseDuringFocusPause === "boolean"
+      ? record.pauseDuringFocusPause
+      : DEFAULT_DOOMSCROLLING_CONFIG.pauseDuringFocusPause,
     blockedCategories: normalizeCategoryRules(record.blockedCategories),
     customCategoryStacks: normalizeCustomCategoryStacks(record.customCategoryStacks),
     blockedHosts: normalizeHostRules(record.blockedHosts),

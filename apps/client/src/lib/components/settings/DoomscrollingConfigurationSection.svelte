@@ -4,7 +4,7 @@
   import DoomscrollingModeSelector from "./DoomscrollingModeSelector.svelte";
   import ToggleSetting from "./ToggleSetting.svelte";
 
-  type ScheduleToggle = "enabled" | "focus" | "shortBreaks" | "longBreaks";
+  type ScheduleToggle = "enabled" | "focus" | "shortBreaks" | "longBreaks" | "pause";
 
   let {
     title,
@@ -12,12 +12,14 @@
     blockDuringFocus,
     blockDuringShortBreaks,
     blockDuringLongBreaks,
+    pauseDuringFocusPause,
     mode = "blacklist",
     enabledLabel,
     enabledDescription,
     focusDescription,
     shortBreakDescription,
     longBreakDescription,
+    pauseDescription,
     showMode = true,
     modeHeading = "Website mode",
     modeDescription = "Choose how listed websites are handled",
@@ -31,12 +33,14 @@
     blockDuringFocus: boolean;
     blockDuringShortBreaks: boolean;
     blockDuringLongBreaks: boolean;
+    pauseDuringFocusPause: boolean;
     mode?: DoomscrollingMode;
     enabledLabel: string;
     enabledDescription: string;
     focusDescription: string;
     shortBreakDescription: string;
     longBreakDescription: string;
+    pauseDescription: string;
     showMode?: boolean;
     modeHeading?: string;
     modeDescription?: string;
@@ -83,6 +87,12 @@
           description={longBreakDescription}
           checked={blockDuringLongBreaks}
           onChange={(checked) => onScheduleChange("longBreaks", checked)}
+        />
+        <ToggleSetting
+          label="Pause if the focus session is paused"
+          description={pauseDescription}
+          checked={pauseDuringFocusPause}
+          onChange={(checked) => onScheduleChange("pause", checked)}
         />
       </div>
 

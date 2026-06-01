@@ -13,7 +13,7 @@
   const doomscrolling = getDoomscrolling();
 
   type DesktopListKind = "blocked";
-  type DesktopConfigurationToggle = "enabled" | "focus" | "shortBreaks" | "longBreaks";
+  type DesktopConfigurationToggle = "enabled" | "focus" | "shortBreaks" | "longBreaks" | "pause";
 
   interface DoomscrollingAppSelection {
     name: string;
@@ -144,8 +144,10 @@
       doomscrolling.setDesktopBlockDuringFocus(checked);
     } else if (toggle === "shortBreaks") {
       doomscrolling.setDesktopBlockDuringShortBreaks(checked);
-    } else {
+    } else if (toggle === "longBreaks") {
       doomscrolling.setDesktopBlockDuringLongBreaks(checked);
+    } else {
+      doomscrolling.setDesktopPauseDuringFocusPause(checked);
     }
   }
 
@@ -185,7 +187,8 @@
       if (action.action.toggle === "enabled") return "Turn off desktop app blocking?";
       if (action.action.toggle === "focus") return "Allow apps during focus?";
       if (action.action.toggle === "shortBreaks") return "Allow apps during short breaks?";
-      return "Allow apps during long breaks?";
+      if (action.action.toggle === "longBreaks") return "Allow apps during long breaks?";
+      return "Keep desktop app blocking active while paused?";
     }
     return action.action.type === "disable"
       ? `Allow ${action.action.name}?`
@@ -203,7 +206,10 @@
       if (action.action.toggle === "shortBreaks") {
         return "App rules will not apply during short breaks until you enable this again";
       }
-      return "App rules will not apply during long breaks until you enable this again";
+      if (action.action.toggle === "longBreaks") {
+        return "App rules will not apply during long breaks until you enable this again";
+      }
+      return "App rules will continue applying while a focus session is paused";
     }
     return action.action.type === "disable"
       ? "It will stay in the list but will not affect desktop blocking until you enable it again"
@@ -225,12 +231,14 @@
     blockDuringFocus={doomscrolling.desktopBlockDuringFocus}
     blockDuringShortBreaks={doomscrolling.desktopBlockDuringShortBreaks}
     blockDuringLongBreaks={doomscrolling.desktopBlockDuringLongBreaks}
+    pauseDuringFocusPause={doomscrolling.desktopPauseDuringFocusPause}
     showMode={false}
     enabledLabel="Enable desktop app blocking"
     enabledDescription="Allow app rules to run during selected Pomodoro phases"
     focusDescription="Apply app rules while a focus session is running"
     shortBreakDescription="Apply app rules during short breaks"
     longBreakDescription="Apply app rules during long breaks"
+    pauseDescription="Pause desktop app blocking while focus is paused, then resume when focus continues"
     onScheduleChange={requestDesktopConfigurationToggleChange}
   />
 

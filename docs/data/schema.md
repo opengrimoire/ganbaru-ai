@@ -436,6 +436,8 @@ Music files remain outside the vault. SQLite stores playlist definitions, source
 
 Append-only active-use samples for Doomscrolling usage limits. Configuration lives in `vault/config.json` under `doomscrolling.limits` because it is user settings, while usage history is structured behavioral data and belongs in SQLite.
 
+Browser and desktop Pomodoro blocking settings live in `vault/config.json` under `doomscrolling` and `doomscrolling.desktop`. The `pauseDuringFocusPause` flag is stored separately for browser rules and desktop app rules so each surface can decide whether a paused focus session pauses enforcement or keeps rules strict.
+
 Each row stores one measured active-use interval. The browser extension records active focused tab time through native messaging and sends only a normalized host plus elapsed seconds. Desktop samples use focused foreground app time where the platform exposes it. On Wayland sessions that do not expose focused app tracking, desktop samples use selected-app process-open time instead.
 
 | Field | Type | Description |

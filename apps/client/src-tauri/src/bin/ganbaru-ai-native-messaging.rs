@@ -113,6 +113,7 @@ struct NativeResponse {
     host_name: String,
     connected: bool,
     active: bool,
+    paused: bool,
     phase: String,
     remaining_seconds: Option<i64>,
     rules_fingerprint: String,
@@ -127,6 +128,8 @@ struct NativeResponse {
 #[serde(rename_all = "camelCase")]
 struct RuntimeState {
     active: bool,
+    #[serde(default)]
+    paused: bool,
     phase: String,
     remaining_seconds: Option<i64>,
     updated_at: String,
@@ -177,6 +180,7 @@ struct DoomscrollingConfig {
     block_during_focus: bool,
     block_during_short_breaks: bool,
     block_during_long_breaks: bool,
+    pause_during_focus_pause: bool,
     blocked_category_ids: Vec<String>,
     custom_category_stacks: Vec<CustomCategoryStack>,
     blocked_hosts: Vec<String>,
@@ -236,6 +240,7 @@ fn main() {
             host_name: native_host_name(),
             connected: false,
             active: false,
+            paused: false,
             phase: "inactive".to_string(),
             remaining_seconds: None,
             rules_fingerprint: "unavailable".to_string(),
@@ -482,6 +487,10 @@ fn read_config(path: &std::path::Path) -> Option<DoomscrollingConfig> {
             .get("blockDuringLongBreaks")
             .and_then(Value::as_bool)
             .or(legacy_block_during_breaks)
+            .unwrap_or(true),
+        pause_during_focus_pause: doomscrolling
+            .get("pauseDuringFocusPause")
+            .and_then(Value::as_bool)
             .unwrap_or(true),
         blocked_category_ids: read_category_array(doomscrolling.get("blockedCategories")),
         custom_category_stacks: read_custom_category_stacks(
@@ -850,6 +859,7 @@ fn default_config() -> DoomscrollingConfig {
         block_during_focus: true,
         block_during_short_breaks: true,
         block_during_long_breaks: true,
+        pause_during_focus_pause: true,
         blocked_category_ids: default_built_in_category_ids(),
         custom_category_stacks: Vec::new(),
         blocked_hosts: Vec::new(),
@@ -864,11 +874,13 @@ fn default_config() -> DoomscrollingConfig {
 
 fn response_from_snapshot(snapshot: &StateSnapshot) -> NativeResponse {
     let (active, phase, remaining_seconds, reason) = runtime_status(snapshot);
+    let paused = snapshot.runtime.as_ref().is_some_and(|runtime| runtime.paused);
     NativeResponse {
         message_type: "decision",
         host_name: native_host_name(),
         connected: snapshot.config_dir.is_some(),
         active,
+        paused,
         phase,
         remaining_seconds,
         rules_fingerprint: rules_fingerprint(&snapshot.config, snapshot.limit_state.as_ref()),
@@ -919,9 +931,13 @@ fn runtime_status(snapshot: &StateSnapshot) -> (bool, String, Option<i64>, Optio
         );
     }
 
-    let remaining_seconds = runtime
-        .remaining_seconds
-        .map(|remaining| (remaining - age_seconds).max(0));
+    let remaining_seconds = runtime.remaining_seconds.map(|remaining| {
+        if runtime.paused {
+            remaining
+        } else {
+            (remaining - age_seconds).max(0)
+        }
+    });
     (
         runtime.active,
         runtime.phase.clone(),
@@ -934,6 +950,13 @@ fn should_enforce(snapshot: &StateSnapshot, response: &mut NativeResponse) -> bo
     if !response.active {
         return false;
     }
+
+    if snapshot.runtime.as_ref().is_some_and(|runtime| runtime.paused)
+        && snapshot.config.pause_during_focus_pause
+    {
+        return false;
+    }
+
     match response.phase.as_str() {
         "focus" => snapshot.config.block_during_focus,
         "short_break" => snapshot.config.block_during_short_breaks,
@@ -1164,6 +1187,7 @@ fn rules_fingerprint(config: &DoomscrollingConfig, limit_state: Option<&LimitSta
     feed_fingerprint_bool(&mut hash, config.block_during_focus);
     feed_fingerprint_bool(&mut hash, config.block_during_short_breaks);
     feed_fingerprint_bool(&mut hash, config.block_during_long_breaks);
+    feed_fingerprint_bool(&mut hash, config.pause_during_focus_pause);
     feed_fingerprint_hosts(&mut hash, "category", &config.blocked_category_ids);
     feed_fingerprint(&mut hash, "custom_stack");
     for stack in &config.custom_category_stacks {
@@ -1538,6 +1562,7 @@ mod tests {
             block_during_focus: true,
             block_during_short_breaks: true,
             block_during_long_breaks: true,
+            pause_during_focus_pause: true,
             blocked_category_ids: Vec::new(),
             custom_category_stacks: Vec::new(),
             blocked_hosts: vec!["reddit.com".to_string(), "youtube.com".to_string()],
@@ -1556,6 +1581,7 @@ mod tests {
             host_name: super::HOST_NAME.to_string(),
             connected: true,
             active: true,
+            paused: false,
             phase: phase.to_string(),
             remaining_seconds: Some(60),
             rules_fingerprint: "test".to_string(),

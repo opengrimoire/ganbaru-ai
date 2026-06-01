@@ -172,6 +172,7 @@ describe("normalizeDoomscrollingConfig", () => {
       blockDuringFocus: true,
       blockDuringShortBreaks: true,
       blockDuringLongBreaks: true,
+      pauseDuringFocusPause: true,
       blockedCategories: DEFAULT_DOOMSCROLLING_CONFIG.blockedCategories,
       customCategoryStacks: [],
       blockedHosts: [hostRule("reddit.com"), hostRule("youtube.com")],

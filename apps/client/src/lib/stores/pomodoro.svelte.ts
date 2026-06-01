@@ -181,9 +181,11 @@ let lastDoomscrollingStateKey = "";
 function writeCurrentDoomscrollingRuntimeState(force = false): void {
   if (!pomodoroCoordinator) return;
   const minuteBucket = Math.ceil(remainingSeconds / 60);
-  const active = isRunning && activeRunId !== null;
+  const active = pomodoroSessionActive();
+  const paused = active && !isRunning;
   const stateKey = [
     active ? "1" : "0",
+    paused ? "1" : "0",
     active ? phase : "inactive",
     activeRunId ?? "",
     activeBlockId ?? "",
@@ -194,6 +196,7 @@ function writeCurrentDoomscrollingRuntimeState(force = false): void {
 
   writeDoomscrollingRuntimeState({
     active,
+    paused,
     phase: active ? phase : "inactive",
     activeRunId,
     activeBlockId,
