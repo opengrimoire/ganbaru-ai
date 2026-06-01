@@ -4,7 +4,7 @@ import { sameConcreteOccurrence } from "./occurrence-protection";
 
 export { sameConcreteOccurrence };
 
-function eventCoversInstant(event: CalendarEvent, instant: Date): boolean {
+export function eventCoversInstant(event: CalendarEvent, instant: Date): boolean {
   const startMs = parseCalendarDate(event.start).getTime();
   const endMs = parseCalendarDate(event.end).getTime();
   const instantMs = instant.getTime();
@@ -14,11 +14,19 @@ function eventCoversInstant(event: CalendarEvent, instant: Date): boolean {
     && instantMs < endMs;
 }
 
+export function isActiveTimedCalendarEvent(
+  event: CalendarEvent,
+  now: Date = new Date(),
+): boolean {
+  return event.allDay !== true && eventCoversInstant(event, now);
+}
+
 export function endActiveEventWouldStopProductivity(
   selectedEvent: CalendarEvent,
   visibleEvents: readonly CalendarEvent[],
   now: Date = new Date(),
 ): boolean {
+  if (!selectedEvent.pomodoroConfig) return false;
   return !visibleEvents.some((event) =>
     !!event.pomodoroConfig
     && !event.allDay

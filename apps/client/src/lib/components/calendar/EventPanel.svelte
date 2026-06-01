@@ -98,6 +98,7 @@
     parked = false,
     readOnly = false,
     allowDeleteWhenReadOnly = false,
+    allowPomodoroWhenReadOnly = false,
     skipInlineDeleteConfirm = false,
     inlineEndEventConfirm = false,
     lockStartControls = false,
@@ -126,6 +127,7 @@
     parked?: boolean;
     readOnly?: boolean;
     allowDeleteWhenReadOnly?: boolean;
+    allowPomodoroWhenReadOnly?: boolean;
     skipInlineDeleteConfirm?: boolean;
     inlineEndEventConfirm?: boolean;
     lockStartControls?: boolean;
@@ -150,6 +152,8 @@
   const startControlsDisabled = $derived(controlsDisabled || lockStartControls);
   const deleteControlsDisabled = $derived(parked || (readOnly && !allowDeleteWhenReadOnly));
   const scopeControlsDisabled = $derived(parked || (readOnly && !allowDeleteWhenReadOnly));
+  const pomodoroControlsDisabled = $derived(parked || (readOnly && !allowPomodoroWhenReadOnly));
+  const pomodoroReadOnlyInteractive = $derived(readOnly && allowPomodoroWhenReadOnly && !parked);
   const endEventAction = $derived(mode === "edit" && !!event && !!onEndEvent);
   const generalDisabledAffordance = $derived(parked);
   const startDisabledAffordance = $derived(parked || (lockStartControls && !readOnly));
@@ -642,7 +646,11 @@
 
 
   function handleToggle(s: Section) {
-    if (controlsDisabled) return;
+    if (s === "pomodoro") {
+      if (pomodoroControlsDisabled) return;
+    } else if (controlsDisabled) {
+      return;
+    }
     if (s === "music") return;
     const enabled = isSectionEnabled(s);
     if (enabled) {
@@ -664,13 +672,15 @@
   }
 
   function canExpandSection(s: Section): boolean {
-    return !controlsDisabled || (s === "meeting" && readOnly && !parked && !!showHeavySections);
+    return !controlsDisabled
+      || (s === "meeting" && readOnly && !parked && !!showHeavySections)
+      || (s === "pomodoro" && !pomodoroControlsDisabled);
   }
 
   /** Label click: expand/collapse the details panel. */
   function handleExpand(s: Section) {
     if (!canExpandSection(s)) return;
-    const canMutate = !controlsDisabled;
+    const canMutate = s === "pomodoro" ? !pomodoroControlsDisabled : !controlsDisabled;
     // Auto-activate repeat when expanding for the first time.
     if (canMutate && s === "repeat" && !recurrence && openSection !== s) {
       recurrence = { frequency: "daily", interval: 1, end: { type: "never" } };
@@ -1114,6 +1124,9 @@
   // reverting all edits back to the original values disables the button
   // again, matching the click-outside cancellation behavior.
   const saveReady = $derived(mode === "create" || externalDirty);
+  const saveControlsDisabled = $derived(
+    (controlsDisabled && !pomodoroReadOnlyInteractive) || savePending || !saveReady,
+  );
   const eventPanelBodyConstrained = $derived.by(() => (
     panelLayout === "fullscreen"
     || shouldConstrainPanelHeight(getPanelHeightLimit(panelLayout, viewport.height))
@@ -1305,7 +1318,7 @@
 
   async function handleSave() {
     if (parked) return;
-    if (controlsDisabled) return;
+    if (controlsDisabled && !pomodoroReadOnlyInteractive) return;
     if (savePending || !saveReady) return;
     const data = buildSaveData();
     const s = isRecurring ? scope : undefined;
@@ -2088,6 +2101,7 @@
         bind:preset={pomodoroPreset}
         bind:focusDuration bind:shortBreak bind:longBreak bind:idleTimeoutEnabled
         expanded={openSection === "pomodoro"}
+        readonlyInteractive={pomodoroReadOnlyInteractive}
         ontoggle={() => handleToggle("pomodoro")}
         onexpand={() => handleExpand("pomodoro")}
         onchange={emitChange} />
@@ -2144,7 +2158,9 @@
     )}
     style="background-color: var(--panel-bg);"
   >
-    {#if readOnly && !(allowDeleteWhenReadOnly && mode === "edit" && (onDelete || onEndEvent) && event)}
+    {#if readOnly
+      && !allowPomodoroWhenReadOnly
+      && !(allowDeleteWhenReadOnly && mode === "edit" && (onDelete || onEndEvent) && event)}
       <div class="flex w-full items-center justify-center rounded-none py-1.5 text-[0.8rem] text-muted-foreground/60"
         style="background-color: var(--panel-contrast);">
         Read only
@@ -2183,15 +2199,16 @@
               {/if}
             </button>
           {/if}
-          {#if readOnly}
+          {#if readOnly && !allowPomodoroWhenReadOnly}
             <div class="flex flex-1 cursor-not-allowed items-center justify-center gap-2 py-1.5 text-[0.866667rem] text-muted-foreground"
               style="background-color: var(--panel-contrast);">
-              <span>Read-only ({formatShortcut("Mod + D")} to archive)</span>
+              <span>Read-only ({formatShortcut("Mod + D")} to {endEventAction ? "end event" : "archive"})</span>
             </div>
           {:else}
           <button onclick={handleSave}
-            disabled={controlsDisabled || savePending || !saveReady}
+            disabled={saveControlsDisabled}
             class="flex flex-1 items-center justify-center gap-2 py-1.5 text-[0.866667rem]
+              {pomodoroReadOnlyInteractive ? 'readonly-interactive' : ''}
               {saveReady
                 ? 'bg-action-confirm text-action-confirm-foreground hover:opacity-90'
                 : 'text-muted-foreground cursor-not-allowed'}"
@@ -2323,7 +2340,7 @@
 
   /* Kill all interactivity below the drag-handle bar when readOnly */
   .panel-root[data-readonly] :global(button:not(.panel-chrome):not(.readonly-interactive)),
-  .panel-root[data-readonly] :global(input),
+  .panel-root[data-readonly] :global(input:not(.readonly-interactive-input)),
   .panel-root[data-readonly] :global([contenteditable]) {
     pointer-events: none !important;
     cursor: default !important;

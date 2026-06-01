@@ -47,7 +47,7 @@
   } from "./display-events";
   import { buildRecurringCommitPlan } from "./recurrence-edit-plan";
   import { executeRecurrenceCommitPlan } from "./recurrence-edit-executor";
-  import { endActiveEventWouldStopProductivity } from "./active-event-end";
+  import { endActiveEventWouldStopProductivity, isActiveTimedCalendarEvent } from "./active-event-end";
   import { activeRootId } from "./occurrence-protection";
   import { getCalendarEventEditLock } from "./event-edit-permissions";
   import {
@@ -95,6 +95,7 @@
         detailsLoaded: boolean;
         readOnly: boolean;
         allowDeleteWhenReadOnly: boolean;
+        allowPomodoroWhenReadOnly: boolean;
         skipInlineDeleteConfirm: boolean;
         endActiveEventAvailable: boolean;
         inlineEndEventConfirm: boolean;
@@ -113,6 +114,7 @@
         externalDirty: false;
         readOnly: false;
         allowDeleteWhenReadOnly: false;
+        allowPomodoroWhenReadOnly: false;
         skipInlineDeleteConfirm: false;
       }
     | {
@@ -129,6 +131,7 @@
         externalDirty: boolean;
         readOnly: boolean;
         allowDeleteWhenReadOnly: boolean;
+        allowPomodoroWhenReadOnly: boolean;
         skipInlineDeleteConfirm: boolean;
         endActiveEventAvailable: boolean;
         inlineEndEventConfirm: boolean;
@@ -640,7 +643,7 @@
     const s = session.state;
     if (s.mode !== "edit") return { locked: false, allowArchive: false };
     return getCalendarEventEditLock(s.originalEvent, calendarsStore.list, {
-      isActivePomodoroEvent: isSelectedActiveOccurrence(s),
+      isActivePomodoroEvent: isSelectedActivePomodoroOccurrence(s),
     });
   });
 
@@ -657,15 +660,18 @@
       };
     }
     if (s.mode === "edit" && panelEvent) {
+      const selectedActive = isSelectedEndableActiveOccurrence(s);
+      const allowPomodoroWhenReadOnly = canEnablePomodoroForActiveCalendarEvent(s);
       return {
         mode: "edit",
         sessionKey: s.sessionKey,
         event: panelEvent,
-        recurringScopeEnabled: isRecurring(s.originalEvent) && !isSelectedActiveOccurrence(s),
+        recurringScopeEnabled: isRecurring(s.originalEvent) && !selectedActive,
         anchor: s.anchor,
         detailsLoaded: panelDetailsLoaded,
         readOnly: selectedEditLock.locked,
-        allowDeleteWhenReadOnly: selectedEditLock.locked && selectedEditLock.allowArchive,
+        allowDeleteWhenReadOnly: selectedEditLock.locked && (selectedEditLock.allowArchive || selectedActive),
+        allowPomodoroWhenReadOnly,
         skipInlineDeleteConfirm: deleteWouldStopSession,
         endActiveEventAvailable: false,
         inlineEndEventConfirm: false,
@@ -690,11 +696,14 @@
         externalDirty: false,
         readOnly: false,
         allowDeleteWhenReadOnly: false,
+        allowPomodoroWhenReadOnly: false,
         skipInlineDeleteConfirm: false,
       };
     }
     if (s.mode === "edit" && panelEvent) {
-      const selectedActive = endingActiveEvent || isSelectedActiveOccurrence(s);
+      const selectedActive = endingActiveEvent || isSelectedEndableActiveOccurrence(s);
+      const allowPomodoroWhenReadOnly = !endingActiveEvent
+        && canEnablePomodoroForActiveCalendarEvent(s);
       const endWouldStopProductivity = !endingActiveEvent && selectedActiveEndWouldStopProductivity(s);
       return {
         parked: false,
@@ -709,7 +718,10 @@
         detailsLoaded: panelDetailsLoaded,
         externalDirty: session.dirty,
         readOnly: !endingActiveEvent && selectedEditLock.locked,
-        allowDeleteWhenReadOnly: !endingActiveEvent && selectedEditLock.locked && selectedEditLock.allowArchive,
+        allowDeleteWhenReadOnly: !endingActiveEvent
+          && selectedEditLock.locked
+          && (selectedEditLock.allowArchive || selectedActive),
+        allowPomodoroWhenReadOnly,
         skipInlineDeleteConfirm: deleteWouldStopSession,
         endActiveEventAvailable: selectedActive,
         inlineEndEventConfirm: selectedActive && !endWouldStopProductivity,
@@ -729,6 +741,7 @@
         externalDirty: false,
         readOnly: false,
         allowDeleteWhenReadOnly: false,
+        allowPomodoroWhenReadOnly: false,
         skipInlineDeleteConfirm: false,
       };
     }
@@ -746,6 +759,7 @@
       externalDirty: false,
       readOnly: parkedPanelSnapshot.readOnly,
       allowDeleteWhenReadOnly: parkedPanelSnapshot.allowDeleteWhenReadOnly,
+      allowPomodoroWhenReadOnly: parkedPanelSnapshot.allowPomodoroWhenReadOnly,
       skipInlineDeleteConfirm: parkedPanelSnapshot.skipInlineDeleteConfirm,
       endActiveEventAvailable: parkedPanelSnapshot.endActiveEventAvailable,
       inlineEndEventConfirm: parkedPanelSnapshot.inlineEndEventConfirm,
@@ -763,16 +777,38 @@
     return !!event.recurringParentId || !!event.recurrence;
   }
 
-  function isSelectedActiveOccurrence(s: Extract<EditSessionState, { mode: "edit" }>): boolean {
+  function isLocalWritableEvent(event: CalendarEvent): boolean {
+    const calendar = calendarsStore.list.find((item) => item.id === event.calendarId);
+    return calendar?.source === "local" && calendar.readOnly !== true;
+  }
+
+  function isSelectedActivePomodoroOccurrence(s: Extract<EditSessionState, { mode: "edit" }>): boolean {
     if (!pomodoro.isActive || !pomodoro.activeBlockId) return false;
     if (!isRecurring(s.originalEvent)) return s.originalEvent.id === pomodoro.activeBlockId;
     return activeDateForEditSession(s.templateId) === s.instanceEvent.start.split(" ")[0];
   }
 
+  function isSelectedActiveCalendarOccurrence(s: Extract<EditSessionState, { mode: "edit" }>): boolean {
+    return isLocalWritableEvent(s.originalEvent) && isActiveTimedCalendarEvent(s.instanceEvent);
+  }
+
+  function isSelectedEndableActiveOccurrence(s: Extract<EditSessionState, { mode: "edit" }>): boolean {
+    return isSelectedActivePomodoroOccurrence(s) || isSelectedActiveCalendarOccurrence(s);
+  }
+
+  function canEnablePomodoroForActiveCalendarEvent(
+    s: Extract<EditSessionState, { mode: "edit" }>,
+  ): boolean {
+    return !pomodoro.isActive
+      && !isRecurring(s.originalEvent)
+      && !s.instanceEvent.pomodoroConfig
+      && isSelectedActiveCalendarOccurrence(s);
+  }
+
   function selectedActiveEndWouldStopProductivity(
     s: Extract<EditSessionState, { mode: "edit" }>,
   ): boolean {
-    if (!isSelectedActiveOccurrence(s)) return false;
+    if (!isSelectedActivePomodoroOccurrence(s)) return false;
     return endActiveEventWouldStopProductivity(
       s.instanceEvent,
       currentVisibleStoreEvents(),
@@ -784,7 +820,7 @@
     s: Extract<EditSessionState, { mode: "edit" }>,
     requested?: RecurringScope,
   ): RecurringScope {
-    return isSelectedActiveOccurrence(s) ? "this" : requested ?? session.scope;
+    return isSelectedEndableActiveOccurrence(s) ? "this" : requested ?? session.scope;
   }
 
   /** Would this save displace the active block out of the current time window? */
@@ -794,7 +830,7 @@
     const s = session.state;
     // Active recurring occurrences are isolated to this occurrence. Future
     // "following" or "all" edits in the same series do not move the active run.
-    if (!isSelectedActiveOccurrence(s)) return false;
+    if (!isSelectedActivePomodoroOccurrence(s)) return false;
     const now = new Date();
     const newStart = parseCalendarDate(data.start);
     const newEnd = parseCalendarDate(data.end);
@@ -1822,6 +1858,53 @@
     return saveRefreshedVisibleWindow;
   }
 
+  function shouldEnablePomodoroForActiveCalendarEvent(data: PanelSaveData): boolean {
+    const s = session.state;
+    return s.mode === "edit"
+      && canEnablePomodoroForActiveCalendarEvent(s)
+      && !!data.pomodoroConfig;
+  }
+
+  async function enablePomodoroForActiveCalendarEvent(data: PanelSaveData): Promise<void> {
+    const s = session.state;
+    const config = data.pomodoroConfig;
+    if (s.mode !== "edit" || !config || !canEnablePomodoroForActiveCalendarEvent(s)) return;
+
+    suppressEditingGlow = true;
+    suppressEditPreview = true;
+    panelCommitHidden = true;
+    saveDisplayFreeze = buildSaveDisplayFreeze({ pomodoroConfig: config });
+    const saveToastId = showSavePendingToast();
+
+    try {
+      await calendarStore.updateBlock({ id: s.originalEvent.id, pomodoroConfig: config });
+      await pomodoro.startFromBlock(
+        s.originalEvent.id,
+        {
+          focusMinutes: config.focusDurationMinutes,
+          shortBreakMinutes: config.shortBreakMinutes,
+          longBreakMinutes: config.longBreakMinutes,
+          cyclesBeforeLongBreak: config.pomodoroCount,
+        },
+        s.instanceEvent.end,
+        s.instanceEvent.start.split(" ")[0],
+        config.idleTimeoutMinutes,
+      );
+      await calendarStore.refreshWindow(viewWindow.start, viewWindow.end);
+      closeSession();
+      showSaveSuccessToast(saveToastId);
+      await tick();
+    } finally {
+      if (saveSuccessToast?.id === saveToastId && saveSuccessToast.pending) {
+        dismissSaveToastIfCurrent(saveToastId);
+      }
+      suppressEditingGlow = false;
+      suppressEditPreview = false;
+      panelCommitHidden = false;
+      saveDisplayFreeze = null;
+    }
+  }
+
   async function handlePanelSave(data: PanelSaveData, scope?: RecurringScope) {
     // Gate: confirm before stopping the active pomodoro session.
     // stopSession() is deferred until after the save so hybrid logic still sees activeBlockId.
@@ -1834,6 +1917,11 @@
         },
         { title: "Save and stop the focus session?", yesLabel: "Stop and save (Enter)", noLabel: "Keep editing (Esc)" },
       );
+      return;
+    }
+
+    if (shouldEnablePomodoroForActiveCalendarEvent(data)) {
+      await enablePomodoroForActiveCalendarEvent(data);
       return;
     }
 
@@ -1879,7 +1967,7 @@
 
   async function executeEndEvent(data: PanelSaveData, scope?: RecurringScope) {
     const s = session.state;
-    if (s.mode !== "edit" || !isSelectedActiveOccurrence(s)) return;
+    if (s.mode !== "edit" || !isSelectedEndableActiveOccurrence(s)) return;
 
     const actualEnd = new Date();
     const end = formatCalendarDateWithSeconds(actualEnd);
@@ -1887,6 +1975,7 @@
     const endIso = actualEnd.toISOString();
     const saveFreeze = buildSaveDisplayFreeze(endedData, scope);
     let saveRefreshedVisibleWindow = false;
+    const completesPomodoro = isSelectedActivePomodoroOccurrence(s);
     const suppressPomodoroAutoStart = pomodoro.isActive && !!pomodoro.activeBlockId;
     endingActiveEvent = true;
     suppressEditingGlow = true;
@@ -1895,10 +1984,16 @@
     if (suppressPomodoroAutoStart) pomodoro.autoStartSuppressed = true;
 
     try {
-      saveRefreshedVisibleWindow = await persistPanelData(endedData, scope, {
-        syncActivePomodoro: false,
-      });
-      await pomodoro.completeActiveBlockAt(endIso);
+      if (!completesPomodoro && !isRecurring(s.originalEvent)) {
+        await calendarStore.updateBlock({ id: s.originalEvent.id, end: endedData.end });
+      } else {
+        saveRefreshedVisibleWindow = await persistPanelData(endedData, scope, {
+          syncActivePomodoro: false,
+        });
+      }
+      if (completesPomodoro) {
+        await pomodoro.completeActiveBlockAt(endIso);
+      }
       if (!saveRefreshedVisibleWindow) {
         await calendarStore.refreshWindow(viewWindow.start, viewWindow.end);
       }
@@ -1916,7 +2011,7 @@
   async function handleEndEvent(data: PanelSaveData, scope?: RecurringScope) {
     if (endingActiveEvent) return;
     const s = session.state;
-    if (s.mode !== "edit" || !isSelectedActiveOccurrence(s)) return;
+    if (s.mode !== "edit" || !isSelectedEndableActiveOccurrence(s)) return;
 
     if (selectedActiveEndWouldStopProductivity(s)) {
       requestConfirm(
@@ -2152,6 +2247,7 @@
       initialSyncSeeded
       readOnly={panelRender.readOnly}
       allowDeleteWhenReadOnly={panelRender.allowDeleteWhenReadOnly}
+      allowPomodoroWhenReadOnly={panelRender.allowPomodoroWhenReadOnly}
       skipInlineDeleteConfirm={panelRender.skipInlineDeleteConfirm}
       inlineEndEventConfirm={panelRender.mode === "edit" ? panelRender.inlineEndEventConfirm : false}
       lockStartControls={panelRender.mode === "edit" ? panelRender.endActiveEventAvailable : false}

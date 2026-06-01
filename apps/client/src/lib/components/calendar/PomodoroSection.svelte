@@ -25,6 +25,7 @@
     longBreak = $bindable(10),
     idleTimeoutEnabled = $bindable(true),
     expanded,
+    readonlyInteractive = false,
     ontoggle,
     onexpand,
     onchange,
@@ -36,6 +37,7 @@
     longBreak: number;
     idleTimeoutEnabled: boolean;
     expanded: boolean;
+    readonlyInteractive?: boolean;
     ontoggle: () => void;
     onexpand: () => void;
     onchange: () => void;
@@ -146,17 +148,22 @@
     if (preset === "custom") return `Custom (${focusDuration}/${shortBreak}/${longBreak})`;
     return POMO_PRESETS[preset]?.label ?? "Custom";
   });
+  const readonlyInteractiveClass = $derived(readonlyInteractive ? "readonly-interactive" : "");
+  const readonlyInteractiveInputClass = $derived(
+    readonlyInteractive ? "readonly-interactive-input" : "",
+  );
 </script>
 
 <div bind:this={sectionEl} class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
   <div class="section-header flex items-stretch">
     <button onclick={ontoggle}
       class="flex w-10 shrink-0 items-center justify-center
+        {readonlyInteractiveClass}
         {enabled ? 'bg-black/3 dark:bg-black/30 text-foreground' : 'text-muted-foreground/50'}">
       <Timer size={14} />
     </button>
     <button onclick={onexpand}
-      class="flex flex-1 items-center gap-2.5 px-3 py-2 text-left">
+      class="flex flex-1 items-center gap-2.5 px-3 py-2 text-left {readonlyInteractiveClass}">
       <span class="translate-y-[1.13px] text-[0.8rem] {enabled ? 'text-foreground' : 'text-muted-foreground'}">Pomodoro</span>
       <span class="ml-auto translate-y-[1.13px] truncate text-[0.733333rem] text-muted-foreground">{summary}</span>
     </button>
@@ -172,6 +179,7 @@
           data-roving-index={index}
           tabindex={presetFocusIndex === index ? 0 : -1}
           class="flex items-center gap-2.5 rounded-none px-3 py-1.5 text-left text-[0.8rem]
+            {readonlyInteractiveClass}
             {preset === key
               ? 'bg-black/5 dark:bg-black/15 text-foreground'
               : 'text-foreground'}"
@@ -188,6 +196,7 @@
         data-roving-index={POMO_PRESET_ENTRIES.length}
         tabindex={presetFocusIndex === POMO_PRESET_ENTRIES.length ? 0 : -1}
         class="flex items-center gap-2.5 rounded-none px-3 py-1.5 text-left text-[0.8rem]
+          {readonlyInteractiveClass}
           {preset === 'custom'
             ? 'bg-black/5 dark:bg-black/15 text-foreground'
             : 'text-foreground'}"
@@ -206,7 +215,7 @@
               <input type="number" value={field.value} min={field.min} max={field.max}
                 oninput={(e) => field.setDraft(e.currentTarget.value)}
                 onblur={field.commit}
-                class="num-input w-9 rounded bg-black/5 px-1 py-0.5 text-center text-[0.733333rem] text-event-panel-input-text outline-none dark:bg-black/15"
+                class="num-input w-9 rounded bg-black/5 px-1 py-0.5 text-center text-[0.733333rem] text-event-panel-input-text outline-none dark:bg-black/15 {readonlyInteractiveInputClass}"
                 onkeydown={(e) => handleNumberDraftKeydown(e, field.commit, field.restore)} />
               <span class="text-muted-foreground">min</span>
             </label>
@@ -216,7 +225,7 @@
       <div class="mt-1 border-t border-border/40 px-0 pt-0.5">
         <button
           onclick={() => { idleTimeoutEnabled = !idleTimeoutEnabled; onchange(); }}
-          class="flex w-full items-center gap-2.5 rounded-none px-2.5 py-1.5 text-left text-[0.8rem] text-foreground"
+          class="flex w-full items-center gap-2.5 rounded-none px-2.5 py-1.5 text-left text-[0.8rem] text-foreground {readonlyInteractiveClass}"
         >
           <div class="size-3 shrink-0
             {idleTimeoutEnabled ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">

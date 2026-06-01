@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CalendarEvent, PomodoroConfig } from "./types";
 import {
   endActiveEventWouldStopProductivity,
+  isActiveTimedCalendarEvent,
   sameConcreteOccurrence,
 } from "./active-event-end";
 
@@ -40,6 +41,16 @@ describe("active event end helpers", () => {
       [selected, future],
       new Date("2026-05-24T10:30:00"),
     )).toBe(true);
+  });
+
+  it("does not require focus-session confirmation for a non-pomodoro active event", () => {
+    const selected = event({ pomodoroConfig: undefined });
+
+    expect(endActiveEventWouldStopProductivity(
+      selected,
+      [selected],
+      new Date("2026-05-24T10:30:00"),
+    )).toBe(false);
   });
 
   it("uses inline confirmation when another pomodoro event overlaps now", () => {
@@ -83,5 +94,30 @@ describe("active event end helpers", () => {
     });
 
     expect(sameConcreteOccurrence(template, firstSynthetic)).toBe(true);
+  });
+
+  it("detects active timed calendar events without requiring pomodoro config", () => {
+    const selected = event({ pomodoroConfig: undefined });
+
+    expect(isActiveTimedCalendarEvent(
+      selected,
+      new Date("2026-05-24T10:30:00"),
+    )).toBe(true);
+
+    expect(isActiveTimedCalendarEvent(
+      selected,
+      new Date("2026-05-24T13:00:00"),
+    )).toBe(false);
+  });
+
+  it("does not treat all-day events as cuttable active timed events", () => {
+    expect(isActiveTimedCalendarEvent(
+      event({
+        allDay: true,
+        start: "2026-05-24 00:00",
+        end: "2026-05-25 00:00",
+      }),
+      new Date("2026-05-24T10:30:00"),
+    )).toBe(false);
   });
 });
