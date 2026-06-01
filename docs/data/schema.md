@@ -436,7 +436,7 @@ Music files remain outside the vault. SQLite stores playlist definitions, source
 
 Append-only active-use samples for daily Doomscrolling usage limits. Configuration lives in `vault/config.json` under `doomscrolling.limits` because it is user settings, while usage history is structured behavioral data and belongs in SQLite.
 
-Each row stores one measured active-use interval. The browser extension records active focused tab time through native messaging and sends only a normalized host plus elapsed seconds. Desktop samples are recorded only when foreground app detection is available. The current desktop foreground adapter reports unavailable, so it does not infer usage from background processes.
+Each row stores one measured active-use interval. The browser extension records active focused tab time through native messaging and sends only a normalized host plus elapsed seconds. Desktop samples use focused foreground app time where the platform exposes it. On Wayland sessions that do not expose focused app tracking, desktop samples use selected-app process-open time instead.
 
 | Field | Type | Description |
 |---|---|---|
@@ -454,7 +454,7 @@ Indexes:
 - `(local_date, source_type, source_key)` for current-day totals and source-specific analysis.
 - `(started_at)` for timeline and cleanup queries.
 
-Daily totals are derived from samples and the current `doomscrolling.limits.items` definitions, including each limit entry's website, mobile app, and desktop app fields. This means editing a limit changes how today's historical samples roll up, without rewriting the samples themselves. A local `doomscrolling-limit-state.json` snapshot in the app config directory contains derived totals and the active SQLite filename for the native browser host so URL decisions stay fast and usage samples are recorded into the same database the UI reads.
+Daily totals are derived from samples and the current `doomscrolling.limits.items` definitions, including each limit entry's website, mobile app, desktop app display label, and desktop app match names. This means editing a limit changes how today's historical samples roll up, without rewriting the samples themselves. A local `doomscrolling-limit-state.json` snapshot in the app config directory contains derived totals and the active SQLite filename for the native browser host so URL decisions stay fast and usage samples are recorded into the same database the UI reads.
 
 ## Other features (stub)
 

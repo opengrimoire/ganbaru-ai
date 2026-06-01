@@ -226,7 +226,18 @@ pub struct DoomscrollingForegroundDesktopAppStatus {
     app_name: Option<String>,
     process_name: Option<String>,
     process_id: Option<u32>,
+    match_names: Vec<String>,
     reason: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DoomscrollingForegroundDesktopAppExpectation {
+    app_name: Option<String>,
+    process_name: Option<String>,
+    process_id: Option<u32>,
+    #[serde(default)]
+    match_names: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -496,21 +507,145 @@ fn normalize_process_match_name(name: &str) -> Option<String> {
     normalize_app_candidate_name(basename)
 }
 
+fn normalize_process_match_name_aliases(name: &str) -> Vec<String> {
+    let Some(primary) = normalize_process_match_name(name) else {
+        return Vec::new();
+    };
+    let mut aliases = vec![primary.clone()];
+    let lower = primary.to_lowercase();
+    for suffix in [".exe", ".desktop"] {
+        if lower.ends_with(suffix) {
+            if let Some(alias) =
+                normalize_app_candidate_name(&primary[..primary.len() - suffix.len()])
+            {
+                aliases.push(alias);
+            }
+        }
+    }
+    aliases
+}
+
 fn normalize_process_match_names(name: &str, process_names: Vec<String>) -> Vec<String> {
     let mut seen = HashSet::new();
     let mut normalized = Vec::new();
     for candidate in std::iter::once(name.to_string()).chain(process_names.into_iter()) {
-        let Some(process_name) = normalize_process_match_name(&candidate) else {
-            continue;
-        };
-        let key = app_name_key(&process_name);
-        if is_protected_desktop_app_name(&process_name) || seen.contains(&key) {
-            continue;
+        for process_name in normalize_process_match_name_aliases(&candidate) {
+            let key = app_name_key(&process_name);
+            if is_protected_desktop_app_name(&process_name) || seen.contains(&key) {
+                continue;
+            }
+            seen.insert(key);
+            normalized.push(process_name);
         }
-        seen.insert(key);
-        normalized.push(process_name);
     }
     normalized
+}
+
+fn unavailable_foreground_desktop_app_status(
+    reason: impl Into<String>,
+) -> DoomscrollingForegroundDesktopAppStatus {
+    DoomscrollingForegroundDesktopAppStatus {
+        available: false,
+        app_name: None,
+        process_name: None,
+        process_id: None,
+        match_names: Vec::new(),
+        reason: Some(reason.into()),
+    }
+}
+
+fn foreground_status_from_parts(
+    app_name: impl Into<String>,
+    process_name: Option<String>,
+    process_id: Option<u32>,
+    match_names: Vec<String>,
+) -> DoomscrollingForegroundDesktopAppStatus {
+    let raw_app_name = app_name.into();
+    let app_name = normalize_app_candidate_name(&raw_app_name);
+    let process_name = process_name.and_then(|name| {
+        normalize_process_match_name_aliases(&name)
+            .into_iter()
+            .next()
+    });
+    let Some(app_name) = app_name else {
+        return unavailable_foreground_desktop_app_status("foreground app name is unavailable");
+    };
+    let mut raw_match_names = match_names;
+    if let Some(process_name) = &process_name {
+        raw_match_names.push(process_name.clone());
+    }
+    DoomscrollingForegroundDesktopAppStatus {
+        match_names: normalize_process_match_names(&app_name, raw_match_names),
+        available: true,
+        app_name: Some(app_name),
+        process_name,
+        process_id,
+        reason: None,
+    }
+}
+
+fn foreground_status_match_names(status: &DoomscrollingForegroundDesktopAppStatus) -> Vec<String> {
+    let mut names = Vec::new();
+    if let Some(app_name) = &status.app_name {
+        names.push(app_name.clone());
+    }
+    if let Some(process_name) = &status.process_name {
+        names.push(process_name.clone());
+    }
+    names.extend(status.match_names.iter().cloned());
+    normalize_process_match_names(status.app_name.as_deref().unwrap_or(""), names)
+}
+
+fn foreground_expectation_matches(
+    status: &DoomscrollingForegroundDesktopAppStatus,
+    expected: &DoomscrollingForegroundDesktopAppExpectation,
+) -> bool {
+    if !status.available {
+        return false;
+    }
+    if let (Some(status_process_id), Some(expected_process_id)) =
+        (status.process_id, expected.process_id)
+    {
+        return status_process_id == expected_process_id;
+    }
+    let status_names = foreground_status_match_names(status)
+        .into_iter()
+        .map(|name| app_name_key(&name))
+        .collect::<HashSet<_>>();
+    let mut expected_names = Vec::new();
+    if let Some(app_name) = &expected.app_name {
+        expected_names.push(app_name.clone());
+    }
+    if let Some(process_name) = &expected.process_name {
+        expected_names.push(process_name.clone());
+    }
+    expected_names.extend(expected.match_names.iter().cloned());
+    normalize_process_match_names(expected.app_name.as_deref().unwrap_or(""), expected_names)
+        .into_iter()
+        .any(|name| status_names.contains(&app_name_key(&name)))
+}
+
+fn validate_foreground_status_is_closeable(
+    status: &DoomscrollingForegroundDesktopAppStatus,
+) -> Result<(), String> {
+    let names = foreground_status_match_names(status);
+    if names.is_empty() {
+        return Err("foreground app is unavailable".to_string());
+    }
+    if status
+        .app_name
+        .as_deref()
+        .is_some_and(is_protected_desktop_app_name)
+    {
+        return Err("refusing to close protected foreground app".to_string());
+    }
+    if names
+        .iter()
+        .all(|name| is_protected_desktop_app_name(name))
+    {
+        return Err("refusing to close protected foreground app".to_string());
+    }
+    Ok(())
 }
 
 fn sort_and_deduplicate_candidates(
@@ -769,11 +904,15 @@ fn parse_desktop_entry(contents: &str, detail: String) -> Option<DoomscrollingDe
     if linux_desktop_entry_is_system_utility(&name, &categories, &detail) {
         return None;
     }
-    let process_names = exec
+    let mut process_names = exec
         .as_deref()
         .and_then(process_name_from_exec)
         .into_iter()
-        .collect();
+        .collect::<Vec<_>>();
+    process_names.push(detail.clone());
+    if let Some(stem) = Path::new(&detail).file_stem().and_then(|name| name.to_str()) {
+        process_names.push(stem.to_string());
+    }
     Some(candidate(
         name,
         "Installed app",
@@ -1127,16 +1266,607 @@ fn close_desktop_process(_process_id: u32) -> Result<(), String> {
     Err("desktop app closing is only available on Linux for now".to_string())
 }
 
-fn foreground_desktop_app_status() -> DoomscrollingForegroundDesktopAppStatus {
-    DoomscrollingForegroundDesktopAppStatus {
-        available: false,
-        app_name: None,
-        process_name: None,
-        process_id: None,
-        reason: Some(
-            "Foreground desktop app detection is not available on this platform yet.".to_string(),
-        ),
+#[cfg(windows)]
+fn windows_foreground_window() -> Option<windows::Win32::Foundation::HWND> {
+    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+
+    let hwnd = unsafe { GetForegroundWindow() };
+    if hwnd.0 == 0 {
+        None
+    } else {
+        Some(hwnd)
     }
+}
+
+#[cfg(windows)]
+fn windows_foreground_process_id(
+    hwnd: windows::Win32::Foundation::HWND,
+) -> Option<u32> {
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
+
+    let mut process_id = 0;
+    unsafe {
+        GetWindowThreadProcessId(hwnd, Some(&mut process_id as *mut u32));
+    }
+    if process_id == 0 {
+        None
+    } else {
+        Some(process_id)
+    }
+}
+
+#[cfg(windows)]
+fn windows_process_image_path(process_id: u32) -> Option<String> {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
+        PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    use windows::core::PWSTR;
+
+    let handle = unsafe {
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process_id).ok()?
+    };
+    let mut buffer = vec![0u16; 32_768];
+    let mut size = buffer.len() as u32;
+    let result = unsafe {
+        QueryFullProcessImageNameW(
+            handle,
+            PROCESS_NAME_WIN32,
+            PWSTR(buffer.as_mut_ptr()),
+            &mut size as *mut u32,
+        )
+    };
+    let _ = unsafe { CloseHandle(handle) };
+    result.ok()?;
+    if size == 0 {
+        return None;
+    }
+    Some(String::from_utf16_lossy(&buffer[..size as usize]))
+}
+
+#[cfg(windows)]
+fn windows_status_for_window(
+    hwnd: windows::Win32::Foundation::HWND,
+) -> DoomscrollingForegroundDesktopAppStatus {
+    let Some(process_id) = windows_foreground_process_id(hwnd) else {
+        return unavailable_foreground_desktop_app_status(
+            "foreground window process is unavailable",
+        );
+    };
+    let process_path = windows_process_image_path(process_id);
+    let process_name = process_path
+        .as_deref()
+        .and_then(normalize_process_match_name)
+        .or_else(|| Some(format!("process-{process_id}")));
+    let app_name = process_path
+        .as_deref()
+        .and_then(|path| Path::new(path).file_stem().and_then(|name| name.to_str()))
+        .and_then(normalize_app_candidate_name)
+        .or_else(|| process_name.clone())
+        .unwrap_or_else(|| format!("process-{process_id}"));
+    let mut match_names = Vec::new();
+    if let Some(path) = process_path {
+        match_names.push(path);
+    }
+    foreground_status_from_parts(app_name, process_name, Some(process_id), match_names)
+}
+
+#[cfg(windows)]
+fn foreground_desktop_app_status() -> DoomscrollingForegroundDesktopAppStatus {
+    let Some(hwnd) = windows_foreground_window() else {
+        return unavailable_foreground_desktop_app_status("no foreground window is active");
+    };
+    windows_status_for_window(hwnd)
+}
+
+#[cfg(windows)]
+fn close_current_foreground_desktop_app(
+    expected: DoomscrollingForegroundDesktopAppExpectation,
+) -> Result<(), String> {
+    use windows::Win32::Foundation::{LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_CLOSE};
+
+    let hwnd = windows_foreground_window().ok_or_else(|| "no foreground window is active".to_string())?;
+    let status = windows_status_for_window(hwnd);
+    validate_foreground_status_is_closeable(&status)?;
+    if !foreground_expectation_matches(&status, &expected) {
+        return Err("foreground app changed before it could be closed".to_string());
+    }
+    unsafe {
+        PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0))
+            .map_err(|e| format!("close foreground window: {e}"))?;
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn ns_string_to_string(value: Option<objc2::rc::Retained<objc2_foundation::NSString>>) -> Option<String> {
+    value
+        .map(|value| value.to_string())
+        .and_then(|value| normalize_app_candidate_name(&value))
+}
+
+#[cfg(target_os = "macos")]
+fn foreground_desktop_app_status() -> DoomscrollingForegroundDesktopAppStatus {
+    use objc2_app_kit::NSWorkspace;
+
+    let workspace = NSWorkspace::sharedWorkspace();
+    let Some(app) = workspace.frontmostApplication() else {
+        return unavailable_foreground_desktop_app_status("no foreground app is active");
+    };
+    let app_name = ns_string_to_string(app.localizedName())
+        .or_else(|| ns_string_to_string(app.bundleIdentifier()));
+    let Some(app_name) = app_name else {
+        return unavailable_foreground_desktop_app_status("foreground app name is unavailable");
+    };
+    let process_id = app.processIdentifier();
+    let process_id = if process_id > 0 {
+        Some(process_id as u32)
+    } else {
+        None
+    };
+    let bundle_id = ns_string_to_string(app.bundleIdentifier());
+    let mut match_names = Vec::new();
+    if let Some(bundle_id) = bundle_id {
+        match_names.push(bundle_id);
+    }
+    foreground_status_from_parts(app_name.clone(), Some(app_name), process_id, match_names)
+}
+
+#[cfg(target_os = "macos")]
+fn close_current_foreground_desktop_app(
+    expected: DoomscrollingForegroundDesktopAppExpectation,
+) -> Result<(), String> {
+    use objc2_app_kit::NSRunningApplication;
+
+    let status = foreground_desktop_app_status();
+    validate_foreground_status_is_closeable(&status)?;
+    if !foreground_expectation_matches(&status, &expected) {
+        return Err("foreground app changed before it could be closed".to_string());
+    }
+    let process_id = status
+        .process_id
+        .ok_or_else(|| "foreground app process is unavailable".to_string())?;
+    let Some(app) = NSRunningApplication::runningApplicationWithProcessIdentifier(
+        process_id as libc::pid_t,
+    ) else {
+        return Err("foreground app is no longer running".to_string());
+    };
+    if app.terminate() {
+        Ok(())
+    } else {
+        Err("foreground app refused the close request".to_string())
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn linux_is_wayland_session() -> bool {
+    std::env::var("XDG_SESSION_TYPE")
+        .map(|value| value.eq_ignore_ascii_case("wayland"))
+        .unwrap_or(false)
+        || std::env::var_os("WAYLAND_DISPLAY").is_some()
+}
+
+#[cfg(target_os = "linux")]
+fn x11_intern_atom<C: x11rb::connection::Connection>(
+    conn: &C,
+    name: &[u8],
+) -> Result<u32, String> {
+    use x11rb::protocol::xproto::ConnectionExt as _;
+
+    conn.intern_atom(false, name)
+        .map_err(|e| format!("intern X11 atom: {e}"))?
+        .reply()
+        .map(|reply| reply.atom)
+        .map_err(|e| format!("read X11 atom: {e}"))
+}
+
+#[cfg(target_os = "linux")]
+fn x11_property_u32<C: x11rb::connection::Connection>(
+    conn: &C,
+    window: u32,
+    property: u32,
+    type_: u32,
+) -> Result<Option<u32>, String> {
+    use x11rb::protocol::xproto::ConnectionExt as _;
+
+    let reply = conn
+        .get_property(false, window, property, type_, 0, 1)
+        .map_err(|e| format!("read X11 property: {e}"))?
+        .reply()
+        .map_err(|e| format!("read X11 property reply: {e}"))?;
+    Ok(reply.value32().and_then(|mut values| values.next()))
+}
+
+#[cfg(target_os = "linux")]
+fn x11_property_string<C: x11rb::connection::Connection>(
+    conn: &C,
+    window: u32,
+    property: u32,
+    type_: u32,
+) -> Option<String> {
+    use x11rb::protocol::xproto::ConnectionExt as _;
+
+    let reply = conn
+        .get_property(false, window, property, type_, 0, 4096)
+        .ok()?
+        .reply()
+        .ok()?;
+    let value = String::from_utf8_lossy(&reply.value)
+        .trim_matches('\0')
+        .trim()
+        .to_string();
+    normalize_app_candidate_name(&value)
+}
+
+#[cfg(target_os = "linux")]
+fn x11_wm_class<C: x11rb::connection::Connection>(conn: &C, window: u32) -> Vec<String> {
+    use x11rb::protocol::xproto::{AtomEnum, ConnectionExt as _};
+
+    let Ok(cookie) = conn.get_property(false, window, AtomEnum::WM_CLASS, AtomEnum::STRING, 0, 4096)
+    else {
+        return Vec::new();
+    };
+    let Ok(reply) = cookie.reply() else {
+        return Vec::new();
+    };
+    reply
+        .value
+        .split(|byte| *byte == 0)
+        .filter_map(|part| std::str::from_utf8(part).ok())
+        .filter_map(normalize_app_candidate_name)
+        .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn x11_foreground_window_status() -> Result<DoomscrollingForegroundDesktopAppStatus, String> {
+    use x11rb::connection::Connection as _;
+    use x11rb::protocol::xproto::AtomEnum;
+
+    let (conn, screen_num) = x11rb::connect(None).map_err(|e| format!("connect to X11: {e}"))?;
+    let root = conn.setup().roots[screen_num].root;
+    let active_window_atom = x11_intern_atom(&conn, b"_NET_ACTIVE_WINDOW")?;
+    let Some(window) = x11_property_u32(&conn, root, active_window_atom, AtomEnum::WINDOW.into())?
+    else {
+        return Err("no active X11 window is available".to_string());
+    };
+    if window == 0 {
+        return Err("no active X11 window is available".to_string());
+    }
+    x11_window_status(&conn, window)
+}
+
+#[cfg(target_os = "linux")]
+fn x11_window_status<C: x11rb::connection::Connection>(
+    conn: &C,
+    window: u32,
+) -> Result<DoomscrollingForegroundDesktopAppStatus, String> {
+    use x11rb::protocol::xproto::AtomEnum;
+
+    let pid_atom = x11_intern_atom(conn, b"_NET_WM_PID")?;
+    let process_id = x11_property_u32(conn, window, pid_atom, AtomEnum::CARDINAL.into())?;
+    let utf8_atom = x11_intern_atom(conn, b"UTF8_STRING")?;
+    let wm_name_atom = x11_intern_atom(conn, b"_NET_WM_NAME")?;
+    let title = x11_property_string(conn, window, wm_name_atom, utf8_atom)
+        .or_else(|| x11_property_string(conn, window, AtomEnum::WM_NAME.into(), AtomEnum::STRING.into()));
+    let wm_class_names = x11_wm_class(conn, window);
+    let process_names = process_id
+        .map(|id| read_linux_process_name(&PathBuf::from("/proc").join(id.to_string())))
+        .unwrap_or_default();
+    let app_name = wm_class_names
+        .last()
+        .cloned()
+        .or_else(|| title.clone())
+        .or_else(|| process_names.first().cloned())
+        .ok_or_else(|| "active X11 window app name is unavailable".to_string())?;
+    let process_name = process_names.first().cloned();
+    let mut match_names = Vec::new();
+    match_names.extend(wm_class_names);
+    match_names.extend(process_names);
+    if let Some(title) = title {
+        match_names.push(title);
+    }
+    Ok(foreground_status_from_parts(
+        app_name,
+        process_name,
+        process_id,
+        match_names,
+    ))
+}
+
+#[cfg(target_os = "linux")]
+fn x11_close_active_window(
+    expected: DoomscrollingForegroundDesktopAppExpectation,
+) -> Result<(), String> {
+    use x11rb::connection::Connection as _;
+    use x11rb::protocol::xproto::{
+        AtomEnum, ClientMessageData, ClientMessageEvent, ConnectionExt as _, EventMask,
+    };
+
+    let (conn, screen_num) = x11rb::connect(None).map_err(|e| format!("connect to X11: {e}"))?;
+    let root = conn.setup().roots[screen_num].root;
+    let active_window_atom = x11_intern_atom(&conn, b"_NET_ACTIVE_WINDOW")?;
+    let Some(window) = x11_property_u32(&conn, root, active_window_atom, AtomEnum::WINDOW.into())?
+    else {
+        return Err("no active X11 window is available".to_string());
+    };
+    let status = x11_window_status(&conn, window)?;
+    validate_foreground_status_is_closeable(&status)?;
+    if !foreground_expectation_matches(&status, &expected) {
+        return Err("foreground app changed before it could be closed".to_string());
+    }
+    let close_atom = x11_intern_atom(&conn, b"_NET_CLOSE_WINDOW")?;
+    let event = ClientMessageEvent::new(
+        32,
+        window,
+        close_atom,
+        ClientMessageData::from([0u32, 2, 0, 0, 0]),
+    );
+    conn.send_event(
+        false,
+        root,
+        EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY,
+        event,
+    )
+    .map_err(|e| format!("send X11 close request: {e}"))?;
+    conn.flush().map_err(|e| format!("flush X11 close request: {e}"))?;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone)]
+struct WaylandToplevelInfo {
+    handle: wayland_protocols_wlr::foreign_toplevel::v1::client::zwlr_foreign_toplevel_handle_v1::ZwlrForeignToplevelHandleV1,
+    title: Option<String>,
+    app_id: Option<String>,
+    active: bool,
+    closed: bool,
+}
+
+#[cfg(target_os = "linux")]
+struct WaylandToplevelState {
+    manager: Option<wayland_protocols_wlr::foreign_toplevel::v1::client::zwlr_foreign_toplevel_manager_v1::ZwlrForeignToplevelManagerV1>,
+    toplevels: HashMap<wayland_client::backend::ObjectId, WaylandToplevelInfo>,
+    finished: bool,
+}
+
+#[cfg(target_os = "linux")]
+fn wayland_state_is_activated(state: &[u8]) -> bool {
+    const ACTIVATED_STATE: u32 = 2;
+    state.chunks_exact(4).any(|chunk| {
+        u32::from_ne_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]) == ACTIVATED_STATE
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn wayland_status_from_toplevel(
+    info: &WaylandToplevelInfo,
+) -> Option<DoomscrollingForegroundDesktopAppStatus> {
+    let app_name = info.app_id.clone().or_else(|| info.title.clone())?;
+    let mut match_names = Vec::new();
+    if let Some(app_id) = &info.app_id {
+        match_names.push(app_id.clone());
+    }
+    if let Some(title) = &info.title {
+        match_names.push(title.clone());
+    }
+    Some(foreground_status_from_parts(
+        app_name,
+        info.app_id.clone(),
+        None,
+        match_names,
+    ))
+}
+
+#[cfg(target_os = "linux")]
+impl WaylandToplevelState {
+    fn active_toplevel(&self) -> Option<&WaylandToplevelInfo> {
+        self.toplevels
+            .values()
+            .find(|info| info.active && !info.closed && (info.app_id.is_some() || info.title.is_some()))
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl wayland_client::Dispatch<
+    wayland_client::protocol::wl_registry::WlRegistry,
+    (),
+> for WaylandToplevelState {
+    fn event(
+        state: &mut Self,
+        registry: &wayland_client::protocol::wl_registry::WlRegistry,
+        event: wayland_client::protocol::wl_registry::Event,
+        _: &(),
+        _: &wayland_client::Connection,
+        qh: &wayland_client::QueueHandle<Self>,
+    ) {
+        if let wayland_client::protocol::wl_registry::Event::Global {
+            name,
+            interface,
+            version,
+        } = event
+        {
+            if interface == "zwlr_foreign_toplevel_manager_v1" {
+                let manager = registry.bind::<
+                    wayland_protocols_wlr::foreign_toplevel::v1::client::zwlr_foreign_toplevel_manager_v1::ZwlrForeignToplevelManagerV1,
+                    _,
+                    _,
+                >(name, version.min(3), qh, ());
+                state.manager = Some(manager);
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl wayland_client::Dispatch<
+    wayland_protocols_wlr::foreign_toplevel::v1::client::zwlr_foreign_toplevel_manager_v1::ZwlrForeignToplevelManagerV1,
+    (),
+> for WaylandToplevelState {
+    fn event(
+        state: &mut Self,
+        _: &wayland_protocols_wlr::foreign_toplevel::v1::client::zwlr_foreign_toplevel_manager_v1::ZwlrForeignToplevelManagerV1,
+        event: wayland_protocols_wlr::foreign_toplevel::v1::client::zwlr_foreign_toplevel_manager_v1::Event,
+        _: &(),
+        _: &wayland_client::Connection,
+        _: &wayland_client::QueueHandle<Self>,
+    ) {
+        use wayland_client::Proxy as _;
+        use wayland_protocols_wlr::foreign_toplevel::v1::client::zwlr_foreign_toplevel_manager_v1::Event;
+
+        match event {
+            Event::Toplevel { toplevel } => {
+                state.toplevels.insert(
+                    toplevel.id(),
+                    WaylandToplevelInfo {
+                        handle: toplevel,
+                        title: None,
+                        app_id: None,
+                        active: false,
+                        closed: false,
+                    },
+                );
+            }
+            Event::Finished => state.finished = true,
+            _ => {}
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl wayland_client::Dispatch<
+    wayland_protocols_wlr::foreign_toplevel::v1::client::zwlr_foreign_toplevel_handle_v1::ZwlrForeignToplevelHandleV1,
+    (),
+> for WaylandToplevelState {
+    fn event(
+        state: &mut Self,
+        toplevel: &wayland_protocols_wlr::foreign_toplevel::v1::client::zwlr_foreign_toplevel_handle_v1::ZwlrForeignToplevelHandleV1,
+        event: wayland_protocols_wlr::foreign_toplevel::v1::client::zwlr_foreign_toplevel_handle_v1::Event,
+        _: &(),
+        _: &wayland_client::Connection,
+        _: &wayland_client::QueueHandle<Self>,
+    ) {
+        use wayland_client::Proxy as _;
+        use wayland_protocols_wlr::foreign_toplevel::v1::client::zwlr_foreign_toplevel_handle_v1::Event;
+
+        let key = toplevel.id();
+        let Some(info) = state.toplevels.get_mut(&key) else {
+            return;
+        };
+        match event {
+            Event::Title { title } => info.title = normalize_app_candidate_name(&title),
+            Event::AppId { app_id } => info.app_id = normalize_app_candidate_name(&app_id),
+            Event::State { state: raw_state } => {
+                info.active = wayland_state_is_activated(&raw_state);
+            }
+            Event::Closed => info.closed = true,
+            _ => {}
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+wayland_client::delegate_noop!(WaylandToplevelState: ignore wayland_client::protocol::wl_output::WlOutput);
+
+#[cfg(target_os = "linux")]
+fn with_wayland_toplevel_state<T>(
+    action: impl FnOnce(&wayland_client::Connection, &mut WaylandToplevelState) -> Result<T, String>,
+) -> Result<T, String> {
+    let conn = wayland_client::Connection::connect_to_env()
+        .map_err(|e| format!("connect to Wayland: {e}"))?;
+    let mut event_queue = conn.new_event_queue();
+    let qh = event_queue.handle();
+    conn.display().get_registry(&qh, ());
+    let mut state = WaylandToplevelState {
+        manager: None,
+        toplevels: HashMap::new(),
+        finished: false,
+    };
+    event_queue
+        .roundtrip(&mut state)
+        .map_err(|e| format!("read Wayland globals: {e}"))?;
+    if state.manager.is_none() {
+        return Err("Wayland compositor does not advertise zwlr_foreign_toplevel_manager_v1".to_string());
+    }
+    event_queue
+        .roundtrip(&mut state)
+        .map_err(|e| format!("read Wayland toplevels: {e}"))?;
+    action(&conn, &mut state)
+}
+
+#[cfg(target_os = "linux")]
+fn wayland_foreground_window_status() -> Result<DoomscrollingForegroundDesktopAppStatus, String> {
+    with_wayland_toplevel_state(|_, state| {
+        let Some(info) = state.active_toplevel() else {
+            return Err("no active Wayland toplevel is available".to_string());
+        };
+        wayland_status_from_toplevel(info)
+            .ok_or_else(|| "active Wayland toplevel app name is unavailable".to_string())
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn wayland_close_active_window(
+    expected: DoomscrollingForegroundDesktopAppExpectation,
+) -> Result<(), String> {
+    with_wayland_toplevel_state(|conn, state| {
+        let Some(info) = state.active_toplevel().cloned() else {
+            return Err("no active Wayland toplevel is available".to_string());
+        };
+        let status = wayland_status_from_toplevel(&info)
+            .ok_or_else(|| "active Wayland toplevel app name is unavailable".to_string())?;
+        validate_foreground_status_is_closeable(&status)?;
+        if !foreground_expectation_matches(&status, &expected) {
+            return Err("foreground app changed before it could be closed".to_string());
+        }
+        info.handle.close();
+        conn.flush()
+            .map_err(|e| format!("flush Wayland close request: {e}"))?;
+        Ok(())
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn foreground_desktop_app_status() -> DoomscrollingForegroundDesktopAppStatus {
+    if linux_is_wayland_session() {
+        return wayland_foreground_window_status()
+            .unwrap_or_else(unavailable_foreground_desktop_app_status);
+    }
+    if std::env::var_os("DISPLAY").is_some() {
+        return x11_foreground_window_status()
+            .unwrap_or_else(unavailable_foreground_desktop_app_status);
+    }
+    unavailable_foreground_desktop_app_status(
+        "foreground desktop app detection needs X11 or a Wayland compositor with zwlr_foreign_toplevel_manager_v1",
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn close_current_foreground_desktop_app(
+    expected: DoomscrollingForegroundDesktopAppExpectation,
+) -> Result<(), String> {
+    if linux_is_wayland_session() {
+        return wayland_close_active_window(expected);
+    }
+    if std::env::var_os("DISPLAY").is_some() {
+        return x11_close_active_window(expected);
+    }
+    Err("foreground desktop app closing needs X11 or a Wayland compositor with zwlr_foreign_toplevel_manager_v1".to_string())
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+fn foreground_desktop_app_status() -> DoomscrollingForegroundDesktopAppStatus {
+    unavailable_foreground_desktop_app_status(
+        "foreground desktop app detection is not supported on this platform",
+    )
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+fn close_current_foreground_desktop_app(
+    _expected: DoomscrollingForegroundDesktopAppExpectation,
+) -> Result<(), String> {
+    Err("foreground desktop app closing is not supported on this platform".to_string())
 }
 
 fn disconnected_extension_status(
@@ -1339,6 +2069,13 @@ pub fn doomscrolling_list_blocked_desktop_app_matches(
 #[tauri::command]
 pub fn doomscrolling_close_desktop_app(process_id: u32) -> Result<(), String> {
     close_desktop_process(process_id)
+}
+
+#[tauri::command]
+pub fn doomscrolling_close_current_foreground_desktop_app(
+    expected: DoomscrollingForegroundDesktopAppExpectation,
+) -> Result<(), String> {
+    close_current_foreground_desktop_app(expected)
 }
 
 #[tauri::command]

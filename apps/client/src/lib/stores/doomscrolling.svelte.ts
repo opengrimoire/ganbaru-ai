@@ -5,6 +5,7 @@ import {
   normalizeDoomscrollingAppName,
   normalizeDoomscrollingConfig,
   normalizeDoomscrollingCustomCategoryStackName,
+  normalizeDoomscrollingDesktopAppMatchNames,
   normalizeDoomscrollingLimitEntryName,
   normalizeDoomscrollingUsageLimitName,
   normalizeDoomscrollingHost,
@@ -58,6 +59,7 @@ export interface DoomscrollingUsageLimitEntryDraft {
   websiteHost: string;
   mobileAppName: string;
   desktopAppName: string;
+  desktopAppMatchNames: readonly string[];
 }
 
 function loadSavedConfig(): DoomscrollingConfig {
@@ -267,8 +269,17 @@ function normalizeLimitDraftEntry(
   const desktopAppName = draft.desktopAppName.trim()
     ? normalizeDoomscrollingAppName(draft.desktopAppName)
     : null;
+  const desktopAppMatchNames = desktopAppName
+    ? normalizeDoomscrollingDesktopAppMatchNames(
+      desktopAppName,
+      draft.desktopAppMatchNames,
+    )
+    : [];
   if (!websiteHost && !mobileAppName && !desktopAppName) return "invalid-sources";
   if (desktopAppName && isProtectedDoomscrollingDesktopAppName(desktopAppName)) {
+    return "protected-source";
+  }
+  if (desktopAppMatchNames.some(isProtectedDoomscrollingDesktopAppName)) {
     return "protected-source";
   }
   return {
@@ -277,6 +288,7 @@ function normalizeLimitDraftEntry(
     websiteHost,
     mobileAppName,
     desktopAppName,
+    desktopAppMatchNames,
   };
 }
 

@@ -78,7 +78,15 @@ export interface DoomscrollingForegroundDesktopAppStatus {
   appName: string | null;
   processName: string | null;
   processId: number | null;
+  matchNames: string[];
   reason: string | null;
+}
+
+export interface DoomscrollingForegroundDesktopAppExpectation {
+  appName: string | null;
+  processName: string | null;
+  processId: number | null;
+  matchNames: readonly string[];
 }
 
 export async function writeDoomscrollingRuntimeState(
@@ -117,6 +125,13 @@ export async function showDoomscrollingDesktopBlockNotification(appName: string)
   await invoke("show_doomscrolling_desktop_block_notification", { appName });
 }
 
+export async function showDoomscrollingDesktopLimitNotification(
+  appName: string,
+  limitName: string,
+): Promise<void> {
+  await invoke("show_doomscrolling_desktop_limit_notification", { appName, limitName });
+}
+
 export async function recordDoomscrollingUsageSample(
   dbUrl: string,
   sample: DoomscrollingUsageSamplePayload,
@@ -144,4 +159,10 @@ export async function getForegroundDoomscrollingDesktopApp(): Promise<Doomscroll
   return await invoke<DoomscrollingForegroundDesktopAppStatus>(
     "doomscrolling_get_foreground_desktop_app",
   );
+}
+
+export async function closeCurrentForegroundDoomscrollingDesktopApp(
+  expected: DoomscrollingForegroundDesktopAppExpectation,
+): Promise<void> {
+  await invoke("doomscrolling_close_current_foreground_desktop_app", { expected });
 }

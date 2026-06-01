@@ -37,8 +37,10 @@
   const desktopAvailabilityMessage = $derived(
     usage.foregroundStatus.available
       ? null
-      : usage.foregroundStatus.reason
-        ?? "Desktop foreground tracking is unavailable. Desktop app limits will not count or close apps on this system.",
+      : usage.foregroundStatus.reason?.toLowerCase().includes("wayland")
+        ? null
+        : usage.foregroundStatus.reason
+          ?? "Desktop foreground tracking is unavailable. Desktop app limits will not count or close apps on this system.",
   );
 
   function formatMinutes(totalSeconds: number): string {
@@ -269,19 +271,14 @@
   >
     <div class="h-px bg-border/70" aria-hidden="true"></div>
 
-    <section class="flex flex-col gap-2">
-      {#if desktopAvailabilityMessage}
+    {#if desktopAvailabilityMessage}
+      <section class="flex flex-col gap-2">
         <div class="flex min-h-9 items-center gap-2.5 rounded-md border border-border bg-background/60 px-3 py-1.5 text-muted-foreground dark:bg-transparent">
           <CircleAlert size={14} strokeWidth={2.25} class="shrink-0" />
           <div class="min-w-0 text-[0.8rem]">{desktopAvailabilityMessage}</div>
         </div>
-      {/if}
-
-      <div class="flex min-h-9 items-center gap-2.5 rounded-md border border-border bg-background/60 px-3 py-1.5 text-muted-foreground dark:bg-transparent">
-        <CircleAlert size={14} strokeWidth={2.25} class="shrink-0" />
-        <div class="min-w-0 text-[0.8rem]">Mobile app entries are saved for later, but mobile usage is not counted yet.</div>
-      </div>
-    </section>
+      </section>
+    {/if}
 
     <div class="h-px bg-border/70" aria-hidden="true"></div>
 

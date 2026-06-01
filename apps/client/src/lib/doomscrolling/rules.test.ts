@@ -73,6 +73,7 @@ function limit(partial: Partial<DoomscrollingUsageLimit>): DoomscrollingUsageLim
       websiteHost: "youtube.com",
       mobileAppName: null,
       desktopAppName: null,
+      desktopAppMatchNames: [],
     }],
     ...partial,
   };
@@ -328,6 +329,7 @@ describe("normalizeDoomscrollingConfig", () => {
                 name: "  YouTube main  ",
                 websiteHost: "https://youtube.com/watch?v=1",
                 desktopAppName: "FreeTube",
+                desktopAppMatchNames: [],
                 mobileAppName: "YouTube",
               },
             ],
@@ -349,6 +351,7 @@ describe("normalizeDoomscrollingConfig", () => {
             websiteHost: "youtube.com",
             mobileAppName: "YouTube",
             desktopAppName: "FreeTube",
+            desktopAppMatchNames: ["FreeTube"],
           },
         ],
       },
@@ -403,6 +406,7 @@ describe("Doomscrolling usage limit matching", () => {
         websiteHost: "youtube.com",
         mobileAppName: null,
         desktopAppName: null,
+        desktopAppMatchNames: [],
       },
       websiteSample("music.youtube.com", 60),
     )).toBe(true);
@@ -413,6 +417,7 @@ describe("Doomscrolling usage limit matching", () => {
         websiteHost: null,
         mobileAppName: "YouTube",
         desktopAppName: null,
+        desktopAppMatchNames: [],
       },
       {
         sourceType: "mobile-app",
@@ -430,6 +435,7 @@ describe("Doomscrolling usage limit matching", () => {
         websiteHost: null,
         mobileAppName: null,
         desktopAppName: "FreeTube",
+        desktopAppMatchNames: ["FreeTube"],
       },
       desktopSample("freetube", 60),
     )).toBe(true);
@@ -451,6 +457,7 @@ describe("Doomscrolling usage limit matching", () => {
                 websiteHost: "youtube.com",
                 mobileAppName: null,
                 desktopAppName: "FreeTube",
+                desktopAppMatchNames: ["FreeTube"],
               },
             ],
           }),
@@ -483,6 +490,7 @@ describe("Doomscrolling usage limit matching", () => {
                 websiteHost: "reddit.com",
                 mobileAppName: null,
                 desktopAppName: null,
+                desktopAppMatchNames: [],
               },
               {
                 id: "discord",
@@ -490,6 +498,7 @@ describe("Doomscrolling usage limit matching", () => {
                 websiteHost: "discord.com",
                 mobileAppName: null,
                 desktopAppName: null,
+                desktopAppMatchNames: [],
               },
             ],
           }),

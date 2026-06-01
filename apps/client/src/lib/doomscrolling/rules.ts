@@ -265,6 +265,7 @@ export interface DoomscrollingLimitEntry {
   websiteHost: string | null;
   mobileAppName: string | null;
   desktopAppName: string | null;
+  desktopAppMatchNames: string[];
 }
 
 export interface DoomscrollingUsageLimit {
@@ -457,6 +458,23 @@ export function normalizeDoomscrollingAppName(input: string): string | null {
 export function isProtectedDoomscrollingDesktopAppName(input: string): boolean {
   const name = normalizeDoomscrollingAppName(input);
   return name ? protectedDesktopAppKeys().has(appRuleKey(name)) : false;
+}
+
+export function normalizeDoomscrollingDesktopAppMatchNames(
+  displayName: string,
+  matchNames: readonly string[] = [],
+): string[] {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const rawName of [displayName, ...matchNames]) {
+    const name = normalizeDoomscrollingAppName(rawName);
+    if (!name || isProtectedDoomscrollingDesktopAppName(name)) continue;
+    const key = appRuleKey(name);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(name);
+  }
+  return normalized;
 }
 
 function normalizeHostRuleValue(value: unknown): DoomscrollingHostRule | null {
@@ -658,6 +676,14 @@ function normalizeLimitEntryValue(value: unknown): DoomscrollingLimitEntry | nul
   const desktopAppName = typeof value.desktopAppName === "string"
     ? normalizeDoomscrollingAppName(value.desktopAppName)
     : null;
+  const desktopAppMatchNames = desktopAppName
+    ? normalizeDoomscrollingDesktopAppMatchNames(
+      desktopAppName,
+      Array.isArray(value.desktopAppMatchNames)
+        ? value.desktopAppMatchNames.filter((item): item is string => typeof item === "string")
+        : [],
+    )
+    : [];
   if (!websiteHost && !mobileAppName && !desktopAppName) return null;
   if (desktopAppName && isProtectedDoomscrollingDesktopAppName(desktopAppName)) return null;
   return {
@@ -666,6 +692,7 @@ function normalizeLimitEntryValue(value: unknown): DoomscrollingLimitEntry | nul
     websiteHost,
     mobileAppName,
     desktopAppName,
+    desktopAppMatchNames,
   };
 }
 
@@ -677,7 +704,14 @@ export function doomscrollingLimitEntrySourceKeys(entry: DoomscrollingLimitEntry
   const keys: string[] = [];
   if (entry.websiteHost) keys.push(`website:${entry.websiteHost}`);
   if (entry.mobileAppName) keys.push(`mobile-app:${entry.mobileAppName.toLowerCase()}`);
-  if (entry.desktopAppName) keys.push(`desktop-app:${appRuleKey(entry.desktopAppName)}`);
+  if (entry.desktopAppName) {
+    const matchNames = entry.desktopAppMatchNames.length > 0
+      ? entry.desktopAppMatchNames
+      : [entry.desktopAppName];
+    for (const matchName of matchNames) {
+      keys.push(`desktop-app:${appRuleKey(matchName)}`);
+    }
+  }
   return keys;
 }
 
@@ -859,7 +893,10 @@ export function matchesDoomscrollingLimitEntry(
     );
   }
   if (sample.sourceType === "desktop-app" && entry.desktopAppName) {
-    return appRuleKey(sample.sourceKey) === appRuleKey(entry.desktopAppName);
+    const matchNames = entry.desktopAppMatchNames.length > 0
+      ? entry.desktopAppMatchNames
+      : [entry.desktopAppName];
+    return matchNames.some((name) => appRuleKey(sample.sourceKey) === appRuleKey(name));
   }
   if (sample.sourceType === "mobile-app" && entry.mobileAppName) {
     return sample.sourceKey.toLowerCase() === entry.mobileAppName.toLowerCase();

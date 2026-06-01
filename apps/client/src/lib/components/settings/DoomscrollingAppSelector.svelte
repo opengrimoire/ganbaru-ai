@@ -1,3 +1,12 @@
+<script lang="ts" module>
+  export interface DoomscrollingAppSelection {
+    name: string;
+    matchNames: readonly string[];
+  }
+
+  export type DoomscrollingAppSelectorMode = "multi" | "single";
+</script>
+
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
@@ -11,24 +20,23 @@
   import { isProtectedDoomscrollingDesktopAppName } from "$lib/doomscrolling";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 
-  interface DoomscrollingAppSelection {
-    name: string;
-    matchNames: readonly string[];
-  }
-
   let {
     title,
+    mode = "multi",
     existingNames,
     protectAppSelf = false,
     onAdd,
     onRemove,
+    onSelect,
     onCancel,
   }: {
     title: string;
+    mode?: DoomscrollingAppSelectorMode;
     existingNames: readonly string[];
     protectAppSelf?: boolean;
-    onAdd: (app: DoomscrollingAppSelection) => boolean;
-    onRemove: (name: string) => void;
+    onAdd?: (app: DoomscrollingAppSelection) => boolean;
+    onRemove?: (name: string) => void;
+    onSelect?: (app: DoomscrollingAppSelection) => void;
     onCancel: () => void;
   } = $props();
 
@@ -83,16 +91,26 @@
     }
   }
 
-  function requestAdd(name: string, matchNames: readonly string[] = [name]): void {
+  function selectionFor(name: string, matchNames: readonly string[] = [name]): DoomscrollingAppSelection | null {
     const trimmed = name.trim();
-    if (!trimmed || existingKeys.has(trimmed.toLowerCase())) return;
-    if (protectAppSelf && isProtectedDoomscrollingDesktopAppName(trimmed)) return;
-    pendingAddApp = { name: trimmed, matchNames };
+    if (!trimmed || existingKeys.has(trimmed.toLowerCase())) return null;
+    if (protectAppSelf && isProtectedDoomscrollingDesktopAppName(trimmed)) return null;
+    return { name: trimmed, matchNames };
+  }
+
+  function requestAdd(name: string, matchNames: readonly string[] = [name]): void {
+    const selection = selectionFor(name, matchNames);
+    if (!selection) return;
+    if (mode === "single") {
+      onSelect?.(selection);
+      return;
+    }
+    pendingAddApp = selection;
   }
 
   function confirmAdd(): void {
     if (!pendingAddApp) return;
-    onAdd(pendingAddApp);
+    onAdd?.(pendingAddApp);
     pendingAddApp = null;
   }
 
@@ -103,12 +121,13 @@
   function requestRemove(name: string): void {
     const existingName = existingNameByKey.get(name.toLowerCase());
     if (!existingName) return;
+    if (mode === "single") return;
     pendingRemoveName = existingName;
   }
 
   function confirmRemove(): void {
     if (!pendingRemoveName) return;
-    onRemove(pendingRemoveName);
+    onRemove?.(pendingRemoveName);
     pendingRemoveName = null;
   }
 
@@ -219,21 +238,25 @@
         {:else}
           <div class="flex flex-col">
             {#each filteredApps as app (app.name.toLowerCase())}
-              {@const alreadyAdded = existingKeys.has(app.name.toLowerCase())}
+              {@const alreadyAdded = mode === "single"
+                ? existingKeys.has(app.name.toLowerCase()) || app.processNames.some((name) => existingKeys.has(name.toLowerCase()))
+                : existingKeys.has(app.name.toLowerCase())}
               <button
                 type="button"
                 onclick={() => alreadyAdded ? requestRemove(app.name) : requestAdd(app.name, app.processNames)}
                 class={[
                   "flex min-w-0 items-center justify-between gap-3 border-b border-border/70 px-3 py-2 text-left last:border-b-0",
-                  !confirmationOpen && "hover:bg-accent",
+                  !confirmationOpen && (!alreadyAdded || mode === "multi") && "hover:bg-accent",
+                  alreadyAdded && mode === "single" && "cursor-not-allowed opacity-60",
                 ]}
+                disabled={alreadyAdded && mode === "single"}
               >
                 <span class="min-w-0 truncate text-[0.866667rem] text-foreground">{app.name}</span>
                 <span class="shrink-0 text-[0.8rem] text-muted-foreground">
                   {#if alreadyAdded}
-                    Remove
+                    {mode === "single" ? "Used" : "Remove"}
                   {:else}
-                    Add
+                    {mode === "single" ? "Choose" : "Add"}
                   {/if}
                 </span>
               </button>

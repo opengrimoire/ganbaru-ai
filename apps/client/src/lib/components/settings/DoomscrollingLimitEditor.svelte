@@ -13,6 +13,9 @@
   } from "$lib/stores/doomscrolling.svelte";
   import { getDoomscrollingUsage } from "$lib/stores/doomscrolling-usage.svelte";
   import CustomSelect from "./CustomSelect.svelte";
+  import DoomscrollingAppSelector, {
+    type DoomscrollingAppSelection,
+  } from "./DoomscrollingAppSelector.svelte";
   import type { DoomscrollingLimitEditorTarget } from "./types";
 
   type DurationOption = "15" | "30" | "45" | "60" | "90" | "120" | "180" | "240" | "custom";
@@ -59,6 +62,7 @@
   let draftCustomMinutes = $state("30");
   let draftEntries = $state<DoomscrollingUsageLimitEntryDraft[]>([]);
   let formError = $state("");
+  let desktopAppPickerEntryId = $state<string | null>(null);
   let editorRootEl: HTMLElement | undefined = $state();
   let editorScrollEl: HTMLElement | undefined = $state();
   let hydratedKey = "";
@@ -106,6 +110,7 @@
       websiteHost: "",
       mobileAppName: "",
       desktopAppName: "",
+      desktopAppMatchNames: [],
     };
   }
 
@@ -150,6 +155,7 @@
       websiteHost: entry.websiteHost ?? "",
       mobileAppName: entry.mobileAppName ?? "",
       desktopAppName: entry.desktopAppName ?? "",
+      desktopAppMatchNames: entry.desktopAppMatchNames,
     }));
     if (draftEntries.length === 0) draftEntries = [createEntryDraft()];
   }
@@ -208,7 +214,7 @@
 
   function updateEntry(
     id: string,
-    field: keyof Omit<DoomscrollingUsageLimitEntryDraft, "id">,
+    field: keyof Omit<DoomscrollingUsageLimitEntryDraft, "id" | "desktopAppMatchNames">,
     value: string,
   ): void {
     draftEntries = draftEntries.map((entry) =>
@@ -220,6 +226,59 @@
   function removeEntry(id: string): void {
     draftEntries = draftEntries.filter((entry) => entry.id !== id);
     if (draftEntries.length === 0) draftEntries = [createEntryDraft()];
+    if (desktopAppPickerEntryId === id) desktopAppPickerEntryId = null;
+    formError = "";
+  }
+
+  function openDesktopAppPicker(id: string): void {
+    desktopAppPickerEntryId = id;
+    formError = "";
+  }
+
+  function closeDesktopAppPicker(): void {
+    desktopAppPickerEntryId = null;
+  }
+
+  function existingDesktopAppPickerNames(): string[] {
+    const activeId = desktopAppPickerEntryId;
+    if (!activeId) return [];
+    return draftEntries
+      .filter((entry) => entry.id !== activeId)
+      .flatMap((entry) => [
+        entry.desktopAppName,
+        ...entry.desktopAppMatchNames,
+      ])
+      .map(normalizeDoomscrollingAppName)
+      .filter((name): name is string => Boolean(name));
+  }
+
+  function chooseDesktopApp(app: DoomscrollingAppSelection): void {
+    const activeId = desktopAppPickerEntryId;
+    if (!activeId) return;
+    draftEntries = draftEntries.map((entry) =>
+      entry.id === activeId
+        ? {
+          ...entry,
+          desktopAppName: app.name,
+          desktopAppMatchNames: app.matchNames,
+        }
+        : entry
+    );
+    desktopAppPickerEntryId = null;
+    formError = "";
+  }
+
+  function clearDesktopApp(id: string): void {
+    draftEntries = draftEntries.map((entry) =>
+      entry.id === id
+        ? {
+          ...entry,
+          desktopAppName: "",
+          desktopAppMatchNames: [],
+        }
+        : entry
+    );
+    if (desktopAppPickerEntryId === id) desktopAppPickerEntryId = null;
     formError = "";
   }
 
@@ -393,12 +452,28 @@
                   class="h-9 min-w-0 border-0 border-r border-border/70 bg-transparent px-2 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:bg-accent/35"
                   placeholder="Facebook"
                 />
-                <input
-                  value={entry.desktopAppName}
-                  oninput={(event) => updateEntry(entry.id, "desktopAppName", event.currentTarget.value)}
-                  class="h-9 min-w-0 border-0 border-r border-border/70 bg-transparent px-2 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:bg-accent/35"
-                  placeholder="Facebook"
-                />
+                <div class="flex h-9 min-w-0 items-center gap-1 border-r border-border/70 px-1.5">
+                  <button
+                    type="button"
+                    onclick={() => openDesktopAppPicker(entry.id)}
+                    class={[
+                      "min-w-0 flex-1 truncate rounded-sm px-1.5 py-1 text-left text-[0.8rem] outline-none transition-colors hover:bg-accent focus:bg-accent",
+                      entry.desktopAppName ? "text-foreground" : "text-muted-foreground",
+                    ]}
+                  >
+                    {entry.desktopAppName || "Choose app"}
+                  </button>
+                  {#if entry.desktopAppName}
+                    <button
+                      type="button"
+                      onclick={() => clearDesktopApp(entry.id)}
+                      aria-label="Clear desktop app"
+                      class="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    >
+                      <X size={12} strokeWidth={2.25} />
+                    </button>
+                  {/if}
+                </div>
                 <button
                   type="button"
                   onclick={() => removeEntry(entry.id)}
@@ -453,3 +528,14 @@
     </div>
   </footer>
 </div>
+
+{#if desktopAppPickerEntryId}
+  <DoomscrollingAppSelector
+    title="Choose a desktop app"
+    mode="single"
+    existingNames={existingDesktopAppPickerNames()}
+    protectAppSelf
+    onSelect={chooseDesktopApp}
+    onCancel={closeDesktopAppPicker}
+  />
+{/if}

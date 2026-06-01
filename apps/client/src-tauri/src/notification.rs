@@ -2007,6 +2007,71 @@ pub fn show_doomscrolling_desktop_block_notification(
     });
 }
 
+#[tauri::command]
+pub fn show_doomscrolling_desktop_limit_notification(
+    app: tauri::AppHandle,
+    app_name: String,
+    limit_name: String,
+    app_sounds: State<'_, AppSoundState>,
+) {
+    app_sounds.play(AppSound::EventNotification);
+    std::thread::spawn(move || {
+        let app_name = app_name
+            .lines()
+            .next()
+            .unwrap_or("")
+            .trim()
+            .chars()
+            .take(80)
+            .collect::<String>();
+        let app_name = if app_name.is_empty() {
+            "The app".to_string()
+        } else {
+            app_name
+        };
+        let limit_name = limit_name
+            .lines()
+            .next()
+            .unwrap_or("")
+            .trim()
+            .chars()
+            .take(80)
+            .collect::<String>();
+        let limit_name = if limit_name.is_empty() {
+            "a daily limit".to_string()
+        } else {
+            limit_name
+        };
+        let body = escape_notification_markup(&format!(
+            "{app_name} was closed because {limit_name} reached today's limit. Change this in Settings > Doomscrolling > Limits (or click this notification)"
+        ));
+        let result = Notification::new()
+            .appname("Ganbaru AI")
+            .summary("Daily limit reached")
+            .body(&body)
+            .action("default", "Open limits")
+            .timeout(10_000)
+            .hint(Hint::Category("device".into()))
+            .hint(Hint::DesktopEntry("ganbaru-ai".into()))
+            .hint(Hint::Transient(true))
+            .show();
+
+        match result {
+            Ok(handle) => {
+                handle.wait_for_action(|action| {
+                    if action == "default" {
+                        let _ = app.emit("doomscrolling-open-limits-settings", ());
+                        focus_main_window(app.clone());
+                    }
+                });
+            }
+            Err(e) => {
+                eprintln!("Failed to show doomscrolling desktop limit notification: {e}");
+            }
+        }
+    });
+}
+
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
