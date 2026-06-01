@@ -168,6 +168,7 @@ interface CalendarSplitSeriesPayload {
   urlPatch: string | null;
   localRsvpStatus: AttendeeStatus | null;
   meetingEnabled: boolean;
+  copyPomodoroConfig: boolean;
   pomodoroConfig: PomodoroConfig | null;
   now: string;
 }
@@ -221,6 +222,32 @@ function hasEventPatchKey<K extends keyof CalendarEvent>(
   key: K,
 ): boolean {
   return Object.prototype.hasOwnProperty.call(changes, key);
+}
+
+function resolvedPomodoroConfigForTimedEvent(
+  parent: CalendarEvent,
+  changes: Partial<CalendarEvent>,
+  allDay: boolean | undefined,
+): {
+  copyFromParent: boolean;
+  finalConfig: PomodoroConfig | undefined;
+  payloadConfig: PomodoroConfig | null;
+} {
+  if (allDay) {
+    return { copyFromParent: false, finalConfig: undefined, payloadConfig: null };
+  }
+  if (hasEventPatchKey(changes, "pomodoroConfig")) {
+    return {
+      copyFromParent: false,
+      finalConfig: changes.pomodoroConfig,
+      payloadConfig: changes.pomodoroConfig ?? null,
+    };
+  }
+  return {
+    copyFromParent: true,
+    finalConfig: parent.pomodoroConfig,
+    payloadConfig: null,
+  };
 }
 
 /**
@@ -457,7 +484,9 @@ function prepareUpdateBlockPayload(
     }
   }
 
-  const pomodoroConfig: PomodoroConfigPatch | null = presentKeys.has("pomodoroConfig")
+  const pomodoroConfig: PomodoroConfigPatch | null = allDayForDb && presentKeys.has("allDay")
+    ? { action: "clear" }
+    : presentKeys.has("pomodoroConfig")
     ? toUpdate.pomodoroConfig
       ? { action: "set", value: toUpdate.pomodoroConfig }
       : { action: "clear" }
@@ -1735,7 +1764,7 @@ export function getCalendar() {
         localParticipationStatus: parent.localParticipationStatus,
         meetingEnabled: parent.meetingEnabled,
         notifications: parent.notifications,
-        pomodoroConfig: parent.pomodoroConfig,
+        pomodoroConfig: parent.allDay ? undefined : parent.pomodoroConfig,
       });
       rawBlocks = [...rawBlocks, standalone];
       totalEventCount++;
@@ -1872,7 +1901,7 @@ export function getCalendar() {
       const descriptionPatch = "description" in changes
         ? sanitizeCalendarDescriptionHtml(changes.description ?? "") : null;
       const urlPatch = "url" in changes ? (changes.url ?? "") : null;
-      const pomConfig = merged.pomodoroConfig ?? parent.pomodoroConfig;
+      const pomodoroState = resolvedPomodoroConfigForTimedEvent(parent, changes, merged.allDay);
       await invoke("calendar_split_series", {
         dbUrl: dbUrl(),
         input: {
@@ -1897,7 +1926,8 @@ export function getCalendar() {
           urlPatch,
           localRsvpStatus: localParticipationStatus ?? null,
           meetingEnabled,
-          pomodoroConfig: pomConfig ?? null,
+          copyPomodoroConfig: pomodoroState.copyFromParent,
+          pomodoroConfig: pomodoroState.payloadConfig,
           now,
         },
       });
@@ -1915,7 +1945,7 @@ export function getCalendar() {
         recurrence: newRecurrence,
         recurringParentId: undefined,
         exceptions: newExceptions.length > 0 ? newExceptions : undefined,
-        pomodoroConfig: pomConfig,
+        pomodoroConfig: pomodoroState.finalConfig,
       });
       rawBlocks = [...rawBlocks, newTemplate];
       totalEventCount++;
@@ -2021,7 +2051,7 @@ export function getCalendar() {
           localParticipationStatus: parent.localParticipationStatus,
           meetingEnabled: parent.meetingEnabled,
           notifications: parent.notifications,
-          pomodoroConfig: parent.pomodoroConfig,
+          pomodoroConfig: parent.allDay ? undefined : parent.pomodoroConfig,
         });
         appendWorkingBlock(standalone);
         return standalone;
@@ -2076,7 +2106,7 @@ export function getCalendar() {
           ? sanitizeCalendarDescriptionHtml(changes.description ?? "")
           : null;
         const urlPatch = "url" in changes ? (changes.url ?? "") : null;
-        const pomodoroConfig = merged.pomodoroConfig ?? parent.pomodoroConfig;
+        const pomodoroState = resolvedPomodoroConfigForTimedEvent(parent, changes, merged.allDay);
 
         backendOperations.push({
           type: "split_series",
@@ -2102,7 +2132,8 @@ export function getCalendar() {
             urlPatch,
             localRsvpStatus: merged.localParticipationStatus ?? null,
             meetingEnabled,
-            pomodoroConfig: pomodoroConfig ?? null,
+            copyPomodoroConfig: pomodoroState.copyFromParent,
+            pomodoroConfig: pomodoroState.payloadConfig,
             now,
           },
         });
@@ -2118,7 +2149,7 @@ export function getCalendar() {
           recurrence: newRecurrence,
           recurringParentId: undefined,
           exceptions: newExceptions.length > 0 ? newExceptions : undefined,
-          pomodoroConfig,
+          pomodoroConfig: pomodoroState.finalConfig,
         });
         appendWorkingBlock(newTemplate);
         return newTemplate;

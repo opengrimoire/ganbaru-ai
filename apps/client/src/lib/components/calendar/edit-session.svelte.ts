@@ -124,7 +124,9 @@ export function buildEditPanelInitialChanges(
     description: event.description ?? "",
     recurrence: event.recurrence,
     notifications: normalizeNotifications(event.notifications),
-    pomodoroConfig: normalizePomodoroConfig(event.pomodoroConfig, focusIdleDefaults),
+    pomodoroConfig: event.allDay
+      ? undefined
+      : normalizePomodoroConfig(event.pomodoroConfig, focusIdleDefaults),
     allDay: event.allDay || undefined,
     meetingEnabled: meetingEnabled || undefined,
     location: meetingEnabled && event.location ? event.location : undefined,
@@ -157,13 +159,15 @@ export function buildCreatePanelInitialChanges(
     description: "",
     recurrence: undefined,
     notifications: [0],
-    pomodoroConfig: {
-      focusDurationMinutes: 40,
-      shortBreakMinutes: 5,
-      longBreakMinutes: 10,
-      pomodoroCount: 4,
-      idleTimeoutMinutes: pauseWhenIdle ? thresholdMinutes : null,
-    },
+    pomodoroConfig: allDay
+      ? undefined
+      : {
+          focusDurationMinutes: 40,
+          shortBreakMinutes: 5,
+          longBreakMinutes: 10,
+          pomodoroCount: 4,
+          idleTimeoutMinutes: pauseWhenIdle ? thresholdMinutes : null,
+        },
     allDay: allDay || undefined,
     meetingEnabled: undefined,
     location: undefined,

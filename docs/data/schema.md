@@ -105,7 +105,7 @@ The active calendar. One row per event (or per recurring template, with instance
 | `recurrence_rule` | text or null | RFC 5545 RRULE string. Null for non-recurring events. |
 | `recurrence_exceptions` | child rows | Stored in `calendar_event_exdates`, one occurrence date per row. Timed `.ics` EXDATE values import as the occurrence's local date in the event home zone, then export again at the event's original start time with UTC or `TZID` to match the master event. |
 | `calendar_id` | UUID | FK to `calendars`. Deleting a calendar archives or hard deletes its events first, then removes the calendar row. |
-| `pomodoro_config` | child row or null | Per-event pomodoro settings in `pomodoro_configs`. Null means pomodoro is disabled for this event. |
+| `pomodoro_config` | child row or null | Per-event pomodoro settings in `pomodoro_configs`. Null means pomodoro is disabled for this event. All-day events cannot have this child row. |
 | `notification_config` | child rows | Notification offsets in `calendar_event_notifications`, one row per offset. |
 | `attendees` | child rows | Participants in `calendar_event_attendees`. |
 | `categories` | child rows | RFC 5545 categories in `calendar_event_categories`, one row per category. |
@@ -165,7 +165,7 @@ The pomodoro tracking system uses normalized config rows plus four history table
 
 ### `pomodoro_configs`
 
-One row per calendar event with Pomodoro enabled. The config row is the mutable source for future runs. Once a run starts, those settings are copied into `pomodoro_runs` as an immutable history snapshot.
+One row per timed calendar event with Pomodoro enabled. All-day events cannot have a config row. The config row is the mutable source for future runs. Once a run starts, those settings are copied into `pomodoro_runs` as an immutable history snapshot. Migration `20260601000000_remove_all_day_pomodoro_configs.sql` removes legacy config rows that were attached to all-day events before this invariant existed.
 
 | Field | Type | Description |
 |---|---|---|

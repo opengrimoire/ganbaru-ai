@@ -152,8 +152,6 @@
   const startControlsDisabled = $derived(controlsDisabled || lockStartControls);
   const deleteControlsDisabled = $derived(parked || (readOnly && !allowDeleteWhenReadOnly));
   const scopeControlsDisabled = $derived(parked || (readOnly && !allowDeleteWhenReadOnly));
-  const pomodoroControlsDisabled = $derived(parked || (readOnly && !allowPomodoroWhenReadOnly));
-  const pomodoroReadOnlyInteractive = $derived(readOnly && allowPomodoroWhenReadOnly && !parked);
   const endEventAction = $derived(mode === "edit" && !!event && !!onEndEvent);
   const generalDisabledAffordance = $derived(parked);
   const startDisabledAffordance = $derived(parked || (lockStartControls && !readOnly));
@@ -218,6 +216,13 @@
   let shortBreak = $state(5);
   let longBreak = $state(10);
   let idleTimeoutEnabled = $state(true);
+  const timedSectionsVisible = $derived(!allDay);
+  const pomodoroControlsDisabled = $derived(
+    parked || !timedSectionsVisible || (readOnly && !allowPomodoroWhenReadOnly),
+  );
+  const pomodoroReadOnlyInteractive = $derived(
+    readOnly && allowPomodoroWhenReadOnly && !parked && timedSectionsVisible,
+  );
 
   function applyDefaultIdleTimeoutPreference(): void {
     idleTimeoutEnabled = preferences.focusIdlePauseOnEventCreate;
@@ -225,6 +230,17 @@
 
   function idleTimeoutMinutesForPayload(): number | null {
     return idleTimeoutEnabled ? preferences.focusIdleThresholdMinutes : null;
+  }
+
+  function buildPomodoroConfigPayload(): PomodoroConfig | undefined {
+    if (allDay || !pomodoroEnabled) return undefined;
+    return {
+      focusDurationMinutes: focusDuration,
+      shortBreakMinutes: shortBreak,
+      longBreakMinutes: longBreak,
+      pomodoroCount: 4,
+      idleTimeoutMinutes: idleTimeoutMinutesForPayload(),
+    };
   }
 
   // ─── Notifications ──────────────────────────────────────────────
@@ -1150,13 +1166,7 @@
       description,
       recurrence,
       notifications: collectNotifications(),
-      pomodoroConfig: pomodoroEnabled ? {
-        focusDurationMinutes: focusDuration,
-        shortBreakMinutes: shortBreak,
-        longBreakMinutes: longBreak,
-        pomodoroCount: 4,
-        idleTimeoutMinutes: idleTimeoutMinutesForPayload(),
-      } : undefined,
+      pomodoroConfig: buildPomodoroConfigPayload(),
       allDay: allDay || undefined,
       meetingEnabled: meetingEnabled || undefined,
       location: meetingEnabled && location ? location : undefined,
@@ -1292,13 +1302,7 @@
       description,
       recurrence,
       notifications: collectNotifications(),
-      pomodoroConfig: pomodoroEnabled ? {
-        focusDurationMinutes: focusDuration,
-        shortBreakMinutes: shortBreak,
-        longBreakMinutes: longBreak,
-        pomodoroCount: 4,
-        idleTimeoutMinutes: idleTimeoutMinutesForPayload(),
-      } : undefined,
+      pomodoroConfig: buildPomodoroConfigPayload(),
       allDay: allDay || undefined,
       meetingEnabled: meetingEnabled || undefined,
       location: meetingEnabled && location ? location : undefined,
@@ -2096,15 +2100,17 @@
       {/if}
 
       <!-- 2) Pomodoro -->
-      <PomodoroSection
-        enabled={pomodoroEnabled}
-        bind:preset={pomodoroPreset}
-        bind:focusDuration bind:shortBreak bind:longBreak bind:idleTimeoutEnabled
-        expanded={openSection === "pomodoro"}
-        readonlyInteractive={pomodoroReadOnlyInteractive}
-        ontoggle={() => handleToggle("pomodoro")}
-        onexpand={() => handleExpand("pomodoro")}
-        onchange={emitChange} />
+      {#if timedSectionsVisible}
+        <PomodoroSection
+          enabled={pomodoroEnabled}
+          bind:preset={pomodoroPreset}
+          bind:focusDuration bind:shortBreak bind:longBreak bind:idleTimeoutEnabled
+          expanded={openSection === "pomodoro"}
+          readonlyInteractive={pomodoroReadOnlyInteractive}
+          ontoggle={() => handleToggle("pomodoro")}
+          onexpand={() => handleExpand("pomodoro")}
+          onchange={emitChange} />
+      {/if}
 
       <!-- 3) Notifications -->
       <NotificationsSection
@@ -2127,21 +2133,23 @@
         onchange={emitChange} />
 
       <!-- 5) Music -->
-      <div class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
-        <div class="section-header flex items-stretch">
-          <div aria-hidden="true" class="flex w-10 shrink-0 items-center justify-center text-muted-foreground/50">
-            <Music size={14} />
+      {#if timedSectionsVisible}
+        <div class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
+          <div class="section-header flex items-stretch">
+            <div aria-hidden="true" class="flex w-10 shrink-0 items-center justify-center text-muted-foreground/50">
+              <Music size={14} />
+            </div>
+            <button onclick={() => handleExpand("music")}
+              disabled={controlsDisabled}
+              class="flex flex-1 items-center px-3 py-2 text-left">
+              <span class="translate-y-[1.13px] text-[0.8rem] text-muted-foreground">Music</span>
+            </button>
           </div>
-          <button onclick={() => handleExpand("music")}
-            disabled={controlsDisabled}
-            class="flex flex-1 items-center px-3 py-2 text-left">
-            <span class="translate-y-[1.13px] text-[0.8rem] text-muted-foreground">Music</span>
-          </button>
+          {#if openSection === "music"}
+            <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="music" class="px-3.5 py-3 text-center text-[0.866667rem] text-muted-foreground/60" style="background-color: var(--panel-bg);">Coming soon</div>
+          {/if}
         </div>
-        {#if openSection === "music"}
-          <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="music" class="px-3.5 py-3 text-center text-[0.866667rem] text-muted-foreground/60" style="background-color: var(--panel-bg);">Coming soon</div>
-        {/if}
-      </div>
+      {/if}
   </div>
   </div>
   </div>

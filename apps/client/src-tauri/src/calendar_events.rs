@@ -284,6 +284,7 @@ pub struct CalendarSplitSeries {
     url_patch: Option<String>,
     local_rsvp_status: Option<String>,
     meeting_enabled: bool,
+    copy_pomodoro_config: bool,
     pomodoro_config: Option<CalendarPomodoroConfig>,
     now: String,
 }
@@ -1770,6 +1771,7 @@ async fn update_calendar_event_unchecked_tx(
     patch: &CalendarEventUpdate,
 ) -> Result<(), String> {
     validate_event_update(patch)?;
+    ensure_update_pomodoro_matches_all_day(tx, patch).await?;
     for field in &patch.fields {
         apply_update_field(tx, &patch.id, field).await?;
     }
@@ -1863,6 +1865,51 @@ async fn update_calendar_event_unchecked_tx(
         return Err(format!("calendar event '{}' not found", patch.id));
     }
     Ok(())
+}
+
+async fn ensure_update_pomodoro_matches_all_day(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    patch: &CalendarEventUpdate,
+) -> Result<(), String> {
+    let row = sqlx::query(
+        "SELECT all_day,
+                EXISTS(SELECT 1 FROM pomodoro_configs WHERE event_id = calendar_events.id) AS has_pomodoro_config
+         FROM calendar_events
+         WHERE id = ?",
+    )
+    .bind(&patch.id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|e| format!("load calendar event for invariant check: {e}"))?;
+    let Some(row) = row else {
+        return Err(format!("calendar event '{}' not found", patch.id));
+    };
+
+    let existing_all_day: i64 = row
+        .try_get("all_day")
+        .map_err(|e| format!("read all_day for invariant check: {e}"))?;
+    let existing_has_pomodoro: i64 = row
+        .try_get("has_pomodoro_config")
+        .map_err(|e| format!("read pomodoro config state for invariant check: {e}"))?;
+
+    let final_all_day = patch_all_day_value(&patch.fields).unwrap_or(existing_all_day != 0);
+    let final_has_pomodoro = match &patch.pomodoro_config {
+        Some(CalendarPomodoroConfigPatch::Set(_)) => true,
+        Some(CalendarPomodoroConfigPatch::Clear) => false,
+        None => existing_has_pomodoro != 0,
+    };
+
+    if final_all_day && final_has_pomodoro {
+        return Err("all-day events cannot have a pomodoro config".to_string());
+    }
+    Ok(())
+}
+
+fn patch_all_day_value(fields: &[CalendarEventUpdateField]) -> Option<bool> {
+    fields.iter().rev().find_map(|field| match field {
+        CalendarEventUpdateField::AllDay(value) => Some(*value),
+        _ => None,
+    })
 }
 
 async fn ensure_calendar_event_update_allowed(
@@ -2053,7 +2100,9 @@ async fn detach_calendar_instance_tx(
     .await?;
     copy_calendar_metadata(tx, &input.parent_id, &input.new_id).await?;
 
-    copy_pomodoro_config(tx, &input.parent_id, &input.new_id).await?;
+    if !input.all_day {
+        copy_pomodoro_config(tx, &input.parent_id, &input.new_id).await?;
+    }
     copy_attendees(tx, &input.parent_id, &input.new_id).await?;
 
     let original_occurrence_id = format!("{}::{}", input.parent_id, input.instance_date);
@@ -2188,7 +2237,7 @@ async fn split_calendar_series_tx(
 
     if let Some(config) = &input.pomodoro_config {
         insert_pomodoro_config(tx, &input.new_id, config).await?;
-    } else {
+    } else if input.copy_pomodoro_config {
         copy_pomodoro_config(tx, &input.parent_id, &input.new_id).await?;
     }
     copy_attendees(tx, &input.parent_id, &input.new_id).await?;
@@ -2773,6 +2822,9 @@ fn validate_event_create(event: &CalendarEventCreate) -> Result<(), String> {
     validate_json_option(&event.extended_properties, "extended_properties")?;
     validate_json_option(&event.organizer, "organizer")?;
     validate_optional_attendee_status(&event.local_rsvp_status, "local_rsvp_status")?;
+    if event.all_day && event.pomodoro_config.is_some() {
+        return Err("all-day events cannot have a pomodoro config".to_string());
+    }
     if let Some(config) = &event.pomodoro_config {
         validate_pomodoro_config(config)?;
     }
@@ -2840,6 +2892,9 @@ fn validate_split_series(input: &CalendarSplitSeries) -> Result<(), String> {
     validate_color(input.color, "color")?;
     validate_json_option(&input.notifications, "notifications")?;
     validate_json_option(&input.exceptions, "exceptions")?;
+    if input.all_day && (input.copy_pomodoro_config || input.pomodoro_config.is_some()) {
+        return Err("all-day events cannot have a pomodoro config".to_string());
+    }
     if let Some(config) = &input.pomodoro_config {
         validate_pomodoro_config(config)?;
     }
@@ -3042,13 +3097,13 @@ mod tests {
         apply_update_field, archive_calendar_event_tx, cap_calendar_series_tx,
         delete_calendar_event_tx, filter_excluded_dates, insert_calendar_event_row,
         protected_active_event_end_update_allowed, restore_archived_calendar_event_tx,
-        sanitize_stored_event_description, update_calendar_event_tx, validate_color,
-        validate_event_create, validate_non_negative, validate_positive, validate_priority,
-        validate_update_field, CalendarActiveEventReferenceTransfer,
+        sanitize_stored_event_description, split_calendar_series_tx, update_calendar_event_tx,
+        validate_color, validate_event_create, validate_non_negative, validate_positive,
+        validate_priority, validate_update_field, CalendarActiveEventReferenceTransfer,
         CalendarDeleteArchiveOperation, CalendarDetachInstance, CalendarEventCreate,
         CalendarEventMutationContext, CalendarEventMutationTarget, CalendarEventUpdate,
         CalendarEventUpdateField, CalendarPomodoroConfig, CalendarPomodoroConfigPatch,
-        CalendarRecurrenceCommitOperation,
+        CalendarRecurrenceCommitOperation, CalendarSplitSeries,
     };
 
     fn event_create() -> CalendarEventCreate {
@@ -3091,6 +3146,16 @@ mod tests {
         }
     }
 
+    fn pomodoro_config() -> CalendarPomodoroConfig {
+        CalendarPomodoroConfig {
+            focus_duration_minutes: 40,
+            short_break_minutes: 5,
+            long_break_minutes: 10,
+            pomodoro_count: 4,
+            idle_timeout_minutes: Some(3),
+        }
+    }
+
     #[test]
     fn validates_event_color_and_priority_ranges() {
         assert!(validate_color(Some(0), "color").is_ok());
@@ -3114,6 +3179,14 @@ mod tests {
         event.title = String::new();
         assert!(validate_event_create(&event).is_ok());
         assert!(validate_update_field(&CalendarEventUpdateField::Title(String::new())).is_ok());
+    }
+
+    #[test]
+    fn all_day_event_create_rejects_pomodoro_config() {
+        let mut event = event_create();
+        event.all_day = true;
+        event.pomodoro_config = Some(pomodoro_config());
+        assert!(validate_event_create(&event).is_err());
     }
 
     #[test]
@@ -3461,6 +3534,175 @@ mod tests {
             &context,
             "2026-05-09T10:30:00.500Z",
         ));
+    }
+
+    #[test]
+    fn all_day_update_rejects_existing_pomodoro_config_without_clear() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event_at(
+                &pool,
+                "event-1",
+                "2999-05-09T10:00:00Z",
+                "2999-05-09T11:00:00Z",
+                None,
+            )
+            .await;
+            insert_test_pomodoro_config(&pool, "event-1").await;
+
+            let mut tx = pool.begin().await.unwrap();
+            let err = update_calendar_event_tx(
+                &mut tx,
+                &CalendarEventUpdate {
+                    id: "event-1".to_string(),
+                    updated_at: "2026-05-09T10:30:00Z".to_string(),
+                    fields: vec![CalendarEventUpdateField::AllDay(true)],
+                    attendees: None,
+                    alarms: None,
+                    pomodoro_config: None,
+                },
+            )
+            .await
+            .unwrap_err();
+            tx.rollback().await.unwrap();
+            assert!(err.contains("all-day events cannot have a pomodoro config"));
+        });
+    }
+
+    #[test]
+    fn all_day_update_can_clear_existing_pomodoro_config() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event_at(
+                &pool,
+                "event-1",
+                "2999-05-09T10:00:00Z",
+                "2999-05-09T11:00:00Z",
+                None,
+            )
+            .await;
+            insert_test_pomodoro_config(&pool, "event-1").await;
+
+            let mut tx = pool.begin().await.unwrap();
+            update_calendar_event_tx(
+                &mut tx,
+                &CalendarEventUpdate {
+                    id: "event-1".to_string(),
+                    updated_at: "2026-05-09T10:30:00Z".to_string(),
+                    fields: vec![CalendarEventUpdateField::AllDay(true)],
+                    attendees: None,
+                    alarms: None,
+                    pomodoro_config: Some(CalendarPomodoroConfigPatch::Clear),
+                },
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+
+            let row: (i64, i64) = sqlx::query_as(
+                "SELECT all_day,
+                        (SELECT COUNT(*) FROM pomodoro_configs WHERE event_id = 'event-1')
+                 FROM calendar_events WHERE id = 'event-1'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(row, (1, 0));
+        });
+    }
+
+    #[test]
+    fn existing_all_day_event_update_rejects_pomodoro_set() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event_at(
+                &pool,
+                "event-1",
+                "2999-05-09T00:00:00Z",
+                "2999-05-09T00:00:00Z",
+                None,
+            )
+            .await;
+            sqlx::query("UPDATE calendar_events SET all_day = 1 WHERE id = 'event-1'")
+                .execute(&pool)
+                .await
+                .unwrap();
+
+            let mut tx = pool.begin().await.unwrap();
+            let err = update_calendar_event_tx(
+                &mut tx,
+                &CalendarEventUpdate {
+                    id: "event-1".to_string(),
+                    updated_at: "2026-05-09T10:30:00Z".to_string(),
+                    fields: vec![],
+                    attendees: None,
+                    alarms: None,
+                    pomodoro_config: Some(CalendarPomodoroConfigPatch::Set(pomodoro_config())),
+                },
+            )
+            .await
+            .unwrap_err();
+            tx.rollback().await.unwrap();
+            assert!(err.contains("all-day events cannot have a pomodoro config"));
+        });
+    }
+
+    #[test]
+    fn all_day_split_does_not_copy_parent_pomodoro_config() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event_at(
+                &pool,
+                "event-1",
+                "2999-05-09T10:00:00Z",
+                "2999-05-09T11:00:00Z",
+                Some("FREQ=DAILY"),
+            )
+            .await;
+            insert_test_pomodoro_config(&pool, "event-1").await;
+
+            let mut tx = pool.begin().await.unwrap();
+            split_calendar_series_tx(
+                &mut tx,
+                &CalendarSplitSeries {
+                    parent_id: "event-1".to_string(),
+                    day_before: "2999-05-09".to_string(),
+                    capped_rrule: Some("FREQ=DAILY;UNTIL=29990509T235959Z".to_string()),
+                    new_id: "event-2".to_string(),
+                    title: "All day split".to_string(),
+                    start_time: "2999-05-10T00:00:00Z".to_string(),
+                    end_time: "2999-05-10T00:00:00Z".to_string(),
+                    timezone: "America/Monterrey".to_string(),
+                    calendar_id: "local".to_string(),
+                    color: None,
+                    notifications: None,
+                    exceptions: None,
+                    rrule: Some("FREQ=DAILY".to_string()),
+                    all_day: true,
+                    location: String::new(),
+                    transparency: "opaque".to_string(),
+                    status: "confirmed".to_string(),
+                    description_patch: None,
+                    url_patch: None,
+                    local_rsvp_status: None,
+                    meeting_enabled: false,
+                    copy_pomodoro_config: false,
+                    pomodoro_config: None,
+                    now: "2026-05-09T10:30:00Z".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+
+            let count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM pomodoro_configs WHERE event_id = 'event-2'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(count, 0);
+        });
     }
 
     #[test]
@@ -4392,6 +4634,19 @@ mod tests {
                      '2026-05-09T10:00:00Z', '2026-05-09T10:40:00Z',
                      '2026-05-09T10:00:00Z', 'active')",
         )
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    async fn insert_test_pomodoro_config(pool: &sqlx::SqlitePool, event_id: &str) {
+        sqlx::query(
+            "INSERT INTO pomodoro_configs
+                (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes,
+                 pomodoro_count, idle_timeout_minutes)
+             VALUES (?, 40, 5, 10, 4, 3)",
+        )
+        .bind(event_id)
         .execute(pool)
         .await
         .unwrap();

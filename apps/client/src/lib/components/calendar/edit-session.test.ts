@@ -237,6 +237,22 @@ describe("panel initial changes", () => {
     expect(result.attendees).toBeUndefined();
   });
 
+  it("omits pomodoro config from all-day edit baselines", () => {
+    const result = buildEditPanelInitialChanges(makeEvent({
+      allDay: true,
+      pomodoroConfig: {
+        focusDurationMinutes: 40,
+        shortBreakMinutes: 5,
+        longBreakMinutes: 10,
+        pomodoroCount: 4,
+        idleTimeoutMinutes: 3,
+      },
+    }));
+
+    expect(result.allDay).toBe(true);
+    expect(result.pomodoroConfig).toBeUndefined();
+  });
+
   it("seeds create baseline with default panel values", () => {
     const result = buildCreatePanelInitialChanges("2026-04-16 09:00", "2026-04-16 10:00", true);
 
@@ -247,13 +263,7 @@ describe("panel initial changes", () => {
     expect(result.allDay).toBe(true);
     expect(result.meetingEnabled).toBeUndefined();
     expect(result.visibility).toBe("private");
-    expect(result.pomodoroConfig).toEqual({
-      focusDurationMinutes: 40,
-      shortBreakMinutes: 5,
-      longBreakMinutes: 10,
-      pomodoroCount: 4,
-      idleTimeoutMinutes: 3,
-    });
+    expect(result.pomodoroConfig).toBeUndefined();
   });
 
   it("uses focus idle defaults when seeding a create baseline", () => {
