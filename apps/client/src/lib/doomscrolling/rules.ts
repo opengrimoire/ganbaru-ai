@@ -274,7 +274,8 @@ export interface DoomscrollingUsageLimit {
   id: string;
   name: string;
   enabled: boolean;
-  minutesPerDay: number;
+  minutesPerDay: number | null;
+  minutesPerWeek?: number | null;
   entries: DoomscrollingLimitEntry[];
 }
 
@@ -313,13 +314,20 @@ export interface DoomscrollingUsageSample {
   localDate: string;
 }
 
-export interface DoomscrollingDailyLimitTotal {
+export type DoomscrollingLimitPeriod = "day" | "week";
+
+export interface DoomscrollingLimitTotal {
   limitId: string;
+  period?: DoomscrollingLimitPeriod;
+  windowStartLocalDate?: string;
+  windowEndLocalDate?: string;
   usedSeconds: number;
   limitSeconds: number;
   remainingSeconds: number;
   exhausted: boolean;
 }
+
+export type DoomscrollingDailyLimitTotal = DoomscrollingLimitTotal;
 
 export interface DoomscrollingDailyLimitEntryTotal {
   entryId: string;
@@ -331,10 +339,12 @@ export interface DoomscrollingLimitDecision {
   host: string | null;
   limitId: string | null;
   limitName: string | null;
+  period?: DoomscrollingLimitPeriod | null;
   matchedRule: string | null;
 }
 
 const MAX_DAILY_LIMIT_MINUTES = 24 * 60;
+const MAX_WEEKLY_LIMIT_MINUTES = 7 * 24 * 60;
 
 function defaultCategoryRules(): DoomscrollingCategoryRule[] {
   return DOOMSCROLLING_CATEGORY_DEFINITIONS.map((category) => ({
@@ -660,6 +670,14 @@ function normalizeLimitMinutes(value: unknown): number | null {
   return minutes;
 }
 
+function normalizeOptionalLimitMinutes(value: unknown, maxMinutes: number): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const minutes = Math.trunc(value);
+  if (minutes < 1 || minutes > maxMinutes) return null;
+  return minutes;
+}
+
 function normalizeLimitEntryId(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const id = value.trim();
@@ -755,15 +773,17 @@ function normalizeUsageLimitValue(value: unknown): DoomscrollingUsageLimit | nul
     ? normalizeDoomscrollingUsageLimitName(value.name)
     : null;
   const minutesPerDay = normalizeLimitMinutes(value.minutesPerDay);
+  const minutesPerWeek = normalizeOptionalLimitMinutes(value.minutesPerWeek, MAX_WEEKLY_LIMIT_MINUTES);
   const entries = normalizeLimitEntries(value.entries);
-  if (!id || !name || minutesPerDay === null || !entries) return null;
-  return {
+  if (!id || !name || !entries || (minutesPerDay === null && minutesPerWeek === null)) return null;
+  const limit: DoomscrollingUsageLimit = {
     id,
     name,
     enabled: value.enabled !== false,
     minutesPerDay,
     entries,
   };
+  return minutesPerWeek === null ? limit : { ...limit, minutesPerWeek };
 }
 
 function normalizeUsageLimitsConfig(value: unknown): DoomscrollingUsageLimitsConfig {
@@ -897,6 +917,55 @@ function normalizedUsageSourceKey(value: string): string {
   return value.trim().toLowerCase();
 }
 
+function parseLocalDateParts(value: string): { year: number; month: number; day: number } | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const year = Number.parseInt(match[1] ?? "", 10);
+  const month = Number.parseInt(match[2] ?? "", 10);
+  const day = Number.parseInt(match[3] ?? "", 10);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return { year, month, day };
+}
+
+function localDateToUtcDate(value: string): Date | null {
+  const parts = parseLocalDateParts(value);
+  if (!parts) return null;
+  const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+  if (
+    date.getUTCFullYear() !== parts.year
+    || date.getUTCMonth() !== parts.month - 1
+    || date.getUTCDate() !== parts.day
+  ) {
+    return null;
+  }
+  return date;
+}
+
+function utcDateToLocalDate(date: Date): string {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function doomscrollingWeekStartLocalDate(localDate: string): string {
+  const date = localDateToUtcDate(localDate);
+  if (!date) return localDate;
+  const dayIndex = date.getUTCDay();
+  const daysSinceMonday = (dayIndex + 6) % 7;
+  date.setUTCDate(date.getUTCDate() - daysSinceMonday);
+  return utcDateToLocalDate(date);
+}
+
+function sampleIsInLocalDateWindow(
+  sample: DoomscrollingUsageSample,
+  windowStartLocalDate: string,
+  windowEndLocalDate: string,
+): boolean {
+  return sample.localDate >= windowStartLocalDate && sample.localDate <= windowEndLocalDate;
+}
+
 export function matchesDoomscrollingLimitEntry(
   entry: DoomscrollingLimitEntry,
   sample: DoomscrollingUsageSample,
@@ -924,9 +993,18 @@ export function computeDoomscrollingLimitEntryDailyTotals(
   samples: readonly DoomscrollingUsageSample[],
   localDate: string,
 ): DoomscrollingDailyLimitEntryTotal[] {
+  return computeDoomscrollingLimitEntryWindowTotals(limit, samples, localDate, localDate);
+}
+
+export function computeDoomscrollingLimitEntryWindowTotals(
+  limit: DoomscrollingUsageLimit,
+  samples: readonly DoomscrollingUsageSample[],
+  windowStartLocalDate: string,
+  windowEndLocalDate: string,
+): DoomscrollingDailyLimitEntryTotal[] {
   const usedSecondsByEntryId = new Map<string, number>();
   for (const sample of samples) {
-    if (sample.localDate !== localDate) continue;
+    if (!sampleIsInLocalDateWindow(sample, windowStartLocalDate, windowEndLocalDate)) continue;
     if (!Number.isFinite(sample.elapsedSeconds) || sample.elapsedSeconds <= 0) continue;
     const matchingEntry = limit.entries.find((entry) =>
       matchesDoomscrollingLimitEntry(entry, sample)
@@ -944,31 +1022,88 @@ export function computeDoomscrollingLimitEntryDailyTotals(
   }));
 }
 
+function computeDoomscrollingLimitWindowTotal(
+  limit: DoomscrollingUsageLimit,
+  samples: readonly DoomscrollingUsageSample[],
+  period: DoomscrollingLimitPeriod,
+  limitMinutes: number,
+  windowStartLocalDate: string,
+  windowEndLocalDate: string,
+): DoomscrollingLimitTotal {
+  const usedSeconds = computeDoomscrollingLimitEntryWindowTotals(
+    limit,
+    samples,
+    windowStartLocalDate,
+    windowEndLocalDate,
+  ).reduce((total, entryTotal) => total + entryTotal.usedSeconds, 0);
+  const limitSeconds = limitMinutes * 60;
+  const remainingSeconds = Math.max(0, limitSeconds - usedSeconds);
+  return {
+    limitId: limit.id,
+    period,
+    windowStartLocalDate,
+    windowEndLocalDate,
+    usedSeconds,
+    limitSeconds,
+    remainingSeconds,
+    exhausted: usedSeconds >= limitSeconds,
+  };
+}
+
+export function computeDoomscrollingLimitTotals(
+  config: DoomscrollingConfig,
+  samples: readonly DoomscrollingUsageSample[],
+  localDate: string,
+): DoomscrollingLimitTotal[] {
+  const weekStartLocalDate = doomscrollingWeekStartLocalDate(localDate);
+  return config.limits.items.flatMap((limit) => {
+    const totals: DoomscrollingLimitTotal[] = [];
+    if (limit.minutesPerDay !== null) {
+      totals.push(computeDoomscrollingLimitWindowTotal(
+        limit,
+        samples,
+        "day",
+        limit.minutesPerDay,
+        localDate,
+        localDate,
+      ));
+    }
+    if (limit.minutesPerWeek !== null && limit.minutesPerWeek !== undefined) {
+      totals.push(computeDoomscrollingLimitWindowTotal(
+        limit,
+        samples,
+        "week",
+        limit.minutesPerWeek,
+        weekStartLocalDate,
+        localDate,
+      ));
+    }
+    return totals;
+  });
+}
+
 export function computeDoomscrollingLimitDailyTotals(
   config: DoomscrollingConfig,
   samples: readonly DoomscrollingUsageSample[],
   localDate: string,
 ): DoomscrollingDailyLimitTotal[] {
-  return config.limits.items.map((limit) => {
-    const usedSeconds = computeDoomscrollingLimitEntryDailyTotals(limit, samples, localDate)
-      .reduce((total, entryTotal) => total + entryTotal.usedSeconds, 0);
-    const limitSeconds = limit.minutesPerDay * 60;
-    const remainingSeconds = Math.max(0, limitSeconds - usedSeconds);
-    return {
-      limitId: limit.id,
-      usedSeconds,
-      limitSeconds,
-      remainingSeconds,
-      exhausted: usedSeconds >= limitSeconds,
-    };
-  });
+  return computeDoomscrollingLimitTotals(config, samples, localDate)
+    .filter((total) => (total.period ?? "day") === "day");
 }
 
-function totalForLimit(
-  totals: readonly DoomscrollingDailyLimitTotal[],
+function exhaustedTotalForLimit(
+  totals: readonly DoomscrollingLimitTotal[],
   limitId: string,
-): DoomscrollingDailyLimitTotal | null {
-  return totals.find((total) => total.limitId === limitId) ?? null;
+): DoomscrollingLimitTotal | null {
+  return totals.find((total) =>
+    total.limitId === limitId
+    && total.exhausted
+    && total.usedSeconds >= total.limitSeconds
+  ) ?? null;
+}
+
+function limitPeriodLabel(period: DoomscrollingLimitPeriod | undefined): string {
+  return period === "week" ? "weekly" : "daily";
 }
 
 export function isSupportedDoomscrollingUsageUrl(url: string): boolean {
@@ -1007,7 +1142,7 @@ export function doomscrollingWebsiteUsageSampleFromUrl(
 export function evaluateDoomscrollingWebsiteLimit(
   url: string,
   config: DoomscrollingConfig,
-  totals: readonly DoomscrollingDailyLimitTotal[],
+  totals: readonly DoomscrollingLimitTotal[],
 ): DoomscrollingLimitDecision {
   let parsed: URL;
   let host: string;
@@ -1027,18 +1162,20 @@ export function evaluateDoomscrollingWebsiteLimit(
 
   for (const limit of config.limits.items) {
     if (!limit.enabled) continue;
-    const total = totalForLimit(totals, limit.id);
-    if (!total?.exhausted) continue;
+    const total = exhaustedTotalForLimit(totals, limit.id);
+    if (!total) continue;
     if (limit.entries.some((entry) =>
       entry.websiteHost !== null && doomscrollingHostMatchesRule(host, entry.websiteHost)
     )) {
-      return {
+      const period = total.period ?? "day";
+      const decision: DoomscrollingLimitDecision = {
         blocked: true,
         host,
         limitId: limit.id,
         limitName: limit.name,
-        matchedRule: `daily limit: ${limit.name}`,
+        matchedRule: `${limitPeriodLabel(period)} limit: ${limit.name}`,
       };
+      return period === "week" ? { ...decision, period } : decision;
     }
   }
 

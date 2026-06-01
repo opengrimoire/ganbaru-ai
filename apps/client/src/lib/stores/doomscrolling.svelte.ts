@@ -45,13 +45,15 @@ export type SaveDoomscrollingUsageLimitResult =
   | "missing"
   | "invalid-name"
   | "invalid-minutes"
+  | "invalid-budget"
   | "invalid-sources"
   | "duplicate-source"
   | "protected-source";
 
 export interface DoomscrollingUsageLimitDraft {
   name: string;
-  minutesPerDay: number;
+  minutesPerDay: number | null;
+  minutesPerWeek: number | null;
   entries: readonly DoomscrollingUsageLimitEntryDraft[];
 }
 
@@ -300,9 +302,21 @@ function normalizeLimitDraftEntry(
 function normalizeLimitDraft(
   draft: DoomscrollingUsageLimitDraft,
 ): SaveDoomscrollingUsageLimitResult | Omit<DoomscrollingUsageLimit, "id" | "enabled"> {
-  if (!Number.isFinite(draft.minutesPerDay)) return "invalid-minutes";
-  const minutesPerDay = Math.trunc(draft.minutesPerDay);
-  if (minutesPerDay < 1 || minutesPerDay > 24 * 60) return "invalid-minutes";
+  const minutesPerDay = draft.minutesPerDay === null ? null : Math.trunc(draft.minutesPerDay);
+  const minutesPerWeek = draft.minutesPerWeek === null ? null : Math.trunc(draft.minutesPerWeek);
+  if (
+    minutesPerDay !== null
+    && (!Number.isFinite(draft.minutesPerDay) || minutesPerDay < 1 || minutesPerDay > 24 * 60)
+  ) {
+    return "invalid-minutes";
+  }
+  if (
+    minutesPerWeek !== null
+    && (!Number.isFinite(draft.minutesPerWeek) || minutesPerWeek < 1 || minutesPerWeek > 7 * 24 * 60)
+  ) {
+    return "invalid-minutes";
+  }
+  if (minutesPerDay === null && minutesPerWeek === null) return "invalid-budget";
   if (draft.entries.length === 0) return "invalid-sources";
   const seenSources = new Set<string>();
   const seenEntryIds = new Set<string>();
@@ -324,11 +338,12 @@ function normalizeLimitDraft(
   if (entries.length > 1 && !explicitName) return "invalid-name";
   const name = explicitName ?? derivedEntryName(firstEntry);
   if (!name) return "invalid-name";
-  return {
+  const normalized: Omit<DoomscrollingUsageLimit, "id" | "enabled"> = {
     name,
     minutesPerDay,
     entries,
   };
+  return minutesPerWeek === null ? normalized : { ...normalized, minutesPerWeek };
 }
 
 export function getDoomscrolling() {

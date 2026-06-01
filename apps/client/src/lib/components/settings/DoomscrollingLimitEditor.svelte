@@ -25,7 +25,19 @@
   } from "./DoomscrollingAppSelector.svelte";
   import type { DoomscrollingLimitEditorTarget } from "./types";
 
-  type DurationOption = "15" | "30" | "45" | "60" | "90" | "120" | "180" | "240" | "custom";
+  type DailyBudgetOption = "none" | "15" | "30" | "45" | "60" | "90" | "120" | "180" | "240" | "custom";
+  type WeeklyBudgetOption =
+    | "none"
+    | "60"
+    | "120"
+    | "180"
+    | "300"
+    | "420"
+    | "600"
+    | "840"
+    | "1260"
+    | "1680"
+    | "custom";
 
   let {
     target,
@@ -52,7 +64,8 @@
   const sourceColorColumnOrder = [0, 3, 1, 2] as const;
   const sourceColorPickOrder = createSourceColorPickOrder();
 
-  const durationOptions: readonly { value: DurationOption; label: string }[] = [
+  const dailyBudgetOptions: readonly { value: DailyBudgetOption; label: string }[] = [
+    { value: "none", label: "None" },
     { value: "15", label: "15 minutes" },
     { value: "30", label: "30 minutes" },
     { value: "45", label: "45 minutes" },
@@ -63,14 +76,33 @@
     { value: "240", label: "4 hours" },
     { value: "custom", label: "Custom" },
   ];
-  const durationPresetValues = new Set(
-    durationOptions
+  const weeklyBudgetOptions: readonly { value: WeeklyBudgetOption; label: string }[] = [
+    { value: "none", label: "None" },
+    { value: "60", label: "1 hour" },
+    { value: "120", label: "2 hours" },
+    { value: "300", label: "5 hours" },
+    { value: "420", label: "7 hours" },
+    { value: "600", label: "10 hours" },
+    { value: "840", label: "14 hours" },
+    { value: "1260", label: "21 hours" },
+    { value: "1680", label: "28 hours" },
+    { value: "custom", label: "Custom" },
+  ];
+  const dailyBudgetPresetValues = new Set(
+    dailyBudgetOptions
+      .filter((option) => option.value !== "custom")
+      .map((option) => option.value),
+  );
+  const weeklyBudgetPresetValues = new Set(
+    weeklyBudgetOptions
       .filter((option) => option.value !== "custom")
       .map((option) => option.value),
   );
   let draftName = $state("");
-  let draftDurationMode = $state<DurationOption>("60");
-  let draftCustomMinutes = $state("60");
+  let draftDailyBudgetMode = $state<DailyBudgetOption>("60");
+  let draftDailyCustomMinutes = $state("60");
+  let draftWeeklyBudgetMode = $state<WeeklyBudgetOption>("none");
+  let draftWeeklyCustomHours = $state("5");
   let draftEntries = $state<DoomscrollingUsageLimitEntryDraft[]>([]);
   let formError = $state("");
   let desktopAppPickerEntryId = $state<string | null>(null);
@@ -88,25 +120,55 @@
     return doomscrolling.usageLimits.find((limit) => limit.id === target.limitId) ?? null;
   });
 
-  function durationModeForMinutes(minutes: number): DurationOption {
-    const value = String(minutes) as DurationOption;
-    return durationPresetValues.has(value) ? value : "custom";
+  function dailyBudgetModeForMinutes(minutes: number | null): DailyBudgetOption {
+    if (minutes === null) return "none";
+    const value = String(minutes) as DailyBudgetOption;
+    return dailyBudgetPresetValues.has(value) ? value : "custom";
   }
 
-  function setDraftDurationMode(value: string): void {
-    const next = durationOptions.find((option) => option.value === value)?.value ?? "custom";
-    draftDurationMode = next;
-    if (next !== "custom") {
-      draftCustomMinutes = next;
+  function weeklyBudgetModeForMinutes(minutes: number | null | undefined): WeeklyBudgetOption {
+    if (minutes === null || minutes === undefined) return "none";
+    const value = String(minutes) as WeeklyBudgetOption;
+    return weeklyBudgetPresetValues.has(value) ? value : "custom";
+  }
+
+  function setDraftDailyBudgetMode(value: string): void {
+    const next = dailyBudgetOptions.find((option) => option.value === value)?.value ?? "custom";
+    draftDailyBudgetMode = next;
+    if (next !== "custom" && next !== "none") {
+      draftDailyCustomMinutes = next;
       formError = "";
     }
   }
 
-  function parseDraftMinutes(): number | null {
-    const raw = draftDurationMode === "custom" ? draftCustomMinutes : draftDurationMode;
-    if (!/^\d+$/.test(raw.trim())) return null;
+  function setDraftWeeklyBudgetMode(value: string): void {
+    const next = weeklyBudgetOptions.find((option) => option.value === value)?.value ?? "custom";
+    draftWeeklyBudgetMode = next;
+    if (next !== "custom" && next !== "none") {
+      draftWeeklyCustomHours = String(Number.parseInt(next, 10) / 60);
+      formError = "";
+    }
+  }
+
+  function parseDraftDailyMinutes(): number | null | "invalid" {
+    if (draftDailyBudgetMode === "none") return null;
+    const raw = draftDailyBudgetMode === "custom" ? draftDailyCustomMinutes : draftDailyBudgetMode;
+    if (!/^\d+$/.test(raw.trim())) return "invalid";
     const minutes = Number.parseInt(raw, 10);
-    return minutes >= 1 && minutes <= 1440 ? minutes : null;
+    return minutes >= 1 && minutes <= 1440 ? minutes : "invalid";
+  }
+
+  function parseDraftWeeklyMinutes(): number | null | "invalid" {
+    if (draftWeeklyBudgetMode === "none") return null;
+    if (draftWeeklyBudgetMode !== "custom") {
+      const minutes = Number.parseInt(draftWeeklyBudgetMode, 10);
+      return minutes >= 1 && minutes <= 7 * 24 * 60 ? minutes : "invalid";
+    }
+    const raw = draftWeeklyCustomHours.trim();
+    if (!/^(?:\d+|\d+\.\d|\.\d)$/.test(raw)) return "invalid";
+    const hours = Number.parseFloat(raw);
+    if (!Number.isFinite(hours) || hours < 0.1 || hours > 168) return "invalid";
+    return Math.round(hours * 60);
   }
 
   function createEntryId(): string {
@@ -177,23 +239,29 @@
     formError = "";
     if (target.mode === "create") {
       draftName = "";
-      draftDurationMode = "60";
-      draftCustomMinutes = "60";
+      draftDailyBudgetMode = "60";
+      draftDailyCustomMinutes = "60";
+      draftWeeklyBudgetMode = "none";
+      draftWeeklyCustomHours = "5";
       draftEntries = [createEntryDraft(entryColorForIndex(0))];
       return;
     }
     const limit = targetLimit;
     if (!limit) {
       draftName = "";
-      draftDurationMode = "60";
-      draftCustomMinutes = "60";
+      draftDailyBudgetMode = "60";
+      draftDailyCustomMinutes = "60";
+      draftWeeklyBudgetMode = "none";
+      draftWeeklyCustomHours = "5";
       draftEntries = [createEntryDraft(entryColorForIndex(0))];
       formError = "Limit no longer exists";
       return;
     }
     draftName = limit.name;
-    draftDurationMode = durationModeForMinutes(limit.minutesPerDay);
-    draftCustomMinutes = String(limit.minutesPerDay);
+    draftDailyBudgetMode = dailyBudgetModeForMinutes(limit.minutesPerDay);
+    draftDailyCustomMinutes = String(limit.minutesPerDay ?? 60);
+    draftWeeklyBudgetMode = weeklyBudgetModeForMinutes(limit.minutesPerWeek);
+    draftWeeklyCustomHours = String((limit.minutesPerWeek ?? 300) / 60);
     draftEntries = limit.entries.map((entry, index) => ({
       id: entry.id,
       name: entry.name ?? "",
@@ -382,9 +450,18 @@
 
   function saveLimit(): void {
     formError = "";
-    const minutesPerDay = parseDraftMinutes();
-    if (minutesPerDay === null) {
-      formError = "Choose a duration from 1 minute to 24 hours";
+    const minutesPerDay = parseDraftDailyMinutes();
+    if (minutesPerDay === "invalid") {
+      formError = "Choose a daily budget from 1 minute to 24 hours, or None";
+      return;
+    }
+    const minutesPerWeek = parseDraftWeeklyMinutes();
+    if (minutesPerWeek === "invalid") {
+      formError = "Choose weekly hours from 0.1 to 168, or None";
+      return;
+    }
+    if (minutesPerDay === null && minutesPerWeek === null) {
+      formError = "Choose a daily or weekly budget";
       return;
     }
     const entries = validatedEntries();
@@ -396,6 +473,7 @@
     const draft = {
       name: draftName,
       minutesPerDay,
+      minutesPerWeek,
       entries,
     };
     const result = target.mode === "edit"
@@ -408,7 +486,8 @@
     }
     const messages = {
       "invalid-name": "Enter a limit name",
-      "invalid-minutes": "Choose a duration from 1 minute to 24 hours",
+      "invalid-minutes": "Choose a valid daily or weekly budget",
+      "invalid-budget": "Choose a daily or weekly budget",
       "invalid-sources": "Each linked source needs a valid website, mobile app, or desktop app",
       "duplicate-source": "Remove duplicate website or app entries",
       "protected-source": "Protected desktop apps cannot be tracked",
@@ -433,7 +512,7 @@
             {target.mode === "edit" ? "Edit usage limit" : "Add usage limit"}
           </h1>
           <p class="mt-1 max-w-2xl text-[0.866667rem] text-muted-foreground">
-            Link every source that should share the same daily budget.
+            Link every source that should share the same usage budget.
           </p>
         </div>
       </div>
@@ -476,14 +555,14 @@
 
         <CustomSelect
           label="Daily budget"
-          description="Presets cover common limits"
-          value={draftDurationMode}
-          options={durationOptions}
-          onChange={setDraftDurationMode}
+          description="Set the budget for today, or disable it"
+          value={draftDailyBudgetMode}
+          options={dailyBudgetOptions}
+          onChange={setDraftDailyBudgetMode}
           class="w-72 max-[480px]:w-full"
         />
 
-        {#if draftDurationMode === "custom"}
+        {#if draftDailyBudgetMode === "custom"}
           <div class="flex items-center justify-between gap-4 px-1 py-1 max-[480px]:flex-col max-[480px]:items-stretch max-[480px]:gap-2">
             <div class="min-w-0 flex-1">
               <label for="doomscrolling-limit-custom-minutes" class="text-[0.866667rem] text-foreground">Custom minutes</label>
@@ -491,7 +570,7 @@
             </div>
             <input
               id="doomscrolling-limit-custom-minutes"
-              bind:value={draftCustomMinutes}
+              bind:value={draftDailyCustomMinutes}
               oninput={() => {
                 formError = "";
               }}
@@ -503,6 +582,35 @@
             />
           </div>
         {/if}
+
+        <CustomSelect
+          label="Weekly budget"
+          description="Set the budget for this week, or leave it off"
+          value={draftWeeklyBudgetMode}
+          options={weeklyBudgetOptions}
+          onChange={setDraftWeeklyBudgetMode}
+          class="w-72 max-[480px]:w-full"
+        />
+
+        {#if draftWeeklyBudgetMode === "custom"}
+          <div class="flex items-center justify-between gap-4 px-1 py-1 max-[480px]:flex-col max-[480px]:items-stretch max-[480px]:gap-2">
+            <div class="min-w-0 flex-1">
+              <label for="doomscrolling-limit-custom-weekly-hours" class="text-[0.866667rem] text-foreground">Custom weekly hours</label>
+              <div class="mt-0.5 text-[0.8rem] text-muted-foreground">Use hours from 0.1 to 168, with one decimal at most</div>
+            </div>
+            <input
+              id="doomscrolling-limit-custom-weekly-hours"
+              bind:value={draftWeeklyCustomHours}
+              oninput={() => {
+                formError = "";
+              }}
+              type="text"
+              inputmode="decimal"
+              class="h-7 w-28 max-w-full rounded-md border border-border bg-card px-2.5 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring max-[480px]:w-full dark:bg-transparent"
+              placeholder="5.5"
+            />
+          </div>
+        {/if}
       </section>
 
       <div class="h-px bg-border/70" aria-hidden="true"></div>
@@ -511,7 +619,7 @@
         <div class="min-w-0 px-1">
           <h2 class="text-[0.866667rem] font-semibold text-foreground">Linked sources</h2>
           <div class="mt-0.5 text-[0.8rem] text-muted-foreground">
-            Each row can connect the same product across browser, mobile, and desktop.
+            Each source can connect the same product across browser, mobile, and desktop.
           </div>
         </div>
 
@@ -655,7 +763,7 @@
 {#if pendingDeleteEntryId}
   <ConfirmDialog
     title="Delete linked source?"
-    message="This removes the source from the daily limit. Today's tracked usage stays in history."
+    message="This removes the source from the usage limit. Tracked usage stays in history."
     confirmLabel="Delete (Enter)"
     cancelLabel="Cancel (Esc)"
     onConfirm={confirmDeleteEntry}

@@ -1,16 +1,18 @@
 <script lang="ts">
+  import Check from "@lucide/svelte/icons/check";
   import CircleAlert from "@lucide/svelte/icons/circle-alert";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Plus from "@lucide/svelte/icons/plus";
   import Power from "@lucide/svelte/icons/power";
-  import PowerOff from "@lucide/svelte/icons/power-off";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import { getEventColor } from "$lib/components/calendar/utils";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import {
-    computeDoomscrollingLimitEntryDailyTotals,
+    computeDoomscrollingLimitEntryWindowTotals,
     doomscrollingLimitEntryKey,
     type DoomscrollingLimitEntry,
+    type DoomscrollingLimitPeriod,
+    type DoomscrollingLimitTotal,
     type DoomscrollingUsageLimit,
   } from "$lib/doomscrolling";
   import { getDoomscrolling } from "$lib/stores/doomscrolling.svelte";
@@ -55,20 +57,6 @@
     return remainder > 0 ? `${hours}h ${remainder}m` : `${hours}h`;
   }
 
-  function formatDailyLimit(minutes: number): string {
-    return minutes < 60 ? `${minutes}m` : formatMinutes(minutes * 60);
-  }
-
-  function totalUsedSeconds(limitId: string): number {
-    return usage.totalFor(limitId)?.usedSeconds ?? 0;
-  }
-
-  function progressPercent(limit: DoomscrollingUsageLimit): number {
-    const used = totalUsedSeconds(limit.id);
-    const total = limit.minutesPerDay * 60;
-    return Math.min(100, Math.round((used / total) * 100));
-  }
-
   interface LimitProgressSegment {
     entry: DoomscrollingLimitEntry;
     usedSeconds: number;
@@ -76,15 +64,37 @@
     color: string;
   }
 
+  interface LimitBudgetView {
+    total: DoomscrollingLimitTotal;
+    period: DoomscrollingLimitPeriod;
+    segments: LimitProgressSegment[];
+  }
+
   function entryColor(entry: DoomscrollingLimitEntry): string {
     return getEventColor(entry.color ?? undefined, theme.current).bg;
   }
 
-  function limitProgressSegments(limit: DoomscrollingUsageLimit): LimitProgressSegment[] {
-    const entryTotals = computeDoomscrollingLimitEntryDailyTotals(
+  function totalPeriod(total: DoomscrollingLimitTotal): DoomscrollingLimitPeriod {
+    return total.period ?? "day";
+  }
+
+  function periodUsageLabel(period: DoomscrollingLimitPeriod): string {
+    return period === "week" ? "this week" : "today";
+  }
+
+  function formatLimitSeconds(seconds: number): string {
+    return formatMinutes(seconds);
+  }
+
+  function limitProgressSegments(
+    limit: DoomscrollingUsageLimit,
+    total: DoomscrollingLimitTotal,
+  ): LimitProgressSegment[] {
+    const entryTotals = computeDoomscrollingLimitEntryWindowTotals(
       limit,
       usage.samples,
-      usage.localDate,
+      total.windowStartLocalDate ?? usage.localDate,
+      total.windowEndLocalDate ?? usage.localDate,
     );
     const usedSecondsByEntryId = new Map(
       entryTotals.map((entryTotal) => [entryTotal.entryId, entryTotal.usedSeconds] as const),
@@ -93,7 +103,7 @@
       (total, entryTotal) => total + entryTotal.usedSeconds,
       0,
     );
-    const widthBaseSeconds = Math.max(limit.minutesPerDay * 60, totalUsedSeconds, 1);
+    const widthBaseSeconds = Math.max(total.limitSeconds, totalUsedSeconds, 1);
     return limit.entries
       .map((entry) => {
         const usedSeconds = usedSecondsByEntryId.get(entry.id) ?? 0;
@@ -105,6 +115,45 @@
         };
       })
       .filter((segment) => segment.usedSeconds > 0 && segment.widthPercent > 0);
+  }
+
+  function limitBudgetViews(limit: DoomscrollingUsageLimit): LimitBudgetView[] {
+    const storedTotals = usage.totalsFor(limit.id);
+    const storedTotalByPeriod = new Map(
+      storedTotals.map((total) => [totalPeriod(total), total] as const),
+    );
+    const totals = [
+        limit.minutesPerDay === null ? null : (storedTotalByPeriod.get("day") ?? {
+          limitId: limit.id,
+          period: "day" as const,
+          windowStartLocalDate: usage.localDate,
+          windowEndLocalDate: usage.localDate,
+          usedSeconds: 0,
+          limitSeconds: limit.minutesPerDay * 60,
+          remainingSeconds: limit.minutesPerDay * 60,
+          exhausted: false,
+        }),
+        limit.minutesPerWeek === null || limit.minutesPerWeek === undefined ? null : (storedTotalByPeriod.get("week") ?? {
+          limitId: limit.id,
+          period: "week" as const,
+          windowStartLocalDate: usage.weekStartLocalDate,
+          windowEndLocalDate: usage.localDate,
+          usedSeconds: 0,
+          limitSeconds: limit.minutesPerWeek * 60,
+          remainingSeconds: limit.minutesPerWeek * 60,
+          exhausted: false,
+        }),
+      ].filter((total): total is DoomscrollingLimitTotal => total !== null);
+    return totals
+      .map((total) => ({
+        total,
+        period: totalPeriod(total),
+        segments: limitProgressSegments(limit, total),
+      }))
+      .sort((a, b) => {
+        const order = { day: 0, week: 1 } satisfies Record<DoomscrollingLimitPeriod, number>;
+        return order[a.period] - order[b.period];
+      });
   }
 
   function websiteDisplayName(host: string): string {
@@ -186,7 +235,7 @@
   <section class="flex flex-col gap-4">
     <div class="flex min-w-0 flex-wrap items-center justify-between gap-2 px-1">
       <div class="min-w-0">
-        <h2 class="text-[0.866667rem] font-semibold text-foreground">Daily limits</h2>
+        <h2 class="text-[0.866667rem] font-semibold text-foreground">Usage limits</h2>
         <div class="mt-0.5 text-[0.8rem] text-muted-foreground">
           Each limit can link one or many websites, mobile apps, and desktop apps
         </div>
@@ -203,19 +252,52 @@
 
     <div class="flex flex-col px-1">
       {#each doomscrolling.usageLimits as limit (limit.id)}
-        {@const used = totalUsedSeconds(limit.id)}
-        {@const segments = limitProgressSegments(limit)}
+        {@const budgetViews = limitBudgetViews(limit)}
         <article
-          class="flex min-w-0 flex-col gap-2 border-b border-border/70 py-2"
+          class={cn(
+            "flex min-w-0 flex-col gap-1.5 border-b border-border/70 py-4 transition-opacity",
+            !limit.enabled && "opacity-50",
+          )}
           aria-label={limit.enabled ? limit.name : `${limit.name} disabled`}
         >
           <div class="flex min-w-0 flex-wrap items-start justify-between gap-2">
             <div class="min-w-0 flex-1">
-              <h3 class={cn("truncate text-[0.866667rem] text-foreground", !limit.enabled && "opacity-50 line-through")}>
+              <h3 class="truncate text-[0.866667rem] text-foreground">
                 {limit.name}
               </h3>
-              <div class="mt-0.5 text-[0.8rem] text-muted-foreground">
-                {formatMinutes(used)} used of {formatDailyLimit(limit.minutesPerDay)} today
+              <div class="mt-0.5 flex min-w-0 flex-col gap-2">
+                {#each budgetViews as view (`${limit.id}:${view.period}`)}
+                  <div class="flex min-w-0 flex-col gap-2 pt-2 first:pt-0">
+                    <div class="text-[0.8rem] text-muted-foreground">
+                      {formatMinutes(view.total.usedSeconds)} used of {formatLimitSeconds(view.total.limitSeconds)} {periodUsageLabel(view.period)}
+                    </div>
+
+                    <div class="flex h-1.5 overflow-hidden rounded-full bg-muted">
+                      {#if view.segments.length > 0}
+                        {#each view.segments as segment (segment.entry.id)}
+                          <div
+                            class="h-full first:rounded-l-full last:rounded-r-full"
+                            style={`width: ${segment.widthPercent}%; background-color: ${segment.color};`}
+                            title={`${entryLabel(segment.entry)}: ${formatMinutes(segment.usedSeconds)}`}
+                          ></div>
+                        {/each}
+                      {/if}
+                    </div>
+
+                    <div class="flex min-w-0 flex-wrap gap-1.5">
+                      {#each limit.entries as entry (doomscrollingLimitEntryKey(entry))}
+                        <span class="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-transparent px-2 py-1 text-[0.733333rem] text-foreground">
+                          <span
+                            class="h-2 w-2 shrink-0 rounded-full"
+                            style={`background-color: ${entryColor(entry)};`}
+                            aria-hidden="true"
+                          ></span>
+                          <span class="truncate">{entryLabel(entry)}</span>
+                        </span>
+                      {/each}
+                    </div>
+                  </div>
+                {/each}
               </div>
             </div>
             <div class="flex shrink-0 items-center gap-1.5">
@@ -227,7 +309,7 @@
                 class="flex h-7 w-24 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2 text-[0.8rem] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
               >
                 {#if limit.enabled}
-                  <PowerOff size={13} strokeWidth={2} class="shrink-0" />
+                  <Check size={13} strokeWidth={2.25} class="shrink-0" />
                   <span>Enabled</span>
                 {:else}
                   <Power size={13} strokeWidth={2} class="shrink-0" />
@@ -255,40 +337,10 @@
               </button>
             </div>
           </div>
-
-          <div class="flex h-1.5 overflow-hidden rounded-full bg-muted">
-            {#if segments.length > 0}
-              {#each segments as segment (segment.entry.id)}
-                <div
-                  class="h-full first:rounded-l-full last:rounded-r-full"
-                  style={`width: ${segment.widthPercent}%; background-color: ${segment.color};`}
-                  title={`${entryLabel(segment.entry)}: ${formatMinutes(segment.usedSeconds)}`}
-                ></div>
-              {/each}
-            {:else}
-              <div
-                class="h-full rounded-full bg-primary"
-                style={`width: ${progressPercent(limit)}%`}
-              ></div>
-            {/if}
-          </div>
-
-          <div class="flex min-w-0 flex-wrap gap-1.5">
-            {#each limit.entries as entry (doomscrollingLimitEntryKey(entry))}
-              <span class="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-transparent px-2 py-1 text-[0.733333rem] text-foreground">
-                <span
-                  class="h-2 w-2 shrink-0 rounded-full"
-                  style={`background-color: ${entryColor(entry)};`}
-                  aria-hidden="true"
-                ></span>
-                <span class="truncate">{entryLabel(entry)}</span>
-              </span>
-            {/each}
-          </div>
         </article>
       {:else}
         <div class="flex h-10 items-center border-b border-border/70 text-[0.8rem] text-muted-foreground">
-          No daily limits yet
+          No usage limits yet
         </div>
       {/each}
     </div>
@@ -303,7 +355,7 @@
     <div class="flex flex-col gap-3">
       <ToggleSetting
         label="Enable usage limits"
-        description="Apply daily budgets whenever Ganbaru AI is running"
+        description="Apply daily and weekly budgets whenever Ganbaru AI is running"
         checked={doomscrolling.limitsEnabled}
         onChange={requestGlobalEnabledChange}
       />

@@ -60,6 +60,9 @@ export interface DoomscrollingUsageSampleRow {
 
 export interface DoomscrollingLimitStateItem {
   id: string;
+  period: "day" | "week";
+  windowStartLocalDate: string;
+  windowEndLocalDate: string;
   usedSeconds: number;
   limitSeconds: number;
   remainingSeconds: number;
@@ -68,6 +71,7 @@ export interface DoomscrollingLimitStateItem {
 
 export interface DoomscrollingLimitState {
   localDate: string;
+  weekStartLocalDate: string;
   updatedAt: string;
   databaseFileName: "ganbaru-ai.db" | "ganbaru-ai-dev.db" | "ganbaru-ai-benchmark.db";
   limits: DoomscrollingLimitStateItem[];
@@ -141,11 +145,12 @@ export async function recordDoomscrollingUsageSample(
 
 export async function listDoomscrollingUsageSamples(
   dbUrl: string,
-  localDate: string,
+  startLocalDate: string,
+  endLocalDate: string,
 ): Promise<DoomscrollingUsageSampleRow[]> {
   return await invoke<DoomscrollingUsageSampleRow[]>(
     "doomscrolling_list_usage_samples",
-    { dbUrl, localDate },
+    { dbUrl, startLocalDate, endLocalDate },
   );
 }
 

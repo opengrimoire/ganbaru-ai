@@ -1,7 +1,7 @@
 <script lang="ts">
+  import Check from "@lucide/svelte/icons/check";
   import Plus from "@lucide/svelte/icons/plus";
   import Power from "@lucide/svelte/icons/power";
-  import PowerOff from "@lucide/svelte/icons/power-off";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import { cn } from "$lib/utils";
 
@@ -133,7 +133,7 @@
               class="flex h-7 w-24 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2 text-[0.8rem] text-foreground hover:bg-accent dark:bg-transparent"
             >
               {#if item.enabled}
-                <PowerOff size={13} strokeWidth={2} class="shrink-0" />
+                <Check size={13} strokeWidth={2.25} class="shrink-0" />
                 <span>Enabled</span>
               {:else}
                 <Power size={13} strokeWidth={2} class="shrink-0" />

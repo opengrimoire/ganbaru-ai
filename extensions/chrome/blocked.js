@@ -43,18 +43,22 @@ function renderBlockedState(state) {
   const remaining = typeof state?.remainingSeconds === "number" ? state.remainingSeconds : 0;
   const matchedRuleName = typeof state?.matchedRuleName === "string" ? state.matchedRuleName : "";
   const blockedByLimit = matchedRuleName.startsWith("daily limit:");
+  const blockedByWeeklyLimit = matchedRuleName.startsWith("weekly limit:");
+  const blockedByUsageLimit = blockedByLimit || blockedByWeeklyLimit;
   latestOriginalUrl = typeof state?.originalUrl === "string" ? state.originalUrl : latestOriginalUrl;
   latestBlocked = state?.blocked !== false;
 
   if (latestBlocked) {
     titleEl.textContent = blockedByLimit
       ? `${host ? displayHost(host) : "This site"} reached today's limit`
+      : blockedByWeeklyLimit
+      ? `${host ? displayHost(host) : "This site"} reached this week's limit`
       : `${host ? displayHost(host) : "This site"} is blocked`;
-    copyEl.textContent = blockedByLimit
-      ? "Come back after your daily reset."
+    copyEl.textContent = blockedByUsageLimit
+      ? "Come back after the limit resets."
       : "Stay strong and keep moving forward.";
-    remainingEl.textContent = blockedByLimit
-      ? "Daily limit reached"
+    remainingEl.textContent = blockedByUsageLimit
+      ? blockedByWeeklyLimit ? "Weekly limit reached" : "Daily limit reached"
       : Number.isFinite(remaining) && remaining > 0
       ? `${Math.ceil(remaining / 60)} min left in focus`
       : "Focus session active";

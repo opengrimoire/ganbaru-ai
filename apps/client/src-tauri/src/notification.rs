@@ -2038,16 +2038,16 @@ pub fn show_doomscrolling_desktop_limit_notification(
             .take(80)
             .collect::<String>();
         let limit_name = if limit_name.is_empty() {
-            "a daily limit".to_string()
+            "a usage limit".to_string()
         } else {
             limit_name
         };
         let body = escape_notification_markup(&format!(
-            "{app_name} was closed because {limit_name} reached today's limit. Change this in Settings > Doomscrolling > Limits (or click this notification)"
+            "{app_name} was closed because {limit_name} reached its limit. Change this in Settings > Doomscrolling > Limits (or click this notification)"
         ));
         let result = Notification::new()
             .appname("Ganbaru AI")
-            .summary("Daily limit reached")
+            .summary("Usage limit reached")
             .body(&body)
             .action("default", "Open limits")
             .timeout(10_000)

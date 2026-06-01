@@ -204,6 +204,7 @@ pub struct DoomscrollingUsageSampleRow {
 #[serde(rename_all = "camelCase")]
 pub struct DoomscrollingLimitState {
     local_date: String,
+    week_start_local_date: String,
     updated_at: String,
     database_file_name: String,
     limits: Vec<DoomscrollingLimitStateItem>,
@@ -213,6 +214,9 @@ pub struct DoomscrollingLimitState {
 #[serde(rename_all = "camelCase")]
 pub struct DoomscrollingLimitStateItem {
     id: String,
+    period: String,
+    window_start_local_date: String,
+    window_end_local_date: String,
     used_seconds: i64,
     limit_seconds: i64,
     remaining_seconds: i64,
@@ -482,6 +486,9 @@ fn validate_limit_state(state: &DoomscrollingLimitState) -> Result<(), String> {
     if !validate_local_date(&state.local_date) {
         return Err("local_date must use yyyy-mm-dd".to_string());
     }
+    if !validate_local_date(&state.week_start_local_date) {
+        return Err("week_start_local_date must use yyyy-mm-dd".to_string());
+    }
     DateTime::parse_from_rfc3339(&state.updated_at)
         .map_err(|e| format!("parse updated_at: {e}"))?;
     if !ALLOWED_USAGE_DATABASE_FILES.contains(&state.database_file_name.as_str()) {
@@ -490,6 +497,17 @@ fn validate_limit_state(state: &DoomscrollingLimitState) -> Result<(), String> {
     for limit in &state.limits {
         if limit.id.trim().is_empty() {
             return Err("limit id is required".to_string());
+        }
+        if !matches!(limit.period.as_str(), "day" | "week") {
+            return Err("limit period must be day or week".to_string());
+        }
+        if !validate_local_date(&limit.window_start_local_date)
+            || !validate_local_date(&limit.window_end_local_date)
+        {
+            return Err("limit window dates must use yyyy-mm-dd".to_string());
+        }
+        if limit.window_start_local_date.as_str() > limit.window_end_local_date.as_str() {
+            return Err("limit window start must not be after window end".to_string());
         }
         if limit.used_seconds < 0 || limit.limit_seconds <= 0 || limit.remaining_seconds < 0 {
             return Err("limit seconds must be non-negative".to_string());
@@ -1978,20 +1996,25 @@ pub async fn doomscrolling_record_usage_sample<R: Runtime>(
 pub async fn doomscrolling_list_usage_samples<R: Runtime>(
     app: tauri::AppHandle<R>,
     db_url: String,
-    local_date: String,
+    start_local_date: String,
+    end_local_date: String,
 ) -> Result<Vec<DoomscrollingUsageSampleRow>, String> {
-    if !validate_local_date(&local_date) {
-        return Err("local_date must use yyyy-mm-dd".to_string());
+    if !validate_local_date(&start_local_date) || !validate_local_date(&end_local_date) {
+        return Err("local dates must use yyyy-mm-dd".to_string());
+    }
+    if start_local_date > end_local_date {
+        return Err("start_local_date must not be after end_local_date".to_string());
     }
     let pool = connect_sqlite(app, db_url).await?;
     let rows = sqlx::query(
         "SELECT id, source_type, source_key, display_name, started_at,
                 elapsed_seconds, local_date, created_at
          FROM doomscrolling_usage_samples
-         WHERE local_date = ?
+         WHERE local_date >= ? AND local_date <= ?
          ORDER BY started_at ASC, id ASC",
     )
-    .bind(local_date)
+    .bind(start_local_date)
+    .bind(end_local_date)
     .fetch_all(&pool)
     .await
     .map_err(|e| format!("list doomscrolling usage samples: {e}"))?;
@@ -2243,10 +2266,14 @@ mod tests {
     fn limit_state_requires_a_local_date() {
         let state = DoomscrollingLimitState {
             local_date: "today".to_string(),
+            week_start_local_date: "2026-05-25".to_string(),
             updated_at: "2026-05-28T00:00:00.000Z".to_string(),
             database_file_name: "ganbaru-ai-dev.db".to_string(),
             limits: vec![DoomscrollingLimitStateItem {
                 id: "youtube".to_string(),
+                period: "day".to_string(),
+                window_start_local_date: "2026-05-28".to_string(),
+                window_end_local_date: "2026-05-28".to_string(),
                 used_seconds: 60,
                 limit_seconds: 600,
                 remaining_seconds: 540,

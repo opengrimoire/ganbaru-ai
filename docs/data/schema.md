@@ -434,7 +434,7 @@ Music files remain outside the vault. SQLite stores playlist definitions, source
 
 ### `doomscrolling_usage_samples`
 
-Append-only active-use samples for daily Doomscrolling usage limits. Configuration lives in `vault/config.json` under `doomscrolling.limits` because it is user settings, while usage history is structured behavioral data and belongs in SQLite.
+Append-only active-use samples for Doomscrolling usage limits. Configuration lives in `vault/config.json` under `doomscrolling.limits` because it is user settings, while usage history is structured behavioral data and belongs in SQLite.
 
 Each row stores one measured active-use interval. The browser extension records active focused tab time through native messaging and sends only a normalized host plus elapsed seconds. Desktop samples use focused foreground app time where the platform exposes it. On Wayland sessions that do not expose focused app tracking, desktop samples use selected-app process-open time instead.
 
@@ -454,7 +454,7 @@ Indexes:
 - `(local_date, source_type, source_key)` for current-day totals and source-specific analysis.
 - `(started_at)` for timeline and cleanup queries.
 
-Daily totals are derived from samples and the current `doomscrolling.limits.items` definitions, including each limit entry's website, mobile app, desktop app display label, desktop app match names, and optional source color palette slot. This means editing a limit changes how today's historical samples roll up, without rewriting the samples themselves. The source color is user-facing display metadata for segmenting the daily limit bar and does not affect matching. A local `doomscrolling-limit-state.json` snapshot in the app config directory contains derived totals and the active SQLite filename for the native browser host so URL decisions stay fast and usage samples are recorded into the same database the UI reads.
+Daily and weekly totals are derived from samples and the current `doomscrolling.limits.items` definitions, including each limit entry's website, mobile app, desktop app display label, desktop app match names, and optional source color palette slot. This means editing a limit changes how current-day and current-week historical samples roll up, without rewriting the samples themselves. Daily budgets use `minutesPerDay`, weekly budgets use `minutesPerWeek`, and at least one budget must be present. Weekly totals use the Monday-based local week. The source color is user-facing display metadata for segmenting the limit bars and does not affect matching. A local `doomscrolling-limit-state.json` snapshot in the app config directory contains derived daily and weekly totals, each total's period and local-date window, and the active SQLite filename for the native browser host so URL decisions stay fast and usage samples are recorded into the same database the UI reads.
 
 ## Other features (stub)
 

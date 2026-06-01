@@ -159,7 +159,8 @@ struct UsageLimit {
     id: String,
     name: String,
     enabled: bool,
-    minutes_per_day: i64,
+    minutes_per_day: Option<i64>,
+    minutes_per_week: Option<i64>,
     entries: Vec<UsageLimitEntry>,
 }
 
@@ -196,6 +197,7 @@ struct StateSnapshot {
 #[serde(rename_all = "camelCase")]
 struct LimitState {
     local_date: String,
+    week_start_local_date: Option<String>,
     updated_at: String,
     database_file_name: Option<String>,
     limits: Vec<LimitStateItem>,
@@ -205,6 +207,9 @@ struct LimitState {
 #[serde(rename_all = "camelCase")]
 struct LimitStateItem {
     id: String,
+    period: Option<String>,
+    window_start_local_date: Option<String>,
+    window_end_local_date: Option<String>,
     used_seconds: i64,
     limit_seconds: i64,
     remaining_seconds: i64,
@@ -629,8 +634,9 @@ fn read_usage_limit(item: &Value) -> Option<UsageLimit> {
     };
     let id = normalize_limit_id(record.get("id").and_then(Value::as_str)?)?;
     let name = normalize_usage_limit_name(record.get("name").and_then(Value::as_str)?)?;
-    let minutes_per_day = record.get("minutesPerDay").and_then(Value::as_i64)?;
-    if !(1..=1440).contains(&minutes_per_day) {
+    let minutes_per_day = read_optional_limit_minutes(record.get("minutesPerDay"), 1440)?;
+    let minutes_per_week = read_optional_limit_minutes(record.get("minutesPerWeek"), 7 * 24 * 60)?;
+    if minutes_per_day.is_none() && minutes_per_week.is_none() {
         return None;
     }
     let entries = read_usage_limit_entries(record.get("entries")?)?;
@@ -639,8 +645,19 @@ fn read_usage_limit(item: &Value) -> Option<UsageLimit> {
         name,
         enabled: record.get("enabled").and_then(Value::as_bool) != Some(false),
         minutes_per_day,
+        minutes_per_week,
         entries,
     })
+}
+
+fn read_optional_limit_minutes(value: Option<&Value>, max_minutes: i64) -> Option<Option<i64>> {
+    match value {
+        None | Some(Value::Null) => Some(None),
+        Some(value) => {
+            let minutes = value.as_i64()?;
+            (1..=max_minutes).contains(&minutes).then_some(Some(minutes))
+        }
+    }
 }
 
 fn normalize_limit_id(value: &str) -> Option<String> {
@@ -1061,9 +1078,11 @@ fn decide_url_limit(
             .iter()
             .any(|entry| limit_entry_matches_host(entry, host))
         {
+            let period = total.period.as_deref().unwrap_or("day");
+            let period_label = if period == "week" { "weekly" } else { "daily" };
             return HostDecision {
                 blocked: true,
-                matched_rule_name: Some(format!("daily limit: {}", limit.name)),
+                matched_rule_name: Some(format!("{period_label} limit: {}", limit.name)),
             };
         }
     }
@@ -1163,7 +1182,18 @@ fn rules_fingerprint(config: &DoomscrollingConfig, limit_state: Option<&LimitSta
         feed_fingerprint(&mut hash, &limit.id);
         feed_fingerprint(&mut hash, &limit.name);
         feed_fingerprint_bool(&mut hash, limit.enabled);
-        feed_fingerprint(&mut hash, &limit.minutes_per_day.to_string());
+        feed_fingerprint(&mut hash, "day");
+        if let Some(minutes_per_day) = limit.minutes_per_day {
+            feed_fingerprint(&mut hash, &minutes_per_day.to_string());
+        } else {
+            feed_fingerprint(&mut hash, "none");
+        }
+        feed_fingerprint(&mut hash, "week");
+        if let Some(minutes_per_week) = limit.minutes_per_week {
+            feed_fingerprint(&mut hash, &minutes_per_week.to_string());
+        } else {
+            feed_fingerprint(&mut hash, "none");
+        }
         for entry in &limit.entries {
             feed_fingerprint(&mut hash, &entry.id);
             if let Some(name) = &entry.name {
@@ -1176,11 +1206,23 @@ fn rules_fingerprint(config: &DoomscrollingConfig, limit_state: Option<&LimitSta
     }
     if let Some(limit_state) = limit_state {
         feed_fingerprint(&mut hash, &limit_state.local_date);
+        if let Some(week_start_local_date) = &limit_state.week_start_local_date {
+            feed_fingerprint(&mut hash, week_start_local_date);
+        }
         if let Some(database_file_name) = &limit_state.database_file_name {
             feed_fingerprint(&mut hash, database_file_name);
         }
         for limit in &limit_state.limits {
             feed_fingerprint(&mut hash, &limit.id);
+            if let Some(period) = &limit.period {
+                feed_fingerprint(&mut hash, period);
+            }
+            if let Some(window_start_local_date) = &limit.window_start_local_date {
+                feed_fingerprint(&mut hash, window_start_local_date);
+            }
+            if let Some(window_end_local_date) = &limit.window_end_local_date {
+                feed_fingerprint(&mut hash, window_end_local_date);
+            }
             feed_fingerprint(&mut hash, &limit.used_seconds.to_string());
             feed_fingerprint(&mut hash, &limit.limit_seconds.to_string());
             feed_fingerprint(&mut hash, &limit.remaining_seconds.to_string());
@@ -1416,6 +1458,34 @@ fn limit_state_is_fresh(state: &LimitState) -> bool {
         return false;
     }
     if state
+        .week_start_local_date
+        .as_deref()
+        .is_some_and(|local_date| !valid_local_date(local_date))
+    {
+        return false;
+    }
+    if state.limits.iter().any(|limit| {
+        limit
+            .period
+            .as_deref()
+            .is_some_and(|period| period != "day" && period != "week")
+            || limit
+                .window_start_local_date
+                .as_deref()
+                .is_some_and(|local_date| !valid_local_date(local_date))
+            || limit
+                .window_end_local_date
+                .as_deref()
+                .is_some_and(|local_date| !valid_local_date(local_date))
+            || limit
+                .window_start_local_date
+                .as_deref()
+                .zip(limit.window_end_local_date.as_deref())
+                .is_some_and(|(start, end)| start > end)
+    }) {
+        return false;
+    }
+    if state
         .database_file_name
         .as_deref()
         .is_some_and(|file_name| !ALLOWED_USAGE_DATABASE_FILES.contains(&file_name))
@@ -1589,7 +1659,8 @@ mod tests {
             id: "youtube".to_string(),
             name: "YouTube".to_string(),
             enabled: true,
-            minutes_per_day: 10,
+            minutes_per_day: Some(10),
+            minutes_per_week: None,
             entries: vec![super::UsageLimitEntry {
                 id: "youtube-website".to_string(),
                 name: None,
@@ -1600,10 +1671,14 @@ mod tests {
         }];
         let limit_state = super::LimitState {
             local_date: "2026-05-28".to_string(),
+            week_start_local_date: Some("2026-05-25".to_string()),
             updated_at: super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
             database_file_name: Some("ganbaru-ai-dev.db".to_string()),
             limits: vec![super::LimitStateItem {
                 id: "youtube".to_string(),
+                period: Some("day".to_string()),
+                window_start_local_date: Some("2026-05-28".to_string()),
+                window_end_local_date: Some("2026-05-28".to_string()),
                 used_seconds: 600,
                 limit_seconds: 600,
                 remaining_seconds: 0,
@@ -1633,7 +1708,8 @@ mod tests {
             id: "reddit".to_string(),
             name: "Reddit limit".to_string(),
             enabled: true,
-            minutes_per_day: 10,
+            minutes_per_day: Some(10),
+            minutes_per_week: None,
             entries: vec![super::UsageLimitEntry {
                 id: "reddit-website".to_string(),
                 name: None,
@@ -1644,10 +1720,14 @@ mod tests {
         }];
         let limit_state = super::LimitState {
             local_date: "2026-05-28".to_string(),
+            week_start_local_date: Some("2026-05-25".to_string()),
             updated_at: super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
             database_file_name: Some("ganbaru-ai-dev.db".to_string()),
             limits: vec![super::LimitStateItem {
                 id: "reddit".to_string(),
+                period: Some("day".to_string()),
+                window_start_local_date: Some("2026-05-28".to_string()),
+                window_end_local_date: Some("2026-05-28".to_string()),
                 used_seconds: 600,
                 limit_seconds: 600,
                 remaining_seconds: 0,
@@ -1675,6 +1755,7 @@ mod tests {
         let config_dir = std::path::Path::new("/tmp/org.opengrimoire.ganbaru-ai");
         let limit_state = super::LimitState {
             local_date: "2026-05-28".to_string(),
+            week_start_local_date: Some("2026-05-25".to_string()),
             updated_at: super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
             database_file_name: Some("ganbaru-ai-dev.db".to_string()),
             limits: Vec::new(),

@@ -14,10 +14,12 @@ import {
 } from "$lib/api/doomscrolling";
 import { ensureDbUrl } from "$lib/api/db";
 import {
-  computeDoomscrollingLimitDailyTotals,
+  computeDoomscrollingLimitTotals,
+  doomscrollingWeekStartLocalDate,
   isProtectedDoomscrollingDesktopAppName,
   matchesDoomscrollingLimitEntry,
-  type DoomscrollingDailyLimitTotal,
+  type DoomscrollingLimitPeriod,
+  type DoomscrollingLimitTotal,
   type DoomscrollingUsageSample,
 } from "$lib/doomscrolling";
 import { getDoomscrolling } from "$lib/stores/doomscrolling.svelte";
@@ -52,7 +54,8 @@ interface OpenAppUsageSnapshot {
 }
 
 let localDate = $state(todayLocalDate());
-let totals = $state<DoomscrollingDailyLimitTotal[]>([]);
+let weekStartLocalDate = $state(doomscrollingWeekStartLocalDate(localDate));
+let totals = $state<DoomscrollingLimitTotal[]>([]);
 let samples = $state<DoomscrollingUsageSample[]>([]);
 let refreshRunning = false;
 let foregroundStatus = $state<DoomscrollingForegroundDesktopAppStatus>({
@@ -107,24 +110,30 @@ async function refreshUsage(): Promise<void> {
   refreshRunning = true;
   try {
     const nextLocalDate = todayLocalDate();
+    const nextWeekStartLocalDate = doomscrollingWeekStartLocalDate(nextLocalDate);
     const dbUrl = await ensureDbUrl();
-    const rows = await listDoomscrollingUsageSamples(dbUrl, nextLocalDate);
+    const rows = await listDoomscrollingUsageSamples(dbUrl, nextWeekStartLocalDate, nextLocalDate);
     const doomscrolling = getDoomscrolling();
     const nextSamples = rows.map(rowToSample);
-    const nextTotals = computeDoomscrollingLimitDailyTotals(
+    const nextTotals = computeDoomscrollingLimitTotals(
       doomscrolling.config,
       nextSamples,
       nextLocalDate,
     );
     localDate = nextLocalDate;
+    weekStartLocalDate = nextWeekStartLocalDate;
     samples = nextSamples;
     totals = nextTotals;
     await writeDoomscrollingLimitState({
       localDate: nextLocalDate,
+      weekStartLocalDate: nextWeekStartLocalDate,
       updatedAt: new Date().toISOString(),
       databaseFileName: databaseFileNameFromUrl(dbUrl),
       limits: nextTotals.map((total) => ({
         id: total.limitId,
+        period: total.period ?? "day",
+        windowStartLocalDate: total.windowStartLocalDate ?? nextLocalDate,
+        windowEndLocalDate: total.windowEndLocalDate ?? nextLocalDate,
         usedSeconds: total.usedSeconds,
         limitSeconds: total.limitSeconds,
         remainingSeconds: total.remainingSeconds,
@@ -227,16 +236,20 @@ function exhaustedForegroundLimit(
   source: ForegroundUsageSource,
   startedAt: number,
   sampleLocalDate: string,
-): { limitId: string; limitName: string } | null {
+): { limitId: string; limitName: string; period: DoomscrollingLimitPeriod } | null {
   const doomscrolling = getDoomscrolling();
   if (!doomscrolling.limitsEnabled) return null;
   const sample = foregroundLimitSample(source, startedAt, sampleLocalDate);
   for (const limit of doomscrolling.usageLimits) {
     if (!limit.enabled) continue;
-    const total = totals.find((item) => item.limitId === limit.id);
-    if (!total?.exhausted) continue;
+    const total = totals.find((item) =>
+      item.limitId === limit.id
+      && item.exhausted
+      && item.usedSeconds >= item.limitSeconds
+    );
+    if (!total) continue;
     if (!limit.entries.some((entry) => matchesDoomscrollingLimitEntry(entry, sample))) continue;
-    return { limitId: limit.id, limitName: limit.name };
+    return { limitId: limit.id, limitName: limit.name, period: total.period ?? "day" };
   }
   return null;
 }
@@ -427,7 +440,10 @@ export function getDoomscrollingUsage() {
     get localDate(): string {
       return localDate;
     },
-    get totals(): readonly DoomscrollingDailyLimitTotal[] {
+    get weekStartLocalDate(): string {
+      return weekStartLocalDate;
+    },
+    get totals(): readonly DoomscrollingLimitTotal[] {
       return totals;
     },
     get samples(): readonly DoomscrollingUsageSample[] {
@@ -436,8 +452,11 @@ export function getDoomscrollingUsage() {
     get foregroundStatus(): DoomscrollingForegroundDesktopAppStatus {
       return foregroundStatus;
     },
-    totalFor(limitId: string): DoomscrollingDailyLimitTotal | null {
+    totalFor(limitId: string): DoomscrollingLimitTotal | null {
       return totals.find((total) => total.limitId === limitId) ?? null;
+    },
+    totalsFor(limitId: string): readonly DoomscrollingLimitTotal[] {
+      return totals.filter((total) => total.limitId === limitId);
     },
     refresh(): Promise<void> {
       return refreshUsage();
