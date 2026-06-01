@@ -6,6 +6,7 @@ import {
   normalizeDoomscrollingConfig,
   normalizeDoomscrollingCustomCategoryStackName,
   normalizeDoomscrollingDesktopAppMatchNames,
+  normalizeDoomscrollingLimitEntryColor,
   normalizeDoomscrollingLimitEntryName,
   normalizeDoomscrollingUsageLimitName,
   normalizeDoomscrollingHost,
@@ -21,6 +22,7 @@ import {
   type DoomscrollingMode,
   type DoomscrollingUsageLimit,
 } from "$lib/doomscrolling";
+import type { EventColor } from "$lib/components/calendar/types";
 import { getConfigKey, setConfigKey } from "$lib/vault/config";
 
 const CONFIG_KEY = "doomscrolling";
@@ -56,6 +58,7 @@ export interface DoomscrollingUsageLimitDraft {
 export interface DoomscrollingUsageLimitEntryDraft {
   id: string;
   name: string;
+  color?: EventColor | null;
   websiteHost: string;
   mobileAppName: string;
   desktopAppName: string;
@@ -282,7 +285,8 @@ function normalizeLimitDraftEntry(
   if (desktopAppMatchNames.some(isProtectedDoomscrollingDesktopAppName)) {
     return "protected-source";
   }
-  return {
+  const color = normalizeDoomscrollingLimitEntryColor(draft.color);
+  const entry: DoomscrollingLimitEntry = {
     id,
     name,
     websiteHost,
@@ -290,6 +294,7 @@ function normalizeLimitDraftEntry(
     desktopAppName,
     desktopAppMatchNames,
   };
+  return color === null ? entry : { ...entry, color };
 }
 
 function normalizeLimitDraft(
@@ -315,7 +320,9 @@ function normalizeLimitDraft(
   }
   const firstEntry = entries[0];
   if (!firstEntry) return "invalid-sources";
-  const name = normalizeDoomscrollingUsageLimitName(draft.name) ?? derivedEntryName(firstEntry);
+  const explicitName = normalizeDoomscrollingUsageLimitName(draft.name);
+  if (entries.length > 1 && !explicitName) return "invalid-name";
+  const name = explicitName ?? derivedEntryName(firstEntry);
   if (!name) return "invalid-name";
   return {
     name,

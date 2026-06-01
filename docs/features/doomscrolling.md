@@ -30,7 +30,7 @@ This is intentionally smaller than the full spec below. It supports domain-level
 
 Daily usage limits are budget rules, not Pomodoro phase rules. They apply whenever Ganbaru AI is running and reset at local midnight.
 
-Each limit can link one or many entries that share the same daily budget. Each entry represents a product or habit across browser, mobile, and desktop, for example `facebook.com`, the Facebook mobile app, and the Facebook desktop app. The limit name is optional in the editor. If it is empty, Ganbaru AI derives it from the first linked entry using this priority: entry name, mobile app name, desktop app name, then website name with the first letter capitalized.
+Each limit can link one or many entries that share the same daily budget. Each entry represents a product or habit across browser, mobile, and desktop, for example `facebook.com`, the Facebook mobile app, and the Facebook desktop app. Single-source limits can omit the limit name, and Ganbaru AI derives it from that source using this priority: entry name, mobile app name, desktop app name, then website name with the first letter capitalized. Multi-source limits require an explicit group name.
 
 Categories are not configurable in daily usage limits for now. Built-in categories and custom category stacks remain browser-blocking tools only.
 
@@ -38,8 +38,10 @@ Config shape under `doomscrolling.limits`:
 
 - `enabled`: global usage-limit toggle.
 - `items`: ordered list of limit definitions.
+- New items default to a 1 hour daily budget.
 - Each item has `id`, `name`, `enabled`, `minutesPerDay`, and `entries`.
-- Each entry has `id`, optional `name`, optional `websiteHost`, optional `mobileAppName`, optional `desktopAppName`, and `desktopAppMatchNames`.
+- Each entry has `id`, optional `name`, optional `color`, optional `websiteHost`, optional `mobileAppName`, optional `desktopAppName`, and `desktopAppMatchNames`.
+- `color` stores the event-palette slot used to draw that source on the daily limit bar and in the linked-source chips. New sources receive visually spaced default colors based on the 4-column picker layout.
 - `desktopAppName` is the display label selected in the picker. `desktopAppMatchNames` stores normalized app ids, executable names, shortcut names, or desktop-entry ids returned by the picker so foreground samples can match the same app across platforms.
 - At least one of `websiteHost`, `mobileAppName`, or `desktopAppName` is required for every entry.
 - Mobile app entries are stored for future mobile support, but mobile usage is not counted or enforced yet.
@@ -50,6 +52,7 @@ Limits count active use only:
 - Browser usage samples contain only the normalized host and elapsed seconds, never the full URL.
 - A blocked extension page does not count as website usage.
 - Desktop app usage counts foreground active app time where the OS exposes it. Supported foreground adapters are Windows foreground windows, macOS frontmost applications, Linux X11 EWMH active windows, and Wayland wlroots foreign-toplevel data when the compositor provides it.
+- Limit bars render today's usage as stacked source segments using each entry's configured color, so the user can see which linked website, mobile app, or desktop app consumed the budget.
 - On Wayland sessions without foreground app tracking, desktop app usage limits intentionally count selected apps while their matching process is open. This is open-app time, not focused use.
 - If neither foreground tracking nor open-app process matching is available, desktop limits show unavailable and do not count desktop app usage.
 - Deleting a limit does not delete today's usage samples. Recreating a limit with the same matching website or app fields rolls up the already recorded samples again, so deleting and re-adding a limit cannot reset today's budget.

@@ -1,8 +1,12 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import Plus from "@lucide/svelte/icons/plus";
   import Eraser from "@lucide/svelte/icons/eraser";
   import Save from "@lucide/svelte/icons/save";
-  import X from "@lucide/svelte/icons/x";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import ColorPicker from "$lib/components/calendar/ColorPicker.svelte";
+  import { FALLBACK_COLOR_INDEX, type EventColor } from "$lib/components/calendar/types";
+  import { EVENT_COLOR_OPTIONS } from "$lib/components/calendar/utils";
   import {
     isProtectedDoomscrollingDesktopAppName,
     normalizeDoomscrollingAppName,
@@ -12,7 +16,9 @@
     getDoomscrolling,
     type DoomscrollingUsageLimitEntryDraft,
   } from "$lib/stores/doomscrolling.svelte";
+  import { getTheme } from "$lib/stores/theme.svelte";
   import { getDoomscrollingUsage } from "$lib/stores/doomscrolling-usage.svelte";
+  import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import CustomSelect from "./CustomSelect.svelte";
   import DoomscrollingAppSelector, {
     type DoomscrollingAppSelection,
@@ -41,6 +47,10 @@
 
   const doomscrolling = getDoomscrolling();
   const usage = getDoomscrollingUsage();
+  const theme = getTheme();
+  const sourceColorGridColumns = 4;
+  const sourceColorColumnOrder = [0, 3, 1, 2] as const;
+  const sourceColorPickOrder = createSourceColorPickOrder();
 
   const durationOptions: readonly { value: DurationOption; label: string }[] = [
     { value: "15", label: "15 minutes" },
@@ -59,17 +69,19 @@
       .map((option) => option.value),
   );
   let draftName = $state("");
-  let draftDurationMode = $state<DurationOption>("30");
-  let draftCustomMinutes = $state("30");
+  let draftDurationMode = $state<DurationOption>("60");
+  let draftCustomMinutes = $state("60");
   let draftEntries = $state<DoomscrollingUsageLimitEntryDraft[]>([]);
   let formError = $state("");
   let desktopAppPickerEntryId = $state<string | null>(null);
+  let pendingDeleteEntryId = $state<string | null>(null);
   let editorRootEl: HTMLElement | undefined = $state();
   let editorScrollEl: HTMLElement | undefined = $state();
   let hydratedKey = "";
   const contentPaddingX = $derived(compactLayout ? "0.75rem" : iconRailLayout ? "1.25rem" : "2rem");
   const contentPaddingTop = $derived(compactLayout ? "1rem" : iconRailLayout ? "1.25rem" : "2rem");
   const contentPaddingBottom = $derived(compactLayout ? "1rem" : iconRailLayout ? "1.25rem" : "2rem");
+  const limitNameWarning = $derived(limitNameRequirementMessage());
 
   const targetLimit = $derived.by<DoomscrollingUsageLimit | null>(() => {
     if (target.mode !== "edit") return null;
@@ -104,10 +116,37 @@
     return `entry-${suffix}`;
   }
 
-  function createEntryDraft(): DoomscrollingUsageLimitEntryDraft {
+  function createSourceColorPickOrder(): readonly EventColor[] {
+    const rows = Math.ceil(EVENT_COLOR_OPTIONS.length / sourceColorGridColumns);
+    const colors: EventColor[] = [];
+    for (const column of sourceColorColumnOrder) {
+      for (let row = 0; row < rows; row += 1) {
+        const color = EVENT_COLOR_OPTIONS[(row * sourceColorGridColumns) + column];
+        if (typeof color === "number") colors.push(color);
+      }
+    }
+    return colors;
+  }
+
+  function entryColorForIndex(index: number): EventColor {
+    return sourceColorPickOrder[index % sourceColorPickOrder.length] ?? FALLBACK_COLOR_INDEX;
+  }
+
+  function nextEntryColor(): EventColor {
+    const usedColors = new Set(
+      draftEntries
+        .map((entry) => entry.color)
+        .filter((color): color is EventColor => typeof color === "number"),
+    );
+    return sourceColorPickOrder.find((color) => !usedColors.has(color))
+      ?? entryColorForIndex(draftEntries.length);
+  }
+
+  function createEntryDraft(color: EventColor = nextEntryColor()): DoomscrollingUsageLimitEntryDraft {
     return {
       id: createEntryId(),
       name: "",
+      color,
       websiteHost: "",
       mobileAppName: "",
       desktopAppName: "",
@@ -129,30 +168,36 @@
     return draftEntries.filter(entryHasAnyField);
   }
 
+  function limitNameRequirementMessage(): string {
+    if (activeEntries().length <= 1 || draftName.trim() !== "") return "";
+    return "Add a limit name when grouping multiple sources.";
+  }
+
   function hydrateDraft(): void {
     formError = "";
     if (target.mode === "create") {
       draftName = "";
-      draftDurationMode = "30";
-      draftCustomMinutes = "30";
-      draftEntries = [createEntryDraft()];
+      draftDurationMode = "60";
+      draftCustomMinutes = "60";
+      draftEntries = [createEntryDraft(entryColorForIndex(0))];
       return;
     }
     const limit = targetLimit;
     if (!limit) {
       draftName = "";
-      draftDurationMode = "30";
-      draftCustomMinutes = "30";
-      draftEntries = [createEntryDraft()];
+      draftDurationMode = "60";
+      draftCustomMinutes = "60";
+      draftEntries = [createEntryDraft(entryColorForIndex(0))];
       formError = "Limit no longer exists";
       return;
     }
     draftName = limit.name;
     draftDurationMode = durationModeForMinutes(limit.minutesPerDay);
     draftCustomMinutes = String(limit.minutesPerDay);
-    draftEntries = limit.entries.map((entry) => ({
+    draftEntries = limit.entries.map((entry, index) => ({
       id: entry.id,
       name: entry.name ?? "",
+      color: entry.color ?? entryColorForIndex(index),
       websiteHost: entry.websiteHost ?? "",
       mobileAppName: entry.mobileAppName ?? "",
       desktopAppName: entry.desktopAppName ?? "",
@@ -208,14 +253,19 @@
     });
   }
 
-  function addEntry(): void {
+  async function addEntry(): Promise<void> {
     draftEntries = [...draftEntries, createEntryDraft()];
     formError = "";
+    await tick();
+    editorScrollEl?.scrollTo({
+      top: editorScrollEl.scrollHeight,
+      behavior: "smooth",
+    });
   }
 
   function updateEntry(
     id: string,
-    field: keyof Omit<DoomscrollingUsageLimitEntryDraft, "id" | "desktopAppMatchNames">,
+    field: keyof Omit<DoomscrollingUsageLimitEntryDraft, "id" | "color" | "desktopAppMatchNames">,
     value: string,
   ): void {
     draftEntries = draftEntries.map((entry) =>
@@ -224,11 +274,36 @@
     formError = "";
   }
 
-  function removeEntry(id: string): void {
+  function updateEntryColor(id: string, color: EventColor | undefined): void {
+    draftEntries = draftEntries.map((entry) =>
+      entry.id === id ? { ...entry, color: color ?? null } : entry
+    );
+    formError = "";
+  }
+
+  function removeEntryImmediately(id: string): void {
     draftEntries = draftEntries.filter((entry) => entry.id !== id);
     if (draftEntries.length === 0) draftEntries = [createEntryDraft()];
     if (desktopAppPickerEntryId === id) desktopAppPickerEntryId = null;
+    if (pendingDeleteEntryId === id) pendingDeleteEntryId = null;
     formError = "";
+  }
+
+  function requestRemoveEntry(entry: DoomscrollingUsageLimitEntryDraft): void {
+    if (!entryHasAnyField(entry)) {
+      removeEntryImmediately(entry.id);
+      return;
+    }
+    pendingDeleteEntryId = entry.id;
+  }
+
+  function confirmDeleteEntry(): void {
+    if (!pendingDeleteEntryId) return;
+    removeEntryImmediately(pendingDeleteEntryId);
+  }
+
+  function cancelDeleteEntry(): void {
+    pendingDeleteEntryId = null;
   }
 
   function openDesktopAppPicker(id: string): void {
@@ -290,7 +365,7 @@
       return null;
     }
     if (entries.some((entry) => !entryHasAnySource(entry))) {
-      formError = "Each linked row needs a website, mobile app, or desktop app";
+      formError = "Each linked source needs a website, mobile app, or desktop app";
       return null;
     }
     for (const entry of entries) {
@@ -314,6 +389,10 @@
     }
     const entries = validatedEntries();
     if (!entries) return;
+    if (entries.length > 1 && draftName.trim() === "") {
+      formError = "";
+      return;
+    }
     const draft = {
       name: draftName,
       minutesPerDay,
@@ -330,7 +409,7 @@
     const messages = {
       "invalid-name": "Enter a limit name",
       "invalid-minutes": "Choose a duration from 1 minute to 24 hours",
-      "invalid-sources": "Each row needs a valid website, mobile app, or desktop app",
+      "invalid-sources": "Each linked source needs a valid website, mobile app, or desktop app",
       "duplicate-source": "Remove duplicate website or app entries",
       "protected-source": "Protected desktop apps cannot be tracked",
       missing: "Limit no longer exists",
@@ -370,17 +449,29 @@
         <div class="flex items-center justify-between gap-4 px-1 py-1 max-[480px]:flex-col max-[480px]:items-stretch max-[480px]:gap-2">
           <div class="min-w-0 flex-1">
             <label for="doomscrolling-limit-name" class="text-[0.866667rem] text-foreground">Limit name</label>
-            <div class="mt-0.5 text-[0.8rem] text-muted-foreground">Optional. Empty names use the first linked row.</div>
+            <div class="mt-0.5 text-[0.8rem] text-muted-foreground">Name this source group in the limits list</div>
           </div>
-          <input
-            id="doomscrolling-limit-name"
-            bind:value={draftName}
-            oninput={() => {
-              formError = "";
-            }}
-            class="h-7 w-72 max-w-full rounded-md border border-border bg-card px-2.5 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring max-[480px]:w-full dark:bg-transparent"
-            placeholder="YouTube"
-          />
+          <div class="flex w-72 max-w-full flex-col gap-1 max-[480px]:w-full">
+            <input
+              id="doomscrolling-limit-name"
+              bind:value={draftName}
+              oninput={() => {
+                formError = "";
+              }}
+              class={[
+                "h-7 w-full rounded-md border bg-card px-2.5 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring dark:bg-transparent",
+                limitNameWarning ? "border-destructive" : "border-border",
+              ]}
+              aria-invalid={limitNameWarning ? "true" : "false"}
+              aria-describedby={limitNameWarning ? "doomscrolling-limit-name-warning" : undefined}
+              placeholder="Social media"
+            />
+            {#if limitNameWarning}
+              <div id="doomscrolling-limit-name-warning" class="text-[0.733333rem] text-destructive">
+                {limitNameWarning}
+              </div>
+            {/if}
+          </div>
         </div>
 
         <CustomSelect
@@ -424,68 +515,86 @@
           </div>
         </div>
 
-        <div class="overflow-x-auto px-1">
-          <div class="min-w-full overflow-hidden rounded-md border border-border">
-            <div class="grid grid-cols-[minmax(8rem,1fr)_minmax(10rem,1fr)_minmax(10rem,1fr)_minmax(10rem,1fr)_2.5rem] border-b border-border bg-muted/30 text-[0.733333rem] font-medium text-muted-foreground">
-              <div class="px-2 py-1.5">Name</div>
-              <div class="px-2 py-1.5">Website domain</div>
-              <div class="px-2 py-1.5">Mobile app</div>
-              <div class="px-2 py-1.5">Desktop app</div>
-              <div aria-hidden="true"></div>
-            </div>
-            {#each draftEntries as entry (entry.id)}
-              <div class="grid grid-cols-[minmax(8rem,1fr)_minmax(10rem,1fr)_minmax(10rem,1fr)_minmax(10rem,1fr)_2.5rem] items-center border-b border-border/70 last:border-b-0">
+        <div class="flex flex-col gap-3 px-1">
+          {#each draftEntries as entry (entry.id)}
+            <div class="flex min-w-0 flex-col gap-3 rounded-md border border-border bg-card/35 p-3 dark:bg-transparent">
+              <div class="flex min-w-0 items-center gap-2">
                 <input
                   value={entry.name}
                   oninput={(event) => updateEntry(entry.id, "name", event.currentTarget.value)}
-                  class="h-9 min-w-0 border-0 border-r border-border/70 bg-transparent px-2 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:bg-accent/35"
+                  aria-label="Source name"
+                  class="h-8 min-w-0 flex-1 rounded-md border border-border bg-background/70 px-2.5 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring dark:bg-transparent"
                   placeholder="Name..."
                 />
-                <input
-                  value={entry.websiteHost}
-                  oninput={(event) => updateEntry(entry.id, "websiteHost", event.currentTarget.value)}
-                  class="h-9 min-w-0 border-0 border-r border-border/70 bg-transparent px-2 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:bg-accent/35"
-                  placeholder="domain.com"
-                />
-                <input
-                  value={entry.mobileAppName}
-                  oninput={(event) => updateEntry(entry.id, "mobileAppName", event.currentTarget.value)}
-                  class="h-9 min-w-0 border-0 border-r border-border/70 bg-transparent px-2 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:bg-accent/35"
-                  placeholder="App name..."
-                />
-                <div class="flex h-9 min-w-0 items-center gap-1 border-r border-border/70 px-1.5">
-                  <button
-                    type="button"
-                    onclick={() => openDesktopAppPicker(entry.id)}
-                    class={[
-                      "min-w-0 flex-1 truncate rounded-sm px-1.5 py-1 text-left text-[0.8rem] outline-none transition-colors hover:bg-accent focus:bg-accent",
-                      entry.desktopAppName ? "text-foreground" : "text-muted-foreground",
-                    ]}
-                  >
-                    {entry.desktopAppName || "Choose app..."}
-                  </button>
-                  {#if entry.desktopAppName}
-                    <button
-                      type="button"
-                      onclick={() => clearDesktopApp(entry.id)}
-                      aria-label="Clear desktop app"
-                      class="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                    >
-                      <Eraser size={12} strokeWidth={2.25} />
-                    </button>
-                  {/if}
+                <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground dark:bg-transparent">
+                  <ColorPicker
+                    color={entry.color ?? undefined}
+                    theme={theme.current}
+                    title="Source color"
+                    ariaLabel="Select source color"
+                    onselect={(color) => updateEntryColor(entry.id, color)}
+                  />
                 </div>
                 <button
                   type="button"
-                  onclick={() => removeEntry(entry.id)}
+                  onclick={() => requestRemoveEntry(entry)}
                   aria-label="Remove linked source row"
-                  class="flex h-9 w-full items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  data-app-tooltip-disabled="true"
+                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground dark:bg-transparent"
                 >
-                  <X size={13} strokeWidth={2.25} />
+                  <Trash2 size={13} strokeWidth={2.25} />
                 </button>
               </div>
-            {/each}
-          </div>
+
+              <div class="grid min-w-0 grid-cols-1 gap-2 min-[680px]:grid-cols-3">
+                <label class="flex min-w-0 flex-col gap-1">
+                  <span class="text-[0.733333rem] font-medium text-muted-foreground">Website</span>
+                  <input
+                    value={entry.websiteHost}
+                    oninput={(event) => updateEntry(entry.id, "websiteHost", event.currentTarget.value)}
+                    class="h-8 min-w-0 rounded-md border border-border bg-background/70 px-2.5 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring dark:bg-transparent"
+                    placeholder="domain.com"
+                  />
+                </label>
+
+                <label class="flex min-w-0 flex-col gap-1">
+                  <span class="text-[0.733333rem] font-medium text-muted-foreground">Mobile</span>
+                  <input
+                    value={entry.mobileAppName}
+                    oninput={(event) => updateEntry(entry.id, "mobileAppName", event.currentTarget.value)}
+                    class="h-8 min-w-0 rounded-md border border-border bg-background/70 px-2.5 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring dark:bg-transparent"
+                    placeholder="App name..."
+                  />
+                </label>
+
+                <div class="flex min-w-0 flex-col gap-1">
+                  <span class="text-[0.733333rem] font-medium text-muted-foreground">Desktop</span>
+                  <div class="flex h-8 min-w-0 items-center gap-1 rounded-md border border-border bg-background/70 px-1.5 dark:bg-transparent">
+                    <button
+                      type="button"
+                      onclick={() => openDesktopAppPicker(entry.id)}
+                      class={[
+                        "min-w-0 flex-1 truncate rounded-sm px-1.5 py-1 text-left text-[0.8rem] outline-none transition-colors hover:bg-accent focus:bg-accent",
+                        entry.desktopAppName ? "text-foreground" : "text-muted-foreground",
+                      ]}
+                    >
+                      {entry.desktopAppName || "Choose app..."}
+                    </button>
+                    {#if entry.desktopAppName}
+                      <button
+                        type="button"
+                        onclick={() => clearDesktopApp(entry.id)}
+                        aria-label="Clear desktop app"
+                        class="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                      >
+                        <Eraser size={12} strokeWidth={2.25} />
+                      </button>
+                    {/if}
+                  </div>
+                </div>
+              </div>
+            </div>
+          {/each}
         </div>
 
         <div class="flex justify-end px-1">
@@ -495,14 +604,11 @@
             class="flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
           >
             <Plus size={13} strokeWidth={2.25} />
-            <span>Add row</span>
+            <span>Add source</span>
           </button>
         </div>
       </section>
 
-      {#if formError}
-        <div class="text-[0.8rem] text-destructive">{formError}</div>
-      {/if}
     </div>
   </main>
 
@@ -510,22 +616,27 @@
     class="shrink-0"
     style="padding-left: {contentPaddingX}; padding-right: {contentPaddingX}; padding-bottom: {contentPaddingBottom};"
   >
-    <div class="flex flex-wrap justify-end gap-2 border-t border-border/70 pt-3">
-      <button
-        type="button"
-        onclick={onCancel}
-        class="flex h-8 items-center justify-center rounded-md border border-border bg-card px-3 text-[0.8rem] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
-      >
-        Cancel
-      </button>
-      <button
-        type="button"
-        onclick={saveLimit}
-        class="flex h-8 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-[0.8rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-      >
-        <Save size={13} strokeWidth={2.25} />
-        <span>Save</span>
-      </button>
+    <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border/70 pt-3">
+      <div class="min-w-0 flex-1 text-[0.8rem] text-destructive">
+        {formError}
+      </div>
+      <div class="flex shrink-0 flex-wrap justify-end gap-2">
+        <button
+          type="button"
+          onclick={onCancel}
+          class="flex h-8 items-center justify-center rounded-md border border-border bg-card px-3 text-[0.8rem] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onclick={saveLimit}
+          class="flex h-8 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-[0.8rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          <Save size={13} strokeWidth={2.25} />
+          <span>Save</span>
+        </button>
+      </div>
     </div>
   </footer>
 </div>
@@ -538,5 +649,16 @@
     protectAppSelf
     onSelect={chooseDesktopApp}
     onCancel={closeDesktopAppPicker}
+  />
+{/if}
+
+{#if pendingDeleteEntryId}
+  <ConfirmDialog
+    title="Delete linked source?"
+    message="This removes the source from the daily limit. Today's tracked usage stays in history."
+    confirmLabel="Delete (Enter)"
+    cancelLabel="Cancel (Esc)"
+    onConfirm={confirmDeleteEntry}
+    onCancel={cancelDeleteEntry}
   />
 {/if}

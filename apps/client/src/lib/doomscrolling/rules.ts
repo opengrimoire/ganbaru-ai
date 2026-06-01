@@ -1,4 +1,5 @@
 import rawDoomscrollingCategoryDefinitions from "./categories.json";
+import { PALETTE_SIZE, type EventColor } from "$lib/components/calendar/types";
 
 export type DoomscrollingMode = "blacklist" | "whitelist";
 
@@ -262,6 +263,7 @@ export interface DoomscrollingDesktopConfig {
 export interface DoomscrollingLimitEntry {
   id: string;
   name: string | null;
+  color?: EventColor | null;
   websiteHost: string | null;
   mobileAppName: string | null;
   desktopAppName: string | null;
@@ -317,6 +319,11 @@ export interface DoomscrollingDailyLimitTotal {
   limitSeconds: number;
   remainingSeconds: number;
   exhausted: boolean;
+}
+
+export interface DoomscrollingDailyLimitEntryTotal {
+  entryId: string;
+  usedSeconds: number;
 }
 
 export interface DoomscrollingLimitDecision {
@@ -660,6 +667,12 @@ function normalizeLimitEntryId(value: unknown): string | null {
   return id;
 }
 
+export function normalizeDoomscrollingLimitEntryColor(value: unknown): EventColor | null {
+  if (typeof value !== "number" || !Number.isInteger(value)) return null;
+  if (value < 0 || value >= PALETTE_SIZE) return null;
+  return value;
+}
+
 function normalizeLimitEntryValue(value: unknown): DoomscrollingLimitEntry | null {
   if (!isRecord(value)) return null;
   const id = normalizeLimitEntryId(value.id);
@@ -667,6 +680,7 @@ function normalizeLimitEntryValue(value: unknown): DoomscrollingLimitEntry | nul
   const name = typeof value.name === "string"
     ? normalizeDoomscrollingLimitEntryName(value.name)
     : null;
+  const color = normalizeDoomscrollingLimitEntryColor(value.color);
   const websiteHost = typeof value.websiteHost === "string"
     ? normalizeDoomscrollingHost(value.websiteHost)
     : null;
@@ -686,7 +700,7 @@ function normalizeLimitEntryValue(value: unknown): DoomscrollingLimitEntry | nul
     : [];
   if (!websiteHost && !mobileAppName && !desktopAppName) return null;
   if (desktopAppName && isProtectedDoomscrollingDesktopAppName(desktopAppName)) return null;
-  return {
+  const entry: DoomscrollingLimitEntry = {
     id,
     name,
     websiteHost,
@@ -694,6 +708,7 @@ function normalizeLimitEntryValue(value: unknown): DoomscrollingLimitEntry | nul
     desktopAppName,
     desktopAppMatchNames,
   };
+  return color === null ? entry : { ...entry, color };
 }
 
 export function doomscrollingLimitEntryKey(entry: DoomscrollingLimitEntry): string {
@@ -904,21 +919,39 @@ export function matchesDoomscrollingLimitEntry(
   return false;
 }
 
+export function computeDoomscrollingLimitEntryDailyTotals(
+  limit: DoomscrollingUsageLimit,
+  samples: readonly DoomscrollingUsageSample[],
+  localDate: string,
+): DoomscrollingDailyLimitEntryTotal[] {
+  const usedSecondsByEntryId = new Map<string, number>();
+  for (const sample of samples) {
+    if (sample.localDate !== localDate) continue;
+    if (!Number.isFinite(sample.elapsedSeconds) || sample.elapsedSeconds <= 0) continue;
+    const matchingEntry = limit.entries.find((entry) =>
+      matchesDoomscrollingLimitEntry(entry, sample)
+    );
+    if (!matchingEntry) continue;
+    const usedSeconds = Math.round(sample.elapsedSeconds);
+    usedSecondsByEntryId.set(
+      matchingEntry.id,
+      (usedSecondsByEntryId.get(matchingEntry.id) ?? 0) + usedSeconds,
+    );
+  }
+  return limit.entries.map((entry) => ({
+    entryId: entry.id,
+    usedSeconds: usedSecondsByEntryId.get(entry.id) ?? 0,
+  }));
+}
+
 export function computeDoomscrollingLimitDailyTotals(
   config: DoomscrollingConfig,
   samples: readonly DoomscrollingUsageSample[],
   localDate: string,
 ): DoomscrollingDailyLimitTotal[] {
   return config.limits.items.map((limit) => {
-    let usedSeconds = 0;
-    for (const sample of samples) {
-      if (sample.localDate !== localDate) continue;
-      if (!Number.isFinite(sample.elapsedSeconds) || sample.elapsedSeconds <= 0) continue;
-      const matches = limit.entries.some((entry) =>
-        matchesDoomscrollingLimitEntry(entry, sample)
-      );
-      if (matches) usedSeconds += Math.round(sample.elapsedSeconds);
-    }
+    const usedSeconds = computeDoomscrollingLimitEntryDailyTotals(limit, samples, localDate)
+      .reduce((total, entryTotal) => total + entryTotal.usedSeconds, 0);
     const limitSeconds = limit.minutesPerDay * 60;
     const remainingSeconds = Math.max(0, limitSeconds - usedSeconds);
     return {

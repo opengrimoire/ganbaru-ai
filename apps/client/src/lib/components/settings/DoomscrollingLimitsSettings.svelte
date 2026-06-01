@@ -5,14 +5,17 @@
   import Power from "@lucide/svelte/icons/power";
   import PowerOff from "@lucide/svelte/icons/power-off";
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import { getEventColor } from "$lib/components/calendar/utils";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import {
+    computeDoomscrollingLimitEntryDailyTotals,
     doomscrollingLimitEntryKey,
     type DoomscrollingLimitEntry,
     type DoomscrollingUsageLimit,
   } from "$lib/doomscrolling";
   import { getDoomscrolling } from "$lib/stores/doomscrolling.svelte";
   import { getDoomscrollingUsage } from "$lib/stores/doomscrolling-usage.svelte";
+  import { getTheme } from "$lib/stores/theme.svelte";
   import { cn } from "$lib/utils";
   import DoomscrollingBrowserConnectionStatus from "./DoomscrollingBrowserConnectionStatus.svelte";
   import ToggleSetting from "./ToggleSetting.svelte";
@@ -31,6 +34,7 @@
 
   const doomscrolling = getDoomscrolling();
   const usage = getDoomscrollingUsage();
+  const theme = getTheme();
 
   let pendingAction = $state<PendingLimitAction | null>(null);
 
@@ -63,6 +67,44 @@
     const used = totalUsedSeconds(limit.id);
     const total = limit.minutesPerDay * 60;
     return Math.min(100, Math.round((used / total) * 100));
+  }
+
+  interface LimitProgressSegment {
+    entry: DoomscrollingLimitEntry;
+    usedSeconds: number;
+    widthPercent: number;
+    color: string;
+  }
+
+  function entryColor(entry: DoomscrollingLimitEntry): string {
+    return getEventColor(entry.color ?? undefined, theme.current).bg;
+  }
+
+  function limitProgressSegments(limit: DoomscrollingUsageLimit): LimitProgressSegment[] {
+    const entryTotals = computeDoomscrollingLimitEntryDailyTotals(
+      limit,
+      usage.samples,
+      usage.localDate,
+    );
+    const usedSecondsByEntryId = new Map(
+      entryTotals.map((entryTotal) => [entryTotal.entryId, entryTotal.usedSeconds] as const),
+    );
+    const totalUsedSeconds = entryTotals.reduce(
+      (total, entryTotal) => total + entryTotal.usedSeconds,
+      0,
+    );
+    const widthBaseSeconds = Math.max(limit.minutesPerDay * 60, totalUsedSeconds, 1);
+    return limit.entries
+      .map((entry) => {
+        const usedSeconds = usedSecondsByEntryId.get(entry.id) ?? 0;
+        return {
+          entry,
+          usedSeconds,
+          widthPercent: Math.min(100, Math.max(0, (usedSeconds / widthBaseSeconds) * 100)),
+          color: entryColor(entry),
+        };
+      })
+      .filter((segment) => segment.usedSeconds > 0 && segment.widthPercent > 0);
   }
 
   function websiteDisplayName(host: string): string {
@@ -162,6 +204,7 @@
     <div class="flex flex-col px-1">
       {#each doomscrolling.usageLimits as limit (limit.id)}
         {@const used = totalUsedSeconds(limit.id)}
+        {@const segments = limitProgressSegments(limit)}
         <article
           class="flex min-w-0 flex-col gap-2 border-b border-border/70 py-2"
           aria-label={limit.enabled ? limit.name : `${limit.name} disabled`}
@@ -213,16 +256,31 @@
             </div>
           </div>
 
-          <div class="h-1.5 overflow-hidden rounded-full bg-muted">
-            <div
-              class="h-full rounded-full bg-primary"
-              style={`width: ${progressPercent(limit)}%`}
-            ></div>
+          <div class="flex h-1.5 overflow-hidden rounded-full bg-muted">
+            {#if segments.length > 0}
+              {#each segments as segment (segment.entry.id)}
+                <div
+                  class="h-full first:rounded-l-full last:rounded-r-full"
+                  style={`width: ${segment.widthPercent}%; background-color: ${segment.color};`}
+                  title={`${entryLabel(segment.entry)}: ${formatMinutes(segment.usedSeconds)}`}
+                ></div>
+              {/each}
+            {:else}
+              <div
+                class="h-full rounded-full bg-primary"
+                style={`width: ${progressPercent(limit)}%`}
+              ></div>
+            {/if}
           </div>
 
           <div class="flex min-w-0 flex-wrap gap-1.5">
             {#each limit.entries as entry (doomscrollingLimitEntryKey(entry))}
-              <span class="inline-flex max-w-full items-center rounded-full border border-border bg-transparent px-2 py-1 text-[0.733333rem] text-foreground">
+              <span class="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-transparent px-2 py-1 text-[0.733333rem] text-foreground">
+                <span
+                  class="h-2 w-2 shrink-0 rounded-full"
+                  style={`background-color: ${entryColor(entry)};`}
+                  aria-hidden="true"
+                ></span>
                 <span class="truncate">{entryLabel(entry)}</span>
               </span>
             {/each}

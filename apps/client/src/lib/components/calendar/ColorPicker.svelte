@@ -10,10 +10,14 @@
     color,
     theme,
     onselect,
+    title = "Event color",
+    ariaLabel = "Select event color",
   }: {
     color: EventColor | undefined;
     theme: Theme;
     onselect: (color: EventColor | undefined) => void;
+    title?: string;
+    ariaLabel?: string;
   } = $props();
 
   let open = $state(false);
@@ -124,7 +128,7 @@
     onkeydown={handleButtonKeydown}
     class="size-4.5 shrink-0 rounded-sm"
     style="background-color: {colorEntry.bg};"
-    title="Event color"
+      title={title}
     data-app-tooltip-focus-disabled="true"
   ></button>
   {#if open}
@@ -146,7 +150,7 @@
         {@const entry = getEventColor(c, theme)}
         <button
           data-color-index={index}
-          aria-label={`Select event color ${index + 1}`}
+          aria-label={`${ariaLabel} ${index + 1}`}
           tabindex={activeIndex === index ? 0 : -1}
           onclick={() => { selectColor(c, "pointer"); }}
           onfocus={() => { activeIndex = index; }}
