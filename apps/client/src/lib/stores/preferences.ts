@@ -81,6 +81,11 @@ export type FocusBreakSoundIntervalSeconds =
   (typeof FOCUS_BREAK_SOUND_INTERVAL_SECONDS)[number];
 export const DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS: FocusBreakSoundIntervalSeconds = 10;
 export const DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS: FocusBreakSoundIntervalSeconds = 10;
+export const FOCUS_BREAK_END_ESC_PRESS_OPTIONS = Object.freeze([1, 3, 10, 20, 50] as const);
+export type FocusBreakEndEscPresses =
+  | (typeof FOCUS_BREAK_END_ESC_PRESS_OPTIONS)[number]
+  | null;
+export const DEFAULT_FOCUS_BREAK_END_ESC_PRESSES: FocusBreakEndEscPresses = 10;
 export const FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES = Object.freeze(
   [0, 3, 5, 10, 15] as const,
 );
@@ -175,6 +180,23 @@ export function parseFocusBreakSoundIntervalSeconds(
   fallback: FocusBreakSoundIntervalSeconds,
 ): FocusBreakSoundIntervalSeconds {
   return isFocusBreakSoundIntervalSeconds(value) ? value : fallback;
+}
+
+export function isFocusBreakEndEscPresses(
+  value: unknown,
+): value is FocusBreakEndEscPresses {
+  return value === null
+    || (typeof value === "number"
+      && FOCUS_BREAK_END_ESC_PRESS_OPTIONS.includes(
+        value as Exclude<FocusBreakEndEscPresses, null>,
+      ));
+}
+
+export function parseFocusBreakEndEscPresses(
+  value: unknown,
+  fallback: FocusBreakEndEscPresses,
+): FocusBreakEndEscPresses {
+  return isFocusBreakEndEscPresses(value) ? value : fallback;
 }
 
 export function isFocusPauseNotificationIntervalMinutes(

@@ -10,9 +10,11 @@ import {
   DEFAULT_CALENDAR_TIME_FORMAT,
   DEFAULT_FOCUS_IDLE_PAUSE_ON_EVENT_CREATE,
   DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
+  DEFAULT_FOCUS_BREAK_END_ESC_PRESSES,
   DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS,
   DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS,
   DEFAULT_FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
+  FOCUS_BREAK_END_ESC_PRESS_OPTIONS,
   FOCUS_IDLE_THRESHOLD_MINUTES_MAX,
   FOCUS_IDLE_THRESHOLD_MINUTES_MIN,
   FOCUS_BREAK_SOUND_INTERVAL_SECONDS,
@@ -23,9 +25,11 @@ import {
   clampFontScale,
   getFontFamilyById,
   isCalendarTimeFormat,
+  isFocusBreakEndEscPresses,
   isFocusBreakSoundIntervalSeconds,
   isFocusPauseNotificationIntervalMinutes,
   isTitleBarControlId,
+  parseFocusBreakEndEscPresses,
   parseFocusBreakSoundIntervalSeconds,
   parseFocusPauseNotificationIntervalMinutes,
   parseTitleBarVisibility,
@@ -166,6 +170,12 @@ describe("focus preferences", () => {
     expect(DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS).toBe(10);
   });
 
+  it("uses fixed break end Esc counts with 10 presses as the default", () => {
+    expect(FOCUS_BREAK_END_ESC_PRESS_OPTIONS).toEqual([1, 3, 10, 20, 50]);
+    expect(Object.isFrozen(FOCUS_BREAK_END_ESC_PRESS_OPTIONS)).toBe(true);
+    expect(DEFAULT_FOCUS_BREAK_END_ESC_PRESSES).toBe(10);
+  });
+
   it("uses fixed paused focus notification intervals with 3 minutes as the default", () => {
     expect(FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES).toEqual([0, 3, 5, 10, 15]);
     expect(Object.isFrozen(FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES)).toBe(true);
@@ -183,6 +193,18 @@ describe("focus preferences", () => {
     expect(isFocusBreakSoundIntervalSeconds(null)).toBe(false);
   });
 
+  it("accepts supported break end Esc counts plus disabled", () => {
+    expect(isFocusBreakEndEscPresses(null)).toBe(true);
+    expect(isFocusBreakEndEscPresses(1)).toBe(true);
+    expect(isFocusBreakEndEscPresses(3)).toBe(true);
+    expect(isFocusBreakEndEscPresses(10)).toBe(true);
+    expect(isFocusBreakEndEscPresses(20)).toBe(true);
+    expect(isFocusBreakEndEscPresses(50)).toBe(true);
+    expect(isFocusBreakEndEscPresses(2)).toBe(false);
+    expect(isFocusBreakEndEscPresses("10")).toBe(false);
+    expect(isFocusBreakEndEscPresses(undefined)).toBe(false);
+  });
+
   it("accepts only supported paused focus notification intervals", () => {
     expect(isFocusPauseNotificationIntervalMinutes(0)).toBe(true);
     expect(isFocusPauseNotificationIntervalMinutes(3)).toBe(true);
@@ -198,6 +220,13 @@ describe("focus preferences", () => {
     expect(parseFocusBreakSoundIntervalSeconds(30, 10)).toBe(30);
     expect(parseFocusBreakSoundIntervalSeconds(20, 10)).toBe(10);
     expect(parseFocusBreakSoundIntervalSeconds("10", 10)).toBe(10);
+  });
+
+  it("falls back when parsing unsupported break end Esc counts", () => {
+    expect(parseFocusBreakEndEscPresses(20, 10)).toBe(20);
+    expect(parseFocusBreakEndEscPresses(null, 10)).toBeNull();
+    expect(parseFocusBreakEndEscPresses(2, 10)).toBe(10);
+    expect(parseFocusBreakEndEscPresses("10", 10)).toBe(10);
   });
 
   it("falls back when parsing unsupported paused focus notification intervals", () => {

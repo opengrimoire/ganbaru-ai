@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   delayUntil,
   elapsedSecondsSince,
+  formatBreakEndEarlyShortcut,
   formatBreakExtensionHint,
   formatBreakExtensionShortcut,
   formatBlockedScreenDateTime,
@@ -165,9 +166,17 @@ describe("blocked pomodoro screen helpers", () => {
     expect(formatBreakExtensionShortcut("MacIntel")).toBe("Cmd + Shift + Space");
   });
 
+  it("formats configurable break ending Esc hints", () => {
+    expect(formatBreakEndEarlyShortcut(0, 10)).toBe("10x Esc");
+    expect(formatBreakEndEarlyShortcut(4, 10)).toBe("6x Esc");
+    expect(formatBreakEndEarlyShortcut(0, 1)).toBe("1x Esc");
+    expect(formatBreakEndEarlyShortcut(0, null)).toBeNull();
+  });
+
   it("uses direct break countdown action copy", () => {
     const copy = pomodoroBlockedScreenCopy("break_countdown");
     expect(copy.primaryHint?.label).toBe("extend the break");
+    expect(copy.secondaryHint?.key).toBe("10x Esc");
     expect(copy.secondaryHint?.label).toBe("end your break now");
   });
 

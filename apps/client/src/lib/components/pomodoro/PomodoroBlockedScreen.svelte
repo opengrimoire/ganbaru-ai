@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import {
     formatBreakExtensionHint,
+    formatBreakEndEarlyShortcut,
     formatBlockedScreenDateTime,
     formatBlockedScreenDuration,
     formatBreakExtensionShortcut,
@@ -11,6 +12,10 @@
     shouldShowBlockedScreenDateTime,
     type PomodoroBlockedScreenState,
   } from "./blocked-screen";
+  import {
+    DEFAULT_FOCUS_BREAK_END_ESC_PRESSES,
+    type FocusBreakEndEscPresses,
+  } from "$lib/stores/preferences";
 
   let {
     state: screenState,
@@ -18,12 +23,14 @@
     extensionMinutes = 0,
     maxExtensionMinutes = 3,
     escPresses = 0,
+    breakEndEscPresses = DEFAULT_FOCUS_BREAK_END_ESC_PRESSES,
   }: {
     state: PomodoroBlockedScreenState;
     seconds: number;
     extensionMinutes?: number;
     maxExtensionMinutes?: number;
     escPresses?: number;
+    breakEndEscPresses?: FocusBreakEndEscPresses;
   } = $props();
 
   let now = $state(new Date());
@@ -44,8 +51,7 @@
   });
   const skipHintKey = $derived.by(() => {
     if (screenState !== "break_countdown") return null;
-    if (escPresses <= 0) return "3x Esc";
-    return `${Math.max(0, 3 - escPresses)}x Esc`;
+    return formatBreakEndEarlyShortcut(escPresses, breakEndEscPresses);
   });
 
   onMount(() => {

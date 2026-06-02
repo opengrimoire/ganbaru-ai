@@ -2,9 +2,11 @@
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import {
     DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
+    DEFAULT_FOCUS_BREAK_END_ESC_PRESSES,
     DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS,
     DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS,
     DEFAULT_FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
+    FOCUS_BREAK_END_ESC_PRESS_OPTIONS,
     FOCUS_IDLE_THRESHOLD_MINUTES_MAX,
     FOCUS_IDLE_THRESHOLD_MINUTES_MIN,
     FOCUS_BREAK_SOUND_INTERVAL_SECONDS,
@@ -17,6 +19,8 @@
   const preferences = getPreferences();
 
   type SelectOption = { value: string; label: string };
+
+  const BREAK_END_DISABLED_SELECT_VALUE = "disabled";
 
   const idleThresholdOptions: readonly SelectOption[] = Array.from(
     {
@@ -42,6 +46,17 @@
       return { value: String(seconds), label: `${seconds} seconds before` };
     });
 
+  const breakEndEscPressOptions: readonly SelectOption[] = [
+    {
+      value: BREAK_END_DISABLED_SELECT_VALUE,
+      label: "Disabled",
+    },
+    ...FOCUS_BREAK_END_ESC_PRESS_OPTIONS.map((presses) => ({
+      value: String(presses),
+      label: `${presses} Esc ${presses === 1 ? "press" : "presses"}`,
+    })),
+  ];
+
   const pausedFocusWarningOptions: readonly SelectOption[] =
     FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES.map((minutes) => {
       if (minutes === 0) return { value: String(minutes), label: "None" };
@@ -49,6 +64,7 @@
     });
 
   let showDisableIdlePauseConfirm = $state(false);
+  let showDisableBreakEndConfirm = $state(false);
 
   function handleIdleThresholdChange(value: string): void {
     const minutes = Number(value);
@@ -66,6 +82,18 @@
     const seconds = Number(value);
     if (!Number.isFinite(seconds)) return;
     preferences.setFocusBreakEndWarningSeconds(seconds);
+  }
+
+  function handleBreakEndEscPressChange(value: string): void {
+    if (value === BREAK_END_DISABLED_SELECT_VALUE) {
+      if (preferences.focusBreakEndEscPresses === null) return;
+      showDisableBreakEndConfirm = true;
+      return;
+    }
+    const presses = Number(value);
+    if (!Number.isFinite(presses)) return;
+    preferences.setFocusBreakEndEscPresses(presses);
+    showDisableBreakEndConfirm = false;
   }
 
   function handlePausedFocusWarningChange(value: string): void {
@@ -89,6 +117,15 @@
 
   function cancelDisableIdlePauseDefault(): void {
     showDisableIdlePauseConfirm = false;
+  }
+
+  function confirmDisableBreakEnd(): void {
+    preferences.setFocusBreakEndEscPresses(null);
+    showDisableBreakEndConfirm = false;
+  }
+
+  function cancelDisableBreakEnd(): void {
+    showDisableBreakEndConfirm = false;
   }
 </script>
 
@@ -137,6 +174,17 @@
     <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Break screen</h2>
     <div class="flex flex-col gap-3">
       <CustomSelect
+        label="End break early"
+        description="Esc presses required before the break timer finishes"
+        value={preferences.focusBreakEndEscPresses === null
+          ? BREAK_END_DISABLED_SELECT_VALUE
+          : String(preferences.focusBreakEndEscPresses)}
+        options={breakEndEscPressOptions}
+        onChange={handleBreakEndEscPressChange}
+        canReset={preferences.focusBreakEndEscPresses !== DEFAULT_FOCUS_BREAK_END_ESC_PRESSES}
+        onReset={() => preferences.resetFocusBreakEndEscPresses()}
+      />
+      <CustomSelect
         label="Repeat after break ends"
         description="Replay the break-complete sound until you return"
         value={String(preferences.focusBreakFinishedRepeatSeconds)}
@@ -161,10 +209,21 @@
 {#if showDisableIdlePauseConfirm}
   <ConfirmDialog
     title="Turn off idle pause by default?"
-    message="Idle pause is an important productivity feature. It keeps focus time honest when you step away. Without it, away time can count as focus."
+    message="Idle pause is an important productivity feature. It keeps focus time honest when you step away."
     confirmLabel="Turn off (Enter)"
     cancelLabel="Keep on (Esc)"
     onConfirm={confirmDisableIdlePauseDefault}
     onCancel={cancelDisableIdlePauseDefault}
+  />
+{/if}
+
+{#if showDisableBreakEndConfirm}
+  <ConfirmDialog
+    title="Disable early break ending?"
+    message="The break screen will hide the Esc ending option. You will need to wait until the break timer finishes."
+    confirmLabel="Disable (Enter)"
+    cancelLabel="Keep current (Esc)"
+    onConfirm={confirmDisableBreakEnd}
+    onCancel={cancelDisableBreakEnd}
   />
 {/if}

@@ -1,4 +1,8 @@
 import { formatShortcut } from "$lib/keyboard-shortcuts";
+import {
+  DEFAULT_FOCUS_BREAK_END_ESC_PRESSES,
+  type FocusBreakEndEscPresses,
+} from "$lib/stores/preferences";
 
 export type PomodoroBlockedScreenState =
   | "idle"
@@ -219,6 +223,17 @@ export function formatBreakExtensionShortcut(platform?: string): string {
   return formatShortcut(BREAK_EXTENSION_SHORTCUT, platform);
 }
 
+export function formatBreakEndEarlyShortcut(
+  escPresses: number,
+  requiredEscPresses: FocusBreakEndEscPresses = DEFAULT_FOCUS_BREAK_END_ESC_PRESSES,
+): string | null {
+  if (requiredEscPresses === null) return null;
+  const safeRequiredEscPresses = Math.max(1, Math.floor(requiredEscPresses));
+  const safeEscPresses = Math.max(0, Math.floor(escPresses));
+  const remainingPresses = Math.max(0, safeRequiredEscPresses - safeEscPresses);
+  return `${remainingPresses}x Esc`;
+}
+
 export function shouldScheduleIdleAlert(targetMs: number, failureDueAtMs: number): boolean {
   return targetMs < failureDueAtMs;
 }
@@ -266,7 +281,11 @@ export function pomodoroBlockedScreenCopy(
         subtitle: null,
         tone: "neutral",
         primaryHint: { key: BREAK_EXTENSION_SHORTCUT, label: "extend the break" },
-        secondaryHint: { key: "3x Esc", label: "end your break now", tone: "danger" },
+        secondaryHint: {
+          key: `${DEFAULT_FOCUS_BREAK_END_ESC_PRESSES}x Esc`,
+          label: "end your break now",
+          tone: "danger",
+        },
       };
     case "break_finished":
       return {

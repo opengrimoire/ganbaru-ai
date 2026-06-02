@@ -2554,7 +2554,10 @@ function showBreakOverlay(breakSeconds: number) {
     0,
     Math.floor(phaseEndTime ?? (Date.now() + breakSeconds * 1000)),
   );
-  invoke("show_break_overlay", { breakEndsAtMs }).catch((e) =>
+  invoke("show_break_overlay", {
+    breakEndsAtMs,
+    breakEndEscPresses: getPreferences().focusBreakEndEscPresses,
+  }).catch((e) =>
     console.warn("Failed to show break overlay:", e),
   );
   scheduleBreakEndWarning();

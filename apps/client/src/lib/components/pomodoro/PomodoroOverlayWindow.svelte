@@ -7,6 +7,11 @@
   import { hasShortcutModifier } from "$lib/keyboard-shortcuts";
   import { IDLE_FOCUS_FAILURE_DELAY_SECONDS } from "$lib/stores/pomodoro-machine";
   import {
+    DEFAULT_FOCUS_BREAK_END_ESC_PRESSES,
+    parseFocusBreakEndEscPresses,
+    type FocusBreakEndEscPresses,
+  } from "$lib/stores/preferences";
+  import {
     POMODORO_OVERLAY_BLOCKER_ACTION_EVENT,
     delayUntil,
     elapsedSecondsSince,
@@ -30,7 +35,11 @@
 
   type OverlayMode =
     | { kind: "idle"; initialIdleSeconds: number }
-    | { kind: "break"; breakEndsAtMs: number }
+    | {
+        kind: "break";
+        breakEndsAtMs: number;
+        breakEndEscPresses: FocusBreakEndEscPresses;
+      }
     | { kind: "completion"; screenState: PomodoroCompletionScreenState };
 
   interface BreakExtendedPayload {
@@ -44,6 +53,14 @@
   function numberParam(params: URLSearchParams, name: string, fallback: number): number {
     const value = Number(params.get(name));
     return Number.isFinite(value) && value >= 0 ? Math.floor(value) : fallback;
+  }
+
+  function breakEndEscPressesParam(params: URLSearchParams): FocusBreakEndEscPresses {
+    const raw = params.get("breakEndEscPresses");
+    if (raw === null) return DEFAULT_FOCUS_BREAK_END_ESC_PRESSES;
+    if (raw === "disabled") return null;
+    const value = Number(raw);
+    return parseFocusBreakEndEscPresses(value, DEFAULT_FOCUS_BREAK_END_ESC_PRESSES);
   }
 
   function overlayModeFromLocation(): OverlayMode {
@@ -73,6 +90,7 @@
         "breakEndsAtMs",
         Date.now() + fallbackBreakSeconds * 1000,
       ),
+      breakEndEscPresses: breakEndEscPressesParam(params),
     };
   }
 
@@ -98,6 +116,9 @@
   let closed = false;
   let focusFailureSent = false;
   let breakEndMs = mode.kind === "break" ? mode.breakEndsAtMs : 0;
+  const breakEndEscPresses = mode.kind === "break"
+    ? mode.breakEndEscPresses
+    : DEFAULT_FOCUS_BREAK_END_ESC_PRESSES;
   let breakFinishedAtMs: number | null = null;
   let idleAlertTimeoutId: ReturnType<typeof setTimeout> | null = null;
   let idleFailureTimeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -250,8 +271,9 @@
     }
 
     if (command.key === "Escape") {
-      escPresses = Math.min(3, escPresses + 1);
-      if (escPresses >= 3) {
+      if (breakEndEscPresses === null) return;
+      escPresses = Math.min(breakEndEscPresses, escPresses + 1);
+      if (escPresses >= breakEndEscPresses) {
         void skipBreak();
       }
       return;
@@ -421,5 +443,6 @@
     {extensionMinutes}
     maxExtensionMinutes={MAX_BREAK_EXTENSION_MINUTES}
     {escPresses}
+    {breakEndEscPresses}
   />
 </div>

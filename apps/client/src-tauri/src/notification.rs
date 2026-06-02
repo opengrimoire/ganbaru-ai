@@ -793,6 +793,7 @@ thread_local! {
 enum PomodoroOverlayKind {
     Break {
         ends_at_ms: u64,
+        end_esc_presses: Option<u32>,
     },
     Idle {
         seconds: u32,
@@ -1178,9 +1179,15 @@ fn restore_overlay_cleanup(mut cleanup: PomodoroOverlayCleanup) {
 
 fn overlay_url(kind: PomodoroOverlayKind) -> WebviewUrl {
     let query = match kind {
-        PomodoroOverlayKind::Break { ends_at_ms } => {
+        PomodoroOverlayKind::Break {
+            ends_at_ms,
+            end_esc_presses,
+        } => {
+            let end_esc_presses = end_esc_presses
+                .map(|presses| presses.to_string())
+                .unwrap_or_else(|| "disabled".to_string());
             format!(
-                "index.html?ganbaruWindow=pomodoroOverlay&overlayKind=break&breakEndsAtMs={ends_at_ms}"
+                "index.html?ganbaruWindow=pomodoroOverlay&overlayKind=break&breakEndsAtMs={ends_at_ms}&breakEndEscPresses={end_esc_presses}"
             )
         }
         PomodoroOverlayKind::Idle { seconds } => {
@@ -1672,13 +1679,26 @@ pub fn set_pomodoro_overlay_state(
 }
 
 #[tauri::command]
-pub fn show_break_overlay(app: tauri::AppHandle, break_ends_at_ms: u64) -> Result<(), String> {
+pub fn show_break_overlay(
+    app: tauri::AppHandle,
+    break_ends_at_ms: u64,
+    break_end_esc_presses: Option<u32>,
+) -> Result<(), String> {
     show_pomodoro_overlay(
         app,
         PomodoroOverlayKind::Break {
             ends_at_ms: break_ends_at_ms,
+            end_esc_presses: normalize_break_end_esc_presses(break_end_esc_presses),
         },
     )
+}
+
+fn normalize_break_end_esc_presses(value: Option<u32>) -> Option<u32> {
+    match value {
+        Some(1 | 3 | 10 | 20 | 50) => value,
+        Some(_) => Some(10),
+        None => None,
+    }
 }
 
 #[tauri::command]
@@ -2245,6 +2265,17 @@ mod tests {
             PomodoroOverlayVisualState::WorkweekComplete
         );
         assert!(completion_visual_state_from_kind("unknown").is_err());
+    }
+
+    #[test]
+    fn break_end_esc_presses_accepts_supported_values_and_disabled() {
+        assert_eq!(normalize_break_end_esc_presses(None), None);
+        assert_eq!(normalize_break_end_esc_presses(Some(1)), Some(1));
+        assert_eq!(normalize_break_end_esc_presses(Some(3)), Some(3));
+        assert_eq!(normalize_break_end_esc_presses(Some(10)), Some(10));
+        assert_eq!(normalize_break_end_esc_presses(Some(20)), Some(20));
+        assert_eq!(normalize_break_end_esc_presses(Some(50)), Some(50));
+        assert_eq!(normalize_break_end_esc_presses(Some(2)), Some(10));
     }
 
     fn unique_restore_file(name: &str) -> PathBuf {
