@@ -404,8 +404,8 @@
     use:releaseClickedButtonFocusAction
     onwheel={(event) => player.handleVolumeWheel(event)}
   >
-  <div class="flex h-(--cal-header-row-h) shrink-0 items-center gap-3 px-2">
-    <div class="flex min-w-0 flex-1 items-center gap-2">
+  <div class="grid h-(--cal-header-row-h) shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-2 max-[720px]:flex">
+    <div class="flex min-w-0 items-center gap-2 max-[720px]:shrink-0">
       <button
         type="button"
         onclick={openPlaylistBuilder}
@@ -415,24 +415,24 @@
         <ListPlus size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
         <span>Playlist builder</span>
       </button>
-      <div class="hidden min-w-0 overflow-hidden whitespace-nowrap text-[0.8rem] font-medium text-foreground min-[720px]:block">
-        {#if topBarMediaTitle}
-          <span title={player.currentSource ? player.loadedTitle : undefined}>{topBarMediaTitle}</span>
-        {/if}
-      </div>
+    </div>
+    <div class="hidden w-64 min-w-0 justify-self-center overflow-hidden whitespace-nowrap text-center text-[0.8rem] font-medium text-foreground min-[960px]:block">
+      {#if topBarMediaTitle}
+        <span title={player.currentSource ? player.loadedTitle : undefined}>{topBarMediaTitle}</span>
+      {/if}
     </div>
     <form
-      class="ml-auto flex min-w-0 flex-[0_1_36rem] items-center justify-end gap-2 max-[720px]:flex-1"
+      class="ml-auto flex min-w-0 items-center justify-end gap-2 justify-self-end max-[720px]:flex-1"
       onsubmit={(event) => { event.preventDefault(); void player.loadFromInput(); }}
     >
       <label class="sr-only" for="music-source">Music source</label>
-      <div class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md border border-border bg-card px-2.5">
+      <div class="flex h-7 w-48 min-w-0 items-center gap-2 rounded-md border border-border bg-card px-2.5 max-[720px]:flex-1">
         <LinkIcon class="shrink-0 text-muted-foreground" size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
         <input
           id="music-source"
           bind:value={player.sourceInput}
           class="min-w-0 flex-1 bg-transparent text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground"
-          placeholder="Add a local file path or YouTube link"
+          placeholder="YouTube link"
           autocomplete="off"
           spellcheck="false"
         />
@@ -448,22 +448,24 @@
           type="button"
           onclick={() => { void player.loadFolder(); }}
           disabled={player.sourceActionBusy}
-          class="inline-flex h-7 items-center justify-center gap-1.5 rounded-md border border-border bg-secondary px-2.5 text-[0.8rem] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+          class="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+          aria-label="Pick folder"
+          title="Pick folder"
         >
           <FolderOpen size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-          <span class="hidden min-[420px]:inline">Folder</span>
         </button>
         <button
           type="submit"
           disabled={player.sourceActionBusy}
-          class="inline-flex h-7 items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+          class="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+          aria-label={player.sourceActionBusy ? "Loading source" : "Load source"}
+          title={player.sourceActionBusy ? "Loading source" : "Load source"}
         >
           {#if player.sourceActionBusy}
             <LoaderCircle class="animate-spin" size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
           {:else}
             <Play size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
           {/if}
-          <span class="hidden min-[420px]:inline">Load</span>
         </button>
         <button
           type="button"
