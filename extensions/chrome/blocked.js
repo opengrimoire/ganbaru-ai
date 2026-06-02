@@ -5,11 +5,14 @@ const titleEl = document.getElementById("blocked-title");
 const copyEl = document.querySelector(".blocked-copy");
 const remainingEl = document.getElementById("remaining");
 const actionButton = document.getElementById("close");
+const recheckButton = document.getElementById("recheck");
 const faviconEl = document.getElementById("favicon");
 
+const RELEASE_CONFIRMATION_MS = 1000;
 let latestOriginalUrl = "";
 let latestBlocked = true;
 let refreshTimeoutId = null;
+let releaseTimeoutId = null;
 let restoringOriginalUrl = false;
 
 titleEl.textContent = "This site is blocked";
@@ -38,6 +41,18 @@ function requestBlockedPageState() {
   });
 }
 
+function requestForceRecheck() {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: "force_recheck" }, (response) => {
+      if (chrome.runtime.lastError) {
+        resolve(null);
+        return;
+      }
+      resolve(response ?? null);
+    });
+  });
+}
+
 function renderBlockedState(state) {
   const host = typeof state?.host === "string" ? state.host : "";
   const remaining = typeof state?.remainingSeconds === "number" ? state.remainingSeconds : 0;
@@ -49,6 +64,7 @@ function renderBlockedState(state) {
   latestBlocked = state?.blocked !== false;
 
   if (latestBlocked) {
+    cancelReleaseConfirmation();
     titleEl.textContent = blockedByLimit
       ? `${host ? displayHost(host) : "This site"} reached today's limit`
       : blockedByWeeklyLimit
@@ -64,7 +80,7 @@ function renderBlockedState(state) {
       : "Focus session active";
     actionButton.textContent = "Close tab";
   } else {
-    restoreOriginalUrl();
+    scheduleReleaseConfirmation();
   }
 
   if (host && !faviconEl.src) faviconEl.src = faviconUrl(host);
@@ -95,6 +111,27 @@ function resetRefreshTimer() {
   refreshTimeoutId = setTimeout(refreshBlockedPage, document.hidden ? 30_000 : 1_000);
 }
 
+function cancelReleaseConfirmation() {
+  if (releaseTimeoutId === null) return;
+  clearTimeout(releaseTimeoutId);
+  releaseTimeoutId = null;
+}
+
+function scheduleReleaseConfirmation() {
+  if (releaseTimeoutId !== null || restoringOriginalUrl) return;
+  releaseTimeoutId = setTimeout(async () => {
+    releaseTimeoutId = null;
+    const state = await requestBlockedPageState();
+    if (state?.ok !== true) return;
+    if (state.blocked === false) {
+      latestOriginalUrl = typeof state.originalUrl === "string" ? state.originalUrl : latestOriginalUrl;
+      restoreOriginalUrl();
+      return;
+    }
+    renderBlockedState(state);
+  }, RELEASE_CONFIRMATION_MS);
+}
+
 function clearBlockedPageState() {
   if (!blockedPageId) return;
   chrome.runtime.sendMessage({ type: "clear_blocked_page", id: blockedPageId });
@@ -103,6 +140,7 @@ function clearBlockedPageState() {
 function restoreOriginalUrl() {
   if (restoringOriginalUrl || !latestOriginalUrl) return;
   restoringOriginalUrl = true;
+  cancelReleaseConfirmation();
   clearBlockedPageState();
   chrome.tabs.getCurrent((tab) => {
     if (tab?.id) {
@@ -128,6 +166,18 @@ actionButton.addEventListener("click", () => {
     }
     chrome.runtime.sendMessage({ type: "close_tab" });
   });
+});
+
+recheckButton.addEventListener("click", async () => {
+  recheckButton.disabled = true;
+  recheckButton.textContent = "Rechecking";
+  try {
+    await requestForceRecheck();
+    await refreshBlockedPage();
+  } finally {
+    recheckButton.textContent = "Recheck";
+    recheckButton.disabled = false;
+  }
 });
 
 await refreshBlockedPage();

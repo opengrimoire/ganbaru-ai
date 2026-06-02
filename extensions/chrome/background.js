@@ -4,6 +4,7 @@ const STATUS_STORAGE_KEY = "status";
 const BLOCKED_PAGE_STORAGE_PREFIX = "blockedPage:";
 const ACTIVE_USAGE_STORAGE_KEY = "activeUsage";
 const USAGE_IDLE_THRESHOLD_SECONDS = 60;
+const BLOCKED_PAGE_RELEASE_CONFIRMATION_MS = 1000;
 const recentRedirects = new Map();
 let lastEnforcementStateKey = "";
 
@@ -17,6 +18,7 @@ function sendNativeMessage(message) {
           connected: false,
           active: false,
           paused: false,
+          pauseReason: null,
           blocked: false,
           reason: error.message,
         });
@@ -29,6 +31,12 @@ function sendNativeMessage(message) {
 
 function isSupportedPageUrl(url) {
   return typeof url === "string" && (url.startsWith("http://") || url.startsWith("https://"));
+}
+
+function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function hostFromUrl(url) {
@@ -76,6 +84,7 @@ async function updateStatus(status) {
   const nextEnforcementStateKey = [
     status?.active === true ? "1" : "0",
     status?.paused === true ? "1" : "0",
+    typeof status?.pauseReason === "string" ? status.pauseReason : "none",
     typeof status?.phase === "string" ? status.phase : "inactive",
     typeof status?.rulesFingerprint === "string" ? status.rulesFingerprint : "unknown",
   ].join("|");
@@ -88,6 +97,7 @@ async function updateStatus(status) {
       connected: status?.connected === true,
       active: status?.active === true,
       paused: status?.paused === true,
+      pauseReason: typeof status?.pauseReason === "string" ? status.pauseReason : null,
       phase: typeof status?.phase === "string" ? status.phase : "inactive",
       remainingSeconds: typeof status?.remainingSeconds === "number" ? status.remainingSeconds : null,
       reason: typeof status?.reason === "string" ? status.reason : null,
@@ -282,6 +292,17 @@ async function refreshBlockedPage(blockedPageId) {
   };
 }
 
+async function confirmBlockedPageRelease(blockedPageId) {
+  const first = await refreshBlockedPage(blockedPageId);
+  if (first?.ok !== true || first.blocked !== false || typeof first.originalUrl !== "string") {
+    return first;
+  }
+
+  await delay(BLOCKED_PAGE_RELEASE_CONFIRMATION_MS);
+  const second = await refreshBlockedPage(blockedPageId);
+  return second?.ok === true ? second : first;
+}
+
 function blockedPageUrl(blockedPageId) {
   const params = new URLSearchParams();
   params.set("blocked", blockedPageId);
@@ -339,7 +360,7 @@ async function recheckBlockedPages() {
     if (typeof tab.id !== "number" || typeof tab.url !== "string") continue;
     const blockedPageId = blockedPageIdFromUrl(tab.url);
     if (!blockedPageId) continue;
-    void refreshBlockedPage(blockedPageId).then(async (state) => {
+    void confirmBlockedPageRelease(blockedPageId).then(async (state) => {
       if (state?.ok !== true || state.blocked !== false || typeof state.originalUrl !== "string") {
         return;
       }

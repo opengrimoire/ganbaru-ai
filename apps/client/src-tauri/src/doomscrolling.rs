@@ -151,6 +151,7 @@ const PROTECTED_DESKTOP_PROCESS_NAMES: &[&str] = &[
 pub struct DoomscrollingRuntimeState {
     active: bool,
     paused: bool,
+    pause_reason: Option<String>,
     phase: String,
     active_run_id: Option<String>,
     active_block_id: Option<String>,
@@ -322,6 +323,10 @@ fn validate_state(state: &DoomscrollingRuntimeState) -> Result<(), String> {
     }
     if state.updated_at.trim().is_empty() {
         return Err("updated_at is required".to_string());
+    }
+    match state.pause_reason.as_deref() {
+        None | Some("manual" | "idle" | "suspend") => {}
+        Some(other) => return Err(format!("unsupported doomscrolling pause reason '{other}'")),
     }
     Ok(())
 }
@@ -2147,6 +2152,7 @@ mod tests {
         DoomscrollingRuntimeState {
             active: phase != "inactive",
             paused: false,
+            pause_reason: None,
             phase: phase.to_string(),
             active_run_id: None,
             active_block_id: None,
@@ -2171,6 +2177,24 @@ mod tests {
     fn rejects_negative_remaining_seconds() {
         let mut state = state("focus");
         state.remaining_seconds = Some(-1);
+        assert!(validate_state(&state).is_err());
+    }
+
+    #[test]
+    fn accepts_supported_pause_reasons() {
+        for pause_reason in [None, Some("manual"), Some("idle"), Some("suspend")] {
+            let mut state = state("focus");
+            state.paused = pause_reason.is_some();
+            state.pause_reason = pause_reason.map(ToOwned::to_owned);
+            assert!(validate_state(&state).is_ok());
+        }
+    }
+
+    #[test]
+    fn rejects_unknown_pause_reason() {
+        let mut state = state("focus");
+        state.paused = true;
+        state.pause_reason = Some("network".to_string());
         assert!(validate_state(&state).is_err());
     }
 

@@ -184,14 +184,25 @@ let idleCheckGeneration = 0;
 let idlePaused = $state<IdlePauseState | null>(null);
 let lastDoomscrollingStateKey = "";
 
+type DoomscrollingPauseReason = "manual" | "idle" | "suspend";
+
+function currentDoomscrollingPauseReason(paused: boolean): DoomscrollingPauseReason | null {
+  if (!paused) return null;
+  if (idlePaused) return "idle";
+  if (suspendedAway) return "suspend";
+  return "manual";
+}
+
 function writeCurrentDoomscrollingRuntimeState(force = false): void {
   if (!pomodoroCoordinator) return;
   const minuteBucket = Math.ceil(remainingSeconds / 60);
   const active = pomodoroSessionActive();
   const paused = active && !isRunning;
+  const pauseReason = currentDoomscrollingPauseReason(paused);
   const stateKey = [
     active ? "1" : "0",
     paused ? "1" : "0",
+    pauseReason ?? "",
     active ? phase : "inactive",
     activeRunId ?? "",
     activeBlockId ?? "",
@@ -203,6 +214,7 @@ function writeCurrentDoomscrollingRuntimeState(force = false): void {
   writeDoomscrollingRuntimeState({
     active,
     paused,
+    pauseReason,
     phase: active ? phase : "inactive",
     activeRunId,
     activeBlockId,
@@ -2460,6 +2472,17 @@ async function checkIdle(generation: number = idleCheckGeneration) {
     isRunning = false;
     lastTickMs = null;
 
+    const overlayStartedAtMs = Date.now();
+    idlePaused = {
+      idleSeconds: result.idleSeconds,
+      nativeOverlay: true,
+      idleStartMs: result.idleStartMs,
+      overlayStartedAtMs,
+      focusFailed: false,
+      focusFailedAtMs: null,
+    };
+    updateTray();
+
     // Show the enforced fullscreen idle overlay. If native setup fails,
     // the main window falls back to the Svelte overlay component.
     let nativeOverlay = false;
@@ -2470,17 +2493,17 @@ async function checkIdle(generation: number = idleCheckGeneration) {
     } catch (e) {
       console.warn("Failed to show idle overlay:", e);
     }
-
-    const overlayStartedAtMs = Date.now();
-    idlePaused = {
-      idleSeconds: result.idleSeconds,
-      nativeOverlay,
-      idleStartMs: result.idleStartMs,
-      overlayStartedAtMs,
-      focusFailed: false,
-      focusFailedAtMs: null,
-    };
-    updateTray();
+    if (
+      idlePaused?.idleStartMs === result.idleStartMs &&
+      idlePaused.overlayStartedAtMs === overlayStartedAtMs &&
+      idlePaused.nativeOverlay !== nativeOverlay
+    ) {
+      idlePaused = {
+        ...idlePaused,
+        nativeOverlay,
+      };
+      updateTray();
+    }
   } catch (e) {
     console.warn("Idle check failed:", e);
   } finally {

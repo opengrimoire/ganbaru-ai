@@ -47,6 +47,12 @@ fn get_startup_elapsed_ms() -> u64 {
         .unwrap_or(0)
 }
 
+fn clear_doomscrolling_enforcement_state_best_effort(app: &tauri::AppHandle, context: &str) {
+    if let Err(error) = doomscrolling::clear_doomscrolling_enforcement_state(app) {
+        eprintln!("failed to clear doomscrolling enforcement state {context}: {error}");
+    }
+}
+
 #[tauri::command]
 fn toggle_devtools(window: tauri::WebviewWindow) -> Result<bool, String> {
     #[cfg(debug_assertions)]
@@ -75,9 +81,7 @@ fn force_quit(
         overlays.focus(&app);
         return;
     }
-    if let Err(error) = doomscrolling::clear_doomscrolling_enforcement_state(&app) {
-        eprintln!("failed to clear doomscrolling enforcement state: {error}");
-    }
+    clear_doomscrolling_enforcement_state_best_effort(&app, "before force quit");
     app.exit(0);
 }
 
@@ -197,6 +201,7 @@ fn clear_benchmark_state(app: tauri::AppHandle) -> Result<(), String> {
 /// response).
 #[tauri::command]
 fn restart_app(app: tauri::AppHandle) {
+    clear_doomscrolling_enforcement_state_best_effort(&app, "before restart");
     app.restart();
 }
 
@@ -206,6 +211,7 @@ fn restart_app(app: tauri::AppHandle) {
 #[tauri::command]
 fn restart_app_after_delay(app: tauri::AppHandle, delay_ms: u64) -> Result<(), String> {
     spawn_delayed_relaunch_helper(delay_ms)?;
+    clear_doomscrolling_enforcement_state_best_effort(&app, "before delayed restart");
     app.exit(0);
     Ok(())
 }
@@ -691,7 +697,7 @@ pub fn run() {
     }
     PROCESS_START.set(std::time::Instant::now()).ok();
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             focus_main_window_for_second_launch(app);
         }))
@@ -835,6 +841,7 @@ pub fn run() {
             themes::theme_reset_to_seed,
         ])
         .setup(|app| {
+            clear_doomscrolling_enforcement_state_best_effort(app.handle(), "during startup");
             music::setup_youtube_host(app.handle())?;
             media_controls::setup_media_controls(app.handle())?;
             if let Err(err) = notification::restore_stale_shortcuts(app.handle()) {
@@ -843,6 +850,12 @@ pub fn run() {
             tray::setup_tray(app.handle())?;
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        if let tauri::RunEvent::ExitRequested { .. } = event {
+            clear_doomscrolling_enforcement_state_best_effort(app_handle, "before app exit");
+        }
+    });
 }

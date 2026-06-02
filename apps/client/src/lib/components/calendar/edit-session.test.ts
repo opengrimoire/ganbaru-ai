@@ -294,10 +294,10 @@ describe("panel initial changes", () => {
           idleTimeoutMinutes: 15,
         },
       }),
-      { pauseWhenIdle: true, thresholdMinutes: 7 },
+      { pauseWhenIdle: true, thresholdMinutes: 5 },
     );
 
-    expect(result.pomodoroConfig?.idleTimeoutMinutes).toBe(7);
+    expect(result.pomodoroConfig?.idleTimeoutMinutes).toBe(5);
   });
 });
 

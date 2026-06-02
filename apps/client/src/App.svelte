@@ -298,8 +298,11 @@
   });
 
   $effect(() => {
+    const _active = pomodoro.isActive;
     const _running = pomodoro.isRunning;
     const _phase = pomodoro.phase;
+    const _idlePaused = pomodoro.idlePaused;
+    const _suspendedAway = pomodoro.suspendedAway;
     const _enabled = doomscrolling.desktopEnabled;
     const _focus = doomscrolling.desktopBlockDuringFocus;
     const _shortBreaks = doomscrolling.desktopBlockDuringShortBreaks;
@@ -367,7 +370,8 @@
 
   function desktopAppBlockingActive(): boolean {
     if (!isMainWindow || !pomodoro.isActive || !doomscrolling.desktopEnabled) return false;
-    if (!pomodoro.isRunning && doomscrolling.desktopPauseDuringFocusPause) return false;
+    const strictPause = pomodoro.idlePaused !== null || pomodoro.suspendedAway !== null;
+    if (!pomodoro.isRunning && !strictPause && doomscrolling.desktopPauseDuringFocusPause) return false;
     if (pomodoro.phase === "focus") return doomscrolling.desktopBlockDuringFocus;
     if (pomodoro.phase === "short_break") return doomscrolling.desktopBlockDuringShortBreaks;
     if (pomodoro.phase === "long_break") return doomscrolling.desktopBlockDuringLongBreaks;

@@ -739,7 +739,7 @@
     focusDescription="Apply website rules while a focus session is running"
     shortBreakDescription="Apply website rules during short breaks"
     longBreakDescription="Apply website rules during long breaks"
-    pauseDescription="Pause website blocking while focus is paused, then resume when focus continues"
+    pauseDescription="Pause website blocking while focus is manually paused, then resume when focus continues"
     modeHeading="Website mode"
     modeDescription="Choose whether listed websites are blocked or allowed"
     blacklistDescription="Blocks listed websites"

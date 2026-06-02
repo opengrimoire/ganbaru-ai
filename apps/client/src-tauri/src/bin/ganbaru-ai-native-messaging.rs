@@ -18,6 +18,7 @@ const EXTENSION_CONNECTION_FILE: &str = "doomscrolling-extension-status.json";
 const EVENTS_FILE: &str = "doomscrolling-events.jsonl";
 const CONFIG_FILE: &str = "vault/config.json";
 const STALE_STATE_SECONDS: i64 = 75;
+const ACTIVE_STATE_STALE_SECONDS: i64 = 45;
 const LIMIT_STATE_STALE_SECONDS: i64 = 20;
 const ALLOWED_USAGE_DATABASE_FILES: &[&str] = &[
     "ganbaru-ai.db",
@@ -114,6 +115,7 @@ struct NativeResponse {
     connected: bool,
     active: bool,
     paused: bool,
+    pause_reason: Option<String>,
     phase: String,
     remaining_seconds: Option<i64>,
     rules_fingerprint: String,
@@ -130,6 +132,8 @@ struct RuntimeState {
     active: bool,
     #[serde(default)]
     paused: bool,
+    #[serde(default)]
+    pause_reason: Option<String>,
     phase: String,
     remaining_seconds: Option<i64>,
     updated_at: String,
@@ -241,6 +245,7 @@ fn main() {
             connected: false,
             active: false,
             paused: false,
+            pause_reason: None,
             phase: "inactive".to_string(),
             remaining_seconds: None,
             rules_fingerprint: "unavailable".to_string(),
@@ -880,13 +885,19 @@ fn response_from_snapshot(snapshot: &StateSnapshot) -> NativeResponse {
     let paused = snapshot
         .runtime
         .as_ref()
-        .is_some_and(|runtime| runtime.paused);
+        .is_some_and(|runtime| active && runtime.paused);
+    let pause_reason = snapshot.runtime.as_ref().and_then(|runtime| {
+        (active && runtime.paused)
+            .then(|| runtime.pause_reason.clone())
+            .flatten()
+    });
     NativeResponse {
         message_type: "decision",
         host_name: native_host_name(),
         connected: snapshot.config_dir.is_some(),
         active,
         paused,
+        pause_reason,
         phase,
         remaining_seconds,
         rules_fingerprint: rules_fingerprint(&snapshot.config, snapshot.limit_state.as_ref()),
@@ -899,6 +910,13 @@ fn response_from_snapshot(snapshot: &StateSnapshot) -> NativeResponse {
 }
 
 fn runtime_status(snapshot: &StateSnapshot) -> (bool, String, Option<i64>, Option<String>) {
+    runtime_status_at(snapshot, now_utc())
+}
+
+fn runtime_status_at(
+    snapshot: &StateSnapshot,
+    checked_at: DateTime<Utc>,
+) -> (bool, String, Option<i64>, Option<String>) {
     if !snapshot.config.enabled {
         return (
             false,
@@ -925,10 +943,15 @@ fn runtime_status(snapshot: &StateSnapshot) -> (bool, String, Option<i64>, Optio
             Some("runtime state has invalid timestamp".to_string()),
         );
     };
-    let age_seconds = (now_utc() - updated_at.with_timezone(&Utc))
+    let age_seconds = (checked_at - updated_at.with_timezone(&Utc))
         .num_seconds()
         .max(0);
-    if age_seconds > STALE_STATE_SECONDS {
+    let stale_state_seconds = if runtime.active {
+        ACTIVE_STATE_STALE_SECONDS
+    } else {
+        STALE_STATE_SECONDS
+    };
+    if age_seconds > stale_state_seconds {
         return (
             false,
             "inactive".to_string(),
@@ -960,7 +983,7 @@ fn should_enforce(snapshot: &StateSnapshot, response: &mut NativeResponse) -> bo
     if snapshot
         .runtime
         .as_ref()
-        .is_some_and(|runtime| runtime.paused)
+        .is_some_and(pause_should_suspend_enforcement)
         && snapshot.config.pause_during_focus_pause
     {
         return false;
@@ -972,6 +995,10 @@ fn should_enforce(snapshot: &StateSnapshot, response: &mut NativeResponse) -> bo
         "long_break" => snapshot.config.block_during_long_breaks,
         _ => false,
     }
+}
+
+fn pause_should_suspend_enforcement(runtime: &RuntimeState) -> bool {
+    runtime.paused && !matches!(runtime.pause_reason.as_deref(), Some("idle" | "suspend"))
 }
 
 struct HostDecision {
@@ -1559,10 +1586,11 @@ fn log_block_event(snapshot: &StateSnapshot, host: &str, matched_rule_name: Opti
 #[cfg(test)]
 mod tests {
     use super::{
-        decide_url, host_from_url, host_matches_rule, should_enforce, DoomscrollingConfig,
-        DoomscrollingMode, NativeResponse, RuntimeState, StateSnapshot, UsageLimitsConfig,
+        decide_url, host_from_url, host_matches_rule, runtime_status_at, should_enforce,
+        DoomscrollingConfig, DoomscrollingMode, NativeResponse, RuntimeState, StateSnapshot,
+        UsageLimitsConfig,
     };
-    use chrono::SecondsFormat;
+    use chrono::{DateTime, SecondsFormat, Utc};
 
     fn config() -> DoomscrollingConfig {
         DoomscrollingConfig {
@@ -1591,6 +1619,7 @@ mod tests {
             connected: true,
             active: true,
             paused: false,
+            pause_reason: None,
             phase: phase.to_string(),
             remaining_seconds: Some(60),
             rules_fingerprint: "test".to_string(),
@@ -1603,13 +1632,70 @@ mod tests {
     }
 
     fn runtime_for_phase(phase: &str, paused: bool) -> RuntimeState {
+        runtime_for_phase_updated_at(
+            phase,
+            paused,
+            super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
+        )
+    }
+
+    fn runtime_for_phase_updated_at(phase: &str, paused: bool, updated_at: String) -> RuntimeState {
         RuntimeState {
             active: true,
             paused,
+            pause_reason: paused.then(|| "manual".to_string()),
             phase: phase.to_string(),
             remaining_seconds: Some(60),
-            updated_at: super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
+            updated_at,
         }
+    }
+
+    #[test]
+    fn active_runtime_state_remains_fresh_inside_heartbeat_window() {
+        let snapshot = StateSnapshot {
+            config_dir: None,
+            config: config(),
+            runtime: Some(runtime_for_phase_updated_at(
+                "focus",
+                false,
+                "2026-05-26T00:00:00.000Z".to_string(),
+            )),
+            limit_state: None,
+        };
+        let checked_at = DateTime::parse_from_rfc3339("2026-05-26T00:00:44.000Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let (active, phase, remaining_seconds, reason) = runtime_status_at(&snapshot, checked_at);
+
+        assert!(active);
+        assert_eq!(phase, "focus");
+        assert_eq!(remaining_seconds, Some(16));
+        assert!(reason.is_none());
+    }
+
+    #[test]
+    fn active_runtime_state_fails_open_after_missed_heartbeat() {
+        let snapshot = StateSnapshot {
+            config_dir: None,
+            config: config(),
+            runtime: Some(runtime_for_phase_updated_at(
+                "focus",
+                false,
+                "2026-05-26T00:00:00.000Z".to_string(),
+            )),
+            limit_state: None,
+        };
+        let checked_at = DateTime::parse_from_rfc3339("2026-05-26T00:00:46.000Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let (active, phase, remaining_seconds, reason) = runtime_status_at(&snapshot, checked_at);
+
+        assert!(!active);
+        assert_eq!(phase, "inactive");
+        assert_eq!(remaining_seconds, None);
+        assert_eq!(reason.as_deref(), Some("runtime state is stale"));
     }
 
     #[test]
@@ -2031,6 +2117,51 @@ mod tests {
             config_dir: None,
             config: config(),
             runtime: Some(runtime_for_phase("focus", true)),
+            limit_state: None,
+        };
+        let mut focus = response_for_phase("focus");
+
+        assert!(!should_enforce(&snapshot, &mut focus));
+    }
+
+    #[test]
+    fn keeps_enforcing_idle_paused_focus() {
+        let mut runtime = runtime_for_phase("focus", true);
+        runtime.pause_reason = Some("idle".to_string());
+        let snapshot = StateSnapshot {
+            config_dir: None,
+            config: config(),
+            runtime: Some(runtime),
+            limit_state: None,
+        };
+        let mut focus = response_for_phase("focus");
+
+        assert!(should_enforce(&snapshot, &mut focus));
+    }
+
+    #[test]
+    fn keeps_enforcing_suspend_paused_focus() {
+        let mut runtime = runtime_for_phase("focus", true);
+        runtime.pause_reason = Some("suspend".to_string());
+        let snapshot = StateSnapshot {
+            config_dir: None,
+            config: config(),
+            runtime: Some(runtime),
+            limit_state: None,
+        };
+        let mut focus = response_for_phase("focus");
+
+        assert!(should_enforce(&snapshot, &mut focus));
+    }
+
+    #[test]
+    fn treats_missing_pause_reason_as_regular_pause() {
+        let mut runtime = runtime_for_phase("focus", true);
+        runtime.pause_reason = None;
+        let snapshot = StateSnapshot {
+            config_dir: None,
+            config: config(),
+            runtime: Some(runtime),
             limit_state: None,
         };
         let mut focus = response_for_phase("focus");

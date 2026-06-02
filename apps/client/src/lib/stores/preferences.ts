@@ -72,9 +72,12 @@ export type CalendarTimeFormat = "24h" | "12h";
 export const DEFAULT_CALENDAR_TIME_FORMAT: CalendarTimeFormat = "24h";
 export const DEFAULT_CALENDAR_DIM_PAST_EVENTS = true;
 export const DEFAULT_MUSIC_PAUSE_ON_POMODORO_PAUSE = true;
-export const FOCUS_IDLE_THRESHOLD_MINUTES_MIN = 1;
-export const FOCUS_IDLE_THRESHOLD_MINUTES_MAX = 15;
-export const DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES = 3;
+export const FOCUS_IDLE_THRESHOLD_MINUTES_OPTIONS = Object.freeze(
+  [1, 2, 3, 4, 5, 10, 15] as const,
+);
+export type FocusIdleThresholdMinutes =
+  (typeof FOCUS_IDLE_THRESHOLD_MINUTES_OPTIONS)[number];
+export const DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES: FocusIdleThresholdMinutes = 3;
 export const DEFAULT_FOCUS_IDLE_PAUSE_ON_EVENT_CREATE = true;
 export const FOCUS_BREAK_SOUND_INTERVAL_SECONDS = Object.freeze([0, 10, 15, 30, 60] as const);
 export type FocusBreakSoundIntervalSeconds =
@@ -166,9 +169,14 @@ export function isCalendarTimeFormat(value: unknown): value is CalendarTimeForma
 export function clampFocusIdleThresholdMinutes(value: number): number {
   if (!Number.isFinite(value)) return DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES;
   const integerValue = Math.round(value);
-  if (integerValue < FOCUS_IDLE_THRESHOLD_MINUTES_MIN) return FOCUS_IDLE_THRESHOLD_MINUTES_MIN;
-  if (integerValue > FOCUS_IDLE_THRESHOLD_MINUTES_MAX) return FOCUS_IDLE_THRESHOLD_MINUTES_MAX;
-  return integerValue;
+  if (
+    FOCUS_IDLE_THRESHOLD_MINUTES_OPTIONS.includes(
+      integerValue as FocusIdleThresholdMinutes,
+    )
+  ) {
+    return integerValue;
+  }
+  return DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES;
 }
 
 export function isFocusBreakSoundIntervalSeconds(

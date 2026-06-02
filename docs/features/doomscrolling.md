@@ -122,9 +122,9 @@ The blocker state follows the active Pomodoro phase:
 - **No active session.** Rules are inactive unless a manually activated environment or morning routine says otherwise.
 - **Focus phase.** Rules are enforced with the active environment's focus strictness.
 - **Break phase.** Rules follow the environment's break policy. The policy can keep rules strict, relax all rules, or allow only configured break sites.
-- **Manual pause.** Browser and desktop app rules pause during a paused focus session by default. The user can turn this off per surface to keep those rules strict while focus is paused.
-- **Idle pause.** Browser and desktop app rules follow the same pause setting because the session is paused until the user returns.
-- **Suspend pause.** Browser and desktop app rules follow the same pause setting until the user resumes, stops, or the session expires.
+- **Manual pause.** Browser and desktop app rules pause during a manually paused focus session by default. The user can turn this off per surface to keep those rules strict while focus is manually paused.
+- **Idle pause.** The timer pauses and the pause is excluded from focus history, but browser and desktop app rules keep enforcing. Idle must not become a way to unlock procrastination targets.
+- **Suspend pause.** The timer pauses and the pause is excluded from focus history, but browser and desktop app rules keep enforcing until the user resumes, stops, or the session expires.
 - **Stopped session.** Pomodoro-sourced rules turn off. If the environment was manually activated, its non-Pomodoro rules can remain active.
 - **Block transition.** Rules switch to the next event's environment atomically with the Pomodoro transition. If both events use the same environment, no browser-facing state change is needed.
 

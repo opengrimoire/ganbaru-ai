@@ -238,7 +238,7 @@
     focusDescription="Apply app rules while a focus session is running"
     shortBreakDescription="Apply app rules during short breaks"
     longBreakDescription="Apply app rules during long breaks"
-    pauseDescription="Pause desktop app blocking while focus is paused, then resume when focus continues"
+    pauseDescription="Pause desktop app blocking while focus is manually paused, then resume when focus continues"
     onScheduleChange={requestDesktopConfigurationToggleChange}
   />
 

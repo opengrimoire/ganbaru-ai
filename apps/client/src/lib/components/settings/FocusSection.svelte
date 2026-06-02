@@ -9,8 +9,7 @@
     DEFAULT_FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
     FOCUS_BREAK_END_ESC_PRESS_OPTIONS,
     FOCUS_BREAK_EXTENSION_LIMIT_OPTIONS,
-    FOCUS_IDLE_THRESHOLD_MINUTES_MAX,
-    FOCUS_IDLE_THRESHOLD_MINUTES_MIN,
+    FOCUS_IDLE_THRESHOLD_MINUTES_OPTIONS,
     FOCUS_BREAK_SOUND_INTERVAL_SECONDS,
     FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
   } from "$lib/stores/preferences";
@@ -24,15 +23,11 @@
 
   const DISABLED_SELECT_VALUE = "disabled";
 
-  const idleThresholdOptions: readonly SelectOption[] = Array.from(
-    {
-      length: FOCUS_IDLE_THRESHOLD_MINUTES_MAX - FOCUS_IDLE_THRESHOLD_MINUTES_MIN + 1,
-    },
-    (_, index) => {
-      const minutes = FOCUS_IDLE_THRESHOLD_MINUTES_MIN + index;
-      return { value: String(minutes), label: `${minutes} min` };
-    },
-  );
+  const idleThresholdOptions: readonly SelectOption[] =
+    FOCUS_IDLE_THRESHOLD_MINUTES_OPTIONS.map((minutes) => ({
+      value: String(minutes),
+      label: `${minutes} min`,
+    }));
 
   const breakFinishedRepeatOptions: readonly SelectOption[] =
     FOCUS_BREAK_SOUND_INTERVAL_SECONDS.map((seconds) => {

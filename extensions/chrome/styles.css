@@ -96,8 +96,15 @@ button:disabled {
   margin-top: 0.85rem;
 }
 
-.primary-action {
+.blocked-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
   margin-top: 1.75rem;
+}
+
+.primary-action {
   min-width: 8.5rem;
 }
 

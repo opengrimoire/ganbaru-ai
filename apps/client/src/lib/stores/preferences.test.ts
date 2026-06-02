@@ -17,8 +17,7 @@ import {
   DEFAULT_FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
   FOCUS_BREAK_END_ESC_PRESS_OPTIONS,
   FOCUS_BREAK_EXTENSION_LIMIT_OPTIONS,
-  FOCUS_IDLE_THRESHOLD_MINUTES_MAX,
-  FOCUS_IDLE_THRESHOLD_MINUTES_MIN,
+  FOCUS_IDLE_THRESHOLD_MINUTES_OPTIONS,
   FOCUS_BREAK_SOUND_INTERVAL_SECONDS,
   FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
   DEFAULT_TITLE_BAR_VISIBILITY,
@@ -167,6 +166,12 @@ describe("focus preferences", () => {
     expect(DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES).toBe(3);
   });
 
+  it("uses fixed idle threshold minutes with 3 minutes as the default", () => {
+    expect(FOCUS_IDLE_THRESHOLD_MINUTES_OPTIONS).toEqual([1, 2, 3, 4, 5, 10, 15]);
+    expect(Object.isFrozen(FOCUS_IDLE_THRESHOLD_MINUTES_OPTIONS)).toBe(true);
+    expect(DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES).toBe(3);
+  });
+
   it("uses fixed break screen sound intervals with 10 seconds as the default", () => {
     expect(FOCUS_BREAK_SOUND_INTERVAL_SECONDS).toEqual([0, 10, 15, 30, 60]);
     expect(Object.isFrozen(FOCUS_BREAK_SOUND_INTERVAL_SECONDS)).toBe(true);
@@ -265,19 +270,19 @@ describe("focus preferences", () => {
   });
 
   it("clamps idle threshold minutes to the supported list", () => {
-    expect(clampFocusIdleThresholdMinutes(FOCUS_IDLE_THRESHOLD_MINUTES_MIN)).toBe(
-      FOCUS_IDLE_THRESHOLD_MINUTES_MIN,
-    );
-    expect(clampFocusIdleThresholdMinutes(FOCUS_IDLE_THRESHOLD_MINUTES_MAX)).toBe(
-      FOCUS_IDLE_THRESHOLD_MINUTES_MAX,
-    );
-    expect(clampFocusIdleThresholdMinutes(0)).toBe(FOCUS_IDLE_THRESHOLD_MINUTES_MIN);
-    expect(clampFocusIdleThresholdMinutes(16)).toBe(FOCUS_IDLE_THRESHOLD_MINUTES_MAX);
+    expect(clampFocusIdleThresholdMinutes(1)).toBe(1);
+    expect(clampFocusIdleThresholdMinutes(5)).toBe(5);
+    expect(clampFocusIdleThresholdMinutes(10)).toBe(10);
+    expect(clampFocusIdleThresholdMinutes(15)).toBe(15);
+    expect(clampFocusIdleThresholdMinutes(0)).toBe(DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES);
+    expect(clampFocusIdleThresholdMinutes(6)).toBe(DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES);
+    expect(clampFocusIdleThresholdMinutes(16)).toBe(DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES);
   });
 
   it("rounds fractional values and falls back for non-finite inputs", () => {
     expect(clampFocusIdleThresholdMinutes(4.4)).toBe(4);
     expect(clampFocusIdleThresholdMinutes(4.5)).toBe(5);
+    expect(clampFocusIdleThresholdMinutes(8.5)).toBe(DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES);
     expect(clampFocusIdleThresholdMinutes(Number.NaN)).toBe(
       DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
     );
