@@ -405,7 +405,7 @@
     onwheel={(event) => player.handleVolumeWheel(event)}
   >
   <div class="relative flex h-(--cal-header-row-h) shrink-0 items-center gap-3 px-2">
-    <div class="flex min-w-0 shrink-0 items-center gap-2">
+    <div class="relative z-10 flex min-w-0 shrink-0 items-center gap-2">
       <button
         type="button"
         onclick={openPlaylistBuilder}
@@ -413,23 +413,25 @@
         aria-label="Playlist builder"
       >
         <ListPlus size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-        <span>Playlist builder</span>
+        <span class="hidden min-[960px]:inline">Playlist builder</span>
       </button>
     </div>
     <div
-      class="absolute top-1/2 hidden w-64 min-w-0 -translate-x-1/2 -translate-y-1/2 overflow-hidden whitespace-nowrap text-center text-[0.8rem] font-medium text-foreground min-[960px]:block"
-      style:left={playlistVisible ? "calc((100% - 20rem) / 2)" : "50%"}
+      class="music-header-title absolute top-1/2 z-0 min-w-0 -translate-x-1/2 -translate-y-1/2 text-center text-[0.8rem] font-medium text-foreground"
+      data-playlist-visible={playlistVisible}
     >
       {#if topBarMediaTitle}
-        <span title={player.currentSource ? player.loadedTitle : undefined}>{topBarMediaTitle}</span>
+        <span class="block truncate" title={player.currentSource ? player.loadedTitle : undefined}>
+          {topBarMediaTitle}
+        </span>
       {/if}
     </div>
     <form
-      class="ml-auto flex min-w-0 items-center justify-end gap-2 max-[720px]:flex-1"
+      class="relative z-10 ml-auto flex min-w-0 items-center justify-end gap-2 max-[720px]:flex-1"
       onsubmit={(event) => { event.preventDefault(); void player.loadFromInput(); }}
     >
       <label class="sr-only" for="music-source">Music source</label>
-      <div class="flex h-7 w-48 min-w-0 items-center gap-2 rounded-md border border-border bg-card px-2.5 max-[720px]:flex-1">
+      <div class="music-source-field hidden h-7 min-w-0 items-center gap-2 rounded-md border border-border bg-card px-2.5 min-[540px]:flex">
         <LinkIcon class="shrink-0 text-muted-foreground" size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
         <input
           id="music-source"
@@ -441,7 +443,7 @@
         />
       </div>
       {#if player.parseError || player.playerError}
-        <div class="hidden min-w-0 max-w-56 items-center gap-1.5 text-[0.733333rem] text-destructive min-[680px]:flex">
+        <div class="hidden min-w-0 max-w-56 items-center gap-1.5 text-[0.733333rem] text-destructive min-[1360px]:flex">
           <AlertCircle class="shrink-0" size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
           <span class="truncate">{player.parseError ?? player.playerError}</span>
         </div>
@@ -780,6 +782,21 @@
 {/if}
 
 <style>
+  .music-header-title {
+    left: 50%;
+    width: clamp(3rem, 22vw, 16rem);
+  }
+
+  @media (min-width: 861px) {
+    .music-header-title[data-playlist-visible="true"] {
+      left: calc((100% - 20rem) / 2);
+    }
+  }
+
+  .music-source-field {
+    width: clamp(5rem, 20vw, 12rem);
+  }
+
   .music-volume-slider {
     --music-volume-thumb-size: 0.875rem;
     --music-volume-track-height: 0.25rem;
