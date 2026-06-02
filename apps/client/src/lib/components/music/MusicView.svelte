@@ -404,8 +404,8 @@
     use:releaseClickedButtonFocusAction
     onwheel={(event) => player.handleVolumeWheel(event)}
   >
-  <div class="grid h-(--cal-header-row-h) shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-2 max-[720px]:flex">
-    <div class="flex min-w-0 items-center gap-2 max-[720px]:shrink-0">
+  <div class="relative flex h-(--cal-header-row-h) shrink-0 items-center gap-3 px-2">
+    <div class="flex min-w-0 shrink-0 items-center gap-2">
       <button
         type="button"
         onclick={openPlaylistBuilder}
@@ -416,13 +416,16 @@
         <span>Playlist builder</span>
       </button>
     </div>
-    <div class="hidden w-64 min-w-0 justify-self-center overflow-hidden whitespace-nowrap text-center text-[0.8rem] font-medium text-foreground min-[960px]:block">
+    <div
+      class="absolute top-1/2 hidden w-64 min-w-0 -translate-x-1/2 -translate-y-1/2 overflow-hidden whitespace-nowrap text-center text-[0.8rem] font-medium text-foreground min-[960px]:block"
+      style:left={playlistVisible ? "calc((100% - 20rem) / 2)" : "50%"}
+    >
       {#if topBarMediaTitle}
         <span title={player.currentSource ? player.loadedTitle : undefined}>{topBarMediaTitle}</span>
       {/if}
     </div>
     <form
-      class="ml-auto flex min-w-0 items-center justify-end gap-2 justify-self-end max-[720px]:flex-1"
+      class="ml-auto flex min-w-0 items-center justify-end gap-2 max-[720px]:flex-1"
       onsubmit={(event) => { event.preventDefault(); void player.loadFromInput(); }}
     >
       <label class="sr-only" for="music-source">Music source</label>
