@@ -34,6 +34,11 @@ button:active {
   transform: translateY(1px);
 }
 
+button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
 .blocked-page {
   min-height: 100vh;
   display: grid;
@@ -180,4 +185,9 @@ p {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.85rem;
+}
+
+.popup-action {
+  margin-top: 0.15rem;
+  width: 100%;
 }

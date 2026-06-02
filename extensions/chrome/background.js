@@ -103,6 +103,17 @@ async function updateStatus(status) {
   }
 }
 
+async function forceRecheckStatus() {
+  await refreshActiveUsage({ forceFlush: true });
+  const state = await sendNativeMessage({ type: "get_state" });
+  await updateStatus(state);
+  await Promise.all([
+    recheckOpenTabs(),
+    recheckBlockedPages(),
+  ]);
+  return state;
+}
+
 function localDateString(timestampMs) {
   const date = new Date(timestampMs);
   const year = date.getFullYear();
@@ -374,6 +385,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await updateStatus(state);
         sendResponse(state);
       });
+    return true;
+  }
+
+  if (message.type === "force_recheck") {
+    forceRecheckStatus()
+      .then((state) => sendResponse(state));
     return true;
   }
 
