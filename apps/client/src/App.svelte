@@ -82,6 +82,7 @@
   let IdleOverlay = $state<IdleOverlayComponent | null>(null);
   let loadingBenchmarkOverlay: Promise<void> | null = null;
   let loadingIdleOverlay: Promise<void> | null = null;
+  let devtoolsToggleInFlight = false;
 
   function ensureBenchmarkOverlay(): Promise<void> {
     if (BenchmarkOverlay) return Promise.resolve();
@@ -368,11 +369,16 @@
     void desktopBlocker.check(doomscrolling.blockedApps);
   }
 
-  function openDevtools(): void {
-    if (!import.meta.env.DEV) return;
-    invoke("open_devtools").catch((error) => {
-      console.warn("Failed to open DevTools:", error);
-    });
+  function toggleDevtools(): void {
+    if (!import.meta.env.DEV || devtoolsToggleInFlight) return;
+    devtoolsToggleInFlight = true;
+    invoke<boolean>("toggle_devtools")
+      .catch((error) => {
+        console.warn("Failed to toggle DevTools:", error);
+      })
+      .finally(() => {
+        devtoolsToggleInFlight = false;
+      });
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -381,7 +387,7 @@
       && (e.key === "F12" || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "i"))
     ) {
       e.preventDefault();
-      openDevtools();
+      toggleDevtools();
       return;
     }
 

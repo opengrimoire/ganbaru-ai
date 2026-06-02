@@ -48,11 +48,16 @@ fn get_startup_elapsed_ms() -> u64 {
 }
 
 #[tauri::command]
-fn open_devtools(window: tauri::WebviewWindow) -> Result<(), String> {
+fn toggle_devtools(window: tauri::WebviewWindow) -> Result<bool, String> {
     #[cfg(debug_assertions)]
     {
-        window.open_devtools();
-        Ok(())
+        if window.is_devtools_open() {
+            window.close_devtools();
+            Ok(false)
+        } else {
+            window.open_devtools();
+            Ok(true)
+        }
     }
     #[cfg(not(debug_assertions))]
     {
@@ -742,7 +747,7 @@ pub fn run() {
             benchmark_seed::benchmark_seed_pomodoro_history,
             restart_app,
             restart_app_after_delay,
-            open_devtools,
+            toggle_devtools,
             get_memory_report,
             get_startup_elapsed_ms,
             vault::vault_read_config,
