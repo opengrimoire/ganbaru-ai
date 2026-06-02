@@ -7,7 +7,8 @@ const DEFAULT_HORIZONTAL_GAP_PX = 2;
 const DEFAULT_MIN_EVENT_WIDTH_PX = 28;
 const DEFAULT_MIN_MORE_WIDTH_PX = 42;
 const DEFAULT_HORIZONTAL_PADDING_PX = 8;
-const DEFAULT_AVG_CHAR_WIDTH_PX = 5.6;
+const DEFAULT_AVG_CHAR_WIDTH_PX = 5.8;
+const DEFAULT_TEXT_SAFETY_PX = 3;
 
 interface MonthDayLayoutBase {
   row: number;
@@ -45,6 +46,7 @@ export interface MonthDayLayoutOptions {
   minMoreWidthPx?: number;
   horizontalPaddingPx?: number;
   avgCharWidthPx?: number;
+  textSafetyPx?: number;
 }
 
 interface NormalizedMonthDayLayoutOptions {
@@ -56,6 +58,18 @@ interface NormalizedMonthDayLayoutOptions {
   minMoreWidthPx: number;
   horizontalPaddingPx: number;
   avgCharWidthPx: number;
+  textSafetyPx: number;
+}
+
+interface MonthDayEventWidthEstimate {
+  compactWidthPx: number;
+  desiredWidthPx: number;
+}
+
+interface PackedMonthDayEventLayoutItem extends MonthDayLayoutBase {
+  kind: "event";
+  event: CalendarEvent;
+  desiredWidthPx: number;
 }
 
 function roundPx(value: number): number {
@@ -80,6 +94,7 @@ function normalizeOptions(options: MonthDayLayoutOptions): NormalizedMonthDayLay
       finitePositive(options.horizontalPaddingPx, DEFAULT_HORIZONTAL_PADDING_PX),
     ),
     avgCharWidthPx: finitePositive(options.avgCharWidthPx, DEFAULT_AVG_CHAR_WIDTH_PX),
+    textSafetyPx: Math.max(0, finitePositive(options.textSafetyPx, DEFAULT_TEXT_SAFETY_PX)),
   };
 }
 
@@ -93,25 +108,59 @@ function visibleTitle(event: CalendarEvent): string {
   return title.length > 0 ? title : "(No title)";
 }
 
-function textWidth(text: string, options: NormalizedMonthDayLayoutOptions): number {
-  return text.length * options.avgCharWidthPx;
+function characterWidth(char: string, avgCharWidthPx: number): number {
+  if (char === " ") return avgCharWidthPx * 0.55;
+  if ("fijlrtI1|![](){}".includes(char)) return avgCharWidthPx * 0.62;
+  if ("mwMW@#%&".includes(char)) return avgCharWidthPx * 1.45;
+  if (".,:;'`\"".includes(char)) return avgCharWidthPx * 0.65;
+
+  const codePoint = char.codePointAt(0) ?? 0;
+  if (codePoint >= 48 && codePoint <= 57) return avgCharWidthPx * 0.95;
+  if (codePoint >= 65 && codePoint <= 90) return avgCharWidthPx * 1.22;
+  if (codePoint > 0x2e80) return avgCharWidthPx * 1.8;
+  if (codePoint > 0x7f) return avgCharWidthPx * 1.05;
+  return avgCharWidthPx;
 }
 
-function estimateEventWidth(event: CalendarEvent, options: NormalizedMonthDayLayoutOptions): number {
-  if (options.cellWidthPx <= 0) return 0;
-  const minWidth = Math.min(options.cellWidthPx, options.minEventWidthPx);
-  const maxTwoAcrossWidth = Math.max(
+function textWidth(text: string, options: NormalizedMonthDayLayoutOptions): number {
+  let width = 0;
+  for (const char of text) width += characterWidth(char, options.avgCharWidthPx);
+  return width;
+}
+
+function maxPackedEventWidth(options: NormalizedMonthDayLayoutOptions, minWidth: number): number {
+  return Math.max(
     minWidth,
     (options.cellWidthPx - options.horizontalGapPx) / 2,
   );
+}
+
+function estimateEventWidths(
+  event: CalendarEvent,
+  options: NormalizedMonthDayLayoutOptions,
+): MonthDayEventWidthEstimate {
+  if (options.cellWidthPx <= 0) return { compactWidthPx: 0, desiredWidthPx: 0 };
+  const minWidth = Math.min(options.cellWidthPx, options.minEventWidthPx);
+  const maxPackedWidth = maxPackedEventWidth(options, minWidth);
   const naturalWidth = textWidth(visibleTitle(event), options) + options.horizontalPaddingPx;
-  return roundPx(Math.min(options.cellWidthPx, Math.max(minWidth, Math.min(naturalWidth, maxTwoAcrossWidth))));
+  const compactWidthPx = roundPx(
+    Math.min(options.cellWidthPx, Math.max(minWidth, Math.min(naturalWidth, maxPackedWidth))),
+  );
+  const desiredWidthPx = roundPx(
+    Math.min(
+      options.cellWidthPx,
+      Math.max(compactWidthPx, Math.min(naturalWidth + options.textSafetyPx, maxPackedWidth)),
+    ),
+  );
+  return { compactWidthPx, desiredWidthPx };
 }
 
 function estimateMoreWidth(hiddenCount: number, options: NormalizedMonthDayLayoutOptions): number {
   if (options.cellWidthPx <= 0) return 0;
   const minWidth = Math.min(options.cellWidthPx, options.minMoreWidthPx);
-  const naturalWidth = textWidth(`+${hiddenCount} more`, options) + options.horizontalPaddingPx;
+  const naturalWidth = textWidth(`+${hiddenCount} more`, options)
+    + options.horizontalPaddingPx
+    + options.textSafetyPx;
   return roundPx(Math.min(options.cellWidthPx, Math.max(minWidth, naturalWidth)));
 }
 
@@ -119,56 +168,95 @@ function topForRow(row: number, options: NormalizedMonthDayLayoutOptions): numbe
   return row * (options.chipHeightPx + options.rowGapPx);
 }
 
-function rowRight(items: readonly MonthDayEventLayoutItem[], row: number): number {
-  let right = 0;
+function rowWidth(
+  items: readonly PackedMonthDayEventLayoutItem[],
+  widthOf: (item: PackedMonthDayEventLayoutItem) => number,
+  options: NormalizedMonthDayLayoutOptions,
+): number {
+  if (items.length === 0) return 0;
+  let width = options.horizontalGapPx * (items.length - 1);
   for (const item of items) {
-    if (item.row === row) right = Math.max(right, item.leftPx + item.widthPx);
+    width += widthOf(item);
   }
-  return right;
+  return width;
 }
 
-function findLastItemIndexInRow(items: readonly MonthDayEventLayoutItem[], row: number): number {
+function findLastItemIndexInRow(items: readonly PackedMonthDayEventLayoutItem[], row: number): number {
   for (let i = items.length - 1; i >= 0; i -= 1) {
     if (items[i].row === row) return i;
   }
   return -1;
 }
 
-function expandedLastEvents(
-  items: readonly MonthDayLayoutItem[],
+function publicEventItem(item: PackedMonthDayEventLayoutItem): MonthDayEventLayoutItem {
+  return {
+    kind: "event",
+    event: item.event,
+    row: item.row,
+    leftPx: item.leftPx,
+    topPx: item.topPx,
+    widthPx: item.widthPx,
+    heightPx: item.heightPx,
+  };
+}
+
+function allocateRowEventWidths(
+  rowItems: PackedMonthDayEventLayoutItem[],
+  rightBoundaryPx: number,
+  options: NormalizedMonthDayLayoutOptions,
+): void {
+  if (rowItems.length === 0) return;
+
+  const compactWidth = rowWidth(rowItems, (item) => item.widthPx, options);
+  let spareWidth = Math.max(0, rightBoundaryPx - compactWidth);
+
+  for (const item of rowItems) {
+    if (spareWidth <= 0) break;
+    const readableDeficit = Math.max(0, item.desiredWidthPx - item.widthPx);
+    const addedWidth = Math.min(spareWidth, readableDeficit);
+    item.widthPx += addedWidth;
+    spareWidth -= addedWidth;
+  }
+
+  const lastItem = rowItems[rowItems.length - 1];
+  if (lastItem && spareWidth > 0) {
+    lastItem.widthPx += spareWidth;
+  }
+
+  let leftPx = 0;
+  for (const item of rowItems) {
+    item.leftPx = roundPx(leftPx);
+    item.widthPx = roundPx(item.widthPx);
+    leftPx += item.widthPx + options.horizontalGapPx;
+  }
+}
+
+function arrangeLayoutItems(
+  eventItems: readonly PackedMonthDayEventLayoutItem[],
+  moreItem: MonthDayMoreLayoutItem | undefined,
   rowCount: number,
   options: NormalizedMonthDayLayoutOptions,
 ): MonthDayLayoutItem[] {
-  const next = items.map((item) => ({ ...item })) as MonthDayLayoutItem[];
+  const mutableEvents = eventItems.map((item) => ({ ...item }));
+  const arrangedItems: MonthDayLayoutItem[] = [];
 
   for (let row = 0; row < rowCount; row += 1) {
-    let lastEventIndex = -1;
-    let moreLeft: number | undefined;
-
-    for (let i = 0; i < next.length; i += 1) {
-      const item = next[i];
-      if (item.row !== row) continue;
-      if (item.kind === "event") {
-        lastEventIndex = i;
-      } else {
-        moreLeft = item.leftPx;
-      }
-    }
-
-    if (lastEventIndex < 0) continue;
-    const item = next[lastEventIndex];
-    if (item.kind !== "event") continue;
-    const rowRightBoundary = moreLeft !== undefined
-      ? Math.max(item.leftPx, moreLeft - options.horizontalGapPx)
+    const rowEvents = mutableEvents.filter((item) => item.row === row);
+    const rowMore = moreItem?.row === row ? { ...moreItem } : undefined;
+    const rightBoundaryPx = rowMore && rowEvents.length > 0
+      ? Math.max(0, rowMore.leftPx - options.horizontalGapPx)
       : options.cellWidthPx;
-    item.widthPx = roundPx(Math.max(item.widthPx, rowRightBoundary - item.leftPx));
+
+    allocateRowEventWidths(rowEvents, rightBoundaryPx, options);
+    arrangedItems.push(...rowEvents.map(publicEventItem));
+    if (rowMore) arrangedItems.push(rowMore);
   }
 
-  return next;
+  return arrangedItems;
 }
 
 function appendMoreChip(
-  eventItems: MonthDayEventLayoutItem[],
+  eventItems: PackedMonthDayEventLayoutItem[],
   hiddenCount: number,
   rowCount: number,
   options: NormalizedMonthDayLayoutOptions,
@@ -179,22 +267,30 @@ function appendMoreChip(
 
   while (true) {
     const widthPx = estimateMoreWidth(hidden, options);
-    const occupiedRight = rowRight(items, targetRow);
-    const leftPx = occupiedRight > 0 ? occupiedRight + options.horizontalGapPx : 0;
+    const targetRowItems = items.filter((item) => item.row === targetRow);
+    const rowBoundaryPx = targetRowItems.length > 0
+      ? Math.max(0, options.cellWidthPx - widthPx - options.horizontalGapPx)
+      : options.cellWidthPx;
+    const compactWidthPx = rowWidth(targetRowItems, (item) => item.widthPx, options);
+    const desiredWidthPx = rowWidth(targetRowItems, (item) => item.desiredWidthPx, options);
 
-    if (leftPx + widthPx <= options.cellWidthPx || items.length === 0) {
-      const hasRowEvent = items.some((item) => item.row === targetRow);
+    if (
+      targetRowItems.length === 0 ||
+      (compactWidthPx <= rowBoundaryPx && desiredWidthPx <= rowBoundaryPx) ||
+      items.length === 0
+    ) {
+      const hasRowEvent = targetRowItems.length > 0;
       const moreItem: MonthDayMoreLayoutItem = {
         kind: "more",
         hiddenCount: hidden,
         row: targetRow,
-        leftPx: roundPx(hasRowEvent ? options.cellWidthPx - widthPx : Math.min(leftPx, options.cellWidthPx)),
+        leftPx: roundPx(hasRowEvent ? options.cellWidthPx - widthPx : 0),
         topPx: topForRow(targetRow, options),
         widthPx,
         heightPx: options.chipHeightPx,
       };
       return {
-        items: expandedLastEvents([...items, moreItem], rowCount, options),
+        items: arrangeLayoutItems(items, moreItem, rowCount, options),
         hiddenCount: hidden,
         rowCount,
       };
@@ -212,7 +308,7 @@ function appendMoreChip(
         heightPx: options.chipHeightPx,
       };
       return {
-        items: expandedLastEvents([...items, moreItem], rowCount, options),
+        items: arrangeLayoutItems(items, moreItem, rowCount, options),
         hiddenCount: hidden,
         rowCount,
       };
@@ -241,14 +337,14 @@ export function layoutMonthDayEvents(
     return { items: [], hiddenCount: events.length, rowCount };
   }
 
-  const items: MonthDayEventLayoutItem[] = [];
+  const items: PackedMonthDayEventLayoutItem[] = [];
   let row = 0;
   let cursorX = 0;
   let packedCount = 0;
 
   for (const event of events) {
-    const widthPx = estimateEventWidth(event, normalized);
-    if (cursorX > 0 && cursorX + normalized.horizontalGapPx + widthPx > normalized.cellWidthPx) {
+    const { compactWidthPx, desiredWidthPx } = estimateEventWidths(event, normalized);
+    if (cursorX > 0 && cursorX + normalized.horizontalGapPx + compactWidthPx > normalized.cellWidthPx) {
       row += 1;
       cursorX = 0;
     }
@@ -261,16 +357,21 @@ export function layoutMonthDayEvents(
       row,
       leftPx: roundPx(leftPx),
       topPx: topForRow(row, normalized),
-      widthPx,
+      widthPx: compactWidthPx,
       heightPx: normalized.chipHeightPx,
+      desiredWidthPx,
     });
-    cursorX = leftPx + widthPx;
+    cursorX = leftPx + compactWidthPx;
     packedCount += 1;
   }
 
   const hiddenCount = events.length - packedCount;
   if (hiddenCount <= 0) {
-    return { items: expandedLastEvents(items, rowCount, normalized), hiddenCount: 0, rowCount };
+    return {
+      items: arrangeLayoutItems(items, undefined, rowCount, normalized),
+      hiddenCount: 0,
+      rowCount,
+    };
   }
 
   return appendMoreChip(items, hiddenCount, rowCount, normalized);

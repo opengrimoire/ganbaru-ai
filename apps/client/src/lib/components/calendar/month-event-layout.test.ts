@@ -43,6 +43,29 @@ describe("layoutMonthDayEvents", () => {
     expect(last.leftPx + last.widthPx).toBe(100);
   });
 
+  it("uses spare row width on earlier readable labels before expanding the last event", () => {
+    const layout = layoutMonthDayEvents([
+      evt("1", "Dormir"),
+      evt("2", "Desayuno"),
+      evt("3", "Ejercicio"),
+    ], {
+      cellWidthPx: 220,
+      availableHeightPx: MONTH_EVENT_CHIP_HEIGHT_PX,
+    });
+
+    const items = layout.items.filter((item) => item.kind === "event");
+    const desayuno = items.find((item) => item.event.title === "Desayuno");
+    const ejercicio = items.find((item) => item.event.title === "Ejercicio");
+
+    expect(items).toHaveLength(3);
+    expect(desayuno?.kind).toBe("event");
+    expect(ejercicio?.kind).toBe("event");
+    expect(desayuno?.widthPx).toBeGreaterThan(56);
+    if (ejercicio?.kind === "event") {
+      expect(ejercicio.leftPx + ejercicio.widthPx).toBe(220);
+    }
+  });
+
   it("moves a long event to the next row when the current row is full", () => {
     const layout = layoutMonthDayEvents([
       evt("1", "Sleep"),
@@ -124,6 +147,52 @@ describe("layoutMonthDayEvents", () => {
       expect(more.leftPx + more.widthPx).toBe(100);
       expect(eventItem.leftPx + eventItem.widthPx).toBe(more.leftPx - 2);
     }
+  });
+
+  it("keeps readable events before the more chip when the row has enough space", () => {
+    const layout = layoutMonthDayEvents([
+      evt("1", "Compras"),
+      evt("2", "Comer"),
+      evt("3", "Cenar"),
+      evt("4", "Poner a lavar la ropa"),
+    ], {
+      cellWidthPx: 190,
+      availableHeightPx: MONTH_EVENT_CHIP_HEIGHT_PX,
+    });
+
+    const eventTitles = layout.items
+      .filter((item) => item.kind === "event")
+      .map((item) => item.event.title);
+    const compras = layout.items.find((item) => item.kind === "event" && item.event.title === "Compras");
+    const comer = layout.items.find((item) => item.kind === "event" && item.event.title === "Comer");
+    const more = layout.items.find((item) => item.kind === "more");
+
+    expect(eventTitles).toEqual(["Compras", "Comer", "Cenar"]);
+    expect(compras?.widthPx).toBeGreaterThan(52);
+    expect(comer?.widthPx).toBeGreaterThan(40);
+    expect(more?.kind).toBe("more");
+    expect(more?.hiddenCount).toBe(1);
+  });
+
+  it("hides another event before leaving earlier labels compressed beside the more chip", () => {
+    const layout = layoutMonthDayEvents([
+      evt("1", "Compras"),
+      evt("2", "Comer"),
+      evt("3", "Cenar"),
+      evt("4", "Poner a lavar la ropa"),
+    ], {
+      cellWidthPx: 155,
+      availableHeightPx: MONTH_EVENT_CHIP_HEIGHT_PX,
+    });
+
+    const eventTitles = layout.items
+      .filter((item) => item.kind === "event")
+      .map((item) => item.event.title);
+    const more = layout.items.find((item) => item.kind === "more");
+
+    expect(eventTitles).toEqual(["Compras", "Comer"]);
+    expect(more?.kind).toBe("more");
+    expect(more?.hiddenCount).toBe(2);
   });
 
   it("replaces visible chips until the more chip fits", () => {
