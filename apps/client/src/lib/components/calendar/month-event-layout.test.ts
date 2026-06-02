@@ -75,6 +75,23 @@ describe("layoutMonthDayEvents", () => {
     }
   });
 
+  it("uses full-width rows when every event fits vertically", () => {
+    const layout = layoutMonthDayEvents([
+      evt("1", "A"),
+      evt("2", "B"),
+      evt("3", "C"),
+    ], {
+      cellWidthPx: 140,
+      availableHeightPx: MONTH_EVENT_CHIP_HEIGHT_PX * 3 + MONTH_EVENT_ROW_GAP_PX * 2,
+    });
+
+    expect(layout.hiddenCount).toBe(0);
+    expect(layout.rowCount).toBe(3);
+    expect(layout.items.map((item) => item.row)).toEqual([0, 1, 2]);
+    expect(layout.items.every((item) => item.leftPx === 0)).toBe(true);
+    expect(layout.items.every((item) => item.widthPx === 140)).toBe(true);
+  });
+
   it("reserves month chip width for meeting detail icons", () => {
     const plain = layoutMonthDayEvents([
       evt("1", "Meet"),

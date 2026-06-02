@@ -244,6 +244,21 @@ function publicEventItem(item: PackedMonthDayEventLayoutItem): MonthDayEventLayo
   };
 }
 
+function fullWidthEventItems(
+  events: readonly CalendarEvent[],
+  options: NormalizedMonthDayLayoutOptions,
+): MonthDayEventLayoutItem[] {
+  return events.map((event, row) => ({
+    kind: "event",
+    event,
+    row,
+    leftPx: 0,
+    topPx: topForRow(row, options),
+    widthPx: roundPx(options.cellWidthPx),
+    heightPx: options.chipHeightPx,
+  }));
+}
+
 function allocateRowEventWidths(
   rowItems: PackedMonthDayEventLayoutItem[],
   rightBoundaryPx: number,
@@ -381,6 +396,13 @@ export function layoutMonthDayEvents(
   }
   if (rowCount === 0 || normalized.cellWidthPx <= 0) {
     return { items: [], hiddenCount: events.length, rowCount };
+  }
+  if (events.length <= rowCount) {
+    return {
+      items: fullWidthEventItems(events, normalized),
+      hiddenCount: 0,
+      rowCount,
+    };
   }
 
   const items: PackedMonthDayEventLayoutItem[] = [];
