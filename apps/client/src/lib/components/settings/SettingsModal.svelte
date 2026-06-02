@@ -244,7 +244,7 @@
       <aside
         class={cn(
           "flex shrink-0 flex-col gap-3 bg-background/40 dark:bg-black/20",
-          useIconRail ? "w-14 px-1 py-3" : "w-60 px-2 py-4",
+          useIconRail ? "w-14 px-1 py-3" : "w-58 py-4 pl-2 pr-0",
         )}
       >
         <div class={cn("flex items-center", useIconRail ? "justify-center" : "justify-between")}>
