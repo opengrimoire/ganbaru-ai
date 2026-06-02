@@ -87,11 +87,14 @@ describe("sound cadence helpers", () => {
     expect(shouldPlayRepeatingSoundAtElapsedSecond(20, IDLE_ALERT_INTERVAL_SECONDS)).toBe(true);
   });
 
-  it("plays break-finished alerts immediately and every 10 seconds", () => {
+  it("plays break-finished alerts immediately and every configured interval", () => {
     expect(shouldPlayRepeatingSoundAtElapsedSecond(0, BREAK_FINISHED_ALERT_INTERVAL_SECONDS)).toBe(true);
     expect(shouldPlayRepeatingSoundAtElapsedSecond(9, BREAK_FINISHED_ALERT_INTERVAL_SECONDS)).toBe(false);
     expect(shouldPlayRepeatingSoundAtElapsedSecond(10, BREAK_FINISHED_ALERT_INTERVAL_SECONDS)).toBe(true);
     expect(shouldPlayRepeatingSoundAtElapsedSecond(20, BREAK_FINISHED_ALERT_INTERVAL_SECONDS)).toBe(true);
+    expect(shouldPlayRepeatingSoundAtElapsedSecond(15, 15)).toBe(true);
+    expect(shouldPlayRepeatingSoundAtElapsedSecond(30, 15)).toBe(true);
+    expect(shouldPlayRepeatingSoundAtElapsedSecond(10, 0)).toBe(false);
   });
 });
 

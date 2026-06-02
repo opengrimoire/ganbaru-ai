@@ -56,14 +56,20 @@ The `Mod + Shift + Space` chord extends the current break, capped at 3 added min
 
 There is no "stop the session" control on the break screen. Stopping the session must go through the main window, which makes it a deliberate action rather than an impulse during a moment of resistance.
 
+## Sound settings
+
+Focus settings has a Break screen section for break-complete audio behavior. The reminder repeat dropdown controls how often the break-finished sound repeats after the timer reaches 0. Supported values are None, every 10 seconds, every 15 seconds, every 30 seconds, and every minute. None still plays the break-finished sound immediately when the break reaches 0, but does not repeat it. The default is every 10 seconds.
+
+The warning dropdown controls whether the same sound plays once before the break ends. Supported values are None, 10 seconds before, 15 seconds before, 30 seconds before, and 1 minute before. The default is 10 seconds before. If the selected warning point has already passed, no warning is played for that break.
+
 ## Overtime
 
-If the user does not interact with the break screen and the break timer reaches 0, the system enters overtime. The break-finished sound plays immediately, then every 10 seconds until the user acknowledges the screen or the system auto-advances. The break segment's `actual_end` is not set yet; the segment continues to be the active segment, but the timer counts up instead of down.
+If the user does not interact with the break screen and the break timer reaches 0, the system enters overtime. The break-finished sound plays immediately, then repeats at the configured Break screen reminder cadence until the user acknowledges the screen or the system auto-advances. The break segment's `actual_end` is not set yet; the segment continues to be the active segment, but the timer counts up instead of down.
 
 Overtime is capped at `MAX_BREAK_OVERTIME_SECONDS` (1800 seconds = 30 minutes). During overtime:
 
 - The break mark on the rail keeps growing for 10 seconds. After that grace window, the extra waiting time is empty on the rail, matching idle and pause gaps.
-- A reminder alert fires every 10 seconds prompting the user to start the next focus phase.
+- A reminder alert fires at the configured repeat cadence prompting the user to start the next focus phase. If the repeat cadence is None, only the immediate break-finished sound plays.
 - After 30 minutes of overtime, the system auto-advances to focus. The break segment is marked completed, with `actual_end` capped at 10 seconds after the planned break end.
 
 The rail gives the user 10 seconds of grace to return without treating a long absence as break time. The 30 minute cap prevents the break screen from waiting forever if the user never comes back.

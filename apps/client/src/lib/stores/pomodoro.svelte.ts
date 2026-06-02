@@ -31,7 +31,6 @@ import {
   MAX_BREAK_OVERTIME_SECONDS,
   IDLE_FOCUS_FAILURE_DELAY_SECONDS,
   IDLE_CHECK_MAX_INTERVAL_MS,
-  BREAK_FINISHED_ALERT_INTERVAL_SECONDS,
   limitRemainingSecondsToBlockEnd,
   phaseDurationSeconds,
   isPomodoroSessionActive,
@@ -161,6 +160,7 @@ let segmentVersion = $state(0);
 let breakOvertimeSeconds = $state(0);
 let overtimeIntervalId: ReturnType<typeof setInterval> | null = null;
 let overtimeAlertIntervalId: ReturnType<typeof setInterval> | null = null;
+let breakEndWarningTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
 // Block expiry: set when the calendar event ends naturally (via tick).
 // Keeps activeBlockId intact so the next checkActiveBlock can trigger
@@ -842,6 +842,7 @@ function syncPausedTrayPulse(): void {
 
 function expirePausedBlockAtDeadline(): void {
   if (activeBlockEndMs === null) return;
+  clearBreakEndWarning();
   clearMusicPausedByPomodoro();
   const endIso = new Date(activeBlockEndMs).toISOString();
   stopPausedOpportunityCountdown();
@@ -874,6 +875,7 @@ function expirePausedBlockAtDeadline(): void {
 
 async function expirePausedBlockAtDeadlineAndWait(): Promise<void> {
   if (activeBlockEndMs === null) return;
+  clearBreakEndWarning();
   clearMusicPausedByPomodoro();
   const endIso = new Date(activeBlockEndMs).toISOString();
   stopPausedOpportunityCountdown();
@@ -1037,6 +1039,7 @@ function addBreakTimeInternal(seconds: number = BREAK_EXTENSION_SECONDS): void {
 
   setPhaseRemainingSeconds(currentWorkRemainingSeconds + addedVisibleSeconds, elapsedSeconds, nowMs);
   if (phaseEndTime !== null) phaseEndTime = nowMs + remainingSeconds * 1000;
+  scheduleBreakEndWarning();
 
   const seg = activeSegment();
   if (seg && isBreakPhase(seg.phase) && seg.status === "active") {
@@ -1494,6 +1497,7 @@ function refreshFutureSegmentsForActiveWindow(blockId: string, eventDate: string
 function applyActiveBlockWindowChange(blockId: string, newEndMs: number, eventDate?: string): void {
   activeBlockEndMs = newEndMs;
   refreshCurrentPhaseLimit();
+  scheduleBreakEndWarning();
   if (activeRunId) {
     updateRunWindowInBackend({
       runId: activeRunId,
@@ -1669,6 +1673,7 @@ async function reconfigureSession(
     intervalId = setInterval(tick, 1000);
     lastTickMs = nowMs;
   }
+  scheduleBreakEndWarning();
 
   if (result.resetNotification) {
     notificationShown = false;
@@ -1998,6 +2003,30 @@ function stopOvertime() {
   breakOvertimeSeconds = 0;
 }
 
+function clearBreakEndWarning(): void {
+  if (breakEndWarningTimeoutId === null) return;
+  clearTimeout(breakEndWarningTimeoutId);
+  breakEndWarningTimeoutId = null;
+}
+
+function scheduleBreakEndWarning(): void {
+  clearBreakEndWarning();
+  if (!isRunning || !isBreakPhase(phase) || phaseEndTime === null) return;
+
+  const warningSeconds = getPreferences().focusBreakEndWarningSeconds;
+  if (warningSeconds <= 0) return;
+
+  const targetMs = phaseEndTime - warningSeconds * 1000;
+  const delayMs = targetMs - Date.now();
+  if (delayMs <= 0) return;
+
+  breakEndWarningTimeoutId = setTimeout(() => {
+    breakEndWarningTimeoutId = null;
+    if (!isRunning || !isBreakPhase(phase) || phaseEndTime === null) return;
+    playAppSound(APP_SOUND_IDS.breakFinished).catch(() => {});
+  }, delayMs);
+}
+
 function clearMusicPausedByPomodoro(): void {
   musicPausedByPomodoroPause = false;
   musicPauseInFlight = null;
@@ -2046,6 +2075,7 @@ function resumeMusicFromPomodoroPause(): void {
 
 function startFocusSession() {
   closePomodoroOverlay();
+  clearBreakEndWarning();
   clearMusicPausedByPomodoro();
   stopPausedOpportunityCountdown();
   if (intervalId) {
@@ -2085,9 +2115,11 @@ async function dismissSuspend(resume: boolean): Promise<void> {
     phaseEndTime = Date.now() + remainingSeconds * 1000;
     lastTickMs = Date.now();
     intervalId = setInterval(tick, 1000);
+    scheduleBreakEndWarning();
     startIdleChecking();
     updateTray();
   } else {
+    clearBreakEndWarning();
     const seg = activeSegment();
     const lastPause = seg?.pauseLog[seg.pauseLog.length - 1];
     const endIso = lastPause ? lastPause.startedAt : nowIso();
@@ -2428,6 +2460,7 @@ function showBreakOverlay(breakSeconds: number) {
   invoke("show_break_overlay", { breakEndsAtMs }).catch((e) =>
     console.warn("Failed to show break overlay:", e),
   );
+  scheduleBreakEndWarning();
 }
 
 function closePomodoroOverlay(): void {
@@ -2458,6 +2491,7 @@ function tick() {
   switch (result.kind) {
     case "suspend_and_block_expired": {
       closePomodoroOverlay();
+      clearBreakEndWarning();
       // Record synthetic pause
       if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
         const seg = segments[currentSegmentIndex];
@@ -2485,6 +2519,7 @@ function tick() {
     }
 
     case "suspend_block_active": {
+      clearBreakEndWarning();
       // Record synthetic pause
       if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
         const seg = segments[currentSegmentIndex];
@@ -2507,6 +2542,7 @@ function tick() {
 
     case "block_expired": {
       closePomodoroOverlay();
+      clearBreakEndWarning();
       lastTickMs = now;
       recordRunningPhaseProgress(0);
       const endIso = new Date(activeBlockEndMs!).toISOString();
@@ -2531,6 +2567,7 @@ function tick() {
     }
 
     case "break_finished": {
+      clearBreakEndWarning();
       lastTickMs = now;
       recordRunningPhaseProgress(0);
       remainingSeconds = 0;
@@ -2549,9 +2586,12 @@ function tick() {
       }
       if (!overtimeAlertIntervalId) {
         playAppSound(APP_SOUND_IDS.breakFinished).catch(() => {});
-        overtimeAlertIntervalId = setInterval(() => {
-          playAppSound(APP_SOUND_IDS.breakFinished).catch(() => {});
-        }, BREAK_FINISHED_ALERT_INTERVAL_SECONDS * 1000);
+        const repeatSeconds = getPreferences().focusBreakFinishedRepeatSeconds;
+        if (repeatSeconds > 0) {
+          overtimeAlertIntervalId = setInterval(() => {
+            playAppSound(APP_SOUND_IDS.breakFinished).catch(() => {});
+          }, repeatSeconds * 1000);
+        }
       }
       return;
     }
@@ -2782,6 +2822,7 @@ async function startFromBlockInternal(
       return;
 
     case "new_session": {
+      clearBreakEndWarning();
       clearMusicPausedByPomodoro();
       stopPausedOpportunityCountdown();
       initListeners();
@@ -2817,6 +2858,7 @@ async function startFromBlockInternal(
 
 async function stopSessionInternal(): Promise<void> {
   closePomodoroOverlay();
+  clearBreakEndWarning();
   clearMusicPausedByPomodoro();
   stopPausedOpportunityCountdown();
   if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
@@ -2859,6 +2901,7 @@ async function stopSessionInternal(): Promise<void> {
 
 async function completeActiveBlockAtInternal(endIso: string = nowIso()): Promise<void> {
   closePomodoroOverlay();
+  clearBreakEndWarning();
   const parsedEndMs = Date.parse(endIso);
   const normalizedEndIso = Number.isFinite(parsedEndMs)
     ? new Date(parsedEndMs).toISOString()
@@ -2920,6 +2963,7 @@ async function completeActiveBlockAtInternal(endIso: string = nowIso()): Promise
 
 function pauseSession(): void {
   if (!isRunning) return;
+  clearBreakEndWarning();
   isRunning = false;
   phaseEndTime = null;
   lastTickMs = null;
@@ -2962,6 +3006,7 @@ function resumeSession(): void {
   }
   intervalId = setInterval(tick, 1000);
   lastTickMs = Date.now();
+  scheduleBreakEndWarning();
   startIdleChecking();
   resumeMusicFromPomodoroPause();
   updateTray();

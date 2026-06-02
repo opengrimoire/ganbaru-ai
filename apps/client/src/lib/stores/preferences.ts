@@ -76,6 +76,11 @@ export const FOCUS_IDLE_THRESHOLD_MINUTES_MIN = 1;
 export const FOCUS_IDLE_THRESHOLD_MINUTES_MAX = 15;
 export const DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES = 3;
 export const DEFAULT_FOCUS_IDLE_PAUSE_ON_EVENT_CREATE = true;
+export const FOCUS_BREAK_SOUND_INTERVAL_SECONDS = Object.freeze([0, 10, 15, 30, 60] as const);
+export type FocusBreakSoundIntervalSeconds =
+  (typeof FOCUS_BREAK_SOUND_INTERVAL_SECONDS)[number];
+export const DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS: FocusBreakSoundIntervalSeconds = 10;
+export const DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS: FocusBreakSoundIntervalSeconds = 10;
 
 export const TITLE_BAR_CONTROL_IDS = [
   "pomodoro",
@@ -147,6 +152,22 @@ export function clampFocusIdleThresholdMinutes(value: number): number {
   if (integerValue < FOCUS_IDLE_THRESHOLD_MINUTES_MIN) return FOCUS_IDLE_THRESHOLD_MINUTES_MIN;
   if (integerValue > FOCUS_IDLE_THRESHOLD_MINUTES_MAX) return FOCUS_IDLE_THRESHOLD_MINUTES_MAX;
   return integerValue;
+}
+
+export function isFocusBreakSoundIntervalSeconds(
+  value: unknown,
+): value is FocusBreakSoundIntervalSeconds {
+  return typeof value === "number"
+    && FOCUS_BREAK_SOUND_INTERVAL_SECONDS.includes(
+      value as FocusBreakSoundIntervalSeconds,
+    );
+}
+
+export function parseFocusBreakSoundIntervalSeconds(
+  value: unknown,
+  fallback: FocusBreakSoundIntervalSeconds,
+): FocusBreakSoundIntervalSeconds {
+  return isFocusBreakSoundIntervalSeconds(value) ? value : fallback;
 }
 
 /**

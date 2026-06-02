@@ -2,8 +2,11 @@
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import {
     DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
+    DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS,
+    DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS,
     FOCUS_IDLE_THRESHOLD_MINUTES_MAX,
     FOCUS_IDLE_THRESHOLD_MINUTES_MIN,
+    FOCUS_BREAK_SOUND_INTERVAL_SECONDS,
   } from "$lib/stores/preferences";
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import CustomSelect from "./CustomSelect.svelte";
@@ -23,12 +26,38 @@
     },
   );
 
+  const breakFinishedRepeatOptions: readonly SelectOption[] =
+    FOCUS_BREAK_SOUND_INTERVAL_SECONDS.map((seconds) => {
+      if (seconds === 0) return { value: String(seconds), label: "None" };
+      if (seconds === 60) return { value: String(seconds), label: "Every minute" };
+      return { value: String(seconds), label: `Every ${seconds} seconds` };
+    });
+
+  const breakEndWarningOptions: readonly SelectOption[] =
+    FOCUS_BREAK_SOUND_INTERVAL_SECONDS.map((seconds) => {
+      if (seconds === 0) return { value: String(seconds), label: "None" };
+      if (seconds === 60) return { value: String(seconds), label: "1 minute before" };
+      return { value: String(seconds), label: `${seconds} seconds before` };
+    });
+
   let showDisableIdlePauseConfirm = $state(false);
 
   function handleIdleThresholdChange(value: string): void {
     const minutes = Number(value);
     if (!Number.isFinite(minutes)) return;
     preferences.setFocusIdleThresholdMinutes(minutes);
+  }
+
+  function handleBreakFinishedRepeatChange(value: string): void {
+    const seconds = Number(value);
+    if (!Number.isFinite(seconds)) return;
+    preferences.setFocusBreakFinishedRepeatSeconds(seconds);
+  }
+
+  function handleBreakEndWarningChange(value: string): void {
+    const seconds = Number(value);
+    if (!Number.isFinite(seconds)) return;
+    preferences.setFocusBreakEndWarningSeconds(seconds);
   }
 
   function handleIdlePauseDefaultChange(checked: boolean): void {
@@ -67,6 +96,32 @@
         description="Turns on Pause on inactivity for new Pomodoro events"
         checked={preferences.focusIdlePauseOnEventCreate}
         onChange={handleIdlePauseDefaultChange}
+      />
+    </div>
+  </section>
+
+  <div class="h-px bg-border/70" aria-hidden="true"></div>
+
+  <section class="flex flex-col gap-4">
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Break screen</h2>
+    <div class="flex flex-col gap-3">
+      <CustomSelect
+        label="Repeat after break ends"
+        description="Replay the break-complete sound until you return"
+        value={String(preferences.focusBreakFinishedRepeatSeconds)}
+        options={breakFinishedRepeatOptions}
+        onChange={handleBreakFinishedRepeatChange}
+        canReset={preferences.focusBreakFinishedRepeatSeconds !== DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS}
+        onReset={() => preferences.resetFocusBreakFinishedRepeatSeconds()}
+      />
+      <CustomSelect
+        label="Warning before break ends"
+        description="Play the same sound once before the break completes"
+        value={String(preferences.focusBreakEndWarningSeconds)}
+        options={breakEndWarningOptions}
+        onChange={handleBreakEndWarningChange}
+        canReset={preferences.focusBreakEndWarningSeconds !== DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS}
+        onReset={() => preferences.resetFocusBreakEndWarningSeconds()}
       />
     </div>
   </section>

@@ -551,5 +551,6 @@ export function shouldPlayRepeatingSoundAtElapsedSecond(
 ): boolean {
   if (elapsedSeconds < 0) return false;
   if (elapsedSeconds === 0) return true;
+  if (intervalSeconds <= 0) return false;
   return elapsedSeconds % intervalSeconds === 0;
 }

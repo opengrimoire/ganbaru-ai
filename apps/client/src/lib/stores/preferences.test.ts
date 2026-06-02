@@ -10,15 +10,20 @@ import {
   DEFAULT_CALENDAR_TIME_FORMAT,
   DEFAULT_FOCUS_IDLE_PAUSE_ON_EVENT_CREATE,
   DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
+  DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS,
+  DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS,
   FOCUS_IDLE_THRESHOLD_MINUTES_MAX,
   FOCUS_IDLE_THRESHOLD_MINUTES_MIN,
+  FOCUS_BREAK_SOUND_INTERVAL_SECONDS,
   DEFAULT_TITLE_BAR_VISIBILITY,
   TITLE_BAR_CONTROL_IDS,
   clampFocusIdleThresholdMinutes,
   clampFontScale,
   getFontFamilyById,
   isCalendarTimeFormat,
+  isFocusBreakSoundIntervalSeconds,
   isTitleBarControlId,
+  parseFocusBreakSoundIntervalSeconds,
   parseTitleBarVisibility,
   resolveFontFamilyStack,
   shouldNormalizeTitleBarVisibility,
@@ -148,6 +153,30 @@ describe("focus preferences", () => {
   it("defaults idle pause to enabled with a 3 minute threshold", () => {
     expect(DEFAULT_FOCUS_IDLE_PAUSE_ON_EVENT_CREATE).toBe(true);
     expect(DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES).toBe(3);
+  });
+
+  it("uses fixed break screen sound intervals with 10 seconds as the default", () => {
+    expect(FOCUS_BREAK_SOUND_INTERVAL_SECONDS).toEqual([0, 10, 15, 30, 60]);
+    expect(Object.isFrozen(FOCUS_BREAK_SOUND_INTERVAL_SECONDS)).toBe(true);
+    expect(DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS).toBe(10);
+    expect(DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS).toBe(10);
+  });
+
+  it("accepts only supported break screen sound intervals", () => {
+    expect(isFocusBreakSoundIntervalSeconds(0)).toBe(true);
+    expect(isFocusBreakSoundIntervalSeconds(10)).toBe(true);
+    expect(isFocusBreakSoundIntervalSeconds(15)).toBe(true);
+    expect(isFocusBreakSoundIntervalSeconds(30)).toBe(true);
+    expect(isFocusBreakSoundIntervalSeconds(60)).toBe(true);
+    expect(isFocusBreakSoundIntervalSeconds(20)).toBe(false);
+    expect(isFocusBreakSoundIntervalSeconds("10")).toBe(false);
+    expect(isFocusBreakSoundIntervalSeconds(null)).toBe(false);
+  });
+
+  it("falls back when parsing unsupported break screen sound intervals", () => {
+    expect(parseFocusBreakSoundIntervalSeconds(30, 10)).toBe(30);
+    expect(parseFocusBreakSoundIntervalSeconds(20, 10)).toBe(10);
+    expect(parseFocusBreakSoundIntervalSeconds("10", 10)).toBe(10);
   });
 
   it("clamps idle threshold minutes to the supported list", () => {

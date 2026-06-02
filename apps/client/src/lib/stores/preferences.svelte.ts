@@ -8,8 +8,11 @@ import {
   DEFAULT_CALENDAR_TIME_FORMAT,
   DEFAULT_FOCUS_IDLE_PAUSE_ON_EVENT_CREATE,
   DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
+  DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS,
+  DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS,
   DEFAULT_TITLE_BAR_VISIBILITY,
   type CalendarTimeFormat,
+  type FocusBreakSoundIntervalSeconds,
   type TitleBarControlId,
   type TitleBarVisibility,
   clampFocusIdleThresholdMinutes,
@@ -17,6 +20,7 @@ import {
   getFontFamilyById,
   isCalendarTimeFormat,
   isTitleBarControlId,
+  parseFocusBreakSoundIntervalSeconds,
   parseTitleBarVisibility,
   resolveFontFamilyStack,
   shouldNormalizeTitleBarVisibility,
@@ -30,6 +34,10 @@ const CALENDAR_TIME_FORMAT_CONFIG_KEY = "preferences.calendarTimeFormat";
 const CALENDAR_DIM_PAST_EVENTS_CONFIG_KEY = "preferences.calendarDimPastEvents";
 const FOCUS_IDLE_THRESHOLD_MINUTES_CONFIG_KEY = "preferences.focusIdleThresholdMinutes";
 const FOCUS_IDLE_PAUSE_ON_EVENT_CREATE_CONFIG_KEY = "preferences.focusIdlePauseOnEventCreate";
+const FOCUS_BREAK_FINISHED_REPEAT_SECONDS_CONFIG_KEY =
+  "preferences.focusBreakFinishedRepeatSeconds";
+const FOCUS_BREAK_END_WARNING_SECONDS_CONFIG_KEY =
+  "preferences.focusBreakEndWarningSeconds";
 const MUSIC_PAUSE_ON_POMODORO_PAUSE_CONFIG_KEY = "preferences.musicPauseOnPomodoroPause";
 const TITLE_BAR_VISIBILITY_CONFIG_KEY = "preferences.titleBarVisibility";
 
@@ -78,6 +86,22 @@ function loadSavedFocusIdlePauseOnEventCreate(): boolean {
   return DEFAULT_FOCUS_IDLE_PAUSE_ON_EVENT_CREATE;
 }
 
+function loadSavedFocusBreakFinishedRepeatSeconds(): FocusBreakSoundIntervalSeconds {
+  const saved = getConfigKey<unknown>(FOCUS_BREAK_FINISHED_REPEAT_SECONDS_CONFIG_KEY, undefined);
+  return parseFocusBreakSoundIntervalSeconds(
+    saved,
+    DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS,
+  );
+}
+
+function loadSavedFocusBreakEndWarningSeconds(): FocusBreakSoundIntervalSeconds {
+  const saved = getConfigKey<unknown>(FOCUS_BREAK_END_WARNING_SECONDS_CONFIG_KEY, undefined);
+  return parseFocusBreakSoundIntervalSeconds(
+    saved,
+    DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS,
+  );
+}
+
 function loadSavedMusicPauseOnPomodoroPause(): boolean {
   const saved = getConfigKey<unknown>(MUSIC_PAUSE_ON_POMODORO_PAUSE_CONFIG_KEY, undefined);
   if (typeof saved === "boolean") return saved;
@@ -100,6 +124,12 @@ let calendarTimeFormat = $state<CalendarTimeFormat>(loadSavedCalendarTimeFormat(
 let calendarDimPastEvents = $state<boolean>(loadSavedCalendarDimPastEvents());
 let focusIdleThresholdMinutes = $state<number>(loadSavedFocusIdleThresholdMinutes());
 let focusIdlePauseOnEventCreate = $state<boolean>(loadSavedFocusIdlePauseOnEventCreate());
+let focusBreakFinishedRepeatSeconds = $state<FocusBreakSoundIntervalSeconds>(
+  loadSavedFocusBreakFinishedRepeatSeconds(),
+);
+let focusBreakEndWarningSeconds = $state<FocusBreakSoundIntervalSeconds>(
+  loadSavedFocusBreakEndWarningSeconds(),
+);
 let musicPauseOnPomodoroPause = $state<boolean>(loadSavedMusicPauseOnPomodoroPause());
 let titleBarVisibility = $state<TitleBarVisibility>(loadSavedTitleBarVisibility());
 
@@ -157,6 +187,24 @@ function setFocusIdlePauseOnEventCreate(value: boolean): void {
   setConfigKey(FOCUS_IDLE_PAUSE_ON_EVENT_CREATE_CONFIG_KEY, value);
 }
 
+function setFocusBreakFinishedRepeatSeconds(value: number): void {
+  const parsed = parseFocusBreakSoundIntervalSeconds(
+    value,
+    DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS,
+  );
+  focusBreakFinishedRepeatSeconds = parsed;
+  setConfigKey(FOCUS_BREAK_FINISHED_REPEAT_SECONDS_CONFIG_KEY, parsed);
+}
+
+function setFocusBreakEndWarningSeconds(value: number): void {
+  const parsed = parseFocusBreakSoundIntervalSeconds(
+    value,
+    DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS,
+  );
+  focusBreakEndWarningSeconds = parsed;
+  setConfigKey(FOCUS_BREAK_END_WARNING_SECONDS_CONFIG_KEY, parsed);
+}
+
 function setMusicPauseOnPomodoroPause(value: boolean): void {
   musicPauseOnPomodoroPause = value;
   setConfigKey(MUSIC_PAUSE_ON_POMODORO_PAUSE_CONFIG_KEY, value);
@@ -208,6 +256,12 @@ export function getPreferences() {
     get focusIdlePauseOnEventCreate(): boolean {
       return focusIdlePauseOnEventCreate;
     },
+    get focusBreakFinishedRepeatSeconds(): FocusBreakSoundIntervalSeconds {
+      return focusBreakFinishedRepeatSeconds;
+    },
+    get focusBreakEndWarningSeconds(): FocusBreakSoundIntervalSeconds {
+      return focusBreakEndWarningSeconds;
+    },
     get musicPauseOnPomodoroPause(): boolean {
       return musicPauseOnPomodoroPause;
     },
@@ -221,6 +275,8 @@ export function getPreferences() {
     setCalendarDimPastEvents,
     setFocusIdleThresholdMinutes,
     setFocusIdlePauseOnEventCreate,
+    setFocusBreakFinishedRepeatSeconds,
+    setFocusBreakEndWarningSeconds,
     setMusicPauseOnPomodoroPause,
     setTitleBarControlVisible,
     toggleTitleBarControl,
@@ -244,6 +300,12 @@ export function getPreferences() {
     },
     resetFocusIdlePauseOnEventCreate() {
       setFocusIdlePauseOnEventCreate(DEFAULT_FOCUS_IDLE_PAUSE_ON_EVENT_CREATE);
+    },
+    resetFocusBreakFinishedRepeatSeconds() {
+      setFocusBreakFinishedRepeatSeconds(DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS);
+    },
+    resetFocusBreakEndWarningSeconds() {
+      setFocusBreakEndWarningSeconds(DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS);
     },
     resetMusicPauseOnPomodoroPause() {
       setMusicPauseOnPomodoroPause(DEFAULT_MUSIC_PAUSE_ON_POMODORO_PAUSE);

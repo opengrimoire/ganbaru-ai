@@ -163,6 +163,8 @@ Delete/archive requests are planned before they reach the backend. The plan can 
 
 The pomodoro tracking system uses normalized config rows plus four history tables: runs, segments, pauses, and run events. Together they record every session from start to finish with enough resolution for real-time rendering, crash recovery, and long-term analytics. There is no `pomodoro_sessions` summary table. Session totals are derived from the rows below.
 
+Global Pomodoro preferences that are not per-event history live in `vault/config.json` under `preferences.*`. Break screen audio uses `preferences.focusBreakFinishedRepeatSeconds` and `preferences.focusBreakEndWarningSeconds`, each storing one of `0`, `10`, `15`, `30`, or `60` seconds. `0` means None. Both default to `10`.
+
 ### `pomodoro_configs`
 
 One row per timed calendar event with Pomodoro enabled. All-day events cannot have a config row. The config row is the mutable source for future runs. Once a run starts, those settings are copied into `pomodoro_runs` as an immutable history snapshot. Migration `20260601000000_remove_all_day_pomodoro_configs.sql` removes legacy config rows that were attached to all-day events before this invariant existed.
