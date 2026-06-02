@@ -17,8 +17,8 @@ const LIMIT_STATE_FILE: &str = "doomscrolling-limit-state.json";
 const EXTENSION_CONNECTION_FILE: &str = "doomscrolling-extension-status.json";
 const EVENTS_FILE: &str = "doomscrolling-events.jsonl";
 const CONFIG_FILE: &str = "vault/config.json";
-const STALE_STATE_SECONDS: i64 = 180;
-const LIMIT_STATE_STALE_SECONDS: i64 = 300;
+const STALE_STATE_SECONDS: i64 = 75;
+const LIMIT_STATE_STALE_SECONDS: i64 = 20;
 const ALLOWED_USAGE_DATABASE_FILES: &[&str] = &[
     "ganbaru-ai.db",
     "ganbaru-ai-dev.db",
@@ -1559,7 +1559,7 @@ fn log_block_event(snapshot: &StateSnapshot, host: &str, matched_rule_name: Opti
 mod tests {
     use super::{
         decide_url, host_from_url, host_matches_rule, should_enforce, DoomscrollingConfig,
-        DoomscrollingMode, NativeResponse, StateSnapshot, UsageLimitsConfig,
+        DoomscrollingMode, NativeResponse, RuntimeState, StateSnapshot, UsageLimitsConfig,
     };
     use chrono::SecondsFormat;
 
@@ -1598,6 +1598,16 @@ mod tests {
             matched_rule_name: None,
             reason: None,
             environment_name: "Ganbaru AI",
+        }
+    }
+
+    fn runtime_for_phase(phase: &str, paused: bool) -> RuntimeState {
+        RuntimeState {
+            active: true,
+            paused,
+            phase: phase.to_string(),
+            remaining_seconds: Some(60),
+            updated_at: super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
         }
     }
 
@@ -2004,6 +2014,34 @@ mod tests {
 
         assert!(!should_enforce(&snapshot, &mut focus));
         assert!(should_enforce(&snapshot, &mut short_break));
+    }
+
+    #[test]
+    fn skips_paused_focus_when_pause_setting_enabled() {
+        let snapshot = StateSnapshot {
+            config_dir: None,
+            config: config(),
+            runtime: Some(runtime_for_phase("focus", true)),
+            limit_state: None,
+        };
+        let mut focus = response_for_phase("focus");
+
+        assert!(!should_enforce(&snapshot, &mut focus));
+    }
+
+    #[test]
+    fn enforces_paused_focus_when_pause_setting_disabled() {
+        let mut config = config();
+        config.pause_during_focus_pause = false;
+        let snapshot = StateSnapshot {
+            config_dir: None,
+            config,
+            runtime: Some(runtime_for_phase("focus", true)),
+            limit_state: None,
+        };
+        let mut focus = response_for_phase("focus");
+
+        assert!(should_enforce(&snapshot, &mut focus));
     }
 
     #[test]

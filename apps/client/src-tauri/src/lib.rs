@@ -75,6 +75,9 @@ fn force_quit(
         overlays.focus(&app);
         return;
     }
+    if let Err(error) = doomscrolling::clear_doomscrolling_enforcement_state(&app) {
+        eprintln!("failed to clear doomscrolling enforcement state: {error}");
+    }
     app.exit(0);
 }
 
@@ -82,6 +85,7 @@ fn force_quit(
 /// Used to factory reset application state.
 #[tauri::command]
 async fn reset_database(app: tauri::AppHandle) -> Result<(), String> {
+    doomscrolling::clear_doomscrolling_enforcement_state(&app)?;
     db_path::close_all_sqlite_pools(&app).await?;
     let mut db_path = app.path().app_config_dir().map_err(|e| e.to_string())?;
     let db_file = if cfg!(debug_assertions) {

@@ -290,6 +290,25 @@ fn limit_state_path<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, St
     Ok(path)
 }
 
+fn remove_file_if_exists(path: &Path) -> Result<(), String> {
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+fn clear_enforcement_state_files(state_path: &Path, limit_state_path: &Path) -> Result<(), String> {
+    remove_file_if_exists(state_path)?;
+    remove_file_if_exists(limit_state_path)
+}
+
+pub fn clear_doomscrolling_enforcement_state<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<(), String> {
+    clear_enforcement_state_files(&state_path(app)?, &limit_state_path(app)?)
+}
+
 fn validate_state(state: &DoomscrollingRuntimeState) -> Result<(), String> {
     match state.phase.as_str() {
         "inactive" | "focus" | "short_break" | "long_break" => {}
@@ -2115,12 +2134,14 @@ pub fn doomscrolling_get_foreground_desktop_app() -> DoomscrollingForegroundDesk
 #[cfg(test)]
 mod tests {
     use super::{
-        extension_status_from_file_contents, normalize_app_candidate_name,
-        sort_and_deduplicate_candidates, validate_state, DoomscrollingDesktopAppCandidate,
-        DoomscrollingDesktopAppRuleInput, DoomscrollingLimitState, DoomscrollingLimitStateItem,
-        DoomscrollingRuntimeState, DoomscrollingUsageSampleInput,
+        clear_enforcement_state_files, extension_status_from_file_contents,
+        normalize_app_candidate_name, sort_and_deduplicate_candidates, validate_state,
+        DoomscrollingDesktopAppCandidate, DoomscrollingDesktopAppRuleInput,
+        DoomscrollingLimitState, DoomscrollingLimitStateItem, DoomscrollingRuntimeState,
+        DoomscrollingUsageSampleInput,
     };
     use chrono::{DateTime, Utc};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn state(phase: &str) -> DoomscrollingRuntimeState {
         DoomscrollingRuntimeState {
@@ -2151,6 +2172,30 @@ mod tests {
         let mut state = state("focus");
         state.remaining_seconds = Some(-1);
         assert!(validate_state(&state).is_err());
+    }
+
+    #[test]
+    fn clears_shutdown_enforcement_state_files() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "ganbaru-ai-doomscrolling-cleanup-{}-{suffix}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let state_path = dir.join("doomscrolling-state.json");
+        let limit_state_path = dir.join("doomscrolling-limit-state.json");
+        std::fs::write(&state_path, "{}").unwrap();
+        std::fs::write(&limit_state_path, "{}").unwrap();
+
+        clear_enforcement_state_files(&state_path, &limit_state_path).unwrap();
+
+        assert!(!state_path.exists());
+        assert!(!limit_state_path.exists());
+        clear_enforcement_state_files(&state_path, &limit_state_path).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

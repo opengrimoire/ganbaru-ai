@@ -99,6 +99,7 @@ async function updateStatus(status) {
   });
   if (shouldRecheckOpenTabs) {
     void recheckOpenTabs();
+    void recheckBlockedPages();
   }
 }
 
@@ -307,6 +308,33 @@ async function recheckOpenTabs() {
   for (const tab of tabs) {
     if (typeof tab.id !== "number" || typeof tab.url !== "string") continue;
     void decideAndRedirect(tab.id, tab.url);
+  }
+}
+
+function blockedPageIdFromUrl(url) {
+  if (typeof url !== "string") return null;
+  try {
+    const pageUrl = new URL(url);
+    if (pageUrl.href.startsWith(chrome.runtime.getURL("blocked.html")) === false) return null;
+    return pageUrl.searchParams.get("blocked");
+  } catch {
+    return null;
+  }
+}
+
+async function recheckBlockedPages() {
+  const tabs = await chrome.tabs.query({ url: chrome.runtime.getURL("blocked.html*") });
+  for (const tab of tabs) {
+    if (typeof tab.id !== "number" || typeof tab.url !== "string") continue;
+    const blockedPageId = blockedPageIdFromUrl(tab.url);
+    if (!blockedPageId) continue;
+    void refreshBlockedPage(blockedPageId).then(async (state) => {
+      if (state?.ok !== true || state.blocked !== false || typeof state.originalUrl !== "string") {
+        return;
+      }
+      await clearBlockedPageState(blockedPageId);
+      await chrome.tabs.update(tab.id, { url: state.originalUrl });
+    });
   }
 }
 

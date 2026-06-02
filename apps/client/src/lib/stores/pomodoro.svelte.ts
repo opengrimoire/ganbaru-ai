@@ -1230,6 +1230,7 @@ function recordRunEvent(event: PomodoroRunEventWrite, warning = "Failed to recor
 
 function sendHeartbeat(): void {
   if (!activeRunId) return;
+  writeCurrentDoomscrollingRuntimeState(true);
   invoke("pomodoro_heartbeat", {
     dbUrl: dbUrl(),
     runId: activeRunId,
