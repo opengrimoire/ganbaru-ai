@@ -627,6 +627,26 @@ class MusicPlayerStore {
     this.updateMusicTray();
   }
 
+  async setTransientVolume(value: number): Promise<void> {
+    const volume = clampVolume(value);
+    this.snapshot = { ...this.snapshot, volume };
+    if (!this.currentSource) {
+      this.updateNativeMediaControls();
+      return;
+    }
+    if (this.currentSource.kind === "local-file") {
+      if (this.usesNativeLocalBackend()) {
+        await this.applyNativeLocalTransientVolume();
+      } else {
+        this.applyLocalVolume();
+      }
+    } else {
+      this.postYouTubeCommand({ action: "volume", volume: this.effectiveYouTubeVolume() });
+    }
+    this.updateNativeMediaControls();
+    this.updateMusicTray();
+  }
+
   async toggleMute(): Promise<void> {
     this.muted = !this.muted;
     this.announceVolumeFeedback();
@@ -1080,6 +1100,16 @@ class MusicPlayerStore {
       this.applyLocalSnapshot(volumeSnapshot);
       const muteSnapshot = await setLocalMuted(false);
       this.applyLocalSnapshot(muteSnapshot);
+    } catch (error) {
+      this.playerError = mediaPlayerErrorMessage(error);
+      this.snapshot = { ...this.snapshot, status: "error", error: this.playerError };
+    }
+  }
+
+  private async applyNativeLocalTransientVolume(): Promise<void> {
+    try {
+      const volumeSnapshot = await setLocalVolume(this.snapshot.volume);
+      this.applyLocalSnapshot(volumeSnapshot);
     } catch (error) {
       this.playerError = mediaPlayerErrorMessage(error);
       this.snapshot = { ...this.snapshot, status: "error", error: this.playerError };

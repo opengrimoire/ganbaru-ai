@@ -11,6 +11,7 @@
   import { getDoomscrolling } from "$lib/stores/doomscrolling.svelte";
   import { getDoomscrollingDesktopBlocker } from "$lib/stores/doomscrolling-desktop-blocker.svelte";
   import { getDoomscrollingUsage } from "$lib/stores/doomscrolling-usage.svelte";
+  import { getMusicPlayer } from "$lib/stores/music-player.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { getZoom } from "$lib/stores/zoom.svelte";
   import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
@@ -62,6 +63,7 @@
   const doomscrolling = getDoomscrolling();
   const desktopBlocker = getDoomscrollingDesktopBlocker();
   const doomscrollingUsage = getDoomscrollingUsage();
+  const music = getMusicPlayer();
   const pomodoro = getPomodoro();
   const zoom = getZoom();
   const settingsLauncher = getSettingsLauncher();
@@ -73,9 +75,20 @@
   const ACTIVE_BLOCK_CHECK_INTERVAL_MS = 1000;
   const EVENT_NOTIFICATION_CHECK_INTERVAL_MS = 1000;
   const DESKTOP_BLOCKING_CHECK_INTERVAL_MS = 5_000;
+  const COMPLETION_MUSIC_FADE_OUT_MS = 1_200;
+  const COMPLETION_MUSIC_FADE_IN_MS = 1_800;
+  const COMPLETION_MUSIC_FADE_STEP_MS = 100;
+  const COMPLETION_MUSIC_PAUSE_SETTLE_MS = 150;
+  const COMPLETION_SOUND_RESUME_PAD_MS = 250;
+  const COMPLETION_SOUND_DURATION_MS: Record<PomodoroCompletionKind, number> = {
+    event: 15_714,
+    day: 12_000,
+    workweek: 11_455,
+  };
 
   let isMaximized = $state(true);
   let completionOverlay = $state<{ kind: PomodoroCompletionKind } | null>(null);
+  let completionMusicDuckingGeneration = 0;
   type BenchmarkOverlayComponent = typeof import("$lib/components/benchmark/BenchmarkOverlay.svelte").default;
   type IdleOverlayComponent = typeof import("$lib/components/pomodoro/IdleOverlay.svelte").default;
   let BenchmarkOverlay = $state<BenchmarkOverlayComponent | null>(null);
@@ -465,6 +478,96 @@
     return APP_SOUND_IDS.eventFinished;
   }
 
+  interface CompletionMusicDuck {
+    generation: number;
+    restoreVolume: number;
+    shouldResume: boolean;
+  }
+
+  function delayMs(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      window.setTimeout(resolve, Math.max(0, ms));
+    });
+  }
+
+  function completionSoundDurationMs(kind: PomodoroCompletionKind): number {
+    return COMPLETION_SOUND_DURATION_MS[kind];
+  }
+
+  function interpolateVolume(start: number, end: number, progress: number): number {
+    const clampedProgress = Math.min(1, Math.max(0, progress));
+    return start + (end - start) * clampedProgress;
+  }
+
+  async function fadeMusicVolume(
+    targetVolume: number,
+    durationMs: number,
+    generation: number,
+  ): Promise<boolean> {
+    const startVolume = music.volumeControlValue;
+    const steps = Math.max(1, Math.ceil(durationMs / COMPLETION_MUSIC_FADE_STEP_MS));
+    for (let step = 1; step <= steps; step++) {
+      await delayMs(durationMs / steps);
+      if (generation !== completionMusicDuckingGeneration) return false;
+      await music.setTransientVolume(
+        interpolateVolume(startVolume, targetVolume, step / steps),
+      );
+    }
+    return generation === completionMusicDuckingGeneration;
+  }
+
+  async function prepareMusicForCompletionSound(): Promise<CompletionMusicDuck | null> {
+    const generation = ++completionMusicDuckingGeneration;
+    if (!music.currentSource || !music.isPlaying || music.muted || music.volumeControlValue <= 0) {
+      return null;
+    }
+
+    const restoreVolume = music.volumeControlValue;
+    try {
+      const faded = await fadeMusicVolume(0, COMPLETION_MUSIC_FADE_OUT_MS, generation);
+      if (!faded) return null;
+
+      await music.pausePlayback();
+      await delayMs(COMPLETION_MUSIC_PAUSE_SETTLE_MS);
+      return {
+        generation,
+        restoreVolume,
+        shouldResume: true,
+      };
+    } catch (error) {
+      console.warn("Failed to duck music for pomodoro completion sound:", error);
+      await music.setTransientVolume(restoreVolume).catch(() => {});
+      return null;
+    }
+  }
+
+  async function playPomodoroCompletionSound(kind: PomodoroCompletionKind): Promise<void> {
+    try {
+      await playAppSound(soundForCompletionKind(kind));
+    } catch (error) {
+      console.warn("Failed to play pomodoro completion sound:", error);
+    }
+  }
+
+  function restoreMusicAfterCompletionSound(
+    duck: CompletionMusicDuck | null,
+    kind: PomodoroCompletionKind,
+  ): void {
+    if (!duck?.shouldResume) return;
+    void (async () => {
+      await delayMs(completionSoundDurationMs(kind) + COMPLETION_SOUND_RESUME_PAD_MS);
+      if (duck.generation !== completionMusicDuckingGeneration) return;
+      if (!music.currentSource) return;
+      await music.playPlayback();
+      await fadeMusicVolume(duck.restoreVolume, COMPLETION_MUSIC_FADE_IN_MS, duck.generation);
+      if (duck.generation === completionMusicDuckingGeneration) {
+        await music.setTransientVolume(duck.restoreVolume);
+      }
+    })().catch((error) => {
+      console.warn("Failed to restore music after pomodoro completion sound:", error);
+    });
+  }
+
   async function showNaturalPomodoroCompletion(block: CalendarEvent | null): Promise<void> {
     if (!block) return;
     let kind: PomodoroCompletionKind = "event";
@@ -476,10 +579,23 @@
     } catch (e) {
       console.warn("Failed to classify pomodoro completion:", e);
     }
+
+    const duck = await prepareMusicForCompletionSound();
+    try {
+      const nativeOverlay = await invoke<boolean>("show_pomodoro_completion_overlay", { kind });
+      if (nativeOverlay) {
+        await playPomodoroCompletionSound(kind);
+        restoreMusicAfterCompletionSound(duck, kind);
+        return;
+      }
+    } catch (e) {
+      console.warn("Failed to show native pomodoro completion overlay:", e);
+    }
+
     completionOverlay = { kind };
-    playAppSound(soundForCompletionKind(kind)).catch((e) =>
-      console.warn("Failed to play pomodoro completion sound:", e),
-    );
+    await afterAnimationFrames(2);
+    await playPomodoroCompletionSound(kind);
+    restoreMusicAfterCompletionSound(duck, kind);
   }
 
   let trackedBlockSnapshot: CalendarEvent | null = null;
@@ -520,10 +636,11 @@
       trackedBlockSnapshot = { ...activeBlock };
     } else if (pomodoro.activeBlockId && pomodoro.blockExpired) {
       // Block naturally ended, no successor: stop the timer and show a terminal notice.
-      await showNaturalPomodoroCompletion(trackedBlockSnapshot);
+      const completedBlock = trackedBlockSnapshot;
       pomodoro.clearBlockExpired();
       trackedBlockSnapshot = null;
-      pomodoro.stopSession();
+      await pomodoro.stopSession();
+      await showNaturalPomodoroCompletion(completedBlock);
     } else if (
       pomodoro.activeBlockId &&
       trackedBlockSnapshot &&
@@ -532,10 +649,11 @@
       // A paused session has no tick to mark blockExpired. If the event window
       // has naturally passed, finish it silently instead of offering an edit
       // rollback that would not change anything useful.
+      const completedBlock = trackedBlockSnapshot;
       savedBlockState = null;
-      await showNaturalPomodoroCompletion(trackedBlockSnapshot);
       trackedBlockSnapshot = null;
-      pomodoro.stopSession();
+      await pomodoro.stopSession();
+      await showNaturalPomodoroCompletion(completedBlock);
     } else if (pomodoro.activeBlockId && trackedBlockSnapshot) {
       // No overlapping scheduler candidate is not proof that the active event vanished.
       // Explicit expiry and protected edit/delete paths own session stops.

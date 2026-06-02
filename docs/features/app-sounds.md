@@ -68,6 +68,8 @@ The app-sound service:
 
 The app-sound service must stay separate from the local media player. Notification sounds must not affect the user's music or video state, and media player actions such as pause, seek, mute, rate change, or source reload must not affect notification sounds.
 
+Pomodoro terminal completion is the exception because the completion sound is the primary attention cue for the enforced end-of-event screen. If music is already playing, the main window temporarily fades music down, pauses it before the completion sound, waits for the packaged completion sound duration, then resumes music and fades it back to the previous volume. This orchestration must use transient media-player volume changes so the user's saved music volume is not replaced by the temporary ducked value.
+
 ## Media player interaction
 
 The local media player also uses rodio. For user-loaded local media, the Rust backend should request the loaded source's own sample rate when opening the output stream. This avoids unnecessary rodio resampling for user audio files.

@@ -14,7 +14,7 @@ This is not arbitrary friction. It mirrors physical interventions like stretchin
 
 The break screen has one visual implementation and a native enforcement layer.
 
-**Svelte overlay window.** A dedicated Tauri webview window mounts the Pomodoro blocked-screen UI. This is the canonical visual surface for the break countdown, break finished state, idle paused state, and idle focus-failed state. Keeping the UI in Svelte makes the blocked screens share the same component system as the rest of the app and avoids maintaining separate per-OS UI implementations.
+**Svelte overlay window.** A dedicated Tauri webview window mounts the Pomodoro blocked-screen UI. This is the canonical visual surface for the break countdown, break finished state, idle paused state, idle focus-failed state, event-finished state, day-complete state, and workweek-complete state. Keeping the UI in Svelte makes the blocked screens share the same component system as the rest of the app and avoids maintaining separate per-OS UI implementations.
 
 **Rust/Tauri enforcement.** Rust creates a fullscreen, undecorated, always-on-top overlay window for the primary display and marks the overlay as active until the Pomodoro state machine closes it. The overlay is protected by a scoped enforcement guard that starts before windows are shown and stops when the Pomodoro state machine closes the overlay. The guard owns cleanup for window labels, power assertions, shortcut restoration, native platform state, and monitor reconciliation, so starting a new overlay first closes any previous guard and cleanup remains safe after partial setup.
 
@@ -36,7 +36,7 @@ During the countdown, the top of the screen shows the current date and time usin
 
 The countdown timer uses the same runtime UI font as the rest of the app, with bold tabular numerals and oversized display sizing so it is readable from a distance. Supporting date, label, and control text is intentionally large enough to read from a distance without competing with the timer.
 
-Break countdown uses `#035B33` as the background and white as the main text color. Break complete uses `#EEBA04` as the background and `#0D0502` as the main text color. Secondary labels and hints reuse the main text color at lower opacity so the state remains readable from a distance without competing with the main message.
+Break countdown uses `#035B33` as the background and white as the main text color. Break complete and event finished use `#EEBA04` as the background and `#0D0502` as the main text color. Day complete uses `#0E7490` with white text. Workweek complete uses `#1D4ED8` with white text. Secondary labels and hints reuse the main text color at lower opacity so the state remains readable from a distance without competing with the main message.
 
 This does not try to defeat a user with OS-level control of the machine. A forced process kill, power-off, Windows Ctrl+Alt+Del, macOS security prompts, or desktop environment action outside the app's control can still terminate or bypass Ganbaru AI. The goal is to block normal app switching, accidental dismissal, and ordinary close paths without turning the app into hostile system software.
 
@@ -55,6 +55,8 @@ The three-press skip is intentionally awkward. A single Esc would let the user d
 The `Mod + Shift + Space` chord extends the current break, capped at 3 added minutes per break. This handles the common case where the user is mid-stretch or mid-conversation when the break would end and needs slightly more time. The cap prevents the user from indefinitely extending the break and losing the rhythm.
 
 There is no "stop the session" control on the break screen. Stopping the session must go through the main window, which makes it a deliberate action rather than an impulse during a moment of resistance.
+
+Terminal completion screens use the same overlay enforcement but have only one control: any key or click acknowledges the screen and closes the overlay. They do not expose stop, restart, extend, or skip actions because the Pomodoro session has already ended.
 
 ## Sound settings
 

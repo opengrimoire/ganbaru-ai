@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { PomodoroCompletionKind } from "$lib/stores/pomodoro-completion";
   import { onMount } from "svelte";
+  import PomodoroBlockedScreen from "./PomodoroBlockedScreen.svelte";
+  import type { PomodoroCompletionScreenState } from "./blocked-screen";
 
   let {
     kind,
@@ -10,19 +12,10 @@
     onDismiss: () => void;
   } = $props();
 
-  const copy: Record<PomodoroCompletionKind, { title: string; subtitle: string }> = {
-    event: {
-      title: "Event finished",
-      subtitle: "press any key or click to continue",
-    },
-    day: {
-      title: "Pomodoro day complete",
-      subtitle: "press any key or click to continue",
-    },
-    workweek: {
-      title: "Pomodoro workweek complete",
-      subtitle: "press any key or click to continue",
-    },
+  const screenStateForKind: Record<PomodoroCompletionKind, PomodoroCompletionScreenState> = {
+    event: "event_finished",
+    day: "day_complete",
+    workweek: "workweek_complete",
   };
 
   let dismissed = false;
@@ -45,29 +38,12 @@
 </script>
 
 <div
-  class="fixed inset-0 z-60 flex select-none flex-col items-center justify-center bg-black"
+  class="fixed inset-0 z-60 h-screen w-screen"
   role="dialog"
   aria-modal="true"
   tabindex="0"
   onclick={dismiss}
   onkeydown={dismiss}
 >
-  <div class="flex flex-col items-center gap-4 text-center">
-    <p class="completion-title text-5xl font-light">
-      {copy[kind].title}
-    </p>
-    <p class="completion-copy text-sm">
-      {copy[kind].subtitle}
-    </p>
-  </div>
+  <PomodoroBlockedScreen state={screenStateForKind[kind]} seconds={0} />
 </div>
-
-<style>
-  .completion-title {
-    color: #FFFFFF;
-  }
-
-  .completion-copy {
-    color: #9CA3AF;
-  }
-</style>

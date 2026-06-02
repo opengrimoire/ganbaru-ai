@@ -791,8 +791,15 @@ thread_local! {
 
 #[derive(Clone, Copy)]
 enum PomodoroOverlayKind {
-    Break { ends_at_ms: u64 },
-    Idle { seconds: u32 },
+    Break {
+        ends_at_ms: u64,
+    },
+    Idle {
+        seconds: u32,
+    },
+    Completion {
+        visual_state: PomodoroOverlayVisualState,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -801,6 +808,9 @@ enum PomodoroOverlayVisualState {
     IdleFailed,
     BreakCountdown,
     BreakFinished,
+    EventFinished,
+    DayComplete,
+    WorkweekComplete,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -840,6 +850,7 @@ impl PomodoroOverlayKind {
         match self {
             Self::Break { .. } => PomodoroOverlayVisualState::BreakCountdown,
             Self::Idle { .. } => PomodoroOverlayVisualState::Idle,
+            Self::Completion { visual_state } => visual_state,
         }
     }
 }
@@ -851,6 +862,9 @@ impl PomodoroOverlayVisualState {
             "idle_failed" => Ok(Self::IdleFailed),
             "break_countdown" => Ok(Self::BreakCountdown),
             "break_finished" => Ok(Self::BreakFinished),
+            "event_finished" => Ok(Self::EventFinished),
+            "day_complete" => Ok(Self::DayComplete),
+            "workweek_complete" => Ok(Self::WorkweekComplete),
             _ => Err(format!("unknown pomodoro overlay state: {id}")),
         }
     }
@@ -861,6 +875,9 @@ impl PomodoroOverlayVisualState {
             Self::IdleFailed => "idle_failed",
             Self::BreakCountdown => "break_countdown",
             Self::BreakFinished => "break_finished",
+            Self::EventFinished => "event_finished",
+            Self::DayComplete => "day_complete",
+            Self::WorkweekComplete => "workweek_complete",
         }
     }
 
@@ -880,6 +897,21 @@ impl PomodoroOverlayVisualState {
                 red: 0xEE,
                 green: 0xBA,
                 blue: 0x04,
+            },
+            Self::EventFinished => OverlayColor {
+                red: 0xEE,
+                green: 0xBA,
+                blue: 0x04,
+            },
+            Self::DayComplete => OverlayColor {
+                red: 0x0E,
+                green: 0x74,
+                blue: 0x90,
+            },
+            Self::WorkweekComplete => OverlayColor {
+                red: 0x1D,
+                green: 0x4E,
+                blue: 0xD8,
             },
         }
     }
@@ -1154,6 +1186,12 @@ fn overlay_url(kind: PomodoroOverlayKind) -> WebviewUrl {
         PomodoroOverlayKind::Idle { seconds } => {
             format!(
                 "index.html?ganbaruWindow=pomodoroOverlay&overlayKind=idle&idleSeconds={seconds}"
+            )
+        }
+        PomodoroOverlayKind::Completion { visual_state } => {
+            format!(
+                "index.html?ganbaruWindow=pomodoroOverlay&overlayKind=completion&screenState={}",
+                visual_state.id()
             )
         }
     };
@@ -1654,6 +1692,29 @@ pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<boo
     Ok(true)
 }
 
+fn completion_visual_state_from_kind(kind: &str) -> Result<PomodoroOverlayVisualState, String> {
+    match kind {
+        "event" => Ok(PomodoroOverlayVisualState::EventFinished),
+        "day" => Ok(PomodoroOverlayVisualState::DayComplete),
+        "workweek" => Ok(PomodoroOverlayVisualState::WorkweekComplete),
+        _ => Err(format!("unknown pomodoro completion kind: {kind}")),
+    }
+}
+
+#[tauri::command]
+pub fn show_pomodoro_completion_overlay(
+    app: tauri::AppHandle,
+    kind: String,
+) -> Result<bool, String> {
+    show_pomodoro_overlay(
+        app,
+        PomodoroOverlayKind::Completion {
+            visual_state: completion_visual_state_from_kind(&kind)?,
+        },
+    )?;
+    Ok(true)
+}
+
 #[cfg(target_os = "linux")]
 fn get_idle_time_ms() -> Option<u64> {
     let stdout = fixed_command_output(
@@ -2147,6 +2208,43 @@ mod tests {
                 blue: 0x04,
             }
         );
+        assert_eq!(
+            PomodoroOverlayVisualState::from_id("day_complete")
+                .unwrap()
+                .background_color(),
+            OverlayColor {
+                red: 0x0E,
+                green: 0x74,
+                blue: 0x90,
+            }
+        );
+        assert_eq!(
+            PomodoroOverlayVisualState::from_id("workweek_complete")
+                .unwrap()
+                .background_color(),
+            OverlayColor {
+                red: 0x1D,
+                green: 0x4E,
+                blue: 0xD8,
+            }
+        );
+    }
+
+    #[test]
+    fn pomodoro_completion_kinds_map_to_visual_states() {
+        assert_eq!(
+            completion_visual_state_from_kind("event").unwrap(),
+            PomodoroOverlayVisualState::EventFinished
+        );
+        assert_eq!(
+            completion_visual_state_from_kind("day").unwrap(),
+            PomodoroOverlayVisualState::DayComplete
+        );
+        assert_eq!(
+            completion_visual_state_from_kind("workweek").unwrap(),
+            PomodoroOverlayVisualState::WorkweekComplete
+        );
+        assert!(completion_visual_state_from_kind("unknown").is_err());
     }
 
     fn unique_restore_file(name: &str) -> PathBuf {

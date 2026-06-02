@@ -6,6 +6,8 @@ import {
   formatBreakExtensionShortcut,
   formatBlockedScreenDateTime,
   formatBlockedScreenDuration,
+  isBlockedScreenAcknowledgementState,
+  isPomodoroCompletionScreenState,
   nextIntervalTargetAfter,
   parsePomodoroOverlayBlockerAction,
   parsePomodoroBlockedScreenState,
@@ -44,6 +46,9 @@ describe("blocked pomodoro screen helpers", () => {
     expect(shouldShowBlockedScreenDateTime("idle")).toBe(true);
     expect(shouldShowBlockedScreenDateTime("idle_failed")).toBe(true);
     expect(shouldShowBlockedScreenDateTime("break_finished")).toBe(false);
+    expect(shouldShowBlockedScreenDateTime("event_finished")).toBe(false);
+    expect(shouldShowBlockedScreenDateTime("day_complete")).toBe(false);
+    expect(shouldShowBlockedScreenDateTime("workweek_complete")).toBe(false);
   });
 
   it("uses distinct state palettes", () => {
@@ -59,14 +64,36 @@ describe("blocked pomodoro screen helpers", () => {
       background: "#EEBA04",
       mainText: "#0D0502",
     });
+    expect(pomodoroBlockedScreenPalette("day_complete")).toMatchObject({
+      background: "#0E7490",
+      mainText: "#FFFFFF",
+    });
+    expect(pomodoroBlockedScreenPalette("workweek_complete")).toMatchObject({
+      background: "#1D4ED8",
+      mainText: "#FFFFFF",
+    });
+  });
+
+  it("identifies acknowledgement and completion screens", () => {
+    expect(isBlockedScreenAcknowledgementState("break_finished")).toBe(true);
+    expect(isBlockedScreenAcknowledgementState("event_finished")).toBe(true);
+    expect(isBlockedScreenAcknowledgementState("day_complete")).toBe(true);
+    expect(isBlockedScreenAcknowledgementState("workweek_complete")).toBe(true);
+    expect(isBlockedScreenAcknowledgementState("idle")).toBe(false);
+    expect(isPomodoroCompletionScreenState("event_finished")).toBe(true);
+    expect(isPomodoroCompletionScreenState("break_finished")).toBe(false);
   });
 
   it("maps overlay query state to blocked screen state", () => {
     expect(parsePomodoroBlockedScreenState("idle_failed")).toBe("idle_failed");
     expect(parsePomodoroBlockedScreenState("break_finished")).toBe("break_finished");
+    expect(parsePomodoroBlockedScreenState("event_finished")).toBe("event_finished");
+    expect(parsePomodoroBlockedScreenState("day_complete")).toBe("day_complete");
+    expect(parsePomodoroBlockedScreenState("workweek_complete")).toBe("workweek_complete");
     expect(parsePomodoroBlockedScreenState("unknown")).toBe("break_countdown");
     expect(pomodoroBlockedScreenStateFromOverlayKind("idle")).toBe("idle");
     expect(pomodoroBlockedScreenStateFromOverlayKind("break")).toBe("break_countdown");
+    expect(pomodoroBlockedScreenStateFromOverlayKind("completion")).toBe("event_finished");
   });
 
   it("parses blocker actions from unknown event payloads", () => {
@@ -76,19 +103,19 @@ describe("blocked pomodoro screen helpers", () => {
     expect(
       parsePomodoroOverlayBlockerAction({
         kind: "keydown",
+        code: "Space",
+        key: " ",
+        ctrlKey: true,
+        metaKey: true,
+      }),
+    ).toEqual({
+      kind: "keydown",
       code: "Space",
       key: " ",
       ctrlKey: true,
       metaKey: true,
-    }),
-  ).toEqual({
-    kind: "keydown",
-    code: "Space",
-    key: " ",
-    ctrlKey: true,
-    metaKey: true,
-    shiftKey: false,
-  });
+      shiftKey: false,
+    });
     expect(parsePomodoroOverlayBlockerAction({ kind: "keydown", code: "Space" })).toBeNull();
     expect(parsePomodoroOverlayBlockerAction(null)).toBeNull();
   });
@@ -162,5 +189,13 @@ describe("blocked pomodoro screen helpers", () => {
     const copy = pomodoroBlockedScreenCopy("break_finished");
     expect(copy.title).toBe("Break complete");
     expect(copy.subtitle).toBe("press any key to continue");
+  });
+
+  it("uses terminal completion copy", () => {
+    expect(pomodoroBlockedScreenCopy("event_finished").title).toBe("Event finished");
+    expect(pomodoroBlockedScreenCopy("day_complete").title).toBe("Day completed");
+    expect(pomodoroBlockedScreenCopy("workweek_complete").title).toBe(
+      "Workweek completed",
+    );
   });
 });

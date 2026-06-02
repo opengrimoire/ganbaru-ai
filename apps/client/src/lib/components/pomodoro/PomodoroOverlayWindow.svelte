@@ -10,8 +10,11 @@
     POMODORO_OVERLAY_BLOCKER_ACTION_EVENT,
     delayUntil,
     elapsedSecondsSince,
+    isBlockedScreenAcknowledgementState,
+    isPomodoroCompletionScreenState,
     nextIntervalTargetAfter,
     parsePomodoroOverlayBlockerAction,
+    parsePomodoroBlockedScreenState,
     remainingSecondsUntil,
     shouldScheduleIdleAlert,
   } from "./blocked-screen";
@@ -19,6 +22,7 @@
   import type {
     PomodoroOverlayBlockerAction,
     PomodoroBlockedScreenState,
+    PomodoroCompletionScreenState,
   } from "./blocked-screen";
 
   const IDLE_ALERT_INTERVAL_MS = 10_000;
@@ -26,7 +30,8 @@
 
   type OverlayMode =
     | { kind: "idle"; initialIdleSeconds: number }
-    | { kind: "break"; breakEndsAtMs: number };
+    | { kind: "break"; breakEndsAtMs: number }
+    | { kind: "completion"; screenState: PomodoroCompletionScreenState };
 
   interface BreakExtendedPayload {
     seconds: number;
@@ -50,6 +55,16 @@
       };
     }
 
+    if (params.get("overlayKind") === "completion") {
+      const screenState = parsePomodoroBlockedScreenState(params.get("screenState"));
+      return {
+        kind: "completion",
+        screenState: isPomodoroCompletionScreenState(screenState)
+          ? screenState
+          : "event_finished",
+      };
+    }
+
     const fallbackBreakSeconds = numberParam(params, "breakSeconds", 0);
     return {
       kind: "break",
@@ -67,10 +82,16 @@
   let seconds = $state(
     mode.kind === "idle"
       ? mode.initialIdleSeconds
-      : remainingSecondsUntil(mode.breakEndsAtMs, Date.now()),
+      : mode.kind === "break"
+        ? remainingSecondsUntil(mode.breakEndsAtMs, Date.now())
+        : 0,
   );
   let screenState = $state<PomodoroBlockedScreenState>(
-    mode.kind === "idle" ? "idle" : "break_countdown",
+    mode.kind === "idle"
+      ? "idle"
+      : mode.kind === "break"
+        ? "break_countdown"
+        : mode.screenState,
   );
   let extensionMinutes = $state(0);
   let escPresses = $state(0);
@@ -153,6 +174,8 @@
   }
 
   function tick(): void {
+    if (mode.kind === "completion") return;
+
     if (mode.kind === "idle") {
       seconds = mode.initialIdleSeconds + elapsedSecondsSince(overlayStartedAtMs, Date.now());
       return;
@@ -204,6 +227,11 @@
     metaKey: boolean;
     shiftKey: boolean;
   }): void {
+    if (mode.kind === "completion") {
+      closeOverlay();
+      return;
+    }
+
     if (mode.kind === "idle") {
       if (command.code === "Space") {
         void resumeIdle();
@@ -246,6 +274,11 @@
   }
 
   function handleClick(): void {
+    if (mode.kind === "completion") {
+      closeOverlay();
+      return;
+    }
+
     if (mode.kind === "break" && screenState === "break_finished") {
       void acknowledgeBreak();
     }
@@ -253,7 +286,9 @@
 
   function handleBlockerAction(action: PomodoroOverlayBlockerAction): void {
     if (action.kind === "pointer") {
-      if (mode.kind === "break" && screenState === "break_finished") {
+      if (mode.kind === "completion") {
+        closeOverlay();
+      } else if (mode.kind === "break" && isBlockedScreenAcknowledgementState(screenState)) {
         void acknowledgeBreak();
       } else {
         reinforceFullscreen();
@@ -326,6 +361,19 @@
 
       return () => {
         cancelIdlePaintSideEffects();
+        void unlistenBlockerActionPromise.then((unlisten) => {
+          unlisten?.();
+        });
+        for (const id of fullscreenTimerIds) clearTimeout(id);
+        clearInterval(focusIntervalId);
+        window.removeEventListener("keydown", handleKeydown, true);
+        clearIdleTimers();
+        if (tickIntervalId !== null) clearInterval(tickIntervalId);
+      };
+    }
+
+    if (mode.kind === "completion") {
+      return () => {
         void unlistenBlockerActionPromise.then((unlisten) => {
           unlisten?.();
         });

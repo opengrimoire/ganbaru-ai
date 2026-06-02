@@ -198,14 +198,14 @@ Sound effects live in `apps/client/static/sfx/`. App assets are stored as 48 kHz
       <td>Creative Commons 0</td>
     </tr>
     <tr>
-      <td>Pomodoro day complete</td>
+      <td>Day completed!</td>
       <td><code>pomodoro-day-complete.wav</code></td>
       <td><a href="https://freesound.org/people/SilverIllusionist/sounds/669323/">Victory Fanfare (Light Wills Ever) no drums</a></td>
       <td><a href="https://freesound.org/people/SilverIllusionist/">SilverIllusionist</a></td>
       <td>Attribution 4.0</td>
     </tr>
     <tr>
-      <td>Pomodoro workweek complete</td>
+      <td>Workweek completed!</td>
       <td><code>pomodoro-workweek-complete.wav</code></td>
       <td><a href="https://freesound.org/people/SilverIllusionist/sounds/659751/">Victory Fanfare (RPG or High Fantasy)</a></td>
       <td><a href="https://freesound.org/people/SilverIllusionist/">SilverIllusionist</a></td>

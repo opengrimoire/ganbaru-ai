@@ -5,6 +5,7 @@
     formatBlockedScreenDateTime,
     formatBlockedScreenDuration,
     formatBreakExtensionShortcut,
+    isBlockedScreenAcknowledgementState,
     pomodoroBlockedScreenPalette,
     pomodoroBlockedScreenCopy,
     shouldShowBlockedScreenDateTime,
@@ -32,7 +33,8 @@
   const showDateTime = $derived(shouldShowBlockedScreenDateTime(screenState));
   const dateTimeLabel = $derived(formatBlockedScreenDateTime(now));
   const extensionShortcutLabel = $derived(formatBreakExtensionShortcut());
-  const showTimer = $derived(screenState !== "break_finished");
+  const acknowledgementState = $derived(isBlockedScreenAcknowledgementState(screenState));
+  const showTimer = $derived(!acknowledgementState);
   const screenStyle = $derived(
     `--blocked-screen-bg: ${colors.background}; --blocked-main-text: ${colors.mainText}; --blocked-muted-text: ${colors.mutedText}; --blocked-subtle-text: ${colors.subtleText};`,
   );
@@ -76,7 +78,7 @@
   <div class="flex flex-col items-center gap-8 px-6 text-center">
     {#if copy.title}
       <p
-        class={screenState === "break_finished"
+        class={acknowledgementState
           ? "blocked-finished-title blocked-main"
           : "blocked-kicker blocked-muted font-medium uppercase tracking-wide"}
       >
@@ -103,7 +105,7 @@
     {/if}
   </div>
 
-  {#if screenState !== "break_finished"}
+  {#if !acknowledgementState}
     <div class="blocked-hints blocked-subtle absolute inset-x-0 bottom-12 flex flex-col items-center gap-3 px-6 text-center">
       {#if screenState === "break_countdown"}
         {#if showExtensionHint}

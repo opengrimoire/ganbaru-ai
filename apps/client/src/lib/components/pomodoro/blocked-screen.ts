@@ -4,7 +4,15 @@ export type PomodoroBlockedScreenState =
   | "idle"
   | "idle_failed"
   | "break_countdown"
-  | "break_finished";
+  | "break_finished"
+  | "event_finished"
+  | "day_complete"
+  | "workweek_complete";
+
+export type PomodoroCompletionScreenState =
+  | "event_finished"
+  | "day_complete"
+  | "workweek_complete";
 
 export const POMODORO_OVERLAY_BLOCKER_ACTION_EVENT =
   "pomodoro-overlay-blocker-action";
@@ -43,6 +51,22 @@ export type PomodoroOverlayBlockerAction =
     };
 
 const BREAK_EXTENSION_SHORTCUT = "Mod + Shift + Space";
+
+export function isPomodoroCompletionScreenState(
+  state: PomodoroBlockedScreenState,
+): state is PomodoroCompletionScreenState {
+  return (
+    state === "event_finished" ||
+    state === "day_complete" ||
+    state === "workweek_complete"
+  );
+}
+
+export function isBlockedScreenAcknowledgementState(
+  state: PomodoroBlockedScreenState,
+): boolean {
+  return state === "break_finished" || isPomodoroCompletionScreenState(state);
+}
 
 function isPayloadRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -99,6 +123,9 @@ const BLOCKED_SCREEN_PALETTES: Record<
   idle_failed: palette("#A33728", "#F9D573"),
   break_countdown: palette("#035B33", "#FFFFFF"),
   break_finished: palette("#EEBA04", "#0D0502"),
+  event_finished: palette("#EEBA04", "#0D0502"),
+  day_complete: palette("#0E7490", "#FFFFFF"),
+  workweek_complete: palette("#1D4ED8", "#FFFFFF"),
 };
 
 export function parsePomodoroBlockedScreenState(
@@ -109,6 +136,9 @@ export function parsePomodoroBlockedScreenState(
     case "idle_failed":
     case "break_countdown":
     case "break_finished":
+    case "event_finished":
+    case "day_complete":
+    case "workweek_complete":
       return value;
     default:
       return "break_countdown";
@@ -118,6 +148,7 @@ export function parsePomodoroBlockedScreenState(
 export function pomodoroBlockedScreenStateFromOverlayKind(
   overlayKind: string | null,
 ): PomodoroBlockedScreenState {
+  if (overlayKind === "completion") return "event_finished";
   return overlayKind === "idle" ? "idle" : "break_countdown";
 }
 
@@ -141,7 +172,7 @@ export function formatBlockedScreenDuration(totalSeconds: number): string {
 }
 
 export function shouldShowBlockedScreenDateTime(state: PomodoroBlockedScreenState): boolean {
-  return state !== "break_finished";
+  return !isBlockedScreenAcknowledgementState(state);
 }
 
 export function formatBlockedScreenDateTime(
@@ -240,6 +271,33 @@ export function pomodoroBlockedScreenCopy(
     case "break_finished":
       return {
         title: "Break complete",
+        status: null,
+        subtitle: "press any key to continue",
+        tone: "neutral",
+        primaryHint: null,
+        secondaryHint: null,
+      };
+    case "event_finished":
+      return {
+        title: "Event finished",
+        status: null,
+        subtitle: "press any key to continue",
+        tone: "neutral",
+        primaryHint: null,
+        secondaryHint: null,
+      };
+    case "day_complete":
+      return {
+        title: "Day completed",
+        status: null,
+        subtitle: "press any key to continue",
+        tone: "neutral",
+        primaryHint: null,
+        secondaryHint: null,
+      };
+    case "workweek_complete":
+      return {
+        title: "Workweek completed",
         status: null,
         subtitle: "press any key to continue",
         tone: "neutral",

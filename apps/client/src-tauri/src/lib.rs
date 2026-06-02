@@ -722,6 +722,7 @@ pub fn run() {
             notification::play_app_sound,
             notification::play_alert_sound,
             notification::show_idle_overlay,
+            notification::show_pomodoro_completion_overlay,
             music::music_get_playback_state,
             music::music_pick_media_folder,
             music::music_register_embedded_artwork,
