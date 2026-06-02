@@ -8,23 +8,40 @@ export interface EventIndicatorState {
   iconCount: number;
 }
 
-export function getEventIndicatorState(event: CalendarEvent): EventIndicatorState {
-  const hasRepeat = !!event.recurrence || !!event.recurringParentId;
+export interface EventMeetingIndicatorState {
+  hasCallLink: boolean;
+  hasLocation: boolean;
+  hasGenericMeeting: boolean;
+  iconCount: number;
+}
+
+export function getMeetingIndicatorState(event: CalendarEvent): EventMeetingIndicatorState {
   const hasCallLink = event.hasCallLink === true || !!event.url;
   const hasLocation = !!event.location;
   const hasGenericMeeting = event.meetingEnabled === true && !hasCallLink && !hasLocation;
   const iconCount = [
-    hasRepeat,
     hasCallLink,
     hasLocation,
     hasGenericMeeting,
   ].filter(Boolean).length;
 
   return {
-    hasRepeat,
     hasCallLink,
     hasLocation,
     hasGenericMeeting,
     iconCount,
+  };
+}
+
+export function getEventIndicatorState(event: CalendarEvent): EventIndicatorState {
+  const hasRepeat = !!event.recurrence || !!event.recurringParentId;
+  const meetingIndicators = getMeetingIndicatorState(event);
+
+  return {
+    hasRepeat,
+    hasCallLink: meetingIndicators.hasCallLink,
+    hasLocation: meetingIndicators.hasLocation,
+    hasGenericMeeting: meetingIndicators.hasGenericMeeting,
+    iconCount: meetingIndicators.iconCount + (hasRepeat ? 1 : 0),
   };
 }

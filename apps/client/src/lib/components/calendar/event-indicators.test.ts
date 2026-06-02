@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarEvent } from "./types";
-import { getEventIndicatorState } from "./event-indicators";
+import { getEventIndicatorState, getMeetingIndicatorState } from "./event-indicators";
 
 function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
   return {
@@ -48,5 +48,17 @@ describe("getEventIndicatorState", () => {
     expect(state.hasCallLink).toBe(true);
     expect(state.hasLocation).toBe(true);
     expect(state.iconCount).toBe(3);
+  });
+
+  it("exposes meeting indicators without counting repeat", () => {
+    const state = getMeetingIndicatorState(makeEvent({
+      recurrence: { frequency: "daily", interval: 1, end: { type: "never" } },
+      url: "https://meet.example.test",
+    }));
+
+    expect(state.hasCallLink).toBe(true);
+    expect(state.hasLocation).toBe(false);
+    expect(state.hasGenericMeeting).toBe(false);
+    expect(state.iconCount).toBe(1);
   });
 });

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CalendarEvent } from "./types";
 import { layoutMonthDayEvents, MONTH_EVENT_CHIP_HEIGHT_PX } from "./month-event-layout";
 
-function evt(id: string, title: string): CalendarEvent {
+function evt(id: string, title: string, overrides: Partial<CalendarEvent> = {}): CalendarEvent {
   return {
     id,
     title,
@@ -10,7 +10,12 @@ function evt(id: string, title: string): CalendarEvent {
     end: "2026-03-13 10:00",
     timezone: "UTC",
     calendarId: "local",
+    ...overrides,
   };
+}
+
+function eventItemByTitle(layoutItems: ReturnType<typeof layoutMonthDayEvents>["items"], title: string) {
+  return layoutItems.find((item) => item.kind === "event" && item.event.title === title);
 }
 
 describe("layoutMonthDayEvents", () => {
@@ -63,6 +68,60 @@ describe("layoutMonthDayEvents", () => {
     expect(desayuno?.widthPx).toBeGreaterThan(56);
     if (ejercicio?.kind === "event") {
       expect(ejercicio.leftPx + ejercicio.widthPx).toBe(220);
+    }
+  });
+
+  it("reserves month chip width for meeting detail icons", () => {
+    const plain = layoutMonthDayEvents([
+      evt("1", "Meet"),
+      evt("2", "Next"),
+    ], {
+      cellWidthPx: 130,
+      availableHeightPx: MONTH_EVENT_CHIP_HEIGHT_PX,
+    });
+    const withMeetingIcons = layoutMonthDayEvents([
+      evt("1", "Meet", { hasCallLink: true, location: "Room A" }),
+      evt("2", "Next"),
+    ], {
+      cellWidthPx: 130,
+      availableHeightPx: MONTH_EVENT_CHIP_HEIGHT_PX,
+    });
+
+    const plainMeet = eventItemByTitle(plain.items, "Meet");
+    const meetingMeet = eventItemByTitle(withMeetingIcons.items, "Meet");
+
+    expect(plainMeet?.kind).toBe("event");
+    expect(meetingMeet?.kind).toBe("event");
+    if (plainMeet?.kind === "event" && meetingMeet?.kind === "event") {
+      expect(meetingMeet.widthPx).toBeGreaterThan(plainMeet.widthPx + 18);
+    }
+  });
+
+  it("does not reserve month chip width for repeat alone", () => {
+    const plain = layoutMonthDayEvents([
+      evt("1", "Repeat"),
+      evt("2", "Next"),
+    ], {
+      cellWidthPx: 100,
+      availableHeightPx: MONTH_EVENT_CHIP_HEIGHT_PX,
+    });
+    const recurring = layoutMonthDayEvents([
+      evt("1", "Repeat", {
+        recurrence: { frequency: "daily", interval: 1, end: { type: "never" } },
+      }),
+      evt("2", "Next"),
+    ], {
+      cellWidthPx: 100,
+      availableHeightPx: MONTH_EVENT_CHIP_HEIGHT_PX,
+    });
+
+    const plainRepeat = eventItemByTitle(plain.items, "Repeat");
+    const recurringRepeat = eventItemByTitle(recurring.items, "Repeat");
+
+    expect(plainRepeat?.kind).toBe("event");
+    expect(recurringRepeat?.kind).toBe("event");
+    if (plainRepeat?.kind === "event" && recurringRepeat?.kind === "event") {
+      expect(recurringRepeat.widthPx).toBe(plainRepeat.widthPx);
     }
   });
 
@@ -163,8 +222,8 @@ describe("layoutMonthDayEvents", () => {
     const eventTitles = layout.items
       .filter((item) => item.kind === "event")
       .map((item) => item.event.title);
-    const compras = layout.items.find((item) => item.kind === "event" && item.event.title === "Compras");
-    const comer = layout.items.find((item) => item.kind === "event" && item.event.title === "Comer");
+    const compras = eventItemByTitle(layout.items, "Compras");
+    const comer = eventItemByTitle(layout.items, "Comer");
     const more = layout.items.find((item) => item.kind === "more");
 
     expect(eventTitles).toEqual(["Compras", "Comer", "Cenar"]);

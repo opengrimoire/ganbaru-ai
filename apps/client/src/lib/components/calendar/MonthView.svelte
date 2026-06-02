@@ -22,6 +22,10 @@
     MONTH_EVENT_ROW_GAP_PX,
     type MonthDayLayoutItem,
   } from "./month-event-layout";
+  import { getMeetingIndicatorState } from "./event-indicators";
+  import Video from "@lucide/svelte/icons/video";
+  import MapPin from "@lucide/svelte/icons/map-pin";
+  import Users from "@lucide/svelte/icons/users";
 
   let {
     anchorDate,
@@ -287,11 +291,13 @@
                       : getEventColor(evt.color, theme)}
                   {@const evtIsCancelled = isEventSurfaceCancelled(evt)}
                   {@const evtStatusPatternClass = getEventStatusPatternClass(evt)}
+                  {@const evtMeetingIndicators = getMeetingIndicatorState(evt)}
+                  {@const evtIconColor = `color-mix(in srgb, ${evtColors.text} 70%, ${evtColors.bg})`}
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
                   <!-- svelte-ignore a11y_no_static_element_interactions -->
                   <div
                     data-event-id={evt.id}
-                    class="month-event-surface absolute z-2 flex min-w-0 items-center gap-1 overflow-hidden truncate rounded px-1 text-[0.666667rem] leading-5 {evtStatusPatternClass}"
+                    class="month-event-surface absolute z-2 flex min-w-0 items-center gap-1 overflow-hidden rounded px-1 text-[0.666667rem] leading-5 {evtStatusPatternClass}"
                     style="
                       left: {item.leftPx}px;
                       top: {item.topPx}px;
@@ -304,7 +310,20 @@
                     onpointerdown={() => onEventPrefetch?.(evt)}
                     onclick={(e) => { e.stopPropagation(); onEventClick(evt, (e.currentTarget as HTMLElement).getBoundingClientRect()); }}
                   >
-                    <span class="relative z-10 truncate" style={evtIsCancelled ? 'text-decoration: line-through;' : ''}>{#if evt.title}{evt.title}{:else}(No title){/if}</span>
+                    <span class="relative z-10 min-w-0 flex-1 truncate" style={evtIsCancelled ? 'text-decoration: line-through;' : ''}>{#if evt.title}{evt.title}{:else}(No title){/if}</span>
+                    {#if evtMeetingIndicators.iconCount > 0}
+                      <span class="relative z-10 flex shrink-0 items-center gap-0.5" style="color: {evtIconColor};">
+                        {#if evtMeetingIndicators.hasCallLink}
+                          <Video size={8} class="shrink-0" />
+                        {/if}
+                        {#if evtMeetingIndicators.hasLocation}
+                          <MapPin size={8} class="shrink-0" />
+                        {/if}
+                        {#if evtMeetingIndicators.hasGenericMeeting}
+                          <Users size={8} class="shrink-0" />
+                        {/if}
+                      </span>
+                    {/if}
                   </div>
                 {:else}
                   <button

@@ -1,8 +1,12 @@
 import type { CalendarEvent } from "./types";
+import { getMeetingIndicatorState } from "./event-indicators";
 
 export const MONTH_EVENT_CHIP_HEIGHT_PX = 20;
 export const MONTH_EVENT_ROW_GAP_PX = 1;
 
+const MONTH_MEETING_ICON_SIZE_PX = 8;
+const MONTH_MEETING_ICON_GAP_PX = 2;
+const MONTH_MEETING_ICON_TEXT_GAP_PX = 4;
 const DEFAULT_HORIZONTAL_GAP_PX = 2;
 const DEFAULT_MIN_EVENT_WIDTH_PX = 28;
 const DEFAULT_MIN_MORE_WIDTH_PX = 42;
@@ -128,6 +132,14 @@ function textWidth(text: string, options: NormalizedMonthDayLayoutOptions): numb
   return width;
 }
 
+function meetingIndicatorWidth(event: CalendarEvent): number {
+  const { iconCount } = getMeetingIndicatorState(event);
+  if (iconCount === 0) return 0;
+  return MONTH_MEETING_ICON_TEXT_GAP_PX
+    + iconCount * MONTH_MEETING_ICON_SIZE_PX
+    + (iconCount - 1) * MONTH_MEETING_ICON_GAP_PX;
+}
+
 function maxPackedEventWidth(options: NormalizedMonthDayLayoutOptions, minWidth: number): number {
   return Math.max(
     minWidth,
@@ -142,7 +154,9 @@ function estimateEventWidths(
   if (options.cellWidthPx <= 0) return { compactWidthPx: 0, desiredWidthPx: 0 };
   const minWidth = Math.min(options.cellWidthPx, options.minEventWidthPx);
   const maxPackedWidth = maxPackedEventWidth(options, minWidth);
-  const naturalWidth = textWidth(visibleTitle(event), options) + options.horizontalPaddingPx;
+  const naturalWidth = textWidth(visibleTitle(event), options)
+    + options.horizontalPaddingPx
+    + meetingIndicatorWidth(event);
   const compactWidthPx = roundPx(
     Math.min(options.cellWidthPx, Math.max(minWidth, Math.min(naturalWidth, maxPackedWidth))),
   );
