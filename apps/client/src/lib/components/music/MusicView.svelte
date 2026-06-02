@@ -758,12 +758,12 @@
               {/if}
             </button>
             {#if volumeMenuOpen}
-              <div class="absolute bottom-full left-1/2 z-30 mb-2 flex -translate-x-1/2 flex-col items-center gap-2 rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-lg">
+              <div class="music-volume-panel absolute bottom-full left-1/2 z-30 mb-2 flex -translate-x-1/2 flex-col items-center gap-2 rounded-md border border-border p-2 text-foreground shadow-lg">
                 <button
                   type="button"
                   onclick={() => { void player.toggleMute(); }}
                   class={cn(
-                    "inline-flex h-7 min-w-10 items-center justify-center rounded-sm px-1.5 text-[0.733333rem] tabular-nums text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
+                    "inline-flex h-7 w-full items-center justify-center rounded-sm px-1.5 text-[0.733333rem] tabular-nums text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
                     player.muted && "line-through opacity-60",
                   )}
                   title={player.muted ? "Unmute (M key)" : "Mute (M key)"}
@@ -889,6 +889,11 @@
 
   .music-compact-volume-control {
     display: none;
+  }
+
+  .music-volume-panel {
+    width: 3.5rem;
+    background-color: var(--cal-bg);
   }
 
   .music-utility-shuffle {
