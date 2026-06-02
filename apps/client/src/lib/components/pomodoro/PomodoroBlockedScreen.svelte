@@ -168,9 +168,13 @@
 
   .blocked-date-time,
   .blocked-kicker,
-  .blocked-subtitle,
-  .blocked-hints {
+  .blocked-subtitle {
     font-size: 1.75rem;
+    line-height: 1.25;
+  }
+
+  .blocked-hints {
+    font-size: 1.3125rem;
     line-height: 1.25;
   }
 
@@ -206,9 +210,12 @@
 
     .blocked-date-time,
     .blocked-kicker,
-    .blocked-subtitle,
-    .blocked-hints {
+    .blocked-subtitle {
       font-size: 1.4rem;
+    }
+
+    .blocked-hints {
+      font-size: 1.05rem;
     }
 
     .blocked-status {
@@ -227,9 +234,12 @@
 
     .blocked-date-time,
     .blocked-kicker,
-    .blocked-subtitle,
-    .blocked-hints {
+    .blocked-subtitle {
       font-size: 1.1rem;
+    }
+
+    .blocked-hints {
+      font-size: 0.825rem;
     }
 
     .blocked-status {
@@ -248,9 +258,12 @@
 
     .blocked-date-time,
     .blocked-kicker,
-    .blocked-subtitle,
-    .blocked-hints {
+    .blocked-subtitle {
       font-size: 0.85rem;
+    }
+
+    .blocked-hints {
+      font-size: 0.6375rem;
     }
 
     .blocked-status {
@@ -269,9 +282,12 @@
 
     .blocked-date-time,
     .blocked-kicker,
-    .blocked-subtitle,
-    .blocked-hints {
+    .blocked-subtitle {
       font-size: 0.7rem;
+    }
+
+    .blocked-hints {
+      font-size: 0.525rem;
     }
 
     .blocked-status {
