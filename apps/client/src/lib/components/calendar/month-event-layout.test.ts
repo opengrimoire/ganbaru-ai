@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarEvent } from "./types";
-import { layoutMonthDayEvents, MONTH_EVENT_CHIP_HEIGHT_PX } from "./month-event-layout";
+import {
+  layoutMonthDayEvents,
+  MONTH_EVENT_CHIP_HEIGHT_PX,
+  MONTH_EVENT_ROW_GAP_PX,
+} from "./month-event-layout";
 
 function evt(id: string, title: string, overrides: Partial<CalendarEvent> = {}): CalendarEvent {
   return {
@@ -132,11 +136,12 @@ describe("layoutMonthDayEvents", () => {
       evt("3", "Deep planning review"),
     ], {
       cellWidthPx: 100,
-      availableHeightPx: MONTH_EVENT_CHIP_HEIGHT_PX * 2 + 1,
+      availableHeightPx: MONTH_EVENT_CHIP_HEIGHT_PX * 2 + MONTH_EVENT_ROW_GAP_PX,
     });
 
     expect(layout.hiddenCount).toBe(0);
     expect(layout.items.map((item) => item.row)).toEqual([0, 0, 1]);
+    expect(layout.items[2].topPx).toBe(MONTH_EVENT_CHIP_HEIGHT_PX + MONTH_EVENT_ROW_GAP_PX);
   });
 
   it("uses the half-row cap for packing before expanding the last event", () => {

@@ -2,7 +2,7 @@ import type { CalendarEvent } from "./types";
 import { getMeetingIndicatorState } from "./event-indicators";
 
 export const MONTH_EVENT_CHIP_HEIGHT_PX = 20;
-export const MONTH_EVENT_ROW_GAP_PX = 1;
+export const MONTH_EVENT_ROW_GAP_PX = 2;
 
 const MONTH_MEETING_ICON_SIZE_PX = 8;
 const MONTH_MEETING_ICON_GAP_PX = 2;
