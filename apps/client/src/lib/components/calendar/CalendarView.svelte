@@ -7,7 +7,7 @@
   import {
     addDays, adjacentWorkCycleAnchor, computeViewWindow, formatCalendarDate, formatDatePart,
     formatCalendarDateWithSeconds, getWeekDays, getWorkCycleDays,
-    getEventSurfaceStatusForIdentity, getLocalTimezone, parseCalendarDate,
+    getEventSurfaceStatusForIdentity, getLocalTimezone,
   } from "./utils";
   import type { TimezoneAbbrMode } from "./utils";
   import { getCalendar } from "$lib/stores/calendar.svelte";
@@ -47,7 +47,11 @@
   } from "./display-events";
   import { buildRecurringCommitPlan } from "./recurrence-edit-plan";
   import { executeRecurrenceCommitPlan } from "./recurrence-edit-executor";
-  import { endActiveEventWouldStopProductivity, isActiveTimedCalendarEvent } from "./active-event-end";
+  import {
+    activePomodoroSaveWouldStopSession,
+    endActiveEventWouldStopProductivity,
+    isActiveTimedCalendarEvent,
+  } from "./active-event-end";
   import { activeRootId } from "./occurrence-protection";
   import { getCalendarEventEditLock } from "./event-edit-permissions";
   import {
@@ -642,7 +646,7 @@
   const selectedEditLock = $derived.by(() => {
     const s = session.state;
     if (s.mode !== "edit") return { locked: false, allowArchive: false };
-    return getCalendarEventEditLock(s.originalEvent, calendarsStore.list, {
+    return getCalendarEventEditLock(s.instanceEvent, calendarsStore.list, {
       isActivePomodoroEvent: isSelectedActivePomodoroOccurrence(s),
     });
   });
@@ -823,18 +827,15 @@
     return isSelectedEndableActiveOccurrence(s) ? "this" : requested ?? session.scope;
   }
 
-  /** Would this save displace the active block out of the current time window? */
-  function wouldSaveStopSession(data: { start: string; end: string }, _scope?: RecurringScope): boolean {
+  /** Would this save remove the active pomodoro or move it out of the current time window? */
+  function wouldSaveStopSession(data: PanelSaveData, _scope?: RecurringScope): boolean {
     if (!pomodoro.isActive || !pomodoro.activeBlockId || session.state.mode !== "edit") return false;
 
     const s = session.state;
     // Active recurring occurrences are isolated to this occurrence. Future
     // "following" or "all" edits in the same series do not move the active run.
     if (!isSelectedActivePomodoroOccurrence(s)) return false;
-    const now = new Date();
-    const newStart = parseCalendarDate(data.start);
-    const newEnd = parseCalendarDate(data.end);
-    return !(now >= newStart && now < newEnd);
+    return activePomodoroSaveWouldStopSession(data);
   }
 
   // Flag: the user confirmed the session stop but the actual stopSession() call
@@ -903,6 +904,7 @@
 
   const DELETE_UNDO_TIMEOUT_MS = 5_000;
   const SAVE_SUCCESS_TOAST_TIMEOUT_MS = 3_000;
+  const SAVE_ERROR_TOAST_TIMEOUT_MS = 8_000;
 
   interface DeleteUndoToast {
     id: string;
@@ -915,6 +917,7 @@
     id: string;
     pending: boolean;
     message: string;
+    variant: "success" | "error";
   }
 
   let deleteUndoToast: DeleteUndoToast | null = $state(null);
@@ -970,7 +973,7 @@
   function showSavePendingToast(): string {
     clearSaveSuccessTimer();
     const id = crypto.randomUUID();
-    saveSuccessToast = { id, pending: true, message: "Saving..." };
+    saveSuccessToast = { id, pending: true, message: "Saving...", variant: "success" };
     return id;
   }
 
@@ -981,11 +984,51 @@
   function showSaveSuccessToast(id: string): void {
     clearSaveSuccessTimer();
     if (saveSuccessToast?.id !== id) return;
-    saveSuccessToast = { id, pending: false, message: "Saved" };
+    saveSuccessToast = { id, pending: false, message: "Saved", variant: "success" };
     saveSuccessTimer = setTimeout(() => {
       if (saveSuccessToast?.id === id) saveSuccessToast = null;
       saveSuccessTimer = undefined;
     }, SAVE_SUCCESS_TOAST_TIMEOUT_MS);
+  }
+
+  function saveErrorMessage(error: unknown): string {
+    if (error instanceof Error && error.message.trim()) return error.message;
+    if (typeof error === "string" && error.trim()) return error;
+    return "Unknown save error";
+  }
+
+  function showSaveErrorToast(id: string, error: unknown): void {
+    clearSaveSuccessTimer();
+    if (saveSuccessToast?.id !== id) return;
+    saveSuccessToast = {
+      id,
+      pending: false,
+      message: `Save failed: ${saveErrorMessage(error)}`,
+      variant: "error",
+    };
+    saveSuccessTimer = setTimeout(() => {
+      if (saveSuccessToast?.id === id) saveSuccessToast = null;
+      saveSuccessTimer = undefined;
+    }, SAVE_ERROR_TOAST_TIMEOUT_MS);
+  }
+
+  function logPanelSaveError(
+    context: "enable-active-pomodoro" | "panel-save",
+    error: unknown,
+    data: PanelSaveData,
+    scope?: RecurringScope,
+  ): void {
+    const s = session.state;
+    console.error("[CalendarView] event save failed", {
+      context,
+      mode: s.mode,
+      eventId: s.mode === "edit" ? s.originalEvent.id : undefined,
+      scope,
+      keys: Object.keys(data).sort(),
+      hasPomodoroConfig: !!data.pomodoroConfig,
+      allDay: !!data.allDay,
+      error,
+    });
   }
 
   async function undoDeletedEvent(): Promise<void> {
@@ -1872,12 +1915,12 @@
 
     suppressEditingGlow = true;
     suppressEditPreview = true;
-    panelCommitHidden = true;
-    saveDisplayFreeze = buildSaveDisplayFreeze({ pomodoroConfig: config });
+    saveDisplayFreeze = buildSaveDisplayFreeze(data);
     const saveToastId = showSavePendingToast();
 
     try {
-      await calendarStore.updateBlock({ id: s.originalEvent.id, pomodoroConfig: config });
+      const updated: CalendarEvent = { ...s.originalEvent, ...data };
+      await calendarStore.updateBlock(updated);
       await pomodoro.startFromBlock(
         s.originalEvent.id,
         {
@@ -1886,21 +1929,23 @@
           longBreakMinutes: config.longBreakMinutes,
           cyclesBeforeLongBreak: config.pomodoroCount,
         },
-        s.instanceEvent.end,
-        s.instanceEvent.start.split(" ")[0],
+        data.end,
+        data.start.split(" ")[0],
         config.idleTimeoutMinutes,
       );
       await calendarStore.refreshWindow(viewWindow.start, viewWindow.end);
       closeSession();
       showSaveSuccessToast(saveToastId);
       await tick();
+    } catch (error) {
+      logPanelSaveError("enable-active-pomodoro", error, data);
+      showSaveErrorToast(saveToastId, error);
     } finally {
       if (saveSuccessToast?.id === saveToastId && saveSuccessToast.pending) {
         dismissSaveToastIfCurrent(saveToastId);
       }
       suppressEditingGlow = false;
       suppressEditPreview = false;
-      panelCommitHidden = false;
       saveDisplayFreeze = null;
     }
   }
@@ -1934,7 +1979,6 @@
     const saveFreeze = buildSaveDisplayFreeze(data, scope);
     suppressEditingGlow = true;
     suppressEditPreview = true;
-    panelCommitHidden = true;
     saveDisplayFreeze = saveFreeze;
     if (suppressPomodoroAutoStart) pomodoro.autoStartSuppressed = true;
     const saveToastId = showSavePendingToast();
@@ -1953,6 +1997,10 @@
       closeSession();
       showSaveSuccessToast(saveToastId);
       await tick();
+    } catch (error) {
+      sessionStopPending = false;
+      logPanelSaveError("panel-save", error, data, scope);
+      showSaveErrorToast(saveToastId, error);
     } finally {
       if (saveSuccessToast?.id === saveToastId && saveSuccessToast.pending) {
         dismissSaveToastIfCurrent(saveToastId);
@@ -1960,7 +2008,6 @@
       if (suppressPomodoroAutoStart) pomodoro.autoStartSuppressed = false;
       suppressEditingGlow = false;
       suppressEditPreview = false;
-      panelCommitHidden = false;
       saveDisplayFreeze = null;
     }
   }
@@ -2232,30 +2279,31 @@
   {/if}
   {#if EventPanel && panelRender}
     {@const Panel = EventPanel}
+    {@const render = panelRender}
     <Panel
-      parked={panelRender.parked}
-      mode={panelRender.mode}
-      panelSessionKey={panelRender.sessionKey}
-      start={panelRender.start}
-      end={panelRender.end}
-      event={panelRender.mode === "edit" ? panelRender.event : undefined}
-      recurringScopeEnabled={panelRender.mode === "edit" ? panelRender.recurringScopeEnabled : false}
-      anchor={panelRender.anchor}
-      initialAllDay={panelRender.initialAllDay}
-      detailsLoaded={panelRender.detailsLoaded}
-      externalDirty={panelRender.externalDirty}
+      parked={render.parked}
+      mode={render.mode}
+      panelSessionKey={render.sessionKey}
+      start={render.start}
+      end={render.end}
+      event={render.mode === "edit" ? render.event : undefined}
+      recurringScopeEnabled={render.mode === "edit" ? render.recurringScopeEnabled : false}
+      anchor={render.anchor}
+      initialAllDay={render.initialAllDay}
+      detailsLoaded={render.detailsLoaded}
+      externalDirty={render.externalDirty}
       initialSyncSeeded
-      readOnly={panelRender.readOnly}
-      allowDeleteWhenReadOnly={panelRender.allowDeleteWhenReadOnly}
-      allowPomodoroWhenReadOnly={panelRender.allowPomodoroWhenReadOnly}
-      skipInlineDeleteConfirm={panelRender.skipInlineDeleteConfirm}
-      inlineEndEventConfirm={panelRender.mode === "edit" ? panelRender.inlineEndEventConfirm : false}
-      lockStartControls={panelRender.mode === "edit" ? panelRender.endActiveEventAvailable : false}
+      readOnly={render.readOnly}
+      allowDeleteWhenReadOnly={render.allowDeleteWhenReadOnly}
+      allowPomodoroWhenReadOnly={render.allowPomodoroWhenReadOnly}
+      skipInlineDeleteConfirm={render.skipInlineDeleteConfirm}
+      inlineEndEventConfirm={render.mode === "edit" ? render.inlineEndEventConfirm : false}
+      lockStartControls={render.mode === "edit" ? render.endActiveEventAvailable : false}
       calendarIdentityEmail={panelCalendarIdentityEmail}
       loadFullEvent={calendarStore.loadPanelEvent}
       onSave={handlePanelSave}
-      onDelete={panelRender.mode === "edit" && !panelRender.parked ? handleDelete : undefined}
-      onEndEvent={panelRender.mode === "edit" && !panelRender.parked && panelRender.endActiveEventAvailable
+      onDelete={render.mode === "edit" && !render.parked ? handleDelete : undefined}
+      onEndEvent={render.mode === "edit" && !render.parked && render.endActiveEventAvailable
         ? handleEndEvent
         : undefined}
       onChange={handlePanelChange}
@@ -2281,7 +2329,7 @@
   {#if saveSuccessToast}
     <ActionToast
       message={saveSuccessToast.message}
-      variant="success"
+      variant={saveSuccessToast.variant}
       stacked={!!deleteUndoToast}
       controlsVisible={!saveSuccessToast.pending}
       dismissLabel="Dismiss save notification"

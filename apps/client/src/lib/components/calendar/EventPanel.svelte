@@ -489,6 +489,21 @@
     return true;
   }
 
+  function hasSaveableTimeDraft(): boolean {
+    return endTimeDraftEdited || (!lockStartControls && startTimeDraftEdited);
+  }
+
+  function commitSaveableTimeDrafts(): boolean {
+    let committed = false;
+    if (!lockStartControls && startTimeDraftEdited) {
+      committed = commitTimeInput("start") || committed;
+    }
+    if (endTimeDraftEdited) {
+      committed = commitTimeInput("end") || committed;
+    }
+    return committed;
+  }
+
   function restoreTimeInput(target: "start" | "end") {
     setTimeDraft(target, restoreTimeDraft(target === "start" ? startTime : endTime, preferences.calendarTimeFormat));
     setTimeDraftEdited(target, false);
@@ -1139,7 +1154,7 @@
   // In edit mode it tracks the session's diff-based dirty flag so that
   // reverting all edits back to the original values disables the button
   // again, matching the click-outside cancellation behavior.
-  const saveReady = $derived(mode === "create" || externalDirty);
+  const saveReady = $derived(mode === "create" || externalDirty || hasSaveableTimeDraft());
   const saveControlsDisabled = $derived(
     (controlsDisabled && !pomodoroReadOnlyInteractive) || savePending || !saveReady,
   );
@@ -1323,7 +1338,10 @@
   async function handleSave() {
     if (parked) return;
     if (controlsDisabled && !pomodoroReadOnlyInteractive) return;
-    if (savePending || !saveReady) return;
+    if (savePending) return;
+    const hadSaveableTimeDraft = hasSaveableTimeDraft();
+    const committedTimeDraft = commitSaveableTimeDrafts();
+    if (!externalDirty && mode !== "create" && (!hadSaveableTimeDraft || !committedTimeDraft)) return;
     const data = buildSaveData();
     const s = isRecurring ? scope : undefined;
     savePending = true;

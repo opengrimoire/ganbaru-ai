@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarEvent, PomodoroConfig } from "./types";
 import {
+  activePomodoroSaveWouldStopSession,
   endActiveEventWouldStopProductivity,
   isActiveTimedCalendarEvent,
   sameConcreteOccurrence,
@@ -119,5 +120,38 @@ describe("active event end helpers", () => {
       }),
       new Date("2026-05-24T10:30:00"),
     )).toBe(false);
+  });
+
+  it("stops an active pomodoro save when the pomodoro config is removed", () => {
+    expect(activePomodoroSaveWouldStopSession(
+      {
+        start: "2026-05-24 09:00",
+        end: "2026-05-24 13:00",
+        pomodoroConfig: undefined,
+      },
+      new Date("2026-05-24T10:30:00"),
+    )).toBe(true);
+  });
+
+  it("keeps an active pomodoro save running when the config remains and the event still covers now", () => {
+    expect(activePomodoroSaveWouldStopSession(
+      {
+        start: "2026-05-24 09:00",
+        end: "2026-05-24 13:00",
+        pomodoroConfig,
+      },
+      new Date("2026-05-24T10:30:00"),
+    )).toBe(false);
+  });
+
+  it("stops an active pomodoro save when the edited time no longer covers now", () => {
+    expect(activePomodoroSaveWouldStopSession(
+      {
+        start: "2026-05-24 11:00",
+        end: "2026-05-24 13:00",
+        pomodoroConfig,
+      },
+      new Date("2026-05-24T10:30:00"),
+    )).toBe(true);
   });
 });

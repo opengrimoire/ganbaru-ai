@@ -50,6 +50,8 @@ When a feature needs broader access (e.g. work environment management needs to l
 
 The Tauri webview itself is hardened: production CSP allows bundled local assets and Tauri IPC only, blocks object and frame sources, disallows inline scripts, and currently allows inline styles for Svelte layout, theme, and calendar geometry bindings. The dev CSP remains more permissive for Vite and HMR, including local dev origins and `unsafe-eval`. IPC channels are validated by command name and parameter shape.
 
+Developer tools can be opened with F12 or Ctrl + Shift + I in development builds. The backend command is guarded by Rust debug assertions, so production builds reject it.
+
 Calendar descriptions are the current app-owned rich HTML surface. The frontend and Rust backend both cap and sanitize descriptions before rendering or persistence, and closed event panels render only plain text previews in the main DOM.
 
 ## Native overlay enforcement

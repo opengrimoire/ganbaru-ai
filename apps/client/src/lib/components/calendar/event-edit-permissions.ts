@@ -50,8 +50,8 @@ export function getCalendarEventEditLock(
     return { locked: true, reason: "read-only-calendar", allowArchive: false };
   }
 
-  const started = hasCalendarEventStarted(event, options.now ?? new Date());
-  if (!started || options.isActivePomodoroEvent === true) {
+  const ended = hasCalendarEventEnded(event, options.now ?? new Date());
+  if (!ended || options.isActivePomodoroEvent === true) {
     return { locked: false, allowArchive: false };
   }
 

@@ -41,6 +41,7 @@ describe("shortcut search", () => {
       "Toggle light/dark mode",
       "Open theme picker",
       "Toggle diagnostics panel",
+      "Open DevTools (dev only)",
       "Close app",
       "Open shortcuts",
     ]);
@@ -187,16 +188,18 @@ describe("shortcut search", () => {
 
   it("allows modifier prefix searches to show matching shortcuts", () => {
     const actions = matchingActions("ctrl");
+    const commandActions = actions.filter((action) => action !== "Open DevTools (dev only)");
     expect(actions).toContain("Zoom in");
     expect(actions).toContain("Open theme picker");
+    expect(actions).toContain("Open DevTools (dev only)");
     expect(actions).toContain("Show or hide playlist");
     expect(actions).not.toContain("Go to today");
 
     expect(matchingActions("Ctrl")).toEqual(actions);
     expect(matchingActions("Ctrl ")).toEqual(actions);
     expect(matchingActions("Control")).toEqual(actions);
-    expect(matchingActions("Cmd")).toEqual(actions);
-    expect(matchingActions("Command")).toEqual(actions);
+    expect(matchingActions("Cmd")).toEqual(commandActions);
+    expect(matchingActions("Command")).toEqual(commandActions);
     expect(matchingActions("ctrl +")).toEqual(actions);
     expect(matchingActions("Ctrl + ")).toEqual(actions);
     expect(matchingActions("ctrl shift")).toEqual(
@@ -204,6 +207,7 @@ describe("shortcut search", () => {
         "Toggle light/dark mode",
         "Open theme picker",
         "Toggle diagnostics panel",
+        "Open DevTools (dev only)",
         "Previous view",
       ]),
     );
@@ -212,6 +216,7 @@ describe("shortcut search", () => {
         "Toggle light/dark mode",
         "Open theme picker",
         "Toggle diagnostics panel",
+        "Open DevTools (dev only)",
         "Previous view",
       ]),
     );

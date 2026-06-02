@@ -658,10 +658,7 @@ fn validate_foreground_status_is_closeable(
     {
         return Err("refusing to close protected foreground app".to_string());
     }
-    if names
-        .iter()
-        .all(|name| is_protected_desktop_app_name(name))
-    {
+    if names.iter().all(|name| is_protected_desktop_app_name(name)) {
         return Err("refusing to close protected foreground app".to_string());
     }
     Ok(())
@@ -929,7 +926,10 @@ fn parse_desktop_entry(contents: &str, detail: String) -> Option<DoomscrollingDe
         .into_iter()
         .collect::<Vec<_>>();
     process_names.push(detail.clone());
-    if let Some(stem) = Path::new(&detail).file_stem().and_then(|name| name.to_str()) {
+    if let Some(stem) = Path::new(&detail)
+        .file_stem()
+        .and_then(|name| name.to_str())
+    {
         process_names.push(stem.to_string());
     }
     Some(candidate(
@@ -1298,9 +1298,7 @@ fn windows_foreground_window() -> Option<windows::Win32::Foundation::HWND> {
 }
 
 #[cfg(windows)]
-fn windows_foreground_process_id(
-    hwnd: windows::Win32::Foundation::HWND,
-) -> Option<u32> {
+fn windows_foreground_process_id(hwnd: windows::Win32::Foundation::HWND) -> Option<u32> {
     use windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
 
     let mut process_id = 0;
@@ -1316,16 +1314,14 @@ fn windows_foreground_process_id(
 
 #[cfg(windows)]
 fn windows_process_image_path(process_id: u32) -> Option<String> {
+    use windows::core::PWSTR;
     use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::System::Threading::{
         OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
         PROCESS_QUERY_LIMITED_INFORMATION,
     };
-    use windows::core::PWSTR;
 
-    let handle = unsafe {
-        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process_id).ok()?
-    };
+    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process_id).ok()? };
     let mut buffer = vec![0u16; 32_768];
     let mut size = buffer.len() as u32;
     let result = unsafe {
@@ -1386,7 +1382,8 @@ fn close_current_foreground_desktop_app(
     use windows::Win32::Foundation::{LPARAM, WPARAM};
     use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_CLOSE};
 
-    let hwnd = windows_foreground_window().ok_or_else(|| "no foreground window is active".to_string())?;
+    let hwnd =
+        windows_foreground_window().ok_or_else(|| "no foreground window is active".to_string())?;
     let status = windows_status_for_window(hwnd);
     validate_foreground_status_is_closeable(&status)?;
     if !foreground_expectation_matches(&status, &expected) {
@@ -1400,7 +1397,9 @@ fn close_current_foreground_desktop_app(
 }
 
 #[cfg(target_os = "macos")]
-fn ns_string_to_string(value: Option<objc2::rc::Retained<objc2_foundation::NSString>>) -> Option<String> {
+fn ns_string_to_string(
+    value: Option<objc2::rc::Retained<objc2_foundation::NSString>>,
+) -> Option<String> {
     value
         .map(|value| value.to_string())
         .and_then(|value| normalize_app_candidate_name(&value))
@@ -1447,9 +1446,9 @@ fn close_current_foreground_desktop_app(
     let process_id = status
         .process_id
         .ok_or_else(|| "foreground app process is unavailable".to_string())?;
-    let Some(app) = NSRunningApplication::runningApplicationWithProcessIdentifier(
-        process_id as libc::pid_t,
-    ) else {
+    let Some(app) =
+        NSRunningApplication::runningApplicationWithProcessIdentifier(process_id as libc::pid_t)
+    else {
         return Err("foreground app is no longer running".to_string());
     };
     if app.terminate() {
@@ -1468,10 +1467,7 @@ fn linux_is_wayland_session() -> bool {
 }
 
 #[cfg(target_os = "linux")]
-fn x11_intern_atom<C: x11rb::connection::Connection>(
-    conn: &C,
-    name: &[u8],
-) -> Result<u32, String> {
+fn x11_intern_atom<C: x11rb::connection::Connection>(conn: &C, name: &[u8]) -> Result<u32, String> {
     use x11rb::protocol::xproto::ConnectionExt as _;
 
     conn.intern_atom(false, name)
@@ -1523,7 +1519,8 @@ fn x11_property_string<C: x11rb::connection::Connection>(
 fn x11_wm_class<C: x11rb::connection::Connection>(conn: &C, window: u32) -> Vec<String> {
     use x11rb::protocol::xproto::{AtomEnum, ConnectionExt as _};
 
-    let Ok(cookie) = conn.get_property(false, window, AtomEnum::WM_CLASS, AtomEnum::STRING, 0, 4096)
+    let Ok(cookie) =
+        conn.get_property(false, window, AtomEnum::WM_CLASS, AtomEnum::STRING, 0, 4096)
     else {
         return Vec::new();
     };
@@ -1567,8 +1564,14 @@ fn x11_window_status<C: x11rb::connection::Connection>(
     let process_id = x11_property_u32(conn, window, pid_atom, AtomEnum::CARDINAL.into())?;
     let utf8_atom = x11_intern_atom(conn, b"UTF8_STRING")?;
     let wm_name_atom = x11_intern_atom(conn, b"_NET_WM_NAME")?;
-    let title = x11_property_string(conn, window, wm_name_atom, utf8_atom)
-        .or_else(|| x11_property_string(conn, window, AtomEnum::WM_NAME.into(), AtomEnum::STRING.into()));
+    let title = x11_property_string(conn, window, wm_name_atom, utf8_atom).or_else(|| {
+        x11_property_string(
+            conn,
+            window,
+            AtomEnum::WM_NAME.into(),
+            AtomEnum::STRING.into(),
+        )
+    });
     let wm_class_names = x11_wm_class(conn, window);
     let process_names = process_id
         .map(|id| read_linux_process_name(&PathBuf::from("/proc").join(id.to_string())))
@@ -1629,7 +1632,8 @@ fn x11_close_active_window(
         event,
     )
     .map_err(|e| format!("send X11 close request: {e}"))?;
-    conn.flush().map_err(|e| format!("flush X11 close request: {e}"))?;
+    conn.flush()
+        .map_err(|e| format!("flush X11 close request: {e}"))?;
     Ok(())
 }
 
@@ -1681,17 +1685,16 @@ fn wayland_status_from_toplevel(
 #[cfg(target_os = "linux")]
 impl WaylandToplevelState {
     fn active_toplevel(&self) -> Option<&WaylandToplevelInfo> {
-        self.toplevels
-            .values()
-            .find(|info| info.active && !info.closed && (info.app_id.is_some() || info.title.is_some()))
+        self.toplevels.values().find(|info| {
+            info.active && !info.closed && (info.app_id.is_some() || info.title.is_some())
+        })
     }
 }
 
 #[cfg(target_os = "linux")]
-impl wayland_client::Dispatch<
-    wayland_client::protocol::wl_registry::WlRegistry,
-    (),
-> for WaylandToplevelState {
+impl wayland_client::Dispatch<wayland_client::protocol::wl_registry::WlRegistry, ()>
+    for WaylandToplevelState
+{
     fn event(
         state: &mut Self,
         registry: &wayland_client::protocol::wl_registry::WlRegistry,
@@ -1806,7 +1809,9 @@ fn with_wayland_toplevel_state<T>(
         .roundtrip(&mut state)
         .map_err(|e| format!("read Wayland globals: {e}"))?;
     if state.manager.is_none() {
-        return Err("Wayland compositor does not advertise zwlr_foreign_toplevel_manager_v1".to_string());
+        return Err(
+            "Wayland compositor does not advertise zwlr_foreign_toplevel_manager_v1".to_string(),
+        );
     }
     event_queue
         .roundtrip(&mut state)
@@ -2356,7 +2361,10 @@ Exec=code
 
         assert_eq!(app.name, "Visual Studio Code");
         assert_eq!(app.source, "Installed app");
-        assert_eq!(app.process_names, vec!["Visual Studio Code", "code"]);
+        assert_eq!(
+            app.process_names,
+            vec!["Visual Studio Code", "code", "code.desktop"]
+        );
     }
 
     #[cfg(target_os = "linux")]

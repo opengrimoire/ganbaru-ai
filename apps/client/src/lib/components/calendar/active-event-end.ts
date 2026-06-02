@@ -1,4 +1,4 @@
-import type { CalendarEvent } from "./types";
+import type { CalendarEvent, PomodoroConfig } from "./types";
 import { parseCalendarDate } from "./utils";
 import { sameConcreteOccurrence } from "./occurrence-protection";
 
@@ -33,4 +33,20 @@ export function endActiveEventWouldStopProductivity(
     && !sameConcreteOccurrence(event, selectedEvent)
     && eventCoversInstant(event, now),
   );
+}
+
+export function activePomodoroSaveWouldStopSession(
+  data: {
+    start: string;
+    end: string;
+    pomodoroConfig?: PomodoroConfig;
+    allDay?: boolean;
+  },
+  now: Date = new Date(),
+): boolean {
+  if (data.allDay === true || !data.pomodoroConfig) return true;
+
+  const newStart = parseCalendarDate(data.start);
+  const newEnd = parseCalendarDate(data.end);
+  return !(now >= newStart && now < newEnd);
 }

@@ -102,11 +102,24 @@ describe("calendar event edit permissions", () => {
     expect(lock.locked).toBe(false);
   });
 
-  it("locks started local events while allowing archive from the read-only panel", () => {
+  it("keeps active local events editable", () => {
     const lock = getCalendarEventEditLock(
       event({
         start: "2026-05-25 21:00",
         end: "2026-05-26 15:00",
+      }),
+      [calendar()],
+      { now: NOW },
+    );
+
+    expect(lock).toEqual({ locked: false, allowArchive: false });
+  });
+
+  it("locks past local events while allowing archive from the read-only panel", () => {
+    const lock = getCalendarEventEditLock(
+      event({
+        start: "2026-05-25 21:00",
+        end: "2026-05-26 05:00",
       }),
       [calendar()],
       { now: NOW },

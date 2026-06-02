@@ -353,6 +353,9 @@ describe("computeEditDisplay", () => {
       { recurrence: template.recurrence },
       "all",
       TEST_WINDOW,
+      undefined,
+      "2026-05-31",
+      "12:00",
     );
 
     const seriesEvents = result.events.filter((event) =>

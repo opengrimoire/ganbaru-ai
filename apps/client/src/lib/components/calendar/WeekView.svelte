@@ -90,10 +90,8 @@
   const visibleDays = $derived(days.length > 0 ? days : [anchorDate]);
   const dayCount = $derived(visibleDays.length);
 
-  // Structurally memoize all-day layout: when the grid positions haven't changed
-  // (same event IDs at same row/col/span), reuse the previous position objects so
-  // the {#each} block skips re-evaluation of unchanged items. This prevents the
-  // all-day CSS Grid banner from relayouting on every edit-session state change.
+  // Structurally track all-day layout using stable fields only. Event object
+  // identity can be a Svelte proxy/raw mix when panel state changes.
   let _prevAllDay: PositionedAllDayEvent[] = [];
   const allDayPositioned = $derived.by(() => {
     const next = layoutAllDayEventsForWeek(events, visibleDays);
@@ -107,18 +105,8 @@
       }
     }
     if (!layoutSame) { _prevAllDay = next; return next; }
-    // Layout is identical. Reuse prev position objects for items whose event
-    // reference hasn't changed; only create new objects for changed events.
-    let anyEventChanged = false;
-    for (let i = 0; i < next.length; i++) {
-      if (_prevAllDay[i].event !== next[i].event) { anyEventChanged = true; break; }
-    }
-    if (!anyEventChanged) return _prevAllDay;
-    const stable = next.map((n, i) =>
-      _prevAllDay[i].event === n.event ? _prevAllDay[i] : n,
-    );
-    _prevAllDay = stable;
-    return stable;
+    _prevAllDay = next;
+    return next;
   });
   const allDayMaxRow = $derived(allDayPositioned.length > 0 ? Math.max(...allDayPositioned.map((p) => p.row)) + 1 : 0);
   const tzCount = $derived(Math.max(1, timezones.length));

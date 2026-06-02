@@ -368,7 +368,23 @@
     void desktopBlocker.check(doomscrolling.blockedApps);
   }
 
+  function openDevtools(): void {
+    if (!import.meta.env.DEV) return;
+    invoke("open_devtools").catch((error) => {
+      console.warn("Failed to open DevTools:", error);
+    });
+  }
+
   function handleKeydown(e: KeyboardEvent) {
+    if (
+      import.meta.env.DEV
+      && (e.key === "F12" || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "i"))
+    ) {
+      e.preventDefault();
+      openDevtools();
+      return;
+    }
+
     if (hasOnlyShortcutModifier(e) && e.key === ",") {
       e.preventDefault();
       if (settingsLauncher.isOpen) {

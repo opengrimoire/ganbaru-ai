@@ -61,12 +61,9 @@ function normalizeFocusIdleDefaults(
  * Treats missing and explicit undefined as equivalent.
  */
 export function fieldEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  if (a === undefined && b === undefined) return true;
-  if (a === null && b === null) return true;
-  if (a === undefined || b === undefined) return false;
-  if (a === null || b === null) return false;
-  if (typeof a !== "object" || typeof b !== "object") return false;
+  if (a === undefined || b === undefined) return a === b;
+  if (a === null || b === null) return a === b;
+  if (typeof a !== "object" || typeof b !== "object") return a === b;
   return JSON.stringify(a) === JSON.stringify(b);
 }
 

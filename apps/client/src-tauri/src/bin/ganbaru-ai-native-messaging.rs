@@ -664,7 +664,9 @@ fn read_optional_limit_minutes(value: Option<&Value>, max_minutes: i64) -> Optio
         None | Some(Value::Null) => Some(None),
         Some(value) => {
             let minutes = value.as_i64()?;
-            (1..=max_minutes).contains(&minutes).then_some(Some(minutes))
+            (1..=max_minutes)
+                .contains(&minutes)
+                .then_some(Some(minutes))
         }
     }
 }
@@ -874,7 +876,10 @@ fn default_config() -> DoomscrollingConfig {
 
 fn response_from_snapshot(snapshot: &StateSnapshot) -> NativeResponse {
     let (active, phase, remaining_seconds, reason) = runtime_status(snapshot);
-    let paused = snapshot.runtime.as_ref().is_some_and(|runtime| runtime.paused);
+    let paused = snapshot
+        .runtime
+        .as_ref()
+        .is_some_and(|runtime| runtime.paused);
     NativeResponse {
         message_type: "decision",
         host_name: native_host_name(),
@@ -951,7 +956,10 @@ fn should_enforce(snapshot: &StateSnapshot, response: &mut NativeResponse) -> bo
         return false;
     }
 
-    if snapshot.runtime.as_ref().is_some_and(|runtime| runtime.paused)
+    if snapshot
+        .runtime
+        .as_ref()
+        .is_some_and(|runtime| runtime.paused)
         && snapshot.config.pause_during_focus_pause
     {
         return false;

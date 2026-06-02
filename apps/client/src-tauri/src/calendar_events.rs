@@ -64,6 +64,8 @@ struct CalendarEventMutationContext {
     occurrence_date: Option<String>,
     start_time: String,
     end_time: String,
+    rrule: Option<String>,
+    repeat_until: Option<String>,
     synthetic: bool,
 }
 
@@ -208,6 +210,41 @@ enum CalendarEventUpdateField {
     LocalRsvpStatus(Option<String>),
     #[serde(rename = "guestPermissions")]
     GuestPermissions(CalendarGuestPermissions),
+}
+
+impl CalendarEventUpdateField {
+    fn field_name(&self) -> &'static str {
+        match self {
+            CalendarEventUpdateField::Title(_) => "title",
+            CalendarEventUpdateField::StartTime(_) => "startTime",
+            CalendarEventUpdateField::EndTime(_) => "endTime",
+            CalendarEventUpdateField::Timezone(_) => "timezone",
+            CalendarEventUpdateField::CalendarId(_) => "calendarId",
+            CalendarEventUpdateField::Color(_) => "color",
+            CalendarEventUpdateField::Description(_) => "description",
+            CalendarEventUpdateField::Rrule(_) => "rrule",
+            CalendarEventUpdateField::RepeatUntil(_) => "repeatUntil",
+            CalendarEventUpdateField::Notifications(_) => "notifications",
+            CalendarEventUpdateField::Exceptions(_) => "exceptions",
+            CalendarEventUpdateField::AllDay(_) => "allDay",
+            CalendarEventUpdateField::Location(_) => "location",
+            CalendarEventUpdateField::Url(_) => "url",
+            CalendarEventUpdateField::Transparency(_) => "transparency",
+            CalendarEventUpdateField::Status(_) => "status",
+            CalendarEventUpdateField::SourceUid(_) => "sourceUid",
+            CalendarEventUpdateField::Visibility(_) => "visibility",
+            CalendarEventUpdateField::Priority(_) => "priority",
+            CalendarEventUpdateField::Categories(_) => "categories",
+            CalendarEventUpdateField::Geo(_) => "geo",
+            CalendarEventUpdateField::Sequence(_) => "sequence",
+            CalendarEventUpdateField::Rdate(_) => "rdate",
+            CalendarEventUpdateField::ExtendedProperties(_) => "extendedProperties",
+            CalendarEventUpdateField::Organizer(_) => "organizer",
+            CalendarEventUpdateField::MeetingEnabled(_) => "meetingEnabled",
+            CalendarEventUpdateField::LocalRsvpStatus(_) => "localRsvpStatus",
+            CalendarEventUpdateField::GuestPermissions(_) => "guestPermissions",
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -1075,7 +1112,7 @@ async fn load_mutation_context(
         require_non_empty_option(&target.occurrence_end, "occurrence_end")?;
     }
     let row = sqlx::query(
-        "SELECT id, start_time, end_time
+        "SELECT id, start_time, end_time, rrule, repeat_until
          FROM calendar_events
          WHERE id = ?",
     )
@@ -1093,6 +1130,12 @@ async fn load_mutation_context(
     let stored_end: String = row
         .try_get("end_time")
         .map_err(|e| format!("read event end_time: {e}"))?;
+    let rrule: Option<String> = row
+        .try_get("rrule")
+        .map_err(|e| format!("read event rrule: {e}"))?;
+    let repeat_until: Option<String> = row
+        .try_get("repeat_until")
+        .map_err(|e| format!("read event repeat_until: {e}"))?;
     // Synthetic ids carry the local recurrence date. The occurrence start is
     // UTC and can fall on a different calendar date near midnight.
     let occurrence_date = synthetic_date
@@ -1105,6 +1148,8 @@ async fn load_mutation_context(
         occurrence_date,
         start_time: target.occurrence_start.clone().unwrap_or(stored_start),
         end_time: target.occurrence_end.clone().unwrap_or(stored_end),
+        rrule,
+        repeat_until,
         synthetic,
     })
 }
@@ -1753,7 +1798,24 @@ pub async fn calendar_update_event<R: Runtime>(
     validate_event_update(&patch)?;
     let pool = connect_sqlite(app, db_url).await?;
     let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
-    update_calendar_event_tx(&mut tx, &patch).await?;
+    if let Err(err) = update_calendar_event_tx(&mut tx, &patch).await {
+        let field_names = patch
+            .fields
+            .iter()
+            .map(CalendarEventUpdateField::field_name)
+            .collect::<Vec<_>>()
+            .join(",");
+        eprintln!(
+            "[calendar_update_event] failed id={} fields=[{}] attendees={} alarms={} pomodoro_config={} error={}",
+            patch.id,
+            field_names,
+            patch.attendees.is_some(),
+            patch.alarms.is_some(),
+            patch.pomodoro_config.is_some(),
+            err,
+        );
+        return Err(err);
+    }
     tx.commit().await.map_err(|e| format!("commit: {e}"))?;
     Ok(())
 }
@@ -1935,6 +1997,9 @@ async fn ensure_calendar_event_update_allowed(
     if protected_active_event_end_update_allowed(patch, &context, &now) {
         return Ok(());
     }
+    if protected_active_event_update_allowed(tx, patch, &context, &now).await? {
+        return Ok(());
+    }
     Err(format!(
         "calendar event '{}' is protected; archive it instead",
         context.id
@@ -1984,6 +2049,96 @@ fn protected_active_event_end_update_allowed(
     start_ms <= new_end_ms && new_end_ms <= now_ms
 }
 
+async fn protected_active_event_update_allowed(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    patch: &CalendarEventUpdate,
+    context: &CalendarEventMutationContext,
+    now: &str,
+) -> Result<bool, String> {
+    if context.synthetic || !protected_event_is_active_at(context, now) {
+        return Ok(false);
+    }
+    active_event_update_fields_allowed(tx, patch, context).await
+}
+
+async fn active_event_update_fields_allowed(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    patch: &CalendarEventUpdate,
+    context: &CalendarEventMutationContext,
+) -> Result<bool, String> {
+    for field in &patch.fields {
+        if !active_event_update_field_allowed(tx, field, context).await? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+async fn active_event_update_field_allowed(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    field: &CalendarEventUpdateField,
+    context: &CalendarEventMutationContext,
+) -> Result<bool, String> {
+    match field {
+        CalendarEventUpdateField::StartTime(value) => {
+            Ok(calendar_timestamps_match(value, &context.start_time))
+        }
+        CalendarEventUpdateField::AllDay(value) => Ok(!*value),
+        CalendarEventUpdateField::EndTime(value) => {
+            let Some(start_ms) = calendar_timestamp_millis(&context.start_time) else {
+                return Ok(false);
+            };
+            let Some(end_ms) = calendar_timestamp_millis(value) else {
+                return Ok(false);
+            };
+            Ok(start_ms <= end_ms)
+        }
+        CalendarEventUpdateField::Rrule(value) => Ok(value == &context.rrule),
+        CalendarEventUpdateField::RepeatUntil(value) => Ok(value == &context.repeat_until),
+        CalendarEventUpdateField::Exceptions(value) => {
+            stored_string_list_matches(
+                tx,
+                &context.source_event_id,
+                "calendar_event_exdates",
+                "occurrence_date",
+                value,
+                "exceptions",
+            )
+            .await
+        }
+        CalendarEventUpdateField::Rdate(value) => {
+            stored_string_list_matches(
+                tx,
+                &context.source_event_id,
+                "calendar_event_rdates",
+                "occurrence_start",
+                value,
+                "rdate",
+            )
+            .await
+        }
+        _ => Ok(true),
+    }
+}
+
+async fn stored_string_list_matches(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    event_id: &str,
+    table: &'static str,
+    column: &'static str,
+    value: &Option<String>,
+    field: &str,
+) -> Result<bool, String> {
+    let incoming = parse_string_list(value, field)?;
+    let query = format!("SELECT {column} FROM {table} WHERE event_id = ? ORDER BY sort_order ASC");
+    let stored = sqlx::query_scalar::<_, String>(&query)
+        .bind(event_id)
+        .fetch_all(&mut **tx)
+        .await
+        .map_err(|e| format!("load calendar {table}: {e}"))?;
+    Ok(incoming == stored)
+}
+
 fn protected_event_is_active_at(context: &CalendarEventMutationContext, now: &str) -> bool {
     let Some(start_ms) = calendar_timestamp_millis(&context.start_time) else {
         return false;
@@ -1998,6 +2153,16 @@ fn protected_event_is_active_at(context: &CalendarEventMutationContext, now: &st
         return false;
     }
     true
+}
+
+fn calendar_timestamps_match(left: &str, right: &str) -> bool {
+    match (
+        calendar_timestamp_millis(left),
+        calendar_timestamp_millis(right),
+    ) {
+        (Some(left_ms), Some(right_ms)) => left_ms == right_ms,
+        _ => left == right,
+    }
 }
 
 fn calendar_timestamp_millis(value: &str) -> Option<i64> {
@@ -3102,8 +3267,8 @@ mod tests {
         validate_priority, validate_update_field, CalendarActiveEventReferenceTransfer,
         CalendarDeleteArchiveOperation, CalendarDetachInstance, CalendarEventCreate,
         CalendarEventMutationContext, CalendarEventMutationTarget, CalendarEventUpdate,
-        CalendarEventUpdateField, CalendarPomodoroConfig, CalendarPomodoroConfigPatch,
-        CalendarRecurrenceCommitOperation, CalendarSplitSeries,
+        CalendarEventUpdateField, CalendarGuestPermissions, CalendarPomodoroConfig,
+        CalendarPomodoroConfigPatch, CalendarRecurrenceCommitOperation, CalendarSplitSeries,
     };
 
     fn event_create() -> CalendarEventCreate {
@@ -3368,7 +3533,12 @@ mod tests {
                 &CalendarEventUpdate {
                     id: "event-1".to_string(),
                     updated_at: "2026-05-09T10:30:00Z".to_string(),
-                    fields: vec![CalendarEventUpdateField::Title("Changed".to_string())],
+                    fields: vec![
+                        CalendarEventUpdateField::Title("Changed".to_string()),
+                        CalendarEventUpdateField::StartTime("2000-05-09T10:00:00Z".to_string()),
+                        CalendarEventUpdateField::EndTime("2999-05-09T11:00:00Z".to_string()),
+                        CalendarEventUpdateField::AllDay(false),
+                    ],
                     attendees: None,
                     alarms: None,
                     pomodoro_config: None,
@@ -3389,7 +3559,164 @@ mod tests {
     }
 
     #[test]
-    fn active_non_pomodoro_title_update_rejects_without_open_run() {
+    fn active_non_pomodoro_title_update_succeeds_without_open_run() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event_at(
+                &pool,
+                "event-1",
+                "2000-05-09T10:00:00Z",
+                "2999-05-09T11:00:00Z",
+                None,
+            )
+            .await;
+
+            let mut tx = pool.begin().await.unwrap();
+            update_calendar_event_tx(
+                &mut tx,
+                &CalendarEventUpdate {
+                    id: "event-1".to_string(),
+                    updated_at: "2026-05-09T10:30:00Z".to_string(),
+                    fields: vec![CalendarEventUpdateField::Title("Changed".to_string())],
+                    attendees: None,
+                    alarms: None,
+                    pomodoro_config: None,
+                },
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+
+            let title: String =
+                sqlx::query_scalar("SELECT title FROM calendar_events WHERE id = 'event-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(title, "Changed");
+        });
+    }
+
+    #[test]
+    fn active_non_pomodoro_full_panel_update_succeeds_without_open_run() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event_at(
+                &pool,
+                "event-1",
+                "2000-05-09T10:00:00Z",
+                "2999-05-09T11:00:00Z",
+                None,
+            )
+            .await;
+
+            let mut tx = pool.begin().await.unwrap();
+            update_calendar_event_tx(
+                &mut tx,
+                &CalendarEventUpdate {
+                    id: "event-1".to_string(),
+                    updated_at: "2026-05-09T10:30:00Z".to_string(),
+                    fields: vec![
+                        CalendarEventUpdateField::Title("Changed".to_string()),
+                        CalendarEventUpdateField::StartTime("2000-05-09T10:00:00Z".to_string()),
+                        CalendarEventUpdateField::EndTime("2999-05-09T11:00:00Z".to_string()),
+                        CalendarEventUpdateField::Timezone("America/Monterrey".to_string()),
+                        CalendarEventUpdateField::CalendarId("local".to_string()),
+                        CalendarEventUpdateField::Color(None),
+                        CalendarEventUpdateField::Description(String::new()),
+                        CalendarEventUpdateField::Rrule(None),
+                        CalendarEventUpdateField::RepeatUntil(None),
+                        CalendarEventUpdateField::Notifications(None),
+                        CalendarEventUpdateField::Exceptions(None),
+                        CalendarEventUpdateField::AllDay(false),
+                        CalendarEventUpdateField::Location(String::new()),
+                        CalendarEventUpdateField::Url(String::new()),
+                        CalendarEventUpdateField::Transparency("opaque".to_string()),
+                        CalendarEventUpdateField::Status("confirmed".to_string()),
+                        CalendarEventUpdateField::SourceUid(None),
+                        CalendarEventUpdateField::Visibility("public".to_string()),
+                        CalendarEventUpdateField::Priority(None),
+                        CalendarEventUpdateField::Categories(None),
+                        CalendarEventUpdateField::Geo(None),
+                        CalendarEventUpdateField::Sequence(0),
+                        CalendarEventUpdateField::Rdate(None),
+                        CalendarEventUpdateField::ExtendedProperties(None),
+                        CalendarEventUpdateField::Organizer(None),
+                        CalendarEventUpdateField::MeetingEnabled(false),
+                        CalendarEventUpdateField::LocalRsvpStatus(None),
+                        CalendarEventUpdateField::GuestPermissions(CalendarGuestPermissions {
+                            guest_can_modify: false,
+                            guest_can_invite_others: true,
+                            guest_can_see_other_guests: true,
+                        }),
+                    ],
+                    attendees: Some(Vec::new()),
+                    alarms: Some(Vec::new()),
+                    pomodoro_config: Some(CalendarPomodoroConfigPatch::Clear),
+                },
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+
+            let title: String =
+                sqlx::query_scalar("SELECT title FROM calendar_events WHERE id = 'event-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(title, "Changed");
+        });
+    }
+
+    #[test]
+    fn active_event_with_completed_pomodoro_history_update_succeeds_without_open_run() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event_at(
+                &pool,
+                "event-1",
+                "2000-05-09T10:00:00Z",
+                "2999-05-09T11:00:00Z",
+                None,
+            )
+            .await;
+            insert_test_completed_pomodoro_history(&pool, "event-1", "event-1", "2000-05-09").await;
+
+            let mut tx = pool.begin().await.unwrap();
+            update_calendar_event_tx(
+                &mut tx,
+                &CalendarEventUpdate {
+                    id: "event-1".to_string(),
+                    updated_at: "2026-05-09T10:30:00Z".to_string(),
+                    fields: vec![
+                        CalendarEventUpdateField::Title("Changed".to_string()),
+                        CalendarEventUpdateField::StartTime("2000-05-09T10:00:00Z".to_string()),
+                        CalendarEventUpdateField::EndTime("2999-05-09T11:00:00Z".to_string()),
+                        CalendarEventUpdateField::Rrule(None),
+                        CalendarEventUpdateField::RepeatUntil(None),
+                        CalendarEventUpdateField::Exceptions(None),
+                        CalendarEventUpdateField::AllDay(false),
+                        CalendarEventUpdateField::Rdate(None),
+                    ],
+                    attendees: None,
+                    alarms: None,
+                    pomodoro_config: Some(CalendarPomodoroConfigPatch::Clear),
+                },
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+
+            let title: String =
+                sqlx::query_scalar("SELECT title FROM calendar_events WHERE id = 'event-1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(title, "Changed");
+        });
+    }
+
+    #[test]
+    fn active_non_pomodoro_start_update_rejects_without_open_run() {
         tauri::async_runtime::block_on(async {
             let pool = in_memory_pool().await;
             insert_test_event_at(
@@ -3407,7 +3734,44 @@ mod tests {
                 &CalendarEventUpdate {
                     id: "event-1".to_string(),
                     updated_at: "2026-05-09T10:30:00Z".to_string(),
-                    fields: vec![CalendarEventUpdateField::Title("Changed".to_string())],
+                    fields: vec![CalendarEventUpdateField::StartTime(
+                        "2000-05-09T10:15:00Z".to_string(),
+                    )],
+                    attendees: None,
+                    alarms: None,
+                    pomodoro_config: None,
+                },
+            )
+            .await
+            .unwrap_err();
+            tx.rollback().await.unwrap();
+
+            assert!(err.contains("protected"));
+        });
+    }
+
+    #[test]
+    fn active_non_pomodoro_recurrence_update_rejects_without_open_run() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event_at(
+                &pool,
+                "event-1",
+                "2000-05-09T10:00:00Z",
+                "2999-05-09T11:00:00Z",
+                None,
+            )
+            .await;
+
+            let mut tx = pool.begin().await.unwrap();
+            let err = update_calendar_event_tx(
+                &mut tx,
+                &CalendarEventUpdate {
+                    id: "event-1".to_string(),
+                    updated_at: "2026-05-09T10:30:00Z".to_string(),
+                    fields: vec![CalendarEventUpdateField::Rrule(Some(
+                        "FREQ=DAILY".to_string(),
+                    ))],
                     attendees: None,
                     alarms: None,
                     pomodoro_config: None,
@@ -3526,6 +3890,8 @@ mod tests {
             occurrence_date: None,
             start_time: "2026-05-09T10:00:00Z".to_string(),
             end_time: "2026-05-09T11:00:00Z".to_string(),
+            rrule: None,
+            repeat_until: None,
             synthetic: false,
         };
 

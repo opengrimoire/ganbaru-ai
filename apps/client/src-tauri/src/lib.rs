@@ -48,6 +48,20 @@ fn get_startup_elapsed_ms() -> u64 {
 }
 
 #[tauri::command]
+fn open_devtools(window: tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(debug_assertions)]
+    {
+        window.open_devtools();
+        Ok(())
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        let _ = window;
+        Err("DevTools are only available in development builds".to_string())
+    }
+}
+
+#[tauri::command]
 fn force_quit(
     app: tauri::AppHandle,
     overlays: tauri::State<'_, notification::PomodoroOverlayState>,
@@ -728,6 +742,7 @@ pub fn run() {
             benchmark_seed::benchmark_seed_pomodoro_history,
             restart_app,
             restart_app_after_delay,
+            open_devtools,
             get_memory_report,
             get_startup_elapsed_ms,
             vault::vault_read_config,
