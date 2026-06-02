@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import type { CalendarEvent } from "./types";
   import type { DayNameFormat } from "./utils";
   import {
@@ -11,6 +12,7 @@
     isEventSurfaceCancelled,
     formatDayName,
     formatDatePart,
+    formatTimeRange,
   } from "./utils";
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import type { Theme } from "$lib/stores/themes";
@@ -26,6 +28,8 @@
   import Video from "@lucide/svelte/icons/video";
   import MapPin from "@lucide/svelte/icons/map-pin";
   import Users from "@lucide/svelte/icons/users";
+  import X from "@lucide/svelte/icons/x";
+  import CalendarScrollbar from "./CalendarScrollbar.svelte";
 
   let {
     anchorDate,
@@ -55,6 +59,14 @@
   const MONTH_DAY_NUMBER_MARGIN_PX = 1;
   const MONTH_CELL_BORDER_PX = 1;
   const MONTH_CELL_RIGHT_EDGE_INSET_PX = 1;
+  const MONTH_MORE_MODAL_MIN_WIDTH_PX = 280;
+  const MONTH_MORE_MODAL_MAX_WIDTH_PX = 560;
+  const MONTH_MORE_MODAL_EXTRA_WIDTH_PX = 96;
+
+  interface MonthMoreModalState {
+    day: Date;
+    events: CalendarEvent[];
+  }
 
   /**
    * Per-cell ordering: all-day events first, sorted by title then start;
@@ -115,6 +127,9 @@
   let monthGridEl: HTMLDivElement | undefined = $state();
   let monthGridWidth = $state(0);
   let monthGridHeight = $state(0);
+  let monthMoreModal: MonthMoreModalState | undefined = $state();
+  let monthMoreDialogEl: HTMLDivElement | undefined = $state();
+  let monthMoreScrollEl: HTMLDivElement | undefined = $state();
 
   $effect(() => {
     const observedCells = headerCells.filter((el): el is HTMLElement => !!el);
@@ -204,7 +219,81 @@
   function monthLayoutItemKey(item: MonthDayLayoutItem): string {
     return item.kind === "event" ? `event:${item.event.id}` : "more";
   }
+
+  function displayEventTitle(event: CalendarEvent): string {
+    const title = event.title.trim();
+    return title.length > 0 ? title : "(No title)";
+  }
+
+  function eventTimeRangeLabel(event: CalendarEvent): string {
+    return event.allDay
+      ? "All day"
+      : formatTimeRange(event.start, event.end, preferences.calendarTimeFormat);
+  }
+
+  function monthMoreEventLabel(event: CalendarEvent): string {
+    return `${displayEventTitle(event)} · ${eventTimeRangeLabel(event)}`;
+  }
+
+  function formatMonthMoreModalTitle(day: Date): string {
+    return new Intl.DateTimeFormat(undefined, {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    }).format(day);
+  }
+
+  function openMonthMoreModal(day: Date, events: CalendarEvent[]): void {
+    monthMoreModal = {
+      day: new Date(day),
+      events: [...events],
+    };
+  }
+
+  function closeMonthMoreModal(): void {
+    monthMoreModal = undefined;
+  }
+
+  function handleMonthMoreModalKeydown(e: KeyboardEvent): void {
+    if (!monthMoreModal) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      closeMonthMoreModal();
+      return;
+    }
+    e.stopPropagation();
+  }
+
+  function openEventFromMonthMoreModal(event: CalendarEvent, rect: DOMRect): void {
+    onEventClick(event, rect);
+  }
+
+  $effect(() => {
+    if (!monthMoreModal) return;
+    void tick().then(() => {
+      monthMoreDialogEl?.focus();
+    });
+  });
+
+  const monthMoreModalWidthPx = $derived.by(() => {
+    if (!monthMoreModal) return MONTH_MORE_MODAL_MIN_WIDTH_PX;
+    const longestLabelLength = monthMoreModal.events.reduce(
+      (max, event) => Math.max(max, monthMoreEventLabel(event).length),
+      0,
+    );
+    return Math.min(
+      MONTH_MORE_MODAL_MAX_WIDTH_PX,
+      Math.max(
+        MONTH_MORE_MODAL_MIN_WIDTH_PX,
+        longestLabelLength * 5.8 + MONTH_MORE_MODAL_EXTRA_WIDTH_PX,
+      ),
+    );
+  });
 </script>
+
+<svelte:window onkeydown={handleMonthMoreModalKeydown} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
@@ -328,8 +417,8 @@
                 {:else}
                   <button
                     type="button"
-                    aria-label="+{item.hiddenCount} more"
-                    title="+{item.hiddenCount} more"
+                    aria-label="Show all events for {formatMonthMoreModalTitle(day)}"
+                    title="Show all events"
                     class="month-more-surface absolute z-2 flex min-w-0 cursor-pointer items-center justify-center overflow-hidden truncate rounded px-1 text-[0.666667rem] leading-5"
                     style="
                       left: {item.leftPx}px;
@@ -339,7 +428,7 @@
                       --month-more-color: {moreColor};
                       color: var(--month-more-color);
                     "
-                    onclick={(e) => { e.stopPropagation(); onDayClick(day); }}
+                    onclick={(e) => { e.stopPropagation(); openMonthMoreModal(day, dayEvts); }}
                   >
                     {item.label}
                   </button>
@@ -352,6 +441,108 @@
     {/each}
   </div>
 </div>
+
+{#if monthMoreModal}
+  {@const modalPast = isPastDay(monthMoreModal.day)}
+  {@const modalInMonth = monthMoreModal.day.getMonth() === currentMonth}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="fixed inset-0 z-40 flex items-center justify-center px-3 py-4"
+    onclick={(e) => { e.stopPropagation(); closeMonthMoreModal(); }}
+  >
+    <div class="absolute inset-0 bg-black/45"></div>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      bind:this={monthMoreDialogEl}
+      class="month-more-dialog relative z-10 flex max-h-[min(82vh,42rem)] min-h-0 flex-col rounded-md border border-border text-foreground outline-none"
+      style="
+        width: min(calc(100vw - 1.5rem), {monthMoreModalWidthPx}px);
+        background-color: var(--cal-bg);
+      "
+      role="dialog"
+      aria-modal="true"
+      aria-label={formatMonthMoreModalTitle(monthMoreModal.day)}
+      tabindex="-1"
+      onclick={(e) => e.stopPropagation()}
+    >
+      <div class="flex shrink-0 items-center justify-between gap-3 border-b border-border px-3 py-2.5">
+        <div class="flex min-h-7 min-w-0 items-center">
+          <h2 class="truncate text-sm font-semibold leading-7 text-foreground">
+            {formatMonthMoreModalTitle(monthMoreModal.day)}
+          </h2>
+        </div>
+        <button
+          type="button"
+          class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          aria-label="Close"
+          onclick={closeMonthMoreModal}
+        >
+          <X size={14} />
+        </button>
+      </div>
+
+      <div class="relative min-h-0">
+        <div
+          bind:this={monthMoreScrollEl}
+          class="hide-scrollbar min-h-0 overflow-y-auto overflow-x-hidden px-3 py-3"
+          style="max-height: min(62vh, 34rem);"
+        >
+          <div class="flex min-w-0 flex-col gap-1.5">
+            {#each monthMoreModal.events as evt (evt.id)}
+              {@const evtColors = preferences.calendarDimPastEvents && modalPast
+                ? getPastEventColor(evt.color, theme)
+                : !modalInMonth
+                  ? getOutsideMonthEventColor(evt.color, theme)
+                  : getEventColor(evt.color, theme)}
+              {@const evtIsCancelled = isEventSurfaceCancelled(evt)}
+              {@const evtStatusPatternClass = getEventStatusPatternClass(evt)}
+              {@const evtMeetingIndicators = getMeetingIndicatorState(evt)}
+              {@const evtIconColor = `color-mix(in srgb, ${evtColors.text} 70%, ${evtColors.bg})`}
+              <!-- svelte-ignore a11y_click_events_have_key_events -->
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div
+                data-event-id={evt.id}
+                class="month-event-surface relative flex h-7 min-w-0 cursor-pointer items-center gap-1.5 overflow-hidden rounded px-1.5 text-[0.8rem] leading-7 {evtStatusPatternClass}"
+                style="
+                  background-color: {evtColors.bg};
+                  color: {evtColors.text};
+                "
+                onpointerenter={() => onEventPrefetch?.(evt)}
+                onpointerdown={() => onEventPrefetch?.(evt)}
+                onclick={(e) => {
+                  e.stopPropagation();
+                  openEventFromMonthMoreModal(evt, (e.currentTarget as HTMLElement).getBoundingClientRect());
+                }}
+              >
+                <span class="relative z-10 min-w-0 flex-1 truncate" style={evtIsCancelled ? "text-decoration: line-through;" : ""}>
+                  {displayEventTitle(evt)}
+                </span>
+                {#if evtMeetingIndicators.iconCount > 0}
+                  <span class="relative z-10 flex shrink-0 items-center gap-0.5" style="color: {evtIconColor};">
+                    {#if evtMeetingIndicators.hasCallLink}
+                      <Video size={9} class="shrink-0" />
+                    {/if}
+                    {#if evtMeetingIndicators.hasLocation}
+                      <MapPin size={9} class="shrink-0" />
+                    {/if}
+                    {#if evtMeetingIndicators.hasGenericMeeting}
+                      <Users size={9} class="shrink-0" />
+                    {/if}
+                  </span>
+                {/if}
+                <span class="relative z-10 shrink-0 whitespace-nowrap" style="color: {evtIconColor};">
+                  {eventTimeRangeLabel(evt)}
+                </span>
+              </div>
+            {/each}
+          </div>
+        </div>
+        <CalendarScrollbar scrollContainer={monthMoreScrollEl} wheelPassthrough />
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   .month-event-surface,
