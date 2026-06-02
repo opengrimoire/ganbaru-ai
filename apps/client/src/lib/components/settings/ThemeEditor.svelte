@@ -203,8 +203,16 @@
     return out;
   }
 
+  function scrollViewportHasLayout(
+    viewport: HTMLDivElement | undefined,
+  ): viewport is HTMLDivElement {
+    if (!viewport) return false;
+    return viewport.clientHeight > 0 && viewport.scrollHeight > 0;
+  }
+
   function updateActiveThemeSection() {
-    if (!scrollViewport) return;
+    const viewport = scrollViewport;
+    if (!scrollViewportHasLayout(viewport)) return;
     if (lockedThemeSection) {
       activeThemeSection = lockedThemeSection;
       return;
@@ -212,13 +220,12 @@
     const sections = themeSectionElements();
     if (sections.length === 0) return;
     const atBottom =
-      scrollViewport.scrollTop + scrollViewport.clientHeight >=
-      scrollViewport.scrollHeight - 2;
+      viewport.scrollTop + viewport.clientHeight >= viewport.scrollHeight - 2;
     if (atBottom) {
       activeThemeSection = sections[sections.length - 1].target;
       return;
     }
-    const viewportTop = scrollViewport.getBoundingClientRect().top;
+    const viewportTop = viewport.getBoundingClientRect().top;
     const threshold = viewportTop + 8;
     let next = sections[0].target;
     for (const section of sections) {

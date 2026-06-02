@@ -266,12 +266,16 @@
       </button>
     </header>
 
-    <!-- Scrollable body (hidden while collapsed) -->
-    {#if !collapsed}
-      <div class="min-h-0 flex-1 bg-background/40 dark:bg-black/20">
-        <ThemeEditor theme={editing} />
-      </div>
-    {/if}
+    <!-- Keep the editor mounted while collapsed so scroll and expanded rows survive. -->
+    <div
+      class={cn(
+        "min-h-0 flex-1 bg-background/40 dark:bg-black/20",
+        collapsed && "hidden",
+      )}
+      aria-hidden={collapsed ? "true" : undefined}
+    >
+      <ThemeEditor theme={editing} />
+    </div>
 
     <!-- Sticky footer -->
     <footer
