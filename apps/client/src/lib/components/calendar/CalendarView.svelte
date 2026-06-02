@@ -1801,8 +1801,17 @@
     return target instanceof Element && target.closest(".confirm-dialog") !== null;
   }
 
+  function isInteractiveControlTarget(target: EventTarget | null): boolean {
+    return target instanceof Element
+      && target.closest(
+        "button, a[href], input, textarea, select, [contenteditable='true'], [role='button'], [role='menuitem'], [role='checkbox'], [role='switch'], [role='combobox']",
+      ) !== null;
+  }
+
   function isCalendarEditCloseTarget(target: EventTarget | null): boolean {
-    return target instanceof Element && target.closest("[data-calendar-edit-close-zone]") !== null;
+    return target instanceof Element
+      && target.closest("[data-calendar-edit-close-ignore]") === null
+      && target.closest("[data-calendar-edit-close-zone]") !== null;
   }
 
   function handleOutsidePointerDown(e: PointerEvent) {
@@ -1810,6 +1819,7 @@
     if (panelCommitHidden) return;
     if (session.state.mode === "closed") return;
     if (isPanelOrEventTarget(e.target)) return;
+    if (isInteractiveControlTarget(e.target)) return;
     if (!isCalendarEditCloseTarget(e.target)) return;
 
     suppressOutsideClickUntil = performance.now() + 750;
@@ -2253,6 +2263,7 @@
         onDayClick={handleDayClickFromMonth}
         onEventClick={handleEventClick}
         onEventPrefetch={handleEventPrefetch}
+        onRequestPanelClose={handlePanelClose}
         onWheelNavigate={handleWheelNavigate}
       />
     {/if}

@@ -148,6 +148,7 @@
 <!-- Toolbar row -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
+  data-calendar-edit-close-zone
   class="flex shrink-0 items-center gap-1 px-3"
   style="height: var(--cal-header-row-h); background-color: var(--cal-header-bg); border-bottom: 1px solid var(--sidebar);"
   onwheel={handleToolbarWheel}
@@ -174,9 +175,10 @@
     {#if showMiniCalendar}
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="fixed inset-0 z-40" onclick={() => closeMiniCalendar("pointer")}></div>
+      <div data-calendar-edit-close-ignore class="fixed inset-0 z-40" onclick={() => closeMiniCalendar("pointer")}></div>
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
+        data-calendar-edit-close-ignore
         class="absolute left-0 top-full z-50 mt-1 w-56 rounded-md border border-border bg-card text-card-foreground p-2.5 shadow-lg"
         style="--foreground: var(--card-foreground);"
       >
@@ -264,8 +266,8 @@
     {#if showAccountPicker}
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="fixed inset-0 z-40" onclick={() => (showAccountPicker = false)}></div>
-      <div class="absolute right-0 top-full z-50 mt-1 w-56 rounded-md border border-border bg-card text-card-foreground p-2.5 shadow-lg" style="--foreground: var(--card-foreground);">
+      <div data-calendar-edit-close-ignore class="fixed inset-0 z-40" onclick={() => (showAccountPicker = false)}></div>
+      <div data-calendar-edit-close-ignore class="absolute right-0 top-full z-50 mt-1 w-56 rounded-md border border-border bg-card text-card-foreground p-2.5 shadow-lg" style="--foreground: var(--card-foreground);">
         <p class="mb-2 px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Calendars</p>
         {#each calendarsStore.list as cal}
           {@const checked = cal.visible}

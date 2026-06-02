@@ -38,6 +38,7 @@
     onDayClick,
     onEventClick,
     onEventPrefetch,
+    onRequestPanelClose,
     onWheelNavigate,
   }: {
     anchorDate: Date;
@@ -46,6 +47,7 @@
     onDayClick: (date: Date) => void;
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
     onEventPrefetch?: (event: CalendarEvent) => void;
+    onRequestPanelClose?: () => void;
     onWheelNavigate?: (direction: "back" | "forward") => void;
   } = $props();
 
@@ -252,11 +254,13 @@
   }
 
   function closeMonthMoreModal(): void {
+    onRequestPanelClose?.();
     monthMoreModal = undefined;
   }
 
   function handleMonthMoreModalKeydown(e: KeyboardEvent): void {
     if (!monthMoreModal) return;
+    if (e.target instanceof Element && e.target.closest(".panel-root, .confirm-dialog") !== null) return;
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
@@ -466,7 +470,7 @@
       tabindex="-1"
       onclick={(e) => e.stopPropagation()}
     >
-      <div class="flex shrink-0 items-center justify-between gap-3 border-b border-border px-3 py-2.5">
+      <div data-calendar-edit-close-zone class="flex shrink-0 items-center justify-between gap-3 border-b border-border px-3 py-2.5">
         <div class="flex min-h-7 min-w-0 items-center">
           <h2 class="truncate text-sm font-semibold leading-7 text-foreground">
             {formatMonthMoreModalTitle(monthMoreModal.day)}
