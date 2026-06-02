@@ -16,6 +16,12 @@
   import type { Theme } from "$lib/stores/themes";
   import { resolveAppTokens, resolveCalendarTokens } from "$lib/stores/themes";
   import { dayNumberShade } from "$lib/components/ui/colorMath";
+  import {
+    layoutMonthDayEvents,
+    MONTH_EVENT_CHIP_HEIGHT_PX,
+    MONTH_EVENT_ROW_GAP_PX,
+    type MonthDayLayoutItem,
+  } from "./month-event-layout";
 
   let {
     anchorDate,
@@ -39,6 +45,12 @@
 
   /** Stable empty fallback for days with no events. */
   const EMPTY_DAY: CalendarEvent[] = [];
+  const MONTH_CELL_PAD_X_PX = 4;
+  const MONTH_CELL_PAD_Y_PX = 4;
+  const MONTH_DAY_NUMBER_HEIGHT_PX = 24;
+  const MONTH_DAY_NUMBER_MARGIN_PX = 1;
+  const MONTH_CELL_BORDER_PX = 1;
+  const MONTH_CELL_RIGHT_EDGE_INSET_PX = 1;
 
   /**
    * Per-cell ordering: all-day events first, sorted by title then start;
@@ -94,22 +106,100 @@
 
   // Responsive day name format based on column width
   let headerCells: HTMLElement[] = $state([]);
+  let headerCellWidths: number[] = $state([]);
   let dayFormat: DayNameFormat = $state("short");
+  let monthGridEl: HTMLDivElement | undefined = $state();
+  let monthGridWidth = $state(0);
+  let monthGridHeight = $state(0);
 
   $effect(() => {
-    const el = headerCells[0];
+    const observedCells = headerCells.filter((el): el is HTMLElement => !!el);
+    if (observedCells.length === 0) return;
+    const observer = new ResizeObserver((entries) => {
+      const next = [...headerCellWidths];
+      for (const entry of entries) {
+        const index = headerCells.indexOf(entry.target as HTMLElement);
+        if (index < 0) continue;
+        next[index] = resizeObserverBox(entry).width;
+      }
+      headerCellWidths = next;
+      const firstWidth = next[0] ?? 0;
+      if (firstWidth >= 110) dayFormat = "long";
+      else if (firstWidth >= 60) dayFormat = "short";
+      else dayFormat = "narrow";
+    });
+    for (const el of observedCells) observer.observe(el);
+    return () => observer.disconnect();
+  });
+
+  function resizeObserverBox(entry: ResizeObserverEntry): { width: number; height: number } {
+    const rawBox = entry.contentBoxSize;
+    const box = Array.isArray(rawBox) ? rawBox[0] : rawBox;
+    return {
+      width: box?.inlineSize ?? entry.contentRect.width,
+      height: box?.blockSize ?? entry.contentRect.height,
+    };
+  }
+
+  $effect(() => {
+    const el = monthGridEl;
     if (!el) return;
     const observer = new ResizeObserver((entries) => {
-      const w = entries[0].contentBoxSize[0].inlineSize;
-      if (w >= 110) dayFormat = "long";
-      else if (w >= 60) dayFormat = "short";
-      else dayFormat = "narrow";
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = resizeObserverBox(entry);
+      monthGridWidth = Math.max(0, width);
+      monthGridHeight = Math.max(0, height);
     });
     observer.observe(el);
     return () => observer.disconnect();
   });
 
-  const maxVisible = 3;
+  const monthLayoutOptionsByColumn = $derived.by(() => {
+    const cellHeightPx = monthGridHeight > 0 && weeks.length > 0
+      ? monthGridHeight / weeks.length
+      : 0;
+    const availableHeightPx = Math.max(
+      0,
+      cellHeightPx
+        - MONTH_CELL_PAD_Y_PX * 2
+        - MONTH_DAY_NUMBER_HEIGHT_PX
+        - MONTH_DAY_NUMBER_MARGIN_PX,
+    );
+    return Array.from({ length: 7 }, (_, i) => {
+      const fallbackColumnWidth = monthGridWidth > 0 ? monthGridWidth / 7 : 0;
+      const columnWidth = headerCellWidths[i] ?? fallbackColumnWidth;
+      const borderWidth = i < 6 ? MONTH_CELL_BORDER_PX : 0;
+      const cellWidthPx = Math.max(
+        0,
+        columnWidth
+          - MONTH_CELL_PAD_X_PX * 2
+          - borderWidth
+          - MONTH_CELL_RIGHT_EDGE_INSET_PX,
+      );
+      return {
+        cellWidthPx,
+        availableHeightPx,
+        chipHeightPx: MONTH_EVENT_CHIP_HEIGHT_PX,
+        rowGapPx: MONTH_EVENT_ROW_GAP_PX,
+      };
+    });
+  });
+
+  const fallbackMonthLayoutOptions = $derived({
+    cellWidthPx: 0,
+    availableHeightPx: 0,
+    chipHeightPx: MONTH_EVENT_CHIP_HEIGHT_PX,
+    rowGapPx: MONTH_EVENT_ROW_GAP_PX,
+  });
+
+  function monthLayoutOptionsForColumn(columnIndex: number) {
+    return monthLayoutOptionsByColumn[columnIndex] ?? fallbackMonthLayoutOptions;
+  }
+
+  function monthLayoutItemKey(item: MonthDayLayoutItem): string {
+    return item.kind === "event" ? `event:${item.event.id}` : "more";
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -143,6 +233,7 @@
 
   <!-- Week rows -->
   <div
+    bind:this={monthGridEl}
     data-calendar-edit-close-zone
     class="grid min-h-0 flex-1 overflow-x-hidden"
     style="grid-template-rows: repeat({weeks.length}, minmax(0, 1fr));"
@@ -168,7 +259,9 @@
             inMonth,
             past,
           )}
-          {@const dayEvts = sortDayCellEvents(eventsByDay.get(formatDatePart(day)) ?? EMPTY_DAY)}
+          {@const dateStr = formatDatePart(day)}
+          {@const dayEvts = sortDayCellEvents(eventsByDay.get(dateStr) ?? EMPTY_DAY)}
+          {@const dayLayout = layoutMonthDayEvents(dayEvts, monthLayoutOptionsForColumn(di))}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
@@ -183,36 +276,55 @@
               {day.getDate()}
             </span>
 
-            {#each dayEvts.slice(0, maxVisible) as evt}
-              {@const evtColors = preferences.calendarDimPastEvents && past
-                ? getPastEventColor(evt.color, theme)
-                : !inMonth
-                  ? getOutsideMonthEventColor(evt.color, theme)
-                  : getEventColor(evt.color, theme)}
-              {@const evtIsCancelled = isEventSurfaceCancelled(evt)}
-              {@const evtStatusPatternClass = getEventStatusPatternClass(evt)}
-              <!-- svelte-ignore a11y_click_events_have_key_events -->
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <div
-                data-event-id={evt.id}
-                class="month-event-surface relative z-2 mb-px flex items-center gap-1 truncate rounded px-1 py-px text-[0.666667rem] {evtStatusPatternClass}"
-                style="
-                  background-color: {evtColors.bg};
-                  color: {evtColors.text};
-                "
-                onpointerenter={() => onEventPrefetch?.(evt)}
-                onpointerdown={() => onEventPrefetch?.(evt)}
-                onclick={(e) => { e.stopPropagation(); onEventClick(evt, (e.currentTarget as HTMLElement).getBoundingClientRect()); }}
-              >
-                <span class="relative z-10 truncate" style={evtIsCancelled ? 'text-decoration: line-through;' : ''}>{#if evt.title}{evt.title}{:else}(No title){/if}</span>
-              </div>
-            {/each}
-
-            {#if dayEvts.length > maxVisible}
-              <span class="relative z-2 mt-px text-center text-[0.666667rem]" style="color: {moreColor};">
-                +{dayEvts.length - maxVisible} more
-              </span>
-            {/if}
+            <div class="relative min-h-0 flex-1 overflow-hidden">
+              {#each dayLayout.items as item (monthLayoutItemKey(item))}
+                {#if item.kind === "event"}
+                  {@const evt = item.event}
+                  {@const evtColors = preferences.calendarDimPastEvents && past
+                    ? getPastEventColor(evt.color, theme)
+                    : !inMonth
+                      ? getOutsideMonthEventColor(evt.color, theme)
+                      : getEventColor(evt.color, theme)}
+                  {@const evtIsCancelled = isEventSurfaceCancelled(evt)}
+                  {@const evtStatusPatternClass = getEventStatusPatternClass(evt)}
+                  <!-- svelte-ignore a11y_click_events_have_key_events -->
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
+                  <div
+                    data-event-id={evt.id}
+                    class="month-event-surface absolute z-2 flex min-w-0 items-center gap-1 overflow-hidden truncate rounded px-1 text-[0.666667rem] leading-5 {evtStatusPatternClass}"
+                    style="
+                      left: {item.leftPx}px;
+                      top: {item.topPx}px;
+                      width: {item.widthPx}px;
+                      height: {item.heightPx}px;
+                      background-color: {evtColors.bg};
+                      color: {evtColors.text};
+                    "
+                    onpointerenter={() => onEventPrefetch?.(evt)}
+                    onpointerdown={() => onEventPrefetch?.(evt)}
+                    onclick={(e) => { e.stopPropagation(); onEventClick(evt, (e.currentTarget as HTMLElement).getBoundingClientRect()); }}
+                  >
+                    <span class="relative z-10 truncate" style={evtIsCancelled ? 'text-decoration: line-through;' : ''}>{#if evt.title}{evt.title}{:else}(No title){/if}</span>
+                  </div>
+                {:else}
+                  <button
+                    type="button"
+                    class="month-more-surface absolute z-2 flex min-w-0 cursor-pointer items-center justify-center overflow-hidden truncate rounded px-1 text-[0.666667rem] leading-5"
+                    style="
+                      left: {item.leftPx}px;
+                      top: {item.topPx}px;
+                      width: {item.widthPx}px;
+                      height: {item.heightPx}px;
+                      --month-more-color: {moreColor};
+                      color: var(--month-more-color);
+                    "
+                    onclick={(e) => { e.stopPropagation(); onDayClick(day); }}
+                  >
+                    +{item.hiddenCount} more
+                  </button>
+                {/if}
+              {/each}
+            </div>
           </div>
         {/each}
       </div>
@@ -221,6 +333,11 @@
 </div>
 
 <style>
+  .month-event-surface,
+  .month-more-surface {
+    box-sizing: border-box;
+  }
+
   .month-event-surface::before {
     content: "";
     position: absolute;
@@ -257,5 +374,15 @@
       transparent 1.3px
     );
     background-size: 8px 8px;
+  }
+
+  .month-more-surface {
+    appearance: none;
+    background-color: color-mix(in srgb, var(--month-more-color) 9%, transparent);
+    border: 1px solid color-mix(in srgb, var(--month-more-color) 20%, transparent);
+  }
+
+  .month-more-surface:hover {
+    background-color: color-mix(in srgb, var(--month-more-color) 14%, transparent);
   }
 </style>

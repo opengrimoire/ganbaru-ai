@@ -23,7 +23,7 @@ Four views, switched from the navigation bar.
 
 **Week view.** Seven day columns side by side, labeled with weekday names and dates. Best for planning. The rail appears in each day column independently, scoped to that day's runs and events.
 
-**Month view.** A grid of day cells, each summarizing the day's events as small rows. The rail is **not** rendered in month view: the cells are too small for a 6px rail to communicate anything meaningful, and the user is in a planning context, not an in-session context.
+**Month view.** A grid of day cells, each summarizing the day's events as compact chips. Short chips can share a row when they fit, while longer chips keep the width they need up to the per-chip cap and wrap to the next compact row. The last event chip in each row expands into remaining row space. The `+N more` indicator is also a compact chip and appears only when the cell cannot fit more legible rows, but it does not expand like an event chip. The rail is **not** rendered in month view: the cells are too small for a 6px rail to communicate anything meaningful, and the user is in a planning context, not an in-session context.
 
 The current view persists across app restarts. Switching views never changes the underlying selection or scroll target unless the new view cannot represent the current state.
 
@@ -66,7 +66,7 @@ The day, work-cycle, and week views support direct manipulation:
 - **Right-click** opens a context menu (delete, archive, duplicate). Protected events show archive instead of delete.
 - **Delete event** removes only future untracked events. Past, in-progress, started, or tracked events are archived instead. Active pomodoro events show End event first; delete and archive are available only after the active run is no longer attached to the current event.
 
-In month view, click on a day cell to switch to day view focused on that date. Click on an event row to open the edit panel.
+In month view, click on a day cell or `+N more` chip to switch to day view focused on that date. Click on an event chip to open the edit panel.
 
 ## Edit panel
 
