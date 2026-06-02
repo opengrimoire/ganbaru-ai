@@ -794,6 +794,7 @@ enum PomodoroOverlayKind {
     Break {
         ends_at_ms: u64,
         end_esc_presses: Option<u32>,
+        extension_limit: Option<u32>,
     },
     Idle {
         seconds: u32,
@@ -1182,12 +1183,16 @@ fn overlay_url(kind: PomodoroOverlayKind) -> WebviewUrl {
         PomodoroOverlayKind::Break {
             ends_at_ms,
             end_esc_presses,
+            extension_limit,
         } => {
             let end_esc_presses = end_esc_presses
                 .map(|presses| presses.to_string())
                 .unwrap_or_else(|| "disabled".to_string());
+            let extension_limit = extension_limit
+                .map(|limit| limit.to_string())
+                .unwrap_or_else(|| "disabled".to_string());
             format!(
-                "index.html?ganbaruWindow=pomodoroOverlay&overlayKind=break&breakEndsAtMs={ends_at_ms}&breakEndEscPresses={end_esc_presses}"
+                "index.html?ganbaruWindow=pomodoroOverlay&overlayKind=break&breakEndsAtMs={ends_at_ms}&breakEndEscPresses={end_esc_presses}&breakExtensionLimit={extension_limit}"
             )
         }
         PomodoroOverlayKind::Idle { seconds } => {
@@ -1683,12 +1688,14 @@ pub fn show_break_overlay(
     app: tauri::AppHandle,
     break_ends_at_ms: u64,
     break_end_esc_presses: Option<u32>,
+    break_extension_limit: Option<u32>,
 ) -> Result<(), String> {
     show_pomodoro_overlay(
         app,
         PomodoroOverlayKind::Break {
             ends_at_ms: break_ends_at_ms,
             end_esc_presses: normalize_break_end_esc_presses(break_end_esc_presses),
+            extension_limit: normalize_break_extension_limit(break_extension_limit),
         },
     )
 }
@@ -1697,6 +1704,14 @@ fn normalize_break_end_esc_presses(value: Option<u32>) -> Option<u32> {
     match value {
         Some(1 | 3 | 10 | 20 | 50) => value,
         Some(_) => Some(10),
+        None => None,
+    }
+}
+
+fn normalize_break_extension_limit(value: Option<u32>) -> Option<u32> {
+    match value {
+        Some(1 | 3 | 5 | 10 | 15) => value,
+        Some(_) => Some(3),
         None => None,
     }
 }
@@ -2276,6 +2291,17 @@ mod tests {
         assert_eq!(normalize_break_end_esc_presses(Some(20)), Some(20));
         assert_eq!(normalize_break_end_esc_presses(Some(50)), Some(50));
         assert_eq!(normalize_break_end_esc_presses(Some(2)), Some(10));
+    }
+
+    #[test]
+    fn break_extension_limit_accepts_supported_values_and_disabled() {
+        assert_eq!(normalize_break_extension_limit(None), None);
+        assert_eq!(normalize_break_extension_limit(Some(1)), Some(1));
+        assert_eq!(normalize_break_extension_limit(Some(3)), Some(3));
+        assert_eq!(normalize_break_extension_limit(Some(5)), Some(5));
+        assert_eq!(normalize_break_extension_limit(Some(10)), Some(10));
+        assert_eq!(normalize_break_extension_limit(Some(15)), Some(15));
+        assert_eq!(normalize_break_extension_limit(Some(2)), Some(3));
     }
 
     fn unique_restore_file(name: &str) -> PathBuf {

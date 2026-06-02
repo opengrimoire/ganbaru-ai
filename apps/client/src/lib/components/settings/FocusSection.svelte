@@ -4,9 +4,11 @@
     DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
     DEFAULT_FOCUS_BREAK_END_ESC_PRESSES,
     DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS,
+    DEFAULT_FOCUS_BREAK_EXTENSION_LIMIT,
     DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS,
     DEFAULT_FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
     FOCUS_BREAK_END_ESC_PRESS_OPTIONS,
+    FOCUS_BREAK_EXTENSION_LIMIT_OPTIONS,
     FOCUS_IDLE_THRESHOLD_MINUTES_MAX,
     FOCUS_IDLE_THRESHOLD_MINUTES_MIN,
     FOCUS_BREAK_SOUND_INTERVAL_SECONDS,
@@ -20,7 +22,7 @@
 
   type SelectOption = { value: string; label: string };
 
-  const BREAK_END_DISABLED_SELECT_VALUE = "disabled";
+  const DISABLED_SELECT_VALUE = "disabled";
 
   const idleThresholdOptions: readonly SelectOption[] = Array.from(
     {
@@ -48,7 +50,7 @@
 
   const breakEndEscPressOptions: readonly SelectOption[] = [
     {
-      value: BREAK_END_DISABLED_SELECT_VALUE,
+      value: DISABLED_SELECT_VALUE,
       label: "Disabled",
     },
     ...FOCUS_BREAK_END_ESC_PRESS_OPTIONS.map((presses) => ({
@@ -65,6 +67,7 @@
 
   let showDisableIdlePauseConfirm = $state(false);
   let showDisableBreakEndConfirm = $state(false);
+  let showDisableBreakExtensionConfirm = $state(false);
 
   function handleIdleThresholdChange(value: string): void {
     const minutes = Number(value);
@@ -85,7 +88,7 @@
   }
 
   function handleBreakEndEscPressChange(value: string): void {
-    if (value === BREAK_END_DISABLED_SELECT_VALUE) {
+    if (value === DISABLED_SELECT_VALUE) {
       if (preferences.focusBreakEndEscPresses === null) return;
       showDisableBreakEndConfirm = true;
       return;
@@ -94,6 +97,18 @@
     if (!Number.isFinite(presses)) return;
     preferences.setFocusBreakEndEscPresses(presses);
     showDisableBreakEndConfirm = false;
+  }
+
+  function handleBreakExtensionLimitChange(value: string): void {
+    if (value === DISABLED_SELECT_VALUE) {
+      if (preferences.focusBreakExtensionLimit === null) return;
+      showDisableBreakExtensionConfirm = true;
+      return;
+    }
+    const limit = Number(value);
+    if (!Number.isFinite(limit)) return;
+    preferences.setFocusBreakExtensionLimit(limit);
+    showDisableBreakExtensionConfirm = false;
   }
 
   function handlePausedFocusWarningChange(value: string): void {
@@ -127,6 +142,26 @@
   function cancelDisableBreakEnd(): void {
     showDisableBreakEndConfirm = false;
   }
+
+  function confirmDisableBreakExtension(): void {
+    preferences.setFocusBreakExtensionLimit(null);
+    showDisableBreakExtensionConfirm = false;
+  }
+
+  function cancelDisableBreakExtension(): void {
+    showDisableBreakExtensionConfirm = false;
+  }
+
+  const breakExtensionLimitOptions: readonly SelectOption[] = [
+    {
+      value: DISABLED_SELECT_VALUE,
+      label: "Disabled",
+    },
+    ...FOCUS_BREAK_EXTENSION_LIMIT_OPTIONS.map((limit) => ({
+      value: String(limit),
+      label: `${limit} ${limit === 1 ? "time" : "times"}`,
+    })),
+  ];
 </script>
 
 <div class="flex flex-col gap-6">
@@ -177,12 +212,23 @@
         label="End break early"
         description="Esc presses required before the break timer finishes"
         value={preferences.focusBreakEndEscPresses === null
-          ? BREAK_END_DISABLED_SELECT_VALUE
+          ? DISABLED_SELECT_VALUE
           : String(preferences.focusBreakEndEscPresses)}
         options={breakEndEscPressOptions}
         onChange={handleBreakEndEscPressChange}
         canReset={preferences.focusBreakEndEscPresses !== DEFAULT_FOCUS_BREAK_END_ESC_PRESSES}
         onReset={() => preferences.resetFocusBreakEndEscPresses()}
+      />
+      <CustomSelect
+        label="Extend break"
+        description="How many extra 1-minute extensions are allowed"
+        value={preferences.focusBreakExtensionLimit === null
+          ? DISABLED_SELECT_VALUE
+          : String(preferences.focusBreakExtensionLimit)}
+        options={breakExtensionLimitOptions}
+        onChange={handleBreakExtensionLimitChange}
+        canReset={preferences.focusBreakExtensionLimit !== DEFAULT_FOCUS_BREAK_EXTENSION_LIMIT}
+        onReset={() => preferences.resetFocusBreakExtensionLimit()}
       />
       <CustomSelect
         label="Repeat after break ends"
@@ -225,5 +271,16 @@
     cancelLabel="Keep current (Esc)"
     onConfirm={confirmDisableBreakEnd}
     onCancel={cancelDisableBreakEnd}
+  />
+{/if}
+
+{#if showDisableBreakExtensionConfirm}
+  <ConfirmDialog
+    title="Disable break extensions?"
+    message="The break screen will hide the extension shortcut. You will not be able to add extra break time."
+    confirmLabel="Disable (Enter)"
+    cancelLabel="Keep current (Esc)"
+    onConfirm={confirmDisableBreakExtension}
+    onCancel={cancelDisableBreakExtension}
   />
 {/if}

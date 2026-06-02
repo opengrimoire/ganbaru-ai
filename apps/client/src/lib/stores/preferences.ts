@@ -86,6 +86,11 @@ export type FocusBreakEndEscPresses =
   | (typeof FOCUS_BREAK_END_ESC_PRESS_OPTIONS)[number]
   | null;
 export const DEFAULT_FOCUS_BREAK_END_ESC_PRESSES: FocusBreakEndEscPresses = 10;
+export const FOCUS_BREAK_EXTENSION_LIMIT_OPTIONS = Object.freeze([1, 3, 5, 10, 15] as const);
+export type FocusBreakExtensionLimit =
+  | (typeof FOCUS_BREAK_EXTENSION_LIMIT_OPTIONS)[number]
+  | null;
+export const DEFAULT_FOCUS_BREAK_EXTENSION_LIMIT: FocusBreakExtensionLimit = 3;
 export const FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES = Object.freeze(
   [0, 3, 5, 10, 15] as const,
 );
@@ -197,6 +202,23 @@ export function parseFocusBreakEndEscPresses(
   fallback: FocusBreakEndEscPresses,
 ): FocusBreakEndEscPresses {
   return isFocusBreakEndEscPresses(value) ? value : fallback;
+}
+
+export function isFocusBreakExtensionLimit(
+  value: unknown,
+): value is FocusBreakExtensionLimit {
+  return value === null
+    || (typeof value === "number"
+      && FOCUS_BREAK_EXTENSION_LIMIT_OPTIONS.includes(
+        value as Exclude<FocusBreakExtensionLimit, null>,
+      ));
+}
+
+export function parseFocusBreakExtensionLimit(
+  value: unknown,
+  fallback: FocusBreakExtensionLimit,
+): FocusBreakExtensionLimit {
+  return isFocusBreakExtensionLimit(value) ? value : fallback;
 }
 
 export function isFocusPauseNotificationIntervalMinutes(

@@ -2557,6 +2557,7 @@ function showBreakOverlay(breakSeconds: number) {
   invoke("show_break_overlay", {
     breakEndsAtMs,
     breakEndEscPresses: getPreferences().focusBreakEndEscPresses,
+    breakExtensionLimit: getPreferences().focusBreakExtensionLimit,
   }).catch((e) =>
     console.warn("Failed to show break overlay:", e),
   );

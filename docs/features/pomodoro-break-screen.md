@@ -46,13 +46,13 @@ The break screen has a small, deliberate control set.
 
 Default (no input): when the break timer reaches 0, the screen waits for the user to start the next focus phase.
 
-`Mod + Shift + Space`: extends the current break. `Mod` means Ctrl on Windows and Linux, and Cmd on macOS. The hint remains stable until the maximum extension is reached, then it disappears.
+`Mod + Shift + Space`: extends the current break by 1 minute. `Mod` means Ctrl on Windows and Linux, and Cmd on macOS. The hint remains stable until the maximum extension count is reached, then it disappears. Focus settings controls how many extensions are allowed. Supported values are 1, 3, 5, 10, and 15, with 3 as the default. A stricter option disables break extensions entirely; when selected, the break screen does not show the extension hint and the shortcut cannot extend the break.
 
 `Esc` presses in succession: optionally skips the break. The next focus phase starts immediately. Focus settings controls how many Esc presses are required. Supported values are 1, 3, 10, 20, and 50, with 10 as the default. A stricter option disables early break ending entirely; when selected, the break screen does not show the Esc hint and Esc cannot skip the break.
 
 The default 10-press skip is intentionally awkward. A single Esc would let the user dismiss breaks reflexively, defeating the purpose. Ten presses are still possible for a deliberate skip, but slow enough that an absentminded press does not skip by accident.
 
-The `Mod + Shift + Space` chord extends the current break, capped at 3 added minutes per break. This handles the common case where the user is mid-stretch or mid-conversation when the break would end and needs slightly more time. The cap prevents the user from indefinitely extending the break and losing the rhythm.
+The `Mod + Shift + Space` chord handles the common case where the user is mid-stretch or mid-conversation when the break would end and needs slightly more time. The cap prevents the user from indefinitely extending the break and losing the rhythm.
 
 There is no "stop the session" control on the break screen. Stopping the session must go through the main window, which makes it a deliberate action rather than an impulse during a moment of resistance.
 
@@ -61,6 +61,8 @@ Terminal completion screens use the same overlay enforcement but have only one c
 ## Focus settings
 
 Focus settings has a Break screen section for break screen behavior. The first dropdown controls early break ending through Esc presses. Supported values are Disabled, 1 press, 3 presses, 10 presses, 20 presses, and 50 presses. The default is 10 presses. Selecting Disabled shows a warning confirmation because the break must finish before focus can resume.
+
+The second dropdown controls break extensions. Supported values are Disabled, 1 time, 3 times, 5 times, 10 times, and 15 times. The default is 3 times. Selecting Disabled shows a warning confirmation because the user will not be able to add extra break time.
 
 The reminder repeat dropdown controls how often the break-finished sound repeats after the timer reaches 0. Supported values are None, every 10 seconds, every 15 seconds, every 30 seconds, and every minute. None still plays the break-finished sound immediately when the break reaches 0, but does not repeat it. The default is every 10 seconds.
 

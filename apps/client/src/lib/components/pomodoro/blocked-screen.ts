@@ -1,7 +1,9 @@
 import { formatShortcut } from "$lib/keyboard-shortcuts";
 import {
   DEFAULT_FOCUS_BREAK_END_ESC_PRESSES,
+  DEFAULT_FOCUS_BREAK_EXTENSION_LIMIT,
   type FocusBreakEndEscPresses,
+  type FocusBreakExtensionLimit,
 } from "$lib/stores/preferences";
 
 export type PomodoroBlockedScreenState =
@@ -210,9 +212,10 @@ export function delayUntil(targetMs: number, nowMs: number): number {
 
 export function formatBreakExtensionHint(
   extensionMinutes: number,
-  maxExtensionMinutes: number,
+  maxExtensionMinutes: FocusBreakExtensionLimit = DEFAULT_FOCUS_BREAK_EXTENSION_LIMIT,
   platform?: string,
 ): string | null {
+  if (maxExtensionMinutes === null) return null;
   const safeExtensionMinutes = Math.max(0, Math.floor(extensionMinutes));
   const safeMaxExtensionMinutes = Math.max(0, Math.floor(maxExtensionMinutes));
   if (safeExtensionMinutes >= safeMaxExtensionMinutes) return null;

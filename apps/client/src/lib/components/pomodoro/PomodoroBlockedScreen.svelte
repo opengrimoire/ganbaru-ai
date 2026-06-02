@@ -14,21 +14,23 @@
   } from "./blocked-screen";
   import {
     DEFAULT_FOCUS_BREAK_END_ESC_PRESSES,
+    DEFAULT_FOCUS_BREAK_EXTENSION_LIMIT,
     type FocusBreakEndEscPresses,
+    type FocusBreakExtensionLimit,
   } from "$lib/stores/preferences";
 
   let {
     state: screenState,
     seconds,
     extensionMinutes = 0,
-    maxExtensionMinutes = 3,
+    maxExtensionMinutes = DEFAULT_FOCUS_BREAK_EXTENSION_LIMIT,
     escPresses = 0,
     breakEndEscPresses = DEFAULT_FOCUS_BREAK_END_ESC_PRESSES,
   }: {
     state: PomodoroBlockedScreenState;
     seconds: number;
     extensionMinutes?: number;
-    maxExtensionMinutes?: number;
+    maxExtensionMinutes?: FocusBreakExtensionLimit;
     escPresses?: number;
     breakEndEscPresses?: FocusBreakEndEscPresses;
   } = $props();

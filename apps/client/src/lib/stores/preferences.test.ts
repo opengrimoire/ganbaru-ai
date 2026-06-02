@@ -12,9 +12,11 @@ import {
   DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
   DEFAULT_FOCUS_BREAK_END_ESC_PRESSES,
   DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS,
+  DEFAULT_FOCUS_BREAK_EXTENSION_LIMIT,
   DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS,
   DEFAULT_FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
   FOCUS_BREAK_END_ESC_PRESS_OPTIONS,
+  FOCUS_BREAK_EXTENSION_LIMIT_OPTIONS,
   FOCUS_IDLE_THRESHOLD_MINUTES_MAX,
   FOCUS_IDLE_THRESHOLD_MINUTES_MIN,
   FOCUS_BREAK_SOUND_INTERVAL_SECONDS,
@@ -26,10 +28,12 @@ import {
   getFontFamilyById,
   isCalendarTimeFormat,
   isFocusBreakEndEscPresses,
+  isFocusBreakExtensionLimit,
   isFocusBreakSoundIntervalSeconds,
   isFocusPauseNotificationIntervalMinutes,
   isTitleBarControlId,
   parseFocusBreakEndEscPresses,
+  parseFocusBreakExtensionLimit,
   parseFocusBreakSoundIntervalSeconds,
   parseFocusPauseNotificationIntervalMinutes,
   parseTitleBarVisibility,
@@ -176,6 +180,12 @@ describe("focus preferences", () => {
     expect(DEFAULT_FOCUS_BREAK_END_ESC_PRESSES).toBe(10);
   });
 
+  it("uses fixed break extension limits with 3 times as the default", () => {
+    expect(FOCUS_BREAK_EXTENSION_LIMIT_OPTIONS).toEqual([1, 3, 5, 10, 15]);
+    expect(Object.isFrozen(FOCUS_BREAK_EXTENSION_LIMIT_OPTIONS)).toBe(true);
+    expect(DEFAULT_FOCUS_BREAK_EXTENSION_LIMIT).toBe(3);
+  });
+
   it("uses fixed paused focus notification intervals with 3 minutes as the default", () => {
     expect(FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES).toEqual([0, 3, 5, 10, 15]);
     expect(Object.isFrozen(FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES)).toBe(true);
@@ -205,6 +215,18 @@ describe("focus preferences", () => {
     expect(isFocusBreakEndEscPresses(undefined)).toBe(false);
   });
 
+  it("accepts supported break extension limits plus disabled", () => {
+    expect(isFocusBreakExtensionLimit(null)).toBe(true);
+    expect(isFocusBreakExtensionLimit(1)).toBe(true);
+    expect(isFocusBreakExtensionLimit(3)).toBe(true);
+    expect(isFocusBreakExtensionLimit(5)).toBe(true);
+    expect(isFocusBreakExtensionLimit(10)).toBe(true);
+    expect(isFocusBreakExtensionLimit(15)).toBe(true);
+    expect(isFocusBreakExtensionLimit(2)).toBe(false);
+    expect(isFocusBreakExtensionLimit("3")).toBe(false);
+    expect(isFocusBreakExtensionLimit(undefined)).toBe(false);
+  });
+
   it("accepts only supported paused focus notification intervals", () => {
     expect(isFocusPauseNotificationIntervalMinutes(0)).toBe(true);
     expect(isFocusPauseNotificationIntervalMinutes(3)).toBe(true);
@@ -227,6 +249,13 @@ describe("focus preferences", () => {
     expect(parseFocusBreakEndEscPresses(null, 10)).toBeNull();
     expect(parseFocusBreakEndEscPresses(2, 10)).toBe(10);
     expect(parseFocusBreakEndEscPresses("10", 10)).toBe(10);
+  });
+
+  it("falls back when parsing unsupported break extension limits", () => {
+    expect(parseFocusBreakExtensionLimit(5, 3)).toBe(5);
+    expect(parseFocusBreakExtensionLimit(null, 3)).toBeNull();
+    expect(parseFocusBreakExtensionLimit(2, 3)).toBe(3);
+    expect(parseFocusBreakExtensionLimit("3", 3)).toBe(3);
   });
 
   it("falls back when parsing unsupported paused focus notification intervals", () => {

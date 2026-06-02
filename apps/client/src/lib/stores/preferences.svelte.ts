@@ -10,11 +10,13 @@ import {
   DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
   DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS,
   DEFAULT_FOCUS_BREAK_END_ESC_PRESSES,
+  DEFAULT_FOCUS_BREAK_EXTENSION_LIMIT,
   DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS,
   DEFAULT_FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
   DEFAULT_TITLE_BAR_VISIBILITY,
   type CalendarTimeFormat,
   type FocusBreakEndEscPresses,
+  type FocusBreakExtensionLimit,
   type FocusBreakSoundIntervalSeconds,
   type FocusPauseNotificationIntervalMinutes,
   type TitleBarControlId,
@@ -25,6 +27,7 @@ import {
   isCalendarTimeFormat,
   isTitleBarControlId,
   parseFocusBreakEndEscPresses,
+  parseFocusBreakExtensionLimit,
   parseFocusBreakSoundIntervalSeconds,
   parseFocusPauseNotificationIntervalMinutes,
   parseTitleBarVisibility,
@@ -46,6 +49,8 @@ const FOCUS_BREAK_END_WARNING_SECONDS_CONFIG_KEY =
   "preferences.focusBreakEndWarningSeconds";
 const FOCUS_BREAK_END_ESC_PRESSES_CONFIG_KEY =
   "preferences.focusBreakEndEscPresses";
+const FOCUS_BREAK_EXTENSION_LIMIT_CONFIG_KEY =
+  "preferences.focusBreakExtensionLimit";
 const FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES_CONFIG_KEY =
   "preferences.focusPauseNotificationIntervalMinutes";
 const MUSIC_PAUSE_ON_POMODORO_PAUSE_CONFIG_KEY = "preferences.musicPauseOnPomodoroPause";
@@ -117,6 +122,11 @@ function loadSavedFocusBreakEndEscPresses(): FocusBreakEndEscPresses {
   return parseFocusBreakEndEscPresses(saved, DEFAULT_FOCUS_BREAK_END_ESC_PRESSES);
 }
 
+function loadSavedFocusBreakExtensionLimit(): FocusBreakExtensionLimit {
+  const saved = getConfigKey<unknown>(FOCUS_BREAK_EXTENSION_LIMIT_CONFIG_KEY, undefined);
+  return parseFocusBreakExtensionLimit(saved, DEFAULT_FOCUS_BREAK_EXTENSION_LIMIT);
+}
+
 function loadSavedFocusPauseNotificationIntervalMinutes():
   FocusPauseNotificationIntervalMinutes {
   const saved = getConfigKey<unknown>(
@@ -159,6 +169,9 @@ let focusBreakEndWarningSeconds = $state<FocusBreakSoundIntervalSeconds>(
 );
 let focusBreakEndEscPresses = $state<FocusBreakEndEscPresses>(
   loadSavedFocusBreakEndEscPresses(),
+);
+let focusBreakExtensionLimit = $state<FocusBreakExtensionLimit>(
+  loadSavedFocusBreakExtensionLimit(),
 );
 let focusPauseNotificationIntervalMinutes = $state<FocusPauseNotificationIntervalMinutes>(
   loadSavedFocusPauseNotificationIntervalMinutes(),
@@ -247,6 +260,15 @@ function setFocusBreakEndEscPresses(value: number | null): void {
   setConfigKey(FOCUS_BREAK_END_ESC_PRESSES_CONFIG_KEY, parsed);
 }
 
+function setFocusBreakExtensionLimit(value: number | null): void {
+  const parsed = parseFocusBreakExtensionLimit(
+    value,
+    DEFAULT_FOCUS_BREAK_EXTENSION_LIMIT,
+  );
+  focusBreakExtensionLimit = parsed;
+  setConfigKey(FOCUS_BREAK_EXTENSION_LIMIT_CONFIG_KEY, parsed);
+}
+
 function setFocusPauseNotificationIntervalMinutes(value: number): void {
   const parsed = parseFocusPauseNotificationIntervalMinutes(
     value,
@@ -316,6 +338,9 @@ export function getPreferences() {
     get focusBreakEndEscPresses(): FocusBreakEndEscPresses {
       return focusBreakEndEscPresses;
     },
+    get focusBreakExtensionLimit(): FocusBreakExtensionLimit {
+      return focusBreakExtensionLimit;
+    },
     get focusPauseNotificationIntervalMinutes(): FocusPauseNotificationIntervalMinutes {
       return focusPauseNotificationIntervalMinutes;
     },
@@ -335,6 +360,7 @@ export function getPreferences() {
     setFocusBreakFinishedRepeatSeconds,
     setFocusBreakEndWarningSeconds,
     setFocusBreakEndEscPresses,
+    setFocusBreakExtensionLimit,
     setFocusPauseNotificationIntervalMinutes,
     setMusicPauseOnPomodoroPause,
     setTitleBarControlVisible,
@@ -368,6 +394,9 @@ export function getPreferences() {
     },
     resetFocusBreakEndEscPresses() {
       setFocusBreakEndEscPresses(DEFAULT_FOCUS_BREAK_END_ESC_PRESSES);
+    },
+    resetFocusBreakExtensionLimit() {
+      setFocusBreakExtensionLimit(DEFAULT_FOCUS_BREAK_EXTENSION_LIMIT);
     },
     resetFocusPauseNotificationIntervalMinutes() {
       setFocusPauseNotificationIntervalMinutes(

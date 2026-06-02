@@ -8,8 +8,11 @@
   import { IDLE_FOCUS_FAILURE_DELAY_SECONDS } from "$lib/stores/pomodoro-machine";
   import {
     DEFAULT_FOCUS_BREAK_END_ESC_PRESSES,
+    DEFAULT_FOCUS_BREAK_EXTENSION_LIMIT,
+    parseFocusBreakExtensionLimit,
     parseFocusBreakEndEscPresses,
     type FocusBreakEndEscPresses,
+    type FocusBreakExtensionLimit,
   } from "$lib/stores/preferences";
   import {
     POMODORO_OVERLAY_BLOCKER_ACTION_EVENT,
@@ -31,7 +34,6 @@
   } from "./blocked-screen";
 
   const IDLE_ALERT_INTERVAL_MS = 10_000;
-  const MAX_BREAK_EXTENSION_MINUTES = 3;
 
   type OverlayMode =
     | { kind: "idle"; initialIdleSeconds: number }
@@ -39,6 +41,7 @@
         kind: "break";
         breakEndsAtMs: number;
         breakEndEscPresses: FocusBreakEndEscPresses;
+        breakExtensionLimit: FocusBreakExtensionLimit;
       }
     | { kind: "completion"; screenState: PomodoroCompletionScreenState };
 
@@ -61,6 +64,14 @@
     if (raw === "disabled") return null;
     const value = Number(raw);
     return parseFocusBreakEndEscPresses(value, DEFAULT_FOCUS_BREAK_END_ESC_PRESSES);
+  }
+
+  function breakExtensionLimitParam(params: URLSearchParams): FocusBreakExtensionLimit {
+    const raw = params.get("breakExtensionLimit");
+    if (raw === null) return DEFAULT_FOCUS_BREAK_EXTENSION_LIMIT;
+    if (raw === "disabled") return null;
+    const value = Number(raw);
+    return parseFocusBreakExtensionLimit(value, DEFAULT_FOCUS_BREAK_EXTENSION_LIMIT);
   }
 
   function overlayModeFromLocation(): OverlayMode {
@@ -91,6 +102,7 @@
         Date.now() + fallbackBreakSeconds * 1000,
       ),
       breakEndEscPresses: breakEndEscPressesParam(params),
+      breakExtensionLimit: breakExtensionLimitParam(params),
     };
   }
 
@@ -119,6 +131,9 @@
   const breakEndEscPresses = mode.kind === "break"
     ? mode.breakEndEscPresses
     : DEFAULT_FOCUS_BREAK_END_ESC_PRESSES;
+  const breakExtensionLimit = mode.kind === "break"
+    ? mode.breakExtensionLimit
+    : DEFAULT_FOCUS_BREAK_EXTENSION_LIMIT;
   let breakFinishedAtMs: number | null = null;
   let idleAlertTimeoutId: ReturnType<typeof setTimeout> | null = null;
   let idleFailureTimeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -226,8 +241,9 @@
   }
 
   async function extendBreak(): Promise<void> {
+    if (breakExtensionLimit === null) return;
+    if (extensionMinutes >= breakExtensionLimit) return;
     escPresses = 0;
-    if (extensionMinutes >= MAX_BREAK_EXTENSION_MINUTES) return;
     extensionMinutes += 1;
     breakEndMs += 60_000;
     seconds = remainingSecondsUntil(breakEndMs, Date.now());
@@ -266,7 +282,9 @@
     }
 
     if (command.code === "Space" && command.shiftKey && hasShortcutModifier(command)) {
-      void extendBreak();
+      if (breakExtensionLimit !== null) {
+        void extendBreak();
+      }
       return;
     }
 
@@ -441,7 +459,7 @@
     state={screenState}
     {seconds}
     {extensionMinutes}
-    maxExtensionMinutes={MAX_BREAK_EXTENSION_MINUTES}
+    maxExtensionMinutes={breakExtensionLimit}
     {escPresses}
     {breakEndEscPresses}
   />

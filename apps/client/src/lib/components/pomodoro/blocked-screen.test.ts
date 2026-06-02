@@ -159,6 +159,7 @@ describe("blocked pomodoro screen helpers", () => {
       "Press Cmd + Shift + Space to extend the break",
     );
     expect(formatBreakExtensionHint(3, 3)).toBeNull();
+    expect(formatBreakExtensionHint(0, null)).toBeNull();
   });
 
   it("formats the break extension shortcut for the platform", () => {
