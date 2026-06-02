@@ -27,6 +27,7 @@ struct PomodoroTrayState {
     total_seconds: u32,
     is_running: bool,
     is_active: bool,
+    can_pause_resume: bool,
     can_add_focus_time: bool,
     paused_pulse_frame: Option<u8>,
 }
@@ -48,6 +49,7 @@ pub struct PomodoroTrayUpdate {
     total_seconds: u32,
     is_running: bool,
     is_active: bool,
+    can_pause_resume: bool,
     can_add_focus_time: bool,
     paused_pulse_frame: Option<u8>,
 }
@@ -79,6 +81,7 @@ struct MenuShape {
     pomodoro_active: bool,
     pomodoro_phase_id: u8,
     pomodoro_running: bool,
+    pomodoro_can_pause_resume: bool,
     pomodoro_can_add_focus_time: bool,
     music_status: String,
     music_title: Option<String>,
@@ -102,6 +105,7 @@ static TRAY_STATE: LazyLock<Mutex<TrayState>> = LazyLock::new(|| {
             total_seconds: 0,
             is_running: false,
             is_active: false,
+            can_pause_resume: false,
             can_add_focus_time: false,
             paused_pulse_frame: None,
         },
@@ -335,6 +339,7 @@ fn menu_shape(state: &TrayState) -> MenuShape {
         pomodoro_active: pomodoro_active(&state.pomodoro),
         pomodoro_phase_id: phase_id(&state.pomodoro.phase),
         pomodoro_running: state.pomodoro.is_running,
+        pomodoro_can_pause_resume: state.pomodoro.can_pause_resume,
         pomodoro_can_add_focus_time: state.pomodoro.can_add_focus_time,
         music_status: state.music.status.clone(),
         music_title: state.music.title.clone(),
@@ -373,12 +378,12 @@ fn build_menu(app: &AppHandle, state: &TrayState) -> Result<Menu<tauri::Wry>, St
 
     let pomodoro_active = pomodoro_active(&state.pomodoro);
     let pause_resume_label = if state.pomodoro.is_running {
-        "Pause pomodoro"
+        "Pause focus"
     } else {
-        "Resume pomodoro"
+        "Resume focus"
     };
     let pause_resume_item = MenuItemBuilder::with_id("pause_resume", pause_resume_label)
-        .enabled(pomodoro_active)
+        .enabled(state.pomodoro.can_pause_resume)
         .build(app)
         .map_err(|e| e.to_string())?;
     let add_focus_time_item = MenuItemBuilder::with_id("add_focus_time", "Extend focus 3 minutes")
@@ -576,7 +581,9 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .menu(&menu)
         .on_menu_event(move |app, event| match event.id().as_ref() {
             "pause_resume" => {
-                let _ = app.emit("tray-pause-resume", ());
+                if TRAY_STATE.lock().unwrap().pomodoro.can_pause_resume {
+                    let _ = app.emit("tray-pause-resume", ());
+                }
             }
             "skip" => {
                 let _ = app.emit("tray-skip", ());
@@ -614,6 +621,7 @@ pub fn update_tray(app: AppHandle, update: PomodoroTrayUpdate) -> Result<(), Str
             total_seconds: update.total_seconds,
             is_running: update.is_running,
             is_active: update.is_active,
+            can_pause_resume: update.can_pause_resume,
             can_add_focus_time: update.can_add_focus_time,
             paused_pulse_frame: update.paused_pulse_frame,
         };
@@ -642,6 +650,28 @@ pub fn update_music_tray(app: AppHandle, update: MusicTrayUpdate) -> Result<(), 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn tray_state_with_pause_resume(can_pause_resume: bool) -> TrayState {
+        TrayState {
+            pomodoro: PomodoroTrayState {
+                phase: "focus".to_string(),
+                remaining_seconds: 1200,
+                total_seconds: 2400,
+                is_running: true,
+                is_active: true,
+                can_pause_resume,
+                can_add_focus_time: false,
+                paused_pulse_frame: None,
+            },
+            music: MusicTrayState {
+                status: "idle".to_string(),
+                title: None,
+                can_play_pause: false,
+                can_previous: false,
+                can_next: false,
+            },
+        }
+    }
 
     fn has_ring_pixel_with_color(pixels: &[u8], color: (u8, u8, u8)) -> bool {
         pixels.chunks_exact(4).any(|pixel| {
@@ -739,6 +769,16 @@ mod tests {
         let pixels = render_progress_icon_with_pause(0.0, true, Some(12));
 
         assert!(has_ring_pixel_with_color(&pixels, RING_EMPTY_COLOR));
+    }
+
+    #[test]
+    fn menu_shape_tracks_pause_resume_availability() {
+        let disabled = menu_shape(&tray_state_with_pause_resume(false));
+        let enabled = menu_shape(&tray_state_with_pause_resume(true));
+
+        assert!(!disabled.pomodoro_can_pause_resume);
+        assert!(enabled.pomodoro_can_pause_resume);
+        assert_ne!(disabled, enabled);
     }
 
     #[test]

@@ -34,6 +34,7 @@ import {
   limitRemainingSecondsToBlockEnd,
   phaseDurationSeconds,
   isPomodoroSessionActive,
+  canPauseResumePomodoro,
   decideTick,
   decideAdvancePhase,
   decideTransition,
@@ -1032,6 +1033,21 @@ function canExtendFocusTime(addSeconds: number = FOCUS_EXTENSION_SECONDS): boole
   return extendedVisibleRemainingSeconds > currentVisibleRemainingSeconds;
 }
 
+function canPauseResumeSession(nowMs: number = Date.now()): boolean {
+  return canPauseResumePomodoro({
+    phase,
+    activeBlockId,
+    activeBlockEndMs,
+    blockExpired,
+    isRunning,
+    remainingSeconds,
+    totalSeconds: phaseTotalSeconds,
+    nowMs,
+    suspendedAway: suspendedAway !== null,
+    idlePaused: idlePaused !== null,
+  });
+}
+
 function usedBreakExtensionSeconds(): number {
   if (!isBreakPhase(phase)) return 0;
   const configuredBreakSeconds = phaseDurationSeconds(phase, config);
@@ -1874,6 +1890,7 @@ interface PomodoroTrayUpdatePayload {
   totalSeconds: number;
   isRunning: boolean;
   isActive: boolean;
+  canPauseResume: boolean;
   canAddFocusTime: boolean;
   pausedPulseFrame: number | null;
 }
@@ -1891,6 +1908,7 @@ function updateTray(options: UpdateTrayOptions = {}) {
     totalSeconds: phaseTotalSeconds,
     isRunning,
     isActive,
+    canPauseResume: canPauseResumeSession(),
     canAddFocusTime: canExtendFocusTime(),
     pausedPulseFrame: currentPausedTrayPulseFrame(),
   };
@@ -2034,7 +2052,7 @@ function initListeners() {
   }).catch((e) => console.warn("Failed to listen for idle-overlay-focus-failed:", e));
 
   listen("tray-pause-resume", () => {
-    if (suspendedAway || idlePaused) return;
+    if (!canPauseResumeSession()) return;
     if (isRunning) {
       pauseSession();
     } else {
@@ -3043,7 +3061,7 @@ async function completeActiveBlockAtInternal(endIso: string = nowIso()): Promise
 }
 
 function pauseSession(): void {
-  if (!isRunning) return;
+  if (!isRunning || !canPauseResumeSession()) return;
   clearBreakEndWarning();
   pausedFocusNotificationSuppressed = false;
   isRunning = false;
@@ -3073,7 +3091,7 @@ function resumeSession(): void {
     expirePausedBlockAtDeadline();
     return;
   }
-  if (!pomodoroSessionActive()) return;
+  if (!canPauseResumeSession()) return;
   resetPausedFocusNotificationState();
   stopPausedOpportunityCountdown();
   isRunning = true;
@@ -3149,6 +3167,9 @@ export function getPomodoro() {
     },
     get canAddFocusTime() {
       return canExtendFocusTime();
+    },
+    get canPauseResume() {
+      return canPauseResumeSession();
     },
     get pausedPulseFrame() {
       return currentPausedTrayPulseFrame();

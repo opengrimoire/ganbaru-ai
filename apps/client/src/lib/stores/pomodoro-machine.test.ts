@@ -4,6 +4,7 @@ import {
   phaseDurationSeconds,
   limitRemainingSecondsToBlockEnd,
   isPomodoroSessionActive,
+  canPauseResumePomodoro,
   decideTick,
   decideAdvancePhase,
   decideTransition,
@@ -195,6 +196,44 @@ describe("isPomodoroSessionActive", () => {
         isRunning: true,
       }),
     ).toBe(true);
+  });
+});
+
+describe("canPauseResumePomodoro", () => {
+  const baseInput = {
+    phase: "focus" as const,
+    activeBlockId: "block-1",
+    activeBlockEndMs: NOW + 60_000,
+    blockExpired: false,
+    isRunning: true,
+    remainingSeconds: DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER,
+    totalSeconds: DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER,
+    nowMs: NOW,
+    suspendedAway: false,
+    idlePaused: false,
+  };
+
+  it("allows active focus to pause or resume", () => {
+    expect(canPauseResumePomodoro(baseInput)).toBe(true);
+  });
+
+  it("disables pause and resume during breaks", () => {
+    expect(canPauseResumePomodoro({ ...baseInput, phase: "short_break" })).toBe(false);
+    expect(canPauseResumePomodoro({ ...baseInput, phase: "long_break" })).toBe(false);
+  });
+
+  it("disables pause and resume while suspended away or idle paused", () => {
+    expect(canPauseResumePomodoro({ ...baseInput, suspendedAway: true })).toBe(false);
+    expect(canPauseResumePomodoro({ ...baseInput, idlePaused: true })).toBe(false);
+  });
+
+  it("disables pause and resume when the session is no longer active", () => {
+    expect(
+      canPauseResumePomodoro({
+        ...baseInput,
+        activeBlockEndMs: NOW,
+      }),
+    ).toBe(false);
   });
 });
 

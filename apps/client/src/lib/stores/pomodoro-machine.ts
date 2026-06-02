@@ -103,6 +103,19 @@ export function isPomodoroSessionActive(
   return input.isRunning || input.remainingSeconds < input.totalSeconds;
 }
 
+export interface PomodoroPauseResumeInput extends PomodoroSessionActiveInput {
+  phase: PomodoroPhase;
+  suspendedAway: boolean;
+  idlePaused: boolean;
+}
+
+export function canPauseResumePomodoro(input: PomodoroPauseResumeInput): boolean {
+  if (input.phase !== "focus" || input.suspendedAway || input.idlePaused) {
+    return false;
+  }
+  return isPomodoroSessionActive(input);
+}
+
 // decideTick
 
 export type TickResult =

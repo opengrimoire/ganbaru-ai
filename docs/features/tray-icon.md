@@ -13,7 +13,7 @@ The tray icon answers two quick questions:
 
 It also gives access to common controls:
 
-- Pause or resume Pomodoro.
+- Pause or resume the active focus phase.
 - Extend the current focus period by 3 minutes when the event window has room.
 - Advance to break or start focus, depending on the current phase.
 - Play or pause Music.
@@ -51,7 +51,7 @@ The tray menu has two sections.
 Pomodoro section:
 
 - Status row: remaining time while active, or `No active session`.
-- `Pause pomodoro` or `Resume pomodoro`.
+- `Pause focus` or `Resume focus`, enabled only during an active focus phase.
 - `Extend focus 3 minutes`, enabled once per focus period when the current event window has room.
 - `Go to break now` during focus, or `Start focus now` during breaks.
 

@@ -294,7 +294,7 @@
 
   const isActive = $derived(pomodoro.isActive);
   const pomodoroPauseResumeLabel = $derived(
-    isActive && !pomodoro.isRunning ? "Resume pomodoro" : "Pause pomodoro",
+    isActive && !pomodoro.isRunning ? "Resume focus" : "Pause focus",
   );
   const pomodoroPausedPulseActive = $derived(
     isActive &&
@@ -320,7 +320,7 @@
         : "Start focus now"
       : "Go to break now",
   );
-  const canPauseResumePomodoro = $derived(isActive);
+  const canPauseResumePomodoro = $derived(pomodoro.canPauseResume);
   const canAdvancePomodoro = $derived(isActive);
   const titleBarVolumeStep = 0.05;
   const titleBarVolumeSliderProgress = $derived(musicPlayer.volumeMax > 0
