@@ -772,20 +772,22 @@
                 >
                   {player.volumePercentLabel}
                 </button>
-                <input
-                  type="range"
-                  min="0"
-                  max={volumeMax}
-                  step={volumeShortcutStep}
-                  value={player.volumeControlValue}
-                  class="music-volume-slider music-volume-slider-vertical"
-                  style={`--music-volume-progress: ${volumeSliderProgress};`}
-                  aria-label="Volume"
-                  tabindex="-1"
-                  oninput={(event) => { setVolumeFromControl(Number(event.currentTarget.value)); }}
-                  onpointerup={releaseRangeFocus}
-                  onpointercancel={releaseRangeFocus}
-                />
+                <div class="music-volume-slider-vertical-frame flex items-center justify-center">
+                  <input
+                    type="range"
+                    min="0"
+                    max={volumeMax}
+                    step={volumeShortcutStep}
+                    value={player.volumeControlValue}
+                    class="music-volume-slider music-volume-slider-vertical"
+                    style={`--music-volume-progress: ${volumeSliderProgress};`}
+                    aria-label="Volume"
+                    tabindex="-1"
+                    oninput={(event) => { setVolumeFromControl(Number(event.currentTarget.value)); }}
+                    onpointerup={releaseRangeFocus}
+                    onpointercancel={releaseRangeFocus}
+                  />
+                </div>
               </div>
             {/if}
           </div>
@@ -992,22 +994,22 @@
   }
 
   .music-volume-slider-vertical {
-    width: var(--music-volume-thumb-size);
-    height: 8rem;
-    writing-mode: vertical-lr;
-    direction: rtl;
+    width: 8rem;
+    height: var(--music-volume-thumb-size);
+    transform: rotate(-90deg);
     background:
       linear-gradient(
-        to top,
+        to right,
         var(--primary) 0%,
         var(--primary) var(--music-volume-progress),
         var(--music-volume-track-color) var(--music-volume-progress),
         var(--music-volume-track-color) 100%
       )
-      center / var(--music-volume-track-height) calc(100% - var(--music-volume-thumb-size)) no-repeat;
+      center / calc(100% - var(--music-volume-thumb-size)) var(--music-volume-track-height) no-repeat;
   }
 
-  .music-volume-slider-vertical::-webkit-slider-thumb {
-    margin-top: 0;
+  .music-volume-slider-vertical-frame {
+    width: var(--music-volume-thumb-size);
+    height: 8rem;
   }
 </style>
