@@ -30,6 +30,7 @@ export interface MonthDayEventLayoutItem extends MonthDayLayoutBase {
 export interface MonthDayMoreLayoutItem extends MonthDayLayoutBase {
   kind: "more";
   hiddenCount: number;
+  label: string;
 }
 
 export type MonthDayLayoutItem = MonthDayEventLayoutItem | MonthDayMoreLayoutItem;
@@ -74,6 +75,11 @@ interface PackedMonthDayEventLayoutItem extends MonthDayLayoutBase {
   kind: "event";
   event: CalendarEvent;
   desiredWidthPx: number;
+}
+
+interface MonthDayMoreChipEstimate {
+  widthPx: number;
+  label: string;
 }
 
 function roundPx(value: number): number {
@@ -169,13 +175,37 @@ function estimateEventWidths(
   return { compactWidthPx, desiredWidthPx };
 }
 
-function estimateMoreWidth(hiddenCount: number, options: NormalizedMonthDayLayoutOptions): number {
-  if (options.cellWidthPx <= 0) return 0;
-  const minWidth = Math.min(options.cellWidthPx, options.minMoreWidthPx);
-  const naturalWidth = textWidth(`+${hiddenCount} more`, options)
+function moreLabel(hiddenCount: number, variant: "full" | "compact"): string {
+  return variant === "full" ? `+${hiddenCount} more` : `+${hiddenCount}`;
+}
+
+function labelWidth(label: string, options: NormalizedMonthDayLayoutOptions): number {
+  return textWidth(label, options)
     + options.horizontalPaddingPx
     + options.textSafetyPx;
-  return roundPx(Math.min(options.cellWidthPx, Math.max(minWidth, naturalWidth)));
+}
+
+function estimateMoreChip(
+  hiddenCount: number,
+  options: NormalizedMonthDayLayoutOptions,
+): MonthDayMoreChipEstimate {
+  if (options.cellWidthPx <= 0) return { widthPx: 0, label: moreLabel(hiddenCount, "compact") };
+  const minWidth = Math.min(options.cellWidthPx, options.minMoreWidthPx);
+  const fullLabel = moreLabel(hiddenCount, "full");
+  const fullWidth = labelWidth(fullLabel, options);
+  if (fullWidth <= options.cellWidthPx) {
+    return {
+      widthPx: roundPx(Math.min(options.cellWidthPx, Math.max(minWidth, fullWidth))),
+      label: fullLabel,
+    };
+  }
+
+  const compactLabel = moreLabel(hiddenCount, "compact");
+  const compactWidth = labelWidth(compactLabel, options);
+  return {
+    widthPx: roundPx(Math.min(options.cellWidthPx, Math.max(minWidth, compactWidth))),
+    label: compactLabel,
+  };
 }
 
 function topForRow(row: number, options: NormalizedMonthDayLayoutOptions): number {
@@ -280,10 +310,10 @@ function appendMoreChip(
   const items = [...eventItems];
 
   while (true) {
-    const widthPx = estimateMoreWidth(hidden, options);
+    const moreChip = estimateMoreChip(hidden, options);
     const targetRowItems = items.filter((item) => item.row === targetRow);
     const rowBoundaryPx = targetRowItems.length > 0
-      ? Math.max(0, options.cellWidthPx - widthPx - options.horizontalGapPx)
+      ? Math.max(0, options.cellWidthPx - moreChip.widthPx - options.horizontalGapPx)
       : options.cellWidthPx;
     const compactWidthPx = rowWidth(targetRowItems, (item) => item.widthPx, options);
     const desiredWidthPx = rowWidth(targetRowItems, (item) => item.desiredWidthPx, options);
@@ -297,10 +327,11 @@ function appendMoreChip(
       const moreItem: MonthDayMoreLayoutItem = {
         kind: "more",
         hiddenCount: hidden,
+        label: moreChip.label,
         row: targetRow,
-        leftPx: roundPx(hasRowEvent ? options.cellWidthPx - widthPx : 0),
+        leftPx: roundPx(hasRowEvent ? options.cellWidthPx - moreChip.widthPx : 0),
         topPx: topForRow(targetRow, options),
-        widthPx,
+        widthPx: moreChip.widthPx,
         heightPx: options.chipHeightPx,
       };
       return {
@@ -315,10 +346,11 @@ function appendMoreChip(
       const moreItem: MonthDayMoreLayoutItem = {
         kind: "more",
         hiddenCount: hidden,
+        label: moreChip.label,
         row: targetRow,
         leftPx: 0,
         topPx: topForRow(targetRow, options),
-        widthPx,
+        widthPx: moreChip.widthPx,
         heightPx: options.chipHeightPx,
       };
       return {

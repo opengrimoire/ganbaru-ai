@@ -328,6 +328,8 @@
                 {:else}
                   <button
                     type="button"
+                    aria-label="+{item.hiddenCount} more"
+                    title="+{item.hiddenCount} more"
                     class="month-more-surface absolute z-2 flex min-w-0 cursor-pointer items-center justify-center overflow-hidden truncate rounded px-1 text-[0.666667rem] leading-5"
                     style="
                       left: {item.leftPx}px;
@@ -339,7 +341,7 @@
                     "
                     onclick={(e) => { e.stopPropagation(); onDayClick(day); }}
                   >
-                    +{item.hiddenCount} more
+                    {item.label}
                   </button>
                 {/if}
               {/each}
@@ -397,11 +399,11 @@
 
   .month-more-surface {
     appearance: none;
-    background-color: color-mix(in srgb, var(--month-more-color) 9%, transparent);
-    border: 1px solid color-mix(in srgb, var(--month-more-color) 20%, transparent);
+    background-color: transparent;
+    border: 1px solid transparent;
   }
 
   .month-more-surface:hover {
-    background-color: color-mix(in srgb, var(--month-more-color) 14%, transparent);
+    background-color: transparent;
   }
 </style>

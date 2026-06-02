@@ -184,6 +184,23 @@ describe("layoutMonthDayEvents", () => {
     const more = layout.items.find((item) => item.kind === "more");
     expect(more).toBeDefined();
     expect(more?.hiddenCount).toBe(3);
+    expect(more?.label).toBe("+3 more");
+  });
+
+  it("uses the compact more label when the full label cannot fit", () => {
+    const layout = layoutMonthDayEvents([
+      evt("1", "A"),
+      evt("2", "B"),
+      evt("3", "C"),
+    ], {
+      cellWidthPx: 34,
+      availableHeightPx: MONTH_EVENT_CHIP_HEIGHT_PX,
+    });
+
+    const more = layout.items.find((item) => item.kind === "more");
+    expect(more?.kind).toBe("more");
+    expect(more?.hiddenCount).toBe(3);
+    expect(more?.label).toBe("+3");
   });
 
   it("keeps the more chip compact while expanding the previous event", () => {
