@@ -50,6 +50,9 @@ import {
 
 const POMODORO_WINDOW_SYNC_EVENT = "pomodoro-window-sync";
 const POMODORO_WINDOW_COMMAND_EVENT = "pomodoro-window-command";
+const PAUSED_FOCUS_NOTIFICATION_RESUME_EVENT = "pomodoro-paused-focus-resume";
+const PAUSED_FOCUS_NOTIFICATION_STOP_ASKING_EVENT =
+  "pomodoro-paused-focus-stop-asking";
 const pomodoroCoordinator = getCurrentWindow().label === "main";
 
 interface PomodoroWindowSnapshot {
@@ -146,6 +149,8 @@ const PAUSED_TRAY_PULSE_FRAME_COUNT = PAUSED_PULSE_AMOUNTS.length;
 const PAUSED_TRAY_PULSE_FRAME_MS = 180;
 let musicPausedByPomodoroPause = false;
 let musicPauseInFlight: Promise<void> | null = null;
+let pausedFocusNotificationTimeoutId: ReturnType<typeof setTimeout> | null = null;
+let pausedFocusNotificationSuppressed = false;
 
 // Segment tracking state
 let segments = $state<PersistedSegment[]>([]);
@@ -840,10 +845,67 @@ function syncPausedTrayPulse(): void {
   }, PAUSED_TRAY_PULSE_FRAME_MS);
 }
 
+function clearPausedFocusNotificationTimeout(): void {
+  if (pausedFocusNotificationTimeoutId === null) return;
+  clearTimeout(pausedFocusNotificationTimeoutId);
+  pausedFocusNotificationTimeoutId = null;
+}
+
+function resetPausedFocusNotificationState(): void {
+  clearPausedFocusNotificationTimeout();
+  pausedFocusNotificationSuppressed = false;
+}
+
+function suppressPausedFocusNotificationsForCurrentPause(): void {
+  pausedFocusNotificationSuppressed = true;
+  clearPausedFocusNotificationTimeout();
+}
+
+function pausedFocusNotificationIntervalMs(): number {
+  const minutes = getPreferences().focusPauseNotificationIntervalMinutes;
+  return minutes > 0 ? minutes * 60_000 : 0;
+}
+
+function showPausedFocusNotification(): void {
+  invoke("show_paused_focus_notification").catch((error) => {
+    console.warn("Failed to show paused focus notification:", error);
+  });
+}
+
+function scheduleNextPausedFocusNotification(): void {
+  if (pausedFocusNotificationTimeoutId !== null) return;
+  if (pausedFocusNotificationSuppressed || !pausedFocusPulseActive()) return;
+
+  const delayMs = pausedFocusNotificationIntervalMs();
+  if (delayMs <= 0) return;
+
+  pausedFocusNotificationTimeoutId = setTimeout(() => {
+    pausedFocusNotificationTimeoutId = null;
+    if (pausedFocusNotificationSuppressed || !pausedFocusPulseActive()) return;
+    if (pausedFocusNotificationIntervalMs() <= 0) return;
+    showPausedFocusNotification();
+    scheduleNextPausedFocusNotification();
+  }, delayMs);
+}
+
+function syncPausedFocusNotification(): void {
+  if (!pomodoroCoordinator) return;
+  if (
+    pausedFocusNotificationSuppressed ||
+    !pausedFocusPulseActive() ||
+    pausedFocusNotificationIntervalMs() <= 0
+  ) {
+    clearPausedFocusNotificationTimeout();
+    return;
+  }
+  scheduleNextPausedFocusNotification();
+}
+
 function expirePausedBlockAtDeadline(): void {
   if (activeBlockEndMs === null) return;
   clearBreakEndWarning();
   clearMusicPausedByPomodoro();
+  resetPausedFocusNotificationState();
   const endIso = new Date(activeBlockEndMs).toISOString();
   stopPausedOpportunityCountdown();
   refreshPausedOpportunityRemaining(activeBlockEndMs);
@@ -877,6 +939,7 @@ async function expirePausedBlockAtDeadlineAndWait(): Promise<void> {
   if (activeBlockEndMs === null) return;
   clearBreakEndWarning();
   clearMusicPausedByPomodoro();
+  resetPausedFocusNotificationState();
   const endIso = new Date(activeBlockEndMs).toISOString();
   stopPausedOpportunityCountdown();
   refreshPausedOpportunityRemaining(activeBlockEndMs);
@@ -1820,6 +1883,7 @@ function updateTray(options: UpdateTrayOptions = {}) {
   if (!pomodoroCoordinator) return;
   writeCurrentDoomscrollingRuntimeState();
   syncPausedTrayPulse();
+  syncPausedFocusNotification();
   const isActive = pomodoroSessionActive();
   const update: PomodoroTrayUpdatePayload = {
     phase,
@@ -1987,6 +2051,20 @@ function initListeners() {
   listen<{ seconds: number }>("pomodoro-add-time", (event) => {
     addFocusTimeInternal(event.payload.seconds);
   }).catch((e) => console.warn("Failed to listen for pomodoro-add-time:", e));
+
+  listen(PAUSED_FOCUS_NOTIFICATION_RESUME_EVENT, () => {
+    if (suspendedAway || idlePaused || isRunning || !pausedFocusPulseActive()) return;
+    resumeSession();
+  }).catch((e) =>
+    console.warn("Failed to listen for paused focus notification resume:", e),
+  );
+
+  listen(PAUSED_FOCUS_NOTIFICATION_STOP_ASKING_EVENT, () => {
+    if (!pausedFocusPulseActive()) return;
+    suppressPausedFocusNotificationsForCurrentPause();
+  }).catch((e) =>
+    console.warn("Failed to listen for paused focus notification stop asking:", e),
+  );
 }
 
 // Session control
@@ -2077,6 +2155,7 @@ function startFocusSession() {
   closePomodoroOverlay();
   clearBreakEndWarning();
   clearMusicPausedByPomodoro();
+  resetPausedFocusNotificationState();
   stopPausedOpportunityCountdown();
   if (intervalId) {
     clearInterval(intervalId);
@@ -2860,6 +2939,7 @@ async function stopSessionInternal(): Promise<void> {
   closePomodoroOverlay();
   clearBreakEndWarning();
   clearMusicPausedByPomodoro();
+  resetPausedFocusNotificationState();
   stopPausedOpportunityCountdown();
   if (currentSegmentIndex >= 0 && currentSegmentIndex < segments.length) {
     const seg = segments[currentSegmentIndex];
@@ -2902,6 +2982,7 @@ async function stopSessionInternal(): Promise<void> {
 async function completeActiveBlockAtInternal(endIso: string = nowIso()): Promise<void> {
   closePomodoroOverlay();
   clearBreakEndWarning();
+  resetPausedFocusNotificationState();
   const parsedEndMs = Date.parse(endIso);
   const normalizedEndIso = Number.isFinite(parsedEndMs)
     ? new Date(parsedEndMs).toISOString()
@@ -2964,6 +3045,7 @@ async function completeActiveBlockAtInternal(endIso: string = nowIso()): Promise
 function pauseSession(): void {
   if (!isRunning) return;
   clearBreakEndWarning();
+  pausedFocusNotificationSuppressed = false;
   isRunning = false;
   phaseEndTime = null;
   lastTickMs = null;
@@ -2992,6 +3074,7 @@ function resumeSession(): void {
     return;
   }
   if (!pomodoroSessionActive()) return;
+  resetPausedFocusNotificationState();
   stopPausedOpportunityCountdown();
   isRunning = true;
   phaseEndTime = Date.now() + remainingSeconds * 1000;

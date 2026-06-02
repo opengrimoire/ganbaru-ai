@@ -12,9 +12,11 @@ import {
   DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
   DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS,
   DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS,
+  DEFAULT_FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
   FOCUS_IDLE_THRESHOLD_MINUTES_MAX,
   FOCUS_IDLE_THRESHOLD_MINUTES_MIN,
   FOCUS_BREAK_SOUND_INTERVAL_SECONDS,
+  FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
   DEFAULT_TITLE_BAR_VISIBILITY,
   TITLE_BAR_CONTROL_IDS,
   clampFocusIdleThresholdMinutes,
@@ -22,8 +24,10 @@ import {
   getFontFamilyById,
   isCalendarTimeFormat,
   isFocusBreakSoundIntervalSeconds,
+  isFocusPauseNotificationIntervalMinutes,
   isTitleBarControlId,
   parseFocusBreakSoundIntervalSeconds,
+  parseFocusPauseNotificationIntervalMinutes,
   parseTitleBarVisibility,
   resolveFontFamilyStack,
   shouldNormalizeTitleBarVisibility,
@@ -162,6 +166,12 @@ describe("focus preferences", () => {
     expect(DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS).toBe(10);
   });
 
+  it("uses fixed paused focus notification intervals with 3 minutes as the default", () => {
+    expect(FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES).toEqual([0, 3, 5, 10, 15]);
+    expect(Object.isFrozen(FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES)).toBe(true);
+    expect(DEFAULT_FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES).toBe(3);
+  });
+
   it("accepts only supported break screen sound intervals", () => {
     expect(isFocusBreakSoundIntervalSeconds(0)).toBe(true);
     expect(isFocusBreakSoundIntervalSeconds(10)).toBe(true);
@@ -173,10 +183,27 @@ describe("focus preferences", () => {
     expect(isFocusBreakSoundIntervalSeconds(null)).toBe(false);
   });
 
+  it("accepts only supported paused focus notification intervals", () => {
+    expect(isFocusPauseNotificationIntervalMinutes(0)).toBe(true);
+    expect(isFocusPauseNotificationIntervalMinutes(3)).toBe(true);
+    expect(isFocusPauseNotificationIntervalMinutes(5)).toBe(true);
+    expect(isFocusPauseNotificationIntervalMinutes(10)).toBe(true);
+    expect(isFocusPauseNotificationIntervalMinutes(15)).toBe(true);
+    expect(isFocusPauseNotificationIntervalMinutes(1)).toBe(false);
+    expect(isFocusPauseNotificationIntervalMinutes("3")).toBe(false);
+    expect(isFocusPauseNotificationIntervalMinutes(null)).toBe(false);
+  });
+
   it("falls back when parsing unsupported break screen sound intervals", () => {
     expect(parseFocusBreakSoundIntervalSeconds(30, 10)).toBe(30);
     expect(parseFocusBreakSoundIntervalSeconds(20, 10)).toBe(10);
     expect(parseFocusBreakSoundIntervalSeconds("10", 10)).toBe(10);
+  });
+
+  it("falls back when parsing unsupported paused focus notification intervals", () => {
+    expect(parseFocusPauseNotificationIntervalMinutes(5, 3)).toBe(5);
+    expect(parseFocusPauseNotificationIntervalMinutes(1, 3)).toBe(3);
+    expect(parseFocusPauseNotificationIntervalMinutes("3", 3)).toBe(3);
   });
 
   it("clamps idle threshold minutes to the supported list", () => {

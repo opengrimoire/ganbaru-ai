@@ -10,9 +10,11 @@ import {
   DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
   DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS,
   DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS,
+  DEFAULT_FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
   DEFAULT_TITLE_BAR_VISIBILITY,
   type CalendarTimeFormat,
   type FocusBreakSoundIntervalSeconds,
+  type FocusPauseNotificationIntervalMinutes,
   type TitleBarControlId,
   type TitleBarVisibility,
   clampFocusIdleThresholdMinutes,
@@ -21,6 +23,7 @@ import {
   isCalendarTimeFormat,
   isTitleBarControlId,
   parseFocusBreakSoundIntervalSeconds,
+  parseFocusPauseNotificationIntervalMinutes,
   parseTitleBarVisibility,
   resolveFontFamilyStack,
   shouldNormalizeTitleBarVisibility,
@@ -38,6 +41,8 @@ const FOCUS_BREAK_FINISHED_REPEAT_SECONDS_CONFIG_KEY =
   "preferences.focusBreakFinishedRepeatSeconds";
 const FOCUS_BREAK_END_WARNING_SECONDS_CONFIG_KEY =
   "preferences.focusBreakEndWarningSeconds";
+const FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES_CONFIG_KEY =
+  "preferences.focusPauseNotificationIntervalMinutes";
 const MUSIC_PAUSE_ON_POMODORO_PAUSE_CONFIG_KEY = "preferences.musicPauseOnPomodoroPause";
 const TITLE_BAR_VISIBILITY_CONFIG_KEY = "preferences.titleBarVisibility";
 
@@ -102,6 +107,18 @@ function loadSavedFocusBreakEndWarningSeconds(): FocusBreakSoundIntervalSeconds 
   );
 }
 
+function loadSavedFocusPauseNotificationIntervalMinutes():
+  FocusPauseNotificationIntervalMinutes {
+  const saved = getConfigKey<unknown>(
+    FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES_CONFIG_KEY,
+    undefined,
+  );
+  return parseFocusPauseNotificationIntervalMinutes(
+    saved,
+    DEFAULT_FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
+  );
+}
+
 function loadSavedMusicPauseOnPomodoroPause(): boolean {
   const saved = getConfigKey<unknown>(MUSIC_PAUSE_ON_POMODORO_PAUSE_CONFIG_KEY, undefined);
   if (typeof saved === "boolean") return saved;
@@ -129,6 +146,9 @@ let focusBreakFinishedRepeatSeconds = $state<FocusBreakSoundIntervalSeconds>(
 );
 let focusBreakEndWarningSeconds = $state<FocusBreakSoundIntervalSeconds>(
   loadSavedFocusBreakEndWarningSeconds(),
+);
+let focusPauseNotificationIntervalMinutes = $state<FocusPauseNotificationIntervalMinutes>(
+  loadSavedFocusPauseNotificationIntervalMinutes(),
 );
 let musicPauseOnPomodoroPause = $state<boolean>(loadSavedMusicPauseOnPomodoroPause());
 let titleBarVisibility = $state<TitleBarVisibility>(loadSavedTitleBarVisibility());
@@ -205,6 +225,15 @@ function setFocusBreakEndWarningSeconds(value: number): void {
   setConfigKey(FOCUS_BREAK_END_WARNING_SECONDS_CONFIG_KEY, parsed);
 }
 
+function setFocusPauseNotificationIntervalMinutes(value: number): void {
+  const parsed = parseFocusPauseNotificationIntervalMinutes(
+    value,
+    DEFAULT_FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
+  );
+  focusPauseNotificationIntervalMinutes = parsed;
+  setConfigKey(FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES_CONFIG_KEY, parsed);
+}
+
 function setMusicPauseOnPomodoroPause(value: boolean): void {
   musicPauseOnPomodoroPause = value;
   setConfigKey(MUSIC_PAUSE_ON_POMODORO_PAUSE_CONFIG_KEY, value);
@@ -262,6 +291,9 @@ export function getPreferences() {
     get focusBreakEndWarningSeconds(): FocusBreakSoundIntervalSeconds {
       return focusBreakEndWarningSeconds;
     },
+    get focusPauseNotificationIntervalMinutes(): FocusPauseNotificationIntervalMinutes {
+      return focusPauseNotificationIntervalMinutes;
+    },
     get musicPauseOnPomodoroPause(): boolean {
       return musicPauseOnPomodoroPause;
     },
@@ -277,6 +309,7 @@ export function getPreferences() {
     setFocusIdlePauseOnEventCreate,
     setFocusBreakFinishedRepeatSeconds,
     setFocusBreakEndWarningSeconds,
+    setFocusPauseNotificationIntervalMinutes,
     setMusicPauseOnPomodoroPause,
     setTitleBarControlVisible,
     toggleTitleBarControl,
@@ -306,6 +339,11 @@ export function getPreferences() {
     },
     resetFocusBreakEndWarningSeconds() {
       setFocusBreakEndWarningSeconds(DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS);
+    },
+    resetFocusPauseNotificationIntervalMinutes() {
+      setFocusPauseNotificationIntervalMinutes(
+        DEFAULT_FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
+      );
     },
     resetMusicPauseOnPomodoroPause() {
       setMusicPauseOnPomodoroPause(DEFAULT_MUSIC_PAUSE_ON_POMODORO_PAUSE);

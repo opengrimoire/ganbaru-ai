@@ -711,6 +711,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             notification::show_pomodoro_notification,
+            notification::show_paused_focus_notification,
             notification::show_event_notification,
             notification::show_benchmark_notification,
             notification::show_doomscrolling_desktop_block_notification,

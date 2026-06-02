@@ -81,6 +81,13 @@ export type FocusBreakSoundIntervalSeconds =
   (typeof FOCUS_BREAK_SOUND_INTERVAL_SECONDS)[number];
 export const DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS: FocusBreakSoundIntervalSeconds = 10;
 export const DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS: FocusBreakSoundIntervalSeconds = 10;
+export const FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES = Object.freeze(
+  [0, 3, 5, 10, 15] as const,
+);
+export type FocusPauseNotificationIntervalMinutes =
+  (typeof FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES)[number];
+export const DEFAULT_FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES:
+  FocusPauseNotificationIntervalMinutes = 3;
 
 export const TITLE_BAR_CONTROL_IDS = [
   "pomodoro",
@@ -168,6 +175,22 @@ export function parseFocusBreakSoundIntervalSeconds(
   fallback: FocusBreakSoundIntervalSeconds,
 ): FocusBreakSoundIntervalSeconds {
   return isFocusBreakSoundIntervalSeconds(value) ? value : fallback;
+}
+
+export function isFocusPauseNotificationIntervalMinutes(
+  value: unknown,
+): value is FocusPauseNotificationIntervalMinutes {
+  return typeof value === "number"
+    && FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES.includes(
+      value as FocusPauseNotificationIntervalMinutes,
+    );
+}
+
+export function parseFocusPauseNotificationIntervalMinutes(
+  value: unknown,
+  fallback: FocusPauseNotificationIntervalMinutes,
+): FocusPauseNotificationIntervalMinutes {
+  return isFocusPauseNotificationIntervalMinutes(value) ? value : fallback;
 }
 
 /**

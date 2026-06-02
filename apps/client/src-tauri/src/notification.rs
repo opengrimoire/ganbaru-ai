@@ -2413,3 +2413,42 @@ pub fn show_pomodoro_notification(
         }
     });
 }
+
+#[tauri::command]
+pub fn show_paused_focus_notification(app: tauri::AppHandle, app_sounds: State<'_, AppSoundState>) {
+    app_sounds.play(AppSound::EventNotification);
+    std::thread::spawn(move || {
+        let result = Notification::new()
+            .appname("Ganbaru AI")
+            .summary("Focus session is paused")
+            .body("Your focus session is still paused.")
+            .action("resume", "Resume focus")
+            .action("stop_asking", "Stop asking")
+            .timeout(15_000)
+            .id(9003)
+            .hint(Hint::Category("reminder".into()))
+            .hint(Hint::DesktopEntry("ganbaru-ai".into()))
+            .hint(Hint::Transient(true))
+            .show();
+
+        match result {
+            Ok(handle) => {
+                handle.wait_for_action(|action| match action {
+                    "resume" => {
+                        let _ = app.emit("pomodoro-paused-focus-resume", ());
+                    }
+                    "stop_asking" => {
+                        let _ = app.emit("pomodoro-paused-focus-stop-asking", ());
+                    }
+                    "default" => {
+                        focus_main_window(app.clone());
+                    }
+                    _ => {}
+                });
+            }
+            Err(e) => {
+                eprintln!("Failed to show paused focus notification: {e}");
+            }
+        }
+    });
+}

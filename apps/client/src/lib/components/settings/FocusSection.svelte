@@ -4,9 +4,11 @@
     DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
     DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS,
     DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS,
+    DEFAULT_FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
     FOCUS_IDLE_THRESHOLD_MINUTES_MAX,
     FOCUS_IDLE_THRESHOLD_MINUTES_MIN,
     FOCUS_BREAK_SOUND_INTERVAL_SECONDS,
+    FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
   } from "$lib/stores/preferences";
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import CustomSelect from "./CustomSelect.svelte";
@@ -40,6 +42,12 @@
       return { value: String(seconds), label: `${seconds} seconds before` };
     });
 
+  const pausedFocusWarningOptions: readonly SelectOption[] =
+    FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES.map((minutes) => {
+      if (minutes === 0) return { value: String(minutes), label: "None" };
+      return { value: String(minutes), label: `Every ${minutes} minutes` };
+    });
+
   let showDisableIdlePauseConfirm = $state(false);
 
   function handleIdleThresholdChange(value: string): void {
@@ -58,6 +66,12 @@
     const seconds = Number(value);
     if (!Number.isFinite(seconds)) return;
     preferences.setFocusBreakEndWarningSeconds(seconds);
+  }
+
+  function handlePausedFocusWarningChange(value: string): void {
+    const minutes = Number(value);
+    if (!Number.isFinite(minutes)) return;
+    preferences.setFocusPauseNotificationIntervalMinutes(minutes);
   }
 
   function handleIdlePauseDefaultChange(checked: boolean): void {
@@ -96,6 +110,23 @@
         description="Turns on Pause on inactivity for new Pomodoro events"
         checked={preferences.focusIdlePauseOnEventCreate}
         onChange={handleIdlePauseDefaultChange}
+      />
+    </div>
+  </section>
+
+  <div class="h-px bg-border/70" aria-hidden="true"></div>
+
+  <section class="flex flex-col gap-4">
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Notification</h2>
+    <div class="flex flex-col gap-3">
+      <CustomSelect
+        label="Paused focus warning"
+        description="Remind you to resume paused focus sessions"
+        value={String(preferences.focusPauseNotificationIntervalMinutes)}
+        options={pausedFocusWarningOptions}
+        onChange={handlePausedFocusWarningChange}
+        canReset={preferences.focusPauseNotificationIntervalMinutes !== DEFAULT_FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES}
+        onReset={() => preferences.resetFocusPauseNotificationIntervalMinutes()}
       />
     </div>
   </section>
