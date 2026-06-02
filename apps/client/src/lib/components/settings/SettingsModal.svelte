@@ -218,7 +218,7 @@
                 selectSection(section.id);
               }}
               class={cn(
-                "flex h-8 shrink-0 items-center gap-1.5 rounded px-2.5 text-[0.8rem] font-medium transition-colors",
+                "flex h-8 shrink-0 items-center gap-1.5 rounded px-2.5 text-[0.8rem] font-medium",
                 activeSection === section.id
                   ? "bg-accent text-accent-foreground"
                   : "text-foreground hover:bg-accent/60",
@@ -264,7 +264,7 @@
             <X size={14} strokeWidth={2} />
           </button>
         </div>
-        <nav class="flex flex-col gap-0.5">
+        <nav class="flex flex-col">
           {#each SECTIONS as section}
             {@const Icon = section.icon}
             <button
@@ -274,7 +274,7 @@
               aria-label={section.label}
               data-app-tooltip-disabled="true"
               class={cn(
-                "flex items-center rounded-md text-left text-[0.866667rem] font-medium transition-colors",
+                "flex items-center rounded-md text-left text-[0.866667rem] font-medium",
                 useIconRail ? "h-9 justify-center px-0" : "gap-2.5 px-3 py-1.5",
                 activeSection === section.id
                   ? "bg-accent text-accent-foreground"
