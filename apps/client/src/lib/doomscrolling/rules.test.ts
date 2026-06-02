@@ -154,10 +154,14 @@ describe("normalizeDoomscrollingAppName", () => {
 });
 
 describe("normalizeDoomscrollingConfig", () => {
-  it("defaults all blocking toggles and built-in categories to enabled", () => {
+  it("defaults news to disabled and other built-in categories to enabled", () => {
     const normalized = normalizeDoomscrollingConfig(null);
     expect(normalized).toEqual(DEFAULT_DOOMSCROLLING_CONFIG);
-    expect(normalized.blockedCategories.every((rule) => rule.enabled)).toBe(true);
+    expect(normalized.blockedCategories.find((rule) => rule.id === "news")).toEqual(
+      categoryRule("news", false),
+    );
+    const otherCategories = normalized.blockedCategories.filter((rule) => rule.id !== "news");
+    expect(otherCategories.every((rule) => rule.enabled)).toBe(true);
   });
 
   it("normalizes malformed config without throwing", () => {

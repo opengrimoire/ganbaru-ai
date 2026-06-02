@@ -351,7 +351,7 @@ const MAX_WEEKLY_LIMIT_MINUTES = 7 * 24 * 60;
 function defaultCategoryRules(): DoomscrollingCategoryRule[] {
   return DOOMSCROLLING_CATEGORY_DEFINITIONS.map((category) => ({
     id: category.id,
-    enabled: true,
+    enabled: category.id !== "news",
   }));
 }
 

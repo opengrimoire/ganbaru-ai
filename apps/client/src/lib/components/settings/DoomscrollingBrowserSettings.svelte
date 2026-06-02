@@ -10,6 +10,7 @@
     parseDoomscrollingHosts,
     type DoomscrollingCategoryId,
     type DoomscrollingCustomCategoryStack,
+    type DoomscrollingMode,
     type DoomscrollingHostRule,
   } from "$lib/doomscrolling";
   import { getDoomscrolling } from "$lib/stores/doomscrolling.svelte";
@@ -54,6 +55,10 @@
     toggle: BrowserConfigurationToggle;
   }
 
+  interface PendingModeAction {
+    mode: DoomscrollingMode;
+  }
+
   interface PendingCategoryAction {
     type: "disable";
     categoryId: DoomscrollingCategoryId;
@@ -71,6 +76,7 @@
   type PendingAction =
     | { target: "website"; action: PendingWebsiteAction }
     | { target: "browserConfiguration"; action: PendingBrowserConfigurationAction }
+    | { target: "mode"; action: PendingModeAction }
     | { target: "category"; action: PendingCategoryAction }
     | { target: "customStack"; action: PendingCustomStackAction }
     | { target: "customStackDraftHost"; action: PendingCustomStackDraftHostAction };
@@ -366,6 +372,15 @@
     pendingAction = { target: "browserConfiguration", action: { toggle } };
   }
 
+  function requestModeChange(mode: DoomscrollingMode): void {
+    if (mode === doomscrolling.mode) return;
+    if (mode === "whitelist") {
+      pendingAction = { target: "mode", action: { mode } };
+      return;
+    }
+    doomscrolling.setMode(mode);
+  }
+
   function confirmPendingAction(): void {
     if (!pendingAction) return;
     if (pendingAction.target === "website") {
@@ -378,6 +393,8 @@
       }
     } else if (pendingAction.target === "browserConfiguration") {
       setBrowserConfigurationToggle(pendingAction.action.toggle, false);
+    } else if (pendingAction.target === "mode") {
+      doomscrolling.setMode(pendingAction.action.mode);
     } else if (pendingAction.target === "category") {
       doomscrolling.setBlockedCategoryEnabled(pendingAction.action.categoryId, false);
     } else if (pendingAction.target === "customStackDraftHost") {
@@ -413,6 +430,7 @@
       if (action.action.toggle === "longBreaks") return "Allow websites during long breaks?";
       return "Keep browser blocking active while paused?";
     }
+    if (action.target === "mode") return "Switch to whitelist mode?";
     if (action.target === "category") {
       const category = getDoomscrollingCategoryDefinition(action.action.categoryId);
       return `Allow the ${category?.label ?? "category"} category?`;
@@ -448,6 +466,9 @@
       }
       return "Website rules will continue applying while a focus session is paused";
     }
+    if (action.target === "mode") {
+      return "Whitelist mode blocks every website that is not listed as allowed!";
+    }
     if (action.target === "category") {
       return "This category will stop blocking its websites until you enable it again";
     }
@@ -466,6 +487,7 @@
     if (action.target === "browserConfiguration") {
       return action.action.toggle === "enabled" ? "Turn off (Enter)" : "Allow (Enter)";
     }
+    if (action.target === "mode") return "Switch (Enter)";
     if (action.target === "category") return "Disable (Enter)";
     if (action.target === "customStackDraftHost") return "Delete (Enter)";
     return action.action.type === "disable" ? "Disable (Enter)" : "Delete (Enter)";
@@ -723,7 +745,7 @@
     blacklistDescription="Blocks listed websites"
     whitelistDescription="Only allows listed websites"
     onScheduleChange={requestBrowserConfigurationToggleChange}
-    onModeChange={(mode) => doomscrolling.setMode(mode)}
+    onModeChange={requestModeChange}
   />
 
   <fieldset

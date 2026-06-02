@@ -530,6 +530,7 @@ fn built_in_category(id: &str) -> Option<&'static BuiltInCategory> {
 fn default_built_in_category_ids() -> Vec<String> {
     built_in_categories()
         .iter()
+        .filter(|category| category.id != "news")
         .map(|category| category.id.to_string())
         .collect()
 }
@@ -1651,6 +1652,14 @@ mod tests {
             super::read_category_array(Some(&value)),
             vec!["social-media".to_string(), "news".to_string()]
         );
+    }
+
+    #[test]
+    fn reads_default_built_in_categories_without_news() {
+        let categories = super::read_category_array(None);
+        assert!(!categories.contains(&"news".to_string()));
+        assert!(categories.contains(&"social-media".to_string()));
+        assert!(categories.contains(&"streaming".to_string()));
     }
 
     #[test]
