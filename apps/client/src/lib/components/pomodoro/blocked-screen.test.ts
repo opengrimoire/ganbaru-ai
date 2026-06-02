@@ -61,12 +61,12 @@ describe("blocked pomodoro screen helpers", () => {
       mainText: "#FFFFFF",
     });
     expect(pomodoroBlockedScreenPalette("break_finished")).toMatchObject({
-      background: "#EEBA04",
-      mainText: "#0D0502",
-    });
-    expect(pomodoroBlockedScreenPalette("day_complete")).toMatchObject({
       background: "#0E7490",
       mainText: "#FFFFFF",
+    });
+    expect(pomodoroBlockedScreenPalette("day_complete")).toMatchObject({
+      background: "#EEBA04",
+      mainText: "#0D0502",
     });
     expect(pomodoroBlockedScreenPalette("workweek_complete")).toMatchObject({
       background: "#1D4ED8",

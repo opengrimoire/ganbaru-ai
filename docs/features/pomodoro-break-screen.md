@@ -36,7 +36,7 @@ During the countdown, the top of the screen shows the current date and time usin
 
 The countdown timer uses the same runtime UI font as the rest of the app, with bold tabular numerals and oversized display sizing so it is readable from a distance. Supporting date, label, and control text is intentionally large enough to read from a distance without competing with the timer.
 
-Break countdown uses `#035B33` as the background and white as the main text color. Break complete and event finished use `#EEBA04` as the background and `#0D0502` as the main text color. Day complete uses `#0E7490` with white text. Workweek complete uses `#1D4ED8` with white text. Secondary labels and hints reuse the main text color at lower opacity so the state remains readable from a distance without competing with the main message.
+Break countdown uses `#035B33` as the background and white as the main text color. Break complete uses `#0E7490` with white text. Event finished and day complete use `#EEBA04` as the background and `#0D0502` as the main text color. Workweek complete uses `#1D4ED8` with white text. Secondary labels and hints reuse the main text color at lower opacity so the state remains readable from a distance without competing with the main message.
 
 This does not try to defeat a user with OS-level control of the machine. A forced process kill, power-off, Windows Ctrl+Alt+Del, macOS security prompts, or desktop environment action outside the app's control can still terminate or bypass Ganbaru AI. The goal is to block normal app switching, accidental dismissal, and ordinary close paths without turning the app into hostile system software.
 

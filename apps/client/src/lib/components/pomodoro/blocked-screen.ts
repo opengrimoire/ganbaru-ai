@@ -122,9 +122,9 @@ const BLOCKED_SCREEN_PALETTES: Record<
   idle: palette("#A33728", "#F9D573"),
   idle_failed: palette("#A33728", "#F9D573"),
   break_countdown: palette("#035B33", "#FFFFFF"),
-  break_finished: palette("#EEBA04", "#0D0502"),
+  break_finished: palette("#0E7490", "#FFFFFF"),
   event_finished: palette("#EEBA04", "#0D0502"),
-  day_complete: palette("#0E7490", "#FFFFFF"),
+  day_complete: palette("#EEBA04", "#0D0502"),
   workweek_complete: palette("#1D4ED8", "#FFFFFF"),
 };
 

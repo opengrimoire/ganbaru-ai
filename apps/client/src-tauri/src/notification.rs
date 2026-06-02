@@ -894,9 +894,9 @@ impl PomodoroOverlayVisualState {
                 blue: 0x33,
             },
             Self::BreakFinished => OverlayColor {
-                red: 0xEE,
-                green: 0xBA,
-                blue: 0x04,
+                red: 0x0E,
+                green: 0x74,
+                blue: 0x90,
             },
             Self::EventFinished => OverlayColor {
                 red: 0xEE,
@@ -904,9 +904,9 @@ impl PomodoroOverlayVisualState {
                 blue: 0x04,
             },
             Self::DayComplete => OverlayColor {
-                red: 0x0E,
-                green: 0x74,
-                blue: 0x90,
+                red: 0xEE,
+                green: 0xBA,
+                blue: 0x04,
             },
             Self::WorkweekComplete => OverlayColor {
                 red: 0x1D,
@@ -2203,9 +2203,9 @@ mod tests {
                 .unwrap()
                 .background_color(),
             OverlayColor {
-                red: 0xEE,
-                green: 0xBA,
-                blue: 0x04,
+                red: 0x0E,
+                green: 0x74,
+                blue: 0x90,
             }
         );
         assert_eq!(
@@ -2213,9 +2213,9 @@ mod tests {
                 .unwrap()
                 .background_color(),
             OverlayColor {
-                red: 0x0E,
-                green: 0x74,
-                blue: 0x90,
+                red: 0xEE,
+                green: 0xBA,
+                blue: 0x04,
             }
         );
         assert_eq!(
