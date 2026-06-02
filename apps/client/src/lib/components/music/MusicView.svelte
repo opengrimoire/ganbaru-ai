@@ -721,7 +721,7 @@
               type="button"
               onclick={() => { void player.toggleMute(); }}
               class={cn(
-                "inline-flex h-8 min-w-10 items-center justify-end tabular-nums",
+                "inline-flex h-8 w-10 items-center justify-center tabular-nums",
                 player.muted && "line-through opacity-60",
               )}
               title={player.muted ? "Unmute (M key)" : "Mute (M key)"}
