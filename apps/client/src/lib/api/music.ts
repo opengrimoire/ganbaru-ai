@@ -43,6 +43,10 @@ export async function registerEmbeddedArtwork(path: string): Promise<string | nu
   return invoke("music_register_embedded_artwork", { path });
 }
 
+export async function revealLocalFile(path: string): Promise<void> {
+  await invoke("music_reveal_local_file", { path });
+}
+
 export async function getYouTubeHostUrl(): Promise<string> {
   return invoke("music_youtube_host_url");
 }

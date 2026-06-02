@@ -18,6 +18,7 @@
   import VolumeX from "@lucide/svelte/icons/volume-x";
   import CalendarScrollbar from "$lib/components/calendar/CalendarScrollbar.svelte";
   import MusicPlaylistBuilderView from "$lib/components/music/MusicPlaylistBuilderView.svelte";
+  import { revealLocalFile } from "$lib/api/music";
   import { SPEED_PRESETS, clampRate, formatPlaybackTime, isSpeedPreset } from "$lib/music/playback";
   import { getMusicPlayer } from "$lib/stores/music-player.svelte";
   import { cn } from "$lib/utils";
@@ -27,6 +28,7 @@
 
   type MusicPage = "player" | "playlist-builder";
 
+  let musicHeader = $state<HTMLElement | null>(null);
   let mediaSurface = $state<HTMLElement | null>(null);
   let playlistScrollContainer = $state<HTMLElement | undefined>();
   let speedMenuRoot = $state<HTMLElement | null>(null);
@@ -46,6 +48,7 @@
   let lastPlaylistAutoScrollIndex = -1;
   let lastPlaylistAutoScrollIdentity: string | null = null;
   let playlistScrollRequestId = 0;
+  let mediaTitleMeasuredCenterPx = $state<number | null>(null);
 
   const mediaSurfaceFullscreenEvent = "ganbaru-ai-music-media-surface-fullscreen";
   const volumeMax = $derived(player.volumeMax);
@@ -62,6 +65,9 @@
       )
       : "",
   );
+  const mediaTitleLeft = $derived(
+    playlistVisible && mediaTitleMeasuredCenterPx !== null ? `${mediaTitleMeasuredCenterPx}px` : "50%",
+  );
   const speedShortcutStep = 0.25;
   const musicIconSize = 14;
   const musicIconStrokeWidth = 1.5;
@@ -70,6 +76,59 @@
     player.setSurfaceElement(mediaSurface);
     return () => {
       player.setSurfaceElement(null);
+    };
+  });
+
+  $effect(() => {
+    const header = musicHeader;
+    const surface = mediaSurface;
+    const playlistLayoutVisible = playlistVisible;
+
+    if (typeof window === "undefined" || typeof ResizeObserver === "undefined" || !header || !surface) {
+      mediaTitleMeasuredCenterPx = null;
+      return;
+    }
+
+    let animationFrameId: number | null = null;
+
+    const updateTitleCenter = () => {
+      const headerRect = header.getBoundingClientRect();
+      const surfaceRect = surface.getBoundingClientRect();
+      if (headerRect.width <= 0 || surfaceRect.width <= 0) {
+        mediaTitleMeasuredCenterPx = null;
+        return;
+      }
+      mediaTitleMeasuredCenterPx = Math.round(surfaceRect.left - headerRect.left + surfaceRect.width / 2);
+    };
+
+    const requestTitleCenterUpdate = () => {
+      if (animationFrameId !== null) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+      animationFrameId = window.requestAnimationFrame(() => {
+        animationFrameId = null;
+        updateTitleCenter();
+      });
+    };
+
+    updateTitleCenter();
+    void tick().then(() => {
+      if (playlistLayoutVisible === playlistVisible) {
+        requestTitleCenterUpdate();
+      }
+    });
+
+    const observer = new ResizeObserver(requestTitleCenterUpdate);
+    observer.observe(header);
+    observer.observe(surface);
+    window.addEventListener("resize", requestTitleCenterUpdate);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", requestTitleCenterUpdate);
+      if (animationFrameId !== null) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
     };
   });
 
@@ -142,6 +201,16 @@
 
   function closePlaylistBuilder(): void {
     musicPage = "player";
+  }
+
+  async function openCurrentLocalFileLocation(): Promise<void> {
+    const source = player.currentSource;
+    if (source?.kind !== "local-file") return;
+    try {
+      await revealLocalFile(source.path);
+    } catch (error) {
+      player.playerError = error instanceof Error ? error.message : String(error);
+    }
   }
 
   function digitSeekShortcut(event: KeyboardEvent): number | null {
@@ -417,12 +486,12 @@
   <MusicPlaylistBuilderView onBack={closePlaylistBuilder} />
 {:else}
 <section
-    class="flex h-full min-h-0 flex-col text-foreground"
+    class="flex h-full min-h-0 select-none flex-col text-foreground"
     style="background-color: var(--cal-bg);"
     use:releaseClickedButtonFocusAction
     onwheel={(event) => player.handleVolumeWheel(event)}
   >
-  <div class="relative flex h-(--cal-header-row-h) shrink-0 items-center gap-3 px-2">
+  <div bind:this={musicHeader} class="relative flex h-(--cal-header-row-h) shrink-0 items-center gap-3 px-2">
     <div class="relative z-10 flex min-w-0 shrink-0 items-center gap-2">
       <button
         type="button"
@@ -436,12 +505,24 @@
     </div>
     <div
       class="music-header-title absolute top-1/2 z-0 min-w-0 -translate-x-1/2 -translate-y-1/2 text-center text-[0.8rem] font-medium text-foreground"
-      data-playlist-visible={playlistVisible}
+      style={`left: ${mediaTitleLeft};`}
     >
       {#if topBarMediaTitle}
-        <span class="block truncate" title={player.currentSource ? player.loadedTitle : undefined}>
-          {topBarMediaTitle}
-        </span>
+        {#if player.currentSource?.kind === "local-file"}
+          <button
+            type="button"
+            onclick={() => { void openCurrentLocalFileLocation(); }}
+            class="block w-full truncate text-center transition-colors hover:text-accent-foreground"
+            title={`Show file location: ${player.loadedTitle}`}
+            aria-label="Show current file location"
+          >
+            {topBarMediaTitle}
+          </button>
+        {:else}
+          <span class="block w-full truncate text-center" title={player.currentSource ? player.loadedTitle : undefined}>
+            {topBarMediaTitle}
+          </span>
+        {/if}
       {/if}
     </div>
     <form
@@ -454,7 +535,7 @@
         <input
           id="music-source"
           bind:value={player.sourceInput}
-          class="min-w-0 flex-1 bg-transparent text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground"
+          class="min-w-0 flex-1 select-text bg-transparent text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground"
           placeholder="YouTube link"
           autocomplete="off"
           spellcheck="false"
@@ -840,7 +921,7 @@
                       min="0.25"
                       max="2"
                       step="0.05"
-                      class="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                      class="h-8 min-w-0 flex-1 select-text rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                       aria-label="Custom playback speed"
                     />
                     <button
@@ -875,14 +956,7 @@
 
 <style>
   .music-header-title {
-    left: 50%;
     width: clamp(3rem, 22vw, 16rem);
-  }
-
-  @media (min-width: 861px) {
-    .music-header-title[data-playlist-visible="true"] {
-      left: calc((100% - 20rem) / 2);
-    }
   }
 
   .music-source-field {

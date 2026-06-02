@@ -6,6 +6,7 @@ use std::{
     io::{Read, Seek, SeekFrom, Write},
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
+    process::Stdio,
     sync::{Arc, Mutex},
     thread,
     time::{SystemTime, UNIX_EPOCH},
@@ -244,6 +245,13 @@ pub fn music_register_embedded_artwork(
 }
 
 #[tauri::command]
+pub fn music_reveal_local_file(path: String) -> Result<(), String> {
+    let path = PathBuf::from(path);
+    require_absolute_file(&path)?;
+    reveal_local_file(&path)
+}
+
+#[tauri::command]
 pub fn music_youtube_host_url(state: State<'_, MusicHostState>) -> String {
     state.youtube_url.clone()
 }
@@ -331,6 +339,45 @@ fn require_absolute_file(path: &Path) -> Result<(), String> {
     } else {
         Err("selected media path must be a file".to_string())
     }
+}
+
+#[cfg(target_os = "linux")]
+fn reveal_local_file(path: &Path) -> Result<(), String> {
+    let folder = path
+        .parent()
+        .ok_or_else(|| "media file has no containing folder".to_string())?;
+    spawn_file_manager_command("xdg-open", [folder.as_os_str()])
+}
+
+#[cfg(target_os = "macos")]
+fn reveal_local_file(path: &Path) -> Result<(), String> {
+    spawn_file_manager_command("open", [std::ffi::OsStr::new("-R"), path.as_os_str()])
+}
+
+#[cfg(windows)]
+fn reveal_local_file(path: &Path) -> Result<(), String> {
+    let selection = format!("/select,{}", path.display());
+    spawn_file_manager_command("explorer.exe", [std::ffi::OsStr::new(&selection)])
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+fn reveal_local_file(_path: &Path) -> Result<(), String> {
+    Err("opening media file locations is not implemented for this platform".to_string())
+}
+
+fn spawn_file_manager_command<I, S>(program: &str, args: I) -> Result<(), String>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<std::ffi::OsStr>,
+{
+    std::process::Command::new(program)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("open media file location: {e}"))
 }
 
 fn media_file_id(path: &Path) -> String {

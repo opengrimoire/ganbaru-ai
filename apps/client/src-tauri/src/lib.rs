@@ -722,6 +722,7 @@ pub fn run() {
             music::music_pick_media_folder,
             music::music_register_embedded_artwork,
             music::music_register_media_file,
+            music::music_reveal_local_file,
             music::music_save_playback_state,
             music::music_youtube_host_url,
             media_controls::update_media_controls,
