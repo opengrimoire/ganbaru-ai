@@ -55,6 +55,34 @@ fn apply_linux_notification_hints(
     }
 }
 
+fn show_notification_with_linux_action<F>(
+    notification: &Notification,
+    error_context: &str,
+    on_action: F,
+) where
+    F: FnOnce(&str),
+{
+    #[cfg(target_os = "linux")]
+    {
+        match notification.show() {
+            Ok(handle) => {
+                handle.wait_for_action(on_action);
+            }
+            Err(e) => {
+                eprintln!("{error_context}: {e}");
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = on_action;
+        if let Err(e) = notification.show() {
+            eprintln!("{error_context}: {e}");
+        }
+    }
+}
+
 #[derive(Clone, Serialize)]
 struct AddTimePayload {
     seconds: u32,
@@ -377,6 +405,7 @@ fn fixed_command_output(program: &str, args: &[&str], max_bytes: usize) -> Resul
     String::from_utf8(bytes).map_err(|e| e.to_string())
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn fixed_command_status(program: &str, args: &[&str]) -> bool {
     Command::new(program)
         .args(args)
@@ -803,6 +832,7 @@ fn screensaver_inhibit() -> Option<u32> {
 fn screensaver_uninhibit(_cookie: u32) {}
 
 const POMODORO_OVERLAY_MAIN_LABEL: &str = "pomodoro-overlay-main";
+#[cfg(target_os = "linux")]
 const POMODORO_OVERLAY_BLOCKER_ACTION_EVENT: &str = "pomodoro-overlay-blocker-action";
 const POMODORO_OVERLAY_STATE_CHANGED_EVENT: &str = "pomodoro-overlay-state-changed";
 #[cfg(not(target_os = "linux"))]
@@ -858,6 +888,7 @@ struct PomodoroOverlayStateChangedPayload {
     state: String,
 }
 
+#[cfg(target_os = "linux")]
 #[derive(Clone, Serialize)]
 struct PomodoroOverlayBlockerActionPayload {
     kind: String,
@@ -2029,26 +2060,18 @@ pub fn show_event_notification(
             .action("open", action_label)
             .timeout(15_000);
         apply_linux_notification_hints(&mut notification, Some("calendar"), true, true);
-        let result = notification.show();
-
-        match result {
-            #[cfg(target_os = "linux")]
-            Ok(handle) => {
-                handle.wait_for_action(|action| {
-                    if action == "open" || action == "default" {
-                        if opens_calendar {
-                            let _ = app.emit("calendar-notification-open", ());
-                        }
-                        focus_main_window(app.clone());
+        show_notification_with_linux_action(
+            &notification,
+            "Failed to show event notification",
+            |action| {
+                if action == "open" || action == "default" {
+                    if opens_calendar {
+                        let _ = app.emit("calendar-notification-open", ());
                     }
-                });
-            }
-            #[cfg(not(target_os = "linux"))]
-            Ok(()) => {}
-            Err(e) => {
-                eprintln!("Failed to show event notification: {e}");
-            }
-        }
+                    focus_main_window(app.clone());
+                }
+            },
+        );
     });
 }
 
@@ -2069,23 +2092,15 @@ pub fn show_benchmark_notification(
             .timeout(10_000)
             .id(9002);
         apply_linux_notification_hints(&mut notification, None, false, true);
-        let result = notification.show();
-
-        match result {
-            #[cfg(target_os = "linux")]
-            Ok(handle) => {
-                handle.wait_for_action(|action| {
-                    if action == "show_summary" || action == "default" {
-                        focus_main_window(app.clone());
-                    }
-                });
-            }
-            #[cfg(not(target_os = "linux"))]
-            Ok(()) => {}
-            Err(e) => {
-                eprintln!("Failed to show benchmark notification: {e}");
-            }
-        }
+        show_notification_with_linux_action(
+            &notification,
+            "Failed to show benchmark notification",
+            |action| {
+                if action == "show_summary" || action == "default" {
+                    focus_main_window(app.clone());
+                }
+            },
+        );
     });
 }
 
@@ -2121,24 +2136,16 @@ pub fn show_doomscrolling_desktop_block_notification(
             .action("default", "Open desktop apps")
             .timeout(10_000);
         apply_linux_notification_hints(&mut notification, Some("device"), true, true);
-        let result = notification.show();
-
-        match result {
-            #[cfg(target_os = "linux")]
-            Ok(handle) => {
-                handle.wait_for_action(|action| {
-                    if action == "default" {
-                        let _ = app.emit("doomscrolling-open-desktop-settings", ());
-                        focus_main_window(app.clone());
-                    }
-                });
-            }
-            #[cfg(not(target_os = "linux"))]
-            Ok(()) => {}
-            Err(e) => {
-                eprintln!("Failed to show doomscrolling desktop block notification: {e}");
-            }
-        }
+        show_notification_with_linux_action(
+            &notification,
+            "Failed to show doomscrolling desktop block notification",
+            |action| {
+                if action == "default" {
+                    let _ = app.emit("doomscrolling-open-desktop-settings", ());
+                    focus_main_window(app.clone());
+                }
+            },
+        );
     });
 }
 
@@ -2188,24 +2195,16 @@ pub fn show_doomscrolling_desktop_limit_notification(
             .action("default", "Open limits")
             .timeout(10_000);
         apply_linux_notification_hints(&mut notification, Some("device"), true, true);
-        let result = notification.show();
-
-        match result {
-            #[cfg(target_os = "linux")]
-            Ok(handle) => {
-                handle.wait_for_action(|action| {
-                    if action == "default" {
-                        let _ = app.emit("doomscrolling-open-limits-settings", ());
-                        focus_main_window(app.clone());
-                    }
-                });
-            }
-            #[cfg(not(target_os = "linux"))]
-            Ok(()) => {}
-            Err(e) => {
-                eprintln!("Failed to show doomscrolling desktop limit notification: {e}");
-            }
-        }
+        show_notification_with_linux_action(
+            &notification,
+            "Failed to show doomscrolling desktop limit notification",
+            |action| {
+                if action == "default" {
+                    let _ = app.emit("doomscrolling-open-limits-settings", ());
+                    focus_main_window(app.clone());
+                }
+            },
+        );
     });
 }
 
@@ -2493,23 +2492,15 @@ pub fn show_pomodoro_notification(
         }
         notification.timeout(timeout_ms as i32).id(9001);
         apply_linux_notification_hints(&mut notification, None, false, true);
-        let result = notification.show();
-
-        match result {
-            #[cfg(target_os = "linux")]
-            Ok(handle) => {
-                handle.wait_for_action(|action| {
-                    if action == "add_time" {
-                        let _ = app.emit("pomodoro-add-time", AddTimePayload { seconds: 180 });
-                    }
-                });
-            }
-            #[cfg(not(target_os = "linux"))]
-            Ok(()) => {}
-            Err(e) => {
-                eprintln!("Failed to show notification: {e}");
-            }
-        }
+        show_notification_with_linux_action(
+            &notification,
+            "Failed to show notification",
+            |action| {
+                if action == "add_time" {
+                    let _ = app.emit("pomodoro-add-time", AddTimePayload { seconds: 180 });
+                }
+            },
+        );
     });
 }
 
@@ -2527,29 +2518,21 @@ pub fn show_paused_focus_notification(app: tauri::AppHandle, app_sounds: State<'
             .timeout(15_000)
             .id(9003);
         apply_linux_notification_hints(&mut notification, Some("reminder"), true, true);
-        let result = notification.show();
-
-        match result {
-            #[cfg(target_os = "linux")]
-            Ok(handle) => {
-                handle.wait_for_action(|action| match action {
-                    "resume" => {
-                        let _ = app.emit("pomodoro-paused-focus-resume", ());
-                    }
-                    "stop_asking" => {
-                        let _ = app.emit("pomodoro-paused-focus-stop-asking", ());
-                    }
-                    "default" => {
-                        focus_main_window(app.clone());
-                    }
-                    _ => {}
-                });
-            }
-            #[cfg(not(target_os = "linux"))]
-            Ok(()) => {}
-            Err(e) => {
-                eprintln!("Failed to show paused focus notification: {e}");
-            }
-        }
+        show_notification_with_linux_action(
+            &notification,
+            "Failed to show paused focus notification",
+            |action| match action {
+                "resume" => {
+                    let _ = app.emit("pomodoro-paused-focus-resume", ());
+                }
+                "stop_asking" => {
+                    let _ = app.emit("pomodoro-paused-focus-stop-asking", ());
+                }
+                "default" => {
+                    focus_main_window(app.clone());
+                }
+                _ => {}
+            },
+        );
     });
 }
