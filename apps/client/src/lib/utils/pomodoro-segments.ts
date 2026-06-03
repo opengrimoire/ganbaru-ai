@@ -1,35 +1,25 @@
 import type {
   PomodoroConfig,
   PlannedSegment,
-  AccentBarBand,
   PauseInterval,
   PersistedSegment,
   TimelineBand,
   SegmentPhase,
   SegmentStatus,
 } from "$lib/components/calendar/types";
+import { BREAK_OVERTIME_RAIL_GRACE_SECONDS } from "$lib/stores/pomodoro-machine";
 
 /**
  * Compute the planned sequence of focus and break segments for a pomodoro
  * session within a given event duration.
  *
- * Parameters
- * ----------
- * config : PomodoroConfig
- *     Pomodoro timing settings.
- * eventDurationMinutes : number
- *     Total duration of the calendar event in minutes.
- * initialFocusOffsetMinutes : number
- *     Focus time already accumulated from a preceding event (inheritance).
+ * @param config - Pomodoro timing settings.
+ * @param eventDurationMinutes - Total duration of the calendar event in minutes.
+ * @param initialFocusOffsetMinutes - Focus time already accumulated from a preceding event (inheritance).
  *     If >= focusDuration, the event starts with a break instead of focus.
- * initialCycleNumber : number
- *     Cycle number to start at (from a preceding event's trailing cycle).
+ * @param initialCycleNumber - Cycle number to start at (from a preceding event's trailing cycle).
  *     Default 1. If >= pomodoroCount, the first break will be a long break.
- *
- * Returns
- * -------
- * PlannedSegment[]
- *     Ordered list of segments with minute offsets from the event start.
+ * @returns Ordered list of segments with minute offsets from the event start.
  */
 export function computePlannedSegments(
   config: PomodoroConfig,
@@ -160,19 +150,10 @@ export function computeTrailingCycleNumber(segments: PlannedSegment[]): number {
  * Convert planned segments into accent bar bands for rendering.
  * Only break segments produce bands (focus is the default accent fill).
  *
- * Parameters
- * ----------
- * segments : PlannedSegment[]
- *     Output from computePlannedSegments.
- * eventDurationMinutes : number
- *     Total duration of the calendar event in minutes.
- * status : SegmentStatus
- *     Status to assign to all bands (default "planned").
- *
- * Returns
- * -------
- * AccentBarBand[]
- *     Bands representing break positions within the accent bar.
+ * @param segments - Output from computePlannedSegments.
+ * @param eventDurationMinutes - Total duration of the calendar event in minutes.
+ * @param status - Status to assign to all bands (default "planned").
+ * @returns Bands representing break positions within the accent bar.
  */
 export interface TimelineEvent {
   id: string;
@@ -187,6 +168,9 @@ export interface ActivePomodoroState {
   activeBlockId: string | null;
   segments: PersistedSegment[];
   remainingSeconds: number;
+  phaseElapsedSeconds?: number;
+  phaseWorkDurationSeconds?: number;
+  currentConfig?: PomodoroConfig;
   breakOvertimeSeconds: number;
 }
 
@@ -205,7 +189,7 @@ export function computeDayTimelineBands(
   activeState: ActivePomodoroState | null,
   dayStartMs: number,
   nowMs: number,
-  persistedSegments?: Map<string, PersistedSegment[]>,
+  persistedSegments?: ReadonlyMap<string, PersistedSegment[]>,
 ): TimelineBand[] {
   if (events.length === 0) return [];
 
@@ -216,6 +200,12 @@ export function computeDayTimelineBands(
   const sorted = [...nonContained].sort((a, b) =>
     a.startMinute !== b.startMinute ? a.startMinute - b.startMinute : a.startMs - b.startMs,
   );
+
+  // Find the active event's range so planned bands from overlapping events
+  // are suppressed (the active session's bands take visual priority).
+  const activeEvRange = activeState?.activeBlockId
+    ? sorted.find((ev) => ev.id === activeState.activeBlockId)
+    : null;
 
   const bands: TimelineBand[] = [];
   let cursor = -Infinity; // tracks where the previous event's coverage ends (minute-of-day)
@@ -248,10 +238,20 @@ export function computeDayTimelineBands(
     }
 
     if (isActive && activeState && activeState.segments.length > 0) {
+      const activeRunIds = new Set(activeState.segments.map((segment) => segment.runId));
+      const previousRunSegments = (persistedSegments?.get(ev.id) ?? [])
+        .filter((segment) => !activeRunIds.has(segment.runId));
+      if (previousRunSegments.length > 0) {
+        bands.push(...projectPersistedSegments(previousRunSegments, ev, dayStartMs));
+      }
+
       // Active event: project both focus fills and break bands from persisted segments
       const activeBands = projectActiveSegments(
         activeState.segments,
         activeState.remainingSeconds,
+        activeState.phaseElapsedSeconds,
+        activeState.phaseWorkDurationSeconds,
+        activeState.currentConfig,
         ev,
         dayStartMs,
         nowMs,
@@ -260,9 +260,10 @@ export function computeDayTimelineBands(
     } else {
       // Check for persisted segments (past completed sessions)
       const evPersistedSegs = persistedSegments?.get(ev.id);
-      if (evPersistedSegs && evPersistedSegs.length > 0) {
+      const hasPersistedSegments = !!evPersistedSegs && evPersistedSegs.length > 0;
+      if (hasPersistedSegments) {
         // Output focus fill and break bands from persisted segments
-        const pastBands = projectPersistedSegments(evPersistedSegs, ev, dayStartMs);
+        const pastBands = projectPersistedSegments(evPersistedSegs ?? [], ev, dayStartMs);
         bands.push(...pastBands);
       }
 
@@ -278,22 +279,21 @@ export function computeDayTimelineBands(
         continue;
       }
 
-      // Compute remaining planned bands from now (or effectiveStart)
+      // Compute remaining planned bands from now or effectiveStart. Events
+      // with persisted segments keep their original rhythm. Untracked events
+      // that are already in progress preview from now, matching the schedule
+      // created when the user starts Pomodoro work after saving.
       const evStartMs = dayStartMs + effectiveStart * 60000;
       const plannedStartMs = Math.max(nowMs, evStartMs);
       const plannedStartMinute = (plannedStartMs - dayStartMs) / 60000;
       const remainingDuration = ev.endMinute - plannedStartMinute;
+      const untrackedInProgress = !hasPersistedSegments && nowMs > evStartMs && nowMs < evEndMs;
 
       if (remainingDuration > 0) {
-        // If starting partway through and the event had actual work, adjust
-        // inheritance for elapsed time. Without persisted segments no focus
-        // actually ran, so breaks compute fresh from now (avoids a flash
-        // between event creation and session start).
-        let adjustedFocus = inheritedFocus;
-        let adjustedCycle = inheritedCycle;
+        let adjustedFocus = untrackedInProgress ? 0 : inheritedFocus;
+        let adjustedCycle = untrackedInProgress ? 1 : inheritedCycle;
         const elapsedSinceEffective = plannedStartMinute - effectiveStart;
-        const hasPersistedWork = evPersistedSegs && evPersistedSegs.length > 0;
-        if (elapsedSinceEffective > 0 && hasPersistedWork) {
+        if (elapsedSinceEffective > 0 && !untrackedInProgress) {
           const elapsedSegments = computePlannedSegments(ev.config, elapsedSinceEffective, inheritedFocus, inheritedCycle);
           adjustedFocus = computeTrailingFocusMinutes(elapsedSegments);
           adjustedCycle = computeTrailingCycleNumber(elapsedSegments);
@@ -302,8 +302,15 @@ export function computeDayTimelineBands(
         const planned = computePlannedSegments(ev.config, remainingDuration, adjustedFocus, adjustedCycle);
         for (const seg of planned) {
           if (seg.phase === "focus") continue;
+          const bandTop = plannedStartMinute + seg.startOffsetMinutes;
+          const bandEnd = bandTop + (seg.endOffsetMinutes - seg.startOffsetMinutes);
+          // Skip planned bands that overlap with the active event's range
+          // (the active session's bands take visual priority on the rail).
+          if (activeEvRange && !isActive && bandTop < activeEvRange.endMinute && bandEnd > activeEvRange.startMinute) {
+            continue;
+          }
           bands.push({
-            topMinute: plannedStartMinute + seg.startOffsetMinutes,
+            topMinute: bandTop,
             heightMinutes: seg.endOffsetMinutes - seg.startOffsetMinutes,
             phase: seg.phase,
             status: "planned",
@@ -312,9 +319,21 @@ export function computeDayTimelineBands(
       }
     }
 
-    // Compute trailing state for inheritance to next event (using full event duration)
-    const fullDurationFromStart = ev.endMinute - effectiveStart;
-    const fullSegments = computePlannedSegments(ev.config, fullDurationFromStart, inheritedFocus, inheritedCycle);
+    const evEndMsForTrailing = dayStartMs + ev.endMinute * 60000;
+    const evStartMsForTrailing = dayStartMs + effectiveStart * 60000;
+    const isUntrackedInProgressForTrailing = !isActive
+      && !persistedSegments?.get(ev.id)?.length
+      && nowMs > evStartMsForTrailing
+      && nowMs < evEndMsForTrailing;
+    const trailingStartMinute = isUntrackedInProgressForTrailing
+      ? (Math.max(nowMs, evStartMsForTrailing) - dayStartMs) / 60000
+      : effectiveStart;
+    const trailingFocus = isUntrackedInProgressForTrailing ? 0 : inheritedFocus;
+    const trailingCycle = isUntrackedInProgressForTrailing ? 1 : inheritedCycle;
+
+    // Compute trailing state for inheritance to next event.
+    const fullDurationFromStart = ev.endMinute - trailingStartMinute;
+    const fullSegments = computePlannedSegments(ev.config, fullDurationFromStart, trailingFocus, trailingCycle);
     inheritedFocus = computeTrailingFocusMinutes(fullSegments);
     inheritedCycle = computeTrailingCycleNumber(fullSegments);
     cursor = Math.max(cursor, ev.endMinute);
@@ -346,6 +365,51 @@ function filterContained(events: TimelineEvent[]): TimelineEvent[] {
   });
 }
 
+function samePomodoroConfig(a: PomodoroConfig | undefined, b: PomodoroConfig | undefined): boolean {
+  return !!a && !!b
+    && a.focusDurationMinutes === b.focusDurationMinutes
+    && a.shortBreakMinutes === b.shortBreakMinutes
+    && a.longBreakMinutes === b.longBreakMinutes
+    && a.pomodoroCount === b.pomodoroCount;
+}
+
+function phaseDurationMinutes(phase: SegmentPhase, config: PomodoroConfig): number {
+  if (phase === "focus") return config.focusDurationMinutes;
+  if (phase === "long_break") return config.longBreakMinutes;
+  return config.shortBreakMinutes;
+}
+
+function cappedBreakBandEndMs(segment: PersistedSegment, endMs: number): number {
+  if (segment.phase === "focus") return endMs;
+  const plannedEndMs = new Date(segment.plannedEnd).getTime();
+  return Math.min(endMs, plannedEndMs + BREAK_OVERTIME_RAIL_GRACE_SECONDS * 1000);
+}
+
+function projectedActiveSegmentEndMs(
+  activeSegment: PersistedSegment,
+  remainingSeconds: number,
+  ev: TimelineEvent,
+  nowMs: number,
+  activeConfig?: PomodoroConfig,
+  phaseElapsedSeconds?: number,
+  phaseWorkDurationSeconds?: number,
+): number {
+  const storedEndMs = nowMs + remainingSeconds * 1000;
+  const sameConfig = samePomodoroConfig(activeConfig, ev.config);
+  if (sameConfig && phaseWorkDurationSeconds === undefined) return storedEndMs;
+
+  const configuredDurationSeconds = phaseDurationMinutes(activeSegment.phase, ev.config) * 60;
+  const targetDurationSeconds = sameConfig
+    ? Math.max(0, phaseWorkDurationSeconds ?? configuredDurationSeconds)
+    : configuredDurationSeconds;
+  const elapsedSeconds = phaseElapsedSeconds ?? Math.max(
+    0,
+    phaseDurationMinutes(activeSegment.phase, activeConfig ?? ev.config) * 60 - remainingSeconds,
+  );
+  const projectedRemainingSeconds = Math.max(0, targetDurationSeconds - elapsedSeconds);
+  return Math.min(ev.endMs, nowMs + projectedRemainingSeconds * 1000);
+}
+
 /**
  * Split a time range [startMs, endMs] into sub-ranges excluding pause intervals.
  * Each returned range is a filled period where focus was actually running.
@@ -360,9 +424,9 @@ function splitAroundPauses(
   const ranges: Array<{ start: number; end: number }> = [];
   let cursor = startMs;
 
-  for (const [pauseStart, pauseEnd] of pauseLog) {
-    const pStartMs = new Date(pauseStart).getTime();
-    const pEndMs = pauseEnd ? new Date(pauseEnd).getTime() : endMs;
+  for (const pause of pauseLog) {
+    const pStartMs = new Date(pause.startedAt).getTime();
+    const pEndMs = pause.endedAt ? new Date(pause.endedAt).getTime() : endMs;
 
     if (pStartMs > cursor) {
       ranges.push({ start: cursor, end: Math.min(pStartMs, endMs) });
@@ -392,9 +456,12 @@ function emitFocusFillBands(
 ): void {
   const ranges = splitAroundPauses(startMs, endMs, pauseLog);
   for (const r of ranges) {
-    const topMinute = (r.start - dayStartMs) / 60000;
-    const heightMinutes = (r.end - r.start) / 60000;
-    if (heightMinutes > 0 && topMinute + heightMinutes > ev.startMinute && topMinute < ev.endMinute) {
+    const rawTopMinute = (r.start - dayStartMs) / 60000;
+    const rawEndMinute = (r.end - dayStartMs) / 60000;
+    const topMinute = Math.max(rawTopMinute, ev.startMinute);
+    const endMinute = Math.min(rawEndMinute, ev.endMinute);
+    const heightMinutes = endMinute - topMinute;
+    if (heightMinutes > 0) {
       bands.push({ topMinute, heightMinutes, phase: "focus", status });
     }
   }
@@ -407,14 +474,27 @@ function emitFocusFillBands(
 function projectActiveSegments(
   segments: PersistedSegment[],
   remainingSeconds: number,
+  phaseElapsedSeconds: number | undefined,
+  phaseWorkDurationSeconds: number | undefined,
+  activeConfig: PomodoroConfig | undefined,
   ev: TimelineEvent,
   dayStartMs: number,
   nowMs: number,
 ): TimelineBand[] {
   const bands: TimelineBand[] = [];
   const activeIdx = segments.findIndex((s) => s.status === "active");
-  const currentEndMs = nowMs + remainingSeconds * 1000;
-  let cursor = currentEndMs;
+  const activeSegment = activeIdx >= 0 ? segments[activeIdx] : null;
+  const currentEndMs = activeSegment
+    ? projectedActiveSegmentEndMs(
+        activeSegment,
+        remainingSeconds,
+        ev,
+        nowMs,
+        activeConfig,
+        phaseElapsedSeconds,
+        phaseWorkDurationSeconds,
+      )
+    : nowMs + remainingSeconds * 1000;
 
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i];
@@ -422,7 +502,8 @@ function projectActiveSegments(
 
     if (seg.status === "completed" || seg.status === "skipped" || seg.status === "interrupted") {
       const startMs = new Date(seg.actualStart ?? seg.plannedStart).getTime();
-      const endMs = new Date(seg.actualEnd ?? seg.plannedEnd).getTime();
+      const rawEndMs = new Date(seg.actualEnd ?? seg.plannedEnd).getTime();
+      const endMs = cappedBreakBandEndMs(seg, rawEndMs);
       if (seg.phase === "focus") {
         emitFocusFillBands(startMs, endMs, seg.pauseLog, dayStartMs, ev, seg.status, bands);
       } else {
@@ -445,28 +526,59 @@ function projectActiveSegments(
       } else {
         // Active break
         const startMs = new Date(seg.actualStart!).getTime();
+        const endMs = cappedBreakBandEndMs(seg, currentEndMs);
         const topMinute = (startMs - dayStartMs) / 60000;
-        const heightMinutes = (cursor - startMs) / 60000;
+        const heightMinutes = (endMs - startMs) / 60000;
         if (heightMinutes > 0 && topMinute + heightMinutes > ev.startMinute && topMinute < ev.endMinute) {
           bands.push({ topMinute, heightMinutes, phase: seg.phase, status: "active" });
         }
       }
-    } else if (i > activeIdx || activeIdx === -1) {
-      // Future planned segments: only output breaks (no focus fill for planned)
-      if (seg.phase === "focus") {
-        cursor += plannedDurMs;
-        continue;
-      }
-      const topMinute = (cursor - dayStartMs) / 60000;
-      const heightMinutes = plannedDurMs / 60000;
-      if (topMinute + heightMinutes > ev.startMinute && topMinute < ev.endMinute) {
-        bands.push({ topMinute, heightMinutes, phase: seg.phase, status: seg.status });
-      }
-      cursor += plannedDurMs;
     }
   }
 
+  if (activeSegment) {
+    emitProjectedFutureBreakBands(activeSegment, currentEndMs, ev, dayStartMs, bands);
+  }
+
   return bands;
+}
+
+function emitProjectedFutureBreakBands(
+  activeSegment: PersistedSegment,
+  currentEndMs: number,
+  ev: TimelineEvent,
+  dayStartMs: number,
+  bands: TimelineBand[],
+): void {
+  let cursor = currentEndMs;
+  let cycle = activeSegment.cycleNumber;
+  let nextIsFocus = activeSegment.phase !== "focus";
+
+  if (activeSegment.phase === "short_break" || activeSegment.phase === "long_break") {
+    cycle = activeSegment.phase === "long_break" ? 1 : activeSegment.cycleNumber + 1;
+  }
+
+  while (cursor < ev.endMs) {
+    if (nextIsFocus) {
+      cursor += ev.config.focusDurationMinutes * 60_000;
+      nextIsFocus = false;
+      continue;
+    }
+
+    const isLongBreak = cycle >= ev.config.pomodoroCount;
+    const breakPhase: SegmentPhase = isLongBreak ? "long_break" : "short_break";
+    const breakDurationMs = (isLongBreak ? ev.config.longBreakMinutes : ev.config.shortBreakMinutes) * 60_000;
+    const breakEnd = Math.min(cursor + breakDurationMs, ev.endMs);
+    const topMinute = (cursor - dayStartMs) / 60000;
+    const heightMinutes = (breakEnd - cursor) / 60000;
+    if (heightMinutes > 0 && topMinute + heightMinutes > ev.startMinute && topMinute < ev.endMinute) {
+      bands.push({ topMinute, heightMinutes, phase: breakPhase, status: "planned" });
+    }
+
+    cursor += breakDurationMs;
+    cycle = isLongBreak ? 1 : cycle + 1;
+    nextIsFocus = true;
+  }
 }
 
 /**
@@ -483,7 +595,8 @@ function projectPersistedSegments(
     if (seg.status === "planned") continue;
     if (!seg.actualStart) continue;
     const startMs = new Date(seg.actualStart).getTime();
-    const endMs = seg.actualEnd ? new Date(seg.actualEnd).getTime() : startMs;
+    const rawEndMs = seg.actualEnd ? new Date(seg.actualEnd).getTime() : startMs;
+    const endMs = cappedBreakBandEndMs(seg, rawEndMs);
     if (endMs <= startMs) continue;
     if (seg.phase === "focus") {
       emitFocusFillBands(startMs, endMs, seg.pauseLog, dayStartMs, ev, seg.status, bands);
@@ -496,54 +609,4 @@ function projectPersistedSegments(
     }
   }
   return bands;
-}
-
-/**
- * Compute the focus score for a completed session.
- *
- * Parameters
- * ----------
- * startMs : number
- *     Session start timestamp (ms).
- * endMs : number
- *     Session end timestamp (ms).
- * pauseLog : PauseInterval[]
- *     Array of [pauseStart, resumeOrNull] intervals.
- *
- * Returns
- * -------
- * number
- *     Ratio of actual focus time to total elapsed time (0.0 to 1.0).
- */
-export function computeFocusScore(
-  startMs: number,
-  endMs: number,
-  pauseLog: PauseInterval[],
-): number {
-  const totalMs = endMs - startMs;
-  if (totalMs <= 0) return 1.0;
-  let pauseMs = 0;
-  for (const [pStart, pEnd] of pauseLog) {
-    const ps = new Date(pStart).getTime();
-    const pe = pEnd ? new Date(pEnd).getTime() : endMs;
-    pauseMs += Math.max(0, Math.min(pe, endMs) - Math.max(ps, startMs));
-  }
-  return Math.round(Math.max(0, (totalMs - pauseMs) / totalMs) * 100) / 100;
-}
-
-export function segmentsToAccentBands(
-  segments: PlannedSegment[],
-  eventDurationMinutes: number,
-  status: SegmentStatus = "planned",
-): AccentBarBand[] {
-  if (eventDurationMinutes <= 0) return [];
-
-  return segments
-    .filter((s) => s.phase !== "focus")
-    .map((s) => ({
-      topFraction: s.startOffsetMinutes / eventDurationMinutes,
-      heightFraction: (s.endOffsetMinutes - s.startOffsetMinutes) / eventDurationMinutes,
-      phase: s.phase,
-      status,
-    }));
 }

@@ -1,35 +1,60 @@
 <script lang="ts">
   import type { CalendarEvent } from "./types";
-  import { getEventColor } from "./utils";
+  import {
+    getEventColor,
+    getEventStatusPatternClass,
+    getPastEventColor,
+    isEventSurfaceCancelled,
+  } from "./utils";
+  import { getPreferences } from "$lib/stores/preferences.svelte";
+  import { isThemeCalendarDark, type Theme } from "$lib/stores/themes";
+  import { getEventIndicatorState } from "./event-indicators";
   import Repeat from "@lucide/svelte/icons/repeat";
-  import Bell from "@lucide/svelte/icons/bell";
+  import Video from "@lucide/svelte/icons/video";
+  import MapPin from "@lucide/svelte/icons/map-pin";
+  import Users from "@lucide/svelte/icons/users";
 
   let {
     event,
-    isDark = false,
+    theme,
     editing = false,
     preview = false,
+    grabbing = false,
+    canDrag = true,
     isPast = false,
     onclick,
+    onprefetch,
     onpointerdown,
   }: {
     event: CalendarEvent;
-    isDark?: boolean;
+    theme: Theme;
     editing?: boolean;
     preview?: boolean;
+    grabbing?: boolean;
+    canDrag?: boolean;
     isPast?: boolean;
     onclick: (rect?: DOMRect) => void;
+    onprefetch?: () => void;
     onpointerdown?: (e: PointerEvent) => void;
   } = $props();
 
-  const colors = $derived(getEventColor(event.color, isDark));
-  const activeColors = $derived(colors);
+  const preferences = getPreferences();
+  const isDark = $derived(isThemeCalendarDark(theme));
+  const indicators = $derived(getEventIndicatorState(event));
+  const hasIcons = $derived(indicators.iconCount > 0);
+  const isCancelled = $derived(isEventSurfaceCancelled(event));
 
-  const hasRepeat = $derived(!!event.recurrence || !!event.recurringParentId);
-  const hasNotification = $derived(event.notifications && event.notifications.length > 0);
-  const isFree = $derived(event.transparency === "transparent");
-  const isTentative = $derived(event.status === "tentative");
-  const isCancelled = $derived(event.status === "cancelled");
+  const usePastColors = $derived(
+    preferences.calendarDimPastEvents && isPast && !editing && !preview && !grabbing,
+  );
+  const statusPatternClass = $derived(getEventStatusPatternClass(event));
+  const activeColors = $derived(
+    usePastColors
+      ? getPastEventColor(event.color, theme)
+      : getEventColor(event.color, theme)
+  );
+
+  const iconColor = $derived(`color-mix(in srgb, ${activeColors.text} 70%, ${activeColors.bg})`);
 
   let chipEl: HTMLDivElement | undefined = $state();
 
@@ -40,6 +65,7 @@
   }
 
   function handlePointerDown(e: PointerEvent) {
+    onprefetch?.();
     e.stopPropagation();
     onpointerdown?.(e);
   }
@@ -50,79 +76,88 @@
 <div
   bind:this={chipEl}
   data-event-id={event.id}
-  class="allday-chip relative min-w-0 flex-1 select-none truncate rounded px-1.5 text-[10px] leading-[20px]
-    {editing || preview ? 'chip-editing' : ''}
-    {isPast && !editing && !preview && !isDark ? 'chip-past-light' : ''}"
+  class="allday-chip relative min-w-0 flex-1 select-none truncate rounded px-1.5 text-[0.666667rem] leading-5 {statusPatternClass}
+    {editing || preview || grabbing ? 'chip-editing' : ''}"
   style="
     background-color: {activeColors.bg};
     color: {activeColors.text};
-    cursor: grab;
+    --event-bg: {activeColors.bg};
+    --outline-mix: {isDark ? 'white' : 'black'};
+    cursor: {canDrag ? 'grab' : 'pointer'};
     z-index: 1;
-    filter: {isPast && !editing && !preview ? (isDark ? 'brightness(0.7)' : 'saturate(0.8)') : 'none'};
-    opacity: {isCancelled ? 0.4 : isFree ? 0.55 : 1};
-    --glow-color: {isDark ? 'rgba(130, 160, 220, 0.3)' : 'rgba(0, 30, 80, 0.2)'};
-    {isFree ? 'border-left: 2px dashed currentColor;' : ''}
-    {isTentative ? 'background-image: repeating-linear-gradient(135deg, transparent, transparent 3px, color-mix(in srgb, currentColor 8%, transparent) 3px, color-mix(in srgb, currentColor 8%, transparent) 5px);' : ''}
+    filter: none;
   "
   onclick={handleClick}
+  onpointerenter={onprefetch}
   onpointerdown={handlePointerDown}
 >
-  {#if hasRepeat || hasNotification}
-    <span class="absolute right-1 top-[3px] flex items-center gap-0.5">
-      {#if hasRepeat}
-        <Repeat size={8} class="shrink-0 opacity-70" />
+  {#if hasIcons}
+    <span class="absolute right-1 top-0.75 z-10 flex items-center gap-0.5" style="color: {iconColor};">
+      {#if indicators.hasRepeat}
+        <Repeat size={8} class="shrink-0" />
       {/if}
-      {#if hasNotification}
-        <Bell size={8} class="shrink-0 opacity-70" />
+      {#if indicators.hasCallLink}
+        <Video size={8} class="shrink-0" />
+      {/if}
+      {#if indicators.hasLocation}
+        <MapPin size={8} class="shrink-0" />
+      {/if}
+      {#if indicators.hasGenericMeeting}
+        <Users size={8} class="shrink-0" />
       {/if}
     </span>
   {/if}
-  <span class="truncate" class:pr-5={hasRepeat || hasNotification} style={isCancelled ? 'text-decoration: line-through;' : ''}>
-    {#if event.title}{event.title}{:else}<span class="opacity-50">(No title)</span>{/if}
+  <span
+    class="relative z-10 truncate"
+    class:pr-5={indicators.iconCount > 0 && indicators.iconCount <= 2}
+    class:pr-8={indicators.iconCount > 2}
+    style={isCancelled ? 'text-decoration: line-through;' : ''}
+  >
+    {#if event.title}{event.title}{:else}(No title){/if}
   </span>
 </div>
 
 <style>
-  .allday-chip {
-    transition: box-shadow 180ms ease-out, filter 180ms ease-out;
-  }
-
-  /* Past-light overlay: always present, opacity-controlled for smooth fade */
   .allday-chip::before {
     content: "";
     position: absolute;
     inset: 0;
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: inherit;
+    z-index: 0;
     pointer-events: none;
-    z-index: 1;
-    opacity: 0;
-    transition: opacity 180ms ease-out;
   }
 
-  .chip-past-light::before {
-    opacity: 1;
+  .allday-chip.event-pattern-tentative::before {
+    background-image: linear-gradient(
+      90deg,
+      color-mix(in srgb, currentColor 10%, transparent) 0 1px,
+      transparent 1px
+    );
+    background-repeat: repeat;
+    background-size: 6px 100%;
   }
 
-  .allday-chip::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
-    border-radius: inherit;
-    pointer-events: none;
-    z-index: 3;
-    opacity: 0;
-    transition: opacity 180ms ease-out;
+  .allday-chip.event-pattern-declined::before {
+    background-image: linear-gradient(
+      135deg,
+      transparent 0 44%,
+      color-mix(in srgb, currentColor 11%, transparent) 44% 56%,
+      transparent 56%
+    );
+    background-repeat: repeat;
+    background-size: 7px 7px;
+  }
+
+  .allday-chip.event-pattern-pending::before {
+    background-image: radial-gradient(
+      circle,
+      color-mix(in srgb, currentColor 16%, transparent) 1px,
+      transparent 1.3px
+    );
+    background-size: 9px 9px;
   }
 
   .chip-editing {
-    box-shadow:
-      0 0 2px 0 var(--glow-color),
-      0 0 5px 0 color-mix(in srgb, var(--glow-color) 50%, transparent);
-  }
-
-  .chip-editing::after {
-    opacity: 0.7;
+    outline: 2px solid color-mix(in oklab, var(--event-bg) 65%, var(--outline-mix));
+    outline-offset: 0;
   }
 </style>

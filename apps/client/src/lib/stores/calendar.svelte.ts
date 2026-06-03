@@ -1,31 +1,253 @@
-import { execute, select } from "$lib/api/db";
+import { invoke } from "@tauri-apps/api/core";
+import { emit, listen } from "@tauri-apps/api/event";
+import { Temporal } from "@js-temporal/polyfill";
+import { dbUrl, ensureDbUrl } from "$lib/api/db";
 import type {
-  CalendarEvent, EventAlarm, EventAttendee, EventColor, EventOverride,
-  EventOrganizer, EventStatus, EventTransparency, EventVisibility,
-  GeoCoordinates, GuestPermissions, PomodoroConfig, RecurrenceConfig,
+  Calendar, CalendarEvent, EventAttendee, EventColor, EventOverride,
+  EventOrganizer, EventStatus, EventTransparency, EventVisibility, AttendeeStatus,
+  GeoCoordinates, GuestPermissions, IcalendarPreservationStatus, PomodoroConfig, RecurrenceConfig,
 } from "$lib/components/calendar/types";
-import { recurrenceToRrule } from "$lib/components/calendar/rrule";
+import type {
+  CalendarDeleteArchiveOperation,
+} from "$lib/components/calendar/delete-archive-plan";
+import {
+  moveDatedPatchToDate,
+  type RecurringCommitPlan,
+} from "$lib/components/calendar/recurrence-edit-plan";
+import {
+  occurrenceOnDate,
+  patchForTemplateAnchor,
+  templateEndForDate,
+  templateEventIdForDate,
+} from "$lib/components/calendar/recurrence-commit-helpers";
+import { recurrenceConfigsEqual, recurrenceToRrule } from "$lib/components/calendar/rrule";
 import { expandRecurring, parseYMD, fmtYMD } from "$lib/components/calendar/recurrence";
 import {
-  mapRow, mapAttendee, mapAlarm, mapOverride, toDbTime,
-  type DbCalendarEvent, type DbAttendee, type DbAlarm, type DbOverride,
+  buildExpansionIndex,
+  eventsInWindowFromIndex,
+  type ExpansionIndex,
+} from "$lib/components/calendar/calendar-index";
+import {
+  computeViewWindow, sanitizeCalendarTime, wallClockToUtcIso,
+} from "$lib/components/calendar/utils";
+import {
+  mapAlarm, mapAttendee, mapOverride, mapRow, mapWindowAttendee, safeJsonParse, toDbTime,
+  type DbAlarm, type DbAttendee, type DbCalendarEvent, type DbOverride, type DbWindowAttendee,
 } from "./map-row";
+import {
+  buildBulkImportPayload,
+  type CalendarImportSourceKind,
+  type CalendarBulkImportResult,
+} from "./calendar-bulk-import";
+import {
+  buildCalendarEventMutationTarget,
+  buildCalendarEventMutationTargetFromId,
+  type CalendarEventMutationTarget,
+} from "./calendar-mutations";
+import { sanitizeCalendarDescriptionHtml } from "$lib/calendar/description-sanitizer";
+import { calendarDisplayName } from "$lib/calendar/calendar-display";
+import { adjacentCalendarWindowRequests, calendarWindowCovers } from "./calendar-window-prefetch";
+import {
+  BoundedWindowCache,
+  LatestWindowLoadCoordinator,
+  type WindowLoadEvent,
+  type WindowLoadOutcome,
+} from "./window-load-coordinator";
+import type { IcsImportSummary, IcsPreservationPayload } from "$lib/calendar/ics/types";
+import { deriveIcalendarProjectionState } from "$lib/calendar/ics/projection-state";
+import { mark as perfMark } from "$lib/stores/perflog.svelte";
+import {
+  createWindowSyncEnvelope,
+  isForeignWindowSyncEnvelope,
+  isWindowSyncEnvelope,
+} from "$lib/window-sync";
 
 export { expandRecurring, parseYMD, fmtYMD };
 
-function nowLocal(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  const h = String(d.getHours()).padStart(2, "0");
-  const min = String(d.getMinutes()).padStart(2, "0");
-  const s = String(d.getSeconds()).padStart(2, "0");
-  return `${y}-${m}-${day} ${h}:${min}:${s}`;
+type CalendarUpdateField =
+  | { field: "title"; value: string }
+  | { field: "startTime"; value: string }
+  | { field: "endTime"; value: string }
+  | { field: "timezone"; value: string }
+  | { field: "calendarId"; value: string }
+  | { field: "color"; value: number | null }
+  | { field: "description"; value: string }
+  | { field: "rrule"; value: string | null }
+  | { field: "repeatUntil"; value: string | null }
+  | { field: "notifications"; value: string | null }
+  | { field: "exceptions"; value: string | null }
+  | { field: "allDay"; value: boolean }
+  | { field: "meetingEnabled"; value: boolean }
+  | { field: "location"; value: string }
+  | { field: "url"; value: string }
+  | { field: "transparency"; value: EventTransparency }
+  | { field: "status"; value: EventStatus }
+  | { field: "sourceUid"; value: string | null }
+  | { field: "visibility"; value: EventVisibility }
+  | { field: "priority"; value: number | null }
+  | { field: "categories"; value: string | null }
+  | { field: "geo"; value: string | null }
+  | { field: "sequence"; value: number }
+  | { field: "rdate"; value: string | null }
+  | { field: "extendedProperties"; value: string | null }
+  | { field: "organizer"; value: string | null }
+  | { field: "localRsvpStatus"; value: AttendeeStatus | null }
+  | {
+      field: "guestPermissions";
+      value: {
+        guestCanModify: boolean;
+        guestCanInviteOthers: boolean;
+        guestCanSeeOtherGuests: boolean;
+      };
+    };
+
+type PomodoroConfigPatch =
+  | { action: "set"; value: PomodoroConfig }
+  | { action: "clear" };
+
+interface CalendarEventUpdatePayload {
+  id: string;
+  updatedAt: string;
+  fields: CalendarUpdateField[];
+  attendees: Array<{
+    id: string;
+    name: string | null;
+    email: string;
+    role: string;
+    status: string;
+    rsvp: boolean;
+  }> | null;
+  alarms: Array<{
+    id: string;
+    action: string;
+    triggerType: string;
+    triggerValue: string;
+    description: string | null;
+  }> | null;
+  pomodoroConfig: PomodoroConfigPatch | null;
+}
+
+interface CalendarDetachInstancePayload {
+  parentId: string;
+  instanceDate: string;
+  exceptions: string;
+  newId: string;
+  title: string;
+  startTime: string;
+  endTime: string;
+  timezone: string;
+  calendarId: string;
+  color: number | null;
+  notifications: string | null;
+  allDay: boolean;
+  location: string;
+  transparency: EventTransparency;
+  status: EventStatus;
+  now: string;
+}
+
+interface CalendarSplitSeriesPayload {
+  parentId: string;
+  dayBefore: string;
+  cappedRrule: string | null;
+  newId: string;
+  title: string;
+  startTime: string;
+  endTime: string;
+  timezone: string;
+  calendarId: string;
+  color: number | null;
+  notifications: string | null;
+  exceptions: string | null;
+  rrule: string | null;
+  allDay: boolean;
+  location: string;
+  transparency: EventTransparency;
+  status: EventStatus;
+  descriptionPatch: string | null;
+  urlPatch: string | null;
+  localRsvpStatus: AttendeeStatus | null;
+  meetingEnabled: boolean;
+  copyPomodoroConfig: boolean;
+  pomodoroConfig: PomodoroConfig | null;
+  now: string;
+}
+
+type CalendarRecurrenceCommitOperationPayload =
+  | { type: "update_event"; patch: CalendarEventUpdatePayload }
+  | { type: "detach_instance"; input: CalendarDetachInstancePayload }
+  | { type: "split_series"; input: CalendarSplitSeriesPayload }
+  | {
+      type: "transfer_active_event_reference";
+      transfer: {
+        newEventId: string;
+        newEventDate: string | null;
+        plannedEnd: string | null;
+      };
+    };
+
+const CALENDAR_WINDOW_SYNC_EVENT = "calendar-window-sync";
+
+interface CalendarWindowSyncPayload {
+  kind: "data-changed";
+}
+
+let calendarSyncInitialized = false;
+
+function nowIso(): string {
+  return new Date().toISOString();
 }
 
 function localTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+function hasNonDefaultGuestPermissions(value: GuestPermissions | undefined): boolean {
+  return !!value && (value.canModify || !value.canInviteOthers || !value.canSeeOtherGuests);
+}
+
+function hasMeetingState(value: Partial<CalendarEvent>): boolean {
+  return value.meetingEnabled === true
+    || !!(value.attendees && value.attendees.length > 0)
+    || !!value.organizer
+    || !!value.location
+    || !!value.url
+    || !!value.geo
+    || value.localParticipationStatus !== undefined
+    || hasNonDefaultGuestPermissions(value.guestPermissions);
+}
+
+function hasEventPatchKey<K extends keyof CalendarEvent>(
+  changes: Partial<CalendarEvent>,
+  key: K,
+): boolean {
+  return Object.prototype.hasOwnProperty.call(changes, key);
+}
+
+function resolvedPomodoroConfigForTimedEvent(
+  parent: CalendarEvent,
+  changes: Partial<CalendarEvent>,
+  allDay: boolean | undefined,
+): {
+  copyFromParent: boolean;
+  finalConfig: PomodoroConfig | undefined;
+  payloadConfig: PomodoroConfig | null;
+} {
+  if (allDay) {
+    return { copyFromParent: false, finalConfig: undefined, payloadConfig: null };
+  }
+  if (hasEventPatchKey(changes, "pomodoroConfig")) {
+    return {
+      copyFromParent: false,
+      finalConfig: changes.pomodoroConfig,
+      payloadConfig: changes.pomodoroConfig ?? null,
+    };
+  }
+  return {
+    copyFromParent: true,
+    finalConfig: parent.pomodoroConfig,
+    payloadConfig: null,
+  };
 }
 
 /**
@@ -61,16 +283,453 @@ function hasStructuralChanges(
   return false;
 }
 
-// --- Store ---
+function prepareUpdateBlockPayload(
+  patch: Partial<CalendarEvent> & { id: string },
+  blocks: readonly CalendarEvent[],
+): { parentId: string; toUpdate: Partial<CalendarEvent> & { id: string }; payload: CalendarEventUpdatePayload } {
+  const parentId = patch.recurringParentId ?? patch.id;
+  let toUpdate: Partial<CalendarEvent> & { id: string };
 
-/** DB-backed template events (no virtual instances). */
+  if (patch.recurringParentId) {
+    const template = blocks.find((b) => b.id === parentId);
+    toUpdate = { ...patch, id: parentId };
+    delete toUpdate.recurringParentId;
+    if (template) {
+      if (patch.start) {
+        const templateStartDate = template.start.split(" ")[0];
+        toUpdate.start = `${templateStartDate} ${String(patch.start).split(" ")[1]}`;
+      }
+      if (patch.end) {
+        const templateEndDate = template.end.split(" ")[0];
+        toUpdate.end = `${templateEndDate} ${String(patch.end).split(" ")[1]}`;
+      }
+    }
+  } else {
+    toUpdate = { ...patch };
+    delete toUpdate.recurringParentId;
+  }
+
+  if (toUpdate.start !== undefined) {
+    const sanitized = sanitizeCalendarTime(String(toUpdate.start));
+    if (!sanitized) {
+      throw new Error(`Invalid calendar time format: start="${toUpdate.start}"`);
+    }
+    toUpdate.start = sanitized;
+  }
+  if (toUpdate.end !== undefined) {
+    const sanitized = sanitizeCalendarTime(String(toUpdate.end));
+    if (!sanitized) {
+      throw new Error(`Invalid calendar time format: end="${toUpdate.end}"`);
+    }
+    toUpdate.end = sanitized;
+  }
+  if ("description" in toUpdate) {
+    toUpdate.description = sanitizeCalendarDescriptionHtml(toUpdate.description ?? "");
+  }
+
+  const existing = blocks.find((b) => b.id === parentId);
+  const homeZone = toUpdate.timezone ?? existing?.timezone ?? localTimezone();
+  const allDayForDb = "allDay" in toUpdate ? !!toUpdate.allDay : !!existing?.allDay;
+  const fields: CalendarUpdateField[] = [];
+  const presentKeys = new Set(Object.keys(toUpdate) as Array<keyof CalendarEvent | "id">);
+  const addField = (field: CalendarUpdateField) => {
+    fields.push(field);
+  };
+
+  for (const key of presentKeys) {
+    switch (key) {
+      case "id":
+      case "recurringParentId":
+      case "pomodoroConfig":
+      case "attendees":
+      case "alarms":
+      case "overrides":
+        break;
+      case "title":
+        addField({ field: "title", value: toUpdate.title ?? "" });
+        break;
+      case "start":
+        addField({
+          field: "startTime",
+          value: toDbTime(String(toUpdate.start), homeZone, allDayForDb),
+        });
+        break;
+      case "end":
+        addField({
+          field: "endTime",
+          value: toDbTime(String(toUpdate.end), homeZone, allDayForDb),
+        });
+        break;
+      case "timezone":
+        addField({ field: "timezone", value: toUpdate.timezone ?? "" });
+        break;
+      case "calendarId":
+        addField({ field: "calendarId", value: toUpdate.calendarId ?? "local" });
+        break;
+      case "color":
+        addField({ field: "color", value: toUpdate.color ?? null });
+        break;
+      case "description":
+        addField({ field: "description", value: toUpdate.description ?? "" });
+        break;
+      case "recurrence": {
+        const rrule = toUpdate.recurrence ? recurrenceToRrule(toUpdate.recurrence) : null;
+        const repeatUntil = toUpdate.recurrence?.end.type === "until"
+          ? toUpdate.recurrence.end.date
+          : null;
+        addField({ field: "rrule", value: rrule });
+        addField({ field: "repeatUntil", value: repeatUntil });
+        break;
+      }
+      case "notifications": {
+        const notifJson = toUpdate.notifications && toUpdate.notifications.length > 0
+          ? JSON.stringify(toUpdate.notifications)
+          : null;
+        addField({ field: "notifications", value: notifJson });
+        break;
+      }
+      case "exceptions": {
+        const exceptionsJson = toUpdate.exceptions && toUpdate.exceptions.length > 0
+          ? JSON.stringify(toUpdate.exceptions)
+          : null;
+        addField({ field: "exceptions", value: exceptionsJson });
+        break;
+      }
+      case "allDay":
+        addField({ field: "allDay", value: !!toUpdate.allDay });
+        break;
+      case "meetingEnabled":
+        addField({ field: "meetingEnabled", value: !!toUpdate.meetingEnabled });
+        break;
+      case "location":
+        addField({ field: "location", value: toUpdate.location ?? "" });
+        break;
+      case "url":
+        addField({ field: "url", value: toUpdate.url ?? "" });
+        break;
+      case "transparency":
+        addField({ field: "transparency", value: toUpdate.transparency ?? "opaque" });
+        break;
+      case "status":
+        addField({ field: "status", value: toUpdate.status ?? "confirmed" });
+        break;
+      case "sourceUid":
+        addField({ field: "sourceUid", value: toUpdate.sourceUid ?? null });
+        break;
+      case "visibility":
+        addField({ field: "visibility", value: toUpdate.visibility ?? "public" });
+        break;
+      case "priority":
+        addField({ field: "priority", value: toUpdate.priority ?? null });
+        break;
+      case "categories":
+        addField({
+          field: "categories",
+          value: toUpdate.categories ? JSON.stringify(toUpdate.categories) : null,
+        });
+        break;
+      case "geo":
+        addField({
+          field: "geo",
+          value: toUpdate.geo ? JSON.stringify(toUpdate.geo) : null,
+        });
+        break;
+      case "sequence":
+        addField({ field: "sequence", value: toUpdate.sequence ?? 0 });
+        break;
+      case "rdate":
+        addField({
+          field: "rdate",
+          value: toUpdate.rdate ? JSON.stringify(toUpdate.rdate) : null,
+        });
+        break;
+      case "extendedProperties":
+        addField({
+          field: "extendedProperties",
+          value: toUpdate.extendedProperties ? JSON.stringify(toUpdate.extendedProperties) : null,
+        });
+        break;
+      case "organizer":
+        addField({
+          field: "organizer",
+          value: toUpdate.organizer ? JSON.stringify(toUpdate.organizer) : null,
+        });
+        break;
+      case "localParticipationStatus":
+        addField({
+          field: "localRsvpStatus",
+          value: toUpdate.localParticipationStatus ?? null,
+        });
+        break;
+      case "guestPermissions": {
+        const gp = toUpdate.guestPermissions;
+        addField({
+          field: "guestPermissions",
+          value: {
+            guestCanModify: gp?.canModify ?? false,
+            guestCanInviteOthers: gp?.canInviteOthers ?? true,
+            guestCanSeeOtherGuests: gp?.canSeeOtherGuests ?? true,
+          },
+        });
+        break;
+      }
+      case "hasCallLink":
+      case "surfaceStatus":
+      case "surfaceAttendees":
+      case "icalendarComponentId":
+      case "icalendarPreservationStatus":
+      case "icalendarProjectionWarnings":
+      case "icalendarRawJcal":
+        break;
+    }
+  }
+
+  const pomodoroConfig: PomodoroConfigPatch | null = allDayForDb && presentKeys.has("allDay")
+    ? { action: "clear" }
+    : presentKeys.has("pomodoroConfig")
+    ? toUpdate.pomodoroConfig
+      ? { action: "set", value: toUpdate.pomodoroConfig }
+      : { action: "clear" }
+    : null;
+
+  return {
+    parentId,
+    toUpdate,
+    payload: {
+      id: parentId,
+      updatedAt: nowIso(),
+      fields,
+      attendees: presentKeys.has("attendees")
+        ? (toUpdate.attendees ?? []).map((attendee) => ({
+            id: attendee.id,
+            name: attendee.name ?? null,
+            email: attendee.email,
+            role: attendee.role,
+            status: attendee.status,
+            rsvp: attendee.rsvp,
+          }))
+        : null,
+      alarms: presentKeys.has("alarms")
+        ? (toUpdate.alarms ?? []).map((alarm) => ({
+            id: alarm.id,
+            action: alarm.action,
+            triggerType: alarm.triggerType,
+            triggerValue: alarm.triggerValue,
+            description: alarm.description ?? null,
+          }))
+        : null,
+      pomodoroConfig,
+    },
+  };
+}
+
+// Store
+
+/** DB-backed template events for the current render window plus recurring templates. */
 let rawBlocks = $state<CalendarEvent[]>([]);
-/** Expanded events including virtual recurring instances. */
-let blocks = $state<CalendarEvent[]>([]);
+let windowEvents = $state<CalendarEvent[]>([]);
+let loaded = $state(false);
+let totalEventCount = $state(0);
+let currentWindowKey: string | null = null;
+let currentWindowRenderZone: string | null = null;
+let currentWindowStart: Temporal.PlainDate | null = null;
+let currentWindowEnd: Temporal.PlainDate | null = null;
 let batchDepth = 0;
-function reexpand() {
+const PANEL_EVENT_CACHE_LIMIT = 64;
+const panelEventCache = new Map<string, Promise<CalendarEvent | undefined>>();
+const WINDOW_CACHE_LIMIT = 12;
+
+type CalendarWindowLoadMode = "apply" | "ensure" | "prefetch";
+
+interface CalendarWindowSnapshot {
+  key: string;
+  renderZone: string;
+  windowStart: Temporal.PlainDate;
+  windowEnd: Temporal.PlainDate;
+  rawBlocks: CalendarEvent[];
+  windowEvents: CalendarEvent[];
+  expansionIndex: ExpansionIndex;
+  totalEventCount: number;
+}
+
+interface CalendarWindowLoadRequest {
+  key: string;
+  renderZone: string;
+  windowStart: Temporal.PlainDate;
+  windowEnd: Temporal.PlainDate;
+  markBoot: boolean;
+  force: boolean;
+  mode: CalendarWindowLoadMode;
+}
+
+const windowCache = new BoundedWindowCache<CalendarWindowSnapshot>(WINDOW_CACHE_LIMIT);
+let pomodoroSchedulerWindowCache: {
+  key: string;
+  version: number;
+  promise: Promise<CalendarEvent[]>;
+} | null = null;
+let prefetchGeneration = 0;
+let foregroundWindowBusy = false;
+let foregroundWindowRequestId = 0;
+let foregroundWindowIdleWaiters: Array<() => void> = [];
+
+type DbFullEvent = DbCalendarEvent & {
+  description: string | null;
+  url: string | null;
+  source_uid: string | null;
+  visibility: string;
+  priority: number | null;
+  categories: string | null;
+  geo: string | null;
+  sequence: number;
+  extended_properties: string | null;
+  organizer: string | null;
+  meeting_enabled: number;
+  guest_can_modify: number;
+  guest_can_invite_others: number;
+  guest_can_see_other_guests: number;
+  icalendar_component_id: string | null;
+  icalendar_preservation_status: IcalendarPreservationStatus | null;
+  icalendar_projection_warnings: string | null;
+  icalendar_raw_jcal: string | null;
+};
+
+type DbFullOverride = DbOverride & {
+  description: string | null;
+  location: string | null;
+  url: string | null;
+  visibility: string | null;
+  extended_properties: string | null;
+  icalendar_component_id: string | null;
+  icalendar_raw_jcal: string | null;
+};
+
+interface CalendarWindowRows {
+  events: DbCalendarEvent[];
+  overrides: DbOverride[];
+  attendees: DbWindowAttendee[];
+  total_event_count: number;
+}
+
+interface CalendarPomodoroSchedulerRows {
+  events: DbCalendarEvent[];
+  overrides: DbOverride[];
+}
+
+interface CalendarPanelEventRows {
+  event: DbFullEvent | null;
+  attendees: DbAttendee[];
+}
+
+interface CalendarFullEventRows {
+  event: DbFullEvent | null;
+  attendees: DbAttendee[];
+  alarms: DbAlarm[];
+  overrides: DbFullOverride[];
+}
+
+interface CalendarIcalendarExportMetadata {
+  method: string | null;
+  mixed_methods: boolean;
+}
+
+/**
+ * Sorted lookup over the current render-window rows, rebuilt lazily after
+ * each invalidate. The non-recurring events are sorted ascending by start so window queries can
+ * bisect-and-walk in `O(log N + K)` instead of scanning every template.
+ * Recurring templates stay in a small list and are walked exhaustively per
+ * query. Until recurrence moves to Rust, the window command includes
+ * recurring templates so TypeScript can preserve existing expansion behavior.
+ */
+let expansionIndex: ExpansionIndex | null = null;
+
+/**
+ * Reactivity token. `eventsInWindow` reads it so any `$derived` / `$effect`
+ * that depends on the visible-event set re-runs after a mutation. Bumped
+ * from `invalidate()`. External callers that need to react to mutations
+ * without forcing an expansion subscribe via `void indexVersion`.
+ */
+let indexVersion = $state(0);
+
+/**
+ * Drop the cached index and bump the reactivity token so any
+ * `$derived` / `$effect` reading `eventsInWindow` re-runs. The next read
+ * rebuilds the index lazily; mutations are rare relative to reads so
+ * eager rebuild would just waste work.
+ */
+function invalidate(recomputeWindow = true, clearCachedWindows = true) {
   if (batchDepth > 0) return;
-  blocks = expandRecurring(rawBlocks);
+  expansionIndex = null;
+  if (clearCachedWindows) clearWindowCache();
+  if (recomputeWindow && currentWindowStart && currentWindowEnd) {
+    expansionIndex = buildExpansionIndex(rawBlocks);
+    windowEvents = eventsInWindowFromIndex(expansionIndex, currentWindowStart, currentWindowEnd);
+  }
+  panelEventCache.clear();
+  indexVersion++;
+}
+
+function rememberPanelEvent(id: string, promise: Promise<CalendarEvent | undefined>) {
+  panelEventCache.set(id, promise);
+  while (panelEventCache.size > PANEL_EVENT_CACHE_LIMIT) {
+    const first = panelEventCache.keys().next().value;
+    if (typeof first !== "string") break;
+    panelEventCache.delete(first);
+  }
+}
+
+function applyFullEventFields(row: DbFullEvent, event: CalendarEvent) {
+  if (row.description) event.description = sanitizeCalendarDescriptionHtml(row.description);
+  if (row.url) event.url = row.url;
+  if (row.source_uid) event.sourceUid = row.source_uid;
+  if (row.visibility && row.visibility !== "public") {
+    event.visibility = row.visibility as EventVisibility;
+  }
+  if (row.priority != null) event.priority = row.priority;
+  const categories = safeJsonParse<string[]>(row.categories);
+  if (categories) event.categories = categories;
+  const geo = safeJsonParse<GeoCoordinates>(row.geo);
+  if (geo) event.geo = geo;
+  if (row.sequence) event.sequence = row.sequence;
+  const extendedProperties =
+    safeJsonParse<Record<string, string>>(row.extended_properties);
+  if (extendedProperties) event.extendedProperties = extendedProperties;
+  const organizer = safeJsonParse<EventOrganizer>(row.organizer);
+  if (organizer) event.organizer = organizer;
+  if (row.meeting_enabled === 1) event.meetingEnabled = true;
+  if (row.local_rsvp_status) {
+    event.localParticipationStatus = row.local_rsvp_status as AttendeeStatus;
+  }
+  if (row.guest_can_modify === 1
+    || row.guest_can_invite_others === 0
+    || row.guest_can_see_other_guests === 0) {
+    event.guestPermissions = {
+      canModify: row.guest_can_modify === 1,
+      canInviteOthers: row.guest_can_invite_others !== 0,
+      canSeeOtherGuests: row.guest_can_see_other_guests !== 0,
+    };
+  }
+  if (row.icalendar_component_id) event.icalendarComponentId = row.icalendar_component_id;
+  const projectionWarnings = safeJsonParse<string[]>(row.icalendar_projection_warnings);
+  const projectionState = deriveIcalendarProjectionState({
+    sourceUid: row.source_uid,
+    componentId: row.icalendar_component_id,
+    preservationStatus: row.icalendar_preservation_status,
+    projectionWarnings,
+  });
+  if (projectionState.preservationStatus) {
+    event.icalendarPreservationStatus = projectionState.preservationStatus;
+  }
+  if (projectionState.projectionWarnings) {
+    event.icalendarProjectionWarnings = projectionState.projectionWarnings;
+  }
+  const rawJcal = safeJsonParse<unknown>(row.icalendar_raw_jcal);
+  if (rawJcal) event.icalendarRawJcal = rawJcal;
+}
+
+function getIndex(): ExpansionIndex {
+  if (!expansionIndex) expansionIndex = buildExpansionIndex(rawBlocks);
+  return expansionIndex;
 }
 
 /**
@@ -82,148 +741,750 @@ function resolveToTemplate(event: CalendarEvent): CalendarEvent | undefined {
   return rawBlocks.find((b) => b.id === parentId);
 }
 
-/**
- * When a recurring instance is edited (e.g. via drag), merge its changes
- * into the template: keep the template's date, take the instance's time-of-day
- * and all non-positional fields.
- */
-function mergeIntoTemplate(template: CalendarEvent, changes: CalendarEvent): CalendarEvent {
-  const templateStartDate = template.start.split(" ")[0];
-  const templateEndDate = template.end.split(" ")[0];
-  const newStartTime = changes.start.split(" ")[1];
-  const newEndTime = changes.end.split(" ")[1];
-  return {
-    ...template,
-    ...changes,
-    id: template.id,
-    start: `${templateStartDate} ${newStartTime}`,
-    end: `${templateEndDate} ${newEndTime}`,
-    recurringParentId: undefined,
-  };
+function mutationTargetForEvent(eventOrId: CalendarEvent | string): CalendarEventMutationTarget {
+  if (typeof eventOrId === "string") {
+    return buildCalendarEventMutationTargetFromId(eventOrId);
+  }
+  return buildCalendarEventMutationTarget(eventOrId, resolveToTemplate(eventOrId));
 }
 
 /**
- * Replace all attendees for an event (delete + insert).
+ * Load slim per-instance overrides in one unfiltered query and group by
+ * parent id. Heavy override columns (description, location, url,
+ * extended_properties, visibility) stay in the DB and ride along with the
+ * parent through the panel / full-event loaders when EventPanel, delete undo,
+ * or ICS export needs them.
  */
-async function saveAttendees(eventId: string, attendees: EventAttendee[]): Promise<void> {
-  await execute("DELETE FROM calendar_event_attendees WHERE event_id = $1", [eventId]);
-  for (let i = 0; i < attendees.length; i++) {
-    const att = attendees[i];
-    await execute(
-      `INSERT INTO calendar_event_attendees (id, event_id, name, email, role, status, rsvp, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [att.id, eventId, att.name ?? null, att.email, att.role, att.status, att.rsvp ? 1 : 0, i],
-    );
-  }
-}
-
-async function loadAttendees(eventIds: string[]): Promise<Map<string, EventAttendee[]>> {
-  const placeholders = eventIds.map((_, i) => `$${i + 1}`).join(",");
-  const rows = await select<DbAttendee>(
-    `SELECT * FROM calendar_event_attendees WHERE event_id IN (${placeholders}) ORDER BY sort_order ASC`,
-    eventIds,
-  );
-  const map = new Map<string, EventAttendee[]>();
-  for (const r of rows) {
-    const list = map.get(r.event_id) ?? [];
-    list.push(mapAttendee(r));
-    map.set(r.event_id, list);
-  }
-  return map;
-}
-
-async function loadAlarms(eventIds: string[]): Promise<Map<string, EventAlarm[]>> {
-  const placeholders = eventIds.map((_, i) => `$${i + 1}`).join(",");
-  const rows = await select<DbAlarm>(
-    `SELECT * FROM calendar_event_alarms WHERE event_id IN (${placeholders}) ORDER BY sort_order ASC`,
-    eventIds,
-  );
-  const map = new Map<string, EventAlarm[]>();
-  for (const r of rows) {
-    const list = map.get(r.event_id) ?? [];
-    list.push(mapAlarm(r));
-    map.set(r.event_id, list);
-  }
-  return map;
-}
-
-async function loadOverrides(eventIds: string[]): Promise<Map<string, EventOverride[]>> {
-  const placeholders = eventIds.map((_, i) => `$${i + 1}`).join(",");
-  const rows = await select<DbOverride>(
-    `SELECT * FROM calendar_event_overrides WHERE parent_event_id IN (${placeholders})`,
-    eventIds,
-  );
+function mapOverrides(
+  rows: DbOverride[],
+  renderZone: string,
+  parentAllDayById: Map<string, boolean>,
+): Map<string, EventOverride[]> {
   const map = new Map<string, EventOverride[]>();
   for (const r of rows) {
     const list = map.get(r.parent_event_id) ?? [];
-    list.push(mapOverride(r));
+    list.push(mapOverride(r, renderZone, parentAllDayById.get(r.parent_event_id) === true));
     map.set(r.parent_event_id, list);
   }
   return map;
 }
 
+function calendarWindowKey(
+  windowStart: Temporal.PlainDate,
+  windowEnd: Temporal.PlainDate,
+  renderZone: string,
+): string {
+  return `${renderZone}:${windowStart.toString()}:${windowEnd.toString()}`;
+}
+
+function currentWindowCovers(
+  windowStart: Temporal.PlainDate,
+  windowEnd: Temporal.PlainDate,
+  renderZone: string,
+): boolean {
+  return loaded
+    && currentWindowStart !== null
+    && currentWindowEnd !== null
+    && currentWindowRenderZone === renderZone
+    && calendarWindowCovers(currentWindowStart, currentWindowEnd, windowStart, windowEnd);
+}
+
+function findCachedWindowCovering(
+  windowStart: Temporal.PlainDate,
+  windowEnd: Temporal.PlainDate,
+  renderZone: string,
+): CalendarWindowSnapshot | undefined {
+  return windowCache.find((snapshot) =>
+    snapshot.renderZone === renderZone
+    && calendarWindowCovers(snapshot.windowStart, snapshot.windowEnd, windowStart, windowEnd)
+  );
+}
+
+function windowQueueKey(mode: CalendarWindowLoadMode, key: string): string {
+  return `${mode}:${key}`;
+}
+
+function markWindowLoadEvent(event: WindowLoadEvent<CalendarWindowLoadRequest>): void {
+  const request = "request" in event ? event.request : undefined;
+  if (event.type === "start") {
+    perfMark("window.load-start", {
+      mode: request?.mode ?? "unknown",
+      queued: windowLoadCoordinator.queuedKey ? 1 : 0,
+    });
+  } else if (event.type === "queue") {
+    perfMark("window.load-queued", {
+      mode: request?.mode ?? "unknown",
+      replaced: event.replacedKey ? 1 : 0,
+    });
+  } else if (event.type === "drop") {
+    perfMark("window.load-dropped", { reason: event.reason });
+  } else if (event.type === "finish") {
+    perfMark("window.load-finished", { outcome: event.outcome });
+  } else {
+    perfMark("window.load-error");
+  }
+}
+
+function applyWindowSnapshot(snapshot: CalendarWindowSnapshot): void {
+  rawBlocks = snapshot.rawBlocks;
+  windowEvents = snapshot.windowEvents;
+  expansionIndex = snapshot.expansionIndex;
+  totalEventCount = snapshot.totalEventCount;
+  currentWindowKey = snapshot.key;
+  currentWindowRenderZone = snapshot.renderZone;
+  currentWindowStart = snapshot.windowStart;
+  currentWindowEnd = snapshot.windowEnd;
+  loaded = true;
+  panelEventCache.clear();
+  indexVersion++;
+  perfMark("window.applied", {
+    rows: snapshot.rawBlocks.length,
+    expanded: snapshot.windowEvents.length,
+    cache: windowCache.size,
+  });
+}
+
+function rememberWindowSnapshot(snapshot: CalendarWindowSnapshot): void {
+  windowCache.set(snapshot.key, snapshot);
+  perfMark("window.cache-put", {
+    rows: snapshot.rawBlocks.length,
+    expanded: snapshot.windowEvents.length,
+    size: windowCache.size,
+  });
+}
+
+function beginForegroundWindowLoad(): number {
+  foregroundWindowBusy = true;
+  return ++foregroundWindowRequestId;
+}
+
+function finishForegroundWindowLoad(requestId: number): void {
+  if (requestId !== foregroundWindowRequestId) return;
+  foregroundWindowBusy = false;
+  resolveForegroundWindowIdle();
+}
+
+function resolveForegroundWindowIdle(): void {
+  if (foregroundWindowBusy) return;
+  const waiters = foregroundWindowIdleWaiters;
+  foregroundWindowIdleWaiters = [];
+  for (const resolve of waiters) resolve();
+}
+
+async function waitForForegroundWindowIdle(): Promise<void> {
+  if (!foregroundWindowBusy) return;
+  await new Promise<void>((resolve) => {
+    foregroundWindowIdleWaiters.push(resolve);
+  });
+}
+
+function adjacentWindowRequests(snapshot: CalendarWindowSnapshot): Array<{
+  start: Temporal.PlainDate;
+  end: Temporal.PlainDate;
+}> {
+  return adjacentCalendarWindowRequests(snapshot.windowStart, snapshot.windowEnd);
+}
+
+function mapWindowRows(rows: CalendarWindowRows, renderZone: string): CalendarEvent[] {
+  const mapped = rows.events.map((r) => mapRow(r, renderZone));
+  if (mapped.length === 0) return mapped;
+
+  const parentAllDayById = new Map(mapped.map((event) => [event.id, event.allDay === true]));
+  const overrideMap = mapOverrides(rows.overrides, renderZone, parentAllDayById);
+  const surfaceAttendeesByEventId = new Map<string, DbWindowAttendee[]>();
+  for (const attendee of rows.attendees) {
+    const existing = surfaceAttendeesByEventId.get(attendee.event_id);
+    if (existing) existing.push(attendee);
+    else surfaceAttendeesByEventId.set(attendee.event_id, [attendee]);
+  }
+  for (const evt of mapped) {
+    const ovr = overrideMap.get(evt.id);
+    if (ovr?.length) evt.overrides = ovr;
+    const surfaceAttendees = surfaceAttendeesByEventId.get(evt.id);
+    if (surfaceAttendees?.length) {
+      evt.surfaceAttendees = surfaceAttendees.map(mapWindowAttendee);
+    }
+  }
+  return mapped;
+}
+
+async function runWindowLoadRequest(
+  request: CalendarWindowLoadRequest,
+  isSuperseded: () => boolean,
+): Promise<WindowLoadOutcome> {
+  const {
+    key,
+    renderZone,
+    windowStart,
+    windowEnd,
+    markBoot,
+    force,
+    mode,
+  } = request;
+  const url = await ensureDbUrl();
+  const windowStartDate = windowStart.toString();
+  const windowEndDate = windowEnd.toString();
+  if (!force && !markBoot && mode !== "apply") {
+    const cached = findCachedWindowCovering(windowStart, windowEnd, renderZone);
+    if (cached || currentWindowCovers(windowStart, windowEnd, renderZone)) {
+      perfMark("window.load-covered", { mode });
+      return "applied";
+    }
+  }
+  const windowEndExclusiveDate = windowEnd.add({ days: 1 }).toString();
+  const rows = await invoke<CalendarWindowRows>("calendar_load_window", {
+    dbUrl: url,
+    windowStartDate,
+    windowEndDate,
+    windowStartUtc: wallClockToUtcIso(`${windowStartDate} 00:00`, renderZone),
+    windowEndExclusiveUtc: wallClockToUtcIso(`${windowEndExclusiveDate} 00:00`, renderZone),
+  });
+  perfMark("window.rows-done", {
+    mode,
+    rows: rows.events.length,
+    attendees: rows.attendees.length,
+    total: rows.total_event_count,
+  });
+
+  if (!markBoot && isSuperseded()) {
+    perfMark("window.load-superseded", { stage: "rows", mode });
+    return "superseded";
+  }
+
+  if (markBoot) perfMark("boot.sql-main-done", { rows: rows.events.length, total: rows.total_event_count });
+  const mapped = mapWindowRows(rows, renderZone);
+  if (markBoot) perfMark("boot.maprow-done");
+
+  if (!markBoot && isSuperseded()) {
+    perfMark("window.load-superseded", { stage: "map", mode });
+    return "superseded";
+  }
+
+  const expanded = await invoke<CalendarEvent[]>("calendar_expand_render_events", {
+    events: mapped,
+    windowStartDate,
+    windowEndDate,
+  });
+  perfMark("window.expand-done", {
+    mode,
+    rows: mapped.length,
+    expanded: expanded.length,
+  });
+
+  if (!markBoot && isSuperseded()) {
+    perfMark("window.load-superseded", { stage: "expand", mode });
+    return "superseded";
+  }
+
+  const snapshot: CalendarWindowSnapshot = {
+    key,
+    renderZone,
+    windowStart,
+    windowEnd,
+    rawBlocks: mapped,
+    windowEvents: expanded,
+    expansionIndex: buildExpansionIndex(mapped),
+    totalEventCount: rows.total_event_count,
+  };
+  rememberWindowSnapshot(snapshot);
+
+  if (mode === "apply") {
+    applyWindowSnapshot(snapshot);
+    if (markBoot) {
+      perfMark("boot.sql-children-done");
+      perfMark("boot.rawblocks-set", { events: rawBlocks.length, total: totalEventCount });
+    }
+    scheduleAdjacentPrefetch(snapshot);
+  }
+
+  return "applied";
+}
+
+const windowLoadCoordinator = new LatestWindowLoadCoordinator<CalendarWindowLoadRequest>(
+  runWindowLoadRequest,
+  markWindowLoadEvent,
+);
+
+async function loadWindowIntoState(
+  windowStart: Temporal.PlainDate,
+  windowEnd: Temporal.PlainDate,
+  markBoot: boolean,
+  force = false,
+): Promise<void> {
+  const renderZone = localTimezone();
+  const key = calendarWindowKey(windowStart, windowEnd, renderZone);
+  if (!force && !markBoot && loaded && currentWindowKey === key) return;
+  if (!force && !markBoot && currentWindowCovers(windowStart, windowEnd, renderZone)) return;
+  if (!force && !markBoot) {
+    const cached = windowCache.get(key) ?? findCachedWindowCovering(windowStart, windowEnd, renderZone);
+    if (cached) {
+      const foregroundId = ++foregroundWindowRequestId;
+      foregroundWindowBusy = false;
+      resolveForegroundWindowIdle();
+      prefetchGeneration++;
+      windowLoadCoordinator.supersedePending();
+      perfMark("window.cache-hit", {
+        rows: cached.rawBlocks.length,
+        expanded: cached.windowEvents.length,
+        size: windowCache.size,
+      });
+      applyWindowSnapshot(cached);
+      scheduleAdjacentPrefetch(cached);
+      finishForegroundWindowLoad(foregroundId);
+      return;
+    }
+  }
+
+  prefetchGeneration++;
+  const foregroundId = beginForegroundWindowLoad();
+  try {
+    await windowLoadCoordinator.enqueue(windowQueueKey("apply", key), {
+      key,
+      renderZone,
+      windowStart,
+      windowEnd,
+      markBoot,
+      force,
+      mode: "apply",
+    });
+  } finally {
+    finishForegroundWindowLoad(foregroundId);
+  }
+}
+
+async function prefetchWindow(
+  windowStart: Temporal.PlainDate,
+  windowEnd: Temporal.PlainDate,
+  generation: number,
+): Promise<void> {
+  if (generation !== prefetchGeneration || !loaded) return;
+  const renderZone = localTimezone();
+  const key = calendarWindowKey(windowStart, windowEnd, renderZone);
+  if (currentWindowCovers(windowStart, windowEnd, renderZone)
+    || findCachedWindowCovering(windowStart, windowEnd, renderZone)) return;
+
+  await windowLoadCoordinator.enqueue(windowQueueKey("prefetch", key), {
+    key,
+    renderZone,
+    windowStart,
+    windowEnd,
+    markBoot: false,
+    force: false,
+    mode: "prefetch",
+  });
+}
+
+async function ensureWindowSnapshotReady(
+  windowStart: Temporal.PlainDate,
+  windowEnd: Temporal.PlainDate,
+): Promise<void> {
+  const renderZone = localTimezone();
+  const key = calendarWindowKey(windowStart, windowEnd, renderZone);
+  if (currentWindowCovers(windowStart, windowEnd, renderZone)
+    || findCachedWindowCovering(windowStart, windowEnd, renderZone)) return;
+
+  prefetchGeneration++;
+  const foregroundId = beginForegroundWindowLoad();
+  try {
+    await windowLoadCoordinator.enqueue(windowQueueKey("ensure", key), {
+      key,
+      renderZone,
+      windowStart,
+      windowEnd,
+      markBoot: false,
+      force: false,
+      mode: "ensure",
+    });
+  } finally {
+    finishForegroundWindowLoad(foregroundId);
+  }
+}
+
+function scheduleAdjacentPrefetch(snapshot: CalendarWindowSnapshot): void {
+  const requests = adjacentWindowRequests(snapshot);
+  if (requests.length === 0) return;
+  const generation = ++prefetchGeneration;
+
+  void (async () => {
+    for (const request of requests) {
+      if (generation !== prefetchGeneration) return;
+      await prefetchWindow(request.start, request.end, generation);
+    }
+  })();
+}
+
+function scheduleWindowPrefetches(requests: Array<{
+  start: Temporal.PlainDate;
+  end: Temporal.PlainDate;
+}>): void {
+  if (requests.length === 0) return;
+  const generation = prefetchGeneration;
+
+  void (async () => {
+    for (const request of requests) {
+      if (generation !== prefetchGeneration) return;
+      await prefetchWindow(request.start, request.end, generation);
+    }
+  })();
+}
+
+async function waitForWindowIdle(): Promise<void> {
+  await windowLoadCoordinator.whenIdle();
+}
+
+function clearWindowCache(): void {
+  windowCache.clear();
+  prefetchGeneration++;
+  windowLoadCoordinator.supersedePending();
+}
+
+async function reloadCurrentWindowFromDb(): Promise<void> {
+  if (!currentWindowStart || !currentWindowEnd) {
+    invalidate(false);
+    return;
+  }
+  await reloadWindowFromDb(currentWindowStart, currentWindowEnd);
+}
+
+async function reloadWindowFromDb(
+  windowStart: Temporal.PlainDate,
+  windowEnd: Temporal.PlainDate,
+): Promise<void> {
+  clearWindowCache();
+  await loadWindowIntoState(windowStart, windowEnd, false, true);
+}
+
+async function loadPomodoroSchedulerEventsFromDb(
+  windowStart: Temporal.PlainDate,
+  windowEnd: Temporal.PlainDate,
+): Promise<CalendarEvent[]> {
+  const renderZone = localTimezone();
+  const key = calendarWindowKey(windowStart, windowEnd, renderZone);
+  const version = indexVersion;
+  if (
+    pomodoroSchedulerWindowCache &&
+    pomodoroSchedulerWindowCache.key === key &&
+    pomodoroSchedulerWindowCache.version === version
+  ) {
+    return pomodoroSchedulerWindowCache.promise;
+  }
+
+  const promise = (async () => {
+    const url = await ensureDbUrl();
+    const windowStartDate = windowStart.toString();
+    const windowEndDate = windowEnd.toString();
+    const windowEndExclusiveDate = windowEnd.add({ days: 1 }).toString();
+    const rows = await invoke<CalendarPomodoroSchedulerRows>(
+      "calendar_load_pomodoro_scheduler_window",
+      {
+        dbUrl: url,
+        windowStartDate,
+        windowEndDate,
+        windowStartUtc: wallClockToUtcIso(`${windowStartDate} 00:00`, renderZone),
+        windowEndExclusiveUtc: wallClockToUtcIso(`${windowEndExclusiveDate} 00:00`, renderZone),
+      },
+    );
+    const mapped = mapWindowRows(
+      {
+        events: rows.events,
+        overrides: rows.overrides,
+        attendees: [],
+        total_event_count: rows.events.length,
+      },
+      renderZone,
+    );
+    const expanded = await invoke<CalendarEvent[]>("calendar_expand_render_events", {
+      events: mapped,
+      windowStartDate,
+      windowEndDate,
+    });
+    return expanded.filter((event) => event.pomodoroConfig);
+  })().catch((error: unknown) => {
+    if (pomodoroSchedulerWindowCache?.promise === promise) {
+      pomodoroSchedulerWindowCache = null;
+    }
+    throw error;
+  });
+
+  pomodoroSchedulerWindowCache = { key, version, promise };
+  return promise;
+}
+
+function isCalendarWindowSyncPayload(value: unknown): value is CalendarWindowSyncPayload {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return record.kind === "data-changed";
+}
+
+function publishCalendarWindowSync(): void {
+  emit(
+    CALENDAR_WINDOW_SYNC_EVENT,
+    createWindowSyncEnvelope<CalendarWindowSyncPayload>({ kind: "data-changed" }),
+  ).catch((err) => console.warn("calendar window sync failed", err));
+}
+
+function initCalendarWindowSync(): void {
+  if (calendarSyncInitialized) return;
+  calendarSyncInitialized = true;
+  listen<unknown>(CALENDAR_WINDOW_SYNC_EVENT, (event) => {
+    const envelope = event.payload;
+    if (!isWindowSyncEnvelope(envelope, isCalendarWindowSyncPayload)) return;
+    if (!isForeignWindowSyncEnvelope(envelope)) return;
+    reloadCurrentWindowFromDb().catch((err) => {
+      console.warn("calendar window sync reload failed", err);
+    });
+  }).catch((err) => console.warn("calendar window sync listener failed", err));
+}
+
+/**
+ * Build a slim copy of `e` containing only the keys the in-memory render,
+ * expansion, and notification scheduler care about. Used at the boundary
+ * where heavy events (ICS imports, addBlock opts) are pushed into
+ * render state, so heavy fields stay in the DB and out of long-lived RAM.
+ */
+function slimEvent(e: CalendarEvent): CalendarEvent {
+  const slim: CalendarEvent = {
+    id: e.id,
+    title: e.title,
+    start: e.start,
+    end: e.end,
+    timezone: e.timezone,
+    calendarId: e.calendarId,
+  };
+  if (e.color !== undefined) slim.color = e.color;
+  if (e.recurrence) slim.recurrence = e.recurrence;
+  if (e.notifications && e.notifications.length > 0) slim.notifications = e.notifications;
+  if (e.exceptions && e.exceptions.length > 0) slim.exceptions = e.exceptions;
+  if (e.recurringParentId) slim.recurringParentId = e.recurringParentId;
+  if (e.allDay) slim.allDay = true;
+  if (e.meetingEnabled) slim.meetingEnabled = true;
+  if (e.hasCallLink || e.url) slim.hasCallLink = true;
+  if (e.location) slim.location = e.location;
+  if (e.transparency === "transparent") slim.transparency = "transparent";
+  if (e.status && e.status !== "confirmed") slim.status = e.status;
+  if (e.localParticipationStatus) slim.localParticipationStatus = e.localParticipationStatus;
+  if (e.pomodoroConfig) slim.pomodoroConfig = e.pomodoroConfig;
+  if (e.rdate && e.rdate.length > 0) slim.rdate = e.rdate;
+  if (e.overrides && e.overrides.length > 0) slim.overrides = e.overrides;
+  return slim;
+}
+
 export function getCalendar() {
+  initCalendarWindowSync();
   const store = {
-    get events(): CalendarEvent[] {
-      return blocks;
+    /**
+     * View-scoped expansion. Pass the visible date range; the underlying
+     * sorted index makes per-call cost bounded by the visible event count
+     * rather than the full template count, so repeated calls stay cheap
+     * even during held-arrow navigation.
+     */
+    eventsInWindow(
+      windowStart: Temporal.PlainDate,
+      windowEnd: Temporal.PlainDate,
+    ): CalendarEvent[] {
+      void indexVersion;
+      const renderZone = localTimezone();
+      const key = calendarWindowKey(windowStart, windowEnd, renderZone);
+      if (currentWindowKey === key) {
+        return windowEvents;
+      }
+      if (currentWindowCovers(windowStart, windowEnd, renderZone)) {
+        return eventsInWindowFromIndex(getIndex(), windowStart, windowEnd);
+      }
+      const cached = windowCache.peek(key);
+      if (cached) return cached.windowEvents;
+      const covering = findCachedWindowCovering(windowStart, windowEnd, renderZone);
+      if (covering) {
+        return eventsInWindowFromIndex(covering.expansionIndex, windowStart, windowEnd);
+      }
+      return [];
+    },
+
+    /**
+     * Reactivity token; consumers can `void store.indexVersion` inside an
+     * `$effect` to re-run on any mutation without paying a wide-window
+     * expansion just to subscribe.
+     */
+    get indexVersion(): number {
+      return indexVersion;
     },
 
     get rawBlocks(): CalendarEvent[] {
       return rawBlocks;
     },
 
-    /** Suppress reexpand() during multi-step mutations. */
+    get eventCount(): number {
+      return totalEventCount;
+    },
+
+    get loaded(): boolean {
+      return loaded;
+    },
+
+    get windowLoadBusy(): boolean {
+      return windowLoadCoordinator.busy;
+    },
+
+    get foregroundWindowLoadBusy(): boolean {
+      return foregroundWindowBusy;
+    },
+
+    isWindowCurrent(
+      windowStart: Temporal.PlainDate,
+      windowEnd: Temporal.PlainDate,
+    ): boolean {
+      return currentWindowKey === calendarWindowKey(windowStart, windowEnd, localTimezone());
+    },
+
+    hasWindow(
+      windowStart: Temporal.PlainDate,
+      windowEnd: Temporal.PlainDate,
+    ): boolean {
+      const renderZone = localTimezone();
+      return currentWindowCovers(windowStart, windowEnd, renderZone)
+        || findCachedWindowCovering(windowStart, windowEnd, renderZone) !== undefined;
+    },
+
+    async ensureWindowReady(
+      windowStart: Temporal.PlainDate,
+      windowEnd: Temporal.PlainDate,
+    ): Promise<void> {
+      await ensureWindowSnapshotReady(windowStart, windowEnd);
+    },
+
+    prefetchWindows(requests: Array<{
+      start: Temporal.PlainDate;
+      end: Temporal.PlainDate;
+    }>): void {
+      scheduleWindowPrefetches(requests);
+    },
+
+    async whenWindowIdle(): Promise<void> {
+      await waitForWindowIdle();
+    },
+
+    async whenForegroundWindowIdle(): Promise<void> {
+      await waitForForegroundWindowIdle();
+    },
+
+    /** Suppress invalidate() during multi-step mutations. */
     beginBatch() { batchDepth++; },
-    endBatch() { if (--batchDepth <= 0) { batchDepth = 0; reexpand(); } },
+    endBatch() { if (--batchDepth <= 0) { batchDepth = 0; invalidate(); } },
 
     async load() {
-      console.log("[calendar] load() called");
+      perfMark("boot.sql-start");
       try {
-        const rows = await select<DbCalendarEvent>(
-          `SELECT ce.id, ce.title, ce.start_time, ce.end_time, ce.timezone,
-                  ce.calendar_id, ce.color, ce.description, ce.rrule,
-                  ce.notifications, ce.exceptions, ce.repeat_until,
-                  ce.all_day, ce.location, ce.url, ce.transparency, ce.status,
-                  ce.source_uid, ce.visibility, ce.priority, ce.categories,
-                  ce.geo, ce.sequence, ce.rdate, ce.extended_properties,
-                  ce.organizer,
-                  ce.guest_can_modify, ce.guest_can_invite_others,
-                  ce.guest_can_see_other_guests,
-                  pc.focus_duration_minutes, pc.short_break_minutes,
-                  pc.long_break_minutes, pc.pomodoro_count,
-                  pc.idle_timeout_minutes
-           FROM calendar_events ce
-           LEFT JOIN pomodoro_configs pc ON pc.event_id = ce.id
-           ORDER BY ce.start_time ASC`,
-        );
-        console.log(`[calendar] loaded ${rows.length} blocks from DB`, rows);
-        const mapped = rows.map(mapRow);
-
-        // Load related tables and merge into events
-        if (mapped.length > 0) {
-          const ids = mapped.map((e) => e.id);
-          const [attendeeMap, alarmMap, overrideMap] = await Promise.all([
-            loadAttendees(ids),
-            loadAlarms(ids),
-            loadOverrides(ids),
-          ]);
-          for (const evt of mapped) {
-            const att = attendeeMap.get(evt.id);
-            if (att?.length) evt.attendees = att;
-            const alm = alarmMap.get(evt.id);
-            if (alm?.length) evt.alarms = alm;
-            const ovr = overrideMap.get(evt.id);
-            if (ovr?.length) evt.overrides = ovr;
-          }
-        }
-
-        rawBlocks = mapped;
-        reexpand();
-        console.log(`[calendar] blocks set, count: ${blocks.length} (${rawBlocks.length} templates)`);
+        loaded = false;
+        const initialWindow = computeViewWindow(new Date(), "week");
+        await loadWindowIntoState(initialWindow.start, initialWindow.end, true);
       } catch (e) {
         console.error("[calendar] load() failed:", e);
         throw e;
       }
+    },
+
+    async loadWindow(
+      windowStart: Temporal.PlainDate,
+      windowEnd: Temporal.PlainDate,
+    ): Promise<void> {
+      await loadWindowIntoState(windowStart, windowEnd, false);
+    },
+
+    async refreshCurrentWindow(): Promise<void> {
+      await reloadCurrentWindowFromDb();
+    },
+
+    async refreshWindow(
+      windowStart: Temporal.PlainDate,
+      windowEnd: Temporal.PlainDate,
+    ): Promise<void> {
+      await reloadWindowFromDb(windowStart, windowEnd);
+    },
+
+    async loadPomodoroSchedulerEvents(
+      windowStart: Temporal.PlainDate,
+      windowEnd: Temporal.PlainDate,
+    ): Promise<CalendarEvent[]> {
+      return loadPomodoroSchedulerEventsFromDb(windowStart, windowEnd);
+    },
+
+    /**
+     * Fetch just the fields the event panel needs for first paint. This is
+     * intentionally lighter than `loadFullEvent`: no alarms and no recurring
+     * override mirrors. Results are cached until the next calendar mutation,
+     * and event tiles prefetch this on pointer hover / pointer down.
+     */
+    async loadPanelEvent(id: string): Promise<CalendarEvent | undefined> {
+      const cached = panelEventCache.get(id);
+      if (cached) return cached;
+
+      const promise = (async () => {
+        const renderZone = localTimezone();
+        const rows = await invoke<CalendarPanelEventRows>("calendar_load_panel_event", {
+          dbUrl: dbUrl(),
+          id,
+        });
+        if (!rows.event) return undefined;
+        const event = mapRow(rows.event, renderZone);
+        applyFullEventFields(rows.event, event);
+        if (rows.attendees.length > 0) event.attendees = rows.attendees.map(mapAttendee);
+        return event;
+      })().catch((e: unknown) => {
+        if (panelEventCache.get(id) === promise) panelEventCache.delete(id);
+        throw e;
+      });
+
+      rememberPanelEvent(id, promise);
+      return promise;
+    },
+
+    prefetchPanelEvent(id: string): void {
+      void store.loadPanelEvent(id).catch((e) => {
+        console.warn("[calendar] panel event prefetch failed:", e);
+      });
+    },
+
+    /**
+     * Fetch the full DB row for one event id and return a fully populated
+     * `CalendarEvent`. The render path holds only a slim subset of columns in
+     * the current window; this is what ICS export and delete undo call when
+     * they need every heavy field, including alarms and override mirrors.
+     */
+    async loadFullEvent(id: string): Promise<CalendarEvent | undefined> {
+      const renderZone = localTimezone();
+      const rows = await invoke<CalendarFullEventRows>("calendar_load_full_event", {
+        dbUrl: dbUrl(),
+        id,
+      });
+      if (!rows.event) return undefined;
+      const row = rows.event;
+      const event = mapRow(row, renderZone);
+      applyFullEventFields(row, event);
+
+      if (rows.attendees.length > 0) {
+        event.attendees = rows.attendees.map(mapAttendee);
+      }
+      if (rows.alarms.length > 0) {
+        event.alarms = rows.alarms.map(mapAlarm);
+      }
+      if (rows.overrides.length > 0) {
+        event.overrides = rows.overrides.map((r) => {
+          const slim = mapOverride(r, renderZone, row.all_day === 1);
+          if (r.description) {
+            slim.description = sanitizeCalendarDescriptionHtml(r.description);
+          }
+          if (r.location) slim.location = r.location;
+          if (r.url) slim.url = r.url;
+          if (r.visibility) slim.visibility = r.visibility as EventVisibility;
+          const ep = safeJsonParse<Record<string, string>>(r.extended_properties);
+          if (ep) slim.extendedProperties = ep;
+          if (r.icalendar_component_id) slim.icalendarComponentId = r.icalendar_component_id;
+          const rawJcal = safeJsonParse<unknown>(r.icalendar_raw_jcal);
+          if (rawJcal) slim.icalendarRawJcal = rawJcal;
+          return slim;
+        });
+      }
+      return event;
     },
 
     async addBlock(opts: {
@@ -231,11 +1492,13 @@ export function getCalendar() {
       start: string;
       end: string;
       id?: string;
+      timezone?: string;
       calendarId?: string;
       color?: EventColor;
       description?: string;
       recurrence?: RecurrenceConfig;
       notifications?: number[];
+      exceptions?: string[];
       pomodoroConfig?: PomodoroConfig;
       allDay?: boolean;
       location?: string;
@@ -252,174 +1515,189 @@ export function getCalendar() {
       extendedProperties?: Record<string, string>;
       organizer?: EventOrganizer;
       attendees?: EventAttendee[];
+      localParticipationStatus?: AttendeeStatus;
       guestPermissions?: GuestPermissions;
+      meetingEnabled?: boolean;
     }): Promise<CalendarEvent> {
+      // Sanitize times to ensure clean integer minutes
+      const sanitizedStart = sanitizeCalendarTime(opts.start);
+      const sanitizedEnd = sanitizeCalendarTime(opts.end);
+      if (!sanitizedStart || !sanitizedEnd) {
+        throw new Error(`Invalid calendar time format: start="${opts.start}", end="${opts.end}"`);
+      }
+
       const id = opts.id ?? crypto.randomUUID();
-      const now = nowLocal();
-      const timezone = localTimezone();
+      const now = nowIso();
+      const timezone = opts.timezone ?? localTimezone();
       const calendarId = opts.calendarId ?? "local";
+      const description = sanitizeCalendarDescriptionHtml(opts.description ?? "");
+      const meetingEnabled = opts.meetingEnabled ?? hasMeetingState(opts);
       const rrule = opts.recurrence ? recurrenceToRrule(opts.recurrence) : null;
       const repeatUntil = opts.recurrence?.end.type === "until"
         ? opts.recurrence.end.date : null;
       const notifJson = opts.notifications && opts.notifications.length > 0
         ? JSON.stringify(opts.notifications) : null;
-      await execute(
-        `INSERT INTO calendar_events
-           (id, title, start_time, end_time, timezone, calendar_id,
-            color, description, rrule, notifications, repeat_until,
-            all_day, location, url, transparency, status,
-            source_uid, visibility, priority, categories, geo,
-            sequence, rdate, extended_properties, organizer,
-            guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
-            created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-                 $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
-                 $22, $23, $24, $25, $26, $27, $28, $29, $30)`,
-        [id, opts.title, toDbTime(opts.start), toDbTime(opts.end),
-         timezone, calendarId, opts.color ?? null, opts.description ?? "",
-         rrule, notifJson, repeatUntil,
-         opts.allDay ? 1 : 0, opts.location ?? "", opts.url ?? "",
-         opts.transparency ?? "opaque", opts.status ?? "confirmed",
-         opts.sourceUid ?? null,
-         opts.visibility ?? "public",
-         opts.priority ?? null,
-         opts.categories ? JSON.stringify(opts.categories) : null,
-         opts.geo ? JSON.stringify(opts.geo) : null,
-         opts.sequence ?? 0,
-         opts.rdate ? JSON.stringify(opts.rdate) : null,
-         opts.extendedProperties ? JSON.stringify(opts.extendedProperties) : null,
-         opts.organizer ? JSON.stringify(opts.organizer) : null,
-         opts.guestPermissions?.canModify ? 1 : 0,
-         opts.guestPermissions?.canInviteOthers === false ? 0 : 1,
-         opts.guestPermissions?.canSeeOtherGuests === false ? 0 : 1,
-         now, now],
-      );
-      if (opts.pomodoroConfig) {
-        await execute(
-          `INSERT INTO pomodoro_configs
-             (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count, idle_timeout_minutes)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [id, opts.pomodoroConfig.focusDurationMinutes, opts.pomodoroConfig.shortBreakMinutes,
-           opts.pomodoroConfig.longBreakMinutes, opts.pomodoroConfig.pomodoroCount,
-           opts.pomodoroConfig.idleTimeoutMinutes],
-        );
-      }
-      if (opts.attendees && opts.attendees.length > 0) {
-        await saveAttendees(id, opts.attendees);
-      }
-      const event: CalendarEvent = {
-        id, title: opts.title, start: opts.start, end: opts.end,
+      const exceptionsJson = opts.exceptions && opts.exceptions.length > 0
+        ? JSON.stringify(opts.exceptions) : null;
+      await invoke("calendar_add_event", {
+        dbUrl: dbUrl(),
+        event: {
+          id,
+          title: opts.title,
+          startTime: toDbTime(sanitizedStart, timezone, opts.allDay),
+          endTime: toDbTime(sanitizedEnd, timezone, opts.allDay),
+          timezone,
+          calendarId,
+          color: opts.color ?? null,
+          description,
+          rrule,
+          notifications: notifJson,
+          exceptions: exceptionsJson,
+          repeatUntil,
+          allDay: opts.allDay ?? false,
+          location: opts.location ?? "",
+          url: opts.url ?? "",
+          transparency: opts.transparency ?? "opaque",
+          status: opts.status ?? "confirmed",
+          sourceUid: opts.sourceUid ?? null,
+          visibility: opts.visibility ?? "public",
+          priority: opts.priority ?? null,
+          categories: opts.categories ? JSON.stringify(opts.categories) : null,
+          geo: opts.geo ? JSON.stringify(opts.geo) : null,
+          sequence: opts.sequence ?? 0,
+          rdate: opts.rdate ? JSON.stringify(opts.rdate) : null,
+          extendedProperties: opts.extendedProperties
+            ? JSON.stringify(opts.extendedProperties)
+            : null,
+          organizer: opts.organizer ? JSON.stringify(opts.organizer) : null,
+          meetingEnabled,
+          localRsvpStatus: opts.localParticipationStatus ?? null,
+          guestCanModify: opts.guestPermissions?.canModify ?? false,
+          guestCanInviteOthers: opts.guestPermissions?.canInviteOthers ?? true,
+          guestCanSeeOtherGuests: opts.guestPermissions?.canSeeOtherGuests ?? true,
+          createdAt: now,
+          updatedAt: now,
+          pomodoroConfig: opts.pomodoroConfig ?? null,
+          attendees: (opts.attendees ?? []).map((attendee) => ({
+            id: attendee.id,
+            name: attendee.name ?? null,
+            email: attendee.email,
+            role: attendee.role,
+            status: attendee.status,
+            rsvp: attendee.rsvp,
+          })),
+        },
+      });
+      const event: CalendarEvent = slimEvent({
+        id, title: opts.title, start: sanitizedStart, end: sanitizedEnd,
         timezone, calendarId,
-        color: opts.color, description: opts.description,
+        color: opts.color,
         recurrence: opts.recurrence, notifications: opts.notifications,
+        exceptions: opts.exceptions,
         pomodoroConfig: opts.pomodoroConfig,
+        meetingEnabled,
         allDay: opts.allDay, location: opts.location, url: opts.url,
         transparency: opts.transparency, status: opts.status,
-        sourceUid: opts.sourceUid, visibility: opts.visibility,
-        priority: opts.priority, categories: opts.categories,
-        geo: opts.geo, sequence: opts.sequence,
-        rdate: opts.rdate, extendedProperties: opts.extendedProperties,
-        organizer: opts.organizer,
-        attendees: opts.attendees,
-        guestPermissions: opts.guestPermissions,
-      };
+        localParticipationStatus: opts.localParticipationStatus,
+      });
       rawBlocks = [...rawBlocks, event];
-      reexpand();
+      totalEventCount++;
+      invalidate();
+      publishCalendarWindowSync();
       return event;
     },
 
-    async updateBlock(event: CalendarEvent) {
-      // Resolve recurring instance to its template
-      const parentId = event.recurringParentId ?? event.id;
-      let toUpdate = event;
-      if (event.recurringParentId) {
-        const template = rawBlocks.find((b) => b.id === parentId);
-        if (template) {
-          toUpdate = mergeIntoTemplate(template, event);
-        }
-      }
-      toUpdate = { ...toUpdate, recurringParentId: undefined };
+    /**
+     * Apply a partial event patch. Only columns whose keys are present in
+     * the patch are written; unrelated fields stay as-is. Callers can pass a
+     * full event (every column rewritten, original behavior) or a narrow
+     * patch like `{ id, start, end }` for drag commits.
+     *
+     * Child rows (attendees, alarms, pomodoroConfig) are touched only when
+     * their key is explicitly present in the patch, so passing a slim
+     * in-memory event without those keys preserves their existing rows.
+     */
+    async updateBlock(patch: Partial<CalendarEvent> & { id: string }): Promise<void> {
+      const { parentId, toUpdate, payload } = prepareUpdateBlockPayload(patch, rawBlocks);
 
-      const now = nowLocal();
-      const rrule = toUpdate.recurrence ? recurrenceToRrule(toUpdate.recurrence) : null;
-      const repeatUntil = toUpdate.recurrence?.end.type === "until"
-        ? toUpdate.recurrence.end.date : null;
-      const notifJson = toUpdate.notifications && toUpdate.notifications.length > 0
-        ? JSON.stringify(toUpdate.notifications) : null;
-      const gp = toUpdate.guestPermissions;
-      await execute(
-        `UPDATE calendar_events
-         SET title = $1, start_time = $2, end_time = $3,
-             color = $4, description = $5,
-             rrule = $6, notifications = $7,
-             repeat_until = $8,
-             all_day = $9, location = $10, url = $11,
-             transparency = $12, status = $13,
-             visibility = $14, priority = $15,
-             categories = $16, geo = $17,
-             sequence = $18, rdate = $19,
-             extended_properties = $20, organizer = $21,
-             guest_can_modify = $22, guest_can_invite_others = $23,
-             guest_can_see_other_guests = $24,
-             updated_at = $25
-         WHERE id = $26`,
-        [
-          toUpdate.title,
-          toDbTime(String(toUpdate.start)),
-          toDbTime(String(toUpdate.end)),
-          toUpdate.color ?? null,
-          toUpdate.description ?? "",
-          rrule,
-          notifJson,
-          repeatUntil,
-          toUpdate.allDay ? 1 : 0,
-          toUpdate.location ?? "",
-          toUpdate.url ?? "",
-          toUpdate.transparency ?? "opaque",
-          toUpdate.status ?? "confirmed",
-          toUpdate.visibility ?? "public",
-          toUpdate.priority ?? null,
-          toUpdate.categories ? JSON.stringify(toUpdate.categories) : null,
-          toUpdate.geo ? JSON.stringify(toUpdate.geo) : null,
-          toUpdate.sequence ?? 0,
-          toUpdate.rdate ? JSON.stringify(toUpdate.rdate) : null,
-          toUpdate.extendedProperties ? JSON.stringify(toUpdate.extendedProperties) : null,
-          toUpdate.organizer ? JSON.stringify(toUpdate.organizer) : null,
-          gp?.canModify ? 1 : 0,
-          gp?.canInviteOthers === false ? 0 : 1,
-          gp?.canSeeOtherGuests === false ? 0 : 1,
-          now,
-          parentId,
-        ],
-      );
-      // Sync attendees
-      await saveAttendees(parentId, toUpdate.attendees ?? []);
-      if (toUpdate.pomodoroConfig) {
-        await execute(
-          `INSERT OR REPLACE INTO pomodoro_configs
-             (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count, idle_timeout_minutes)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [parentId, toUpdate.pomodoroConfig.focusDurationMinutes,
-           toUpdate.pomodoroConfig.shortBreakMinutes,
-           toUpdate.pomodoroConfig.longBreakMinutes,
-           toUpdate.pomodoroConfig.pomodoroCount,
-           toUpdate.pomodoroConfig.idleTimeoutMinutes],
-        );
-      } else {
-        await execute("DELETE FROM pomodoro_configs WHERE event_id = $1", [parentId]);
-      }
+      await invoke("calendar_update_event", {
+        dbUrl: dbUrl(),
+        patch: payload,
+      });
+
       rawBlocks = rawBlocks.map((b) =>
-        b.id === parentId ? { ...b, ...toUpdate, id: parentId } : b,
+        b.id === parentId
+          ? { ...b, ...toUpdate, id: parentId, recurringParentId: undefined }
+          : b,
       );
-      reexpand();
+      invalidate();
+      publishCalendarWindowSync();
     },
 
-    async deleteBlock(id: string) {
-      // Resolve recurring instance to parent
-      const parentId = id.includes("::") ? id.split("::")[0] : id;
-      await execute("DELETE FROM calendar_events WHERE id = $1", [parentId]);
-      rawBlocks = rawBlocks.filter((b) => b.id !== parentId);
-      reexpand();
+    async deleteBlock(eventOrId: CalendarEvent | string) {
+      const target = mutationTargetForEvent(eventOrId);
+      await invoke("calendar_delete_event", { dbUrl: dbUrl(), target });
+      if (target.id.includes("::")) {
+        const [parentId, date] = target.id.split("::");
+        rawBlocks = rawBlocks.map((b) =>
+          b.id === parentId ? { ...b, exceptions: [...(b.exceptions ?? []), date] } : b,
+        );
+      } else {
+        rawBlocks = rawBlocks.filter((b) => b.id !== target.id);
+        totalEventCount = Math.max(0, totalEventCount - 1);
+      }
+      invalidate();
+      publishCalendarWindowSync();
+    },
+
+    async archiveBlock(eventOrId: CalendarEvent | string) {
+      const target = mutationTargetForEvent(eventOrId);
+      await invoke("calendar_archive_event", { dbUrl: dbUrl(), target });
+      if (target.id.includes("::")) {
+        const [parentId, date] = target.id.split("::");
+        rawBlocks = rawBlocks.map((b) =>
+          b.id === parentId ? { ...b, exceptions: [...(b.exceptions ?? []), date] } : b,
+        );
+      } else {
+        rawBlocks = rawBlocks.filter((b) => b.id !== target.id);
+        totalEventCount = Math.max(0, totalEventCount - 1);
+      }
+      invalidate();
+      publishCalendarWindowSync();
+    },
+
+    async applyDeleteArchivePlan(operations: CalendarDeleteArchiveOperation[]) {
+      await invoke("calendar_apply_delete_archive_plan", {
+        dbUrl: dbUrl(),
+        operations,
+      });
+      invalidate(false);
+      panelEventCache.clear();
+      publishCalendarWindowSync();
+    },
+
+    async restoreArchivedBlock(eventOrId: CalendarEvent | string) {
+      const target = mutationTargetForEvent(eventOrId);
+      await invoke("calendar_restore_archived_event", { dbUrl: dbUrl(), target });
+      if (target.id.includes("::")) {
+        const [parentId, date] = target.id.split("::");
+        rawBlocks = rawBlocks.map((b) =>
+          b.id === parentId
+            ? { ...b, exceptions: (b.exceptions ?? []).filter((exception) => exception !== date) }
+            : b,
+        );
+      } else {
+        const existed = rawBlocks.some((b) => b.id === target.id);
+        panelEventCache.delete(target.id);
+        const restored = await store.loadFullEvent(target.id)
+          ?? (typeof eventOrId === "string" ? undefined : { ...eventOrId, recurringParentId: undefined });
+        if (restored) {
+          rawBlocks = [...rawBlocks.filter((b) => b.id !== target.id), restored];
+          if (!existed) totalEventCount += 1;
+        }
+      }
+      invalidate();
+      publishCalendarWindowSync();
     },
 
     /**
@@ -441,101 +1719,57 @@ export function getCalendar() {
 
       const instanceDate = instanceEvent.start.split(" ")[0];
       const exceptions = [...(parent.exceptions ?? []), instanceDate];
-      const now = nowLocal();
-
-      // Add exception to parent
-      await execute(
-        `UPDATE calendar_events SET exceptions = $1, updated_at = $2 WHERE id = $3`,
-        [JSON.stringify(exceptions), now, parentId],
-      );
-
-      // Create standalone event
+      const now = nowIso();
       const newId = crypto.randomUUID();
       const timezone = parent.timezone || localTimezone();
       const notifJson = parent.notifications && parent.notifications.length > 0
         ? JSON.stringify(parent.notifications) : null;
-      const gpD = parent.guestPermissions;
-      await execute(
-        `INSERT INTO calendar_events
-           (id, title, start_time, end_time, timezone, calendar_id,
-            color, description, notifications,
-            all_day, location, url, transparency, status,
-            visibility, priority, categories, geo,
-            sequence, extended_properties, organizer,
-            guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
-            created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-                 $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)`,
-        [
-          newId, instanceEvent.title,
-          toDbTime(instanceEvent.start), toDbTime(instanceEvent.end),
-          timezone, parent.calendarId,
-          instanceEvent.color ?? null,
-          instanceEvent.description ?? "",
-          notifJson,
-          parent.allDay ? 1 : 0,
-          parent.location ?? "",
-          parent.url ?? "",
-          parent.transparency ?? "opaque",
-          parent.status ?? "confirmed",
-          parent.visibility ?? "public",
-          parent.priority ?? null,
-          parent.categories ? JSON.stringify(parent.categories) : null,
-          parent.geo ? JSON.stringify(parent.geo) : null,
-          parent.sequence ?? 0,
-          parent.extendedProperties ? JSON.stringify(parent.extendedProperties) : null,
-          parent.organizer ? JSON.stringify(parent.organizer) : null,
-          gpD?.canModify ? 1 : 0,
-          gpD?.canInviteOthers === false ? 0 : 1,
-          gpD?.canSeeOtherGuests === false ? 0 : 1,
-          now, now,
-        ],
-      );
-      if (parent.pomodoroConfig) {
-        await execute(
-          `INSERT INTO pomodoro_configs
-             (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count, idle_timeout_minutes)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [newId, parent.pomodoroConfig.focusDurationMinutes,
-           parent.pomodoroConfig.shortBreakMinutes,
-           parent.pomodoroConfig.longBreakMinutes,
-           parent.pomodoroConfig.pomodoroCount,
-           parent.pomodoroConfig.idleTimeoutMinutes],
-        );
-      }
+      await invoke("calendar_detach_instance", {
+        dbUrl: dbUrl(),
+        input: {
+          parentId,
+          instanceDate,
+          exceptions: JSON.stringify(exceptions),
+          newId,
+          title: instanceEvent.title,
+          startTime: toDbTime(instanceEvent.start, timezone, parent.allDay),
+          endTime: toDbTime(instanceEvent.end, timezone, parent.allDay),
+          timezone,
+          calendarId: parent.calendarId,
+          color: instanceEvent.color ?? null,
+          notifications: notifJson,
+          allDay: parent.allDay ?? false,
+          location: parent.location ?? "",
+          transparency: parent.transparency ?? "opaque",
+          status: parent.status ?? "confirmed",
+          now,
+        },
+      });
 
-      // Copy attendees from parent
-      if (parent.attendees && parent.attendees.length > 0) {
-        const cloned = parent.attendees.map((a) => ({ ...a, id: crypto.randomUUID() }));
-        await saveAttendees(newId, cloned);
-      }
-
-      // Migrate pomodoro segments from parent template to the new standalone event
-      // Segments may be stored with event_id = parentId or event_id = parentId::date
-      await execute(
-        `UPDATE pomodoro_segments SET event_id = $1
-         WHERE event_id IN ($2, $2 || '::' || $3) AND event_date = $3`,
-        [newId, parentId, instanceDate],
-      );
-
-      // Update in-memory state
       rawBlocks = rawBlocks.map((b) =>
         b.id === parentId ? { ...b, exceptions } : b,
       );
-      const standalone: CalendarEvent = {
-        ...instanceEvent,
+      const standalone: CalendarEvent = slimEvent({
         id: newId,
+        title: instanceEvent.title,
+        start: instanceEvent.start,
+        end: instanceEvent.end,
         timezone,
         calendarId: parent.calendarId,
-        recurrence: undefined,
-        recurringParentId: undefined,
-        exceptions: undefined,
-        pomodoroConfig: parent.pomodoroConfig,
-        attendees: parent.attendees,
-        guestPermissions: parent.guestPermissions,
-      };
+        color: instanceEvent.color,
+        allDay: parent.allDay,
+        location: parent.location,
+        transparency: parent.transparency,
+        status: parent.status,
+        localParticipationStatus: parent.localParticipationStatus,
+        meetingEnabled: parent.meetingEnabled,
+        notifications: parent.notifications,
+        pomodoroConfig: parent.allDay ? undefined : parent.pomodoroConfig,
+      });
       rawBlocks = [...rawBlocks, standalone];
-      reexpand();
+      totalEventCount++;
+      invalidate();
+      publishCalendarWindowSync();
       return standalone;
     },
 
@@ -547,15 +1781,23 @@ export function getCalendar() {
       if (!parent) return;
 
       const exceptions = [...(parent.exceptions ?? []), date];
-      const now = nowLocal();
-      await execute(
-        `UPDATE calendar_events SET exceptions = $1, updated_at = $2 WHERE id = $3`,
-        [JSON.stringify(exceptions), now, parentId],
-      );
+      const now = nowIso();
+      await invoke("calendar_update_event", {
+        dbUrl: dbUrl(),
+        patch: {
+          id: parentId,
+          updatedAt: now,
+          fields: [{ field: "exceptions", value: JSON.stringify(exceptions) }],
+          attendees: null,
+          alarms: null,
+          pomodoroConfig: null,
+        },
+      });
       rawBlocks = rawBlocks.map((b) =>
         b.id === parentId ? { ...b, exceptions } : b,
       );
-      reexpand();
+      invalidate();
+      publishCalendarWindowSync();
     },
 
     /**
@@ -565,20 +1807,31 @@ export function getCalendar() {
       const parent = rawBlocks.find((b) => b.id === parentId);
       if (!parent || !parent.recurrence) return;
 
-      const now = nowLocal();
+      const now = nowIso();
       const updatedRecurrence: RecurrenceConfig = {
         ...parent.recurrence,
         end: { type: "until", date },
       };
       const rrule = recurrenceToRrule(updatedRecurrence);
-      await execute(
-        `UPDATE calendar_events SET repeat_until = $1, rrule = $2, updated_at = $3 WHERE id = $4`,
-        [date, rrule, now, parentId],
-      );
+      await invoke("calendar_update_event", {
+        dbUrl: dbUrl(),
+        patch: {
+          id: parentId,
+          updatedAt: now,
+          fields: [
+            { field: "repeatUntil", value: date },
+            { field: "rrule", value: rrule },
+          ],
+          attendees: null,
+          alarms: null,
+          pomodoroConfig: null,
+        },
+      });
       rawBlocks = rawBlocks.map((b) =>
         b.id === parentId ? { ...b, recurrence: updatedRecurrence } : b,
       );
-      reexpand();
+      invalidate();
+      publishCalendarWindowSync();
     },
 
     /**
@@ -603,17 +1856,13 @@ export function getCalendar() {
       const capBefore = parseYMD(capDate);
       capBefore.setDate(capBefore.getDate() - 1);
       const dayBefore = fmtYMD(capBefore);
-      const now = nowLocal();
+      const now = nowIso();
 
       // Cap the old template's recurrence at dayBefore
       const cappedRecurrence: RecurrenceConfig | undefined = parent.recurrence
         ? { ...parent.recurrence, end: { type: "until", date: dayBefore } }
         : undefined;
       const cappedRrule = cappedRecurrence ? recurrenceToRrule(cappedRecurrence) : null;
-      await execute(
-        `UPDATE calendar_events SET repeat_until = $1, rrule = $2, updated_at = $3 WHERE id = $4`,
-        [dayBefore, cappedRrule, now, parentId],
-      );
 
       // Create new recurring template starting at changes' full position
       const newId = crypto.randomUUID();
@@ -623,113 +1872,589 @@ export function getCalendar() {
       const newEnd = changes.end
         ? String(changes.end)
         : `${splitDate} ${instanceEvent.end.split(" ")[1]}`;
+      const newStartDate = newStart.split(" ")[0];
+      const newExceptions = (parent.exceptions ?? []).filter((date) => date >= newStartDate);
       const merged = { ...parent, ...changes };
-      // New template inherits the original recurrence (without the old end condition)
-      const newRecurrence: RecurrenceConfig | undefined = parent.recurrence
-        ? { ...parent.recurrence, end: { type: "never" } }
-        : undefined;
+      const meetingEnabled = merged.meetingEnabled ?? hasMeetingState(merged);
+      const recurrenceChanged = hasEventPatchKey(changes, "recurrence")
+        && !recurrenceConfigsEqual(changes.recurrence, parent.recurrence);
+      const newRecurrence: RecurrenceConfig | undefined = recurrenceChanged
+        ? changes.recurrence
+        : parent.recurrence
+          ? { ...parent.recurrence, end: { type: "never" } }
+          : undefined;
       const rrule = newRecurrence ? recurrenceToRrule(newRecurrence) : null;
+      const localParticipationStatus = merged.localParticipationStatus;
 
       const splitNotifJson = merged.notifications && merged.notifications.length > 0
         ? JSON.stringify(merged.notifications) : null;
-      const gpS = parent.guestPermissions;
-      await execute(
-        `INSERT INTO calendar_events
-           (id, title, start_time, end_time, timezone, calendar_id,
-            color, description, rrule, notifications,
-            all_day, location, url, transparency, status,
-            visibility, priority, categories, geo,
-            sequence, extended_properties, organizer,
-            guest_can_modify, guest_can_invite_others, guest_can_see_other_guests,
-            created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-                 $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)`,
-        [
-          newId, merged.title ?? parent.title,
-          toDbTime(newStart),
-          toDbTime(newEnd),
-          parent.timezone, parent.calendarId,
-          merged.color ?? null,
-          merged.description ?? "",
+      const splitExceptionsJson = newExceptions.length > 0
+        ? JSON.stringify(newExceptions) : null;
+      const homeZone = parent.timezone || localTimezone();
+      // description and url are heavy columns. If `changes` carries them
+      // (user edited via EventPanel after Step 3 lands), bind the new
+      // value; COALESCE then prefers it. Otherwise bind NULL and the
+      // parent's column wins. Other heavy columns (visibility, priority,
+      // categories, geo, sequence, extended_properties, organizer,
+      // guest_can_*) preserve current behavior: parent's row, never
+      // overridden by `changes`.
+      const descriptionPatch = "description" in changes
+        ? sanitizeCalendarDescriptionHtml(changes.description ?? "") : null;
+      const urlPatch = "url" in changes ? (changes.url ?? "") : null;
+      const pomodoroState = resolvedPomodoroConfigForTimedEvent(parent, changes, merged.allDay);
+      await invoke("calendar_split_series", {
+        dbUrl: dbUrl(),
+        input: {
+          parentId,
+          dayBefore,
+          cappedRrule,
+          newId,
+          title: merged.title ?? parent.title,
+          startTime: toDbTime(newStart, homeZone, merged.allDay),
+          endTime: toDbTime(newEnd, homeZone, merged.allDay),
+          timezone: homeZone,
+          calendarId: parent.calendarId,
+          color: merged.color ?? null,
+          notifications: splitNotifJson,
+          exceptions: splitExceptionsJson,
           rrule,
-          splitNotifJson,
-          merged.allDay ? 1 : 0,
-          merged.location ?? "",
-          merged.url ?? "",
-          merged.transparency ?? "opaque",
-          merged.status ?? "confirmed",
-          parent.visibility ?? "public",
-          parent.priority ?? null,
-          parent.categories ? JSON.stringify(parent.categories) : null,
-          parent.geo ? JSON.stringify(parent.geo) : null,
-          parent.sequence ?? 0,
-          parent.extendedProperties ? JSON.stringify(parent.extendedProperties) : null,
-          parent.organizer ? JSON.stringify(parent.organizer) : null,
-          gpS?.canModify ? 1 : 0,
-          gpS?.canInviteOthers === false ? 0 : 1,
-          gpS?.canSeeOtherGuests === false ? 0 : 1,
-          now, now,
-        ],
-      );
+          allDay: merged.allDay ?? false,
+          location: merged.location ?? "",
+          transparency: merged.transparency ?? "opaque",
+          status: merged.status ?? "confirmed",
+          descriptionPatch,
+          urlPatch,
+          localRsvpStatus: localParticipationStatus ?? null,
+          meetingEnabled,
+          copyPomodoroConfig: pomodoroState.copyFromParent,
+          pomodoroConfig: pomodoroState.payloadConfig,
+          now,
+        },
+      });
 
-      const pomConfig = merged.pomodoroConfig ?? parent.pomodoroConfig;
-      if (pomConfig) {
-        await execute(
-          `INSERT INTO pomodoro_configs
-             (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count, idle_timeout_minutes)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [newId, pomConfig.focusDurationMinutes, pomConfig.shortBreakMinutes,
-           pomConfig.longBreakMinutes, pomConfig.pomodoroCount,
-           pomConfig.idleTimeoutMinutes],
-        );
-      }
-
-      // Copy attendees from parent
-      if (parent.attendees && parent.attendees.length > 0) {
-        const cloned = parent.attendees.map((a) => ({ ...a, id: crypto.randomUUID() }));
-        await saveAttendees(newId, cloned);
-      }
-
-      // Update in-memory state
       rawBlocks = rawBlocks.map((b) =>
         b.id === parentId ? { ...b, recurrence: cappedRecurrence } : b,
       );
-      const newTemplate: CalendarEvent = {
+      const newTemplate: CalendarEvent = slimEvent({
         ...parent,
         ...changes,
         id: newId,
         start: newStart,
         end: newEnd,
+        timezone: homeZone,
         recurrence: newRecurrence,
         recurringParentId: undefined,
-        exceptions: undefined,
-        pomodoroConfig: pomConfig,
-        attendees: parent.attendees,
-        guestPermissions: parent.guestPermissions,
-      };
+        exceptions: newExceptions.length > 0 ? newExceptions : undefined,
+        pomodoroConfig: pomodoroState.finalConfig,
+      });
       rawBlocks = [...rawBlocks, newTemplate];
-      reexpand();
+      totalEventCount++;
+      invalidate();
       return newTemplate;
     },
 
+    async applyRecurrenceCommitPlan(plan: RecurringCommitPlan) {
+      const backendOperations: CalendarRecurrenceCommitOperationPayload[] = [];
+      const operationResults = new Map<string, CalendarEvent>();
+      let workingBlocks = rawBlocks.map((block) => ({ ...block }));
+      let addedCount = 0;
+      let activeRunTransferred = false;
+
+      const replaceWorkingBlock = (event: CalendarEvent): void => {
+        workingBlocks = workingBlocks.map((block) => block.id === event.id ? { ...block, ...event } : block);
+      };
+
+      const appendWorkingBlock = (event: CalendarEvent): void => {
+        workingBlocks = [...workingBlocks.filter((block) => block.id !== event.id), event];
+        addedCount += 1;
+      };
+
+      const getWorkingTemplate = (eventOrId: CalendarEvent | string): CalendarEvent | undefined => {
+        const id = typeof eventOrId === "string"
+          ? eventOrId
+          : eventOrId.recurringParentId ?? eventOrId.id;
+        return workingBlocks.find((block) => block.id === id);
+      };
+
+      const queueUpdate = (patch: Partial<CalendarEvent> & { id: string }): CalendarEvent => {
+        const { parentId, toUpdate, payload } = prepareUpdateBlockPayload(patch, workingBlocks);
+        backendOperations.push({ type: "update_event", patch: payload });
+        const existing = workingBlocks.find((block) => block.id === parentId);
+        const updated = slimEvent({
+          ...existing,
+          ...toUpdate,
+          id: parentId,
+          recurringParentId: undefined,
+        } as CalendarEvent);
+        replaceWorkingBlock(updated);
+        return updated;
+      };
+
+      const queueSetRepeatUntil = (parentId: string, date: string): CalendarEvent | undefined => {
+        const parent = getWorkingTemplate(parentId);
+        if (!parent?.recurrence) return undefined;
+        const updatedRecurrence: RecurrenceConfig = {
+          ...parent.recurrence,
+          end: { type: "until", date },
+        };
+        return queueUpdate({ id: parentId, recurrence: updatedRecurrence });
+      };
+
+      const queueDetachInstance = (instanceEvent: CalendarEvent): CalendarEvent => {
+        const parentId = instanceEvent.recurringParentId ?? instanceEvent.id;
+        const parent = getWorkingTemplate(parentId);
+        if (!parent) throw new Error("Parent template not found");
+
+        const instanceDate = instanceEvent.start.split(" ")[0];
+        const exceptions = Array.from(new Set([...(parent.exceptions ?? []), instanceDate]));
+        const now = nowIso();
+        const newId = crypto.randomUUID();
+        const timezone = parent.timezone || localTimezone();
+        const notifications = parent.notifications && parent.notifications.length > 0
+          ? JSON.stringify(parent.notifications)
+          : null;
+        backendOperations.push({
+          type: "detach_instance",
+          input: {
+            parentId,
+            instanceDate,
+            exceptions: JSON.stringify(exceptions),
+            newId,
+            title: instanceEvent.title,
+            startTime: toDbTime(instanceEvent.start, timezone, parent.allDay),
+            endTime: toDbTime(instanceEvent.end, timezone, parent.allDay),
+            timezone,
+            calendarId: parent.calendarId,
+            color: instanceEvent.color ?? null,
+            notifications,
+            allDay: parent.allDay ?? false,
+            location: parent.location ?? "",
+            transparency: parent.transparency ?? "opaque",
+            status: parent.status ?? "confirmed",
+            now,
+          },
+        });
+
+        replaceWorkingBlock({ ...parent, exceptions });
+        const standalone = slimEvent({
+          id: newId,
+          title: instanceEvent.title,
+          start: instanceEvent.start,
+          end: instanceEvent.end,
+          timezone,
+          calendarId: parent.calendarId,
+          color: instanceEvent.color,
+          allDay: parent.allDay,
+          location: parent.location,
+          transparency: parent.transparency,
+          status: parent.status,
+          localParticipationStatus: parent.localParticipationStatus,
+          meetingEnabled: parent.meetingEnabled,
+          notifications: parent.notifications,
+          pomodoroConfig: parent.allDay ? undefined : parent.pomodoroConfig,
+        });
+        appendWorkingBlock(standalone);
+        return standalone;
+      };
+
+      const queueSplitSeries = (
+        instanceEvent: CalendarEvent,
+        changes: Partial<CalendarEvent>,
+      ): CalendarEvent => {
+        const parentId = instanceEvent.recurringParentId ?? instanceEvent.id;
+        const parent = getWorkingTemplate(parentId);
+        if (!parent) throw new Error("Parent template not found");
+
+        const splitDate = instanceEvent.start.split(" ")[0];
+        const newStartDateStr = changes.start
+          ? String(changes.start).split(" ")[0]
+          : splitDate;
+        const capDate = newStartDateStr < splitDate ? newStartDateStr : splitDate;
+        const capBefore = parseYMD(capDate);
+        capBefore.setDate(capBefore.getDate() - 1);
+        const dayBefore = fmtYMD(capBefore);
+        const now = nowIso();
+        const cappedRecurrence: RecurrenceConfig | undefined = parent.recurrence
+          ? { ...parent.recurrence, end: { type: "until", date: dayBefore } }
+          : undefined;
+        const cappedRrule = cappedRecurrence ? recurrenceToRrule(cappedRecurrence) : null;
+        const newId = crypto.randomUUID();
+        const newStart = changes.start
+          ? String(changes.start)
+          : `${splitDate} ${instanceEvent.start.split(" ")[1]}`;
+        const newEnd = changes.end
+          ? String(changes.end)
+          : `${splitDate} ${instanceEvent.end.split(" ")[1]}`;
+        const newStartDate = newStart.split(" ")[0];
+        const newExceptions = (parent.exceptions ?? []).filter((date) => date >= newStartDate);
+        const merged = { ...parent, ...changes };
+        const meetingEnabled = merged.meetingEnabled ?? hasMeetingState(merged);
+        const recurrenceChanged = hasEventPatchKey(changes, "recurrence")
+          && !recurrenceConfigsEqual(changes.recurrence, parent.recurrence);
+        const newRecurrence: RecurrenceConfig | undefined = recurrenceChanged
+          ? changes.recurrence
+          : parent.recurrence
+            ? { ...parent.recurrence, end: { type: "never" } }
+            : undefined;
+        const rrule = newRecurrence ? recurrenceToRrule(newRecurrence) : null;
+        const notifications = merged.notifications && merged.notifications.length > 0
+          ? JSON.stringify(merged.notifications)
+          : null;
+        const exceptions = newExceptions.length > 0 ? JSON.stringify(newExceptions) : null;
+        const homeZone = parent.timezone || localTimezone();
+        const descriptionPatch = "description" in changes
+          ? sanitizeCalendarDescriptionHtml(changes.description ?? "")
+          : null;
+        const urlPatch = "url" in changes ? (changes.url ?? "") : null;
+        const pomodoroState = resolvedPomodoroConfigForTimedEvent(parent, changes, merged.allDay);
+
+        backendOperations.push({
+          type: "split_series",
+          input: {
+            parentId,
+            dayBefore,
+            cappedRrule,
+            newId,
+            title: merged.title ?? parent.title,
+            startTime: toDbTime(newStart, homeZone, merged.allDay),
+            endTime: toDbTime(newEnd, homeZone, merged.allDay),
+            timezone: homeZone,
+            calendarId: parent.calendarId,
+            color: merged.color ?? null,
+            notifications,
+            exceptions,
+            rrule,
+            allDay: merged.allDay ?? false,
+            location: merged.location ?? "",
+            transparency: merged.transparency ?? "opaque",
+            status: merged.status ?? "confirmed",
+            descriptionPatch,
+            urlPatch,
+            localRsvpStatus: merged.localParticipationStatus ?? null,
+            meetingEnabled,
+            copyPomodoroConfig: pomodoroState.copyFromParent,
+            pomodoroConfig: pomodoroState.payloadConfig,
+            now,
+          },
+        });
+
+        if (cappedRecurrence) replaceWorkingBlock({ ...parent, recurrence: cappedRecurrence });
+        const newTemplate = slimEvent({
+          ...parent,
+          ...changes,
+          id: newId,
+          start: newStart,
+          end: newEnd,
+          timezone: homeZone,
+          recurrence: newRecurrence,
+          recurringParentId: undefined,
+          exceptions: newExceptions.length > 0 ? newExceptions : undefined,
+          pomodoroConfig: pomodoroState.finalConfig,
+        });
+        appendWorkingBlock(newTemplate);
+        return newTemplate;
+      };
+
+      const resolveTransferTarget = (
+        operation: Extract<RecurringCommitPlan["operations"][number], { type: "transfer-active-run" }>,
+      ): { id: string; end?: string; date?: string } => {
+        const target = operation.to;
+        if (target.kind === "event-id") {
+          return {
+            id: target.eventId,
+            date: target.eventId.split("::")[1],
+          };
+        }
+
+        const result = operationResults.get(target.operationId);
+        if (!result) {
+          throw new Error(`Missing result for recurrence operation ${target.operationId}`);
+        }
+
+        if (target.kind === "operation-result") {
+          return {
+            id: result.id,
+            end: result.end,
+            date: result.start.split(" ")[0],
+          };
+        }
+
+        return {
+          id: templateEventIdForDate(result, target.date),
+          end: templateEndForDate(result, target.date),
+          date: target.date,
+        };
+      };
+
+      const toPlannedEnd = (value: string | undefined): string | null => {
+        if (!value) return null;
+        const ms = new Date(value.replace(" ", "T")).getTime();
+        return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+      };
+
+      for (const operation of plan.operations) {
+        switch (operation.type) {
+          case "detach-occurrence": {
+            const detached = queueDetachInstance(operation.occurrence);
+            const updated = queueUpdate({
+              ...detached,
+              ...operation.patch,
+              recurrence: operation.target === "recurring-template"
+                ? operation.patch.recurrence
+                : undefined,
+              recurringParentId: undefined,
+            });
+            operationResults.set(operation.operationId, updated);
+            break;
+          }
+          case "cap-template":
+            queueSetRepeatUntil(operation.templateId, operation.untilDate);
+            break;
+          case "split-series": {
+            const newTemplate = queueSplitSeries(operation.occurrence, operation.patch);
+            operationResults.set(operation.operationId, newTemplate);
+            break;
+          }
+          case "update-template-fields": {
+            const template = getWorkingTemplate(operation.selectedOccurrence);
+            if (!template) throw new Error(`Template ${operation.templateId} not found`);
+            if (operation.protectedUntilDate) {
+              if (!operation.firstMutableDate) {
+                throw new Error(`No mutable occurrence remains for recurrence template ${operation.templateId}`);
+              }
+              const virtualInstance = occurrenceOnDate(template, template.id, operation.firstMutableDate);
+              const patch = moveDatedPatchToDate(operation.patch, operation.firstMutableDate);
+              const newTemplate = queueSplitSeries(virtualInstance, patch);
+              operationResults.set(operation.templateId, newTemplate);
+              break;
+            }
+            const updated = queueUpdate(
+              patchForTemplateAnchor(template, operation.selectedOccurrence, operation.patch),
+            );
+            operationResults.set(operation.templateId, updated);
+            break;
+          }
+          case "collapse-series": {
+            const template = getWorkingTemplate(operation.survivor);
+            if (!template) throw new Error(`Template ${operation.templateId} not found`);
+            const patch = { ...operation.patch, recurrence: undefined };
+            if (operation.protectedUntilDate) {
+              queueSetRepeatUntil(operation.templateId, operation.protectedUntilDate);
+              const detached = queueDetachInstance(operation.survivor);
+              const updated = queueUpdate({
+                ...detached,
+                ...patch,
+                id: detached.id,
+                recurrence: undefined,
+                recurringParentId: undefined,
+                exceptions: undefined,
+              });
+              operationResults.set(operation.operationId, updated);
+              break;
+            }
+            const updated = queueUpdate({
+              ...template,
+              ...patch,
+              id: template.id,
+              start: patch.start ? String(patch.start) : operation.survivor.start,
+              end: patch.end ? String(patch.end) : operation.survivor.end,
+              recurrence: undefined,
+              recurringParentId: undefined,
+              exceptions: undefined,
+            });
+            operationResults.set(operation.operationId, updated);
+            break;
+          }
+          case "materialize-protected-history": {
+            const datesToProtect = await invoke<string[]>("calendar_progress_dates_before", {
+              dbUrl: dbUrl(),
+              templateId: operation.templateId,
+              cutoffDate: operation.cutoffDate,
+              excludeDate: operation.excludeDate ?? null,
+            });
+            const parent = getWorkingTemplate(operation.templateId);
+            if (!parent) break;
+            for (const date of datesToProtect) {
+              queueDetachInstance(occurrenceOnDate(parent, operation.templateId, date));
+            }
+            break;
+          }
+          case "materialize-occurrence": {
+            const detached = queueDetachInstance(operation.occurrence);
+            const updated = operation.patch
+              ? queueUpdate({ ...detached, ...operation.patch, id: detached.id, recurringParentId: undefined })
+              : detached;
+            operationResults.set(operation.operationId, updated);
+            break;
+          }
+          case "transfer-active-run":
+            {
+              const target = resolveTransferTarget(operation);
+              backendOperations.push({
+                type: "transfer_active_event_reference",
+                transfer: {
+                  newEventId: target.id,
+                  newEventDate: target.date ?? null,
+                  plannedEnd: toPlannedEnd(operation.newEnd ?? target.end),
+                },
+              });
+              activeRunTransferred = true;
+            }
+            break;
+          case "refresh-window":
+            break;
+        }
+      }
+
+      if (backendOperations.length > 0) {
+        await invoke("calendar_apply_recurrence_commit_plan", {
+          dbUrl: dbUrl(),
+          operations: backendOperations,
+        });
+        rawBlocks = workingBlocks.map((block) => slimEvent(block));
+        totalEventCount += addedCount;
+        invalidate(false);
+        panelEventCache.clear();
+        publishCalendarWindowSync();
+      }
+
+      return { operationResults, activeRunTransferred };
+    },
+
     async clearAll() {
-      await execute("DELETE FROM calendar_events");
+      await invoke("calendar_clear_events", { dbUrl: dbUrl() });
       rawBlocks = [];
-      blocks = [];
+      totalEventCount = 0;
+      invalidate();
+      publishCalendarWindowSync();
+    },
+
+    /**
+     * Insert or update a batch of events into a target calendar, deduplicated
+     * by (calendar_id, source_uid). Newer revisions (higher SEQUENCE) win;
+     * equal SEQUENCE counts as an update so re-importing the same file leaves
+     * the DB clean. Child rows (attendees, alarms, overrides) are replaced.
+     *
+     * The whole batch ships as a typed payload to the Rust
+     * `calendar_bulk_import` command. Rust deduplicates by UID, compares
+     * SEQUENCE, replaces child rows, and commits once.
+     */
+    async bulkImport(
+      events: CalendarEvent[],
+      targetCalendarId: string,
+      opts: {
+        refreshWindow?: boolean;
+        preservation?: IcsPreservationPayload | null;
+        sourceName?: string;
+        sourceKind?: CalendarImportSourceKind;
+      } = {},
+    ): Promise<IcsImportSummary> {
+      const now = nowIso();
+      const fallbackZone = localTimezone();
+
+      const payload = buildBulkImportPayload(
+        events,
+        targetCalendarId,
+        now,
+        fallbackZone,
+        () => crypto.randomUUID(),
+        opts.preservation ?? null,
+        opts.sourceName ?? "",
+        opts.sourceKind ?? "import-file",
+      );
+      const result = await invoke<CalendarBulkImportResult>("calendar_bulk_import", {
+        dbUrl: dbUrl(),
+        payload,
+      });
+
+      if (result.applied.length === 0) {
+        return {
+          added: 0,
+          updated: 0,
+          skippedOlder: result.skippedOlder,
+          warnings: result.warnings,
+        };
+      }
+
+      totalEventCount += result.added;
+      if (opts.refreshWindow ?? true) {
+        await reloadCurrentWindowFromDb();
+      }
+      publishCalendarWindowSync();
+
+      return {
+        added: result.added,
+        updated: result.updated,
+        skippedOlder: result.skippedOlder,
+        warnings: result.warnings,
+      };
+    },
+
+    /**
+     * Serialize every event of `calendar` into a `.ics` string ready to write
+     * to disk. Event ids come from Rust because the render path owns only
+     * the visible window. Heavy fields are loaded on demand via
+     * `loadFullEvent` before serialization so the export is lossless.
+     */
+    async exportCalendarAsIcs(calendar: Calendar): Promise<string> {
+      const ids = await invoke<string[]>("calendar_list_event_ids_for_calendar", {
+        dbUrl: dbUrl(),
+        calendarId: calendar.id,
+      });
+      const full = await Promise.all(ids.map((id) => store.loadFullEvent(id)));
+      const calendarEvents = full.filter((e): e is CalendarEvent => e !== undefined);
+      const preservedTimezoneRows = await invoke<string[]>(
+        "calendar_load_icalendar_timezones_for_calendar",
+        {
+          dbUrl: dbUrl(),
+          calendarId: calendar.id,
+        },
+      );
+      const preservedTimezones = preservedTimezoneRows
+        .map((row) => safeJsonParse<unknown>(row))
+        .filter((row): row is unknown => row !== undefined);
+      const preservedPassthroughRows = await invoke<string[]>(
+        "calendar_load_icalendar_passthrough_components_for_calendar",
+        {
+          dbUrl: dbUrl(),
+          calendarId: calendar.id,
+        },
+      );
+      const preservedPassthroughComponents = preservedPassthroughRows
+        .map((row) => safeJsonParse<unknown>(row))
+        .filter((row): row is unknown => row !== undefined);
+      const preservedExportMetadata = await invoke<CalendarIcalendarExportMetadata>(
+        "calendar_load_icalendar_export_metadata_for_calendar",
+        {
+          dbUrl: dbUrl(),
+          calendarId: calendar.id,
+        },
+      );
+      if (preservedExportMetadata.mixed_methods) {
+        console.warn(
+          "iCalendar export used METHOD:PUBLISH because this calendar contains mixed preserved METHOD values.",
+        );
+      }
+      const { serializeCalendarToIcs } = await import("$lib/calendar/ics/serializer");
+      return serializeCalendarToIcs(
+        { ...calendar, name: calendarDisplayName(calendar) },
+        calendarEvents,
+        undefined,
+        preservedTimezones,
+        preservedPassthroughComponents,
+        preservedExportMetadata.method ?? undefined,
+      );
     },
 
     /**
      * Check whether a specific recurring instance date has completed progress segments.
      */
     async hasProgressSegments(templateId: string, date: string): Promise<boolean> {
-      const rows = await select<{ cnt: number }>(
-        `SELECT COUNT(*) as cnt FROM pomodoro_segments
-         WHERE event_id IN ($1, $1 || '::' || $2) AND event_date = $2
-           AND status IN ('completed', 'interrupted', 'skipped')
-           AND actual_start IS NOT NULL`,
-        [templateId, date],
-      );
-      return rows.length > 0 && rows[0].cnt > 0;
+      return invoke<boolean>("calendar_has_progress_segments", {
+        dbUrl: dbUrl(),
+        templateId,
+        date,
+      });
     },
 
     /**
@@ -751,18 +2476,12 @@ export function getCalendar() {
       cutoffDate: string,
       excludeDate?: string,
     ): Promise<string[]> {
-      const rows = await select<{ event_date: string }>(
-        `SELECT DISTINCT event_date FROM pomodoro_segments
-         WHERE (event_id = $1 OR event_id = $1 || '::' || event_date)
-           AND event_date < $2
-           AND status IN ('completed', 'interrupted', 'skipped')
-           AND actual_start IS NOT NULL`,
-        [templateId, cutoffDate],
-      );
-
-      const datesToProtect = rows
-        .map((r) => r.event_date)
-        .filter((d) => d !== excludeDate);
+      const datesToProtect = await invoke<string[]>("calendar_progress_dates_before", {
+        dbUrl: dbUrl(),
+        templateId,
+        cutoffDate,
+        excludeDate: excludeDate ?? null,
+      });
 
       if (datesToProtect.length === 0) return [];
 

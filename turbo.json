@@ -12,10 +12,6 @@
     "check": {
       "dependsOn": ["^build"]
     },
-    "test": {},
-    "lint": {},
-    "clean": {
-      "cache": false
-    }
+    "test": {}
   }
 }

@@ -1,0 +1,56 @@
+import { describe, expect, it } from "vitest";
+import {
+  recordResetShortcutPress,
+  type ResetShortcutSequenceOptions,
+  type ResetShortcutSequenceState,
+} from "./titlebar-shortcuts";
+
+const options: ResetShortcutSequenceOptions = {
+  requiredPresses: 10,
+  maxGapMs: 8_000,
+};
+
+function emptySequence(): ResetShortcutSequenceState {
+  return { pressCount: 0, lastPressAtMs: null };
+}
+
+describe("title bar shortcuts", () => {
+  it("waits before the reset threshold so close can still run", () => {
+    let state = emptySequence();
+
+    for (let press = 1; press < options.requiredPresses; press += 1) {
+      const result = recordResetShortcutPress(state, press * 100, options);
+      state = result.state;
+
+      expect(result.resetTriggered).toBe(false);
+      expect(state.pressCount).toBe(press);
+    }
+  });
+
+  it("triggers reset and clears the sequence at the required press count", () => {
+    let state = emptySequence();
+
+    for (let press = 1; press <= options.requiredPresses; press += 1) {
+      const result = recordResetShortcutPress(state, press * 100, options);
+      state = result.state;
+
+      if (press < options.requiredPresses) {
+        expect(result.resetTriggered).toBe(false);
+      } else {
+        expect(result.resetTriggered).toBe(true);
+        expect(state).toEqual(emptySequence());
+      }
+    }
+  });
+
+  it("starts over when the previous press is outside the shortcut window", () => {
+    let state = emptySequence();
+    state = recordResetShortcutPress(state, 0, options).state;
+    state = recordResetShortcutPress(state, 1_000, options).state;
+
+    const result = recordResetShortcutPress(state, 10_001, options);
+
+    expect(result.resetTriggered).toBe(false);
+    expect(result.state).toEqual({ pressCount: 1, lastPressAtMs: 10_001 });
+  });
+});

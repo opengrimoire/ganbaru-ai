@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Blocked during focus</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body class="blocked-page">
+    <main class="blocked-shell" aria-labelledby="blocked-title">
+      <img id="favicon" class="site-favicon" alt="" hidden>
+      <h1 id="blocked-title"></h1>
+      <p class="blocked-copy">Stay strong and keep moving forward.</p>
+      <p id="remaining" class="blocked-time"></p>
+      <div class="blocked-actions">
+        <button id="recheck" class="primary-action" type="button">Recheck</button>
+        <button id="close" class="primary-action" type="button">Close tab</button>
+      </div>
+    </main>
+    <script src="blocked.js" type="module"></script>
+  </body>
+</html>

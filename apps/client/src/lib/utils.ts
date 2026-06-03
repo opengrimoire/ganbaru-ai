@@ -5,9 +5,20 @@ export function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type WithoutChild<T> = T extends { child?: any } ? Omit<T, "child"> : T;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type WithoutChildren<T> = T extends { children?: any } ? Omit<T, "children"> : T;
-export type WithoutChildrenOrChild<T> = WithoutChildren<WithoutChild<T>>;
 export type WithElementRef<T, U extends HTMLElement = HTMLElement> = T & { ref?: U | null };
+
+export function isEditableKeyboardTarget(target: EventTarget | null): boolean {
+	if (!(target instanceof Element)) return false;
+	return target.closest("input, textarea, select, [contenteditable='true'], [contenteditable='plaintext-only']") !== null;
+}
+
+export function isAppShortcutBlockedTarget(target: EventTarget | null): boolean {
+	if (!(target instanceof Element)) return false;
+	return target.closest("[data-app-shortcuts='ignore']") !== null;
+}
+
+export type FocusIntentKeydown = Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey" | "shiftKey">;
+
+export function shouldUseKeyboardFocusIntent(event: FocusIntentKeydown): boolean {
+	return event.key === "Tab" && !event.altKey && !event.ctrlKey && !event.metaKey;
+}

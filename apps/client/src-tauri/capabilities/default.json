@@ -1,27 +1,94 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
-  "windows": ["main"],
+  "description": "Capability for app-owned windows",
+  "windows": ["main", "view-*", "pomodoro-overlay-*"],
   "permissions": [
-    "core:default",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:event:allow-emit",
+    "core:window:allow-create",
+    "core:window:allow-destroy",
+    "core:window:allow-get-all-windows",
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
-    "core:window:allow-close",
     "core:window:allow-is-maximized",
     "core:window:allow-start-dragging",
+    "core:window:allow-start-resize-dragging",
     "core:window:allow-set-fullscreen",
     "core:window:allow-set-always-on-top",
     "core:window:allow-set-focus",
-    "core:window:allow-set-decorations",
+    "core:window:allow-show",
+    "core:window:allow-unminimize",
     "core:window:allow-is-fullscreen",
+    "core:window:allow-internal-toggle-maximize",
+    "core:webview:allow-create-webview-window",
     "core:webview:allow-set-webview-zoom",
-    "opener:default",
-    "sql:default",
-    "sql:allow-load",
-    "sql:allow-execute",
-    "sql:allow-select",
-    "sql:allow-close",
-    "global-shortcut:default"
+    "updater:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "https://github.com/opengrimoire/ganbaru-ai/releases/tag/app-v*"
+        },
+        {
+          "url": "https://github.com/opengrimoire/ganbaru-ai/blob/main/LICENSE"
+        },
+        {
+          "url": "https://github.com/opengrimoire/ganbaru-ai/blob/main/apps/client/static/sfx/*"
+        },
+        {
+          "url": "https://freesound.org/"
+        },
+        {
+          "url": "https://freesound.org/people/FunWithSound/"
+        },
+        {
+          "url": "https://freesound.org/people/FunWithSound/sounds/456965/"
+        },
+        {
+          "url": "https://freesound.org/people/CogFireStudios/"
+        },
+        {
+          "url": "https://freesound.org/people/CogFireStudios/sounds/619837/"
+        },
+        {
+          "url": "https://freesound.org/people/CogFireStudios/sounds/619838/"
+        },
+        {
+          "url": "https://freesound.org/people/SilverIllusionist/"
+        },
+        {
+          "url": "https://freesound.org/people/SilverIllusionist/sounds/562103/"
+        },
+        {
+          "url": "https://freesound.org/people/SilverIllusionist/sounds/843310/"
+        },
+        {
+          "url": "https://freesound.org/people/SilverIllusionist/sounds/669323/"
+        },
+        {
+          "url": "https://freesound.org/people/SilverIllusionist/sounds/659751/"
+        },
+        {
+          "url": "https://freesound.org/people/MATUSTRM/"
+        },
+        {
+          "url": "https://freesound.org/people/MATUSTRM/sounds/848972/"
+        },
+        {
+          "url": "https://freesound.org/people/rhodesmas/"
+        },
+        {
+          "url": "https://freesound.org/people/rhodesmas/sounds/322930/"
+        },
+        {
+          "url": "https://freesound.org/people/eqylizer/"
+        },
+        {
+          "url": "https://freesound.org/people/eqylizer/sounds/624599/"
+        }
+      ]
+    }
   ]
 }

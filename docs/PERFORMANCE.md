@@ -1,0 +1,316 @@
+# Performance
+
+This file is the canonical performance record for Ganbaru AI. It exists so future agents can reason about RAM, startup time, interaction speed, and package size without reconstructing old debugging sessions.
+
+## Index
+
+- [How to capture new results](#how-to-capture-new-results)
+- [Canonical tracking rules](#canonical-tracking-rules)
+- [Benchmark identifiers](#benchmark-identifiers)
+- [Benchmark records](#benchmark-records)
+- [Package size](#package-size)
+- [Output rules](#output-rules)
+- [Performance principles](#performance-principles)
+- [Measurement notes](#measurement-notes)
+
+## How to capture new results
+
+Use benchmark-generated output as the source of truth. Manual copies from the diagnostics panel are diagnostic only, because they can mix real user data, warm boots, open diagnostics UI, and human timing.
+
+To capture a comparable run:
+
+1. Build and install a release package.
+2. Open Ganbaru AI from the installed app, not `pnpm tauri dev`. This is important because Tauri uses more resources in dev mode.
+3. Open diagnostics with `Ctrl + Shift + D` or the optional title-bar button.
+4. Under Benchmarks, click `Run core benchmarks`, `Run backend benchmarks`, or `Run all benchmarks` depending on the change being measured.
+5. Do not interact with the app while the overlay is running.
+6. When the summary appears, review the readable tables, copy the markdown, and send it to an agent for careful placement here.
+
+The app runs every benchmark against an isolated benchmark database. The user's real database is not opened during a benchmark pass.
+
+The markdown output is an interchange format for the agent. Do not paste it verbatim into this file; place its rows into the matching canonical tables below. Generated run ids ending in `-ID` are unresolved placeholders. Before recording rows here, replace `YYYY-MM-DD-ID` with the next zero-padded run id for that date, such as `YYYY-MM-DD-01` or `YYYY-MM-DD-02`. No canonical row should keep `-ID`.
+
+## Canonical tracking rules
+
+Run metadata must identify:
+
+- Harness version.
+- Anchor date.
+- Platform, including OS family plus distro/version or Windows version.
+- Build reference in `version+git-ref` form, with `-dirty` when the app was built from a dirty worktree.
+- Notes, only when the run needs context that affects interpretation. Blank is normal. Do not use notes for generic labels such as "current baseline".
+
+Measurement rows must identify:
+
+- Run id.
+- Dataset id.
+- The primary measurement type: startup boot, idle memory, navigation memory, interaction latency, or operation latency.
+
+Measurement tables must not include a generic `Notes` column. Keep fixed scenario methodology in the harness spec. If a future detail becomes important enough to compare across runs, add a dedicated typed column instead of hiding it in prose.
+
+Do not paste ad hoc `Live RAM`, `Startup RAM snapshot`, or `Speed log` panel copies into the canonical tables. Use those while investigating, then run the benchmark suite when a change needs to be recorded.
+
+Only bump `HARNESS_VERSION`, `DENSE_DATASET_VERSION`, or dense detail profile names after the current version has at least one run recorded in the run metadata. During unrecorded benchmark iteration, edit the current version in place. Once a version has recorded rows, bump only when numeric comparability changes: measurement methodology, sampling cadence, scenario workload, or benchmark dataset generation. Do not bump for markdown layout, rendered-preview layout, wording, docs-only changes, column order, or removing helper sections such as generated diagnostic counters. When the measurement method changes after recorded rows exist, explain whether old rows remain comparable; if not, old rows become historical context instead of direct comparison data.
+
+## Benchmark identifiers
+
+This section defines identifiers used by recorded rows. Harness behavior, suite membership, scenario definitions, dataset generation, and version-specific methodology live in [performance-benchmark.md](features/performance-benchmark.md).
+
+### Dataset ids
+
+Benchmark rows use compact dataset ids. Do not write prose dataset labels in measurement tables. Dataset id semantics are defined in the harness spec.
+
+| Pattern | Meaning |
+|---|---|
+| `base-N` | The isolated benchmark DB after scenario setup and before dense dataset seeding. `N` is the number of calendar events present at measurement start. Use `base-0` for a truly empty benchmark DB. |
+| `dense-vX-rYy-sZ-dP` | Dense calendar dataset version `X`, seeded from `Y` years before through `Y` years after the run anchor date. `sZ` is the number of timed events stacked at each hour; `dP` is the dense detail profile. For example, `dense-v1-r1y-s1-d1` means dense dataset v1, one year back and forward, one timed event per hour, and detail profile 1. |
+| `synth-vX-N` | Historical synthetic benchmark dataset. Do not use this pattern for new rows. |
+
+Keep dataset ids stable and mechanical. If a future benchmark needs non-calendar setup data, record that context in run metadata or the harness spec instead of expanding the dataset id into prose.
+
+## Benchmark records
+
+Latest canonical baseline: `2026-06-02-01`.
+
+Canonical rows keep the statistics and memory buckets that can support long-run comparisons. Raw harness diagnostics such as per-action counters, fixed guard timings, and redundant averages are not preserved here unless they answer a specific performance question. Interaction rows use the realistic dense current-window dataset unless the benchmark is explicitly asking about empty-state or total-history behavior.
+
+### Run metadata
+
+| Run | Harness | Anchor date | Build ref | Platform | Notes |
+|---|---|---|---|---|---|
+| 2026-05-12-01 | v1 | 2026-05-12 | 0.1.0+b75c37a | Linux Ubuntu 24.04.4 LTS |  |
+| 2026-05-16-01 | v1 | 2026-05-16 | 0.1.0+043fa1c-dirty | Linux Ubuntu 24.04.4 LTS |  |
+| 2026-05-21-01 | v1 | 2026-05-21 | 0.1.0+89e2765 | Linux Ubuntu 24.04.4 LTS |  |
+| 2026-06-02-01 | v1 | 2026-06-02 | 0.1.0+d946cea | Linux Ubuntu 24.04.4 LTS |  |
+
+### Startup boot
+
+Use `Launch median ms` as the headline app-open comparison value. `Usable paint median ms` marks when the app is ready for interaction.
+
+| Run | Dataset | Runs | Usable paint median ms | Launch median ms | Launch P95 ms |
+|---|---|---:|---:|---:|---:|
+| 2026-05-12-01 | base-0 | 5 | 293 | 887 | 931 |
+| 2026-05-12-01 | dense-v1-r1y-s1-d1 | 5 | 667 | 1253 | 1664 |
+| 2026-05-12-01 | dense-v1-r10y-s1-d1 | 5 | 797 | 1337 | 1753 |
+| 2026-05-16-01 | base-0 | 5 | 319 | 912 | 1417 |
+| 2026-05-16-01 | dense-v1-r1y-s1-d1 | 5 | 887 | 1502 | 1915 |
+| 2026-05-16-01 | dense-v1-r10y-s1-d1 | 5 | 1237 | 1877 | 2237 |
+| 2026-05-21-01 | base-0 | 5 | 344 | 932 | 1309 |
+| 2026-05-21-01 | dense-v1-r1y-s1-d1 | 5 | 884 | 1442 | 1812 |
+| 2026-05-21-01 | dense-v1-r10y-s1-d1 | 5 | 1047 | 2073 | 2087 |
+| 2026-06-02-01 | base-0 | 5 | 363 | 956 | 1040 |
+| 2026-06-02-01 | dense-v1-r1y-s1-d1 | 5 | 995 | 1568 | 1700 |
+| 2026-06-02-01 | dense-v1-r10y-s1-d1 | 5 | 1845 | 2444 | 2544 |
+
+### Idle memory
+
+Memory uses the best implemented platform metric: PSS on Linux and Working Set on Windows. macOS memory rows must not be recorded until physical footprint sampling is implemented. Record the metric in run notes whenever it is not obvious from the platform. The harness samples idle memory once per second for 30 seconds after the anchored calendar window is ready. `Min` and `Max` are the lowest and highest values observed during that window. `End` is the final sample.
+
+| Run | Dataset | Statistic | Backend MB | Frontend MB | Network MB | Total MB |
+|---|---|---|---:|---:|---:|---:|
+| 2026-05-12-01 | base-0 | Min | 111.9 | 193.6 | 19.3 | 325 |
+| 2026-05-12-01 | base-0 | Max | 112.5 | 196.0 | 19.4 | 328 |
+| 2026-05-12-01 | base-0 | End | 111.9 | 194.6 | 19.4 | 326 |
+| 2026-05-12-01 | dense-v1-r1y-s1-d1 | Min | 115.3 | 242.7 | 19.0 | 378 |
+| 2026-05-12-01 | dense-v1-r1y-s1-d1 | Max | 115.9 | 254.9 | 19.1 | 390 |
+| 2026-05-12-01 | dense-v1-r1y-s1-d1 | End | 115.3 | 247.5 | 19.1 | 382 |
+| 2026-05-12-01 | dense-v1-r10y-s1-d1 | Min | 114.7 | 247.8 | 19.3 | 382 |
+| 2026-05-12-01 | dense-v1-r10y-s1-d1 | Max | 115.3 | 262.0 | 19.4 | 397 |
+| 2026-05-12-01 | dense-v1-r10y-s1-d1 | End | 114.7 | 250.4 | 19.4 | 384 |
+| 2026-05-16-01 | base-0 | Min | 118.3 | 201.1 | 20.9 | 340 |
+| 2026-05-16-01 | base-0 | Max | 118.9 | 205.8 | 21.0 | 345 |
+| 2026-05-16-01 | base-0 | End | 118.3 | 202.0 | 21.0 | 341 |
+| 2026-05-16-01 | dense-v1-r1y-s1-d1 | Min | 121.8 | 270.0 | 21.2 | 414 |
+| 2026-05-16-01 | dense-v1-r1y-s1-d1 | Max | 122.6 | 287.7 | 21.3 | 431 |
+| 2026-05-16-01 | dense-v1-r1y-s1-d1 | End | 121.8 | 287.4 | 21.3 | 430 |
+| 2026-05-16-01 | dense-v1-r10y-s1-d1 | Min | 122.1 | 275.6 | 20.9 | 419 |
+| 2026-05-16-01 | dense-v1-r10y-s1-d1 | Max | 122.6 | 288.3 | 21.0 | 431 |
+| 2026-05-16-01 | dense-v1-r10y-s1-d1 | End | 122.1 | 284.9 | 21.0 | 428 |
+| 2026-05-21-01 | base-0 | Min | 106.6 | 190.8 | 17.3 | 315 |
+| 2026-05-21-01 | base-0 | Max | 107.2 | 193.4 | 17.4 | 318 |
+| 2026-05-21-01 | base-0 | End | 106.6 | 191.6 | 17.4 | 316 |
+| 2026-05-21-01 | dense-v1-r1y-s1-d1 | Min | 110.0 | 260.3 | 17.3 | 388 |
+| 2026-05-21-01 | dense-v1-r1y-s1-d1 | Max | 110.1 | 269.5 | 17.4 | 397 |
+| 2026-05-21-01 | dense-v1-r1y-s1-d1 | End | 110.1 | 262.6 | 17.4 | 390 |
+| 2026-05-21-01 | dense-v1-r10y-s1-d1 | Min | 111.2 | 260.6 | 17.4 | 389 |
+| 2026-05-21-01 | dense-v1-r10y-s1-d1 | Max | 111.3 | 273.4 | 17.5 | 402 |
+| 2026-05-21-01 | dense-v1-r10y-s1-d1 | End | 111.3 | 262.3 | 17.5 | 391 |
+| 2026-06-02-01 | base-0 | Min | 118.5 | 205.1 | 20.1 | 344 |
+| 2026-06-02-01 | base-0 | Max | 119.3 | 209.2 | 20.2 | 348 |
+| 2026-06-02-01 | base-0 | End | 118.8 | 209.2 | 20.2 | 348 |
+| 2026-06-02-01 | dense-v1-r1y-s1-d1 | Min | 130.4 | 277.0 | 20.1 | 427 |
+| 2026-06-02-01 | dense-v1-r1y-s1-d1 | Max | 130.4 | 287.0 | 20.2 | 438 |
+| 2026-06-02-01 | dense-v1-r1y-s1-d1 | End | 130.4 | 278.9 | 20.2 | 429 |
+| 2026-06-02-01 | dense-v1-r10y-s1-d1 | Min | 129.7 | 281.1 | 20.1 | 432 |
+| 2026-06-02-01 | dense-v1-r10y-s1-d1 | Max | 130.4 | 290.1 | 20.2 | 440 |
+| 2026-06-02-01 | dense-v1-r10y-s1-d1 | End | 129.7 | 288.2 | 20.2 | 438 |
+
+### Calendar held navigation memory
+
+This records post-action memory after reproducing real held right-arrow navigation in week view against a practical full visible window. The harness holds right arrow for the fixed duration, releases it, then samples memory once per second for 30 seconds. `Min` and `Max` are the lowest and highest values observed during that window. `End` is the final sample.
+
+| Run | Dataset | Statistic | Backend MB | Frontend MB | Network MB | Total MB |
+|---|---|---|---:|---:|---:|---:|
+| 2026-05-12-01 | dense-v1-r1y-s1-d1 | Min | 116.0 | 269.5 | 19.3 | 405 |
+| 2026-05-12-01 | dense-v1-r1y-s1-d1 | Max | 116.7 | 313.8 | 19.3 | 450 |
+| 2026-05-12-01 | dense-v1-r1y-s1-d1 | End | 116.0 | 273.2 | 19.3 | 408 |
+| 2026-05-16-01 | dense-v1-r1y-s1-d1 | Min | 120.8 | 312.7 | 20.9 | 455 |
+| 2026-05-16-01 | dense-v1-r1y-s1-d1 | Max | 121.5 | 373.5 | 21.0 | 516 |
+| 2026-05-16-01 | dense-v1-r1y-s1-d1 | End | 120.8 | 315.1 | 21.0 | 457 |
+| 2026-05-21-01 | dense-v1-r1y-s1-d1 | Min | 110.8 | 362.7 | 17.4 | 491 |
+| 2026-05-21-01 | dense-v1-r1y-s1-d1 | Max | 111.4 | 371.1 | 17.4 | 500 |
+| 2026-05-21-01 | dense-v1-r1y-s1-d1 | End | 110.8 | 363.2 | 17.4 | 491 |
+| 2026-06-02-01 | dense-v1-r1y-s1-d1 | Min | 145.0 | 354.2 | 20.2 | 519 |
+| 2026-06-02-01 | dense-v1-r1y-s1-d1 | Max | 146.3 | 398.1 | 20.3 | 565 |
+| 2026-06-02-01 | dense-v1-r1y-s1-d1 | End | 145.0 | 355.9 | 20.3 | 521 |
+
+### Calendar panel latency
+
+Rows report user-visible panel-open elapsed time for the two calendar panel actions with a practical full visible window. The fixed repetition count is defined by the harness spec and is not repeated in this canonical table.
+
+| Run | Dataset | Action | Median ms | P95 ms |
+|---|---|---|---:|---:|
+| 2026-05-12-01 | dense-v1-r1y-s1-d1 | click existing event | 88 | 101 |
+| 2026-05-12-01 | dense-v1-r1y-s1-d1 | click empty time slot | 100 | 105 |
+| 2026-05-16-01 | dense-v1-r1y-s1-d1 | click existing event | 156 | 191 |
+| 2026-05-16-01 | dense-v1-r1y-s1-d1 | click empty time slot | 159 | 175 |
+| 2026-05-21-01 | dense-v1-r1y-s1-d1 | click existing event | 121 | 133 |
+| 2026-05-21-01 | dense-v1-r1y-s1-d1 | click empty time slot | 138 | 155 |
+| 2026-06-02-01 | dense-v1-r1y-s1-d1 | click existing event | 127 | 147 |
+| 2026-06-02-01 | dense-v1-r1y-s1-d1 | click empty time slot | 148 | 168 |
+
+### Calendar import operations
+
+Rows report one 1000-event add or update pass against the practical dense dataset. Smaller repeated import rows are diagnostic variance checks and are not part of the long-run record.
+
+| Run | Dataset | Metric | Value ms |
+|---|---|---|---:|
+| 2026-05-12-01 | dense-v1-r1y-s1-d1 | bulk import 1000 add | 305 |
+| 2026-05-12-01 | dense-v1-r1y-s1-d1 | bulk import 1000 update | 330 |
+| 2026-05-16-01 | dense-v1-r1y-s1-d1 | bulk import 1000 add | 592 |
+| 2026-05-16-01 | dense-v1-r1y-s1-d1 | bulk import 1000 update | 584 |
+| 2026-05-21-01 | dense-v1-r1y-s1-d1 | bulk import 1000 add | 459 |
+| 2026-05-21-01 | dense-v1-r1y-s1-d1 | bulk import 1000 update | 474 |
+| 2026-06-02-01 | dense-v1-r1y-s1-d1 | bulk import 1000 add | 848 |
+| 2026-06-02-01 | dense-v1-r1y-s1-d1 | bulk import 1000 update | 902 |
+
+## Package size
+
+Package size is not produced by the benchmark harness, but it is deterministic enough to track here. Use decimal MB from byte size.
+
+```bash
+stat -c "%n %s" target/release/bundle/deb/*.deb target/release/bundle/rpm/*.rpm target/release/bundle/appimage/*.AppImage
+```
+
+| Date | Phase | What changed | Artifact | MB | Build host |
+|---|---|---|---|---:|---|
+| 2026-04-02 | Phase 1 | Baseline: calendar, pomodoro, kanban, performance panel | .deb | 7.0 | Linux |
+| 2026-05-03 | Phase 1 | Event panel polish and startup memory work | .deb | 7.4 | Linux |
+| 2026-05-03 | Phase 1 | Event panel polish and startup memory work | .rpm | 7.4 | Linux |
+| 2026-05-03 | Phase 1 | Event panel polish and startup memory work | .AppImage | 80.9 | Linux |
+| 2026-05-12 | Phase 1 | Harness v1 benchmark baseline | .deb | 8.1 | Linux |
+| 2026-05-12 | Phase 1 | Harness v1 benchmark baseline | .rpm | 8.1 | Linux |
+| 2026-05-12 | Phase 1 | Harness v1 benchmark baseline | .AppImage | 83.2 | Linux |
+| 2026-06-02 | Phase 1 | Harness v1 benchmark run | .deb | 20.8 | Linux |
+| 2026-06-02 | Phase 1 | Harness v1 benchmark run | .rpm | 20.8 | Linux |
+| 2026-06-02 | Phase 1 | Harness v1 benchmark run | .AppImage | 95.4 | Linux |
+
+## Output rules
+
+Prefer normalized tables over compact cells. Good:
+
+| Run | Dataset | Statistic | Backend MB | Frontend MB | Network MB | Total MB |
+|---|---|---|---:|---:|---:|---:|
+
+Avoid cells like `104.8 / 339.2 / 17.3 / 461`, because they are hard to diff, sort, and scan.
+
+Use the latency table for repeated measurements. Keep median and P95 as the canonical statistics; raw averages, min, and max are diagnostics and should not appear in the canonical copied output unless a run is specifically analyzing tail behavior:
+
+| Run | Dataset | Metric | Runs | Median ms | P95 ms |
+|---|---|---|---:|---:|---:|
+
+Calendar panel latency uses a narrower action table because both actions share one fixed harness run count:
+
+| Run | Dataset | Action | Median ms | P95 ms |
+|---|---|---|---:|---:|
+
+For visible-window interaction benchmarks, record the practical dense current-window dataset (`dense-v1-r1y-s1-d1`) unless the benchmark question is specifically about empty-state behavior or total stored-history scale.
+
+Use the startup table only for repeated process launches with the harness-defined closed-process cooldown. Launch median is the headline app-open value; P95 keeps the tail visible:
+
+| Run | Dataset | Runs | Usable paint median ms | Launch median ms | Launch P95 ms |
+|---|---|---:|---:|---:|---:|
+
+Use the compact scalar table for one-off values that are themselves the measurement. If every scalar value is milliseconds, put the unit in the value header, such as `Value ms`. Otherwise keep `Value` and `Unit` separate. Do not record harness-internal counters such as held-navigation repeat counts, skipped ticks, or deterministic dataset math unless they are the subject of the benchmark:
+
+| Run | Dataset | Metric | Value | Unit |
+|---|---|---|---:|---|
+
+## Performance principles
+
+Ganbaru AI should feel lightweight even though it uses Tauri plus a WebView. The floor is higher than a fully native UI, so app code should avoid adding avoidable RAM and startup cost.
+
+General rules:
+
+- Measure release builds, not dev mode.
+- Keep benchmark data isolated from the user's real database.
+- Compare runs on the same machine, OS, WebKit or WebView2 version, window state, and power mode.
+- Prefer the platform metric that best matches real app RAM cost. Use PSS on Linux, Working Set on Windows, and physical footprint on macOS once implemented.
+- Treat startup, idle memory, navigation memory, interaction speed, and operation speed as different questions. Do not let one benchmark stand in for all of them.
+- Prefer fixing real cost over hiding warnings or increasing thresholds.
+- Lazy-load inactive surfaces by default.
+- Preload only when the UX gain is concrete and the RAM cost is measured.
+- Keep hot render paths bounded by the visible window, not total database size.
+- Keep large or rarely used fields out of always-resident frontend state.
+- Use Rust for native I/O, filesystem safety, compression, and data work that already crosses IPC or is proven expensive. Keep UI state, layout, and Svelte component logic in TypeScript.
+
+## Measurement notes
+
+### Memory metrics
+
+| Metric | Meaning | Use |
+|---|---|---|
+| USS | Private memory only | Useful for process internals, undercounts app cost |
+| PSS | Private memory plus fair share of shared libraries | Preferred total on Linux |
+| RSS | Private memory plus full shared libraries per process | Often available, overcounts shared libraries |
+| Working Set | Resident pages currently in physical memory | Current Windows metric through Win32 APIs |
+| Physical footprint | macOS memory-pressure footprint | Target macOS metric, not implemented yet |
+
+Linux currently reads PSS from `/proc/{pid}/smaps_rollup`. If that is unavailable for a process, the app falls back to `VmRSS` and reports the copied metric as `PSS/RSS`.
+
+Windows uses Working Set through Win32 `GetProcessMemoryInfo`. This reflects resident physical pages and is useful for user-facing RAM checks, but shared pages may be counted for each process. Do not compare Windows Working Set numbers directly against Linux PSS as if they were the same metric.
+
+macOS should use physical footprint through Mach task information because that is the closest fit for what users experience as app memory pressure. Until that is implemented for the app process and its WebView-related processes, macOS reports memory as unavailable instead of emitting misleading zero or RSS-based numbers.
+
+Copied diagnostics output includes the metric name, and chart CSV exports use a metric-specific total column such as `total_pss_mb` or `total_working_set_mb`.
+
+### Process buckets
+
+| Bucket | Meaning |
+|---|---|
+| Backend | Rust process, Tauri runtime, SQLite, native commands |
+| Frontend | WebKit or WebView2 renderer plus Svelte app, DOM, CSS, JS heap |
+| Network | WebKit or WebView2 network process |
+
+The frontend number includes the browser engine. It cannot be split cleanly into "WebKit baseline" and "Ganbaru AI app code" at runtime.
+
+### Diagnostics panel
+
+The diagnostics panel is a diagnostic tool. It can copy live RAM, startup RAM, charts, speed logs, and benchmark summaries. Only benchmark summaries should become canonical rows in this file.
+
+The panel itself is lazy-loaded. Live memory polling starts only while the panel is mounted. The startup RAM snapshot is captured before the panel needs to be opened, so it remains useful for quick local diagnosis even if it is not the canonical record.
+
+For local music memory checks, use the live RAM panel while testing an installed release build. Capture Backend, Frontend, Network, and Total before playback, during Rust-backed audio playback, after switching tracks, and after stop or unload. Rust-backed audio playback should raise the Backend bucket for the Rodio and Symphonia pipeline without creating the extra local WebView audio element, video surface, or Web Audio graph used by the old fallback. These manual samples are diagnostics only; record canonical rows here only after a benchmark harness scenario exists for local music playback.
+
+### Current architecture notes
+
+These notes explain the broad shape of current performance work. They should stay conceptual, not incident-specific.
+
+- Calendar render state is loaded through a Rust window query. Non-recurring rows are bounded by the visible date window, and recurring templates are expanded through a Rust render command after row mapping. TypeScript recurrence remains for unsaved edit previews.
+- Calendar window loading is latest-wins. Rapid navigation can leave an already-started native query in flight, but stale requests should not continue through mapping, recurrence expansion, state application, and paint once a newer target exists. A small bounded cache keeps recent day/week render windows available for adjacent navigation.
+- Held keyboard navigation fires once immediately, then repeats through gated timer ticks and native repeated keydown events. Repeat cadence is gated by pending anchor commits, not foreground window loads. Keyup cancels future repeat intent, and missed repeat ticks are not replayed later.
+- Calendar render state uses slim event rows. Heavy fields such as description, attendees, alarms, extended properties, and organizer stay in SQLite until a workflow needs them.
+- EventPanel is dynamically imported and can be parked offscreen after first paint to trade a small measured RAM cost for faster first interaction.
+- Event detail loading uses a lighter `loadPanelEvent` path for panel opens and `loadFullEvent` only where full fidelity is required, such as ICS export and delete undo snapshots.
+- Timezone search metadata is lazy. Startup only builds active-zone labels.
+- The performance and benchmark UI should stay lazy so measuring the app does not significantly change the app being measured.

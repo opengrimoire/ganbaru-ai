@@ -1,43 +1,84 @@
 <script lang="ts">
   import type { PositionedEvent } from "./types";
-  import { getEventColor } from "./utils";
+  import {
+    getEventColor,
+    getEventStatusPatternClass,
+    getPastEventColor,
+    formatTimeRange,
+    isEventSurfaceCancelled,
+  } from "./utils";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
+  import { getPreferences } from "$lib/stores/preferences.svelte";
+  import { isThemeCalendarDark, type Theme } from "$lib/stores/themes";
+  import { getEventIndicatorState } from "./event-indicators";
   import Repeat from "@lucide/svelte/icons/repeat";
-  import Bell from "@lucide/svelte/icons/bell";
+  import Video from "@lucide/svelte/icons/video";
+  import MapPin from "@lucide/svelte/icons/map-pin";
+  import Users from "@lucide/svelte/icons/users";
 
   const calZoom = getCalendarZoom();
+  const preferences = getPreferences();
 
   let {
     positioned,
-    isDark = false,
+    theme,
     editing = false,
     preview = false,
+    grabbing = false,
+    animateLayout = false,
+    canDrag = true,
     isPast = false,
+    inResizeZone = false,
     onclick,
+    onprefetch,
     onpointerdown,
   }: {
     positioned: PositionedEvent;
-    isDark?: boolean;
+    theme: Theme;
     editing?: boolean;
     preview?: boolean;
+    grabbing?: boolean;
+    animateLayout?: boolean;
+    canDrag?: boolean;
     isPast?: boolean;
+    inResizeZone?: boolean;
     onclick: (rect?: DOMRect) => void;
+    onprefetch?: () => void;
     onpointerdown?: (e: PointerEvent) => void;
   } = $props();
 
-  const colors = $derived(getEventColor(positioned.event.color, isDark));
-  const activeColors = $derived(colors);
+  const isDark = $derived(isThemeCalendarDark(theme));
 
-  const startTime = $derived(positioned.event.start.split(" ")[1] ?? "");
-  const endTime = $derived(positioned.event.end.split(" ")[1] ?? "");
-  const hasRepeat = $derived(!!positioned.event.recurrence || !!positioned.event.recurringParentId);
-  const hasNotification = $derived(positioned.event.notifications && positioned.event.notifications.length > 0);
-  const isFree = $derived(positioned.event.transparency === "transparent");
-  const isTentative = $derived(positioned.event.status === "tentative");
-  const isCancelled = $derived(positioned.event.status === "cancelled");
+  const timeRange = $derived(
+    formatTimeRange(
+      positioned.event.start.split(" ")[1] ?? "",
+      positioned.event.end.split(" ")[1] ?? "",
+      preferences.calendarTimeFormat,
+      "compact",
+    ),
+  );
+  const indicators = $derived(getEventIndicatorState(positioned.event));
+  const hasIcons = $derived(indicators.iconCount > 0);
+  const isCancelled = $derived(isEventSurfaceCancelled(positioned.event));
   const blockPixelHeight = $derived((positioned.durationMinutes / 60) * calZoom.hourHeight);
 
+  const usePastColors = $derived(
+    preferences.calendarDimPastEvents && isPast && !editing && !preview && !grabbing,
+  );
+  const statusPatternClass = $derived(getEventStatusPatternClass(positioned.event));
+  const showContour = $derived(editing || preview || grabbing);
+  const activeColors = $derived(
+    usePastColors
+      ? getPastEventColor(positioned.event.color, theme)
+      : getEventColor(positioned.event.color, theme)
+  );
+
+  const timeColor = $derived(`color-mix(in srgb, ${activeColors.text} 80%, ${activeColors.bg})`);
+  const locationColor = $derived(`color-mix(in srgb, ${activeColors.text} 60%, ${activeColors.bg})`);
+  const iconColor = $derived(`color-mix(in srgb, ${activeColors.text} 70%, ${activeColors.bg})`);
+
   function handlePointerDown(e: PointerEvent) {
+    onprefetch?.();
     e.stopPropagation();
     onpointerdown?.(e);
   }
@@ -54,6 +95,11 @@
       : eventRect;
     onclick(rect);
   }
+
+  // Cursor is controlled by parent (DayColumn) via inResizeZone prop
+  const effectiveCursor = $derived(
+    !canDrag ? 'pointer' : inResizeZone ? 'ns-resize' : 'default'
+  );
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -63,21 +109,23 @@
   data-event-id={positioned.event.id}
   data-clipped-top={positioned.isClippedTop || undefined}
   data-clipped-bottom={positioned.isClippedBottom || undefined}
-  title={blockPixelHeight <= 14 ? `${positioned.event.title || '(No title)'} ${startTime} - ${endTime}` : undefined}
-  class="event-block-wrapper absolute flex overflow-hidden text-[11px] leading-tight select-none {editing || preview ? 'event-editing' : ''} {isPast && !editing && !preview && !isDark ? 'past-light' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
+  title={blockPixelHeight <= 14 ? `${positioned.event.title || '(No title)'} ${timeRange}` : undefined}
+  class="event-block-wrapper absolute flex overflow-hidden text-[0.8rem] leading-tight select-none {statusPatternClass} {showContour ? 'event-editing' : ''} {animateLayout ? 'event-layout-transition' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
   style="
     top: calc({positioned.startMinute} / 60 * var(--hour-h) * 1px);
     height: calc({positioned.durationMinutes} / 60 * var(--hour-h) * 1px - {positioned.isClippedBottom || !positioned.hasEventBelow ? 0 : 2}px);
     left: {positioned.left}%;
     width: {positioned.totalColumns > 1 ? `calc(${positioned.width}% - 2px)` : `${positioned.width}%`};
+    background-color: {activeColors.bg};
     color: {activeColors.text};
-    cursor: grab;
-    z-index: {editing ? 45 : 1};
-    filter: {isPast && !editing && !preview ? (isDark ? 'brightness(0.7)' : 'saturate(0.8)') : 'none'};
-    opacity: {isCancelled ? 0.4 : isFree ? 0.55 : 1};
-    --glow-color: {isDark ? 'rgba(130, 160, 220, 0.3)' : 'rgba(0, 30, 80, 0.2)'};
+    --event-bg: {activeColors.bg};
+    --outline-mix: {isDark ? 'white' : 'black'};
+    cursor: {effectiveCursor};
+    z-index: {editing ? 45 : 3};
+    filter: none;
   "
   onclick={handleClick}
+  onpointerenter={onprefetch}
   onpointerdown={handlePointerDown}
 >
   <!-- Resize handle: top (hidden on clipped edge) -->
@@ -86,27 +134,34 @@
   {/if}
 
   <!-- Content -->
-  <div class="relative min-w-0 flex-1 overflow-hidden px-1 py-0.5" style="background-color: {activeColors.bg};{isFree ? ' border-left: 2px dashed currentColor;' : ''}{isTentative ? ' background-image: repeating-linear-gradient(135deg, transparent, transparent 3px, color-mix(in srgb, currentColor 8%, transparent) 3px, color-mix(in srgb, currentColor 8%, transparent) 5px);' : ''}">
-    {#if blockPixelHeight > 16 && (hasRepeat || hasNotification)}
-      <div class="absolute right-1 flex items-center gap-0.5" style="top: 5px;">
-        {#if hasRepeat}
-          <Repeat size={8} class="shrink-0 opacity-70" />
+  <div class="relative z-10 min-w-0 flex-1 overflow-hidden px-1 py-0.5">
+    {#if hasIcons}
+      <div class="event-icons absolute right-1 flex items-center gap-0.5" style="top: 5px; color: {iconColor};">
+        {#if indicators.hasRepeat}
+          <Repeat size={9} class="shrink-0" />
         {/if}
-        {#if hasNotification}
-          <Bell size={8} class="shrink-0 opacity-70" />
+        {#if indicators.hasCallLink}
+          <Video size={9} class="shrink-0" />
+        {/if}
+        {#if indicators.hasLocation}
+          <MapPin size={9} class="shrink-0" />
+        {/if}
+        {#if indicators.hasGenericMeeting}
+          <Users size={9} class="shrink-0" />
         {/if}
       </div>
     {/if}
-    {#if blockPixelHeight > 14}
-      <div class="truncate font-medium" class:pr-5={(hasRepeat || hasNotification) && blockPixelHeight > 16} style={isCancelled ? 'text-decoration: line-through;' : ''}>
-        {#if positioned.event.title}{positioned.event.title}{:else}<span class="opacity-50">(No title)</span>{/if}
-      </div>
-    {/if}
-    {#if blockPixelHeight > 28}
-      <div class="truncate opacity-80">{startTime} - {endTime}</div>
-    {/if}
-    {#if blockPixelHeight > 44 && positioned.event.location}
-      <div class="truncate text-[9px] opacity-60">{positioned.event.location}</div>
+    <div
+      class="event-title truncate font-medium"
+      class:pr-5={indicators.iconCount > 0 && indicators.iconCount <= 2}
+      class:pr-8={indicators.iconCount > 2}
+      style={isCancelled ? 'text-decoration: line-through;' : ''}
+    >
+      {#if positioned.event.title}{positioned.event.title}{:else}(No title){/if}
+    </div>
+    <div class="event-time truncate" style="color: {timeColor};">{timeRange}</div>
+    {#if positioned.event.location}
+      <div class="event-location truncate text-[0.666667rem]" style="color: {locationColor};">{positioned.event.location}</div>
     {/if}
   </div>
 
@@ -123,8 +178,7 @@
     left: 0;
     right: 0;
     height: 11px;
-    cursor: ns-resize;
-    z-index: 2;
+    z-index: 20;
   }
 
   .resize-handle-top {
@@ -136,40 +190,82 @@
   }
 
   .event-block-wrapper {
-    transition: box-shadow 180ms ease-out, left 250ms cubic-bezier(0.25, 0.1, 0.25, 1), width 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
+    container-type: size;
+    container-name: event-block;
   }
 
-  .event-block-wrapper::after {
+  .event-block-wrapper.event-layout-transition {
+    transition: left 250ms cubic-bezier(0.25, 0.1, 0.25, 1), width 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+
+  .event-block-wrapper::before {
     content: "";
     position: absolute;
     inset: 0;
-    border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
-    border-radius: inherit;
+    z-index: 0;
     pointer-events: none;
-    z-index: 3;
-    opacity: 0;
-    transition: opacity 180ms ease-out;
+  }
+
+  .event-block-wrapper.event-pattern-tentative::before {
+    background-image: linear-gradient(
+      90deg,
+      color-mix(in srgb, currentColor 10%, transparent) 0 1px,
+      transparent 1px
+    );
+    background-repeat: repeat;
+    background-size: 6px 100%;
+  }
+
+  .event-block-wrapper.event-pattern-declined::before {
+    background-image: linear-gradient(
+      135deg,
+      transparent 0 44%,
+      color-mix(in srgb, currentColor 11%, transparent) 44% 56%,
+      transparent 56%
+    );
+    background-repeat: repeat;
+    background-size: 7px 7px;
+  }
+
+  .event-block-wrapper.event-pattern-pending::before {
+    background-image: radial-gradient(
+      circle,
+      color-mix(in srgb, currentColor 16%, transparent) 1px,
+      transparent 1.3px
+    );
+    background-size: 9px 9px;
+  }
+
+  .event-title,
+  .event-icons,
+  .event-time,
+  .event-location {
+    display: none;
+  }
+
+  @container event-block (min-height: 14px) {
+    .event-title { display: block; }
+  }
+
+  @container event-block (min-height: 17px) {
+    .event-icons { display: flex; }
+  }
+
+  @container event-block (min-height: 32px) {
+    .event-time { display: block; }
+  }
+
+  @container event-block (min-height: 48px) {
+    .event-location { display: block; }
+  }
+
+  /* Disable layout transition for events with an explicit contour to avoid jank */
+  .event-block-wrapper.event-editing {
+    transition: none;
   }
 
   .event-editing {
-    box-shadow:
-      0 0 3px 0 var(--glow-color),
-      0 0 8px 1px var(--glow-color),
-      0 0 16px 2px color-mix(in srgb, var(--glow-color) 40%, transparent);
+    outline: 2px solid color-mix(in oklab, var(--event-bg) 65%, var(--outline-mix));
+    outline-offset: 0;
   }
-
-  .event-editing::after {
-    opacity: 1;
-  }
-
-  .past-light::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: inherit;
-    pointer-events: none;
-    z-index: 1;
-  }
-
 </style>

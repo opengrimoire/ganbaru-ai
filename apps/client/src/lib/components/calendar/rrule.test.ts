@@ -2,11 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   recurrenceToRrule,
   rruleToRecurrence,
-  presetToRecurrence,
-  recurrenceToPreset,
   formatRecurrenceLabel,
+  recurrenceConfigsEqual,
 } from "./rrule";
-import type { RecurrenceConfig, RecurrencePreset } from "./types";
+import type { RecurrenceConfig } from "./types";
 
 describe("recurrenceToRrule", () => {
   it("serializes simple daily", () => {
@@ -269,30 +268,6 @@ describe("rruleToRecurrence", () => {
   });
 });
 
-describe("preset round-trips", () => {
-  const presets: Exclude<RecurrencePreset, "none">[] = [
-    "daily",
-    "weekdays",
-    "weekly",
-    "monthly",
-    "yearly",
-  ];
-
-  for (const preset of presets) {
-    it(`round-trips ${preset}`, () => {
-      const config = presetToRecurrence(preset)!;
-      expect(config).toBeDefined();
-      const rrule = recurrenceToRrule(config);
-      const parsed = rruleToRecurrence(rrule);
-      expect(recurrenceToPreset(parsed)).toBe(preset);
-    });
-  }
-
-  it("returns undefined for 'none'", () => {
-    expect(presetToRecurrence("none")).toBeUndefined();
-  });
-});
-
 describe("RRULE round-trips for BY* rules", () => {
   it("round-trips ordinal BYDAY", () => {
     const rrule = "FREQ=MONTHLY;BYDAY=2TU";
@@ -365,60 +340,40 @@ describe("RRULE round-trips for BY* rules", () => {
   });
 });
 
-describe("recurrenceToPreset", () => {
-  it("returns null for custom interval", () => {
-    const config: RecurrenceConfig = { frequency: "daily", interval: 2, end: { type: "never" } };
-    expect(recurrenceToPreset(config)).toBeNull();
+describe("recurrenceConfigsEqual", () => {
+  it("treats selector order and default week start as equivalent", () => {
+    expect(recurrenceConfigsEqual(
+      {
+        frequency: "weekly",
+        interval: 1,
+        weekdays: ["FR", "MO"],
+        wkst: "MO",
+        end: { type: "never" },
+      },
+      {
+        frequency: "weekly",
+        interval: 1,
+        weekdays: ["MO", "FR"],
+        end: { type: "never" },
+      },
+    )).toBe(true);
   });
 
-  it("returns null for non-never end", () => {
-    const config: RecurrenceConfig = {
-      frequency: "daily",
-      interval: 1,
-      end: { type: "count", count: 5 },
-    };
-    expect(recurrenceToPreset(config)).toBeNull();
-  });
-
-  it("returns null for custom weekday set", () => {
-    const config: RecurrenceConfig = {
-      frequency: "weekly",
-      interval: 1,
-      weekdays: ["MO", "WE"],
-      end: { type: "never" },
-    };
-    expect(recurrenceToPreset(config)).toBeNull();
-  });
-
-  it("returns null when ordinalWeekdays present", () => {
-    const config: RecurrenceConfig = {
-      frequency: "monthly",
-      interval: 1,
-      ordinalWeekdays: [{ day: "TU", ordinal: 2 }],
-      end: { type: "never" },
-    };
-    expect(recurrenceToPreset(config)).toBeNull();
-  });
-
-  it("returns null when byMonthDay present", () => {
-    const config: RecurrenceConfig = {
-      frequency: "monthly",
-      interval: 1,
-      byMonthDay: [15],
-      end: { type: "never" },
-    };
-    expect(recurrenceToPreset(config)).toBeNull();
-  });
-
-  it("returns null when bySetPos present", () => {
-    const config: RecurrenceConfig = {
-      frequency: "monthly",
-      interval: 1,
-      weekdays: ["MO", "TU", "WE", "TH", "FR"],
-      bySetPos: [-1],
-      end: { type: "never" },
-    };
-    expect(recurrenceToPreset(config)).toBeNull();
+  it("distinguishes real recurrence changes", () => {
+    expect(recurrenceConfigsEqual(
+      {
+        frequency: "weekly",
+        interval: 1,
+        weekdays: ["MO", "FR"],
+        end: { type: "never" },
+      },
+      {
+        frequency: "weekly",
+        interval: 1,
+        weekdays: ["MO"],
+        end: { type: "never" },
+      },
+    )).toBe(false);
   });
 });
 

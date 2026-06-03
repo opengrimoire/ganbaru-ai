@@ -1,0 +1,19 @@
+BEGIN:VCALENDAR
+PRODID:-//Ganbaru AI//RFC5546 Scheduling Fixtures//EN
+VERSION:2.0
+CALSCALE:GREGORIAN
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:fixture-request@example.com
+DTSTAMP:20260101T000000Z
+DTSTART:20260608T150000Z
+DTEND:20260608T160000Z
+SUMMARY:Scheduling request
+SEQUENCE:4
+STATUS:CONFIRMED
+ORGANIZER;CN=Alice;SENT-BY="mailto:assistant@example.com";DIR="https://example.com/alice":mailto:alice@example.com
+ATTENDEE;CN=Bob;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;RSVP=TRUE;CUTYPE=INDIVIDUAL;DELEGATED-FROM="mailto:manager@example.com";MEMBER="mailto:team@example.com":mailto:bob@example.com
+ATTENDEE;CN=Carol;ROLE=OPT-PARTICIPANT;PARTSTAT=TENTATIVE;RSVP=FALSE;DELEGATED-TO="mailto:delegate@example.com":mailto:carol@example.com
+REQUEST-STATUS:2.0;Success
+END:VEVENT
+END:VCALENDAR

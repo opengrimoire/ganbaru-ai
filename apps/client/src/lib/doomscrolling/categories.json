@@ -1,0 +1,293 @@
+[
+  {
+    "id": "social-media",
+    "label": "Social media",
+    "hosts": [
+      "facebook.com",
+      "instagram.com",
+      "x.com",
+      "twitter.com",
+      "tiktok.com",
+      "reddit.com",
+      "threads.net",
+      "bsky.app",
+      "snapchat.com",
+      "pinterest.com",
+      "linkedin.com",
+      "vk.com",
+      "ok.ru",
+      "weibo.com",
+      "douban.com"
+    ]
+  },
+  {
+    "id": "streaming",
+    "label": "Streaming",
+    "hosts": [
+      "youtube.com",
+      "netflix.com",
+      "hulu.com",
+      "disneyplus.com",
+      "primevideo.com",
+      "twitch.tv",
+      "max.com",
+      "peacocktv.com",
+      "crunchyroll.com",
+      "paramountplus.com",
+      "tv.apple.com",
+      "tubi.tv",
+      "fandangoathome.com",
+      "bilibili.com",
+      "iqiyi.com",
+      "youku.com",
+      "hotstar.com"
+    ],
+    "domainKeywords": [
+      "anime"
+    ]
+  },
+  {
+    "id": "news",
+    "label": "News",
+    "hosts": [
+      "cnn.com",
+      "bbc.com",
+      "nytimes.com",
+      "washingtonpost.com",
+      "theguardian.com",
+      "reuters.com",
+      "wsj.com",
+      "bloomberg.com",
+      "npr.org",
+      "latimes.com",
+      "politico.com"
+    ],
+    "domainKeywords": [
+      "news"
+    ]
+  },
+  {
+    "id": "sports",
+    "label": "Sports",
+    "hosts": [
+      "espn.com",
+      "bleacherreport.com",
+      "nba.com",
+      "nfl.com",
+      "mlb.com",
+      "nhl.com",
+      "fifa.com",
+      "theathletic.com",
+      "cricbuzz.com",
+      "espncricinfo.com"
+    ],
+    "domainKeywords": [
+      "sports",
+      "scores"
+    ]
+  },
+  {
+    "id": "porn",
+    "label": "Porn",
+    "hosts": [
+      "xnxx.com",
+      "xhamster.com",
+      "redtube.com"
+    ],
+    "domainKeywords": [
+      "porn",
+      "xxx",
+      "sex",
+      "xvideo",
+      "adult",
+      "nsfw",
+      "hentai",
+      "hanime",
+      "rule34",
+      "r34",
+      "booru",
+      "furry",
+      "jav",
+      "onlyfans",
+      "camgirl",
+      "nude",
+      "naked",
+      "erotic",
+      "bdsm",
+      "amateur",
+      "milf",
+      "anal",
+      "escort",
+      "fuck",
+      "fap",
+      "jerk",
+      "pussy",
+      "cock",
+      "dick"
+    ],
+    "redditSubredditKeywords": [
+      "nsfw",
+      "porn",
+      "xxx",
+      "sex",
+      "slut",
+      "thot",
+      "gonewild",
+      "gw",
+      "nude",
+      "fuck",
+      "cock",
+      "dick",
+      "penis",
+      "pussy",
+      "booty",
+      "butt",
+      "anal",
+      "cream",
+      "cum",
+      "blowjob",
+      "tit",
+      "boob",
+      "busty",
+      "milf",
+      "teen",
+      "college",
+      "whore",
+      "onlyfans",
+      "wife",
+      "couple",
+      "bdsm",
+      "cuck",
+      "incest",
+      "thong",
+      "hentai",
+      "rule34",
+      "r34",
+      "ecchi",
+      "futa",
+      "furry",
+      "celeb",
+      "thick",
+      "thigh",
+      "petite"
+    ]
+  },
+  {
+    "id": "gambling",
+    "label": "Gambling",
+    "hosts": [
+      "stake.com",
+      "stake.us",
+      "draftkings.com",
+      "fanduel.com",
+      "caesars.com",
+      "bovada.lv",
+      "williamhill.com",
+      "ladbrokes.com",
+      "paddypower.com"
+    ],
+    "domainKeywords": [
+      "casino",
+      "bet",
+      "poker",
+      "slots"
+    ]
+  },
+  {
+    "id": "gaming",
+    "label": "Gaming",
+    "hosts": [
+      "steampowered.com",
+      "epicgames.com",
+      "roblox.com",
+      "battle.net",
+      "xbox.com",
+      "playstation.com",
+      "itch.io",
+      "speedrun.com",
+      "fortnite.com",
+      "minecraft.net",
+      "callofduty.com",
+      "riotgames.com",
+      "nintendo.com"
+    ],
+    "domainKeywords": [
+      "game"
+    ]
+  },
+  {
+    "id": "shopping",
+    "label": "Shopping",
+    "hosts": [
+      "amazon.com",
+      "ebay.com",
+      "aliexpress.com",
+      "temu.com",
+      "walmart.com",
+      "target.com",
+      "etsy.com",
+      "shein.com",
+      "bestbuy.com",
+      "homedepot.com",
+      "zara.com",
+      "depop.com",
+      "whatnot.com"
+    ],
+    "domainKeywords": [
+      "shopee",
+      "lazada",
+      "flipkart",
+      "tokopedia",
+      "mercadolibre",
+      "mercadolivre",
+      "coupang",
+      "rakuten"
+    ]
+  },
+  {
+    "id": "dating",
+    "label": "Dating",
+    "hosts": [
+      "tinder.com",
+      "bumble.com",
+      "hinge.co",
+      "okcupid.com",
+      "match.com",
+      "pof.com",
+      "grindr.com",
+      "happn.com",
+      "badoo.com",
+      "feeld.co",
+      "taimi.com"
+    ],
+    "domainKeywords": [
+      "dating",
+      "hookup"
+    ]
+  },
+  {
+    "id": "trading",
+    "label": "Trading",
+    "hosts": [
+      "robinhood.com",
+      "coinbase.com",
+      "binance.com",
+      "etoro.com",
+      "kraken.com",
+      "marketwatch.com",
+      "seekingalpha.com",
+      "coinmarketcap.com",
+      "coingecko.com",
+      "gemini.com",
+      "kucoin.com",
+      "bybit.com",
+      "okx.com",
+      "webull.com"
+    ],
+    "domainKeywords": [
+      "crypto",
+      "forex",
+      "trading"
+    ]
+  }
+]

@@ -1,6 +1,13 @@
-export type View = "calendar" | "kanban";
+import { parseInitialViewSearch, type View } from "$lib/navigation";
 
-let currentView = $state<View>("calendar");
+export type { View } from "$lib/navigation";
+
+function initialView(): View {
+  if (typeof window === "undefined") return "calendar";
+  return parseInitialViewSearch(window.location.search) ?? "calendar";
+}
+
+let currentView = $state<View>(initialView());
 
 export function getNavigation() {
   return {

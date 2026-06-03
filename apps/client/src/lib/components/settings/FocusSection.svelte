@@ -1,0 +1,289 @@
+<script lang="ts">
+  import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
+  import {
+    DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
+    DEFAULT_FOCUS_BREAK_END_ESC_PRESSES,
+    DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS,
+    DEFAULT_FOCUS_BREAK_EXTENSION_LIMIT,
+    DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS,
+    DEFAULT_FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
+    FOCUS_BREAK_END_ESC_PRESS_OPTIONS,
+    FOCUS_BREAK_EXTENSION_LIMIT_OPTIONS,
+    FOCUS_IDLE_THRESHOLD_MINUTES_OPTIONS,
+    FOCUS_BREAK_SOUND_INTERVAL_SECONDS,
+    FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
+  } from "$lib/stores/preferences";
+  import { getPreferences } from "$lib/stores/preferences.svelte";
+  import { getPomodoro } from "$lib/stores/pomodoro.svelte";
+  import CustomSelect from "./CustomSelect.svelte";
+  import ToggleSetting from "./ToggleSetting.svelte";
+
+  const preferences = getPreferences();
+  const pomodoro = getPomodoro();
+
+  type SelectOption = { value: string; label: string };
+
+  const DISABLED_SELECT_VALUE = "disabled";
+
+  const idleThresholdOptions: readonly SelectOption[] =
+    FOCUS_IDLE_THRESHOLD_MINUTES_OPTIONS.map((minutes) => ({
+      value: String(minutes),
+      label: `${minutes} min`,
+    }));
+
+  const breakFinishedRepeatOptions: readonly SelectOption[] =
+    FOCUS_BREAK_SOUND_INTERVAL_SECONDS.map((seconds) => {
+      if (seconds === 0) return { value: String(seconds), label: "None" };
+      if (seconds === 60) return { value: String(seconds), label: "Every minute" };
+      return { value: String(seconds), label: `Every ${seconds} seconds` };
+    });
+
+  const breakEndWarningOptions: readonly SelectOption[] =
+    FOCUS_BREAK_SOUND_INTERVAL_SECONDS.map((seconds) => {
+      if (seconds === 0) return { value: String(seconds), label: "None" };
+      if (seconds === 60) return { value: String(seconds), label: "1 minute before" };
+      return { value: String(seconds), label: `${seconds} seconds before` };
+    });
+
+  const breakEndEscPressOptions: readonly SelectOption[] = [
+    {
+      value: DISABLED_SELECT_VALUE,
+      label: "Disabled",
+    },
+    ...FOCUS_BREAK_END_ESC_PRESS_OPTIONS.map((presses) => ({
+      value: String(presses),
+      label: `${presses} Esc ${presses === 1 ? "press" : "presses"}`,
+    })),
+  ];
+
+  const pausedFocusWarningOptions: readonly SelectOption[] =
+    FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES.map((minutes) => {
+      if (minutes === 0) return { value: String(minutes), label: "None" };
+      return { value: String(minutes), label: `Every ${minutes} minutes` };
+    });
+
+  let showDisableIdlePauseConfirm = $state(false);
+  let showDisableBreakEndConfirm = $state(false);
+  let showDisableBreakExtensionConfirm = $state(false);
+
+  function handleIdleThresholdChange(value: string): void {
+    const minutes = Number(value);
+    if (!Number.isFinite(minutes)) return;
+    preferences.setFocusIdleThresholdMinutes(minutes);
+    pomodoro.setActiveIdleThresholdMinutes(preferences.focusIdleThresholdMinutes);
+  }
+
+  function resetIdleThreshold(): void {
+    preferences.resetFocusIdleThresholdMinutes();
+    pomodoro.setActiveIdleThresholdMinutes(DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES);
+  }
+
+  function handleBreakFinishedRepeatChange(value: string): void {
+    const seconds = Number(value);
+    if (!Number.isFinite(seconds)) return;
+    preferences.setFocusBreakFinishedRepeatSeconds(seconds);
+  }
+
+  function handleBreakEndWarningChange(value: string): void {
+    const seconds = Number(value);
+    if (!Number.isFinite(seconds)) return;
+    preferences.setFocusBreakEndWarningSeconds(seconds);
+  }
+
+  function handleBreakEndEscPressChange(value: string): void {
+    if (value === DISABLED_SELECT_VALUE) {
+      if (preferences.focusBreakEndEscPresses === null) return;
+      showDisableBreakEndConfirm = true;
+      return;
+    }
+    const presses = Number(value);
+    if (!Number.isFinite(presses)) return;
+    preferences.setFocusBreakEndEscPresses(presses);
+    showDisableBreakEndConfirm = false;
+  }
+
+  function handleBreakExtensionLimitChange(value: string): void {
+    if (value === DISABLED_SELECT_VALUE) {
+      if (preferences.focusBreakExtensionLimit === null) return;
+      showDisableBreakExtensionConfirm = true;
+      return;
+    }
+    const limit = Number(value);
+    if (!Number.isFinite(limit)) return;
+    preferences.setFocusBreakExtensionLimit(limit);
+    showDisableBreakExtensionConfirm = false;
+  }
+
+  function handlePausedFocusWarningChange(value: string): void {
+    const minutes = Number(value);
+    if (!Number.isFinite(minutes)) return;
+    preferences.setFocusPauseNotificationIntervalMinutes(minutes);
+  }
+
+  function handleIdlePauseDefaultChange(checked: boolean): void {
+    if (checked) {
+      preferences.setFocusIdlePauseOnEventCreate(true);
+      return;
+    }
+    showDisableIdlePauseConfirm = true;
+  }
+
+  function confirmDisableIdlePauseDefault(): void {
+    preferences.setFocusIdlePauseOnEventCreate(false);
+    showDisableIdlePauseConfirm = false;
+  }
+
+  function cancelDisableIdlePauseDefault(): void {
+    showDisableIdlePauseConfirm = false;
+  }
+
+  function confirmDisableBreakEnd(): void {
+    preferences.setFocusBreakEndEscPresses(null);
+    showDisableBreakEndConfirm = false;
+  }
+
+  function cancelDisableBreakEnd(): void {
+    showDisableBreakEndConfirm = false;
+  }
+
+  function confirmDisableBreakExtension(): void {
+    preferences.setFocusBreakExtensionLimit(null);
+    showDisableBreakExtensionConfirm = false;
+  }
+
+  function cancelDisableBreakExtension(): void {
+    showDisableBreakExtensionConfirm = false;
+  }
+
+  const breakExtensionLimitOptions: readonly SelectOption[] = [
+    {
+      value: DISABLED_SELECT_VALUE,
+      label: "Disabled",
+    },
+    ...FOCUS_BREAK_EXTENSION_LIMIT_OPTIONS.map((limit) => ({
+      value: String(limit),
+      label: `${limit} ${limit === 1 ? "time" : "times"}`,
+    })),
+  ];
+</script>
+
+<div class="flex flex-col gap-6">
+  <section class="flex flex-col gap-4">
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Idle detection</h2>
+    <div class="flex flex-col gap-3">
+      <CustomSelect
+        label="Idle threshold"
+        description="Pause focus after this much inactivity"
+        value={String(preferences.focusIdleThresholdMinutes)}
+        options={idleThresholdOptions}
+        onChange={handleIdleThresholdChange}
+        canReset={preferences.focusIdleThresholdMinutes !== DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES}
+        onReset={resetIdleThreshold}
+      />
+      <ToggleSetting
+        label="Idle pause by default"
+        description="Turns on Pause on inactivity for new Pomodoro events"
+        checked={preferences.focusIdlePauseOnEventCreate}
+        onChange={handleIdlePauseDefaultChange}
+      />
+    </div>
+  </section>
+
+  <div class="h-px bg-border/70" aria-hidden="true"></div>
+
+  <section class="flex flex-col gap-4">
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Notification</h2>
+    <div class="flex flex-col gap-3">
+      <CustomSelect
+        label="Paused focus warning"
+        description="Remind you to resume paused focus sessions"
+        value={String(preferences.focusPauseNotificationIntervalMinutes)}
+        options={pausedFocusWarningOptions}
+        onChange={handlePausedFocusWarningChange}
+        canReset={preferences.focusPauseNotificationIntervalMinutes !== DEFAULT_FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES}
+        onReset={() => preferences.resetFocusPauseNotificationIntervalMinutes()}
+      />
+    </div>
+  </section>
+
+  <div class="h-px bg-border/70" aria-hidden="true"></div>
+
+  <section class="flex flex-col gap-4">
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Break screen</h2>
+    <div class="flex flex-col gap-3">
+      <CustomSelect
+        label="End break early"
+        description="Esc presses required before the break timer finishes"
+        value={preferences.focusBreakEndEscPresses === null
+          ? DISABLED_SELECT_VALUE
+          : String(preferences.focusBreakEndEscPresses)}
+        options={breakEndEscPressOptions}
+        onChange={handleBreakEndEscPressChange}
+        canReset={preferences.focusBreakEndEscPresses !== DEFAULT_FOCUS_BREAK_END_ESC_PRESSES}
+        onReset={() => preferences.resetFocusBreakEndEscPresses()}
+      />
+      <CustomSelect
+        label="Extend break"
+        description="How many extra 1-minute extensions are allowed"
+        value={preferences.focusBreakExtensionLimit === null
+          ? DISABLED_SELECT_VALUE
+          : String(preferences.focusBreakExtensionLimit)}
+        options={breakExtensionLimitOptions}
+        onChange={handleBreakExtensionLimitChange}
+        canReset={preferences.focusBreakExtensionLimit !== DEFAULT_FOCUS_BREAK_EXTENSION_LIMIT}
+        onReset={() => preferences.resetFocusBreakExtensionLimit()}
+      />
+      <CustomSelect
+        label="Repeat after break ends"
+        description="Replay the break-complete sound until you return"
+        value={String(preferences.focusBreakFinishedRepeatSeconds)}
+        options={breakFinishedRepeatOptions}
+        onChange={handleBreakFinishedRepeatChange}
+        canReset={preferences.focusBreakFinishedRepeatSeconds !== DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS}
+        onReset={() => preferences.resetFocusBreakFinishedRepeatSeconds()}
+      />
+      <CustomSelect
+        label="Warning before break ends"
+        description="Play the same sound once before the break completes"
+        value={String(preferences.focusBreakEndWarningSeconds)}
+        options={breakEndWarningOptions}
+        onChange={handleBreakEndWarningChange}
+        canReset={preferences.focusBreakEndWarningSeconds !== DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS}
+        onReset={() => preferences.resetFocusBreakEndWarningSeconds()}
+      />
+    </div>
+  </section>
+</div>
+
+{#if showDisableIdlePauseConfirm}
+  <ConfirmDialog
+    title="Turn off idle pause by default?"
+    message="Idle pause is an important productivity feature. It keeps focus time honest when you step away."
+    confirmLabel="Turn off (Enter)"
+    cancelLabel="Keep on (Esc)"
+    onConfirm={confirmDisableIdlePauseDefault}
+    onCancel={cancelDisableIdlePauseDefault}
+  />
+{/if}
+
+{#if showDisableBreakEndConfirm}
+  <ConfirmDialog
+    title="Disable early break ending?"
+    message="The break screen will hide the Esc ending option. You will need to wait until the break timer finishes."
+    confirmLabel="Disable (Enter)"
+    cancelLabel="Keep current (Esc)"
+    onConfirm={confirmDisableBreakEnd}
+    onCancel={cancelDisableBreakEnd}
+  />
+{/if}
+
+{#if showDisableBreakExtensionConfirm}
+  <ConfirmDialog
+    title="Disable break extensions?"
+    message="The break screen will hide the extension shortcut. You will not be able to add extra break time."
+    confirmLabel="Disable (Enter)"
+    cancelLabel="Keep current (Esc)"
+    onConfirm={confirmDisableBreakExtension}
+    onCancel={cancelDisableBreakExtension}
+  />
+{/if}

@@ -1,16 +1,19 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   parseCalendarDate,
   formatCalendarDate,
+  formatCalendarDateWithSeconds,
   formatDatePart,
   startOfWeek,
   getWeekDays,
+  getWorkCycleDays,
+  adjacentWorkCycleAnchor,
   addDays,
   isSameDay,
   minuteOfDay,
-  minuteToTop,
   durationMinutes,
   snapToGrid,
+  snapSimpleClickStartMinute,
   clampMinute,
   eventsForDay,
   allDayEventsForDay,
@@ -19,9 +22,31 @@ import {
   layoutEventsForDay,
   effectiveMinuteRange,
   minuteOffsetToDateStr,
-  formatHour,
+  formatTimeLabel,
+  formatTimeRange,
+  getHourInTimezone,
+  sanitizeCalendarTime,
+  normalizeEventColor,
+  EVENT_COLOR_OPTIONS,
+  getEventColor,
+  getEventStatusPatternClass,
+  getEventSurfaceStatusForIdentity,
+  getPastEventColor,
+  getOutsideMonthEventColor,
+  isEventSurfaceCancelled,
+  getTimezoneCity,
+  getTimezoneRegion,
+  getTimezoneOffsetMinutes,
+  getTimezoneInfo,
+  listAllTimezones,
+  searchTimezones,
+  deriveAcronymFromLongName,
+  compactOffsetFromLong,
+  computeViewWindow,
+  visibleMinuteRangeForScroll,
 } from "./utils";
-import type { CalendarEvent } from "./types";
+import { FALLBACK_COLOR_INDEX, PALETTE_SIZE, type CalendarEvent } from "./types";
+import { lightTheme, darkTheme, type Theme } from "$lib/stores/themes";
 
 /** Build a CalendarEvent with required timezone/calendarId defaults. */
 function evt(base: Omit<CalendarEvent, "timezone" | "calendarId">): CalendarEvent {
@@ -36,6 +61,13 @@ describe("parseCalendarDate", () => {
     expect(d.getDate()).toBe(13);
     expect(d.getHours()).toBe(14);
     expect(d.getMinutes()).toBe(30);
+  });
+
+  it("parses optional seconds", () => {
+    const d = parseCalendarDate("2026-03-13 14:30:45");
+    expect(d.getHours()).toBe(14);
+    expect(d.getMinutes()).toBe(30);
+    expect(d.getSeconds()).toBe(45);
   });
 
   it("defaults time to 00:00 if missing", () => {
@@ -54,6 +86,13 @@ describe("formatCalendarDate", () => {
   it("zero-pads single digit values", () => {
     const d = new Date(2026, 0, 5, 3, 7);
     expect(formatCalendarDate(d)).toBe("2026-01-05 03:07");
+  });
+});
+
+describe("formatCalendarDateWithSeconds", () => {
+  it("formats a Date to YYYY-MM-DD HH:MM:SS", () => {
+    const d = new Date(2026, 2, 13, 14, 30, 5, 999);
+    expect(formatCalendarDateWithSeconds(d)).toBe("2026-03-13 14:30:05");
   });
 });
 
@@ -104,6 +143,46 @@ describe("getWeekDays", () => {
   });
 });
 
+describe("getWorkCycleDays", () => {
+  it("returns Monday through Friday for weekday anchors", () => {
+    const days = getWorkCycleDays(new Date(2026, 3, 29));
+    expect(days.map(formatDatePart)).toEqual([
+      "2026-04-27",
+      "2026-04-28",
+      "2026-04-29",
+      "2026-04-30",
+      "2026-05-01",
+    ]);
+  });
+
+  it("returns Saturday and Sunday for weekend anchors", () => {
+    expect(getWorkCycleDays(new Date(2026, 4, 2)).map(formatDatePart)).toEqual([
+      "2026-05-02",
+      "2026-05-03",
+    ]);
+    expect(getWorkCycleDays(new Date(2026, 4, 3)).map(formatDatePart)).toEqual([
+      "2026-05-02",
+      "2026-05-03",
+    ]);
+  });
+});
+
+describe("adjacentWorkCycleAnchor", () => {
+  it("moves from weekdays to weekend and back", () => {
+    expect(formatDatePart(adjacentWorkCycleAnchor(new Date(2026, 3, 29), "forward")))
+      .toBe("2026-05-02");
+    expect(formatDatePart(adjacentWorkCycleAnchor(new Date(2026, 3, 29), "back")))
+      .toBe("2026-04-25");
+  });
+
+  it("moves from weekend to neighboring weekdays", () => {
+    expect(formatDatePart(adjacentWorkCycleAnchor(new Date(2026, 4, 2), "forward")))
+      .toBe("2026-05-04");
+    expect(formatDatePart(adjacentWorkCycleAnchor(new Date(2026, 4, 2), "back")))
+      .toBe("2026-04-27");
+  });
+});
+
 describe("addDays", () => {
   it("adds positive days", () => {
     const d = addDays(new Date(2026, 2, 13), 5);
@@ -143,16 +222,12 @@ describe("minuteOfDay", () => {
     expect(minuteOfDay("2026-03-13 23:59")).toBe(1439);
   });
 
+  it("includes seconds as fractional minutes", () => {
+    expect(minuteOfDay("2026-03-13 14:30:30")).toBe(870.5);
+  });
+
   it("defaults to 0 if no time part", () => {
     expect(minuteOfDay("2026-03-13")).toBe(0);
-  });
-});
-
-describe("minuteToTop", () => {
-  it("converts minutes to pixel position", () => {
-    expect(minuteToTop(60, 48)).toBe(48); // 1 hour
-    expect(minuteToTop(30, 48)).toBe(24); // 30 min
-    expect(minuteToTop(0, 48)).toBe(0);
   });
 });
 
@@ -160,6 +235,10 @@ describe("durationMinutes", () => {
   it("calculates duration between two calendar dates", () => {
     expect(durationMinutes("2026-03-13 14:00", "2026-03-13 15:30")).toBe(90);
     expect(durationMinutes("2026-03-13 08:00", "2026-03-13 08:30")).toBe(30);
+  });
+
+  it("preserves second-level duration", () => {
+    expect(durationMinutes("2026-03-13 14:00:00", "2026-03-13 14:00:30")).toBe(0.5);
   });
 
   it("returns 0 for same start and end", () => {
@@ -186,6 +265,29 @@ describe("snapToGrid", () => {
   });
 });
 
+describe("snapSimpleClickStartMinute", () => {
+  it("uses the hour start for simple clicks in the first half of an hour", () => {
+    expect(snapSimpleClickStartMinute(600)).toBe(600);
+    expect(snapSimpleClickStartMinute(614.9)).toBe(600);
+    expect(snapSimpleClickStartMinute(629.9)).toBe(600);
+  });
+
+  it("uses the half-hour start for simple clicks in the second half of an hour", () => {
+    expect(snapSimpleClickStartMinute(630)).toBe(630);
+    expect(snapSimpleClickStartMinute(644.9)).toBe(630);
+    expect(snapSimpleClickStartMinute(659.9)).toBe(630);
+  });
+
+  it("does not round a simple click to the nearest grid mark", () => {
+    expect(snapSimpleClickStartMinute(615)).toBe(600);
+    expect(snapSimpleClickStartMinute(645)).toBe(630);
+  });
+
+  it("keeps the last possible simple click inside the current day", () => {
+    expect(snapSimpleClickStartMinute(1440)).toBe(1410);
+  });
+});
+
 describe("clampMinute", () => {
   it("clamps to 0-1440 range", () => {
     expect(clampMinute(-10)).toBe(0);
@@ -194,11 +296,69 @@ describe("clampMinute", () => {
   });
 });
 
-describe("formatHour", () => {
-  it("formats hour with leading zero", () => {
-    expect(formatHour(0)).toBe("00:00");
-    expect(formatHour(9)).toBe("09:00");
-    expect(formatHour(14)).toBe("14:00");
+describe("visibleMinuteRangeForScroll", () => {
+  it("subtracts sticky chrome before converting pixels to minutes", () => {
+    expect(visibleMinuteRangeForScroll({
+      scrollTop: 300,
+      viewportHeight: 600,
+      stickyTop: 120,
+      hourHeight: 60,
+    })).toEqual({ startMinute: 180, endMinute: 780 });
+  });
+
+  it("clamps to the day bounds", () => {
+    expect(visibleMinuteRangeForScroll({
+      scrollTop: 0,
+      viewportHeight: 2000,
+      stickyTop: 0,
+      hourHeight: 60,
+    })).toEqual({ startMinute: 0, endMinute: 1440 });
+  });
+
+  it("falls back to the full day for invalid geometry", () => {
+    expect(visibleMinuteRangeForScroll({
+      scrollTop: 0,
+      viewportHeight: 0,
+      stickyTop: 0,
+      hourHeight: 60,
+    })).toEqual({ startMinute: 0, endMinute: 1440 });
+  });
+});
+
+describe("formatTimeLabel", () => {
+  it("keeps 24-hour labels canonical", () => {
+    expect(formatTimeLabel("9:05", "24h")).toBe("09:05");
+    expect(formatTimeLabel("2026-05-21 16:30", "24h")).toBe("16:30");
+  });
+
+  it("formats 12-hour labels with meridiem", () => {
+    expect(formatTimeLabel("00:00", "12h")).toBe("12 am");
+    expect(formatTimeLabel("09:30", "12h")).toBe("9:30 am");
+    expect(formatTimeLabel("16:45", "12h")).toBe("4:45 pm");
+  });
+
+  it("supports compact meridiem for narrow controls", () => {
+    expect(formatTimeLabel("00:00", "12h", "compact")).toBe("12am");
+    expect(formatTimeLabel("16:45", "12h", "compact")).toBe("4:45pm");
+  });
+
+  it("formats time ranges", () => {
+    expect(formatTimeRange("09:00", "17:30", "12h")).toBe("9 am - 5:30 pm");
+    expect(formatTimeRange("07:00", "09:30", "12h", "compact")).toBe("7 - 9:30am");
+    expect(formatTimeRange("09:30", "12:30", "12h", "compact")).toBe("9:30am - 12:30pm");
+    expect(formatTimeRange("13:00", "17:30", "12h", "compact")).toBe("1 - 5:30pm");
+  });
+
+  it("leaves malformed labels unchanged", () => {
+    expect(formatTimeLabel("bad", "12h")).toBe("bad");
+    expect(formatTimeLabel("24:00", "12h")).toBe("24:00");
+  });
+});
+
+describe("getHourInTimezone", () => {
+  it("uses the selected calendar time format", () => {
+    const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    expect(getHourInTimezone(new Date(2026, 4, 21), 13, localTz, "12h")).toBe("1 pm");
   });
 });
 
@@ -315,7 +475,7 @@ describe("layoutEventsForDay", () => {
     const layout = layoutEventsForDay(events, "2026-03-13");
     expect(layout).toHaveLength(1);
     expect(layout[0].left).toBe(0);
-    expect(layout[0].width).toBe(92);
+    expect(layout[0].width).toBe(88);
     expect(layout[0].column).toBe(0);
     expect(layout[0].totalColumns).toBe(1);
   });
@@ -329,8 +489,8 @@ describe("layoutEventsForDay", () => {
     expect(layout).toHaveLength(2);
     expect(layout[0].totalColumns).toBe(2);
     expect(layout[1].totalColumns).toBe(2);
-    expect(layout[0].width).toBe(46);
-    expect(layout[1].width).toBe(46);
+    expect(layout[0].width).toBe(44);
+    expect(layout[1].width).toBe(44);
   });
 
   it("returns empty array for no events", () => {
@@ -364,41 +524,7 @@ describe("layoutEventsForDay", () => {
   });
 });
 
-describe("calendar store time conversion round-trip", () => {
-  // These test the contract of toDbTime/toCalendarDate without importing private functions.
-  // The store stores "YYYY-MM-DD HH:MM:00" and loads back "YYYY-MM-DD HH:MM".
-
-  it("appending :00 and taking substring(0,16) is a lossless round-trip", () => {
-    const input = "2026-03-13 14:30";
-    const dbTime = input + ":00"; // toDbTime
-    const loaded = dbTime.substring(0, 16).replace("T", " "); // toCalendarDate
-    expect(loaded).toBe(input);
-  });
-
-  it("handles midnight correctly", () => {
-    const input = "2026-01-01 00:00";
-    const dbTime = input + ":00";
-    const loaded = dbTime.substring(0, 16).replace("T", " ");
-    expect(loaded).toBe(input);
-  });
-
-  it("handles 23:59 correctly", () => {
-    const input = "2026-12-31 23:59";
-    const dbTime = input + ":00";
-    const loaded = dbTime.substring(0, 16).replace("T", " ");
-    expect(loaded).toBe(input);
-  });
-
-  it("handles legacy ISO format from old data gracefully", () => {
-    // Old data stored as ISO: "2026-03-13T19:30:00.000Z"
-    // toCalendarDate strips timezone and uses UTC hours (known limitation for old data)
-    const isoString = "2026-03-13T19:30:00.000Z";
-    const loaded = isoString.substring(0, 16).replace("T", " ");
-    expect(loaded).toBe("2026-03-13 19:30");
-  });
-});
-
-// --- All-day event helpers ---
+// All-day event helpers
 
 describe("eventsForDay excludes all-day events", () => {
   it("filters out all-day events", () => {
@@ -521,6 +647,28 @@ describe("layoutAllDayEventsForWeek", () => {
     expect(result[0].spanCols).toBe(3); // Mon-Tue-Wed
   });
 
+  it("lays out all-day events across a five-day work range", () => {
+    const workDays = weekDays.slice(0, 5);
+    const events: CalendarEvent[] = [
+      evt({ id: "1", title: "A", start: "2026-03-10 00:00", end: "2026-03-13 00:00", allDay: true }),
+    ];
+    const result = layoutAllDayEventsForWeek(events, workDays);
+    expect(result).toHaveLength(1);
+    expect(result[0].startCol).toBe(1);
+    expect(result[0].spanCols).toBe(4);
+  });
+
+  it("lays out all-day events across a two-day weekend range", () => {
+    const weekendDays = weekDays.slice(5);
+    const events: CalendarEvent[] = [
+      evt({ id: "1", title: "A", start: "2026-03-13 00:00", end: "2026-03-15 00:00", allDay: true }),
+    ];
+    const result = layoutAllDayEventsForWeek(events, weekendDays);
+    expect(result).toHaveLength(1);
+    expect(result[0].startCol).toBe(0);
+    expect(result[0].spanCols).toBe(2);
+  });
+
   it("excludes events entirely outside the week", () => {
     const events: CalendarEvent[] = [
       evt({ id: "1", title: "A", start: "2026-03-01 00:00", end: "2026-03-05 00:00", allDay: true }),
@@ -532,5 +680,610 @@ describe("layoutAllDayEventsForWeek", () => {
   it("returns empty for no events", () => {
     const result = layoutAllDayEventsForWeek([], weekDays);
     expect(result).toHaveLength(0);
+  });
+});
+
+describe("sanitizeCalendarTime", () => {
+  it("passes through valid times unchanged", () => {
+    expect(sanitizeCalendarTime("2026-03-13 14:30")).toBe("2026-03-13 14:30");
+    expect(sanitizeCalendarTime("2026-01-01 00:00")).toBe("2026-01-01 00:00");
+    expect(sanitizeCalendarTime("2026-03-13 14:30:45")).toBe("2026-03-13 14:30:45");
+  });
+
+  it("rounds floating point minutes", () => {
+    expect(sanitizeCalendarTime("2026-03-13 14:30.5")).toBe("2026-03-13 14:31");
+    expect(sanitizeCalendarTime("2026-03-13 14:30.4")).toBe("2026-03-13 14:30");
+    expect(sanitizeCalendarTime("2026-03-13 14:30.14999999999977")).toBe("2026-03-13 14:30");
+    expect(sanitizeCalendarTime("2026-03-13 13:23.14999999999977")).toBe("2026-03-13 13:23");
+  });
+
+  it("rounds floating point hours", () => {
+    expect(sanitizeCalendarTime("2026-03-13 14.5:30")).toBe("2026-03-13 15:30");
+  });
+
+  it("clamps out of range values", () => {
+    expect(sanitizeCalendarTime("2026-03-13 25:30")).toBe("2026-03-13 23:30");
+    expect(sanitizeCalendarTime("2026-03-13 -1:30")).toBe("2026-03-13 00:30");
+    expect(sanitizeCalendarTime("2026-03-13 14:70")).toBe("2026-03-13 14:59");
+    expect(sanitizeCalendarTime("2026-03-13 14:-5")).toBe("2026-03-13 14:00");
+    expect(sanitizeCalendarTime("2026-03-13 14:30:70")).toBe("2026-03-13 14:30:59");
+  });
+
+  it("defaults missing time to 00:00", () => {
+    expect(sanitizeCalendarTime("2026-03-13")).toBe("2026-03-13 00:00");
+  });
+
+  it("returns null for invalid inputs", () => {
+    expect(sanitizeCalendarTime("")).toBe(null);
+    expect(sanitizeCalendarTime("invalid")).toBe(null);
+    expect(sanitizeCalendarTime("2026/03/13 14:30")).toBe(null);
+    expect(sanitizeCalendarTime(null as unknown as string)).toBe(null);
+    expect(sanitizeCalendarTime(undefined as unknown as string)).toBe(null);
+  });
+
+  it("handles edge cases", () => {
+    expect(sanitizeCalendarTime("2026-03-13 00:00")).toBe("2026-03-13 00:00");
+    expect(sanitizeCalendarTime("2026-03-13 23:59")).toBe("2026-03-13 23:59");
+    expect(sanitizeCalendarTime("  2026-03-13 14:30  ")).toBe("2026-03-13 14:30"); // trims whitespace
+  });
+
+  it("rolls exact 24:00 end-of-day input to next-day midnight", () => {
+    expect(sanitizeCalendarTime("2026-03-13 24:00")).toBe("2026-03-14 00:00");
+    expect(sanitizeCalendarTime("2026-03-13 24:00:00")).toBe("2026-03-14 00:00:00");
+  });
+});
+
+describe("normalizeEventColor", () => {
+  let warn: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  it("accepts integer indices in range unchanged", () => {
+    expect(normalizeEventColor(0)).toBe(0);
+    expect(normalizeEventColor(22)).toBe(22);
+    expect(normalizeEventColor(23)).toBe(23);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("accepts numeric strings that parse to in-range integers", () => {
+    expect(normalizeEventColor("0")).toBe(0);
+    expect(normalizeEventColor("14")).toBe(14);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("returns undefined for null, undefined, and empty string without warning", () => {
+    expect(normalizeEventColor(null)).toBeUndefined();
+    expect(normalizeEventColor(undefined)).toBeUndefined();
+    expect(normalizeEventColor("")).toBeUndefined();
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("returns undefined and warns once for non-numeric strings", () => {
+    expect(normalizeEventColor("not-a-color-xyz")).toBeUndefined();
+    expect(normalizeEventColor("not-a-color-xyz")).toBeUndefined();
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects out-of-range numbers", () => {
+    expect(normalizeEventColor(-1)).toBeUndefined();
+    expect(normalizeEventColor(32)).toBeUndefined();
+    expect(normalizeEventColor(99)).toBeUndefined();
+  });
+
+  it("rejects non-integer numbers", () => {
+    expect(normalizeEventColor(1.5)).toBeUndefined();
+    expect(normalizeEventColor(Number.NaN)).toBeUndefined();
+    expect(normalizeEventColor(Number.POSITIVE_INFINITY)).toBeUndefined();
+  });
+
+  it("rejects non-numeric values with a warning", () => {
+    expect(normalizeEventColor({})).toBeUndefined();
+    expect(normalizeEventColor([])).toBeUndefined();
+    expect(normalizeEventColor(true)).toBeUndefined();
+  });
+
+  it("rejects non-numeric strings", () => {
+    expect(normalizeEventColor("not-a-number")).toBeUndefined();
+    expect(normalizeEventColor("abc")).toBeUndefined();
+    expect(normalizeEventColor("__proto__")).toBeUndefined();
+  });
+});
+
+describe("EVENT_COLOR_OPTIONS", () => {
+  it("contains every palette index exactly once", () => {
+    expect(EVENT_COLOR_OPTIONS).toHaveLength(PALETTE_SIZE);
+    expect(new Set(EVENT_COLOR_OPTIONS).size).toBe(EVENT_COLOR_OPTIONS.length);
+    for (const color of EVENT_COLOR_OPTIONS) {
+      expect(normalizeEventColor(color)).toBe(color);
+    }
+    expect([...EVENT_COLOR_OPTIONS].sort((a, b) => a - b)).toEqual(
+      Array.from({ length: PALETTE_SIZE }, (_, i) => i),
+    );
+  });
+
+  it("includes the fallback index", () => {
+    expect(EVENT_COLOR_OPTIONS).toContain(FALLBACK_COLOR_INDEX);
+  });
+});
+
+const HEX = /^#[0-9a-fA-F]{6}$/;
+
+function assertColorEntry(entry: { bg: string; text: string }): void {
+  expect(entry.bg).toMatch(HEX);
+  expect(entry.text).toMatch(HEX);
+}
+
+describe("getEventColor", () => {
+  it("returns the theme's palette entry for a known slot", () => {
+    const entry = getEventColor(2, lightTheme);
+    expect(entry.bg.toLowerCase()).toBe(lightTheme.eventPalette[2].toLowerCase());
+    assertColorEntry(entry);
+  });
+
+  it("returns the fallback slot for undefined color (render fallback)", () => {
+    const entry = getEventColor(undefined, lightTheme);
+    expect(entry.bg.toLowerCase()).toBe(
+      lightTheme.eventPalette[FALLBACK_COLOR_INDEX].toLowerCase(),
+    );
+  });
+
+  it("returns different hex values across light and dark themes for the same slot", () => {
+    const light = getEventColor(14, lightTheme);
+    const dark = getEventColor(14, darkTheme);
+    expect(light.bg.toLowerCase()).not.toBe(dark.bg.toLowerCase());
+  });
+
+  it("resolves every EVENT_COLOR_OPTIONS entry under both built-in themes", () => {
+    for (const theme of [lightTheme, darkTheme]) {
+      for (const color of EVENT_COLOR_OPTIONS) {
+        assertColorEntry(getEventColor(color, theme));
+      }
+    }
+  });
+
+  it("resolves palettes for a custom theme as long as all slots are filled", () => {
+    const customPalette = [...darkTheme.eventPalette];
+    customPalette[2] = "#123456";
+    const customTheme: Theme = {
+      kind: "builtin",
+      id: "custom-test",
+      displayName: "Custom Test",
+      base: "dark",
+      iconLabel: "dark",
+      blendCanvas: "#000000",
+      eventPalette: customPalette,
+    };
+    const entry = getEventColor(2, customTheme);
+    expect(entry.bg.toLowerCase()).toBe("#123456");
+  });
+});
+
+describe("dimmed color variants", () => {
+  it("past and outside-month return valid hex entries", () => {
+    for (const theme of [lightTheme, darkTheme]) {
+      assertColorEntry(getPastEventColor(2, theme));
+      assertColorEntry(getOutsideMonthEventColor(2, theme));
+    }
+  });
+
+  it("dimmed variants differ from the base color", () => {
+    const base = getEventColor(2, lightTheme);
+    const past = getPastEventColor(2, lightTheme);
+    expect(past.bg.toLowerCase()).not.toBe(base.bg.toLowerCase());
+  });
+
+  it("outside-month is more washed out than past (lower main weight)", () => {
+    // Outside-month uses 0.25 main weight; past uses 0.3 (light theme).
+    // The blended bg should therefore be closer to the canvas color.
+    const past = getPastEventColor(2, lightTheme);
+    const outside = getOutsideMonthEventColor(2, lightTheme);
+    expect(past.bg).not.toBe(outside.bg);
+  });
+
+  it("preserves palette alpha when computing dimmed variants", () => {
+    const customPalette = [...lightTheme.eventPalette];
+    customPalette[2] = "#ff000080";
+    const customTheme: Theme = {
+      kind: "builtin",
+      id: "custom-alpha-test",
+      displayName: "Custom alpha test",
+      base: "light",
+      iconLabel: "light",
+      blendCanvas: "#ffffff",
+      eventPalette: customPalette,
+    };
+    expect(getPastEventColor(2, customTheme).bg).toBe("#ffb3b380");
+    expect(getOutsideMonthEventColor(2, customTheme).bg.endsWith("80")).toBe(true);
+  });
+
+  it("falls back to the dimmed fallback slot when color is undefined", () => {
+    assertColorEntry(getPastEventColor(undefined, lightTheme));
+    assertColorEntry(getOutsideMonthEventColor(undefined, darkTheme));
+  });
+});
+
+describe("getEventStatusPatternClass", () => {
+  it("returns no pattern for ordinary confirmed events or free availability", () => {
+    expect(getEventStatusPatternClass({ status: "confirmed", transparency: "opaque" })).toBe("");
+    expect(getEventStatusPatternClass({ status: "confirmed", transparency: "transparent" })).toBe("");
+    expect(getEventStatusPatternClass({})).toBe("");
+  });
+
+  it("uses vertical pinstripes for tentative events", () => {
+    const patternClass = getEventStatusPatternClass({
+      status: "tentative",
+      transparency: "transparent",
+    });
+    expect(patternClass).toBe("event-pattern-tentative");
+  });
+
+  it("uses the strongest cancelled pattern before availability", () => {
+    const patternClass = getEventStatusPatternClass({
+      status: "cancelled",
+      transparency: "transparent",
+    });
+    expect(patternClass).toBe("event-pattern-declined");
+  });
+
+  it("keeps event-level cancelled stronger than RSVP surface status", () => {
+    const patternClass = getEventStatusPatternClass({
+      status: "cancelled",
+      surfaceStatus: "accepted",
+    });
+    expect(patternClass).toBe("event-pattern-declined");
+  });
+
+  it("uses dots for pending RSVP state", () => {
+    const patternClass = getEventStatusPatternClass({
+      surfaceStatus: "needs-action",
+    });
+    expect(patternClass).toBe("event-pattern-pending");
+  });
+
+  it("uses RSVP surface status before event-level tentative", () => {
+    const patternClass = getEventStatusPatternClass({
+      status: "tentative",
+      surfaceStatus: "accepted",
+    });
+    expect(patternClass).toBe("");
+  });
+
+  it("treats declined RSVP as a cancelled surface", () => {
+    expect(isEventSurfaceCancelled({ surfaceStatus: "declined" })).toBe(true);
+    expect(isEventSurfaceCancelled({ status: "cancelled" })).toBe(true);
+    expect(isEventSurfaceCancelled({ surfaceStatus: "accepted", status: "cancelled" })).toBe(true);
+  });
+});
+
+describe("getEventSurfaceStatusForIdentity", () => {
+  it("returns the matching attendee RSVP status case-insensitively", () => {
+    expect(getEventSurfaceStatusForIdentity({
+      surfaceAttendees: [
+        { email: "other@example.com", status: "accepted" },
+        { email: "Person@Example.com", status: "tentative" },
+      ],
+    }, "person@example.com")).toBe("tentative");
+  });
+
+  it("falls back to local participation status without an identity or matching attendee", () => {
+    const event: Pick<CalendarEvent, "surfaceAttendees"> = {
+      surfaceAttendees: [{ email: "other@example.com", status: "declined" }],
+    };
+    expect(getEventSurfaceStatusForIdentity(event, undefined)).toBeUndefined();
+    expect(getEventSurfaceStatusForIdentity(event, "person@example.com")).toBeUndefined();
+    expect(getEventSurfaceStatusForIdentity({
+      ...event,
+      localParticipationStatus: "needs-action",
+    }, undefined)).toBe("needs-action");
+    expect(getEventSurfaceStatusForIdentity({
+      ...event,
+      localParticipationStatus: "tentative",
+    }, "person@example.com")).toBe("tentative");
+  });
+});
+
+describe("getTimezoneCity", () => {
+  it("returns the last segment with underscores converted to spaces", () => {
+    expect(getTimezoneCity("Asia/Tehran")).toBe("Tehran");
+    expect(getTimezoneCity("America/New_York")).toBe("New York");
+    expect(getTimezoneCity("America/Argentina/Buenos_Aires")).toBe("Buenos Aires");
+  });
+
+  it("returns the input itself for single-segment IDs", () => {
+    expect(getTimezoneCity("UTC")).toBe("UTC");
+  });
+});
+
+describe("getTimezoneRegion", () => {
+  it("returns the first segment of an IANA ID", () => {
+    expect(getTimezoneRegion("Asia/Tehran")).toBe("Asia");
+    expect(getTimezoneRegion("America/Argentina/Buenos_Aires")).toBe("America");
+    expect(getTimezoneRegion("Europe/London")).toBe("Europe");
+  });
+
+  it("returns an empty string for single-segment IDs", () => {
+    expect(getTimezoneRegion("UTC")).toBe("");
+  });
+});
+
+describe("getTimezoneOffsetMinutes", () => {
+  it("handles whole-hour positive offsets", () => {
+    expect(getTimezoneOffsetMinutes("Asia/Tokyo")).toBe(9 * 60);
+  });
+
+  it("handles whole-hour negative offsets", () => {
+    expect(getTimezoneOffsetMinutes("Pacific/Honolulu")).toBe(-10 * 60);
+  });
+
+  it("handles half-hour zones", () => {
+    expect(getTimezoneOffsetMinutes("Asia/Kolkata")).toBe(5 * 60 + 30);
+  });
+
+  it("handles 45-minute zones", () => {
+    expect(getTimezoneOffsetMinutes("Asia/Kathmandu")).toBe(5 * 60 + 45);
+  });
+
+  it("returns 0 for UTC", () => {
+    expect(getTimezoneOffsetMinutes("UTC")).toBe(0);
+  });
+});
+
+describe("deriveAcronymFromLongName", () => {
+  it("derives standard 3-letter acronyms from typical names", () => {
+    expect(deriveAcronymFromLongName("Korean Standard Time")).toBe("KST");
+    expect(deriveAcronymFromLongName("Japan Standard Time")).toBe("JST");
+    expect(deriveAcronymFromLongName("Iran Standard Time")).toBe("IST");
+    expect(deriveAcronymFromLongName("West Africa Time")).toBe("WAT");
+    expect(deriveAcronymFromLongName("British Summer Time")).toBe("BST");
+  });
+
+  it("derives 4-letter acronyms for compound names", () => {
+    expect(deriveAcronymFromLongName("Australian Eastern Standard Time")).toBe(
+      "AEST",
+    );
+    expect(deriveAcronymFromLongName("Central European Summer Time")).toBe(
+      "CEST",
+    );
+    expect(deriveAcronymFromLongName("New Zealand Standard Time")).toBe("NZST");
+    expect(deriveAcronymFromLongName("South Africa Standard Time")).toBe(
+      "SAST",
+    );
+  });
+
+  it("derives 5-letter acronyms when needed", () => {
+    expect(
+      deriveAcronymFromLongName("Australian Central Western Standard Time"),
+    ).toBe("ACWST");
+  });
+
+  it("treats hyphenated regions as separate words", () => {
+    expect(deriveAcronymFromLongName("Hawaii-Aleutian Standard Time")).toBe(
+      "HAST",
+    );
+  });
+
+  it("treats ampersand as a word boundary, not a letter", () => {
+    expect(deriveAcronymFromLongName("Wallis & Futuna Time")).toBe("WFT");
+    expect(deriveAcronymFromLongName("French Southern & Antarctic Time")).toBe(
+      "FSAT",
+    );
+    expect(
+      deriveAcronymFromLongName("St. Pierre & Miquelon Daylight Time"),
+    ).toBe("SPMDT");
+  });
+
+  it("skips lowercase mid-name particles like 'de'", () => {
+    expect(
+      deriveAcronymFromLongName("Fernando de Noronha Standard Time"),
+    ).toBe("FNST");
+  });
+
+  it("returns null when the long name is itself an offset form", () => {
+    expect(deriveAcronymFromLongName("GMT+5:30")).toBeNull();
+    expect(deriveAcronymFromLongName("UTC+14")).toBeNull();
+    expect(deriveAcronymFromLongName("Coordinated Universal Time")).toBeNull();
+  });
+
+  it("returns null for empty or whitespace-only input", () => {
+    expect(deriveAcronymFromLongName("")).toBeNull();
+    expect(deriveAcronymFromLongName("   ")).toBeNull();
+  });
+
+  it("returns null when the derivation produces fewer than 2 letters", () => {
+    expect(deriveAcronymFromLongName("Time")).toBeNull();
+  });
+
+  it("returns null when the derivation would exceed 5 letters", () => {
+    expect(
+      deriveAcronymFromLongName("Some Very Long Made Up Time Zone Name"),
+    ).toBeNull();
+  });
+
+  it("skips the stop words 'of', 'the', 'and'", () => {
+    expect(deriveAcronymFromLongName("Time of the East")).toBe("TE");
+  });
+});
+
+describe("compactOffsetFromLong", () => {
+  it("strips GMT prefix and leading zero hours", () => {
+    expect(compactOffsetFromLong("GMT-06:00")).toBe("-6");
+    expect(compactOffsetFromLong("GMT+09:00")).toBe("+9");
+  });
+
+  it("preserves non-zero minutes", () => {
+    expect(compactOffsetFromLong("GMT+05:30")).toBe("+5:30");
+    expect(compactOffsetFromLong("GMT+08:45")).toBe("+8:45");
+    expect(compactOffsetFromLong("GMT-09:30")).toBe("-9:30");
+  });
+
+  it("keeps the sign on two-digit-hour offsets", () => {
+    expect(compactOffsetFromLong("GMT+14:00")).toBe("+14");
+    expect(compactOffsetFromLong("GMT-12:00")).toBe("-12");
+  });
+
+  it("returns +0 for the UTC zero point", () => {
+    expect(compactOffsetFromLong("GMT")).toBe("+0");
+    expect(compactOffsetFromLong("")).toBe("+0");
+  });
+
+  it("falls back to a stripped form for anything unexpected", () => {
+    expect(compactOffsetFromLong("UTC+05:30")).toBe("UTC+05:30");
+    expect(compactOffsetFromLong("GMT+5:30")).toBe("+5:30");
+  });
+});
+
+describe("listAllTimezones", () => {
+  it("excludes Etc/* zones", () => {
+    const list = listAllTimezones();
+    expect(list.every((tz) => !tz.startsWith("Etc/"))).toBe(true);
+  });
+
+  it("includes common multi-segment zones", () => {
+    const list = listAllTimezones();
+    expect(list).toContain("Asia/Tehran");
+    expect(list).toContain("America/New_York");
+    expect(list).toContain("Europe/London");
+  });
+
+  it("excludes deprecated single-segment aliases", () => {
+    const list = listAllTimezones();
+    expect(list).not.toContain("EST");
+    expect(list).not.toContain("PST8PDT");
+    expect(list).not.toContain("Iran");
+    expect(list).not.toContain("Japan");
+    expect(list).not.toContain("UTC");
+  });
+});
+
+describe("searchTimezones", () => {
+  it("returns the full filtered list for an empty query", () => {
+    const result = searchTimezones("", []);
+    const filtered = listAllTimezones();
+    expect(result.length).toBe(filtered.length);
+  });
+
+  it("sorts the empty-query result by UTC offset ascending", () => {
+    const result = searchTimezones("", []);
+    for (let i = 1; i < result.length; i++) {
+      const prev = getTimezoneInfo(result[i - 1]).offsetMinutes;
+      const curr = getTimezoneInfo(result[i]).offsetMinutes;
+      expect(prev).toBeLessThanOrEqual(curr);
+    }
+  });
+
+  it("excludes already-active zones from results", () => {
+    const result = searchTimezones("", ["Asia/Tehran", "America/New_York"]);
+    expect(result).not.toContain("Asia/Tehran");
+    expect(result).not.toContain("America/New_York");
+  });
+
+  it("excludes Etc/* zones from any query", () => {
+    const empty = searchTimezones("", []);
+    expect(empty.every((tz) => !tz.startsWith("Etc/"))).toBe(true);
+    const named = searchTimezones("gmt", []);
+    expect(named.every((tz) => !tz.startsWith("Etc/"))).toBe(true);
+  });
+
+  it("excludes deprecated single-segment aliases from any query", () => {
+    const result = searchTimezones("", []);
+    expect(result).not.toContain("EST");
+    expect(result).not.toContain("Japan");
+    expect(result).not.toContain("UTC");
+  });
+
+  it("finds zones by IANA city name", () => {
+    expect(searchTimezones("tehran", [])).toContain("Asia/Tehran");
+    expect(searchTimezones("chicago", [])).toContain("America/Chicago");
+    expect(searchTimezones("tokyo", [])).toContain("Asia/Tokyo");
+  });
+
+  it("finds zones by region prefix", () => {
+    const result = searchTimezones("asia", []);
+    expect(result.some((tz) => tz.startsWith("Asia/"))).toBe(true);
+    expect(result.length).toBeGreaterThan(10);
+  });
+
+  it("finds zones by Intl long-name match", () => {
+    // "Iran Standard Time" matches Asia/Tehran via long name; the
+    // deprecated "Iran" IANA alias has been filtered out so this can
+    // only succeed via the long-name tier.
+    expect(searchTimezones("iran", [])).toContain("Asia/Tehran");
+  });
+
+  it("ranks city-prefix matches above region-only matches", () => {
+    // Tokyo's city prefix-matches at tier 2; many Asia/* zones only
+    // match via the region "Asia" (tier 4-5) for longer queries. With
+    // "tokyo" the only candidate is Asia/Tokyo so it must be first.
+    const result = searchTimezones("tokyo", []);
+    expect(result[0]).toBe("Asia/Tokyo");
+  });
+
+  it("returns matches with case-insensitive query", () => {
+    const lower = searchTimezones("tehran", []);
+    const upper = searchTimezones("TEHRAN", []);
+    const mixed = searchTimezones("Tehran", []);
+    expect(lower).toEqual(upper);
+    expect(lower).toEqual(mixed);
+  });
+
+  it("returns an empty list for a query that matches nothing", () => {
+    const result = searchTimezones("zzzzzqqqxxxnomatch", []);
+    expect(result).toEqual([]);
+  });
+});
+
+describe("computeViewWindow", () => {
+  it("day mode: returns anchor day with 1-day margin", () => {
+    const w = computeViewWindow(new Date(2026, 3, 29), "day");
+    expect(w.start.toString()).toBe("2026-04-28");
+    expect(w.end.toString()).toBe("2026-04-30");
+  });
+
+  it("week mode: returns Monday-Sunday plus margin", () => {
+    // 2026-04-29 is a Wednesday. Monday = 04-27, Sunday = 05-03.
+    const w = computeViewWindow(new Date(2026, 3, 29), "week");
+    expect(w.start.toString()).toBe("2026-04-26");
+    expect(w.end.toString()).toBe("2026-05-04");
+  });
+
+  it("week mode: anchor on Sunday yields the same week (Mon..Sun)", () => {
+    // 2026-05-03 is a Sunday. startOfWeek -> 2026-04-27.
+    const w = computeViewWindow(new Date(2026, 4, 3), "week");
+    expect(w.start.toString()).toBe("2026-04-26");
+    expect(w.end.toString()).toBe("2026-05-04");
+  });
+
+  it("workweek mode: weekday anchors return Monday-Friday plus margin", () => {
+    const w = computeViewWindow(new Date(2026, 3, 29), "workweek");
+    expect(w.start.toString()).toBe("2026-04-26");
+    expect(w.end.toString()).toBe("2026-05-02");
+  });
+
+  it("workweek mode: weekend anchors return Saturday-Sunday plus margin", () => {
+    const w = computeViewWindow(new Date(2026, 4, 3), "workweek");
+    expect(w.start.toString()).toBe("2026-05-01");
+    expect(w.end.toString()).toBe("2026-05-04");
+  });
+
+  it("month mode: returns 6x7 month grid plus margin", () => {
+    // April 2026 grid: starts Mon 2026-03-30, ends Sun 2026-05-10.
+    const w = computeViewWindow(new Date(2026, 3, 15), "month");
+    expect(w.start.toString()).toBe("2026-03-29");
+    expect(w.end.toString()).toBe("2026-05-11");
+  });
+
+  it("month mode: window reflects target month, not anchor day", () => {
+    // Anchor on April 30 vs April 1 should produce identical windows
+    // because both fall in April 2026.
+    const a = computeViewWindow(new Date(2026, 3, 30), "month");
+    const b = computeViewWindow(new Date(2026, 3, 1), "month");
+    expect(a.start.toString()).toBe(b.start.toString());
+    expect(a.end.toString()).toBe(b.end.toString());
   });
 });

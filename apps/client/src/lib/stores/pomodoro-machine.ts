@@ -1,6 +1,6 @@
-import type { PomodoroPhase } from "@ganbaruai/shared-types";
+import type { PomodoroPhase } from "@ganbaru-ai/shared-types";
 
-// --- Types ---
+// Types
 
 export interface PomodoroConfig {
   focusMinutes: number;
@@ -15,24 +15,15 @@ export interface TimerSnapshot {
   remainingSeconds: number;
   currentCycle: number;
   totalCycles: number;
-  isRunning: boolean;
   config: PomodoroConfig;
-  completedPomodoros: number;
   skipNextBreak: boolean;
   notificationShown: boolean;
   phaseEndTime: number | null;
-  activeBlockId: string | null;
   activeBlockEndMs: number | null;
-  blockExpired: boolean;
   lastTickMs: number | null;
-  sessionStartTime: string | null;
-  hasOvertimeInterval: boolean;
-  suspendedAway: boolean;
-  idlePaused: boolean;
-  idleTimeoutMs: number | null;
 }
 
-// --- Constants ---
+// Constants
 
 export const DEFAULT_CONFIG: PomodoroConfig = {
   focusMinutes: 40,
@@ -44,9 +35,17 @@ export const DEFAULT_CONFIG: PomodoroConfig = {
 export const TIME_MULTIPLIER = 60;
 export const SUSPEND_THRESHOLD_MS = 15_000;
 export const NOTIFICATION_THRESHOLD = 60;
+export const BREAK_EXTENSION_SECONDS = 60;
+export const MAX_BREAK_EXTENSION_SECONDS = 180;
+export const BREAK_OVERTIME_RAIL_GRACE_SECONDS = 10;
 export const MAX_BREAK_OVERTIME_SECONDS = 1800;
+export const IDLE_ALERT_INTERVAL_SECONDS = 10;
+export const IDLE_FOCUS_FAILURE_DELAY_SECONDS = 60;
+export const BREAK_FINISHED_ALERT_INTERVAL_SECONDS = 10;
+export const IDLE_CHECK_MIN_INTERVAL_MS = 1_000;
+export const IDLE_CHECK_MAX_INTERVAL_MS = 15_000;
 
-// --- Utility functions ---
+// Utility functions
 
 export function configEquals(a: PomodoroConfig, b: PomodoroConfig): boolean {
   return (
@@ -66,7 +65,58 @@ export function phaseDurationSeconds(
   return config.longBreakMinutes * TIME_MULTIPLIER;
 }
 
-// --- decideTick ---
+export function limitRemainingSecondsToBlockEnd(
+  remainingSeconds: number,
+  activeBlockEndMs: number | null,
+  nowMs: number,
+): number {
+  const normalizedRemaining = Math.max(0, Math.ceil(remainingSeconds));
+  if (activeBlockEndMs === null) return normalizedRemaining;
+  const blockRemainingSeconds = Math.max(
+    0,
+    Math.ceil((activeBlockEndMs - nowMs) / 1000),
+  );
+  return Math.min(normalizedRemaining, blockRemainingSeconds);
+}
+
+export interface PomodoroSessionActiveInput {
+  activeBlockId: string | null;
+  activeBlockEndMs: number | null;
+  blockExpired: boolean;
+  isRunning: boolean;
+  remainingSeconds: number;
+  totalSeconds: number;
+  nowMs: number;
+}
+
+export function isPomodoroSessionActive(
+  input: PomodoroSessionActiveInput,
+): boolean {
+  if (input.activeBlockId !== null) {
+    if (input.blockExpired) return false;
+    if (input.activeBlockEndMs !== null) {
+      return input.nowMs < input.activeBlockEndMs;
+    }
+    return input.isRunning || input.remainingSeconds < input.totalSeconds;
+  }
+
+  return input.isRunning || input.remainingSeconds < input.totalSeconds;
+}
+
+export interface PomodoroPauseResumeInput extends PomodoroSessionActiveInput {
+  phase: PomodoroPhase;
+  suspendedAway: boolean;
+  idlePaused: boolean;
+}
+
+export function canPauseResumePomodoro(input: PomodoroPauseResumeInput): boolean {
+  if (input.phase !== "focus" || input.suspendedAway || input.idlePaused) {
+    return false;
+  }
+  return isPomodoroSessionActive(input);
+}
+
+// decideTick
 
 export type TickResult =
   | {
@@ -90,6 +140,13 @@ export type TickResult =
   | { kind: "countdown_with_notification"; remainingSeconds: number }
   | { kind: "countdown"; remainingSeconds: number };
 
+/**
+ * Pure function that decides what action to take on each timer tick.
+ * Handles suspend/wake detection, block expiry, phase completion, and notifications.
+ * @param snapshot - Current timer state snapshot.
+ * @param nowMs - Current timestamp in milliseconds.
+ * @returns Action to take based on timer state.
+ */
 export function decideTick(snapshot: TimerSnapshot, nowMs: number): TickResult {
   // 1. Suspend/wake detection (highest priority)
   if (
@@ -163,7 +220,7 @@ export function decideTick(snapshot: TimerSnapshot, nowMs: number): TickResult {
   return { kind: "countdown", remainingSeconds };
 }
 
-// --- decideAdvancePhase ---
+// decideAdvancePhase
 
 export type AdvancePhaseResult =
   | {
@@ -186,6 +243,12 @@ export type AdvancePhaseResult =
       remainingSeconds: number;
     };
 
+/**
+ * Pure function that decides the next phase when the current phase completes.
+ * Handles skip-break preference and long break cycle logic.
+ * @param snapshot - Current timer state snapshot.
+ * @returns Next phase and its duration.
+ */
 export function decideAdvancePhase(snapshot: TimerSnapshot): AdvancePhaseResult {
   if (snapshot.phase === "focus") {
     if (snapshot.skipNextBreak) {
@@ -222,15 +285,15 @@ export function decideAdvancePhase(snapshot: TimerSnapshot): AdvancePhaseResult 
   };
 }
 
-// --- decideTransition ---
+// decideTransition
 
 export interface TransitionInput {
   previousConfig: PomodoroConfig;
   newConfig: PomodoroConfig;
   phase: PomodoroPhase;
   remainingSeconds: number;
+  elapsedFocusSeconds?: number;
   currentCycle: number;
-  totalCycles: number;
   blockExpired: boolean;
 }
 
@@ -253,10 +316,19 @@ export type TransitionResult =
     }
   | { kind: "keep_break" };
 
+/**
+ * Pure function that decides how to handle a config change during an active session.
+ * May trigger an early break if accumulated focus exceeds new threshold.
+ * @param input - Current state and new config.
+ * @returns Transition action (trigger break, continue, fresh start, or keep break).
+ */
 export function decideTransition(input: TransitionInput): TransitionResult {
   if (input.phase === "focus") {
     const oldFocusSec = input.previousConfig.focusMinutes * TIME_MULTIPLIER;
-    const accumulatedFocusSec = Math.max(0, oldFocusSec - input.remainingSeconds);
+    const accumulatedFocusSec = Math.max(
+      0,
+      input.elapsedFocusSeconds ?? oldFocusSec - input.remainingSeconds,
+    );
     const newFocusThresholdSec = input.newConfig.focusMinutes * TIME_MULTIPLIER;
 
     if (accumulatedFocusSec >= newFocusThresholdSec) {
@@ -291,7 +363,7 @@ export function decideTransition(input: TransitionInput): TransitionResult {
   return { kind: "keep_break" };
 }
 
-// --- decideStartFromBlock ---
+// decideStartFromBlock
 
 export interface StartFromBlockInput {
   currentBlockId: string | null;
@@ -311,6 +383,12 @@ export type StartFromBlockResult =
   | { kind: "transition"; newConfig: PomodoroConfig; newEndMs: number }
   | { kind: "new_session"; newConfig: PomodoroConfig; newEndMs: number | null };
 
+/**
+ * Pure function that decides how to handle a calendar block becoming active.
+ * Determines whether to start new session, transition, reconfigure, or do nothing.
+ * @param input - Current block state and incoming block info.
+ * @returns Action to take (noop, update end, reconfigure, rebuild, transition, or new session).
+ */
 export function decideStartFromBlock(
   input: StartFromBlockInput,
 ): StartFromBlockResult {
@@ -355,11 +433,12 @@ export function decideStartFromBlock(
   };
 }
 
-// --- decideReconfigure ---
+// decideReconfigure
 
 export interface ReconfigureInput {
   phase: PomodoroPhase;
   remainingSeconds: number;
+  elapsedSeconds?: number;
   currentConfig: PomodoroConfig;
   newConfig: PomodoroConfig;
   hasOvertimeInterval: boolean;
@@ -371,9 +450,18 @@ export interface ReconfigureResult {
   resetNotification: boolean;
 }
 
+/**
+ * Pure function that recalculates remaining time when config changes mid-phase.
+ * Preserves elapsed time and adjusts remaining based on new duration.
+ * @param input - Current phase state and new config.
+ * @returns New remaining seconds and flags for overtime/notification reset.
+ */
 export function decideReconfigure(input: ReconfigureInput): ReconfigureResult {
   const oldDuration = phaseDurationSeconds(input.phase, input.currentConfig);
-  const elapsed = Math.max(0, oldDuration - input.remainingSeconds);
+  const elapsed = Math.max(
+    0,
+    input.elapsedSeconds ?? oldDuration - input.remainingSeconds,
+  );
 
   const newDuration = phaseDurationSeconds(input.phase, input.newConfig);
   const newRemaining = Math.max(0, newDuration - elapsed);
@@ -386,7 +474,7 @@ export function decideReconfigure(input: ReconfigureInput): ReconfigureResult {
   };
 }
 
-// --- decideIdleCheck ---
+// decideIdleCheck
 
 export interface IdleCheckInput {
   isRunning: boolean;
@@ -408,6 +496,13 @@ export type IdleCheckResult =
       idleStartMs: number;
     };
 
+/**
+ * Pure function that checks if user has been idle long enough to trigger auto-pause.
+ * Only triggers during focus phase when not already paused and webcam is not in use.
+ * @param input - Current idle detection state.
+ * @param nowMs - Current timestamp in milliseconds.
+ * @returns Skip or trigger idle pause with timing info.
+ */
 export function decideIdleCheck(
   input: IdleCheckInput,
   nowMs: number,
@@ -435,4 +530,40 @@ export function decideIdleCheck(
   }
 
   return { kind: "skip" };
+}
+
+export function nextIdleCheckDelayMs({
+  idleTimeoutMs,
+  idleMs,
+  webcamInUse,
+  minIntervalMs = IDLE_CHECK_MIN_INTERVAL_MS,
+  maxIntervalMs = IDLE_CHECK_MAX_INTERVAL_MS,
+}: {
+  idleTimeoutMs: number;
+  idleMs: number;
+  webcamInUse: boolean;
+  minIntervalMs?: number;
+  maxIntervalMs?: number;
+}): number {
+  const minMs = Math.max(1, Math.floor(minIntervalMs));
+  const maxMs = Math.max(minMs, Math.floor(maxIntervalMs));
+  if (webcamInUse) return maxMs;
+
+  const remainingMs = idleTimeoutMs - idleMs;
+  if (remainingMs <= 0) return minMs;
+  return Math.min(maxMs, Math.max(minMs, Math.ceil(remainingMs)));
+}
+
+export function shouldTriggerIdleFocusFailure(overlayElapsedSeconds: number): boolean {
+  return overlayElapsedSeconds >= IDLE_FOCUS_FAILURE_DELAY_SECONDS;
+}
+
+export function shouldPlayRepeatingSoundAtElapsedSecond(
+  elapsedSeconds: number,
+  intervalSeconds: number,
+): boolean {
+  if (elapsedSeconds < 0) return false;
+  if (elapsedSeconds === 0) return true;
+  if (intervalSeconds <= 0) return false;
+  return elapsedSeconds % intervalSeconds === 0;
 }

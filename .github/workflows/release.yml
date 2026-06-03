@@ -1,0 +1,218 @@
+name: release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "app-v*"
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-release:
+    name: build ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux x64
+            runner: ubuntu-22.04
+            artifact: linux-x64
+          - name: windows x64
+            runner: windows-2022
+            artifact: windows-x64
+    env:
+      CARGO_TERM_COLOR: always
+      GANBARU_AI_RELEASE_REPOSITORY: ${{ github.repository }}
+      TAURI_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY }}
+    steps:
+      - name: checkout
+        # actions/checkout v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: setup node
+        # actions/setup-node v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "24"
+
+      - name: validate release metadata
+        env:
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: node apps/client/scripts/release-metadata.mjs
+
+      - name: enable pnpm
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.1.1 --activate
+
+      - name: install Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+
+      - name: install Linux dependencies
+        if: matrix.runner == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: install workspace dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: fetch Rust dependencies
+        run: cargo fetch --locked
+
+      - name: write release updater config
+        run: node apps/client/scripts/write-tauri-release-config.mjs
+
+      - name: build release bundle
+        run: pnpm --dir apps/client tauri build --config src-tauri/tauri.release.conf.json -- --locked
+
+      - name: stage release assets
+        run: node apps/client/scripts/stage-tauri-release-assets.mjs
+
+      - name: upload unsigned assets
+        # actions/upload-artifact v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: unsigned-${{ matrix.artifact }}
+          path: dist/release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  sign-release:
+    name: sign release assets
+    needs: build-release
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    environment: release
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: checkout
+        # actions/checkout v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: setup node
+        # actions/setup-node v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "24"
+
+      - name: enable pnpm
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.1.1 --activate
+
+      - name: install signer dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: download unsigned assets
+        # actions/download-artifact v6
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          pattern: unsigned-*
+          path: dist/release-assets
+          merge-multiple: true
+
+      - name: sign updater assets
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: node apps/client/scripts/sign-tauri-release-assets.mjs
+
+      - name: upload signed assets
+        # actions/upload-artifact v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: signed-release-assets
+          path: dist/release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-release:
+    name: publish draft release
+    needs: sign-release
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    environment: release
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: checkout
+        # actions/checkout v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: setup node
+        # actions/setup-node v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "24"
+
+      - name: resolve release metadata
+        id: release
+        env:
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: node apps/client/scripts/release-metadata.mjs
+
+      - name: download signed assets
+        # actions/download-artifact v6
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          name: signed-release-assets
+          path: dist/release-assets
+
+      - name: write updater feed
+        env:
+          GANBARU_AI_RELEASE_REPOSITORY: ${{ github.repository }}
+          GANBARU_AI_RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
+        run: node apps/client/scripts/write-tauri-latest-json.mjs
+
+      - name: write checksums
+        run: |
+          cd dist/release-assets
+          find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%P\0' | sort -z | xargs -0 sha256sum > SHA256SUMS
+
+      - name: create or update draft release
+        env:
+          RELEASE_TAG_NAME: ${{ steps.release.outputs.tag_name }}
+          RELEASE_NAME: ${{ steps.release.outputs.release_name }}
+        run: |
+          existing_draft="$(gh release view "$RELEASE_TAG_NAME" --json isDraft -q .isDraft 2>/dev/null || true)"
+          if [ "$existing_draft" = "true" ]; then
+            gh release edit "$RELEASE_TAG_NAME" --draft --title "$RELEASE_NAME" --notes-file docs/release-notes-template.md
+          elif [ "$existing_draft" = "false" ]; then
+            echo "Release $RELEASE_TAG_NAME already exists and is published"
+            exit 1
+          else
+            gh release create "$RELEASE_TAG_NAME" --target "$GITHUB_SHA" --draft --title "$RELEASE_NAME" --notes-file docs/release-notes-template.md
+          fi
+          gh release upload "$RELEASE_TAG_NAME" dist/release-assets/* --clobber

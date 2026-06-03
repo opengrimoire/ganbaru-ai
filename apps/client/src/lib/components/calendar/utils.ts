@@ -1,20 +1,35 @@
 import type {
   CalendarEvent,
+  CalendarViewMode,
   EventColor,
   PositionedAllDayEvent,
   PositionedEvent,
 } from "./types";
+import { Temporal } from "@js-temporal/polyfill";
+import { FALLBACK_COLOR_INDEX, PALETTE_SIZE } from "./types";
+import {
+  getSmoothScrollDelta,
+  smoothScrollMaxScrollTop,
+  type SmoothScrollFn,
+} from "./timeline-scroll";
+import { blendHex } from "$lib/components/ui/colorMath";
+import {
+  DEFAULT_CALENDAR_TIME_FORMAT,
+  type CalendarTimeFormat,
+} from "$lib/stores/preferences";
+
+export { blendHex };
 
 const MIN_EVENT_HEIGHT = 4;
 
-// --- Date parsing and formatting ---
+// Date parsing and formatting
 
 export function parseCalendarDate(str: string): Date {
-  // "YYYY-MM-DD HH:MM" -> Date
+  // "YYYY-MM-DD HH:MM" or "YYYY-MM-DD HH:MM:SS" -> Date
   const [datePart, timePart] = str.split(" ");
   const [y, m, d] = datePart.split("-").map(Number);
-  const [h, min] = (timePart ?? "00:00").split(":").map(Number);
-  return new Date(y, m - 1, d, h, min);
+  const [h, min, sec] = (timePart ?? "00:00").split(":").map(Number);
+  return new Date(y, m - 1, d, h, min, sec || 0);
 }
 
 export function formatCalendarDate(date: Date): string {
@@ -26,6 +41,12 @@ export function formatCalendarDate(date: Date): string {
   return `${y}-${m}-${d} ${h}:${min}`;
 }
 
+export function formatCalendarDateWithSeconds(date: Date): string {
+  const base = formatCalendarDate(date);
+  const sec = String(date.getSeconds()).padStart(2, "0");
+  return `${base}:${sec}`;
+}
+
 export function formatDatePart(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -33,7 +54,108 @@ export function formatDatePart(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-// --- Week / day helpers ---
+/**
+ * Detect that a stored datetime string is already in UTC ISO 8601 form
+ * (ends with Z, with or without seconds and millis). Used by the io
+ * round-trip to fall back to legacy parsing for unmigrated rows.
+ */
+export function isUtcIso(value: string): boolean {
+  return typeof value === "string" && value.endsWith("Z") && value.includes("T");
+}
+
+/**
+ * Convert a wall clock string ("YYYY-MM-DD HH:MM" or "YYYY-MM-DD HH:MM:SS")
+ * interpreted in `zone` to a UTC ISO 8601 instant ending in Z. DST ambiguity
+ * resolves with `disambiguation: "compatible"`: in fall-back ambiguity (the
+ * 1:30 am that happens twice) pick the earlier instant; in spring-forward
+ * gaps shift forward by the gap. Matches RFC 5545 conventions.
+ */
+export function wallClockToUtcIso(wallClock: string, zone: string): string {
+  const normalized = wallClock.includes("T") ? wallClock : wallClock.replace(" ", "T");
+  const padded = /T\d{2}:\d{2}$/.test(normalized) ? `${normalized}:00` : normalized;
+  const plain = Temporal.PlainDateTime.from(padded);
+  const zoned = plain.toZonedDateTime(zone, { disambiguation: "compatible" });
+  return zoned.toInstant().toString();
+}
+
+/**
+ * Convert a UTC ISO 8601 instant to a wall clock in `zone`. Minute precision
+ * stays the default shape, but non-zero seconds are preserved for exact event
+ * cuts that must stop scheduler behavior immediately.
+ */
+export function utcIsoToWallClock(utcIso: string, zone: string): string {
+  const instant = Temporal.Instant.from(utcIso);
+  const zoned = instant.toZonedDateTimeISO(zone);
+  const y = String(zoned.year).padStart(4, "0");
+  const m = String(zoned.month).padStart(2, "0");
+  const d = String(zoned.day).padStart(2, "0");
+  const h = String(zoned.hour).padStart(2, "0");
+  const min = String(zoned.minute).padStart(2, "0");
+  const base = `${y}-${m}-${d} ${h}:${min}`;
+  if (zoned.second === 0 && zoned.millisecond === 0 && zoned.microsecond === 0 && zoned.nanosecond === 0) {
+    return base;
+  }
+  return `${base}:${String(zoned.second).padStart(2, "0")}`;
+}
+
+/**
+ * Sanitize a calendar time string to ensure clean "YYYY-MM-DD HH:MM" or
+ * "YYYY-MM-DD HH:MM:SS" format.
+ * Handles:
+ * - Floating point minutes (rounds them)
+ * - Explicit seconds (preserves them for exact cut timestamps)
+ * - Missing time part (defaults to 00:00)
+ * - Out of range values (clamps them)
+ * Returns null if the input is completely invalid.
+ */
+export function sanitizeCalendarTime(str: string): string | null {
+  if (typeof str !== "string" || !str.trim()) return null;
+
+  // Try to parse the date part
+  const parts = str.trim().split(" ");
+  const datePart = parts[0];
+  const timePart = parts[1] ?? "00:00";
+
+  // Validate date part format
+  const dateMatch = datePart.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!dateMatch) return null;
+
+  // Parse time part, handling potential floats
+  const timeParts = timePart.split(":");
+  if (timeParts.length < 2) return null;
+
+  let hour = parseFloat(timeParts[0]);
+  let minute = parseFloat(timeParts[1]);
+  let second = timeParts[2] !== undefined ? parseFloat(timeParts[2]) : null;
+
+  // Handle NaN
+  if (isNaN(hour)) hour = 0;
+  if (isNaN(minute)) minute = 0;
+  if (second !== null && isNaN(second)) second = 0;
+
+  const roundedMinute = Math.round(minute);
+  const roundedSecond = second !== null ? Math.round(second) : null;
+
+  if (hour === 24 && roundedMinute === 0 && (roundedSecond ?? 0) === 0) {
+    const nextDay = parseCalendarDate(`${datePart} 00:00`);
+    nextDay.setDate(nextDay.getDate() + 1);
+    const nextDatePart = formatDatePart(nextDay);
+    return roundedSecond === null ? `${nextDatePart} 00:00` : `${nextDatePart} 00:00:00`;
+  }
+
+  // Round and clamp
+  hour = Math.max(0, Math.min(23, Math.round(hour)));
+  minute = Math.max(0, Math.min(59, roundedMinute));
+  if (second !== null) second = Math.max(0, Math.min(59, roundedSecond ?? 0));
+
+  const hh = String(hour).padStart(2, "0");
+  const mm = String(minute).padStart(2, "0");
+  const ss = second !== null ? String(second).padStart(2, "0") : null;
+
+  return ss === null ? `${datePart} ${hh}:${mm}` : `${datePart} ${hh}:${mm}:${ss}`;
+}
+
+// Week / day helpers
 
 export function startOfWeek(date: Date): Date {
   const d = new Date(date);
@@ -52,6 +174,41 @@ export function getWeekDays(anchorDate: Date): Date[] {
     d.setDate(monday.getDate() + i);
     return d;
   });
+}
+
+export function workCycleRangeForDate(anchorDate: Date): { start: Date; end: Date } {
+  const day = anchorDate.getDay();
+  const start = new Date(anchorDate);
+  const offset = day === 0 ? -1 : day === 6 ? 0 : 1 - day;
+  start.setDate(anchorDate.getDate() + offset);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(start);
+  end.setDate(start.getDate() + (start.getDay() === 6 ? 1 : 4));
+  return { start, end };
+}
+
+export function getWorkCycleDays(anchorDate: Date): Date[] {
+  const { start, end } = workCycleRangeForDate(anchorDate);
+  const days: Date[] = [];
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    days.push(new Date(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return days;
+}
+
+export function adjacentWorkCycleAnchor(
+  anchorDate: Date,
+  direction: "back" | "forward",
+): Date {
+  const { start } = workCycleRangeForDate(anchorDate);
+  const weekendRange = start.getDay() === 6;
+  const delta = direction === "forward"
+    ? weekendRange ? 2 : 5
+    : weekendRange ? -5 : -2;
+  return addDays(start, delta);
 }
 
 export function addDays(date: Date, n: number): Date {
@@ -86,7 +243,7 @@ export function isPastDay(date: Date): boolean {
   return d.getTime() < today.getTime();
 }
 
-// --- Month helpers ---
+// Month helpers
 
 export function getMonthGrid(year: number, month: number): Date[][] {
   const first = new Date(year, month, 1);
@@ -104,16 +261,54 @@ export function getMonthGrid(year: number, month: number): Date[][] {
   return weeks;
 }
 
-// --- Time helpers ---
+/**
+ * Visible date range for a given view mode anchored on `anchor`. Returns
+ * Temporal.PlainDate bounds with a 1-day margin on each side so off-by-one
+ * edges (DST, week boundaries) don't drop overlapping events. Used by the
+ * calendar store's window-scoped expansion cache.
+ *
+ * - `day`: anchor day, plus margin.
+ * - `week`: 7 days starting from week-start of anchor (Monday), plus margin.
+ * - `month`: the 6x7 month grid, plus margin.
+ */
+export function computeViewWindow(
+  anchor: Date,
+  mode: CalendarViewMode,
+): { start: Temporal.PlainDate; end: Temporal.PlainDate } {
+  if (mode === "day") {
+    const d = Temporal.PlainDate.from(formatDatePart(anchor));
+    return { start: d.subtract({ days: 1 }), end: d.add({ days: 1 }) };
+  }
+  if (mode === "workweek") {
+    const { start, end } = workCycleRangeForDate(anchor);
+    return {
+      start: Temporal.PlainDate.from(formatDatePart(start)).subtract({ days: 1 }),
+      end: Temporal.PlainDate.from(formatDatePart(end)).add({ days: 1 }),
+    };
+  }
+  if (mode === "week") {
+    const monday = startOfWeek(anchor);
+    const sunday = addDays(monday, 6);
+    return {
+      start: Temporal.PlainDate.from(formatDatePart(monday)).subtract({ days: 1 }),
+      end: Temporal.PlainDate.from(formatDatePart(sunday)).add({ days: 1 }),
+    };
+  }
+  const grid = getMonthGrid(anchor.getFullYear(), anchor.getMonth());
+  const first = grid[0][0];
+  const last = grid[5][6];
+  return {
+    start: Temporal.PlainDate.from(formatDatePart(first)).subtract({ days: 1 }),
+    end: Temporal.PlainDate.from(formatDatePart(last)).add({ days: 1 }),
+  };
+}
+
+// Time helpers
 
 export function minuteOfDay(dateStr: string): number {
   const timePart = dateStr.split(" ")[1] ?? "00:00";
-  const [h, m] = timePart.split(":").map(Number);
-  return h * 60 + m;
-}
-
-export function minuteToTop(minute: number, hourHeight: number): number {
-  return (minute / 60) * hourHeight;
+  const [h, m, s] = timePart.split(":").map(Number);
+  return h * 60 + m + (s || 0) / 60;
 }
 
 export function durationMinutes(start: string, end: string): number {
@@ -122,8 +317,59 @@ export function durationMinutes(start: string, end: string): number {
   return Math.max(0, (e.getTime() - s.getTime()) / 60000);
 }
 
-export function formatHour(hour: number): string {
-  return `${String(hour).padStart(2, "0")}:00`;
+function parseClockTime(value: string): { hour: number; minute: number } | undefined {
+  const timePart = value.includes(" ") ? value.split(" ")[1] : value;
+  const match = timePart.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!match) return undefined;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return undefined;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return undefined;
+  return { hour, minute };
+}
+
+export function formatTimeLabel(
+  value: string,
+  timeFormat: CalendarTimeFormat = DEFAULT_CALENDAR_TIME_FORMAT,
+  variant: "short" | "compact" = "short",
+): string {
+  const parsed = parseClockTime(value);
+  if (!parsed) return value;
+
+  if (timeFormat === "24h") {
+    return `${String(parsed.hour).padStart(2, "0")}:${String(parsed.minute).padStart(2, "0")}`;
+  }
+
+  const period = parsed.hour < 12 ? "am" : "pm";
+  const displayHour = parsed.hour % 12 === 0 ? 12 : parsed.hour % 12;
+  const minute = String(parsed.minute).padStart(2, "0");
+  if (variant === "compact") {
+    if (parsed.minute === 0) return `${displayHour}${period}`;
+    return `${displayHour}:${minute}${period}`;
+  }
+  if (parsed.minute === 0) return `${displayHour} ${period}`;
+  return `${displayHour}:${minute} ${period}`;
+}
+
+export function formatTimeRange(
+  start: string,
+  end: string,
+  timeFormat: CalendarTimeFormat = DEFAULT_CALENDAR_TIME_FORMAT,
+  variant: "short" | "compact" = "short",
+): string {
+  const startLabel = formatTimeLabel(start, timeFormat, variant);
+  const endLabel = formatTimeLabel(end, timeFormat, variant);
+  if (timeFormat !== "12h" || variant !== "compact") return `${startLabel} - ${endLabel}`;
+
+  const startTime = parseClockTime(start);
+  const endTime = parseClockTime(end);
+  if (!startTime || !endTime) return `${startLabel} - ${endLabel}`;
+
+  const startPeriod = startTime.hour < 12 ? "am" : "pm";
+  const endPeriod = endTime.hour < 12 ? "am" : "pm";
+  if (startPeriod !== endPeriod) return `${startLabel} - ${endLabel}`;
+
+  return `${startLabel.slice(0, -startPeriod.length)} - ${endLabel}`;
 }
 
 export function formatMonthYear(date: Date): string {
@@ -140,7 +386,7 @@ export function formatDayName(
   return date.toLocaleDateString("en-US", { weekday: format });
 }
 
-// --- Timezone helpers ---
+// Timezone helpers
 
 export const GUTTER_WIDTH_PER_TZ = 46;
 
@@ -160,15 +406,20 @@ export function getHourInTimezone(
   baseDate: Date,
   hour: number,
   tz: string,
+  timeFormat: CalendarTimeFormat = DEFAULT_CALENDAR_TIME_FORMAT,
+  variant: "short" | "compact" = "short",
 ): string {
   const d = new Date(baseDate);
   d.setHours(hour, 0, 0, 0);
-  return new Intl.DateTimeFormat("en-US", {
+  const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: tz,
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
-  }).format(d);
+    hourCycle: "h23",
+  }).formatToParts(d);
+  const timeHour = parts.find((p) => p.type === "hour")?.value ?? "00";
+  const minute = parts.find((p) => p.type === "minute")?.value ?? "00";
+  return formatTimeLabel(`${timeHour === "24" ? "00" : timeHour}:${minute}`, timeFormat, variant);
 }
 
 export function getTimezoneOffset(tz: string, date?: Date): string {
@@ -184,129 +435,111 @@ export function formatTimezoneName(tz: string): string {
   return tz.replace(/_/g, " ").replace(/\//g, " / ");
 }
 
-// Maps common city names, country names, and abbreviations to IANA timezone IDs.
-// Only entries that aren't already discoverable via the IANA ID itself.
-const TIMEZONE_ALIASES: Record<string, string[]> = {
-  // Countries -> representative timezone(s)
-  japan: ["Asia/Tokyo"],
-  russia: ["Europe/Moscow", "Asia/Yekaterinburg", "Asia/Vladivostok", "Asia/Novosibirsk"],
-  china: ["Asia/Shanghai"],
-  india: ["Asia/Kolkata"],
-  australia: ["Australia/Sydney", "Australia/Perth", "Australia/Adelaide"],
-  brazil: ["America/Sao_Paulo", "America/Manaus"],
-  canada: ["America/Toronto", "America/Vancouver", "America/Edmonton", "America/Halifax"],
-  germany: ["Europe/Berlin"],
-  france: ["Europe/Paris"],
-  uk: ["Europe/London"],
-  "united kingdom": ["Europe/London"],
-  england: ["Europe/London"],
-  spain: ["Europe/Madrid"],
-  italy: ["Europe/Rome"],
-  netherlands: ["Europe/Amsterdam"],
-  sweden: ["Europe/Stockholm"],
-  norway: ["Europe/Oslo"],
-  finland: ["Europe/Helsinki"],
-  denmark: ["Europe/Copenhagen"],
-  switzerland: ["Europe/Zurich"],
-  portugal: ["Europe/Lisbon"],
-  greece: ["Europe/Athens"],
-  turkey: ["Europe/Istanbul"],
-  egypt: ["Africa/Cairo"],
-  "south africa": ["Africa/Johannesburg"],
-  nigeria: ["Africa/Lagos"],
-  kenya: ["Africa/Nairobi"],
-  morocco: ["Africa/Casablanca"],
-  israel: ["Asia/Jerusalem"],
-  "south korea": ["Asia/Seoul"],
-  korea: ["Asia/Seoul"],
-  thailand: ["Asia/Bangkok"],
-  vietnam: ["Asia/Ho_Chi_Minh"],
-  philippines: ["Asia/Manila"],
-  singapore: ["Asia/Singapore"],
-  malaysia: ["Asia/Kuala_Lumpur"],
-  indonesia: ["Asia/Jakarta"],
-  pakistan: ["Asia/Karachi"],
-  bangladesh: ["Asia/Dhaka"],
-  "new zealand": ["Pacific/Auckland"],
-  argentina: ["America/Argentina/Buenos_Aires"],
-  chile: ["America/Santiago"],
-  colombia: ["America/Bogota"],
-  peru: ["America/Lima"],
-  venezuela: ["America/Caracas"],
-  cuba: ["America/Havana"],
-  // Mexico cities and states
-  mexico: ["America/Mexico_City", "America/Cancun", "America/Tijuana", "America/Chihuahua", "America/Monterrey"],
-  monterrey: ["America/Monterrey"],
-  guadalajara: ["America/Mexico_City"],
-  cancun: ["America/Cancun"],
-  tijuana: ["America/Tijuana"],
-  chihuahua: ["America/Chihuahua"],
-  merida: ["America/Merida"],
-  mazatlan: ["America/Mazatlan"],
-  hermosillo: ["America/Hermosillo"],
-  // US cities
-  "new york": ["America/New_York"],
-  "los angeles": ["America/Los_Angeles"],
-  chicago: ["America/Chicago"],
-  denver: ["America/Denver"],
-  phoenix: ["America/Phoenix"],
-  houston: ["America/Chicago"],
-  miami: ["America/New_York"],
-  seattle: ["America/Los_Angeles"],
-  "san francisco": ["America/Los_Angeles"],
-  boston: ["America/New_York"],
-  dallas: ["America/Chicago"],
-  atlanta: ["America/New_York"],
-  detroit: ["America/Detroit"],
-  honolulu: ["Pacific/Honolulu"],
-  anchorage: ["America/Anchorage"],
-  // Other major cities
-  london: ["Europe/London"],
-  paris: ["Europe/Paris"],
-  berlin: ["Europe/Berlin"],
-  moscow: ["Europe/Moscow"],
-  tokyo: ["Asia/Tokyo"],
-  beijing: ["Asia/Shanghai"],
-  shanghai: ["Asia/Shanghai"],
-  mumbai: ["Asia/Kolkata"],
-  delhi: ["Asia/Kolkata"],
-  bangalore: ["Asia/Kolkata"],
-  dubai: ["Asia/Dubai"],
-  "hong kong": ["Asia/Hong_Kong"],
-  taipei: ["Asia/Taipei"],
-  seoul: ["Asia/Seoul"],
-  bangkok: ["Asia/Bangkok"],
-  jakarta: ["Asia/Jakarta"],
-  sydney: ["Australia/Sydney"],
-  melbourne: ["Australia/Melbourne"],
-  auckland: ["Pacific/Auckland"],
-  "buenos aires": ["America/Argentina/Buenos_Aires"],
-  santiago: ["America/Santiago"],
-  bogota: ["America/Bogota"],
-  lima: ["America/Lima"],
-  "sao paulo": ["America/Sao_Paulo"],
-  rio: ["America/Sao_Paulo"],
-  toronto: ["America/Toronto"],
-  vancouver: ["America/Vancouver"],
-  hawaii: ["Pacific/Honolulu"],
-  alaska: ["America/Anchorage"],
-  // Common abbreviations
-  est: ["America/New_York"],
-  cst: ["America/Chicago"],
-  mst: ["America/Denver"],
-  pst: ["America/Los_Angeles"],
-  gmt: ["Europe/London"],
-  utc: ["Etc/UTC"],
-  cet: ["Europe/Berlin"],
-  eet: ["Europe/Athens"],
-  ist: ["Asia/Kolkata"],
-  jst: ["Asia/Tokyo"],
-  kst: ["Asia/Seoul"],
-  hkt: ["Asia/Hong_Kong"],
-  sgt: ["Asia/Singapore"],
-  aest: ["Australia/Sydney"],
-  nzst: ["Pacific/Auckland"],
-};
+/**
+ * Full standard-time long name via Intl ("Iran Standard Time", "Pacific
+ * Standard Time"). Falls back to the formatted IANA ID when Intl yields
+ * nothing for the zone.
+ */
+export function getTimezoneLongName(tz: string, date?: Date): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    timeZoneName: "long",
+  }).formatToParts(date ?? new Date());
+  return parts.find((p) => p.type === "timeZoneName")?.value ?? formatTimezoneName(tz);
+}
+
+/**
+ * Last segment of an IANA ID with underscores converted to spaces. For
+ * "Asia/Tehran" returns "Tehran"; for "America/Argentina/Buenos_Aires"
+ * returns "Buenos Aires". Single-segment IDs return themselves.
+ */
+export function getTimezoneCity(tz: string): string {
+  const segments = tz.split("/");
+  const last = segments[segments.length - 1] ?? tz;
+  return last.replace(/_/g, " ");
+}
+
+/**
+ * First segment of an IANA ID. For "Asia/Tehran" returns "Asia"; for
+ * "America/Argentina/Buenos_Aires" returns "America". Single-segment IDs
+ * return an empty string.
+ */
+export function getTimezoneRegion(tz: string): string {
+  const segments = tz.split("/");
+  if (segments.length < 2) return "";
+  return segments[0] ?? "";
+}
+
+/**
+ * Numeric offset in minutes east of UTC at the given instant. Positive for
+ * zones ahead of UTC (Tokyo +540, Kolkata +330), negative for zones behind
+ * (Anchorage -540). "GMT" alone parses to 0.
+ */
+export function getTimezoneOffsetMinutes(tz: string, date?: Date): number {
+  const raw = getTimezoneOffset(tz, date);
+  if (!raw || raw === "GMT") return 0;
+  const match = raw.match(/^GMT([+-])(\d{1,2})(?::(\d{2}))?$/);
+  if (!match) return 0;
+  const sign = match[1] === "-" ? -1 : 1;
+  const hours = Number(match[2] ?? "0");
+  const minutes = Number(match[3] ?? "0");
+  return sign * (hours * 60 + minutes);
+}
+
+const DEPRECATED_TIMEZONE_IDS = new Set([
+  "GMT",
+  "UTC",
+  "Universal",
+  "Zulu",
+  "GB",
+  "GB-Eire",
+  "NZ",
+  "NZ-CHAT",
+  "PRC",
+  "ROK",
+  "ROC",
+  "W-SU",
+  "EST",
+  "MST",
+  "HST",
+  "EST5EDT",
+  "CST6CDT",
+  "MST7MDT",
+  "PST8PDT",
+  "Iran",
+  "Israel",
+  "Egypt",
+  "Cuba",
+  "Jamaica",
+  "Libya",
+  "Navajo",
+  "Poland",
+  "Portugal",
+  "Singapore",
+  "Turkey",
+  "Hongkong",
+  "Japan",
+  "Eire",
+  "Greenwich",
+  "UCT",
+]);
+
+let _filteredTimezones: string[] | null = null;
+
+/**
+ * All IANA zones excluding `Etc/*` (POSIX-inverted signs) and known
+ * deprecated single-segment aliases. Cached after first call.
+ */
+export function listAllTimezones(): string[] {
+  if (_filteredTimezones) return _filteredTimezones;
+  const all = getIanaTimezones();
+  _filteredTimezones = all.filter((tz) => {
+    if (tz.startsWith("Etc/")) return false;
+    if (DEPRECATED_TIMEZONE_IDS.has(tz)) return false;
+    return true;
+  });
+  return _filteredTimezones;
+}
 
 let _ianaTimezones: string[] | null = null;
 
@@ -320,50 +553,308 @@ function getIanaTimezones(): string[] {
   return _ianaTimezones;
 }
 
+/**
+ * Which form of timezone tag the calendar shows in the gutter column
+ * header and as the trailing label in picker rows. The popover offset
+ * always renders with a `UTC` prefix regardless of mode.
+ *
+ * - `acronym`: always show a letter form (Intl-provided when CLDR exposes
+ *   one, e.g. `PST`/`CST`; long-name-derived otherwise, e.g. `KST`/`JST`/
+ *   `AEST`/`ACWST`); falls through to numeric only for the handful of
+ *   zones whose long name is itself `GMT+XX:00`.
+ * - `utc`: always numeric (`-6`, `+9`, `+5:30`, `+14`), even for zones
+ *   where Intl exposes a named short. The "UTC only" mode.
+ * - `utc-fallback`: Intl's named short when available (`CST`, `PST`),
+ *   numeric otherwise (`+9`, `+3:30`). Mirrors what Google Calendar does
+ *   today; never derives an acronym, only uses what Intl ships.
+ */
+export type TimezoneAbbrMode = "acronym" | "utc" | "utc-fallback";
+
+const ACRONYM_STOP_WORDS = new Set(["of", "the", "and"]);
+
+/**
+ * Derive a 2-5 letter acronym from a timezone's Intl long name. Used as
+ * a fallback when Intl returns a `GMT±N` form for `timeZoneName: "short"`,
+ * so users see e.g. "KST" / "JST" / "AEST" / "ACWST" instead of "+9" /
+ * "+10" / "+8:45" for the many zones CLDR doesn't expose a short code
+ * for. Returns null when the long name is itself an offset form (Intl
+ * has no name for the zone, e.g., `Asia/Amman`'s long name is just
+ * "GMT+03:00") or when the derivation produces fewer than 2 or more
+ * than 5 letters. Lowercase mid-name particles (`de`, `la`, `del`,
+ * `der`, `du`, etc.) and ampersand boundaries are skipped so names like
+ * "Fernando de Noronha Standard Time" yield FNST and "Wallis & Futuna
+ * Time" yields WFT.
+ */
+export function deriveAcronymFromLongName(longName: string): string | null {
+  const trimmed = longName.trim();
+  if (!trimmed) return null;
+  if (/^(GMT|UTC|Coordinated)/.test(trimmed)) return null;
+  const words = trimmed
+    .split(/[\s\-&]+/)
+    .filter((w) => {
+      if (w.length === 0) return false;
+      if (ACRONYM_STOP_WORDS.has(w.toLowerCase())) return false;
+      // Drop mid-name particles ("de", "la", etc.) by skipping any token
+      // that starts with a lowercase letter; significant zone words are
+      // always capitalized in Intl long names.
+      const head = w[0];
+      if (head !== head.toUpperCase()) return false;
+      // Token must start with a Latin letter; drops "&", "(", numerics,
+      // etc. that survive the split.
+      if (!/^[A-Za-z]/.test(w)) return false;
+      return true;
+    });
+  if (words.length === 0) return null;
+  const initials = words
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
+  if (!/^[A-Z]+$/.test(initials)) return null;
+  if (initials.length < 2 || initials.length > 5) return null;
+  return initials;
+}
+
+/**
+ * Compact-numeric form of a long offset. Drops the `GMT` prefix, the
+ * leading zero in the hour, and the `:00` minutes when zero. Used by the
+ * "UTC only" trigger mode where every zone (including those Intl exposes
+ * as `CST`/`PST`) shows a pure numeric offset for visual consistency.
+ *
+ * Examples: `GMT-06:00` -> `-6`, `GMT+05:30` -> `+5:30`, `GMT+14:00` ->
+ * `+14`, `GMT` (UTC itself) -> `+0`. Strings that don't match the
+ * `GMT±HH:MM` shape are returned with `GMT` stripped if present, else
+ * passed through, so callers always receive a non-empty string.
+ */
+export function compactOffsetFromLong(longOffset: string): string {
+  if (!longOffset || longOffset === "GMT") return "+0";
+  const m = longOffset.match(/^GMT([+-])(\d{1,2}):(\d{2})$/);
+  if (!m) {
+    const stripped = longOffset.replace(/^GMT/, "");
+    return stripped || "+0";
+  }
+  const sign = m[1];
+  const hours = String(parseInt(m[2], 10));
+  const minutes = m[3];
+  return minutes === "00" ? `${sign}${hours}` : `${sign}${hours}:${minutes}`;
+}
+
+/**
+ * Display- and search-ready snapshot of a timezone, baked once and reused
+ * by the picker. The popover never calls Intl during render or per
+ * keystroke; it reads from this object via `getTimezoneInfo`. Lowercase
+ * mirrors of the search fields avoid per-keystroke `.toLowerCase()` allocs
+ * inside the search loop.
+ */
+export interface TimezoneInfo {
+  tz: string;
+  abbr: string;
+  columnAbbr: string;
+  acronym: string;
+  numericOffset: string;
+  offset: string;
+  offsetUtc: string;
+  offsetMinutes: number;
+  longName: string;
+  city: string;
+  region: string;
+  longNameLower: string;
+  cityLower: string;
+  regionLower: string;
+  abbrLower: string;
+  ianaLower: string;
+}
+
+const timezoneInfoCache = new Map<string, TimezoneInfo>();
+
+function buildTimezoneInfo(tz: string): TimezoneInfo {
+  const abbr = getTimezoneAbbr(tz);
+  const stripped = abbr.replace(/^GMT(?=[+-])/, "");
+  const columnAbbr = stripped || abbr;
+  const rawOffset = getTimezoneOffset(tz);
+  // Normalize empty / GMT-only zones so callers always have a non-empty
+  // string to render. Without this, "Africa/Abidjan" would render as ""
+  // in the popover offset column.
+  const offset = rawOffset || "GMT";
+  const offsetUtc = offset.replace(/^GMT/, "UTC");
+  const numericOffset = compactOffsetFromLong(offset);
+  const offsetMinutes = getTimezoneOffsetMinutes(tz);
+  const longName = getTimezoneLongName(tz);
+  const city = getTimezoneCity(tz);
+  const region = getTimezoneRegion(tz);
+  // Acronym: prefer Intl's named form when it isn't the offset fallback,
+  // else derive from the long name, else fall through to the stripped
+  // numeric form so the column header always has something to show.
+  let acronym: string;
+  if (!/^GMT/.test(abbr)) {
+    acronym = abbr;
+  } else {
+    const derived = deriveAcronymFromLongName(longName);
+    acronym = derived ?? columnAbbr;
+  }
+  return {
+    tz,
+    abbr,
+    columnAbbr,
+    acronym,
+    numericOffset,
+    offset,
+    offsetUtc,
+    offsetMinutes,
+    longName,
+    city,
+    region,
+    longNameLower: longName.toLowerCase(),
+    cityLower: city.toLowerCase(),
+    regionLower: region.toLowerCase(),
+    abbrLower: abbr.toLowerCase(),
+    ianaLower: tz.toLowerCase(),
+  };
+}
+
+/**
+ * Cached, fully-resolved metadata for a timezone. First call for a given
+ * zone runs three Intl.DateTimeFormat constructions; subsequent calls are
+ * O(1) Map lookups. Safe to call from render paths.
+ */
+export function getTimezoneInfo(tz: string): TimezoneInfo {
+  const cached = timezoneInfoCache.get(tz);
+  if (cached) return cached;
+  const info = buildTimezoneInfo(tz);
+  timezoneInfoCache.set(tz, info);
+  return info;
+}
+
+let _sortedByOffset: TimezoneInfo[] | null = null;
+
+function getSortedByOffset(): TimezoneInfo[] {
+  if (_sortedByOffset) return _sortedByOffset;
+  const list = listAllTimezones().map(getTimezoneInfo);
+  list.sort((a, b) => {
+    if (a.offsetMinutes !== b.offsetMinutes) {
+      return a.offsetMinutes - b.offsetMinutes;
+    }
+    return a.longName.localeCompare(b.longName);
+  });
+  _sortedByOffset = list;
+  return list;
+}
+
+/**
+ * Search timezones with ranked multi-field matching.
+ *
+ * Empty query returns the full filtered list (Etc/* and deprecated aliases
+ * already removed by `listAllTimezones`) sorted by UTC offset ascending,
+ * then long name ascending. This powers the browse-when-empty popover.
+ *
+ * Non-empty query ranks each candidate by where the query first matches.
+ * Tiers (lower is better): long-name prefix, long-name contains, city
+ * prefix, city contains, region prefix, region contains, abbrev prefix,
+ * abbrev contains, IANA-id prefix, IANA-id contains. Within a tier,
+ * candidates sort by UTC offset then long name. Excluded zones never
+ * appear in results.
+ */
 export function searchTimezones(
   query: string,
   exclude: string[],
-  limit: number = 10,
 ): string[] {
+  const sorted = getSortedByOffset();
+  const excludeSet = new Set(exclude);
   const q = query.toLowerCase().trim();
-  if (!q) return [];
 
-  const results = new Set<string>();
+  if (!q) {
+    const out: string[] = [];
+    for (const info of sorted) {
+      if (!excludeSet.has(info.tz)) out.push(info.tz);
+    }
+    return out;
+  }
 
-  // Check aliases first (country names, city names, abbreviations)
-  for (const [alias, tzIds] of Object.entries(TIMEZONE_ALIASES)) {
-    if (alias.includes(q)) {
-      for (const tz of tzIds) {
-        if (!exclude.includes(tz)) results.add(tz);
-      }
+  type Scored = { info: TimezoneInfo; tier: number };
+  const scored: Scored[] = [];
+
+  for (const info of sorted) {
+    if (excludeSet.has(info.tz)) continue;
+
+    let tier = Infinity;
+    if (info.longNameLower.startsWith(q)) tier = 0;
+    else if (info.longNameLower.includes(q)) tier = 1;
+    if (tier > 2) {
+      if (info.cityLower.startsWith(q)) tier = Math.min(tier, 2);
+      else if (info.cityLower.includes(q)) tier = Math.min(tier, 3);
+    }
+    if (tier > 4) {
+      if (info.regionLower.startsWith(q)) tier = Math.min(tier, 4);
+      else if (info.regionLower.includes(q)) tier = Math.min(tier, 5);
+    }
+    if (tier > 6) {
+      if (info.abbrLower.startsWith(q)) tier = Math.min(tier, 6);
+      else if (info.abbrLower.includes(q)) tier = Math.min(tier, 7);
+    }
+    if (tier > 8) {
+      if (info.ianaLower.startsWith(q)) tier = Math.min(tier, 8);
+      else if (info.ianaLower.includes(q)) tier = Math.min(tier, 9);
+    }
+
+    if (tier !== Infinity) {
+      scored.push({ info, tier });
     }
   }
 
-  // Then search IANA timezone IDs and formatted names
-  const all = getIanaTimezones();
-  for (const tz of all) {
-    if (results.size >= limit) break;
-    if (exclude.includes(tz)) continue;
-    if (
-      tz.toLowerCase().includes(q) ||
-      formatTimezoneName(tz).toLowerCase().includes(q)
-    ) {
-      results.add(tz);
+  scored.sort((a, b) => {
+    if (a.tier !== b.tier) return a.tier - b.tier;
+    if (a.info.offsetMinutes !== b.info.offsetMinutes) {
+      return a.info.offsetMinutes - b.info.offsetMinutes;
     }
-  }
+    return a.info.longName.localeCompare(b.info.longName);
+  });
 
-  return [...results].slice(0, limit);
+  return scored.map((s) => s.info.tz);
 }
 
 export function snapToGrid(minute: number, gridMinutes: number = 10): number {
   return Math.round(minute / gridMinutes) * gridMinutes;
 }
 
-export function clampMinute(minute: number): number {
-  return Math.max(0, Math.min(1440, minute));
+export function snapSimpleClickStartMinute(minute: number): number {
+  const bounded = Math.max(0, Math.min(1439, minute));
+  return Math.floor(bounded / 30) * 30;
 }
 
-// --- Cross-midnight helpers ---
+export function clampMinute(minute: number): number {
+  return Math.max(0, Math.min(1440, Math.round(minute)));
+}
+
+/**
+ * Convert a scroll viewport over the timed calendar body into minute bounds.
+ * Header chrome may occupy scroll space before the body in some layouts, so
+ * callers can subtract that space before converting pixels to minutes.
+ */
+export function visibleMinuteRangeForScroll(opts: {
+  scrollTop: number;
+  viewportHeight: number;
+  stickyTop: number;
+  hourHeight: number;
+}): { startMinute: number; endMinute: number } {
+  const dayHeight = 24 * opts.hourHeight;
+  if (
+    opts.viewportHeight <= 0 ||
+    opts.hourHeight <= 0 ||
+    !Number.isFinite(dayHeight)
+  ) {
+    return { startMinute: 0, endMinute: 1440 };
+  }
+  const topPx = Math.max(0, opts.scrollTop - opts.stickyTop);
+  const bottomPx = Math.max(
+    topPx,
+    Math.min(dayHeight, opts.scrollTop + opts.viewportHeight - opts.stickyTop),
+  );
+  return {
+    startMinute: clampMinute((topPx / opts.hourHeight) * 60),
+    endMinute: clampMinute((bottomPx / opts.hourHeight) * 60),
+  };
+}
+
+// Cross-midnight helpers
 
 /**
  * Returns the effective minute range for an event within a specific day.
@@ -407,7 +898,7 @@ export function minuteOffsetToDateStr(
   return formatCalendarDate(base);
 }
 
-// --- Event filtering ---
+// Event filtering
 
 export function eventsForDay(
   events: CalendarEvent[],
@@ -523,7 +1014,7 @@ export function layoutAllDayEventsForWeek(
   return result;
 }
 
-// --- Overlap layout algorithm ---
+// Overlap layout algorithm
 
 interface EventWithRange {
   event: CalendarEvent;
@@ -644,86 +1135,260 @@ export function layoutEventsForDay(
   return result;
 }
 
-// --- Event color palette ---
+// Event color palette
+//
+// Palette values live in the theme registry (see stores/themes.ts). The
+// functions below take a Theme and resolve the active palette into
+// {bg, text} entries, applying contrast-aware text selection and caching
+// the resolved palette per theme ID so switching themes is cheap.
 
-interface ColorEntry {
+import { isThemeCalendarDark, type Theme } from "$lib/stores/themes";
+
+export interface ColorEntry {
   bg: string;
-  accent: string;
   text: string;
 }
 
-const LIGHT_TEXT = "#1c1c1e";
-const DARK_TEXT = "#f0f0f2";
+// Contrast text tokens. Light-mode events default to white, pale swatches
+// flip to near-black. Dark-mode events default to near-black, very-dark
+// blended variants flip to near-white.
+const LIGHT_TEXT = "#ffffff";
+const LIGHT_TEXT_ALT = "#1f1f1f";
+const DARK_TEXT = "#131314";
+const DARK_TEXT_ALT = "#e3e3e3";
 
-const LIGHT_COLORS: Record<EventColor, ColorEntry> = {
-  ruby:      { bg: "#f0c2c2", accent: "#b82e2e", text: LIGHT_TEXT },
-  coral:     { bg: "#f0cec2", accent: "#b8532e", text: LIGHT_TEXT },
-  tangerine: { bg: "#f0d7c2", accent: "#b86e2e", text: LIGHT_TEXT },
-  amber:     { bg: "#f0e0c2", accent: "#b88a2e", text: LIGHT_TEXT },
-  honey:     { bg: "#f0e8c2", accent: "#b8a12e", text: LIGHT_TEXT },
-  lime:      { bg: "#e4f0c2", accent: "#95b82e", text: LIGHT_TEXT },
-  emerald:   { bg: "#c2f0d5", accent: "#2eb867", text: LIGHT_TEXT },
-  jade:      { bg: "#c2f0e4", accent: "#2eb895", text: LIGHT_TEXT },
-  teal:      { bg: "#c2f0ee", accent: "#2eb8b3", text: LIGHT_TEXT },
-  cyan:      { bg: "#c2e7f0", accent: "#2e9cb8", text: LIGHT_TEXT },
-  sky:       { bg: "#c2dbf0", accent: "#2e7ab8", text: LIGHT_TEXT },
-  azure:     { bg: "#c2d1f0", accent: "#2e5cb8", text: LIGHT_TEXT },
-  indigo:    { bg: "#c2c6f0", accent: "#2e39b8", text: LIGHT_TEXT },
-  violet:    { bg: "#d0c2f0", accent: "#572eb8", text: LIGHT_TEXT },
-  purple:    { bg: "#ddc2f0", accent: "#7e2eb8", text: LIGHT_TEXT },
-  orchid:    { bg: "#ecc2f0", accent: "#ac2eb8", text: LIGHT_TEXT },
-  rose:      { bg: "#f0c2d5", accent: "#b82e67", text: LIGHT_TEXT },
-  blush:     { bg: "#f0c2c9", accent: "#b82e45", text: LIGHT_TEXT },
-  slate:     { bg: "#d2d8e0", accent: "#5e6f87", text: LIGHT_TEXT },
-  sage:      { bg: "#d0e1d6", accent: "#5a8c6a", text: LIGHT_TEXT },
-};
+// Luminance flip thresholds tuned against the 32-color built-in palette.
+// Light-mode bgs brighter than LIGHT_FLIP_ABOVE cannot carry white text;
+// dark-mode bgs darker than DARK_FLIP_BELOW cannot carry near-black text.
+// Themes with palettes outside the tuned range may need custom thresholds;
+// for now these are shared across themes of a given base.
+const LIGHT_FLIP_ABOVE = 0.65;
+const DARK_FLIP_BELOW = 0.35;
 
-const DARK_COLORS: Record<EventColor, ColorEntry> = {
-  ruby:      { bg: "#6f2a2a", accent: "#c05959", text: DARK_TEXT },
-  coral:     { bg: "#6f3c2a", accent: "#c07459", text: DARK_TEXT },
-  tangerine: { bg: "#6f4a2a", accent: "#c08959", text: DARK_TEXT },
-  amber:     { bg: "#6f582a", accent: "#c09d59", text: DARK_TEXT },
-  honey:     { bg: "#6f632a", accent: "#c0af59", text: DARK_TEXT },
-  lime:      { bg: "#5e6f2a", accent: "#a6c059", text: DARK_TEXT },
-  emerald:   { bg: "#2a6f47", accent: "#59c084", text: DARK_TEXT },
-  jade:      { bg: "#2a6f5e", accent: "#59c0a6", text: DARK_TEXT },
-  teal:      { bg: "#2a6f6d", accent: "#59c0bc", text: DARK_TEXT },
-  cyan:      { bg: "#2a616f", accent: "#59abc0", text: DARK_TEXT },
-  sky:       { bg: "#2a506f", accent: "#5991c0", text: DARK_TEXT },
-  azure:     { bg: "#2a416f", accent: "#597bc0", text: DARK_TEXT },
-  indigo:    { bg: "#2a306f", accent: "#5961c0", text: DARK_TEXT },
-  violet:    { bg: "#3f2a6f", accent: "#7859c0", text: DARK_TEXT },
-  purple:    { bg: "#522a6f", accent: "#9559c0", text: DARK_TEXT },
-  orchid:    { bg: "#692a6f", accent: "#b759c0", text: DARK_TEXT },
-  rose:      { bg: "#6f2a47", accent: "#c05984", text: DARK_TEXT },
-  blush:     { bg: "#6f2a36", accent: "#c0596a", text: DARK_TEXT },
-  slate:     { bg: "#414b58", accent: "#7b899d", text: DARK_TEXT },
-  sage:      { bg: "#3f5a48", accent: "#78a185", text: DARK_TEXT },
-};
-
-export function getEventColor(
-  color: EventColor | undefined,
-  isDark: boolean,
-): ColorEntry {
-  const key = color ?? "slate";
-  return isDark ? DARK_COLORS[key] : LIGHT_COLORS[key];
+/**
+ * Pick a readable foreground for a given event-tile background under a
+ * light or dark calendar surface. Rec. 709 coefficients on raw sRGB
+ * approximate perceived luminance; calibrated for the event-palette
+ * flips, so `resolvePalette` keeps using this. New callers should
+ * prefer `pickReadableForeground` in `colorMath.ts`, which uses
+ * gamma-decoded WCAG luminance and guarantees AA contrast.
+ *
+ * The `darkCalendar` flag is resolved from the calendar canvas's
+ * luminance (via `isThemeCalendarDark`), not from the theme's cosmetic
+ * `base` label, so swapping the base label no longer changes tile text.
+ *
+ * @deprecated Use `pickReadableForeground` from `$lib/components/ui/colorMath`
+ * for new code. Kept because the event palette was calibrated against the
+ * threshold constants above.
+ */
+function pickContrastText(bg: string, darkCalendar: boolean): string {
+  const r = parseInt(bg.slice(1, 3), 16);
+  const g = parseInt(bg.slice(3, 5), 16);
+  const b = parseInt(bg.slice(5, 7), 16);
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  if (darkCalendar) {
+    return luminance < DARK_FLIP_BELOW ? DARK_TEXT_ALT : DARK_TEXT;
+  }
+  return luminance > LIGHT_FLIP_ABOVE ? LIGHT_TEXT_ALT : LIGHT_TEXT;
 }
 
-export const EVENT_COLOR_OPTIONS: EventColor[] = [
-  "ruby", "coral", "tangerine", "amber", "honey",
-  "lime", "emerald", "jade", "teal", "cyan",
-  "sky", "azure", "indigo", "violet", "purple",
-  "orchid", "rose", "blush", "slate", "sage",
-];
+// Cache of resolved palettes keyed on the Theme object reference. Every
+// `updateTheme` call produces a fresh object (via `mergeThemePatch`), so a
+// WeakMap lookup naturally misses on edits and rebuilds the palette; old
+// Theme objects get GC'd with their cache entries.
+const resolvedPaletteCache = new WeakMap<Theme, ColorEntry[]>();
+
+function resolvePalette(theme: Theme): ColorEntry[] {
+  const cached = resolvedPaletteCache.get(theme);
+  if (cached) return cached;
+  const darkCal = isThemeCalendarDark(theme);
+  const out: ColorEntry[] = [];
+  for (let i = 0; i < theme.eventPalette.length; i++) {
+    const bg = theme.eventPalette[i];
+    out.push({ bg, text: pickContrastText(bg, darkCal) });
+  }
+  resolvedPaletteCache.set(theme, out);
+  return out;
+}
+
+// Dedupes unknown-color warnings so a stray legacy value on many rows logs
+// once per session.
+const warnedUnknownColors = new Set<string>();
+
+/**
+ * Normalize a raw color value read from the database or an external import
+ * into a valid EventColor (slot index 0..PALETTE_SIZE-1). Inputs outside
+ * the range, or non-numeric inputs, log a single warning and return
+ * undefined so the render layer falls back to the FALLBACK_COLOR_INDEX
+ * slot without masking data drift.
+ *
+ * @param raw Value from an untrusted source (DB column, import file).
+ * @returns A palette index, or undefined for null/empty/out-of-range inputs.
+ */
+export function normalizeEventColor(raw: unknown): EventColor | undefined {
+  if (raw == null || raw === "") return undefined;
+  let n: number;
+  if (typeof raw === "number") {
+    n = raw;
+  } else if (typeof raw === "string") {
+    n = Number(raw);
+    if (!Number.isFinite(n)) {
+      if (!warnedUnknownColors.has(raw)) {
+        warnedUnknownColors.add(raw);
+        console.warn(`[calendar] non-numeric event color "${raw}", falling back to default`);
+      }
+      return undefined;
+    }
+  } else {
+    const key = String(raw);
+    if (!warnedUnknownColors.has(key)) {
+      warnedUnknownColors.add(key);
+      console.warn("[calendar] non-numeric event color:", raw);
+    }
+    return undefined;
+  }
+  if (!Number.isInteger(n) || n < 0 || n >= PALETTE_SIZE) {
+    const key = String(raw);
+    if (!warnedUnknownColors.has(key)) {
+      warnedUnknownColors.add(key);
+      console.warn(`[calendar] event color ${raw} out of range, falling back to default`);
+    }
+    return undefined;
+  }
+  return n;
+}
+
+/**
+ * Resolve an event color within a theme. Out-of-range or undefined slots
+ * fall back to FALLBACK_COLOR_INDEX. Pass the active theme from the theme
+ * store at the call site.
+ */
+export function getEventColor(
+  color: EventColor | undefined,
+  theme: Theme,
+): ColorEntry {
+  const palette = resolvePalette(theme);
+  if (color !== undefined && palette[color]) return palette[color];
+  return palette[FALLBACK_COLOR_INDEX];
+}
+
+// Cache for computed dimmed colors (past and outside-month).
+// Keyed on the Theme reference so edits (which mint a new Theme object)
+// naturally miss and recompute; old entries get GC'd with their themes.
+const dimmedColorCache = new WeakMap<Theme, Map<string, ColorEntry>>();
+
+/**
+ * Compute a dimmed variant of an event color by blending the bg toward the
+ * theme's blend canvas. Used in place of CSS opacity so contrast stays
+ * predictable and text sub-pixel antialiasing is preserved.
+ *
+ * @param mainWeight Fraction of the event color in the result (0..1). The
+ *   rest fills from the theme's blend canvas. Lower = more washed out.
+ */
+function getDimmedEventColor(
+  color: EventColor | undefined,
+  theme: Theme,
+  mainWeight: number,
+): ColorEntry {
+  let inner = dimmedColorCache.get(theme);
+  if (!inner) {
+    inner = new Map();
+    dimmedColorCache.set(theme, inner);
+  }
+  const key = `${color ?? FALLBACK_COLOR_INDEX}-${mainWeight}`;
+  const cached = inner.get(key);
+  if (cached) return cached;
+
+  const base = getEventColor(color, theme);
+  const bg = blendHex(base.bg, theme.blendCanvas, mainWeight);
+  const text = pickContrastText(bg, isThemeCalendarDark(theme));
+  const entry: ColorEntry = { bg, text };
+  inner.set(key, entry);
+  return entry;
+}
+
+/**
+ * Past variant: heavier fade on light themes (30% main), lighter on dark
+ * themes (50% main) to preserve legibility. Text contrast is recomputed
+ * from the dimmed bg.
+ */
+export function getPastEventColor(
+  color: EventColor | undefined,
+  theme: Theme,
+): ColorEntry {
+  return getDimmedEventColor(color, theme, isThemeCalendarDark(theme) ? 0.5 : 0.3);
+}
+
+/**
+ * Outside-month variant: strongest fade (~25% main). Used for events shown
+ * in neighboring-month cells of the month grid.
+ */
+export function getOutsideMonthEventColor(
+  color: EventColor | undefined,
+  theme: Theme,
+): ColorEntry {
+  return getDimmedEventColor(color, theme, 0.25);
+}
+
+/**
+ * Return the non-color status pattern class for event surfaces. Event-level
+ * cancelled wins because it cancels the whole event. Otherwise, meeting RSVP
+ * `surfaceStatus` drives the visible surface without changing event `STATUS`.
+ * Availability (`TRANSP`) stays metadata-only because it is used for scheduling
+ * free/busy checks, not as a visible event state.
+ */
+export function getEventStatusPatternClass(
+  event: Pick<CalendarEvent, "status" | "surfaceStatus" | "transparency">,
+): string {
+  if (event.status === "cancelled") return "event-pattern-declined";
+  const status = event.surfaceStatus ?? event.status;
+  if (status === "declined") return "event-pattern-declined";
+  if (status === "tentative") return "event-pattern-tentative";
+  if (status === "needs-action" || status === "delegated") return "event-pattern-pending";
+  return "";
+}
+
+export function isEventSurfaceCancelled(
+  event: Pick<CalendarEvent, "status" | "surfaceStatus">,
+): boolean {
+  if (event.status === "cancelled") return true;
+  const status = event.surfaceStatus ?? event.status;
+  return status === "declined";
+}
+
+export function getEventSurfaceStatusForIdentity(
+  event: Pick<CalendarEvent, "surfaceAttendees" | "localParticipationStatus">,
+  identityEmail: string | undefined,
+): CalendarEvent["surfaceStatus"] {
+  const normalized = identityEmail?.trim().toLowerCase();
+  if (!normalized) return event.localParticipationStatus;
+  return event.surfaceAttendees?.find(
+    (attendee) => attendee.email.toLowerCase() === normalized,
+  )?.status ?? event.localParticipationStatus;
+}
+
+/**
+ * Event-panel color picker order. Built-in palettes are stored in the same
+ * visual order, so this can stay a natural sequence instead of a separate
+ * display remap.
+ */
+export const EVENT_COLOR_OPTIONS: readonly EventColor[] = Object.freeze(
+  Array.from({ length: PALETTE_SIZE }, (_, index) => index),
+);
 
 /**
  * Smooth-scroll wheel handler for Linux/discrete-tick environments.
- * Intercepts wheel events and lerps scrollTop toward a target position.
+ * Intercepts wheel events and applies momentum-based scrolling with
+ * exponential friction decay.
+ *
+ * Implementation note: We track scroll position internally (trackedPos)
+ * rather than reading el.scrollTop each frame. Browsers may round or
+ * clamp scrollTop values between write and read, causing cumulative
+ * drift. This drift manifests as a "bounce back" effect, particularly
+ * visible when scrolling down. By maintaining our own position and only
+ * writing to the DOM, we avoid this browser-induced instability.
  */
-interface SmoothScrollFn {
-  (e: WheelEvent): void;
-  cancel(): void;
-}
+const SMOOTH_SCROLL_STOP_VELOCITY_PX_PER_SEC = 10;
 
 export function createSmoothScroll(
   getEl: () => HTMLElement | undefined,
@@ -733,22 +1398,52 @@ export function createSmoothScroll(
   let velocity = 0;
   let running = false;
   let prev = 0;
+  let trackedPos: number | null = null;
 
   function tick(ts: number) {
     if (!running) return;
     const el = getEl();
-    if (!el) { running = false; return; }
-    if (!prev) { prev = ts; requestAnimationFrame(tick); return; }
+    if (!el) {
+      running = false;
+      trackedPos = null;
+      return;
+    }
+    if (!prev) {
+      prev = ts;
+      requestAnimationFrame(tick);
+      return;
+    }
     const dt = (ts - prev) / 1000;
     prev = ts;
     velocity *= Math.exp(-friction * dt);
-    if (Math.abs(velocity) < 10) {
+    if (Math.abs(velocity) < SMOOTH_SCROLL_STOP_VELOCITY_PX_PER_SEC) {
       velocity = 0;
       running = false;
+      trackedPos = null;
       return;
     }
-    const max = el.scrollHeight - el.clientHeight;
-    el.scrollTop = Math.max(0, Math.min(max, Math.round(el.scrollTop + velocity * dt)));
+    const max = smoothScrollMaxScrollTop(el);
+
+    if (trackedPos === null) trackedPos = el.scrollTop;
+    const newPos = trackedPos + velocity * dt;
+
+    if (velocity > 0 && newPos >= max) {
+      el.scrollTop = max;
+      velocity = 0;
+      running = false;
+      trackedPos = null;
+      return;
+    }
+    if (velocity < 0 && newPos <= 0) {
+      el.scrollTop = 0;
+      velocity = 0;
+      running = false;
+      trackedPos = null;
+      return;
+    }
+
+    trackedPos = newPos;
+    el.scrollTop = newPos;
     requestAnimationFrame(tick);
   }
 
@@ -756,16 +1451,21 @@ export function createSmoothScroll(
     const el = getEl();
     if (!el) return;
     e.preventDefault();
-    velocity += e.deltaY * gain;
-    if (!running) { running = true; prev = 0; requestAnimationFrame(tick); }
+    velocity += getSmoothScrollDelta(e) * gain;
+    if (!running) {
+      running = true;
+      prev = 0;
+      trackedPos = el.scrollTop;
+      requestAnimationFrame(tick);
+    }
   }) as SmoothScrollFn;
 
   fn.cancel = () => {
     running = false;
     velocity = 0;
     prev = 0;
+    trackedPos = null;
   };
 
   return fn;
 }
-

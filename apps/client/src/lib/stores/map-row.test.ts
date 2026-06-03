@@ -1,5 +1,18 @@
-import { describe, it, expect } from "vitest";
-import { mapRow, type DbCalendarEvent } from "./map-row";
+import { describe, it, expect, vi } from "vitest";
+import {
+  mapOverride,
+  mapRow as mapRowImpl,
+  type DbCalendarEvent,
+  type DbOverride,
+} from "./map-row";
+
+// Tests fix the render zone so legacy-format inputs round-trip 1:1 with the
+// stored wall-clock string (the conversion path only kicks in for UTC ISO
+// values, which these tests don't exercise; see utils.test.ts for those).
+const TEST_ZONE = "America/New_York";
+function mapRow(r: DbCalendarEvent) {
+  return mapRowImpl(r, TEST_ZONE);
+}
 
 function makeDbRow(overrides: Partial<DbCalendarEvent> = {}): DbCalendarEvent {
   return {
@@ -10,33 +23,40 @@ function makeDbRow(overrides: Partial<DbCalendarEvent> = {}): DbCalendarEvent {
     timezone: "America/New_York",
     calendar_id: "local",
     color: null,
-    description: "",
     rrule: null,
     notifications: null,
     exceptions: null,
     repeat_until: null,
     all_day: 0,
     location: "",
-    url: "",
+    has_call_link: 0,
+    meeting_enabled: 0,
     transparency: "opaque",
     status: "confirmed",
-    source_uid: null,
-    visibility: "public",
-    priority: null,
-    categories: null,
-    geo: null,
-    sequence: 0,
+    local_rsvp_status: null,
+    created_at: "2026-03-15T08:00:00Z",
     rdate: null,
-    extended_properties: null,
-    organizer: null,
-    guest_can_modify: 0,
-    guest_can_invite_others: 1,
-    guest_can_see_other_guests: 1,
     focus_duration_minutes: null,
     short_break_minutes: null,
     long_break_minutes: null,
     pomodoro_count: null,
     idle_timeout_minutes: null,
+    ...overrides,
+  };
+}
+
+function makeDbOverride(overrides: Partial<DbOverride> = {}): DbOverride {
+  return {
+    id: "override-1",
+    parent_event_id: "evt-1",
+    recurrence_id: "2026-05-01T00:00:00Z",
+    recurrence_range: null,
+    title: null,
+    start_time: "2026-05-01T00:00:00Z",
+    end_time: "2026-05-01T00:00:00Z",
+    color: null,
+    status: null,
+    transparency: null,
     ...overrides,
   };
 }
@@ -50,67 +70,61 @@ describe("mapRow", () => {
     expect(result.end).toBe("2026-03-15 10:00");
     expect(result.timezone).toBe("America/New_York");
     expect(result.calendarId).toBe("local");
+    expect(result.createdAt).toBe("2026-03-15T08:00:00Z");
+  });
+
+  it("preserves non-zero seconds from canonical UTC event times", () => {
+    const result = mapRow(makeDbRow({
+      start_time: "2026-03-15T13:30:00Z",
+      end_time: "2026-03-15T14:30:45Z",
+    }));
+
+    expect(result.start).toBe("2026-03-15 09:30");
+    expect(result.end).toBe("2026-03-15 10:30:45");
   });
 
   it("returns undefined for default values", () => {
     const result = mapRow(makeDbRow());
     expect(result.color).toBeUndefined();
-    expect(result.description).toBeUndefined();
     expect(result.recurrence).toBeUndefined();
     expect(result.notifications).toBeUndefined();
     expect(result.exceptions).toBeUndefined();
     expect(result.allDay).toBeUndefined();
     expect(result.location).toBeUndefined();
-    expect(result.url).toBeUndefined();
     expect(result.transparency).toBeUndefined();
     expect(result.status).toBeUndefined();
     expect(result.pomodoroConfig).toBeUndefined();
-  });
-
-  it("returns undefined for default icalendar fields", () => {
-    const result = mapRow(makeDbRow());
-    expect(result.sourceUid).toBeUndefined();
-    expect(result.visibility).toBeUndefined();
-    expect(result.priority).toBeUndefined();
-    expect(result.categories).toBeUndefined();
-    expect(result.geo).toBeUndefined();
-    expect(result.sequence).toBeUndefined();
     expect(result.rdate).toBeUndefined();
-    expect(result.extendedProperties).toBeUndefined();
-    expect(result.organizer).toBeUndefined();
+    expect(result.meetingEnabled).toBeUndefined();
   });
 
-  it("deserializes sourceUid", () => {
-    const result = mapRow(makeDbRow({ source_uid: "abc123@google.com" }));
-    expect(result.sourceUid).toBe("abc123@google.com");
+  it("maps enabled empty meeting state", () => {
+    const result = mapRow(makeDbRow({ meeting_enabled: 1 }));
+    expect(result.meetingEnabled).toBe(true);
   });
 
-  it("deserializes visibility when not public", () => {
-    expect(mapRow(makeDbRow({ visibility: "public" })).visibility).toBeUndefined();
-    expect(mapRow(makeDbRow({ visibility: "private" })).visibility).toBe("private");
-    expect(mapRow(makeDbRow({ visibility: "confidential" })).visibility).toBe("confidential");
+  it("maps local RSVP status", () => {
+    const result = mapRow(makeDbRow({ local_rsvp_status: "tentative" }));
+    expect(result.localParticipationStatus).toBe("tentative");
   });
 
-  it("deserializes priority", () => {
-    expect(mapRow(makeDbRow({ priority: null })).priority).toBeUndefined();
-    expect(mapRow(makeDbRow({ priority: 0 })).priority).toBe(0);
-    expect(mapRow(makeDbRow({ priority: 5 })).priority).toBe(5);
-    expect(mapRow(makeDbRow({ priority: 9 })).priority).toBe(9);
-  });
-
-  it("deserializes categories JSON", () => {
-    const result = mapRow(makeDbRow({ categories: '["work","meeting"]' }));
-    expect(result.categories).toEqual(["work", "meeting"]);
-  });
-
-  it("deserializes geo JSON", () => {
-    const result = mapRow(makeDbRow({ geo: '{"lat":37.7749,"lng":-122.4194}' }));
-    expect(result.geo).toEqual({ lat: 37.7749, lng: -122.4194 });
-  });
-
-  it("deserializes sequence when non-zero", () => {
-    expect(mapRow(makeDbRow({ sequence: 0 })).sequence).toBeUndefined();
-    expect(mapRow(makeDbRow({ sequence: 3 })).sequence).toBe(3);
+  it("omits heavy fields entirely (loaded on demand by loadFullEvent)", () => {
+    const result = mapRow(makeDbRow());
+    // These keys must be absent (not just undefined) so spreading the slim
+    // event into a patch payload does not accidentally clear DB columns.
+    expect("description" in result).toBe(false);
+    expect("url" in result).toBe(false);
+    expect("sourceUid" in result).toBe(false);
+    expect("visibility" in result).toBe(false);
+    expect("priority" in result).toBe(false);
+    expect("categories" in result).toBe(false);
+    expect("geo" in result).toBe(false);
+    expect("sequence" in result).toBe(false);
+    expect("extendedProperties" in result).toBe(false);
+    expect("organizer" in result).toBe(false);
+    expect("attendees" in result).toBe(false);
+    expect("alarms" in result).toBe(false);
+    expect("guestPermissions" in result).toBe(false);
   });
 
   it("deserializes rdate JSON", () => {
@@ -118,44 +132,13 @@ describe("mapRow", () => {
     expect(result.rdate).toEqual(["2026-04-01", "2026-05-01"]);
   });
 
-  it("deserializes extended_properties JSON", () => {
-    const result = mapRow(makeDbRow({
-      extended_properties: '{"X-GOOGLE-CONFERENCE":"https://meet.google.com/abc"}',
-    }));
-    expect(result.extendedProperties).toEqual({
-      "X-GOOGLE-CONFERENCE": "https://meet.google.com/abc",
-    });
-  });
-
-  it("deserializes organizer JSON", () => {
-    const result = mapRow(makeDbRow({
-      organizer: '{"name":"John Doe","email":"john@example.com"}',
-    }));
-    expect(result.organizer).toEqual({ name: "John Doe", email: "john@example.com" });
-  });
-
-  it("deserializes organizer without name", () => {
-    const result = mapRow(makeDbRow({
-      organizer: '{"email":"john@example.com"}',
-    }));
-    expect(result.organizer).toEqual({ email: "john@example.com" });
-  });
-
   it("handles malformed JSON gracefully", () => {
     const result = mapRow(makeDbRow({
-      categories: "not valid json",
-      geo: "{broken",
       rdate: "{{",
-      extended_properties: "nope",
-      organizer: "bad",
       notifications: "[invalid",
       exceptions: "x",
     }));
-    expect(result.categories).toBeUndefined();
-    expect(result.geo).toBeUndefined();
     expect(result.rdate).toBeUndefined();
-    expect(result.extendedProperties).toBeUndefined();
-    expect(result.organizer).toBeUndefined();
     expect(result.notifications).toBeUndefined();
     expect(result.exceptions).toBeUndefined();
   });
@@ -194,58 +177,40 @@ describe("mapRow", () => {
   });
 
   it("maps color", () => {
-    expect(mapRow(makeDbRow({ color: "ruby" })).color).toBe("ruby");
+    expect(mapRow(makeDbRow({ color: 2 })).color).toBe(2);
     expect(mapRow(makeDbRow({ color: null })).color).toBeUndefined();
   });
 
-  it("maps location and url when non-empty", () => {
-    const result = mapRow(makeDbRow({ location: "Room A", url: "https://meet.example.com" }));
+  it("drops out-of-range color values so render falls back to the default", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect(mapRow(makeDbRow({ color: 99 })).color).toBeUndefined();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("maps location when non-empty", () => {
+    const result = mapRow(makeDbRow({ location: "Room A" }));
     expect(result.location).toBe("Room A");
-    expect(result.url).toBe("https://meet.example.com");
   });
 
-  it("returns undefined guestPermissions for defaults (canModify=false, canInvite=true, canSee=true)", () => {
-    const result = mapRow(makeDbRow());
-    expect(result.guestPermissions).toBeUndefined();
+  it("maps call link presence without loading the URL", () => {
+    const result = mapRow(makeDbRow({ has_call_link: 1 }));
+    expect(result.hasCallLink).toBe(true);
+    expect(result.url).toBeUndefined();
+  });
+});
+
+describe("mapOverride", () => {
+  it("maps all-day override dates without zone shifting", () => {
+    const result = mapOverride(makeDbOverride(), TEST_ZONE, true);
+    expect(result.start).toBe("2026-05-01 00:00");
+    expect(result.end).toBe("2026-05-01 00:00");
   });
 
-  it("maps guestPermissions when canModify is true", () => {
-    const result = mapRow(makeDbRow({ guest_can_modify: 1 }));
-    expect(result.guestPermissions).toEqual({
-      canModify: true,
-      canInviteOthers: true,
-      canSeeOtherGuests: true,
-    });
-  });
-
-  it("maps guestPermissions when canInviteOthers is false", () => {
-    const result = mapRow(makeDbRow({ guest_can_invite_others: 0 }));
-    expect(result.guestPermissions).toEqual({
-      canModify: false,
-      canInviteOthers: false,
-      canSeeOtherGuests: true,
-    });
-  });
-
-  it("maps guestPermissions when canSeeOtherGuests is false", () => {
-    const result = mapRow(makeDbRow({ guest_can_see_other_guests: 0 }));
-    expect(result.guestPermissions).toEqual({
-      canModify: false,
-      canInviteOthers: true,
-      canSeeOtherGuests: false,
-    });
-  });
-
-  it("maps guestPermissions with all non-default values", () => {
-    const result = mapRow(makeDbRow({
-      guest_can_modify: 1,
-      guest_can_invite_others: 0,
-      guest_can_see_other_guests: 0,
-    }));
-    expect(result.guestPermissions).toEqual({
-      canModify: true,
-      canInviteOthers: false,
-      canSeeOtherGuests: false,
-    });
+  it("maps recurrence range", () => {
+    const result = mapOverride(makeDbOverride({ recurrence_range: "this-and-future" }), TEST_ZONE, true);
+    expect(result.recurrenceRange).toBe("this-and-future");
   });
 });

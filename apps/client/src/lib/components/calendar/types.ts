@@ -1,26 +1,18 @@
-export type CalendarViewMode = "week" | "day" | "month";
+export type CalendarViewMode = "week" | "workweek" | "day" | "month";
 
-export type EventColor =
-  | "ruby"
-  | "coral"
-  | "tangerine"
-  | "amber"
-  | "honey"
-  | "lime"
-  | "emerald"
-  | "jade"
-  | "teal"
-  | "cyan"
-  | "sky"
-  | "azure"
-  | "indigo"
-  | "violet"
-  | "purple"
-  | "orchid"
-  | "rose"
-  | "blush"
-  | "slate"
-  | "sage";
+/**
+ * Index into a theme's eventPalette array. Valid range is 0..PALETTE_SIZE-1
+ * (currently 0..31). Stored as INTEGER on calendar_events.color so palette
+ * order is intrinsic and storage stays compact. The render layer falls back
+ * to the FALLBACK_COLOR_INDEX slot for unknown values.
+ */
+export type EventColor = number;
+
+/** Number of slots every theme palette must provide. */
+export const PALETTE_SIZE = 32;
+
+/** Index of the render-layer fallback slot. Every theme must fill it. */
+export const FALLBACK_COLOR_INDEX = 30;
 
 export type RecurrenceFrequency = "daily" | "weekly" | "monthly" | "yearly";
 
@@ -59,14 +51,6 @@ export interface RecurrenceConfig {
   end: RecurrenceEnd;
 }
 
-export type RecurrencePreset =
-  | "none"
-  | "daily"
-  | "weekdays"
-  | "weekly"
-  | "monthly"
-  | "yearly";
-
 export type RecurringScope = "this" | "following" | "all";
 
 export interface PomodoroConfig {
@@ -80,9 +64,17 @@ export interface PomodoroConfig {
 
 export type EventTransparency = "opaque" | "transparent";
 export type EventStatus = "confirmed" | "tentative" | "cancelled";
-export type EventVisibility = "public" | "private" | "confidential";
+export type EventSurfaceStatus = EventStatus | AttendeeStatus;
+export type EventVisibility = "public" | "private";
+export type IcalendarPreservationStatus =
+  | "lossless"
+  | "partial"
+  | "unsupported"
+  | "needs-review"
+  | "regenerated"
+  | "invalid";
 
-// --- Attendee types (RFC 5545 ATTENDEE/ORGANIZER) ---
+// Attendee types (RFC 5545 ATTENDEE/ORGANIZER)
 
 export type AttendeeRole = "chair" | "req-participant" | "opt-participant" | "non-participant";
 export type AttendeeStatus = "needs-action" | "accepted" | "declined" | "tentative" | "delegated";
@@ -94,6 +86,15 @@ export interface EventAttendee {
   role: AttendeeRole;
   status: AttendeeStatus;
   rsvp: boolean;
+  /** Preserved VEVENT component that contains this ATTENDEE property. */
+  icalendarComponentId?: string;
+  /** Zero-based property index inside the preserved VEVENT component. */
+  icalendarPropertyIndex?: number;
+}
+
+export interface EventSurfaceAttendee {
+  email: string;
+  status: AttendeeStatus;
 }
 
 export interface EventOrganizer {
@@ -101,7 +102,7 @@ export interface EventOrganizer {
   email: string;
 }
 
-// --- Alarm types (RFC 5545 VALARM) ---
+// Alarm types (RFC 5545 VALARM)
 
 export type AlarmAction = "display" | "audio" | "email";
 
@@ -112,22 +113,26 @@ export interface EventAlarm {
   /** Duration string for relative ("-PT15M") or ISO datetime for absolute. */
   triggerValue: string;
   description?: string;
+  /** Preserved VALARM component that produced this alarm. */
+  icalendarComponentId?: string;
 }
 
-// --- Geo coordinates (RFC 5545 GEO) ---
+// Geo coordinates (RFC 5545 GEO)
 
 export interface GeoCoordinates {
   lat: number;
   lng: number;
 }
 
-// --- Per-instance override (RFC 5545 RECURRENCE-ID) ---
+// Per-instance override (RFC 5545 RECURRENCE-ID)
 
 export interface EventOverride {
   id: string;
   parentEventId: string;
-  /** Original DTSTART of the overridden instance (ISO datetime). */
+  /** Original DTSTART of the overridden instance as a UTC ISO 8601 instant. */
   recurrenceId: string;
+  /** RFC 5545 RECURRENCE-ID RANGE parameter. */
+  recurrenceRange?: "this-and-future";
   title?: string;
   start?: string;
   end?: string;
@@ -139,9 +144,13 @@ export interface EventOverride {
   transparency?: EventTransparency;
   visibility?: EventVisibility;
   extendedProperties?: Record<string, string>;
+  /** Preserved override VEVENT component that produced this row. */
+  icalendarComponentId?: string;
+  /** Structured preserved VEVENT component JSON for export merging. */
+  icalendarRawJcal?: unknown;
 }
 
-// --- Guest permissions (Google Calendar X-properties) ---
+// Guest permissions (Google Calendar X-properties)
 
 export interface GuestPermissions {
   /** Whether guests can modify the event (X-GOOGLE-GUEST-CAN-MODIFY). */
@@ -152,13 +161,25 @@ export interface GuestPermissions {
   canSeeOtherGuests: boolean;
 }
 
-// --- Main event interface ---
+// Main event interface
 
 export interface CalendarEvent {
   id: string;
   title: string;
-  start: string; // "YYYY-MM-DD HH:MM"
-  end: string; // "YYYY-MM-DD HH:MM"
+  /**
+   * Wall clock "YYYY-MM-DD HH:MM" or "YYYY-MM-DD HH:MM:SS" in the current
+   * render zone (device zone by default). The DB source of truth is
+   * `start_time` as a UTC ISO 8601 instant. `mapRow` converts UTC to
+   * render-zone wall clock at load time; round-trip on save uses the event's
+   * home zone (`timezone`) to convert back to UTC.
+   */
+  start: string;
+  /**
+   * Wall clock "YYYY-MM-DD HH:MM" or "YYYY-MM-DD HH:MM:SS" in the current
+   * render zone. See `start`.
+   */
+  end: string;
+  /** IANA zone (e.g. "America/New_York") used for recurrence math and ICS re-export. */
   timezone: string;
   calendarId: string;
   color?: EventColor;
@@ -172,10 +193,20 @@ export interface CalendarEvent {
   /** Set on virtual recurring instances; points to the DB-backed template event. */
   recurringParentId?: string;
   allDay?: boolean;
+  /** Keeps the Meeting section enabled even when every meeting field is empty. */
+  meetingEnabled?: boolean;
+  /** Render-only marker for a stored call link when the URL is not loaded. */
+  hasCallLink?: boolean;
   location?: string;
   url?: string;
   transparency?: EventTransparency;
   status?: EventStatus;
+  /** Frontend-only visual status. Used for meeting RSVP patterns without changing event STATUS. */
+  surfaceStatus?: EventSurfaceStatus;
+  /** Slim render-only attendee RSVP data for deriving `surfaceStatus` in calendar views. */
+  surfaceAttendees?: EventSurfaceAttendee[];
+  /** App-local RSVP for the placeholder user row before an email identity exists. */
+  localParticipationStatus?: AttendeeStatus;
   /** Original UID from imported .ics file, used for deduplication. */
   sourceUid?: string;
   /** RFC 5545 CLASS: controls visibility to other users. */
@@ -188,6 +219,8 @@ export interface CalendarEvent {
   geo?: GeoCoordinates;
   /** RFC 5545 SEQUENCE: revision counter for change tracking. */
   sequence?: number;
+  /** Database creation timestamp. Used for deterministic scheduler tiebreakers. */
+  createdAt?: string;
   /** RFC 5545 RDATE: additional recurrence dates beyond the RRULE pattern. */
   rdate?: string[];
   /** Arbitrary extended properties (X-* from iCalendar). */
@@ -202,6 +235,14 @@ export interface CalendarEvent {
   overrides?: EventOverride[];
   /** Guest permission flags (Google Calendar X-properties). */
   guestPermissions?: GuestPermissions;
+  /** Preserved VEVENT component that produced this row. */
+  icalendarComponentId?: string;
+  /** Preservation quality for the linked VEVENT component. */
+  icalendarPreservationStatus?: IcalendarPreservationStatus;
+  /** Lossy projection diagnostics for the linked VEVENT component. */
+  icalendarProjectionWarnings?: string[];
+  /** Structured preserved VEVENT component JSON for export merging. */
+  icalendarRawJcal?: unknown;
 }
 
 export interface Calendar {
@@ -213,6 +254,8 @@ export interface Calendar {
   readOnly: boolean;
   sourceUrl?: string;
   lastSynced?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface PositionedAllDayEvent {
@@ -246,7 +289,7 @@ export interface PositionedEvent {
   hasEventBelow?: boolean; // another event starts right when this one ends
 }
 
-// --- Pomodoro segment types ---
+// Pomodoro segment types
 
 export type SegmentPhase = "focus" | "short_break" | "long_break";
 
@@ -259,14 +302,13 @@ export interface PlannedSegment {
   endOffsetMinutes: number;
 }
 
-export interface AccentBarBand {
-  topFraction: number;
-  heightFraction: number;
-  phase: SegmentPhase;
-  status?: SegmentStatus;
-}
+export type PauseReason = "idle" | "manual" | "suspend";
 
-export type PauseInterval = [string, string | null]; // [pauseStartIso, resumeIso | null]
+export interface PauseInterval {
+  startedAt: string;
+  endedAt: string | null;
+  reason: PauseReason;
+}
 
 export interface PersistedSegment {
   id: string;
@@ -288,17 +330,6 @@ export interface TimelineBand {
   heightMinutes: number; // duration in minutes
   phase: SegmentPhase;
   status: SegmentStatus;
-}
-
-export interface SnapLineState {
-  minute: number;
-  label: string;
-  labelBelow: boolean;
-  atBottom: boolean;
-  leftInsetPx: number;
-  blockLeft: number;
-  blockWidth: number;
-  blockMultiCol: boolean;
 }
 
 export interface DragState {

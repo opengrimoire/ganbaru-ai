@@ -1,0 +1,200 @@
+:root {
+  color-scheme: light dark;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  background: #0f1110;
+  color: #f4f5f0;
+}
+
+body {
+  margin: 0;
+}
+
+button {
+  border: 1px solid #d8d8d8;
+  border-radius: 8px;
+  background: #f4f5f0;
+  color: #101010;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+  min-height: 2.65rem;
+  padding: 0 1rem;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    transform 140ms ease;
+}
+
+button:hover {
+  background: #ffffff;
+  border-color: #ffffff;
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.blocked-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: #0f1110;
+  padding: 1.5rem;
+  box-sizing: border-box;
+}
+
+.blocked-shell {
+  width: min(46rem, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 3rem);
+  text-align: center;
+}
+
+.site-favicon {
+  width: 2rem;
+  height: 2rem;
+  margin-bottom: 1rem;
+  object-fit: contain;
+}
+
+.site-favicon[hidden] {
+  display: none;
+}
+
+.blocked-shell h1 {
+  color: #f4f5f0;
+  font-size: clamp(1.35rem, 4vw, 2.35rem);
+  font-weight: 740;
+  line-height: 1.08;
+  margin: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.blocked-copy {
+  color: #aab5ac;
+  font-size: clamp(0.95rem, 2vw, 1.08rem);
+  line-height: 1.55;
+  margin-top: 0.8rem;
+  max-width: 30rem;
+}
+
+.blocked-time {
+  color: #f4f5f0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin-top: 0.85rem;
+}
+
+.blocked-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 1.75rem;
+}
+
+.primary-action {
+  min-width: 8.5rem;
+}
+
+.popup-page {
+  width: 18rem;
+  background: #0f1110;
+}
+
+.popup-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.popup-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.mark {
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid #303a35;
+  border-radius: 6px;
+  background: #1a201d;
+  font-weight: 700;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.02;
+}
+
+p {
+  margin: 0;
+}
+
+.host {
+  font-family: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+  font-size: clamp(1.25rem, 4vw, 2rem);
+  font-weight: 750;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.muted {
+  color: #aab5ac;
+  font-size: 0.85rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.popup-panel dl {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+}
+
+.popup-panel dl > div {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  gap: 0.5rem;
+}
+
+.popup-panel dt {
+  color: #aab5ac;
+  font-size: 0.8rem;
+}
+
+.popup-panel dd {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+
+.popup-action {
+  margin-top: 0.15rem;
+  width: 100%;
+}

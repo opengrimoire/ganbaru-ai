@@ -2,16 +2,24 @@ import { describe, it, expect } from "vitest";
 import {
   configEquals,
   phaseDurationSeconds,
+  limitRemainingSecondsToBlockEnd,
+  isPomodoroSessionActive,
+  canPauseResumePomodoro,
   decideTick,
   decideAdvancePhase,
   decideTransition,
   decideStartFromBlock,
   decideReconfigure,
   decideIdleCheck,
+  nextIdleCheckDelayMs,
+  shouldPlayRepeatingSoundAtElapsedSecond,
+  shouldTriggerIdleFocusFailure,
   DEFAULT_CONFIG,
   TIME_MULTIPLIER,
   SUSPEND_THRESHOLD_MS,
   NOTIFICATION_THRESHOLD,
+  BREAK_FINISHED_ALERT_INTERVAL_SECONDS,
+  IDLE_ALERT_INTERVAL_SECONDS,
   type TimerSnapshot,
   type PomodoroConfig,
   type TransitionInput,
@@ -20,7 +28,7 @@ import {
   type IdleCheckInput,
 } from "./pomodoro-machine";
 
-// --- Helpers ---
+// Helpers
 
 const NOW = 1_700_000_000_000;
 
@@ -30,21 +38,12 @@ function makeSnapshot(overrides: Partial<TimerSnapshot> = {}): TimerSnapshot {
     remainingSeconds: 2400,
     currentCycle: 1,
     totalCycles: 4,
-    isRunning: true,
     config: { ...DEFAULT_CONFIG },
-    completedPomodoros: 0,
     skipNextBreak: false,
     notificationShown: false,
     phaseEndTime: NOW + 2400_000,
-    activeBlockId: "block-1",
     activeBlockEndMs: NOW + 3600_000,
-    blockExpired: false,
     lastTickMs: NOW - 1000,
-    sessionStartTime: new Date(NOW - 60_000).toISOString(),
-    hasOvertimeInterval: false,
-    suspendedAway: false,
-    idlePaused: false,
-    idleTimeoutMs: null,
     ...overrides,
   };
 }
@@ -75,6 +74,31 @@ describe("configEquals", () => {
   });
 });
 
+describe("sound cadence helpers", () => {
+  it("triggers idle focus failure at 60 seconds after the overlay appears", () => {
+    expect(shouldTriggerIdleFocusFailure(59)).toBe(false);
+    expect(shouldTriggerIdleFocusFailure(60)).toBe(true);
+    expect(shouldTriggerIdleFocusFailure(61)).toBe(true);
+  });
+
+  it("plays idle alerts immediately and every 10 seconds", () => {
+    expect(shouldPlayRepeatingSoundAtElapsedSecond(0, IDLE_ALERT_INTERVAL_SECONDS)).toBe(true);
+    expect(shouldPlayRepeatingSoundAtElapsedSecond(9, IDLE_ALERT_INTERVAL_SECONDS)).toBe(false);
+    expect(shouldPlayRepeatingSoundAtElapsedSecond(10, IDLE_ALERT_INTERVAL_SECONDS)).toBe(true);
+    expect(shouldPlayRepeatingSoundAtElapsedSecond(20, IDLE_ALERT_INTERVAL_SECONDS)).toBe(true);
+  });
+
+  it("plays break-finished alerts immediately and every configured interval", () => {
+    expect(shouldPlayRepeatingSoundAtElapsedSecond(0, BREAK_FINISHED_ALERT_INTERVAL_SECONDS)).toBe(true);
+    expect(shouldPlayRepeatingSoundAtElapsedSecond(9, BREAK_FINISHED_ALERT_INTERVAL_SECONDS)).toBe(false);
+    expect(shouldPlayRepeatingSoundAtElapsedSecond(10, BREAK_FINISHED_ALERT_INTERVAL_SECONDS)).toBe(true);
+    expect(shouldPlayRepeatingSoundAtElapsedSecond(20, BREAK_FINISHED_ALERT_INTERVAL_SECONDS)).toBe(true);
+    expect(shouldPlayRepeatingSoundAtElapsedSecond(15, 15)).toBe(true);
+    expect(shouldPlayRepeatingSoundAtElapsedSecond(30, 15)).toBe(true);
+    expect(shouldPlayRepeatingSoundAtElapsedSecond(10, 0)).toBe(false);
+  });
+});
+
 // ============================================================
 // phaseDurationSeconds
 // ============================================================
@@ -97,6 +121,119 @@ describe("phaseDurationSeconds", () => {
 
   it("returns longBreakMinutes * 60 for long_break", () => {
     expect(phaseDurationSeconds("long_break", cfg)).toBe(900);
+  });
+});
+
+describe("limitRemainingSecondsToBlockEnd", () => {
+  it("keeps the phase duration when there is no block end", () => {
+    expect(limitRemainingSecondsToBlockEnd(50 * TIME_MULTIPLIER, null, NOW)).toBe(3000);
+  });
+
+  it("clips the phase duration to the active block end", () => {
+    expect(
+      limitRemainingSecondsToBlockEnd(
+        50 * TIME_MULTIPLIER,
+        NOW + 10 * TIME_MULTIPLIER * 1000,
+        NOW,
+      ),
+    ).toBe(600);
+  });
+
+  it("returns zero when the active block end is already past", () => {
+    expect(limitRemainingSecondsToBlockEnd(50 * TIME_MULTIPLIER, NOW - 1, NOW)).toBe(0);
+  });
+});
+
+describe("isPomodoroSessionActive", () => {
+  const baseInput = {
+    activeBlockId: "block-1",
+    activeBlockEndMs: NOW + 60_000,
+    blockExpired: false,
+    isRunning: false,
+    remainingSeconds: DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER,
+    totalSeconds: DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER,
+    nowMs: NOW,
+  };
+
+  it("keeps a paused full-length block active while its event is current", () => {
+    expect(isPomodoroSessionActive(baseInput)).toBe(true);
+  });
+
+  it("treats a block whose deadline passed as inactive", () => {
+    expect(
+      isPomodoroSessionActive({
+        ...baseInput,
+        activeBlockEndMs: NOW,
+      }),
+    ).toBe(false);
+  });
+
+  it("treats a block awaiting natural expiry handoff as inactive", () => {
+    expect(
+      isPomodoroSessionActive({
+        ...baseInput,
+        blockExpired: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("treats the default stopped timer as inactive", () => {
+    expect(
+      isPomodoroSessionActive({
+        ...baseInput,
+        activeBlockId: null,
+        activeBlockEndMs: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps a non-block timer active while it is running", () => {
+    expect(
+      isPomodoroSessionActive({
+        ...baseInput,
+        activeBlockId: null,
+        activeBlockEndMs: null,
+        isRunning: true,
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("canPauseResumePomodoro", () => {
+  const baseInput = {
+    phase: "focus" as const,
+    activeBlockId: "block-1",
+    activeBlockEndMs: NOW + 60_000,
+    blockExpired: false,
+    isRunning: true,
+    remainingSeconds: DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER,
+    totalSeconds: DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER,
+    nowMs: NOW,
+    suspendedAway: false,
+    idlePaused: false,
+  };
+
+  it("allows active focus to pause or resume", () => {
+    expect(canPauseResumePomodoro(baseInput)).toBe(true);
+  });
+
+  it("disables pause and resume during breaks", () => {
+    expect(canPauseResumePomodoro({ ...baseInput, phase: "short_break" })).toBe(false);
+    expect(canPauseResumePomodoro({ ...baseInput, phase: "long_break" })).toBe(false);
+  });
+
+  it("disables pause and resume while suspended away or idle paused", () => {
+    expect(canPauseResumePomodoro({ ...baseInput, suspendedAway: true })).toBe(false);
+    expect(canPauseResumePomodoro({ ...baseInput, idlePaused: true })).toBe(false);
+  });
+
+  it("disables pause and resume when the session is no longer active", () => {
+    expect(
+      canPauseResumePomodoro({
+        ...baseInput,
+        activeBlockEndMs: NOW,
+      }),
+    ).toBe(false);
   });
 });
 
@@ -561,7 +698,6 @@ describe("decideTransition", () => {
     phase: "focus",
     remainingSeconds: 1200, // 20 min left of 40 min focus -> 20 min accumulated
     currentCycle: 1,
-    totalCycles: 4,
     blockExpired: false,
   };
 
@@ -606,7 +742,6 @@ describe("decideTransition", () => {
         ...baseInput,
         remainingSeconds: 0,
         currentCycle: 4,
-        totalCycles: 4,
         newConfig: { ...DEFAULT_CONFIG, focusMinutes: 25, cyclesBeforeLongBreak: 4 },
       };
       const result = decideTransition(input);
@@ -715,6 +850,20 @@ describe("decideTransition", () => {
       const result = decideTransition(input);
       if (result.kind === "continue_focus") {
         expect(result.remainingSeconds).toBe(900); // (25 - 10) * 60
+      }
+    });
+
+    it("uses explicit elapsed focus when displayed remaining is clipped by the event", () => {
+      const input: TransitionInput = {
+        ...baseInput,
+        remainingSeconds: 0,
+        elapsedFocusSeconds: 10 * TIME_MULTIPLIER,
+        newConfig: { ...DEFAULT_CONFIG, focusMinutes: 25 },
+      };
+      const result = decideTransition(input);
+      expect(result.kind).toBe("continue_focus");
+      if (result.kind === "continue_focus") {
+        expect(result.remainingSeconds).toBe(15 * TIME_MULTIPLIER);
       }
     });
   });
@@ -979,6 +1128,16 @@ describe("decideReconfigure", () => {
     expect(result.newRemainingSeconds).toBe(1800);
   });
 
+  it("uses explicit elapsed time when displayed remaining is clipped by the event", () => {
+    const result = decideReconfigure({
+      ...baseInput,
+      remainingSeconds: 0,
+      elapsedSeconds: 10 * TIME_MULTIPLIER,
+      newConfig: { ...DEFAULT_CONFIG, focusMinutes: 25 },
+    });
+    expect(result.newRemainingSeconds).toBe(15 * TIME_MULTIPLIER);
+  });
+
   it("clamps elapsed to 0 when remaining exceeds old duration", () => {
     // remaining=3000 > oldDuration=2400 -> elapsed = max(0, 2400-3000) = 0
     // new focus 25min -> 1500 - 0 = 1500
@@ -1224,5 +1383,39 @@ describe("decideIdleCheck", () => {
       );
       expect(result.kind).toBe("skip");
     });
+  });
+});
+
+describe("nextIdleCheckDelayMs", () => {
+  it("uses the maximum interval while far from the idle threshold", () => {
+    expect(nextIdleCheckDelayMs({
+      idleTimeoutMs: 60_000,
+      idleMs: 10_000,
+      webcamInUse: false,
+    })).toBe(15_000);
+  });
+
+  it("targets the threshold once the next maximum interval would overshoot it", () => {
+    expect(nextIdleCheckDelayMs({
+      idleTimeoutMs: 60_000,
+      idleMs: 52_000,
+      webcamInUse: false,
+    })).toBe(8_000);
+  });
+
+  it("keeps a minimum delay near the threshold", () => {
+    expect(nextIdleCheckDelayMs({
+      idleTimeoutMs: 60_000,
+      idleMs: 59_750,
+      webcamInUse: false,
+    })).toBe(1_000);
+  });
+
+  it("uses the maximum interval while webcam use suppresses idle", () => {
+    expect(nextIdleCheckDelayMs({
+      idleTimeoutMs: 60_000,
+      idleMs: 59_750,
+      webcamInUse: true,
+    })).toBe(15_000);
   });
 });

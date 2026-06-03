@@ -1,5 +1,6 @@
 <script lang="ts">
   import { getHourInTimezone } from "./utils";
+  import { getPreferences } from "$lib/stores/preferences.svelte";
 
   let {
     timezones = [] as string[],
@@ -11,7 +12,20 @@
     tzCount?: number;
   } = $props();
 
+  const preferences = getPreferences();
   const hours = Array.from({ length: 24 }, (_, i) => i);
+
+  function formatTickLabel(hour: number, tz: string): string {
+    const label = getHourInTimezone(
+      anchorDate,
+      hour,
+      tz,
+      preferences.calendarTimeFormat,
+      "short",
+    );
+    if (preferences.calendarTimeFormat !== "12h") return label;
+    return label.replace(/\b(am|pm)\b$/, (period) => period.toUpperCase());
+  }
 </script>
 
 <div
@@ -30,10 +44,10 @@
         >
           {#if hour > 0}
             <span
-              class="absolute -top-[0.45em] text-[11px] leading-none antialiased"
-              style="color: var(--cal-time-label);"
+              class="absolute top-[-0.45em] -translate-x-1/2 whitespace-nowrap text-[0.733333rem] leading-none antialiased"
+              style="left: {preferences.calendarTimeFormat === '12h' ? 'calc(50% - 0.2px)' : '50%'}; color: var(--cal-time-label);"
             >
-              {getHourInTimezone(anchorDate, hour, tz)}
+              {formatTickLabel(hour, tz)}
             </span>
           {/if}
         </div>

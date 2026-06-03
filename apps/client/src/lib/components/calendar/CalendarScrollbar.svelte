@@ -1,11 +1,27 @@
 <script lang="ts">
+  import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
+  import {
+    CALENDAR_FORWARDED_WHEEL_EVENT,
+    getSmoothScrollDelta,
+    type CalendarForwardedWheelDetail,
+  } from "./timeline-scroll";
+
   let {
     scrollContainer,
     stickyTop = 0,
+    stickyBottom = 0,
+    onTimelineWheel,
+    wheelPassthrough = false,
   }: {
     scrollContainer: HTMLElement | undefined;
     stickyTop?: number;
+    stickyBottom?: number;
+    onTimelineWheel?: (e: WheelEvent) => void;
+    wheelPassthrough?: boolean;
   } = $props();
+
+  const calZoom = getCalendarZoom();
+  const SCROLLBAR_VISIBILITY_THRESHOLD_PX = 2;
 
   let trackEl: HTMLDivElement | undefined = $state();
   let thumbTop = $state(0);
@@ -16,16 +32,21 @@
   let dragStartScrollTop = 0;
 
   function updateThumb() {
+    // Freeze the scrollbar during zoom animations to avoid forced reflows
+    // that cause visual flashes. The scrollbar updates on the next
+    // scroll or resize event after the zoom animation completes.
+    if (calZoom.isAnimating) return;
     if (!scrollContainer || !trackEl) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
-    if (scrollHeight <= clientHeight) {
+    const scrollRange = scrollHeight - clientHeight;
+    if (scrollRange <= SCROLLBAR_VISIBILITY_THRESHOLD_PX) {
       thumbHeight = 0;
+      thumbTop = 0;
       return;
     }
     const trackH = trackEl.clientHeight;
     const ratio = clientHeight / scrollHeight;
     thumbHeight = Math.max(ratio * trackH, 24);
-    const scrollRange = scrollHeight - clientHeight;
     thumbTop = scrollRange > 0
       ? (scrollTop / scrollRange) * (trackH - thumbHeight)
       : 0;
@@ -36,12 +57,14 @@
     if (!el) return;
     updateThumb();
     el.addEventListener("scroll", updateThumb, { passive: true });
+    el.addEventListener("zoomcommit", updateThumb);
     const observer = new ResizeObserver(updateThumb);
     observer.observe(el);
     const content = el.firstElementChild;
     if (content) observer.observe(content as Element);
     return () => {
       el.removeEventListener("scroll", updateThumb);
+      el.removeEventListener("zoomcommit", updateThumb);
       observer.disconnect();
     };
   });
@@ -66,6 +89,12 @@
     trackEl.setPointerCapture(e.pointerId);
   }
 
+  function isPointerInsideTrack(e: PointerEvent): boolean {
+    if (!trackEl) return false;
+    const rect = trackEl.getBoundingClientRect();
+    return e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+  }
+
   function handlePointerMove(e: PointerEvent) {
     if (!dragging || !scrollContainer || !trackEl) return;
     const deltaY = e.clientY - dragStartY;
@@ -79,19 +108,68 @@
   function handlePointerUp() {
     dragging = false;
   }
+
+  function handleWheel(e: WheelEvent) {
+    if (wheelPassthrough) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (scrollContainer) {
+      scrollContainer.dispatchEvent(new CustomEvent<CalendarForwardedWheelDetail>(
+        CALENDAR_FORWARDED_WHEEL_EVENT,
+        {
+          detail: {
+            deltaY: getSmoothScrollDelta(e),
+            deltaMode: e.deltaMode,
+            scrollTop: scrollContainer.scrollTop,
+            scrollHeight: scrollContainer.scrollHeight,
+            clientHeight: scrollContainer.clientHeight,
+          },
+        },
+      ));
+      onTimelineWheel?.(e);
+    }
+  }
+
+  $effect(() => {
+    const el = scrollContainer;
+    if (!wheelPassthrough || !el) return;
+
+    const handlePointerDown = (e: PointerEvent) => {
+      if (!isPointerInsideTrack(e)) return;
+      e.stopPropagation();
+      handleTrackPointerDown(e);
+    };
+    const handlePointerMove = (e: PointerEvent) => {
+      if (!dragging) hovering = isPointerInsideTrack(e);
+    };
+    const handlePointerLeave = () => {
+      if (!dragging) hovering = false;
+    };
+
+    el.addEventListener("pointerdown", handlePointerDown, { capture: true });
+    el.addEventListener("pointermove", handlePointerMove, { passive: true });
+    el.addEventListener("pointerleave", handlePointerLeave);
+
+    return () => {
+      el.removeEventListener("pointerdown", handlePointerDown, { capture: true });
+      el.removeEventListener("pointermove", handlePointerMove);
+      el.removeEventListener("pointerleave", handlePointerLeave);
+    };
+  });
 </script>
 
 <!-- Absolute overlay: positioned outside scroll container so it never scrolls -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   bind:this={trackEl}
-  class="pointer-events-auto absolute right-0 z-50"
-  style="top: {stickyTop}px; bottom: 0; width: 8px;"
+  class="{wheelPassthrough ? 'pointer-events-none' : 'pointer-events-auto'} absolute right-0 z-48"
+  style="top: {stickyTop}px; bottom: {stickyBottom}px; width: 8px;"
   onpointerdown={handleTrackPointerDown}
   onpointermove={handlePointerMove}
   onpointerup={handlePointerUp}
   onpointerenter={() => (hovering = true)}
   onpointerleave={() => { if (!dragging) hovering = false; }}
+  onwheel={handleWheel}
 >
   {#if thumbHeight > 0}
     <div
@@ -99,8 +177,9 @@
       style="
         top: {thumbTop}px;
         height: {thumbHeight}px;
-        background-color: var(--muted-foreground);
-        opacity: {dragging ? 0.5 : hovering ? 0.35 : 0.2};
+        background-color: {dragging || hovering
+          ? 'var(--cal-scrollbar-thumb-hover, var(--muted-foreground))'
+          : 'var(--cal-scrollbar-thumb, var(--muted))'};
       "
     ></div>
   {/if}

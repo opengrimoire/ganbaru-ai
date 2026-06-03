@@ -2,35 +2,84 @@
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { APP_SOUND_IDS, playAppSound } from "$lib/app-sounds";
+  import {
+    delayUntil,
+    elapsedSecondsSince,
+    nextIntervalTargetAfter,
+    shouldScheduleIdleAlert,
+  } from "./blocked-screen";
+  import PomodoroBlockedScreen from "./PomodoroBlockedScreen.svelte";
 
   let {
     idleSeconds,
     nativeOverlay = false,
+    focusFailed = false,
     onResume,
-    onStop,
+    onFocusFailed,
   }: {
     idleSeconds: number;
     nativeOverlay?: boolean;
-    onResume: () => void;
-    onStop: () => void;
+    focusFailed?: boolean;
+    onResume: () => void | Promise<void>;
+    onFocusFailed: (failedAtMs: number) => void | Promise<void>;
   } = $props();
 
-  let elapsed = $state(0);
-  let alertIntervalId: ReturnType<typeof setInterval> | null = null;
-  let tickIntervalId: ReturnType<typeof setInterval> | null = null;
+  const IDLE_ALERT_INTERVAL_MS = 10_000;
+  const FOCUS_FAILURE_DELAY_MS = 60_000;
 
-  function formatDuration(totalSeconds: number): string {
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const secs = totalSeconds % 60;
-    if (hours > 0) {
-      return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  let elapsed = $state(0);
+  let overlayVisibleAtMs = Date.now();
+  let focusFailureDueAtMs = overlayVisibleAtMs + FOCUS_FAILURE_DELAY_MS;
+  let alertTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  let failureTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  let tickIntervalId: ReturnType<typeof setInterval> | null = null;
+  let localFocusFailed = $state(false);
+
+  const overlayFocusFailed = $derived(focusFailed || localFocusFailed);
+
+  function clearAlertTimer() {
+    if (alertTimeoutId !== null) {
+      clearTimeout(alertTimeoutId);
+      alertTimeoutId = null;
     }
-    return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   }
 
-  function playAlert() {
-    invoke("play_alert_sound").catch(() => {});
+  function clearFailureTimer() {
+    if (failureTimeoutId !== null) {
+      clearTimeout(failureTimeoutId);
+      failureTimeoutId = null;
+    }
+  }
+
+  function playIdleAlert() {
+    playAppSound(APP_SOUND_IDS.idleAlert).catch(() => {});
+  }
+
+  function scheduleNextIdleAlert(targetMs: number) {
+    if (!shouldScheduleIdleAlert(targetMs, focusFailureDueAtMs)) return;
+    alertTimeoutId = setTimeout(() => {
+      alertTimeoutId = null;
+      if (localFocusFailed || focusFailed) return;
+      if (!shouldScheduleIdleAlert(Date.now(), focusFailureDueAtMs)) {
+        triggerFocusFailure();
+        return;
+      }
+      playIdleAlert();
+      scheduleNextIdleAlert(
+        nextIntervalTargetAfter(targetMs, IDLE_ALERT_INTERVAL_MS, Date.now()),
+      );
+    }, delayUntil(targetMs, Date.now()));
+  }
+
+  function triggerFocusFailure() {
+    if (localFocusFailed || focusFailed) return;
+    localFocusFailed = true;
+    clearAlertTimer();
+    clearFailureTimer();
+    elapsed = idleSeconds + elapsedSecondsSince(overlayVisibleAtMs, focusFailureDueAtMs);
+    playAppSound(APP_SOUND_IDS.focusSessionFailedLongIdle).catch(() => {});
+    void onFocusFailed(focusFailureDueAtMs);
   }
 
   let wasFullscreen = false;
@@ -60,75 +109,79 @@
   }
 
   function handleResume() {
-    exitFullscreen().then(onResume);
+    void exitFullscreen().then(() => onResume());
   }
 
-  function handleStop() {
-    exitFullscreen().then(onStop);
+  function afterNextPaint(callback: () => void): () => void {
+    let cancelled = false;
+    let firstFrameId = 0;
+    let secondFrameId = 0;
+    firstFrameId = requestAnimationFrame(() => {
+      secondFrameId = requestAnimationFrame(() => {
+        if (!cancelled) callback();
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(firstFrameId);
+      cancelAnimationFrame(secondFrameId);
+    };
   }
 
   onMount(() => {
     elapsed = idleSeconds;
-
-    // When the GTK overlay is active (Linux), it handles fullscreen, sounds,
+    // When the native overlay window is active, it handles fullscreen, sounds,
     // notifications, and key capture. Skip those side effects here.
-    if (!nativeOverlay) {
+    const cancelPaintSideEffects = afterNextPaint(() => {
+      overlayVisibleAtMs = Date.now();
+      focusFailureDueAtMs = overlayVisibleAtMs + FOCUS_FAILURE_DELAY_MS;
+      elapsed = idleSeconds;
+
+      if (nativeOverlay) return;
       enterFullscreen();
 
       invoke("show_event_notification", {
         title: "Focus session paused",
         body: "No activity detected. Return to resume your session.",
+        playSound: false,
       }).catch(() => {});
 
-      playAlert();
-      alertIntervalId = setInterval(playAlert, 15_000);
-    }
+      playIdleAlert();
+      scheduleNextIdleAlert(overlayVisibleAtMs + IDLE_ALERT_INTERVAL_MS);
+      failureTimeoutId = setTimeout(
+        triggerFocusFailure,
+        delayUntil(focusFailureDueAtMs, Date.now()),
+      );
+    });
 
     tickIntervalId = setInterval(() => {
-      elapsed += 1;
+      elapsed = idleSeconds + elapsedSecondsSince(overlayVisibleAtMs, Date.now());
     }, 1000);
 
     function handleKeydown(e: KeyboardEvent) {
-      if (nativeOverlay) return; // GTK overlay captures keys
+      if (nativeOverlay) return; // Native overlay captures keys.
       if (e.code === "Space") {
         e.preventDefault();
         e.stopPropagation();
         handleResume();
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        handleStop();
       }
     }
     window.addEventListener("keydown", handleKeydown, true);
 
     return () => {
+      cancelPaintSideEffects();
       window.removeEventListener("keydown", handleKeydown, true);
-      if (alertIntervalId !== null) clearInterval(alertIntervalId);
+      clearAlertTimer();
+      clearFailureTimer();
       if (tickIntervalId !== null) clearInterval(tickIntervalId);
     };
   });
 </script>
 
-<div class="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-black select-none">
-  <div class="flex flex-col items-center gap-8">
-    <p class="text-[#9CA3AF] text-sm tracking-wide uppercase">Focus session paused</p>
-
-    <p class="text-white text-7xl font-light tabular-nums">
-      {formatDuration(elapsed)}
-    </p>
-
-    <p class="text-[#9CA3AF] text-base">
-      idle
-    </p>
-  </div>
-
-  <div class="mt-16 flex flex-col items-center gap-3">
-    <p class="text-[#9CA3AF] text-sm">
-      Press <span class="text-white">Space</span> to resume focus
-    </p>
-    <p class="text-[#9CA3AF] text-sm">
-      Press <span class="text-white">Esc</span> to stop session
-    </p>
-  </div>
+<div class="fixed inset-0 z-60">
+  <PomodoroBlockedScreen
+    state={overlayFocusFailed ? "idle_failed" : "idle"}
+    seconds={elapsed}
+  />
 </div>
