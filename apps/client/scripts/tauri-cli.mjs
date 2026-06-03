@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+const require = createRequire(import.meta.url);
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const CLIENT_ROOT = path.resolve(SCRIPT_DIR, "..");
 const DEV_CONFIG = path.join("src-tauri", "tauri.dev.conf.json");
+const TAURI_CLI_ENTRY = require.resolve("@tauri-apps/cli/tauri.js");
 
 /**
  * Finds the boundary between Tauri CLI options and application arguments.
@@ -56,8 +59,7 @@ function withDevConfig(args) {
   ];
 }
 
-const command = process.platform === "win32" ? "tauri.cmd" : "tauri";
-const child = spawn(command, withDevConfig(process.argv.slice(2)), {
+const child = spawn(process.execPath, [TAURI_CLI_ENTRY, ...withDevConfig(process.argv.slice(2))], {
   cwd: CLIENT_ROOT,
   stdio: "inherit",
 });
