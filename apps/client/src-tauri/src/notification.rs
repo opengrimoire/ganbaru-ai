@@ -2032,6 +2032,7 @@ pub fn show_event_notification(
         let result = notification.show();
 
         match result {
+            #[cfg(target_os = "linux")]
             Ok(handle) => {
                 handle.wait_for_action(|action| {
                     if action == "open" || action == "default" {
@@ -2042,6 +2043,8 @@ pub fn show_event_notification(
                     }
                 });
             }
+            #[cfg(not(target_os = "linux"))]
+            Ok(()) => {}
             Err(e) => {
                 eprintln!("Failed to show event notification: {e}");
             }
@@ -2069,6 +2072,7 @@ pub fn show_benchmark_notification(
         let result = notification.show();
 
         match result {
+            #[cfg(target_os = "linux")]
             Ok(handle) => {
                 handle.wait_for_action(|action| {
                     if action == "show_summary" || action == "default" {
@@ -2076,6 +2080,8 @@ pub fn show_benchmark_notification(
                     }
                 });
             }
+            #[cfg(not(target_os = "linux"))]
+            Ok(()) => {}
             Err(e) => {
                 eprintln!("Failed to show benchmark notification: {e}");
             }
@@ -2118,6 +2124,7 @@ pub fn show_doomscrolling_desktop_block_notification(
         let result = notification.show();
 
         match result {
+            #[cfg(target_os = "linux")]
             Ok(handle) => {
                 handle.wait_for_action(|action| {
                     if action == "default" {
@@ -2126,6 +2133,8 @@ pub fn show_doomscrolling_desktop_block_notification(
                     }
                 });
             }
+            #[cfg(not(target_os = "linux"))]
+            Ok(()) => {}
             Err(e) => {
                 eprintln!("Failed to show doomscrolling desktop block notification: {e}");
             }
@@ -2182,6 +2191,7 @@ pub fn show_doomscrolling_desktop_limit_notification(
         let result = notification.show();
 
         match result {
+            #[cfg(target_os = "linux")]
             Ok(handle) => {
                 handle.wait_for_action(|action| {
                     if action == "default" {
@@ -2190,6 +2200,8 @@ pub fn show_doomscrolling_desktop_limit_notification(
                     }
                 });
             }
+            #[cfg(not(target_os = "linux"))]
+            Ok(()) => {}
             Err(e) => {
                 eprintln!("Failed to show doomscrolling desktop limit notification: {e}");
             }
@@ -2484,6 +2496,7 @@ pub fn show_pomodoro_notification(
         let result = notification.show();
 
         match result {
+            #[cfg(target_os = "linux")]
             Ok(handle) => {
                 handle.wait_for_action(|action| {
                     if action == "add_time" {
@@ -2491,6 +2504,8 @@ pub fn show_pomodoro_notification(
                     }
                 });
             }
+            #[cfg(not(target_os = "linux"))]
+            Ok(()) => {}
             Err(e) => {
                 eprintln!("Failed to show notification: {e}");
             }
@@ -2515,6 +2530,7 @@ pub fn show_paused_focus_notification(app: tauri::AppHandle, app_sounds: State<'
         let result = notification.show();
 
         match result {
+            #[cfg(target_os = "linux")]
             Ok(handle) => {
                 handle.wait_for_action(|action| match action {
                     "resume" => {
@@ -2529,6 +2545,8 @@ pub fn show_paused_focus_notification(app: tauri::AppHandle, app_sounds: State<'
                     _ => {}
                 });
             }
+            #[cfg(not(target_os = "linux"))]
+            Ok(()) => {}
             Err(e) => {
                 eprintln!("Failed to show paused focus notification: {e}");
             }
