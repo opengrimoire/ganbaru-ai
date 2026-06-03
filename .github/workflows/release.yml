@@ -1,0 +1,83 @@
+name: release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "app-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux x64
+            runner: ubuntu-22.04
+            args: ""
+          - name: windows x64
+            runner: windows-latest
+            args: ""
+    env:
+      CARGO_TERM_COLOR: always
+      GANBARU_AI_RELEASE_REPOSITORY: ${{ github.repository }}
+      TAURI_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: enable pnpm
+        run: corepack enable
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: cache Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+
+      - name: install Linux dependencies
+        if: matrix.runner == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: write release updater config
+        run: node apps/client/scripts/write-tauri-release-config.mjs
+
+      - name: build and upload release assets
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/client
+          tauriScript: pnpm tauri
+          args: --config src-tauri/tauri.release.conf.json ${{ matrix.args }}
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'app-v__VERSION__' }}
+          releaseName: Ganbaru AI v__VERSION__
+          releaseBody: |
+            See the assets to download this version and install.
+
+            The release is created as a draft so assets can be inspected before publishing.
+          releaseDraft: true
+          prerelease: false
+          generateReleaseNotes: true

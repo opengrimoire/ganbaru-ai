@@ -701,6 +701,7 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             focus_main_window_for_second_launch(app);
         }))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(db_path::DatabaseState::default())
         .manage(notification::AppSoundState::default())
         .manage(notification::PomodoroOverlayState::default())

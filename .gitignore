@@ -13,6 +13,7 @@ extensions/chrome-dev/
 .env
 .env.*
 !.env.example
+apps/client/src-tauri/tauri.release.conf.json
 
 # IDE
 .vscode/

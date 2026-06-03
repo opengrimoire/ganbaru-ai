@@ -36,6 +36,8 @@ Docs describe the optimal/ideal end state of the app, not the current implementa
 > Update this when directories are created, renamed, or removed. Items marked (planned) do not exist yet.
 
 ```
+.github/
+  workflows/: GitHub Actions release workflows
 apps/
   client/: Tauri app (Svelte frontend + Rust backend)
     src/: Svelte frontend

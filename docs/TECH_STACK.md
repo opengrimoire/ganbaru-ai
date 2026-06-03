@@ -45,6 +45,7 @@ Key Tauri v2 capabilities used in this project:
 - **Tray icon API.** The app lives in the system tray when not focused, essential for an always-running productivity tool.
 - **Native messaging host binary.** The repo-owned `ganbaru-ai-native-messaging` Rust binary lets Chromium-based browser extensions ask the local app state whether a page should be blocked. Local setup generates separate app and dev native-host launchers so the normal extension and dev extension can be installed at the same time without sharing app config.
 - **File system plugin.** Reading and writing markdown files and vault assets to disk.
+- **Release and update pipeline.** GitHub Actions builds Linux x64 packages and Windows x64 installers through Tauri Action. Release builds inject a generated updater config from GitHub Actions variables and secrets, so the public updater key and GitHub Releases feed are embedded only in release artifacts. The in-app updater is user initiated from Settings, Updates, preserving the no-phone-home default.
 
 **Desktop-only features** (not available on mobile due to OS sandboxing): process management, native messaging, global mouse position polling, always-on-top multi-window, edge panel, work environment switching, fullscreen break overlay, desktop activity monitoring.
 

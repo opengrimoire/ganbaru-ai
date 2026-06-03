@@ -20,6 +20,7 @@
     "@ganbaru-ai/shared-types": "workspace:*",
     "@js-temporal/polyfill": "^0.5.0",
     "@tauri-apps/api": "2.11.0",
+    "@tauri-apps/plugin-updater": "2.10.1",
     "dompurify": "^3.4.0",
     "ical.js": "^2.2.1"
   },

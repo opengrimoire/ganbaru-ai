@@ -8,6 +8,7 @@
   import Music from "@lucide/svelte/icons/music";
   import SettingsIcon from "@lucide/svelte/icons/settings";
   import Timer from "@lucide/svelte/icons/timer";
+  import DownloadCloud from "@lucide/svelte/icons/download-cloud";
   import X from "@lucide/svelte/icons/x";
   import AppearanceSection from "./AppearanceSection.svelte";
   import CalendarScrollbar from "../calendar/CalendarScrollbar.svelte";
@@ -16,6 +17,7 @@
   import DoomscrollingSection from "./DoomscrollingSection.svelte";
   import DoomscrollingLimitEditor from "./DoomscrollingLimitEditor.svelte";
   import ShortcutsSection from "./ShortcutsSection.svelte";
+  import UpdatesSection from "./UpdatesSection.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { hasOnlyShortcutModifier } from "$lib/keyboard-shortcuts";
@@ -58,6 +60,7 @@
     { id: "focus", label: "Focus", icon: Timer },
     { id: "music", label: "Music", icon: Music },
     { id: "doomscrolling", label: "Doomscrolling", icon: GlobeOff },
+    { id: "updates", label: "Updates", icon: DownloadCloud },
     { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
   ];
 
@@ -335,6 +338,8 @@
             initialTab={initialDoomscrollingTab}
             onOpenLimitEditor={openDoomscrollingLimitEditor}
           />
+        {:else if activeSection === "updates"}
+          <UpdatesSection />
         {:else if activeSection === "shortcuts"}
           <ShortcutsSection />
         {/if}
