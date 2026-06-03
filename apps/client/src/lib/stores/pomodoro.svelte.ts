@@ -100,7 +100,9 @@ type PomodoroWindowCommand =
       eventEnd?: string;
       eventDate?: string;
       blockIdleTimeoutMinutes?: number | null;
+      syncIdleTimeoutOnExistingBlock?: boolean;
     }
+  | { kind: "set-active-idle-threshold-minutes"; minutes: number }
   | { kind: "dismiss-suspend"; resume: boolean }
   | { kind: "dismiss-idle"; resume: boolean }
   | { kind: "mark-idle-focus-failed"; failedAtMs?: number }
@@ -391,6 +393,8 @@ function isPomodoroWindowCommand(value: unknown): value is PomodoroWindowCommand
       return value.failedAtMs === undefined || isNonNegativeNumber(value.failedAtMs);
     case "add-focus-time":
       return isPositiveNumber(value.seconds);
+    case "set-active-idle-threshold-minutes":
+      return isPositiveNumber(value.minutes);
     case "set-dismissed-block-id":
       return isNullableString(value.id);
     case "transfer-block-id":
@@ -408,6 +412,10 @@ function isPomodoroWindowCommand(value: unknown): value is PomodoroWindowCommand
           value.blockIdleTimeoutMinutes === undefined ||
           value.blockIdleTimeoutMinutes === null ||
           isNonNegativeNumber(value.blockIdleTimeoutMinutes)
+        ) &&
+        (
+          value.syncIdleTimeoutOnExistingBlock === undefined ||
+          typeof value.syncIdleTimeoutOnExistingBlock === "boolean"
         )
       );
     case "dismiss-suspend":
@@ -1952,7 +1960,11 @@ function handleWindowCommand(command: PomodoroWindowCommand): void {
         command.eventEnd,
         command.eventDate,
         command.blockIdleTimeoutMinutes,
+        command.syncIdleTimeoutOnExistingBlock,
       );
+      return;
+    case "set-active-idle-threshold-minutes":
+      setActiveIdleThresholdMinutesInternal(command.minutes);
       return;
     case "dismiss-suspend":
       void dismissSuspend(command.resume);
@@ -2270,6 +2282,23 @@ function startIdleChecking() {
   stopIdleChecking();
   if (!shouldRunIdleChecks()) return;
   scheduleIdleCheck(0, idleCheckGeneration);
+}
+
+function setActiveIdleThresholdMinutesInternal(minutes: number): void {
+  if (!Number.isFinite(minutes) || minutes <= 0 || idleTimeoutMs === null) return;
+  const nextIdleMs = Math.round(minutes) * 60_000;
+  setActiveIdleTimeoutMs(nextIdleMs);
+}
+
+function setActiveIdleTimeoutMs(nextIdleMs: number | null): void {
+  if (idleTimeoutMs === nextIdleMs) return;
+  idleTimeoutMs = nextIdleMs;
+  if (nextIdleMs === null) {
+    stopIdleChecking();
+  } else {
+    startIdleChecking();
+  }
+  updateTray();
 }
 
 function stopIdleChecking() {
@@ -2901,15 +2930,12 @@ async function startFromBlockInternal(
   eventEnd?: string,
   eventDate?: string,
   blockIdleTimeoutMinutes?: number | null,
+  syncIdleTimeoutOnExistingBlock = true,
 ): Promise<void> {
   const newConfig = { ...DEFAULT_CONFIG, ...blockConfig };
 
   const newIdleMs = (blockIdleTimeoutMinutes != null && blockIdleTimeoutMinutes > 0)
     ? blockIdleTimeoutMinutes * 60_000 : null;
-  if (idleTimeoutMs !== newIdleMs) {
-    idleTimeoutMs = newIdleMs;
-    if (isRunning) startIdleChecking();
-  }
 
   const incomingEndMs = (eventEnd && eventDate)
     ? new Date(eventEnd.replace(" ", "T")).getTime()
@@ -2924,6 +2950,12 @@ async function startFromBlockInternal(
     incomingEndMs,
     hasOvertimeInterval: overtimeIntervalId !== null,
   });
+  const syncIdleTimeout =
+    syncIdleTimeoutOnExistingBlock ||
+    decision.kind === "new_session" ||
+    decision.kind === "transition" ||
+    decision.kind === "reconfigure";
+  if (syncIdleTimeout) setActiveIdleTimeoutMs(newIdleMs);
 
   switch (decision.kind) {
     case "noop":
@@ -3276,6 +3308,7 @@ export function getPomodoro() {
       eventEnd?: string,
       eventDate?: string,
       blockIdleTimeoutMinutes?: number | null,
+      syncIdleTimeoutOnExistingBlock?: boolean,
     ) {
       if (forwardWindowCommand({
         kind: "start-from-block",
@@ -3284,6 +3317,7 @@ export function getPomodoro() {
         eventEnd,
         eventDate,
         blockIdleTimeoutMinutes,
+        syncIdleTimeoutOnExistingBlock,
       })) return;
       await startFromBlockInternal(
         blockId,
@@ -3291,7 +3325,12 @@ export function getPomodoro() {
         eventEnd,
         eventDate,
         blockIdleTimeoutMinutes,
+        syncIdleTimeoutOnExistingBlock,
       );
+    },
+    setActiveIdleThresholdMinutes(minutes: number) {
+      if (forwardWindowCommand({ kind: "set-active-idle-threshold-minutes", minutes })) return;
+      setActiveIdleThresholdMinutesInternal(minutes);
     },
     async stopSession() {
       if (forwardWindowCommand({ kind: "stop-session" })) return;

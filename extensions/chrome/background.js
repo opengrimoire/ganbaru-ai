@@ -4,7 +4,7 @@ const STATUS_STORAGE_KEY = "status";
 const BLOCKED_PAGE_STORAGE_PREFIX = "blockedPage:";
 const ACTIVE_USAGE_STORAGE_KEY = "activeUsage";
 const USAGE_IDLE_THRESHOLD_SECONDS = 60;
-const BLOCKED_PAGE_RELEASE_CONFIRMATION_MS = 1000;
+const BLOCKED_PAGE_RELEASE_CONFIRMATION_MS = 3000;
 const recentRedirects = new Map();
 let lastEnforcementStateKey = "";
 
@@ -270,37 +270,57 @@ async function refreshBlockedPage(blockedPageId) {
   const remainingSeconds = typeof decision?.remainingSeconds === "number"
     ? decision.remainingSeconds
     : null;
+  const blocked = decision?.blocked === true;
+  const now = Date.now();
+  const previousUnblockedSince = typeof stored.value.unblockedSince === "number"
+    ? stored.value.unblockedSince
+    : null;
+  const unblockedSince = blocked ? null : previousUnblockedSince ?? now;
+  const unblockedStableMs = unblockedSince === null ? 0 : now - unblockedSince;
   const nextState = {
     ...stored.value,
     host,
     remainingSeconds,
     matchedRuleName: typeof decision?.matchedRuleName === "string" ? decision.matchedRuleName : null,
-    blocked: decision?.blocked === true,
-    updatedAt: Date.now(),
+    blocked,
+    active: decision?.active === true,
+    paused: decision?.paused === true,
+    pauseReason: typeof decision?.pauseReason === "string" ? decision.pauseReason : null,
+    phase: typeof decision?.phase === "string" ? decision.phase : "inactive",
+    unblockedSince,
+    updatedAt: now,
   };
   await blockedPageStore().set({ [stored.key]: nextState });
 
   return {
     ok: true,
-    blocked: decision?.blocked === true,
+    blocked,
     active: decision?.active === true,
+    paused: decision?.paused === true,
+    pauseReason: typeof decision?.pauseReason === "string" ? decision.pauseReason : null,
     phase: typeof decision?.phase === "string" ? decision.phase : "inactive",
     remainingSeconds,
     matchedRuleName: typeof decision?.matchedRuleName === "string" ? decision.matchedRuleName : null,
+    unblockedStableMs,
     host,
     originalUrl,
   };
 }
 
 async function confirmBlockedPageRelease(blockedPageId) {
-  const first = await refreshBlockedPage(blockedPageId);
-  if (first?.ok !== true || first.blocked !== false || typeof first.originalUrl !== "string") {
-    return first;
+  let state = await refreshBlockedPage(blockedPageId);
+  while (
+    state?.ok === true &&
+    state.blocked === false &&
+    typeof state.originalUrl === "string" &&
+    typeof state.unblockedStableMs === "number" &&
+    state.unblockedStableMs < BLOCKED_PAGE_RELEASE_CONFIRMATION_MS
+  ) {
+    await delay(BLOCKED_PAGE_RELEASE_CONFIRMATION_MS - state.unblockedStableMs);
+    state = await refreshBlockedPage(blockedPageId);
   }
 
-  await delay(BLOCKED_PAGE_RELEASE_CONFIRMATION_MS);
-  const second = await refreshBlockedPage(blockedPageId);
-  return second?.ok === true ? second : first;
+  return state;
 }
 
 function blockedPageUrl(blockedPageId) {

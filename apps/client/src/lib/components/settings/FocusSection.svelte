@@ -14,10 +14,12 @@
     FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
   } from "$lib/stores/preferences";
   import { getPreferences } from "$lib/stores/preferences.svelte";
+  import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import CustomSelect from "./CustomSelect.svelte";
   import ToggleSetting from "./ToggleSetting.svelte";
 
   const preferences = getPreferences();
+  const pomodoro = getPomodoro();
 
   type SelectOption = { value: string; label: string };
 
@@ -68,6 +70,12 @@
     const minutes = Number(value);
     if (!Number.isFinite(minutes)) return;
     preferences.setFocusIdleThresholdMinutes(minutes);
+    pomodoro.setActiveIdleThresholdMinutes(preferences.focusIdleThresholdMinutes);
+  }
+
+  function resetIdleThreshold(): void {
+    preferences.resetFocusIdleThresholdMinutes();
+    pomodoro.setActiveIdleThresholdMinutes(DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES);
   }
 
   function handleBreakFinishedRepeatChange(value: string): void {
@@ -170,7 +178,7 @@
         options={idleThresholdOptions}
         onChange={handleIdleThresholdChange}
         canReset={preferences.focusIdleThresholdMinutes !== DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES}
-        onReset={() => preferences.resetFocusIdleThresholdMinutes()}
+        onReset={resetIdleThreshold}
       />
       <ToggleSetting
         label="Idle pause by default"

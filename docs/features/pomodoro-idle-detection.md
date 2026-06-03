@@ -20,7 +20,7 @@ A reasonable value is 1-5 minutes:
 - **5 minutes** suits users who want to ignore short interruptions like quick water refills.
 - **10 or 15 minutes** suits users who want idle tracking only for longer disappearances.
 
-The value is stored per event through the pomodoro config. The normal event panel uses the Focus settings threshold when a Pomodoro event is created or saved with idle detection enabled, and stores `null` when the event's idle pause toggle is off.
+The value is stored per event through the pomodoro config. The normal event panel uses the Focus settings threshold when a Pomodoro event is created or saved with idle detection enabled, and stores `null` when the event's idle pause toggle is off. Changing the Focus settings threshold during an active focus session updates that session immediately when idle detection is already enabled. It does not enable idle detection for an active event whose idle timeout is `null`.
 
 The threshold applies only to focus phases. Breaks do not pause for idle, because being away during a break is the entire point of a break.
 

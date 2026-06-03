@@ -636,6 +636,7 @@
         activeBlock.end,
         activeBlock.start.split(" ")[0],
         pc.idleTimeoutMinutes,
+        false,
       );
       trackedBlockSnapshot = { ...activeBlock };
     } else if (pomodoro.activeBlockId && pomodoro.blockExpired) {

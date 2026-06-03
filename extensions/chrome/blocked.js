@@ -8,7 +8,7 @@ const actionButton = document.getElementById("close");
 const recheckButton = document.getElementById("recheck");
 const faviconEl = document.getElementById("favicon");
 
-const RELEASE_CONFIRMATION_MS = 1000;
+const RELEASE_CONFIRMATION_MS = 3000;
 let latestOriginalUrl = "";
 let latestBlocked = true;
 let refreshTimeoutId = null;
@@ -80,7 +80,9 @@ function renderBlockedState(state) {
       : "Focus session active";
     actionButton.textContent = "Close tab";
   } else {
-    scheduleReleaseConfirmation();
+    const unblockedStableMs =
+      typeof state?.unblockedStableMs === "number" ? state.unblockedStableMs : 0;
+    scheduleReleaseConfirmation(unblockedStableMs);
   }
 
   if (host && !faviconEl.src) faviconEl.src = faviconUrl(host);
@@ -117,19 +119,22 @@ function cancelReleaseConfirmation() {
   releaseTimeoutId = null;
 }
 
-function scheduleReleaseConfirmation() {
+function scheduleReleaseConfirmation(unblockedStableMs = 0) {
   if (releaseTimeoutId !== null || restoringOriginalUrl) return;
+  const delayMs = Math.max(0, RELEASE_CONFIRMATION_MS - unblockedStableMs);
   releaseTimeoutId = setTimeout(async () => {
     releaseTimeoutId = null;
     const state = await requestBlockedPageState();
     if (state?.ok !== true) return;
-    if (state.blocked === false) {
+    const stableMs =
+      typeof state.unblockedStableMs === "number" ? state.unblockedStableMs : 0;
+    if (state.blocked === false && stableMs >= RELEASE_CONFIRMATION_MS) {
       latestOriginalUrl = typeof state.originalUrl === "string" ? state.originalUrl : latestOriginalUrl;
       restoreOriginalUrl();
       return;
     }
     renderBlockedState(state);
-  }, RELEASE_CONFIRMATION_MS);
+  }, delayMs);
 }
 
 function clearBlockedPageState() {
