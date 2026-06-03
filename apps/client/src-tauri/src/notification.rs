@@ -1603,20 +1603,38 @@ fn reconcile_overlay_windows(
 
     if let Some(window) = app.get_webview_window(POMODORO_OVERLAY_MAIN_LABEL) {
         configure_svelte_overlay_window(&window, primary_monitor, background_color, true);
-    } else if let Err(err) = build_svelte_overlay_window(
-        app,
-        POMODORO_OVERLAY_MAIN_LABEL,
-        overlay_url(kind),
-        "Ganbaru AI pomodoro",
-        primary_monitor,
-        background_color,
-        true,
-    ) {
-        #[cfg(not(target_os = "linux"))]
-        for label in created_labels {
-            destroy_existing_window(app, &label);
+    } else {
+        #[cfg(target_os = "linux")]
+        {
+            build_svelte_overlay_window(
+                app,
+                POMODORO_OVERLAY_MAIN_LABEL,
+                overlay_url(kind),
+                "Ganbaru AI pomodoro",
+                primary_monitor,
+                background_color,
+                true,
+            )?;
         }
-        return Err(err);
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            build_svelte_overlay_window(
+                app,
+                POMODORO_OVERLAY_MAIN_LABEL,
+                overlay_url(kind),
+                "Ganbaru AI pomodoro",
+                primary_monitor,
+                background_color,
+                true,
+            )
+            .map_err(|err| {
+                for label in created_labels {
+                    destroy_existing_window(app, &label);
+                }
+                err
+            })?;
+        }
     }
 
     labels.push(POMODORO_OVERLAY_MAIN_LABEL.to_string());
