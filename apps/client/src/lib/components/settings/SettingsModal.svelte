@@ -4,12 +4,14 @@
   import Palette from "@lucide/svelte/icons/palette";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import GlobeOff from "@lucide/svelte/icons/globe-off";
+  import Info from "@lucide/svelte/icons/info";
   import Keyboard from "@lucide/svelte/icons/keyboard";
   import Music from "@lucide/svelte/icons/music";
   import SettingsIcon from "@lucide/svelte/icons/settings";
   import Timer from "@lucide/svelte/icons/timer";
   import DownloadCloud from "@lucide/svelte/icons/download-cloud";
   import X from "@lucide/svelte/icons/x";
+  import AboutSection from "./AboutSection.svelte";
   import AppearanceSection from "./AppearanceSection.svelte";
   import CalendarScrollbar from "../calendar/CalendarScrollbar.svelte";
   import FocusSection from "./FocusSection.svelte";
@@ -62,6 +64,7 @@
     { id: "doomscrolling", label: "Doomscrolling", icon: GlobeOff },
     { id: "updates", label: "Updates", icon: DownloadCloud },
     { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
+    { id: "about", label: "About", icon: Info },
   ];
 
   let activeSection = $state<SectionId>("appearance");
@@ -342,6 +345,8 @@
           <UpdatesSection />
         {:else if activeSection === "shortcuts"}
           <ShortcutsSection />
+        {:else if activeSection === "about"}
+          <AboutSection />
         {/if}
       </section>
       {#if detailView}

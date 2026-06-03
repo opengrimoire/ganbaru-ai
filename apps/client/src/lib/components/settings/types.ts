@@ -10,7 +10,8 @@ export type SectionId =
   | "music"
   | "doomscrolling"
   | "updates"
-  | "shortcuts";
+  | "shortcuts"
+  | "about";
 
 export type DoomscrollingSettingsTab = "limits" | "browser" | "mobile" | "desktop";
 

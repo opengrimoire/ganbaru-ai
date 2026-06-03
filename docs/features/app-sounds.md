@@ -81,5 +81,5 @@ This does not mean all user media must be 48 kHz. User media keeps its own sourc
 - Do not add packaged app sounds with mixed sample rates.
 - Do not rely on rodio's built-in resampler for app sounds.
 - Do not use browser notification sounds as a substitute for packaged app sounds.
-- Keep sound credits in `README.md`.
+- Keep sound credits in `README.md` and the Settings About section in sync.
 - If a sound sounds correct in VLC but wrong in the app, first check whether rodio is resampling it or opening the output stream at a mismatched rate.
