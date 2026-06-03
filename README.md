@@ -2,7 +2,9 @@
   <img src="apps/client/static/icon.png" alt="Ganbaru AI icon" width="20%" />
   <h1>Ganbaru AI</h1>
 
-Anti-procrastination project manager for life and work. Free, local, open-source, privacy-first, lightweight with opt-in AI.
+Anti-procrastination project manager for life and work.
+
+Free, local, open-source, privacy-first, lightweight with opt-in AI.
 
 </div>
 
@@ -15,6 +17,14 @@ Anti-procrastination project manager for life and work. Free, local, open-source
   <a href="#acknowledgments">Acknowledgments</a>
 </p>
 
+<p align="center">
+  <img src="docs/assets/readme-screenshot-1.png" alt="Ganbaru AI calendar, Pomodoro, and music interface" width="100%" />
+</p>
+
+<p align="center">
+  <img src="docs/assets/readme-screenshot-2.png" alt="Ganbaru AI settings and productivity interface" width="100%" />
+</p>
+
 > [!WARNING]
 > The app is under heavy development and is unstable.
 
@@ -24,13 +34,13 @@ Anti-procrastination project manager for life and work. Free, local, open-source
 |---|---|---|
 | **Calendar** | 100% custom-built with Svelte 5. Session blocks with drag-and-drop creation/resizing, day/week/month views, full RFC 5545 RRULE recurrence, auto-environment activation on block start | Available |
 | **Pomodoro timer** | Focus/break phases, configurable cycle durations, timeline rail visualization, idle detection, suspend/wake handling, pre-break notifications | Available |
-| **Kanban board** | Backlog/planned/in-progress/done columns, priority tiers (easy/medium/hard/epic), estimated pomodoro count, task-to-session linking | Available |
+| **Kanban board** | Backlog/planned/in-progress/done columns, priority tiers (easy/medium/hard/epic), estimated pomodoro count, task-to-session linking | Planned |
 | **Note-taking** | Tiptap block editor with slash commands, markdown storage on disk, bidirectional backlinks indexed in SQLite | Planned |
 | **Daily diary** | Morning and evening entry forms, mood/energy/sleep tracking, personal baselines for AI suggestions | Planned |
 | **Doomscrolling** | Chromium-based development extension that blocks configured websites and category stacks during selected Pomodoro phases; desktop app blocking includes a blocklist, an on-demand app picker, and automatic Linux app closing, while Firefox, richer rules, and mobile app-level blocking are planned | Early desktop slice |
 | **Work environments** | Saved configs per session block: apps to open/close, browser tabs, playlist, blocker rules. Auto-activated by the calendar | Planned |
 | **Edge panel** | Always-on-top sidebar with live pomodoro timer, quick-add tasks, music controls, active environment name | Planned |
-| **Music player** | Local file playback (Symphonia/FFmpeg), YouTube via IFrame API, playlists tied to session blocks and environments | Planned |
+| **Music player** | Local file playback (Symphonia/FFmpeg), YouTube via IFrame API, playlists tied to session blocks and environments | Available |
 | **AI panel** | Embedded terminal (xterm.js) for Codex or another CLI coding agent, BYOK chat widget (OpenAI API, OpenAI-compatible providers, Ollama), calendar-driven session switching, context injection from app state | Planned |
 | **Project management** | Lifecycle templates (brainstorming, evaluation, planning, execution), requirement version control, date cascade, report generation | Planned |
 | **Sync** | Yjs CRDTs with self-hosted Hocuspocus server, E2E encryption, collaborative workspaces with live presence | Planned |
