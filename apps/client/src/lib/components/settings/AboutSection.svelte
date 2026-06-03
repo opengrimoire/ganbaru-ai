@@ -154,11 +154,11 @@
       <div class="px-1 py-1">
         <div class="text-[0.866667rem] text-foreground">TL;DR</div>
         <div class="mt-0.5 text-[0.8rem] leading-5 text-muted-foreground">
-          It's free. You can use it for commercial purposes. You can modify the app's
-          source code freely. You can distribute your source code changes freely. If
-          you distribute or host a modified version of the app, keep that
-          redistribution AGPL 3.0 so it remains open and free. Authors are not
-          responsible for any damages or issues arising from your use of this software.
+          Free and open source. You can use, modify, share, and sell Ganbaru AI.
+          If you distribute or host a modified version, you must provide the source
+          code and license that version under AGPL 3.0. Patent rights from
+          contributors are included. The app is provided without warranty, and
+          authors are not liable for damages.
         </div>
       </div>
     </div>
