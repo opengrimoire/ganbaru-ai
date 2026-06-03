@@ -40,6 +40,8 @@ These rules are enforced globally on the developer environment and reiterated in
 
 **Flag new and unmaintained packages.** When suggesting new dependencies, the contributor (human or AI) must check download counts, last-publish dates, and maintenance status. Low-download or unmaintained packages are flagged before being recommended.
 
+**Release workflow hardening.** Release jobs must avoid dependency caches, avoid mutable action tags, and keep write tokens separate from signing keys. The GitHub release workflow builds unsigned artifacts with read-only repository access, signs updater assets in the protected `release` environment, then publishes the draft release in a separate job with `contents: write`. The Tauri updater private key is not present in the build job or the publish job. Release jobs use fixed runner labels, full commit SHA action pins, `persist-credentials: false` on checkout, and explicit artifact handoff between jobs.
+
 ## Sandbox boundaries
 
 Tauri capabilities define which APIs the frontend (Svelte) can call into the backend (Rust). The default capability set is narrow: no generic filesystem plugin permission, no shell access, no arbitrary process spawn, no opener permission, and only the window, event-listen, webview zoom, and global shortcut permissions needed by current UI code.

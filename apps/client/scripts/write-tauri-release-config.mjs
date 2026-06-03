@@ -54,7 +54,7 @@ function updaterEndpoint() {
 const config = {
   $schema: "https://schema.tauri.app/config/2",
   bundle: {
-    createUpdaterArtifacts: true,
+    createUpdaterArtifacts: false,
   },
   plugins: {
     updater: {
