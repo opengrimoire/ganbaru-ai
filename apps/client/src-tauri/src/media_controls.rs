@@ -55,6 +55,7 @@ pub fn setup_media_controls(app: &tauri::AppHandle) -> Result<(), Box<dyn std::e
 const MIN_PLAYBACK_RATE: f64 = 0.25;
 const MAX_PLAYBACK_RATE: f64 = 2.0;
 
+#[cfg(target_os = "linux")]
 fn clamp_unit(value: f64) -> f64 {
     if value.is_finite() {
         value.clamp(0.0, 1.0)
@@ -63,6 +64,7 @@ fn clamp_unit(value: f64) -> f64 {
     }
 }
 
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn clamp_playback_rate(value: f64) -> f64 {
     if value.is_finite() {
         value.clamp(MIN_PLAYBACK_RATE, MAX_PLAYBACK_RATE)
@@ -77,6 +79,7 @@ fn emit_control(app: &tauri::AppHandle, payload: MusicHardwareControlPayload) {
     let _ = app.emit("music-hardware-control", payload);
 }
 
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn control(action: &'static str) -> MusicHardwareControlPayload {
     MusicHardwareControlPayload {
         action,
@@ -88,6 +91,7 @@ fn control(action: &'static str) -> MusicHardwareControlPayload {
     }
 }
 
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn control_delta(action: &'static str, delta_ms: i64) -> MusicHardwareControlPayload {
     MusicHardwareControlPayload {
         action,
@@ -96,6 +100,7 @@ fn control_delta(action: &'static str, delta_ms: i64) -> MusicHardwareControlPay
     }
 }
 
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn control_position(action: &'static str, position_ms: u64) -> MusicHardwareControlPayload {
     MusicHardwareControlPayload {
         action,
@@ -104,6 +109,7 @@ fn control_position(action: &'static str, position_ms: u64) -> MusicHardwareCont
     }
 }
 
+#[cfg(target_os = "linux")]
 fn control_volume(action: &'static str, volume: f64) -> MusicHardwareControlPayload {
     MusicHardwareControlPayload {
         action,
@@ -112,6 +118,7 @@ fn control_volume(action: &'static str, volume: f64) -> MusicHardwareControlPayl
     }
 }
 
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn control_rate(action: &'static str, rate: f64) -> MusicHardwareControlPayload {
     MusicHardwareControlPayload {
         action,
@@ -120,6 +127,7 @@ fn control_rate(action: &'static str, rate: f64) -> MusicHardwareControlPayload 
     }
 }
 
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn control_shuffle(action: &'static str, shuffle_enabled: bool) -> MusicHardwareControlPayload {
     MusicHardwareControlPayload {
         action,
@@ -128,14 +136,17 @@ fn control_shuffle(action: &'static str, shuffle_enabled: bool) -> MusicHardware
     }
 }
 
+#[cfg(target_os = "linux")]
 fn ms_to_us_i64(ms: u64) -> i64 {
     ms.saturating_mul(1_000).min(i64::MAX as u64) as i64
 }
 
+#[cfg(target_os = "linux")]
 fn us_to_ms_i64(us: i64) -> i64 {
     us / 1_000
 }
 
+#[cfg(target_os = "linux")]
 fn us_to_ms_u64(us: i64) -> u64 {
     if us <= 0 {
         0
@@ -783,18 +794,19 @@ mod windows {
                 status,
                 title,
                 source_kind_label,
-                artwork_url: _,
+                artwork_url,
                 can_play_pause,
                 can_previous,
                 can_next,
                 can_seek,
                 position_ms,
                 duration_ms,
-                volume: _,
-                muted: _,
+                volume,
+                muted,
                 rate,
                 shuffle_enabled,
             } = update;
+            let _ = (artwork_url, volume, muted);
 
             Self {
                 status,

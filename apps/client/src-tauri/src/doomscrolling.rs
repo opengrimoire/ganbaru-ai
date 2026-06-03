@@ -571,7 +571,7 @@ fn normalize_process_match_name_aliases(name: &str) -> Vec<String> {
 fn normalize_process_match_names(name: &str, process_names: Vec<String>) -> Vec<String> {
     let mut seen = HashSet::new();
     let mut normalized = Vec::new();
-    for candidate in std::iter::once(name.to_string()).chain(process_names.into_iter()) {
+    for candidate in std::iter::once(name.to_string()).chain(process_names) {
         for process_name in normalize_process_match_name_aliases(&candidate) {
             let key = app_name_key(&process_name);
             if is_protected_desktop_app_name(&process_name) || seen.contains(&key) {
@@ -1233,8 +1233,9 @@ fn list_blocked_desktop_app_matches(
 
 #[cfg(not(target_os = "linux"))]
 fn list_blocked_desktop_app_matches(
-    _apps: Vec<DoomscrollingDesktopAppRuleInput>,
+    apps: Vec<DoomscrollingDesktopAppRuleInput>,
 ) -> Vec<DoomscrollingRunningDesktopAppMatch> {
+    let _ = desktop_rule_matchers(apps);
     Vec::new()
 }
 
