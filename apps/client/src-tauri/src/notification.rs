@@ -1,9 +1,12 @@
-use notify_rust::{Hint, Notification};
+#[cfg(target_os = "linux")]
+use notify_rust::Hint;
+use notify_rust::Notification;
 use rodio::{ChannelCount, Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, SampleRate};
 use serde::{Deserialize, Serialize};
 #[cfg(target_os = "linux")]
 use std::collections::{HashMap, HashSet};
 use std::io::{Cursor, Read};
+#[cfg(target_os = "linux")]
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{
@@ -23,6 +26,34 @@ const APP_SOUND_COMMAND_QUEUE_LIMIT: usize = 32;
 const APP_SOUND_PLAYER_QUEUE_LIMIT: usize = 8;
 const APP_SOUND_OUTPUT_SAMPLE_RATE_HZ: u32 = 48_000;
 const APP_SOUND_OUTPUT_CHANNELS: u16 = 2;
+
+fn apply_linux_notification_hints(
+    notification: &mut Notification,
+    category: Option<&str>,
+    desktop_entry: bool,
+    transient: bool,
+) {
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(category) = category {
+            notification.hint(Hint::Category(category.to_string()));
+        }
+        if desktop_entry {
+            notification.hint(Hint::DesktopEntry("ganbaru-ai".to_string()));
+        }
+        if transient {
+            notification.hint(Hint::Transient(true));
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = notification;
+        let _ = category;
+        let _ = desktop_entry;
+        let _ = transient;
+    }
+}
 
 #[derive(Clone, Serialize)]
 struct AddTimePayload {
@@ -1990,16 +2021,15 @@ pub fn show_event_notification(
         } else {
             "Open Ganbaru AI"
         };
-        let result = Notification::new()
+        let mut notification = Notification::new();
+        notification
             .appname("Ganbaru AI")
             .summary(&summary)
             .body(&body)
             .action("open", action_label)
-            .timeout(15_000)
-            .hint(Hint::Category("calendar".into()))
-            .hint(Hint::DesktopEntry("ganbaru-ai".into()))
-            .hint(Hint::Transient(true))
-            .show();
+            .timeout(15_000);
+        apply_linux_notification_hints(&mut notification, Some("calendar"), true, true);
+        let result = notification.show();
 
         match result {
             Ok(handle) => {
@@ -2028,14 +2058,15 @@ pub fn show_benchmark_notification(
 ) {
     app_sounds.play(AppSound::EventNotification);
     std::thread::spawn(move || {
-        let result = Notification::new()
+        let mut notification = Notification::new();
+        notification
             .summary(&title)
             .body(&body)
             .action("show_summary", "Show summary")
             .timeout(10_000)
-            .id(9002)
-            .hint(Hint::Transient(true))
-            .show();
+            .id(9002);
+        apply_linux_notification_hints(&mut notification, None, false, true);
+        let result = notification.show();
 
         match result {
             Ok(handle) => {
@@ -2076,16 +2107,15 @@ pub fn show_doomscrolling_desktop_block_notification(
         let body = escape_notification_markup(&format!(
             "{app_name} was closed because it is blocked by your desktop rules. Change this in Settings > Doomscrolling > Desktop apps (or click this notification)"
         ));
-        let result = Notification::new()
+        let mut notification = Notification::new();
+        notification
             .appname("Ganbaru AI")
             .summary("App closed by Ganbaru AI")
             .body(&body)
             .action("default", "Open desktop apps")
-            .timeout(10_000)
-            .hint(Hint::Category("device".into()))
-            .hint(Hint::DesktopEntry("ganbaru-ai".into()))
-            .hint(Hint::Transient(true))
-            .show();
+            .timeout(10_000);
+        apply_linux_notification_hints(&mut notification, Some("device"), true, true);
+        let result = notification.show();
 
         match result {
             Ok(handle) => {
@@ -2141,16 +2171,15 @@ pub fn show_doomscrolling_desktop_limit_notification(
         let body = escape_notification_markup(&format!(
             "{app_name} was closed because {limit_name} reached its limit. Change this in Settings > Doomscrolling > Limits (or click this notification)"
         ));
-        let result = Notification::new()
+        let mut notification = Notification::new();
+        notification
             .appname("Ganbaru AI")
             .summary("Usage limit reached")
             .body(&body)
             .action("default", "Open limits")
-            .timeout(10_000)
-            .hint(Hint::Category("device".into()))
-            .hint(Hint::DesktopEntry("ganbaru-ai".into()))
-            .hint(Hint::Transient(true))
-            .show();
+            .timeout(10_000);
+        apply_linux_notification_hints(&mut notification, Some("device"), true, true);
+        let result = notification.show();
 
         match result {
             Ok(handle) => {
@@ -2450,11 +2479,9 @@ pub fn show_pomodoro_notification(
         if allow_add_time.unwrap_or(true) {
             notification.action("add_time", "Extend focus 3 minutes");
         }
-        let result = notification
-            .timeout(timeout_ms as i32)
-            .id(9001)
-            .hint(Hint::Transient(true))
-            .show();
+        notification.timeout(timeout_ms as i32).id(9001);
+        apply_linux_notification_hints(&mut notification, None, false, true);
+        let result = notification.show();
 
         match result {
             Ok(handle) => {
@@ -2475,18 +2502,17 @@ pub fn show_pomodoro_notification(
 pub fn show_paused_focus_notification(app: tauri::AppHandle, app_sounds: State<'_, AppSoundState>) {
     app_sounds.play(AppSound::EventNotification);
     std::thread::spawn(move || {
-        let result = Notification::new()
+        let mut notification = Notification::new();
+        notification
             .appname("Ganbaru AI")
             .summary("Focus session is paused")
             .body("Your focus session is still paused.")
             .action("resume", "Resume focus")
             .action("stop_asking", "Stop asking")
             .timeout(15_000)
-            .id(9003)
-            .hint(Hint::Category("reminder".into()))
-            .hint(Hint::DesktopEntry("ganbaru-ai".into()))
-            .hint(Hint::Transient(true))
-            .show();
+            .id(9003);
+        apply_linux_notification_hints(&mut notification, Some("reminder"), true, true);
+        let result = notification.show();
 
         match result {
             Ok(handle) => {
