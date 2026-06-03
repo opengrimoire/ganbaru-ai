@@ -9,6 +9,7 @@
 import type { Temporal as TemporalPolyfill } from "@js-temporal/polyfill";
 declare global {
   const __GANBARU_AI_BUILD_REF__: string;
+  const __GANBARU_AI_GITHUB_REPOSITORY__: string;
 
   // eslint-disable-next-line no-var
   var Temporal: typeof TemporalPolyfill;

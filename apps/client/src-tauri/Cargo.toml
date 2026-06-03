@@ -41,6 +41,7 @@ notify-rust = "4"
 # ppmd, deflate64, and time; we only need plain deflate for ICS bundles, so
 # the import path stays narrow and the binary stays lean.
 zip = { version = "8", default-features = false, features = ["deflate"] }
+tauri-plugin-opener = "2.5.4"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"

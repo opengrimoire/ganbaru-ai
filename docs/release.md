@@ -78,4 +78,6 @@ The generated file is ignored by git and must not be committed.
 
 The build job creates unsigned installers with the public updater configuration embedded. The signing job signs only updater assets (`.AppImage`, `.exe`, and `.msi`) with the Tauri signer. The publish job writes `latest.json` from those signatures and points each platform to the tag-specific release asset URL.
 
-The app does not check for updates in the background. Users can check manually in Settings, Updates. That button contacts the configured GitHub Releases feed, verifies the signed artifact, downloads it, installs it, and restarts the app.
+Release builds check the configured GitHub Releases feed at most once per day by default to notify users when a new version is available. Users can turn this off in Settings, Updates. The automatic check never downloads or installs anything.
+
+When an update is available, the main window shows a small prompt with Install update, Later, and Release notes actions. Install update downloads the signed artifact, verifies it through Tauri's updater, installs it, and restarts the app. Release notes opens the matching GitHub Release page in the default browser, using a Tauri opener permission scoped to `https://github.com/opengrimoire/ganbaru-ai/releases/tag/app-v*`. Users can also run the same check manually from Settings, Updates.

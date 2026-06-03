@@ -80,17 +80,18 @@ As of May 29, 2026, `pnpm -w run validate` is the normal code gate: type checks,
 - `RUSTSEC-2026-0097`: `rand` 0.7.3 is unsound when a custom logger reenters thread-local RNG calls during reseeding. The remaining path is `tauri-utils`, `kuchikiki`, `selectors`, `phf_codegen`, and `rand` 0.7.3. Ganbaru AI does not install a custom logger that uses `rand::thread_rng`; remove this warning when the upstream parser chain no longer depends on `rand` 0.7.
 - `uds_windows` 1.2.0 is yanked through `notify-rust` and `zbus`. It is a transitive Windows crate in the notification stack. Remove it when `notify-rust` or `zbus` releases a compatible path without the yanked package.
 
-## No phone home
+## Network defaults
 
-The app does not initiate any network traffic without an explicit user-configured destination:
+The app does not send analytics, telemetry, crash reports, or usage data. Network traffic is limited to user-facing features with visible configuration:
 
 - Sync goes to the user's chosen Hocuspocus server.
 - AI calls go to the user's chosen provider (OpenAI API, OpenAI-compatible provider, another explicitly configured provider, or local Ollama).
 - Doomscrolling extension only talks to the local Tauri backend.
-- Update checks contact the configured GitHub Releases feed only when the user presses Check for updates. There is no background update check.
+- Release builds check the configured GitHub Releases feed at most once per day by default to notify the user when an update is available. Users can turn this off in Settings, Updates. The app never downloads or installs updates until the user chooses that action.
+- The update prompt can open the matching GitHub Release page in the default browser. The Tauri opener permission is scoped to `https://github.com/opengrimoire/ganbaru-ai/releases/tag/app-v*`, not broad HTTP or HTTPS URL opening.
 - No crash report, no usage analytics, no font loading from CDNs, no analytics scripts in the webview.
 
-A network filter (e.g. Little Snitch on macOS, an outbound firewall on Linux) should see no traffic from Ganbaru AI when the user has not configured sync or AI. This is testable, and it is part of the project's brand.
+A network filter (e.g. Little Snitch on macOS, an outbound firewall on Linux) should see only the configured update check in a release build when the user has not configured sync or AI. Clicking Release notes can also open the matching GitHub Release page in the user's default browser. Turning off update notifications returns the app to no external traffic unless the user starts a manual update check, opens release notes from an already visible update prompt, or configures another network feature.
 
 ## Handling code copied from web sources
 

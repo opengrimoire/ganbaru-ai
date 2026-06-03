@@ -15,6 +15,7 @@
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { getZoom } from "$lib/stores/zoom.svelte";
   import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
+  import { getUpdateManager } from "$lib/stores/updates.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { getDetachedWindows } from "$lib/stores/detached-windows.svelte";
   import { selectActivePomodoroBlock } from "$lib/stores/pomodoro-scheduler";
@@ -42,6 +43,7 @@
   import MusicView from "$lib/components/music/MusicView.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import TooltipHost from "$lib/components/ui/TooltipHost.svelte";
+  import UpdateNotificationToast from "$lib/components/updates/UpdateNotificationToast.svelte";
   import { formatEventNotificationBody } from "$lib/components/calendar/event-notifications";
   import {
     firstMarkTime,
@@ -67,6 +69,7 @@
   const pomodoro = getPomodoro();
   const zoom = getZoom();
   const settingsLauncher = getSettingsLauncher();
+  const updates = getUpdateManager();
   const viewport = getViewport();
   const detachedWindows = getDetachedWindows();
   let unlistenCalendarNotificationOpen: UnlistenFn | null = null;
@@ -185,6 +188,7 @@
   onMount(() => {
     perfMark("boot.app-mount");
     if (isMainWindow) {
+      void updates.checkAutomatically();
       listen("calendar-notification-open", () => {
         nav.navigate("calendar");
       })
@@ -839,6 +843,10 @@
       kind={completionOverlay.kind}
       onDismiss={() => { completionOverlay = null; }}
     />
+  {/if}
+
+  {#if isMainWindow}
+    <UpdateNotificationToast />
   {/if}
 
   {#if BenchmarkOverlay}

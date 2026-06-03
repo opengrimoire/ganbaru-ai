@@ -12,6 +12,7 @@ const configDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(configDir, "../..");
 const appVersion = readAppVersion();
 const buildRef = `${appVersion}+${readGitCommit()}${isGitDirty() ? "-dirty" : ""}`;
+const githubRepository = process.env.GANBARU_AI_RELEASE_REPOSITORY ?? "opengrimoire/ganbaru-ai";
 
 function readAppVersion(): string {
   const raw = readFileSync(path.join(configDir, "package.json"), "utf8");
@@ -156,6 +157,7 @@ export default defineConfig({
   plugins: [tauriDevReady(), ...skipSvelteStyleVirtuals(tailwindcss()), svelte()],
   define: {
     __GANBARU_AI_BUILD_REF__: JSON.stringify(buildRef),
+    __GANBARU_AI_GITHUB_REPOSITORY__: JSON.stringify(githubRepository),
   },
   resolve: {
     alias: {
