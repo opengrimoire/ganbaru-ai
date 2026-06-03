@@ -24,6 +24,7 @@ mod themes;
 mod timezone_migration;
 mod tray;
 mod vault;
+mod window_shape;
 
 static PROCESS_START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
 static PLATFORM_LABEL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
@@ -844,6 +845,7 @@ pub fn run() {
         ])
         .setup(|app| {
             clear_doomscrolling_enforcement_state_best_effort(app.handle(), "during startup");
+            window_shape::setup_main_window(app.handle())?;
             music::setup_youtube_host(app.handle())?;
             media_controls::setup_media_controls(app.handle())?;
             if let Err(err) = notification::restore_stale_shortcuts(app.handle()) {
