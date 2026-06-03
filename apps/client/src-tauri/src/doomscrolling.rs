@@ -1314,7 +1314,7 @@ fn windows_foreground_window() -> Option<windows::Win32::Foundation::HWND> {
     use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
 
     let hwnd = unsafe { GetForegroundWindow() };
-    if hwnd.0 == 0 {
+    if hwnd.0.is_null() {
         None
     } else {
         Some(hwnd)
