@@ -4,12 +4,24 @@ import {
   isCalendarViewMode,
   type CalendarViewMode,
 } from "$lib/components/calendar/types";
+import {
+  DEFAULT_LANGUAGE_PREFERENCE,
+  LANGUAGE_PREFERENCES,
+  isLanguagePreference,
+  parseLanguagePreference,
+  type LanguagePreference,
+} from "$lib/i18n/locales";
 
 export {
   CALENDAR_VIEW_MODES,
   DEFAULT_CALENDAR_VIEW_MODE,
+  DEFAULT_LANGUAGE_PREFERENCE,
+  LANGUAGE_PREFERENCES,
   isCalendarViewMode,
+  isLanguagePreference,
+  parseLanguagePreference,
   type CalendarViewMode,
+  type LanguagePreference,
 };
 
 /**

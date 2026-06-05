@@ -15,12 +15,14 @@ import {
   DEFAULT_FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
   DEFAULT_TITLE_BAR_VISIBILITY,
   DEFAULT_CALENDAR_VIEW_MODE,
+  LANGUAGE_PREFERENCES,
   type CalendarTimeFormat,
   type CalendarViewMode,
   type FocusBreakEndEscPresses,
   type FocusBreakExtensionLimit,
   type FocusBreakSoundIntervalSeconds,
   type FocusPauseNotificationIntervalMinutes,
+  type LanguagePreference,
   type TitleBarControlId,
   type TitleBarVisibility,
   clampFocusIdleThresholdMinutes,
@@ -38,6 +40,7 @@ import {
   shouldNormalizeTitleBarVisibility,
 } from "./preferences";
 import { getConfigKey, setConfigKey } from "../vault/config";
+import { getLocalization } from "$lib/i18n/translator.svelte";
 
 const FONT_FAMILY_CONFIG_KEY = "preferences.fontFamilyId";
 const FONT_SCALE_CONFIG_KEY = "preferences.fontScale";
@@ -189,6 +192,7 @@ let focusPauseNotificationIntervalMinutes = $state<FocusPauseNotificationInterva
 );
 let musicPauseOnPomodoroPause = $state<boolean>(loadSavedMusicPauseOnPomodoroPause());
 let titleBarVisibility = $state<TitleBarVisibility>(loadSavedTitleBarVisibility());
+const localization = getLocalization();
 
 function applyPreferencesToDom(): void {
   if (typeof document === "undefined") return;
@@ -335,6 +339,12 @@ export function getPreferences() {
     get eventTimezoneDisplay(): EventTimezoneDisplay {
       return eventTimezoneDisplay;
     },
+    get languagePreference(): LanguagePreference {
+      return localization.languagePreference;
+    },
+    get languagePreferences(): readonly (typeof LANGUAGE_PREFERENCES)[number][] {
+      return LANGUAGE_PREFERENCES;
+    },
     get calendarTimeFormat(): CalendarTimeFormat {
       return calendarTimeFormat;
     },
@@ -373,6 +383,7 @@ export function getPreferences() {
     },
     setFontFamily,
     setFontScale,
+    setLanguagePreference: localization.setLanguagePreference,
     setEventTimezoneDisplay,
     setCalendarTimeFormat,
     setCalendarViewMode,

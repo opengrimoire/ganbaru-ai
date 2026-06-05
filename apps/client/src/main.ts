@@ -6,6 +6,7 @@ import { mount } from "svelte";
 import { invoke } from "@tauri-apps/api/core";
 import { ensureConfigLoaded } from "./lib/vault/config";
 import { getActiveVaultInfo } from "./lib/vault/state";
+import { initializeLocalizationFromConfig } from "./lib/i18n/translator.svelte";
 import { hydrateUserThemes } from "./lib/stores/theme.svelte";
 import {
   HARNESS_VERSION,
@@ -112,6 +113,7 @@ const appPromise = (async () => {
       return await mountVaultSetupView(null);
     }
     await ensureConfigLoaded();
+    initializeLocalizationFromConfig();
     const benchmarkResumePending = await hasFreshBenchmarkResumeState();
     if (!benchmarkResumePending) {
       await hydrateUserThemes();

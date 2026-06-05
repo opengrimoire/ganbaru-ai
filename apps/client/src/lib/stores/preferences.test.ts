@@ -23,6 +23,7 @@ import {
   FOCUS_BREAK_SOUND_INTERVAL_SECONDS,
   FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
   DEFAULT_TITLE_BAR_VISIBILITY,
+  DEFAULT_LANGUAGE_PREFERENCE,
   TITLE_BAR_CONTROL_IDS,
   clampFocusIdleThresholdMinutes,
   clampFontScale,
@@ -34,10 +35,12 @@ import {
   isFocusBreakSoundIntervalSeconds,
   isFocusPauseNotificationIntervalMinutes,
   isTitleBarControlId,
+  isLanguagePreference,
   parseFocusBreakEndEscPresses,
   parseFocusBreakExtensionLimit,
   parseFocusBreakSoundIntervalSeconds,
   parseFocusPauseNotificationIntervalMinutes,
+  parseLanguagePreference,
   parseTitleBarVisibility,
   resolveFontFamilyStack,
   shouldNormalizeTitleBarVisibility,
@@ -166,6 +169,26 @@ describe("calendar appearance preferences", () => {
     expect(isCalendarViewMode("7d")).toBe(false);
     expect(isCalendarViewMode("agenda")).toBe(false);
     expect(isCalendarViewMode(undefined)).toBe(false);
+  });
+});
+
+describe("language preferences", () => {
+  it("defaults to the system language", () => {
+    expect(DEFAULT_LANGUAGE_PREFERENCE).toBe("system");
+  });
+
+  it("accepts supported language preferences only", () => {
+    expect(isLanguagePreference("system")).toBe(true);
+    expect(isLanguagePreference("en")).toBe(true);
+    expect(isLanguagePreference("es")).toBe(true);
+    expect(isLanguagePreference("fr")).toBe(false);
+    expect(isLanguagePreference(undefined)).toBe(false);
+  });
+
+  it("falls back to system when parsing invalid stored language preferences", () => {
+    expect(parseLanguagePreference("es")).toBe("es");
+    expect(parseLanguagePreference("fr")).toBe(DEFAULT_LANGUAGE_PREFERENCE);
+    expect(parseLanguagePreference(null)).toBe(DEFAULT_LANGUAGE_PREFERENCE);
   });
 });
 
