@@ -35,10 +35,13 @@ export const en = {
       "If you are coming from a previous installation, import your existing Ganbaru AI folder.",
     developmentBuildWarning: (folderName: string) =>
       `Development build: use the default ${folderName} folder, or choose a copy of your production folder. Do not point dev at your real production data.`,
-    defaultLocation: "Default location",
+    defaultLocation: "Default folder",
     useDefaultFolder: "Use the default folder",
     changeFolder: "Change folder",
     importFolder: "Import folder",
+    languageSelectorLabel: "Choose language",
+    languageSearchPlaceholder: "Search languages...",
+    noLanguagesFound: "No languages found.",
   },
   dataFolderError: {
     startup:

@@ -43,10 +43,13 @@ export const es = {
       "Si vienes de una instalación anterior, importa tu carpeta de Ganbaru AI existente.",
     developmentBuildWarning: (folderName: string) =>
       `Compilación de desarrollo: usa la carpeta ${folderName} predeterminada, o elige una copia de tu carpeta de producción. No apuntes dev a tus datos reales de producción.`,
-    defaultLocation: "Ubicación predeterminada",
+    defaultLocation: "Carpeta predeterminada",
     useDefaultFolder: "Usar la carpeta predeterminada",
     changeFolder: "Cambiar carpeta",
     importFolder: "Importar carpeta",
+    languageSelectorLabel: "Elegir idioma",
+    languageSearchPlaceholder: "Buscar idiomas...",
+    noLanguagesFound: "No se encontraron idiomas.",
   },
   dataFolderError: {
     startup:

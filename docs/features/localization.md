@@ -14,6 +14,14 @@ The selected value persists in the active Ganbaru AI folder root `config.json` a
 
 `system` resolves from `navigator.languages` and then `navigator.language`. Exact supported locale matches win first; otherwise the base language is matched, so `es-MX` resolves to `es`. If no candidate is supported, the app resolves to English.
 
+## Data folder setup
+
+The first-run "Choose where to store your data" screen shows a compact language dropdown above the heading. The trigger has no filled background and shows only the language icon, the active resolved language name, and the chevron. The dropdown includes a search field because this control will grow as more locales are added. The system option shows the resolved language in parentheses, such as `System language (English)`.
+
+This screen can appear before an active Ganbaru AI folder exists, so it cannot assume `config.json` is available. A language selected here is applied immediately with `persist: false`, then stored as a temporary local setup preference. After the user creates or imports a Ganbaru AI folder, the temporary value is copied into `preferences.language`, flushed to the new active folder's `config.json`, and cleared. Main boot also checks for that temporary value after `ensureConfigLoaded()` so the handoff still happens before the app mounts if the setup window reloads first.
+
+The setup trigger displays the resolved locale name for `system`, such as `Español` for `es-MX`, and falls back to `English` when the system language is unsupported.
+
 ## Runtime behavior
 
 `main.ts` loads the active config before mounting Svelte and initializes localization from that config. The localization store then exposes:

@@ -4,9 +4,13 @@ import "@fontsource-variable/inter";
 import "./app.css";
 import { mount } from "svelte";
 import { invoke } from "@tauri-apps/api/core";
-import { ensureConfigLoaded } from "./lib/vault/config";
+import { ensureConfigLoaded, flushConfig } from "./lib/vault/config";
 import { getActiveVaultInfo } from "./lib/vault/state";
-import { initializeLocalizationFromConfig } from "./lib/i18n/translator.svelte";
+import { getLocalization, initializeLocalizationFromConfig } from "./lib/i18n/translator.svelte";
+import {
+  clearPreVaultLanguagePreference,
+  readPreVaultLanguagePreference,
+} from "./lib/i18n/pre-vault-language";
 import { hydrateUserThemes } from "./lib/stores/theme.svelte";
 import {
   HARNESS_VERSION,
@@ -67,6 +71,24 @@ async function hasFreshBenchmarkResumeState(): Promise<boolean> {
   }
 }
 
+function safeStorage(): Storage | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    return window.localStorage;
+  } catch {
+    return undefined;
+  }
+}
+
+async function applyPreVaultLanguagePreference(): Promise<void> {
+  const storage = safeStorage();
+  const preference = readPreVaultLanguagePreference(storage);
+  if (!preference) return;
+  getLocalization().setLanguagePreference(preference);
+  await flushConfig();
+  clearPreVaultLanguagePreference(storage);
+}
+
 // Boot order: validate the active Ganbaru AI folder, hydrate root
 // config.json, load user themes from SQLite, then mount App. Config and theme
 // reads block first paint so the initial render matches what the user has on
@@ -114,6 +136,7 @@ const appPromise = (async () => {
     }
     await ensureConfigLoaded();
     initializeLocalizationFromConfig();
+    await applyPreVaultLanguagePreference();
     const benchmarkResumePending = await hasFreshBenchmarkResumeState();
     if (!benchmarkResumePending) {
       await hydrateUserThemes();
