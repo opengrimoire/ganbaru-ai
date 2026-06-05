@@ -9,6 +9,7 @@ Free, local, open-source, privacy-first, lightweight with opt-in AI.
 </div>
 
 <p align="center">
+  <a href="#download">Download</a>&nbsp;&nbsp;&nbsp;&nbsp;
   <a href="#features">Features</a>&nbsp;&nbsp;&nbsp;&nbsp;
   <a href="#building-from-source">Building from source</a>&nbsp;&nbsp;&nbsp;&nbsp;
   <a href="#contributing">Contributing</a>&nbsp;&nbsp;&nbsp;&nbsp;
@@ -27,6 +28,22 @@ Free, local, open-source, privacy-first, lightweight with opt-in AI.
 
 > [!WARNING]
 > The app is under heavy development and is unstable.
+
+## Download
+
+Download the latest release from [GitHub Releases](https://github.com/opengrimoire/ganbaru-ai/releases/latest).
+
+| Platform | Download |
+|---|---|
+| **Ubuntu, Debian, Linux Mint** | `.deb` package |
+| **Fedora, RHEL, openSUSE** | `.rpm` package |
+| **Other Linux x64 desktops** | `.AppImage` |
+| **Windows 10 or Windows 11 x64** | `.msi` installer, or the `.exe` setup if preferred |
+| **macOS** | Not available yet. macOS builds are planned, but they need Apple hardware and signing before release. |
+| **Android** | Not available yet. Android support is planned soon after the current desktop release path settles. |
+| **iOS** | Not available yet. iOS depends on the same Apple build and signing path as macOS. |
+
+Use `SHA256SUMS` if you want to verify a download before installing it. The `.sig` files and `latest.json` are used by the automatic updater.
 
 ## Features
 
