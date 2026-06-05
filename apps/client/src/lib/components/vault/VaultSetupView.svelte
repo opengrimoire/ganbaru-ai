@@ -11,6 +11,7 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import WindowResizeHandles from "$lib/components/WindowResizeHandles.svelte";
   import { isCloseWindowShortcut } from "$lib/components/titlebar-shortcuts";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
     formatDataFolderError,
     getDefaultDataFolderLocation,
@@ -30,6 +31,7 @@
   } = $props();
 
   const appWindow = getCurrentWindow();
+  const { t } = getLocalization();
   const fallbackDefaultPath = import.meta.env.DEV
     ? "Documents/Ganbaru AI Dev"
     : "Documents/Ganbaru AI";
@@ -48,7 +50,7 @@
       requestQuit();
     }
 
-    error = initialError ? formatDataFolderError(initialError, "startup") : null;
+    error = initialError ? formatDataFolderError(initialError, "startup", t) : null;
     void loadDefaultLocation();
     void appWindow.isMaximized().then((value) => {
       isMaximized = value;
@@ -76,7 +78,7 @@
     try {
       defaultLocation = await getDefaultDataFolderLocation();
     } catch (err) {
-      error = formatDataFolderError(err);
+      error = formatDataFolderError(err, "general", t);
     }
   }
 
@@ -93,7 +95,7 @@
             : await importDataFolder();
       if (info) onReady(info);
     } catch (err) {
-      error = formatDataFolderError(err, mode);
+      error = formatDataFolderError(err, mode, t);
     } finally {
       busy = null;
     }
@@ -113,7 +115,7 @@
       <div class="flex h-full">
         <button
           type="button"
-          aria-label="Minimize"
+          aria-label={t("common.minimize")}
           onclick={() => void appWindow.minimize()}
           class="flex h-full w-10 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
@@ -121,7 +123,7 @@
         </button>
         <button
           type="button"
-          aria-label={isMaximized ? "Restore" : "Maximize"}
+          aria-label={isMaximized ? t("common.restore") : t("common.maximize")}
           onclick={() => void appWindow.toggleMaximize()}
           class="flex h-full w-10 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
@@ -129,7 +131,7 @@
         </button>
         <button
           type="button"
-          aria-label="Close"
+          aria-label={t("window.close")}
           onclick={requestQuit}
           class="flex h-full w-10 items-center justify-center text-muted-foreground transition-colors hover:bg-destructive hover:text-destructive-foreground"
         >
@@ -143,14 +145,14 @@
         <div class="mx-auto flex min-h-full w-full max-w-2xl flex-col justify-center gap-7 py-5 min-[760px]:py-8">
           <div class="space-y-2">
             <h1 class="max-w-xl text-2xl font-semibold leading-tight text-foreground min-[560px]:text-3xl">
-              Choose where to store your data
+              {t("vaultSetup.title")}
             </h1>
             <p class="text-sm leading-6 text-muted-foreground">
-              If you are coming from a previous installation, import your existing Ganbaru AI folder.
+              {t("vaultSetup.intro")}
               {#if defaultLocation?.developmentBuild}
                 <br />
                 <strong class="font-semibold text-warning">
-                  Development build: use the default {defaultLocation.folderName} folder, or choose a copy of your production folder. Do not point dev at your real production data.
+                  {t("vaultSetup.developmentBuildWarning", defaultLocation.folderName)}
                 </strong>
               {/if}
             </p>
@@ -160,7 +162,7 @@
             <div class="grid gap-2 border-y border-border py-4 min-[560px]:grid-cols-[auto_1fr] min-[560px]:items-start">
               <div class="flex items-center gap-2 text-sm font-medium text-foreground">
                 <Folder size={16} strokeWidth={1.8} class="text-muted-foreground" />
-                Default location
+                {t("vaultSetup.defaultLocation")}
               </div>
               <p class="break-all text-sm leading-5 text-muted-foreground min-[560px]:text-right">
                 {defaultLocation?.path ?? fallbackDefaultPath}
@@ -179,7 +181,7 @@
                 {:else}
                   <Folder size={16} strokeWidth={1.8} />
                 {/if}
-                <span>Use the default folder</span>
+                <span>{t("vaultSetup.useDefaultFolder")}</span>
               </button>
 
               <div class="grid gap-2 min-[560px]:grid-cols-2">
@@ -194,7 +196,7 @@
                   {:else}
                     <FolderOpen size={16} strokeWidth={1.8} />
                   {/if}
-                  <span>Change folder</span>
+                  <span>{t("vaultSetup.changeFolder")}</span>
                 </button>
 
                 <button
@@ -208,7 +210,7 @@
                   {:else}
                     <FolderInput size={16} strokeWidth={1.8} />
                   {/if}
-                  <span>Import folder</span>
+                  <span>{t("vaultSetup.importFolder")}</span>
                 </button>
               </div>
             </div>

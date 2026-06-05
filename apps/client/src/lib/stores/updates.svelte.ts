@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 import { getConfigKey, setConfigKey } from "$lib/vault/config";
+import { formatNumber } from "$lib/i18n/formatters";
+import { getLocalization } from "$lib/i18n/translator.svelte";
 import {
   DEFAULT_AUTO_UPDATE_NOTIFICATIONS,
   errorText,
@@ -42,6 +44,7 @@ function loadLastAutoCheckAt(): string | null {
 }
 
 class UpdateManagerStore {
+  private localization = getLocalization();
   status = $state<UpdateStatus>("idle");
   pendingUpdate = $state<Update | null>(null);
   currentVersion = $state<string | null>(null);
@@ -62,23 +65,24 @@ class UpdateManagerStore {
   );
 
   statusCopy = $derived.by(() => {
+    const { t } = this.localization;
     switch (this.status) {
       case "checking":
-        return "Checking the configured release feed";
+        return t("updates.checkingFeed");
       case "current":
-        return "Ganbaru AI is up to date";
+        return t("updates.current");
       case "available":
-        return `Version ${this.latestVersion ?? "unknown"} is available`;
+        return t("updates.versionAvailable", this.latestVersion ?? "unknown");
       case "downloading":
         return this.progressPercent === null
-          ? `Downloading ${this.formatBytes(this.downloadedBytes)}`
-          : `Downloading ${this.progressPercent}%`;
+          ? t("updates.downloadingBytes", this.formatBytes(this.downloadedBytes))
+          : t("updates.downloadingPercent", this.progressPercent);
       case "installed":
-        return "Update installed. Restarting Ganbaru AI";
+        return t("updates.installedRestarting");
       case "error":
-        return this.errorMessage ?? "Update check failed";
+        return this.errorMessage ?? t("updates.checkFailed");
       default:
-        return "No update check has run in this window";
+        return t("updates.notChecked");
     }
   });
 
@@ -131,7 +135,10 @@ class UpdateManagerStore {
       unitIndex += 1;
     }
     const digits = unitIndex === 0 || value >= 10 ? 0 : 1;
-    return `${value.toFixed(digits)} ${units[unitIndex]}`;
+    return `${formatNumber(this.localization.locale, value, {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    })} ${units[unitIndex]}`;
   }
 
   async checkAutomatically(): Promise<void> {
@@ -183,7 +190,7 @@ class UpdateManagerStore {
       this.status = "available";
     } catch (error: unknown) {
       this.status = "error";
-      this.errorMessage = updateCheckErrorMessage(error);
+      this.errorMessage = updateCheckErrorMessage(error, this.localization.t);
       if (automatic) {
         this.promptDismissed = true;
       }

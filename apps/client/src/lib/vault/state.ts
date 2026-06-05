@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { translate, type Translate } from "$lib/i18n/translator.svelte";
 
 export interface VaultAppState {
   activeVaultPath: string | null;
@@ -23,18 +24,6 @@ export interface DataFolderDefaultLocation {
 }
 
 export type DataFolderErrorAction = "startup" | "default" | "change" | "import" | "general";
-
-const DATA_FOLDER_ERROR_FALLBACKS: Record<DataFolderErrorAction, string> = {
-  startup:
-    "Ganbaru AI could not open the configured data folder. Choose another folder or import an existing Ganbaru AI folder.",
-  default:
-    "Ganbaru AI could not use the default folder. Choose another folder or check folder permissions.",
-  change:
-    "Ganbaru AI could not use this folder. Choose an empty folder or an existing Ganbaru AI folder.",
-  import:
-    "Ganbaru AI could not import this folder. Select the folder from your previous installation.",
-  general: "Ganbaru AI could not use this folder.",
-};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -92,21 +81,40 @@ function parseOptionalVaultInfo(value: unknown): VaultInfo | null {
   return value === null ? null : parseVaultInfo(value);
 }
 
-function errorMessage(value: unknown): string {
+function errorMessage(value: unknown, t: Translate): string {
   const message = value instanceof Error ? value.message : String(value);
   const trimmed = message.trim();
-  return trimmed === "" ? "Unknown error" : trimmed;
+  return trimmed === "" ? t("dataFolderError.unknown") : trimmed;
 }
 
 function containsAny(value: string, needles: readonly string[]): boolean {
   return needles.some((needle) => value.includes(needle));
 }
 
+function fallbackForAction(
+  action: DataFolderErrorAction,
+  t: Translate,
+): string {
+  switch (action) {
+    case "startup":
+      return t("dataFolderError.startup");
+    case "default":
+      return t("dataFolderError.default");
+    case "change":
+      return t("dataFolderError.change");
+    case "import":
+      return t("dataFolderError.import");
+    case "general":
+      return t("dataFolderError.general");
+  }
+}
+
 export function formatDataFolderError(
   error: unknown,
   action: DataFolderErrorAction = "general",
+  t: Translate = translate,
 ): string {
-  const raw = errorMessage(error);
+  const raw = errorMessage(error, t);
   const lower = raw.toLowerCase();
 
   if (
@@ -117,7 +125,7 @@ export function formatDataFolderError(
       "os error 13",
     ])
   ) {
-    return "Ganbaru AI cannot access this folder. Check folder permissions or choose another location.";
+    return t("dataFolderError.permission");
   }
 
   if (
@@ -132,30 +140,30 @@ export function formatDataFolderError(
       "pragma optimize",
     ])
   ) {
-    return "The app found this Ganbaru AI folder, but ganbaru-ai.sqlite could not be opened. Restore a backup or choose another folder.";
+    return t("dataFolderError.database");
   }
 
   if (lower.includes("selected folder is not empty and is not a ganbaru ai folder")) {
     if (action === "default") {
-      return "The default Ganbaru AI folder already exists, but it is not a valid Ganbaru AI folder. Move those files somewhere else, choose another folder, or import an existing Ganbaru AI folder.";
+      return t("dataFolderError.defaultNotValid");
     }
-    return "This folder already contains other files. Choose an empty folder, an existing Ganbaru AI folder, or create a new folder.";
+    return t("dataFolderError.folderNotEmpty");
   }
 
   if (lower.includes("read ganbaru ai folder marker")) {
-    return "This folder is missing the Ganbaru AI folder marker. Select the main Ganbaru AI folder, not one of its subfolders.";
+    return t("dataFolderError.missingMarker");
   }
 
   if (lower.includes("parse ganbaru ai folder marker")) {
-    return "This Ganbaru AI folder marker is damaged. The app cannot import this folder automatically.";
+    return t("dataFolderError.damagedMarker");
   }
 
   if (lower.includes("unsupported ganbaru ai folder schema version")) {
-    return "This Ganbaru AI folder was created by a newer version of the app. Update Ganbaru AI before opening it.";
+    return t("dataFolderError.newerSchema");
   }
 
   if (lower.includes("selected folder is not a ganbaru ai folder")) {
-    return "This does not look like a Ganbaru AI folder. Select the folder from your previous installation.";
+    return t("dataFolderError.notGanbaruFolder");
   }
 
   if (
@@ -166,10 +174,10 @@ export function formatDataFolderError(
       "not found",
     ])
   ) {
-    return "This Ganbaru AI folder could not be found. Choose another folder or import an existing Ganbaru AI folder.";
+    return t("dataFolderError.notFound");
   }
 
-  return `${DATA_FOLDER_ERROR_FALLBACKS[action]} Details: ${raw}`;
+  return t("dataFolderError.withDetails", fallbackForAction(action, t), raw);
 }
 
 export async function readVaultAppState(): Promise<VaultAppState> {

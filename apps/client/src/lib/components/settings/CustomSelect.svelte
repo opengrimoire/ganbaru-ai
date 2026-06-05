@@ -4,6 +4,7 @@
   import Check from "@lucide/svelte/icons/check";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import { cn } from "$lib/utils";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import { portal } from "$lib/utils/portal";
   import ShortcutDescription from "./ShortcutDescription.svelte";
   import {
@@ -42,6 +43,8 @@
     onReset?: () => void;
     class?: string;
   } = $props();
+
+  const { t } = getLocalization();
 
   const ESTIMATED_DROPDOWN_HEIGHT = 240;
   const DEFAULT_POPOVER_GEOMETRY: SelectPopoverGeometry = {
@@ -237,7 +240,7 @@
       <button
         onclick={onReset}
         disabled={!canReset}
-        aria-label="Reset"
+        aria-label={t("common.reset")}
         data-app-tooltip-disabled="true"
         class={cn(
           "flex h-7 w-7 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors",
