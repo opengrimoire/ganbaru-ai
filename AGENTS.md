@@ -89,7 +89,7 @@ package.json: root scripts, shared dev dependencies
 
 ## Ganbaru AI folder structure
 
-> Everything the app produces lives in one Ganbaru AI folder. By default it is created at `Documents/Ganbaru AI`. Update this as the project evolves.
+> Everything the app produces lives in one Ganbaru AI folder. By default production creates `Documents/Ganbaru AI`, while development builds create `Documents/Ganbaru AI Dev`. Update this as the project evolves.
 
 ```
 Ganbaru AI/

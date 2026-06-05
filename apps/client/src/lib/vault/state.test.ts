@@ -107,6 +107,7 @@ describe("data folder state api", () => {
       path: "/home/victor/Documents/Ganbaru AI",
       parentPath: "/home/victor/Documents",
       folderName: "Ganbaru AI",
+      developmentBuild: false,
     });
     const { getDefaultDataFolderLocation } = await loadModule();
 
@@ -114,6 +115,7 @@ describe("data folder state api", () => {
       path: "/home/victor/Documents/Ganbaru AI",
       parentPath: "/home/victor/Documents",
       folderName: "Ganbaru AI",
+      developmentBuild: false,
     });
   });
 });

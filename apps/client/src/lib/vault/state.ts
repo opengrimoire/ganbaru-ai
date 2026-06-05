@@ -19,6 +19,7 @@ export interface DataFolderDefaultLocation {
   path: string;
   parentPath: string;
   folderName: string;
+  developmentBuild: boolean;
 }
 
 export type DataFolderErrorAction = "startup" | "default" | "change" | "import" | "general";
@@ -41,6 +42,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readString(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null;
+}
+
+function readBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
 }
 
 function readStringArray(value: unknown): string[] {
@@ -76,10 +81,11 @@ function parseDataFolderDefaultLocation(value: unknown): DataFolderDefaultLocati
   const path = readString(value.path);
   const parentPath = readString(value.parentPath);
   const folderName = readString(value.folderName);
-  if (!path || !parentPath || !folderName) {
+  const developmentBuild = readBoolean(value.developmentBuild);
+  if (!path || !parentPath || !folderName || developmentBuild === null) {
     throw new Error("default folder response is incomplete");
   }
-  return { path, parentPath, folderName };
+  return { path, parentPath, folderName, developmentBuild };
 }
 
 function parseOptionalVaultInfo(value: unknown): VaultInfo | null {

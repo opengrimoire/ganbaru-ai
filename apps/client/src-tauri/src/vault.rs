@@ -16,7 +16,8 @@ use tauri::{Manager, Runtime};
 use tauri_plugin_dialog::{DialogExt, FilePath};
 
 pub const APP_SQLITE_FILE: &str = "app.sqlite";
-const DEFAULT_DATA_FOLDER_NAME: &str = "Ganbaru AI";
+const PRODUCTION_DATA_FOLDER_NAME: &str = "Ganbaru AI";
+const DEVELOPMENT_DATA_FOLDER_NAME: &str = "Ganbaru AI Dev";
 const APP_STATE_FILE: &str = "app-state.json";
 const VAULT_MANIFEST_FILE: &str = "vault.json";
 const CONFIG_FILE: &str = "config.json";
@@ -58,6 +59,7 @@ pub struct VaultDefaultLocation {
     pub path: String,
     pub parent_path: String,
     pub folder_name: String,
+    pub development_build: bool,
 }
 
 fn app_state_path<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
@@ -103,8 +105,20 @@ fn display_name_from_path(path: &Path) -> String {
     path.file_name()
         .and_then(|name| name.to_str())
         .filter(|name| !name.trim().is_empty())
-        .unwrap_or(DEFAULT_DATA_FOLDER_NAME)
+        .unwrap_or(default_data_folder_name())
         .to_string()
+}
+
+fn is_development_build() -> bool {
+    cfg!(debug_assertions)
+}
+
+fn default_data_folder_name() -> &'static str {
+    if is_development_build() {
+        DEVELOPMENT_DATA_FOLDER_NAME
+    } else {
+        PRODUCTION_DATA_FOLDER_NAME
+    }
 }
 
 fn new_vault_id() -> String {
@@ -282,7 +296,7 @@ fn default_data_parent(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 }
 
 fn default_data_folder_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    Ok(default_data_parent(app)?.join(DEFAULT_DATA_FOLDER_NAME))
+    Ok(default_data_parent(app)?.join(default_data_folder_name()))
 }
 
 fn default_location_from_path(path: PathBuf) -> Result<VaultDefaultLocation, String> {
@@ -292,7 +306,8 @@ fn default_location_from_path(path: PathBuf) -> Result<VaultDefaultLocation, Str
     Ok(VaultDefaultLocation {
         path: path_to_string(&path, "Ganbaru AI folder")?,
         parent_path: path_to_string(parent, "Ganbaru AI folder parent")?,
-        folder_name: DEFAULT_DATA_FOLDER_NAME.to_string(),
+        folder_name: default_data_folder_name().to_string(),
+        development_build: is_development_build(),
     })
 }
 
@@ -935,6 +950,15 @@ mod tests {
             "selected folder is not empty and is not a Ganbaru AI folder"
         );
         let _ = fs::remove_dir_all(&path);
+    }
+
+    #[test]
+    fn default_data_folder_name_tracks_build_mode() {
+        if cfg!(debug_assertions) {
+            assert_eq!(default_data_folder_name(), DEVELOPMENT_DATA_FOLDER_NAME);
+        } else {
+            assert_eq!(default_data_folder_name(), PRODUCTION_DATA_FOLDER_NAME);
+        }
     }
 
     #[test]

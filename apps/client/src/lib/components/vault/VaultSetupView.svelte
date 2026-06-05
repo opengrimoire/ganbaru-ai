@@ -30,6 +30,9 @@
   } = $props();
 
   const appWindow = getCurrentWindow();
+  const fallbackDefaultPath = import.meta.env.DEV
+    ? "Documents/Ganbaru AI Dev"
+    : "Documents/Ganbaru AI";
   let defaultLocation = $state<DataFolderDefaultLocation | null>(null);
   let busy = $state<"default" | "change" | "import" | null>(null);
   let error = $state<string | null>(null);
@@ -142,8 +145,14 @@
             <h1 class="max-w-xl text-2xl font-semibold leading-tight text-foreground min-[560px]:text-3xl">
               Choose where to store your data
             </h1>
-            <p class="max-w-xl text-sm leading-6 text-muted-foreground">
+            <p class="text-sm leading-6 text-muted-foreground">
               If you are coming from a previous installation, import your existing Ganbaru AI folder.
+              {#if defaultLocation?.developmentBuild}
+                <br />
+                <strong class="font-semibold text-warning">
+                  Development build: use the default {defaultLocation.folderName} folder, or choose a copy of your production folder. Do not point dev at your real production data.
+                </strong>
+              {/if}
             </p>
           </div>
 
@@ -154,7 +163,7 @@
                 Default location
               </div>
               <p class="break-all text-sm leading-5 text-muted-foreground min-[560px]:text-right">
-                {defaultLocation?.path ?? "Documents/Ganbaru AI"}
+                {defaultLocation?.path ?? fallbackDefaultPath}
               </p>
             </div>
 

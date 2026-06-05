@@ -179,7 +179,7 @@ The user runs their own Hocuspocus server. The app points to their server URL. R
 
 ### Ganbaru AI folder structure on disk
 
-See the Ganbaru AI folder directory tree in `AGENTS.md` for the canonical layout. Everything the app produces or manages lives in one folder, making backup and sync the same operation regardless of data type. First launch creates `Documents/Ganbaru AI` by default, while import lets a user reuse a folder copied from another installation.
+See the Ganbaru AI folder directory tree in `AGENTS.md` for the canonical layout. Everything the app produces or manages lives in one folder, making backup and sync the same operation regardless of data type. First launch creates `Documents/Ganbaru AI` by default in production and `Documents/Ganbaru AI Dev` in development builds, while import lets a user reuse a folder copied from another installation.
 
 ---
 
