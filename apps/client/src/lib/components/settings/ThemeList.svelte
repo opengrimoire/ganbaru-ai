@@ -5,6 +5,8 @@
   import Sun from "@lucide/svelte/icons/sun";
   import Moon from "@lucide/svelte/icons/moon";
   import { invoke } from "@tauri-apps/api/core";
+  import { themeDisplayName } from "$lib/i18n/theme-labels";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
   import type { ThemeId } from "$lib/stores/themes";
@@ -15,6 +17,7 @@
 
   const themeStore = getTheme();
   const themeEditor = getThemeEditor();
+  const { t } = getLocalization();
 
   let pendingDelete = $state<ThemeId | undefined>(undefined);
   let importOpen = $state(false);
@@ -35,7 +38,7 @@
   const themeOptions = $derived(
     orderedThemes.map((theme) => ({
       value: theme.id,
-      label: theme.displayName,
+      label: themeDisplayName(theme, t),
     })),
   );
 
@@ -92,7 +95,7 @@
       importDraft = text;
     } catch (err) {
       console.error("clipboard read failed", err);
-      importErrors = ["Could not read from clipboard. Paste manually below."];
+      importErrors = [t("settings.theme.clipboardFailed")];
     }
   }
 
@@ -109,18 +112,18 @@
       importErrors = [];
       importDraft = "";
       importOpen = false;
-      flashToast("Theme imported");
+      flashToast(t("settings.theme.imported"));
     } catch (err) {
       console.error("import from file failed", err);
       importErrors = [
-        err instanceof Error ? err.message : "Could not read the selected file.",
+        err instanceof Error ? err.message : t("settings.theme.fileReadFailed"),
       ];
     }
   }
 
   async function handleImport() {
     if (importDraft.trim().length === 0) {
-      importErrors = ["Paste a theme JSON object first."];
+      importErrors = [t("settings.theme.pasteFirst")];
       return;
     }
     const result = await themeStore.importTheme(importDraft);
@@ -131,13 +134,13 @@
     importErrors = [];
     importDraft = "";
     importOpen = false;
-    flashToast("Theme imported");
+    flashToast(t("settings.theme.imported"));
   }
 
   async function handleExport(id: ThemeId) {
     const contents = themeStore.exportTheme(id);
     if (!contents) {
-      flashToast("Could not export theme");
+      flashToast(t("settings.theme.exportFailed"));
       return;
     }
     try {
@@ -145,10 +148,10 @@
         defaultName: `${id}.json`,
         contents,
       });
-      if (saved) flashToast("Theme exported");
+      if (saved) flashToast(t("settings.theme.exported"));
     } catch (err) {
       console.error("theme export failed", err);
-      flashToast("Could not export theme");
+      flashToast(t("settings.theme.exportFailed"));
     }
   }
 
@@ -170,7 +173,7 @@
 <div class="flex flex-col gap-4">
   <header class="flex items-start justify-between gap-3 px-1 max-[520px]:flex-col">
     <div class="min-w-0 flex-1">
-      <h2 class="text-[0.866667rem] font-semibold text-foreground">Themes</h2>
+      <h2 class="text-[0.866667rem] font-semibold text-foreground">{t("settings.theme.themesHeading")}</h2>
     </div>
   </header>
 
@@ -178,7 +181,7 @@
     class="flex items-center justify-between gap-4 px-1 py-1 max-[640px]:flex-col max-[640px]:items-stretch max-[640px]:gap-2"
   >
     <div class="min-w-0 flex-1">
-      <h3 class="text-[0.866667rem] font-normal text-foreground">Quick toggle</h3>
+      <h3 class="text-[0.866667rem] font-normal text-foreground">{t("settings.theme.quickToggle")}</h3>
       <ShortcutDescription shortcuts={quickToggleShortcuts} />
     </div>
     <div
@@ -192,7 +195,7 @@
           aria-hidden="true"
         />
         <CustomSelect
-          ariaLabel="Light mode quick toggle theme"
+          ariaLabel={t("settings.theme.lightQuickToggle")}
           value={themeStore.quickToggleLightId}
           options={themeOptions}
           onChange={handleQuickToggleLight}
@@ -207,7 +210,7 @@
           aria-hidden="true"
         />
         <CustomSelect
-          ariaLabel="Dark mode quick toggle theme"
+          ariaLabel={t("settings.theme.darkQuickToggle")}
           value={themeStore.quickToggleDarkId}
           options={themeOptions}
           onChange={handleQuickToggleDark}
@@ -219,21 +222,21 @@
 
   <section class="flex flex-col gap-3">
     <div class="px-1">
-      <h3 class="text-[0.866667rem] font-normal text-foreground">All themes</h3>
+      <h3 class="text-[0.866667rem] font-normal text-foreground">{t("settings.theme.allThemes")}</h3>
       <ShortcutDescription shortcuts={themePickerShortcuts} />
     </div>
 
     <div class="flex flex-col">
-      {#each orderedThemes as t (t.id)}
+      {#each orderedThemes as theme (theme.id)}
         <ThemeRow
-          theme={t}
-          isActive={t.id === themeStore.id}
-          isBuiltin={themeStore.isBuiltin(t.id)}
-          onApply={() => handleApply(t.id)}
-          onOpen={() => handleOpen(t.id)}
-          onDuplicate={() => handleDuplicate(t.id)}
-          onExport={() => handleExport(t.id)}
-          onDelete={() => handleDelete(t.id)}
+          {theme}
+          isActive={theme.id === themeStore.id}
+          isBuiltin={themeStore.isBuiltin(theme.id)}
+          onApply={() => handleApply(theme.id)}
+          onOpen={() => handleOpen(theme.id)}
+          onDuplicate={() => handleDuplicate(theme.id)}
+          onExport={() => handleExport(theme.id)}
+          onDelete={() => handleDelete(theme.id)}
         />
       {/each}
       {#if importOpen}
@@ -241,12 +244,12 @@
           <div class="flex flex-col gap-2">
             <div class="flex items-center justify-between gap-2">
               <span class="text-[0.8rem] font-medium text-foreground">
-                Paste theme JSON
+                {t("settings.theme.pasteJson")}
               </span>
               <button
                 type="button"
                 onclick={handleImportToggle}
-                aria-label="Close import"
+                aria-label={t("settings.theme.closeImport")}
                 data-app-tooltip-disabled="true"
                 class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
               >
@@ -276,7 +279,7 @@
                   onclick={handlePasteFromClipboard}
                   class="rounded-md border border-border bg-card px-2.5 py-1 text-[0.733333rem] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
                 >
-                  Paste from clipboard
+                  {t("settings.theme.pasteClipboard")}
                 </button>
                 <button
                   type="button"
@@ -284,7 +287,7 @@
                   class="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[0.733333rem] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
                 >
                   <FolderOpen size={11} strokeWidth={2.25} />
-                  <span>Open file</span>
+                  <span>{t("settings.theme.openFile")}</span>
                 </button>
               </div>
               <button
@@ -292,7 +295,7 @@
                 onclick={handleImport}
                 class="rounded-md border border-border bg-primary px-3 py-1 text-[0.8rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90 max-[520px]:self-end"
               >
-                Import
+                {t("settings.theme.import")}
               </button>
             </div>
           </div>
@@ -308,7 +311,7 @@
             strokeWidth={1.75}
             class="shrink-0 text-muted-foreground"
           />
-          <span>Import theme</span>
+          <span>{t("settings.theme.importTheme")}</span>
         </button>
       {/if}
     </div>
@@ -326,10 +329,13 @@
 {#if pendingDelete}
   {@const target = themeStore.registry[pendingDelete]}
   <ConfirmDialog
-    title={`Delete ${target?.displayName ?? "this theme"}?`}
-    message="This cannot be undone"
-    confirmLabel="Delete (Enter)"
-    cancelLabel="Cancel (Esc)"
+    title={t(
+      "settings.theme.deleteTitle",
+      target ? themeDisplayName(target, t) : t("settings.theme.thisTheme"),
+    )}
+    message={t("settings.theme.cannotBeUndone")}
+    confirmLabel={t("settings.doomscrolling.shared.deleteShortcut")}
+    cancelLabel={t("common.cancelShortcut")}
     onConfirm={confirmDelete}
     onCancel={cancelDelete}
   />
