@@ -87,26 +87,28 @@ pnpm-workspace.yaml: workspace definition
 package.json: root scripts, shared dev dependencies
 ```
 
-## Vault structure
+## Ganbaru AI folder structure
 
-> Everything the app produces lives in one folder (the vault). Update this as the project evolves.
+> Everything the app produces lives in one Ganbaru AI folder. By default it is created at `Documents/Ganbaru AI`. Update this as the project evolves.
 
 ```
-vault/
+Ganbaru AI/
+  vault.json: internal Ganbaru AI folder marker, id, display name, and schema version
+  config.json: user settings, work environment definitions, blocker rulesets
+  app.sqlite: SQLite source of truth for structured data and indexes
   notes/daily/: daily notes (markdown)
   notes/projects/: per-project notes and working documents (markdown)
   diary/morning/, diary/evening/: dated diary entries (markdown, indexed fields in SQLite)
-  calendar/: calendar event data (session blocks, schedule state)
   projects/{project-id}/: per-project file attachments (reference docs, research PDFs)
   reports/: generated project status reports (markdown, PDF)
   assets/: user assets (images embedded in notes, attachments)
   templates/: project management phase templates, methodology templates (SWOT, BMC, etc.)
-  config.json: user settings, work environment definitions, blocker rulesets
   .yjs/: Yjs document state cache (binary)
-  app.db: SQLite index (metadata, search, tags, backlinks, pomodoro configs, runs, segments, pauses, run events, playlist definitions)
 ```
 
-Music files stay wherever the user keeps them; vault stores only playlist definitions. Backups go to a user-specified path outside the vault.
+Music files stay wherever the user keeps them; the Ganbaru AI folder stores only playlist definitions. Backups go to a user-specified path outside the Ganbaru AI folder.
+
+Tauri's platform app config directory stores device-local bootstrap and runtime state only, including `app-state.json`, benchmark state, benchmark SQLite, and doomscrolling runtime snapshots. Production and dev builds keep separate app config directories and therefore separate active-folder pointers.
 
 ## Key conventions
 
@@ -156,11 +158,11 @@ After the relevant gate passes, finish the task without extra dev-server, Tauri 
 
 ### Documentation
 
-- Keep the workspace structure and vault structure in this file up to date. When directories are created, renamed, or removed, update the relevant tree. Never hardcode vault paths; read them from user configuration.
+- Keep the workspace structure and Ganbaru AI folder structure in this file up to date. When directories are created, renamed, or removed, update the relevant tree. Never hardcode Ganbaru AI folder paths; read them from user configuration.
 
 ### Data handling and migrations
 
-- Treat stored user data as durable. Any change to SQLite schema, persisted JSON, config keys, theme tokens, import/export formats, or generated vault data must consider existing installs, older exports, stale rows, removed fields, renamed keys, seed/reset data, and rollback or fallback behavior.
+- Treat stored user data as durable. Any change to SQLite schema, persisted JSON, config keys, theme tokens, import/export formats, or generated Ganbaru AI folder data must consider existing installs, older exports, stale rows, removed fields, renamed keys, seed/reset data, and rollback or fallback behavior.
 - Do not leave dead persistent data behind. If a field, row key, config key, or JSON property becomes obsolete, add an explicit migration, cleanup path, or validator drop rule, then document it in the relevant data or feature spec.
 - SQLite migrations live in `apps/client/src-tauri/migrations/` and are embedded into the Rust binary through `sqlx::migrate!("./migrations")`. Use SQLx file names with a UTC timestamp prefix, `YYYYMMDDHHMMSS_description.sql`, such as `20260601103000_add_project_tables.sql`. Do not manually register migration files; the SQLx macro discovers them at compile time.
 - `20260529180656_baseline_schema.sql` is the fresh-start schema for the pre-user reset. Do not edit it after a released build can have applied it. Add a new timestamped migration file instead.

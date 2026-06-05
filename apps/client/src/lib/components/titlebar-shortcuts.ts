@@ -1,3 +1,5 @@
+import { hasOnlyShortcutModifier, type KeyboardModifierState } from "$lib/keyboard-shortcuts";
+
 export interface ResetShortcutSequenceState {
   pressCount: number;
   lastPressAtMs: number | null;
@@ -12,6 +14,8 @@ export interface ResetShortcutSequenceResult {
   state: ResetShortcutSequenceState;
   resetTriggered: boolean;
 }
+
+export type CloseWindowShortcutEvent = Pick<KeyboardEvent, "key"> & KeyboardModifierState;
 
 /**
  * Record one hidden reset shortcut press.
@@ -41,4 +45,10 @@ export function recordResetShortcutPress(
     state: { pressCount, lastPressAtMs: nowMs },
     resetTriggered: false,
   };
+}
+
+export function isCloseWindowShortcut(event: CloseWindowShortcutEvent): boolean {
+  const key = event.key.toLowerCase();
+  if (key !== "w") return false;
+  return hasOnlyShortcutModifier(event) || hasOnlyShortcutModifier(event, { shift: true });
 }

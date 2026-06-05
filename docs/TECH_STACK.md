@@ -12,7 +12,7 @@ Desktop (Windows, Linux) is the primary target. Mobile (iOS, Android via Tauri v
 
 ### Rust
 
-The backend of the Tauri app. Handles everything that requires OS-level access: process management, global mouse polling, file system operations, native messaging with the browser extension, system tray, local file I/O for the markdown vault, Rust-backed local audio playback through the internal media player module, the local video loopback fallback, and desktop activity monitoring (active window tracking, idle detection, app-switch counting). Rust is not optional here; it is the layer that makes the OS-level features possible from a web-based frontend.
+The backend of the Tauri app. Handles everything that requires OS-level access: process management, global mouse polling, file system operations, native messaging with the browser extension, system tray, local file I/O for markdown files in the Ganbaru AI folder, Rust-backed local audio playback through the internal media player module, the local video loopback fallback, and desktop activity monitoring (active window tracking, idle detection, app-switch counting). Rust is not optional here; it is the layer that makes the OS-level features possible from a web-based frontend.
 
 Short app sound effects are also played from Rust. The packaged app sounds are standardized as 48 kHz stereo 16-bit PCM WAV files and use a dedicated app-sound output path separate from the user media player. See `docs/features/app-sounds.md`.
 
@@ -44,7 +44,7 @@ Key Tauri v2 capabilities used in this project:
 - **`setIgnoreCursorEvents`**. Allows the custom notification window to be non-interactive when desired, so it does not interrupt work in other apps.
 - **Tray icon API.** The app lives in the system tray when not focused, essential for an always-running productivity tool.
 - **Native messaging host binary.** The repo-owned `ganbaru-ai-native-messaging` Rust binary lets Chromium-based browser extensions ask the local app state whether a page should be blocked. Local setup generates separate app and dev native-host launchers so the normal extension and dev extension can be installed at the same time without sharing app config.
-- **File system plugin.** Reading and writing markdown files and vault assets to disk.
+- **File system plugin.** Reading and writing markdown files and Ganbaru AI folder assets to disk.
 - **Release and update pipeline.** GitHub Actions builds Linux x64 packages and Windows x64 installers, signs updater assets in a protected signing job, and publishes a draft GitHub Release from a separate write-token job. Release builds inject a generated updater config from GitHub Actions variables, so the public updater key and GitHub Releases feed are embedded only in release artifacts. Release builds check GitHub Releases at most once per day by default to notify users about available updates; downloads and installs remain user initiated from Settings, Updates or the update prompt. The update prompt can open the matching GitHub Release page in the default browser through Tauri's opener plugin.
 
 **Desktop-only features** (not available on mobile due to OS sandboxing): process management, native messaging, global mouse position polling, always-on-top multi-window, edge panel, work environment switching, fullscreen break overlay, desktop activity monitoring.
@@ -127,7 +127,7 @@ Connects Tiptap to the Yjs CRDT layer. Every keystroke generates a Yjs binary up
 
 ### `@tiptap/extension-collaboration-cursor`
 
-Shows live cursor positions and selections of other collaborators inside a shared document. Used in collaborative workspaces (the ClickUp/Notion alternative tier), not in personal vaults.
+Shows live cursor positions and selections of other collaborators inside a shared document. Used in collaborative workspaces (the ClickUp/Notion alternative tier), not in personal Ganbaru AI folders.
 
 ---
 
@@ -166,20 +166,20 @@ All data in transit and at rest on the sync server is end-to-end encrypted. The 
 
 Two encryption contexts:
 
-- **Personal vault.** Single key per vault, known only to the user's devices. The relay is a blind courier.
+- **Personal Ganbaru AI folder.** Single key per folder, known only to the user's devices. The relay is a blind courier.
 - **Collaborative workspace.** One workspace key shared among members, encrypted individually for each member's device using their public key. All members can read the workspace; nobody outside it can, including the server operator.
 
 ### The two sync tiers
 
 **Local only (default)**
-The app works entirely offline. No sync server involved. The vault lives on the user's file system. Automatic local backups are a scheduled encrypted export (a zip of the vault folder) to a user-specified local path. The user can manually copy this to Google Drive, an external drive, or anywhere they want. The app does not manage this for them but makes the export trivial.
+The app works entirely offline. No sync server involved. The Ganbaru AI folder lives on the user's file system. Automatic local backups are a scheduled encrypted export (a zip of the Ganbaru AI folder) to a user-specified local path. The user can manually copy this to Google Drive, an external drive, or anywhere they want. The app does not manage this for them but makes the export trivial.
 
 **Self-hosted sync**
 The user runs their own Hocuspocus server. The app points to their server URL. Real-time E2E encrypted sync across all devices (desktop + mobile), automatic cloud backups, and collaborative workspaces with live presence. The app provides step-by-step setup guides for common cloud providers and local server options, automated where possible.
 
-### Vault structure on disk
+### Ganbaru AI folder structure on disk
 
-See the vault directory tree in `AGENTS.md` for the canonical layout. Everything the app produces or manages lives in one folder called the vault, making backup and sync the same operation regardless of data type.
+See the Ganbaru AI folder directory tree in `AGENTS.md` for the canonical layout. Everything the app produces or manages lives in one folder, making backup and sync the same operation regardless of data type. First launch creates `Documents/Ganbaru AI` by default, while import lets a user reuse a folder copied from another installation.
 
 ---
 
@@ -189,7 +189,7 @@ See the vault directory tree in `AGENTS.md` for the canonical layout. Everything
 
 Local database for all structured data in the app. This includes: metadata and search indexes for notes, tags, and bidirectional backlinks between notes; calendar event indexes and session block configurations; Kanban task state, priority tiers, estimated vs. actual Pomodoro counts, and task-to-session-block links; work environment configs and blocker rulesets; Pomodoro session history; requirement version diffs (timestamped changes to task descriptions, scope, and acceptance criteria within the project management framework); diary entry indexes (the entries themselves are markdown files, but mood, energy, sleep quality fields are indexed for trend analysis); and app settings.
 
-SQLite is never the source of truth for note or diary content; that lives in `.md` files. SQLite is the fast query layer over the vault and the primary store for all productivity metrics.
+SQLite is never the source of truth for note or diary content; that lives in `.md` files. SQLite is the fast query layer over the Ganbaru AI folder and the primary store for all productivity metrics.
 
 ### Svelte runes (in-memory state)
 
@@ -203,7 +203,7 @@ Ganbaru AI has two fundamentally different categories of data, and each uses the
 
 ### Documents: markdown on disk, SQLite indexes
 
-Notes, diary entries, and project documentation are markdown files stored in the vault directory. SQLite stores metadata (title, tags, backlinks, mood/energy fields for diary) for fast queries, but the `.md` file is always the source of truth for content.
+Notes, diary entries, and project documentation are markdown files stored in the Ganbaru AI folder. SQLite stores metadata (title, tags, backlinks, mood/energy fields for diary) for fast queries, but the `.md` file is always the source of truth for content.
 
 Why markdown for documents:
 
@@ -212,7 +212,7 @@ Why markdown for documents:
 - Portable. No lock-in. If the user stops using Ganbaru AI, their writing is intact.
 - AI-agent-friendly. Any AI coding agent can read and write markdown natively, with no tools or plugins required.
 
-Why NOT SQLite for document content: binary format that can't be diffed, can't be opened in external editors, creates lock-in, and makes the vault opaque.
+Why NOT SQLite for document content: binary format that can't be diffed, can't be opened in external editors, creates lock-in, and makes the folder opaque.
 
 ### Structured data: SQLite as source of truth
 
@@ -252,7 +252,7 @@ A separate SQLite database per project was also rejected: it fragments data, mak
 
 ### Why a CLI instead of MCP
 
-All of Ganbaru AI's data operations are local: reading SQLite, writing SQLite, reading/writing vault files. For local operations, a CLI is strictly simpler than MCP:
+All of Ganbaru AI's data operations are local: reading SQLite, writing SQLite, reading and writing files in the Ganbaru AI folder. For local operations, a CLI is strictly simpler than MCP:
 
 - **No running server.** MCP requires a persistent process listening for connections. A CLI starts, runs the query, returns the result, and exits.
 - **Zero setup.** Codex and other CLI agents call CLI tools via Bash natively. No plugin installation, no MCP configuration, no `.mcp.json` files.
@@ -263,7 +263,7 @@ MCP becomes the right choice later for features that require persistent connecti
 
 ### CLI design
 
-The `ganbaru-ai` CLI is a Rust binary that links directly to the same SQLite access layer used by the Tauri app. It reads the vault path from the app's config and operates on the same database. Output defaults to human-readable text; JSON output mode returns structured JSON for programmatic consumption by agents.
+The `ganbaru-ai` CLI is a Rust binary that links directly to the same SQLite access layer used by the Tauri app. It reads the Ganbaru AI folder path from the app's config and operates on the same database. Output defaults to human-readable text; JSON output mode returns structured JSON for programmatic consumption by agents.
 
 ```bash
 # Project management
@@ -300,7 +300,7 @@ ganbaru-ai export kanban --project ganbaru-ai
 
 ### Markdown export for software project repositories
 
-When a user manages a software project with Ganbaru AI, the structured data (tasks, calendar events, workspace configs) lives in Ganbaru AI's vault SQLite. But the project's git repository also needs project context for:
+When a user manages a software project with Ganbaru AI, the structured data (tasks, calendar events, workspace configs) lives in the Ganbaru AI folder's SQLite database. But the project's git repository also needs project context for:
 
 - **Collaborators who don't use Ganbaru AI.** They read exported kanban snapshots and reports to understand what's happening.
 - **AI agents without the CLI installed.** They read markdown natively without any tooling.
@@ -381,7 +381,7 @@ The Will system requires knowing which application the user is actively working 
 
 ### `notify`
 
-Rust crate for cross-platform file system watching. Used by the Will Intensity system to detect file saves in the user's project directories during Pomodoro focus periods. This serves as a proxy for active creation output in coding and writing tasks. Also used to watch the vault directory for external changes (e.g., files edited in another app) that need to trigger SQLite reindexing.
+Rust crate for cross-platform file system watching. Used by the Will Intensity system to detect file saves in the user's project directories during Pomodoro focus periods. This serves as a proxy for active creation output in coding and writing tasks. Also used to watch the Ganbaru AI folder for external changes (e.g., files edited in another app) that need to trigger SQLite reindexing.
 
 ---
 
@@ -655,7 +655,7 @@ Everything is free. The project is sustained by donations via GitHub Sponsors.
 | Media engine (video)      | Platform WebView media element                       | Local video through Tauri's platform WebView stack                                 |
 | Media engine (audio-only) | Rodio + Symphonia target                             | Native audio playback and decoding path for low-RAM local music                    |
 | YouTube playback          | IFrame Player API                                    | Official, free, no developer key, full programmatic control, ToS-compliant         |
-| File watching             | `notify`                                             | Cross-platform file system events for vault reindexing |
+| File watching             | `notify`                                             | Cross-platform file system events for Ganbaru AI folder reindexing |
 | Process control           | `sysinfo` + `std::process`                           | App blocking and environment switching                                             |
 | Activity monitoring       | Win32 / X11 / `rdev`                                 | Active window tracking, idle detection, app-switch counting        |
 | Mouse tracking            | `rdev` / Win32 / X11                                 | Edge panel trigger                                                                 |

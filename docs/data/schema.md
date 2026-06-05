@@ -1,6 +1,6 @@
 # Data schema
 
-Every table in `app.db`, with the rationale behind subtle columns and constraints. New tables are added here as features land. Stub headings exist for tables that are designed but not yet implemented; fill them in when the feature ships.
+Every table in `app.sqlite`, with the rationale behind subtle columns and constraints. New tables are added here as features land. Stub headings exist for tables that are designed but not yet implemented; fill them in when the feature ships.
 
 All timestamps are ISO 8601 in UTC with a `Z` suffix. The UI converts to the device's current IANA zone for display, recomputing on visibility, focus, and a 60s sanity poll so a user who travels from NYC to Tokyo sees their events shift to the correct local wall clock without reloading the app. Storing in UTC is the only thing that survives DST transitions, timezone changes, and user travel without rewriting historical data.
 
@@ -163,7 +163,7 @@ Delete/archive requests are planned before they reach the backend. The plan can 
 
 The pomodoro tracking system uses normalized config rows plus four history tables: runs, segments, pauses, and run events. Together they record every session from start to finish with enough resolution for real-time rendering, crash recovery, and long-term analytics. There is no `pomodoro_sessions` summary table. Session totals are derived from the rows below.
 
-Global Pomodoro preferences that are not per-event history live in `vault/config.json` under `preferences.*`. Break screen audio uses `preferences.focusBreakFinishedRepeatSeconds` and `preferences.focusBreakEndWarningSeconds`, each storing one of `0`, `10`, `15`, `30`, or `60` seconds. `0` means None. Both default to `10`.
+Global Pomodoro preferences that are not per-event history live in the active Ganbaru AI folder root `config.json` under `preferences.*`. Break screen audio uses `preferences.focusBreakFinishedRepeatSeconds` and `preferences.focusBreakEndWarningSeconds`, each storing one of `0`, `10`, `15`, `30`, or `60` seconds. `0` means None. Both default to `10`.
 
 ### `pomodoro_configs`
 
@@ -318,7 +318,7 @@ If `original_event_id` is synthetic and neither the live template expands that o
 
 User-authored themes persist as a normalized snapshot across six tables. Built-in light and dark stay code-pinned in `apps/client/src/lib/stores/themes.ts` and never appear in the database; the schema's `CHECK (id NOT IN ('light', 'dark'))` on `themes.id` defends against built-in import collisions, while the primary key prevents duplicate user-theme IDs. The full feature design lives in `features/themes.md`.
 
-Boot order matters: `apps/client/src/main.ts` awaits `ensureConfigLoaded()` and then `hydrateUserThemes()` before mounting the app. The hydrate helper runs an idempotent one-time migration that walks the legacy `themes.user` blob from `vault/config.json`, runs the current derivation engine to produce missing tokens, writes one transaction per theme, then removes `themes.user` from the config so subsequent boots load purely from SQLite.
+Boot order matters: `apps/client/src/main.ts` validates the active Ganbaru AI folder, awaits `ensureConfigLoaded()`, and then `hydrateUserThemes()` before mounting the app. The hydrate helper runs an idempotent one-time migration that walks the legacy `themes.user` blob from root `config.json`, runs the current derivation engine to produce missing tokens, writes one transaction per theme, then removes `themes.user` from the config so subsequent boots load purely from SQLite.
 
 ### `themes`
 
@@ -344,7 +344,7 @@ One row per user theme. Carries identity, the active blend canvas (the bg dimmed
 
 One row per resolved color value, across three peer kinds. Sources drive multi-token derivation when one of them is edited; app and calendar tokens are the rendered shell snapshot. Source key names are bare (`canvas`, `ink`, `primary`, `destructive`, `confirm`, `warning`); app and calendar key names keep their `--prefixed` CSS form.
 
-Migration v9 removes app-token rows that used to store implementation paint hooks now derived at runtime or owned by component code. This keeps existing vaults aligned with the current token catalog instead of preserving obsolete live or seed rows.
+Migration v9 removes app-token rows that used to store implementation paint hooks now derived at runtime or owned by component code. This keeps existing Ganbaru AI folders aligned with the current token catalog instead of preserving obsolete live or seed rows.
 
 Migration v11 moves `--cal-header-bg` from `kind='calendar'` to `kind='app'` because Calendar header now follows App canvas by default while remaining independently pinnable. The remaining calendar tokens cover the internal grid surface and details only.
 
@@ -424,7 +424,7 @@ JSON keeps a role as the export format only: `serializeTheme` emits a v2 envelop
 
 ## Music
 
-Music files remain outside the vault. SQLite stores playlist definitions, source identities, and playback resume state.
+Music files remain outside the Ganbaru AI folder. SQLite stores playlist definitions, source identities, and playback resume state.
 
 - **`music_playlists`:** id, name, created_at, updated_at.
 - **`music_playlist_tracks`:** id, playlist_id, position, source_kind, source_uri, source_identity, title, start_ms, end_ms, volume, rate, created_at, updated_at.
@@ -436,9 +436,9 @@ Music files remain outside the vault. SQLite stores playlist definitions, source
 
 ### `doomscrolling_usage_samples`
 
-Append-only active-use samples for Doomscrolling usage limits. Configuration lives in `vault/config.json` under `doomscrolling.limits` because it is user settings, while usage history is structured behavioral data and belongs in SQLite.
+Append-only active-use samples for Doomscrolling usage limits. Configuration lives in the active Ganbaru AI folder root `config.json` under `doomscrolling.limits` because it is user settings, while usage history is structured behavioral data and belongs in SQLite.
 
-Browser and desktop Pomodoro blocking settings live in `vault/config.json` under `doomscrolling` and `doomscrolling.desktop`. The `pauseDuringFocusPause` flag is stored separately for browser rules and desktop app rules so each surface can decide whether a paused focus session pauses enforcement or keeps rules strict.
+Browser and desktop Pomodoro blocking settings live in the active Ganbaru AI folder root `config.json` under `doomscrolling` and `doomscrolling.desktop`. The `pauseDuringFocusPause` flag is stored separately for browser rules and desktop app rules so each surface can decide whether a paused focus session pauses enforcement or keeps rules strict.
 
 Each row stores one measured active-use interval. The browser extension records active focused tab time through native messaging and sends only a normalized host plus elapsed seconds. Desktop samples use focused foreground app time where the platform exposes it. On Wayland sessions that do not expose focused app tracking, desktop samples use selected-app process-open time instead.
 
@@ -466,8 +466,8 @@ These tables are designed but their detailed shape is filled in when the feature
 
 - **Project task tables:** deferred until the future task design is settled.
 - **`work_environments`:** planned normalized environment header. Apps, browser tabs, and blocker rules are child rows, not embedded blobs.
-- **`notes_index`:** path, title, modified_at, tags, backlinks. Source of truth is the markdown file under `vault/notes/`.
-- **`diary_index`:** date, type (morning/evening), mood, energy, sleep_hours, path. Source of truth is the markdown file under `vault/diary/`.
+- **`notes_index`:** path, title, modified_at, tags, backlinks. Source of truth is the markdown file under `Ganbaru AI/notes/`.
+- **`diary_index`:** date, type (morning/evening), mood, energy, sleep_hours, path. Source of truth is the markdown file under `Ganbaru AI/diary/`.
 - **`projects`:** id, name, status, lifecycle_phase, created_at.
 
 When designing one of these, follow the pomodoro pattern: snapshot any value that the user could change later but that an audit query needs to know about at the moment of the action.

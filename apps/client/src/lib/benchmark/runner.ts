@@ -143,7 +143,7 @@ export function createRunner(getEventCount: () => number) {
  * The next cold boot opens the isolated benchmark DB (because
  * `vaultMode === "benchmark"`) and the runner picks up the baseline pass from
  * `checkAndResume`. State file lives in `app_config_dir/benchmark-state.json`,
- * not the vault.
+ * not the Ganbaru AI folder.
  */
 export async function persistPhaseAPending(opts: {
   scenarioId: string;

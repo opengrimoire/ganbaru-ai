@@ -1,4 +1,4 @@
-use crate::db;
+use crate::{db, vault};
 use sqlx::{
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
     SqlitePool,
@@ -10,11 +10,9 @@ use std::{
 };
 use tauri::{AppHandle, Manager, Runtime};
 
-const ALLOWED_SQLITE_FILES: &[&str] = &[
-    "ganbaru-ai.db",
-    "ganbaru-ai-dev.db",
-    "ganbaru-ai-benchmark.db",
-];
+pub const BENCHMARK_SQLITE_URL: &str = "sqlite:benchmark.sqlite";
+
+const ALLOWED_SQLITE_FILES: &[&str] = &["app.sqlite", "benchmark.sqlite"];
 
 #[derive(Clone, Default)]
 pub struct DatabaseState {
@@ -30,8 +28,13 @@ pub fn resolve_sqlite_url<R: Runtime>(app: &AppHandle<R>, db_url: &str) -> Resul
         return Err(format!("unsupported sqlite file '{file_name}'"));
     }
 
-    let mut path = app.path().app_config_dir().map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(&path).map_err(|e| format!("create app config dir: {e}"))?;
+    let mut path = if file_name == vault::APP_SQLITE_FILE {
+        vault::active_vault_path(app)?
+    } else {
+        let path = app.path().app_config_dir().map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(&path).map_err(|e| format!("create app config dir: {e}"))?;
+        path
+    };
     path.push(file_name);
     let path = path
         .to_str()

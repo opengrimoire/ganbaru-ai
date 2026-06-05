@@ -43,7 +43,7 @@ Ganbaru AI does **not** offer a hosted sync service. The project is donation-fun
 
 ## Backups
 
-Sync is not a backup. Backups go to a user-specified path outside the vault, on a schedule the user configures. Sync ensures multiple devices have the same state; backups ensure the state can be recovered if all devices are lost.
+Sync is not a backup. Backups go to a user-specified path outside the Ganbaru AI folder, on a schedule the user configures. Sync ensures multiple devices have the same state; backups ensure the state can be recovered if all devices are lost.
 
 ## What this doc does not cover yet
 

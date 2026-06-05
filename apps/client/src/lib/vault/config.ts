@@ -1,5 +1,5 @@
 /**
- * Frontend bridge to `vault/config.json`.
+ * Frontend bridge to the active Ganbaru AI folder's root `config.json`.
  *
  * Reads the file once at boot, keeps an in-memory cache, and flushes any
  * changes back to disk through a debounced write so a burst of edits
@@ -11,7 +11,7 @@
  * concerns (theme vs preferences vs themes.user) live under their own
  * branches.
  *
- * The vault path itself is owned by the Rust side (see
+ * The Ganbaru AI folder path itself is owned by the Rust side (see
  * `src-tauri/src/vault.rs`). This module only knows how to read and write
  * the config payload and never talks to the filesystem directly.
  */
@@ -96,8 +96,8 @@ function deletePath(root: JsonObject, parts: readonly string[]): void {
 }
 
 async function fetchFromDisk(): Promise<JsonObject> {
+  const raw = await invoke<string>("vault_read_config");
   try {
-    const raw = await invoke<string>("vault_read_config");
     const parsed = JSON.parse(raw);
     return isPlainObject(parsed) ? parsed : {};
   } catch (err) {
@@ -145,7 +145,7 @@ function migrateFromLocalStorage(): boolean {
 }
 
 /**
- * Trigger the one-time vault load. Idempotent: subsequent calls return the
+ * Trigger the one-time config load. Idempotent: subsequent calls return the
  * same promise. Must complete before any consumer calls `getConfigKey`.
  */
 export function ensureConfigLoaded(): Promise<void> {

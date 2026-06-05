@@ -80,7 +80,7 @@ This means the old icon remains resolvable until the new icon is ready. The user
 
 The cache filenames include a tray icon renderer version. Bump `LINUX_TRAY_ICON_VERSION` in `apps/client/src-tauri/src/tray.rs` when a renderer change makes existing cached PNGs visually obsolete.
 
-Generated tray PNGs live in the app cache, not the vault. They are derived UI assets, not user data. The cache footprint is small: one empty icon, up to 101 normal progress icons, and up to 22 paused pulse frames per progress step per renderer version.
+Generated tray PNGs live in the app cache, not the Ganbaru AI folder. They are derived UI assets, not user data. The cache footprint is small: one empty icon, up to 101 normal progress icons, and up to 22 paused pulse frames per progress step per renderer version.
 
 ## Tauri version pinning
 

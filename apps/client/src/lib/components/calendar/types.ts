@@ -1,4 +1,11 @@
-export type CalendarViewMode = "week" | "workweek" | "day" | "month";
+export const CALENDAR_VIEW_MODES = ["day", "workweek", "week", "month"] as const;
+export type CalendarViewMode = (typeof CALENDAR_VIEW_MODES)[number];
+export const DEFAULT_CALENDAR_VIEW_MODE: CalendarViewMode = "week";
+
+export function isCalendarViewMode(value: unknown): value is CalendarViewMode {
+  return typeof value === "string"
+    && CALENDAR_VIEW_MODES.includes(value as CalendarViewMode);
+}
 
 /**
  * Index into a theme's eventPalette array. Valid range is 0..PALETTE_SIZE-1

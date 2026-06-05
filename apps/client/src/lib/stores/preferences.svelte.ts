@@ -14,7 +14,9 @@ import {
   DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS,
   DEFAULT_FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
   DEFAULT_TITLE_BAR_VISIBILITY,
+  DEFAULT_CALENDAR_VIEW_MODE,
   type CalendarTimeFormat,
+  type CalendarViewMode,
   type FocusBreakEndEscPresses,
   type FocusBreakExtensionLimit,
   type FocusBreakSoundIntervalSeconds,
@@ -25,6 +27,7 @@ import {
   clampFontScale,
   getFontFamilyById,
   isCalendarTimeFormat,
+  isCalendarViewMode,
   isTitleBarControlId,
   parseFocusBreakEndEscPresses,
   parseFocusBreakExtensionLimit,
@@ -40,6 +43,7 @@ const FONT_FAMILY_CONFIG_KEY = "preferences.fontFamilyId";
 const FONT_SCALE_CONFIG_KEY = "preferences.fontScale";
 const EVENT_TZ_DISPLAY_KEY = "preferences.eventTimezoneDisplay";
 const CALENDAR_TIME_FORMAT_CONFIG_KEY = "preferences.calendarTimeFormat";
+const CALENDAR_VIEW_MODE_CONFIG_KEY = "preferences.calendarViewMode";
 const CALENDAR_DIM_PAST_EVENTS_CONFIG_KEY = "preferences.calendarDimPastEvents";
 const FOCUS_IDLE_THRESHOLD_MINUTES_CONFIG_KEY = "preferences.focusIdleThresholdMinutes";
 const FOCUS_IDLE_PAUSE_ON_EVENT_CREATE_CONFIG_KEY = "preferences.focusIdlePauseOnEventCreate";
@@ -81,6 +85,12 @@ function loadSavedCalendarTimeFormat(): CalendarTimeFormat {
   const saved = getConfigKey<unknown>(CALENDAR_TIME_FORMAT_CONFIG_KEY, undefined);
   if (isCalendarTimeFormat(saved)) return saved;
   return DEFAULT_CALENDAR_TIME_FORMAT;
+}
+
+function loadSavedCalendarViewMode(): CalendarViewMode {
+  const saved = getConfigKey<unknown>(CALENDAR_VIEW_MODE_CONFIG_KEY, undefined);
+  if (isCalendarViewMode(saved)) return saved;
+  return DEFAULT_CALENDAR_VIEW_MODE;
 }
 
 function loadSavedCalendarDimPastEvents(): boolean {
@@ -158,6 +168,7 @@ let fontFamilyId = $state<FontFamilyId>(loadSavedFontFamilyId());
 let fontScale = $state<number>(loadSavedFontScale());
 let eventTimezoneDisplay = $state<EventTimezoneDisplay>(loadSavedEventTzDisplay());
 let calendarTimeFormat = $state<CalendarTimeFormat>(loadSavedCalendarTimeFormat());
+let calendarViewMode = $state<CalendarViewMode>(loadSavedCalendarViewMode());
 let calendarDimPastEvents = $state<boolean>(loadSavedCalendarDimPastEvents());
 let focusIdleThresholdMinutes = $state<number>(loadSavedFocusIdleThresholdMinutes());
 let focusIdlePauseOnEventCreate = $state<boolean>(loadSavedFocusIdlePauseOnEventCreate());
@@ -215,6 +226,13 @@ function setCalendarTimeFormat(value: CalendarTimeFormat): void {
   if (!isCalendarTimeFormat(value)) return;
   calendarTimeFormat = value;
   setConfigKey(CALENDAR_TIME_FORMAT_CONFIG_KEY, value);
+}
+
+function setCalendarViewMode(value: CalendarViewMode): void {
+  if (!isCalendarViewMode(value)) return;
+  if (value === calendarViewMode) return;
+  calendarViewMode = value;
+  setConfigKey(CALENDAR_VIEW_MODE_CONFIG_KEY, value);
 }
 
 function setCalendarDimPastEvents(value: boolean): void {
@@ -299,8 +317,8 @@ function resetTitleBarVisibility(): void {
 }
 
 /**
- * Access app-wide user preferences (font family, font scale). Returns
- * getters so Svelte's reactivity picks up changes in consuming components.
+ * Access app-wide user preferences. Returns getters so Svelte's reactivity
+ * picks up changes in consuming components.
  */
 export function getPreferences() {
   return {
@@ -319,6 +337,9 @@ export function getPreferences() {
     },
     get calendarTimeFormat(): CalendarTimeFormat {
       return calendarTimeFormat;
+    },
+    get calendarViewMode(): CalendarViewMode {
+      return calendarViewMode;
     },
     get calendarDimPastEvents(): boolean {
       return calendarDimPastEvents;
@@ -354,6 +375,7 @@ export function getPreferences() {
     setFontScale,
     setEventTimezoneDisplay,
     setCalendarTimeFormat,
+    setCalendarViewMode,
     setCalendarDimPastEvents,
     setFocusIdleThresholdMinutes,
     setFocusIdlePauseOnEventCreate,
@@ -376,6 +398,9 @@ export function getPreferences() {
     },
     resetCalendarTimeFormat() {
       setCalendarTimeFormat(DEFAULT_CALENDAR_TIME_FORMAT);
+    },
+    resetCalendarViewMode() {
+      setCalendarViewMode(DEFAULT_CALENDAR_VIEW_MODE);
     },
     resetCalendarDimPastEvents() {
       setCalendarDimPastEvents(DEFAULT_CALENDAR_DIM_PAST_EVENTS);

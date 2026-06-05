@@ -74,7 +74,7 @@ The diary creates two daily touchpoints: morning and evening, tied to the sleep 
 
 Mood and energy data over time create personal baselines for the AI layer (understanding the user's patterns).
 
-Diary entries are stored as dated markdown files in the vault and indexed in SQLite.
+Diary entries are stored as dated markdown files in the Ganbaru AI folder and indexed in SQLite.
 
 ### Sleep alarm (mobile-only feature)
 

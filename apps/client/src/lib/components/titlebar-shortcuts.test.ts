@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  isCloseWindowShortcut,
   recordResetShortcutPress,
+  type CloseWindowShortcutEvent,
   type ResetShortcutSequenceOptions,
   type ResetShortcutSequenceState,
 } from "./titlebar-shortcuts";
@@ -14,7 +16,28 @@ function emptySequence(): ResetShortcutSequenceState {
   return { pressCount: 0, lastPressAtMs: null };
 }
 
+function shortcutEvent(overrides: Partial<CloseWindowShortcutEvent>): CloseWindowShortcutEvent {
+  return {
+    altKey: false,
+    ctrlKey: false,
+    key: "w",
+    metaKey: false,
+    shiftKey: false,
+    ...overrides,
+  };
+}
+
 describe("title bar shortcuts", () => {
+  it("matches close shortcuts with and without shift", () => {
+    expect(isCloseWindowShortcut(shortcutEvent({ ctrlKey: true }))).toBe(true);
+    expect(isCloseWindowShortcut(shortcutEvent({ ctrlKey: true, shiftKey: true }))).toBe(true);
+  });
+
+  it("rejects close shortcuts with extra modifiers or another key", () => {
+    expect(isCloseWindowShortcut(shortcutEvent({ ctrlKey: true, altKey: true }))).toBe(false);
+    expect(isCloseWindowShortcut(shortcutEvent({ ctrlKey: true, key: "t" }))).toBe(false);
+  });
+
   it("waits before the reset threshold so close can still run", () => {
     let state = emptySequence();
 

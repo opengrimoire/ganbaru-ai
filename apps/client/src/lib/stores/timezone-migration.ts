@@ -11,7 +11,8 @@
  *
  * Idempotency: a marker preference (`preferences.calendarTimezoneMigratedV8`)
  * is set to true on success. Subsequent boots short-circuit. The marker
- * lives in vault/config.json so it survives DB rebuilds during dev.
+ * lives in the active Ganbaru AI folder config so it survives DB rebuilds
+ * during dev.
  *
  * Mirrors the `hydrateUserThemes` pattern from theme.svelte.ts — runs in
  * main.ts after `ensureConfigLoaded()` and before the App component imports
@@ -108,7 +109,8 @@ function getDeviceZone(): string {
 /**
  * Run the one-time legacy-to-UTC rewrite for calendar_events and
  * calendar_event_overrides. Idempotent: a successful run sets
- * `preferences.calendarTimezoneMigratedV8 = true` in vault/config.json
+ * `preferences.calendarTimezoneMigratedV8 = true` in the active Ganbaru AI
+ * folder config
  * and subsequent calls short-circuit.
  */
 export async function hydrateCalendarEventTimezones(): Promise<void> {

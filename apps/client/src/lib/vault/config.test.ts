@@ -95,6 +95,18 @@ describe("ensureConfigLoaded", () => {
     expect(reads.length).toBe(1);
   });
 
+  it("rejects backend read failures so startup can show a setup error", async () => {
+    installLocalStorage();
+    invokeMock.mockImplementation(((cmd: string) => {
+      if (cmd === "vault_read_config") return Promise.reject(new Error("permission denied"));
+      if (cmd === "vault_write_config") return Promise.resolve();
+      return Promise.reject(new Error(`unexpected command: ${cmd}`));
+    }) as unknown as Mock);
+    const { ensureConfigLoaded } = await loadModule();
+
+    await expect(ensureConfigLoaded()).rejects.toThrow("permission denied");
+  });
+
   it("treats malformed JSON from the backend as an empty config", async () => {
     installLocalStorage();
     setReadResponse("not json");

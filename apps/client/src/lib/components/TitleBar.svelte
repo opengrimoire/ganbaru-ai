@@ -57,6 +57,7 @@
   import { formatShortcut, hasOnlyShortcutModifier } from "$lib/keyboard-shortcuts";
   import type { PlaybackStatus } from "$lib/music/playback";
   import {
+    isCloseWindowShortcut,
     recordResetShortcutPress,
     type ResetShortcutSequenceState,
   } from "$lib/components/titlebar-shortcuts";
@@ -268,7 +269,7 @@
       return;
     }
     showCloseConfirm = false;
-    // Best-effort rollback of any open theme edit so the vault does not
+    // Best-effort rollback of any open theme edit so the config does not
     // keep half-tuned colors after a forced quit. Debounced writes may not
     // flush before the process dies, so this is not a guarantee.
     if (themeEditor.editingId) void themeEditor.cancel();
@@ -540,11 +541,13 @@
   // Capture shell shortcuts early so focused views and modals cannot intercept them.
   $effect(() => {
     function handleGlobalShellShortcut(e: KeyboardEvent) {
-      if (hasOnlyShortcutModifier(e, { shift: true }) && e.key.toLowerCase() === "w") {
+      if (isCloseWindowShortcut(e)) {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
         const resetTriggered =
+          e.shiftKey
+          &&
           !e.repeat
           && !isEditableKeyboardTarget(e.target)
           && registerResetShortcutPress();
@@ -1443,7 +1446,7 @@
 {#if showResetSequenceConfirm}
   <ConfirmDialog
     title="Open reset confirmation?"
-    message="You pressed the hidden reset shortcut 10 times. Continue only if you meant to erase the app data"
+    message="You pressed the hidden reset shortcut 10 times. Continue only if you meant to erase the structured database"
     confirmLabel="Continue (Enter)"
     cancelLabel="Cancel (Esc)"
     onConfirm={() => {
@@ -1456,9 +1459,9 @@
 
 {#if showResetConfirm}
   <ConfirmDialog
-    title="Reset everything?"
-    message="All data will be permanently deleted"
-    confirmLabel="Reset everything (Enter)"
+    title="Reset database?"
+    message="The active Ganbaru AI folder's app.sqlite file will be permanently deleted"
+    confirmLabel="Reset database (Enter)"
     cancelLabel="Cancel (Esc)"
     onConfirm={confirmReset}
     onCancel={() => { showResetConfirm = false; }}

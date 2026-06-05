@@ -12,15 +12,14 @@ import {
  * first call to `ensureDbUrl()` and cached for the rest of the process lifetime.
  *
  * The resolution checks the persisted benchmark state file: only fresh
- * `*-pending` states route to the isolated `ganbaru-ai-benchmark.db`.
+ * `*-pending` states route to the isolated `benchmark.sqlite`.
  * Interrupted `*-running` states fall back to the user DB and are cleaned
  * up by the benchmark runner after boot.
  */
 let cachedUrl: string | null = null;
 
-function defaultUserUrl(): string {
-  return import.meta.env.DEV ? "sqlite:ganbaru-ai-dev.db" : "sqlite:ganbaru-ai.db";
-}
+const USER_DB_URL = "sqlite:app.sqlite";
+const BENCHMARK_DB_URL = "sqlite:benchmark.sqlite";
 
 /** Minimal shape needed for the URL decision. The full state lives in `benchmark/types.ts`. */
 interface VaultModeProbe {
@@ -42,13 +41,13 @@ async function resolveUrl(): Promise<string> {
       const fresh = isFreshBenchmarkTotalAge(parsed) && isFreshBenchmarkPendingAge(parsed);
       const benchmarkPending = isBenchmarkPendingStage(parsed?.stage);
       if (parsed?.vaultMode === "benchmark" && benchmarkPending && validVersion && fresh) {
-        return "sqlite:ganbaru-ai-benchmark.db";
+        return BENCHMARK_DB_URL;
       }
     }
   } catch (e) {
     console.error("dbUrl: failed to probe benchmark state, falling back to user DB", e);
   }
-  return defaultUserUrl();
+  return USER_DB_URL;
 }
 
 /**

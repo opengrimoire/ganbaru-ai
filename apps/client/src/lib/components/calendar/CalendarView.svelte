@@ -253,9 +253,12 @@
 
   type ViewState = { mode: CalendarViewMode; date: Date };
 
-  let viewMode: CalendarViewMode = $state("week");
+  const initialViewMode: CalendarViewMode = preferences.calendarViewMode;
+  const initialAnchorDate = new Date();
+
+  let viewMode: CalendarViewMode = $state(initialViewMode);
   let dayHeaderReturnMode: DayHeaderReturnMode = $state(DEFAULT_DAY_HEADER_RETURN_MODE);
-  let anchorDate: Date = $state(new Date());
+  let anchorDate: Date = $state(initialAnchorDate);
   let timezones: string[] = $state([getLocalTimezone()]);
   let tzAbbrMode: TimezoneAbbrMode = $state("acronym");
 
@@ -844,7 +847,7 @@
 
   // View history for Alt+Left/Right navigation (capped at 50)
   const VIEW_HISTORY_LIMIT = 50;
-  let history: ViewState[] = $state([{ mode: "week", date: new Date() }]);
+  let history: ViewState[] = $state([{ mode: initialViewMode, date: new Date(initialAnchorDate) }]);
   let historyIndex = $state(0);
   let isNavigatingHistory = false;
 
@@ -1417,6 +1420,7 @@
         applyPersistedSegmentsSnapshot(segmentSnapshot);
         dayHeaderReturnMode = nextDayHeaderReturnMode(dayHeaderReturnMode, normalizedTarget.mode);
         viewMode = normalizedTarget.mode;
+        preferences.setCalendarViewMode(normalizedTarget.mode);
         anchorDate = normalizedTarget.date;
         void calendarStore.loadWindow(targetWindow.start, targetWindow.end)
           .catch((error) => console.error("[CalendarView] target state apply failed:", error));

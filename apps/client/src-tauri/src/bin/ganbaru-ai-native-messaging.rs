@@ -16,15 +16,12 @@ const STATE_FILE: &str = "doomscrolling-state.json";
 const LIMIT_STATE_FILE: &str = "doomscrolling-limit-state.json";
 const EXTENSION_CONNECTION_FILE: &str = "doomscrolling-extension-status.json";
 const EVENTS_FILE: &str = "doomscrolling-events.jsonl";
-const CONFIG_FILE: &str = "vault/config.json";
+const APP_STATE_FILE: &str = "app-state.json";
+const CONFIG_FILE: &str = "config.json";
+const APP_SQLITE_FILE: &str = "app.sqlite";
 const STALE_STATE_SECONDS: i64 = 75;
 const ACTIVE_STATE_STALE_SECONDS: i64 = 45;
 const LIMIT_STATE_STALE_SECONDS: i64 = 20;
-const ALLOWED_USAGE_DATABASE_FILES: &[&str] = &[
-    "ganbaru-ai.db",
-    "ganbaru-ai-dev.db",
-    "ganbaru-ai-benchmark.db",
-];
 const USAGE_SAMPLE_TABLE_SQL: &str = "
     CREATE TABLE IF NOT EXISTS doomscrolling_usage_samples (
         id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
@@ -196,6 +193,7 @@ struct DoomscrollingConfig {
 #[derive(Debug)]
 struct StateSnapshot {
     config_dir: Option<PathBuf>,
+    vault_path: Option<PathBuf>,
     config: DoomscrollingConfig,
     runtime: Option<RuntimeState>,
     limit_state: Option<LimitState>,
@@ -207,8 +205,14 @@ struct LimitState {
     local_date: String,
     week_start_local_date: Option<String>,
     updated_at: String,
-    database_file_name: Option<String>,
+    database_path: Option<String>,
     limits: Vec<LimitStateItem>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AppState {
+    active_vault_path: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -302,7 +306,7 @@ fn run() -> Result<NativeResponse, String> {
         match normalize_usage_sample(&request) {
             Ok(sample) => {
                 match record_usage_sample(
-                    snapshot.config_dir.as_deref(),
+                    snapshot.vault_path.as_deref(),
                     snapshot.limit_state.as_ref(),
                     sample,
                 ) {
@@ -390,10 +394,16 @@ fn write_native_message(response: &NativeResponse) -> Result<(), String> {
 }
 
 fn load_snapshot() -> StateSnapshot {
-    let config_dir = config_dir_candidates()
-        .into_iter()
-        .find(|dir| dir.join(STATE_FILE).exists() || dir.join(CONFIG_FILE).exists());
-    let config = config_dir
+    let config_dir = config_dir_candidates().into_iter().find(|dir| {
+        dir.join(STATE_FILE).exists()
+            || dir.join(LIMIT_STATE_FILE).exists()
+            || dir.join(APP_STATE_FILE).exists()
+    });
+    let vault_path = config_dir
+        .as_ref()
+        .and_then(|dir| read_app_state(&dir.join(APP_STATE_FILE)))
+        .and_then(active_vault_path_from_state);
+    let config = vault_path
         .as_ref()
         .and_then(|dir| read_config(&dir.join(CONFIG_FILE)))
         .unwrap_or_else(default_config);
@@ -402,9 +412,10 @@ fn load_snapshot() -> StateSnapshot {
         .and_then(|dir| read_runtime_state(&dir.join(STATE_FILE)));
     let limit_state = config_dir
         .as_ref()
-        .and_then(|dir| read_limit_state(&dir.join(LIMIT_STATE_FILE)));
+        .and_then(|dir| read_limit_state(&dir.join(LIMIT_STATE_FILE), vault_path.as_deref()));
     StateSnapshot {
         config_dir,
+        vault_path,
         config,
         runtime,
         limit_state,
@@ -457,10 +468,23 @@ fn read_runtime_state(path: &std::path::Path) -> Option<RuntimeState> {
     serde_json::from_str(&contents).ok()
 }
 
-fn read_limit_state(path: &std::path::Path) -> Option<LimitState> {
+fn read_app_state(path: &std::path::Path) -> Option<AppState> {
+    let contents = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str(&contents).ok()
+}
+
+fn active_vault_path_from_state(state: AppState) -> Option<PathBuf> {
+    let path = PathBuf::from(state.active_vault_path?);
+    if !path.is_absolute() || !path.is_dir() {
+        return None;
+    }
+    path.join("vault.json").exists().then_some(path)
+}
+
+fn read_limit_state(path: &std::path::Path, vault_path: Option<&Path>) -> Option<LimitState> {
     let contents = std::fs::read_to_string(path).ok()?;
     let state: LimitState = serde_json::from_str(&contents).ok()?;
-    limit_state_is_fresh(&state).then_some(state)
+    limit_state_is_fresh(&state, vault_path).then_some(state)
 }
 
 fn read_config(path: &std::path::Path) -> Option<DoomscrollingConfig> {
@@ -1269,8 +1293,8 @@ fn rules_fingerprint(config: &DoomscrollingConfig, limit_state: Option<&LimitSta
         if let Some(week_start_local_date) = &limit_state.week_start_local_date {
             feed_fingerprint(&mut hash, week_start_local_date);
         }
-        if let Some(database_file_name) = &limit_state.database_file_name {
-            feed_fingerprint(&mut hash, database_file_name);
+        if let Some(database_path) = &limit_state.database_path {
+            feed_fingerprint(&mut hash, database_path);
         }
         for limit in &limit_state.limits {
             feed_fingerprint(&mut hash, &limit.id);
@@ -1382,41 +1406,34 @@ fn now_epoch_ms() -> i64 {
         .unwrap_or(0)
 }
 
-fn fallback_usage_database_file_name(config_dir: &Path) -> &'static str {
-    let file_name = config_dir
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or_default();
-    if file_name.ends_with(".dev") {
-        "ganbaru-ai-dev.db"
-    } else {
-        "ganbaru-ai.db"
+fn database_path_is_allowed(path: &Path, vault_path: Option<&Path>) -> bool {
+    if !path.is_absolute()
+        || path.file_name().and_then(|name| name.to_str()) != Some(APP_SQLITE_FILE)
+    {
+        return false;
+    }
+    match vault_path {
+        Some(vault_path) => path == vault_path.join(APP_SQLITE_FILE),
+        None => true,
     }
 }
 
-fn usage_database_file_name(config_dir: &Path, limit_state: Option<&LimitState>) -> &'static str {
+fn usage_db_path(vault_path: &Path, limit_state: Option<&LimitState>) -> PathBuf {
     limit_state
-        .and_then(|state| state.database_file_name.as_deref())
-        .and_then(|file_name| {
-            ALLOWED_USAGE_DATABASE_FILES
-                .iter()
-                .copied()
-                .find(|allowed| *allowed == file_name)
-        })
-        .unwrap_or_else(|| fallback_usage_database_file_name(config_dir))
-}
-
-fn usage_db_path(config_dir: &Path, limit_state: Option<&LimitState>) -> PathBuf {
-    config_dir.join(usage_database_file_name(config_dir, limit_state))
+        .and_then(|state| state.database_path.as_deref())
+        .map(PathBuf::from)
+        .filter(|path| database_path_is_allowed(path, Some(vault_path)))
+        .unwrap_or_else(|| vault_path.join(APP_SQLITE_FILE))
 }
 
 fn record_usage_sample(
-    config_dir: Option<&Path>,
+    vault_path: Option<&Path>,
     limit_state: Option<&LimitState>,
     sample: UsageSample,
 ) -> Result<(), String> {
-    let config_dir = config_dir.ok_or_else(|| "app config directory is unavailable".to_string())?;
-    let db_path = usage_db_path(config_dir, limit_state);
+    let vault_path =
+        vault_path.ok_or_else(|| "active Ganbaru AI folder is unavailable".to_string())?;
+    let db_path = usage_db_path(vault_path, limit_state);
     if !db_path.exists() {
         return Err("usage database is unavailable".to_string());
     }
@@ -1513,7 +1530,7 @@ fn now_utc() -> DateTime<Utc> {
     std::time::SystemTime::now().into()
 }
 
-fn limit_state_is_fresh(state: &LimitState) -> bool {
+fn limit_state_is_fresh(state: &LimitState, vault_path: Option<&Path>) -> bool {
     if !valid_local_date(&state.local_date) {
         return false;
     }
@@ -1546,9 +1563,10 @@ fn limit_state_is_fresh(state: &LimitState) -> bool {
         return false;
     }
     if state
-        .database_file_name
+        .database_path
         .as_deref()
-        .is_some_and(|file_name| !ALLOWED_USAGE_DATABASE_FILES.contains(&file_name))
+        .map(Path::new)
+        .is_some_and(|path| !database_path_is_allowed(path, vault_path))
     {
         return false;
     }
@@ -1654,6 +1672,7 @@ mod tests {
     fn active_runtime_state_remains_fresh_inside_heartbeat_window() {
         let snapshot = StateSnapshot {
             config_dir: None,
+            vault_path: None,
             config: config(),
             runtime: Some(runtime_for_phase_updated_at(
                 "focus",
@@ -1678,6 +1697,7 @@ mod tests {
     fn active_runtime_state_fails_open_after_missed_heartbeat() {
         let snapshot = StateSnapshot {
             config_dir: None,
+            vault_path: None,
             config: config(),
             runtime: Some(runtime_for_phase_updated_at(
                 "focus",
@@ -1812,7 +1832,7 @@ mod tests {
             local_date: "2026-05-28".to_string(),
             week_start_local_date: Some("2026-05-25".to_string()),
             updated_at: super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
-            database_file_name: Some("ganbaru-ai-dev.db".to_string()),
+            database_path: Some("/tmp/ganbaru-ai-vault/app.sqlite".to_string()),
             limits: vec![super::LimitStateItem {
                 id: "youtube".to_string(),
                 period: Some("day".to_string()),
@@ -1861,7 +1881,7 @@ mod tests {
             local_date: "2026-05-28".to_string(),
             week_start_local_date: Some("2026-05-25".to_string()),
             updated_at: super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
-            database_file_name: Some("ganbaru-ai-dev.db".to_string()),
+            database_path: Some("/tmp/ganbaru-ai-vault/app.sqlite".to_string()),
             limits: vec![super::LimitStateItem {
                 id: "reddit".to_string(),
                 period: Some("day".to_string()),
@@ -1890,34 +1910,29 @@ mod tests {
     }
 
     #[test]
-    fn uses_limit_state_database_file_for_usage_samples() {
-        let config_dir = std::path::Path::new("/tmp/org.opengrimoire.ganbaru-ai");
+    fn uses_limit_state_database_path_for_usage_samples() {
+        let vault_path = std::path::Path::new("/tmp/ganbaru-ai-vault");
         let limit_state = super::LimitState {
             local_date: "2026-05-28".to_string(),
             week_start_local_date: Some("2026-05-25".to_string()),
             updated_at: super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
-            database_file_name: Some("ganbaru-ai-dev.db".to_string()),
+            database_path: Some("/tmp/ganbaru-ai-vault/app.sqlite".to_string()),
             limits: Vec::new(),
         };
 
         assert_eq!(
-            super::usage_db_path(config_dir, Some(&limit_state)),
-            config_dir.join("ganbaru-ai-dev.db")
+            super::usage_db_path(vault_path, Some(&limit_state)),
+            vault_path.join("app.sqlite")
         );
     }
 
     #[test]
-    fn falls_back_to_config_dir_database_file_for_old_limit_state() {
-        let prod_config_dir = std::path::Path::new("/tmp/org.opengrimoire.ganbaru-ai");
-        let dev_config_dir = std::path::Path::new("/tmp/org.opengrimoire.ganbaru-ai.dev");
+    fn falls_back_to_vault_database_path_without_limit_state_path() {
+        let vault_path = std::path::Path::new("/tmp/ganbaru-ai-vault");
 
         assert_eq!(
-            super::usage_db_path(prod_config_dir, None),
-            prod_config_dir.join("ganbaru-ai.db")
-        );
-        assert_eq!(
-            super::usage_db_path(dev_config_dir, None),
-            dev_config_dir.join("ganbaru-ai-dev.db")
+            super::usage_db_path(vault_path, None),
+            vault_path.join("app.sqlite")
         );
     }
 
@@ -2082,6 +2097,7 @@ mod tests {
         config.block_during_long_breaks = false;
         let snapshot = StateSnapshot {
             config_dir: None,
+            vault_path: None,
             config,
             runtime: None,
             limit_state: None,
@@ -2100,6 +2116,7 @@ mod tests {
         config.block_during_short_breaks = true;
         let snapshot = StateSnapshot {
             config_dir: None,
+            vault_path: None,
             config,
             runtime: None,
             limit_state: None,
@@ -2115,6 +2132,7 @@ mod tests {
     fn skips_paused_focus_when_pause_setting_enabled() {
         let snapshot = StateSnapshot {
             config_dir: None,
+            vault_path: None,
             config: config(),
             runtime: Some(runtime_for_phase("focus", true)),
             limit_state: None,
@@ -2130,6 +2148,7 @@ mod tests {
         runtime.pause_reason = Some("idle".to_string());
         let snapshot = StateSnapshot {
             config_dir: None,
+            vault_path: None,
             config: config(),
             runtime: Some(runtime),
             limit_state: None,
@@ -2145,6 +2164,7 @@ mod tests {
         runtime.pause_reason = Some("suspend".to_string());
         let snapshot = StateSnapshot {
             config_dir: None,
+            vault_path: None,
             config: config(),
             runtime: Some(runtime),
             limit_state: None,
@@ -2160,6 +2180,7 @@ mod tests {
         runtime.pause_reason = None;
         let snapshot = StateSnapshot {
             config_dir: None,
+            vault_path: None,
             config: config(),
             runtime: Some(runtime),
             limit_state: None,
@@ -2175,6 +2196,7 @@ mod tests {
         config.pause_during_focus_pause = false;
         let snapshot = StateSnapshot {
             config_dir: None,
+            vault_path: None,
             config,
             runtime: Some(runtime_for_phase("focus", true)),
             limit_state: None,

@@ -6,8 +6,10 @@ import {
   FONT_SCALE_MAX,
   DEFAULT_FONT_SCALE,
   DEFAULT_CALENDAR_DIM_PAST_EVENTS,
+  DEFAULT_CALENDAR_VIEW_MODE,
   DEFAULT_MUSIC_PAUSE_ON_POMODORO_PAUSE,
   DEFAULT_CALENDAR_TIME_FORMAT,
+  CALENDAR_VIEW_MODES,
   DEFAULT_FOCUS_IDLE_PAUSE_ON_EVENT_CREATE,
   DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
   DEFAULT_FOCUS_BREAK_END_ESC_PRESSES,
@@ -26,6 +28,7 @@ import {
   clampFontScale,
   getFontFamilyById,
   isCalendarTimeFormat,
+  isCalendarViewMode,
   isFocusBreakEndEscPresses,
   isFocusBreakExtensionLimit,
   isFocusBreakSoundIntervalSeconds,
@@ -142,6 +145,7 @@ describe("resolveFontFamilyStack", () => {
 describe("calendar appearance preferences", () => {
   it("defaults to 24-hour time and dimmed past event colors", () => {
     expect(DEFAULT_CALENDAR_TIME_FORMAT).toBe("24h");
+    expect(DEFAULT_CALENDAR_VIEW_MODE).toBe("week");
     expect(DEFAULT_CALENDAR_DIM_PAST_EVENTS).toBe(true);
   });
 
@@ -151,6 +155,17 @@ describe("calendar appearance preferences", () => {
     expect(isCalendarTimeFormat("24-hour")).toBe(false);
     expect(isCalendarTimeFormat(true)).toBe(false);
     expect(isCalendarTimeFormat(undefined)).toBe(false);
+  });
+
+  it("accepts supported calendar view modes only", () => {
+    expect(CALENDAR_VIEW_MODES).toEqual(["day", "workweek", "week", "month"]);
+    expect(isCalendarViewMode("day")).toBe(true);
+    expect(isCalendarViewMode("workweek")).toBe(true);
+    expect(isCalendarViewMode("week")).toBe(true);
+    expect(isCalendarViewMode("month")).toBe(true);
+    expect(isCalendarViewMode("7d")).toBe(false);
+    expect(isCalendarViewMode("agenda")).toBe(false);
+    expect(isCalendarViewMode(undefined)).toBe(false);
   });
 });
 

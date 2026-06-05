@@ -5,6 +5,7 @@ import "./app.css";
 import { mount } from "svelte";
 import { invoke } from "@tauri-apps/api/core";
 import { ensureConfigLoaded } from "./lib/vault/config";
+import { getActiveVaultInfo } from "./lib/vault/state";
 import { hydrateUserThemes } from "./lib/stores/theme.svelte";
 import {
   HARNESS_VERSION,
@@ -65,10 +66,10 @@ async function hasFreshBenchmarkResumeState(): Promise<boolean> {
   }
 }
 
-// Boot order: hydrate vault/config.json, then load user themes from
-// SQLite, then mount App. Config and theme reads block first paint so
-// the initial render matches what the user has on disk (no flash of
-// defaults). The one-shot calendar timezone migration runs from
+// Boot order: validate the active Ganbaru AI folder, hydrate root
+// config.json, load user themes from SQLite, then mount App. Config and theme
+// reads block first paint so the initial render matches what the user has on
+// disk (no flash of defaults). The one-shot calendar timezone migration runs from
 // `App.svelte`'s onMount instead, gating only `calendar.load()`: the
 // migration is idempotent (short-circuits once the marker is set), so on
 // every boot after the first successful run it is a single config read,
@@ -95,15 +96,36 @@ const appPromise = (async () => {
     });
   }
 
-  await ensureConfigLoaded();
-  const benchmarkResumePending = await hasFreshBenchmarkResumeState();
-  if (!benchmarkResumePending) {
-    try {
-      await hydrateUserThemes();
-    } catch (err) {
-      console.error("theme hydration failed before mount", err);
-    }
+  async function mountVaultSetupView(initialError: string | null) {
+    const { default: VaultSetupView } = await import(
+      "$lib/components/vault/VaultSetupView.svelte"
+    );
+    return mount(VaultSetupView, {
+      target: document.getElementById("app")!,
+      props: {
+        initialError,
+        onReady: () => {
+          window.location.reload();
+        },
+      },
+    });
   }
+
+  try {
+    const activeVault = await getActiveVaultInfo();
+    if (!activeVault) {
+      return await mountVaultSetupView(null);
+    }
+    await ensureConfigLoaded();
+    const benchmarkResumePending = await hasFreshBenchmarkResumeState();
+    if (!benchmarkResumePending) {
+      await hydrateUserThemes();
+    }
+  } catch (err) {
+    const vaultError = err instanceof Error ? err.message : String(err);
+    return await mountVaultSetupView(vaultError);
+  }
+
   const { default: App } = await import("./App.svelte");
   return mount(App, {
     target: document.getElementById("app")!,

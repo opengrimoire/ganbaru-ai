@@ -1,3 +1,17 @@
+import {
+  CALENDAR_VIEW_MODES,
+  DEFAULT_CALENDAR_VIEW_MODE,
+  isCalendarViewMode,
+  type CalendarViewMode,
+} from "$lib/components/calendar/types";
+
+export {
+  CALENDAR_VIEW_MODES,
+  DEFAULT_CALENDAR_VIEW_MODE,
+  isCalendarViewMode,
+  type CalendarViewMode,
+};
+
 /**
  * Pure types and helpers for app-wide user preferences that live outside
  * the theme system (font family, font scale, density). Themes may ship a

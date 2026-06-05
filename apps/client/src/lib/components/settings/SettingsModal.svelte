@@ -10,9 +10,11 @@
   import SettingsIcon from "@lucide/svelte/icons/settings";
   import Timer from "@lucide/svelte/icons/timer";
   import DownloadCloud from "@lucide/svelte/icons/download-cloud";
+  import HardDrive from "@lucide/svelte/icons/hard-drive";
   import X from "@lucide/svelte/icons/x";
   import AboutSection from "./AboutSection.svelte";
   import AppearanceSection from "./AppearanceSection.svelte";
+  import DataSection from "./DataSection.svelte";
   import CalendarScrollbar from "../calendar/CalendarScrollbar.svelte";
   import FocusSection from "./FocusSection.svelte";
   import MusicSection from "./MusicSection.svelte";
@@ -62,6 +64,7 @@
     { id: "focus", label: "Focus", icon: Timer },
     { id: "music", label: "Music", icon: Music },
     { id: "doomscrolling", label: "Doomscrolling", icon: GlobeOff },
+    { id: "data", label: "Data", icon: HardDrive },
     { id: "updates", label: "Updates", icon: DownloadCloud },
     { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
     { id: "about", label: "About", icon: Info },
@@ -341,6 +344,8 @@
             initialTab={initialDoomscrollingTab}
             onOpenLimitEditor={openDoomscrollingLimitEditor}
           />
+        {:else if activeSection === "data"}
+          <DataSection />
         {:else if activeSection === "updates"}
           <UpdatesSection />
         {:else if activeSection === "shortcuts"}

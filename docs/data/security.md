@@ -6,7 +6,7 @@ Ganbaru AI handles deeply personal data: calendar, notes, mood, work patterns, a
 
 The app must protect against:
 
-1. **Local malware on the user's machine.** Exfiltration of vault contents or SQLite data via processes the user did not authorize.
+1. **Local malware on the user's machine.** Exfiltration of Ganbaru AI folder contents or SQLite data via processes the user did not authorize.
 2. **Compromised dependencies.** A malicious or compromised npm, pip, or cargo package executing during install or runtime.
 3. **Supply chain attacks via external code.** Snippets the user (or AI agents) copy from web searches, GitHub issues, or Stack Overflow.
 4. **Network observation of sync traffic.** Anyone between the user's devices and the sync server (ISP, government, a cafe Wi-Fi attacker) seeing or modifying the user's data in transit.

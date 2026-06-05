@@ -15,14 +15,14 @@
  *     -> persistPhaseAPending(...)
  *     -> restart app, delayed for startup samples            # restart 1
  *   [boot, vaultMode=benchmark, stage=phase-a-pending]
- *     -> Rust database layer opens ganbaru-ai-benchmark.db (empty)
+ *     -> Rust database layer opens benchmark.sqlite (empty)
  *     -> stage becomes phase-a-running
  *     -> checkAndResume runs the baseline pass, or skips it for dense-only scenarios
  *     -> scenario.seed(dense dataset)
  *     -> persistPhaseBPending(...)
  *     -> restart app, delayed for startup samples            # restart 2
  *   [boot, vaultMode=benchmark, stage=phase-b-pending]
- *     -> Rust database layer opens ganbaru-ai-benchmark.db (now seeded)
+ *     -> Rust database layer opens benchmark.sqlite (now seeded)
  *     -> stage becomes phase-b-running
  *     -> checkAndResume runs the dense pass
  *     -> if more dense datasets exist, seed the next dataset and repeat phase B

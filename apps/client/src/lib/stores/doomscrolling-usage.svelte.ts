@@ -27,11 +27,6 @@ import { getDoomscrolling } from "$lib/stores/doomscrolling.svelte";
 const REFRESH_INTERVAL_MS = 5_000;
 const FOREGROUND_USAGE_INTERVAL_MS = 5_000;
 const DESKTOP_LIMIT_CLOSE_THROTTLE_MS = 60_000;
-const ALLOWED_DATABASE_FILE_NAMES = [
-  "ganbaru-ai.db",
-  "ganbaru-ai-dev.db",
-  "ganbaru-ai-benchmark.db",
-] as const;
 
 interface ForegroundUsageSnapshot {
   sourceKey: string;
@@ -90,21 +85,6 @@ function rowToSample(row: DoomscrollingUsageSampleRow): DoomscrollingUsageSample
   };
 }
 
-function databaseFileNameFromUrl(
-  dbUrl: string,
-): (typeof ALLOWED_DATABASE_FILE_NAMES)[number] {
-  const fileName = dbUrl
-    .replace(/^sqlite:/, "")
-    .split(/[\\/]/)
-    .filter(Boolean)
-    .at(-1);
-  const allowed = ALLOWED_DATABASE_FILE_NAMES.find((allowedName) => allowedName === fileName);
-  if (!allowed) {
-    throw new Error(`unsupported doomscrolling usage database '${dbUrl}'`);
-  }
-  return allowed;
-}
-
 async function refreshUsage(): Promise<void> {
   if (refreshRunning) return;
   refreshRunning = true;
@@ -128,7 +108,6 @@ async function refreshUsage(): Promise<void> {
       localDate: nextLocalDate,
       weekStartLocalDate: nextWeekStartLocalDate,
       updatedAt: new Date().toISOString(),
-      databaseFileName: databaseFileNameFromUrl(dbUrl),
       limits: nextTotals.map((total) => ({
         id: total.limitId,
         period: total.period ?? "day",

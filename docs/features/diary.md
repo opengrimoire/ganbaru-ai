@@ -32,7 +32,7 @@ After the entry, the app can optionally show a summary of the day's productivity
 
 ## Storage
 
-Diary entries are dated markdown files in the vault. Structured fields (mood, energy, sleep) are also indexed in SQLite for queries like "show me all days with mood >= 4 in the past month."
+Diary entries are dated markdown files in the Ganbaru AI folder. Structured fields (mood, energy, sleep) are also indexed in SQLite for queries like "show me all days with mood >= 4 in the past month."
 
 The markdown file is the source of truth (see `data/architecture.md`). The SQLite index is regenerated from the files.
 

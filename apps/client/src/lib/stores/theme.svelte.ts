@@ -212,7 +212,7 @@ function initThemeSync(): void {
 }
 
 /**
- * Boot-time hydration: load user themes from SQLite, run the one-time vault
+ * Boot-time hydration: load user themes from SQLite, run the one-time config
  * migration if a legacy `themes.user` blob is present, resolve the active
  * theme from config, and paint the first frame.
  *
@@ -261,8 +261,9 @@ export async function hydrateUserThemes(): Promise<void> {
 
 /**
  * One-time migration: read the legacy `themes.user` JSON blob from
- * vault/config.json, walk each entry through `validateThemeJson` (legacy
- * branch), insert into SQLite, then delete the key from config and flush.
+ * the active Ganbaru AI folder config, walk each entry through
+ * `validateThemeJson` (legacy branch), insert into SQLite, then delete the
+ * key from config and flush.
  * Idempotent because a second pass sees no `themes.user` and returns early.
  */
 async function migrateVaultThemesIfPresent(): Promise<void> {
@@ -287,13 +288,13 @@ async function migrateVaultThemesIfPresent(): Promise<void> {
       id: key,
     });
     if (!result.ok) {
-      console.error("vault theme migration: skipped invalid theme", key, result.errors);
+      console.error("config theme migration: skipped invalid theme", key, result.errors);
       continue;
     }
     try {
       await dbInsertTheme(userThemeToWrite(result.theme));
     } catch (err) {
-      console.error("vault theme migration: insert failed for", key, err);
+      console.error("config theme migration: insert failed for", key, err);
     }
   }
   setConfigKey(LEGACY_CUSTOM_KEY, undefined);
