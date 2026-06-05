@@ -22,6 +22,7 @@ All documentation lives in `docs/`. Top-level overviews:
 - **docs/TECH_STACK.md**: how it's built
 - **docs/ROADMAP.md**: phased development plan
 - **docs/PERFORMANCE.md**: memory, startup, and package size measurements
+- **docs/release.md**, **docs/rulesets.md**, and **CONTRIBUTING.md**: branch, PR, ruleset, and release workflow
 
 Granular docs (read the relevant one when working on a feature):
 
@@ -145,6 +146,7 @@ Tauri's platform app config directory stores device-local bootstrap and runtime 
 - **Agent data bridge:** a `ganbaru-ai` CLI (Rust, reads the same SQLite) is the primary bridge between AI agents and Ganbaru AI's data. Agents call it via Bash. The CLI exports project state as markdown to git repos for collaborators and agents without the CLI. These exports are views of the database, not the source of truth.
 - **State management:** Svelte 5 runes ($state, $derived, $effect), no external state manager
 - **Localization:** user-facing UI text must use the typed i18n catalog. Language selectors show explicit languages as autonyms, such as `English` and `Español`, while non-language options like system preference are localized. User-facing date, time, number, plural, relative-minute, and list formatting should use the current locale helpers.
+- **Branching and releases:** normal work uses topic branches from `dev` and PRs back to `dev`. Direct pushes to `dev` or `main` are not normal workflow. `main`, `release/*` branches, `app-v*` tags, release environment approval, and published GitHub Releases are controlled by organization admins for supply-chain safety. Releases are explicit `app-v*` tags that build draft GitHub Releases. See `CONTRIBUTING.md`, `docs/release.md`, and `docs/rulesets.md`.
 - **Sync:** Yjs + Hocuspocus (CRDT-based, E2E encrypted, self-hosted by the user)
 - **Build tool:** Vite (default with Tauri + Svelte scaffold)
 
@@ -192,7 +194,7 @@ After the relevant gate passes, finish the task without extra dev-server, Tauri 
 - `20260529180656_baseline_schema.sql` is the fresh-start schema for the pre-user reset. Do not edit it after a released build can have applied it. Add a new timestamped migration file instead.
 - Keep `apps/client/src-tauri/src/db.rs` focused on migration execution. Put schema and migration invariant tests in `apps/client/src-tauri/src/db/tests.rs`.
 - Keep migrations idempotent and narrowly scoped when practical, but remember that SQLx validates applied migration checksums. Never rewrite an applied migration to fix a live install. Preserve user-authored values whenever those values still have meaning, and only delete data that is truly obsolete or derivable from current canonical data.
-- For local development before users exist, a baseline squash is acceptable only when Victor explicitly approves a clean reinstall or purge. Document the reset in this file and the relevant data docs.
+- For local development before users exist, a baseline squash is acceptable only when a project maintainer explicitly approves a clean reinstall or purge. Document the reset in this file and the relevant data docs.
 
 ### Theme and color tokens
 
