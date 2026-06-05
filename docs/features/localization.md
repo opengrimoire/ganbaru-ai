@@ -2,21 +2,40 @@
 
 Ganbaru AI supports a typed app language layer for all normal app chrome and main feature surfaces. English is the canonical catalog and Spanish is the first translated catalog. Unsupported or incomplete translations fall back to English at the individual message key level so the app stays usable while catalogs evolve.
 
-## User preference
+## Supported values
 
-The Appearance settings page exposes a Language selector with three values:
+The app language preference is intentionally small and stable:
 
 - `system`: follow the operating system or browser language list.
 - `en`: force English.
 - `es`: force Spanish.
 
-The selected value persists in the active Ganbaru AI folder root `config.json` as `preferences.language`. Invalid stored values normalize back to `system` on load and are written back as `system` so stale or hand-edited config does not keep failing every boot.
-
 `system` resolves from `navigator.languages` and then `navigator.language`. Exact supported locale matches win first; otherwise the base language is matched, so `es-MX` resolves to `es`. If no candidate is supported, the app resolves to English.
+
+## User preference
+
+The Appearance settings page exposes the persistent language selector. The selected value persists in the active Ganbaru AI folder root `config.json` as `preferences.language`. Invalid stored values normalize back to `system` on load and are written back as `system` so stale or hand-edited config does not keep failing every boot.
+
+## Language selector display
+
+Language selectors should optimize for the person trying to find their language, even when the current UI language is not readable to them.
+
+- Explicit language options use autonyms: `English`, `Español`, `Français`, and so on. They should not change to `Inglés` or `Spanish` just because the current UI language changed.
+- Non-language options are localized. The system option label should use the current UI language, then show the resolved explicit language in parentheses, such as `System language (Español)` or `Idioma del sistema (English)`.
+- Search should match the autonym, the current UI language name, supported locale ids, and useful aliases. For example, both `Spanish` and `Español` should find the Spanish option.
+- Option rows should be one line unless extra context is necessary. The resolved system language belongs in parentheses, not as a repeated second line.
 
 ## Data folder setup
 
-The first-run "Choose where to store your data" screen shows a compact language dropdown above the heading. The trigger has no filled background and shows only the language icon, the active resolved language name, and the chevron. The dropdown includes a search field because this control will grow as more locales are added. The system option shows the resolved language in parentheses, such as `System language (English)`.
+The first-run "Choose where to store your data" screen shows a compact language dropdown above the heading. The trigger has no filled background and shows only the language icon, the active resolved language name, and the chevron. The dropdown includes a search field because this control will grow as more locales are added.
+
+The core folder-choice content remains vertically centered independently of the language selector above it and warnings or errors below it. Adding a language selector or an error message should not make the main setup content jump.
+
+The dropdown menu should feel compact and calm:
+
+- The search box sits at the top of the menu without a divider line between search and results.
+- Language rows use one-line labels.
+- The selected option uses a subtle inset rounded highlight aligned with the search box width, not a full-width block against the menu edge.
 
 This screen can appear before an active Ganbaru AI folder exists, so it cannot assume `config.json` is available. A language selected here is applied immediately with `persist: false`, then stored as a temporary local setup preference. After the user creates or imports a Ganbaru AI folder, the temporary value is copied into `preferences.language`, flushed to the new active folder's `config.json`, and cleared. Main boot also checks for that temporary value after `ensureConfigLoaded()` so the handoff still happens before the app mounts if the setup window reloads first.
 
@@ -62,5 +81,6 @@ To add a locale:
 2. Add a catalog under `apps/client/src/lib/i18n/messages/`.
 3. Register the catalog in `translator.svelte.ts`.
 4. Add the option to `LANGUAGE_PREFERENCES` in `stores/preferences.ts`.
-5. Add or update tests for locale resolution, translator fallback, and any locale-specific formatter behavior.
-6. Review app surfaces for hardcoded user-facing text and add feature keys where needed.
+5. Add the locale to setup language option generation in `apps/client/src/lib/i18n/pre-vault-language.ts` if it is not derived automatically.
+6. Add or update tests for locale resolution, translator fallback, setup search aliases, and any locale-specific formatter behavior.
+7. Review app surfaces for hardcoded user-facing text and add feature keys where needed.
