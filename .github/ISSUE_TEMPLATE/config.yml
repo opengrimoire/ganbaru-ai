@@ -6,3 +6,6 @@ contact_links:
   - name: Release and ruleset policy
     url: https://github.com/opengrimoire/ganbaru-ai/blob/main/docs/rulesets.md
     about: Read how protected branches, release branches, and release tags are configured.
+  - name: Report a security vulnerability
+    url: https://github.com/opengrimoire/ganbaru-ai/security/advisories/new
+    about: Report vulnerabilities privately through GitHub security advisories.
