@@ -5,6 +5,7 @@
   import CircleCheck from "@lucide/svelte/icons/circle-check";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import { appSessionStartedAt } from "$lib/stores/app-session";
   import { getDoomscrollingExtensionConnection } from "$lib/stores/doomscrolling-extension-status.svelte";
   import { cn } from "$lib/utils";
@@ -16,6 +17,7 @@
   ]);
 
   const extensionConnection = getDoomscrollingExtensionConnection();
+  const { t } = getLocalization();
 
   const extensionStatus = $derived(extensionConnection.status);
   const extensionStatusLoading = $derived(extensionConnection.loading);
@@ -38,12 +40,12 @@
   );
 
   function extensionStatusTitle(): string {
-    if (extensionStatusError && !extensionStatus) return "Browser extension status unavailable";
-    if (extensionStatusLoading && !extensionStatus) return "Checking browser extension";
-    if (extensionStatusWaitingForFirstConnection) return "Waiting for browser extension";
+    if (extensionStatusError && !extensionStatus) return t("settings.doomscrolling.extension.unavailable");
+    if (extensionStatusLoading && !extensionStatus) return t("settings.doomscrolling.extension.checking");
+    if (extensionStatusWaitingForFirstConnection) return t("settings.doomscrolling.extension.waiting");
     return extensionStatusConnected
-      ? "Browser extension connected"
-      : "Browser extension not connected";
+      ? t("settings.doomscrolling.extension.connected")
+      : t("settings.doomscrolling.extension.notConnected");
   }
 
   async function openExtensionInstallDocs(): Promise<void> {
@@ -93,7 +95,7 @@
       onclick={openExtensionInstallDocs}
       class="flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
     >
-      <span>Install extension</span>
+      <span>{t("settings.doomscrolling.extension.install")}</span>
       <ExternalLink size={12} strokeWidth={2.25} />
     </button>
   {/if}

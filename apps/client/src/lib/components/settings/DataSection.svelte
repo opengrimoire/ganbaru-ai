@@ -4,6 +4,7 @@
   import FolderOpen from "@lucide/svelte/icons/folder-open";
   import HardDrive from "@lucide/svelte/icons/hard-drive";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
     formatDataFolderError,
     getActiveVaultInfo,
@@ -16,6 +17,7 @@
   let activeDataFolder = $state<DataFolderInfo | null>(null);
   let busy = $state<"load" | "reveal" | "change" | "import" | null>("load");
   let error = $state<string | null>(null);
+  const { t } = getLocalization();
 
   const actionButtonClass =
     "inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border px-2.5 text-[0.8rem] font-medium transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-55";
@@ -25,8 +27,8 @@
 
   const currentFolderPath = $derived(
     busy === "load"
-      ? "Loading folder..."
-      : activeDataFolder?.path ?? "No active folder",
+      ? t("settings.data.loadingFolder")
+      : activeDataFolder?.path ?? t("settings.data.noActiveFolder"),
   );
 
   async function loadDataFolderState(): Promise<void> {
@@ -35,7 +37,7 @@
     try {
       activeDataFolder = await getActiveVaultInfo();
     } catch (err) {
-      error = formatDataFolderError(err, "startup");
+      error = formatDataFolderError(err, "startup", t);
     } finally {
       busy = null;
     }
@@ -51,7 +53,7 @@
     try {
       await revealActiveVault();
     } catch (err) {
-      error = formatDataFolderError(err);
+      error = formatDataFolderError(err, "general", t);
     } finally {
       busy = null;
     }
@@ -64,7 +66,7 @@
       const info = mode === "change" ? await pickDataFolderLocation() : await importDataFolder();
       if (info) restartApp();
     } catch (err) {
-      error = formatDataFolderError(err, mode);
+      error = formatDataFolderError(err, mode, t);
     } finally {
       busy = null;
     }
@@ -77,12 +79,12 @@
 
 <div class="flex flex-col gap-6">
   <section class="flex flex-col gap-4">
-    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Folder</h2>
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("settings.data.folderHeading")}</h2>
 
     <div class="flex flex-col gap-3">
       <div class="flex items-start justify-between gap-4 px-1 py-1 max-[520px]:flex-col max-[520px]:items-stretch max-[520px]:gap-2">
         <div class="min-w-0 flex-1">
-          <div class="text-[0.866667rem] text-foreground">Current folder</div>
+          <div class="text-[0.866667rem] text-foreground">{t("settings.data.currentFolder")}</div>
           <div class="mt-0.5 wrap-break-word text-[0.8rem] leading-5 text-muted-foreground">
             {currentFolderPath}
           </div>
@@ -98,15 +100,15 @@
           {:else}
             <FolderOpen size={14} strokeWidth={1.9} class="shrink-0" />
           {/if}
-          <span>Reveal</span>
+          <span>{t("settings.data.reveal")}</span>
         </button>
       </div>
 
       <div class="flex items-start justify-between gap-4 px-1 py-1 max-[520px]:flex-col max-[520px]:items-stretch max-[520px]:gap-2">
         <div class="min-w-0 flex-1">
-          <div class="text-[0.866667rem] text-foreground">Change folder</div>
+          <div class="text-[0.866667rem] text-foreground">{t("settings.data.changeFolder")}</div>
           <div class="mt-0.5 text-[0.8rem] leading-5 text-muted-foreground">
-            Choose another Ganbaru AI folder and restart
+            {t("settings.data.changeFolderDescription")}
           </div>
         </div>
         <button
@@ -120,15 +122,15 @@
           {:else}
             <FolderOpen size={14} strokeWidth={1.9} class="shrink-0" />
           {/if}
-          <span>Change folder</span>
+          <span>{t("settings.data.changeFolder")}</span>
         </button>
       </div>
 
       <div class="flex items-start justify-between gap-4 px-1 py-1 max-[520px]:flex-col max-[520px]:items-stretch max-[520px]:gap-2">
         <div class="min-w-0 flex-1">
-          <div class="text-[0.866667rem] text-foreground">Import folder</div>
+          <div class="text-[0.866667rem] text-foreground">{t("settings.data.importFolder")}</div>
           <div class="mt-0.5 text-[0.8rem] leading-5 text-muted-foreground">
-            Use a Ganbaru AI folder from another installation
+            {t("settings.data.importFolderDescription")}
           </div>
         </div>
         <button
@@ -142,7 +144,7 @@
           {:else}
             <FolderInput size={14} strokeWidth={1.9} class="shrink-0" />
           {/if}
-          <span>Import folder</span>
+          <span>{t("settings.data.importFolder")}</span>
         </button>
       </div>
     </div>
@@ -152,7 +154,7 @@
     <div class="h-px bg-border/70" aria-hidden="true"></div>
 
     <section class="flex flex-col gap-4">
-      <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Status</h2>
+      <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("settings.data.statusHeading")}</h2>
       <div role="alert" class="px-1 text-[0.8rem] leading-5 text-destructive">
         {error}
       </div>
@@ -167,7 +169,7 @@
         {:else}
           <HardDrive size={13} strokeWidth={2.25} class="shrink-0" />
         {/if}
-        <span>Reload folder status</span>
+        <span>{t("settings.data.reloadFolderStatus")}</span>
       </button>
     </section>
   {/if}

@@ -6,17 +6,21 @@
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import Search from "@lucide/svelte/icons/search";
   import X from "@lucide/svelte/icons/x";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import CalendarScrollbar from "../calendar/CalendarScrollbar.svelte";
   import {
     SHORTCUT_GROUPS,
     filterShortcutGroups,
+    localizedShortcutGroups,
     shortcutParts,
   } from "./shortcuts";
 
+  const { t } = getLocalization();
   let search = $state("");
   let searchInput: HTMLInputElement | undefined = $state();
   let shortcutsScrollEl: HTMLDivElement | undefined = $state();
-  const filteredGroups = $derived(filterShortcutGroups(SHORTCUT_GROUPS, search));
+  const shortcutGroups = $derived(localizedShortcutGroups(SHORTCUT_GROUPS, t));
+  const filteredGroups = $derived(filterShortcutGroups(shortcutGroups, search));
   const hasSearch = $derived(search.trim().length > 0);
 
   async function focusSearchInput(): Promise<void> {
@@ -40,7 +44,7 @@
 <div class="flex h-full min-h-0 flex-col gap-4">
   <div class="shrink-0">
     <label class="relative block">
-      <span class="sr-only">Search shortcuts</span>
+      <span class="sr-only">{t("settings.shortcuts.search")}</span>
       <Search
         size={14}
         strokeWidth={1.8}
@@ -52,13 +56,13 @@
         type="search"
         bind:value={search}
         data-shortcuts-search-input="true"
-        placeholder="Search shortcuts"
+        placeholder={t("settings.shortcuts.search")}
         class="h-8 w-full rounded-md border border-border bg-background pl-8 pr-8 text-[0.866667rem] text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-1 focus:ring-ring"
       />
       {#if hasSearch}
         <button
           type="button"
-          aria-label="Clear shortcut search"
+          aria-label={t("settings.shortcuts.clearSearch")}
           onclick={() => { search = ""; }}
           class="absolute right-1.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
@@ -72,7 +76,7 @@
     <div bind:this={shortcutsScrollEl} class="hide-scrollbar h-full overflow-y-auto pr-1">
       {#if filteredGroups.length === 0}
         <div class="px-1 py-6 text-[0.866667rem] text-muted-foreground">
-          No shortcuts found.
+          {t("settings.shortcuts.noResults")}
         </div>
       {/if}
 

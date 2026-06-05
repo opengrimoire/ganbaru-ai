@@ -13,6 +13,7 @@
     type DoomscrollingMode,
     type DoomscrollingHostRule,
   } from "$lib/doomscrolling";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getDoomscrolling } from "$lib/stores/doomscrolling.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import DoomscrollingBrowserConnectionStatus from "./DoomscrollingBrowserConnectionStatus.svelte";
@@ -20,6 +21,7 @@
   import DoomscrollingRuleList from "./DoomscrollingRuleList.svelte";
 
   const doomscrolling = getDoomscrolling();
+  const { t } = getLocalization();
 
   type WebsiteListKind = "blocked" | "exception" | "allowed";
 
@@ -93,11 +95,11 @@
     blocked: {
       kind: "blocked",
       id: "doomscrolling-blocked-websites",
-      heading: "Blocked websites",
-      description: "Block selected domains when browser blocking is active. Example: youtube.com",
-      placeholder: "Enter a domain...",
-      emptyText: "No blocked websites yet",
-      errorText: "Enter a valid domain. Example: domain.com",
+      heading: t("settings.doomscrolling.browser.blockedWebsites"),
+      description: t("settings.doomscrolling.browser.blockedWebsitesDescription"),
+      placeholder: t("settings.doomscrolling.browser.enterDomain"),
+      emptyText: t("settings.doomscrolling.browser.noBlockedWebsites"),
+      errorText: t("settings.doomscrolling.browser.invalidDomain"),
       websites: () => doomscrolling.blockedHosts,
       add: (text: string) => doomscrolling.addBlockedHostsText(text),
       remove: (website: string) => doomscrolling.removeBlockedHost(website),
@@ -106,11 +108,11 @@
     exception: {
       kind: "exception",
       id: "doomscrolling-exception-websites",
-      heading: "Exceptions",
-      description: "Allow specific subdomains inside blocked domains. Example: music.youtube.com",
-      placeholder: "Enter a domain...",
-      emptyText: "No exceptions yet",
-      errorText: "Enter a valid domain. Example: domain.com",
+      heading: t("settings.doomscrolling.browser.exceptions"),
+      description: t("settings.doomscrolling.browser.exceptionsDescription"),
+      placeholder: t("settings.doomscrolling.browser.enterDomain"),
+      emptyText: t("settings.doomscrolling.browser.noExceptions"),
+      errorText: t("settings.doomscrolling.browser.invalidDomain"),
       websites: () => doomscrolling.exceptionHosts,
       add: (text: string) => doomscrolling.addExceptionHostsText(text),
       remove: (website: string) => doomscrolling.removeExceptionHost(website),
@@ -119,11 +121,11 @@
     allowed: {
       kind: "allowed",
       id: "doomscrolling-allowed-websites",
-      heading: "Allowed websites",
-      description: "Only these domains stay available in whitelist mode. Example: github.com",
-      placeholder: "Enter a domain...",
-      emptyText: "No allowed websites yet",
-      errorText: "Enter a valid domain. Example: domain.com",
+      heading: t("settings.doomscrolling.browser.allowedWebsites"),
+      description: t("settings.doomscrolling.browser.allowedWebsitesDescription"),
+      placeholder: t("settings.doomscrolling.browser.enterDomain"),
+      emptyText: t("settings.doomscrolling.browser.noAllowedWebsites"),
+      errorText: t("settings.doomscrolling.browser.invalidDomain"),
       websites: () => doomscrolling.allowedHosts,
       add: (text: string) => doomscrolling.addAllowedHostsText(text),
       remove: (website: string) => doomscrolling.removeAllowedHost(website),
@@ -274,12 +276,12 @@
   function addCustomCategoryDraftHost(): boolean {
     const hosts = parseDoomscrollingHosts(customStackDraft.hostInput);
     if (hosts.length === 0) {
-      customStackErrors.hosts = "Enter a valid domain. Example: domain.com";
+      customStackErrors.hosts = t("settings.doomscrolling.browser.invalidDomain");
       return false;
     }
     const newHosts = hosts.filter((host) => !customStackDraft.hosts.includes(host));
     if (newHosts.length === 0) {
-      customStackErrors.hosts = "Website is already in this category";
+      customStackErrors.hosts = t("settings.doomscrolling.browser.duplicateDomain");
       customStackDraft.hostInput = "";
       return false;
     }
@@ -334,13 +336,13 @@
       return;
     }
     if (result === "invalid-name") {
-      customStackErrors.name = "Enter a category name";
+      customStackErrors.name = t("settings.doomscrolling.browser.categoryNameRequired");
     } else if (result === "duplicate-name") {
-      customStackErrors.name = "Use a different category name";
+      customStackErrors.name = t("settings.doomscrolling.browser.differentCategoryName");
     } else if (result === "missing") {
-      customStackErrors.name = "Category no longer exists";
+      customStackErrors.name = t("settings.doomscrolling.browser.categoryMissing");
     } else {
-      customStackErrors.hosts = "Enter a valid domain. Example: domain.com";
+      customStackErrors.hosts = t("settings.doomscrolling.browser.invalidDomain");
     }
   }
 
@@ -379,6 +381,31 @@
       return;
     }
     doomscrolling.setMode(mode);
+  }
+
+  function categoryLabel(categoryId: DoomscrollingCategoryId): string {
+    switch (categoryId) {
+      case "social-media":
+        return t("settings.doomscrolling.browser.categoryLabel.socialMedia");
+      case "streaming":
+        return t("settings.doomscrolling.browser.categoryLabel.streaming");
+      case "news":
+        return t("settings.doomscrolling.browser.categoryLabel.news");
+      case "sports":
+        return t("settings.doomscrolling.browser.categoryLabel.sports");
+      case "porn":
+        return t("settings.doomscrolling.browser.categoryLabel.porn");
+      case "gambling":
+        return t("settings.doomscrolling.browser.categoryLabel.gambling");
+      case "gaming":
+        return t("settings.doomscrolling.browser.categoryLabel.gaming");
+      case "shopping":
+        return t("settings.doomscrolling.browser.categoryLabel.shopping");
+      case "dating":
+        return t("settings.doomscrolling.browser.categoryLabel.dating");
+      case "trading":
+        return t("settings.doomscrolling.browser.categoryLabel.trading");
+    }
   }
 
   function confirmPendingAction(): void {
@@ -420,77 +447,86 @@
   function pendingActionTitle(action: PendingAction): string {
     if (action.target === "website") {
       return action.action.type === "disable"
-        ? `Disable ${action.action.host}?`
-        : `Delete ${action.action.host}?`;
+        ? t("settings.doomscrolling.browser.websiteDisableTitle", action.action.host)
+        : t("settings.doomscrolling.browser.websiteDeleteTitle", action.action.host);
     }
     if (action.target === "browserConfiguration") {
-      if (action.action.toggle === "enabled") return "Turn off browser blocking?";
-      if (action.action.toggle === "focus") return "Allow websites during focus?";
-      if (action.action.toggle === "shortBreaks") return "Allow websites during short breaks?";
-      if (action.action.toggle === "longBreaks") return "Allow websites during long breaks?";
-      return "Keep browser blocking active while paused?";
+      if (action.action.toggle === "enabled") return t("settings.doomscrolling.browser.turnOffBrowserTitle");
+      if (action.action.toggle === "focus") return t("settings.doomscrolling.browser.allowWebsitesFocusTitle");
+      if (action.action.toggle === "shortBreaks") return t("settings.doomscrolling.browser.allowWebsitesShortBreaksTitle");
+      if (action.action.toggle === "longBreaks") return t("settings.doomscrolling.browser.allowWebsitesLongBreaksTitle");
+      return t("settings.doomscrolling.browser.keepBrowserBlockingPausedTitle");
     }
-    if (action.target === "mode") return "Switch to whitelist mode?";
+    if (action.target === "mode") return t("settings.doomscrolling.browser.switchWhitelistTitle");
     if (action.target === "category") {
       const category = getDoomscrollingCategoryDefinition(action.action.categoryId);
-      return `Allow the ${category?.label ?? "category"} category?`;
+      return t(
+        "settings.doomscrolling.browser.allowCategoryTitle",
+        category ? categoryLabel(category.id) : "category",
+      );
     }
     if (action.target === "customStackDraftHost") {
-      return `Delete ${action.action.host}?`;
+      return t("settings.doomscrolling.browser.websiteDeleteTitle", action.action.host);
     }
     const stack = findCustomStack(action.action.stackId);
-    const name = stack?.name ?? "custom category";
+    const name = stack?.name ?? t("settings.doomscrolling.browser.customCategoryFallback");
     return action.action.type === "disable"
-      ? `Allow the ${name} category?`
-      : `Delete the ${name} category?`;
+      ? t("settings.doomscrolling.browser.allowCategoryTitle", name)
+      : t("settings.doomscrolling.browser.deleteCategoryTitle", name);
   }
 
   function pendingActionMessage(action: PendingAction): string {
     if (action.target === "website") {
       return action.action.type === "disable"
-        ? "It will stay in the list but will not affect browser blocking until you enable it again"
-        : "This cannot be undone";
+        ? t("settings.doomscrolling.browser.websiteDisableMessage")
+        : t("settings.doomscrolling.shared.cannotBeUndone");
     }
     if (action.target === "browserConfiguration") {
       if (action.action.toggle === "enabled") {
-        return "Website rules will not apply until you enable browser blocking again";
+        return t("settings.doomscrolling.browser.browserOffMessage");
       }
       if (action.action.toggle === "focus") {
-        return "Website rules will not apply during focus sessions until you enable this again";
+        return t("settings.doomscrolling.browser.focusOffMessage");
       }
       if (action.action.toggle === "shortBreaks") {
-        return "Website rules will not apply during short breaks until you enable this again";
+        return t("settings.doomscrolling.browser.shortBreaksOffMessage");
       }
       if (action.action.toggle === "longBreaks") {
-        return "Website rules will not apply during long breaks until you enable this again";
+        return t("settings.doomscrolling.browser.longBreaksOffMessage");
       }
-      return "Website rules will continue applying while a focus session is paused";
+      return t("settings.doomscrolling.browser.pauseActiveMessage");
     }
     if (action.target === "mode") {
-      return "Whitelist mode blocks every website that is not listed as allowed!";
+      return t("settings.doomscrolling.browser.whitelistWarning");
     }
     if (action.target === "category") {
-      return "This category will stop blocking its websites until you enable it again";
+      return t("settings.doomscrolling.browser.categoryDisableMessage");
     }
     if (action.target === "customStackDraftHost") {
-      return "This cannot be undone";
+      return t("settings.doomscrolling.shared.cannotBeUndone");
     }
     return action.action.type === "disable"
-      ? "This category will stop blocking its websites until you enable it again"
-      : "This cannot be undone";
+      ? t("settings.doomscrolling.browser.categoryDisableMessage")
+      : t("settings.doomscrolling.shared.cannotBeUndone");
   }
 
   function pendingActionConfirmLabel(action: PendingAction): string {
     if (action.target === "website") {
-      return action.action.type === "disable" ? "Disable (Enter)" : "Delete (Enter)";
+      return action.action.type === "disable"
+        ? t("settings.doomscrolling.shared.disableShortcut")
+        : t("settings.doomscrolling.shared.deleteShortcut");
     }
     if (action.target === "browserConfiguration") {
-      return action.action.toggle === "enabled" ? "Turn off (Enter)" : "Allow (Enter)";
+      return action.action.toggle === "enabled"
+        ? t("settings.doomscrolling.shared.turnOffShortcut")
+        : t("settings.doomscrolling.shared.allowShortcut");
     }
-    if (action.target === "mode") return "Switch (Enter)";
-    if (action.target === "category") return "Disable (Enter)";
-    if (action.target === "customStackDraftHost") return "Delete (Enter)";
-    return action.action.type === "disable" ? "Disable (Enter)" : "Delete (Enter)";
+    if (action.target === "mode") return t("settings.doomscrolling.shared.switchShortcut");
+    if (action.target === "category") return t("settings.doomscrolling.shared.disableShortcut");
+    if (action.target === "customStackDraftHost") return t("settings.doomscrolling.shared.deleteShortcut");
+    return action.action.type === "disable"
+      ? t("settings.doomscrolling.shared.disableShortcut")
+      : t("settings.doomscrolling.shared.deleteShortcut");
   }
 
 </script>
@@ -519,7 +555,7 @@
 
 {#snippet blacklistModeSection()}
   <section class="flex flex-col gap-4">
-    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Blacklist mode</h2>
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("settings.doomscrolling.browser.blacklistMode")}</h2>
     <div class="flex flex-col gap-4">
       {@render blockedCategoriesSubsection()}
       {#each blacklistWebsiteSections as section (section.kind)}
@@ -543,9 +579,9 @@
 {#snippet blockedCategoriesSubsection()}
   <div class="flex flex-col gap-2 px-1 py-1">
     <div class="min-w-0">
-      <h3 class="text-[0.866667rem] text-foreground">Blocked categories</h3>
+      <h3 class="text-[0.866667rem] text-foreground">{t("settings.doomscrolling.browser.blockedCategories")}</h3>
       <div class="mt-0.5 text-[0.8rem] text-muted-foreground">
-        Turn preset and custom website groups on or off
+        {t("settings.doomscrolling.browser.blockedCategoriesDescription")}
       </div>
     </div>
 
@@ -555,7 +591,9 @@
         <button
           type="button"
           onclick={() => requestCategoryEnabledChange(category.id, !enabled)}
-          aria-label={enabled ? `${category.label} category enabled` : `${category.label} category disabled`}
+          aria-label={enabled
+            ? t("settings.doomscrolling.browser.categoryEnabled", categoryLabel(category.id))
+            : t("settings.doomscrolling.browser.categoryDisabled", categoryLabel(category.id))}
           aria-pressed={enabled}
           class={cn(
             "inline-flex min-h-8 max-w-full items-center justify-center rounded-full border px-3 py-1.5 text-[0.8rem] font-medium leading-5",
@@ -564,7 +602,7 @@
               : "border-border bg-transparent text-muted-foreground",
           )}
         >
-          <span class="truncate">{category.label}</span>
+          <span class="truncate">{categoryLabel(category.id)}</span>
         </button>
       {/each}
 
@@ -577,7 +615,13 @@
               : "border-border bg-transparent text-muted-foreground",
           )}
           role="group"
-          aria-label={`${stack.name} custom category, ${stack.enabled ? "enabled" : "disabled"}`}
+          aria-label={t(
+            "settings.doomscrolling.browser.customCategoryState",
+            stack.name,
+            stack.enabled
+              ? t("settings.doomscrolling.shared.enabled")
+              : t("settings.doomscrolling.shared.disabled"),
+          )}
         >
           <button
             type="button"
@@ -590,7 +634,7 @@
           <button
             type="button"
             onclick={() => openEditCustomCategoryForm(stack)}
-            aria-label={`Edit ${stack.name}`}
+            aria-label={t("settings.doomscrolling.shared.edit", stack.name)}
             data-app-tooltip-disabled="true"
             class="flex min-h-8 w-7 shrink-0 items-center justify-center pr-2 text-muted-foreground"
           >
@@ -611,7 +655,7 @@
         )}
       >
         <Plus size={13} strokeWidth={2.25} class="shrink-0" />
-        <span class="ml-1.5 truncate">New category</span>
+        <span class="ml-1.5 truncate">{t("settings.doomscrolling.browser.newCategory")}</span>
       </button>
     </div>
 
@@ -620,7 +664,7 @@
         class="flex min-w-0 flex-col gap-1 py-1"
       >
         <div class="flex min-w-0 flex-wrap items-center gap-2">
-          <label for="doomscrolling-custom-stack-name" class="sr-only">Category name</label>
+          <label for="doomscrolling-custom-stack-name" class="sr-only">{t("settings.doomscrolling.browser.categoryName")}</label>
           <input
             id="doomscrolling-custom-stack-name"
             bind:value={customStackDraft.name}
@@ -628,7 +672,7 @@
             onkeydown={handleCustomCategoryNameKeydown}
             type="text"
             spellcheck="false"
-            placeholder="Category name"
+            placeholder={t("settings.doomscrolling.browser.categoryName")}
             class="flex h-7 min-w-32 flex-1 rounded-md border border-border bg-transparent px-2 text-[0.8rem] leading-snug text-foreground outline-none placeholder:text-muted-foreground"
           />
           <button
@@ -639,10 +683,10 @@
           >
             {#if customCategoryEditingId}
               <Save size={13} strokeWidth={2.25} />
-              <span>Save</span>
+              <span>{t("settings.doomscrolling.browser.save")}</span>
             {:else}
               <Plus size={13} strokeWidth={2.25} />
-              <span>Add</span>
+              <span>{t("settings.doomscrolling.browser.add")}</span>
             {/if}
           </button>
           {#if customCategoryEditingId}
@@ -652,7 +696,7 @@
               class="flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[0.8rem] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
             >
               <Trash2 size={13} strokeWidth={2} />
-              <span>Delete</span>
+              <span>{t("settings.doomscrolling.browser.delete")}</span>
             </button>
           {/if}
           <button
@@ -660,7 +704,7 @@
             onclick={closeCustomCategoryForm}
             class="flex h-7 shrink-0 items-center justify-center rounded-md border border-border bg-card px-2.5 text-[0.8rem] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
           >
-            Cancel
+            {t("settings.doomscrolling.browser.cancel")}
           </button>
         </div>
 
@@ -676,7 +720,7 @@
                 oninput={() => clearCustomStackError("hosts")}
                 type="text"
                 spellcheck="false"
-                placeholder="Enter a domain..."
+                placeholder={t("settings.doomscrolling.browser.enterDomain")}
                 class="flex h-7 min-w-0 flex-1 bg-transparent px-1 text-[0.8rem] leading-snug text-foreground outline-none placeholder:text-muted-foreground"
               />
               <button
@@ -685,7 +729,7 @@
                 class="flex h-7 shrink-0 items-center justify-center gap-1.5 px-1 text-[0.8rem] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Plus size={13} strokeWidth={2.25} />
-                <span>Add</span>
+                <span>{t("settings.doomscrolling.browser.add")}</span>
               </button>
             </form>
             <div class="flex flex-col">
@@ -697,7 +741,7 @@
                   <button
                     type="button"
                     onclick={() => requestCustomCategoryDraftHostDelete(host)}
-                    aria-label={`Remove ${host}`}
+                    aria-label={t("settings.doomscrolling.shared.remove", host)}
                     data-app-tooltip-disabled="true"
                     class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground transition-colors hover:bg-accent dark:bg-transparent"
                   >
@@ -706,7 +750,7 @@
                 </div>
               {:else}
                 <div class="flex h-10 items-center border-b border-border/70 px-1 text-[0.8rem] text-muted-foreground">
-                  No websites added yet
+                  {t("settings.doomscrolling.browser.noWebsitesAdded")}
                 </div>
               {/each}
             </div>
@@ -727,23 +771,23 @@
   <DoomscrollingBrowserConnectionStatus />
 
   <DoomscrollingConfigurationSection
-    title="Browser configuration"
+    title={t("settings.doomscrolling.browser.browserConfiguration")}
     enabled={doomscrolling.enabled}
     blockDuringFocus={doomscrolling.blockDuringFocus}
     blockDuringShortBreaks={doomscrolling.blockDuringShortBreaks}
     blockDuringLongBreaks={doomscrolling.blockDuringLongBreaks}
     pauseDuringFocusPause={doomscrolling.pauseDuringFocusPause}
     mode={doomscrolling.mode}
-    enabledLabel="Enable browser blocking"
-    enabledDescription="Allow website rules to run during selected Pomodoro phases"
-    focusDescription="Apply website rules while a focus session is running"
-    shortBreakDescription="Apply website rules during short breaks"
-    longBreakDescription="Apply website rules during long breaks"
-    pauseDescription="Pause website blocking while focus is manually paused, then resume when focus continues"
-    modeHeading="Website mode"
-    modeDescription="Choose whether listed websites are blocked or allowed"
-    blacklistDescription="Blocks listed websites"
-    whitelistDescription="Only allows listed websites"
+    enabledLabel={t("settings.doomscrolling.browser.enableBrowserBlocking")}
+    enabledDescription={t("settings.doomscrolling.browser.enableBrowserBlockingDescription")}
+    focusDescription={t("settings.doomscrolling.browser.focusDescription")}
+    shortBreakDescription={t("settings.doomscrolling.browser.shortBreakDescription")}
+    longBreakDescription={t("settings.doomscrolling.browser.longBreakDescription")}
+    pauseDescription={t("settings.doomscrolling.browser.pauseDescription")}
+    modeHeading={t("settings.doomscrolling.shared.websiteMode")}
+    modeDescription={t("settings.doomscrolling.browser.modeDescription")}
+    blacklistDescription={t("settings.doomscrolling.shared.blacklistDescription")}
+    whitelistDescription={t("settings.doomscrolling.shared.whitelistDescription")}
     onScheduleChange={requestBrowserConfigurationToggleChange}
     onModeChange={requestModeChange}
   />
@@ -761,7 +805,7 @@
     {#if doomscrolling.mode === "blacklist"}
       {@render blacklistModeSection()}
     {:else}
-      {@render modeWebsiteSection("Whitelist mode", whitelistWebsiteSections)}
+      {@render modeWebsiteSection(t("settings.doomscrolling.browser.whitelistMode"), whitelistWebsiteSections)}
     {/if}
   </fieldset>
 </div>
@@ -771,7 +815,7 @@
     title={pendingActionTitle(pendingAction)}
     message={pendingActionMessage(pendingAction)}
     confirmLabel={pendingActionConfirmLabel(pendingAction)}
-    cancelLabel="Cancel (Esc)"
+    cancelLabel={t("settings.doomscrolling.shared.cancelShortcut")}
     onConfirm={confirmPendingAction}
     onCancel={cancelPendingAction}
   />

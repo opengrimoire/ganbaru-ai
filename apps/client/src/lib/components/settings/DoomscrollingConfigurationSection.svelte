@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { DoomscrollingMode } from "$lib/doomscrolling";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import { cn } from "$lib/utils";
   import DoomscrollingModeSelector from "./DoomscrollingModeSelector.svelte";
   import ToggleSetting from "./ToggleSetting.svelte";
@@ -49,6 +50,8 @@
     onScheduleChange: (toggle: ScheduleToggle, checked: boolean) => void;
     onModeChange?: (mode: DoomscrollingMode) => void;
   } = $props();
+
+  const { t } = getLocalization();
 </script>
 
 <section class="flex flex-col gap-4">
@@ -69,27 +72,27 @@
         !enabled && "opacity-50",
       )}
     >
-      <div class="flex flex-col gap-3" aria-label="Blocking schedule">
+      <div class="flex flex-col gap-3" aria-label={t("settings.doomscrolling.shared.blockingSchedule")}>
         <ToggleSetting
-          label="Block during focus"
+          label={t("settings.doomscrolling.shared.blockDuringFocus")}
           description={focusDescription}
           checked={blockDuringFocus}
           onChange={(checked) => onScheduleChange("focus", checked)}
         />
         <ToggleSetting
-          label="Block during short breaks"
+          label={t("settings.doomscrolling.shared.blockDuringShortBreaks")}
           description={shortBreakDescription}
           checked={blockDuringShortBreaks}
           onChange={(checked) => onScheduleChange("shortBreaks", checked)}
         />
         <ToggleSetting
-          label="Block during long breaks"
+          label={t("settings.doomscrolling.shared.blockDuringLongBreaks")}
           description={longBreakDescription}
           checked={blockDuringLongBreaks}
           onChange={(checked) => onScheduleChange("longBreaks", checked)}
         />
         <ToggleSetting
-          label="Pause if the focus session is paused"
+          label={t("settings.doomscrolling.shared.pauseIfFocusPaused")}
           description={pauseDescription}
           checked={pauseDuringFocusPause}
           onChange={(checked) => onScheduleChange("pause", checked)}

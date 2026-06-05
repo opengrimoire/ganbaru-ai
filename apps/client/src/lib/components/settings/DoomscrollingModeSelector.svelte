@@ -3,6 +3,7 @@
   import ShieldCheck from "@lucide/svelte/icons/shield-check";
   import ShieldX from "@lucide/svelte/icons/shield-x";
   import type { DoomscrollingMode } from "$lib/doomscrolling";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import { cn } from "$lib/utils";
 
   interface ModeOption {
@@ -24,16 +25,18 @@
     onChange: (mode: DoomscrollingMode) => void;
   } = $props();
 
+  const { t } = getLocalization();
+
   const options = $derived<readonly ModeOption[]>([
     {
       mode: "blacklist",
-      label: "Blacklist mode",
+      label: t("settings.doomscrolling.browser.blacklistMode"),
       description: blacklistDescription,
       icon: ShieldX,
     },
     {
       mode: "whitelist",
-      label: "Whitelist mode",
+      label: t("settings.doomscrolling.browser.whitelistMode"),
       description: whitelistDescription,
       icon: ShieldCheck,
     },

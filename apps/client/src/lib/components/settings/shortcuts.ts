@@ -1,4 +1,5 @@
 import { shortcutParts as platformShortcutParts } from "$lib/keyboard-shortcuts";
+import type { Translate } from "$lib/i18n/translator.svelte";
 
 export interface ShortcutItem {
   keys: string[];
@@ -75,6 +76,109 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = Object.freeze([
     ],
   },
 ]);
+
+function localizedGroupTitle(title: string, t: Translate): string {
+  if (title === "General") return t("settings.shortcuts.group.general");
+  if (title === "Calendar") return t("settings.shortcuts.group.calendar");
+  if (title === "Music") return t("settings.shortcuts.group.music");
+  return title;
+}
+
+function localizedAction(action: string, t: Translate): string {
+  switch (action) {
+    case "Next view":
+      return t("settings.shortcuts.action.nextView");
+    case "Previous view":
+      return t("settings.shortcuts.action.previousView");
+    case "Open calendar":
+      return t("settings.shortcuts.action.openCalendar");
+    case "Open projects":
+      return t("settings.shortcuts.action.openProjects");
+    case "Open notes":
+      return t("settings.shortcuts.action.openNotes");
+    case "Open music":
+      return t("settings.shortcuts.action.openMusic");
+    case "Open or close settings":
+      return t("settings.shortcuts.action.openOrCloseSettings");
+    case "Zoom in":
+      return t("settings.shortcuts.action.zoomIn");
+    case "Zoom out":
+      return t("settings.shortcuts.action.zoomOut");
+    case "Reset zoom":
+      return t("settings.shortcuts.action.resetZoom");
+    case "Toggle light/dark mode":
+      return t("settings.shortcuts.action.toggleTheme");
+    case "Open theme picker":
+      return t("settings.shortcuts.action.openThemePicker");
+    case "Toggle diagnostics panel":
+      return t("settings.shortcuts.action.toggleDiagnostics");
+    case "Toggle DevTools (dev only)":
+      return t("settings.shortcuts.action.toggleDevtools");
+    case "Close app":
+      return t("settings.shortcuts.action.closeApp");
+    case "Open shortcuts":
+      return t("settings.shortcuts.action.openShortcuts");
+    case "Go to today":
+      return t("settings.shortcuts.action.goToToday");
+    case "Day view":
+      return t("settings.shortcuts.action.dayView");
+    case "Work cycle view":
+      return t("settings.shortcuts.action.workCycleView");
+    case "Week view":
+      return t("settings.shortcuts.action.weekView");
+    case "Month view":
+      return t("settings.shortcuts.action.monthView");
+    case "Previous or next date range":
+      return t("settings.shortcuts.action.previousNextDateRange");
+    case "Scroll timeline":
+      return t("settings.shortcuts.action.scrollTimeline");
+    case "Zoom in the calendar timeline":
+      return t("settings.shortcuts.action.zoomInCalendar");
+    case "Zoom out the calendar timeline":
+      return t("settings.shortcuts.action.zoomOutCalendar");
+    case "Reset calendar timeline zoom":
+      return t("settings.shortcuts.action.resetCalendarZoom");
+    case "Save event":
+      return t("settings.shortcuts.action.saveEvent");
+    case "Delete event":
+      return t("settings.shortcuts.action.deleteEvent");
+    case "Play or pause":
+      return t("settings.shortcuts.action.playPause");
+    case "Show or hide playlist":
+      return t("settings.shortcuts.action.showHidePlaylist");
+    case "Mute or unmute":
+      return t("settings.shortcuts.action.muteUnmute");
+    case "Toggle shuffle":
+      return t("settings.shortcuts.action.toggleShuffle");
+    case "Jump to playback position":
+      return t("settings.shortcuts.action.jumpPlaybackPosition");
+    case "Jump 10 seconds":
+      return t("settings.shortcuts.action.jump10Seconds");
+    case "Adjust volume":
+      return t("settings.shortcuts.action.adjustVolume");
+    case "Last track":
+      return t("settings.shortcuts.action.lastTrack");
+    case "Next track":
+      return t("settings.shortcuts.action.nextTrack");
+    case "Adjust playback speed":
+      return t("settings.shortcuts.action.adjustPlaybackSpeed");
+    default:
+      return action;
+  }
+}
+
+export function localizedShortcutGroups(
+  groups: readonly ShortcutGroup[],
+  t: Translate,
+): ShortcutGroup[] {
+  return groups.map((group) => ({
+    title: localizedGroupTitle(group.title, t),
+    items: group.items.map((item) => ({
+      ...item,
+      action: localizedAction(item.action, t),
+    })),
+  }));
+}
 
 export function shortcutParts(shortcut: string): string[] {
   return platformShortcutParts(shortcut);
