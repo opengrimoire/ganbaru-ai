@@ -10,9 +10,11 @@
   import SettingsIcon from "@lucide/svelte/icons/settings";
   import Timer from "@lucide/svelte/icons/timer";
   import DownloadCloud from "@lucide/svelte/icons/download-cloud";
+  import HardDrive from "@lucide/svelte/icons/hard-drive";
   import X from "@lucide/svelte/icons/x";
   import AboutSection from "./AboutSection.svelte";
   import AppearanceSection from "./AppearanceSection.svelte";
+  import DataSection from "./DataSection.svelte";
   import CalendarScrollbar from "../calendar/CalendarScrollbar.svelte";
   import FocusSection from "./FocusSection.svelte";
   import MusicSection from "./MusicSection.svelte";
@@ -23,6 +25,7 @@
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { hasOnlyShortcutModifier } from "$lib/keyboard-shortcuts";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import type {
     DoomscrollingLimitEditorTarget,
     DoomscrollingSettingsTab,
@@ -41,6 +44,7 @@
 
   const themeEditor = getThemeEditor();
   const viewport = getViewport();
+  const { t } = getLocalization();
 
   // When the user opens a theme in the floating editor, step out of the way
   // so the modal backdrop does not block clicking through to the app.
@@ -50,21 +54,22 @@
 
   interface SectionMeta {
     id: SectionId;
-    label: string;
+    label: () => string;
     icon: Component;
   }
 
   // To add a new settings page, add an entry with an icon and a matching
   // branch in the content switch below.
   const SECTIONS: SectionMeta[] = [
-    { id: "appearance", label: "Appearance", icon: Palette },
-    { id: "calendars", label: "Calendar", icon: CalendarDays },
-    { id: "focus", label: "Focus", icon: Timer },
-    { id: "music", label: "Music", icon: Music },
-    { id: "doomscrolling", label: "Doomscrolling", icon: GlobeOff },
-    { id: "updates", label: "Updates", icon: DownloadCloud },
-    { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
-    { id: "about", label: "About", icon: Info },
+    { id: "appearance", label: () => t("settings.section.appearance"), icon: Palette },
+    { id: "calendars", label: () => t("settings.section.calendars"), icon: CalendarDays },
+    { id: "focus", label: () => t("settings.section.focus"), icon: Timer },
+    { id: "music", label: () => t("settings.section.music"), icon: Music },
+    { id: "doomscrolling", label: () => t("settings.section.doomscrolling"), icon: GlobeOff },
+    { id: "data", label: () => t("settings.section.data"), icon: HardDrive },
+    { id: "updates", label: () => t("settings.section.updates"), icon: DownloadCloud },
+    { id: "shortcuts", label: () => t("settings.section.shortcuts"), icon: Keyboard },
+    { id: "about", label: () => t("settings.section.about"), icon: Info },
   ];
 
   let activeSection = $state<SectionId>("appearance");
@@ -231,14 +236,14 @@
               )}
             >
               <Icon size={14} strokeWidth={1.75} class="shrink-0" />
-              <span>{section.label}</span>
+              <span>{section.label()}</span>
             </button>
           {/each}
         </nav>
         <button
           type="button"
           onclick={onClose}
-          aria-label="Close settings"
+          aria-label={t("settings.close")}
           data-app-tooltip-disabled="true"
           class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
@@ -257,13 +262,13 @@
           {#if !useIconRail}
             <span class="flex h-7 min-w-0 items-center gap-2.5 px-3 text-[0.866667rem] font-semibold text-muted-foreground">
               <SettingsIcon size={15} strokeWidth={1.75} class="shrink-0" />
-              <span class="truncate">Settings</span>
+              <span class="truncate">{t("settings.title")}</span>
             </span>
           {/if}
           <button
             type="button"
             onclick={onClose}
-            aria-label="Close settings"
+            aria-label={t("settings.close")}
             data-app-tooltip-disabled="true"
             class="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
@@ -277,7 +282,7 @@
               onclick={() => {
                 selectSection(section.id);
               }}
-              aria-label={section.label}
+              aria-label={section.label()}
               data-app-tooltip-disabled="true"
               class={cn(
                 "flex items-center rounded-md text-left text-[0.866667rem] font-medium",
@@ -289,7 +294,7 @@
             >
               <Icon size={15} strokeWidth={1.75} class="shrink-0" />
               {#if !useIconRail}
-                <span>{section.label}</span>
+                <span>{section.label()}</span>
               {/if}
             </button>
           {/each}
@@ -341,6 +346,8 @@
             initialTab={initialDoomscrollingTab}
             onOpenLimitEditor={openDoomscrollingLimitEditor}
           />
+        {:else if activeSection === "data"}
+          <DataSection />
         {:else if activeSection === "updates"}
           <UpdatesSection />
         {:else if activeSection === "shortcuts"}

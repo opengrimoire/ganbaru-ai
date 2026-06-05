@@ -248,7 +248,7 @@ Use the compact scalar table for one-off values that are themselves the measurem
 
 ## Performance principles
 
-Ganbaru AI should feel lightweight even though it uses Tauri plus a WebView. The floor is higher than a fully native UI, so app code should avoid adding avoidable RAM and startup cost.
+Ganbaru AI should feel lightweight even though it uses the OS's WebView. The floor is higher than a fully native UI, so app code should avoid adding avoidable RAM and startup cost.
 
 General rules:
 

@@ -1,4 +1,5 @@
 import { formatShortcut } from "$lib/keyboard-shortcuts";
+import type { Translate } from "$lib/i18n/translator.svelte";
 import {
   DEFAULT_FOCUS_BREAK_END_ESC_PRESSES,
   DEFAULT_FOCUS_BREAK_EXTENSION_LIMIT,
@@ -214,12 +215,14 @@ export function formatBreakExtensionHint(
   extensionMinutes: number,
   maxExtensionMinutes: FocusBreakExtensionLimit = DEFAULT_FOCUS_BREAK_EXTENSION_LIMIT,
   platform?: string,
+  t?: Translate,
 ): string | null {
   if (maxExtensionMinutes === null) return null;
   const safeExtensionMinutes = Math.max(0, Math.floor(extensionMinutes));
   const safeMaxExtensionMinutes = Math.max(0, Math.floor(maxExtensionMinutes));
   if (safeExtensionMinutes >= safeMaxExtensionMinutes) return null;
-  return `Press ${formatBreakExtensionShortcut(platform)} to extend the break`;
+  const shortcut = formatBreakExtensionShortcut(platform);
+  return t ? t("pomodoroOverlay.extendBreakHint", shortcut) : `Press ${shortcut} to extend the break`;
 }
 
 export function formatBreakExtensionShortcut(platform?: string): string {
@@ -257,24 +260,31 @@ export function nextIntervalTargetAfter(
 
 export function pomodoroBlockedScreenCopy(
   state: PomodoroBlockedScreenState,
+  t?: Translate,
 ): PomodoroBlockedScreenCopy {
   switch (state) {
     case "idle":
       return {
-        title: "Focus session paused",
+        title: t ? t("pomodoroOverlay.focusPausedTitle") : "Focus session paused",
         status: null,
         subtitle: null,
         tone: "neutral",
-        primaryHint: { key: "Space", label: "resume focus" },
+        primaryHint: {
+          key: "Space",
+          label: t ? t("pomodoroOverlay.resumeFocus") : "resume focus",
+        },
         secondaryHint: null,
       };
     case "idle_failed":
       return {
-        title: "Focus session failed",
+        title: t ? t("pomodoroOverlay.focusFailedTitle") : "Focus session failed",
         status: null,
         subtitle: null,
         tone: "danger",
-        primaryHint: { key: "Space", label: "restart focus" },
+        primaryHint: {
+          key: "Space",
+          label: t ? t("pomodoroOverlay.restartFocus") : "restart focus",
+        },
         secondaryHint: null,
       };
     case "break_countdown":
@@ -283,45 +293,48 @@ export function pomodoroBlockedScreenCopy(
         status: null,
         subtitle: null,
         tone: "neutral",
-        primaryHint: { key: BREAK_EXTENSION_SHORTCUT, label: "extend the break" },
+        primaryHint: {
+          key: BREAK_EXTENSION_SHORTCUT,
+          label: t ? t("pomodoroOverlay.extendBreak") : "extend the break",
+        },
         secondaryHint: {
           key: `${DEFAULT_FOCUS_BREAK_END_ESC_PRESSES}x Esc`,
-          label: "end your break now",
+          label: t ? t("pomodoroOverlay.endBreakNow") : "end your break now",
           tone: "danger",
         },
       };
     case "break_finished":
       return {
-        title: "Break complete",
+        title: t ? t("pomodoroOverlay.breakCompleteTitle") : "Break complete",
         status: null,
-        subtitle: "press any key to continue",
+        subtitle: t ? t("pomodoroOverlay.pressAnyKey") : "press any key to continue",
         tone: "neutral",
         primaryHint: null,
         secondaryHint: null,
       };
     case "event_finished":
       return {
-        title: "Event finished",
+        title: t ? t("pomodoroOverlay.eventFinishedTitle") : "Event finished",
         status: null,
-        subtitle: "press any key to continue",
+        subtitle: t ? t("pomodoroOverlay.pressAnyKey") : "press any key to continue",
         tone: "neutral",
         primaryHint: null,
         secondaryHint: null,
       };
     case "day_complete":
       return {
-        title: "Day completed",
+        title: t ? t("pomodoroOverlay.dayCompletedTitle") : "Day completed",
         status: null,
-        subtitle: "press any key to continue",
+        subtitle: t ? t("pomodoroOverlay.pressAnyKey") : "press any key to continue",
         tone: "neutral",
         primaryHint: null,
         secondaryHint: null,
       };
     case "workweek_complete":
       return {
-        title: "Workweek completed",
+        title: t ? t("pomodoroOverlay.workweekCompletedTitle") : "Workweek completed",
         status: null,
-        subtitle: "press any key to continue",
+        subtitle: t ? t("pomodoroOverlay.pressAnyKey") : "press any key to continue",
         tone: "neutral",
         primaryHint: null,
         secondaryHint: null,

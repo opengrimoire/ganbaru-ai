@@ -1,5 +1,5 @@
 /**
- * Frontend bridge to `vault/config.json`.
+ * Frontend bridge to the active Ganbaru AI folder's root `config.json`.
  *
  * Reads the file once at boot, keeps an in-memory cache, and flushes any
  * changes back to disk through a debounced write so a burst of edits
@@ -8,10 +8,9 @@
  * Consumers go through `getConfigKey` / `setConfigKey` with dotted keys
  * (e.g. `"theme.activeId"`, `"preferences.fontScale"`). Dotted keys map to
  * nested objects on disk so the JSON stays human-readable and orthogonal
- * concerns (theme vs preferences vs themes.user) live under their own
- * branches.
+ * concerns live under their own branches.
  *
- * The vault path itself is owned by the Rust side (see
+ * The Ganbaru AI folder path itself is owned by the Rust side (see
  * `src-tauri/src/vault.rs`). This module only knows how to read and write
  * the config payload and never talks to the filesystem directly.
  */
@@ -21,27 +20,6 @@ import { invoke } from "@tauri-apps/api/core";
 type JsonObject = Record<string, unknown>;
 
 const WRITE_DEBOUNCE_MS = 250;
-
-const LEGACY_LOCALSTORAGE_MIGRATIONS: ReadonlyArray<{
-  legacyKey: string;
-  configKey: string;
-  parse: (raw: string) => unknown;
-}> = [
-  { legacyKey: "ganbaru-ai-theme", configKey: "theme.activeId", parse: (s) => s },
-  {
-    legacyKey: "ganbaru-ai-font-family",
-    configKey: "preferences.fontFamilyId",
-    parse: (s) => s,
-  },
-  {
-    legacyKey: "ganbaru-ai-font-scale",
-    configKey: "preferences.fontScale",
-    parse: (s) => {
-      const n = parseFloat(s);
-      return Number.isFinite(n) ? n : undefined;
-    },
-  },
-];
 
 let cache: JsonObject = {};
 let loadPromise: Promise<void> | null = null;
@@ -96,8 +74,8 @@ function deletePath(root: JsonObject, parts: readonly string[]): void {
 }
 
 async function fetchFromDisk(): Promise<JsonObject> {
+  const raw = await invoke<string>("vault_read_config");
   try {
-    const raw = await invoke<string>("vault_read_config");
     const parsed = JSON.parse(raw);
     return isPlainObject(parsed) ? parsed : {};
   } catch (err) {
@@ -123,38 +101,14 @@ function scheduleFlush(): void {
   }, WRITE_DEBOUNCE_MS);
 }
 
-function migrateFromLocalStorage(): boolean {
-  if (typeof localStorage === "undefined") return false;
-  let mutated = false;
-  for (const { legacyKey, configKey, parse } of LEGACY_LOCALSTORAGE_MIGRATIONS) {
-    const parts = splitKey(configKey);
-    const existing = readPath(cache, parts);
-    const legacy = localStorage.getItem(legacyKey);
-    if (legacy !== null && existing === undefined) {
-      const value = parse(legacy);
-      if (value !== undefined) {
-        writePath(cache, parts, value);
-        mutated = true;
-      }
-    }
-    if (legacy !== null) {
-      localStorage.removeItem(legacyKey);
-    }
-  }
-  return mutated;
-}
-
 /**
- * Trigger the one-time vault load. Idempotent: subsequent calls return the
- * same promise. Must complete before any consumer calls `getConfigKey`.
+ * Trigger the config load. Idempotent: subsequent calls return the same
+ * promise. Must complete before any consumer calls `getConfigKey`.
  */
 export function ensureConfigLoaded(): Promise<void> {
   if (loadPromise) return loadPromise;
   loadPromise = (async () => {
     cache = await fetchFromDisk();
-    if (migrateFromLocalStorage()) {
-      await flushToDisk();
-    }
   })();
   return loadPromise;
 }

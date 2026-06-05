@@ -20,6 +20,7 @@
   import { getDoomscrollingUsage } from "$lib/stores/doomscrolling-usage.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import CustomSelect from "./CustomSelect.svelte";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import DoomscrollingAppSelector, {
     type DoomscrollingAppSelection,
   } from "./DoomscrollingAppSelector.svelte";
@@ -60,44 +61,66 @@
   const doomscrolling = getDoomscrolling();
   const usage = getDoomscrollingUsage();
   const theme = getTheme();
+  const { t } = getLocalization();
   const sourceColorGridColumns = 4;
   const sourceColorColumnOrder = [0, 3, 1, 2] as const;
   const sourceColorPickOrder = createSourceColorPickOrder();
 
-  const dailyBudgetOptions: readonly { value: DailyBudgetOption; label: string }[] = [
-    { value: "none", label: "None" },
-    { value: "15", label: "15 minutes" },
-    { value: "30", label: "30 minutes" },
-    { value: "45", label: "45 minutes" },
-    { value: "60", label: "1 hour" },
-    { value: "90", label: "1 hour 30 minutes" },
-    { value: "120", label: "2 hours" },
-    { value: "180", label: "3 hours" },
-    { value: "240", label: "4 hours" },
-    { value: "custom", label: "Custom" },
-  ];
-  const weeklyBudgetOptions: readonly { value: WeeklyBudgetOption; label: string }[] = [
-    { value: "none", label: "None" },
-    { value: "60", label: "1 hour" },
-    { value: "120", label: "2 hours" },
-    { value: "300", label: "5 hours" },
-    { value: "420", label: "7 hours" },
-    { value: "600", label: "10 hours" },
-    { value: "840", label: "14 hours" },
-    { value: "1260", label: "21 hours" },
-    { value: "1680", label: "28 hours" },
-    { value: "custom", label: "Custom" },
-  ];
-  const dailyBudgetPresetValues = new Set(
-    dailyBudgetOptions
-      .filter((option) => option.value !== "custom")
-      .map((option) => option.value),
-  );
-  const weeklyBudgetPresetValues = new Set(
-    weeklyBudgetOptions
-      .filter((option) => option.value !== "custom")
-      .map((option) => option.value),
-  );
+  function budgetDurationLabel(minutes: number): string {
+    if (minutes < 60) return t("settings.doomscrolling.limits.editor.minutes", minutes);
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    if (remainingMinutes === 0) return t("settings.doomscrolling.limits.editor.hours", hours);
+    return t("settings.doomscrolling.limits.editor.hoursMinutes", hours, remainingMinutes);
+  }
+
+  const dailyBudgetOptions = $derived.by<readonly { value: DailyBudgetOption; label: string }[]>(() => [
+    { value: "none", label: t("settings.doomscrolling.limits.editor.none") },
+    { value: "15", label: budgetDurationLabel(15) },
+    { value: "30", label: budgetDurationLabel(30) },
+    { value: "45", label: budgetDurationLabel(45) },
+    { value: "60", label: budgetDurationLabel(60) },
+    { value: "90", label: budgetDurationLabel(90) },
+    { value: "120", label: budgetDurationLabel(120) },
+    { value: "180", label: budgetDurationLabel(180) },
+    { value: "240", label: budgetDurationLabel(240) },
+    { value: "custom", label: t("settings.doomscrolling.limits.editor.custom") },
+  ]);
+  const weeklyBudgetOptions = $derived.by<readonly { value: WeeklyBudgetOption; label: string }[]>(() => [
+    { value: "none", label: t("settings.doomscrolling.limits.editor.none") },
+    { value: "60", label: budgetDurationLabel(60) },
+    { value: "120", label: budgetDurationLabel(120) },
+    { value: "300", label: budgetDurationLabel(300) },
+    { value: "420", label: budgetDurationLabel(420) },
+    { value: "600", label: budgetDurationLabel(600) },
+    { value: "840", label: budgetDurationLabel(840) },
+    { value: "1260", label: budgetDurationLabel(1260) },
+    { value: "1680", label: budgetDurationLabel(1680) },
+    { value: "custom", label: t("settings.doomscrolling.limits.editor.custom") },
+  ]);
+  const dailyBudgetPresetValues = new Set<DailyBudgetOption>([
+    "none",
+    "15",
+    "30",
+    "45",
+    "60",
+    "90",
+    "120",
+    "180",
+    "240",
+  ]);
+  const weeklyBudgetPresetValues = new Set<WeeklyBudgetOption>([
+    "none",
+    "60",
+    "120",
+    "180",
+    "300",
+    "420",
+    "600",
+    "840",
+    "1260",
+    "1680",
+  ]);
   let draftName = $state("");
   let draftDailyBudgetMode = $state<DailyBudgetOption>("60");
   let draftDailyCustomMinutes = $state("60");
@@ -232,7 +255,7 @@
 
   function limitNameRequirementMessage(): string {
     if (activeEntries().length <= 1 || draftName.trim() !== "") return "";
-    return "Add a limit name when grouping multiple sources.";
+    return t("settings.doomscrolling.limits.editor.addLimitNameForMultipleSources");
   }
 
   function hydrateDraft(): void {
@@ -254,7 +277,7 @@
       draftWeeklyBudgetMode = "none";
       draftWeeklyCustomHours = "5";
       draftEntries = [createEntryDraft(entryColorForIndex(0))];
-      formError = "Limit no longer exists";
+      formError = t("settings.doomscrolling.limits.editor.limitMissing");
       return;
     }
     draftName = limit.name;
@@ -429,11 +452,11 @@
   function validatedEntries(): DoomscrollingUsageLimitEntryDraft[] | null {
     const entries = activeEntries();
     if (entries.length === 0) {
-      formError = "Add at least one website, mobile app, or desktop app";
+      formError = t("settings.doomscrolling.limits.editor.addOneSource");
       return null;
     }
     if (entries.some((entry) => !entryHasAnySource(entry))) {
-      formError = "Each linked source needs a website, mobile app, or desktop app";
+      formError = t("settings.doomscrolling.limits.editor.sourceNeedsTarget");
       return null;
     }
     for (const entry of entries) {
@@ -441,7 +464,7 @@
         ? normalizeDoomscrollingAppName(entry.desktopAppName)
         : null;
       if (desktopName && isProtectedDoomscrollingDesktopAppName(desktopName)) {
-        formError = "Protected desktop apps cannot be tracked";
+        formError = t("settings.doomscrolling.limits.editor.protectedDesktopApps");
         return null;
       }
     }
@@ -452,16 +475,16 @@
     formError = "";
     const minutesPerDay = parseDraftDailyMinutes();
     if (minutesPerDay === "invalid") {
-      formError = "Choose a daily budget from 1 minute to 24 hours, or None";
+      formError = t("settings.doomscrolling.limits.editor.dailyBudgetInvalid");
       return;
     }
     const minutesPerWeek = parseDraftWeeklyMinutes();
     if (minutesPerWeek === "invalid") {
-      formError = "Choose weekly hours from 0.1 to 168, or None";
+      formError = t("settings.doomscrolling.limits.editor.weeklyBudgetInvalid");
       return;
     }
     if (minutesPerDay === null && minutesPerWeek === null) {
-      formError = "Choose a daily or weekly budget";
+      formError = t("settings.doomscrolling.limits.editor.chooseBudget");
       return;
     }
     const entries = validatedEntries();
@@ -485,13 +508,13 @@
       return;
     }
     const messages = {
-      "invalid-name": "Enter a limit name",
-      "invalid-minutes": "Choose a valid daily or weekly budget",
-      "invalid-budget": "Choose a daily or weekly budget",
-      "invalid-sources": "Each linked source needs a valid website, mobile app, or desktop app",
-      "duplicate-source": "Remove duplicate website or app entries",
-      "protected-source": "Protected desktop apps cannot be tracked",
-      missing: "Limit no longer exists",
+      "invalid-name": t("settings.doomscrolling.limits.editor.enterLimitName"),
+      "invalid-minutes": t("settings.doomscrolling.limits.editor.validBudget"),
+      "invalid-budget": t("settings.doomscrolling.limits.editor.chooseBudget"),
+      "invalid-sources": t("settings.doomscrolling.limits.editor.validSources"),
+      "duplicate-source": t("settings.doomscrolling.limits.editor.duplicateSource"),
+      "protected-source": t("settings.doomscrolling.limits.editor.protectedDesktopApps"),
+      missing: t("settings.doomscrolling.limits.editor.limitMissing"),
     } satisfies Record<Exclude<typeof result, "saved">, string>;
     formError = messages[result];
   }
@@ -509,10 +532,12 @@
       <div class="flex min-w-0 items-start justify-between gap-3 border-b border-border/70 pb-4">
         <div class="min-w-0">
           <h1 class="truncate text-[1rem] font-semibold text-foreground">
-            {target.mode === "edit" ? "Edit usage limit" : "Add usage limit"}
+            {target.mode === "edit"
+              ? t("settings.doomscrolling.limits.editor.editTitle")
+              : t("settings.doomscrolling.limits.editor.addTitle")}
           </h1>
           <p class="mt-1 max-w-2xl text-[0.866667rem] text-muted-foreground">
-            Link every source that should share the same usage budget.
+            {t("settings.doomscrolling.limits.editor.intro")}
           </p>
         </div>
       </div>
@@ -523,12 +548,12 @@
       style="padding-left: {contentPaddingX}; padding-right: {contentPaddingX};"
     >
       <section class="flex flex-col gap-4">
-        <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Limit details</h2>
+        <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("settings.doomscrolling.limits.editor.limitDetails")}</h2>
 
         <div class="flex items-center justify-between gap-4 px-1 py-1 max-[480px]:flex-col max-[480px]:items-stretch max-[480px]:gap-2">
           <div class="min-w-0 flex-1">
-            <label for="doomscrolling-limit-name" class="text-[0.866667rem] text-foreground">Limit name</label>
-            <div class="mt-0.5 text-[0.8rem] text-muted-foreground">Name this source group in the limits list</div>
+            <label for="doomscrolling-limit-name" class="text-[0.866667rem] text-foreground">{t("settings.doomscrolling.limits.editor.limitName")}</label>
+            <div class="mt-0.5 text-[0.8rem] text-muted-foreground">{t("settings.doomscrolling.limits.editor.limitNameDescription")}</div>
           </div>
           <div class="flex w-72 max-w-full flex-col gap-1 max-[480px]:w-full">
             <input
@@ -543,7 +568,7 @@
               ]}
               aria-invalid={limitNameWarning ? "true" : "false"}
               aria-describedby={limitNameWarning ? "doomscrolling-limit-name-warning" : undefined}
-              placeholder="Social media"
+              placeholder={t("settings.doomscrolling.limits.editor.limitNamePlaceholder")}
             />
             {#if limitNameWarning}
               <div id="doomscrolling-limit-name-warning" class="text-[0.733333rem] text-destructive">
@@ -554,8 +579,8 @@
         </div>
 
         <CustomSelect
-          label="Daily budget"
-          description="Set the budget for today, or disable it"
+          label={t("settings.doomscrolling.limits.editor.dailyBudget")}
+          description={t("settings.doomscrolling.limits.editor.dailyBudgetDescription")}
           value={draftDailyBudgetMode}
           options={dailyBudgetOptions}
           onChange={setDraftDailyBudgetMode}
@@ -565,8 +590,8 @@
         {#if draftDailyBudgetMode === "custom"}
           <div class="flex items-center justify-between gap-4 px-1 py-1 max-[480px]:flex-col max-[480px]:items-stretch max-[480px]:gap-2">
             <div class="min-w-0 flex-1">
-              <label for="doomscrolling-limit-custom-minutes" class="text-[0.866667rem] text-foreground">Custom minutes</label>
-              <div class="mt-0.5 text-[0.8rem] text-muted-foreground">Use a whole number from 1 to 1440</div>
+              <label for="doomscrolling-limit-custom-minutes" class="text-[0.866667rem] text-foreground">{t("settings.doomscrolling.limits.editor.customMinutes")}</label>
+              <div class="mt-0.5 text-[0.8rem] text-muted-foreground">{t("settings.doomscrolling.limits.editor.customMinutesDescription")}</div>
             </div>
             <input
               id="doomscrolling-limit-custom-minutes"
@@ -584,8 +609,8 @@
         {/if}
 
         <CustomSelect
-          label="Weekly budget"
-          description="Set the budget for this week, or leave it off"
+          label={t("settings.doomscrolling.limits.editor.weeklyBudget")}
+          description={t("settings.doomscrolling.limits.editor.weeklyBudgetDescription")}
           value={draftWeeklyBudgetMode}
           options={weeklyBudgetOptions}
           onChange={setDraftWeeklyBudgetMode}
@@ -595,8 +620,8 @@
         {#if draftWeeklyBudgetMode === "custom"}
           <div class="flex items-center justify-between gap-4 px-1 py-1 max-[480px]:flex-col max-[480px]:items-stretch max-[480px]:gap-2">
             <div class="min-w-0 flex-1">
-              <label for="doomscrolling-limit-custom-weekly-hours" class="text-[0.866667rem] text-foreground">Custom weekly hours</label>
-              <div class="mt-0.5 text-[0.8rem] text-muted-foreground">Use hours from 0.1 to 168, with one decimal at most</div>
+              <label for="doomscrolling-limit-custom-weekly-hours" class="text-[0.866667rem] text-foreground">{t("settings.doomscrolling.limits.editor.customWeeklyHours")}</label>
+              <div class="mt-0.5 text-[0.8rem] text-muted-foreground">{t("settings.doomscrolling.limits.editor.customWeeklyHoursDescription")}</div>
             </div>
             <input
               id="doomscrolling-limit-custom-weekly-hours"
@@ -617,9 +642,9 @@
 
       <section class="flex flex-col gap-4">
         <div class="min-w-0 px-1">
-          <h2 class="text-[0.866667rem] font-semibold text-foreground">Linked sources</h2>
+          <h2 class="text-[0.866667rem] font-semibold text-foreground">{t("settings.doomscrolling.limits.editor.linkedSources")}</h2>
           <div class="mt-0.5 text-[0.8rem] text-muted-foreground">
-            Each source can connect the same product across browser, mobile, and desktop.
+            {t("settings.doomscrolling.limits.editor.linkedSourcesDescription")}
           </div>
         </div>
 
@@ -630,23 +655,23 @@
                 <input
                   value={entry.name}
                   oninput={(event) => updateEntry(entry.id, "name", event.currentTarget.value)}
-                  aria-label="Source name"
+                  aria-label={t("settings.doomscrolling.limits.editor.sourceName")}
                   class="h-8 min-w-0 flex-1 rounded-md border border-border bg-background/70 px-2.5 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring dark:bg-transparent"
-                  placeholder="Name..."
+                  placeholder={t("settings.doomscrolling.limits.editor.sourceNamePlaceholder")}
                 />
                 <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground dark:bg-transparent">
                   <ColorPicker
                     color={entry.color ?? undefined}
                     theme={theme.current}
-                    title="Source color"
-                    ariaLabel="Select source color"
+                    title={t("settings.doomscrolling.limits.editor.sourceColor")}
+                    ariaLabel={t("settings.doomscrolling.limits.editor.selectSourceColor")}
                     onselect={(color) => updateEntryColor(entry.id, color)}
                   />
                 </div>
                 <button
                   type="button"
                   onclick={() => requestRemoveEntry(entry)}
-                  aria-label="Remove linked source row"
+                  aria-label={t("settings.doomscrolling.limits.editor.removeLinkedSourceRow")}
                   data-app-tooltip-disabled="true"
                   class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground dark:bg-transparent"
                 >
@@ -656,7 +681,7 @@
 
               <div class="grid min-w-0 grid-cols-1 gap-2 min-[680px]:grid-cols-3">
                 <label class="flex min-w-0 flex-col gap-1">
-                  <span class="text-[0.733333rem] font-medium text-muted-foreground">Website</span>
+                  <span class="text-[0.733333rem] font-medium text-muted-foreground">{t("settings.doomscrolling.limits.editor.website")}</span>
                   <input
                     value={entry.websiteHost}
                     oninput={(event) => updateEntry(entry.id, "websiteHost", event.currentTarget.value)}
@@ -666,17 +691,17 @@
                 </label>
 
                 <label class="flex min-w-0 flex-col gap-1">
-                  <span class="text-[0.733333rem] font-medium text-muted-foreground">Mobile</span>
+                  <span class="text-[0.733333rem] font-medium text-muted-foreground">{t("settings.doomscrolling.limits.editor.mobile")}</span>
                   <input
                     value={entry.mobileAppName}
                     oninput={(event) => updateEntry(entry.id, "mobileAppName", event.currentTarget.value)}
                     class="h-8 min-w-0 rounded-md border border-border bg-background/70 px-2.5 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring dark:bg-transparent"
-                    placeholder="App name..."
+                    placeholder={t("settings.doomscrolling.limits.editor.mobilePlaceholder")}
                   />
                 </label>
 
                 <div class="flex min-w-0 flex-col gap-1">
-                  <span class="text-[0.733333rem] font-medium text-muted-foreground">Desktop</span>
+                  <span class="text-[0.733333rem] font-medium text-muted-foreground">{t("settings.doomscrolling.limits.editor.desktop")}</span>
                   <div class="flex h-8 min-w-0 items-center gap-1 rounded-md border border-border bg-background/70 px-1.5 dark:bg-transparent">
                     <button
                       type="button"
@@ -686,13 +711,13 @@
                         entry.desktopAppName ? "text-foreground" : "text-muted-foreground",
                       ]}
                     >
-                      {entry.desktopAppName || "Choose app..."}
+                      {entry.desktopAppName || t("settings.doomscrolling.limits.editor.chooseApp")}
                     </button>
                     {#if entry.desktopAppName}
                       <button
                         type="button"
                         onclick={() => clearDesktopApp(entry.id)}
-                        aria-label="Clear desktop app"
+                        aria-label={t("settings.doomscrolling.limits.editor.clearDesktopApp")}
                         class="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                       >
                         <Eraser size={12} strokeWidth={2.25} />
@@ -712,7 +737,7 @@
             class="flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
           >
             <Plus size={13} strokeWidth={2.25} />
-            <span>Add source</span>
+            <span>{t("settings.doomscrolling.limits.editor.addSource")}</span>
           </button>
         </div>
       </section>
@@ -734,7 +759,7 @@
           onclick={onCancel}
           class="flex h-8 items-center justify-center rounded-md border border-border bg-card px-3 text-[0.8rem] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
         >
-          Cancel
+          {t("common.cancel")}
         </button>
         <button
           type="button"
@@ -742,7 +767,7 @@
           class="flex h-8 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-[0.8rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
           <Save size={13} strokeWidth={2.25} />
-          <span>Save</span>
+          <span>{t("common.save")}</span>
         </button>
       </div>
     </div>
@@ -751,7 +776,7 @@
 
 {#if desktopAppPickerEntryId}
   <DoomscrollingAppSelector
-    title="Choose a desktop app"
+    title={t("settings.doomscrolling.limits.editor.chooseDesktopApp")}
     mode="single"
     existingNames={existingDesktopAppPickerNames()}
     protectAppSelf
@@ -762,10 +787,10 @@
 
 {#if pendingDeleteEntryId}
   <ConfirmDialog
-    title="Delete linked source?"
-    message="This removes the source from the usage limit. Tracked usage stays in history."
-    confirmLabel="Delete (Enter)"
-    cancelLabel="Cancel (Esc)"
+    title={t("settings.doomscrolling.limits.editor.deleteLinkedSourceTitle")}
+    message={t("settings.doomscrolling.limits.editor.deleteLinkedSourceMessage")}
+    confirmLabel={t("settings.doomscrolling.shared.deleteShortcut")}
+    cancelLabel={t("settings.doomscrolling.shared.cancelShortcut")}
     onConfirm={confirmDeleteEntry}
     onCancel={cancelDeleteEntry}
   />

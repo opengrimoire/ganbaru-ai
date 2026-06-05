@@ -55,13 +55,13 @@ Raw color values come in from the database, iCalendar imports, and user edits. `
 - Numeric string parseable to such an integer: coerce and pass through.
 - Out of range, non-integer, `NaN`, or `Infinity`: warn once to the console, return undefined; render falls back to the `FALLBACK_COLOR_INDEX` slot.
 - Null, empty string, or other non-numeric type: return undefined silently.
-- Non-numeric strings: not coerced; treated as unknown and dropped. The DB schema migration to `INTEGER` removed the only path that ever produced them.
+- Non-numeric strings: not coerced; treated as unknown and dropped.
 
 The warning is deduped across a session (Set-backed) so a bad value on a thousand rows logs one line, not one thousand.
 
 ### Evolving the palette
 
-The palette size is fixed at 32 (`PALETTE_SIZE`). Themes redefine what color sits at each index; they do not add or remove slots. Stored events keep their integer reference forever, so changing a theme's hex for any slot is always safe. The palette grew from 24 to 32 by appending slots 24..31; legacy 24-slot custom themes are completed on import or hydration with the matching built-in light or dark appended slots. Migrations 17, 18, and 19 reordered the built-in slots into their visible color-family order and remapped stored event colors plus custom-theme palette rows to preserve their visual color.
+The palette size is fixed at 32 (`PALETTE_SIZE`). Themes redefine what color sits at each index; they do not add or remove slots. Stored events keep their integer reference forever, so changing a theme's hex for any slot is always safe. Theme imports must provide exactly 32 event palette slots.
 
 ## Contrast math across the shell
 
@@ -77,7 +77,7 @@ Every foreground, border, and muted caption the derivation engine produces is re
 
 OKLab is implemented from D65 matrix math in the same file (no external dependency). A 10,000-iteration fuzz test asserts `pickReadableForeground` always meets its target; round-trip tolerance tests lock OKLab accuracy inside 1 channel out of 255.
 
-Event-tile text still uses the legacy threshold-based `pickContrastText` (Rec. 709 luminance on raw sRGB) because the event palette was calibrated against those specific thresholds. Dimmed event variants (past and outside-month) are computed by blending the event's base hex toward the theme's `blendCanvas` with a fixed weight; text contrast is recomputed from the dimmed bg and cached per (theme ID, slot, weight).
+Event-tile text uses the threshold-based `pickContrastText` (Rec. 709 luminance on raw sRGB) because the event palette was calibrated against those specific thresholds. Dimmed event variants (past and outside-month) are computed by blending the event's base hex toward the theme's `blendCanvas` with a fixed weight; text contrast is recomputed from the dimmed bg and cached per (theme ID, slot, weight).
 
 ## Luminance-driven canvas resolution
 
@@ -86,19 +86,17 @@ Whether a theme "is dark" is a runtime property of its canvas, not a stored labe
 - `isThemeDark(theme)` reads `--background` from the theme's snapshot (or the base CSS for built-ins) and returns true when its relative luminance sits below `DARK_SURFACE_THRESHOLD` (0.4). Used to toggle the `.dark` class on the HTML root.
 - `isThemeCalendarDark(theme)` does the same for `--cal-bg`, which comes from the selected calendar default bundle or a user-pinned hex when `--cal-bg` is in `calendarIsolated`. Event tiles need to pick contrast against the surface they actually sit on, which is not always the same as the app canvas.
 
-User themes carry no `base` field at all, so there is no stored label to fall out of sync with. A separate helper, `defaultIconLabelFromCanvas(canvasHex)`, classifies an arbitrary canvas as `light` or `dark` for the few places that still need a BASE table to fall back to (legacy import, partial-row recovery during DB hydrate). Users can invert a theme's canvas mid-edit without fighting any stale label: the `.dark` class flips immediately, and event tiles pick the right palette on the very next frame. The 0.4 threshold is intentionally below the sRGB midpoint so a mid-gray canvas (~#888) still resolves as light.
+User themes carry no `base` field at all, so there is no stored label to fall out of sync with. A separate helper, `defaultIconLabelFromCanvas(canvasHex)`, classifies an arbitrary canvas as `light` or `dark` when cloning a built-in theme. Users can invert a theme's canvas mid-edit without fighting any stale label: the `.dark` class flips immediately, and event tiles pick the right palette on the very next frame. The 0.4 threshold is intentionally below the sRGB midpoint so a mid-gray canvas (~#888) still resolves as light.
 
 ## Persistence
 
-User-authored themes persist in SQLite as a normalized snapshot. The active theme ID, quick-toggle light and dark theme IDs, font family, and font scale stay in `vault/config.json` under dotted keys (`theme.activeId`, `theme.quickToggleLightId`, `theme.quickToggleDarkId`, `preferences.fontFamilyId`, `preferences.fontScale`); user themes have moved out of the config blob and into six tables documented in `data/schema.md` (`themes`, `theme_tokens`, `theme_event_palette`, plus seed mirrors and `theme_upgrade_dismissals`). Built-in light and dark stay code-pinned and never appear in the database. The schema's `CHECK (id NOT IN ('light', 'dark'))` defends against any malformed import shadowing built-ins, and the `themes.id` primary key prevents duplicate user-theme IDs.
+User-authored themes persist in SQLite as a normalized snapshot. The active theme ID, quick-toggle light and dark theme IDs, font family, and font scale stay in the active Ganbaru AI folder root `config.json` under dotted keys (`theme.activeId`, `theme.quickToggleLightId`, `theme.quickToggleDarkId`, `preferences.fontFamilyId`, `preferences.fontScale`); user themes have moved out of the config blob and into six tables documented in `data/schema.md` (`themes`, `theme_tokens`, `theme_event_palette`, plus seed mirrors and `theme_upgrade_dismissals`). Built-in light and dark stay code-pinned and never appear in the database. The schema's `CHECK (id NOT IN ('light', 'dark'))` defends against any malformed import shadowing built-ins, and the `themes.id` primary key prevents duplicate user-theme IDs.
 
-The vault folder still defaults to `app_config_dir / "vault"` and is created on first launch. Writes to `config.json` are atomic: the Rust backend serializes to `config.json.tmp`, fsyncs, and renames into place, so a crash mid-write leaves either the previous good file or an ignored temp.
+First launch defaults to `Documents/Ganbaru AI` in production and `Documents/Ganbaru AI Dev` in development builds, with secondary actions to choose another folder or import an existing Ganbaru AI folder. Writes to root `config.json` are atomic: the Rust backend serializes to `config.json.tmp`, fsyncs, and renames into place, so a crash mid-write leaves either the previous good file or an ignored temp.
 
 The frontend bridge (`lib/vault/config.ts`) loads the config once at boot, exposes synchronous reads against an in-memory cache, and debounces writes (250 ms) so rapid edits coalesce into one disk write. Stores hydrate from the cache on first read, keeping first paint synchronous for the small prefs that still live there. User themes load asynchronously: `apps/client/src/main.ts` awaits `ensureConfigLoaded()` and then `hydrateUserThemes()` before mounting the app, so first paint always matches what the user has on disk.
 
-The first vault load runs a one-time migration that copies the legacy `ganbaru-ai-theme`, `ganbaru-ai-font-family`, and `ganbaru-ai-font-scale` keys out of `localStorage` and removes them. The migration is idempotent. See "Migration from vault to SQLite" below for the second one-time migration that copies the legacy `themes.user` blob into the new tables.
-
-Built-in themes still pass through `validateThemeJson` on load (defense in depth against tampered config files). Unknown or invalid theme IDs fall back to the default (`dark`).
+Built-in themes still pass through `validateThemeJson` on load (defense in depth against tampered config files). Unknown or invalid theme IDs fall back to the default (`light`).
 
 ## Custom theme workflow
 
@@ -168,7 +166,7 @@ Three mutators expose the flag:
 
 All three mutators are pure in-memory; the buffer flushes to SQLite when the editor commits.
 
-Imported themes route unknown keys to be dropped: only user-editable keys present in `APP_TOKEN_KEYS` / `CALENDAR_TOKEN_KEYS` (and only valid hex values) survive validation. Older exports that contain former implementation-detail keys import without those keys. Older exports that contain isolated flags for destructive, confirm, or warning family tokens import those token values as source fallbacks when a text source is missing, then drop the flags because those rows are no longer independently editable.
+Imported themes must use the current v2 shape. Validation keeps only user-editable keys present in `APP_TOKEN_KEYS` / `CALENDAR_TOKEN_KEYS`, with valid hex values, and ignores unknown extra keys.
 
 SQLite themes start from the current baseline schema. When the token catalog changes after release, add a focused timestamped SQL migration under `apps/client/src-tauri/migrations/` to delete obsolete live and seed rows or map old rows into the current editable token catalog.
 
@@ -331,20 +329,7 @@ The banner offers two actions:
 - **Rebake** calls `rebakeTheme(themeId)`. The store re-runs `deriveAppTokens` against the theme's current sources and re-runs the current calendar default bundle against its saved mode/custom basis. It overwrites every non-isolated token in the in-memory snapshot with the new derived hex, stamps `derivationEngineVersion` at the current constant, and (if `--cal-bg` is non-isolated) updates `blendCanvas` to the bundle's `blendCanvas`. Isolated tokens are preserved verbatim. Like every other editor mutator the change stays in `$state` until "Save and apply" flushes through `persistThemeToDb`.
 - **Maybe later** records the dismissal in `dismissals` and, for an existing theme, immediately writes a row into `theme_upgrade_dismissals`. For a fresh theme that has not been persisted yet, the dismissal is queued in `pendingDismissals` and gets written right after the parent theme insert during commit. The banner stops appearing for this theme until the constant bumps again.
 
-Clones inherit their source's stamp verbatim (a clone of a built-in stamps at the current constant). v2 and v1 JSON imports take the file's `derivationEngineVersion`; legacy imports stamp at the current constant because the legacy import re-derives at import time. The vault-to-SQLite migration also stamps at the current constant since it runs the current derivation when synthesizing the snapshot.
-
-## Migration from vault to SQLite
-
-The shift from a `themes.user` blob in `vault/config.json` to normalized SQLite rows runs once per install. `apps/client/src/main.ts` awaits `ensureConfigLoaded()` and then `hydrateUserThemes()` before mounting the app; `hydrateUserThemes` calls `migrateVaultThemesIfPresent()` first, then loads every theme from the DB into the in-memory store and applies the active theme.
-
-The migration:
-
-1. Reads `themes.user` from the config cache. If it is missing or empty, exits early (idempotent on every subsequent boot).
-2. Walks each entry through `validateThemeJson`. Legacy entries lacking `sources` or seed mirrors get them synthesized from the resolved palette and the current derivation engine, stamping `derivationEngineVersion` at the current code constant.
-3. Inserts each theme through `insertTheme(theme)`, which writes the row in `themes`, every snapshot row in `theme_tokens` and `theme_event_palette`, and every seed mirror row in `theme_seed_tokens` and `theme_seed_event_palette`, all in one transaction.
-4. After every theme inserts successfully, calls `setConfigKey("themes.user", undefined)` and `flushConfig()` to commit the deletion. A second boot sees no `themes.user` and exits at step 1.
-
-The migration is idempotent because it gates on the presence of `themes.user`. If a single theme fails validation it is skipped (logged once); the rest still land. Built-in themes never touch this path: they live as code constants in `BUILTIN_THEME_REGISTRY` and are filtered out of any imported JSON before insertion.
+Clones inherit their source's stamp verbatim (a clone of a built-in stamps at the current constant). JSON imports take the file's v2 `derivationEngineVersion`.
 
 ## Typography and density
 

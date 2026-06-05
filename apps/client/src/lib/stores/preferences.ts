@@ -1,3 +1,29 @@
+import {
+  CALENDAR_VIEW_MODES,
+  DEFAULT_CALENDAR_VIEW_MODE,
+  isCalendarViewMode,
+  type CalendarViewMode,
+} from "$lib/components/calendar/types";
+import {
+  DEFAULT_LANGUAGE_PREFERENCE,
+  LANGUAGE_PREFERENCES,
+  isLanguagePreference,
+  parseLanguagePreference,
+  type LanguagePreference,
+} from "$lib/i18n/locales";
+
+export {
+  CALENDAR_VIEW_MODES,
+  DEFAULT_CALENDAR_VIEW_MODE,
+  DEFAULT_LANGUAGE_PREFERENCE,
+  LANGUAGE_PREFERENCES,
+  isCalendarViewMode,
+  isLanguagePreference,
+  parseLanguagePreference,
+  type CalendarViewMode,
+  type LanguagePreference,
+};
+
 /**
  * Pure types and helpers for app-wide user preferences that live outside
  * the theme system (font family, font scale, density). Themes may ship a
@@ -247,7 +273,7 @@ export function parseFocusPauseNotificationIntervalMinutes(
 
 /**
  * Normalize persisted title bar visibility. Unknown keys are ignored and
- * missing values stay visible, so old configs survive new controls.
+ * missing values stay visible, so newly added controls remain reachable.
  */
 export function parseTitleBarVisibility(value: unknown): TitleBarVisibility {
   const visibility: TitleBarVisibility = { ...DEFAULT_TITLE_BAR_VISIBILITY };

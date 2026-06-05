@@ -2,6 +2,7 @@ import type {
   CalendarColorDefaultMode,
   ThemeSources,
 } from "$lib/stores/themes";
+import type { Translate } from "$lib/i18n/translator.svelte";
 
 export type TokenInfo = { title: string; description: string };
 
@@ -429,4 +430,353 @@ export function humanizeToken(token: string): string {
 export function tokenInfo(row: GroupSingleRow): TokenInfo {
   const lookup = row.scope === "app" ? APP_TOKEN_INFO : CALENDAR_TOKEN_INFO;
   return lookup[row.key] ?? { title: humanizeToken(row.key), description: "" };
+}
+
+export function localizedThemeNavItems(
+  t: Translate,
+): ReadonlyArray<{ label: string; target: ThemeNavTarget }> {
+  return [
+    { label: t("settings.theme.editor.nav.general"), target: "general" },
+    { label: t("settings.theme.editor.nav.calendar"), target: "calendar" },
+    { label: t("settings.theme.editor.nav.signals"), target: "signals" },
+    { label: t("settings.theme.editor.nav.json"), target: "json" },
+  ];
+}
+
+export function localizedThemeSectionLabel(
+  target: ThemeNavTarget,
+  t: Translate,
+): string {
+  switch (target) {
+    case "general":
+      return t("settings.theme.editor.nav.general");
+    case "calendar":
+      return t("settings.theme.editor.nav.calendar");
+    case "signals":
+      return t("settings.theme.editor.nav.signals");
+    case "json":
+      return t("settings.theme.editor.nav.json");
+  }
+}
+
+export function localizedCalendarDefaultOptions(
+  t: Translate,
+): ReadonlyArray<{ mode: CalendarColorDefaultMode; label: string }> {
+  return [
+    { mode: "light", label: t("settings.theme.editor.calendarDefault.light") },
+    { mode: "dark", label: t("settings.theme.editor.calendarDefault.dark") },
+    {
+      mode: "app-canvas",
+      label: t("settings.theme.editor.calendarDefault.appCanvas"),
+    },
+    {
+      mode: "custom",
+      label: t("settings.theme.editor.calendarDefault.custom"),
+    },
+  ];
+}
+
+export function localizedTokenInfo(
+  row: GroupSingleRow,
+  t: Translate,
+): TokenInfo {
+  switch (`${row.scope}:${row.key}`) {
+    case "app:--background":
+      return {
+        title: t("settings.theme.editor.token.appCanvas.title"),
+        description: t("settings.theme.editor.token.appCanvas.description"),
+      };
+    case "app:--cal-header-bg":
+      return {
+        title: t("settings.theme.editor.token.calendarHeader.title"),
+        description: t("settings.theme.editor.token.calendarHeader.description"),
+      };
+    case "app:--foreground":
+      return {
+        title: t("settings.theme.editor.token.textColor.title"),
+        description: t("settings.theme.editor.token.textColor.description"),
+      };
+    case "app:--card":
+      return {
+        title: t("settings.theme.editor.token.card.title"),
+        description: t("settings.theme.editor.token.card.description"),
+      };
+    case "app:--primary":
+      return {
+        title: t("settings.theme.editor.token.primaryAction.title"),
+        description: t("settings.theme.editor.token.primaryAction.description"),
+      };
+    case "app:--primary-foreground":
+      return {
+        title: t("settings.theme.editor.token.buttonText.title"),
+        description: t("settings.theme.editor.token.buttonText.description"),
+      };
+    case "app:--destructive":
+      return {
+        title: t("settings.theme.editor.token.destructive.title"),
+        description: t("settings.theme.editor.token.destructive.description"),
+      };
+    case "app:--destructive-foreground":
+      return {
+        title: t("settings.theme.editor.token.destructiveText.title"),
+        description: t("settings.theme.editor.token.destructiveText.description"),
+      };
+    case "app:--ring":
+      return {
+        title: t("settings.theme.editor.token.focusRing.title"),
+        description: t("settings.theme.editor.token.focusRing.description"),
+      };
+    case "app:--event-panel-bg":
+      return {
+        title: t("settings.theme.editor.token.eventPanelSurface.title"),
+        description: t(
+          "settings.theme.editor.token.eventPanelSurface.description",
+        ),
+      };
+    case "app:--event-panel-contrast":
+      return {
+        title: t("settings.theme.editor.token.eventPanelSectionHeader.title"),
+        description: t(
+          "settings.theme.editor.token.eventPanelSectionHeader.description",
+        ),
+      };
+    case "app:--event-panel-text":
+      return {
+        title: t("settings.theme.editor.token.eventPanelBodyText.title"),
+        description: t(
+          "settings.theme.editor.token.eventPanelBodyText.description",
+        ),
+      };
+    case "app:--event-panel-muted-text":
+      return {
+        title: t("settings.theme.editor.token.eventPanelMutedText.title"),
+        description: t(
+          "settings.theme.editor.token.eventPanelMutedText.description",
+        ),
+      };
+    case "app:--action-confirm":
+      return {
+        title: t("settings.theme.editor.token.confirmAction.title"),
+        description: t("settings.theme.editor.token.confirmAction.description"),
+      };
+    case "app:--action-confirm-foreground":
+      return {
+        title: t("settings.theme.editor.token.confirmActionText.title"),
+        description: t(
+          "settings.theme.editor.token.confirmActionText.description",
+        ),
+      };
+    case "app:--action-danger-armed":
+      return {
+        title: t("settings.theme.editor.token.armedDelete.title"),
+        description: t("settings.theme.editor.token.armedDelete.description"),
+      };
+    case "app:--action-danger-armed-foreground":
+      return {
+        title: t("settings.theme.editor.token.armedDeleteText.title"),
+        description: t("settings.theme.editor.token.armedDeleteText.description"),
+      };
+    case "app:--status-accepted":
+      return {
+        title: t("settings.theme.editor.token.acceptedAttendee.title"),
+        description: t(
+          "settings.theme.editor.token.acceptedAttendee.description",
+        ),
+      };
+    case "app:--status-accepted-foreground":
+      return {
+        title: t("settings.theme.editor.token.acceptedAttendeeText.title"),
+        description: t(
+          "settings.theme.editor.token.acceptedAttendeeText.description",
+        ),
+      };
+    case "app:--status-tentative":
+      return {
+        title: t("settings.theme.editor.token.tentativeAttendee.title"),
+        description: t(
+          "settings.theme.editor.token.tentativeAttendee.description",
+        ),
+      };
+    case "app:--status-tentative-foreground":
+      return {
+        title: t("settings.theme.editor.token.tentativeAttendeeText.title"),
+        description: t(
+          "settings.theme.editor.token.tentativeAttendeeText.description",
+        ),
+      };
+    case "app:--status-declined":
+      return {
+        title: t("settings.theme.editor.token.declinedAttendee.title"),
+        description: t(
+          "settings.theme.editor.token.declinedAttendee.description",
+        ),
+      };
+    case "app:--status-declined-foreground":
+      return {
+        title: t("settings.theme.editor.token.declinedAttendeeText.title"),
+        description: t(
+          "settings.theme.editor.token.declinedAttendeeText.description",
+        ),
+      };
+    case "cal:--cal-bg":
+      return {
+        title: t("settings.theme.editor.token.calendarBackground.title"),
+        description: t(
+          "settings.theme.editor.token.calendarBackground.description",
+        ),
+      };
+    case "cal:--cal-gridline":
+      return {
+        title: t("settings.theme.editor.token.gridLines.title"),
+        description: t("settings.theme.editor.token.gridLines.description"),
+      };
+    case "cal:--cal-time-label":
+      return {
+        title: t("settings.theme.editor.token.timeLabels.title"),
+        description: t("settings.theme.editor.token.timeLabels.description"),
+      };
+    case "cal:--cal-current-time":
+      return {
+        title: t("settings.theme.editor.token.nowLine.title"),
+        description: t("settings.theme.editor.token.nowLine.description"),
+      };
+    case "cal:--cal-timeline-rail":
+      return {
+        title: t("settings.theme.editor.token.emptyRail.title"),
+        description: t("settings.theme.editor.token.emptyRail.description"),
+      };
+    case "cal:--cal-timeline-break":
+      return {
+        title: t("settings.theme.editor.token.breakMarker.title"),
+        description: t("settings.theme.editor.token.breakMarker.description"),
+      };
+    case "cal:--cal-timeline-focus":
+      return {
+        title: t("settings.theme.editor.token.focusMarker.title"),
+        description: t("settings.theme.editor.token.focusMarker.description"),
+      };
+    default:
+      return tokenInfo(row);
+  }
+}
+
+function localizedSourceGroupInfo(
+  group: SourceGroup,
+  t: Translate,
+): TokenInfo {
+  switch (group.id) {
+    case "app-canvas":
+      return {
+        title: t("settings.theme.editor.group.appCanvas.title"),
+        description: t("settings.theme.editor.group.appCanvas.description"),
+      };
+    case "calendar-surface":
+      return {
+        title: t("settings.theme.editor.group.calendarSurface.title"),
+        description: t("settings.theme.editor.group.calendarSurface.description"),
+      };
+    case "calendar-details":
+      return {
+        title: t("settings.theme.editor.group.calendarDetails.title"),
+        description: t("settings.theme.editor.group.calendarDetails.description"),
+      };
+    case "event-panel":
+      return {
+        title: t("settings.theme.editor.group.eventPanel.title"),
+        description: t("settings.theme.editor.group.eventPanel.description"),
+      };
+    case "ink":
+      return {
+        title: t("settings.theme.editor.group.ink.title"),
+        description: t("settings.theme.editor.group.ink.description"),
+      };
+    case "primary-action":
+      return {
+        title: t("settings.theme.editor.group.primaryAction.title"),
+        description: t("settings.theme.editor.group.primaryAction.description"),
+      };
+    case "destructive":
+      return {
+        title: t("settings.theme.editor.group.destructive.title"),
+        description: t("settings.theme.editor.group.destructive.description"),
+      };
+    case "confirm":
+      return {
+        title: t("settings.theme.editor.group.confirm.title"),
+        description: t("settings.theme.editor.group.confirm.description"),
+      };
+    case "warning":
+      return {
+        title: t("settings.theme.editor.group.warning.title"),
+        description: t("settings.theme.editor.group.warning.description"),
+      };
+  }
+}
+
+function localizedPairInfo(
+  row: GroupPairRow | GroupSourcePairRow,
+  t: Translate,
+): TokenInfo {
+  switch (row.kind === "source-pair" ? row.bgSource : row.bg) {
+    case "--popover":
+      return {
+        title: t("settings.theme.editor.pair.popover.title"),
+        description: t("settings.theme.editor.pair.popover.description"),
+      };
+    case "--secondary":
+      return {
+        title: t("settings.theme.editor.pair.secondarySurface.title"),
+        description: t("settings.theme.editor.pair.secondarySurface.description"),
+      };
+    case "--muted":
+      return {
+        title: t("settings.theme.editor.pair.mutedSurface.title"),
+        description: t("settings.theme.editor.pair.mutedSurface.description"),
+      };
+    case "--accent":
+      return {
+        title: t("settings.theme.editor.pair.hoverHighlight.title"),
+        description: t("settings.theme.editor.pair.hoverHighlight.description"),
+      };
+    case "--sidebar":
+      return {
+        title: t("settings.theme.editor.pair.titleBar.title"),
+        description: t("settings.theme.editor.pair.titleBar.description"),
+      };
+    case "--sidebar-accent":
+      return {
+        title: t("settings.theme.editor.pair.titleBarHover.title"),
+        description: t("settings.theme.editor.pair.titleBarHover.description"),
+      };
+    case "destructive":
+      return {
+        title: t("settings.theme.editor.pair.destructive.title"),
+        description: t("settings.theme.editor.pair.destructive.description"),
+      };
+    case "confirm":
+      return {
+        title: t("settings.theme.editor.pair.confirm.title"),
+        description: t("settings.theme.editor.pair.confirm.description"),
+      };
+    case "warning":
+      return {
+        title: t("settings.theme.editor.pair.warning.title"),
+        description: t("settings.theme.editor.pair.warning.description"),
+      };
+    default:
+      return { title: row.title, description: row.description };
+  }
+}
+
+function localizedGroupRow(row: GroupRow, t: Translate): GroupRow {
+  if (row.kind === "single") return row;
+  return { ...row, ...localizedPairInfo(row, t) };
+}
+
+export function localizedSourceGroups(t: Translate): SourceGroup[] {
+  return SOURCE_GROUPS.map((group) => ({
+    ...group,
+    ...localizedSourceGroupInfo(group, t),
+    rows: group.rows.map((row) => localizedGroupRow(row, t)),
+  }));
 }

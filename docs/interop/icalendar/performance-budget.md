@@ -45,7 +45,7 @@ Import can be heavier than startup, but it must stay bounded:
 
 Current implemented limits:
 
-- plain `.ics` entries are capped by the Rust vault reader before parsing.
+- plain `.ics` entries are capped by the Rust import reader before parsing.
 - zip imports reject unsafe paths, encrypted entries, wrong extensions, oversized entries, oversized aggregate input, and excessive entry count.
 - parser safety checks reject unfolded content lines above 2 MiB, more than 50,000 components, more than 500,000 properties, component nesting deeper than 32, and inline binary `ATTACH` values above 1 MiB.
 - visible-window recurrence expansion is bounded by the requested window plus a 10,000 cursor-iteration guard per template.

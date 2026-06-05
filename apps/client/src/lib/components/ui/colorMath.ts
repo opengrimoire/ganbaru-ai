@@ -201,7 +201,7 @@ export function hsvToHex(h: number, s: number, v: number): string {
  * fall back to `a`.
  *
  * Note: sRGB-space blending is not perceptually uniform, but it matches
- * the legacy derivation weights used by `themes.ts` and the event palette
+ * the existing derivation weights used by `themes.ts` and the event palette
  * darkening in `calendar/utils.ts`. For perceptual lightness walks use
  * the OKLab pickers below instead.
  */
@@ -237,7 +237,7 @@ function linearToSRgb(c: number): number {
  * WCAG 2.1 relative luminance for a hex color. Returns a value in 0..1
  * (0 = pure black, 1 = pure white). Gamma-decodes sRGB before applying
  * the Rec. 709 luminance coefficients, which is the WCAG-compliant
- * formula, as opposed to the raw-sRGB approximation in the legacy
+ * formula, as opposed to the raw-sRGB approximation in
  * `pickContrastText` in `calendar/utils.ts`.
  */
 export function relativeLuminance(hex: string): number {

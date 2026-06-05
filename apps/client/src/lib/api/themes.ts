@@ -50,13 +50,9 @@ export interface ThemeRow {
   calendar_default_custom: string;
   seed_calendar_default_mode: string;
   seed_calendar_default_custom: string;
-  /**
-   * Decorative sun/moon tag for the theme list and editor icon. Nullable
-   * so dev databases and imported legacy theme rows can be normalized from
-   * canvas luminance.
-   */
-  icon_label: "light" | "dark" | null;
-  seed_icon_label: "light" | "dark" | null;
+  /** Decorative sun/moon tag for the theme list and editor icon. */
+  icon_label: "light" | "dark";
+  seed_icon_label: "light" | "dark";
   created_at: number;
   updated_at: number;
 }
@@ -349,22 +345,6 @@ export async function resetPaletteSlotToSeed(
  */
 export async function resetThemeToSeed(id: string): Promise<void> {
   await invoke<void>("theme_reset_to_seed", { dbUrl: await activeDbUrl(), id });
-}
-
-/**
- * Backfill a NULL icon_label/seed_icon_label on a legacy row. Called once
- * per affected theme during hydrate; subsequent writes go through
- * `replaceThemeContent` which always supplies a value.
- */
-export async function backfillIconLabel(
-  id: string,
-  iconLabel: "light" | "dark",
-): Promise<void> {
-  await invoke<void>("theme_backfill_icon_label", {
-    dbUrl: await activeDbUrl(),
-    id,
-    iconLabel,
-  });
 }
 
 export async function recordDismissal(

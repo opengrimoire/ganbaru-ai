@@ -1,4 +1,4 @@
-use crate::db_path::connect_sqlite;
+use crate::{db_path::connect_sqlite, vault};
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
@@ -12,11 +12,6 @@ const STATE_FILE: &str = "doomscrolling-state.json";
 const EXTENSION_CONNECTION_FILE: &str = "doomscrolling-extension-status.json";
 const LIMIT_STATE_FILE: &str = "doomscrolling-limit-state.json";
 const EXTENSION_CONNECTION_STALE_SECONDS: i64 = 60;
-const ALLOWED_USAGE_DATABASE_FILES: &[&str] = &[
-    "ganbaru-ai.db",
-    "ganbaru-ai-dev.db",
-    "ganbaru-ai-benchmark.db",
-];
 const EXTENSION_INSTALL_README_URL: &str =
     "https://github.com/opengrimoire/ganbaru-ai/blob/dev/extensions/chrome/README.md";
 const PROTECTED_DESKTOP_APP_NAMES: &[&str] = &[
@@ -208,7 +203,8 @@ pub struct DoomscrollingLimitState {
     local_date: String,
     week_start_local_date: String,
     updated_at: String,
-    database_file_name: String,
+    #[serde(default)]
+    database_path: Option<String>,
     limits: Vec<DoomscrollingLimitStateItem>,
 }
 
@@ -516,8 +512,14 @@ fn validate_limit_state(state: &DoomscrollingLimitState) -> Result<(), String> {
     }
     DateTime::parse_from_rfc3339(&state.updated_at)
         .map_err(|e| format!("parse updated_at: {e}"))?;
-    if !ALLOWED_USAGE_DATABASE_FILES.contains(&state.database_file_name.as_str()) {
-        return Err("database_file_name is not supported".to_string());
+    if let Some(database_path) = &state.database_path {
+        let path = Path::new(database_path);
+        if !path.is_absolute() {
+            return Err("database_path must be absolute".to_string());
+        }
+        if path.file_name().and_then(|name| name.to_str()) != Some(vault::APP_SQLITE_FILE) {
+            return Err("database_path must point to ganbaru-ai.sqlite".to_string());
+        }
     }
     for limit in &state.limits {
         if limit.id.trim().is_empty() {
@@ -2069,9 +2071,15 @@ pub async fn doomscrolling_list_usage_samples<R: Runtime>(
 #[tauri::command]
 pub fn doomscrolling_write_limit_state<R: Runtime>(
     app: tauri::AppHandle<R>,
-    state: DoomscrollingLimitState,
+    mut state: DoomscrollingLimitState,
 ) -> Result<(), String> {
     validate_limit_state(&state)?;
+    state.database_path = Some(
+        vault::active_database_path(&app)?
+            .to_str()
+            .ok_or_else(|| "database path contains non-utf8 characters".to_string())?
+            .to_string(),
+    );
     let path = limit_state_path(&app)?;
     let json = serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?;
     write_text_file_atomically(&path, &json)
@@ -2345,7 +2353,7 @@ mod tests {
             local_date: "today".to_string(),
             week_start_local_date: "2026-05-25".to_string(),
             updated_at: "2026-05-28T00:00:00.000Z".to_string(),
-            database_file_name: "ganbaru-ai-dev.db".to_string(),
+            database_path: Some("/tmp/ganbaru-ai-vault/ganbaru-ai.sqlite".to_string()),
             limits: vec![DoomscrollingLimitStateItem {
                 id: "youtube".to_string(),
                 period: "day".to_string(),

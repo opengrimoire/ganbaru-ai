@@ -40,10 +40,9 @@ import {
   themeIdCollisionError,
   toUserThemeSnapshot,
 } from "./themeOperations";
-import { flushConfig, getConfigKey, setConfigKey } from "../vault/config";
+import { getConfigKey, setConfigKey } from "../vault/config";
 import { emit, listen } from "@tauri-apps/api/event";
 import {
-  backfillIconLabel,
   deleteTheme as dbDeleteTheme,
   insertTheme as dbInsertTheme,
   loadAllUserThemes,
@@ -63,7 +62,6 @@ import {
 const ACTIVE_KEY = "theme.activeId";
 const QUICK_TOGGLE_LIGHT_KEY = "theme.quickToggleLightId";
 const QUICK_TOGGLE_DARK_KEY = "theme.quickToggleDarkId";
-const LEGACY_CUSTOM_KEY = "themes.user";
 const THEME_WINDOW_SYNC_EVENT = "theme-window-sync";
 
 interface ThemeWindowSyncPayload {
@@ -122,7 +120,7 @@ function loadQuickToggleIdFromConfig(key: string, fallback: ThemeId): ThemeId {
 }
 
 function resolveActive(): Theme {
-  return getThemeById(activeId, combinedRegistry()) ?? darkTheme;
+  return getThemeById(activeId, combinedRegistry()) ?? lightTheme;
 }
 
 function beginInstantThemePaint(): (() => void) | undefined {
@@ -212,33 +210,18 @@ function initThemeSync(): void {
 }
 
 /**
- * Boot-time hydration: load user themes from SQLite, run the one-time vault
- * migration if a legacy `themes.user` blob is present, resolve the active
- * theme from config, and paint the first frame.
+ * Boot-time hydration: load user themes from SQLite, resolve the active theme
+ * from config, and paint the first frame.
  *
  * Idempotent. main.ts awaits this between `ensureConfigLoaded` and the App
  * import so first paint matches what the user has on disk (no FOUC).
  */
 export async function hydrateUserThemes(): Promise<void> {
   if (hydrated) return;
-  await migrateVaultThemesIfPresent();
   const reads = await loadAllUserThemes();
   for (const read of reads) {
     const theme = userThemeFromRead(read);
     customThemes[theme.id] = theme;
-    // One-time backfill: legacy rows can carry NULL icon_label/
-    // seed_icon_label. `userThemeFromRead` derived a value from canvas
-    // luminance; persist it so subsequent reads do not need to derive.
-    if (
-      read.theme.icon_label === null ||
-      read.theme.seed_icon_label === null
-    ) {
-      try {
-        await backfillIconLabel(theme.id, theme.iconLabel);
-      } catch (err) {
-        console.error("icon_label backfill failed for", theme.id, err);
-      }
-    }
   }
   const dismissalRows = await loadDismissals();
   for (const row of dismissalRows) {
@@ -257,47 +240,6 @@ export async function hydrateUserThemes(): Promise<void> {
   hydrated = true;
   applyThemeToDom();
   initThemeSync();
-}
-
-/**
- * One-time migration: read the legacy `themes.user` JSON blob from
- * vault/config.json, walk each entry through `validateThemeJson` (legacy
- * branch), insert into SQLite, then delete the key from config and flush.
- * Idempotent because a second pass sees no `themes.user` and returns early.
- */
-async function migrateVaultThemesIfPresent(): Promise<void> {
-  const saved = getConfigKey<Record<string, unknown> | undefined>(
-    LEGACY_CUSTOM_KEY,
-    undefined,
-  );
-  if (!saved || typeof saved !== "object" || Array.isArray(saved)) return;
-  const ids = Object.keys(saved);
-  if (ids.length === 0) {
-    setConfigKey(LEGACY_CUSTOM_KEY, undefined);
-    await flushConfig();
-    return;
-  }
-  for (const key of ids) {
-    if (!Object.hasOwn(saved, key)) continue;
-    if (isBuiltinThemeId(key)) continue;
-    const value = saved[key];
-    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
-    const result = validateThemeJson({
-      ...(value as Record<string, unknown>),
-      id: key,
-    });
-    if (!result.ok) {
-      console.error("vault theme migration: skipped invalid theme", key, result.errors);
-      continue;
-    }
-    try {
-      await dbInsertTheme(userThemeToWrite(result.theme));
-    } catch (err) {
-      console.error("vault theme migration: insert failed for", key, err);
-    }
-  }
-  setConfigKey(LEGACY_CUSTOM_KEY, undefined);
-  await flushConfig();
 }
 
 type TokenWrite = UserThemeWrite["tokens"][number];
@@ -389,9 +331,9 @@ function userThemeToWrite(theme: UserTheme): UserThemeWrite {
 /**
  * Build a {@link UserTheme} from row groups returned by `loadAllUserThemes`.
  * Missing tokens are backfilled from BASE so a partial DB write or a
- * mid-migration race never crashes the UI. The fallback BASE table is
- * picked from the canvas-row luminance, so a user theme recovers consistent
- * defaults regardless of which built-in family it originally came from.
+ * malformed import never crashes the UI. The fallback BASE table is picked
+ * from the canvas-row luminance, so a user theme recovers consistent defaults
+ * regardless of which built-in family it originally came from.
  */
 function userThemeFromRead(read: UserThemeRead): UserTheme {
   const tokenSourceRows = read.tokens.filter((t) => t.kind === "source");
@@ -448,17 +390,6 @@ function userThemeFromRead(read: UserThemeRead): UserTheme {
   );
   const eventPalette = paletteFromRows(read.palette, fallbackBase);
   const seedEventPalette = paletteFromRows(read.seedPalette, seedFallbackBase);
-  // Legacy rows can carry NULL for icon_label/seed_icon_label. Default both
-  // from canvas luminance so the icon picks a stable value.
-  const iconLabel: "light" | "dark" =
-    read.theme.icon_label === "light" || read.theme.icon_label === "dark"
-      ? read.theme.icon_label
-      : fallbackBase;
-  const seedIconLabel: "light" | "dark" =
-    read.theme.seed_icon_label === "light" ||
-    read.theme.seed_icon_label === "dark"
-      ? read.theme.seed_icon_label
-      : seedFallbackBase;
   const calendarDefaultMode = calendarDefaultModeFromRow(
     read.theme.calendar_default_mode,
   );
@@ -477,7 +408,7 @@ function userThemeFromRead(read: UserThemeRead): UserTheme {
     kind: "user",
     id: read.theme.id,
     displayName: read.theme.display_name,
-    iconLabel,
+    iconLabel: read.theme.icon_label,
     blendCanvas: read.theme.blend_canvas,
     eventPalette,
     derivationEngineVersion: read.theme.derivation_engine_version,
@@ -497,7 +428,7 @@ function userThemeFromRead(read: UserThemeRead): UserTheme {
     seedBlendCanvas: read.theme.seed_blend_canvas,
     seedCalendarDefaultMode,
     seedCalendarDefaultCustom,
-    seedIconLabel,
+    seedIconLabel: read.theme.seed_icon_label,
   };
 }
 

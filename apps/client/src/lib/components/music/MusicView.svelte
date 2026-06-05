@@ -21,10 +21,12 @@
   import { revealLocalFile } from "$lib/api/music";
   import { SPEED_PRESETS, clampRate, formatPlaybackTime, isSpeedPreset } from "$lib/music/playback";
   import { getMusicPlayer } from "$lib/stores/music-player.svelte";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import { cn } from "$lib/utils";
   import { formatShortcut, hasShortcutModifier } from "$lib/keyboard-shortcuts";
 
   const player = getMusicPlayer();
+  const { t } = getLocalization();
 
   type MusicPage = "player" | "playlist-builder";
 
@@ -497,10 +499,10 @@
         type="button"
         onclick={openPlaylistBuilder}
         class="inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-secondary px-2.5 text-[0.8rem] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-        aria-label="Playlist builder"
+        aria-label={t("music.playlistBuilder")}
       >
         <ListPlus size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-        <span class="hidden min-[960px]:inline">Playlist builder</span>
+        <span class="hidden min-[960px]:inline">{t("music.playlistBuilder")}</span>
       </button>
     </div>
     <div
@@ -513,8 +515,8 @@
             type="button"
             onclick={() => { void openCurrentLocalFileLocation(); }}
             class="block w-full truncate text-center transition-colors hover:text-accent-foreground"
-            title={`Show file location: ${player.loadedTitle}`}
-            aria-label="Show current file location"
+            title={t("music.showFileLocation", player.loadedTitle)}
+            aria-label={t("music.showCurrentFileLocation")}
           >
             {topBarMediaTitle}
           </button>
@@ -529,14 +531,14 @@
       class="relative z-10 ml-auto flex min-w-0 items-center justify-end gap-2 max-[720px]:flex-1"
       onsubmit={(event) => { event.preventDefault(); void player.loadFromInput(); }}
     >
-      <label class="sr-only" for="music-source">Music source</label>
+      <label class="sr-only" for="music-source">{t("music.sourceLabel")}</label>
       <div class="music-source-field hidden h-7 min-w-0 items-center gap-2 rounded-md border border-border bg-card px-2.5 min-[540px]:flex">
         <LinkIcon class="shrink-0 text-muted-foreground" size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
         <input
           id="music-source"
           bind:value={player.sourceInput}
           class="min-w-0 flex-1 select-text bg-transparent text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground"
-          placeholder="YouTube link"
+          placeholder={t("music.youtubePlaceholder")}
           autocomplete="off"
           spellcheck="false"
         />
@@ -553,8 +555,8 @@
           onclick={() => { void player.loadFolder(); }}
           disabled={player.sourceActionBusy}
           class="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
-          aria-label="Pick folder"
-          title="Pick folder"
+          aria-label={t("music.pickFolder")}
+          title={t("music.pickFolder")}
         >
           <FolderOpen size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
         </button>
@@ -562,8 +564,8 @@
           type="submit"
           disabled={player.sourceActionBusy}
           class="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
-          aria-label={player.sourceActionBusy ? "Loading source" : "Load source"}
-          title={player.sourceActionBusy ? "Loading source" : "Load source"}
+          aria-label={player.sourceActionBusy ? t("music.loadingSource") : t("music.loadSource")}
+          title={player.sourceActionBusy ? t("music.loadingSource") : t("music.loadSource")}
         >
           {#if player.sourceActionBusy}
             <LoaderCircle class="animate-spin" size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
@@ -575,7 +577,7 @@
           type="button"
           onclick={() => { void player.resetPlayer(); }}
           class="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-          aria-label="Reset"
+          aria-label={t("music.reset")}
           data-app-tooltip-disabled="true"
         >
           <RotateCcw size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
@@ -599,7 +601,7 @@
         style="background-color: var(--cal-bg);"
         role="button"
         tabindex="-1"
-        aria-label={player.isPlaying ? "Pause" : "Play"}
+        aria-label={player.isPlaying ? t("music.pause") : t("music.play")}
         data-app-tooltip-disabled="true"
         onclick={handleMediaSurfaceClick}
         ondblclick={handleMediaSurfaceDoubleClick}
@@ -640,16 +642,16 @@
           <div class="flex items-center justify-between gap-2 px-4 py-3">
             <div class="flex items-center gap-2 text-[0.8rem] font-medium text-muted-foreground">
               <ListMusic size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-              Playlist
+              {t("music.playlist")}
             </div>
             {#if player.queue.length > 0}
-              <div class="text-[0.733333rem] text-muted-foreground">{player.queue.length} tracks</div>
+              <div class="text-[0.733333rem] text-muted-foreground">{t("music.tracks", player.queue.length)}</div>
             {/if}
           </div>
 
           {#if player.folderScanTruncated}
             <div class="mx-4 mt-3 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5 text-[0.733333rem] text-warning">
-              Showing the first 5000 media files.
+              {t("music.scanTruncated")}
             </div>
           {/if}
 
@@ -661,7 +663,7 @@
             >
               {#if player.queue.length === 0}
                 <div class="p-3 text-[0.8rem] text-muted-foreground">
-                  Add a source or pick a folder to start a playlist.
+                  {t("music.emptyPlaylist")}
                 </div>
               {:else}
                 <div class="flex flex-col">
@@ -701,7 +703,7 @@
             value={player.progressValue}
             disabled={!player.currentSource}
             class="h-2 min-w-0 flex-1 accent-primary disabled:opacity-50"
-            aria-label="Seek"
+            aria-label={t("music.seek")}
             tabindex="-1"
             oninput={(event) => { void player.seekToMs(Number(event.currentTarget.value)); }}
             onpointerup={releaseRangeFocus}
@@ -718,8 +720,8 @@
             onclick={() => { void player.playPreviousTrack(); }}
             disabled={!player.canPlayPreviousTrack}
             class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
-            title={`Last track (${formatShortcut("Mod + ←")})`}
-            aria-label="Last track"
+            title={t("music.lastTrackTitle", formatShortcut("Mod + ←"))}
+            aria-label={t("music.lastTrack")}
           >
             <SkipBack size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
           </button>
@@ -728,8 +730,8 @@
             onclick={() => { void player.togglePlay(); }}
             disabled={!player.currentSource}
             class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
-            title={player.isPlaying ? "Pause (Spacebar key)" : "Play (Spacebar key)"}
-            aria-label={player.isPlaying ? "Pause" : "Play"}
+            title={player.isPlaying ? t("music.pauseShortcut") : t("music.playShortcut")}
+            aria-label={player.isPlaying ? t("music.pause") : t("music.play")}
           >
             {#if player.isPlaying}
               <Pause size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
@@ -742,8 +744,8 @@
             onclick={() => { void player.playNextTrack(); }}
             disabled={!player.canPlayNextTrack}
             class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
-            title={`Next track (${formatShortcut("Mod + →")})`}
-            aria-label="Next track"
+            title={t("music.nextTrackTitle", formatShortcut("Mod + →"))}
+            aria-label={t("music.nextTrack")}
           >
             <SkipForward size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
           </button>
@@ -755,8 +757,8 @@
               "music-transport-shuffle inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50",
               !player.shuffleEnabled && "text-muted-foreground opacity-70",
             )}
-            title={player.shuffleEnabled ? "Shuffle on (S or R key)" : "Shuffle off (S or R key)"}
-            aria-label={player.shuffleEnabled ? "Shuffle on" : "Shuffle off"}
+            title={player.shuffleEnabled ? t("music.shuffleOnTitle") : t("music.shuffleOffTitle")}
+            aria-label={player.shuffleEnabled ? t("music.shuffleOn") : t("music.shuffleOff")}
             aria-pressed={player.shuffleEnabled}
           >
             <Shuffle size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
@@ -772,8 +774,8 @@
               "music-utility-shuffle inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50",
               !player.shuffleEnabled && "text-muted-foreground opacity-70",
             )}
-            title={player.shuffleEnabled ? "Shuffle on (S or R key)" : "Shuffle off (S or R key)"}
-            aria-label={player.shuffleEnabled ? "Shuffle on" : "Shuffle off"}
+            title={player.shuffleEnabled ? t("music.shuffleOnTitle") : t("music.shuffleOffTitle")}
+            aria-label={player.shuffleEnabled ? t("music.shuffleOn") : t("music.shuffleOff")}
             aria-pressed={player.shuffleEnabled}
           >
             <Shuffle size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
@@ -791,8 +793,8 @@
               value={player.volumeControlValue}
               class="music-volume-slider block w-28"
               style={`--music-volume-progress: ${volumeSliderProgress};`}
-              aria-label="Volume"
-              data-app-tooltip="Volume (↑ and ↓ keys or scroll wheel)"
+              aria-label={t("music.volume")}
+              data-app-tooltip={t("music.volumeTooltip")}
               tabindex="-1"
               oninput={(event) => { setVolumeFromControl(Number(event.currentTarget.value)); }}
               onpointerup={releaseRangeFocus}
@@ -805,8 +807,8 @@
                 "inline-flex h-8 w-10 items-center justify-center tabular-nums",
                 player.muted && "line-through opacity-60",
               )}
-              title={player.muted ? "Unmute (M key)" : "Mute (M key)"}
-              aria-label={player.muted ? "Unmute volume" : "Mute volume"}
+              title={player.muted ? t("music.unmuteTitle") : t("music.muteTitle")}
+              aria-label={player.muted ? t("music.unmuteVolume") : t("music.muteVolume")}
               aria-pressed={player.muted}
             >
               {player.volumePercentLabel}
@@ -825,8 +827,8 @@
                 "inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
                 player.muted && "text-muted-foreground opacity-70",
               )}
-              title="Volume (↑ and ↓ keys or scroll wheel)"
-              aria-label="Volume controls"
+              title={t("music.volumeTooltip")}
+              aria-label={t("music.volumeControls")}
               aria-haspopup="dialog"
               aria-expanded={volumeMenuOpen}
               data-music-volume-control="true"
@@ -847,8 +849,8 @@
                     "inline-flex h-7 w-full items-center justify-center rounded-sm px-1.5 text-[0.733333rem] tabular-nums text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
                     player.muted && "line-through opacity-60",
                   )}
-                  title={player.muted ? "Unmute (M key)" : "Mute (M key)"}
-                  aria-label={player.muted ? "Unmute volume" : "Mute volume"}
+                  title={player.muted ? t("music.unmuteTitle") : t("music.muteTitle")}
+                  aria-label={player.muted ? t("music.unmuteVolume") : t("music.muteVolume")}
                   aria-pressed={player.muted}
                 >
                   {player.volumePercentLabel}
@@ -862,7 +864,7 @@
                     value={player.volumeControlValue}
                     class="music-volume-slider music-volume-slider-vertical"
                     style={`--music-volume-progress: ${volumeSliderProgress};`}
-                    aria-label="Volume"
+                    aria-label={t("music.volume")}
                     tabindex="-1"
                     oninput={(event) => { setVolumeFromControl(Number(event.currentTarget.value)); }}
                     onpointerup={releaseRangeFocus}
@@ -878,8 +880,8 @@
               type="button"
               onclick={openSpeedMenu}
               class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-              title="Speed (+ and - keys)"
-              aria-label="Speed"
+              title={t("music.speedTitle")}
+              aria-label={t("music.speed")}
               aria-haspopup="menu"
               aria-expanded={speedMenuOpen}
             >
@@ -908,7 +910,7 @@
                     onclick={openCustomSpeed}
                     class="flex h-8 w-full items-center justify-between rounded-sm px-2 text-left text-[0.8rem] hover:bg-accent hover:text-accent-foreground"
                   >
-                    <span>Custom</span>
+                    <span>{t("music.custom")}</span>
                     {#if !activeSpeedIsPreset}
                       <Check size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
                     {/if}
@@ -922,12 +924,12 @@
                       max="2"
                       step="0.05"
                       class="h-8 min-w-0 flex-1 select-text rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                      aria-label="Custom playback speed"
+                      aria-label={t("music.customPlaybackSpeed")}
                     />
                     <button
                       type="submit"
                       class="inline-flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
-                      aria-label="Apply custom speed"
+                      aria-label={t("music.applyCustomSpeed")}
                     >
                       <Check size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
                     </button>
@@ -940,8 +942,8 @@
             type="button"
             onclick={togglePlaylist}
             class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-            title={playlistVisible ? "Hide playlist (P key)" : "Show playlist (P key)"}
-            aria-label={playlistVisible ? "Hide playlist" : "Show playlist"}
+            title={playlistVisible ? t("music.hidePlaylistTitle") : t("music.showPlaylistTitle")}
+            aria-label={playlistVisible ? t("music.hidePlaylist") : t("music.showPlaylist")}
             aria-controls="music-playlist"
             aria-expanded={playlistVisible}
           >

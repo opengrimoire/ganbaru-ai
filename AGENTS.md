@@ -1,17 +1,18 @@
 # Ganbaru AI
 
-Ganbaru AI is an anti-procrastination project manager for life and work. Free, local, open-source (AGPL 3.0), privacy-first, lightweight with opt-in AI (Codex and BYOK for any LLM). It's built with Tauri v2 (Rust) and Svelte 5 with multi-platform in mind (Linux, Windows, macOS, and in the future Android and iOS).
+Ganbaru AI is an anti-procrastination + anti-burnout app. Free, local, open-source (AGPL 3.0), privacy-first, lightweight with opt-in AI (Codex and BYOK for any LLM). It's built with Tauri v2 (Rust) and Svelte 5 with multi-platform in mind (Linux, Windows, macOS, and in the future Android and iOS).
 
-Features a highly interconnected:
+Features are highly interconnected. Current status:
 - Calendar
 - Pomodoro
+- Doomscrolling (work in progress; browser and desktop blocking exist, mobile remains pending)
+- Music player (work in progress; local playback, source parsing, controls, and tray/titlebar integration exist)
+- Localization (work in progress; English and Spanish catalogs with language preferences exist)
 - Projects (pending)
-- Doomscrolling (pending)
 - Note-taking (pending)
 - Sleep alarm (pending)
 - Daily diary (pending)
-- Music management (pending)
-- Gamification (real-life skill tree, XP, contracts, NPC-guided workflows) (pending)
+- Gamification (pending)
 
 ## Essential reading
 
@@ -21,15 +22,16 @@ All documentation lives in `docs/`. Top-level overviews:
 - **docs/TECH_STACK.md**: how it's built
 - **docs/ROADMAP.md**: phased development plan
 - **docs/PERFORMANCE.md**: memory, startup, and package size measurements
+- **docs/release.md**, **docs/rulesets.md**, and **CONTRIBUTING.md**: branch, PR, ruleset, and release workflow
 
 Granular docs (read the relevant one when working on a feature):
 
-- **docs/features/**: per-feature behavior and UX (calendar, calendar-recurrence, pomodoro, pomodoro-break-screen, pomodoro-idle-detection, pomodoro-progress-displays, plus placeholders for unbuilt features)
+- **docs/features/**: per-feature behavior and UX (calendar, calendar-recurrence, localization, music, doomscrolling, pomodoro, pomodoro-break-screen, pomodoro-idle-detection, pomodoro-progress-displays, plus placeholders for unbuilt features)
 - **docs/data/**: data architecture, schema, invariants, sync, hazards, security
 - **docs/algorithms/**: pure-logic specs (recurrence-expansion, pomodoro-segments-and-plan, pomodoro-state-machine, idle-detection, time-conflict-detection, undo-redo)
 - **docs/interop/**: interoperability plans, standards scope, conformance fixtures, client behavior, and migration strategy for external formats and calendar clients
 
-Docs describe the optimal/ideal end state of the app, not the current implementation. They preserve the "why" behind decisions over time.
+Docs describe the optimal/ideal end state of the app, not the current implementation. They preserve the "why" behind decisions over time. When implementation work discovers a better product direction than an older spec, update the relevant spec to that improved ideal. When a meaningful feature or behavior has no suitable spec yet, create the smallest appropriate spec instead of leaving design intent only in code or chat. `AGENTS.md` should carry durable repo context for agents; detailed feature behavior belongs in the relevant `docs/features/` or `docs/data/` spec.
 
 ## Workspace structure
 
@@ -43,36 +45,58 @@ apps/
     src/: Svelte frontend
       lib/: shared frontend code
         components/: reusable Svelte components
+          benchmark/: benchmark overlay and diagnostics components
           calendar/: calendar wrappers, session block rendering
-          projects/: (planned) project and task planning surfaces
+          music/: player controls, source parsing, playlist management surfaces
+          perf/: memory and performance diagnostics components
           pomodoro/: timer display, break screen, idle overlay
+          settings/: settings surfaces, theme editor, preferences
+          updates/: app update UI
+          vault/: data folder setup and active-folder UI
+          ui/: shadcn-svelte generated components
+          projects/: (planned) project and task planning surfaces
           notes/: (planned) Tiptap editor wrapper, slash commands
           diary/: (planned) morning/evening entry forms
-          music/: player controls, source parsing, playlist management surfaces
           ai-panel/: (planned) integrated terminal (xterm.js) and BYOK chat
           visual-novel/: (planned) NPC dialogue, conversation state machine
           edge-panel/: (planned) panel layout, quick-access widgets
           environment/: (planned) work environment config UI
           contracts/: (planned) contract creation, tracking, proof UI
           project/: (planned) project management quest chain phases
-          ui/: shadcn-svelte generated components
-        hooks/: reusable Svelte hooks
-        stores/: Svelte runes ($state), global app state
         api/: typed wrappers around Tauri invoke() calls
+        benchmark/: benchmark runner, samplers, output, scenarios
+        calendar/: shared calendar logic and iCalendar parser/serializer
+        data/: shared static/domain data helpers
         doomscrolling/: shared browser and desktop blocking rules
-        utils/: shared helpers, formatters
+        hooks/: reusable Svelte hooks
+        i18n/: typed localization catalogs, locale resolution, formatters
+        music/: frontend music source and playback helpers
+        stores/: Svelte runes ($state), global app state
         types/: frontend-specific TypeScript types
-      windows/: (planned) entry points for each Tauri window
+        utils/: shared helpers, formatters
+        vault/: frontend data folder config and state
+        windows/: detached window helpers
       app.css, app.d.ts: global styles, type declarations
     static/: static assets (fonts, icons, sounds)
     scripts/: repo-owned maintenance and diagnostics scripts
     src-tauri/: Rust backend
-      src/: main.rs (entry), lib.rs (commands), media_player.rs (Rust local audio playback and media probing), mobile.rs (mobile logic)
+      src/: Rust commands and services
+        main.rs: desktop binary entry
+        lib.rs: Tauri app setup and command registration
+        bin/: auxiliary Rust binaries, including native messaging host
+        db.rs, db/: SQLite pool, migration execution, schema invariant tests
+        vault.rs, db_path.rs, sqlite_row.rs: data folder, database path, and row helpers
+        calendar_*.rs, calendars.rs, recurrence.rs: calendar persistence, import, reads, and recurrence logic
+        pomodoro*.rs, notification.rs, tray.rs, window_shape.rs: timer, overlays, notifications, tray, and window integration
+        doomscrolling.rs: browser and desktop blocking commands and runtime helpers
+        media_player.rs, media_controls.rs, music.rs: local playback, media controls, and music commands
+        themes.rs, benchmark_seed.rs: theme validation and benchmark dataset setup
       migrations/: embedded SQLx SQLite migrations
-      gen/: auto-generated mobile projects
       capabilities/: permission declarations (desktop/mobile)
+      gen/schemas/: generated Tauri schema files
+      examples/: Rust example targets
       icons/: app icons
-      tauri.conf.json, Cargo.toml
+      build.rs, tauri.conf.json, tauri.dev.conf.json, Cargo.toml
     index.html, package.json, svelte.config.js, vite.config.ts, tsconfig.json
   server/: (planned) Hocuspocus sync server (self-hostable)
 packages/
@@ -87,26 +111,28 @@ pnpm-workspace.yaml: workspace definition
 package.json: root scripts, shared dev dependencies
 ```
 
-## Vault structure
+## Ganbaru AI folder structure
 
-> Everything the app produces lives in one folder (the vault). Update this as the project evolves.
+> Everything the app produces lives in one Ganbaru AI folder. By default production creates `Documents/Ganbaru AI`, while development builds create `Documents/Ganbaru AI Dev`. Update this as the project evolves.
 
 ```
-vault/
+Ganbaru AI/
+  vault.json: internal Ganbaru AI folder marker, id, display name, and schema version
+  config.json: user settings, work environment definitions, blocker rulesets
+  ganbaru-ai.sqlite: SQLite source of truth for structured data and indexes
   notes/daily/: daily notes (markdown)
   notes/projects/: per-project notes and working documents (markdown)
   diary/morning/, diary/evening/: dated diary entries (markdown, indexed fields in SQLite)
-  calendar/: calendar event data (session blocks, schedule state)
   projects/{project-id}/: per-project file attachments (reference docs, research PDFs)
   reports/: generated project status reports (markdown, PDF)
   assets/: user assets (images embedded in notes, attachments)
   templates/: project management phase templates, methodology templates (SWOT, BMC, etc.)
-  config.json: user settings, work environment definitions, blocker rulesets
   .yjs/: Yjs document state cache (binary)
-  app.db: SQLite index (metadata, search, tags, backlinks, pomodoro configs, runs, segments, pauses, run events, playlist definitions)
 ```
 
-Music files stay wherever the user keeps them; vault stores only playlist definitions. Backups go to a user-specified path outside the vault.
+Music files stay wherever the user keeps them; the Ganbaru AI folder stores only playlist definitions. Backups go to a user-specified path outside the Ganbaru AI folder.
+
+Tauri's platform app config directory stores device-local bootstrap and runtime state only, including `app-state.json`, benchmark state, benchmark SQLite, and doomscrolling runtime snapshots. Production and dev builds keep separate app config directories and therefore separate active-folder pointers.
 
 ## Key conventions
 
@@ -119,6 +145,8 @@ Music files stay wherever the user keeps them; vault stores only playlist defini
 - **AI integration:** three paths. (1) Integrated terminal (xterm.js) running Codex or another CLI coding agent, with calendar-driven session switching, per-project conversation threads, and task context passed through the agent prompt or standard input. (2) BYOK chat widget for non-developer users (OpenAI API, OpenAI-compatible API, Ollama for local models, and other user-configured providers). (3) MCP for external AI clients only (ChatGPT, teammate agents, etc.), not for internal agent interaction.
 - **Agent data bridge:** a `ganbaru-ai` CLI (Rust, reads the same SQLite) is the primary bridge between AI agents and Ganbaru AI's data. Agents call it via Bash. The CLI exports project state as markdown to git repos for collaborators and agents without the CLI. These exports are views of the database, not the source of truth.
 - **State management:** Svelte 5 runes ($state, $derived, $effect), no external state manager
+- **Localization:** user-facing UI text must use the typed i18n catalog. Language selectors show explicit languages as autonyms, such as `English` and `Español`, while non-language options like system preference are localized. User-facing date, time, number, plural, relative-minute, and list formatting should use the current locale helpers.
+- **Branching and releases:** normal work uses topic branches from `dev` and PRs back to `dev`. Direct pushes to `dev` or `main` are not normal workflow. `main`, `release/*` branches, `app-v*` tags, release environment approval, and published GitHub Releases are controlled by organization admins for supply-chain safety. Releases are explicit `app-v*` tags that build draft GitHub Releases. See `CONTRIBUTING.md`, `docs/release.md`, and `docs/rulesets.md`.
 - **Sync:** Yjs + Hocuspocus (CRDT-based, E2E encrypted, self-hosted by the user)
 - **Build tool:** Vite (default with Tauri + Svelte scaffold)
 
@@ -156,17 +184,17 @@ After the relevant gate passes, finish the task without extra dev-server, Tauri 
 
 ### Documentation
 
-- Keep the workspace structure and vault structure in this file up to date. When directories are created, renamed, or removed, update the relevant tree. Never hardcode vault paths; read them from user configuration.
+- Keep the workspace structure and Ganbaru AI folder structure in this file up to date. When directories are created, renamed, or removed, update the relevant tree. Never hardcode Ganbaru AI folder paths; read them from user configuration.
 
 ### Data handling and migrations
 
-- Treat stored user data as durable. Any change to SQLite schema, persisted JSON, config keys, theme tokens, import/export formats, or generated vault data must consider existing installs, older exports, stale rows, removed fields, renamed keys, seed/reset data, and rollback or fallback behavior.
+- Treat stored user data as durable. Any change to SQLite schema, persisted JSON, config keys, theme tokens, import/export formats, or generated Ganbaru AI folder data must consider existing installs, older exports, stale rows, removed fields, renamed keys, seed/reset data, and rollback or fallback behavior.
 - Do not leave dead persistent data behind. If a field, row key, config key, or JSON property becomes obsolete, add an explicit migration, cleanup path, or validator drop rule, then document it in the relevant data or feature spec.
 - SQLite migrations live in `apps/client/src-tauri/migrations/` and are embedded into the Rust binary through `sqlx::migrate!("./migrations")`. Use SQLx file names with a UTC timestamp prefix, `YYYYMMDDHHMMSS_description.sql`, such as `20260601103000_add_project_tables.sql`. Do not manually register migration files; the SQLx macro discovers them at compile time.
 - `20260529180656_baseline_schema.sql` is the fresh-start schema for the pre-user reset. Do not edit it after a released build can have applied it. Add a new timestamped migration file instead.
 - Keep `apps/client/src-tauri/src/db.rs` focused on migration execution. Put schema and migration invariant tests in `apps/client/src-tauri/src/db/tests.rs`.
 - Keep migrations idempotent and narrowly scoped when practical, but remember that SQLx validates applied migration checksums. Never rewrite an applied migration to fix a live install. Preserve user-authored values whenever those values still have meaning, and only delete data that is truly obsolete or derivable from current canonical data.
-- For local development before users exist, a baseline squash is acceptable only when Victor explicitly approves a clean reinstall or purge. Document the reset in this file and the relevant data docs.
+- For local development before users exist, a baseline squash is acceptable only when a project maintainer explicitly approves a clean reinstall or purge. Document the reset in this file and the relevant data docs.
 
 ### Theme and color tokens
 

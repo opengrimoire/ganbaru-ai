@@ -199,7 +199,7 @@ describe("rruleToRecurrence", () => {
     expect(config.end).toEqual({ type: "until", date: "2026-06-15" });
   });
 
-  it("parses legacy weekdays preset", () => {
+  it("parses weekday BYDAY lists", () => {
     const config = rruleToRecurrence("FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR");
     expect(config.frequency).toBe("weekly");
     expect(config.weekdays).toEqual(["MO", "TU", "WE", "TH", "FR"]);

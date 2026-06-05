@@ -820,9 +820,6 @@ function normalizeDesktopConfig(value: unknown): DoomscrollingDesktopConfig {
     return defaultDesktopConfig();
   }
   const record = value as Record<string, unknown>;
-  const legacyBlockDuringBreaks = typeof record.blockDuringBreaks === "boolean"
-    ? record.blockDuringBreaks
-    : null;
   return {
     enabled: typeof record.enabled === "boolean"
       ? record.enabled
@@ -832,10 +829,10 @@ function normalizeDesktopConfig(value: unknown): DoomscrollingDesktopConfig {
       : true,
     blockDuringShortBreaks: typeof record.blockDuringShortBreaks === "boolean"
       ? record.blockDuringShortBreaks
-      : legacyBlockDuringBreaks ?? true,
+      : true,
     blockDuringLongBreaks: typeof record.blockDuringLongBreaks === "boolean"
       ? record.blockDuringLongBreaks
-      : legacyBlockDuringBreaks ?? true,
+      : true,
     pauseDuringFocusPause: typeof record.pauseDuringFocusPause === "boolean"
       ? record.pauseDuringFocusPause
       : true,
@@ -853,12 +850,6 @@ export function normalizeDoomscrollingConfig(value: unknown): DoomscrollingConfi
     };
   }
   const record = value as Record<string, unknown>;
-  const hasMode = record.mode === "blacklist" || record.mode === "whitelist";
-  const hasExceptionHosts = Array.isArray(record.exceptionHosts);
-  const legacyBlockDuringBreaks = typeof record.blockDuringBreaks === "boolean"
-    ? record.blockDuringBreaks
-    : null;
-  const legacyAllowedHosts = normalizeHostRules(record.allowedHosts);
   return {
     mode: normalizeMode(record.mode),
     enabled: typeof record.enabled === "boolean"
@@ -869,22 +860,18 @@ export function normalizeDoomscrollingConfig(value: unknown): DoomscrollingConfi
       : DEFAULT_DOOMSCROLLING_CONFIG.blockDuringFocus,
     blockDuringShortBreaks: typeof record.blockDuringShortBreaks === "boolean"
       ? record.blockDuringShortBreaks
-      : legacyBlockDuringBreaks ?? DEFAULT_DOOMSCROLLING_CONFIG.blockDuringShortBreaks,
+      : DEFAULT_DOOMSCROLLING_CONFIG.blockDuringShortBreaks,
     blockDuringLongBreaks: typeof record.blockDuringLongBreaks === "boolean"
       ? record.blockDuringLongBreaks
-      : legacyBlockDuringBreaks ?? DEFAULT_DOOMSCROLLING_CONFIG.blockDuringLongBreaks,
+      : DEFAULT_DOOMSCROLLING_CONFIG.blockDuringLongBreaks,
     pauseDuringFocusPause: typeof record.pauseDuringFocusPause === "boolean"
       ? record.pauseDuringFocusPause
       : DEFAULT_DOOMSCROLLING_CONFIG.pauseDuringFocusPause,
     blockedCategories: normalizeCategoryRules(record.blockedCategories),
     customCategoryStacks: normalizeCustomCategoryStacks(record.customCategoryStacks),
     blockedHosts: normalizeHostRules(record.blockedHosts),
-    exceptionHosts: hasExceptionHosts
-      ? normalizeHostRules(record.exceptionHosts)
-      : hasMode
-        ? []
-        : legacyAllowedHosts,
-    allowedHosts: hasMode ? legacyAllowedHosts : [],
+    exceptionHosts: normalizeHostRules(record.exceptionHosts),
+    allowedHosts: normalizeHostRules(record.allowedHosts),
     desktop: normalizeDesktopConfig(record.desktop),
     limits: normalizeUsageLimitsConfig(record.limits),
   };

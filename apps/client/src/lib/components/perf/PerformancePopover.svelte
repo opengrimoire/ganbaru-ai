@@ -9,6 +9,8 @@
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import CircleHelp from "@lucide/svelte/icons/circle-help";
+  import { formatNumber } from "$lib/i18n/formatters";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import { cn } from "$lib/utils";
   import { getBenchmarkStatus } from "$lib/stores/benchmarkStatus.svelte";
   import {
@@ -23,6 +25,7 @@
   import { SAMPLE_CAP, SAMPLE_INTERVAL_MS, samplesToCSV } from "$lib/components/perf/memorySamples";
   import {
     memoryDisplayRows,
+    type MemoryDisplayLabel,
     type MemoryDisplayRow,
     type MemoryReport,
     type StartupMemorySnapshot,
@@ -43,6 +46,9 @@
   } = $props();
 
   const benchmarkStatus = getBenchmarkStatus();
+  const localization = getLocalization();
+  const { t } = localization;
+  const locale = $derived(localization.locale);
   const sectionDividerClass = "mx-0 my-3 h-px bg-border";
   const isDevMode = import.meta.env.DEV;
 
@@ -246,6 +252,62 @@
     perfLog.entries.some((entry) => !entry.tag.startsWith("boot.")),
   );
 
+  function memoryLabel(label: MemoryDisplayLabel): string {
+    if (label === "Backend") return t("diagnostics.memory.backend");
+    if (label === "Frontend") return t("diagnostics.memory.frontend");
+    if (label === "Network") return t("diagnostics.memory.network");
+    return t("diagnostics.memory.total");
+  }
+
+  function formatMemoryMb(value: number): string {
+    return `${formatNumber(locale, value, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    })} ${t("diagnostics.memory.unitMb")}`;
+  }
+
+  function formatWholeMilliseconds(value: number): string {
+    return `${formatNumber(locale, value)} ms`;
+  }
+
+  function localizedBenchmarkSuiteLabel(id: string, fallback?: string): string {
+    if (id === "core") return t("benchmark.suite.core.label");
+    if (id === "backend") return t("benchmark.suite.backend.label");
+    if (id === "all") return t("benchmark.suite.all.label");
+    return fallback ?? id;
+  }
+
+  function localizedBenchmarkSuiteDescription(id: string, fallback: string): string {
+    if (id === "core") return t("benchmark.suite.core.description");
+    if (id === "backend") return t("benchmark.suite.backend.description");
+    if (id === "all") return t("benchmark.suite.all.description");
+    return fallback;
+  }
+
+  function localizedBenchmarkScenarioLabel(id: string, fallback: string): string {
+    if (id === "startup-boot") return t("benchmark.scenario.startupBoot.label");
+    if (id === "idle-memory") return t("benchmark.scenario.idleMemory.label");
+    if (id === "calendar-nav") return t("benchmark.scenario.calendarNav.label");
+    if (id === "calendar-panel-latency") {
+      return t("benchmark.scenario.calendarPanelLatency.label");
+    }
+    if (id === "calendar-import-ops") return t("benchmark.scenario.calendarImportOps.label");
+    return fallback;
+  }
+
+  function localizedBenchmarkScenarioDescription(id: string, fallback: string): string {
+    if (id === "startup-boot") return t("benchmark.scenario.startupBoot.description");
+    if (id === "idle-memory") return t("benchmark.scenario.idleMemory.description");
+    if (id === "calendar-nav") return t("benchmark.scenario.calendarNav.description");
+    if (id === "calendar-panel-latency") {
+      return t("benchmark.scenario.calendarPanelLatency.description");
+    }
+    if (id === "calendar-import-ops") {
+      return t("benchmark.scenario.calendarImportOps.description");
+    }
+    return fallback;
+  }
+
   // Pin the chain list scroll to the bottom on new entries so the latest
   // action is always in view.
   let speedLogEl = $state<HTMLDivElement | undefined>(undefined);
@@ -255,14 +317,19 @@
   });
 
   function formatBootRowText(row: BootRow): string {
-    return `  ${row.label.padEnd(20)} ${row.deltaMs} ms`;
+    const value = formatNumber(locale, row.deltaMs, { maximumFractionDigits: 1 });
+    return `  ${row.label.padEnd(20)} ${value} ms`;
   }
 
   function formatChainRowText(row: ChainRow): string {
     const steps = row.steps.length > 0
-      ? ` (${row.steps.map((step) => `${step.label} ${step.ms} ms`).join(", ")})`
+      ? ` (${row.steps.map((step) => {
+        const value = formatNumber(locale, step.ms, { maximumFractionDigits: 1 });
+        return `${step.label} ${value} ms`;
+      }).join(", ")})`
       : "";
-    return `  ${row.prefix.padEnd(6)} ${row.action.padEnd(16)} ${row.durationMs} ms${steps}`;
+    const value = formatNumber(locale, row.durationMs, { maximumFractionDigits: 1 });
+    return `  ${row.prefix.padEnd(6)} ${row.action.padEnd(16)} ${value} ms${steps}`;
   }
 
   function flashCopied(id: string) {
@@ -281,40 +348,42 @@
   function ramReportLines(report: MemoryReport, label: string): string[] {
     const lines: string[] = [`${label} (${report.platform})`, ""];
     const totalLabel = report.metric.slug === "unavailable"
-      ? "Total"
-      : `Total ${report.metric.name}`;
-    lines.push(`Metric: ${report.metric.name}`);
+      ? t("diagnostics.memory.total")
+      : t("diagnostics.memory.totalMetric", report.metric.name);
+    lines.push(`${t("diagnostics.metric")}: ${report.metric.name}`);
     lines.push("");
-    lines.push("RAM by process:");
+    lines.push(t("diagnostics.ramByProcess"));
     for (const p of report.processes) {
-      lines.push(`  ${p.name}: ${p.mb.toFixed(1)} MB`);
+      lines.push(`  ${p.name}: ${formatMemoryMb(p.mb)}`);
     }
-    lines.push(`  ${totalLabel}: ${Math.round(report.total_mb)} MB`);
+    lines.push(
+      `  ${totalLabel}: ${formatNumber(locale, Math.round(report.total_mb))} ${t("diagnostics.memory.unitMb")}`,
+    );
     return lines;
   }
 
   function totalMemoryTooltip(report: MemoryReport | null): string {
-    if (!report) return "Waiting for the memory report.";
+    if (!report) return t("diagnostics.memory.waiting");
 
     if (report.metric.slug === "pss" || report.metric.slug === "pss_rss") {
       const fallback = report.metric.slug === "pss_rss"
-        ? " Some processes used RSS fallback because PSS was unavailable."
+        ? t("diagnostics.memory.linuxRssFallback")
         : "";
-      return `In Linux, 'Total' uses PSS for Ganbaru AI plus WebKit.${fallback} PSS shares common RAM fairly, so it is closer to the real app cost. To compare with another app, measure that app's PSS too. If you use System Monitor's RSS, compare RSS with RSS, but as I said, that is less accurate.`;
+      return t("diagnostics.memory.linuxPss", fallback);
     }
     if (report.metric.slug === "working_set") {
-      return "In Windows, 'Total' uses Working Set for Ganbaru AI plus WebView2. Working Set includes private and shared RAM currently in memory. Task Manager's Memory shows private working set, so it leaves shared RAM out. To compare with another app, measure that app's Working Set too. If you use Task Manager's Memory, compare Task Manager with Task Manager, but as I said, that is less accurate.";
+      return t("diagnostics.memory.windowsWorkingSet");
     }
     if (report.metric.slug === "unavailable") {
-      return "In macOS, 'Total' should be the physical footprint sum for Ganbaru AI plus WebView processes. It is not implemented yet.";
+      return t("diagnostics.memory.macUnavailable");
     }
 
-    return `${report.metric.name}: ${report.metric.description}`;
+    return t("diagnostics.memory.metricDescription", report.metric.name, report.metric.description);
   }
 
   function speedLogLines(): string[] {
     if (actionChains.length === 0) return [];
-    const lines: string[] = [`Speed log (${actionChains.length} actions):`];
+    const lines: string[] = [t("diagnostics.speedLogCopyHeading", actionChains.length)];
     for (const row of actionChains) {
       lines.push(formatChainRowText(row));
     }
@@ -323,7 +392,7 @@
 
   function launchTableLines(): string[] {
     if (launchMs === null) return [];
-    const lines: string[] = [`Launch time: ${launchMs} ms`, ""];
+    const lines: string[] = [`${t("diagnostics.launchTime")}: ${formatWholeMilliseconds(launchMs)}`, ""];
     for (const row of bootRows) {
       lines.push(formatBootRowText(row));
     }
@@ -332,14 +401,14 @@
 
   function copyLiveRam() {
     if (!liveReport) return;
-    copyToClipboard("live-ram", ramReportLines(liveReport, "Live RAM").join("\n"));
+    copyToClipboard("live-ram", ramReportLines(liveReport, t("diagnostics.liveRam")).join("\n"));
   }
 
   function copyStartupRam() {
     if (startupMemorySnapshot.status !== "ready") return;
     copyToClipboard(
       "startup-ram",
-      ramReportLines(startupMemorySnapshot.report, "Startup RAM snapshot (10s)").join("\n"),
+      ramReportLines(startupMemorySnapshot.report, t("diagnostics.startupRamSnapshot")).join("\n"),
     );
   }
 
@@ -371,7 +440,7 @@
     try {
       await ensureBenchmarkOverlay();
       const { getBenchmarkRunner } = await import("$lib/stores/benchmarkRunner.svelte");
-      getBenchmarkRunner().requestSuite(suite.scenarioIds, suite.label.toLowerCase());
+      getBenchmarkRunner().requestSuite(suite.scenarioIds, suite.id);
     } catch (e) {
       console.error("benchmark overlay load failed", e);
     }
@@ -412,7 +481,7 @@
           "min-w-0 truncate transition-colors",
           perfLive ? "text-foreground" : "text-muted-foreground/40 hover:text-muted-foreground/70",
         )}
-      >LIVE RAM</button>
+      >{t("diagnostics.liveRam")}</button>
       <span class="text-muted-foreground/30">|</span>
       <button
         onclick={() => { perfLive = false; }}
@@ -420,7 +489,7 @@
           "min-w-0 truncate transition-colors",
           !perfLive ? "text-foreground" : "text-muted-foreground/40 hover:text-muted-foreground/70",
         )}
-      >STARTUP RAM (10s)</button>
+      >{t("diagnostics.startupRam")}</button>
     </div>
     <button
       onclick={() => onPinnedChange(!pinned)}
@@ -428,7 +497,7 @@
         "flex h-5 w-5 items-center justify-center rounded transition-colors",
         pinned ? "text-foreground" : "text-muted-foreground/40 hover:text-muted-foreground",
       )}
-      aria-label={pinned ? "Unpin" : "Pin"}
+      aria-label={pinned ? t("diagnostics.unpin") : t("diagnostics.pin")}
       data-app-tooltip-disabled="true"
     >
       {#if pinned}
@@ -443,22 +512,22 @@
     <div class="mt-2 flex w-full items-center justify-between gap-2 text-[0.666667rem] text-warning">
       <span class="flex min-w-0 items-center gap-1.5">
         <TriangleAlert size={11} class="shrink-0" />
-        <span class="truncate">Dev mode uses more resources!</span>
+        <span class="truncate">{t("diagnostics.devModeUsesMoreResources")}</span>
       </span>
     </div>
   {/if}
 
   {#if !perfLive && startupMemorySnapshot.status === "pending"}
-    <div class="mt-2 text-xs text-muted-foreground">Startup snapshot pending...</div>
+    <div class="mt-2 text-xs text-muted-foreground">{t("diagnostics.startupSnapshotPending")}</div>
   {:else if !perfLive && startupMemorySnapshot.status === "failed"}
-    <div class="mt-2 text-xs text-muted-foreground">Startup snapshot unavailable.</div>
+    <div class="mt-2 text-xs text-muted-foreground">{t("diagnostics.startupSnapshotUnavailable")}</div>
   {/if}
 
   <div class="mt-2 space-y-1.5" aria-busy={displayReport === null}>
     {#each memoryRows as row (row.label)}
       <div class="flex items-baseline justify-between">
         <span class="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
-          <span>{row.label}</span>
+          <span>{memoryLabel(row.label)}</span>
         </span>
         {#if row.mb === null}
           <span class="min-w-14 text-right text-[0.733333rem] tabular-nums text-muted-foreground/50">...</span>
@@ -475,7 +544,7 @@
               <CircleHelp size={10} strokeWidth={2} />
             </button>
             {/if}
-            <span class={cn("min-w-14 text-right text-[0.733333rem] tabular-nums text-foreground", showingHoveredSample && "italic")}>{row.mb.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB</span>
+            <span class={cn("min-w-14 text-right text-[0.733333rem] tabular-nums text-foreground", showingHoveredSample && "italic")}>{formatMemoryMb(row.mb)}</span>
           </span>
         {/if}
       </div>
@@ -499,10 +568,10 @@
       >
         {#if copiedId === "live-ram"}
           <Check size={11} />
-          Copied
+          {t("diagnostics.copied")}
         {:else}
           <Copy size={11} />
-          Copy live ram
+          {t("diagnostics.copyLiveRam")}
         {/if}
       </button>
       <button
@@ -512,10 +581,10 @@
       >
         {#if copiedId === "chart"}
           <Check size={11} />
-          Copied
+          {t("diagnostics.copied")}
         {:else}
           <Copy size={11} />
-          Copy chart
+          {t("diagnostics.copyChart")}
         {/if}
       </button>
     </div>
@@ -526,10 +595,10 @@
     >
       {#if copiedId === "startup-ram"}
         <Check size={11} />
-        Copied
+        {t("diagnostics.copied")}
       {:else}
         <Copy size={11} />
-        Copy startup ram
+        {t("diagnostics.copyStartupRam")}
       {/if}
     </button>
   {/if}
@@ -540,9 +609,9 @@
       onclick={() => (launchExpanded = !launchExpanded)}
       class="flex w-full items-center justify-between rounded text-left transition-colors hover:bg-accent"
     >
-      <span class="text-[0.666667rem] uppercase tracking-wider text-foreground">Launch time</span>
+      <span class="text-[0.666667rem] uppercase tracking-wider text-foreground">{t("diagnostics.launchTime")}</span>
       <span class="flex items-center gap-1.5">
-        <span class="text-[0.733333rem] tabular-nums text-foreground">{launchMs.toLocaleString("en")} ms</span>
+        <span class="text-[0.733333rem] tabular-nums text-foreground">{formatWholeMilliseconds(launchMs)}</span>
         <ChevronDown
           size={11}
           class={cn("text-muted-foreground transition-transform", launchExpanded && "rotate-180")}
@@ -555,12 +624,12 @@
           {#each bootRows as row (row.label)}
             <div class="flex min-w-0 justify-between gap-2 text-muted-foreground tabular-nums">
               <span class="min-w-0 truncate">{row.label}</span>
-              <span class="shrink-0">{row.deltaMs} ms</span>
+              <span class="shrink-0">{formatNumber(locale, row.deltaMs, { maximumFractionDigits: 1 })} ms</span>
             </div>
           {/each}
         </div>
       {:else}
-        <div class="mt-1.5 text-[0.666667rem] text-muted-foreground/60">No boot marks captured.</div>
+        <div class="mt-1.5 text-[0.666667rem] text-muted-foreground/60">{t("diagnostics.noBootMarksCaptured")}</div>
       {/if}
       <button
         onclick={copyLaunchTable}
@@ -568,10 +637,10 @@
       >
         {#if copiedId === "launch"}
           <Check size={11} />
-          Copied
+          {t("diagnostics.copied")}
         {:else}
           <Copy size={11} />
-          Copy launch table
+          {t("diagnostics.copyLaunchTable")}
         {/if}
       </button>
     {/if}
@@ -580,7 +649,7 @@
   <div class={sectionDividerClass}></div>
   <div class="flex items-center justify-between">
     <span class="text-[0.666667rem] uppercase tracking-wider text-foreground">
-      Speed log ({actionChains.length})
+      {t("diagnostics.speedLogHeading", actionChains.length)}
     </span>
     <div class="flex items-center gap-2">
       <button
@@ -590,14 +659,14 @@
           perfLog.tracking ? "text-foreground" : "text-muted-foreground/60 hover:text-foreground",
         )}
         title={perfLog.tracking
-          ? "Stop recording navigation, view, and event panel actions"
-          : "Record navigation, view, and event panel actions"}
-      >Track: {perfLog.tracking ? "on" : "off"}</button>
+          ? t("diagnostics.stopTrackingTitle")
+          : t("diagnostics.startTrackingTitle")}
+      >{t("diagnostics.trackState", perfLog.tracking ? t("diagnostics.trackOn") : t("diagnostics.trackOff"))}</button>
       <button
         onclick={clearPerfLog}
         disabled={!hasSpeedLogEntries}
         class="text-[0.666667rem] uppercase tracking-wider text-muted-foreground/60 transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-muted-foreground/60"
-      >Clear</button>
+      >{t("diagnostics.clear")}</button>
     </div>
   </div>
   {#if actionChains.length > 0}
@@ -606,11 +675,14 @@
         <div class="min-w-0 text-muted-foreground tabular-nums">
           <div class="flex min-w-0 justify-between gap-2">
             <span class="min-w-0 truncate"><span class="text-muted-foreground/60">{row.prefix}</span> {row.action}</span>
-            <span class="shrink-0">{row.durationMs} ms</span>
+            <span class="shrink-0">{formatNumber(locale, row.durationMs, { maximumFractionDigits: 1 })} ms</span>
           </div>
           {#if row.steps.length > 0}
             <div class="truncate pl-6 text-muted-foreground/60">
-              {row.steps.map((step) => `${step.label} ${step.ms} ms`).join("  ")}
+              {row.steps.map((step) => {
+                const value = formatNumber(locale, step.ms, { maximumFractionDigits: 1 });
+                return `${step.label} ${value} ms`;
+              }).join("  ")}
             </div>
           {/if}
         </div>
@@ -624,19 +696,19 @@
   >
     {#if copiedId === "speed-log"}
       <Check size={11} />
-      Copied
+      {t("diagnostics.copied")}
     {:else}
       <Copy size={11} />
-      Copy speed log
+      {t("diagnostics.copySpeedLog")}
     {/if}
   </button>
 
   {#if BENCHMARK_SUITES.length > 0}
     <div class={sectionDividerClass}></div>
     <div class="flex items-center justify-between">
-      <span class="text-[0.666667rem] uppercase tracking-wider text-foreground">Benchmarks</span>
+      <span class="text-[0.666667rem] uppercase tracking-wider text-foreground">{t("diagnostics.benchmarks")}</span>
       <span class="text-[0.666667rem] uppercase tracking-wider text-muted-foreground/60"
-        >restarts app</span
+        >{t("diagnostics.restartsApp")}</span
       >
     </div>
     <div class="perf-scroll mt-1.5 flex max-h-56 flex-col gap-1 overflow-y-auto">
@@ -647,16 +719,18 @@
               onclick={() => void requestBenchmarkSuite(suite)}
               disabled={benchmarkStatus.status !== "idle"}
               class="flex h-6 min-w-0 flex-1 items-center justify-start gap-1.5 rounded-md bg-primary px-2 text-[0.733333rem] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-              title={suite.description}
+              title={localizedBenchmarkSuiteDescription(suite.id, suite.description)}
             >
               <Play size={12} class="shrink-0" />
-              <span class="truncate">Run {suite.label.toLowerCase()}</span>
+              <span class="truncate">{t("diagnostics.runSuite", localizedBenchmarkSuiteLabel(suite.id, suite.label))}</span>
             </button>
             <button
               type="button"
               onclick={() => toggleBenchmarkSuite(suite.id)}
               class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground dark:bg-transparent"
-              aria-label={suiteExpanded(suite.id) ? `Hide ${suite.label}` : `Show ${suite.label}`}
+              aria-label={suiteExpanded(suite.id)
+                ? t("diagnostics.hideSuite", localizedBenchmarkSuiteLabel(suite.id, suite.label))
+                : t("diagnostics.showSuite", localizedBenchmarkSuiteLabel(suite.id, suite.label))}
               data-app-tooltip-disabled="true"
               aria-expanded={suiteExpanded(suite.id)}
             >
@@ -673,10 +747,10 @@
                   onclick={() => void requestBenchmark(scenario.id)}
                   disabled={benchmarkStatus.status !== "idle"}
                   class="flex h-6 w-full min-w-0 items-center justify-start gap-1.5 rounded-md bg-muted/70 px-2 text-[0.733333rem] font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-                  title={scenario.description}
+                  title={localizedBenchmarkScenarioDescription(scenario.id, scenario.description)}
                 >
                   <Play size={11} class="shrink-0" />
-                  <span class="truncate">{scenario.label}</span>
+                  <span class="truncate">{localizedBenchmarkScenarioLabel(scenario.id, scenario.label)}</span>
                 </button>
               {/each}
             </div>

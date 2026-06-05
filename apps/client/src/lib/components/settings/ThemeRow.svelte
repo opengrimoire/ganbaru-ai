@@ -7,6 +7,8 @@
   import Download from "@lucide/svelte/icons/download";
   import Sun from "@lucide/svelte/icons/sun";
   import Moon from "@lucide/svelte/icons/moon";
+  import { themeDisplayName } from "$lib/i18n/theme-labels";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import { cn } from "$lib/utils";
   import type { Theme } from "$lib/stores/themes";
   import ThemeMiniPreview from "./ThemeMiniPreview.svelte";
@@ -31,7 +33,9 @@
     onDelete: () => void;
   } = $props();
 
+  const { t } = getLocalization();
   const BaseIcon = $derived(theme.iconLabel === "dark" ? Moon : Sun);
+  const displayName = $derived(themeDisplayName(theme, t));
   let hovering = $state(false);
   let suppressHover = $state(false);
 
@@ -52,7 +56,7 @@
 
 <div
   role="group"
-  aria-label={theme.displayName}
+  aria-label={displayName}
   onpointerenter={handlePointerEnter}
   onpointerleave={handlePointerLeave}
   onpointerdown={handlePointerDown}
@@ -68,7 +72,9 @@
     data-app-tooltip-disabled="true"
     class="absolute inset-0 rounded-md focus:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-default"
     disabled={isActive}
-    aria-label={isActive ? `${theme.displayName} is active` : `Apply ${theme.displayName}`}
+    aria-label={isActive
+      ? t("settings.theme.activeTheme", displayName)
+      : t("settings.theme.applyTheme", displayName)}
   ></button>
 
   <div class="pointer-events-none relative z-10 flex min-w-0 flex-1 items-center gap-3 text-left">
@@ -79,7 +85,7 @@
           strokeWidth={1.75}
           class="shrink-0 text-muted-foreground"
         />
-        <span class="truncate">{theme.displayName}</span>
+        <span class="truncate">{displayName}</span>
         {#if isActive}
           <Check size={13} strokeWidth={2.5} class="shrink-0 text-foreground" />
         {/if}
@@ -92,17 +98,17 @@
     <button
       type="button"
       onclick={onDuplicate}
-      aria-label="Duplicate and edit theme"
+      aria-label={t("settings.theme.duplicateAndEditTheme")}
       data-app-tooltip-disabled="true"
       class="flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[0.8rem] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
     >
       <Copy size={13} strokeWidth={2} />
-      <span class="max-[380px]:hidden">Duplicate and edit</span>
+      <span class="max-[380px]:hidden">{t("settings.theme.duplicateAndEdit")}</span>
     </button>
     <button
       type="button"
       onclick={onOpen}
-      aria-label={isBuiltin ? "View theme" : "Edit theme"}
+      aria-label={isBuiltin ? t("settings.theme.viewTheme") : t("settings.theme.editTheme")}
       data-app-tooltip-disabled="true"
       class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-foreground transition-colors hover:bg-accent dark:bg-transparent"
     >
@@ -115,7 +121,7 @@
     <button
       type="button"
       onclick={onExport}
-      aria-label="Export theme JSON"
+      aria-label={t("settings.theme.exportJson")}
       data-app-tooltip-disabled="true"
       class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-foreground transition-colors hover:bg-accent dark:bg-transparent"
     >
@@ -124,7 +130,7 @@
     <button
       type="button"
       onclick={onDelete}
-      aria-label="Delete theme"
+      aria-label={t("settings.theme.deleteTheme")}
       data-app-tooltip-disabled="true"
       disabled={isBuiltin}
       class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-card dark:bg-transparent dark:disabled:hover:bg-transparent"

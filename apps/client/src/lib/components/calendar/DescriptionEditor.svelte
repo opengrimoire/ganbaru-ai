@@ -17,6 +17,9 @@
     isSafeCalendarDescriptionUrl,
     sanitizeCalendarDescriptionHtml,
   } from "$lib/calendar/description-sanitizer";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
+
+  const { t } = getLocalization();
 
   let {
     description,
@@ -35,6 +38,15 @@
   let toolbarFocusIndex = $state(0);
   const sanitizedDescription = $derived(sanitizeCalendarDescriptionHtml(description));
   const TOOLBAR_ITEM_COUNT = 8;
+  const textFormatButtons = $derived([
+    { icon: Bold, cmd: "bold", title: t("calendar.description.bold") },
+    { icon: Italic, cmd: "italic", title: t("calendar.description.italic") },
+    { icon: Underline, cmd: "underline", title: t("calendar.description.underline") },
+  ]);
+  const listButtons = $derived([
+    { icon: ListOrdered, cmd: "insertOrderedList", title: t("calendar.description.numberedList") },
+    { icon: List, cmd: "insertUnorderedList", title: t("calendar.description.bulletedList") },
+  ]);
 
   function openDescEditor() {
     if (readOnly) return;
@@ -258,11 +270,7 @@
 <div bind:this={descAreaEl}>
   {#if descOpen}
     <div bind:this={toolbarEl} transition:slide={{ duration: 250, easing: cubicOut }} class="flex items-center gap-1 py-1" style="padding-left: 26px;">
-      {#each [
-        { icon: Bold, cmd: "bold", title: "Bold" },
-        { icon: Italic, cmd: "italic", title: "Italic" },
-        { icon: Underline, cmd: "underline", title: "Underline" },
-      ] as btn, index}
+      {#each textFormatButtons as btn, index}
         {@const Icon = btn.icon}
         <button
           onmousedown={(e) => e.preventDefault()}
@@ -276,10 +284,7 @@
         ><Icon size={14} /></button>
       {/each}
       <div class="mx-0.5 h-4 w-px bg-border/60"></div>
-      {#each [
-        { icon: ListOrdered, cmd: "insertOrderedList", title: "Numbered list" },
-        { icon: List, cmd: "insertUnorderedList", title: "Bulleted list" },
-      ] as btn, index}
+      {#each listButtons as btn, index}
         {@const Icon = btn.icon}
         {@const toolbarIndex = index + 3}
         <button
@@ -302,7 +307,7 @@
         data-description-toolbar-index="5"
         tabindex={toolbarFocusIndex === 5 ? 0 : -1}
         class="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-black/15"
-        title="Insert link"
+        title={t("calendar.description.insertLink")}
       ><Link size={14} /></button>
       {#if linkPopoverOpen}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -317,7 +322,7 @@
           />
           <button onclick={() => applyLink(linkPopoverSource)}
             class="rounded bg-black/5 px-2.5 py-1 text-[0.8rem] text-foreground transition-colors hover:bg-black/10 dark:bg-black/15 dark:hover:bg-black/25">
-            Apply
+            {t("calendar.description.apply")}
           </button>
         </div>
       {/if}
@@ -329,7 +334,7 @@
         data-description-toolbar-index="6"
         tabindex={toolbarFocusIndex === 6 ? 0 : -1}
         class="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-black/15"
-        title="Remove formatting"
+        title={t("calendar.description.removeFormatting")}
       ><RemoveFormatting size={14} /></button>
       <button
         onmousedown={(e) => e.preventDefault()}
@@ -339,7 +344,7 @@
         data-description-toolbar-index="7"
         tabindex={toolbarFocusIndex === 7 ? 0 : -1}
         class="ml-auto flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-black/15"
-        title="Done"
+        title={t("calendar.description.done")}
       ><Check size={14} /></button>
     </div>
   {/if}
@@ -359,6 +364,7 @@
         <div
           bind:this={editorEl}
           contenteditable={!readOnly}
+          data-placeholder={t("calendar.description.placeholder")}
           class="desc-editor desc-content max-h-24 overflow-y-auto text-[0.8rem] leading-4 text-foreground outline-none"
           class:desc-editing={!readOnly}
           oninput={handleEditorInput}
@@ -382,7 +388,7 @@
           title={descPreview}
         >{descPreview}</div>
       {:else}
-        <span class="text-[0.8rem] text-muted-foreground/40">Add description</span>
+        <span class="text-[0.8rem] text-muted-foreground/40">{t("calendar.description.addDescription")}</span>
       {/if}
     </div>
   </div>
@@ -407,7 +413,7 @@
   }
 
   .desc-editor:empty::before {
-    content: "Type something...";
+    content: attr(data-placeholder);
     color: var(--muted-foreground);
     opacity: 0.5;
     pointer-events: none;

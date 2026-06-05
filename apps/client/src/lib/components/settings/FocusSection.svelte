@@ -15,52 +15,58 @@
   } from "$lib/stores/preferences";
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import CustomSelect from "./CustomSelect.svelte";
   import ToggleSetting from "./ToggleSetting.svelte";
 
   const preferences = getPreferences();
   const pomodoro = getPomodoro();
+  const { t } = getLocalization();
 
   type SelectOption = { value: string; label: string };
 
   const DISABLED_SELECT_VALUE = "disabled";
 
-  const idleThresholdOptions: readonly SelectOption[] =
+  const idleThresholdOptions = $derived<SelectOption[]>(
     FOCUS_IDLE_THRESHOLD_MINUTES_OPTIONS.map((minutes) => ({
       value: String(minutes),
-      label: `${minutes} min`,
-    }));
+      label: t("settings.focus.minutesShort", minutes),
+    })),
+  );
 
-  const breakFinishedRepeatOptions: readonly SelectOption[] =
+  const breakFinishedRepeatOptions = $derived<SelectOption[]>(
     FOCUS_BREAK_SOUND_INTERVAL_SECONDS.map((seconds) => {
-      if (seconds === 0) return { value: String(seconds), label: "None" };
-      if (seconds === 60) return { value: String(seconds), label: "Every minute" };
-      return { value: String(seconds), label: `Every ${seconds} seconds` };
-    });
+      if (seconds === 0) return { value: String(seconds), label: t("settings.focus.optionNone") };
+      if (seconds === 60) return { value: String(seconds), label: t("settings.focus.everyMinute") };
+      return { value: String(seconds), label: t("settings.focus.everySeconds", seconds) };
+    }),
+  );
 
-  const breakEndWarningOptions: readonly SelectOption[] =
+  const breakEndWarningOptions = $derived<SelectOption[]>(
     FOCUS_BREAK_SOUND_INTERVAL_SECONDS.map((seconds) => {
-      if (seconds === 0) return { value: String(seconds), label: "None" };
-      if (seconds === 60) return { value: String(seconds), label: "1 minute before" };
-      return { value: String(seconds), label: `${seconds} seconds before` };
-    });
+      if (seconds === 0) return { value: String(seconds), label: t("settings.focus.optionNone") };
+      if (seconds === 60) return { value: String(seconds), label: t("settings.focus.oneMinuteBefore") };
+      return { value: String(seconds), label: t("settings.focus.secondsBefore", seconds) };
+    }),
+  );
 
-  const breakEndEscPressOptions: readonly SelectOption[] = [
+  const breakEndEscPressOptions = $derived<SelectOption[]>([
     {
       value: DISABLED_SELECT_VALUE,
-      label: "Disabled",
+      label: t("settings.focus.optionDisabled"),
     },
     ...FOCUS_BREAK_END_ESC_PRESS_OPTIONS.map((presses) => ({
       value: String(presses),
-      label: `${presses} Esc ${presses === 1 ? "press" : "presses"}`,
+      label: t("settings.focus.escPresses", presses),
     })),
-  ];
+  ]);
 
-  const pausedFocusWarningOptions: readonly SelectOption[] =
+  const pausedFocusWarningOptions = $derived<SelectOption[]>(
     FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES.map((minutes) => {
-      if (minutes === 0) return { value: String(minutes), label: "None" };
-      return { value: String(minutes), label: `Every ${minutes} minutes` };
-    });
+      if (minutes === 0) return { value: String(minutes), label: t("settings.focus.optionNone") };
+      return { value: String(minutes), label: t("settings.focus.everyMinutes", minutes) };
+    }),
+  );
 
   let showDisableIdlePauseConfirm = $state(false);
   let showDisableBreakEndConfirm = $state(false);
@@ -155,25 +161,25 @@
     showDisableBreakExtensionConfirm = false;
   }
 
-  const breakExtensionLimitOptions: readonly SelectOption[] = [
+  const breakExtensionLimitOptions = $derived<SelectOption[]>([
     {
       value: DISABLED_SELECT_VALUE,
-      label: "Disabled",
+      label: t("settings.focus.optionDisabled"),
     },
     ...FOCUS_BREAK_EXTENSION_LIMIT_OPTIONS.map((limit) => ({
       value: String(limit),
-      label: `${limit} ${limit === 1 ? "time" : "times"}`,
+      label: t("settings.focus.times", limit),
     })),
-  ];
+  ]);
 </script>
 
 <div class="flex flex-col gap-6">
   <section class="flex flex-col gap-4">
-    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Idle detection</h2>
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("settings.focus.idleDetectionHeading")}</h2>
     <div class="flex flex-col gap-3">
       <CustomSelect
-        label="Idle threshold"
-        description="Pause focus after this much inactivity"
+        label={t("settings.focus.idleThreshold")}
+        description={t("settings.focus.idleThresholdDescription")}
         value={String(preferences.focusIdleThresholdMinutes)}
         options={idleThresholdOptions}
         onChange={handleIdleThresholdChange}
@@ -181,8 +187,8 @@
         onReset={resetIdleThreshold}
       />
       <ToggleSetting
-        label="Idle pause by default"
-        description="Turns on Pause on inactivity for new Pomodoro events"
+        label={t("settings.focus.idlePauseDefault")}
+        description={t("settings.focus.idlePauseDefaultDescription")}
         checked={preferences.focusIdlePauseOnEventCreate}
         onChange={handleIdlePauseDefaultChange}
       />
@@ -192,11 +198,11 @@
   <div class="h-px bg-border/70" aria-hidden="true"></div>
 
   <section class="flex flex-col gap-4">
-    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Notification</h2>
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("settings.focus.notificationHeading")}</h2>
     <div class="flex flex-col gap-3">
       <CustomSelect
-        label="Paused focus warning"
-        description="Remind you to resume paused focus sessions"
+        label={t("settings.focus.pausedFocusWarning")}
+        description={t("settings.focus.pausedFocusWarningDescription")}
         value={String(preferences.focusPauseNotificationIntervalMinutes)}
         options={pausedFocusWarningOptions}
         onChange={handlePausedFocusWarningChange}
@@ -209,11 +215,11 @@
   <div class="h-px bg-border/70" aria-hidden="true"></div>
 
   <section class="flex flex-col gap-4">
-    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Break screen</h2>
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("settings.focus.breakScreenHeading")}</h2>
     <div class="flex flex-col gap-3">
       <CustomSelect
-        label="End break early"
-        description="Esc presses required before the break timer finishes"
+        label={t("settings.focus.endBreakEarly")}
+        description={t("settings.focus.endBreakEarlyDescription")}
         value={preferences.focusBreakEndEscPresses === null
           ? DISABLED_SELECT_VALUE
           : String(preferences.focusBreakEndEscPresses)}
@@ -223,8 +229,8 @@
         onReset={() => preferences.resetFocusBreakEndEscPresses()}
       />
       <CustomSelect
-        label="Extend break"
-        description="How many extra 1-minute extensions are allowed"
+        label={t("settings.focus.extendBreak")}
+        description={t("settings.focus.extendBreakDescription")}
         value={preferences.focusBreakExtensionLimit === null
           ? DISABLED_SELECT_VALUE
           : String(preferences.focusBreakExtensionLimit)}
@@ -234,8 +240,8 @@
         onReset={() => preferences.resetFocusBreakExtensionLimit()}
       />
       <CustomSelect
-        label="Repeat after break ends"
-        description="Replay the break-complete sound until you return"
+        label={t("settings.focus.repeatAfterBreakEnds")}
+        description={t("settings.focus.repeatAfterBreakEndsDescription")}
         value={String(preferences.focusBreakFinishedRepeatSeconds)}
         options={breakFinishedRepeatOptions}
         onChange={handleBreakFinishedRepeatChange}
@@ -243,8 +249,8 @@
         onReset={() => preferences.resetFocusBreakFinishedRepeatSeconds()}
       />
       <CustomSelect
-        label="Warning before break ends"
-        description="Play the same sound once before the break completes"
+        label={t("settings.focus.warningBeforeBreakEnds")}
+        description={t("settings.focus.warningBeforeBreakEndsDescription")}
         value={String(preferences.focusBreakEndWarningSeconds)}
         options={breakEndWarningOptions}
         onChange={handleBreakEndWarningChange}
@@ -257,10 +263,10 @@
 
 {#if showDisableIdlePauseConfirm}
   <ConfirmDialog
-    title="Turn off idle pause by default?"
-    message="Idle pause is an important productivity feature. It keeps focus time honest when you step away."
-    confirmLabel="Turn off (Enter)"
-    cancelLabel="Keep on (Esc)"
+    title={t("settings.focus.idlePauseConfirmTitle")}
+    message={t("settings.focus.idlePauseConfirmMessage")}
+    confirmLabel={t("settings.focus.turnOff")}
+    cancelLabel={t("settings.focus.keepOn")}
     onConfirm={confirmDisableIdlePauseDefault}
     onCancel={cancelDisableIdlePauseDefault}
   />
@@ -268,10 +274,10 @@
 
 {#if showDisableBreakEndConfirm}
   <ConfirmDialog
-    title="Disable early break ending?"
-    message="The break screen will hide the Esc ending option. You will need to wait until the break timer finishes."
-    confirmLabel="Disable (Enter)"
-    cancelLabel="Keep current (Esc)"
+    title={t("settings.focus.disableBreakEndTitle")}
+    message={t("settings.focus.disableBreakEndMessage")}
+    confirmLabel={t("settings.focus.disable")}
+    cancelLabel={t("settings.focus.keepCurrent")}
     onConfirm={confirmDisableBreakEnd}
     onCancel={cancelDisableBreakEnd}
   />
@@ -279,10 +285,10 @@
 
 {#if showDisableBreakExtensionConfirm}
   <ConfirmDialog
-    title="Disable break extensions?"
-    message="The break screen will hide the extension shortcut. You will not be able to add extra break time."
-    confirmLabel="Disable (Enter)"
-    cancelLabel="Keep current (Esc)"
+    title={t("settings.focus.disableBreakExtensionTitle")}
+    message={t("settings.focus.disableBreakExtensionMessage")}
+    confirmLabel={t("settings.focus.disable")}
+    cancelLabel={t("settings.focus.keepCurrent")}
     onConfirm={confirmDisableBreakExtension}
     onCancel={cancelDisableBreakExtension}
   />

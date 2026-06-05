@@ -1,11 +1,14 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
+
+  const { t } = getLocalization();
 
   let {
     title,
     message,
-    confirmLabel = "Yes (Enter)",
-    cancelLabel = "No (Esc)",
+    confirmLabel = t("common.yesShortcut"),
+    cancelLabel = t("common.noShortcut"),
     danger = true,
     extraConfirmShortcut,
     onConfirm,

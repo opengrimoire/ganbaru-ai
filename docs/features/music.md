@@ -37,7 +37,7 @@ Playlists tied to work environments inherit to all session blocks using that env
 
 ## Storage
 
-Music files stay wherever the user keeps them; the vault stores only playlist definitions (lists of file paths, YouTube IDs, and per-track config). Backups go to the user's chosen path, not into the vault.
+Music files stay wherever the user keeps them; the Ganbaru AI folder stores only playlist definitions (lists of file paths, YouTube IDs, and per-track config). Backups go to the user's chosen path, not into the Ganbaru AI folder.
 
 The Music view can scan a user-selected local folder recursively for common audio and video extensions. When opening the folder picker, desktop builds seed the dialog with Tauri's platform audio directory when it exists, so localized Music folder names come from the OS user directory API instead of a hardcoded path. The scan runs outside the UI thread, skips symlinks, and caps the first playlist at 5000 files to avoid blocking on unexpectedly large folders. Loading a folder starts playback immediately. If shuffle is enabled, the initial track is selected from the shuffled playlist instead of always using the first file.
 

@@ -5,6 +5,7 @@
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import { cn } from "$lib/utils";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
@@ -20,6 +21,7 @@
   const themeStore = getTheme();
   const themeEditor = getThemeEditor();
   const viewport = getViewport();
+  const { t } = getLocalization();
 
   const editing = $derived(
     themeEditor.editingId
@@ -231,7 +233,7 @@
     data-theme-editor-density={editorGeometry.density}
     data-app-shortcuts="ignore"
     role="dialog"
-    aria-label="Theme editor"
+    aria-label={t("settings.theme.editor.dialogLabel")}
   >
     <!-- Draggable header -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -253,7 +255,9 @@
       <button
         type="button"
         onclick={toggleCollapsed}
-        aria-label={collapsed ? "Expand editor" : "Collapse editor"}
+        aria-label={collapsed
+          ? t("settings.theme.editor.expandEditor")
+          : t("settings.theme.editor.collapseEditor")}
         aria-expanded={!collapsed}
         data-app-tooltip-disabled="true"
         class="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -288,7 +292,7 @@
           class="flex items-center gap-1.5 rounded-md border border-destructive bg-destructive px-2.5 py-1 text-[0.733333rem] font-medium text-destructive-foreground transition-colors hover:bg-destructive/90"
         >
           <ArrowLeft size={11} strokeWidth={2.25} />
-          <span>Cancel</span>
+          <span>{t("common.cancel")}</span>
         </button>
         {#if editing.kind === "user"}
           <button
@@ -296,10 +300,10 @@
             onclick={onResetAllToSeed}
             disabled={!canResetToSeed}
             aria-disabled={!canResetToSeed}
-            aria-label="Reset every source, override, palette slot, and icon tag to its clone-time value"
+            aria-label={t("settings.theme.editor.resetAllToSeed")}
             title={canResetToSeed
-              ? "Restore every value to the clone-time snapshot"
-              : "Nothing has changed since this theme was cloned"}
+              ? t("settings.theme.editor.restoreSeedTitle")
+              : t("settings.theme.editor.noSeedChangesTitle")}
             class={cn(
               "theme-editor-reset-all flex items-center gap-1.5 rounded-md border border-destructive bg-destructive px-2.5 py-1 text-[0.733333rem] font-medium text-destructive-foreground transition-colors",
               canResetToSeed
@@ -308,7 +312,9 @@
             )}
           >
             <RotateCcw size={11} strokeWidth={2.25} />
-            <span class="theme-editor-optional-label">Reset all to seed</span>
+            <span class="theme-editor-optional-label">
+              {t("settings.theme.editor.resetAllToSeedButton")}
+            </span>
           </button>
         {/if}
       </div>
@@ -318,7 +324,11 @@
         class="flex items-center gap-1.5 rounded-md border border-primary bg-primary px-3 py-1 text-[0.733333rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
       >
         <Check size={11} strokeWidth={2.25} />
-        <span>{isBuiltin ? "Apply and return" : "Save and apply"}</span>
+        <span>
+          {isBuiltin
+            ? t("settings.theme.editor.applyAndReturn")
+            : t("settings.theme.editor.saveAndApply")}
+        </span>
       </button>
     </footer>
   </div>

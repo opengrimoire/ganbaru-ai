@@ -17,6 +17,8 @@
   import Pencil from "@lucide/svelte/icons/pencil";
   import UserPlus from "@lucide/svelte/icons/user-plus";
   import Eye from "@lucide/svelte/icons/eye";
+  import { formatList } from "$lib/i18n/formatters";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
 
   let {
     enabled,
@@ -62,6 +64,10 @@
     ontoggle: () => void;
   } = $props();
 
+  const localization = getLocalization();
+  const { t } = localization;
+  const locale = $derived(localization.locale);
+
   const hasContent = $derived(
     attendees.length > 0 || !!organizer || !!url || !!location,
   );
@@ -102,7 +108,11 @@
     const localSelfCount = showLocalSelfRow ? 1 : 0;
     const peopleCount = visibleAttendees.length + (organizer ? 1 : 0) + localSelfCount;
     if (peopleCount > 0) {
-      parts.push(organizer ? `${peopleCount} people` : `${peopleCount} attendee${peopleCount === 1 ? "" : "s"}`);
+      parts.push(
+        organizer
+          ? t("calendar.meeting.people", peopleCount)
+          : t("calendar.meeting.attendees", peopleCount),
+      );
     }
     if (location) parts.push(location);
     if (url) {
@@ -110,7 +120,7 @@
       try { host = new URL(url).host; } catch { host = ""; }
       if (host) parts.push(host);
     }
-    return parts.join(" · ");
+    return formatList(locale, parts);
   });
 
   let urlInput: HTMLInputElement | undefined = $state();
@@ -162,7 +172,10 @@
   }
 
   function attendeeStatusLabel(status: EventAttendee["status"]): string {
-    return status === "needs-action" ? "pending" : status;
+    if (status === "needs-action") return t("calendar.meeting.statusPending");
+    if (status === "accepted") return t("calendar.meeting.statusAccepted");
+    if (status === "tentative") return t("calendar.meeting.statusTentative");
+    return t("calendar.meeting.statusDeclined");
   }
 
   function optionalActionClass(disabled: boolean, optional: boolean): string {
@@ -219,7 +232,7 @@
     <button onclick={onexpand}
       disabled={readOnly && !allowReadOnlyExpand}
       class="flex flex-1 items-center gap-2.5 px-3 py-2 text-left {allowReadOnlyExpand ? 'readonly-interactive' : ''}">
-      <span class="translate-y-[1.13px] text-[0.8rem] {enabled ? 'text-foreground' : 'text-muted-foreground'}">Meeting</span>
+      <span class="translate-y-[1.13px] text-[0.8rem] {enabled ? 'text-foreground' : 'text-muted-foreground'}">{t("calendar.meeting.title")}</span>
       {#if enabled && summary}
         <span class="ml-auto translate-y-[1.13px] truncate text-[0.733333rem] text-muted-foreground">{summary}</span>
       {/if}
@@ -230,7 +243,7 @@
       <!-- URL -->
       <div class="flex items-center gap-3 text-[0.8rem] leading-none">
         <Video size={14} class="shrink-0 text-foreground" />
-        <input bind:this={urlInput} type="url" bind:value={url} placeholder="Add call link"
+        <input bind:this={urlInput} type="url" bind:value={url} placeholder={t("calendar.meeting.addCallLink")}
           disabled={readOnly}
           class="min-w-0 flex-1 bg-transparent leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
           oninput={onchange} onkeydown={panelInputKeydown} />
@@ -238,7 +251,7 @@
       <!-- Location -->
       <div class="flex items-center gap-3 text-[0.8rem] leading-none">
         <MapPin size={14} class="shrink-0 text-foreground" />
-        <input type="text" bind:value={location} placeholder="Add location"
+        <input type="text" bind:value={location} placeholder={t("calendar.meeting.addLocation")}
           disabled={readOnly}
           class="min-w-0 flex-1 bg-transparent leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
           oninput={onchange} onkeydown={panelInputKeydown} />
@@ -253,15 +266,17 @@
       <!-- Guests -->
       <div class="flex flex-col">
         <div class="flex items-center gap-2 pb-1">
-          <span class="text-[0.666667rem] uppercase tracking-wider text-muted-foreground">Guests</span>
+          <span class="text-[0.666667rem] uppercase tracking-wider text-muted-foreground">{t("calendar.meeting.guests")}</span>
           {#if canEditGuests && guestAttendees.length > 0}
             <div class="ml-auto flex flex-wrap items-center justify-end gap-1">
               {#each [
-                { icon: Pencil, label: "Edit", title: "Modify event", get: () => guestCanModify, set: (v: boolean) => { guestCanModify = v; onchange(); } },
-                { icon: UserPlus, label: "Invite", title: "Invite others", get: () => guestCanInviteOthers, set: (v: boolean) => { guestCanInviteOthers = v; onchange(); } },
-                { icon: Eye, label: "See list", title: "See guest list", get: () => guestCanSeeOtherGuests, set: (v: boolean) => { guestCanSeeOtherGuests = v; onchange(); } },
+                { icon: Pencil, label: t("calendar.meeting.edit"), title: t("calendar.meeting.modifyEvent"), get: () => guestCanModify, set: (v: boolean) => { guestCanModify = v; onchange(); } },
+                { icon: UserPlus, label: t("calendar.meeting.invite"), title: t("calendar.meeting.inviteOthers"), get: () => guestCanInviteOthers, set: (v: boolean) => { guestCanInviteOthers = v; onchange(); } },
+                { icon: Eye, label: t("calendar.meeting.seeList"), title: t("calendar.meeting.seeGuestList"), get: () => guestCanSeeOtherGuests, set: (v: boolean) => { guestCanSeeOtherGuests = v; onchange(); } },
               ] as perm}
                 <button onclick={() => perm.set(!perm.get())}
+                  title={perm.title}
+                  aria-label={perm.title}
                   class="flex items-center gap-1 rounded px-1.5 py-0.5 active:scale-95
                     {perm.get() ? 'bg-foreground/10 text-foreground' : 'bg-foreground/5 text-muted-foreground/30 hover:text-muted-foreground/50'}">
                   <perm.icon size={12} strokeWidth={2} />
@@ -275,21 +290,21 @@
           <div class="flex items-center gap-2.5 py-0.5 text-[0.8rem]">
             <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] bg-status-accepted"><Check size={11} strokeWidth={2.5} class="block text-status-accepted-foreground" /></span>
             <span class="min-w-0 flex-1 truncate text-foreground">
-              {isOrganizerSelf ? `You (${organizer.email})` : organizer.name ?? organizer.email}
+              {isOrganizerSelf ? t("calendar.meeting.youWithEmail", organizer.email) : organizer.name ?? organizer.email}
             </span>
-            <span class="shrink-0 text-[0.733333rem] text-muted-foreground/60">organizer</span>
+            <span class="shrink-0 text-[0.733333rem] text-muted-foreground/60">{t("calendar.meeting.organizer")}</span>
             <div class="flex shrink-0 items-center gap-0.5">
               <button
                 disabled
-                title="Organizer cannot be marked optional"
-                aria-label="Organizer cannot be marked optional"
+                title={t("calendar.meeting.organizerCannotBeOptional")}
+                aria-label={t("calendar.meeting.organizerCannotBeOptional")}
                 class={optionalActionClass(true, false)}>
                 <Flag size={12} />
               </button>
               <button
                 disabled
-                title="Organizer cannot be removed"
-                aria-label="Organizer cannot be removed"
+                title={t("calendar.meeting.organizerCannotBeRemoved")}
+                aria-label={t("calendar.meeting.organizerCannotBeRemoved")}
                 class={removeActionClass(true)}>
                 <X size={12} />
               </button>
@@ -307,20 +322,20 @@
               class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] {selfBg}">
               <SelfIcon size={11} strokeWidth={2.5} class="block {selfFg}" />
             </span>
-            <span class="min-w-0 flex-1 truncate text-foreground">You ({selfAttendee.email})</span>
+            <span class="min-w-0 flex-1 truncate text-foreground">{t("calendar.meeting.youWithEmail", selfAttendee.email)}</span>
             <span class="shrink-0 text-[0.733333rem] text-muted-foreground/60">{selfStatusLabel}</span>
             <div class="flex shrink-0 items-center gap-0.5">
               <button
                 disabled
-                title="Your imported attendee row cannot be marked optional yet"
-                aria-label="Your imported attendee row cannot be marked optional yet"
+                title={t("calendar.meeting.importedAttendeeCannotBeOptional")}
+                aria-label={t("calendar.meeting.importedAttendeeCannotBeOptional")}
                 class={optionalActionClass(true, selfAttendee.role === "opt-participant")}>
                 <Flag size={12} />
               </button>
               <button
                 disabled
-                title="Your imported attendee row cannot be removed yet"
-                aria-label="Your imported attendee row cannot be removed yet"
+                title={t("calendar.meeting.importedAttendeeCannotBeRemoved")}
+                aria-label={t("calendar.meeting.importedAttendeeCannotBeRemoved")}
                 class={removeActionClass(true)}>
                 <X size={12} />
               </button>
@@ -338,24 +353,24 @@
               onclick={toggleLocalSelfRsvp}
               disabled={readOnly}
               class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] {localSelfBg} {readOnly ? 'cursor-not-allowed opacity-60' : 'active:scale-90'}"
-              title={`Toggle local RSVP: ${localSelfStatusLabel}`}
-              aria-label={`Toggle local RSVP: ${localSelfStatusLabel}`}>
+              title={t("calendar.meeting.toggleLocalRsvp", localSelfStatusLabel)}
+              aria-label={t("calendar.meeting.toggleLocalRsvp", localSelfStatusLabel)}>
               <LocalSelfIcon size={11} strokeWidth={2.5} class="block {localSelfFg}" />
             </button>
-            <span class="min-w-0 flex-1 truncate text-foreground">You (Local, no email provided)</span>
+            <span class="min-w-0 flex-1 truncate text-foreground">{t("calendar.meeting.youLocalNoEmail")}</span>
             <span class="shrink-0 text-[0.733333rem] text-muted-foreground/60">{localSelfStatusLabel}</span>
             <div class="flex shrink-0 items-center gap-0.5">
               <button
                 disabled
-                title="Local user cannot be marked optional until an email is configured"
-                aria-label="Local user cannot be marked optional until an email is configured"
+                title={t("calendar.meeting.localUserCannotBeOptional")}
+                aria-label={t("calendar.meeting.localUserCannotBeOptional")}
                 class={optionalActionClass(true, false)}>
                 <Flag size={12} />
               </button>
               <button
                 disabled
-                title="Local user cannot be removed"
-                aria-label="Local user cannot be removed"
+                title={t("calendar.meeting.localUserCannotBeRemoved")}
+                aria-label={t("calendar.meeting.localUserCannotBeRemoved")}
                 class={removeActionClass(true)}>
                 <X size={12} />
               </button>
@@ -384,20 +399,20 @@
                 <span class="min-w-0 flex-1 truncate text-foreground">{att.name ?? att.email}</span>
                 <span class="shrink-0 text-[0.733333rem] text-muted-foreground/60">{statusLabel}</span>
                 {#if att.role === "opt-participant"}
-                  <span class="shrink-0 text-[0.733333rem] text-muted-foreground/60 italic">(optional)</span>
+                  <span class="shrink-0 text-[0.733333rem] text-muted-foreground/60 italic">{t("calendar.meeting.optional")}</span>
                 {/if}
                 <div class="flex shrink-0 items-center gap-0.5">
                   <button onclick={() => toggleAttendeeOptional(att.id)}
                     disabled={guestActionsDisabled}
-                    title={guestActionsDisabled ? "Attendee roles are read-only for this event" : att.role === "opt-participant" ? "Mark required" : "Mark optional"}
-                    aria-label={guestActionsDisabled ? "Attendee roles are read-only for this event" : att.role === "opt-participant" ? "Mark required" : "Mark optional"}
+                    title={guestActionsDisabled ? t("calendar.meeting.attendeeRolesReadOnly") : att.role === "opt-participant" ? t("calendar.meeting.markRequired") : t("calendar.meeting.markOptional")}
+                    aria-label={guestActionsDisabled ? t("calendar.meeting.attendeeRolesReadOnly") : att.role === "opt-participant" ? t("calendar.meeting.markRequired") : t("calendar.meeting.markOptional")}
                     class={optionalActionClass(guestActionsDisabled, att.role === "opt-participant")}>
                     <Flag size={12} />
                   </button>
                   <button onclick={() => removeAttendee(att.id)}
                     disabled={guestActionsDisabled}
-                    title={guestActionsDisabled ? "Attendees cannot be removed from this event" : "Remove attendee"}
-                    aria-label={guestActionsDisabled ? "Attendees cannot be removed from this event" : "Remove attendee"}
+                    title={guestActionsDisabled ? t("calendar.meeting.attendeesCannotBeRemoved") : t("calendar.meeting.removeAttendee")}
+                    aria-label={guestActionsDisabled ? t("calendar.meeting.attendeesCannotBeRemoved") : t("calendar.meeting.removeAttendee")}
                     class={removeActionClass(guestActionsDisabled)}>
                     <X size={12} />
                   </button>
@@ -410,7 +425,7 @@
           <div class="flex items-center gap-2.5 py-1">
             <span class="h-4 w-4 shrink-0"></span>
             <input type="email" bind:value={attendeeInput}
-              placeholder="Add email..."
+              placeholder={t("calendar.meeting.addEmail")}
               class="min-w-0 flex-1 bg-transparent text-[0.8rem] leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
               onkeydown={(e) => {
                 e.stopPropagation();

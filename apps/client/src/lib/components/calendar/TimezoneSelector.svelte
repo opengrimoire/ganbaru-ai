@@ -10,6 +10,7 @@
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import GripVertical from "@lucide/svelte/icons/grip-vertical";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
 
   /**
    * Maximum number of timezones (including the device tz) the calendar can
@@ -17,12 +18,6 @@
    * popover hides the search.
    */
   const MAX_TIMEZONES = 5;
-
-  const ABBR_MODE_OPTIONS: { mode: TimezoneAbbrMode; label: string }[] = [
-    { mode: "acronym", label: "Acronym" },
-    { mode: "utc", label: "UTC only" },
-    { mode: "utc-fallback", label: "UTC fallback" },
-  ];
 
   function triggerLabel(info: ReturnType<typeof getTimezoneInfo>): string {
     if (abbrMode === "acronym") return info.acronym;
@@ -47,6 +42,13 @@
     onReorder?: (from: number, to: number) => void;
     onAbbrModeChange?: (mode: TimezoneAbbrMode) => void;
   } = $props();
+
+  const { t } = getLocalization();
+  const ABBR_MODE_OPTIONS = $derived.by((): { mode: TimezoneAbbrMode; label: string }[] => [
+    { mode: "acronym", label: t("calendar.timezone.acronym") },
+    { mode: "utc", label: t("calendar.timezone.utcOnly") },
+    { mode: "utc-fallback", label: t("calendar.timezone.utcFallback") },
+  ]);
 
   // Width is fixed; height caps the scrollable result list. Both feed into
   // the viewport-aware position math so the popover never spills off-screen.
@@ -365,13 +367,13 @@
   >
     <div class="flex items-center justify-between gap-2 px-3 pt-3 pb-1">
       <div class="flex flex-col">
-        <p class="text-xs font-semibold text-foreground">Timezones</p>
-        <p class="text-[0.666667rem] text-muted-foreground">Device: {localTz}</p>
+        <p class="text-xs font-semibold text-foreground">{t("calendar.timezone.title")}</p>
+        <p class="text-[0.666667rem] text-muted-foreground">{t("calendar.timezone.device", localTz)}</p>
       </div>
       <div
         class="flex items-center gap-0.5 rounded border border-border bg-background p-0.5 text-[0.666667rem]"
         role="group"
-        aria-label="Timezone label format"
+        aria-label={t("calendar.timezone.labelFormat")}
       >
         {#each ABBR_MODE_OPTIONS as opt (opt.mode)}
           {@const isActive = abbrMode === opt.mode}
@@ -421,7 +423,7 @@
             <span class="inline-block w-18 font-medium tabular-nums text-foreground">{info.offsetUtc}</span>
             <span class="ml-1 text-foreground">{info.longName}</span>
             {#if isDevice}
-              <span class="ml-1 text-muted-foreground">(device)</span>
+              <span class="ml-1 text-muted-foreground">{t("calendar.timezone.deviceMarker")}</span>
             {/if}
           </div>
           <div class="flex shrink-0 items-center gap-1">
@@ -431,8 +433,8 @@
               onclick={(e: MouseEvent) => { e.stopPropagation(); onReorder?.(i, i - 1); }}
               disabled={i === 0}
               class="text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
-              title="Move up"
-              aria-label="Move up"
+              title={t("calendar.timezone.moveUp")}
+              aria-label={t("calendar.timezone.moveUp")}
             >
               <ChevronUp size={12} />
             </button>
@@ -442,8 +444,8 @@
               onclick={(e: MouseEvent) => { e.stopPropagation(); onReorder?.(i, i + 1); }}
               disabled={i === timezones.length - 1}
               class="text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
-              title="Move down"
-              aria-label="Move down"
+              title={t("calendar.timezone.moveDown")}
+              aria-label={t("calendar.timezone.moveDown")}
             >
               <ChevronDown size={12} />
             </button>
@@ -453,8 +455,8 @@
                 draggable="false"
                 onclick={(e: MouseEvent) => { e.stopPropagation(); onRemove(i); }}
                 class="text-muted-foreground hover:text-foreground"
-                title="Remove"
-                aria-label="Remove"
+                title={t("calendar.timezone.remove")}
+                aria-label={t("calendar.timezone.remove")}
               >
                 <X size={12} />
               </button>
@@ -473,7 +475,7 @@
           bind:this={inputEl}
           type="text"
           bind:value={query}
-          placeholder="Search timezones, cities, or regions..."
+          placeholder={t("calendar.timezone.searchPlaceholder")}
           class="w-full rounded border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
           onclick={(e: MouseEvent) => e.stopPropagation()}
         />
@@ -486,7 +488,7 @@
         >
           {#if filtered.length === 0}
             <p class="px-2 py-3 text-center text-[0.733333rem] text-muted-foreground">
-              No matches.
+              {t("calendar.timezone.noMatches")}
             </p>
           {:else}
             {#each filtered as tz, idx}
@@ -523,7 +525,7 @@
         </div>
       </div>
     {:else}
-      <p class="px-3 pt-1 pb-3 text-[0.666667rem] text-muted-foreground">Maximum {MAX_TIMEZONES} timezones</p>
+      <p class="px-3 pt-1 pb-3 text-[0.666667rem] text-muted-foreground">{t("calendar.timezone.maximumTimezones", MAX_TIMEZONES)}</p>
     {/if}
   </div>
 {/if}

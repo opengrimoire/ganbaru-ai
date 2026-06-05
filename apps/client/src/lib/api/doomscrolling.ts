@@ -75,7 +75,7 @@ export interface DoomscrollingLimitState {
   localDate: string;
   weekStartLocalDate: string;
   updatedAt: string;
-  databaseFileName: "ganbaru-ai.db" | "ganbaru-ai-dev.db" | "ganbaru-ai-benchmark.db";
+  databasePath?: string | null;
   limits: DoomscrollingLimitStateItem[];
 }
 

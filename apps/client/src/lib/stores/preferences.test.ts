@@ -6,8 +6,10 @@ import {
   FONT_SCALE_MAX,
   DEFAULT_FONT_SCALE,
   DEFAULT_CALENDAR_DIM_PAST_EVENTS,
+  DEFAULT_CALENDAR_VIEW_MODE,
   DEFAULT_MUSIC_PAUSE_ON_POMODORO_PAUSE,
   DEFAULT_CALENDAR_TIME_FORMAT,
+  CALENDAR_VIEW_MODES,
   DEFAULT_FOCUS_IDLE_PAUSE_ON_EVENT_CREATE,
   DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
   DEFAULT_FOCUS_BREAK_END_ESC_PRESSES,
@@ -21,20 +23,24 @@ import {
   FOCUS_BREAK_SOUND_INTERVAL_SECONDS,
   FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
   DEFAULT_TITLE_BAR_VISIBILITY,
+  DEFAULT_LANGUAGE_PREFERENCE,
   TITLE_BAR_CONTROL_IDS,
   clampFocusIdleThresholdMinutes,
   clampFontScale,
   getFontFamilyById,
   isCalendarTimeFormat,
+  isCalendarViewMode,
   isFocusBreakEndEscPresses,
   isFocusBreakExtensionLimit,
   isFocusBreakSoundIntervalSeconds,
   isFocusPauseNotificationIntervalMinutes,
   isTitleBarControlId,
+  isLanguagePreference,
   parseFocusBreakEndEscPresses,
   parseFocusBreakExtensionLimit,
   parseFocusBreakSoundIntervalSeconds,
   parseFocusPauseNotificationIntervalMinutes,
+  parseLanguagePreference,
   parseTitleBarVisibility,
   resolveFontFamilyStack,
   shouldNormalizeTitleBarVisibility,
@@ -142,6 +148,7 @@ describe("resolveFontFamilyStack", () => {
 describe("calendar appearance preferences", () => {
   it("defaults to 24-hour time and dimmed past event colors", () => {
     expect(DEFAULT_CALENDAR_TIME_FORMAT).toBe("24h");
+    expect(DEFAULT_CALENDAR_VIEW_MODE).toBe("week");
     expect(DEFAULT_CALENDAR_DIM_PAST_EVENTS).toBe(true);
   });
 
@@ -151,6 +158,37 @@ describe("calendar appearance preferences", () => {
     expect(isCalendarTimeFormat("24-hour")).toBe(false);
     expect(isCalendarTimeFormat(true)).toBe(false);
     expect(isCalendarTimeFormat(undefined)).toBe(false);
+  });
+
+  it("accepts supported calendar view modes only", () => {
+    expect(CALENDAR_VIEW_MODES).toEqual(["day", "workweek", "week", "month"]);
+    expect(isCalendarViewMode("day")).toBe(true);
+    expect(isCalendarViewMode("workweek")).toBe(true);
+    expect(isCalendarViewMode("week")).toBe(true);
+    expect(isCalendarViewMode("month")).toBe(true);
+    expect(isCalendarViewMode("7d")).toBe(false);
+    expect(isCalendarViewMode("agenda")).toBe(false);
+    expect(isCalendarViewMode(undefined)).toBe(false);
+  });
+});
+
+describe("language preferences", () => {
+  it("defaults to the system language", () => {
+    expect(DEFAULT_LANGUAGE_PREFERENCE).toBe("system");
+  });
+
+  it("accepts supported language preferences only", () => {
+    expect(isLanguagePreference("system")).toBe(true);
+    expect(isLanguagePreference("en")).toBe(true);
+    expect(isLanguagePreference("es")).toBe(true);
+    expect(isLanguagePreference("fr")).toBe(false);
+    expect(isLanguagePreference(undefined)).toBe(false);
+  });
+
+  it("falls back to system when parsing invalid stored language preferences", () => {
+    expect(parseLanguagePreference("es")).toBe("es");
+    expect(parseLanguagePreference("fr")).toBe(DEFAULT_LANGUAGE_PREFERENCE);
+    expect(parseLanguagePreference(null)).toBe(DEFAULT_LANGUAGE_PREFERENCE);
   });
 });
 
@@ -324,16 +362,6 @@ describe("title bar visibility helpers", () => {
       music: false,
       performance: true,
     });
-  });
-
-  it("ignores legacy tab hiding values so tabs remain available", () => {
-    expect(
-      parseTitleBarVisibility({
-        tabs: false,
-        calendarTab: false,
-        todoTab: false,
-      }),
-    ).toEqual(DEFAULT_TITLE_BAR_VISIBILITY);
   });
 
   it("ignores unknown keys and non-boolean values", () => {

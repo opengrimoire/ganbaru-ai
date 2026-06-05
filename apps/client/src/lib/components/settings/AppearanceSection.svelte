@@ -11,7 +11,9 @@
     DEFAULT_FONT_SCALE,
     DEFAULT_FONT_FAMILY_ID,
     FONT_SCALE_LEVELS,
+    isLanguagePreference,
   } from "$lib/stores/preferences";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import CustomSelect from "./CustomSelect.svelte";
   import ToggleSetting from "./ToggleSetting.svelte";
   import ThemeList from "./ThemeList.svelte";
@@ -19,6 +21,7 @@
   const preferences = getPreferences();
   const zoom = getZoom();
   const calZoom = getCalendarZoom();
+  const { t } = getLocalization();
 
   type SelectOption = { value: string; label: string; style?: string };
 
@@ -49,17 +52,33 @@
     return { value: percentString(percent), label: `${percent}%` };
   });
 
-  const timeFormatOptions: readonly SelectOption[] = [
-    { value: "24h", label: "24-hour" },
-    { value: "12h", label: "12-hour (am/pm)" },
-  ];
-
-  const calendarZoomOptions: readonly SelectOption[] = CALENDAR_ZOOM_PERCENT_LEVELS.map(
-    (percent) => ({
-      value: percentString(percent),
-      label: `${percent}% (${calendarZoomGridMinutesForPercent(percent)}min)`,
+  const languageOptions = $derived<SelectOption[]>(
+    preferences.languagePreferences.map((language) => {
+      if (language === "system") {
+        return { value: language, label: t("language.systemOption") };
+      }
+      if (language === "en") {
+        return { value: language, label: t("language.englishOption") };
+      }
+      return { value: language, label: t("language.spanishOption") };
     }),
   );
+
+  const timeFormatOptions = $derived<SelectOption[]>([
+    { value: "24h", label: t("settings.appearance.timeFormat24h") },
+    { value: "12h", label: t("settings.appearance.timeFormat12h") },
+  ]);
+
+  const calendarZoomOptions = $derived<SelectOption[]>(CALENDAR_ZOOM_PERCENT_LEVELS.map(
+    (percent) => ({
+      value: percentString(percent),
+      label: t(
+        "settings.appearance.calendarZoomOption",
+        percent,
+        calendarZoomGridMinutesForPercent(percent),
+      ),
+    }),
+  ));
 
   const baseFontScaleOptions: readonly SelectOption[] = FONT_SCALE_LEVELS.map((level) => {
     const percent = Math.round(level * 100);
@@ -71,7 +90,7 @@
       value: f.id,
       label:
         f.id === DEFAULT_FONT_FAMILY_ID
-          ? `${f.displayName} (recommended)`
+          ? `${f.displayName} (${t("settings.appearance.recommended")})`
           : f.displayName,
       style: `font-family: ${f.cssStack};`,
     })),
@@ -95,10 +114,10 @@
   <div class="h-px bg-border/70" aria-hidden="true"></div>
 
   <section class="flex flex-col gap-4">
-    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Zoom</h2>
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("settings.appearance.zoomHeading")}</h2>
     <div class="flex flex-col gap-3">
       <CustomSelect
-        label="App zoom"
+        label={t("settings.appearance.appZoom")}
         descriptionShortcuts={["Mod + +", "Mod + -", "Mod + 0"]}
         value={percentString(zoom.percent)}
         options={appZoomOptions}
@@ -112,11 +131,11 @@
   <div class="h-px bg-border/70" aria-hidden="true"></div>
 
   <section class="flex flex-col gap-4">
-    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Text</h2>
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("settings.appearance.textHeading")}</h2>
     <div class="flex flex-col gap-3">
       <CustomSelect
-        label="Font family"
-        description="Resolves through system or installed fonts"
+        label={t("settings.appearance.fontFamily")}
+        description={t("settings.appearance.fontFamilyDescription")}
         value={preferences.fontFamilyId}
         options={fontFamilyOptions}
         onChange={(id) => preferences.setFontFamily(id)}
@@ -124,8 +143,8 @@
         onReset={() => preferences.resetFontFamily()}
       />
       <CustomSelect
-        label="Text size"
-        description="Multiplies the base text size across the app"
+        label={t("settings.appearance.textSize")}
+        description={t("settings.appearance.textSizeDescription")}
         value={fontScaleValue}
         options={fontScaleOptions}
         onChange={handleFontScaleChange}
@@ -138,10 +157,29 @@
   <div class="h-px bg-border/70" aria-hidden="true"></div>
 
   <section class="flex flex-col gap-4">
-    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Calendar</h2>
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("settings.appearance.languageHeading")}</h2>
     <div class="flex flex-col gap-3">
       <CustomSelect
-        label="Calendar zoom (5min / 10min / 15min / 30min)"
+        label={t("language.preferenceLabel")}
+        description={t("language.preferenceDescription")}
+        value={preferences.languagePreference}
+        options={languageOptions}
+        onChange={(value) => {
+          if (isLanguagePreference(value)) preferences.setLanguagePreference(value);
+        }}
+        canReset={preferences.languagePreference !== "system"}
+        onReset={() => preferences.setLanguagePreference("system")}
+      />
+    </div>
+  </section>
+
+  <div class="h-px bg-border/70" aria-hidden="true"></div>
+
+  <section class="flex flex-col gap-4">
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("settings.appearance.calendarHeading")}</h2>
+    <div class="flex flex-col gap-3">
+      <CustomSelect
+        label={t("settings.appearance.calendarZoom")}
         descriptionShortcuts={["Shift + +", "Shift + -", "Shift + 0"]}
         value={percentString(calZoom.zoomPercent)}
         options={calendarZoomOptions}
@@ -150,8 +188,8 @@
         onReset={() => calZoom.reset()}
       />
       <CustomSelect
-        label="Time format"
-        description="Show times as 12h or 24h"
+        label={t("settings.appearance.timeFormat")}
+        description={t("settings.appearance.timeFormatDescription")}
         value={preferences.calendarTimeFormat}
         options={timeFormatOptions}
         onChange={(value) => {
@@ -161,8 +199,8 @@
         onReset={() => preferences.resetCalendarTimeFormat()}
       />
       <ToggleSetting
-        label="Dim past event colors"
-        description="Use faded event colors for past events"
+        label={t("settings.appearance.dimPastEventColors")}
+        description={t("settings.appearance.dimPastEventColorsDescription")}
         checked={preferences.calendarDimPastEvents}
         onChange={(checked) => preferences.setCalendarDimPastEvents(checked)}
       />

@@ -1,5 +1,8 @@
 <script lang="ts">
   import CircleAlert from "@lucide/svelte/icons/circle-alert";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
+
+  const { t } = getLocalization();
 </script>
 
 <div class="flex flex-col gap-6">
@@ -11,7 +14,7 @@
       <CircleAlert size={14} strokeWidth={2.25} />
     </span>
     <div class="min-w-0 truncate text-[0.866667rem] font-medium">
-      Mobile app blocking is still in progress
+      {t("settings.doomscrolling.mobile.inProgress")}
     </div>
   </div>
 </div>

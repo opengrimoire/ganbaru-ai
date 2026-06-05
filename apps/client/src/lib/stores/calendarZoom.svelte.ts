@@ -6,15 +6,13 @@ const ZOOM_LEVELS: readonly number[] = CALENDAR_ZOOM_PERCENT_LEVELS.map(
   (percent) => (DEFAULT_HOUR_HEIGHT * percent) / 100,
 );
 const DEFAULT_INDEX = CALENDAR_ZOOM_PERCENT_LEVELS.indexOf(100);
-const LEGACY_DEFAULT_HOUR_HEIGHT = 45;
-const LEGACY_ZOOM_LEVELS = [30, 45, 67, 100, 150, 200] as const;
 const ANIM_DURATION = 150; // ms for smooth zoom animation
 
-function findClosestIndexIn(values: readonly number[], target: number): number {
+function findClosestIndex(height: number): number {
   let best = 0;
-  let bestDist = Math.abs(values[0] - target);
-  for (let i = 1; i < values.length; i++) {
-    const dist = Math.abs(values[i] - target);
+  let bestDist = Math.abs(ZOOM_LEVELS[0] - height);
+  for (let i = 1; i < ZOOM_LEVELS.length; i++) {
+    const dist = Math.abs(ZOOM_LEVELS[i] - height);
     if (dist < bestDist) {
       best = i;
       bestDist = dist;
@@ -23,26 +21,12 @@ function findClosestIndexIn(values: readonly number[], target: number): number {
   return best;
 }
 
-function findClosestIndex(height: number): number {
-  return findClosestIndexIn(ZOOM_LEVELS, height);
-}
-
-function isLegacyZoomHeight(height: number): boolean {
-  return LEGACY_ZOOM_LEVELS.some((level) => Math.abs(level - height) < 0.001);
-}
-
-function legacyHeightToCurrentHeight(height: number): number {
-  const legacyPercent = (height / LEGACY_DEFAULT_HOUR_HEIGHT) * 100;
-  return ZOOM_LEVELS[findClosestIndexIn(CALENDAR_ZOOM_PERCENT_LEVELS, legacyPercent)];
-}
-
 function loadSaved(): number {
   if (typeof localStorage === "undefined") return ZOOM_LEVELS[DEFAULT_INDEX];
   const saved = localStorage.getItem(STORAGE_KEY);
   if (!saved) return ZOOM_LEVELS[DEFAULT_INDEX];
   const parsed = parseFloat(saved);
   if (Number.isNaN(parsed)) return ZOOM_LEVELS[DEFAULT_INDEX];
-  if (isLegacyZoomHeight(parsed)) return legacyHeightToCurrentHeight(parsed);
   return parsed;
 }
 
@@ -257,7 +241,7 @@ export function getCalendarZoom() {
       return Math.round((hourHeight / ZOOM_LEVELS[DEFAULT_INDEX]) * 100);
     },
     setZoomPercent(percent: number) {
-      setZoomIndex(findClosestIndexIn(CALENDAR_ZOOM_PERCENT_LEVELS, percent));
+      setZoomIndex(findClosestIndex((DEFAULT_HOUR_HEIGHT * percent) / 100));
     },
     /** Zoom one level with smooth animation. */
     zoomStep(direction: 1 | -1) {

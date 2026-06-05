@@ -6,23 +6,6 @@ export interface DatePickerDay {
   today: boolean;
 }
 
-export const SHORT_MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-];
-
-export const DAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
-
 export function buildCalendarGrid(
   year: number,
   month: number,

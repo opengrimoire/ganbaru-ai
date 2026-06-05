@@ -10,6 +10,7 @@
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import type { TitleBarControlId } from "$lib/stores/preferences";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import { firstMainView, mainTabViews, type DetachableTabView } from "$lib/navigation";
   import { getDetachedWindows } from "$lib/stores/detached-windows.svelte";
   import {
@@ -57,6 +58,7 @@
   import { formatShortcut, hasOnlyShortcutModifier } from "$lib/keyboard-shortcuts";
   import type { PlaybackStatus } from "$lib/music/playback";
   import {
+    isCloseWindowShortcut,
     recordResetShortcutPress,
     type ResetShortcutSequenceState,
   } from "$lib/components/titlebar-shortcuts";
@@ -81,6 +83,7 @@
   const zoom = getZoom();
   const preferences = getPreferences();
   const viewport = getViewport();
+  const { t } = getLocalization();
   const detachedWindows = getDetachedWindows();
   const benchmarkStatus = getBenchmarkStatus();
 
@@ -268,7 +271,7 @@
       return;
     }
     showCloseConfirm = false;
-    // Best-effort rollback of any open theme edit so the vault does not
+    // Best-effort rollback of any open theme edit so the config does not
     // keep half-tuned colors after a forced quit. Debounced writes may not
     // flush before the process dies, so this is not a guarantee.
     if (themeEditor.editingId) void themeEditor.cancel();
@@ -294,7 +297,9 @@
 
   const isActive = $derived(pomodoro.isActive);
   const pomodoroPauseResumeLabel = $derived(
-    isActive && !pomodoro.isRunning ? "Resume focus" : "Pause focus",
+    isActive && !pomodoro.isRunning
+      ? t("titleBar.pomodoro.resumeFocus")
+      : t("titleBar.pomodoro.pauseFocus"),
   );
   const pomodoroPausedPulseActive = $derived(
     isActive &&
@@ -316,9 +321,9 @@
   const phaseAdvanceLabel = $derived(
     isActive
       ? pomodoro.phase === "focus"
-        ? "Go to break now"
-        : "Start focus now"
-      : "Go to break now",
+        ? t("titleBar.pomodoro.goToBreakNow")
+        : t("titleBar.pomodoro.startFocusNow")
+      : t("titleBar.pomodoro.goToBreakNow"),
   );
   const canPauseResumePomodoro = $derived(pomodoro.canPauseResume);
   const canAdvancePomodoro = $derived(isActive);
@@ -332,22 +337,26 @@
     if (musicPlayer.currentSource || musicPlayer.snapshot.status !== "idle") {
       return musicStatusLabel(musicPlayer.snapshot.status);
     }
-    return "No music loaded";
+    return t("titleBar.music.noMusicLoaded");
   });
   const canPlayPauseMusic = $derived(Boolean(musicPlayer.currentSource) && !musicPlayer.isBusy);
-  const musicPlayPauseLabel = $derived(musicPlayer.isPlaying ? "Pause music" : "Play music");
-  const musicVolumeTooltipLine = $derived(`Volume: ${musicPlayer.volumePercentLabel}`);
+  const musicPlayPauseLabel = $derived(
+    musicPlayer.isPlaying ? t("titleBar.music.pause") : t("titleBar.music.play"),
+  );
+  const musicVolumeTooltipLine = $derived(
+    t("titleBar.music.volumeTooltip", musicPlayer.volumePercentLabel),
+  );
   const pomodoroButtonTooltip = $derived(
-    `${isActive ? `${pomodoro.formattedTime} remaining` : "Pomodoro"}\n${musicVolumeTooltipLine}`,
+    `${isActive ? t("titleBar.pomodoro.remaining", pomodoro.formattedTime) : t("titleBar.control.pomodoro")}\n${musicVolumeTooltipLine}`,
   );
   const musicButtonTooltip = $derived(
-    `Music (${formatShortcut("Mod + M")})\n${musicVolumeTooltipLine}`,
+    `${t("titleBar.control.music")} (${formatShortcut("Mod + M")})\n${musicVolumeTooltipLine}`,
   );
 
-  const tabs: { view: DetachableTabView; label: string; icon: typeof Calendar }[] = [
-    { view: "calendar", label: "Calendar", icon: Calendar },
-    { view: "projects", label: "Projects", icon: Folder },
-    { view: "notes", label: "Notes", icon: Book },
+  const tabs: { view: DetachableTabView; label: () => string; icon: typeof Calendar }[] = [
+    { view: "calendar", label: () => t("titleBar.tab.calendar"), icon: Calendar },
+    { view: "projects", label: () => t("titleBar.tab.projects"), icon: Folder },
+    { view: "notes", label: () => t("titleBar.tab.notes"), icon: Book },
   ];
   const visibleTabs = $derived.by(() => {
     if (detachedWindowView) {
@@ -357,12 +366,12 @@
     return tabs.filter((tab) => visibleViews.has(tab.view));
   });
 
-  const titleBarControls: { id: TitleBarControlId; label: string }[] = [
-    { id: "pomodoro", label: "Pomodoro" },
-    { id: "music", label: "Music" },
-    { id: "theme", label: "Theme toggle" },
-    { id: "performance", label: "Diagnostics" },
-    { id: "settings", label: "Settings" },
+  const titleBarControls: { id: TitleBarControlId; label: () => string }[] = [
+    { id: "pomodoro", label: () => t("titleBar.control.pomodoro") },
+    { id: "music", label: () => t("titleBar.control.music") },
+    { id: "theme", label: () => t("titleBar.control.theme") },
+    { id: "performance", label: () => t("titleBar.control.performance") },
+    { id: "settings", label: () => t("titleBar.control.settings") },
   ];
 
   const TITLE_BAR_MENU_WIDTH = 224;
@@ -540,11 +549,13 @@
   // Capture shell shortcuts early so focused views and modals cannot intercept them.
   $effect(() => {
     function handleGlobalShellShortcut(e: KeyboardEvent) {
-      if (hasOnlyShortcutModifier(e, { shift: true }) && e.key.toLowerCase() === "w") {
+      if (isCloseWindowShortcut(e)) {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
         const resetTriggered =
+          e.shiftKey
+          &&
           !e.repeat
           && !isEditableKeyboardTarget(e.target)
           && registerResetShortcutPress();
@@ -809,21 +820,21 @@
   function musicStatusLabel(status: PlaybackStatus): string {
     switch (status) {
       case "playing":
-        return "Playing";
+        return t("titleBar.music.status.playing");
       case "paused":
-        return "Paused";
+        return t("titleBar.music.status.paused");
       case "loading":
-        return "Loading";
+        return t("titleBar.music.status.loading");
       case "ready":
-        return "Ready";
+        return t("titleBar.music.status.ready");
       case "ended":
-        return "Ended";
+        return t("titleBar.music.status.ended");
       case "error":
-        return "Error";
+        return t("titleBar.music.status.error");
       case "idle":
-        return "Idle";
+        return t("titleBar.music.status.idle");
     }
-    return "Idle";
+    return t("titleBar.music.status.idle");
   }
 
   function togglePomodoroMenu(): void {
@@ -886,7 +897,7 @@
         class="fixed z-50 overflow-hidden rounded-lg border border-border bg-popover px-3 py-3 text-xs text-muted-foreground shadow-lg"
         style="top: calc(var(--titlebar-h) + 4px); right: 8px; width: min(18rem, calc(100vw - 16px)); max-height: calc(100dvh - var(--titlebar-h) - 12px);"
       >
-        Loading...
+        {t("common.loading")}...
       </div>
     {/if}
   {/if}
@@ -927,11 +938,11 @@
             ? "text-foreground dark:text-white"
             : "text-sidebar-foreground dark:text-white/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         )}
-        title={`${tab.label} (Alt+${i + 1})`}
+        title={t("titleBar.tab.withShortcut", tab.label(), `Alt+${i + 1}`)}
       >
         <tab.icon size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
         {#if !autoCompactTabs}
-          <span>{tab.label}</span>
+          <span>{tab.label()}</span>
         {/if}
       </button>
     {/each}
@@ -997,11 +1008,11 @@
           >
             {#if isActive}
               <div class="px-3 py-1.5 text-xs text-muted-foreground">
-                {pomodoro.formattedTime} left
+                {t("titleBar.pomodoro.left", pomodoro.formattedTime)}
               </div>
             {:else}
               <div class="px-3 py-1.5 text-xs text-muted-foreground">
-                No active session
+                {t("titleBar.pomodoro.noActiveSession")}
               </div>
             {/if}
             <button
@@ -1046,7 +1057,7 @@
                   : "cursor-not-allowed text-muted-foreground/50",
               )}
             >
-              <span>Extend focus 3 minutes</span>
+              <span>{t("titleBar.pomodoro.extendFocusMinutes", 3)}</span>
               <ClockPlus
                 class="shrink-0 opacity-70"
                 size={TITLE_BAR_MENU_ICON_SIZE}
@@ -1118,7 +1129,7 @@
                     : "cursor-not-allowed text-muted-foreground/50",
                 )}
               >
-                <span>Previous music</span>
+                <span>{t("titleBar.music.previous")}</span>
                 <SkipBack
                   class="shrink-0 opacity-70"
                   size={TITLE_BAR_MENU_ICON_SIZE}
@@ -1135,7 +1146,7 @@
                     : "cursor-not-allowed text-muted-foreground/50",
                 )}
               >
-                <span>Next music</span>
+                <span>{t("titleBar.music.next")}</span>
                 <SkipForward
                   class="shrink-0 opacity-70"
                   size={TITLE_BAR_MENU_ICON_SIZE}
@@ -1143,7 +1154,7 @@
                 />
               </button>
               <div class="flex items-center gap-3 px-3 py-2 text-sm text-foreground">
-                <span class="shrink-0">Volume</span>
+                <span class="shrink-0">{t("titleBar.music.volume")}</span>
                 <input
                   type="range"
                   min="0"
@@ -1152,7 +1163,7 @@
                   value={musicPlayer.volumeControlValue}
                   class="titlebar-volume-slider min-w-0 flex-1"
                   style={`--titlebar-volume-progress: ${titleBarVolumeSliderProgress};`}
-                  aria-label="Music volume"
+                  aria-label={t("titleBar.music.volumeLabel")}
                   tabindex="-1"
                   oninput={(event) => { setTitleBarVolume(Number(event.currentTarget.value)); }}
                 />
@@ -1161,7 +1172,7 @@
                 onclick={openMusicFromTitleBarMenu}
                 class="flex w-full items-center justify-between gap-4 whitespace-nowrap px-3 py-1.5 text-left text-sm text-foreground hover:bg-accent"
               >
-                <span>Open music</span>
+                <span>{t("titleBar.music.open")}</span>
                 <ExternalLink
                   class="shrink-0 opacity-70"
                   size={TITLE_BAR_MENU_ICON_SIZE}
@@ -1186,7 +1197,7 @@
             : `${TITLE_BAR_ICON_COLOR_CLASS} hover:bg-sidebar-accent`,
         )}
         title={musicButtonTooltip}
-        aria-label="Music"
+        aria-label={t("titleBar.control.music")}
       >
         <Music size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
       </button>
@@ -1205,10 +1216,10 @@
             : "hover:bg-sidebar-accent",
         )}
         title={lockedByThemeEditor
-          ? "Disabled while editing a theme"
+          ? t("titleBar.theme.disabledWhileEditing")
           : theme.isDark
-            ? `Switch to light mode (${formatShortcut("Mod + Shift + L")})`
-            : `Switch to dark mode (${formatShortcut("Mod + Shift + L")})`}
+            ? t("titleBar.theme.switchToLight", formatShortcut("Mod + Shift + L"))
+            : t("titleBar.theme.switchToDark", formatShortcut("Mod + Shift + L"))}
       >
         {#if theme.isDark}
           <Sun size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
@@ -1227,7 +1238,7 @@
             "titlebar-icon-button flex items-center justify-center rounded-lg transition-colors hover:bg-sidebar-accent",
             TITLE_BAR_ICON_COLOR_CLASS,
           )}
-          title={`Diagnostics (${formatShortcut("Mod + Shift + D")})`}
+          title={t("titleBar.diagnosticsWithShortcut", formatShortcut("Mod + Shift + D"))}
         >
           <CircleGauge size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
         </button>
@@ -1246,8 +1257,10 @@
             ? "cursor-not-allowed opacity-40"
             : "hover:bg-sidebar-accent",
         )}
-        title={lockedByThemeEditor ? "Disabled while editing a theme" : `Settings (${formatShortcut("Mod + ,")})`}
-        aria-label="Settings"
+        title={lockedByThemeEditor
+          ? t("titleBar.theme.disabledWhileEditing")
+          : t("titleBar.settingsWithShortcut", formatShortcut("Mod + ,"))}
+        aria-label={t("titleBar.control.settings")}
       >
         <Settings size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
       </button>
@@ -1265,7 +1278,7 @@
             "titlebar-icon-button flex items-center justify-center rounded-lg transition-colors hover:bg-sidebar-accent",
             TITLE_BAR_ICON_COLOR_CLASS,
           )}
-          aria-label="More controls"
+          aria-label={t("titleBar.control.more")}
           data-app-tooltip-disabled="true"
         >
           <MoreHorizontal size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
@@ -1290,7 +1303,7 @@
                     : "text-foreground hover:bg-accent",
                 )}
               >
-                {control.label}
+                {control.label()}
               </button>
             {/each}
           </div>
@@ -1307,7 +1320,7 @@
         "titlebar-icon-button flex items-center justify-center rounded-lg transition-colors hover:bg-sidebar-accent",
         TITLE_BAR_ICON_COLOR_CLASS,
       )}
-      aria-label="Minimize"
+      aria-label={t("common.minimize")}
       data-app-tooltip-disabled="true"
     >
       <Minus size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
@@ -1318,7 +1331,7 @@
         "titlebar-icon-button flex items-center justify-center rounded-lg transition-colors hover:bg-sidebar-accent",
         TITLE_BAR_ICON_COLOR_CLASS,
       )}
-      aria-label={isMaximized ? "Restore" : "Maximize"}
+      aria-label={isMaximized ? t("common.restore") : t("common.maximize")}
       data-app-tooltip-disabled="true"
     >
       {#if isMaximized}
@@ -1338,11 +1351,11 @@
           : "hover:bg-destructive hover:text-destructive-foreground",
       )}
       title={lockedByBenchmark
-        ? "Disabled while a benchmark is active"
+        ? t("titleBar.disabledBenchmark")
         : isMainWindow
-          ? `Close app (${formatShortcut("Mod + Shift + W")})`
-          : `Close window (${formatShortcut("Mod + Shift + W")})`}
-      aria-label="Close"
+          ? t("window.closeAppWithShortcut", formatShortcut("Mod + Shift + W"))
+          : t("window.closeWindowWithShortcut", formatShortcut("Mod + Shift + W"))}
+      aria-label={t("window.close")}
     >
       <X size={TITLE_BAR_ICON_SIZE} strokeWidth={TITLE_BAR_ICON_STROKE_WIDTH} />
     </button>
@@ -1372,10 +1385,10 @@
       >
         {#if detachedWindowView}
           <SquareArrowLeft size={15} strokeWidth={2.2} />
-          <span class="shrink-0 whitespace-nowrap">Move back to main window</span>
+          <span class="shrink-0 whitespace-nowrap">{t("titleBar.moveBackToMainWindow")}</span>
         {:else}
           <SquareArrowUpRight size={15} strokeWidth={2.2} />
-          <span class="shrink-0 whitespace-nowrap">Move to new window</span>
+          <span class="shrink-0 whitespace-nowrap">{t("titleBar.moveToNewWindow")}</span>
         {/if}
       </button>
     </div>
@@ -1414,7 +1427,7 @@
               <Check size={15} strokeWidth={2.4} />
             {/if}
           </span>
-          <span class="min-w-0 flex-1 truncate">{control.label}</span>
+          <span class="min-w-0 flex-1 truncate">{control.label()}</span>
         </button>
       {/each}
       <div class="my-1 h-px bg-border/80"></div>
@@ -1434,7 +1447,7 @@
             <Check size={15} strokeWidth={2.4} />
           {/if}
         </span>
-        <span class="min-w-0 flex-1 truncate">Compact tabs</span>
+        <span class="min-w-0 flex-1 truncate">{t("titleBar.control.compactTabs")}</span>
       </button>
     </div>
   </div>
@@ -1442,10 +1455,10 @@
 
 {#if showResetSequenceConfirm}
   <ConfirmDialog
-    title="Open reset confirmation?"
-    message="You pressed the hidden reset shortcut 10 times. Continue only if you meant to erase the app data"
-    confirmLabel="Continue (Enter)"
-    cancelLabel="Cancel (Esc)"
+    title={t("titleBar.resetSequenceTitle")}
+    message={t("titleBar.resetSequenceMessage")}
+    confirmLabel={t("titleBar.resetSequenceConfirm")}
+    cancelLabel={t("common.cancelShortcut")}
     onConfirm={() => {
       showResetSequenceConfirm = false;
       showResetConfirm = true;
@@ -1456,10 +1469,10 @@
 
 {#if showResetConfirm}
   <ConfirmDialog
-    title="Reset everything?"
-    message="All data will be permanently deleted"
-    confirmLabel="Reset everything (Enter)"
-    cancelLabel="Cancel (Esc)"
+    title={t("titleBar.resetDatabaseTitle")}
+    message={t("titleBar.resetDatabaseMessage")}
+    confirmLabel={t("titleBar.resetDatabaseConfirm")}
+    cancelLabel={t("common.cancelShortcut")}
     onConfirm={confirmReset}
     onCancel={() => { showResetConfirm = false; }}
   />
@@ -1467,10 +1480,10 @@
 
 {#if showCloseConfirm}
   <ConfirmDialog
-    title="Close the app?"
-    message="All productivity features will stop working"
-    confirmLabel="Close anyway (Enter)"
-    cancelLabel="Stay (Esc)"
+    title={t("titleBar.closeAppTitle")}
+    message={t("titleBar.closeAppMessage")}
+    confirmLabel={t("titleBar.closeAnyway")}
+    cancelLabel={t("titleBar.stay")}
     onConfirm={confirmClose}
     onCancel={cancelClose}
   />

@@ -1,6 +1,6 @@
 # Conformance checklist
 
-This checklist tracks standards coverage. It is intentionally broader than the current implementation. Each item should eventually carry these status fields in implementation notes, tests, or issues:
+This checklist tracks standards coverage. It is intentionally broader than the current implementation. Checklist rows use these status fields in implementation notes, tests, or issues:
 
 - **Projected:** mapped into Ganbaru AI normalized rows.
 - **Preserved:** retained in structured iCalendar storage.

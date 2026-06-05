@@ -6,6 +6,7 @@
   } from "$lib/components/ui/colorDisplay";
   import { hexToRgba, normalizeHex } from "$lib/components/ui/colorMath";
   import ColorField from "$lib/components/ui/ColorField.svelte";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
     isThemeCalendarDark,
     resolveCalendarTokens,
@@ -22,6 +23,8 @@
     readOnly: boolean;
     onSetSlot: (index: number, hex: string) => void;
   } = $props();
+
+  const { t } = getLocalization();
 
   const PALETTE_SWATCH_SIZE = 22;
   const PALETTE_SWATCH_CHECKER_BG = checkerboardBackgroundForCells(
@@ -68,11 +71,10 @@
 <section class="flex flex-col gap-2 py-2.5">
   <header class="px-1">
     <h2 class="text-[0.866667rem] font-semibold text-foreground">
-      Event palette
+      {t("settings.theme.editor.eventPalette")}
     </h2>
     <div class="text-[0.733333rem] text-muted-foreground">
-      32 color slots, each one has a faded variant for optional past-event
-      dimming, blended toward Calendar background
+      {t("settings.theme.editor.eventPaletteDescription")}
     </div>
   </header>
   <div
@@ -88,7 +90,10 @@
           isThemeCalendarDark(theme) ? 0.5 : 0.3,
         )}
         <div class="flex min-w-0 items-center gap-1.5">
-          {@render palettePreviewSwatch(past, `Past variant ${past}`)}
+          {@render palettePreviewSwatch(
+            past,
+            t("settings.theme.editor.pastVariant", past),
+          )}
           <ColorField
             value={base}
             onChange={(hex) => {

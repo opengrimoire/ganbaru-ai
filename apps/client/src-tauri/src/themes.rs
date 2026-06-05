@@ -74,8 +74,8 @@ pub struct ThemeRowRead {
     calendar_default_custom: String,
     seed_calendar_default_mode: String,
     seed_calendar_default_custom: String,
-    icon_label: Option<String>,
-    seed_icon_label: Option<String>,
+    icon_label: String,
+    seed_icon_label: String,
     created_at: i64,
     updated_at: i64,
 }
@@ -404,26 +404,6 @@ pub async fn theme_delete<R: Runtime>(
         .execute(&pool)
         .await
         .map_err(|e| format!("delete theme: {e}"))?;
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn theme_backfill_icon_label<R: Runtime>(
-    app: AppHandle<R>,
-    db_url: String,
-    id: String,
-    icon_label: String,
-) -> Result<(), String> {
-    validate_theme_id(&id)?;
-    validate_icon_label(&icon_label, "icon_label")?;
-    let pool = connect_sqlite(app, db_url).await?;
-    sqlx::query("UPDATE themes SET icon_label = ?, seed_icon_label = ? WHERE id = ?")
-        .bind(&icon_label)
-        .bind(&icon_label)
-        .bind(id)
-        .execute(&pool)
-        .await
-        .map_err(|e| format!("backfill theme icon label: {e}"))?;
     Ok(())
 }
 
@@ -1027,8 +1007,8 @@ fn validate_theme_read(theme: &ThemeRowRead) -> Result<(), String> {
         &theme.seed_calendar_default_custom,
         "seed_calendar_default_custom",
     )?;
-    validate_optional_icon_label(&theme.icon_label, "icon_label")?;
-    validate_optional_icon_label(&theme.seed_icon_label, "seed_icon_label")
+    validate_icon_label(&theme.icon_label, "icon_label")?;
+    validate_icon_label(&theme.seed_icon_label, "seed_icon_label")
 }
 
 fn validate_token_read_rows(rows: &[TokenRowRead], field: &str) -> Result<(), String> {
@@ -1134,13 +1114,6 @@ fn validate_icon_label(value: &str, field: &str) -> Result<(), String> {
     } else {
         Err(format!("{field} must be 'light' or 'dark'"))
     }
-}
-
-fn validate_optional_icon_label(value: &Option<String>, field: &str) -> Result<(), String> {
-    if let Some(value) = value {
-        validate_icon_label(value, field)?;
-    }
-    Ok(())
 }
 
 fn validate_calendar_mode(value: &str, field: &str) -> Result<(), String> {

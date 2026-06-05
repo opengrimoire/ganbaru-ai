@@ -10,6 +10,9 @@
     shouldScheduleIdleAlert,
   } from "./blocked-screen";
   import PomodoroBlockedScreen from "./PomodoroBlockedScreen.svelte";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
+
+  const { t } = getLocalization();
 
   let {
     idleSeconds,
@@ -142,8 +145,8 @@
       enterFullscreen();
 
       invoke("show_event_notification", {
-        title: "Focus session paused",
-        body: "No activity detected. Return to resume your session.",
+        title: t("pomodoroOverlay.focusPausedTitle"),
+        body: t("pomodoroOverlay.focusPausedBody"),
         playSound: false,
       }).catch(() => {});
 

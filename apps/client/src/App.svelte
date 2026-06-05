@@ -30,7 +30,6 @@
   import { parseCalendarDate } from "$lib/components/calendar/utils";
   import type { CalendarEvent } from "$lib/components/calendar/types";
   import { Temporal } from "@js-temporal/polyfill";
-  import { hydrateCalendarEventTimezones } from "$lib/stores/timezone-migration";
   import { invoke } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -45,6 +44,7 @@
   import TooltipHost from "$lib/components/ui/TooltipHost.svelte";
   import UpdateNotificationToast from "$lib/components/updates/UpdateNotificationToast.svelte";
   import { formatEventNotificationBody } from "$lib/components/calendar/event-notifications";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
     firstMarkTime,
     mark as perfMark,
@@ -71,6 +71,9 @@
   const settingsLauncher = getSettingsLauncher();
   const updates = getUpdateManager();
   const viewport = getViewport();
+  const localization = getLocalization();
+  const { t } = localization;
+  const locale = $derived(localization.locale);
   const detachedWindows = getDetachedWindows();
   let unlistenCalendarNotificationOpen: UnlistenFn | null = null;
   let unlistenDoomscrollingDesktopSettingsOpen: UnlistenFn | null = null;
@@ -125,19 +128,11 @@
     if (isMainWindow) {
       await pomodoro.cleanupOrphans().catch((e) => console.warn("Failed to clean up orphans:", e));
     }
-    // The legacy wall-clock to UTC ISO migration runs here instead of in
-    // main.ts so first paint is not blocked by a per-event UPDATE pass on
-    // first boot after the migration shipped. The hydrator is idempotent:
-    // it short-circuits via a config marker once the migration succeeds,
-    // so on every subsequent boot this is a single config read. Calendar
-    // load is gated on it so the renderer never reads half-migrated rows.
     try {
-      await hydrateCalendarEventTimezones();
-      perfMark("boot.tz-hydrated");
       await calendar.load();
       // Calendar startup marks are still produced for normal boots.
     } catch (e) {
-      console.error("Failed to migrate or load calendar:", e);
+      console.error("Failed to load calendar:", e);
     }
   }
 
@@ -366,10 +361,10 @@
   function formatAwayDuration(totalSeconds: number): string {
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
-    if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
-    if (hours > 0) return `${hours}h`;
-    if (minutes > 0) return `${minutes}m`;
-    return `${totalSeconds}s`;
+    if (hours > 0 && minutes > 0) return t("focusDialog.awayHoursMinutes", hours, minutes);
+    if (hours > 0) return t("focusDialog.awayHours", hours);
+    if (minutes > 0) return t("focusDialog.awayMinutes", minutes);
+    return t("focusDialog.awaySeconds", totalSeconds);
   }
 
   function desktopAppBlockingActive(): boolean {
@@ -760,8 +755,8 @@
         // Fire if within a narrow window that covers the 1s polling interval with margin.
         if (diff >= 0 && diff < 2_500) {
           notifiedEvents.add(notifKey);
-          const title = event.title.trim() || "Calendar event";
-          const body = formatEventNotificationBody(event, now);
+          const title = event.title.trim() || t("calendar.notification.titleFallback");
+          const body = formatEventNotificationBody(event, now, { t, locale });
           invoke("show_event_notification", { title, body, openCalendar: true }).catch((e) =>
             console.error("[notifications] failed:", e),
           );
@@ -806,10 +801,10 @@
 
   {#if showStopConfirm}
     <ConfirmDialog
-      title="Stop the focus session?"
-      message="All focus features will stop"
-      confirmLabel="Stop session (Enter)"
-      cancelLabel="Undo changes (Esc)"
+      title={t("focusDialog.stopTitle")}
+      message={t("focusDialog.stopMessage")}
+      confirmLabel={t("focusDialog.stopSession")}
+      cancelLabel={t("focusDialog.undoChanges")}
       onConfirm={confirmStop}
       onCancel={cancelStop}
     />
@@ -817,10 +812,10 @@
 
   {#if suspendInfo}
     <ConfirmDialog
-      title="Resume focus session?"
-      message="You were away for {formatAwayDuration(suspendInfo.awaySeconds)}"
-      confirmLabel="Resume (Enter)"
-      cancelLabel="Stop session (Esc)"
+      title={t("focusDialog.resumeTitle")}
+      message={t("focusDialog.awayMessage", formatAwayDuration(suspendInfo.awaySeconds))}
+      confirmLabel={t("focusDialog.resume")}
+      cancelLabel={t("focusDialog.stopSessionShortcut")}
       danger={false}
       onConfirm={() => { void pomodoro.dismissSuspend(true); }}
       onCancel={() => { pomodoro.dismissedBlockId = pomodoro.activeBlockId; void pomodoro.dismissSuspend(false); }}

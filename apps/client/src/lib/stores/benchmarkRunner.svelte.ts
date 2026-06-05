@@ -15,14 +15,14 @@
  *     -> persistPhaseAPending(...)
  *     -> restart app, delayed for startup samples            # restart 1
  *   [boot, vaultMode=benchmark, stage=phase-a-pending]
- *     -> Rust database layer opens ganbaru-ai-benchmark.db (empty)
+ *     -> Rust database layer opens benchmark.sqlite (empty)
  *     -> stage becomes phase-a-running
  *     -> checkAndResume runs the baseline pass, or skips it for dense-only scenarios
  *     -> scenario.seed(dense dataset)
  *     -> persistPhaseBPending(...)
  *     -> restart app, delayed for startup samples            # restart 2
  *   [boot, vaultMode=benchmark, stage=phase-b-pending]
- *     -> Rust database layer opens ganbaru-ai-benchmark.db (now seeded)
+ *     -> Rust database layer opens benchmark.sqlite (now seeded)
  *     -> stage becomes phase-b-running
  *     -> checkAndResume runs the dense pass
  *     -> if more dense datasets exist, seed the next dataset and repeat phase B
@@ -43,6 +43,8 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 import { BUILD_REF } from "$lib/buildInfo";
+import { formatNumber } from "$lib/i18n/formatters";
+import { getLocalization } from "$lib/i18n/translator.svelte";
 import { getCalendar } from "./calendar.svelte";
 import { getBenchmarkStatus, type BenchmarkStatus } from "./benchmarkStatus.svelte";
 import {
@@ -77,6 +79,9 @@ import {
   getScenarioMetadataById,
   loadScenarioById,
 } from "$lib/benchmark/registry";
+
+const localization = getLocalization();
+const { t } = localization;
 
 type PendingRequest =
   | { mode: "single"; scenarioIds: string[] }
@@ -622,9 +627,11 @@ class BenchmarkRunnerStore {
     this.running = undefined;
     this.status = "summary";
     notifyBenchmarkDone(
-      suite ? "Benchmark suite complete" : "Benchmark complete",
       suite
-        ? `${this.results.length} benchmarks finished. Open the app to review the benchmark output.`
+        ? t("benchmark.notification.suiteCompleteTitle")
+        : t("benchmark.notification.completeTitle"),
+      suite
+        ? t("benchmark.notification.suiteCompleteBody", this.results.length)
         : this.#completionMessage(scenario, result),
     );
   }
@@ -710,21 +717,23 @@ class BenchmarkRunnerStore {
   }
 
   #completionMessage(scenario: BenchmarkScenario, result: BenchmarkResult): string {
+    const label = localizedBenchmarkScenarioLabel(scenario.id, scenario.label);
     const datasetPhases = resultDatasetPhases(result);
     const largestDataset = datasetPhases[datasetPhases.length - 1] ?? result.phaseB;
     if (result.workload.kind === "startup") {
       const baseMs = formatOptionalMs(result.phaseA?.startupMs);
       const denseMs = formatOptionalMs(largestDataset.startupMs);
-      return `${scenario.label}: launch medians base ${baseMs}, largest dense ${denseMs}. Open the app to review the benchmark output.`;
+      return t("benchmark.notification.startupCompleteBody", label, baseMs, denseMs);
     }
     if (result.peakTotalMb !== undefined) {
-      return `${scenario.label}: max observed ${Math.round(result.peakTotalMb)} MB. Open the app to review the benchmark output.`;
+      const mb = `${formatNumber(localization.locale, Math.round(result.peakTotalMb))} MB`;
+      return t("benchmark.notification.memoryCompleteBody", label, mb);
     }
     const metricCount = [
       ...(result.phaseA?.metrics ?? []),
       ...datasetPhases.flatMap((phase) => phase.metrics ?? []),
     ].length;
-    return `${scenario.label}: ${metricCount} metric rows. Open the app to review the benchmark output.`;
+    return t("benchmark.notification.metricsCompleteBody", label, metricCount);
   }
 
   async #teardownFinishedBenchmark(): Promise<void> {
@@ -744,7 +753,7 @@ class BenchmarkRunnerStore {
     this.errorMessage = message;
     this.running = undefined;
     this.status = "error";
-    notifyBenchmarkDone("Benchmark failed", message);
+    notifyBenchmarkDone(t("benchmark.notification.failedTitle"), message);
   }
 
   #reset() {
@@ -780,6 +789,17 @@ let store: BenchmarkRunnerStore | null = null;
 export function getBenchmarkRunner(): BenchmarkRunnerStore {
   if (!store) store = new BenchmarkRunnerStore();
   return store;
+}
+
+function localizedBenchmarkScenarioLabel(id: string, fallback: string): string {
+  if (id === "startup-boot") return t("benchmark.scenario.startupBoot.label");
+  if (id === "idle-memory") return t("benchmark.scenario.idleMemory.label");
+  if (id === "calendar-nav") return t("benchmark.scenario.calendarNav.label");
+  if (id === "calendar-panel-latency") {
+    return t("benchmark.scenario.calendarPanelLatency.label");
+  }
+  if (id === "calendar-import-ops") return t("benchmark.scenario.calendarImportOps.label");
+  return fallback;
 }
 
 /** Fires the OS desktop notification used by terminal benchmark states. */
@@ -872,7 +892,6 @@ function aggregateStartupPhase(phase: "A" | "B", phases: PhaseResult[]): PhaseRe
     phase,
     startedAt: startupSamples[0]?.startedAt ?? fallbackPhase?.startedAt ?? new Date().toISOString(),
     workloadDurationMs: average(phases.map((sample) => sample.workloadDurationMs)),
-    peakSamples: [],
     curve: [],
     metrics: undefined,
     boot,
@@ -932,5 +951,7 @@ function average(values: number[]): number {
 }
 
 function formatOptionalMs(value: number | undefined): string {
-  return value === undefined || !Number.isFinite(value) ? "n/a" : `${Math.round(value)} ms`;
+  return value === undefined || !Number.isFinite(value)
+    ? "n/a"
+    : `${formatNumber(localization.locale, Math.round(value))} ms`;
 }

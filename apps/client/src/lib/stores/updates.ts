@@ -64,10 +64,13 @@ export function releasePageUrl(repository: string, version: string | null): stri
  * @param error Unknown thrown value.
  * @returns Short error message.
  */
-export function updateCheckErrorMessage(error: unknown): string {
+export function updateCheckErrorMessage(
+  error: unknown,
+  t: Translate = translate,
+): string {
   const message = errorText(error);
   if (/endpoint|pubkey|public key|configured|configuration/i.test(message)) {
-    return "This build does not have a release update feed configured";
+    return t("updates.feedNotConfigured");
   }
   return message;
 }
@@ -83,3 +86,4 @@ export function errorText(error: unknown): string {
   if (typeof error === "string") return error;
   return String(error);
 }
+import { translate, type Translate } from "$lib/i18n/translator.svelte";

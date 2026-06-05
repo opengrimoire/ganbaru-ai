@@ -7,6 +7,7 @@
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import { getEventColor } from "$lib/components/calendar/utils";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
     computeDoomscrollingLimitEntryWindowTotals,
     doomscrollingLimitEntryKey,
@@ -37,6 +38,7 @@
   const doomscrolling = getDoomscrolling();
   const usage = getDoomscrollingUsage();
   const theme = getTheme();
+  const { t } = getLocalization();
 
   let pendingAction = $state<PendingLimitAction | null>(null);
 
@@ -46,7 +48,7 @@
       : usage.foregroundStatus.reason?.toLowerCase().includes("wayland")
         ? null
         : usage.foregroundStatus.reason
-          ?? "Desktop foreground tracking is unavailable. Desktop app limits will not count or close apps on this system.",
+          ?? t("settings.doomscrolling.limits.desktopUnavailable"),
   );
 
   function formatMinutes(totalSeconds: number): string {
@@ -79,7 +81,9 @@
   }
 
   function periodUsageLabel(period: DoomscrollingLimitPeriod): string {
-    return period === "week" ? "this week" : "today";
+    return period === "week"
+      ? t("settings.doomscrolling.limits.thisWeek")
+      : t("settings.doomscrolling.limits.today");
   }
 
   function formatLimitSeconds(seconds: number): string {
@@ -165,7 +169,7 @@
     return entry.name
       ?? entry.mobileAppName
       ?? entry.desktopAppName
-      ?? (entry.websiteHost ? websiteDisplayName(entry.websiteHost) : "Linked source");
+      ?? (entry.websiteHost ? websiteDisplayName(entry.websiteHost) : t("settings.doomscrolling.limits.linkedSource"));
   }
 
   function requestLimitEnabledChange(limit: DoomscrollingUsageLimit, enabled: boolean): void {
@@ -210,24 +214,28 @@
   }
 
   function pendingTitle(action: PendingLimitAction): string {
-    if (action.type === "global-disable") return "Turn off usage limits?";
+    if (action.type === "global-disable") return t("settings.doomscrolling.limits.turnOffTitle");
     const limit = doomscrolling.usageLimits.find((item) => item.id === action.limitId);
-    const name = limit?.name ?? "this limit";
-    return action.type === "disable" ? `Disable ${name}?` : `Delete ${name}?`;
+    const name = limit?.name ?? t("settings.doomscrolling.limits.thisLimit");
+    return action.type === "disable"
+      ? t("settings.doomscrolling.limits.disableTitle", name)
+      : t("settings.doomscrolling.limits.deleteTitle", name);
   }
 
   function pendingMessage(action: PendingLimitAction): string {
     if (action.type === "global-disable") {
-      return "Daily usage limits will stop blocking websites and closing apps until you enable them again";
+      return t("settings.doomscrolling.limits.turnOffMessage");
     }
     return action.type === "disable"
-      ? "It will stay in the list but will not block when exhausted until you enable it again"
-      : "This cannot be undone. Today's tracked usage will stay in history and can still roll up into matching limits.";
+      ? t("settings.doomscrolling.limits.disableMessage")
+      : t("settings.doomscrolling.limits.deleteMessage");
   }
 
   function pendingConfirmLabel(action: PendingLimitAction): string {
-    if (action.type === "global-disable") return "Turn off (Enter)";
-    return action.type === "disable" ? "Disable (Enter)" : "Delete (Enter)";
+    if (action.type === "global-disable") return t("settings.doomscrolling.shared.turnOffShortcut");
+    return action.type === "disable"
+      ? t("settings.doomscrolling.shared.disableShortcut")
+      : t("settings.doomscrolling.shared.deleteShortcut");
   }
 </script>
 
@@ -235,9 +243,9 @@
   <section class="flex flex-col gap-4">
     <div class="flex min-w-0 flex-wrap items-center justify-between gap-2 px-1">
       <div class="min-w-0">
-        <h2 class="text-[0.866667rem] font-semibold text-foreground">Usage limits</h2>
+        <h2 class="text-[0.866667rem] font-semibold text-foreground">{t("settings.doomscrolling.limits.usageLimitsHeading")}</h2>
         <div class="mt-0.5 text-[0.8rem] text-muted-foreground">
-          Each limit can link one or many websites, mobile apps, and desktop apps
+          {t("settings.doomscrolling.limits.usageLimitsDescription")}
         </div>
       </div>
       <button
@@ -246,7 +254,7 @@
         class="flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
       >
         <Plus size={13} strokeWidth={2.25} />
-        <span>Add limit</span>
+        <span>{t("settings.doomscrolling.limits.addLimit")}</span>
       </button>
     </div>
 
@@ -258,7 +266,9 @@
             "flex min-w-0 flex-col gap-1.5 border-b border-border/70 py-4 transition-opacity",
             !limit.enabled && "opacity-50",
           )}
-          aria-label={limit.enabled ? limit.name : `${limit.name} disabled`}
+          aria-label={limit.enabled
+            ? limit.name
+            : t("settings.doomscrolling.limits.disabledLabel", limit.name)}
         >
           <div class="flex min-w-0 flex-wrap items-start justify-between gap-2">
             <div class="min-w-0 flex-1">
@@ -269,7 +279,12 @@
                 {#each budgetViews as view (`${limit.id}:${view.period}`)}
                   <div class="flex min-w-0 flex-col gap-2 pt-2 first:pt-0">
                     <div class="text-[0.8rem] text-muted-foreground">
-                      {formatMinutes(view.total.usedSeconds)} used of {formatLimitSeconds(view.total.limitSeconds)} {periodUsageLabel(view.period)}
+                      {t(
+                        "settings.doomscrolling.limits.usedOfLimit",
+                        formatMinutes(view.total.usedSeconds),
+                        formatLimitSeconds(view.total.limitSeconds),
+                        periodUsageLabel(view.period),
+                      )}
                     </div>
 
                     <div class="flex h-1.5 overflow-hidden rounded-full bg-muted">
@@ -304,23 +319,25 @@
               <button
                 type="button"
                 onclick={() => requestLimitEnabledChange(limit, !limit.enabled)}
-                aria-label={limit.enabled ? `Disable ${limit.name}` : `Enable ${limit.name}`}
+                aria-label={limit.enabled
+                  ? t("settings.doomscrolling.shared.disable", limit.name)
+                  : t("settings.doomscrolling.shared.enable", limit.name)}
                 data-app-tooltip-disabled="true"
                 class="flex h-7 w-24 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2 text-[0.8rem] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
               >
                 {#if limit.enabled}
                   <Check size={13} strokeWidth={2.25} class="shrink-0" />
-                  <span>Enabled</span>
+                  <span>{t("settings.doomscrolling.shared.enabled")}</span>
                 {:else}
                   <Power size={13} strokeWidth={2} class="shrink-0" />
-                  <span>Disabled</span>
+                  <span>{t("settings.doomscrolling.shared.disabled")}</span>
                 {/if}
               </button>
               <button
                 type="button"
                 onclick={() => onOpenLimitEditor({ mode: "edit", limitId: limit.id })}
                 disabled={!limit.enabled}
-                aria-label={`Edit ${limit.name}`}
+                aria-label={t("settings.doomscrolling.shared.edit", limit.name)}
                 data-app-tooltip-disabled="true"
                 class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40 dark:bg-transparent"
               >
@@ -329,7 +346,7 @@
               <button
                 type="button"
                 onclick={() => requestLimitDelete(limit)}
-                aria-label={`Delete ${limit.name}`}
+                aria-label={t("settings.doomscrolling.shared.delete", limit.name)}
                 data-app-tooltip-disabled="true"
                 class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground transition-colors hover:bg-accent dark:bg-transparent"
               >
@@ -340,7 +357,7 @@
         </article>
       {:else}
         <div class="flex h-10 items-center border-b border-border/70 text-[0.8rem] text-muted-foreground">
-          No usage limits yet
+          {t("settings.doomscrolling.limits.noUsageLimits")}
         </div>
       {/each}
     </div>
@@ -351,11 +368,11 @@
   <DoomscrollingBrowserConnectionStatus />
 
   <section class="flex flex-col gap-4">
-    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Usage limit configuration</h2>
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("settings.doomscrolling.limits.usageLimitConfigurationHeading")}</h2>
     <div class="flex flex-col gap-3">
       <ToggleSetting
-        label="Enable usage limits"
-        description="Apply daily and weekly budgets whenever Ganbaru AI is running"
+        label={t("settings.doomscrolling.limits.enableUsageLimits")}
+        description={t("settings.doomscrolling.limits.enableUsageLimitsDescription")}
         checked={doomscrolling.limitsEnabled}
         onChange={requestGlobalEnabledChange}
       />
@@ -392,7 +409,7 @@
     title={pendingTitle(pendingAction)}
     message={pendingMessage(pendingAction)}
     confirmLabel={pendingConfirmLabel(pendingAction)}
-    cancelLabel="Cancel (Esc)"
+    cancelLabel={t("settings.doomscrolling.shared.cancelShortcut")}
     onConfirm={confirmPendingAction}
     onCancel={cancelPendingAction}
   />

@@ -28,6 +28,9 @@
     isThemeCalendarDark,
     type Theme,
   } from "$lib/stores/themes";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
+
+  const { t } = getLocalization();
 
   let {
     date,
@@ -680,7 +683,7 @@
           class:pr-5={dragIndicators.iconCount > 0 && dragIndicators.iconCount <= 2}
           class:pr-8={dragIndicators.iconCount > 2}
         >
-          {#if previewEvent.title}{previewEvent.title}{:else}(No title){/if}
+          {#if previewEvent.title}{previewEvent.title}{:else}{t("calendar.event.noTitle")}{/if}
         </div>
         {#if dragH > 32}
           {@const st = previewEvent.start.split(" ")[1] ?? ""}
@@ -716,7 +719,7 @@
     >
       <div class="min-w-0 flex-1 px-1 py-0.5" style="background-color: {createBase.bg};">
         <div class="truncate font-medium">
-          {#if createPreview.event.title}{createPreview.event.title}{:else}(No title){/if}
+          {#if createPreview.event.title}{createPreview.event.title}{:else}{t("calendar.event.noTitle")}{/if}
         </div>
         {#if createH > 32}
           {@const st = createPreview.event.start.split(" ")[1] ?? ""}
