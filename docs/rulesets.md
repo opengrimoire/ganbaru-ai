@@ -54,7 +54,7 @@ Branch rules:
 - [ ] Require linear history.
 - [ ] Require merge queue.
 - [ ] Require deployments to succeed.
-- [ ] Require signed commits.
+- [x] Require signed commits.
 - [x] Require a pull request before merging.
   - Required approvals: 0 while the repository has a single maintainer. Raise this before granting write access to more maintainers.
   - [ ] Dismiss stale pull request approvals when new commits are pushed.
@@ -86,7 +86,7 @@ Rationale:
 - `Require linear history` is off because release pull requests should keep the release branch boundary and preserve useful pull request history for generated release notes.
 - `Require merge queue` is off because release pull requests are low volume and the current required checks do not run on `merge_group`.
 - `Require deployments to succeed` is off because the protected `release` environment belongs to the tag-based release workflow after `main` is updated, not to the branch merge gate.
-- Signed commits are desirable, but enabling the rule before local signing is operational can block release promotion from `dev`.
+- `Require signed commits` is enabled on `main` after SSH commit signing was configured locally and a test commit verified successfully on GitHub.
 - Review requirements that need another reviewer stay off while the repository has one maintainer. Raise required approvals, stale approval dismissal, Code Owners, and most-recent-push approval before granting write access to more maintainers.
 - The strongest practical control while the project has one maintainer is limited write access. If more write maintainers are added, the `main` policy must be revisited before access is granted.
 - Code scanning and code quality gates should stay off until they are configured, stable, and documented.
