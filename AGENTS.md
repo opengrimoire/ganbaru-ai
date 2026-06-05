@@ -39,6 +39,7 @@ Docs describe the optimal/ideal end state of the app, not the current implementa
 
 ```
 .github/
+  CODE_OF_CONDUCT.md: GitHub community behavior policy
   ISSUE_TEMPLATE/: GitHub issue forms and template chooser config
   SECURITY.md: GitHub security policy and private vulnerability reporting instructions
   workflows/: GitHub Actions release workflows

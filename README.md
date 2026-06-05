@@ -133,6 +133,8 @@ Contributions are welcome, but keep in mind:
 - Active testing is limited to **Ubuntu Linux** and **Windows 10**. macOS and iOS builds are untested since no Apple hardware is available for development, so contributions for those platforms are especially valuable.
 - If you are considering a large change, open an issue first to discuss the approach.
 
+Before contributing, read [CONTRIBUTING.md](CONTRIBUTING.md). Participation in project spaces is governed by the [code of conduct](.github/CODE_OF_CONDUCT.md). Please report security vulnerabilities privately through the process in [SECURITY.md](.github/SECURITY.md), not through public issues.
+
 ## License
 
 Ganbaru AI is licensed under [AGPL-3.0](LICENSE).
