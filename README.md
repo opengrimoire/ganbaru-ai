@@ -132,12 +132,13 @@ Contributions are welcome, but keep in mind:
 - The app is in heavy early development. Architecture, APIs, and data models are still changing.
 - Active testing is limited to **Ubuntu Linux** and **Windows 10**. macOS and iOS builds are untested since no Apple hardware is available for development, so contributions for those platforms are especially valuable.
 - If you are considering a large change, open an issue first to discuss the approach.
-
-Before contributing, read [CONTRIBUTING.md](CONTRIBUTING.md). Participation in project spaces is governed by the [code of conduct](.github/CODE_OF_CONDUCT.md). Please report security vulnerabilities privately through the process in [SECURITY.md](.github/SECURITY.md), not through public issues.
+- Before contributing, read [CONTRIBUTING.md](CONTRIBUTING.md).
+- Participation in project spaces is governed by the [code of conduct](.github/CODE_OF_CONDUCT.md).
+- Please report security vulnerabilities privately through the process in [SECURITY.md](.github/SECURITY.md), not through public issues.
 
 ## License
 
-Ganbaru AI is licensed under [AGPL-3.0](LICENSE).
+Ganbaru AI is licensed under [AGPL-3.0](LICENSE). It's free and open source. You can use, modify, share, and sell Ganbaru AI. If you distribute or host a modified version, you must provide the source code and license that version under AGPL 3.0. Patent rights from contributors are included. The app is provided without warranty, and authors are not liable for damages.
 
 ## Funding
 
