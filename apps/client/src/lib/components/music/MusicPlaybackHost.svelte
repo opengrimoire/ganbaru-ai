@@ -1,8 +1,10 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { getMusicPlayer } from "$lib/stores/music-player.svelte";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
 
   const player = getMusicPlayer();
+  const { t } = getLocalization();
 
   let hostElement = $state<HTMLDivElement | null>(null);
   let youtubeFrame = $state<HTMLIFrameElement | null>(null);
@@ -313,7 +315,7 @@
       type="button"
       tabindex="-1"
       class="pointer-events-auto absolute inset-0 z-20 cursor-default border-0 bg-transparent p-0 text-transparent outline-none focus:outline-none"
-      aria-label={player.isPlaying ? "Pause" : "Play"}
+      aria-label={player.isPlaying ? t("music.pause") : t("music.play")}
       data-app-tooltip-disabled="true"
       onpointerdown={handleSurfacePointerDown}
       onclick={handleSurfaceClick}
