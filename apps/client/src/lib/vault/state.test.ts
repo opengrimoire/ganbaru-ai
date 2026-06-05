@@ -73,18 +73,18 @@ describe("data folder state api", () => {
 
   it("accepts complete data folder info responses", async () => {
     invokeMock.mockResolvedValue({
-      path: "/home/victor/Documents/Ganbaru AI",
-      configPath: "/home/victor/Documents/Ganbaru AI/config.json",
-      databasePath: "/home/victor/Documents/Ganbaru AI/ganbaru-ai.sqlite",
+      path: "/home/user/Documents/Ganbaru AI",
+      configPath: "/home/user/Documents/Ganbaru AI/config.json",
+      databasePath: "/home/user/Documents/Ganbaru AI/ganbaru-ai.sqlite",
       vaultId: "vault-1",
       displayName: "Ganbaru AI",
     });
     const { getActiveVaultInfo } = await loadModule();
 
     await expect(getActiveVaultInfo()).resolves.toEqual({
-      path: "/home/victor/Documents/Ganbaru AI",
-      configPath: "/home/victor/Documents/Ganbaru AI/config.json",
-      databasePath: "/home/victor/Documents/Ganbaru AI/ganbaru-ai.sqlite",
+      path: "/home/user/Documents/Ganbaru AI",
+      configPath: "/home/user/Documents/Ganbaru AI/config.json",
+      databasePath: "/home/user/Documents/Ganbaru AI/ganbaru-ai.sqlite",
       vaultId: "vault-1",
       displayName: "Ganbaru AI",
     });
@@ -92,9 +92,9 @@ describe("data folder state api", () => {
 
   it("rejects incomplete data folder info responses", async () => {
     invokeMock.mockResolvedValue({
-      path: "/home/victor/Documents/Ganbaru AI",
-      configPath: "/home/victor/Documents/Ganbaru AI/config.json",
-      databasePath: "/home/victor/Documents/Ganbaru AI/ganbaru-ai.sqlite",
+      path: "/home/user/Documents/Ganbaru AI",
+      configPath: "/home/user/Documents/Ganbaru AI/config.json",
+      databasePath: "/home/user/Documents/Ganbaru AI/ganbaru-ai.sqlite",
       vaultId: "vault-1",
     });
     const { getActiveVaultInfo } = await loadModule();
@@ -104,16 +104,16 @@ describe("data folder state api", () => {
 
   it("reads the default data folder location", async () => {
     invokeMock.mockResolvedValue({
-      path: "/home/victor/Documents/Ganbaru AI",
-      parentPath: "/home/victor/Documents",
+      path: "/home/user/Documents/Ganbaru AI",
+      parentPath: "/home/user/Documents",
       folderName: "Ganbaru AI",
       developmentBuild: false,
     });
     const { getDefaultDataFolderLocation } = await loadModule();
 
     await expect(getDefaultDataFolderLocation()).resolves.toEqual({
-      path: "/home/victor/Documents/Ganbaru AI",
-      parentPath: "/home/victor/Documents",
+      path: "/home/user/Documents/Ganbaru AI",
+      parentPath: "/home/user/Documents",
       folderName: "Ganbaru AI",
       developmentBuild: false,
     });
