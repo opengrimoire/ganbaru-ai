@@ -1,6 +1,6 @@
 # Data schema
 
-Every table in `app.sqlite`, with the rationale behind subtle columns and constraints. New tables are added here as features land. Stub headings exist for tables that are designed but not yet implemented; fill them in when the feature ships.
+Every table in `ganbaru-ai.sqlite`, with the rationale behind subtle columns and constraints. New tables are added here as features land. Stub headings exist for tables that are designed but not yet implemented; fill them in when the feature ships.
 
 All timestamps are ISO 8601 in UTC with a `Z` suffix. The UI converts to the device's current IANA zone for display, recomputing on visibility, focus, and a 60s sanity poll so a user who travels from NYC to Tokyo sees their events shift to the correct local wall clock without reloading the app. Storing in UTC is the only thing that survives DST transitions, timezone changes, and user travel without rewriting historical data.
 

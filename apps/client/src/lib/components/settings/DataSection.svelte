@@ -67,7 +67,7 @@
   <div class="space-y-1">
     <h2 class="text-base font-semibold">Data</h2>
     <p class="text-sm leading-5 text-muted-foreground">
-      Your Ganbaru AI folder contains settings, documents, and app.sqlite.
+      Your Ganbaru AI folder contains settings, documents, and ganbaru-ai.sqlite.
     </p>
   </div>
 

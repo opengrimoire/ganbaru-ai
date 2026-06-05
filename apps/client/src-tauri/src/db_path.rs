@@ -12,7 +12,7 @@ use tauri::{AppHandle, Manager, Runtime};
 
 pub const BENCHMARK_SQLITE_URL: &str = "sqlite:benchmark.sqlite";
 
-const ALLOWED_SQLITE_FILES: &[&str] = &["app.sqlite", "benchmark.sqlite"];
+const ALLOWED_SQLITE_FILES: &[&str] = &["ganbaru-ai.sqlite", "benchmark.sqlite"];
 
 #[derive(Clone, Default)]
 pub struct DatabaseState {

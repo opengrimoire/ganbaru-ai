@@ -518,7 +518,7 @@ fn validate_limit_state(state: &DoomscrollingLimitState) -> Result<(), String> {
             return Err("database_path must be absolute".to_string());
         }
         if path.file_name().and_then(|name| name.to_str()) != Some(vault::APP_SQLITE_FILE) {
-            return Err("database_path must point to app.sqlite".to_string());
+            return Err("database_path must point to ganbaru-ai.sqlite".to_string());
         }
     }
     for limit in &state.limits {
@@ -2353,7 +2353,7 @@ mod tests {
             local_date: "today".to_string(),
             week_start_local_date: "2026-05-25".to_string(),
             updated_at: "2026-05-28T00:00:00.000Z".to_string(),
-            database_path: Some("/tmp/ganbaru-ai-vault/app.sqlite".to_string()),
+            database_path: Some("/tmp/ganbaru-ai-vault/ganbaru-ai.sqlite".to_string()),
             limits: vec![DoomscrollingLimitStateItem {
                 id: "youtube".to_string(),
                 period: "day".to_string(),

@@ -18,7 +18,7 @@ const EXTENSION_CONNECTION_FILE: &str = "doomscrolling-extension-status.json";
 const EVENTS_FILE: &str = "doomscrolling-events.jsonl";
 const APP_STATE_FILE: &str = "app-state.json";
 const CONFIG_FILE: &str = "config.json";
-const APP_SQLITE_FILE: &str = "app.sqlite";
+const APP_SQLITE_FILE: &str = "ganbaru-ai.sqlite";
 const STALE_STATE_SECONDS: i64 = 75;
 const ACTIVE_STATE_STALE_SECONDS: i64 = 45;
 const LIMIT_STATE_STALE_SECONDS: i64 = 20;
@@ -1832,7 +1832,7 @@ mod tests {
             local_date: "2026-05-28".to_string(),
             week_start_local_date: Some("2026-05-25".to_string()),
             updated_at: super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
-            database_path: Some("/tmp/ganbaru-ai-vault/app.sqlite".to_string()),
+            database_path: Some("/tmp/ganbaru-ai-vault/ganbaru-ai.sqlite".to_string()),
             limits: vec![super::LimitStateItem {
                 id: "youtube".to_string(),
                 period: Some("day".to_string()),
@@ -1881,7 +1881,7 @@ mod tests {
             local_date: "2026-05-28".to_string(),
             week_start_local_date: Some("2026-05-25".to_string()),
             updated_at: super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
-            database_path: Some("/tmp/ganbaru-ai-vault/app.sqlite".to_string()),
+            database_path: Some("/tmp/ganbaru-ai-vault/ganbaru-ai.sqlite".to_string()),
             limits: vec![super::LimitStateItem {
                 id: "reddit".to_string(),
                 period: Some("day".to_string()),
@@ -1916,13 +1916,13 @@ mod tests {
             local_date: "2026-05-28".to_string(),
             week_start_local_date: Some("2026-05-25".to_string()),
             updated_at: super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
-            database_path: Some("/tmp/ganbaru-ai-vault/app.sqlite".to_string()),
+            database_path: Some("/tmp/ganbaru-ai-vault/ganbaru-ai.sqlite".to_string()),
             limits: Vec::new(),
         };
 
         assert_eq!(
             super::usage_db_path(vault_path, Some(&limit_state)),
-            vault_path.join("app.sqlite")
+            vault_path.join("ganbaru-ai.sqlite")
         );
     }
 
@@ -1932,7 +1932,7 @@ mod tests {
 
         assert_eq!(
             super::usage_db_path(vault_path, None),
-            vault_path.join("app.sqlite")
+            vault_path.join("ganbaru-ai.sqlite")
         );
     }
 

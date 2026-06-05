@@ -33,7 +33,7 @@ The local-first knowledge layer. Users can take notes linked to their tasks and 
 
 **Includes:**
 
-- Ganbaru AI folder structure on disk (vault.json, config.json, app.sqlite, notes/, diary/, projects/)
+- Ganbaru AI folder structure on disk (vault.json, config.json, ganbaru-ai.sqlite, notes/, diary/, projects/)
 - Tiptap note editor: block-based editing, slash commands, rich formatting, drag-to-reorder blocks
 - Markdown serialization via @tiptap/extension-markdown (notes saved as .md files to disk via Tauri file system plugin)
 - Bidirectional backlinks tracked in SQLite (note-to-note, note-to-task, note-to-project)

@@ -57,7 +57,7 @@ describe("data folder state api", () => {
     expect(
       formatDataFolderError("run database migrations: file is not a database", "startup"),
     ).toBe(
-      "The app found this Ganbaru AI folder, but app.sqlite could not be opened. Restore a backup or choose another folder.",
+      "The app found this Ganbaru AI folder, but ganbaru-ai.sqlite could not be opened. Restore a backup or choose another folder.",
     );
   });
 
@@ -75,7 +75,7 @@ describe("data folder state api", () => {
     invokeMock.mockResolvedValue({
       path: "/home/victor/Documents/Ganbaru AI",
       configPath: "/home/victor/Documents/Ganbaru AI/config.json",
-      databasePath: "/home/victor/Documents/Ganbaru AI/app.sqlite",
+      databasePath: "/home/victor/Documents/Ganbaru AI/ganbaru-ai.sqlite",
       vaultId: "vault-1",
       displayName: "Ganbaru AI",
     });
@@ -84,7 +84,7 @@ describe("data folder state api", () => {
     await expect(getActiveVaultInfo()).resolves.toEqual({
       path: "/home/victor/Documents/Ganbaru AI",
       configPath: "/home/victor/Documents/Ganbaru AI/config.json",
-      databasePath: "/home/victor/Documents/Ganbaru AI/app.sqlite",
+      databasePath: "/home/victor/Documents/Ganbaru AI/ganbaru-ai.sqlite",
       vaultId: "vault-1",
       displayName: "Ganbaru AI",
     });
@@ -94,7 +94,7 @@ describe("data folder state api", () => {
     invokeMock.mockResolvedValue({
       path: "/home/victor/Documents/Ganbaru AI",
       configPath: "/home/victor/Documents/Ganbaru AI/config.json",
-      databasePath: "/home/victor/Documents/Ganbaru AI/app.sqlite",
+      databasePath: "/home/victor/Documents/Ganbaru AI/ganbaru-ai.sqlite",
       vaultId: "vault-1",
     });
     const { getActiveVaultInfo } = await loadModule();

@@ -95,7 +95,7 @@ package.json: root scripts, shared dev dependencies
 Ganbaru AI/
   vault.json: internal Ganbaru AI folder marker, id, display name, and schema version
   config.json: user settings, work environment definitions, blocker rulesets
-  app.sqlite: SQLite source of truth for structured data and indexes
+  ganbaru-ai.sqlite: SQLite source of truth for structured data and indexes
   notes/daily/: daily notes (markdown)
   notes/projects/: per-project notes and working documents (markdown)
   diary/morning/, diary/evening/: dated diary entries (markdown, indexed fields in SQLite)

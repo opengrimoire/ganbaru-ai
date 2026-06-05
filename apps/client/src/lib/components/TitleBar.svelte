@@ -1460,7 +1460,7 @@
 {#if showResetConfirm}
   <ConfirmDialog
     title="Reset database?"
-    message="The active Ganbaru AI folder's app.sqlite file will be permanently deleted"
+    message="The active Ganbaru AI folder's ganbaru-ai.sqlite file will be permanently deleted"
     confirmLabel="Reset database (Enter)"
     cancelLabel="Cancel (Esc)"
     onConfirm={confirmReset}

@@ -132,7 +132,7 @@ export function formatDataFolderError(
       "pragma optimize",
     ])
   ) {
-    return "The app found this Ganbaru AI folder, but app.sqlite could not be opened. Restore a backup or choose another folder.";
+    return "The app found this Ganbaru AI folder, but ganbaru-ai.sqlite could not be opened. Restore a backup or choose another folder.";
   }
 
   if (lower.includes("selected folder is not empty and is not a ganbaru ai folder")) {

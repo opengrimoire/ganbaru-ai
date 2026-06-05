@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use tauri::{Manager, Runtime};
 use tauri_plugin_dialog::{DialogExt, FilePath};
 
-pub const APP_SQLITE_FILE: &str = "app.sqlite";
+pub const APP_SQLITE_FILE: &str = "ganbaru-ai.sqlite";
 const PRODUCTION_DATA_FOLDER_NAME: &str = "Ganbaru AI";
 const DEVELOPMENT_DATA_FOLDER_NAME: &str = "Ganbaru AI Dev";
 const APP_STATE_FILE: &str = "app-state.json";
@@ -228,7 +228,7 @@ fn ensure_vault_skeleton(path: &Path) -> Result<(), String> {
             .create(true)
             .append(true)
             .open(database_path(path))
-            .map_err(|e| format!("create app.sqlite: {e}"))?;
+            .map_err(|e| format!("create ganbaru-ai.sqlite: {e}"))?;
     }
     Ok(())
 }

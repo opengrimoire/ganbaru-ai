@@ -26,13 +26,13 @@ The rule is one-directional: structured data may be exported as markdown for col
 
 Everything portable that the app produces lives under one folder. First launch defaults to `Documents/Ganbaru AI` in production and `Documents/Ganbaru AI Dev` in development builds, with secondary actions to choose another folder or import an existing Ganbaru AI folder from another installation. Development setup warns the user to use the dev default or a copied production folder so test data does not mix with real production data. Tauri's platform app config directory stores only device-local bootstrap and runtime state, such as the active folder pointer, benchmark state, and transient doomscrolling snapshots.
 
-Folder setup errors are blocking and remain visible until the user starts another folder action, successfully selects a usable folder, or closes the app. The UI translates backend validation failures into user-facing guidance for non-empty unrelated folders, missing or damaged `vault.json`, unsupported folder schema versions, permission problems, missing folders, and database-open failures for `app.sqlite`.
+Folder setup errors are blocking and remain visible until the user starts another folder action, successfully selects a usable folder, or closes the app. The UI translates backend validation failures into user-facing guidance for non-empty unrelated folders, missing or damaged `vault.json`, unsupported folder schema versions, permission problems, missing folders, and database-open failures for `ganbaru-ai.sqlite`.
 
 ```
 Ganbaru AI/
   vault.json                         # internal Ganbaru AI folder marker, id, display name, schema version
   config.json                        # user settings, environment definitions, blocker rulesets
-  app.sqlite                         # SQLite source of truth for structured data and indexes
+  ganbaru-ai.sqlite                  # SQLite source of truth for structured data and indexes
   notes/daily/                      # daily notes (markdown)
   notes/projects/                   # per-project notes and working documents (markdown)
   diary/morning/, diary/evening/    # dated diary entries (markdown plus indexed fields)
@@ -49,7 +49,7 @@ Backups go to a user-specified path **outside** the Ganbaru AI folder. Backing u
 
 ## Database files
 
-The user database is always `app.sqlite` at the active Ganbaru AI folder root. Development and production builds keep separate Tauri app config directories and separate `app-state.json` files, so each build can point at a different folder. The benchmark harness uses device-local `benchmark.sqlite` in `app_config_dir`; it is not portable user data.
+The user database is always `ganbaru-ai.sqlite` at the active Ganbaru AI folder root. Development and production builds keep separate Tauri app config directories and separate `app-state.json` files, so each build can point at a different folder. The benchmark harness uses device-local `benchmark.sqlite` in `app_config_dir`; it is not portable user data.
 
 Lazy initialization: the database connection is opened on first use after a Ganbaru AI folder has been selected, not at process startup. This keeps cold start time low and allows the folder to be on a slower-than-disk path, such as an encrypted volume, without delaying the setup UI.
 
@@ -73,6 +73,6 @@ When designing a new feature, ask:
 
 - Is this content the user would expect to exist as a file they can open without the app? If yes, it is a document.
 - Does it have relational structure (foreign keys, aggregations, cross-record queries)? If yes, it is structured data.
-- Could it be regenerated from another source? If yes, it is a cache (e.g. the `.yjs/` directory, the search index part of `app.sqlite`).
+- Could it be regenerated from another source? If yes, it is a cache (e.g. the `.yjs/` directory, the search index part of `ganbaru-ai.sqlite`).
 
 If the answer is unclear, the default is structured data in SQLite. Promoting a value to a markdown file later is easy. Demoting a markdown file with subtle structure to SQLite later is painful.
