@@ -19,6 +19,7 @@
   import { deleteActionForCalendarEvent } from "./occurrence-protection";
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import { cn } from "$lib/utils";
   import { formatShortcut, hasOnlyShortcutModifier, hasShortcutModifier } from "$lib/keyboard-shortcuts";
   import {
@@ -55,6 +56,9 @@
   const theme = getTheme();
   const preferences = getPreferences();
   const viewport = getViewport();
+  const localization = getLocalization();
+  const { t } = localization;
+  const locale = $derived(localization.locale);
 
   const DEFAULT_PANEL_HEIGHT = 540;
   const PANEL_MAX_WIDTH = Math.round(EVENT_PANEL_MAX_WIDTH * 1.08);
@@ -265,7 +269,11 @@
   let confirmDeleteBtn: HTMLButtonElement | undefined = $state();
   const deleteAction = $derived(event ? deleteActionForCalendarEvent(event) : "delete");
   const deleteActionLabel = $derived(
-    endEventAction ? "End event" : deleteAction === "archive" ? "Archive" : "Delete",
+    endEventAction
+      ? t("calendar.eventPanel.deleteEndEvent")
+      : deleteAction === "archive"
+        ? t("calendar.eventPanel.deleteArchive")
+        : t("calendar.eventPanel.deleteDelete"),
   );
 
   // ─── Date pickers ──────────────────────────────────────────────
@@ -1294,7 +1302,7 @@
     if (!startDate) return "";
     const [y, m, d] = startDate.split("-").map(Number);
     const dt = new Date(y, m - 1, d);
-    return dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    return dt.toLocaleDateString(locale, { weekday: "short", month: "short", day: "numeric" });
   });
 
   const isCrossMidnight = $derived(endDate !== "" && endDate !== startDate);
@@ -1303,7 +1311,7 @@
     if (!endDate) return "";
     const [y, m, d] = endDate.split("-").map(Number);
     const dt = new Date(y, m - 1, d);
-    return dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    return dt.toLocaleDateString(locale, { weekday: "short", month: "short", day: "numeric" });
   });
 
   // ─── Build data and handlers ────────────────────────────────────
@@ -1613,11 +1621,36 @@
 
   const METADATA_ICON_SIZE = 11;
   const METADATA_ICON_CLASS = "shrink-0 translate-y-[0.5px]";
-  const SCOPE_OPTIONS: ReadonlyArray<{ value: RecurringScope; label: string }> = [
-    { value: "this", label: "Only this" },
-    { value: "following", label: "Following" },
-    { value: "all", label: "All" },
-  ];
+  const SCOPE_OPTIONS: ReadonlyArray<{ value: RecurringScope; label: string }> = $derived([
+    { value: "this", label: t("calendar.eventPanel.onlyThis") },
+    { value: "following", label: t("calendar.eventPanel.following") },
+    { value: "all", label: t("calendar.eventPanel.all") },
+  ]);
+  function transparencyDisplayLabel(value: EventTransparency): string {
+    return value === "transparent"
+      ? t("calendar.eventPanel.free")
+      : t("calendar.eventPanel.busy");
+  }
+
+  function visibilityDisplayLabel(value: EventVisibility): string {
+    return value === "public"
+      ? t("calendar.eventPanel.visibilityPublic")
+      : t("calendar.eventPanel.visibilityPrivate");
+  }
+
+  const transparencyLabel = $derived(transparencyDisplayLabel(transparency));
+  const visibilityLabel = $derived(visibilityDisplayLabel(visibility));
+  const deleteActionVerb = $derived(
+    endEventAction
+      ? t("calendar.eventPanel.actionEndEvent")
+      : t("calendar.eventPanel.actionArchive"),
+  );
+  const armedDeleteLabel = $derived.by(() => {
+    const shortcut = formatShortcut("Mod + D");
+    if (endEventAction) return t("calendar.eventPanel.pressAgainToEndEvent", shortcut);
+    if (deleteAction === "archive") return t("calendar.eventPanel.pressAgainToArchive", shortcut);
+    return t("calendar.eventPanel.pressAgainToDelete", shortcut);
+  });
   let scopeFocusIndex = $state(0);
   let metadataFocusIndex = $state(0);
   const metadataItemCount = $derived(showHeavySections ? 3 : 2);
@@ -1791,7 +1824,7 @@
     {#if isRecurring}
       <div class="relative top-0.5 mb-2 grid grid-cols-3 overflow-hidden rounded-sm bg-event-panel-contrast p-0.5 text-[0.733333rem]"
         role="radiogroup"
-        aria-label="Apply changes to">
+        aria-label={t("calendar.eventPanel.applyChangesTo")}>
         {#each SCOPE_OPTIONS as option, index}
           <button
             role="radio"
@@ -1823,7 +1856,7 @@
           bind:this={titleInput}
           type="text"
           bind:value={title}
-          placeholder="Session title..."
+          placeholder={t("calendar.eventPanel.titlePlaceholder")}
           disabled={controlsDisabled}
           class="w-full bg-transparent py-0.5 text-[1rem] font-semibold text-foreground outline-none placeholder:text-event-panel-placeholder"
           oninput={emitChange}
@@ -2036,10 +2069,10 @@
       >
         {#if allDay}
           <Calendar1 size={METADATA_ICON_SIZE} class={METADATA_ICON_CLASS} />
-          <span class="translate-y-[1.13px] truncate">All day</span>
+          <span class="translate-y-[1.13px] truncate">{t("calendar.eventPanel.allDay")}</span>
         {:else}
           <Clock4 size={METADATA_ICON_SIZE} class={METADATA_ICON_CLASS} />
-          <span class="translate-y-[1.13px] truncate">Timed</span>
+          <span class="translate-y-[1.13px] truncate">{t("calendar.eventPanel.timed")}</span>
         {/if}
       </button>
 
@@ -2054,14 +2087,14 @@
         tabindex={0}
         disabled={controlsDisabled}
         class={metadataButtonClass()}
-        title="Busy tells others you are unavailable for meetings."
+        title={t("calendar.eventPanel.busyTitle")}
       >
         {#if transparency === "transparent"}
           <Smile size={METADATA_ICON_SIZE} class={METADATA_ICON_CLASS} />
         {:else}
           <Ban size={METADATA_ICON_SIZE} class={METADATA_ICON_CLASS} />
         {/if}
-        <span class="translate-y-[1.13px] truncate">{transparency === "transparent" ? "Free" : "Busy"}</span>
+        <span class="translate-y-[1.13px] truncate">{transparencyLabel}</span>
       </button>
 
       {#if showHeavySections}
@@ -2075,14 +2108,14 @@
           tabindex={0}
           disabled={controlsDisabled}
           class={metadataButtonClass("capitalize")}
-          title="Private hides event details from other calendar viewers."
+          title={t("calendar.eventPanel.privateTitle")}
         >
           {#if visibility === "public"}
             <Eye size={METADATA_ICON_SIZE} class={METADATA_ICON_CLASS} />
           {:else}
             <Lock size={METADATA_ICON_SIZE} class={METADATA_ICON_CLASS} />
           {/if}
-          <span class="translate-y-[1.13px] truncate">{visibility}</span>
+          <span class="translate-y-[1.13px] truncate">{visibilityLabel}</span>
         </button>
       {/if}
     </div>
@@ -2160,11 +2193,11 @@
             <button onclick={() => handleExpand("music")}
               disabled={controlsDisabled}
               class="flex flex-1 items-center px-3 py-2 text-left">
-              <span class="translate-y-[1.13px] text-[0.8rem] text-muted-foreground">Music</span>
+              <span class="translate-y-[1.13px] text-[0.8rem] text-muted-foreground">{t("calendar.eventPanel.music")}</span>
             </button>
           </div>
           {#if openSection === "music"}
-            <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="music" class="px-3.5 py-3 text-center text-[0.866667rem] text-muted-foreground/60" style="background-color: var(--panel-bg);">Coming soon</div>
+            <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="music" class="px-3.5 py-3 text-center text-[0.866667rem] text-muted-foreground/60" style="background-color: var(--panel-bg);">{t("calendar.eventPanel.comingSoon")}</div>
           {/if}
         </div>
       {/if}
@@ -2189,7 +2222,7 @@
       && !(allowDeleteWhenReadOnly && mode === "edit" && (onDelete || onEndEvent) && event)}
       <div class="flex w-full items-center justify-center rounded-none py-1.5 text-[0.8rem] text-muted-foreground/60"
         style="background-color: var(--panel-contrast);">
-        Read only
+        {t("calendar.eventPanel.readOnly")}
       </div>
     {:else}
       <div class="panel-footer-actions flex">
@@ -2206,7 +2239,7 @@
             {:else}
               <Trash2 size={14} strokeWidth={1.8} />
             {/if}
-            <span>Press again to {endEventAction ? "end event" : deleteAction} ({formatShortcut("Mod + D")})</span>
+            <span>{armedDeleteLabel}</span>
           </button>
         {:else}
           {#if mode === "edit" && (onDelete || onEndEvent) && event}
@@ -2215,7 +2248,7 @@
               class={cn(
                 "readonly-interactive event-panel-delete-icon-button flex w-10 shrink-0 items-center justify-center text-foreground",
               )}
-              title={`${deleteActionLabel} (${formatShortcut("Mod + D")})`}>
+              title={t("calendar.eventPanel.deleteShortcut", deleteActionLabel, formatShortcut("Mod + D"))}>
               {#if endEventAction}
                 <Scissors size={14} strokeWidth={1.8} />
               {:else if deleteAction === "archive"}
@@ -2228,7 +2261,7 @@
           {#if readOnly && !allowPomodoroWhenReadOnly}
             <div class="flex flex-1 cursor-not-allowed items-center justify-center gap-2 py-1.5 text-[0.866667rem] text-muted-foreground"
               style="background-color: var(--panel-contrast);">
-              <span>Read-only ({formatShortcut("Mod + D")} to {endEventAction ? "end event" : "archive"})</span>
+              <span>{t("calendar.eventPanel.readOnlyShortcut", formatShortcut("Mod + D"), deleteActionVerb)}</span>
             </div>
           {:else}
           <button onclick={handleSave}
@@ -2239,7 +2272,7 @@
                 ? 'bg-action-confirm text-action-confirm-foreground hover:opacity-90'
                 : 'text-muted-foreground cursor-not-allowed'}"
             style="background-color: {saveReady ? '' : 'var(--panel-contrast)'};">
-            <span>Save ({formatShortcut("Mod + Enter")})</span>
+            <span>{t("calendar.eventPanel.saveShortcut", formatShortcut("Mod + Enter"))}</span>
           </button>
           {/if}
         {/if}

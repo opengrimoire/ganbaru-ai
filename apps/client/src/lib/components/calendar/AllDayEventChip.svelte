@@ -13,6 +13,9 @@
   import Video from "@lucide/svelte/icons/video";
   import MapPin from "@lucide/svelte/icons/map-pin";
   import Users from "@lucide/svelte/icons/users";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
+
+  const { t } = getLocalization();
 
   let {
     event,
@@ -43,6 +46,7 @@
   const indicators = $derived(getEventIndicatorState(event));
   const hasIcons = $derived(indicators.iconCount > 0);
   const isCancelled = $derived(isEventSurfaceCancelled(event));
+  const eventTitle = $derived(event.title || t("calendar.event.noTitle"));
 
   const usePastColors = $derived(
     preferences.calendarDimPastEvents && isPast && !editing && !preview && !grabbing,
@@ -113,7 +117,7 @@
     class:pr-8={indicators.iconCount > 2}
     style={isCancelled ? 'text-decoration: line-through;' : ''}
   >
-    {#if event.title}{event.title}{:else}(No title){/if}
+    {eventTitle}
   </span>
 </div>
 

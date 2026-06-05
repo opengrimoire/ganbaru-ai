@@ -24,6 +24,7 @@
   import type { PanelAnchor } from "./edit-session.svelte";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import { onMount } from "svelte";
   import Repeat from "@lucide/svelte/icons/repeat";
   import Video from "@lucide/svelte/icons/video";
@@ -154,6 +155,9 @@
 
   const calZoom = getCalendarZoom();
   const timelineWheelScroll = createTimelineWheelScroll(() => scrollContainer);
+  const localization = getLocalization();
+  const { t } = localization;
+  const locale = $derived(localization.locale);
 
   function renderedHourHeight(): number {
     const raw = scrollContainer?.style.getPropertyValue("--hour-h") ?? "";
@@ -498,7 +502,7 @@
               tabindex="-1"
             >
               <span class="text-[0.866667rem]" style="color: {past ? 'var(--muted-foreground)' : 'var(--foreground)'};">
-                {#if dayFormat !== "none"}{formatDayName(day, dayFormat)}&nbsp;{/if}{day.getDate()}
+                {#if dayFormat !== "none"}{formatDayName(day, dayFormat, locale)}&nbsp;{/if}{day.getDate()}
               </span>
             </div>
             <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -670,7 +674,7 @@
               class:pr-5={dpIndicators.iconCount > 0 && dpIndicators.iconCount <= 2}
               class:pr-8={dpIndicators.iconCount > 2}
             >
-              {#if dp.event.title}{dp.event.title}{:else}(No title){/if}
+              {#if dp.event.title}{dp.event.title}{:else}{t("calendar.event.noTitle")}{/if}
             </span>
           </div>
           </div>

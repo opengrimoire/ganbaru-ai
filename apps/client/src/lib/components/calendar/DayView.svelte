@@ -21,6 +21,7 @@
   import type { PanelAnchor } from "./edit-session.svelte";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import { onMount } from "svelte";
   import type { Theme } from "$lib/stores/themes";
 
@@ -81,6 +82,8 @@
   let visibleEndMinute = $state(1440);
   const calZoom = getCalendarZoom();
   const timelineWheelScroll = createTimelineWheelScroll(() => scrollContainer);
+  const localization = getLocalization();
+  const locale = $derived(localization.locale);
 
   function renderedHourHeight(): number {
     const raw = scrollContainer?.style.getPropertyValue("--hour-h") ?? "";
@@ -179,8 +182,10 @@
 
 
   const dayLabel = $derived.by(() => {
-    const name = formatDayName(anchorDate, dayFormat);
-    const monthStr = anchorDate.toLocaleDateString("en-US", { month: dayFormat === "long" ? "long" : "short" });
+    const name = formatDayName(anchorDate, dayFormat, locale);
+    const monthStr = anchorDate.toLocaleDateString(locale, {
+      month: dayFormat === "long" ? "long" : "short",
+    });
     return name ? `${name}, ${monthStr} ${anchorDate.getDate()}` : `${monthStr} ${anchorDate.getDate()}`;
   });
 

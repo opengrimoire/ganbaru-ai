@@ -373,8 +373,11 @@ export function formatTimeRange(
   return `${startLabel.slice(0, -startPeriod.length)} - ${endLabel}`;
 }
 
-export function formatMonthYear(date: Date): string {
-  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+export function formatMonthYear(
+  date: Date,
+  locale?: string | readonly string[],
+): string {
+  return date.toLocaleDateString(locale, { month: "long", year: "numeric" });
 }
 
 export type DayNameFormat = "long" | "short" | "narrow" | "none";
@@ -382,9 +385,10 @@ export type DayNameFormat = "long" | "short" | "narrow" | "none";
 export function formatDayName(
   date: Date,
   format: DayNameFormat,
+  locale?: string | readonly string[],
 ): string {
   if (format === "none") return "";
-  return date.toLocaleDateString("en-US", { weekday: format });
+  return date.toLocaleDateString(locale, { weekday: format });
 }
 
 // Timezone helpers

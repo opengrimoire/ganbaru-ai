@@ -4,6 +4,7 @@ import type {
   RecurrenceFrequency,
   Weekday,
 } from "./types";
+import type { Translate } from "$lib/i18n/translator.svelte";
 
 const ALL_WEEKDAYS: Weekday[] = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
 
@@ -37,6 +38,21 @@ const FREQ_UNIT_PLURAL: Record<RecurrenceFrequency, string> = {
   monthly: "months",
   yearly: "years",
 };
+
+const WEEKDAY_LABEL_DATES: Record<Weekday, Date> = {
+  MO: new Date(2024, 0, 1),
+  TU: new Date(2024, 0, 2),
+  WE: new Date(2024, 0, 3),
+  TH: new Date(2024, 0, 4),
+  FR: new Date(2024, 0, 5),
+  SA: new Date(2024, 0, 6),
+  SU: new Date(2024, 0, 7),
+};
+
+interface RecurrenceLabelOptions {
+  readonly t?: Translate;
+  readonly locale?: string | readonly string[];
+}
 
 const BYDAY_RE = /^(-?\d+)?([A-Z]{2})$/;
 const WEEKDAY_ORDER = new Map<Weekday, number>(
@@ -305,11 +321,14 @@ export function rruleToRecurrence(
   return config;
 }
 
-function formatMonthDay(dateStr: string): string {
+function formatMonthDay(
+  dateStr: string,
+  locale: string | readonly string[] = "en-US",
+): string {
   const datePart = dateStr.split("T")[0];
   const [y, m, d] = datePart.split("-").map(Number);
   const date = new Date(y, m - 1, d);
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return date.toLocaleDateString(locale, { month: "short", day: "numeric" });
 }
 
 const ORDINAL_SUFFIXES = ["th", "st", "nd", "rd"];
@@ -324,66 +343,176 @@ function ordinalSuffix(n: number): string {
   return `${abs}${ORDINAL_SUFFIXES[mod10] ?? "th"}`;
 }
 
-export function formatRecurrenceLabel(config: RecurrenceConfig): string {
+function frequencyLabel(
+  frequency: RecurrenceFrequency,
+  t: Translate | undefined,
+): string {
+  if (!t) {
+    switch (frequency) {
+      case "daily":
+        return "Daily";
+      case "weekly":
+        return "Weekly";
+      case "monthly":
+        return "Monthly";
+      case "yearly":
+        return "Yearly";
+    }
+  }
+
+  switch (frequency) {
+    case "daily":
+      return t("calendar.recurrence.daily");
+    case "weekly":
+      return t("calendar.recurrence.weekly");
+    case "monthly":
+      return t("calendar.recurrence.monthly");
+    case "yearly":
+      return t("calendar.recurrence.yearly");
+  }
+}
+
+function everyLabel(
+  frequency: RecurrenceFrequency,
+  interval: number,
+  t: Translate | undefined,
+): string {
+  if (!t) return `Every ${interval} ${FREQ_UNIT_PLURAL[frequency]}`;
+  switch (frequency) {
+    case "daily":
+      return t("calendar.recurrence.everyDays", interval);
+    case "weekly":
+      return t("calendar.recurrence.everyWeeks", interval);
+    case "monthly":
+      return t("calendar.recurrence.everyMonths", interval);
+    case "yearly":
+      return t("calendar.recurrence.everyYears", interval);
+  }
+}
+
+function recurrenceOrdinal(value: number, t: Translate | undefined): string {
+  return t ? t("calendar.recurrence.ordinal", value) : ordinalSuffix(value);
+}
+
+function lastLabel(t: Translate | undefined): string {
+  return t ? t("calendar.recurrence.last") : "last";
+}
+
+function lastOccurrenceLabel(t: Translate | undefined): string {
+  return t ? t("calendar.recurrence.lastOccurrence") : "last";
+}
+
+function weekdayLabel(
+  weekday: Weekday,
+  locale: string | readonly string[],
+  localized: boolean,
+): string {
+  if (!localized) return WEEKDAY_LABELS[weekday];
+  return new Intl.DateTimeFormat(locale, { weekday: "short" }).format(
+    WEEKDAY_LABEL_DATES[weekday],
+  );
+}
+
+function joinRecurrenceList(
+  values: string[],
+  locale: string | readonly string[],
+  localized: boolean,
+): string {
+  if (!localized) return values.join(", ");
+  return new Intl.ListFormat(locale, {
+    style: "long",
+    type: "conjunction",
+  }).format(values);
+}
+
+function appendRecurrencePart(label: string, part: string): string {
+  return part.startsWith("(") ? `${label} ${part}` : `${label}, ${part}`;
+}
+
+export function formatRecurrenceLabel(
+  config: RecurrenceConfig,
+  options: RecurrenceLabelOptions = {},
+): string {
+  const { t } = options;
+  const locale = options.locale ?? "en-US";
+  const localized = t !== undefined || options.locale !== undefined;
   let label: string;
 
   if (config.interval === 1) {
-    switch (config.frequency) {
-      case "daily":
-        label = "Daily";
-        break;
-      case "weekly":
-        label = "Weekly";
-        break;
-      case "monthly":
-        label = "Monthly";
-        break;
-      case "yearly":
-        label = "Yearly";
-        break;
-    }
+    label = frequencyLabel(config.frequency, t);
   } else {
-    label = `Every ${config.interval} ${FREQ_UNIT_PLURAL[config.frequency]}`;
+    label = everyLabel(config.frequency, config.interval, t);
   }
 
   // Ordinal weekdays: "on the 2nd Tuesday"
   if (config.ordinalWeekdays && config.ordinalWeekdays.length > 0) {
     const parts = config.ordinalWeekdays.map((ow) => {
-      const dayName = WEEKDAY_LABELS[ow.day];
+      const dayName = weekdayLabel(ow.day, locale, localized);
       if (ow.ordinal != null) {
-        if (ow.ordinal === -1) return `last ${dayName}`;
-        return `${ordinalSuffix(ow.ordinal)} ${dayName}`;
+        if (ow.ordinal === -1) {
+          const last = lastLabel(t);
+          return t
+            ? t("calendar.recurrence.ordinalWeekday", last, dayName)
+            : `${last} ${dayName}`;
+        }
+        const ordinal = recurrenceOrdinal(ow.ordinal, t);
+        return t
+          ? t("calendar.recurrence.ordinalWeekday", ordinal, dayName)
+          : `${ordinal} ${dayName}`;
       }
       return dayName;
     });
-    label += ` on the ${parts.join(", ")}`;
+    const weekdays = joinRecurrenceList(parts, locale, localized);
+    const part = t
+      ? t("calendar.recurrence.onTheWeekdays", weekdays)
+      : `on the ${weekdays}`;
+    label = appendRecurrencePart(label, part);
   }
   // Simple weekdays: shown for weekly frequency, or any frequency with BYSETPOS
   else if (config.weekdays && config.weekdays.length > 0 &&
     (config.frequency === "weekly" || (config.bySetPos && config.bySetPos.length > 0))) {
-    const dayLabels = config.weekdays.map((d) => WEEKDAY_LABELS[d]);
-    label += ` on ${dayLabels.join(", ")}`;
+    const dayLabels = config.weekdays.map((d) =>
+      weekdayLabel(d, locale, localized),
+    );
+    const weekdays = joinRecurrenceList(dayLabels, locale, localized);
+    const part = t
+      ? t("calendar.recurrence.onWeekdays", weekdays)
+      : `on ${weekdays}`;
+    label = appendRecurrencePart(label, part);
   }
 
   // BYMONTHDAY
   if (config.byMonthDay && config.byMonthDay.length > 0) {
-    const dayLabels = config.byMonthDay.map((d) => ordinalSuffix(d));
-    label += ` on the ${dayLabels.join(", ")}`;
+    const dayLabels = config.byMonthDay.map((d) => recurrenceOrdinal(d, t));
+    const days = joinRecurrenceList(dayLabels, locale, localized);
+    const part = t
+      ? t("calendar.recurrence.onMonthDays", days)
+      : `on the ${days}`;
+    label = appendRecurrencePart(label, part);
   }
 
   // BYSETPOS
   if (config.bySetPos && config.bySetPos.length > 0) {
     const posLabels = config.bySetPos.map((p) =>
-      p === -1 ? "last" : ordinalSuffix(p),
+      p === -1 ? lastOccurrenceLabel(t) : recurrenceOrdinal(p, t),
     );
-    label += ` (${posLabels.join(", ")} occurrence)`;
+    const positions = joinRecurrenceList(posLabels, locale, localized);
+    const part = t
+      ? t("calendar.recurrence.occurrence", positions)
+      : `(${positions} occurrence)`;
+    label = appendRecurrencePart(label, part);
   }
 
   // End condition
   if (config.end.type === "until") {
-    label += `, ends ${formatMonthDay(config.end.date)}`;
+    const date = formatMonthDay(config.end.date, locale);
+    const part = t ? t("calendar.recurrence.ends", date) : `ends ${date}`;
+    label = appendRecurrencePart(label, part);
   } else if (config.end.type === "count") {
-    label += `, ${config.end.count} times`;
+    const part = t
+      ? t("calendar.recurrence.times", config.end.count)
+      : `${config.end.count} times`;
+    label = appendRecurrencePart(label, part);
   }
 
   return label;

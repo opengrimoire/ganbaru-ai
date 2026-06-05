@@ -5,10 +5,19 @@
   import {
     type DatePickerDay,
     buildCalendarGrid,
-    SHORT_MONTHS,
-    DAY_LETTERS,
   } from "./date-picker-utils";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import { workCycleRangeForDate } from "./utils";
+
+  const WEEKDAY_HEADER_DATES = [
+    new Date(2024, 0, 1),
+    new Date(2024, 0, 2),
+    new Date(2024, 0, 3),
+    new Date(2024, 0, 4),
+    new Date(2024, 0, 5),
+    new Date(2024, 0, 6),
+    new Date(2024, 0, 7),
+  ];
 
   let {
     selectedDate,
@@ -29,6 +38,10 @@
     onselect: (dateStr: string, source?: "keyboard" | "pointer") => void;
     oncancel?: (source?: "keyboard" | "pointer") => void;
   } = $props();
+
+  const localization = getLocalization();
+  const { t } = localization;
+  const locale = $derived(localization.locale);
 
   type PickerMode = "days" | "months" | "years";
 
@@ -71,7 +84,22 @@
   let headerButtonEl: HTMLButtonElement | undefined = $state();
 
   const monthLabel = $derived(
-    new Date(year, month - 1).toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+    new Date(year, month - 1).toLocaleDateString(locale, {
+      month: "long",
+      year: "numeric",
+    }),
+  );
+  const shortMonths = $derived(
+    Array.from({ length: 12 }, (_, index) =>
+      new Intl.DateTimeFormat(locale, { month: "short" }).format(
+        new Date(2024, index, 1),
+      ),
+    ),
+  );
+  const dayLetters = $derived(
+    WEEKDAY_HEADER_DATES.map((date) =>
+      new Intl.DateTimeFormat(locale, { weekday: "narrow" }).format(date),
+    ),
   );
   const yearPageYears = $derived(Array.from({ length: 12 }, (_, i) => yearPageStart + i));
   const days = $derived.by(() => buildCalendarGrid(year, month, activeDateStr));
@@ -385,6 +413,7 @@
     <button
       onclick={prevMonth}
       onkeydown={handlePickerKeydown}
+      aria-label={t("calendar.toolbar.previous")}
       class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
     >
       <ChevronLeft size={14} />
@@ -393,6 +422,7 @@
     <button
       onclick={() => { yearPageStart -= 12; }}
       onkeydown={handlePickerKeydown}
+      aria-label={t("calendar.toolbar.previous")}
       class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
     >
       <ChevronLeft size={14} />
@@ -401,6 +431,7 @@
     <button
       onclick={prevYear}
       onkeydown={handlePickerKeydown}
+      aria-label={t("calendar.toolbar.previous")}
       class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
     >
       <ChevronLeft size={14} />
@@ -425,6 +456,7 @@
     <button
       onclick={nextMonth}
       onkeydown={handlePickerKeydown}
+      aria-label={t("calendar.toolbar.next")}
       class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
     >
       <ChevronRight size={14} />
@@ -433,6 +465,7 @@
     <button
       onclick={() => { yearPageStart += 12; }}
       onkeydown={handlePickerKeydown}
+      aria-label={t("calendar.toolbar.next")}
       class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
     >
       <ChevronRight size={14} />
@@ -441,6 +474,7 @@
     <button
       onclick={nextYear}
       onkeydown={handlePickerKeydown}
+      aria-label={t("calendar.toolbar.next")}
       class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
     >
       <ChevronRight size={14} />
@@ -452,7 +486,7 @@
 <div data-picker-grid onwheel={handleWheel}>
   {#if pickerMode === "days"}
     <div class="grid grid-cols-7 gap-x-0 text-center">
-      {#each DAY_LETTERS as letter}
+      {#each dayLetters as letter}
         <span class="py-0.5 text-[0.6rem] text-muted-foreground">{letter}</span>
       {/each}
     </div>
@@ -485,7 +519,7 @@
     </div>
   {:else if pickerMode === "months"}
     <div class="grid grid-cols-3 gap-1 py-1">
-      {#each SHORT_MONTHS as name, i}
+      {#each shortMonths as name, i}
         <button
           data-month={i}
           tabindex={i + 1 === month ? 0 : -1}

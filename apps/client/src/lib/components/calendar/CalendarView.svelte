@@ -17,6 +17,7 @@
   import { getTheme } from "$lib/stores/theme.svelte";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { getPreferences } from "$lib/stores/preferences.svelte";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import { onDestroy, onMount, tick } from "svelte";
   import CalendarHeader from "./CalendarHeader.svelte";
   import WeekView from "./WeekView.svelte";
@@ -79,6 +80,7 @@
   const calZoom = getCalendarZoom();
   const theme = getTheme();
   const preferences = getPreferences();
+  const { t } = getLocalization();
 
   type EventPanelComponent = typeof import("./EventPanel.svelte").default;
   type ParkedPanelSnapshot =
@@ -976,7 +978,7 @@
   function showSavePendingToast(): string {
     clearSaveSuccessTimer();
     const id = crypto.randomUUID();
-    saveSuccessToast = { id, pending: true, message: "Saving...", variant: "success" };
+    saveSuccessToast = { id, pending: true, message: t("calendar.view.saving"), variant: "success" };
     return id;
   }
 
@@ -987,7 +989,7 @@
   function showSaveSuccessToast(id: string): void {
     clearSaveSuccessTimer();
     if (saveSuccessToast?.id !== id) return;
-    saveSuccessToast = { id, pending: false, message: "Saved", variant: "success" };
+    saveSuccessToast = { id, pending: false, message: t("calendar.view.saved"), variant: "success" };
     saveSuccessTimer = setTimeout(() => {
       if (saveSuccessToast?.id === id) saveSuccessToast = null;
       saveSuccessTimer = undefined;
@@ -997,7 +999,7 @@
   function saveErrorMessage(error: unknown): string {
     if (error instanceof Error && error.message.trim()) return error.message;
     if (typeof error === "string" && error.trim()) return error;
-    return "Unknown save error";
+    return t("calendar.view.unknownSaveError");
   }
 
   function showSaveErrorToast(id: string, error: unknown): void {
@@ -1006,7 +1008,7 @@
     saveSuccessToast = {
       id,
       pending: false,
-      message: `Save failed: ${saveErrorMessage(error)}`,
+      message: t("calendar.view.saveFailed", saveErrorMessage(error)),
       variant: "error",
     };
     saveSuccessTimer = setTimeout(() => {
@@ -1108,8 +1110,8 @@
   let confirmAction: (() => Promise<void>) | null = $state(null);
   let confirmTitle: string | undefined = $state(undefined);
   let confirmMessage = $state("");
-  let confirmYesLabel = $state("Yes (Enter)");
-  let confirmNoLabel = $state("No (Esc)");
+  let confirmYesLabel = $state(t("common.yesShortcut"));
+  let confirmNoLabel = $state(t("common.noShortcut"));
   let confirmExtraShortcut: ((e: KeyboardEvent) => boolean) | undefined = $state(undefined);
   function requestConfirm(
     message: string,
@@ -1124,8 +1126,8 @@
     confirmTitle = opts?.title;
     confirmMessage = message;
     confirmAction = action;
-    confirmYesLabel = opts?.yesLabel ?? "Yes (Enter)";
-    confirmNoLabel = opts?.noLabel ?? "No (Esc)";
+    confirmYesLabel = opts?.yesLabel ?? t("common.yesShortcut");
+    confirmNoLabel = opts?.noLabel ?? t("common.noShortcut");
     confirmExtraShortcut = opts?.extraConfirmShortcut;
   }
 
@@ -1518,9 +1520,13 @@
 
     if (session.dirty) {
       requestConfirm(
-        "Your changes will be lost",
+        t("calendar.view.changesLost"),
         openCreate,
-        { title: "Discard unsaved changes?", yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
+        {
+          title: t("calendar.view.discardUnsavedTitle"),
+          yesLabel: t("calendar.view.discard"),
+          noLabel: t("common.cancelShortcut"),
+        },
       );
       return;
     }
@@ -1628,9 +1634,13 @@
 
     if (session.dirty) {
       requestConfirm(
-        "Your changes will be lost",
+        t("calendar.view.changesLost"),
         async () => { await openEvent(); },
-        { title: "Discard unsaved changes?", yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
+        {
+          title: t("calendar.view.discardUnsavedTitle"),
+          yesLabel: t("calendar.view.discard"),
+          noLabel: t("common.cancelShortcut"),
+        },
       );
       return;
     }
@@ -1707,13 +1717,17 @@
 
       if (session.dirty) {
         requestConfirm(
-          "Your changes will be lost",
+          t("calendar.view.changesLost"),
           async () => {
             await loadEventPanel();
             session.openEdit(originalInstance, anchor, originalInstance);
             session.updateChanges({ start: event.start, end: event.end });
           },
-          { title: "Discard unsaved changes?", yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
+          {
+            title: t("calendar.view.discardUnsavedTitle"),
+            yesLabel: t("calendar.view.discard"),
+            noLabel: t("common.cancelShortcut"),
+          },
         );
         return;
       }
@@ -1733,7 +1747,7 @@
       if (session.dirty) {
         const anchor = panelAnchorFromRenderedEvent(event.id);
         requestConfirm(
-          "Your changes will be lost",
+          t("calendar.view.changesLost"),
           async () => {
             // Open with the pre-drag instance as originalEvent so the
             // session baseline starts from pre-drag values before the drag
@@ -1742,7 +1756,11 @@
             session.openEdit(originalInstance, anchor, originalInstance);
             session.updateChanges({ start: event.start, end: event.end });
           },
-          { title: "Discard unsaved changes?", yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
+          {
+            title: t("calendar.view.discardUnsavedTitle"),
+            yesLabel: t("calendar.view.discard"),
+            noLabel: t("common.cancelShortcut"),
+          },
         );
         return;
       }
@@ -1783,9 +1801,13 @@
     pendingEditEventId = undefined;
     if (session.dirty) {
       requestConfirm(
-        "Your changes will be lost",
+        t("calendar.view.changesLost"),
         async () => { closeSession(); },
-        { title: "Discard unsaved changes?", yesLabel: "Discard (Enter)", noLabel: "Cancel (Esc)" },
+        {
+          title: t("calendar.view.discardUnsavedTitle"),
+          yesLabel: t("calendar.view.discard"),
+          noLabel: t("common.cancelShortcut"),
+        },
       );
       return;
     }
@@ -1969,12 +1991,16 @@
     // stopSession() is deferred until after the save so hybrid logic still sees activeBlockId.
     if (!sessionStopPending && wouldSaveStopSession(data, scope)) {
       requestConfirm(
-        "The current focus session will stop",
+        t("calendar.view.stopCurrentFocusSession"),
         async () => {
           sessionStopPending = true;
           await handlePanelSave(data, scope);
         },
-        { title: "Save and stop the focus session?", yesLabel: "Stop and save (Enter)", noLabel: "Keep editing (Esc)" },
+        {
+          title: t("calendar.view.saveAndStopTitle"),
+          yesLabel: t("calendar.view.stopAndSave"),
+          noLabel: t("calendar.view.keepEditing"),
+        },
       );
       return;
     }
@@ -2076,14 +2102,14 @@
 
     if (selectedActiveEndWouldStopProductivity(s)) {
       requestConfirm(
-        "The current focus session will stop",
+        t("calendar.view.stopCurrentFocusSession"),
         async () => {
           await executeEndEvent(data, scope);
         },
         {
-          title: "Stop the focus session?",
-          yesLabel: "End event (Enter)",
-          noLabel: "Keep session (Esc)",
+          title: t("calendar.view.stopFocusSessionTitle"),
+          yesLabel: t("calendar.view.endEventConfirm"),
+          noLabel: t("calendar.view.keepSession"),
           extraConfirmShortcut: (e) =>
             (e.key === "d" || e.key === "D") && hasOnlyShortcutModifier(e),
         },
@@ -2095,15 +2121,15 @@
   }
 
   function eventDeleteOutcomeLabel(outcome: CalendarDeleteArchiveOutcome): string {
-    if (outcome === "archive") return "Event archived";
-    if (outcome === "mixed") return "Events deleted and archived";
-    return "Event deleted";
+    if (outcome === "archive") return t("calendar.view.eventArchived");
+    if (outcome === "mixed") return t("calendar.view.eventsDeletedAndArchived");
+    return t("calendar.view.eventDeleted");
   }
 
   function eventDeletePendingLabel(outcome: CalendarDeleteArchiveOutcome): string {
-    if (outcome === "archive") return "Archiving...";
-    if (outcome === "mixed") return "Deleting and archiving...";
-    return "Deleting...";
+    if (outcome === "archive") return t("calendar.view.archiving");
+    if (outcome === "mixed") return t("calendar.view.deletingAndArchiving");
+    return t("calendar.view.deleting");
   }
 
   async function syncSavedActivePomodoro(event: CalendarEvent): Promise<void> {
@@ -2157,16 +2183,21 @@
   async function handleDelete(id: string, scope?: RecurringScope) {
     const plan = buildDeleteArchivePlanForEvent(id, scope);
     if (plan.requiresActiveStop) {
-      const actionVerb = plan.outcome === "archive" ? "archive" : "delete";
       requestConfirm(
-        `The current focus session will stop before this event is ${actionVerb === "archive" ? "archived" : "deleted"}`,
+        plan.outcome === "archive"
+          ? t("calendar.view.stopBeforeArchived")
+          : t("calendar.view.stopBeforeDeleted"),
         async () => {
           await executeDeleteArchivePlan(plan, true);
         },
         {
-          title: `Stop and ${actionVerb} event?`,
-          yesLabel: `Stop and ${actionVerb} (Enter)`,
-          noLabel: "Keep session (Esc)",
+          title: plan.outcome === "archive"
+            ? t("calendar.view.stopAndArchiveEventTitle")
+            : t("calendar.view.stopAndDeleteEventTitle"),
+          yesLabel: plan.outcome === "archive"
+            ? t("calendar.view.stopAndArchive")
+            : t("calendar.view.stopAndDelete"),
+          noLabel: t("calendar.view.keepSession"),
           extraConfirmShortcut: (e) =>
             (e.key === "d" || e.key === "D") && hasOnlyShortcutModifier(e),
         },
@@ -2332,10 +2363,10 @@
   {#if deleteUndoToast}
     <ActionToast
       message={deleteUndoToast.label}
-      actionLabel={!deleteUndoToast.pending && deleteUndoToast.restore ? "Undo" : undefined}
-      reserveActionLabel="Undo"
+      actionLabel={!deleteUndoToast.pending && deleteUndoToast.restore ? t("calendar.view.undo") : undefined}
+      reserveActionLabel={t("calendar.view.undo")}
       controlsVisible={!deleteUndoToast.pending}
-      dismissLabel="Dismiss event notification"
+      dismissLabel={t("calendar.view.dismissEventNotification")}
       onAction={undoDeletedEvent}
       onDismiss={dismissDeleteUndoToast}
     />
@@ -2347,7 +2378,7 @@
       variant={saveSuccessToast.variant}
       stacked={!!deleteUndoToast}
       controlsVisible={!saveSuccessToast.pending}
-      dismissLabel="Dismiss save notification"
+      dismissLabel={t("calendar.view.dismissSaveNotification")}
       onDismiss={dismissSaveSuccessToast}
     />
   {/if}

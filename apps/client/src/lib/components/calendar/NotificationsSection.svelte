@@ -6,21 +6,23 @@
   import Bell from "@lucide/svelte/icons/bell";
   import X from "@lucide/svelte/icons/x";
   import Plus from "@lucide/svelte/icons/plus";
+  import { formatList } from "$lib/i18n/formatters";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
 
-  const NOTIF_PRESETS: { value: number; label: string }[] = [
-    { value: 0, label: "At start" },
-    { value: 5, label: "5 minutes before" },
-    { value: 10, label: "10 minutes before" },
-    { value: 30, label: "30 minutes before" },
-    { value: 60, label: "1 hour before" },
-    { value: 1440, label: "1 day before" },
+  const NOTIF_PRESET_VALUES = [
+    0,
+    5,
+    10,
+    30,
+    60,
+    1440,
   ];
 
-  const CUSTOM_UNITS: { value: number; label: string }[] = [
-    { value: 1, label: "minutes" },
-    { value: 60, label: "hours" },
-    { value: 1440, label: "days" },
-    { value: 10080, label: "weeks" },
+  const CUSTOM_UNIT_VALUES = [
+    1,
+    60,
+    1440,
+    10080,
   ];
 
   let {
@@ -40,6 +42,19 @@
     onexpand: () => void;
     onchange: () => void;
   } = $props();
+
+  const localization = getLocalization();
+  const { t } = localization;
+  const locale = $derived(localization.locale);
+  const NOTIF_PRESETS = $derived.by(() =>
+    NOTIF_PRESET_VALUES.map((value) => ({
+      value,
+      label: formatMinutes(value),
+    })),
+  );
+  const CUSTOM_UNITS = $derived.by(() =>
+    CUSTOM_UNIT_VALUES.map((value) => ({ value, label: unitLabel(value) })),
+  );
 
   let dropdownIdx = $state<number | null>(null);
   let dropdownBtns: (HTMLButtonElement | undefined)[] = $state([]);
@@ -234,30 +249,40 @@
   }
 
   function formatMinutes(minutes: number): string {
-    if (minutes === 0) return "At start";
-    if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} before`;
+    if (minutes === 0) return t("calendar.notifications.atStart");
+    if (minutes < 60) return t("calendar.notifications.minutesBefore", minutes);
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
     if (minutes < 1440) {
-      if (mins === 0) return `${hours} hour${hours === 1 ? "" : "s"} before`;
-      return `${hours}h ${mins}m before`;
+      if (mins === 0) return t("calendar.notifications.hoursBefore", hours);
+      return t("calendar.notifications.compactHoursMinutesBefore", hours, mins);
     }
     const days = Math.floor(minutes / 1440);
-    if (minutes % 1440 === 0) return `${days} day${days === 1 ? "" : "s"} before`;
+    if (minutes % 10080 === 0) {
+      return t("calendar.notifications.weeksBefore", minutes / 10080);
+    }
+    if (minutes % 1440 === 0) return t("calendar.notifications.daysBefore", days);
     const remHours = Math.floor((minutes % 1440) / 60);
-    return `${days}d ${remHours}h before`;
+    return t("calendar.notifications.compactDaysHoursBefore", days, remHours);
+  }
+
+  function unitLabel(unit: number): string {
+    if (unit === 60) return t("calendar.notifications.unitHours");
+    if (unit === 1440) return t("calendar.notifications.unitDays");
+    if (unit === 10080) return t("calendar.notifications.unitWeeks");
+    return t("calendar.notifications.unitMinutes");
   }
 
   const summary = $derived.by(() => {
     if (!enabled) return "";
     const all: number[] = [...selected];
     for (const cn of customNotifs) all.push(cn.amount * cn.unit);
-    if (all.length === 0) return "None";
+    if (all.length === 0) return t("calendar.notifications.none");
     const sorted = [...new Set(all)].sort((a, b) => a - b);
-    return sorted.map((m) => {
+    return formatList(locale, sorted.map((m) => {
       const preset = NOTIF_PRESETS.find((p) => p.value === m);
       return preset ? preset.label : formatMinutes(m);
-    }).join(", ");
+    }));
   });
 </script>
 
@@ -270,7 +295,7 @@
     </button>
     <button onclick={onexpand}
       class="flex flex-1 items-center gap-2.5 px-3 py-2 text-left">
-      <span class="translate-y-[1.13px] text-[0.8rem] {enabled ? 'text-foreground' : 'text-muted-foreground'}">Notifications</span>
+      <span class="translate-y-[1.13px] text-[0.8rem] {enabled ? 'text-foreground' : 'text-muted-foreground'}">{t("calendar.notifications.title")}</span>
       <span class="ml-auto translate-y-[1.13px] truncate text-[0.733333rem] text-muted-foreground">{summary}</span>
     </button>
   </div>
@@ -307,10 +332,11 @@
             class="rounded bg-black/5 px-2.5 py-0.5 text-[0.8rem] dark:bg-black/15
               {dropdownIdx === idx ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}
               text-event-panel-input-text">
-            {CUSTOM_UNITS.find((u) => u.value === cn.unit)?.label ?? "minutes"}
+            {CUSTOM_UNITS.find((u) => u.value === cn.unit)?.label ?? t("calendar.notifications.unitMinutes")}
           </button>
-          <span class="text-[0.8rem] text-muted-foreground">before</span>
+          <span class="text-[0.8rem] text-muted-foreground">{t("calendar.notifications.before")}</span>
           <button onclick={() => { removeCustomNotif(idx); dropdownIdx = null; }}
+            aria-label={t("calendar.notifications.removeCustom")}
             class="ml-auto flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
             <X size={13} />
           </button>
@@ -342,7 +368,7 @@
       {#if customNotifs.length < 2}
         <button onclick={addCustomNotif}
           class="flex items-center gap-1.5 self-start rounded-none px-2.5 py-1 text-[0.8rem] text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-black/15">
-          <Plus size={13} /> <span>Custom</span>
+          <Plus size={13} /> <span>{t("calendar.notifications.custom")}</span>
         </button>
       {/if}
     </div>
