@@ -429,6 +429,10 @@ function appendRecurrencePart(label: string, part: string): string {
   return part.startsWith("(") ? `${label} ${part}` : `${label}, ${part}`;
 }
 
+function appendRecurrenceQualifier(label: string, part: string): string {
+  return `${label} ${part}`;
+}
+
 export function formatRecurrenceLabel(
   config: RecurrenceConfig,
   options: RecurrenceLabelOptions = {},
@@ -466,7 +470,7 @@ export function formatRecurrenceLabel(
     const part = t
       ? t("calendar.recurrence.onTheWeekdays", weekdays)
       : `on the ${weekdays}`;
-    label = appendRecurrencePart(label, part);
+    label = appendRecurrenceQualifier(label, part);
   }
   // Simple weekdays: shown for weekly frequency, or any frequency with BYSETPOS
   else if (config.weekdays && config.weekdays.length > 0 &&
@@ -478,7 +482,7 @@ export function formatRecurrenceLabel(
     const part = t
       ? t("calendar.recurrence.onWeekdays", weekdays)
       : `on ${weekdays}`;
-    label = appendRecurrencePart(label, part);
+    label = appendRecurrenceQualifier(label, part);
   }
 
   // BYMONTHDAY
@@ -488,7 +492,7 @@ export function formatRecurrenceLabel(
     const part = t
       ? t("calendar.recurrence.onMonthDays", days)
       : `on the ${days}`;
-    label = appendRecurrencePart(label, part);
+    label = appendRecurrenceQualifier(label, part);
   }
 
   // BYSETPOS

@@ -23,7 +23,10 @@ const expectedDateFormatter = new Intl.DateTimeFormat(undefined, {
   month: "short",
   year: "numeric",
 });
-const expectedTimeFormatter = new Intl.DateTimeFormat(undefined, {
+const expectedDateTimeFormatter = new Intl.DateTimeFormat(undefined, {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
   hour: "numeric",
   minute: "2-digit",
 });
@@ -33,8 +36,7 @@ function expectedLocalDate(value: string): string {
 }
 
 function expectedLocalTimestamp(value: string): string {
-  const date = new Date(value);
-  return `${expectedDateFormatter.format(date)} at ${expectedTimeFormatter.format(date)}`;
+  return expectedDateTimeFormatter.format(new Date(value));
 }
 
 describe("calendar display helpers", () => {

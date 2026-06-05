@@ -1420,6 +1420,7 @@ export const es = {
       restartingForBaselineDataset: "Reiniciando para dataset base",
       restartingForDenseDataset: "Reiniciando para dataset denso",
       restartingForNextBenchmark: "Reiniciando para el siguiente benchmark",
+      restartingForNextDenseDataset: "Reiniciando para el siguiente dataset denso",
       startupCooldown: (seconds: number) =>
         `Cerrando durante ${seconds} s para el enfriamiento de inicio`,
       baselineCooldown: (seconds: number, current: number, total: number) =>
@@ -1430,6 +1431,19 @@ export const es = {
         `Muestra de inicio ${current}/${total}`,
       seeding: (dataset: string) => `Sembrando ${dataset}`,
       timedWorkload: (label: string, seconds: number) => `${label}: ${seconds} s`,
+    },
+    notification: {
+      suiteCompleteTitle: "Suite de benchmarks completada",
+      completeTitle: "Benchmark completado",
+      failedTitle: "Benchmark falló",
+      suiteCompleteBody: (count: number) =>
+        `${count} benchmarks terminaron. Abre la app para revisar la salida del benchmark.`,
+      startupCompleteBody: (label: string, baseMs: string, denseMs: string) =>
+        `${label}: medianas de inicio base ${baseMs}, denso mayor ${denseMs}. Abre la app para revisar la salida del benchmark.`,
+      memoryCompleteBody: (label: string, mb: string) =>
+        `${label}: máximo observado ${mb}. Abre la app para revisar la salida del benchmark.`,
+      metricsCompleteBody: (label: string, count: number) =>
+        `${label}: ${count} filas de métricas. Abre la app para revisar la salida del benchmark.`,
     },
   },
   music: {

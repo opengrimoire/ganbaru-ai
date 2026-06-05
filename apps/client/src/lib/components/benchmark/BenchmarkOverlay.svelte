@@ -154,6 +154,9 @@
     if (step === "Restarting for next benchmark") {
       return t("benchmark.step.restartingForNextBenchmark");
     }
+    if (step === "Restarting for next dense dataset") {
+      return t("benchmark.step.restartingForNextDenseDataset");
+    }
 
     const startupCooldown = /^Closing for (\d+) s startup cooldown$/.exec(step);
     if (startupCooldown) {
