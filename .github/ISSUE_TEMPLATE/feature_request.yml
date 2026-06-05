@@ -1,0 +1,69 @@
+name: Feature request
+description: Propose a new capability or improvement.
+title: "feat: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Feature requests should describe the user problem and the ideal app behavior. For large ideas, it is fine if the first step is a spec update rather than immediate implementation.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Choose the closest affected area.
+      options:
+        - Calendar
+        - Pomodoro
+        - Doomscrolling
+        - Music
+        - Projects
+        - Notes
+        - Diary
+        - Sleep alarm
+        - Gamification
+        - Setup
+        - Settings
+        - Themes
+        - Localization
+        - Browser extension
+        - AI
+        - Sync
+        - Updates
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: What should the app do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches did you consider?
+    validations:
+      required: false
+  - type: textarea
+    id: docs
+    attributes:
+      label: Spec or documentation impact
+      description: Which docs should change, or does this need a new spec?
+    validations:
+      required: false
+  - type: textarea
+    id: data_security
+    attributes:
+      label: Data, privacy, or security impact
+      description: Note any new stored data, external service, permission, migration, or sensitive workflow.
+    validations:
+      required: false

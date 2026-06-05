@@ -39,7 +39,10 @@ Docs describe the optimal/ideal end state of the app, not the current implementa
 
 ```
 .github/
+  ISSUE_TEMPLATE/: GitHub issue forms and template chooser config
   workflows/: GitHub Actions release workflows
+  release.yml: generated GitHub Release notes config
+  pull_request_template.md: default GitHub pull request template
 apps/
   client/: Tauri app (Svelte frontend + Rust backend)
     src/: Svelte frontend
