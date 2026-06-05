@@ -154,7 +154,6 @@ export function sampleMemoryObservation(opts: {
 const BOOT_MARKS_OF_INTEREST = new Set<string>([
   "boot.script-start",
   "boot.app-mount",
-  "boot.tz-hydrated",
   "boot.sql-start",
   "boot.sql-main-done",
   "boot.maprow-done",

@@ -8,8 +8,7 @@
  * Consumers go through `getConfigKey` / `setConfigKey` with dotted keys
  * (e.g. `"theme.activeId"`, `"preferences.fontScale"`). Dotted keys map to
  * nested objects on disk so the JSON stays human-readable and orthogonal
- * concerns (theme vs preferences vs themes.user) live under their own
- * branches.
+ * concerns live under their own branches.
  *
  * The Ganbaru AI folder path itself is owned by the Rust side (see
  * `src-tauri/src/vault.rs`). This module only knows how to read and write
@@ -21,27 +20,6 @@ import { invoke } from "@tauri-apps/api/core";
 type JsonObject = Record<string, unknown>;
 
 const WRITE_DEBOUNCE_MS = 250;
-
-const LEGACY_LOCALSTORAGE_MIGRATIONS: ReadonlyArray<{
-  legacyKey: string;
-  configKey: string;
-  parse: (raw: string) => unknown;
-}> = [
-  { legacyKey: "ganbaru-ai-theme", configKey: "theme.activeId", parse: (s) => s },
-  {
-    legacyKey: "ganbaru-ai-font-family",
-    configKey: "preferences.fontFamilyId",
-    parse: (s) => s,
-  },
-  {
-    legacyKey: "ganbaru-ai-font-scale",
-    configKey: "preferences.fontScale",
-    parse: (s) => {
-      const n = parseFloat(s);
-      return Number.isFinite(n) ? n : undefined;
-    },
-  },
-];
 
 let cache: JsonObject = {};
 let loadPromise: Promise<void> | null = null;
@@ -123,38 +101,14 @@ function scheduleFlush(): void {
   }, WRITE_DEBOUNCE_MS);
 }
 
-function migrateFromLocalStorage(): boolean {
-  if (typeof localStorage === "undefined") return false;
-  let mutated = false;
-  for (const { legacyKey, configKey, parse } of LEGACY_LOCALSTORAGE_MIGRATIONS) {
-    const parts = splitKey(configKey);
-    const existing = readPath(cache, parts);
-    const legacy = localStorage.getItem(legacyKey);
-    if (legacy !== null && existing === undefined) {
-      const value = parse(legacy);
-      if (value !== undefined) {
-        writePath(cache, parts, value);
-        mutated = true;
-      }
-    }
-    if (legacy !== null) {
-      localStorage.removeItem(legacyKey);
-    }
-  }
-  return mutated;
-}
-
 /**
- * Trigger the one-time config load. Idempotent: subsequent calls return the
- * same promise. Must complete before any consumer calls `getConfigKey`.
+ * Trigger the config load. Idempotent: subsequent calls return the same
+ * promise. Must complete before any consumer calls `getConfigKey`.
  */
 export function ensureConfigLoaded(): Promise<void> {
   if (loadPromise) return loadPromise;
   loadPromise = (async () => {
     cache = await fetchFromDisk();
-    if (migrateFromLocalStorage()) {
-      await flushToDisk();
-    }
   })();
   return loadPromise;
 }

@@ -3,8 +3,8 @@ import { Temporal } from "@js-temporal/polyfill";
 import type { CalendarEvent } from "./types";
 import { expandRecurring, findOrdinalWeekday, fmtYMD, parseYMD } from "./recurrence";
 
-// A window wide enough to keep most legacy assertions intact while still
-// exercising the new windowed signature. Tests that probe window boundaries
+// A window wide enough to keep broad recurrence assertions readable while
+// still exercising the windowed signature. Tests that probe window boundaries
 // pass explicit dates instead.
 const TEST_WINDOW_START = Temporal.PlainDate.from("2025-01-01");
 const TEST_WINDOW_END = Temporal.PlainDate.from("2028-12-31");

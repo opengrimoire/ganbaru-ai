@@ -206,8 +206,6 @@ export interface PhaseResult {
   startedAt: string;
   /** Total ms the scenario workload ran. */
   workloadDurationMs: number;
-  /** Legacy workload memory samples. Current memory scenarios keep this empty. */
-  peakSamples: SamplePoint[];
   /** Memory observation samples for memory benchmarks. Empty for latency-only scenarios. */
   curve: SamplePoint[];
   /** Optional scenario-specific timings or counters captured during the workload. */

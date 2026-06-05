@@ -492,11 +492,6 @@ fn read_config(path: &std::path::Path) -> Option<DoomscrollingConfig> {
     let value: Value = serde_json::from_str(&contents).ok()?;
     let doomscrolling = value.get("doomscrolling")?;
     let (mode, has_mode) = read_mode(doomscrolling);
-    let has_exception_hosts = matches!(doomscrolling.get("exceptionHosts"), Some(Value::Array(_)));
-    let legacy_allowed_hosts = read_host_array(doomscrolling.get("allowedHosts"));
-    let legacy_block_during_breaks = doomscrolling
-        .get("blockDuringBreaks")
-        .and_then(Value::as_bool);
     Some(DoomscrollingConfig {
         mode,
         enabled: doomscrolling
@@ -510,12 +505,10 @@ fn read_config(path: &std::path::Path) -> Option<DoomscrollingConfig> {
         block_during_short_breaks: doomscrolling
             .get("blockDuringShortBreaks")
             .and_then(Value::as_bool)
-            .or(legacy_block_during_breaks)
             .unwrap_or(true),
         block_during_long_breaks: doomscrolling
             .get("blockDuringLongBreaks")
             .and_then(Value::as_bool)
-            .or(legacy_block_during_breaks)
             .unwrap_or(true),
         pause_during_focus_pause: doomscrolling
             .get("pauseDuringFocusPause")
@@ -526,15 +519,9 @@ fn read_config(path: &std::path::Path) -> Option<DoomscrollingConfig> {
             doomscrolling.get("customCategoryStacks"),
         ),
         blocked_hosts: read_host_array(doomscrolling.get("blockedHosts")),
-        exception_hosts: if has_exception_hosts {
-            read_host_array(doomscrolling.get("exceptionHosts"))
-        } else if has_mode {
-            Vec::new()
-        } else {
-            legacy_allowed_hosts.clone()
-        },
+        exception_hosts: read_host_array(doomscrolling.get("exceptionHosts")),
         allowed_hosts: if has_mode {
-            legacy_allowed_hosts
+            read_host_array(doomscrolling.get("allowedHosts"))
         } else {
             Vec::new()
         },
@@ -1733,7 +1720,7 @@ mod tests {
     }
 
     #[test]
-    fn reads_legacy_and_enabled_structured_hosts() {
+    fn reads_enabled_host_rules() {
         let value = serde_json::json!([
             "Reddit.com",
             { "host": "youtube.com", "enabled": false },

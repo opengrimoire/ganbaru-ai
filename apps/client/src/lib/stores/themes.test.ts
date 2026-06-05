@@ -110,22 +110,12 @@ function makeUserTheme(overrides: Partial<UserTheme> = {}): UserTheme {
   };
 }
 
-function buildLegacyInput(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function buildV2Input(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
+    schemaVersion: 2,
     id: "custom-theme",
     displayName: "Custom Theme",
-    base: "dark",
-    blendCanvas: "#202020",
-    eventPalette: paletteOf("#abcdef"),
-    ...overrides,
-  };
-}
-
-function buildV1Input(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
-    schemaVersion: 1,
-    id: "custom-theme",
-    displayName: "Custom Theme",
+    iconLabel: "dark",
     blendCanvas: "#202020",
     derivationEngineVersion: DERIVATION_ENGINE_VERSION,
     sources: SAMPLE_SOURCES_DARK,
@@ -134,14 +124,6 @@ function buildV1Input(overrides: Record<string, unknown> = {}): Record<string, u
     appIsolated: [],
     calendarIsolated: [],
     eventPalette: paletteOf("#abcdef"),
-    ...overrides,
-  };
-}
-
-function buildV2Input(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
-    ...buildV1Input(),
-    schemaVersion: 2,
     calendarDefaults: {
       mode: "custom",
       customBasis: "#334455",
@@ -484,311 +466,20 @@ describe("validateThemeJson v2 branch", () => {
       ).toBe(true);
     }
   });
-});
 
-describe("validateThemeJson v1 branch", () => {
-  it("accepts a fully valid v1 theme", () => {
-    const result = validateThemeJson(buildV1Input());
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.theme.kind).toBe("user");
-      expect(result.theme.id).toBe("custom-theme");
-      expect(result.theme.displayName).toBe("Custom Theme");
-      expect(result.theme.eventPalette).toHaveLength(PALETTE_SIZE);
-      expect(result.theme.derivationEngineVersion).toBe(
-        DERIVATION_ENGINE_VERSION,
-      );
-      expect(result.theme.sources).toEqual(SAMPLE_SOURCES_DARK);
-      expect(result.theme.calendarDefaultMode).toBe("app-canvas");
-      expect(result.theme.calendarDefaultCustom).toBe(SAMPLE_SOURCES_DARK.canvas);
-    }
+  it("rejects unsupported schema versions", () => {
+    expect(validateThemeJson({ ...buildV2Input(), schemaVersion: 1 }).ok).toBe(false);
+    expect(validateThemeJson({ ...buildV2Input(), schemaVersion: undefined }).ok).toBe(false);
   });
 
-  it("populates appTokens and calendarTokens from the v1 snapshot", () => {
-    const customApp = { ...BASE_APP_TOKENS.dark, "--primary": "#112233" };
-    const result = validateThemeJson(buildV1Input({ appTokens: customApp }));
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.theme.appTokens["--primary"]).toBe("#112233");
-    }
-  });
-
-  it("captures the appIsolated and calendarIsolated v1 sets", () => {
-    const result = validateThemeJson(
-      buildV1Input({
-        appIsolated: ["--primary", "--card"],
-        calendarIsolated: ["--cal-bg"],
-      }),
-    );
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.theme.appIsolated.has("--primary")).toBe(true);
-      expect(result.theme.appIsolated.has("--card")).toBe(true);
-      expect(result.theme.calendarIsolated.has("--cal-bg")).toBe(true);
-    }
-  });
-
-  it("moves a v1 calendar header snapshot into app tokens", () => {
-    const appTokens = { ...BASE_APP_TOKENS.dark };
-    delete appTokens["--cal-header-bg"];
-    const result = validateThemeJson(
-      buildV1Input({
-        appTokens,
-        calendarTokens: {
-          ...BASE_CALENDAR_TOKENS.dark,
-          "--cal-header-bg": "#123456",
-        },
-        calendarIsolated: ["--cal-header-bg"],
-      }),
-    );
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.theme.appTokens["--cal-header-bg"]).toBe("#123456");
-      expect(result.theme.appIsolated.has("--cal-header-bg")).toBe(true);
-      expect(
-        Object.hasOwn(result.theme.calendarTokens, "--cal-header-bg"),
-      ).toBe(false);
-      expect(result.theme.calendarIsolated.has("--cal-header-bg")).toBe(false);
-    }
-  });
-
-  it("seeds the theme with current state when none are provided", () => {
-    const result = validateThemeJson(buildV1Input());
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.theme.seedSources).toEqual(result.theme.sources);
-      expect(result.theme.seedAppTokens).toEqual(result.theme.appTokens);
-      expect(result.theme.seedBlendCanvas).toBe(result.theme.blendCanvas);
-    }
-  });
-
-  it("strips unknown isolated keys silently", () => {
-    const result = validateThemeJson(
-      buildV1Input({ appIsolated: ["--primary", "--made-up-token"] }),
-    );
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.theme.appIsolated.has("--primary")).toBe(true);
-      expect(result.theme.appIsolated.has("--made-up-token")).toBe(false);
-    }
-  });
-
-  it("drops isolated flags for synchronized semantic signal tokens", () => {
-    const result = validateThemeJson(
-      buildV1Input({
-        appIsolated: [
-          "--primary",
-          "--destructive",
-          "--action-confirm-foreground",
-        ],
-      }),
-    );
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.theme.appIsolated.has("--primary")).toBe(true);
-      expect(result.theme.appIsolated.has("--destructive")).toBe(false);
-      expect(
-        result.theme.appIsolated.has("--action-confirm-foreground"),
-      ).toBe(false);
-    }
-  });
-
-  it("preserves an explicit iconLabel that disagrees with canvas luminance", () => {
-    const result = validateThemeJson(buildV1Input({ iconLabel: "light" }));
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.theme.iconLabel).toBe("light");
-      expect(result.theme.seedIconLabel).toBe("light");
-    }
-  });
-
-  it("accepts the legacy `scheme` JSON key as iconLabel", () => {
-    const result = validateThemeJson(buildV1Input({ scheme: "light" }));
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.theme.iconLabel).toBe("light");
-      expect(result.theme.seedIconLabel).toBe("light");
-    }
-  });
-
-  it("rejects when sources is missing", () => {
-    const input = buildV1Input();
-    delete (input as Record<string, unknown>).sources;
+  it("rejects missing current-shape fields", () => {
+    const input = buildV2Input();
+    delete input.sources;
     const result = validateThemeJson(input);
     expect(result.ok).toBe(false);
-    if (!result.ok)
+    if (!result.ok) {
       expect(result.errors.some((e) => e.includes("sources"))).toBe(true);
-  });
-});
-
-describe("validateThemeJson legacy branch", () => {
-  it("accepts a minimal legacy theme and stamps engine version", () => {
-    const result = validateThemeJson(buildLegacyInput());
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.theme.kind).toBe("user");
-      expect(result.theme.derivationEngineVersion).toBe(
-        DERIVATION_ENGINE_VERSION,
-      );
     }
-  });
-
-  it("synthesizes sources for a legacy theme that does not provide them", () => {
-    const result = validateThemeJson(buildLegacyInput({ base: "light" }));
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.theme.sources.canvas).toBe(BASE_APP_TOKENS.light["--background"]);
-      expect(result.theme.sources.ink).toBe(BASE_APP_TOKENS.light["--foreground"]);
-    }
-  });
-
-  it("defaults iconLabel from canvas luminance when omitted", () => {
-    const result = validateThemeJson(buildLegacyInput({ base: "light" }));
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.theme.iconLabel).toBe("light");
-      expect(result.theme.seedIconLabel).toBe("light");
-    }
-  });
-
-  it("converts legacy appTokenOverrides into pinned tokens via appIsolated", () => {
-    const result = validateThemeJson(
-      buildLegacyInput({
-        appTokenOverrides: { "--primary": "#112233" },
-      }),
-    );
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.theme.appTokens["--primary"]).toBe("#112233");
-      expect(result.theme.appIsolated.has("--primary")).toBe(true);
-    }
-  });
-
-  it("converts legacy calendarTokenOverrides into pinned tokens via calendarIsolated", () => {
-    const result = validateThemeJson(
-      buildLegacyInput({
-        calendarTokenOverrides: { "--cal-bg": "#0E0F11" },
-      }),
-    );
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.theme.calendarTokens["--cal-bg"]).toBe("#0E0F11");
-      expect(result.theme.calendarIsolated.has("--cal-bg")).toBe(true);
-    }
-  });
-
-  it("moves legacy calendar header overrides into app tokens", () => {
-    const result = validateThemeJson(
-      buildLegacyInput({
-        calendarTokenOverrides: { "--cal-header-bg": "#445566" },
-      }),
-    );
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.theme.appTokens["--cal-header-bg"]).toBe("#445566");
-      expect(result.theme.appIsolated.has("--cal-header-bg")).toBe(true);
-      expect(
-        Object.hasOwn(result.theme.calendarTokens, "--cal-header-bg"),
-      ).toBe(false);
-      expect(result.theme.calendarIsolated.has("--cal-header-bg")).toBe(false);
-    }
-  });
-
-  it("promotes legacy semantic token overrides into source pairs", () => {
-    const result = validateThemeJson(
-      buildLegacyInput({
-        appTokenOverrides: {
-          "--action-confirm": "#123456",
-          "--action-confirm-foreground": "#FDFDFD",
-        },
-      }),
-    );
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.theme.sources.confirm).toBe("#123456");
-      expect(result.theme.sources.confirmText).toBe("#FDFDFD");
-      expect(result.theme.appTokens["--status-accepted"]).toBe("#123456");
-      expect(result.theme.appTokens["--status-accepted-foreground"]).toBe(
-        "#FDFDFD",
-      );
-      expect(result.theme.appIsolated.has("--action-confirm")).toBe(false);
-      expect(
-        result.theme.appIsolated.has("--action-confirm-foreground"),
-      ).toBe(false);
-    }
-  });
-
-  it("strips unknown override keys without erroring", () => {
-    const result = validateThemeJson(
-      buildLegacyInput({
-        appTokenOverrides: { "--primary": "#112233", "--made-up-token": "#000000" },
-      }),
-    );
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.theme.appIsolated.has("--primary")).toBe(true);
-      expect(result.theme.appIsolated.has("--made-up-token")).toBe(false);
-    }
-  });
-
-  it("rejects an id that is not a slug", () => {
-    const result = validateThemeJson(buildLegacyInput({ id: "Has Spaces" }));
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.errors.some((e) => e.includes("id"))).toBe(true);
-  });
-
-  it("rejects an empty displayName", () => {
-    const result = validateThemeJson(buildLegacyInput({ displayName: "   " }));
-    expect(result.ok).toBe(false);
-    if (!result.ok)
-      expect(result.errors.some((e) => e.includes("displayName"))).toBe(true);
-  });
-
-  it("rejects unknown base values", () => {
-    const result = validateThemeJson(buildLegacyInput({ base: "rainbow" }));
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.errors.some((e) => e.includes("base"))).toBe(true);
-  });
-
-  it("rejects an invalid blendCanvas", () => {
-    const result = validateThemeJson(buildLegacyInput({ blendCanvas: "white" }));
-    expect(result.ok).toBe(false);
-    if (!result.ok)
-      expect(result.errors.some((e) => e.includes("blendCanvas"))).toBe(true);
-  });
-
-  it("rejects a palette of the wrong length", () => {
-    const partial = Array.from({ length: 3 }, () => "#000000");
-    const result = validateThemeJson(
-      buildLegacyInput({ eventPalette: partial }),
-    );
-    expect(result.ok).toBe(false);
-    if (!result.ok)
-      expect(result.errors.some((e) => e.includes("eventPalette"))).toBe(true);
-  });
-
-  it("extends a legacy 24-slot palette with current default slots", () => {
-    const legacyPalette = Array.from({ length: 24 }, () => "#abcdef");
-    const result = validateThemeJson(
-      buildLegacyInput({ eventPalette: legacyPalette }),
-    );
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.theme.eventPalette).toHaveLength(PALETTE_SIZE);
-      expect(result.theme.eventPalette.slice(0, 24)).toEqual(legacyPalette);
-      expect(result.theme.eventPalette[24]).toBe(darkTheme.eventPalette[24]);
-    }
-  });
-
-  it("rejects a non-hex palette entry", () => {
-    const palette: string[] = paletteOf("#abcdef");
-    palette[0] = "not-a-hex";
-    const result = validateThemeJson(
-      buildLegacyInput({ eventPalette: palette }),
-    );
-    expect(result.ok).toBe(false);
-    if (!result.ok)
-      expect(result.errors.some((e) => e.includes("[0]"))).toBe(true);
   });
 });
 
@@ -801,7 +492,7 @@ describe("validateThemeJson rejection cases", () => {
   });
 
   it("rejects an id that collides with a built-in", () => {
-    const result = validateThemeJson(buildV1Input({ id: "light" }));
+    const result = validateThemeJson(buildV2Input({ id: "light" }));
     expect(result.ok).toBe(false);
   });
 });

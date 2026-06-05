@@ -21,7 +21,6 @@ mod pomodoro;
 mod pomodoro_enforcement;
 mod recurrence;
 mod themes;
-mod timezone_migration;
 mod tray;
 mod vault;
 mod window_shape;
@@ -774,8 +773,6 @@ pub fn run() {
             vault::vault_pick_and_write_ics_export,
             vault::vault_pick_and_read_theme_json,
             vault::vault_pick_and_write_theme_json,
-            timezone_migration::calendar_load_timezone_hydration_rows,
-            timezone_migration::calendar_apply_timezone_hydration,
             calendar_reads::calendar_load_window,
             calendar_reads::calendar_load_pomodoro_scheduler_window,
             calendar_reads::calendar_load_panel_event,
@@ -830,7 +827,6 @@ pub fn run() {
             themes::theme_insert,
             themes::theme_replace_content,
             themes::theme_delete,
-            themes::theme_backfill_icon_label,
             themes::theme_record_dismissal,
             themes::theme_load_dismissals,
             themes::theme_rename,

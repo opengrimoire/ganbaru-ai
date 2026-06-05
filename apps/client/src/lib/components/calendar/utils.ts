@@ -57,7 +57,8 @@ export function formatDatePart(date: Date): string {
 /**
  * Detect that a stored datetime string is already in UTC ISO 8601 form
  * (ends with Z, with or without seconds and millis). Used by the io
- * round-trip to fall back to legacy parsing for unmigrated rows.
+ * round-trip to preserve wall-clock-shaped values from malformed or
+ * hand-edited rows.
  */
 export function isUtcIso(value: string): boolean {
   return typeof value === "string" && value.endsWith("Z") && value.includes("T");
@@ -1211,7 +1212,7 @@ function resolvePalette(theme: Theme): ColorEntry[] {
   return out;
 }
 
-// Dedupes unknown-color warnings so a stray legacy value on many rows logs
+// Dedupes unknown-color warnings so a stray invalid value on many rows logs
 // once per session.
 const warnedUnknownColors = new Set<string>();
 

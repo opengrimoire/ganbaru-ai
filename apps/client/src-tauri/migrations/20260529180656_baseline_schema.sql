@@ -320,7 +320,7 @@ CREATE TABLE pomodoro_segments (
     actual_start TEXT NOT NULL,
     actual_end TEXT,
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed', 'interrupted')),
-    end_reason TEXT CHECK (end_reason IS NULL OR end_reason IN ('completed', 'stopped', 'skipped_by_user', 'event_expired', 'reconfigured', 'block_transition', 'crash_recovery')),
+    end_reason TEXT CHECK (end_reason IS NULL OR end_reason IN ('completed', 'stopped', 'skipped_by_user', 'event_expired', 'focus_failed', 'reconfigured', 'block_transition', 'crash_recovery')),
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX idx_pomodoro_segments_event ON pomodoro_segments(event_id, event_date);
@@ -345,7 +345,7 @@ CREATE TABLE pomodoro_run_events (
     id TEXT PRIMARY KEY,
     run_id TEXT NOT NULL REFERENCES pomodoro_runs(id) ON DELETE CASCADE,
     segment_id TEXT REFERENCES pomodoro_segments(id) ON DELETE SET NULL,
-    event_type TEXT NOT NULL CHECK (event_type IN ('start', 'phase_start', 'phase_complete', 'pause_start', 'pause_end', 'idle_detected', 'suspend_detected', 'skip_break', 'extend_focus', 'reconfigure', 'block_transition', 'stop', 'complete', 'crash_recovery')),
+    event_type TEXT NOT NULL CHECK (event_type IN ('start', 'phase_start', 'phase_complete', 'pause_start', 'pause_end', 'idle_detected', 'focus_failed', 'suspend_detected', 'skip_break', 'extend_focus', 'reconfigure', 'block_transition', 'stop', 'complete', 'crash_recovery')),
     occurred_at TEXT NOT NULL,
     phase TEXT CHECK (phase IS NULL OR phase IN ('focus', 'short_break', 'long_break')),
     reason TEXT,
@@ -518,8 +518,8 @@ CREATE TABLE themes (
     derivation_engine_version INTEGER NOT NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    icon_label TEXT,
-    seed_icon_label TEXT,
+    icon_label TEXT NOT NULL CHECK (icon_label IN ('light', 'dark')),
+    seed_icon_label TEXT NOT NULL CHECK (seed_icon_label IN ('light', 'dark')),
     calendar_default_mode TEXT NOT NULL DEFAULT 'app-canvas' CHECK (calendar_default_mode IN ('light', 'dark', 'app-canvas', 'custom')),
     calendar_default_custom TEXT NOT NULL DEFAULT '#27282A',
     seed_calendar_default_mode TEXT NOT NULL DEFAULT 'app-canvas' CHECK (seed_calendar_default_mode IN ('light', 'dark', 'app-canvas', 'custom')),

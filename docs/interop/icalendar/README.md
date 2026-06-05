@@ -1,8 +1,8 @@
 # iCalendar compatibility
 
-This folder is the planning hub for full iCalendar (`.ics`) compatibility in Ganbaru AI. It describes how the app can accept, preserve, edit where possible, and export highly compatible calendar files without depending on Google, Outlook, CalDAV, email, or any hosted service.
+This folder defines Ganbaru AI's iCalendar (`.ics`) interoperability model. It describes how the app accepts, preserves, edits where possible, and exports highly compatible calendar files without depending on Google, Outlook, CalDAV, email, or any hosted service.
 
-The target is file-format compatibility first. Ganbaru AI should eventually be able to import every legal RFC 5545 iCalendar object, preserve the parts the app does not yet understand, project supported `VEVENT` data into the existing calendar UI, and export data without corrupting unsupported fields.
+The target is file-format compatibility first. Ganbaru AI imports RFC 5545 iCalendar objects, preserves the parts the app does not yet understand, projects supported `VEVENT` data into the existing calendar UI, and exports data without corrupting unsupported fields.
 
 ## Non-goals
 
@@ -23,15 +23,13 @@ The normal calendar boot path must use only projected rows. It must not parse ra
 
 - [Standards scope](./standards-scope.md): target standards, related RFCs, and boundaries.
 - [Architecture](./architecture.md): lossless preservation plus normalized projection.
-- [Data model](./data-model.md): proposed SQLite responsibilities and table shape.
-- [Milestones](./milestones.md): implementation phases and exit criteria.
+- [Data model](./data-model.md): SQLite responsibilities and table shape.
 - [Conformance checklist](./conformance-checklist.md): component, property, parameter, and value-type tracking.
 - [Fixtures and clients](./fixtures-and-clients.md): automated fixtures and manual client testing.
 - [Edit merge policy](./edit-merge-policy.md): how user edits update projected and preserved data.
 - [Recurrence and timezones](./recurrence-and-timezones.md): recurrence, value type, `VTIMEZONE`, and DST strategy.
 - [Scheduling boundary](./scheduling-boundary.md): offline preservation versus transport-backed actions.
 - [Performance budget](./performance-budget.md): startup, memory, import, export, and recurrence limits.
-- [Migration plan](./migration-plan.md): rollout and existing data handling.
 - [Decisions](./decisions.md): architecture decision log.
 
 Client behavior notes live in [clients](./clients/). They record practical interop observations. They do not define standards behavior.

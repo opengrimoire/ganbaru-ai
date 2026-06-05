@@ -48,7 +48,7 @@ describe("calendar display helpers", () => {
     expect(calendarDisplayName(calendar)).toBe("person@example.com");
   });
 
-  it("falls back to legacy imported names when source_url is unavailable", () => {
+  it("falls back to imported calendar names when source_url is unavailable", () => {
     const calendar = makeCalendar({
       name: "Imported from old-label@example.com (2026-05-14)",
       source: "ics",

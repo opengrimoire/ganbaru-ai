@@ -872,7 +872,6 @@ function aggregateStartupPhase(phase: "A" | "B", phases: PhaseResult[]): PhaseRe
     phase,
     startedAt: startupSamples[0]?.startedAt ?? fallbackPhase?.startedAt ?? new Date().toISOString(),
     workloadDurationMs: average(phases.map((sample) => sample.workloadDurationMs)),
-    peakSamples: [],
     curve: [],
     metrics: undefined,
     boot,

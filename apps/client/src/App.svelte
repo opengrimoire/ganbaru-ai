@@ -30,7 +30,6 @@
   import { parseCalendarDate } from "$lib/components/calendar/utils";
   import type { CalendarEvent } from "$lib/components/calendar/types";
   import { Temporal } from "@js-temporal/polyfill";
-  import { hydrateCalendarEventTimezones } from "$lib/stores/timezone-migration";
   import { invoke } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -125,19 +124,11 @@
     if (isMainWindow) {
       await pomodoro.cleanupOrphans().catch((e) => console.warn("Failed to clean up orphans:", e));
     }
-    // The legacy wall-clock to UTC ISO migration runs here instead of in
-    // main.ts so first paint is not blocked by a per-event UPDATE pass on
-    // first boot after the migration shipped. The hydrator is idempotent:
-    // it short-circuits via a config marker once the migration succeeds,
-    // so on every subsequent boot this is a single config read. Calendar
-    // load is gated on it so the renderer never reads half-migrated rows.
     try {
-      await hydrateCalendarEventTimezones();
-      perfMark("boot.tz-hydrated");
       await calendar.load();
       // Calendar startup marks are still produced for normal boots.
     } catch (e) {
-      console.error("Failed to migrate or load calendar:", e);
+      console.error("Failed to load calendar:", e);
     }
   }
 

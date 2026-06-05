@@ -104,14 +104,8 @@ Before export, warn when:
 
 Warnings should be specific and include component `UID` when available.
 
-## Repair tools
+## Repair behavior
 
-Future repair tools may let users:
+Re-importing the original `.ics` source file is the preferred repair path when a row has no preserved component or when preservation data is known to be incomplete. Unsupported values that were never stored in Ganbaru AI must not be invented from the normalized projection.
 
-- inspect preserved fields not shown in the normal UI
-- regenerate selected components
-- accept loss of unsupported data
-- split a mixed calendar into supported and preserved-only parts
-- re-import a source file to restore preservation data
-
-Repair actions must be explicit and reversible where practical.
+Repair actions must be explicit. If a user accepts regenerated output, diagnostics should make clear that unsupported original fields may be absent from export.

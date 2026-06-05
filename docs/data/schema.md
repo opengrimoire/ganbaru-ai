@@ -127,7 +127,7 @@ Per-instance overrides live in `calendar_event_overrides` (one row per detached 
 
 `calendar_event_overrides.recurrence_range` stores the projected `RECURRENCE-ID` `RANGE` parameter. The only supported value is `this-and-future`, from RFC 5545 `RANGE=THISANDFUTURE`. Imported cancelled overrides with this range hide that occurrence and all following generated occurrences during expansion while preserving the override for export.
 
-The full iCalendar compatibility data model is in `docs/interop/icalendar/data-model.md`. New imports keep iCalendar components and properties available for future lossless round trips while projecting the subset the app understands into normalized calendar tables. Migration v13 adds nullable `icalendar_component_id` links to `calendar_events`, `calendar_event_overrides`, `calendar_event_attendees`, and `calendar_event_alarms`; attendee rows also keep `icalendar_property_index` so an `ATTENDEE` row can be traced to the original property inside its preserved `VEVENT`. Migration v15 adds `calendar_events.local_rsvp_status` as local-only UI state, deliberately outside the iCalendar attendee projection. Full-event loads can reconstruct preserved components on demand, but visible-window loads continue to query only projected calendar rows.
+The full iCalendar compatibility data model is in `docs/interop/icalendar/data-model.md`. Imports keep iCalendar components and properties available for future lossless round trips while projecting the subset the app understands into normalized calendar tables. `calendar_events`, `calendar_event_overrides`, `calendar_event_attendees`, and `calendar_event_alarms` carry nullable `icalendar_component_id` links; attendee rows also keep `icalendar_property_index` so an `ATTENDEE` row can be traced to the original property inside its preserved `VEVENT`. `calendar_events.local_rsvp_status` is local-only UI state, deliberately outside the iCalendar attendee projection. Full-event loads can reconstruct preserved components on demand, but visible-window loads continue to query only projected calendar rows.
 
 Why `pomodoro_configs` is normalized: the config becomes part of analytics once a run starts, and row storage gives schema migrations a safe path when settings gain fields. Active runs copy config values into `pomodoro_runs` as a historical snapshot.
 
@@ -167,7 +167,7 @@ Global Pomodoro preferences that are not per-event history live in the active Ga
 
 ### `pomodoro_configs`
 
-One row per timed calendar event with Pomodoro enabled. All-day events cannot have a config row. The config row is the mutable source for future runs. Once a run starts, those settings are copied into `pomodoro_runs` as an immutable history snapshot. Migration `20260601000000_remove_all_day_pomodoro_configs.sql` removes legacy config rows that were attached to all-day events before this invariant existed.
+One row per timed calendar event with Pomodoro enabled. All-day events cannot have a config row. The config row is the mutable source for future runs. Once a run starts, those settings are copied into `pomodoro_runs` as an immutable history snapshot.
 
 | Field | Type | Description |
 |---|---|---|
@@ -318,7 +318,7 @@ If `original_event_id` is synthetic and neither the live template expands that o
 
 User-authored themes persist as a normalized snapshot across six tables. Built-in light and dark stay code-pinned in `apps/client/src/lib/stores/themes.ts` and never appear in the database; the schema's `CHECK (id NOT IN ('light', 'dark'))` on `themes.id` defends against built-in import collisions, while the primary key prevents duplicate user-theme IDs. The full feature design lives in `features/themes.md`.
 
-Boot order matters: `apps/client/src/main.ts` validates the active Ganbaru AI folder, awaits `ensureConfigLoaded()`, and then `hydrateUserThemes()` before mounting the app. The hydrate helper runs an idempotent one-time migration that walks the legacy `themes.user` blob from root `config.json`, runs the current derivation engine to produce missing tokens, writes one transaction per theme, then removes `themes.user` from the config so subsequent boots load purely from SQLite.
+Boot order matters: `apps/client/src/main.ts` validates the active Ganbaru AI folder, awaits `ensureConfigLoaded()`, and then `hydrateUserThemes()` before mounting the app. User themes load purely from SQLite before first paint so the app mounts with the saved theme registry already available.
 
 ### `themes`
 
@@ -328,8 +328,8 @@ One row per user theme. Carries identity, the active blend canvas (the bg dimmed
 |---|---|---|
 | `id` | text | Primary key. `CHECK (id NOT IN ('light', 'dark'))` so an import cannot shadow a built-in. Duplicate user-theme IDs are rejected by the primary key. |
 | `display_name` | text | User-visible name. Trimmed and length-capped at 60 chars by the client. |
-| `icon_label` | text or null | `'light'` or `'dark'`. Purely decorative sun/moon tag ("was this theme meant for day or night use?"); does not affect the runtime `.dark` class or calendar contrast behavior. Nullable so dev databases and imported legacy theme rows can be normalized on hydrate via canvas luminance. |
-| `seed_icon_label` | text or null | Clone-time snapshot of `icon_label` for "Reset all". Nullable on the same grounds. |
+| `icon_label` | text | `'light'` or `'dark'`. Purely decorative sun/moon tag ("was this theme meant for day or night use?"); does not affect the runtime `.dark` class or calendar contrast behavior. |
+| `seed_icon_label` | text | Clone-time snapshot of `icon_label` for "Reset all". |
 | `blend_canvas` | text | Hex bg the dimmed event variants blend toward. Auto-tracks `--cal-bg` whenever that token is non-isolated, otherwise the user pins it directly. |
 | `seed_blend_canvas` | text | Clone-time snapshot of `blend_canvas` for "Reset all". |
 | `derivation_engine_version` | integer | The `DERIVATION_ENGINE_VERSION` constant in force when the snapshot was written. The editor surfaces a rebake banner when this trails the code constant and no row in `theme_upgrade_dismissals` matches. |
@@ -344,9 +344,7 @@ One row per user theme. Carries identity, the active blend canvas (the bg dimmed
 
 One row per resolved color value, across three peer kinds. Sources drive multi-token derivation when one of them is edited; app and calendar tokens are the rendered shell snapshot. Source key names are bare (`canvas`, `ink`, `primary`, `destructive`, `confirm`, `warning`); app and calendar key names keep their `--prefixed` CSS form.
 
-Migration v9 removes app-token rows that used to store implementation paint hooks now derived at runtime or owned by component code. This keeps existing Ganbaru AI folders aligned with the current token catalog instead of preserving obsolete live or seed rows.
-
-Migration v11 moves `--cal-header-bg` from `kind='calendar'` to `kind='app'` because Calendar header now follows App canvas by default while remaining independently pinnable. The remaining calendar tokens cover the internal grid surface and details only.
+Implementation paint hooks that can be derived at runtime or owned by component code are not stored as theme token rows. `--cal-header-bg` is an app token because Calendar header follows App canvas by default while remaining independently pinnable. Calendar tokens cover the internal grid surface and details only.
 
 | Field | Type | Description |
 |---|---|---|
@@ -420,7 +418,7 @@ The editor only suppresses the banner when a dismissal exists for the *current* 
 
 Three motivations lined up at once. First, structural changes to the token catalog (renames, additions, splits) need a row-level migration path; a JSON blob is opaque to schema migration and forces every saved theme through a tolerant validator. Second, the snapshot model decouples saved themes from the live derivation engine: a theme written today still paints the exact same colors next year, even if the engine bumps. Third, sources are no longer privileged storage; they sit as peer rows next to the app and calendar tokens, which matches the user's intuition that surface tokens like `--card` and `--popover` are not "less important" than the source palette.
 
-JSON keeps a role as the export format only: `serializeTheme` emits a v2 envelope (`schemaVersion: 2`, full snapshot, `calendarDefaults`, `appIsolated` / `calendarIsolated` arrays) and `validateThemeJson` accepts v2, v1, and the legacy `appTokenOverrides` / `calendarTokenOverrides` shape. Older v1 or legacy calendar-header rows are migrated into the app-token header row during import.
+JSON keeps a role as the export format only: `serializeTheme` emits a v2 envelope (`schemaVersion: 2`, full snapshot, `calendarDefaults`, `appIsolated` / `calendarIsolated` arrays) and `validateThemeJson` accepts the current v2 shape.
 
 ## Music
 

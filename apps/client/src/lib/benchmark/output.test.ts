@@ -40,7 +40,6 @@ function mockPhase(
     phase,
     startedAt: "2026-05-01T10:00:00.000Z",
     workloadDurationMs: 3000,
-    peakSamples: [],
     curve,
     boot: {
       marks: {
@@ -173,7 +172,6 @@ const METRIC_RESULT: BenchmarkResult = {
   },
   phaseB: {
     ...DENSE_PHASE,
-    peakSamples: [],
     curve: [],
     metrics: [
       timingMetric("click existing event avg", 176, 50, 171, 202),
@@ -210,7 +208,6 @@ const MIXED_METRIC_RESULT: BenchmarkResult = {
   },
   phaseA: {
     ...BASE_PHASE,
-    peakSamples: [],
     curve: [],
     metrics: [
       {
@@ -225,7 +222,6 @@ const MIXED_METRIC_RESULT: BenchmarkResult = {
   },
   phaseB: {
     ...DENSE_PHASE,
-    peakSamples: [],
     curve: [],
     metrics: [
       {
@@ -254,7 +250,6 @@ const IMPORT_RESULT: BenchmarkResult = {
   },
   phaseB: {
     ...DENSE_PHASE,
-    peakSamples: [],
     curve: [],
     metrics: [
       timingMetric("bulk import 100 add avg", 60, 3, 58, 85),

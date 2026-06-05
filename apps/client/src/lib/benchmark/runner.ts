@@ -89,7 +89,6 @@ async function runPhase(opts: {
     phase: opts.phase,
     startedAt,
     workloadDurationMs,
-    peakSamples: [],
     curve,
     metrics: maybeMetrics ?? undefined,
     boot,

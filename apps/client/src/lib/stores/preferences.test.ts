@@ -341,16 +341,6 @@ describe("title bar visibility helpers", () => {
     });
   });
 
-  it("ignores legacy tab hiding values so tabs remain available", () => {
-    expect(
-      parseTitleBarVisibility({
-        tabs: false,
-        calendarTab: false,
-        todoTab: false,
-      }),
-    ).toEqual(DEFAULT_TITLE_BAR_VISIBILITY);
-  });
-
   it("ignores unknown keys and non-boolean values", () => {
     expect(
       parseTitleBarVisibility({

@@ -63,7 +63,7 @@ Memory scenarios must capture every one-second sample in the observation window.
 
 The benchmark boot path intentionally differs from normal app boot so it can measure exactly one calendar window.
 
-On normal boots, `App.svelte` loads calendar metadata, runs the timezone hydrator, then loads the user's current calendar window.
+On normal boots, `App.svelte` loads calendar metadata, then loads the user's current calendar window.
 
 On benchmark boots, `App.svelte` first reads `benchmark-state.json`. If a benchmark state exists, the app resolves the DB URL before the runner flips the state from pending to running. This caches `sqlite:benchmark.sqlite` for valid pending benchmark boots, while stale, invalid, or interrupted running states still resolve to the user DB and are discarded by the runner. The benchmark overlay and runner then load before normal calendar hydration starts. When the runner claims the pending state, normal current-week hydration is skipped for that process. The scenario setup then loads calendar metadata and the run anchor window itself.
 
@@ -234,7 +234,7 @@ Week-view memory scenarios load the visible Monday to Sunday week plus one day b
 
 Dataset v1 uses a half-open date range from `anchor - yearRadius` through, but not including, `anchor + yearRadius`. Event counts depend on the persisted anchor date because leap years may be included or excluded by the radius.
 
-Every day has one timed event at `HH:00` for every hour from `00:00` through `23:00`; each timed event lasts one hour and has the default Pomodoro config. Every day also has three all-day events. Detail profile `d1` gives timed events a title, description, notification, rich alarm, location, URL, categories, organizer, guest permissions, extended benchmark metadata, and one attendee. All-day events carry title, description, color, status, visibility, priority, categories, organizer, guest permissions, and extended benchmark metadata. Timed and all-day benchmark colors cycle through every current `PALETTE_SIZE` slot so the workload exercises the full event palette rather than the legacy 24-slot range. The generator intentionally avoids recurrence so the benchmark isolates dense visible windows and old or future non-recurring history.
+Every day has one timed event at `HH:00` for every hour from `00:00` through `23:00`; each timed event lasts one hour and has the default Pomodoro config. Every day also has three all-day events. Detail profile `d1` gives timed events a title, description, notification, rich alarm, location, URL, categories, organizer, guest permissions, extended benchmark metadata, and one attendee. All-day events carry title, description, color, status, visibility, priority, categories, organizer, guest permissions, and extended benchmark metadata. Timed and all-day benchmark colors cycle through every current `PALETTE_SIZE` slot so the workload exercises the full event palette. The generator intentionally avoids recurrence so the benchmark isolates dense visible windows and old or future non-recurring history.
 
 Timed events before `${anchorDate} 00:00` get completed Pomodoro history. A one-hour event with the default 40/5/10 config produces three completed segments: 40 minutes of focus, 5 minutes of short break, and 15 minutes of focus. The two focus segments also create completed Pomodoro session rows with a focus score of 1.
 

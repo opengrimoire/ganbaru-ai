@@ -557,7 +557,7 @@ export function expandTemplate(
 
   // Emit the original template as the first occurrence when it overlaps the
   // window and is not itself excepted. Pushed without an `::date` suffix so
-  // the primary event id is preserved (matching legacy behavior).
+  // the primary event id is preserved for the template occurrence.
   const origInWindow = overlapsWindow(origStart, origEnd, windowStart, windowEnd);
   if (origInWindow && !exceptionsSet?.has(startDateStr) && !isCancelledOccurrence(startDateStr, overrideState)) {
     result.push(evt);
@@ -607,7 +607,7 @@ export function expandTemplate(
       rdateSet.add(occStartStr);
 
       // EXDATE: skip emission and do NOT count toward COUNT, matching the
-      // legacy behavior validated by the "respects exceptions" test.
+      // behavior validated by the "respects exceptions" test.
       if (exceptionsSet?.has(occStartStr) || isCancelledOccurrence(occStartStr, overrideState)) {
         cursor = advanceDate(cursor, config);
         continue;
