@@ -1,17 +1,18 @@
 # Ganbaru AI
 
-Ganbaru AI is an anti-procrastination project manager for life and work. Free, local, open-source (AGPL 3.0), privacy-first, lightweight with opt-in AI (Codex and BYOK for any LLM). It's built with Tauri v2 (Rust) and Svelte 5 with multi-platform in mind (Linux, Windows, macOS, and in the future Android and iOS).
+Ganbaru AI is an anti-procrastination + anti-burnout app. Free, local, open-source (AGPL 3.0), privacy-first, lightweight with opt-in AI (Codex and BYOK for any LLM). It's built with Tauri v2 (Rust) and Svelte 5 with multi-platform in mind (Linux, Windows, macOS, and in the future Android and iOS).
 
-Features a highly interconnected:
+Features are highly interconnected. Current status:
 - Calendar
 - Pomodoro
+- Doomscrolling (work in progress; browser and desktop blocking exist, mobile remains pending)
+- Music player (work in progress; local playback, source parsing, controls, and tray/titlebar integration exist)
+- Localization (work in progress; English and Spanish catalogs with language preferences exist)
 - Projects (pending)
-- Doomscrolling (pending)
 - Note-taking (pending)
 - Sleep alarm (pending)
 - Daily diary (pending)
-- Music management (pending)
-- Gamification (real-life skill tree, XP, contracts, NPC-guided workflows) (pending)
+- Gamification (pending)
 
 ## Essential reading
 
@@ -24,12 +25,12 @@ All documentation lives in `docs/`. Top-level overviews:
 
 Granular docs (read the relevant one when working on a feature):
 
-- **docs/features/**: per-feature behavior and UX (calendar, calendar-recurrence, pomodoro, pomodoro-break-screen, pomodoro-idle-detection, pomodoro-progress-displays, plus placeholders for unbuilt features)
+- **docs/features/**: per-feature behavior and UX (calendar, calendar-recurrence, localization, music, doomscrolling, pomodoro, pomodoro-break-screen, pomodoro-idle-detection, pomodoro-progress-displays, plus placeholders for unbuilt features)
 - **docs/data/**: data architecture, schema, invariants, sync, hazards, security
 - **docs/algorithms/**: pure-logic specs (recurrence-expansion, pomodoro-segments-and-plan, pomodoro-state-machine, idle-detection, time-conflict-detection, undo-redo)
 - **docs/interop/**: interoperability plans, standards scope, conformance fixtures, client behavior, and migration strategy for external formats and calendar clients
 
-Docs describe the optimal/ideal end state of the app, not the current implementation. They preserve the "why" behind decisions over time.
+Docs describe the optimal/ideal end state of the app, not the current implementation. They preserve the "why" behind decisions over time. When implementation work discovers a better product direction than an older spec, update the relevant spec to that improved ideal. When a meaningful feature or behavior has no suitable spec yet, create the smallest appropriate spec instead of leaving design intent only in code or chat. `AGENTS.md` should carry durable repo context for agents; detailed feature behavior belongs in the relevant `docs/features/` or `docs/data/` spec.
 
 ## Workspace structure
 
@@ -43,36 +44,58 @@ apps/
     src/: Svelte frontend
       lib/: shared frontend code
         components/: reusable Svelte components
+          benchmark/: benchmark overlay and diagnostics components
           calendar/: calendar wrappers, session block rendering
-          projects/: (planned) project and task planning surfaces
+          music/: player controls, source parsing, playlist management surfaces
+          perf/: memory and performance diagnostics components
           pomodoro/: timer display, break screen, idle overlay
+          settings/: settings surfaces, theme editor, preferences
+          updates/: app update UI
+          vault/: data folder setup and active-folder UI
+          ui/: shadcn-svelte generated components
+          projects/: (planned) project and task planning surfaces
           notes/: (planned) Tiptap editor wrapper, slash commands
           diary/: (planned) morning/evening entry forms
-          music/: player controls, source parsing, playlist management surfaces
           ai-panel/: (planned) integrated terminal (xterm.js) and BYOK chat
           visual-novel/: (planned) NPC dialogue, conversation state machine
           edge-panel/: (planned) panel layout, quick-access widgets
           environment/: (planned) work environment config UI
           contracts/: (planned) contract creation, tracking, proof UI
           project/: (planned) project management quest chain phases
-          ui/: shadcn-svelte generated components
-        hooks/: reusable Svelte hooks
-        stores/: Svelte runes ($state), global app state
         api/: typed wrappers around Tauri invoke() calls
+        benchmark/: benchmark runner, samplers, output, scenarios
+        calendar/: shared calendar logic and iCalendar parser/serializer
+        data/: shared static/domain data helpers
         doomscrolling/: shared browser and desktop blocking rules
-        utils/: shared helpers, formatters
+        hooks/: reusable Svelte hooks
+        i18n/: typed localization catalogs, locale resolution, formatters
+        music/: frontend music source and playback helpers
+        stores/: Svelte runes ($state), global app state
         types/: frontend-specific TypeScript types
-      windows/: (planned) entry points for each Tauri window
+        utils/: shared helpers, formatters
+        vault/: frontend data folder config and state
+        windows/: detached window helpers
       app.css, app.d.ts: global styles, type declarations
     static/: static assets (fonts, icons, sounds)
     scripts/: repo-owned maintenance and diagnostics scripts
     src-tauri/: Rust backend
-      src/: main.rs (entry), lib.rs (commands), media_player.rs (Rust local audio playback and media probing), mobile.rs (mobile logic)
+      src/: Rust commands and services
+        main.rs: desktop binary entry
+        lib.rs: Tauri app setup and command registration
+        bin/: auxiliary Rust binaries, including native messaging host
+        db.rs, db/: SQLite pool, migration execution, schema invariant tests
+        vault.rs, db_path.rs, sqlite_row.rs: data folder, database path, and row helpers
+        calendar_*.rs, calendars.rs, recurrence.rs: calendar persistence, import, reads, and recurrence logic
+        pomodoro*.rs, notification.rs, tray.rs, window_shape.rs: timer, overlays, notifications, tray, and window integration
+        doomscrolling.rs: browser and desktop blocking commands and runtime helpers
+        media_player.rs, media_controls.rs, music.rs: local playback, media controls, and music commands
+        themes.rs, benchmark_seed.rs: theme validation and benchmark dataset setup
       migrations/: embedded SQLx SQLite migrations
-      gen/: auto-generated mobile projects
       capabilities/: permission declarations (desktop/mobile)
+      gen/schemas/: generated Tauri schema files
+      examples/: Rust example targets
       icons/: app icons
-      tauri.conf.json, Cargo.toml
+      build.rs, tauri.conf.json, tauri.dev.conf.json, Cargo.toml
     index.html, package.json, svelte.config.js, vite.config.ts, tsconfig.json
   server/: (planned) Hocuspocus sync server (self-hostable)
 packages/
@@ -121,6 +144,7 @@ Tauri's platform app config directory stores device-local bootstrap and runtime 
 - **AI integration:** three paths. (1) Integrated terminal (xterm.js) running Codex or another CLI coding agent, with calendar-driven session switching, per-project conversation threads, and task context passed through the agent prompt or standard input. (2) BYOK chat widget for non-developer users (OpenAI API, OpenAI-compatible API, Ollama for local models, and other user-configured providers). (3) MCP for external AI clients only (ChatGPT, teammate agents, etc.), not for internal agent interaction.
 - **Agent data bridge:** a `ganbaru-ai` CLI (Rust, reads the same SQLite) is the primary bridge between AI agents and Ganbaru AI's data. Agents call it via Bash. The CLI exports project state as markdown to git repos for collaborators and agents without the CLI. These exports are views of the database, not the source of truth.
 - **State management:** Svelte 5 runes ($state, $derived, $effect), no external state manager
+- **Localization:** user-facing UI text must use the typed i18n catalog. Language selectors show explicit languages as autonyms, such as `English` and `Español`, while non-language options like system preference are localized. User-facing date, time, number, plural, relative-minute, and list formatting should use the current locale helpers.
 - **Sync:** Yjs + Hocuspocus (CRDT-based, E2E encrypted, self-hosted by the user)
 - **Build tool:** Vite (default with Tauri + Svelte scaffold)
 
