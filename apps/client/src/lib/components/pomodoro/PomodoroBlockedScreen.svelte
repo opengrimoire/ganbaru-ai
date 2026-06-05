@@ -18,6 +18,11 @@
     type FocusBreakEndEscPresses,
     type FocusBreakExtensionLimit,
   } from "$lib/stores/preferences";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
+
+  const localization = getLocalization();
+  const { t } = localization;
+  const locale = $derived(localization.locale);
 
   let {
     state: screenState,
@@ -36,11 +41,11 @@
   } = $props();
 
   let now = $state(new Date());
-  const copy = $derived(pomodoroBlockedScreenCopy(screenState));
+  const copy = $derived(pomodoroBlockedScreenCopy(screenState, t));
   const colors = $derived(pomodoroBlockedScreenPalette(screenState));
   const timerLabel = $derived(formatBlockedScreenDuration(seconds));
   const showDateTime = $derived(shouldShowBlockedScreenDateTime(screenState));
-  const dateTimeLabel = $derived(formatBlockedScreenDateTime(now));
+  const dateTimeLabel = $derived(formatBlockedScreenDateTime(now, locale));
   const extensionShortcutLabel = $derived(formatBreakExtensionShortcut());
   const acknowledgementState = $derived(isBlockedScreenAcknowledgementState(screenState));
   const showTimer = $derived(!acknowledgementState);
@@ -49,7 +54,7 @@
   );
   const showExtensionHint = $derived.by(() => {
     if (screenState !== "break_countdown") return false;
-    return formatBreakExtensionHint(extensionMinutes, maxExtensionMinutes) !== null;
+    return formatBreakExtensionHint(extensionMinutes, maxExtensionMinutes, undefined, t) !== null;
   });
   const skipHintKey = $derived.by(() => {
     if (screenState !== "break_countdown") return null;
@@ -118,23 +123,23 @@
       {#if screenState === "break_countdown"}
         {#if showExtensionHint}
           <p>
-            Press <span class="blocked-main">{extensionShortcutLabel}</span> to extend the break
+            {t("pomodoroOverlay.press")} <span class="blocked-main">{extensionShortcutLabel}</span> {t("pomodoroOverlay.to")} {t("pomodoroOverlay.extendBreak")}
           </p>
         {/if}
         {#if skipHintKey}
           <p>
-            Press <span class="blocked-main">{skipHintKey}</span> to end your break now
+            {t("pomodoroOverlay.press")} <span class="blocked-main">{skipHintKey}</span> {t("pomodoroOverlay.to")} {t("pomodoroOverlay.endBreakNow")}
           </p>
         {/if}
       {:else}
         {#if copy.primaryHint}
           <p>
-            Press <span class="blocked-main">{copy.primaryHint.key}</span> to {copy.primaryHint.label}
+            {t("pomodoroOverlay.press")} <span class="blocked-main">{copy.primaryHint.key}</span> {t("pomodoroOverlay.to")} {copy.primaryHint.label}
           </p>
         {/if}
         {#if copy.secondaryHint}
           <p>
-            Press <span class="blocked-main">{copy.secondaryHint.key}</span> to {copy.secondaryHint.label}
+            {t("pomodoroOverlay.press")} <span class="blocked-main">{copy.secondaryHint.key}</span> {t("pomodoroOverlay.to")} {copy.secondaryHint.label}
           </p>
         {/if}
       {/if}

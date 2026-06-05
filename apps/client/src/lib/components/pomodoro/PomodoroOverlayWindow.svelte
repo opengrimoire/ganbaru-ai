@@ -5,6 +5,7 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { APP_SOUND_IDS, playAppSound } from "$lib/app-sounds";
   import { hasShortcutModifier } from "$lib/keyboard-shortcuts";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import { IDLE_FOCUS_FAILURE_DELAY_SECONDS } from "$lib/stores/pomodoro-machine";
   import {
     DEFAULT_FOCUS_BREAK_END_ESC_PRESSES,
@@ -34,6 +35,7 @@
   } from "./blocked-screen";
 
   const IDLE_ALERT_INTERVAL_MS = 10_000;
+  const { t } = getLocalization();
 
   type OverlayMode =
     | { kind: "idle"; initialIdleSeconds: number }
@@ -385,8 +387,8 @@
         idleFailureDueAtMs = overlayStartedAtMs + IDLE_FOCUS_FAILURE_DELAY_SECONDS * 1000;
         seconds = mode.initialIdleSeconds;
         invoke("show_event_notification", {
-          title: "Focus session paused",
-          body: "No activity detected. Return to resume your session.",
+          title: t("pomodoroOverlay.focusPausedTitle"),
+          body: t("pomodoroOverlay.focusPausedBody"),
           playSound: false,
         }).catch(() => {});
         playIdleAlert();
