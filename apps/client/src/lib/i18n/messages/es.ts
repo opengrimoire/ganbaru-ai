@@ -907,6 +907,7 @@ export const es = {
     shortcuts: {
       search: "Buscar atajos",
       clearSearch: "Limpiar búsqueda de atajos",
+      shortcutsLabel: "Atajos:",
       noResults: "No se encontraron atajos.",
       group: {
         general: "General",
@@ -1246,6 +1247,190 @@ export const es = {
     releaseNotes: "Notas de la versión",
     dismissNotification: "Descartar notificación de actualización",
     feedNotConfigured: "Esta compilación no tiene configurado un feed de actualizaciones",
+  },
+  diagnostics: {
+    liveRam: "RAM en vivo",
+    startupRam: "RAM de inicio (10 s)",
+    startupRamSnapshot: "Captura de RAM de inicio (10 s)",
+    pin: "Fijar",
+    unpin: "Desfijar",
+    devModeUsesMoreResources: "El modo de desarrollo usa más recursos.",
+    startupSnapshotPending: "Captura de inicio pendiente...",
+    startupSnapshotUnavailable: "Captura de inicio no disponible.",
+    copied: "Copiado",
+    copyLiveRam: "Copiar RAM en vivo",
+    copyChart: "Copiar gráfica",
+    copyStartupRam: "Copiar RAM de inicio",
+    launchTime: "Tiempo de inicio",
+    noBootMarksCaptured: "No se capturaron marcas de arranque.",
+    copyLaunchTable: "Copiar tabla de inicio",
+    speedLogHeading: (count: number) => `Registro de velocidad (${count})`,
+    speedLogCopyHeading: (count: number) =>
+      `Registro de velocidad (${count} acciones):`,
+    trackOn: "activado",
+    trackOff: "desactivado",
+    trackState: (state: string) => `Registrar: ${state}`,
+    stopTrackingTitle:
+      "Dejar de registrar acciones de navegación, vistas y panel de eventos",
+    startTrackingTitle:
+      "Registrar acciones de navegación, vistas y panel de eventos",
+    clear: "Limpiar",
+    copySpeedLog: "Copiar registro de velocidad",
+    benchmarks: "Benchmarks",
+    restartsApp: "reinicia la app",
+    runSuite: (label: string) => `Ejecutar ${label.toLowerCase()}`,
+    showSuite: (label: string) => `Mostrar ${label}`,
+    hideSuite: (label: string) => `Ocultar ${label}`,
+    metric: "Métrica",
+    ramByProcess: "RAM por proceso:",
+    memory: {
+      backend: "Backend",
+      frontend: "Frontend",
+      network: "Red",
+      total: "Total",
+      totalMetric: (name: string) => `Total ${name}`,
+      unitMb: "MB",
+      waiting: "Esperando el reporte de memoria.",
+      linuxPss: (fallback: string) =>
+        `En Linux, 'Total' usa PSS para Ganbaru AI y WebKit.${fallback} PSS reparte la RAM compartida de forma justa, así que se acerca más al costo real de la app. Para comparar con otra app, mide también el PSS de esa app. Si usas RSS en System Monitor, compara RSS con RSS, pero eso es menos preciso.`,
+      linuxRssFallback: " Algunos procesos usaron RSS porque PSS no estaba disponible.",
+      windowsWorkingSet:
+        "En Windows, 'Total' usa Working Set para Ganbaru AI y WebView2. Working Set incluye RAM privada y compartida actualmente en memoria. Memory en Task Manager muestra el working set privado, así que deja fuera la RAM compartida. Para comparar con otra app, mide también el Working Set de esa app. Si usas Memory en Task Manager, compara Task Manager con Task Manager, pero eso es menos preciso.",
+      macUnavailable:
+        "En macOS, 'Total' debería ser la suma de la huella física de Ganbaru AI y los procesos WebView. Aún no está implementado.",
+      metricDescription: (name: string, description: string) => `${name}: ${description}`,
+    },
+  },
+  benchmark: {
+    runBenchmarkTitle: "¿Ejecutar benchmark?",
+    runSuiteTitle: (suite: string) => `¿Ejecutar ${suite}?`,
+    confirmRun: "Ejecutar (Enter)",
+    suiteIntro: (count: number) =>
+      `Ejecuta ${count} benchmarks en secuencia contra bases de datos aisladas`,
+    singleIntro: "Reinicia la app varias veces contra una base de datos aislada",
+    realCalendarUntouched: "Tu calendario real no se toca.",
+    completionNotification:
+      "Se muestra una notificación de escritorio cuando termina la ejecución.",
+    scenariosHeading: "Escenarios:",
+    runningTitle: (label: string) => `Ejecutando benchmark: ${label}`,
+    runningSuiteProgress: (current: number, total: number) =>
+      `Benchmark ${current}/${total}.`,
+    dataset: (label: string) => `Dataset: ${label}.`,
+    datasetBase: "base",
+    datasetDenseFallback: "dataset denso",
+    runningWarning:
+      "Evita interactuar con la app: los clics y las pulsaciones pueden alterar las mediciones. Tu calendario real vive en una base de datos separada y se mantiene intacto aunque la ejecución se interrumpa, la app se cierre por fuerza o el sistema se apague. Cancelar descarta la ejecución parcial y reinicia con tus datos reales.",
+    completeTitle: "Benchmark completado",
+    completeDescription:
+      "Revisa las tablas, luego copia el markdown para que un agente lo coloque cuidadosamente en el registro de rendimiento.",
+    copied: "Copiado",
+    copyMarkdown: "Copiar markdown",
+    runMetadata: "Metadatos de ejecución",
+    noPrimaryMetrics: "No se capturaron métricas principales.",
+    failedTitle: "Benchmark falló",
+    unknownError: "Error desconocido.",
+    returnToData: "Volver a tus datos",
+    table: {
+      run: "Ejecución",
+      harness: "Harness",
+      anchorDate: "Fecha ancla",
+      buildRef: "Ref de compilación",
+      platform: "Plataforma",
+      notes: "Notas",
+      dataset: "Dataset",
+      runs: "Ejecuciones",
+      usablePaintMedianMs: "Mediana de pintura usable ms",
+      launchMedianMs: "Mediana de inicio ms",
+      launchP95Ms: "P95 de inicio ms",
+      statistic: "Estadística",
+      backendMb: "Backend MB",
+      frontendMb: "Frontend MB",
+      networkMb: "Red MB",
+      totalMb: "Total MB",
+      metric: "Métrica",
+      action: "Acción",
+      value: "Valor",
+      valueMs: "Valor ms",
+      unit: "Unidad",
+      medianMs: "Mediana ms",
+      p95Ms: "P95 ms",
+    },
+    suite: {
+      core: {
+        label: "Benchmarks principales",
+        description: "Inicio, memoria y latencia de interacción visible.",
+      },
+      backend: {
+        label: "Benchmarks de backend",
+        description: "Latencia de importación de calendario respaldada por Rust.",
+      },
+      all: {
+        label: "Todos los benchmarks",
+        description: "Suite completa de benchmarks principales y de backend.",
+      },
+      fallbackPlural: "benchmarks",
+    },
+    scenario: {
+      startupBoot: {
+        label: "Arranque de inicio",
+        sectionTitle: "Arranque de inicio",
+        description:
+          "Captura muestras repetidas de lanzamiento del proceso hasta la pintura usable del calendario sin agregar una ventana de estabilización de memoria. Úsalo para regresiones de tiempo de inicio.",
+      },
+      idleMemory: {
+        label: "Memoria en reposo",
+        sectionTitle: "Memoria en reposo",
+        description:
+          "Carga la semana anclada fija, no realiza interacción durante la ventana de carga y reporta memoria.",
+      },
+      calendarNav: {
+        label: "Navegación semanal del calendario",
+        sectionTitle: "Memoria de navegación sostenida del calendario",
+        description:
+          "Envía eventos keydown iniciales y repetidos de ArrowRight más keyup durante una pulsación de 3 segundos, usando el mismo controlador de teclado de ventana y el mismo controlador de navegación sostenida que una pulsación física de flecha derecha. Corre contra el calendario denso práctico de 1 año.",
+      },
+      calendarPanelLatency: {
+        label: "Latencia del panel de calendario",
+        sectionTitle: "Latencia del panel de calendario",
+        description:
+          "Mide las dos acciones de apertura del panel de calendario con 50 ejecuciones cada una: hacer clic en eventos existentes variados y hacer clic en bloques de tiempo deterministas para crear.",
+      },
+      calendarImportOps: {
+        label: "Operaciones de importación de calendario",
+        sectionTitle: "Operaciones de importación de calendario",
+        description:
+          "Mide el comando Rust calendar_bulk_import para importaciones repetidas de 100 eventos y un pase de agregar/actualizar 1000 eventos.",
+      },
+    },
+    workload: {
+      calendarStartupLaunchSamples: "muestras de inicio de calendario",
+      idleCalendarBaseline: "línea base de calendario en reposo",
+      heldRightArrowWeekViewNavigation:
+        "navegación sostenida con flecha derecha en vista semanal",
+      scriptedCalendarPanelOpenActions:
+        "acciones programadas de apertura del panel de calendario",
+      scriptedCalendarBulkImportCommands:
+        "comandos programados de importación masiva de calendario",
+    },
+    step: {
+      settingUp: "Configurando",
+      memoryObservation: "Observación de memoria",
+      preparingMemoryObservation: "Preparando observación de memoria",
+      restartingToSeedDenseDataset: "Reiniciando para sembrar dataset denso",
+      restartingForBaselineDataset: "Reiniciando para dataset base",
+      restartingForDenseDataset: "Reiniciando para dataset denso",
+      restartingForNextBenchmark: "Reiniciando para el siguiente benchmark",
+      startupCooldown: (seconds: number) =>
+        `Cerrando durante ${seconds} s para el enfriamiento de inicio`,
+      baselineCooldown: (seconds: number, current: number, total: number) =>
+        `Cerrando durante ${seconds} s antes del inicio base ${current}/${total}`,
+      denseCooldown: (seconds: number, current: number, total: number) =>
+        `Cerrando durante ${seconds} s antes del inicio denso ${current}/${total}`,
+      launchSample: (current: number, total: number) =>
+        `Muestra de inicio ${current}/${total}`,
+      seeding: (dataset: string) => `Sembrando ${dataset}`,
+      timedWorkload: (label: string, seconds: number) => `${label}: ${seconds} s`,
+    },
   },
   music: {
     playlistBuilder: "Constructor de playlists",
