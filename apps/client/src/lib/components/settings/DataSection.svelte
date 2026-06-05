@@ -17,6 +17,18 @@
   let busy = $state<"load" | "reveal" | "change" | "import" | null>("load");
   let error = $state<string | null>(null);
 
+  const actionButtonClass =
+    "inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border px-2.5 text-[0.8rem] font-medium transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-55";
+  const secondaryButtonClass = `${actionButtonClass} bg-card text-foreground hover:bg-accent dark:bg-transparent`;
+  const linkButtonClass =
+    "inline-flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-md px-1 text-[0.8rem] font-medium text-foreground transition-colors hover:text-primary focus:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-55";
+
+  const currentFolderPath = $derived(
+    busy === "load"
+      ? "Loading folder..."
+      : activeDataFolder?.path ?? "No active folder",
+  );
+
   async function loadDataFolderState(): Promise<void> {
     busy = "load";
     error = null;
@@ -63,76 +75,100 @@
   });
 </script>
 
-<section class="space-y-6">
-  <div class="space-y-1">
-    <h2 class="text-base font-semibold">Data</h2>
-    <p class="text-sm leading-5 text-muted-foreground">
-      Your Ganbaru AI folder contains settings, documents, and ganbaru-ai.sqlite.
-    </p>
-  </div>
+<div class="flex flex-col gap-6">
+  <section class="flex flex-col gap-4">
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Folder</h2>
 
-  <div class="space-y-3 rounded-lg border border-border bg-card/70 p-4">
-    <div class="flex items-start gap-3">
-      <span class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground">
-        <HardDrive size={17} strokeWidth={1.8} />
-      </span>
-      <div class="min-w-0 flex-1">
-        <h3 class="text-sm font-semibold">Ganbaru AI folder</h3>
-        <p class="mt-1 break-all text-sm text-muted-foreground">
-          {activeDataFolder?.path ?? "No active folder"}
-        </p>
+    <div class="flex flex-col gap-3">
+      <div class="flex items-start justify-between gap-4 px-1 py-1 max-[520px]:flex-col max-[520px]:items-stretch max-[520px]:gap-2">
+        <div class="min-w-0 flex-1">
+          <div class="text-[0.866667rem] text-foreground">Current folder</div>
+          <div class="mt-0.5 wrap-break-word text-[0.8rem] leading-5 text-muted-foreground">
+            {currentFolderPath}
+          </div>
+        </div>
+        <button
+          type="button"
+          onclick={() => void revealDataFolder()}
+          disabled={busy !== null || !activeDataFolder}
+          class={secondaryButtonClass}
+        >
+          {#if busy === "reveal"}
+            <LoaderCircle size={14} strokeWidth={2.1} class="shrink-0 animate-spin" />
+          {:else}
+            <FolderOpen size={14} strokeWidth={1.9} class="shrink-0" />
+          {/if}
+          <span>Reveal</span>
+        </button>
+      </div>
+
+      <div class="flex items-start justify-between gap-4 px-1 py-1 max-[520px]:flex-col max-[520px]:items-stretch max-[520px]:gap-2">
+        <div class="min-w-0 flex-1">
+          <div class="text-[0.866667rem] text-foreground">Change folder</div>
+          <div class="mt-0.5 text-[0.8rem] leading-5 text-muted-foreground">
+            Choose another Ganbaru AI folder and restart
+          </div>
+        </div>
+        <button
+          type="button"
+          onclick={() => void chooseDataFolder("change")}
+          disabled={busy !== null}
+          class={secondaryButtonClass}
+        >
+          {#if busy === "change"}
+            <LoaderCircle size={14} strokeWidth={2.1} class="shrink-0 animate-spin" />
+          {:else}
+            <FolderOpen size={14} strokeWidth={1.9} class="shrink-0" />
+          {/if}
+          <span>Change folder</span>
+        </button>
+      </div>
+
+      <div class="flex items-start justify-between gap-4 px-1 py-1 max-[520px]:flex-col max-[520px]:items-stretch max-[520px]:gap-2">
+        <div class="min-w-0 flex-1">
+          <div class="text-[0.866667rem] text-foreground">Import folder</div>
+          <div class="mt-0.5 text-[0.8rem] leading-5 text-muted-foreground">
+            Use a Ganbaru AI folder from another installation
+          </div>
+        </div>
+        <button
+          type="button"
+          onclick={() => void chooseDataFolder("import")}
+          disabled={busy !== null}
+          class={secondaryButtonClass}
+        >
+          {#if busy === "import"}
+            <LoaderCircle size={14} strokeWidth={2.1} class="shrink-0 animate-spin" />
+          {:else}
+            <FolderInput size={14} strokeWidth={1.9} class="shrink-0" />
+          {/if}
+          <span>Import folder</span>
+        </button>
       </div>
     </div>
-
-    <div class="flex flex-wrap gap-2">
-      <button
-        type="button"
-        onclick={() => void revealDataFolder()}
-        disabled={busy !== null || !activeDataFolder}
-        class="flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {#if busy === "reveal"}
-          <LoaderCircle size={15} strokeWidth={2} class="animate-spin" />
-        {:else}
-          <FolderOpen size={15} strokeWidth={1.8} />
-        {/if}
-        <span>Reveal</span>
-      </button>
-      <button
-        type="button"
-        onclick={() => void chooseDataFolder("change")}
-        disabled={busy !== null}
-        class="flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {#if busy === "change"}
-          <LoaderCircle size={15} strokeWidth={2} class="animate-spin" />
-        {:else}
-          <FolderOpen size={15} strokeWidth={1.8} />
-        {/if}
-        <span>Change folder and restart</span>
-      </button>
-      <button
-        type="button"
-        onclick={() => void chooseDataFolder("import")}
-        disabled={busy !== null}
-        class="flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {#if busy === "import"}
-          <LoaderCircle size={15} strokeWidth={2} class="animate-spin" />
-        {:else}
-          <FolderInput size={15} strokeWidth={1.8} />
-        {/if}
-        <span>Import existing folder and restart</span>
-      </button>
-    </div>
-  </div>
+  </section>
 
   {#if error}
-    <p
-      role="alert"
-      class="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-    >
-      {error}
-    </p>
+    <div class="h-px bg-border/70" aria-hidden="true"></div>
+
+    <section class="flex flex-col gap-4">
+      <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Status</h2>
+      <div role="alert" class="px-1 text-[0.8rem] leading-5 text-destructive">
+        {error}
+      </div>
+      <button
+        type="button"
+        onclick={() => void loadDataFolderState()}
+        disabled={busy !== null}
+        class={linkButtonClass}
+      >
+        {#if busy === "load"}
+          <LoaderCircle size={13} strokeWidth={2.25} class="shrink-0 animate-spin" />
+        {:else}
+          <HardDrive size={13} strokeWidth={2.25} class="shrink-0" />
+        {/if}
+        <span>Reload folder status</span>
+      </button>
+    </section>
   {/if}
-</section>
+</div>
