@@ -96,7 +96,7 @@ First launch defaults to `Documents/Ganbaru AI` in production and `Documents/Gan
 
 The frontend bridge (`lib/vault/config.ts`) loads the config once at boot, exposes synchronous reads against an in-memory cache, and debounces writes (250 ms) so rapid edits coalesce into one disk write. Stores hydrate from the cache on first read, keeping first paint synchronous for the small prefs that still live there. User themes load asynchronously: `apps/client/src/main.ts` awaits `ensureConfigLoaded()` and then `hydrateUserThemes()` before mounting the app, so first paint always matches what the user has on disk.
 
-Built-in themes still pass through `validateThemeJson` on load (defense in depth against tampered config files). Unknown or invalid theme IDs fall back to the default (`dark`).
+Built-in themes still pass through `validateThemeJson` on load (defense in depth against tampered config files). Unknown or invalid theme IDs fall back to the default (`light`).
 
 ## Custom theme workflow
 

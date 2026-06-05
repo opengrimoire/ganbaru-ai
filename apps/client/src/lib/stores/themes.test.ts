@@ -139,6 +139,7 @@ describe("theme registry", () => {
   });
 
   it("default theme ID is registered", () => {
+    expect(DEFAULT_THEME_ID).toBe(lightTheme.id);
     expect(getThemeById(DEFAULT_THEME_ID)).toBeDefined();
   });
 

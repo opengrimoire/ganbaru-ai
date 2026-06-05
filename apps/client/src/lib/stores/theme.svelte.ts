@@ -120,7 +120,7 @@ function loadQuickToggleIdFromConfig(key: string, fallback: ThemeId): ThemeId {
 }
 
 function resolveActive(): Theme {
-  return getThemeById(activeId, combinedRegistry()) ?? darkTheme;
+  return getThemeById(activeId, combinedRegistry()) ?? lightTheme;
 }
 
 function beginInstantThemePaint(): (() => void) | undefined {

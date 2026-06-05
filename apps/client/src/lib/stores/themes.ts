@@ -297,11 +297,8 @@ export const BUILTIN_THEME_REGISTRY: Readonly<Record<ThemeId, BuiltinTheme>> =
     [darkTheme.id]: darkTheme,
   });
 
-/**
- * Theme ID used on first launch and when the stored ID is unknown. Kept as
- * "dark" to preserve the previous default.
- */
-export const DEFAULT_THEME_ID: ThemeId = darkTheme.id;
+/** Theme ID used on first launch and when the stored ID is unknown. */
+export const DEFAULT_THEME_ID: ThemeId = lightTheme.id;
 
 export function pickQuickToggleTarget({
   activeId,
