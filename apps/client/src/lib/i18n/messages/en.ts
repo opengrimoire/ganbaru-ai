@@ -397,6 +397,43 @@ export const en = {
       calendarZoomOption: (percent: number, gridMinutes: number) =>
         `${percent}% (${gridMinutes}min)`,
     },
+    calendars: {
+      heading: "Calendars",
+      importWarnings: "Import warnings",
+      moreWarnings: (count: number) =>
+        `${count} more ${count === 1 ? "warning" : "warnings"} not shown.`,
+      importCalendar: "Import calendar",
+      importingCalendar: "Importing calendar",
+      importingEntry: (name: string, current: number, total: number) =>
+        total > 1 ? `Importing ${name} (${current}/${total})` : `Importing ${name}`,
+      newEvents: (count: number) => `${count} new`,
+      updatedEvents: (count: number) => `${count} updated`,
+      olderSkipped: (count: number) => `${count} older skipped`,
+      noChanges: "no changes",
+      importedCalendars: (count: number, summary: string) =>
+        `Imported ${count} calendars: ${summary}`,
+      imported: (summary: string) => `Imported: ${summary}`,
+      withWarnings: (summary: string, count: number) =>
+        `${summary} (with ${count} ${count === 1 ? "warning" : "warnings"})`,
+      noIcsFiles: "No .ics files found.",
+      noEventsFound: "No events found in file.",
+      importFailed: "Import failed.",
+      exportedToFile: "Exported to file.",
+      exportFailed: "Export failed.",
+      deleted: (name: string) => `Deleted "${name}".`,
+      deleteFailed: "Delete failed.",
+      eventCount: (count: number) => `${count} ${count === 1 ? "event" : "events"}`,
+      importedOn: (date: string) => `imported on ${date}`,
+      export: "Export",
+      localCannotDelete: "Local calendar can't be deleted",
+      deleteCalendar: (name: string) => `Delete ${name}`,
+      deleteTitle: "Delete calendar",
+      deleteMessage: (name: string, count: number) =>
+        `Delete "${name}" and ${
+          count === 1 ? "its 1 event" : `all ${count} events`
+        }? This cannot be undone`,
+      deleteShortcut: "Delete (Enter)",
+    },
     updates: {
       notificationsHeading: "Notifications",
       updateNotifications: "Update notifications",
@@ -965,6 +1002,64 @@ export const en = {
           "It will stay in the list but will not block when exhausted until you enable it again",
         deleteMessage:
           "This cannot be undone. Today's tracked usage will stay in history and can still roll up into matching limits.",
+        editor: {
+          none: "None",
+          custom: "Custom",
+          minutes: (count: number) => `${count} ${count === 1 ? "minute" : "minutes"}`,
+          hours: (count: number) => `${count} ${count === 1 ? "hour" : "hours"}`,
+          hoursMinutes: (hours: number, minutes: number) =>
+            `${hours} ${hours === 1 ? "hour" : "hours"} ${minutes} ${
+              minutes === 1 ? "minute" : "minutes"
+            }`,
+          editTitle: "Edit usage limit",
+          addTitle: "Add usage limit",
+          intro: "Link every source that should share the same usage budget.",
+          limitDetails: "Limit details",
+          limitName: "Limit name",
+          limitNameDescription: "Name this source group in the limits list",
+          limitNamePlaceholder: "Social media",
+          dailyBudget: "Daily budget",
+          dailyBudgetDescription: "Set the budget for today, or disable it",
+          customMinutes: "Custom minutes",
+          customMinutesDescription: "Use a whole number from 1 to 1440",
+          weeklyBudget: "Weekly budget",
+          weeklyBudgetDescription: "Set the budget for this week, or leave it off",
+          customWeeklyHours: "Custom weekly hours",
+          customWeeklyHoursDescription:
+            "Use hours from 0.1 to 168, with one decimal at most",
+          linkedSources: "Linked sources",
+          linkedSourcesDescription:
+            "Each source can connect the same product across browser, mobile, and desktop.",
+          sourceName: "Source name",
+          sourceNamePlaceholder: "Name...",
+          sourceColor: "Source color",
+          selectSourceColor: "Select source color",
+          removeLinkedSourceRow: "Remove linked source row",
+          website: "Website",
+          mobile: "Mobile",
+          desktop: "Desktop",
+          mobilePlaceholder: "App name...",
+          chooseApp: "Choose app...",
+          clearDesktopApp: "Clear desktop app",
+          addSource: "Add source",
+          chooseDesktopApp: "Choose a desktop app",
+          deleteLinkedSourceTitle: "Delete linked source?",
+          deleteLinkedSourceMessage:
+            "This removes the source from the usage limit. Tracked usage stays in history.",
+          addLimitNameForMultipleSources:
+            "Add a limit name when grouping multiple sources.",
+          limitMissing: "Limit no longer exists",
+          addOneSource: "Add at least one website, mobile app, or desktop app",
+          sourceNeedsTarget: "Each linked source needs a website, mobile app, or desktop app",
+          protectedDesktopApps: "Protected desktop apps cannot be tracked",
+          dailyBudgetInvalid: "Choose a daily budget from 1 minute to 24 hours, or None",
+          weeklyBudgetInvalid: "Choose weekly hours from 0.1 to 168, or None",
+          chooseBudget: "Choose a daily or weekly budget",
+          enterLimitName: "Enter a limit name",
+          validBudget: "Choose a valid daily or weekly budget",
+          validSources: "Each linked source needs a valid website, mobile app, or desktop app",
+          duplicateSource: "Remove duplicate website or app entries",
+        },
       },
       browser: {
         categoryLabel: {

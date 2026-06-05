@@ -11,9 +11,13 @@
   import { calendarDisplayName, calendarImportDate } from "$lib/calendar/calendar-display";
   import ActionToast from "$lib/components/ui/ActionToast.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
 
   const calendarsStore = getCalendars();
   const calendarStore = getCalendar();
+  const localization = getLocalization();
+  const { t } = localization;
+  const locale = $derived(localization.locale);
   const MAX_VISIBLE_IMPORT_WARNINGS = 8;
   const TOAST_TIMEOUT_MS = 5_000;
 
@@ -83,19 +87,20 @@
     const visibleWarnings = uniqueWarnings.slice(0, MAX_VISIBLE_IMPORT_WARNINGS);
     const hiddenCount = uniqueWarnings.length - visibleWarnings.length;
     if (hiddenCount > 0) {
-      visibleWarnings.push(`${hiddenCount} more warning${hiddenCount === 1 ? "" : "s"} not shown.`);
+      visibleWarnings.push(t("settings.calendars.moreWarnings", hiddenCount));
     }
     return visibleWarnings;
   }
 
   function importButtonLabel(): string {
-    if (!isImporting) return "Import calendar";
-    if (!importProgress) return "Importing calendar";
-
-    const entryCount = importProgress.total > 1
-      ? ` (${importProgress.current}/${importProgress.total})`
-      : "";
-    return `Importing ${importProgress.label}${entryCount}`;
+    if (!isImporting) return t("settings.calendars.importCalendar");
+    if (!importProgress) return t("settings.calendars.importingCalendar");
+    return t(
+      "settings.calendars.importingEntry",
+      importProgress.label,
+      importProgress.current,
+      importProgress.total,
+    );
   }
 
   async function refreshCounts() {
@@ -150,14 +155,14 @@
 
   function summarizeTotals(totals: ImportTotals): string {
     const parts: string[] = [];
-    if (totals.added) parts.push(`${totals.added} new`);
-    if (totals.updated) parts.push(`${totals.updated} updated`);
-    if (totals.skippedOlder) parts.push(`${totals.skippedOlder} older skipped`);
-    const summaryLine = parts.length > 0 ? parts.join(", ") : "no changes";
+    if (totals.added) parts.push(t("settings.calendars.newEvents", totals.added));
+    if (totals.updated) parts.push(t("settings.calendars.updatedEvents", totals.updated));
+    if (totals.skippedOlder) parts.push(t("settings.calendars.olderSkipped", totals.skippedOlder));
+    const summaryLine = parts.length > 0 ? parts.join(", ") : t("settings.calendars.noChanges");
     if (totals.calendars > 1) {
-      return `Imported ${totals.calendars} calendars: ${summaryLine}`;
+      return t("settings.calendars.importedCalendars", totals.calendars, summaryLine);
     }
-    return `Imported: ${summaryLine}`;
+    return t("settings.calendars.imported", summaryLine);
   }
 
   async function handleImport() {
@@ -178,7 +183,7 @@
       };
 
       if (entries.length === 0) {
-        flashToast("No .ics files found.");
+        flashToast(t("settings.calendars.noIcsFiles"));
         return;
       }
       importProgress = { current: 0, total: entries.length, label: entries[0].name };
@@ -194,7 +199,7 @@
 
       if (totals.calendars === 0) {
         importWarnings = visibleImportWarnings(totals.warnings);
-        flashToast(totals.warnings[0] ?? "No events found in file.");
+        flashToast(totals.warnings[0] ?? t("settings.calendars.noEventsFound"));
         return;
       }
 
@@ -202,9 +207,7 @@
       if (totals.warnings.length > 0) {
         for (const w of totals.warnings) console.warn("[ics import]", w);
         importWarnings = visibleImportWarnings(totals.warnings);
-        flashToast(
-          `${summaryLine} (with ${totals.warnings.length} warning${totals.warnings.length === 1 ? "" : "s"})`,
-        );
+        flashToast(t("settings.calendars.withWarnings", summaryLine, totals.warnings.length));
       } else {
         importWarnings = [];
         flashToast(summaryLine);
@@ -213,7 +216,7 @@
     } catch (err) {
       console.error("ics import failed", err);
       importWarnings = [];
-      flashToast(errorMessage(err, "Import failed."));
+      flashToast(errorMessage(err, t("settings.calendars.importFailed")));
     } finally {
       isImporting = false;
       importProgress = undefined;
@@ -228,10 +231,10 @@
         defaultName: `${displayName.replace(/[^\w.-]+/g, "_")}.ics`,
         contents: ics,
       });
-      if (saved) flashToast("Exported to file.");
+      if (saved) flashToast(t("settings.calendars.exportedToFile"));
     } catch (err) {
       console.error("ics export failed", err);
-      flashToast(errorMessage(err, "Export failed."));
+      flashToast(errorMessage(err, t("settings.calendars.exportFailed")));
     }
   }
 
@@ -247,10 +250,10 @@
       await calendarsStore.remove(target.id);
       await calendarStore.load();
       await refreshCounts();
-      flashToast(`Deleted "${calendarDisplayName(target)}".`);
+      flashToast(t("settings.calendars.deleted", calendarDisplayName(target)));
     } catch (err) {
       console.error("delete calendar failed", err);
-      flashToast(errorMessage(err, "Delete failed."));
+      flashToast(errorMessage(err, t("settings.calendars.deleteFailed")));
     }
   }
 
@@ -262,7 +265,7 @@
 <div class="flex flex-col gap-4">
   <header class="flex items-start justify-between gap-3 px-1 max-[520px]:flex-col">
     <div class="min-w-0 flex-1">
-      <h2 class="text-[0.866667rem] font-semibold text-foreground">Calendars</h2>
+      <h2 class="text-[0.866667rem] font-semibold text-foreground">{t("settings.calendars.heading")}</h2>
     </div>
   </header>
 
@@ -270,7 +273,7 @@
     <section
       class="mx-1 rounded-md border border-border bg-muted/20 px-3 py-2 text-[0.766667rem] text-foreground"
     >
-      <h3 class="font-medium">Import warnings</h3>
+      <h3 class="font-medium">{t("settings.calendars.importWarnings")}</h3>
       <ul class="mt-1 list-disc space-y-1 pl-4 text-muted-foreground">
         {#each importWarnings as warning}
           <li>{warning}</li>
@@ -282,7 +285,7 @@
   <div class="flex flex-col gap-3">
     {#each calendarsStore.list as cal (cal.id)}
       {@const displayName = calendarDisplayName(cal)}
-      {@const importDate = calendarImportDate(cal)}
+      {@const importDate = calendarImportDate(cal, locale)}
       <div class="flex items-center gap-3 px-1 py-1 max-[520px]:flex-col max-[520px]:items-stretch">
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
@@ -296,9 +299,9 @@
             </span>
           </div>
           <div class="mt-0.5 flex items-center gap-2 text-[0.733333rem] text-muted-foreground">
-            <span>{counts[cal.id] ?? 0} event{counts[cal.id] === 1 ? "" : "s"}</span>
+            <span>{t("settings.calendars.eventCount", counts[cal.id] ?? 0)}</span>
             {#if importDate}
-              <span>imported on {importDate}</span>
+              <span>{t("settings.calendars.importedOn", importDate)}</span>
             {/if}
           </div>
         </div>
@@ -310,13 +313,13 @@
             class="flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent"
           >
             <Download size={12} strokeWidth={2.25} />
-            <span>Export</span>
+            <span>{t("settings.calendars.export")}</span>
           </button>
           {#if cal.id === "local"}
             <button
               type="button"
               disabled
-              aria-label="Local calendar can't be deleted"
+              aria-label={t("settings.calendars.localCannotDelete")}
               data-app-tooltip-disabled="true"
               class="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-md border border-border/60 bg-muted/30 text-muted-foreground/35"
             >
@@ -326,7 +329,7 @@
             <button
               type="button"
               onclick={() => handleDelete(cal)}
-              aria-label={`Delete ${displayName}`}
+              aria-label={t("settings.calendars.deleteCalendar", displayName)}
               data-app-tooltip-disabled="true"
               class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-destructive transition-colors hover:bg-destructive/10 dark:bg-transparent"
             >
@@ -360,10 +363,14 @@
 
 {#if pendingDelete}
   <ConfirmDialog
-    title="Delete calendar"
-    message={`Delete "${calendarDisplayName(pendingDelete)}" and all of its ${counts[pendingDelete.id] ?? 0} event(s)? This cannot be undone`}
-    confirmLabel="Delete (Enter)"
-    cancelLabel="Cancel (Esc)"
+    title={t("settings.calendars.deleteTitle")}
+    message={t(
+      "settings.calendars.deleteMessage",
+      calendarDisplayName(pendingDelete),
+      counts[pendingDelete.id] ?? 0,
+    )}
+    confirmLabel={t("settings.calendars.deleteShortcut")}
+    cancelLabel={t("common.cancelShortcut")}
     onConfirm={confirmDelete}
     onCancel={cancelDelete}
   />

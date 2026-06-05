@@ -394,6 +394,43 @@ export const es = {
       calendarZoomOption: (percent: number, gridMinutes: number) =>
         `${percent}% (${gridMinutes}min)`,
     },
+    calendars: {
+      heading: "Calendarios",
+      importWarnings: "Advertencias de importación",
+      moreWarnings: (count: number) =>
+        `${count} ${count === 1 ? "advertencia más no se muestra" : "advertencias más no se muestran"}.`,
+      importCalendar: "Importar calendario",
+      importingCalendar: "Importando calendario",
+      importingEntry: (name: string, current: number, total: number) =>
+        total > 1 ? `Importando ${name} (${current}/${total})` : `Importando ${name}`,
+      newEvents: (count: number) => `${count} nuevos`,
+      updatedEvents: (count: number) => `${count} actualizados`,
+      olderSkipped: (count: number) => `${count} antiguos omitidos`,
+      noChanges: "sin cambios",
+      importedCalendars: (count: number, summary: string) =>
+        `Se importaron ${count} calendarios: ${summary}`,
+      imported: (summary: string) => `Importado: ${summary}`,
+      withWarnings: (summary: string, count: number) =>
+        `${summary} (con ${count} ${count === 1 ? "advertencia" : "advertencias"})`,
+      noIcsFiles: "No se encontraron archivos .ics.",
+      noEventsFound: "No se encontraron eventos en el archivo.",
+      importFailed: "No se pudo importar.",
+      exportedToFile: "Exportado a archivo.",
+      exportFailed: "No se pudo exportar.",
+      deleted: (name: string) => `Se eliminó "${name}".`,
+      deleteFailed: "No se pudo eliminar.",
+      eventCount: (count: number) => `${count} ${count === 1 ? "evento" : "eventos"}`,
+      importedOn: (date: string) => `importado el ${date}`,
+      export: "Exportar",
+      localCannotDelete: "El calendario local no se puede eliminar",
+      deleteCalendar: (name: string) => `Eliminar ${name}`,
+      deleteTitle: "Eliminar calendario",
+      deleteMessage: (name: string, count: number) =>
+        `¿Eliminar "${name}" y ${
+          count === 1 ? "su 1 evento" : `sus ${count} eventos`
+        }? Esta acción no se puede deshacer`,
+      deleteShortcut: "Eliminar (Enter)",
+    },
     updates: {
       notificationsHeading: "Notificaciones",
       updateNotifications: "Notificaciones de actualización",
@@ -973,6 +1010,64 @@ export const es = {
           "Permanecerá en la lista, pero no bloqueará cuando se agote hasta que lo actives de nuevo",
         deleteMessage:
           "Esto no se puede deshacer. El uso registrado de hoy permanecerá en el historial y aún puede sumarse a límites coincidentes.",
+        editor: {
+          none: "Ninguno",
+          custom: "Personalizado",
+          minutes: (count: number) => `${count} ${count === 1 ? "minuto" : "minutos"}`,
+          hours: (count: number) => `${count} ${count === 1 ? "hora" : "horas"}`,
+          hoursMinutes: (hours: number, minutes: number) =>
+            `${hours} ${hours === 1 ? "hora" : "horas"} ${minutes} ${
+              minutes === 1 ? "minuto" : "minutos"
+            }`,
+          editTitle: "Editar límite de uso",
+          addTitle: "Agregar límite de uso",
+          intro: "Vincula cada fuente que debe compartir el mismo presupuesto de uso.",
+          limitDetails: "Detalles del límite",
+          limitName: "Nombre del límite",
+          limitNameDescription: "Nombra este grupo de fuentes en la lista de límites",
+          limitNamePlaceholder: "Redes sociales",
+          dailyBudget: "Presupuesto diario",
+          dailyBudgetDescription: "Define el presupuesto para hoy, o desactívalo",
+          customMinutes: "Minutos personalizados",
+          customMinutesDescription: "Usa un número entero de 1 a 1440",
+          weeklyBudget: "Presupuesto semanal",
+          weeklyBudgetDescription: "Define el presupuesto para esta semana, o déjalo apagado",
+          customWeeklyHours: "Horas semanales personalizadas",
+          customWeeklyHoursDescription:
+            "Usa horas de 0.1 a 168, con un decimal como máximo",
+          linkedSources: "Fuentes vinculadas",
+          linkedSourcesDescription:
+            "Cada fuente puede conectar el mismo producto en navegador, móvil y escritorio.",
+          sourceName: "Nombre de la fuente",
+          sourceNamePlaceholder: "Nombre...",
+          sourceColor: "Color de la fuente",
+          selectSourceColor: "Seleccionar color de fuente",
+          removeLinkedSourceRow: "Eliminar fila de fuente vinculada",
+          website: "Sitio web",
+          mobile: "Móvil",
+          desktop: "Escritorio",
+          mobilePlaceholder: "Nombre de app...",
+          chooseApp: "Elegir app...",
+          clearDesktopApp: "Borrar app de escritorio",
+          addSource: "Agregar fuente",
+          chooseDesktopApp: "Elegir una app de escritorio",
+          deleteLinkedSourceTitle: "¿Eliminar fuente vinculada?",
+          deleteLinkedSourceMessage:
+            "Esto elimina la fuente del límite de uso. El uso registrado permanece en el historial.",
+          addLimitNameForMultipleSources:
+            "Agrega un nombre de límite al agrupar varias fuentes.",
+          limitMissing: "El límite ya no existe",
+          addOneSource: "Agrega al menos un sitio web, app móvil o app de escritorio",
+          sourceNeedsTarget: "Cada fuente vinculada necesita un sitio web, app móvil o app de escritorio",
+          protectedDesktopApps: "Las apps de escritorio protegidas no se pueden registrar",
+          dailyBudgetInvalid: "Elige un presupuesto diario de 1 minuto a 24 horas, o Ninguno",
+          weeklyBudgetInvalid: "Elige horas semanales de 0.1 a 168, o Ninguno",
+          chooseBudget: "Elige un presupuesto diario o semanal",
+          enterLimitName: "Escribe un nombre de límite",
+          validBudget: "Elige un presupuesto diario o semanal válido",
+          validSources: "Cada fuente vinculada necesita un sitio web, app móvil o app de escritorio válido",
+          duplicateSource: "Elimina entradas duplicadas de sitios web o apps",
+        },
       },
       browser: {
         categoryLabel: {
