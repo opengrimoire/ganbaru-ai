@@ -30,7 +30,7 @@ Two well-known categories live alongside arbitrary user-created notes:
 - **Daily notes.** One per calendar day. Auto-created on first access for the day, optionally with a template.
 - **Project notes.** Attached to a project (see `features/project-management.md`). Used as working documents during the project's lifecycle phases.
 
-Both are normal markdown files; the categories are conventions on file location within the vault, not different data models.
+Both are normal markdown files; the categories are conventions on file location within the Ganbaru AI folder, not different data models.
 
 ## Real-time collaboration
 

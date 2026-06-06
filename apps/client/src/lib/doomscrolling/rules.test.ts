@@ -167,7 +167,6 @@ describe("normalizeDoomscrollingConfig", () => {
   it("normalizes malformed config without throwing", () => {
     expect(normalizeDoomscrollingConfig({
       enabled: true,
-      blockDuringBreaks: "yes",
       blockedHosts: ["Reddit.com", "*", "youtube.com"],
       allowedHosts: "docs.example.com",
     })).toEqual({
@@ -198,13 +197,13 @@ describe("normalizeDoomscrollingConfig", () => {
     });
   });
 
-  it("migrates legacy allowed hosts into blacklist exceptions", () => {
+  it("keeps allowed hosts scoped to whitelist mode", () => {
     expect(normalizeDoomscrollingConfig({
       allowedHosts: ["music.youtube.com"],
     })).toMatchObject({
       mode: "blacklist",
-      exceptionHosts: [hostRule("music.youtube.com")],
-      allowedHosts: [],
+      exceptionHosts: [],
+      allowedHosts: [hostRule("music.youtube.com")],
     });
   });
 
@@ -217,16 +216,6 @@ describe("normalizeDoomscrollingConfig", () => {
       mode: "whitelist",
       exceptionHosts: [hostRule("music.youtube.com")],
       allowedHosts: [hostRule("github.com")],
-    });
-  });
-
-  it("uses the legacy break toggle for both break types", () => {
-    expect(normalizeDoomscrollingConfig({
-      blockDuringBreaks: false,
-    })).toMatchObject({
-      blockDuringFocus: true,
-      blockDuringShortBreaks: false,
-      blockDuringLongBreaks: false,
     });
   });
 
@@ -286,10 +275,8 @@ describe("normalizeDoomscrollingConfig", () => {
   it("normalizes desktop app rules as a blocklist separate from browser rules", () => {
     expect(normalizeDoomscrollingConfig({
       desktop: {
-        mode: "whitelist",
         enabled: false,
         blockDuringFocus: false,
-        blockDuringBreaks: false,
         blockedApps: [
           "Steam",
           "Ganbaru AI",
@@ -298,18 +285,13 @@ describe("normalizeDoomscrollingConfig", () => {
           { name: "Calculator", matchNames: ["gnome-calculator"] },
           { name: "Terminal", matchNames: ["gnome-terminal"] },
         ],
-        allowedApps: [
-          "ganbaru-ai",
-          "Visual Studio Code",
-          { name: "Firefox", enabled: false },
-        ],
       },
     })).toMatchObject({
       desktop: {
         enabled: false,
         blockDuringFocus: false,
-        blockDuringShortBreaks: false,
-        blockDuringLongBreaks: false,
+        blockDuringShortBreaks: true,
+        blockDuringLongBreaks: true,
         blockedApps: [
           appRule("Steam"),
           appRule("Discord", false),

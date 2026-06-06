@@ -2,6 +2,7 @@
   import Copy from "@lucide/svelte/icons/copy";
   import Download from "@lucide/svelte/icons/download";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import { cn } from "$lib/utils";
 
   let {
@@ -27,15 +28,17 @@
     onReset: () => void;
     onInput: (event: Event) => void;
   } = $props();
+
+  const { t } = getLocalization();
 </script>
 
 <section class="flex flex-col">
   <header class="px-1 py-2.5">
-    <h2 class="text-[0.866667rem] font-semibold text-foreground">Schema</h2>
+    <h2 class="text-[0.866667rem] font-semibold text-foreground">{t("settings.theme.jsonSchema")}</h2>
     <div class="text-[0.733333rem] text-muted-foreground">
       {isBuiltin
-        ? "Read-only representation of the theme"
-        : "Edit directly, apply to commit changes"}
+        ? t("settings.theme.jsonReadonly")
+        : t("settings.theme.jsonEditable")}
     </div>
   </header>
   <div class="flex flex-col gap-2">
@@ -64,7 +67,7 @@
           class="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[0.733333rem] text-foreground transition-colors hover:bg-accent"
         >
           <Copy size={11} strokeWidth={2.25} />
-          <span>Copy JSON</span>
+          <span>{t("settings.theme.copyJson")}</span>
         </button>
         <button
           type="button"
@@ -72,7 +75,7 @@
           class="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[0.733333rem] text-foreground transition-colors hover:bg-accent"
         >
           <Download size={11} strokeWidth={2.25} />
-          <span>Save to file</span>
+          <span>{t("settings.theme.saveToFile")}</span>
         </button>
       </div>
       {#if !isBuiltin}
@@ -89,7 +92,7 @@
             )}
           >
             <RotateCcw size={11} strokeWidth={2.25} />
-            <span>Discard edits</span>
+            <span>{t("settings.theme.discardEdits")}</span>
           </button>
           <button
             type="button"
@@ -102,7 +105,7 @@
                 : "cursor-not-allowed bg-card text-muted-foreground opacity-60",
             )}
           >
-            Apply changes
+            {t("settings.theme.applyChanges")}
           </button>
         </div>
       {/if}

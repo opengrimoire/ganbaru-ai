@@ -266,12 +266,6 @@ const DARK_EVENT_PALETTE: EventPaletteHexes = Object.freeze([
   "#7B8FA0",
 ]);
 
-const LEGACY_EVENT_PALETTE_SIZE = 24;
-
-function eventPaletteFallback(base: "light" | "dark"): EventPaletteHexes {
-  return base === "dark" ? DARK_EVENT_PALETTE : LIGHT_EVENT_PALETTE;
-}
-
 export const lightTheme: BuiltinTheme = Object.freeze({
   kind: "builtin",
   id: "light",
@@ -303,11 +297,8 @@ export const BUILTIN_THEME_REGISTRY: Readonly<Record<ThemeId, BuiltinTheme>> =
     [darkTheme.id]: darkTheme,
   });
 
-/**
- * Theme ID used on first launch and when the stored ID is unknown. Kept as
- * "dark" to preserve the previous default.
- */
-export const DEFAULT_THEME_ID: ThemeId = darkTheme.id;
+/** Theme ID used on first launch and when the stored ID is unknown. */
+export const DEFAULT_THEME_ID: ThemeId = lightTheme.id;
 
 export function pickQuickToggleTarget({
   activeId,
@@ -845,10 +836,6 @@ const CAL_FRACTIONS = {
  * `walkFraction` parks recessed captions at the exact OKLab-L position
  * BASE.dark uses.
  *
- * The `base` parameter is kept for call-site compatibility with the
- * current resolver path but is intentionally unused: toggling the label
- * on a sourced theme must not shift any derived token.
- *
  * Built-in themes carry no `sources` field and never reach this function
  * at resolve time; it is called only for user themes that have opted into
  * the source-driven workflow.
@@ -1185,8 +1172,7 @@ export function isThemeDark(theme: Theme): boolean {
 
 /**
  * Pick the default decorative iconLabel for a canvas hex. Used by the clone
- * path, the v1 validator's missing-iconLabel fallback, and legacy DB row
- * backfill.
+ * path and derived theme defaults.
  */
 export function defaultIconLabelFromCanvas(
   canvasHex: string,
@@ -1308,47 +1294,6 @@ function orderedTokens(
   return out;
 }
 
-function sourceFallbacksFromAppTokens(
-  appTokens: Readonly<Record<string, string>>,
-): Partial<Record<keyof ThemeSources, string>> {
-  return {
-    canvas: appTokens["--background"],
-    ink: appTokens["--foreground"],
-    primary: appTokens["--primary"],
-    destructive: appTokens["--destructive"],
-    destructiveText: appTokens["--destructive-foreground"],
-    confirm: appTokens["--action-confirm"],
-    confirmText: appTokens["--action-confirm-foreground"],
-    warning: appTokens["--status-tentative"],
-    warningText: appTokens["--status-tentative-foreground"],
-  };
-}
-
-function sourcesFromAppTokenFallbacks(
-  appTokens: Readonly<Record<string, string>>,
-): ThemeSources {
-  const fallback = defaultIconLabelFromCanvas(
-    appTokens["--background"] ?? BASE_APP_TOKENS.dark["--background"],
-  );
-  const fallbacks = sourceFallbacksFromAppTokens(appTokens);
-  return {
-    canvas: fallbacks.canvas ?? defaultSourceValue("canvas", fallback),
-    ink: fallbacks.ink ?? defaultSourceValue("ink", fallback),
-    primary: fallbacks.primary ?? defaultSourceValue("primary", fallback),
-    destructive:
-      fallbacks.destructive ?? defaultSourceValue("destructive", fallback),
-    destructiveText:
-      fallbacks.destructiveText ??
-      defaultSourceValue("destructiveText", fallback),
-    confirm: fallbacks.confirm ?? defaultSourceValue("confirm", fallback),
-    confirmText:
-      fallbacks.confirmText ?? defaultSourceValue("confirmText", fallback),
-    warning: fallbacks.warning ?? defaultSourceValue("warning", fallback),
-    warningText:
-      fallbacks.warningText ?? defaultSourceValue("warningText", fallback),
-  };
-}
-
 export type ThemeValidationResult =
   | { ok: true; theme: UserTheme }
   | { ok: false; errors: string[] };
@@ -1361,26 +1306,18 @@ export type ThemeValidationResult =
  * are stripped silently because dropping a stale token name should not
  * block an otherwise valid theme.
  *
- * Three import paths share validation of common identity fields:
- * - **v2** (`schemaVersion: 2`): expects full token snapshots, calendar
- *   defaults, source palette, isolated-flag arrays, and an engine version
- *   stamp. Used by exports written by this app version onward.
- * - **v1** (`schemaVersion: 1`): same snapshot shape without calendar
- *   defaults. Imported as `app-canvas` to preserve the old behavior.
- * - **Legacy** (no schemaVersion): walks the old `sources?` /
- *   `appTokenOverrides?` / `calendarTokenOverrides?` shape. The current
- *   derivation engine runs at import time to compute the missing tokens,
- *   overrides layer on top to produce the snapshot, and the engine
- *   version stamp is set to the current code constant. Pinned tokens map
- *   to the new `appIsolated` / `calendarIsolated` flag sets.
+ * Theme imports must use the current `schemaVersion: 2` export shape: full
+ * token snapshots, calendar defaults, source palette, isolated-flag arrays,
+ * and an engine version stamp.
  */
 export function validateThemeJson(input: unknown): ThemeValidationResult {
   if (!isPlainObject(input)) {
     return { ok: false, errors: ["theme must be a JSON object"] };
   }
-  if (input.schemaVersion === 2) return validateV2(input);
-  if (input.schemaVersion === 1) return validateV1(input);
-  return validateLegacy(input);
+  if (input.schemaVersion !== 2) {
+    return { ok: false, errors: ["schemaVersion must be 2"] };
+  }
+  return validateSnapshot(input);
 }
 
 function validateIdentity(
@@ -1427,7 +1364,6 @@ function validateIdentity(
     eventPalette,
     errors,
     "eventPalette",
-    cleanBlend ? defaultIconLabelFromCanvas(cleanBlend) : "light",
   ) ?? [];
   return { cleanId, cleanDisplayName, cleanBlend, cleanPalette };
 }
@@ -1436,13 +1372,12 @@ function sanitizeEventPalette(
   source: unknown,
   errors: string[],
   label: "eventPalette" | "seedEventPalette",
-  fallbackBase: "light" | "dark",
 ): string[] | undefined {
   if (!Array.isArray(source)) {
     errors.push(`${label} must be an array of ${PALETTE_SIZE} hex strings`);
     return undefined;
   }
-  if (source.length !== PALETTE_SIZE && source.length !== LEGACY_EVENT_PALETTE_SIZE) {
+  if (source.length !== PALETTE_SIZE) {
     errors.push(
       `${label} must contain exactly ${PALETTE_SIZE} entries (got ${source.length})`,
     );
@@ -1458,50 +1393,14 @@ function sanitizeEventPalette(
       out.push(value);
     }
   }
-  if (source.length === LEGACY_EVENT_PALETTE_SIZE) {
-    out.push(...eventPaletteFallback(fallbackBase).slice(LEGACY_EVENT_PALETTE_SIZE));
-  }
   return out;
 }
 
-/**
- * Legacy-only base sanitizer. Pre-v1 imports needed an explicit base because
- * they shipped without a full token snapshot, so missing tokens fell back to
- * `BASE_APP_TOKENS[base]`. v1 themes carry the snapshot directly and pick
- * any fallback from the sources canvas via `defaultIconLabelFromCanvas`, so
- * they no longer require this field.
- */
-function sanitizeLegacyBase(
-  raw: unknown,
-  errors: string[],
-): "light" | "dark" {
-  if (raw !== "light" && raw !== "dark") {
-    errors.push('base must be "light" or "dark"');
-    return "dark";
-  }
-  return raw;
-}
-
-function validateV1(input: Record<string, unknown>): ThemeValidationResult {
-  return validateSnapshot(input, false);
-}
-
-function validateV2(input: Record<string, unknown>): ThemeValidationResult {
-  return validateSnapshot(input, true);
-}
-
-function validateSnapshot(
-  input: Record<string, unknown>,
-  readCalendarDefaults: boolean,
-): ThemeValidationResult {
+function validateSnapshot(input: Record<string, unknown>): ThemeValidationResult {
   const errors: string[] = [];
   const { cleanId, cleanDisplayName, cleanBlend, cleanPalette } =
     validateIdentity(input, errors);
 
-  // v1 fallback strategy: classify the theme as light/dark from its canvas
-  // hex (or from blendCanvas if sources is invalid) so missing/corrupt rows
-  // recover from a sensible BASE table. This replaces the old `cleanBase`
-  // field which v1 no longer carries.
   const rawCanvas =
     isPlainObject(input.sources) &&
     typeof (input.sources as Record<string, unknown>).canvas === "string"
@@ -1519,10 +1418,6 @@ function validateSnapshot(
     "appTokens",
     errors,
   );
-  const legacyHeader = extractTokenHex(input.calendarTokens, "--cal-header-bg");
-  if (legacyHeader && !extractTokenHex(input.appTokens, "--cal-header-bg")) {
-    cleanAppTokensRaw["--cal-header-bg"] = legacyHeader;
-  }
   const cleanCalTokens = sanitizeFullTokenSnapshot(
     input.calendarTokens,
     CALENDAR_TOKEN_KEYS,
@@ -1536,11 +1431,9 @@ function validateSnapshot(
     input.sources,
     errors,
     "sources",
-    fallbackBase,
-    sourceFallbacksFromAppTokens(cleanAppTokensRaw),
   );
   if (!cleanSources && !errors.some((e) => e.startsWith("sources"))) {
-    errors.push("sources is required on v1 themes");
+    errors.push("sources is required");
   }
 
   const cleanAppTokens = cleanSources
@@ -1555,9 +1448,6 @@ function validateSnapshot(
       errors,
     ),
   );
-  if (isolatedListIncludes(input.calendarIsolated, "--cal-header-bg")) {
-    cleanAppIsolated.add("--cal-header-bg");
-  }
   const cleanCalIsolated = sanitizeIsolatedList(
     input.calendarIsolated,
     CALENDAR_TOKEN_KEY_SET,
@@ -1580,21 +1470,16 @@ function validateSnapshot(
   }
 
   const cleanIconLabel = sanitizeIconLabel(
-    input.iconLabel ?? input.scheme,
+    input.iconLabel,
     cleanSources?.canvas ?? cleanBlend,
     "iconLabel",
     errors,
   );
-  const calendarDefaults = readCalendarDefaults
-    ? sanitizeCalendarDefaults(
-        input.calendarDefaults,
-        cleanSources?.canvas ?? cleanBlend,
-        errors,
-      )
-    : {
-        mode: "app-canvas" as CalendarColorDefaultMode,
-        customBasis: cleanSources?.canvas ?? cleanBlend,
-      };
+  const calendarDefaults = sanitizeCalendarDefaults(
+    input.calendarDefaults,
+    cleanSources?.canvas ?? cleanBlend,
+    errors,
+  );
 
   if (errors.length > 0) return { ok: false, errors };
 
@@ -1627,227 +1512,6 @@ function validateSnapshot(
   return { ok: true, theme };
 }
 
-function validateLegacy(input: Record<string, unknown>): ThemeValidationResult {
-  const errors: string[] = [];
-  const { cleanId, cleanDisplayName, cleanBlend, cleanPalette } =
-    validateIdentity(input, errors);
-  const cleanBase = sanitizeLegacyBase(input.base, errors);
-
-  const cleanAppOverrides =
-    sanitizeOverrides(
-      input.appTokenOverrides,
-      APP_TOKEN_KEY_SET,
-      "appTokenOverrides",
-      errors,
-    ) ?? {};
-  const legacyHeader = extractTokenHex(
-    input.calendarTokenOverrides,
-    "--cal-header-bg",
-  );
-  if (legacyHeader && !cleanAppOverrides["--cal-header-bg"]) {
-    cleanAppOverrides["--cal-header-bg"] = legacyHeader;
-  }
-  const cleanCalOverrides =
-    sanitizeOverrides(
-      input.calendarTokenOverrides,
-      CALENDAR_TOKEN_KEY_SET,
-      "calendarTokenOverrides",
-      errors,
-    ) ?? {};
-  const sourceFallbackTokens = {
-    ...BASE_APP_TOKENS[cleanBase],
-    ...cleanAppOverrides,
-  };
-  const cleanSourcesPartial = sanitizeSources(
-    input.sources,
-    errors,
-    "sources",
-    cleanBase,
-    sourceFallbacksFromAppTokens(sourceFallbackTokens),
-  );
-  // Legacy files without `sources` resolve to defaults derived from BASE.
-  // The new model always carries sources, so synthesize a valid set here.
-  const cleanSources: ThemeSources =
-    cleanSourcesPartial ?? sourcesFromAppTokenFallbacks(sourceFallbackTokens);
-
-  // Legacy themes that stored calCanvas as a 7th source meant "keep the
-  // calendar surface independent of canvas", which maps to an isolated
-  // override on --cal-bg. Only apply when no override already exists.
-  const legacyCalCanvas = extractLegacyCalCanvas(input.sources);
-  if (legacyCalCanvas && !cleanCalOverrides["--cal-bg"]) {
-    cleanCalOverrides["--cal-bg"] = legacyCalCanvas;
-  }
-
-  if (errors.length > 0) return { ok: false, errors };
-
-  // Run the current derivation engine to produce the missing tokens,
-  // then layer the overrides on top to produce the full snapshot.
-  const derivedApp = deriveAppTokens(cleanSources);
-  const derivedCal = deriveCalendarTokens(cleanSources);
-  const appTokens = syncSemanticSignalAppTokens(
-    cleanSources,
-    buildSnapshot(
-      APP_TOKEN_KEYS,
-      BASE_APP_TOKENS[cleanBase],
-      derivedApp,
-      cleanAppOverrides,
-    ),
-  );
-  const calTokens = buildSnapshot(
-    CALENDAR_TOKEN_KEYS,
-    BASE_CALENDAR_TOKENS[cleanBase],
-    derivedCal,
-    cleanCalOverrides,
-  );
-  const appIsolated = normalizeSemanticSignalAppIsolated(
-    new Set(Object.keys(cleanAppOverrides)),
-  );
-  const calIsolated = new Set(Object.keys(cleanCalOverrides));
-
-  const seedAppOverrides =
-    sanitizeOverrides(
-      input.seedAppTokenOverrides,
-      APP_TOKEN_KEY_SET,
-      "seedAppTokenOverrides",
-      errors,
-    ) ?? { ...cleanAppOverrides };
-  const legacySeedHeader = extractTokenHex(
-    input.seedCalendarTokenOverrides,
-    "--cal-header-bg",
-  );
-  if (legacySeedHeader && !seedAppOverrides["--cal-header-bg"]) {
-    seedAppOverrides["--cal-header-bg"] = legacySeedHeader;
-  }
-  const seedCalOverrides =
-    sanitizeOverrides(
-      input.seedCalendarTokenOverrides,
-      CALENDAR_TOKEN_KEY_SET,
-      "seedCalendarTokenOverrides",
-      errors,
-    ) ?? { ...cleanCalOverrides };
-  const seedAppTokensProvided = sanitizeOverrides(
-    input.seedAppTokens,
-    APP_TOKEN_KEY_SET,
-    "seedAppTokens",
-    errors,
-  );
-  const seedCalTokensProvided = sanitizeOverrides(
-    input.seedCalendarTokens,
-    CALENDAR_TOKEN_KEY_SET,
-    "seedCalendarTokens",
-    errors,
-  );
-  const seedSourceFallbackTokens = {
-    ...BASE_APP_TOKENS[cleanBase],
-    ...(seedAppTokensProvided ?? {}),
-    ...seedAppOverrides,
-  };
-
-  // Legacy seed fields, if any, follow the same shape.
-  const seedSourcesPartial = sanitizeSources(
-    input.seedSources,
-    errors,
-    "seedSources",
-    cleanBase,
-    sourceFallbacksFromAppTokens(seedSourceFallbackTokens),
-  );
-  const seedSources: ThemeSources = seedSourcesPartial ?? { ...cleanSources };
-
-  const legacySeedCalCanvas = extractLegacyCalCanvas(input.seedSources);
-  if (legacySeedCalCanvas && !seedCalOverrides["--cal-bg"]) {
-    seedCalOverrides["--cal-bg"] = legacySeedCalCanvas;
-  }
-  const seedPalette =
-    sanitizeSeedPalette(
-      input.seedEventPalette,
-      errors,
-      defaultIconLabelFromCanvas(seedSources.canvas),
-    ) ?? [...cleanPalette];
-  let seedBlend = cleanBlend;
-  if (input.seedBlendCanvas !== undefined) {
-    if (!isHexColor(input.seedBlendCanvas)) {
-      errors.push("seedBlendCanvas must be a hex color (#RRGGBB or #RRGGBBAA)");
-    } else {
-      seedBlend = input.seedBlendCanvas;
-    }
-  }
-
-  if (errors.length > 0) return { ok: false, errors };
-
-  // Build seed snapshots: prefer explicit seedAppTokens when provided, else
-  // re-derive from seedSources and layer seed overrides.
-  const seedDerivedApp = deriveAppTokens(seedSources);
-  const seedDerivedCal = deriveCalendarTokens(seedSources);
-  const seedAppTokens = syncSemanticSignalAppTokens(
-    seedSources,
-    seedAppTokensProvided
-      ? buildSnapshot(
-          APP_TOKEN_KEYS,
-          BASE_APP_TOKENS[cleanBase],
-          seedDerivedApp,
-          { ...seedAppTokensProvided, ...seedAppOverrides },
-        )
-      : buildSnapshot(
-          APP_TOKEN_KEYS,
-          BASE_APP_TOKENS[cleanBase],
-          seedDerivedApp,
-          seedAppOverrides,
-        ),
-  );
-  const seedCalTokens = seedCalTokensProvided
-    ? buildSnapshot(
-        CALENDAR_TOKEN_KEYS,
-        BASE_CALENDAR_TOKENS[cleanBase],
-        seedDerivedCal,
-        { ...seedCalTokensProvided, ...seedCalOverrides },
-      )
-    : buildSnapshot(
-        CALENDAR_TOKEN_KEYS,
-        BASE_CALENDAR_TOKENS[cleanBase],
-        seedDerivedCal,
-        seedCalOverrides,
-      );
-  const seedAppIsolated = normalizeSemanticSignalAppIsolated(
-    new Set(Object.keys(seedAppOverrides)),
-  );
-  const seedCalIsolated = new Set(Object.keys(seedCalOverrides));
-
-  const cleanIconLabel = sanitizeIconLabel(
-    input.iconLabel ?? input.scheme,
-    cleanSources.canvas,
-    "iconLabel",
-    errors,
-  );
-
-  const theme: UserTheme = {
-    kind: "user",
-    id: cleanId,
-    displayName: cleanDisplayName,
-    iconLabel: cleanIconLabel,
-    blendCanvas: cleanBlend,
-    eventPalette: cleanPalette,
-    derivationEngineVersion: DERIVATION_ENGINE_VERSION,
-    calendarDefaultMode: "app-canvas",
-    calendarDefaultCustom: cleanSources.canvas,
-    sources: cleanSources,
-    appTokens,
-    calendarTokens: calTokens,
-    appIsolated,
-    calendarIsolated: calIsolated,
-    seedSources,
-    seedAppTokens,
-    seedCalendarTokens: seedCalTokens,
-    seedAppIsolated,
-    seedCalendarIsolated: seedCalIsolated,
-    seedEventPalette: seedPalette,
-    seedBlendCanvas: seedBlend,
-    seedCalendarDefaultMode: "app-canvas",
-    seedCalendarDefaultCustom: seedSources.canvas,
-    seedIconLabel: cleanIconLabel,
-  };
-  return { ok: true, theme };
-}
-
 /**
  * Build a full token snapshot by layering derived values over base CSS,
  * then overrides over derived. Every key in `order` ends up in the result.
@@ -1865,24 +1529,17 @@ function buildSnapshot(
   return out;
 }
 
-/**
- * Validate an array-of-key-strings (the v1 `appIsolated` / `calendarIsolated`
- * shape). Unknown keys are dropped silently to match the legacy import
- * tolerance for stale token names.
- */
-/**
- * Validate the optional `iconLabel` field. Defaults to canvas-derived when
- * missing so legacy and v1-without-iconLabel imports always end up with a
- * concrete value. Any value other than "light", "dark", or undefined is a
- * hard error. Tolerates the older `scheme` JSON key for backward compat.
- */
+/** Validate the required decorative `iconLabel` field. */
 function sanitizeIconLabel(
   raw: unknown,
   fallbackCanvasHex: string,
   fieldName: string,
   errors: string[],
 ): "light" | "dark" {
-  if (raw === undefined) return defaultIconLabelFromCanvas(fallbackCanvasHex);
+  if (raw === undefined) {
+    errors.push(`${fieldName} is required`);
+    return defaultIconLabelFromCanvas(fallbackCanvasHex);
+  }
   if (raw === "light" || raw === "dark") return raw;
   errors.push(`${fieldName} must be "light" or "dark"`);
   return defaultIconLabelFromCanvas(fallbackCanvasHex);
@@ -1897,6 +1554,7 @@ function sanitizeCalendarDefaults(
     ? fallbackCustomBasis
     : DEFAULT_CALENDAR_DEFAULT_CUSTOM;
   if (raw === undefined) {
+    errors.push("calendarDefaults is required");
     return { mode: "app-canvas", customBasis: fallbackBasis };
   }
   if (!isPlainObject(raw)) {
@@ -1923,24 +1581,16 @@ function sanitizeCalendarDefaults(
   return { mode: cleanMode, customBasis };
 }
 
-function extractTokenHex(source: unknown, key: string): string | undefined {
-  if (!isPlainObject(source)) return undefined;
-  const value = source[key];
-  return isHexColor(value) ? value : undefined;
-}
-
-function isolatedListIncludes(source: unknown, key: string): boolean {
-  if (!Array.isArray(source)) return false;
-  return source.includes(key);
-}
-
 function sanitizeIsolatedList(
   source: unknown,
   allowed: ReadonlySet<string>,
   fieldName: string,
   errors: string[],
 ): Set<string> {
-  if (source === undefined) return new Set();
+  if (source === undefined) {
+    errors.push(`${fieldName} is required`);
+    return new Set();
+  }
   if (!Array.isArray(source)) {
     errors.push(`${fieldName} must be an array of token-key strings`);
     return new Set();
@@ -1958,11 +1608,7 @@ function sanitizeIsolatedList(
   return out;
 }
 
-/**
- * Validate a v1 full token snapshot. Every key in `order` must be present
- * and a valid hex; missing keys backfill from `base` with a non-fatal note
- * (drift across app versions should not block import).
- */
+/** Validate a full current-shape token snapshot. */
 function sanitizeFullTokenSnapshot(
   source: unknown,
   order: readonly string[],
@@ -1979,6 +1625,7 @@ function sanitizeFullTokenSnapshot(
   for (const key of order) {
     const value = (source as Record<string, unknown>)[key];
     if (value === undefined) {
+      errors.push(`${fieldName}.${key} is required`);
       out[key] = base[key];
       continue;
     }
@@ -1992,66 +1639,15 @@ function sanitizeFullTokenSnapshot(
   return out;
 }
 
-/**
- * Pull a legacy `calCanvas` field out of an unknown sources-shaped value.
- * Returns the hex when valid, otherwise undefined. Used to migrate themes
- * written before calCanvas moved from a source to an auto-derived token.
- */
-function extractLegacyCalCanvas(source: unknown): string | undefined {
-  if (!isPlainObject(source)) return undefined;
-  const value = (source as Record<string, unknown>).calCanvas;
-  return isHexColor(value) ? value : undefined;
-}
-
-function sanitizeSeedPalette(
-  source: unknown,
-  errors: string[],
-  fallbackBase: "light" | "dark",
-): string[] | undefined {
-  if (source === undefined) return undefined;
-  return sanitizeEventPalette(source, errors, "seedEventPalette", fallbackBase);
-}
-
-/**
- * Default value for each source channel, sampled from the base CSS tokens
- * so legacy themes missing newer source fields pick up sensible defaults
- * without erroring. Each channel reads from the token it identity-drives in
- * {@link deriveAppTokens}.
- */
-function defaultSourceValue(
-  key: keyof ThemeSources,
-  base: "light" | "dark",
-): string {
-  switch (key) {
-    case "canvas":
-      return BASE_APP_TOKENS[base]["--background"];
-    case "ink":
-      return BASE_APP_TOKENS[base]["--foreground"];
-    case "primary":
-      return BASE_APP_TOKENS[base]["--primary"];
-    case "destructive":
-      return BASE_APP_TOKENS[base]["--destructive"];
-    case "destructiveText":
-      return BASE_APP_TOKENS[base]["--destructive-foreground"];
-    case "confirm":
-      return BASE_APP_TOKENS[base]["--action-confirm"];
-    case "confirmText":
-      return BASE_APP_TOKENS[base]["--action-confirm-foreground"];
-    case "warning":
-      return BASE_APP_TOKENS[base]["--status-tentative"];
-    case "warningText":
-      return BASE_APP_TOKENS[base]["--status-tentative-foreground"];
-  }
-}
-
 function sanitizeSources(
   source: unknown,
   errors: string[],
   fieldName: string = "sources",
-  base: "light" | "dark" = "dark",
-  fallbacks: Partial<Record<keyof ThemeSources, string>> = {},
 ): ThemeSources | undefined {
-  if (source === undefined) return undefined;
+  if (source === undefined) {
+    errors.push(`${fieldName} is required`);
+    return undefined;
+  }
   if (!isPlainObject(source)) {
     errors.push(`${fieldName} must be an object`);
     return undefined;
@@ -2060,11 +1656,9 @@ function sanitizeSources(
   let ok = true;
   for (const key of SOURCE_KEY_ORDER) {
     const value = (source as Record<string, unknown>)[key];
-    // Missing keys are backfilled from base defaults so legacy themes
-    // (written before a source was introduced) keep loading; only an
-    // actively-invalid hex is an error.
     if (value === undefined) {
-      out[key] = fallbacks[key] ?? defaultSourceValue(key, base);
+      errors.push(`${fieldName}.${key} is required`);
+      ok = false;
       continue;
     }
     if (!isHexColor(value)) {
@@ -2076,29 +1670,4 @@ function sanitizeSources(
   }
   if (!ok) return undefined;
   return out as ThemeSources;
-}
-
-function sanitizeOverrides(
-  source: unknown,
-  allowed: ReadonlySet<string>,
-  fieldName: string,
-  errors: string[],
-): Record<string, string> | undefined {
-  if (source === undefined) return undefined;
-  if (!isPlainObject(source)) {
-    errors.push(`${fieldName} must be an object`);
-    return undefined;
-  }
-  const out: Record<string, string> = {};
-  for (const key of Object.keys(source)) {
-    if (!Object.hasOwn(source, key)) continue;
-    if (!allowed.has(key)) continue;
-    const value = (source as Record<string, unknown>)[key];
-    if (!isHexColor(value)) {
-      errors.push(`${fieldName}.${key} must be a hex color`);
-      continue;
-    }
-    out[key] = value;
-  }
-  return out;
 }

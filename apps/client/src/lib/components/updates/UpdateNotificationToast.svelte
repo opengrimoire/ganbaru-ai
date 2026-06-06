@@ -6,17 +6,19 @@
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
   import { getUpdateManager } from "$lib/stores/updates.svelte";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import { cn } from "$lib/utils";
 
   const settingsLauncher = getSettingsLauncher();
   const updates = getUpdateManager();
+  const { t } = getLocalization();
 
   const message = $derived(
     updates.status === "installed"
-      ? "Update installed. Restarting Ganbaru AI"
+      ? t("updates.installedRestarting")
       : updates.status === "downloading"
         ? updates.statusCopy
-        : `There's an update available: ${updates.latestVersion ?? "unknown"}`,
+        : t("updates.promptAvailable", updates.latestVersion ?? "unknown"),
   );
 
   async function openReleaseNotes(): Promise<void> {
@@ -56,9 +58,13 @@
         </div>
         <p class="mt-1 text-[0.733333rem] text-muted-foreground">
           {#if updates.contentLength}
-            {updates.formatBytes(updates.downloadedBytes)} of {updates.formatBytes(updates.contentLength)}
+            {t(
+              "updates.downloadedOfTotal",
+              updates.formatBytes(updates.downloadedBytes),
+              updates.formatBytes(updates.contentLength),
+            )}
           {:else}
-            {updates.formatBytes(updates.downloadedBytes)} downloaded
+            {t("updates.downloaded", updates.formatBytes(updates.downloadedBytes))}
           {/if}
         </p>
       {/if}
@@ -73,14 +79,14 @@
             }}
           >
             <Download size={14} strokeWidth={2} aria-hidden="true" />
-            <span>Install update</span>
+            <span>{t("updates.installUpdate")}</span>
           </button>
           <button
             type="button"
             class="inline-flex h-8 items-center justify-center rounded-md px-2.5 text-[0.8rem] font-medium text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus:outline-none focus:ring-1 focus:ring-ring"
             onclick={() => updates.dismissPrompt()}
           >
-            Later
+            {t("updates.later")}
           </button>
           <button
             type="button"
@@ -96,7 +102,7 @@
             }}
           >
             <ExternalLink size={14} strokeWidth={2} aria-hidden="true" />
-            Release notes
+            {t("updates.releaseNotes")}
           </button>
         </div>
       {/if}
@@ -108,7 +114,7 @@
         class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         onclick={() => updates.dismissPrompt()}
       >
-        <span class="sr-only">Dismiss update notification</span>
+        <span class="sr-only">{t("updates.dismissNotification")}</span>
         <X size={14} strokeWidth={2} aria-hidden="true" />
       </button>
     {/if}

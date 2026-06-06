@@ -23,9 +23,9 @@ The existing tables remain the app-facing model:
 
 These tables are optimized for visible-window queries, recurrence expansion, editing, pomodoro, and notifications.
 
-## Proposed preservation tables
+## Preservation tables
 
-Migration v12 implements preservation with `icalendar_objects`, `icalendar_components`, and relational property/value child tables. It stores imported iCalendar structure without JSON columns. Migration v13 links supported projections back to preserved components.
+Preservation uses `icalendar_objects`, `icalendar_components`, and relational property/value child tables. It stores imported iCalendar structure without JSON columns. Supported projections link back to preserved components.
 
 ### `icalendar_objects`
 
@@ -144,13 +144,13 @@ Projection creates or updates current app rows:
 - recurring override `VEVENT`s map to `calendar_event_overrides`.
 - `VTODO`, `VJOURNAL`, and `VFREEBUSY` are preserved only until matching app surfaces exist.
 
-Every projected row created from preserved data should be traceable back to its component. Migration v13 adds nullable `icalendar_component_id` columns to `calendar_events`, `calendar_event_overrides`, `calendar_event_attendees`, and `calendar_event_alarms`. Attendees also store `icalendar_property_index`, because `ATTENDEE` is a property on a `VEVENT` rather than its own component.
+Every projected row created from preserved data should be traceable back to its component. `calendar_events`, `calendar_event_overrides`, `calendar_event_attendees`, and `calendar_event_alarms` carry nullable `icalendar_component_id` columns. Attendees also store `icalendar_property_index`, because `ATTENDEE` is a property on a `VEVENT` rather than its own component.
 
 The `icalendar_components.projected_kind` and `projected_id` reverse link is used where one component maps to one projected row: master events, override events, and alarms. Attendee rows keep their direct link on the projected row so multiple attendees can reference the same preserved `VEVENT` without overwriting the component's reverse link.
 
 Full-event loads reconstruct linked `VEVENT` structures for the serializer. Export merges the preserved `VEVENT` and nested `VALARM` components with regenerated supported fields, preserving unsupported event properties, unsupported parameters, inert URI attachments, imported `DURATION` shape, floating date-time shape, `RECURRENCE-ID;RANGE=THISANDFUTURE`, and unsupported alarm fields. Preserved `VTIMEZONE` components are loaded separately for calendar export and emitted before generated timezone stubs. Preserved top-level non-event components such as `VTODO`, `VJOURNAL`, `VFREEBUSY`, and future components are passed through unchanged while they have no app projection. A projected row or projected alarm that was deleted is not re-created from preservation storage during export.
 
-Rows from older imports may have a `source_uid` but no `icalendar_component_id`. Full-event loads derive a `regenerated` iCalendar preservation state for those rows so diagnostics and export behavior make clear that the original component is not available.
+Rows without an `icalendar_component_id` derive a `regenerated` iCalendar preservation state so diagnostics and export behavior make clear that no original component is available.
 
 ## Re-import dedupe
 

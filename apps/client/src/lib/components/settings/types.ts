@@ -9,6 +9,7 @@ export type SectionId =
   | "focus"
   | "music"
   | "doomscrolling"
+  | "data"
   | "updates"
   | "shortcuts"
   | "about";

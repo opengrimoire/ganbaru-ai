@@ -108,12 +108,10 @@ export function safeJsonParse<T>(json: string | null): T | undefined {
 /**
  * Convert a DB-stored datetime to a wall clock string for the in-memory
  * `CalendarEvent.start`/`end`. The usual shape is minute precision, with
- * non-zero seconds preserved for exact pomodoro cut timestamps. The new
- * canonical form is UTC ISO 8601;
- * rendering happens in `renderZone` (the device zone by default). Legacy
- * non-Z rows still in the DB after the boot hydrator missed a row are
- * passed through as-is so the calendar still displays them at their
- * original wall clock.
+ * non-zero seconds preserved for exact pomodoro cut timestamps. The
+ * canonical form is UTC ISO 8601; rendering happens in `renderZone` (the
+ * device zone by default). Non-UTC rows are treated as wall-clock text so a
+ * malformed or hand-edited row degrades predictably.
  *
  * For all-day events, the caller is expected to skip this and use the
  * date portion of `dbTime` directly: zone conversion would shift the date

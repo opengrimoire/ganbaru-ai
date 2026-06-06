@@ -3,15 +3,23 @@ import type { Calendar } from "$lib/components/calendar/types";
 const IMPORTED_NAME_PATTERN = /^Imported from (.+) \((\d{4}-\d{2}-\d{2})\)$/;
 const EMAIL_PATTERN = /^[^\s@<>()[\],;:]+@[^\s@<>()[\],;:]+\.[^\s@<>()[\],;:]+$/i;
 const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
-const IMPORT_DATE_FORMATTER = new Intl.DateTimeFormat(undefined, {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-});
-const IMPORT_TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
-  hour: "numeric",
-  minute: "2-digit",
-});
+function importDateFormatter(locale?: string | readonly string[]): Intl.DateTimeFormat {
+  return new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function importDateTimeFormatter(locale?: string | readonly string[]): Intl.DateTimeFormat {
+  return new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
 function stripIcsExtension(value: string): string {
   return value.replace(/\.ics$/i, "");
@@ -60,20 +68,20 @@ function parseImportTimestamp(value: string): Date | undefined {
   return validDate(new Date(trimmed)) ?? validDate(new Date(trimmed.replace(" ", "T")));
 }
 
-function formatImportDateOnly(value: string): string | undefined {
+function formatImportDateOnly(value: string, locale?: string | readonly string[]): string | undefined {
   const date = localDateOnly(value);
-  return date ? IMPORT_DATE_FORMATTER.format(date) : undefined;
+  return date ? importDateFormatter(locale).format(date) : undefined;
 }
 
-function formatImportTimestamp(value: string): string | undefined {
+function formatImportTimestamp(value: string, locale?: string | readonly string[]): string | undefined {
   const trimmed = value.trim();
-  const dateOnly = formatImportDateOnly(trimmed);
+  const dateOnly = formatImportDateOnly(trimmed, locale);
   if (dateOnly) return dateOnly;
 
   const date = parseImportTimestamp(value);
   if (!date) return undefined;
 
-  return `${IMPORT_DATE_FORMATTER.format(date)} at ${IMPORT_TIME_FORMATTER.format(date)}`;
+  return importDateTimeFormatter(locale).format(date);
 }
 
 export function calendarDisplayName(calendar: Calendar): string {
@@ -83,11 +91,14 @@ export function calendarDisplayName(calendar: Calendar): string {
   return calendar.name;
 }
 
-export function calendarImportDate(calendar: Calendar): string | undefined {
+export function calendarImportDate(
+  calendar: Calendar,
+  locale?: string | readonly string[],
+): string | undefined {
   if (calendar.source !== "ics") return undefined;
   return (
-    (calendar.createdAt ? formatImportTimestamp(calendar.createdAt) : undefined) ??
-    formatImportDateOnly(legacyImportedNameParts(calendar.name)?.date ?? "")
+    (calendar.createdAt ? formatImportTimestamp(calendar.createdAt, locale) : undefined) ??
+    formatImportDateOnly(legacyImportedNameParts(calendar.name)?.date ?? "", locale)
   );
 }
 

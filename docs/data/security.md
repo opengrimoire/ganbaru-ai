@@ -6,7 +6,7 @@ Ganbaru AI handles deeply personal data: calendar, notes, mood, work patterns, a
 
 The app must protect against:
 
-1. **Local malware on the user's machine.** Exfiltration of vault contents or SQLite data via processes the user did not authorize.
+1. **Local malware on the user's machine.** Exfiltration of Ganbaru AI folder contents or SQLite data via processes the user did not authorize.
 2. **Compromised dependencies.** A malicious or compromised npm, pip, or cargo package executing during install or runtime.
 3. **Supply chain attacks via external code.** Snippets the user (or AI agents) copy from web searches, GitHub issues, or Stack Overflow.
 4. **Network observation of sync traffic.** Anyone between the user's devices and the sync server (ISP, government, a cafe Wi-Fi attacker) seeing or modifying the user's data in transit.
@@ -41,6 +41,10 @@ These rules are enforced globally on the developer environment and reiterated in
 **Flag new and unmaintained packages.** When suggesting new dependencies, the contributor (human or AI) must check download counts, last-publish dates, and maintenance status. Low-download or unmaintained packages are flagged before being recommended.
 
 **Release workflow hardening.** Release jobs must avoid dependency caches, avoid mutable action tags, and keep write tokens separate from signing keys. The GitHub release workflow builds unsigned artifacts with read-only repository access, signs updater assets in the protected `release` environment, then publishes the draft release in a separate job with `contents: write`. The Tauri updater private key is not present in the build job or the publish job. Release jobs use fixed runner labels, full commit SHA action pins, `persist-credentials: false` on checkout, and explicit artifact handoff between jobs.
+
+**Branch and tag protection.** Normal work must enter through pull requests to `dev`; direct pushes to `dev` and `main` are not part of the normal workflow. `main`, same-repository `release/*` branches, `app-v*` tags, the protected release environment, and published GitHub Releases are controlled by organization admins because they govern signed installers and the updater feed. The exact intended GitHub rulesets live in `docs/rulesets.md`. `pull_request_target` workflows must never checkout pull request code, install dependencies, restore or save caches, run build scripts, or read untrusted files. Do not add a `pull_request_target` workflow for branch routing unless a separate security review explicitly accepts the added privileged automation surface.
+
+**Cache poisoning class.** The May 2026 TanStack npm compromise showed that a CI trust-boundary issue can become a release compromise: TanStack's postmortem describes a chain involving `pull_request_target`, GitHub Actions cache poisoning, token access from the runner process, and malicious package publication. This project treats caches, workflow files, release tags, environment approvals, and signing credentials as privileged supply-chain surfaces. Source: <https://tanstack.com/blog/npm-supply-chain-compromise-postmortem>.
 
 ## Sandbox boundaries
 

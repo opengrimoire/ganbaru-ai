@@ -1,8 +1,10 @@
 <script lang="ts">
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
 
   let { onBack }: { onBack: () => void } = $props();
 
+  const { t } = getLocalization();
   const musicIconSize = 14;
   const musicIconStrokeWidth = 1.5;
 </script>
@@ -16,10 +18,10 @@
       type="button"
       onclick={onBack}
       class="inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-secondary px-2.5 text-[0.8rem] font-medium text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-      aria-label="Back to music player"
+      aria-label={t("music.backToPlayer")}
     >
       <ArrowLeft size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-      <span>Media player</span>
+      <span>{t("music.mediaPlayer")}</span>
     </button>
   </header>
 

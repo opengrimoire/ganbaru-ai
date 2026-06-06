@@ -16,6 +16,8 @@
   import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
   import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
   import { calendarDisplayName } from "$lib/calendar/calendar-display";
+  import { formatList } from "$lib/i18n/formatters";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import Minus from "@lucide/svelte/icons/minus";
   import Plus from "@lucide/svelte/icons/plus";
   import MiniDatePicker from "./MiniDatePicker.svelte";
@@ -23,6 +25,9 @@
   const calendarsStore = getCalendars();
   const settingsLauncher = getSettingsLauncher();
   const calZoom = getCalendarZoom();
+  const localization = getLocalization();
+  const { t } = localization;
+  const locale = $derived(localization.locale);
 
   // Calendar account selector state
   let showAccountPicker = $state(false);
@@ -45,23 +50,35 @@
     onDaySelect: (date: Date) => void;
   } = $props();
 
-  const viewOptions: {
+  const viewOptions = $derived.by((): {
     mode: CalendarViewMode;
     label: string;
     title: string;
     shortcuts: string[];
-  }[] = [
-    { mode: "day", label: "1d", title: "Day view", shortcuts: ["1"] },
-    { mode: "workweek", label: "5d", title: "Work cycle view", shortcuts: ["2"] },
-    { mode: "week", label: "7d", title: "Week view", shortcuts: ["3"] },
-    { mode: "month", label: "31d", title: "Month view", shortcuts: ["4"] },
-  ];
+  }[] => [
+    { mode: "day", label: "1d", title: t("calendar.toolbar.dayView"), shortcuts: ["1"] },
+    {
+      mode: "workweek",
+      label: "5d",
+      title: t("calendar.toolbar.workCycleView"),
+      shortcuts: ["2"],
+    },
+    { mode: "week", label: "7d", title: t("calendar.toolbar.weekView"), shortcuts: ["3"] },
+    {
+      mode: "month",
+      label: "31d",
+      title: t("calendar.toolbar.monthView"),
+      shortcuts: ["4"],
+    },
+  ]);
   const todayShortcuts = ["0"] as const;
 
   function shortcutTitle(shortcuts: readonly string[]): string {
-    const labels = shortcuts.map((shortcut) => `${shortcut} key`);
+    const labels = shortcuts.map((shortcut) =>
+      t("calendar.toolbar.shortcutKey", shortcut),
+    );
     if (labels.length === 1) return labels[0];
-    return `${labels.slice(0, -1).join(", ")} or ${labels[labels.length - 1]}`;
+    return formatList(locale, labels, { type: "disjunction" });
   }
 
   // Keyboard shortcuts for view switching and "today". Arrow-key navigation is
@@ -157,7 +174,8 @@
   <button
     onclick={() => onNavigate("back")}
     class="flex h-7 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-    title="Previous (← key)"
+    title={t("calendar.toolbar.previousTitle", shortcutTitle(["←"]))}
+    aria-label={t("calendar.toolbar.previous")}
   >
     <ChevronLeft size={14} />
   </button>
@@ -169,7 +187,7 @@
       onclick={handleHeaderClick}
       class="flex h-7 items-center rounded-md px-1.5 text-sm font-semibold leading-none text-foreground transition-colors {showMiniCalendar ? 'bg-accent' : 'hover:bg-accent'}"
     >
-      {formatMonthYear(anchorDate)}
+      {formatMonthYear(anchorDate, locale)}
     </button>
 
     {#if showMiniCalendar}
@@ -196,7 +214,8 @@
   <button
     onclick={() => onNavigate("forward")}
     class="flex h-7 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-    title="Next (→ key)"
+    title={t("calendar.toolbar.nextTitle", shortcutTitle(["→"]))}
+    aria-label={t("calendar.toolbar.next")}
   >
     <ChevronRight size={14} />
   </button>
@@ -212,8 +231,8 @@
       class="flex h-7 w-7 items-center justify-center rounded-md transition-colors {!calZoom.canZoomOut
         ? 'cursor-default text-muted-foreground/30'
         : 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
-      title="Zoom out (Shift + -)"
-      aria-label="Zoom out"
+      title={t("calendar.toolbar.zoomOutTitle")}
+      aria-label={t("calendar.toolbar.zoomOut")}
     >
       <Minus size={13} />
     </button>
@@ -223,8 +242,8 @@
       class="flex h-7 w-7 items-center justify-center rounded-md transition-colors {!calZoom.canZoomIn
         ? 'cursor-default text-muted-foreground/30'
         : 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
-      title="Zoom in (Shift + +)"
-      aria-label="Zoom in"
+      title={t("calendar.toolbar.zoomInTitle")}
+      aria-label={t("calendar.toolbar.zoomIn")}
     >
       <Plus size={13} />
     </button>
@@ -234,7 +253,7 @@
         class="rounded-md px-2.5 py-1 text-xs font-medium {viewMode === opt.mode
           ? 'bg-card text-card-foreground'
           : 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
-        title="{opt.title} ({shortcutTitle(opt.shortcuts)})"
+        title={`${opt.title} (${shortcutTitle(opt.shortcuts)})`}
       >
         {opt.label}
       </button>
@@ -248,7 +267,7 @@
     class="ml-1 flex h-7 w-7 items-center justify-center rounded-md transition-colors {isOnToday
       ? 'text-muted-foreground/30 cursor-default'
       : 'text-muted-foreground hover:bg-accent hover:text-foreground'}"
-    title="Go to today ({shortcutTitle(todayShortcuts)})"
+    title={t("calendar.toolbar.goToToday", shortcutTitle(todayShortcuts))}
   >
     <RotateCcw size={13} />
   </button>
@@ -258,7 +277,8 @@
     <button
       onclick={() => { showAccountPicker = !showAccountPicker; }}
       class="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-      title="Calendars"
+      title={t("calendar.toolbar.calendars")}
+      aria-label={t("calendar.toolbar.calendars")}
     >
       <Layers size={13} />
     </button>
@@ -268,7 +288,7 @@
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div data-calendar-edit-close-ignore class="fixed inset-0 z-40" onclick={() => (showAccountPicker = false)}></div>
       <div data-calendar-edit-close-ignore class="absolute right-0 top-full z-50 mt-1 w-56 rounded-md border border-border bg-card text-card-foreground p-2.5 shadow-lg" style="--foreground: var(--card-foreground);">
-        <p class="mb-2 px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Calendars</p>
+        <p class="mb-2 px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{t("calendar.toolbar.calendars")}</p>
         {#each calendarsStore.list as cal}
           {@const checked = cal.visible}
           {@const displayName = calendarDisplayName(cal)}
@@ -285,7 +305,9 @@
             </span>
             <span class="truncate text-sm text-foreground">{displayName}</span>
             {#if cal.readOnly}
-              <span class="ml-auto text-[0.6rem] text-muted-foreground/60">read-only</span>
+              <span class="ml-auto text-[0.6rem] text-muted-foreground/60">
+                {t("calendar.toolbar.readOnly")}
+              </span>
             {/if}
           </button>
         {/each}
@@ -298,7 +320,7 @@
           class="flex w-full items-center gap-2 rounded px-1.5 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           <Settings size={14} />
-          <span>Settings</span>
+          <span>{t("calendar.toolbar.settings")}</span>
         </button>
       </div>
     {/if}

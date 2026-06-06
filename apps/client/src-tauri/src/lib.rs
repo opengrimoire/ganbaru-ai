@@ -21,9 +21,9 @@ mod pomodoro;
 mod pomodoro_enforcement;
 mod recurrence;
 mod themes;
-mod timezone_migration;
 mod tray;
 mod vault;
+mod window_shape;
 
 static PROCESS_START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
 static PLATFORM_LABEL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
@@ -86,18 +86,12 @@ fn force_quit(
 }
 
 /// Delete database files (main, WAL, SHM) and quit the app.
-/// Used to factory reset application state.
+/// Used to reset structured data without deleting the Ganbaru AI folder.
 #[tauri::command]
 async fn reset_database(app: tauri::AppHandle) -> Result<(), String> {
     doomscrolling::clear_doomscrolling_enforcement_state(&app)?;
     db_path::close_all_sqlite_pools(&app).await?;
-    let mut db_path = app.path().app_config_dir().map_err(|e| e.to_string())?;
-    let db_file = if cfg!(debug_assertions) {
-        "ganbaru-ai-dev.db"
-    } else {
-        "ganbaru-ai.db"
-    };
-    db_path.push(db_file);
+    let db_path = vault::active_database_path(&app)?;
 
     for suffix in &["", "-wal", "-shm"] {
         let mut path = db_path.clone();
@@ -113,9 +107,9 @@ async fn reset_database(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 /// Path to the persisted benchmark state file. Lives in `app_config_dir`,
-/// not the user's vault, so a `reset_database` call (which only deletes the
+/// not the user's Ganbaru AI folder, so a `reset_database` call (which only deletes the
 /// SQLite files) does not blow it away mid-run, and the file never pollutes
-/// the vault folder users back up. Used by the in-app benchmark harness to
+/// the folder users back up. Used by the in-app benchmark harness to
 /// hand state across the Phase A -> restart -> Phase B boundary.
 fn benchmark_state_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let mut p = app.path().app_config_dir().map_err(|e| e.to_string())?;
@@ -124,12 +118,12 @@ fn benchmark_state_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 }
 
 /// Path to the isolated SQLite file the benchmark harness uses for both
-/// phases. Lives next to the user's real DB but is never opened during
-/// normal app operation. The harness deletes it before each run and after
-/// the summary is closed.
+/// phases. Lives in app config and is never opened during normal app
+/// operation. The harness deletes it before each run and after the summary
+/// is closed.
 fn benchmark_db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let mut p = app.path().app_config_dir().map_err(|e| e.to_string())?;
-    p.push("ganbaru-ai-benchmark.db");
+    p.push("benchmark.sqlite");
     Ok(p)
 }
 
@@ -154,7 +148,7 @@ fn delete_benchmark_db_files(app: &tauri::AppHandle) -> Result<(), String> {
 /// previous run does not feed stale data into Phase A.
 #[tauri::command]
 async fn prepare_benchmark_db(app: tauri::AppHandle) -> Result<(), String> {
-    db_path::close_sqlite_pool(&app, "sqlite:ganbaru-ai-benchmark.db").await?;
+    db_path::close_sqlite_pool(&app, db_path::BENCHMARK_SQLITE_URL).await?;
     delete_benchmark_db_files(&app)
 }
 
@@ -162,7 +156,7 @@ async fn prepare_benchmark_db(app: tauri::AppHandle) -> Result<(), String> {
 /// clarity at the call site (run-finished cleanup vs run-starting cleanup).
 #[tauri::command]
 async fn teardown_benchmark_db(app: tauri::AppHandle) -> Result<(), String> {
-    db_path::close_sqlite_pool(&app, "sqlite:ganbaru-ai-benchmark.db").await?;
+    db_path::close_sqlite_pool(&app, db_path::BENCHMARK_SQLITE_URL).await?;
     delete_benchmark_db_files(&app)
 }
 
@@ -765,14 +759,20 @@ pub fn run() {
             toggle_devtools,
             get_memory_report,
             get_startup_elapsed_ms,
+            vault::vault_read_app_state,
+            vault::vault_default_location,
+            vault::vault_use_default_folder,
+            vault::vault_active_info,
+            vault::vault_pick_create,
+            vault::vault_pick_open,
+            vault::vault_select_recent,
+            vault::vault_reveal_active,
             vault::vault_read_config,
             vault::vault_write_config,
             vault::vault_pick_and_read_ics_import,
             vault::vault_pick_and_write_ics_export,
             vault::vault_pick_and_read_theme_json,
             vault::vault_pick_and_write_theme_json,
-            timezone_migration::calendar_load_timezone_hydration_rows,
-            timezone_migration::calendar_apply_timezone_hydration,
             calendar_reads::calendar_load_window,
             calendar_reads::calendar_load_pomodoro_scheduler_window,
             calendar_reads::calendar_load_panel_event,
@@ -827,7 +827,6 @@ pub fn run() {
             themes::theme_insert,
             themes::theme_replace_content,
             themes::theme_delete,
-            themes::theme_backfill_icon_label,
             themes::theme_record_dismissal,
             themes::theme_load_dismissals,
             themes::theme_rename,
@@ -844,6 +843,7 @@ pub fn run() {
         ])
         .setup(|app| {
             clear_doomscrolling_enforcement_state_best_effort(app.handle(), "during startup");
+            window_shape::setup_main_window(app.handle())?;
             music::setup_youtube_host(app.handle())?;
             media_controls::setup_media_controls(app.handle())?;
             if let Err(err) = notification::restore_stale_shortcuts(app.handle()) {

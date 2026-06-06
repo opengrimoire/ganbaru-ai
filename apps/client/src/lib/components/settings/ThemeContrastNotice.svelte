@@ -2,6 +2,7 @@
   import AlertTriangle from "@lucide/svelte/icons/alert-triangle";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import Wand2 from "@lucide/svelte/icons/wand-2";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
 
   let {
     count,
@@ -12,6 +13,8 @@
     onJump: () => void;
     onFixAll: () => void;
   } = $props();
+
+  const { t } = getLocalization();
 </script>
 
 <section
@@ -24,29 +27,29 @@
       class="shrink-0 text-amber-500"
     />
     <span class="font-medium">
-      {count} contrast {count === 1 ? "issue" : "issues"}
+      {t("settings.theme.editor.contrastIssue", count)}
     </span>
   </div>
   <div class="theme-contrast-actions flex shrink-0 items-center gap-1.5">
     <button
       type="button"
       onclick={onJump}
-      aria-label="Jump to next failing contrast row"
-      title="Scroll to the next row below its contrast target (cycles through the list). Muted surfaces target 3:1; everything else targets 4.5:1."
+      aria-label={t("settings.theme.editor.jumpToNextContrast")}
+      title={t("settings.theme.editor.jumpToNextContrastTitle")}
       class="flex h-6 items-center gap-1 rounded-md border border-border bg-card px-2 text-[0.666667rem] font-medium text-foreground transition-colors hover:bg-accent"
     >
       <ArrowDown size={11} strokeWidth={2.25} />
-      <span>Jump to next</span>
+      <span>{t("settings.theme.editor.jumpToNext")}</span>
     </button>
     <button
       type="button"
       onclick={onFixAll}
-      aria-label="Auto-fix every failing contrast row"
-      title="Pick a legible text color for every pair below its target"
+      aria-label={t("settings.theme.editor.fixAllContrast")}
+      title={t("settings.theme.editor.fixAllContrastTitle")}
       class="flex h-6 items-center gap-1 rounded-md border border-primary bg-primary px-2 text-[0.666667rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
     >
       <Wand2 size={11} strokeWidth={2.25} />
-      <span>Fix all</span>
+      <span>{t("settings.theme.editor.fixAll")}</span>
     </button>
   </div>
 </section>

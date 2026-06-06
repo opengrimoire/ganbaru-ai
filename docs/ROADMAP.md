@@ -27,13 +27,13 @@ The minimum viable cycle: plan sessions, focus with a timer, track tasks.
 
 ---
 
-## Phase 2: notes and vault
+## Phase 2: notes and Ganbaru AI folder
 
 The local-first knowledge layer. Users can take notes linked to their tasks and projects.
 
 **Includes:**
 
-- Vault directory structure on disk (notes/, diary/, calendar/, projects/, config.json, app.db)
+- Ganbaru AI folder structure on disk (vault.json, config.json, ganbaru-ai.sqlite, notes/, diary/, projects/)
 - Tiptap note editor: block-based editing, slash commands, rich formatting, drag-to-reorder blocks
 - Markdown serialization via @tiptap/extension-markdown (notes saved as .md files to disk via Tauri file system plugin)
 - Bidirectional backlinks tracked in SQLite (note-to-note, note-to-task, note-to-project)
@@ -56,11 +56,11 @@ Daily touchpoints and engagement mechanics that make the app habit-forming.
 
 **Includes:**
 
-- Daily diary: morning and evening entry forms stored as dated markdown files in vault/diary/
+- Daily diary: morning and evening entry forms stored as dated markdown files in `Ganbaru AI/diary/`
 - Diary indexed fields in SQLite: mood (5 options), energy level (5 options), sleep quality (5 options), daily intention, evening reflection
 - Consistency tracking: session block completion rate, Pomodoro cycle completion rate
 
-**Depends on:** phase 2 (notes/vault for diary storage and backlinks), phase 1 (Pomodoro/calendar for consistency data)
+**Depends on:** phase 2 (notes and Ganbaru AI folder for diary storage and backlinks), phase 1 (Pomodoro/calendar for consistency data)
 
 **Out of scope:** sleep alarm (mobile, phase 10), AI mood analysis (phase 11)
 
@@ -204,13 +204,13 @@ Multi-device sync and real-time collaboration via CRDTs and E2E encryption.
 - Yjs CRDT integration: every document type (notes, calendar, Kanban, diary, app state) as Yjs data structures, binary updates that merge in any order
 - Tiptap collaboration: @tiptap/extension-collaboration for real-time note co-editing, @tiptap/extension-collaboration-cursor for live cursor positions and selections
 - Hocuspocus server: apps/server package, persistent document state, presence and awareness, authentication and authorization hooks for workspace access control, self-hostable
-- E2E encryption: libsodium / @noble/ciphers, client-side key derivation, personal vault (single key per vault), collaborative workspace (workspace key encrypted per-member), server stores only ciphertext
+- E2E encryption: libsodium / @noble/ciphers, client-side key derivation, personal Ganbaru AI folder (single key per folder), collaborative workspace (workspace key encrypted per-member), server stores only ciphertext
 - Two sync tiers: local-only (scheduled encrypted export to user-specified path), self-hosted (user's own Hocuspocus server with guided setup, automatic cloud backup)
 - Multi-device sync: desktop-to-desktop, desktop-to-mobile (mobile in phase 10)
 - Collaborative workspaces: shared documents, live presence, access control
-- Local backup: scheduled encrypted zip export of vault folder
+- Local backup: scheduled encrypted zip export of the Ganbaru AI folder
 
-**Depends on:** phase 2 (Tiptap editor for collaboration extensions), phase 1 (SQLite data model, vault structure)
+**Depends on:** phase 2 (Tiptap editor for collaboration extensions), phase 1 (SQLite data model, Ganbaru AI folder structure)
 
 **Out of scope:** mobile sync client (phase 10), AI features
 

@@ -5,13 +5,16 @@
   import { EVENT_COLOR_OPTIONS, getEventColor } from "./utils";
   import { contrastRatio } from "$lib/components/ui/colorMath";
   import { resolveCalendarTokens, type Theme } from "$lib/stores/themes";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
+
+  const { t } = getLocalization();
 
   let {
     color,
     theme,
     onselect,
-    title = "Event color",
-    ariaLabel = "Select event color",
+    title,
+    ariaLabel,
   }: {
     color: EventColor | undefined;
     theme: Theme;
@@ -27,6 +30,7 @@
 
   const selectedColor = $derived(color ?? FALLBACK_COLOR_INDEX);
   const colorEntry = $derived(getEventColor(color, theme));
+  const buttonTitle = $derived(title ?? t("calendar.color.eventColor"));
   const calendarTokens = $derived(resolveCalendarTokens(theme));
   const pickerBg = $derived(calendarTokens["--cal-bg"]);
   const pickerText = $derived(calendarTokens["--cal-time-label"]);
@@ -128,7 +132,7 @@
     onkeydown={handleButtonKeydown}
     class="size-4.5 shrink-0 rounded-sm"
     style="background-color: {colorEntry.bg};"
-      title={title}
+    title={buttonTitle}
     data-app-tooltip-focus-disabled="true"
   ></button>
   {#if open}
@@ -150,7 +154,7 @@
         {@const entry = getEventColor(c, theme)}
         <button
           data-color-index={index}
-          aria-label={`${ariaLabel} ${index + 1}`}
+          aria-label={ariaLabel ? `${ariaLabel} ${index + 1}` : t("calendar.color.selectEventColor", index + 1)}
           tabindex={activeIndex === index ? 0 : -1}
           onclick={() => { selectColor(c, "pointer"); }}
           onfocus={() => { activeIndex = index; }}

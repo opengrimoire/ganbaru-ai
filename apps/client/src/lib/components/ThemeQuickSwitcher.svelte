@@ -3,6 +3,8 @@
   import Moon from "@lucide/svelte/icons/moon";
   import Sun from "@lucide/svelte/icons/sun";
   import X from "@lucide/svelte/icons/x";
+  import { themeDisplayName } from "$lib/i18n/theme-labels";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
   import type { ThemeId } from "$lib/stores/themes";
   import ThemeMiniPreview from "$lib/components/settings/ThemeMiniPreview.svelte";
@@ -11,6 +13,7 @@
   let { onClose }: { onClose: () => void } = $props();
 
   const themeStore = getTheme();
+  const { t } = getLocalization();
   const originalId = themeStore.id;
 
   let selectedId = $state<ThemeId>(themeStore.id);
@@ -117,17 +120,17 @@
   <div
     role="dialog"
     aria-modal="true"
-    aria-label="Theme picker"
+    aria-label={t("settings.theme.pickerLabel")}
     tabindex="-1"
     class="flex max-h-[min(26rem,calc(100dvh-var(--titlebar-h)-2.5rem))] w-[min(26rem,calc(100vw-1rem))] flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-2xl"
     onclick={(e) => e.stopPropagation()}
   >
     <header class="flex shrink-0 items-center justify-between gap-3 border-b border-border/70 px-3 py-2">
-      <h2 class="truncate text-[0.866667rem] font-medium text-foreground">Theme</h2>
+      <h2 class="truncate text-[0.866667rem] font-medium text-foreground">{t("settings.theme.pickerTitle")}</h2>
       <button
         type="button"
         onclick={cancelSelection}
-        aria-label="Close theme picker"
+        aria-label={t("settings.theme.closePicker")}
         data-app-tooltip-disabled="true"
         class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
@@ -135,7 +138,7 @@
       </button>
     </header>
 
-    <div role="listbox" aria-label="Themes" class="min-h-0 flex-1 overflow-y-auto p-1">
+    <div role="listbox" aria-label={t("settings.theme.themesHeading")} class="min-h-0 flex-1 overflow-y-auto p-1">
       {#each orderedThemes as item, index (item.id)}
         {@const BaseIcon = item.iconLabel === "dark" ? Moon : Sun}
         {@const selected = item.id === selectedId}
@@ -157,7 +160,7 @@
             class="shrink-0 text-muted-foreground"
           />
           <span class="min-w-0 flex-1 truncate text-[0.866667rem]">
-            {item.displayName}
+            {themeDisplayName(item, t)}
           </span>
           <ThemeMiniPreview theme={item} />
         </button>

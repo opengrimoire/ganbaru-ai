@@ -18,6 +18,7 @@
     type DoomscrollingDesktopAppCandidate,
   } from "$lib/api/doomscrolling";
   import { isProtectedDoomscrollingDesktopAppName } from "$lib/doomscrolling";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 
   let {
@@ -39,6 +40,8 @@
     onSelect?: (app: DoomscrollingAppSelection) => void;
     onCancel: () => void;
   } = $props();
+
+  const { t } = getLocalization();
 
   let searchInputEl: HTMLInputElement | undefined = $state();
   let query = $state("");
@@ -83,7 +86,7 @@
       apps = await listDoomscrollingDesktopApps();
     } catch (err) {
       console.warn("Failed to list desktop apps:", err);
-      error = "Could not load installed apps";
+      error = t("settings.doomscrolling.appSelector.loadError");
     } finally {
       clearTimeout(loadingTimer);
       loading = false;
@@ -179,13 +182,13 @@
       <div class="min-w-0">
         <h2 class="text-[1rem] font-semibold text-foreground">{title}</h2>
         <p class="mt-0.5 text-[0.8rem] text-muted-foreground">
-          System apps are hidden so they cannot be closed by mistake
+          {t("settings.doomscrolling.appSelector.systemHidden")}
         </p>
       </div>
       <button
         type="button"
         onclick={onCancel}
-        aria-label="Close app picker"
+        aria-label={t("settings.doomscrolling.appSelector.close")}
         data-app-tooltip-disabled="true"
         class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
@@ -201,14 +204,14 @@
           bind:value={query}
           type="text"
           spellcheck="false"
-          placeholder="Search apps..."
+          placeholder={t("settings.doomscrolling.appSelector.search")}
           class="h-7 min-w-0 flex-1 bg-transparent text-[0.866667rem] text-foreground outline-none placeholder:text-muted-foreground"
         />
         <button
           type="button"
           onclick={loadApps}
           disabled={loading}
-          aria-label="Refresh app list"
+          aria-label={t("settings.doomscrolling.appSelector.refresh")}
           class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
         >
           {#if loading}
@@ -223,7 +226,7 @@
         {#if loading && showLoadingState}
           <div class="flex h-full min-h-36 items-center justify-center gap-2 text-[0.866667rem] text-muted-foreground">
             <LoaderCircle size={15} strokeWidth={2.25} class="animate-spin" />
-            <span>Loading apps</span>
+            <span>{t("settings.doomscrolling.appSelector.loading")}</span>
           </div>
         {:else if loading}
           <div class="h-full min-h-36" aria-busy="true"></div>
@@ -233,7 +236,7 @@
           </div>
         {:else if filteredApps.length === 0}
           <div class="flex h-full min-h-36 items-center justify-center px-4 text-center text-[0.866667rem] text-muted-foreground">
-            No apps found
+            {t("settings.doomscrolling.appSelector.empty")}
           </div>
         {:else}
           <div class="flex flex-col">
@@ -254,9 +257,13 @@
                 <span class="min-w-0 truncate text-[0.866667rem] text-foreground">{app.name}</span>
                 <span class="shrink-0 text-[0.8rem] text-muted-foreground">
                   {#if alreadyAdded}
-                    {mode === "single" ? "Used" : "Remove"}
+                    {mode === "single"
+                      ? t("settings.doomscrolling.appSelector.used")
+                      : t("settings.doomscrolling.appSelector.remove")}
                   {:else}
-                    {mode === "single" ? "Choose" : "Add"}
+                    {mode === "single"
+                      ? t("settings.doomscrolling.appSelector.choose")
+                      : t("settings.doomscrolling.appSelector.add")}
                   {/if}
                 </span>
               </button>
@@ -270,10 +277,10 @@
 
 {#if pendingAddApp}
   <ConfirmDialog
-    title={`Block ${pendingAddApp.name}?`}
-    message="Ganbaru AI will automatically close this app during focus sessions"
-    confirmLabel="Block (Enter)"
-    cancelLabel="Cancel (Esc)"
+    title={t("settings.doomscrolling.appSelector.blockTitle", pendingAddApp.name)}
+    message={t("settings.doomscrolling.appSelector.blockMessage")}
+    confirmLabel={t("settings.doomscrolling.appSelector.blockShortcut")}
+    cancelLabel={t("settings.doomscrolling.shared.cancelShortcut")}
     onConfirm={confirmAdd}
     onCancel={cancelAdd}
   />
@@ -281,10 +288,10 @@
 
 {#if pendingRemoveName}
   <ConfirmDialog
-    title={`Remove ${pendingRemoveName} from blocked apps?`}
-    message="It will no longer be blocked by desktop rules"
-    confirmLabel="Remove (Enter)"
-    cancelLabel="Cancel (Esc)"
+    title={t("settings.doomscrolling.desktop.removeAppTitle", pendingRemoveName)}
+    message={t("settings.doomscrolling.desktop.removeMessage")}
+    confirmLabel={t("settings.doomscrolling.shared.removeShortcut")}
+    cancelLabel={t("settings.doomscrolling.shared.cancelShortcut")}
     onConfirm={confirmRemove}
     onCancel={cancelRemove}
   />

@@ -26,6 +26,7 @@
     type UserTheme,
   } from "$lib/stores/themes";
   import { getTheme } from "$lib/stores/theme.svelte";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
     canResetTokenToSeed,
     toUserThemeSnapshot,
@@ -36,15 +37,14 @@
   import ThemeJsonSection from "./ThemeJsonSection.svelte";
   import ThemeRebakeBanner from "./ThemeRebakeBanner.svelte";
   import {
-    CALENDAR_DEFAULT_OPTIONS,
-    CALENDAR_GROUPS,
     SOURCE_GROUPS,
-    TEXT_ACTION_GROUPS,
-    THEME_NAV_ITEMS,
-    THEME_SECTION_LABELS,
     isCalendarGroup,
     isTextActionGroup,
-    tokenInfo,
+    localizedCalendarDefaultOptions,
+    localizedSourceGroups,
+    localizedThemeNavItems,
+    localizedThemeSectionLabel,
+    localizedTokenInfo,
     type GroupContrastRow,
     type GroupPairRow,
     type GroupSingleRow,
@@ -56,6 +56,12 @@
   let { theme }: { theme: Theme } = $props();
 
   const themeStore = getTheme();
+  const { t } = getLocalization();
+  const sourceGroups = $derived(localizedSourceGroups(t));
+  const textActionGroups = $derived(sourceGroups.filter(isTextActionGroup));
+  const calendarGroups = $derived(sourceGroups.filter(isCalendarGroup));
+  const themeNavItems = $derived(localizedThemeNavItems(t));
+  const calendarDefaultOptions = $derived(localizedCalendarDefaultOptions(t));
   const PANEL_SCROLL_KEYS = new Set([
     "ArrowUp",
     "ArrowDown",
@@ -194,7 +200,7 @@
   }> {
     if (!scrollViewport) return [];
     const out: Array<{ target: ThemeNavTarget; el: HTMLElement }> = [];
-    for (const item of THEME_NAV_ITEMS) {
+    for (const item of themeNavItems) {
       const el = scrollViewport.querySelector<HTMLElement>(
         sectionSelector(item.target),
       );
@@ -507,15 +513,24 @@
   }
 
   function contrastTargetSuffix(target: number): string {
-    return target >= 4.5 ? " (AA body text)" : " (AA large/UI)";
+    return target >= 4.5
+      ? t("settings.theme.editor.contrastTargetAaBody")
+      : t("settings.theme.editor.contrastTargetAaLargeUi");
   }
 
   function contrastTitle(contrast: PairContrast): string {
-    const summary =
-      `Contrast ${contrast.ratio.toFixed(2)}:1. ` +
-      `This pair targets ${contrast.target}:1${contrastTargetSuffix(contrast.target)}.`;
-    if (readOnly) return summary;
-    return `${summary} Click to auto-pick a legible text color.`;
+    const ratio = contrast.ratio.toFixed(2);
+    const target = String(contrast.target);
+    const suffix = contrastTargetSuffix(contrast.target);
+    if (readOnly) {
+      return t("settings.theme.editor.contrastTitle", ratio, target, suffix);
+    }
+    return t(
+      "settings.theme.editor.contrastTitleEditable",
+      ratio,
+      target,
+      suffix,
+    );
   }
 
   function autoFixPair(row: GroupContrastRow) {
@@ -590,10 +605,10 @@
   async function copyJsonToClipboard() {
     try {
       await navigator.clipboard.writeText(jsonDraft);
-      flashJsonNotice("JSON copied to clipboard");
+      flashJsonNotice(t("settings.theme.editor.jsonCopied"));
     } catch (err) {
       console.error("clipboard write failed", err);
-      flashJsonNotice("Could not copy JSON");
+      flashJsonNotice(t("settings.theme.editor.jsonCopyFailed"));
     }
   }
 
@@ -603,10 +618,10 @@
         defaultName: `${theme.id}.json`,
         contents: jsonDraft,
       });
-      if (saved) flashJsonNotice("Saved to file");
+      if (saved) flashJsonNotice(t("settings.theme.editor.jsonSaved"));
     } catch (err) {
       console.error("save dialog failed", err);
-      flashJsonNotice("Could not save file");
+      flashJsonNotice(t("settings.theme.editor.jsonSaveFailed"));
     }
   }
 
@@ -618,7 +633,7 @@
     }
     jsonErrors = [];
     jsonDirty = false;
-    flashJsonNotice("Theme updated from JSON");
+    flashJsonNotice(t("settings.theme.editor.jsonUpdated"));
   }
 
   function resetJsonDraft() {
@@ -656,11 +671,26 @@
         }}
         disabled={readOnly}
         aria-label={readOnly
-          ? `Icon tag: ${theme.iconLabel === "dark" ? "night" : "day"}`
-          : `Icon tag: ${theme.iconLabel === "dark" ? "night" : "day"} (decorative, click to flip)`}
+          ? t(
+              "settings.theme.editor.iconTagLabel",
+              theme.iconLabel === "dark"
+                ? t("settings.theme.editor.night")
+                : t("settings.theme.editor.day"),
+            )
+          : t(
+              "settings.theme.editor.iconTagEditableLabel",
+              theme.iconLabel === "dark"
+                ? t("settings.theme.editor.night")
+                : t("settings.theme.editor.day"),
+            )}
         title={readOnly
-          ? "Built-in theme icon tag"
-          : `Decorative tag for ${theme.iconLabel === "dark" ? "night" : "day"} use. Click to flip.`}
+          ? t("settings.theme.editor.builtInIconTag")
+          : t(
+              "settings.theme.editor.iconTagTitle",
+              theme.iconLabel === "dark"
+                ? t("settings.theme.editor.night")
+                : t("settings.theme.editor.day"),
+            )}
         class={cn(
           "flex h-full w-9 shrink-0 items-center justify-center transition-colors focus:outline-none",
           readOnly
@@ -677,7 +707,7 @@
         oninput={(e) => setName((e.currentTarget as HTMLInputElement).value)}
         readonly={readOnly}
         maxlength={60}
-        aria-label="Theme name"
+        aria-label={t("settings.theme.editor.themeName")}
         class={cn(
           "h-full min-w-0 flex-1 bg-transparent px-3 font-medium text-muted-foreground focus:outline-none",
           readOnly && "cursor-default",
@@ -693,9 +723,9 @@
       <nav
         bind:this={themeNav}
         class="theme-editor-nav grid h-full grid-cols-5 items-center gap-1 overflow-hidden px-1"
-        aria-label="Theme editor sections"
+        aria-label={t("settings.theme.editor.sectionsLabel")}
       >
-        {#each THEME_NAV_ITEMS as item}
+        {#each themeNavItems as item}
           <button
             type="button"
             data-theme-nav-button={item.target}
@@ -721,7 +751,7 @@
     onClick: () => void,
     label: string,
     canReset: boolean,
-    disabledTitle = "Already at original value",
+    disabledTitle = t("settings.theme.editor.originalValue"),
   )}
     <button
       type="button"
@@ -731,8 +761,8 @@
         onClick();
       }}
       aria-disabled={!canReset}
-      aria-label="Reset {label} to its original value"
-      title={canReset ? "Restore original value" : disabledTitle}
+      aria-label={t("settings.theme.editor.resetOriginal", label)}
+      title={canReset ? t("settings.theme.editor.restoreOriginal") : disabledTitle}
       class={cn(
         "flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors",
         canReset
@@ -782,10 +812,10 @@
         ariaLabel,
         canResetRow,
         readOnly
-          ? "Built-in themes are read-only"
+          ? t("settings.theme.editor.builtInReadOnly")
           : isLinked
-            ? "Linked colors reset through their source"
-            : "Already at original value",
+            ? t("settings.theme.editor.linkedColorsResetThroughSource")
+            : t("settings.theme.editor.originalValue"),
       )}
       {#if isLinked}
         <button
@@ -796,10 +826,10 @@
             else isolateCalToken(key);
           }}
           disabled={readOnly}
-          aria-label="Isolated edit {ariaLabel}"
+          aria-label={t("settings.theme.editor.isolateEditLabel", ariaLabel)}
           title={readOnly
-            ? "Built-in themes are read-only"
-            : "Edit this color independently of its source"}
+            ? t("settings.theme.editor.builtInReadOnly")
+            : t("settings.theme.editor.isolateEditTitle")}
           class={cn(
             "theme-token-action flex min-w-27 shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[0.666667rem] font-medium text-muted-foreground transition-colors",
             readOnly
@@ -808,7 +838,7 @@
           )}
         >
           <Pencil size={10} strokeWidth={2.25} />
-          <span>Isolated edit</span>
+          <span>{t("settings.theme.editor.isolateEdit")}</span>
         </button>
       {:else}
         <button
@@ -819,10 +849,10 @@
             else relinkCalToken(key);
           }}
           disabled={readOnly}
-          aria-label="Link back {ariaLabel} to its source"
+          aria-label={t("settings.theme.editor.linkBackLabel", ariaLabel)}
           title={readOnly
-            ? "Built-in themes are read-only"
-            : "Re-link this color to its source"}
+            ? t("settings.theme.editor.builtInReadOnly")
+            : t("settings.theme.editor.linkBackTitle")}
           class={cn(
             "theme-token-action flex min-w-27 shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[0.666667rem] font-medium text-muted-foreground transition-colors",
             readOnly
@@ -831,7 +861,7 @@
           )}
         >
           <Link2 size={10} strokeWidth={2.25} />
-          <span>Link back</span>
+          <span>{t("settings.theme.editor.linkBack")}</span>
         </button>
       {/if}
     </div>
@@ -852,14 +882,16 @@
         () => resetSource(key),
         ariaLabel,
         canResetSource(key),
-        readOnly ? "Built-in themes are read-only" : "Already at original value",
+        readOnly
+          ? t("settings.theme.editor.builtInReadOnly")
+          : t("settings.theme.editor.originalValue"),
       )}
       <div class="theme-token-action-spacer min-w-27 shrink-0" aria-hidden="true"></div>
     </div>
   {/snippet}
 
   {#snippet groupSingleRow(row: GroupSingleRow)}
-    {@const info = tokenInfo(row)}
+    {@const info = localizedTokenInfo(row, t)}
     <div class="theme-control-row flex items-center justify-between gap-3 px-1 py-2.5">
       <div class="min-w-0 flex-1">
         <div class="text-[0.8rem] text-foreground">{info.title}</div>
@@ -874,7 +906,7 @@
        of the source it tints. It still uses the normal token editor, so
        linked rows stay read-only until the user chooses Isolated edit. -->
   {#snippet groupHeaderStyleRow(row: GroupSingleRow)}
-    {@const info = tokenInfo(row)}
+    {@const info = localizedTokenInfo(row, t)}
     <div class="theme-control-row flex items-center justify-between gap-3 px-1 py-2.5">
       <div class="min-w-0 flex-1">
         <div class="text-[0.866667rem] font-semibold text-foreground">{info.title}</div>
@@ -901,8 +933,12 @@
               }}
               disabled={readOnly}
               aria-label={readOnly
-                ? `${row.title} text contrast is ${contrast.ratio.toFixed(2)}:1`
-                : `Auto-fix ${row.title} text contrast`}
+                ? t(
+                    "settings.theme.editor.contrastReadOnlyLabel",
+                    row.title,
+                    contrast.ratio.toFixed(2),
+                  )
+                : t("settings.theme.editor.contrastAutoFixLabel", row.title)}
               title={contrastTitle(contrast)}
               class={cn(
                 "flex items-center gap-1 rounded px-1 py-0.5 text-[0.666667rem] font-medium text-amber-700 transition-colors dark:text-amber-400",
@@ -926,17 +962,25 @@
           <span
             class="theme-pair-label w-8.5 text-right text-[0.666667rem] font-medium uppercase tracking-wide text-muted-foreground"
           >
-            Bg
+            {t("settings.theme.editor.backgroundShort")}
           </span>
-          {@render tokenEditor(row.bg, row.scope, `${row.title} background`)}
+          {@render tokenEditor(
+            row.bg,
+            row.scope,
+            t("settings.theme.editor.backgroundControl", row.title),
+          )}
         </div>
         <div class="theme-pair-control-line flex items-center gap-1.5">
           <span
             class="theme-pair-label w-8.5 text-right text-[0.666667rem] font-medium uppercase tracking-wide text-muted-foreground"
           >
-            Text
+            {t("settings.theme.editor.textShort")}
           </span>
-          {@render tokenEditor(row.fg, row.scope, `${row.title} text`)}
+          {@render tokenEditor(
+            row.fg,
+            row.scope,
+            t("settings.theme.editor.textControl", row.title),
+          )}
         </div>
       </div>
     </div>
@@ -961,8 +1005,12 @@
               }}
               disabled={readOnly}
               aria-label={readOnly
-                ? `${row.title} text contrast is ${contrast.ratio.toFixed(2)}:1`
-                : `Auto-fix ${row.title} text contrast`}
+                ? t(
+                    "settings.theme.editor.contrastReadOnlyLabel",
+                    row.title,
+                    contrast.ratio.toFixed(2),
+                  )
+                : t("settings.theme.editor.contrastAutoFixLabel", row.title)}
               title={contrastTitle(contrast)}
               class={cn(
                 "flex items-center gap-1 rounded px-1 py-0.5 text-[0.666667rem] font-medium text-amber-700 transition-colors dark:text-amber-400",
@@ -986,17 +1034,23 @@
           <span
             class="theme-pair-label w-8.5 text-right text-[0.666667rem] font-medium uppercase tracking-wide text-muted-foreground"
           >
-            Bg
+            {t("settings.theme.editor.backgroundShort")}
           </span>
-          {@render sourceEditor(row.bgSource, `${row.title} background`)}
+          {@render sourceEditor(
+            row.bgSource,
+            t("settings.theme.editor.backgroundControl", row.title),
+          )}
         </div>
         <div class="theme-pair-control-line flex items-center gap-1.5">
           <span
             class="theme-pair-label w-8.5 text-right text-[0.666667rem] font-medium uppercase tracking-wide text-muted-foreground"
           >
-            Text
+            {t("settings.theme.editor.textShort")}
           </span>
-          {@render sourceEditor(row.fgSource, `${row.title} text`)}
+          {@render sourceEditor(
+            row.fgSource,
+            t("settings.theme.editor.textControl", row.title),
+          )}
         </div>
       </div>
     </div>
@@ -1031,15 +1085,15 @@
                 value={viewTheme.sources[sourceKey]}
                 onChange={(hex) => setSource(sourceKey, hex)}
                 {readOnly}
-                label="{group.title} source"
+                label={t("settings.theme.editor.sourceControl", group.title)}
               />
               {@render resetIconButton(
                 () => resetSource(sourceKey),
                 group.title,
                 canResetSource(sourceKey),
                 readOnly
-                  ? "Built-in themes are read-only"
-                  : "Already at original value",
+                  ? t("settings.theme.editor.builtInReadOnly")
+                  : t("settings.theme.editor.originalValue"),
               )}
             {/if}
             {#if isCollapsible}
@@ -1047,18 +1101,18 @@
                 type="button"
                 onclick={() => toggleGroup(group.id)}
                 aria-expanded={!isCollapsed}
-                aria-label="{isCollapsed
-                  ? 'Expand'
-                  : 'Collapse'} {group.title} options"
+                aria-label={isCollapsed
+                  ? t("settings.theme.editor.expandGroupLabel", group.title)
+                  : t("settings.theme.editor.collapseGroupLabel", group.title)}
                 class="theme-token-action theme-collapse-action flex min-w-27 shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[0.666667rem] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent hover:text-foreground"
               >
                 {#if isCollapsed}
                   <ChevronDown class="theme-collapse-action-icon" size={11} strokeWidth={2.25} />
-                  <span>Expand</span>
+                  <span>{t("settings.theme.editor.expand")}</span>
                   <ChevronDown class="theme-token-action-tail-icon" size={11} strokeWidth={2.25} />
                 {:else}
                   <ChevronUp class="theme-collapse-action-icon" size={11} strokeWidth={2.25} />
-                  <span>Collapse</span>
+                  <span>{t("settings.theme.editor.collapse")}</span>
                   <ChevronUp class="theme-token-action-tail-icon" size={11} strokeWidth={2.25} />
                 {/if}
               </button>
@@ -1090,7 +1144,7 @@
 
   {#snippet textActionsSection()}
     <section class="flex flex-col divide-y divide-border">
-      {#each TEXT_ACTION_GROUPS as group (group.id)}
+      {#each textActionGroups as group (group.id)}
         {@render groupSection(group)}
       {/each}
     </section>
@@ -1101,15 +1155,15 @@
       <header>
         <div class="min-w-0 flex-1">
           <h2 class="text-[0.866667rem] font-semibold text-foreground">
-            Color defaults
+            {t("settings.theme.editor.colorDefaults")}
           </h2>
           <div class="text-[0.733333rem] text-muted-foreground">
-            Surface, palette, and details
+            {t("settings.theme.editor.colorDefaultsDescription")}
           </div>
         </div>
       </header>
       <div class="theme-calendar-default-row flex min-w-0 flex-wrap items-center gap-1.5">
-        {#each CALENDAR_DEFAULT_OPTIONS as option}
+        {#each calendarDefaultOptions as option}
           {@const selected = viewTheme.calendarDefaultMode === option.mode}
           <button
             type="button"
@@ -1136,17 +1190,17 @@
             value={viewTheme.calendarDefaultCustom}
             onChange={setCalendarDefaultCustom}
             {readOnly}
-            label="Custom calendar default"
+            label={t("settings.theme.editor.customCalendarDefault")}
           />
         {/if}
         <div class="ml-auto shrink-0">
           {@render resetIconButton(
             resetCalendarDefault,
-            "Color defaults",
+            t("settings.theme.editor.colorDefaults"),
             !readOnly && themeStore.canResetCalendarDefault(theme.id),
             readOnly
-              ? "Built-in themes are read-only"
-              : "Already at original value",
+              ? t("settings.theme.editor.builtInReadOnly")
+              : t("settings.theme.editor.originalValue"),
           )}
         </div>
       </div>
@@ -1156,7 +1210,7 @@
   {#snippet calendarSection()}
     <section class="flex flex-col divide-y divide-border">
       {@render calendarDefaultsSection()}
-      {#each CALENDAR_GROUPS as group (group.id)}
+      {#each calendarGroups as group (group.id)}
         {#if group.id === "calendar-details"}
           <ThemeEventPaletteSection
             theme={viewTheme}
@@ -1175,7 +1229,7 @@
       data-theme-nav-target={target}
     >
       <h2 class="shrink-0 text-[0.866667rem] font-semibold uppercase text-foreground">
-        {THEME_SECTION_LABELS[target]}
+        {localizedThemeSectionLabel(target, t)}
       </h2>
       <div class="h-px min-w-4 flex-1 bg-border" aria-hidden="true"></div>
       {#if note}
@@ -1192,7 +1246,7 @@
       bind:this={scrollViewport}
       class="theme-editor-scroll h-full overflow-y-auto focus:outline-none"
       role="region"
-      aria-label="Theme editor controls"
+      aria-label={t("settings.theme.editor.controlsLabel")}
       tabindex="-1"
       onpointerdown={focusScrollViewportFromPointer}
       onkeydown={keepPanelScrollKey}
@@ -1217,7 +1271,7 @@
           />
         {/if}
 
-        {#each SOURCE_GROUPS as group (group.id)}
+        {#each sourceGroups as group (group.id)}
           {#if isCalendarGroup(group)}
             {#if group.id === "calendar-surface"}
               <div class="flex flex-col gap-2">

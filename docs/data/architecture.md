@@ -4,12 +4,12 @@ The app stores two categories of data with deliberately different mechanisms. Mi
 
 ## The split
 
-**Documents.** Notes, diary entries, project working documents. These are markdown files on disk inside the user's vault. The file is the source of truth. SQLite holds an index for fast search, tag lookups, backlinks, and modified-at queries, but the index is rebuildable from the files. If the database is deleted, no document is lost.
+**Documents.** Notes, diary entries, project working documents. These are markdown files on disk inside the user's Ganbaru AI folder. The file is the source of truth. SQLite holds an index for fast search, tag lookups, backlinks, and modified-at queries, but the index is rebuildable from the files. If the database is deleted, no document is lost.
 
 Why markdown on disk and not in SQLite as text columns:
 
 - Users can open, edit, sync, and back up their documents with any tool they already trust (a text editor, git, rsync, Obsidian, Syncthing).
-- The vault remains useful if the app stops being maintained. AGPL plus a plain-file format means the user is never trapped.
+- The Ganbaru AI folder remains useful if the app stops being maintained. AGPL plus a plain-file format means the user is never trapped.
 - Conflict resolution during sync uses the same file-level tools the user already understands.
 
 **Structured data.** Calendar events, kanban tasks, work environment configs, pomodoro runs, segments, pauses, playlist definitions, project metadata. These live in SQLite. The database is the source of truth. There is no "underlying file" to fall back to.
@@ -22,32 +22,36 @@ Why SQLite and not markdown:
 
 The rule is one-directional: structured data may be exported as markdown for collaborators or AI agents that read repos, but those exports are views, not source. They can be regenerated at any time. The reverse, treating an exported markdown file as authoritative, is forbidden.
 
-## Vault layout
+## Ganbaru AI folder layout
 
-Everything the app produces lives under one folder, the vault. The user picks the path. Defaults are platform-conventional (`~/Documents/ganbaru-ai` or similar) but never hardcoded; code reads the path from user config.
+Everything portable that the app produces lives under one folder. First launch defaults to `Documents/Ganbaru AI` in production and `Documents/Ganbaru AI Dev` in development builds, with secondary actions to choose another folder or import an existing Ganbaru AI folder from another installation. Development setup warns the user to use the dev default or a copied production folder so test data does not mix with real production data. Tauri's platform app config directory stores only device-local bootstrap and runtime state, such as the active folder pointer, benchmark state, and transient doomscrolling snapshots.
+
+Folder setup errors are blocking and remain visible until the user starts another folder action, successfully selects a usable folder, or closes the app. The UI translates backend validation failures into user-facing guidance for non-empty unrelated folders, missing or damaged `vault.json`, unsupported folder schema versions, permission problems, missing folders, and database-open failures for `ganbaru-ai.sqlite`.
 
 ```
-vault/
+Ganbaru AI/
+  vault.json                         # internal Ganbaru AI folder marker, id, display name, schema version
+  config.json                        # user settings, environment definitions, blocker rulesets
+  ganbaru-ai.sqlite                  # SQLite source of truth for structured data and indexes
   notes/daily/                      # daily notes (markdown)
   notes/projects/                   # per-project notes and working documents (markdown)
   diary/morning/, diary/evening/    # dated diary entries (markdown plus indexed fields)
-  calendar/                         # calendar event data (session blocks, schedule state)
   projects/{project-id}/            # per-project file attachments (PDFs, references)
   reports/                          # generated project status reports (markdown, PDF)
   assets/                           # user assets (images embedded in notes, attachments)
   templates/                        # phase templates, methodology templates (SWOT, BMC)
-  config.json                       # user settings, environment definitions, blocker rulesets
   .yjs/                             # Yjs document state cache (binary)
-  app.db                            # SQLite (events, runs, segments, indexes, etc.)
 ```
 
-Music files stay wherever the user keeps them. The vault stores playlist definitions only, with paths or URIs into the user's music library. This avoids duplicating large audio files into the vault and respects existing collections.
+Music files stay wherever the user keeps them. The Ganbaru AI folder stores playlist definitions only, with paths or URIs into the user's music library. This avoids duplicating large audio files into the app folder and respects existing collections.
 
-Backups go to a user-specified path **outside** the vault. Backing up the vault into itself defeats the purpose if disk corruption takes the vault.
+Backups go to a user-specified path **outside** the Ganbaru AI folder. Backing up the folder into itself defeats the purpose if disk corruption takes the folder.
 
 ## Database files
 
-In development the app uses `ganbaru-ai-dev.db`. In production it uses `ganbaru-ai.db`. Both live next to the vault root by default. Lazy initialization: the database connection is opened on first use, not at app startup, to keep cold start time low and to allow the vault to be on a slower-than-disk path (e.g. an encrypted volume) without delaying the UI.
+The user database is always `ganbaru-ai.sqlite` at the active Ganbaru AI folder root. Development and production builds keep separate Tauri app config directories and separate `app-state.json` files, so each build can point at a different folder. The benchmark harness uses device-local `benchmark.sqlite` in `app_config_dir`; it is not portable user data.
+
+Lazy initialization: the database connection is opened on first use after a Ganbaru AI folder has been selected, not at process startup. This keeps cold start time low and allows the folder to be on a slower-than-disk path, such as an encrypted volume, without delaying the setup UI.
 
 The Tauri integration owns SQLite in Rust through focused `sqlx` commands. Higher-level ORMs were considered and rejected: they add code to maintain, do not earn enough productivity for an app this small, and obscure the actual queries that show up in performance profiles. Plain SQL with typed command wrappers keeps the call sites direct.
 
@@ -69,6 +73,6 @@ When designing a new feature, ask:
 
 - Is this content the user would expect to exist as a file they can open without the app? If yes, it is a document.
 - Does it have relational structure (foreign keys, aggregations, cross-record queries)? If yes, it is structured data.
-- Could it be regenerated from another source? If yes, it is a cache (e.g. the `.yjs/` directory, the search index part of `app.db`).
+- Could it be regenerated from another source? If yes, it is a cache (e.g. the `.yjs/` directory, the search index part of `ganbaru-ai.sqlite`).
 
 If the answer is unclear, the default is structured data in SQLite. Promoting a value to a markdown file later is easy. Demoting a markdown file with subtle structure to SQLite later is painful.

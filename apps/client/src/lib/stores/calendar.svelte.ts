@@ -3,7 +3,7 @@ import { emit, listen } from "@tauri-apps/api/event";
 import { Temporal } from "@js-temporal/polyfill";
 import { dbUrl, ensureDbUrl } from "$lib/api/db";
 import type {
-  Calendar, CalendarEvent, EventAttendee, EventColor, EventOverride,
+  Calendar, CalendarEvent, CalendarViewMode, EventAttendee, EventColor, EventOverride,
   EventOrganizer, EventStatus, EventTransparency, EventVisibility, AttendeeStatus,
   GeoCoordinates, GuestPermissions, IcalendarPreservationStatus, PomodoroConfig, RecurrenceConfig,
 } from "$lib/components/calendar/types";
@@ -56,6 +56,7 @@ import {
 import type { IcsImportSummary, IcsPreservationPayload } from "$lib/calendar/ics/types";
 import { deriveIcalendarProjectionState } from "$lib/calendar/ics/projection-state";
 import { mark as perfMark } from "$lib/stores/perflog.svelte";
+import { getPreferences } from "$lib/stores/preferences.svelte";
 import {
   createWindowSyncEnvelope,
   isForeignWindowSyncEnvelope,
@@ -1371,11 +1372,11 @@ export function getCalendar() {
     beginBatch() { batchDepth++; },
     endBatch() { if (--batchDepth <= 0) { batchDepth = 0; invalidate(); } },
 
-    async load() {
+    async load(initialViewMode: CalendarViewMode = getPreferences().calendarViewMode) {
       perfMark("boot.sql-start");
       try {
         loaded = false;
-        const initialWindow = computeViewWindow(new Date(), "week");
+        const initialWindow = computeViewWindow(new Date(), initialViewMode);
         await loadWindowIntoState(initialWindow.start, initialWindow.end, true);
       } catch (e) {
         console.error("[calendar] load() failed:", e);

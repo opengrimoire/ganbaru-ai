@@ -1,0 +1,81 @@
+name: Bug report
+description: Report something broken or behaving incorrectly.
+title: "fix: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Do not include private calendar data, diary text, API keys, file paths with personal names, or screenshots that expose sensitive information unless you have already redacted them.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Choose the closest affected area.
+      options:
+        - Calendar
+        - Pomodoro
+        - Doomscrolling
+        - Music
+        - Setup
+        - Settings
+        - Themes
+        - Localization
+        - Updates
+        - Browser extension
+        - Performance
+        - Build
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version or commit
+      description: Use the app version, release tag, or commit SHA where you saw the issue.
+      placeholder: app-v0.1.0 or 310c666
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Write the shortest exact path that triggers the issue.
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include OS, install type, and anything relevant to reproducing the issue.
+      placeholder: |
+        OS:
+        Install type:
+        Data folder mode:
+        Browser, if extension-related:
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Add logs, screenshots, or context if useful. Redact sensitive data first.
+    validations:
+      required: false

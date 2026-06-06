@@ -3,6 +3,7 @@
   import Plus from "@lucide/svelte/icons/plus";
   import Power from "@lucide/svelte/icons/power";
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import { cn } from "$lib/utils";
 
   interface DoomscrollingRuleListItem {
@@ -12,6 +13,8 @@
     locked?: boolean;
     stateLabel?: string;
   }
+
+  const { t } = getLocalization();
 
   let {
     id,
@@ -23,7 +26,7 @@
     items,
     onAdd,
     onOpenSelector,
-    selectorLabel = "Add",
+    selectorLabel = t("settings.doomscrolling.shared.add"),
     onEnabledChange,
     onDelete,
   }: {
@@ -98,7 +101,7 @@
           class="flex h-7 shrink-0 items-center justify-center gap-1.5 px-1 text-[0.8rem] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Plus size={13} strokeWidth={2.25} />
-          <span>Add</span>
+          <span>{t("settings.doomscrolling.shared.add")}</span>
         </button>
       </form>
     {/if}
@@ -110,7 +113,9 @@
         <div
           class="flex min-w-0 items-center gap-2 border-b border-border/70 py-1.5"
           role="group"
-          aria-label={item.enabled ? item.label : `${item.label} disabled`}
+          aria-label={item.enabled
+            ? item.label
+            : t("settings.doomscrolling.limits.disabledLabel", item.label)}
         >
           <span
             class={cn(
@@ -122,28 +127,30 @@
           </span>
           {#if item.locked}
             <span class="flex h-7 w-32 shrink-0 items-center justify-center rounded-md border border-border bg-card px-2 text-[0.8rem] text-muted-foreground dark:bg-transparent">
-              {item.stateLabel ?? "Locked"}
+              {item.stateLabel ?? t("settings.doomscrolling.shared.locked")}
             </span>
           {:else}
             <button
               type="button"
               onclick={() => onEnabledChange(item.label, !item.enabled)}
-              aria-label={item.enabled ? `Disable ${item.label}` : `Enable ${item.label}`}
+              aria-label={item.enabled
+                ? t("settings.doomscrolling.shared.disable", item.label)
+                : t("settings.doomscrolling.shared.enable", item.label)}
               data-app-tooltip-disabled="true"
               class="flex h-7 w-24 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2 text-[0.8rem] text-foreground hover:bg-accent dark:bg-transparent"
             >
               {#if item.enabled}
                 <Check size={13} strokeWidth={2.25} class="shrink-0" />
-                <span>Enabled</span>
+                <span>{t("settings.doomscrolling.shared.enabled")}</span>
               {:else}
                 <Power size={13} strokeWidth={2} class="shrink-0" />
-                <span>Disabled</span>
+                <span>{t("settings.doomscrolling.shared.disabled")}</span>
               {/if}
             </button>
             <button
               type="button"
               onclick={() => onDelete(item.label)}
-              aria-label={`Remove ${item.label}`}
+              aria-label={t("settings.doomscrolling.shared.remove", item.label)}
               data-app-tooltip-disabled="true"
               class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground transition-colors hover:bg-accent dark:bg-transparent"
             >

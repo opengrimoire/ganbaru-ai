@@ -21,6 +21,7 @@
         "maximized": true,
         "decorations": false,
         "transparent": true,
+        "backgroundColor": "#00000000",
         "zoomHotkeysEnabled": false
       }
     ],

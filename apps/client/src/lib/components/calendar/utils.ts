@@ -57,7 +57,8 @@ export function formatDatePart(date: Date): string {
 /**
  * Detect that a stored datetime string is already in UTC ISO 8601 form
  * (ends with Z, with or without seconds and millis). Used by the io
- * round-trip to fall back to legacy parsing for unmigrated rows.
+ * round-trip to preserve wall-clock-shaped values from malformed or
+ * hand-edited rows.
  */
 export function isUtcIso(value: string): boolean {
   return typeof value === "string" && value.endsWith("Z") && value.includes("T");
@@ -372,8 +373,11 @@ export function formatTimeRange(
   return `${startLabel.slice(0, -startPeriod.length)} - ${endLabel}`;
 }
 
-export function formatMonthYear(date: Date): string {
-  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+export function formatMonthYear(
+  date: Date,
+  locale?: string | readonly string[],
+): string {
+  return date.toLocaleDateString(locale, { month: "long", year: "numeric" });
 }
 
 export type DayNameFormat = "long" | "short" | "narrow" | "none";
@@ -381,9 +385,10 @@ export type DayNameFormat = "long" | "short" | "narrow" | "none";
 export function formatDayName(
   date: Date,
   format: DayNameFormat,
+  locale?: string | readonly string[],
 ): string {
   if (format === "none") return "";
-  return date.toLocaleDateString("en-US", { weekday: format });
+  return date.toLocaleDateString(locale, { weekday: format });
 }
 
 // Timezone helpers
@@ -1211,7 +1216,7 @@ function resolvePalette(theme: Theme): ColorEntry[] {
   return out;
 }
 
-// Dedupes unknown-color warnings so a stray legacy value on many rows logs
+// Dedupes unknown-color warnings so a stray invalid value on many rows logs
 // once per session.
 const warnedUnknownColors = new Set<string>();
 

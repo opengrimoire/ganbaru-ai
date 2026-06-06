@@ -3,6 +3,7 @@
     isProtectedDoomscrollingDesktopAppName,
     type DoomscrollingAppRule,
   } from "$lib/doomscrolling";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getDoomscrolling } from "$lib/stores/doomscrolling.svelte";
   import { cn } from "$lib/utils";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
@@ -11,6 +12,7 @@
   import DoomscrollingRuleList from "./DoomscrollingRuleList.svelte";
 
   const doomscrolling = getDoomscrolling();
+  const { t } = getLocalization();
 
   type DesktopListKind = "blocked";
   type DesktopConfigurationToggle = "enabled" | "focus" | "shortBreaks" | "longBreaks" | "pause";
@@ -60,11 +62,11 @@
     blocked: {
       kind: "blocked",
       id: "doomscrolling-blocked-apps",
-      heading: "Blocked apps",
-      description: "Block selected apps when desktop blocking is active. Example: Steam",
-      placeholder: "Enter an app...",
-      emptyText: "No blocked apps yet",
-      errorText: "Enter an app name. Example: Steam",
+      heading: t("settings.doomscrolling.desktop.blockedApps"),
+      description: t("settings.doomscrolling.desktop.blockedAppsDescription"),
+      placeholder: t("settings.doomscrolling.desktop.enterApp"),
+      emptyText: t("settings.doomscrolling.desktop.noBlockedApps"),
+      errorText: t("settings.doomscrolling.desktop.invalidApp"),
       apps: () => doomscrolling.blockedApps,
       add: (text: string) => doomscrolling.addBlockedAppsText(text),
       remove: (name: string) => doomscrolling.removeBlockedApp(name),
@@ -184,61 +186,65 @@
 
   function pendingActionTitle(action: PendingAction): string {
     if (action.target === "desktopConfiguration") {
-      if (action.action.toggle === "enabled") return "Turn off desktop app blocking?";
-      if (action.action.toggle === "focus") return "Allow apps during focus?";
-      if (action.action.toggle === "shortBreaks") return "Allow apps during short breaks?";
-      if (action.action.toggle === "longBreaks") return "Allow apps during long breaks?";
-      return "Keep desktop app blocking active while paused?";
+      if (action.action.toggle === "enabled") return t("settings.doomscrolling.desktop.turnOffTitle");
+      if (action.action.toggle === "focus") return t("settings.doomscrolling.desktop.allowAppsFocusTitle");
+      if (action.action.toggle === "shortBreaks") return t("settings.doomscrolling.desktop.allowAppsShortBreaksTitle");
+      if (action.action.toggle === "longBreaks") return t("settings.doomscrolling.desktop.allowAppsLongBreaksTitle");
+      return t("settings.doomscrolling.desktop.keepBlockingPausedTitle");
     }
     return action.action.type === "disable"
-      ? `Allow ${action.action.name}?`
-      : `Remove ${action.action.name} from blocked apps?`;
+      ? t("settings.doomscrolling.desktop.allowAppTitle", action.action.name)
+      : t("settings.doomscrolling.desktop.removeAppTitle", action.action.name);
   }
 
   function pendingActionMessage(action: PendingAction): string {
     if (action.target === "desktopConfiguration") {
       if (action.action.toggle === "enabled") {
-        return "App rules will not apply until you enable desktop app blocking again";
+        return t("settings.doomscrolling.desktop.appOffMessage");
       }
       if (action.action.toggle === "focus") {
-        return "App rules will not apply during focus sessions until you enable this again";
+        return t("settings.doomscrolling.desktop.focusOffMessage");
       }
       if (action.action.toggle === "shortBreaks") {
-        return "App rules will not apply during short breaks until you enable this again";
+        return t("settings.doomscrolling.desktop.shortBreaksOffMessage");
       }
       if (action.action.toggle === "longBreaks") {
-        return "App rules will not apply during long breaks until you enable this again";
+        return t("settings.doomscrolling.desktop.longBreaksOffMessage");
       }
-      return "App rules will continue applying while a focus session is paused";
+      return t("settings.doomscrolling.desktop.pauseActiveMessage");
     }
     return action.action.type === "disable"
-      ? "It will stay in the list but will not affect desktop blocking until you enable it again"
-      : "It will no longer be blocked by desktop rules";
+      ? t("settings.doomscrolling.desktop.appDisableMessage")
+      : t("settings.doomscrolling.desktop.removeMessage");
   }
 
   function pendingActionConfirmLabel(action: PendingAction): string {
     if (action.target === "desktopConfiguration") {
-      return action.action.toggle === "enabled" ? "Turn off (Enter)" : "Allow (Enter)";
+      return action.action.toggle === "enabled"
+        ? t("settings.doomscrolling.shared.turnOffShortcut")
+        : t("settings.doomscrolling.shared.allowShortcut");
     }
-    return action.action.type === "disable" ? "Allow (Enter)" : "Remove (Enter)";
+    return action.action.type === "disable"
+      ? t("settings.doomscrolling.shared.allowShortcut")
+      : t("settings.doomscrolling.shared.removeShortcut");
   }
 </script>
 
 <div class="flex flex-col gap-6">
   <DoomscrollingConfigurationSection
-    title="Desktop app configuration"
+    title={t("settings.doomscrolling.desktop.desktopConfiguration")}
     enabled={doomscrolling.desktopEnabled}
     blockDuringFocus={doomscrolling.desktopBlockDuringFocus}
     blockDuringShortBreaks={doomscrolling.desktopBlockDuringShortBreaks}
     blockDuringLongBreaks={doomscrolling.desktopBlockDuringLongBreaks}
     pauseDuringFocusPause={doomscrolling.desktopPauseDuringFocusPause}
     showMode={false}
-    enabledLabel="Enable desktop app blocking"
-    enabledDescription="Allow app rules to run during selected Pomodoro phases"
-    focusDescription="Apply app rules while a focus session is running"
-    shortBreakDescription="Apply app rules during short breaks"
-    longBreakDescription="Apply app rules during long breaks"
-    pauseDescription="Pause desktop app blocking while focus is manually paused, then resume when focus continues"
+    enabledLabel={t("settings.doomscrolling.desktop.enableDesktopBlocking")}
+    enabledDescription={t("settings.doomscrolling.desktop.enableDesktopBlockingDescription")}
+    focusDescription={t("settings.doomscrolling.desktop.focusDescription")}
+    shortBreakDescription={t("settings.doomscrolling.desktop.shortBreakDescription")}
+    longBreakDescription={t("settings.doomscrolling.desktop.longBreakDescription")}
+    pauseDescription={t("settings.doomscrolling.desktop.pauseDescription")}
     onScheduleChange={requestDesktopConfigurationToggleChange}
   />
 
@@ -253,7 +259,7 @@
     <div class="h-px bg-border/70" aria-hidden="true"></div>
 
     <section class="flex flex-col gap-4">
-      <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Blocklist</h2>
+      <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("settings.doomscrolling.desktop.blocklist")}</h2>
       <DoomscrollingRuleList
         id={appSections.blocked.id}
         heading={appSections.blocked.heading}
@@ -264,7 +270,7 @@
         items={appItems(appSections.blocked)}
         onAdd={appSections.blocked.add}
         onOpenSelector={() => openAppPicker("blocked")}
-        selectorLabel="Add app"
+        selectorLabel={t("settings.doomscrolling.desktop.addApp")}
         onEnabledChange={(name, enabled) => requestAppEnabledChange(appSections.blocked, name, enabled)}
         onDelete={(name) => requestAppDelete(appSections.blocked, name)}
       />
@@ -274,7 +280,7 @@
 
 {#if activePickerSection}
   <DoomscrollingAppSelector
-    title="Choose an app to block"
+    title={t("settings.doomscrolling.desktop.chooseAppToBlock")}
     existingNames={existingAppNames(activePickerSection)}
     protectAppSelf
     onAdd={addPickedApp}
@@ -288,7 +294,7 @@
     title={pendingActionTitle(pendingAction)}
     message={pendingActionMessage(pendingAction)}
     confirmLabel={pendingActionConfirmLabel(pendingAction)}
-    cancelLabel="Cancel (Esc)"
+    cancelLabel={t("settings.doomscrolling.shared.cancelShortcut")}
     onConfirm={confirmPendingAction}
     onCancel={cancelPendingAction}
   />

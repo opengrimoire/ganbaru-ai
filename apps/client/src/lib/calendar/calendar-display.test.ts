@@ -23,7 +23,10 @@ const expectedDateFormatter = new Intl.DateTimeFormat(undefined, {
   month: "short",
   year: "numeric",
 });
-const expectedTimeFormatter = new Intl.DateTimeFormat(undefined, {
+const expectedDateTimeFormatter = new Intl.DateTimeFormat(undefined, {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
   hour: "numeric",
   minute: "2-digit",
 });
@@ -33,8 +36,7 @@ function expectedLocalDate(value: string): string {
 }
 
 function expectedLocalTimestamp(value: string): string {
-  const date = new Date(value);
-  return `${expectedDateFormatter.format(date)} at ${expectedTimeFormatter.format(date)}`;
+  return expectedDateTimeFormatter.format(new Date(value));
 }
 
 describe("calendar display helpers", () => {
@@ -48,7 +50,7 @@ describe("calendar display helpers", () => {
     expect(calendarDisplayName(calendar)).toBe("person@example.com");
   });
 
-  it("falls back to legacy imported names when source_url is unavailable", () => {
+  it("falls back to imported calendar names when source_url is unavailable", () => {
     const calendar = makeCalendar({
       name: "Imported from old-label@example.com (2026-05-14)",
       source: "ics",

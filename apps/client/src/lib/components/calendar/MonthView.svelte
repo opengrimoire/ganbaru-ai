@@ -15,6 +15,7 @@
     formatTimeRange,
   } from "./utils";
   import { getPreferences } from "$lib/stores/preferences.svelte";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import type { Theme } from "$lib/stores/themes";
   import { resolveAppTokens, resolveCalendarTokens } from "$lib/stores/themes";
   import { dayNumberShade } from "$lib/components/ui/colorMath";
@@ -52,6 +53,9 @@
   } = $props();
 
   const preferences = getPreferences();
+  const localization = getLocalization();
+  const { t } = localization;
+  const locale = $derived(localization.locale);
 
   /** Stable empty fallback for days with no events. */
   const EMPTY_DAY: CalendarEvent[] = [];
@@ -224,12 +228,12 @@
 
   function displayEventTitle(event: CalendarEvent): string {
     const title = event.title.trim();
-    return title.length > 0 ? title : "(No title)";
+    return title.length > 0 ? title : t("calendar.event.noTitle");
   }
 
   function eventTimeRangeLabel(event: CalendarEvent): string {
     return event.allDay
-      ? "All day"
+      ? t("calendar.event.allDay")
       : formatTimeRange(event.start, event.end, preferences.calendarTimeFormat);
   }
 
@@ -238,7 +242,7 @@
   }
 
   function formatMonthMoreModalTitle(day: Date): string {
-    return new Intl.DateTimeFormat(undefined, {
+    return new Intl.DateTimeFormat(locale, {
       weekday: "long",
       month: "long",
       day: "numeric",
@@ -321,7 +325,7 @@
           class="flex items-center justify-center"
         >
           <span class="text-[0.866667rem]" style="color: var(--foreground);">
-            {formatDayName(day, dayFormat)}
+            {formatDayName(day, dayFormat, locale)}
           </span>
         </div>
       {/each}
@@ -403,7 +407,7 @@
                     onpointerdown={() => onEventPrefetch?.(evt)}
                     onclick={(e) => { e.stopPropagation(); onEventClick(evt, (e.currentTarget as HTMLElement).getBoundingClientRect()); }}
                   >
-                    <span class="relative z-10 min-w-0 flex-1 truncate" style={evtIsCancelled ? 'text-decoration: line-through;' : ''}>{#if evt.title}{evt.title}{:else}(No title){/if}</span>
+                    <span class="relative z-10 min-w-0 flex-1 truncate" style={evtIsCancelled ? 'text-decoration: line-through;' : ''}>{displayEventTitle(evt)}</span>
                     {#if evtMeetingIndicators.iconCount > 0}
                       <span class="relative z-10 flex shrink-0 items-center gap-0.5" style="color: {evtIconColor};">
                         {#if evtMeetingIndicators.hasCallLink}
@@ -421,8 +425,11 @@
                 {:else}
                   <button
                     type="button"
-                    aria-label="Show all events for {formatMonthMoreModalTitle(day)}"
-                    title="Show all events"
+                    aria-label={t(
+                      "calendar.event.showAllEventsFor",
+                      formatMonthMoreModalTitle(day),
+                    )}
+                    title={t("calendar.event.showAllEvents")}
                     class="month-more-surface absolute z-2 flex min-w-0 cursor-pointer items-center justify-center overflow-hidden truncate rounded px-1 text-[0.666667rem] leading-5"
                     style="
                       left: {item.leftPx}px;
@@ -479,7 +486,7 @@
         <button
           type="button"
           class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          aria-label="Close"
+          aria-label={t("common.close")}
           onclick={closeMonthMoreModal}
         >
           <X size={14} />

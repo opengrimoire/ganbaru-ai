@@ -1,5 +1,6 @@
 <script lang="ts">
   import { cn } from "$lib/utils";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import type { DoomscrollingLimitEditorTarget, DoomscrollingSettingsTab } from "./types";
   import DoomscrollingBrowserSettings from "./DoomscrollingBrowserSettings.svelte";
   import DoomscrollingMobileSettings from "./DoomscrollingMobileSettings.svelte";
@@ -14,14 +15,16 @@
     onOpenLimitEditor?: (target: DoomscrollingLimitEditorTarget) => void;
   } = $props();
 
+  const { t } = getLocalization();
+
   const tabs: ReadonlyArray<{
     id: DoomscrollingSettingsTab;
-    label: string;
+    label: () => string;
   }> = [
-    { id: "limits", label: "Limits" },
-    { id: "browser", label: "Browser" },
-    { id: "mobile", label: "Mobile apps" },
-    { id: "desktop", label: "Desktop apps" },
+    { id: "limits", label: () => t("settings.doomscrolling.tab.limits") },
+    { id: "browser", label: () => t("settings.doomscrolling.tab.browser") },
+    { id: "mobile", label: () => t("settings.doomscrolling.tab.mobile") },
+    { id: "desktop", label: () => t("settings.doomscrolling.tab.desktop") },
   ];
 
   let activeTab = $state<DoomscrollingSettingsTab>("limits");
@@ -35,7 +38,7 @@
   <div
     class="grid grid-cols-2 gap-1 rounded-md border border-border bg-card p-1 min-[500px]:grid-cols-4 dark:bg-transparent"
     role="tablist"
-    aria-label="Doomscrolling settings"
+    aria-label={t("settings.doomscrolling.tabLabel")}
   >
     {#each tabs as tab}
       {@const active = activeTab === tab.id}
@@ -51,7 +54,7 @@
           activeTab = tab.id;
         }}
       >
-        {tab.label}
+        {tab.label()}
       </button>
     {/each}
   </div>

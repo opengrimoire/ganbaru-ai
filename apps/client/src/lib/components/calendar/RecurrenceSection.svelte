@@ -7,6 +7,17 @@
   import { slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import Repeat from "@lucide/svelte/icons/repeat";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
+
+  const WEEKDAY_LABEL_DATES: Record<Weekday, Date> = {
+    MO: new Date(2024, 0, 1),
+    TU: new Date(2024, 0, 2),
+    WE: new Date(2024, 0, 3),
+    TH: new Date(2024, 0, 4),
+    FR: new Date(2024, 0, 5),
+    SA: new Date(2024, 0, 6),
+    SU: new Date(2024, 0, 7),
+  };
 
   let {
     recurrence = $bindable<RecurrenceConfig | undefined>(undefined),
@@ -26,22 +37,26 @@
     onchange: () => void;
   } = $props();
 
-  const FREQ_OPTIONS: { value: RecurrenceFrequency; label: string }[] = [
-    { value: "daily", label: "days" },
-    { value: "weekly", label: "weeks" },
-    { value: "monthly", label: "months" },
-    { value: "yearly", label: "years" },
-  ];
+  const localization = getLocalization();
+  const { t } = localization;
+  const locale = $derived(localization.locale);
 
-  const ALL_WEEKDAYS: { value: Weekday; label: string }[] = [
-    { value: "MO", label: "Mon" },
-    { value: "TU", label: "Tue" },
-    { value: "WE", label: "Wed" },
-    { value: "TH", label: "Thu" },
-    { value: "FR", label: "Fri" },
-    { value: "SA", label: "Sat" },
-    { value: "SU", label: "Sun" },
-  ];
+  const FREQ_OPTIONS = $derived.by((): { value: RecurrenceFrequency; label: string }[] => [
+    { value: "daily", label: t("calendar.recurrence.unitDays") },
+    { value: "weekly", label: t("calendar.recurrence.unitWeeks") },
+    { value: "monthly", label: t("calendar.recurrence.unitMonths") },
+    { value: "yearly", label: t("calendar.recurrence.unitYears") },
+  ]);
+
+  const ALL_WEEKDAYS = $derived.by((): { value: Weekday; label: string }[] => [
+    { value: "MO", label: weekdayLabel("MO") },
+    { value: "TU", label: weekdayLabel("TU") },
+    { value: "WE", label: weekdayLabel("WE") },
+    { value: "TH", label: weekdayLabel("TH") },
+    { value: "FR", label: weekdayLabel("FR") },
+    { value: "SA", label: weekdayLabel("SA") },
+    { value: "SU", label: weekdayLabel("SU") },
+  ]);
 
   const WEEKDAY_MAP: Weekday[] = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
 
@@ -57,7 +72,9 @@
     if (recurrence && recurrence.end.type === "count") return recurrence.end.count;
     return 13;
   });
-  const label = $derived(recurrence ? formatRecurrenceLabel(recurrence) : "");
+  const label = $derived(
+    recurrence ? formatRecurrenceLabel(recurrence, { t, locale }) : "",
+  );
   let sectionEl: HTMLDivElement | undefined = $state();
   let intervalDraft = $state("1");
   let endCountDraft = $state("13");
@@ -98,14 +115,24 @@
     return parseInt(startDate.split("-")[2], 10);
   }
 
+  function weekdayLabel(weekday: Weekday): string {
+    return new Intl.DateTimeFormat(locale, { weekday: "short" }).format(
+      WEEKDAY_LABEL_DATES[weekday],
+    );
+  }
+
   function getEventOrdinalWeekday(): { ordinal: number; day: Weekday; label: string } {
     const [y, m, d] = startDate.split("-").map(Number);
     const date = new Date(y, m - 1, d);
     const weekday = WEEKDAY_MAP[date.getDay()];
     const ordinal = Math.ceil(d / 7);
-    const dayLabel = ALL_WEEKDAYS.find((w) => w.value === weekday)?.label ?? weekday;
-    const ordSuffix = ordinal === 1 ? "1st" : ordinal === 2 ? "2nd" : ordinal === 3 ? "3rd" : `${ordinal}th`;
-    return { ordinal, day: weekday, label: `${ordSuffix} ${dayLabel}` };
+    const dayLabel = weekdayLabel(weekday);
+    const ordSuffix = t("calendar.recurrence.ordinal", ordinal);
+    return {
+      ordinal,
+      day: weekday,
+      label: t("calendar.recurrence.ordinalWeekday", ordSuffix, dayLabel),
+    };
   }
 
   type MonthlyMode = "day" | "ordinal";
@@ -245,7 +272,11 @@
     const d = recEndDate || defaultUntilDate();
     const [y, m, day] = d.split("-").map(Number);
     const dt = new Date(y, m - 1, day);
-    dateText = dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    dateText = dt.toLocaleDateString(locale, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
   }
 
   function parseDateInput() {
@@ -352,7 +383,7 @@
     </button>
     <button onclick={onexpand}
       class="flex flex-1 items-center gap-2.5 px-3 py-2 text-left">
-      <span class="translate-y-[1.13px] text-[0.8rem] {recurrence ? 'text-foreground' : 'text-muted-foreground'}">Repeat</span>
+      <span class="translate-y-[1.13px] text-[0.8rem] {recurrence ? 'text-foreground' : 'text-muted-foreground'}">{t("calendar.recurrence.repeat")}</span>
       <span class="ml-auto translate-y-[1.13px] truncate text-[0.733333rem] text-muted-foreground">{recurrence ? label : ""}</span>
     </button>
   </div>
@@ -360,7 +391,7 @@
     <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="repeat" class="flex flex-col gap-2.5 p-2.5" style="background-color: var(--panel-bg);">
       <!-- Every N [frequency] -->
       <div class="flex flex-wrap items-center gap-2">
-        <span class="shrink-0 text-[0.8rem] text-muted-foreground">Every</span>
+        <span class="shrink-0 text-[0.8rem] text-muted-foreground">{t("calendar.recurrence.every")}</span>
         <input type="number" value={intervalDraft}
           oninput={(e) => { intervalDraft = e.currentTarget.value; }}
           onblur={commitIntervalDraft}
@@ -387,7 +418,7 @@
       <!-- Weekday picker (weekly) -->
       {#if recFrequency === "weekly"}
         <div class="flex flex-col gap-1.5">
-          <span class="text-[0.733333rem] uppercase tracking-wider text-muted-foreground">Repeat on</span>
+          <span class="text-[0.733333rem] uppercase tracking-wider text-muted-foreground">{t("calendar.recurrence.repeatOn")}</span>
           <div class="grid grid-cols-7 gap-1">
             {#each ALL_WEEKDAYS as wd, index}
               <button onclick={() => toggleWeekday(wd.value)}
@@ -409,7 +440,7 @@
       <!-- Monthly sub-options -->
       {#if recFrequency === "monthly"}
         <div class="flex flex-col gap-1.5">
-          <span class="text-[0.733333rem] uppercase tracking-wider text-muted-foreground">Repeat on</span>
+          <span class="text-[0.733333rem] uppercase tracking-wider text-muted-foreground">{t("calendar.recurrence.repeatOn")}</span>
           <div class="flex flex-wrap gap-1.5">
             <button onclick={() => setMonthlyMode("day")}
               onfocus={() => { monthlyModeFocusIndex = 0; }}
@@ -424,7 +455,7 @@
               <div class="size-3 shrink-0 rounded-full
                 {monthlyMode === 'day' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
               </div>
-              <span class="truncate">Day {getEventDayOfMonth()}</span>
+              <span class="truncate">{t("calendar.recurrence.dayOfMonth", getEventDayOfMonth())}</span>
             </button>
             <button onclick={() => setMonthlyMode("ordinal")}
               onfocus={() => { monthlyModeFocusIndex = 1; }}
@@ -447,7 +478,7 @@
 
       <!-- Ends -->
       <div class="flex flex-col gap-1.5">
-        <span class="text-[0.733333rem] uppercase tracking-wider text-muted-foreground">Ends</span>
+        <span class="text-[0.733333rem] uppercase tracking-wider text-muted-foreground">{t("calendar.recurrence.endsHeading")}</span>
 
         <button onclick={() => updateEndType("never")}
           onfocus={() => { endTypeFocusIndex = 0; }}
@@ -459,7 +490,7 @@
           <div class="size-3 shrink-0 rounded-full
             {recEndType === 'never' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
           </div>
-          <span>Never</span>
+          <span>{t("calendar.recurrence.never")}</span>
         </button>
 
         <div class="flex items-center gap-2.5 rounded-none px-2.5 py-1.5 text-[0.8rem]">
@@ -473,7 +504,7 @@
             <div class="size-3 shrink-0 rounded-full
               {recEndType === 'until' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
             </div>
-            <span>On</span>
+            <span>{t("calendar.recurrence.on")}</span>
           </button>
           <div class="relative">
             <input bind:this={dateBtn}
@@ -516,7 +547,7 @@
             <div class="size-3 shrink-0 rounded-full
               {recEndType === 'count' ? 'bg-form-indicator' : 'border border-muted-foreground/40'}">
             </div>
-            <span>After</span>
+            <span>{t("calendar.recurrence.after")}</span>
           </button>
           <div class="flex items-center gap-2">
             <input type="number" value={endCountDraft}
@@ -528,14 +559,18 @@
                 {recEndType === 'count' ? 'text-event-panel-input-text' : 'text-muted-foreground'}"
               onclick={(e) => e.stopPropagation()}
               onkeydown={(e) => handleNumberDraftKeydown(e, commitEndCountDraft, () => { endCountDraft = String(recEndCount); })} />
-            <span class="{recEndType === 'count' ? 'text-event-panel-input-text' : 'text-muted-foreground'}">times</span>
+            <span class="{recEndType === 'count' ? 'text-event-panel-input-text' : 'text-muted-foreground'}">
+              {t("calendar.recurrence.countUnit", recEndCount)}
+            </span>
           </div>
         </div>
       </div>
 
       <!-- RDATE indicator -->
       {#if rdate && rdate.length > 0}
-        <span class="text-[0.733333rem] italic text-muted-foreground">+ {rdate.length} additional date{rdate.length > 1 ? "s" : ""}</span>
+        <span class="text-[0.733333rem] italic text-muted-foreground">
+          {t("calendar.recurrence.additionalDates", rdate.length)}
+        </span>
       {/if}
     </div>
   {/if}

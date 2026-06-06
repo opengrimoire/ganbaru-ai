@@ -1,9 +1,10 @@
 <script lang="ts">
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import { openUrl } from "@tauri-apps/plugin-opener";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
 
   interface SoundCredit {
-    appUse: string;
+    appUse: () => string;
     filename: string;
     sourceSound: string;
     sourceUrl: string;
@@ -20,10 +21,11 @@
     "inline-flex min-w-0 max-w-full items-center gap-1 text-left text-primary underline-offset-2 transition-colors hover:underline focus:outline-none focus-visible:ring-1 focus-visible:ring-ring";
   const actionButtonClass =
     "inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-ring dark:bg-transparent";
+  const { t } = getLocalization();
 
   const soundCredits: readonly SoundCredit[] = [
     {
-      appUse: "Event notification",
+      appUse: () => t("settings.about.soundUse.eventNotification"),
       filename: "event-notification.wav",
       sourceSound: "Short Success Sound Glockenspiel Treasure Video Game.mp3",
       sourceUrl: "https://freesound.org/people/FunWithSound/sounds/456965/",
@@ -32,7 +34,7 @@
       license: "Creative Commons 0",
     },
     {
-      appUse: "Idle alert",
+      appUse: () => t("settings.about.soundUse.idleAlert"),
       filename: "idle-alert.wav",
       sourceSound: "Soft Short App Melody",
       sourceUrl: "https://freesound.org/people/CogFireStudios/sounds/619837/",
@@ -41,7 +43,7 @@
       license: "Creative Commons 0",
     },
     {
-      appUse: "Focus failure after long idle",
+      appUse: () => t("settings.about.soundUse.focusFailureAfterLongIdle"),
       filename: "focus-session-failed-long-idle.wav",
       sourceSound: "Game Over 8 (One wrong step) .aif",
       sourceUrl: "https://freesound.org/people/SilverIllusionist/sounds/562103/",
@@ -50,7 +52,7 @@
       license: "Attribution 4.0",
     },
     {
-      appUse: "One minute before break",
+      appUse: () => t("settings.about.soundUse.oneMinuteBeforeBreak"),
       filename: "focus-ending-warning.wav",
       sourceSound: "sfx_rpg_ui_focus",
       sourceUrl: "https://freesound.org/people/MATUSTRM/sounds/848972/",
@@ -59,7 +61,7 @@
       license: "Creative Commons 0",
     },
     {
-      appUse: "Break start",
+      appUse: () => t("settings.about.soundUse.breakStart"),
       filename: "break-start.wav",
       sourceSound: "Success 03",
       sourceUrl: "https://freesound.org/people/rhodesmas/sounds/322930/",
@@ -68,7 +70,7 @@
       license: "Attribution 4.0",
     },
     {
-      appUse: "Break finish",
+      appUse: () => t("settings.about.soundUse.breakFinish"),
       filename: "break-finished.wav",
       sourceSound: "Achievement Happy Beeps Jingle",
       sourceUrl: "https://freesound.org/people/CogFireStudios/sounds/619838/",
@@ -77,7 +79,7 @@
       license: "Attribution 4.0",
     },
     {
-      appUse: "Event finish",
+      appUse: () => t("settings.about.soundUse.eventFinish"),
       filename: "event-finished.wav",
       sourceSound: "Reflective Guitar Chords #1",
       sourceUrl: "https://freesound.org/people/SilverIllusionist/sounds/843310/",
@@ -86,7 +88,7 @@
       license: "Creative Commons 0",
     },
     {
-      appUse: "Day completed!",
+      appUse: () => t("settings.about.soundUse.dayCompleted"),
       filename: "pomodoro-day-complete.wav",
       sourceSound: "Victory Fanfare (Light Wills Ever) no drums",
       sourceUrl: "https://freesound.org/people/SilverIllusionist/sounds/669323/",
@@ -95,7 +97,7 @@
       license: "Attribution 4.0",
     },
     {
-      appUse: "Workweek completed!",
+      appUse: () => t("settings.about.soundUse.workweekCompleted"),
       filename: "pomodoro-workweek-complete.wav",
       sourceSound: "Victory Fanfare (RPG or High Fantasy)",
       sourceUrl: "https://freesound.org/people/SilverIllusionist/sounds/659751/",
@@ -104,7 +106,7 @@
       license: "Attribution 4.0",
     },
     {
-      appUse: "AI response finished",
+      appUse: () => t("settings.about.soundUse.aiResponseFinished"),
       filename: "ai-response-finished.wav",
       sourceSound: "Three-Note Doorbell or Notification",
       sourceUrl: "https://freesound.org/people/eqylizer/sounds/624599/",
@@ -129,14 +131,14 @@
 
 <div class="flex flex-col gap-6">
   <section class="flex flex-col gap-4">
-    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">License</h2>
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("settings.about.licenseHeading")}</h2>
 
     <div class="flex flex-col gap-3">
       <div class="flex items-start justify-between gap-4 px-1 py-1 max-[480px]:flex-col max-[480px]:items-stretch max-[480px]:gap-2">
         <div class="min-w-0 flex-1">
-          <div class="text-[0.866667rem] text-foreground">AGPL 3.0</div>
+          <div class="text-[0.866667rem] text-foreground">{t("settings.about.licenseName")}</div>
           <div class="mt-0.5 text-[0.8rem] leading-5 text-muted-foreground">
-            Ganbaru AI is licensed under AGPL 3.0.
+            {t("settings.about.licenseDescription")}
           </div>
         </div>
         <button
@@ -146,19 +148,15 @@
             void openExternalUrl(LICENSE_URL);
           }}
         >
-          <span>View LICENSE</span>
+          <span>{t("settings.about.viewLicense")}</span>
           <ExternalLink size={13} strokeWidth={2.25} aria-hidden="true" />
         </button>
       </div>
 
       <div class="px-1 py-1">
-        <div class="text-[0.866667rem] text-foreground">TL;DR</div>
+        <div class="text-[0.866667rem] text-foreground">{t("settings.about.summaryHeading")}</div>
         <div class="mt-0.5 text-[0.8rem] leading-5 text-muted-foreground">
-          Free and open source. You can use, modify, share, and sell Ganbaru AI.
-          If you distribute or host a modified version, you must provide the source
-          code and license that version under AGPL 3.0. Patent rights from
-          contributors are included. The app is provided without warranty, and
-          authors are not liable for damages.
+          {t("settings.about.summary")}
         </div>
       </div>
     </div>
@@ -167,13 +165,13 @@
   <div class="h-px bg-border/70" aria-hidden="true"></div>
 
   <section class="flex flex-col gap-4">
-    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">Acknowledgments</h2>
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("settings.about.acknowledgmentsHeading")}</h2>
 
     <div class="flex flex-col gap-3">
       <div class="px-1 py-1">
-        <div class="text-[0.866667rem] text-foreground">Sound effects</div>
+        <div class="text-[0.866667rem] text-foreground">{t("settings.about.soundEffects")}</div>
         <div class="mt-0.5 text-[0.8rem] leading-5 text-muted-foreground">
-          Sound effects are sourced from
+          {t("settings.about.soundEffectsDescriptionPrefix")}
           <button
             type="button"
             class={linkButtonClass}
@@ -184,7 +182,7 @@
             Freesound
             <ExternalLink size={11} strokeWidth={2.25} aria-hidden="true" />
           </button>
-          under Attribution 4.0 and CC0 licenses.
+          {t("settings.about.soundEffectsDescriptionSuffix")}
         </div>
       </div>
 
@@ -193,7 +191,7 @@
           <article class="flex min-w-0 flex-col gap-2.5 rounded-md border border-border bg-card/70 px-3 py-3 text-[0.8rem] dark:bg-transparent">
             <div class="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1">
               <h3 class="wrap-break-word min-w-0 text-[0.866667rem] font-medium text-foreground">
-                {credit.appUse}
+                {credit.appUse()}
               </h3>
               <span class="shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-[0.733333rem] text-muted-foreground">
                 {credit.license}
@@ -202,7 +200,7 @@
 
             <div class="grid min-w-0 gap-1.5">
               <div class="grid min-w-0 grid-cols-[4rem_minmax(0,1fr)] items-start gap-2 max-[420px]:grid-cols-1 max-[420px]:gap-0.5">
-                <span class="text-[0.733333rem] leading-5 text-muted-foreground">File</span>
+                <span class="text-[0.733333rem] leading-5 text-muted-foreground">{t("settings.about.file")}</span>
                 <button
                   type="button"
                   class={linkButtonClass}
@@ -216,7 +214,7 @@
               </div>
 
               <div class="grid min-w-0 grid-cols-[4rem_minmax(0,1fr)] items-start gap-2 max-[420px]:grid-cols-1 max-[420px]:gap-0.5">
-                <span class="text-[0.733333rem] leading-5 text-muted-foreground">Source</span>
+                <span class="text-[0.733333rem] leading-5 text-muted-foreground">{t("settings.about.source")}</span>
                 <button
                   type="button"
                   class={linkButtonClass}
@@ -230,7 +228,7 @@
               </div>
 
               <div class="grid min-w-0 grid-cols-[4rem_minmax(0,1fr)] items-start gap-2 max-[420px]:grid-cols-1 max-[420px]:gap-0.5">
-                <span class="text-[0.733333rem] leading-5 text-muted-foreground">Author</span>
+                <span class="text-[0.733333rem] leading-5 text-muted-foreground">{t("settings.about.author")}</span>
                 <button
                   type="button"
                   class={linkButtonClass}

@@ -11,6 +11,7 @@
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import { isThemeCalendarDark, type Theme } from "$lib/stores/themes";
   import { getEventIndicatorState } from "./event-indicators";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import Repeat from "@lucide/svelte/icons/repeat";
   import Video from "@lucide/svelte/icons/video";
   import MapPin from "@lucide/svelte/icons/map-pin";
@@ -18,6 +19,7 @@
 
   const calZoom = getCalendarZoom();
   const preferences = getPreferences();
+  const { t } = getLocalization();
 
   let {
     positioned,
@@ -60,6 +62,7 @@
   const indicators = $derived(getEventIndicatorState(positioned.event));
   const hasIcons = $derived(indicators.iconCount > 0);
   const isCancelled = $derived(isEventSurfaceCancelled(positioned.event));
+  const eventTitle = $derived(positioned.event.title || t("calendar.event.noTitle"));
   const blockPixelHeight = $derived((positioned.durationMinutes / 60) * calZoom.hourHeight);
 
   const usePastColors = $derived(
@@ -109,7 +112,7 @@
   data-event-id={positioned.event.id}
   data-clipped-top={positioned.isClippedTop || undefined}
   data-clipped-bottom={positioned.isClippedBottom || undefined}
-  title={blockPixelHeight <= 14 ? `${positioned.event.title || '(No title)'} ${timeRange}` : undefined}
+  title={blockPixelHeight <= 14 ? `${eventTitle} ${timeRange}` : undefined}
   class="event-block-wrapper absolute flex overflow-hidden text-[0.8rem] leading-tight select-none {statusPatternClass} {showContour ? 'event-editing' : ''} {animateLayout ? 'event-layout-transition' : ''} {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
   style="
     top: calc({positioned.startMinute} / 60 * var(--hour-h) * 1px);
@@ -157,7 +160,7 @@
       class:pr-8={indicators.iconCount > 2}
       style={isCancelled ? 'text-decoration: line-through;' : ''}
     >
-      {#if positioned.event.title}{positioned.event.title}{:else}(No title){/if}
+      {eventTitle}
     </div>
     <div class="event-time truncate" style="color: {timeColor};">{timeRange}</div>
     {#if positioned.event.location}

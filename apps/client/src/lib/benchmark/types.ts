@@ -6,7 +6,7 @@
  * `docs/PERFORMANCE.md`. Each scenario declares whether it measures startup,
  * memory, or feature latency so the runner avoids unrelated waits. Both
  * passes run after a cold restart against an isolated
- * `ganbaru-ai-benchmark.db` so the user's real DB and vault are never
+ * `benchmark.sqlite` so the user's real DB and Ganbaru AI folder are never
  * touched. The rationale lives in `docs/features/performance-benchmark.md`.
  */
 import type { CalendarEvent } from "$lib/components/calendar/types";
@@ -206,8 +206,6 @@ export interface PhaseResult {
   startedAt: string;
   /** Total ms the scenario workload ran. */
   workloadDurationMs: number;
-  /** Legacy workload memory samples. Current memory scenarios keep this empty. */
-  peakSamples: SamplePoint[];
   /** Memory observation samples for memory benchmarks. Empty for latency-only scenarios. */
   curve: SamplePoint[];
   /** Optional scenario-specific timings or counters captured during the workload. */
@@ -230,9 +228,9 @@ export interface PhaseResult {
 
 /**
  * Persisted across each restart in the benchmark sequence. Lives in
- * `app_config_dir/benchmark-state.json` (NOT vault), so a `reset_database`
- * call does not blow it away mid-run, and the file never pollutes the
- * vault folder users back up.
+ * `app_config_dir/benchmark-state.json`, not the Ganbaru AI folder, so a
+ * `reset_database` call does not blow it away mid-run, and the file never
+ * pollutes the folder users back up.
  *
  * The harness writes this file before each intentional restart with a
  * `*-pending` stage, then flips that stage to `*-running` before the
@@ -258,7 +256,7 @@ export interface BenchmarkState {
   anchorDate: string;
   /**
    * Which DB the next boot should open. `"benchmark"` routes
-   * `db.ts:resolveUrl()` to the isolated `ganbaru-ai-benchmark.db`; the
+   * `db.ts:resolveUrl()` to the isolated `benchmark.sqlite`; the
    * user's real DB stays untouched. Always `"benchmark"` for the current
    * harness; the field exists to make the boot path's decision explicit
    * and to leave room for future scenarios that need user-DB access.
