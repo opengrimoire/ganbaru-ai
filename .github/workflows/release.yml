@@ -215,6 +215,11 @@ jobs:
             -f target_commitish="$GITHUB_SHA" \
             -f configuration_file_path=".github/release.yml" \
             --jq .body >> dist/release-notes.md
+          sed -i \
+            -e "s/^## What's Changed$/## What's changed/" \
+            -e "s/^\*\*Full Changelog\*\*:/\*\*Full changelog\*\*:/" \
+            -e "s/^Full Changelog:/Full changelog:/" \
+            dist/release-notes.md
 
       - name: create or update draft release
         env:
