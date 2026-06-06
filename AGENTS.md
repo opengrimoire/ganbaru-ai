@@ -97,6 +97,8 @@ apps/
         media_player.rs, media_controls.rs, music.rs: local playback, media controls, and music commands
         themes.rs, benchmark_seed.rs: theme validation and benchmark dataset setup
       migrations/: embedded SQLx SQLite migrations
+      package-repo/: generated package repository public key staging (ignored)
+      package-scripts/: Linux package lifecycle scripts for repo registration
       capabilities/: permission declarations (desktop/mobile)
       gen/schemas/: generated Tauri schema files
       examples/: Rust example targets

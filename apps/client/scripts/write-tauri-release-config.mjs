@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,6 +10,12 @@ const RELEASE_CONFIG_PATH = path.join(
   CLIENT_ROOT,
   "src-tauri",
   "tauri.release.conf.json",
+);
+const PACKAGE_REPO_PUBLIC_KEY_PATH = path.join(
+  CLIENT_ROOT,
+  "src-tauri",
+  "package-repo",
+  "ganbaru-ai-package-repo.asc",
 );
 const GITHUB_REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 
@@ -51,10 +57,45 @@ function updaterEndpoint() {
   return `https://github.com/${repository}/releases/latest/download/latest.json`;
 }
 
+/**
+ * Normalizes the package repository public key used by Linux installers.
+ *
+ * @returns {string} ASCII-armored OpenPGP public key.
+ */
+function packageRepoPublicKey() {
+  const key = readRequiredEnv("GANBARU_AI_PACKAGE_REPO_PUBLIC_KEY");
+  if (!key.includes("BEGIN PGP PUBLIC KEY BLOCK")) {
+    throw new Error("GANBARU_AI_PACKAGE_REPO_PUBLIC_KEY must be an ASCII-armored public key");
+  }
+  return key.endsWith("\n") ? key : `${key}\n`;
+}
+
+const packageRepoPublicKeyContent = packageRepoPublicKey();
+mkdirSync(path.dirname(PACKAGE_REPO_PUBLIC_KEY_PATH), { recursive: true });
+writeFileSync(PACKAGE_REPO_PUBLIC_KEY_PATH, packageRepoPublicKeyContent, "utf8");
+
 const config = {
   $schema: "https://schema.tauri.app/config/2",
   bundle: {
     createUpdaterArtifacts: false,
+    linux: {
+      deb: {
+        files: {
+          "package-repo/ganbaru-ai-package-repo.asc":
+            "/usr/lib/ganbaru-ai/package-repo/ganbaru-ai-package-repo.asc",
+        },
+        postInstallScript: "package-scripts/deb/postinst",
+        postRemoveScript: "package-scripts/deb/postrm",
+      },
+      rpm: {
+        files: {
+          "package-repo/ganbaru-ai-package-repo.asc":
+            "/usr/lib/ganbaru-ai/package-repo/ganbaru-ai-package-repo.asc",
+        },
+        postInstallScript: "package-scripts/rpm/postinstall.sh",
+        postRemoveScript: "package-scripts/rpm/postremove.sh",
+      },
+    },
   },
   plugins: {
     updater: {

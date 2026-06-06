@@ -1,8 +1,9 @@
 <script lang="ts">
+  import Copy from "@lucide/svelte/icons/copy";
   import Download from "@lucide/svelte/icons/download";
   import ExternalLink from "@lucide/svelte/icons/external-link";
-  import Info from "@lucide/svelte/icons/info";
   import X from "@lucide/svelte/icons/x";
+  import { onDestroy } from "svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
   import { getUpdateManager } from "$lib/stores/updates.svelte";
@@ -12,6 +13,8 @@
   const settingsLauncher = getSettingsLauncher();
   const updates = getUpdateManager();
   const { t } = getLocalization();
+  let commandCopied = $state(false);
+  let commandCopyTimer: ReturnType<typeof setTimeout> | undefined;
 
   const message = $derived(
     updates.status === "installed"
@@ -21,17 +24,37 @@
         : t("updates.promptAvailable", updates.latestVersion ?? "unknown"),
   );
 
-  async function openReleaseNotes(): Promise<void> {
+  async function openReleasePage(): Promise<void> {
     const url = updates.releasePageUrl;
     if (!url) return;
     updates.dismissPrompt();
     try {
       await openUrl(url);
     } catch (error: unknown) {
-      console.error("Failed to open release notes:", error);
+      console.error("Failed to open release page:", error);
       settingsLauncher.open("updates");
     }
   }
+
+  async function copyUpdateCommand(): Promise<void> {
+    const command = updates.copyCommand;
+    if (!command) return;
+    try {
+      await navigator.clipboard.writeText(command);
+      commandCopied = true;
+      if (commandCopyTimer) clearTimeout(commandCopyTimer);
+      commandCopyTimer = setTimeout(() => {
+        commandCopied = false;
+      }, 1600);
+    } catch (error: unknown) {
+      console.error("Failed to copy update command:", error);
+      settingsLauncher.open("updates");
+    }
+  }
+
+  onDestroy(() => {
+    if (commandCopyTimer) clearTimeout(commandCopyTimer);
+  });
 </script>
 
 {#if updates.showPrompt}
@@ -40,10 +63,6 @@
     aria-live="polite"
     class="fixed right-3 bottom-3 z-80 flex w-[min(28rem,calc(100vw-1.5rem))] gap-3 rounded-md border border-border bg-popover px-3 py-3 text-popover-foreground shadow-xl max-[420px]:right-2 max-[420px]:bottom-2 max-[420px]:w-[calc(100vw-1rem)]"
   >
-    <div class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/12 text-primary">
-      <Info size={16} strokeWidth={2} aria-hidden="true" />
-    </div>
-
     <div class="min-w-0 flex-1">
       <p class="wrap-break-word text-[0.866667rem] font-medium leading-5">
         {message}
@@ -71,23 +90,29 @@
 
       {#if updates.status === "available"}
         <div class="mt-2 flex flex-wrap gap-1.5">
-          <button
-            type="button"
-            class="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus:ring-1 focus:ring-ring"
-            onclick={() => {
-              void updates.installUpdate();
-            }}
-          >
-            <Download size={14} strokeWidth={2} aria-hidden="true" />
-            <span>{t("updates.installUpdate")}</span>
-          </button>
-          <button
-            type="button"
-            class="inline-flex h-8 items-center justify-center rounded-md px-2.5 text-[0.8rem] font-medium text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            onclick={() => updates.dismissPrompt()}
-          >
-            {t("updates.later")}
-          </button>
+          {#if updates.primaryAction === "self-updater"}
+            <button
+              type="button"
+              class="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus:ring-1 focus:ring-ring"
+              onclick={() => {
+                void updates.installUpdate();
+              }}
+            >
+              <Download size={14} strokeWidth={2} aria-hidden="true" />
+              <span>{t("updates.updateAndRestart")}</span>
+            </button>
+          {:else if updates.primaryAction === "copy-command" && updates.copyCommand}
+            <button
+              type="button"
+              class="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus:ring-1 focus:ring-ring"
+              onclick={() => {
+                void copyUpdateCommand();
+              }}
+            >
+              <Copy size={14} strokeWidth={2} aria-hidden="true" />
+              <span>{commandCopied ? t("updates.commandCopied") : t("updates.copyCommand")}</span>
+            </button>
+          {/if}
           <button
             type="button"
             class={cn(
@@ -98,7 +123,7 @@
             )}
             disabled={!updates.releasePageUrl}
             onclick={() => {
-              void openReleaseNotes();
+              void openReleasePage();
             }}
           >
             <ExternalLink size={14} strokeWidth={2} aria-hidden="true" />

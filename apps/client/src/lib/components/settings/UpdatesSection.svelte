@@ -1,7 +1,11 @@
 <script lang="ts">
+  import Copy from "@lucide/svelte/icons/copy";
   import Download from "@lucide/svelte/icons/download";
+  import ExternalLink from "@lucide/svelte/icons/external-link";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
+  import { onDestroy } from "svelte";
+  import { openUrl } from "@tauri-apps/plugin-opener";
   import ToggleSetting from "./ToggleSetting.svelte";
   import { BUILD_REF } from "$lib/buildInfo";
   import { formatDateTime } from "$lib/i18n/formatters";
@@ -12,6 +16,8 @@
   const updates = getUpdateManager();
   const localization = getLocalization();
   const { t } = localization;
+  let commandCopied = $state(false);
+  let commandCopyTimer: ReturnType<typeof setTimeout> | undefined;
 
   const actionButtonClass =
     "inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border px-2.5 text-[0.8rem] font-medium transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-55";
@@ -24,6 +30,35 @@
       timeStyle: "short",
     });
   }
+
+  async function openReleasePage(): Promise<void> {
+    const url = updates.releasePageUrl;
+    if (!url) return;
+    try {
+      await openUrl(url);
+    } catch (error: unknown) {
+      console.error("Failed to open release page:", error);
+    }
+  }
+
+  async function copyUpdateCommand(): Promise<void> {
+    const command = updates.copyCommand;
+    if (!command) return;
+    try {
+      await navigator.clipboard.writeText(command);
+      commandCopied = true;
+      if (commandCopyTimer) clearTimeout(commandCopyTimer);
+      commandCopyTimer = setTimeout(() => {
+        commandCopied = false;
+      }, 1600);
+    } catch (error: unknown) {
+      console.error("Failed to copy update command:", error);
+    }
+  }
+
+  onDestroy(() => {
+    if (commandCopyTimer) clearTimeout(commandCopyTimer);
+  });
 </script>
 
 <div class="flex flex-col gap-6">
@@ -82,48 +117,46 @@
         </button>
       </div>
 
-      <div class="px-1 py-1">
-        <div class="text-[0.866667rem] text-foreground">{t("settings.updates.updateStatus")}</div>
-        <div
-          class={cn(
-            "mt-0.5 text-[0.8rem] leading-5",
-            updates.status === "error"
-              ? "text-destructive"
-              : updates.status === "available"
-                ? "text-foreground"
-              : "text-muted-foreground",
-          )}
-        >
-          {updates.statusCopy}
+      {#if updates.status !== "available"}
+        <div class="px-1 py-1">
+          <div class="text-[0.866667rem] text-foreground">{t("settings.updates.updateStatus")}</div>
+          <div
+            class={cn(
+              "mt-0.5 text-[0.8rem] leading-5",
+              updates.status === "error" ? "text-destructive" : "text-muted-foreground",
+            )}
+          >
+            {updates.statusCopy}
+          </div>
+
+          {#if updates.status === "downloading"}
+            <div class="mt-2 h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                class="h-full rounded-full bg-primary transition-[width]"
+                style={`width: ${updates.progressPercent ?? 18}%;`}
+              ></div>
+            </div>
+            <div class="mt-1 text-[0.8rem] leading-5 text-muted-foreground">
+              {#if updates.contentLength}
+                {t(
+                  "updates.downloadedOfTotal",
+                  updates.formatBytes(updates.downloadedBytes),
+                  updates.formatBytes(updates.contentLength),
+                )}
+              {:else}
+                {t("updates.downloaded", updates.formatBytes(updates.downloadedBytes))}
+              {/if}
+            </div>
+          {/if}
+
+          {#if updates.status === "installed"}
+            <div class="mt-2 flex items-center gap-2 text-[0.8rem] leading-5 text-muted-foreground">
+              <RotateCcw size={14} strokeWidth={1.8} class="shrink-0" />
+              <span>{t("settings.updates.restartAfterInstaller")}</span>
+            </div>
+          {/if}
         </div>
-
-        {#if updates.status === "downloading"}
-          <div class="mt-2 h-2 overflow-hidden rounded-full bg-muted">
-            <div
-              class="h-full rounded-full bg-primary transition-[width]"
-              style={`width: ${updates.progressPercent ?? 18}%;`}
-            ></div>
-          </div>
-          <div class="mt-1 text-[0.8rem] leading-5 text-muted-foreground">
-            {#if updates.contentLength}
-              {t(
-                "updates.downloadedOfTotal",
-                updates.formatBytes(updates.downloadedBytes),
-                updates.formatBytes(updates.contentLength),
-              )}
-            {:else}
-              {t("updates.downloaded", updates.formatBytes(updates.downloadedBytes))}
-            {/if}
-          </div>
-        {/if}
-
-        {#if updates.status === "installed"}
-          <div class="mt-2 flex items-center gap-2 text-[0.8rem] leading-5 text-muted-foreground">
-            <RotateCcw size={14} strokeWidth={1.8} class="shrink-0" />
-            <span>{t("settings.updates.restartAfterInstaller")}</span>
-          </div>
-        {/if}
-      </div>
+      {/if}
     </div>
   </section>
 
@@ -140,24 +173,73 @@
               {t("settings.updates.version", updates.latestVersion ?? "unknown")}
             </div>
             <div class="mt-0.5 text-[0.8rem] leading-5 text-muted-foreground">
-              {t("settings.updates.availableUpdateDescription")}
+              {updates.canInstallUpdate
+                ? t("settings.updates.availableUpdateDescription")
+                : t("settings.updates.manualInstallUpdateDescription")}
             </div>
           </div>
-          <button
-            type="button"
-            class={primaryButtonClass}
-            onclick={() => {
-              void updates.installUpdate();
-            }}
-          >
-            <Download size={15} strokeWidth={1.9} class="shrink-0" />
-            <span>{t("settings.updates.downloadAndInstall")}</span>
-          </button>
+          <div class="flex shrink-0 flex-wrap gap-1.5 max-[480px]:w-full">
+            {#if updates.primaryAction === "self-updater"}
+              <button
+                type="button"
+                class={primaryButtonClass}
+                onclick={() => {
+                  void updates.installUpdate();
+                }}
+              >
+                <Download size={15} strokeWidth={1.9} class="shrink-0" />
+                <span>{t("settings.updates.updateAndRestart")}</span>
+              </button>
+            {:else if updates.primaryAction === "copy-command" && updates.copyCommand}
+              <button
+                type="button"
+                class={primaryButtonClass}
+                onclick={() => {
+                  void copyUpdateCommand();
+                }}
+              >
+                <Copy size={15} strokeWidth={1.9} class="shrink-0" />
+                <span>{commandCopied ? t("settings.updates.commandCopied") : t("settings.updates.copyCommand")}</span>
+              </button>
+            {/if}
+            <button
+              type="button"
+              class={secondaryButtonClass}
+              disabled={!updates.releasePageUrl}
+              onclick={() => {
+                void openReleasePage();
+              }}
+            >
+              <ExternalLink size={15} strokeWidth={1.9} class="shrink-0" />
+              <span>{t("settings.updates.releaseNotes")}</span>
+            </button>
+          </div>
         </div>
+
+        {#if updates.copyCommand}
+          <div class="px-1 py-1">
+            <div class="text-[0.866667rem] text-foreground">{t("settings.updates.updateCommand")}</div>
+            <div class="mt-1 flex min-w-0 items-stretch overflow-hidden rounded-md border border-border bg-background/60 max-[480px]:flex-col">
+              <code class="min-w-0 flex-1 overflow-x-auto whitespace-nowrap px-3 py-2 font-mono text-[0.8rem] leading-5 text-foreground">
+                {updates.copyCommand}
+              </code>
+              <button
+                type="button"
+                class="inline-flex h-auto shrink-0 items-center justify-center gap-1.5 border-l border-border px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-ring max-[480px]:h-8 max-[480px]:border-l-0 max-[480px]:border-t"
+                onclick={() => {
+                  void copyUpdateCommand();
+                }}
+              >
+                <Copy size={14} strokeWidth={1.9} class="shrink-0" />
+                <span>{commandCopied ? t("settings.updates.commandCopied") : t("settings.updates.copyCommand")}</span>
+              </button>
+            </div>
+          </div>
+        {/if}
 
         {#if updates.releaseNotes}
           <div class="px-1 py-1">
-            <div class="text-[0.866667rem] text-foreground">{t("settings.updates.releaseNotes")}</div>
+            <div class="text-[0.866667rem] text-foreground">{t("settings.updates.whatsChanged")}</div>
             <div class="mt-1 max-h-28 overflow-y-auto whitespace-pre-line wrap-break-word rounded-md border border-border bg-background/60 px-3 py-2 text-[0.8rem] leading-5 text-muted-foreground">
               {updates.releaseNotes}
             </div>
