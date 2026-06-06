@@ -35,7 +35,7 @@ Do not grant write, maintain, or admin access casually. If more maintainers are 
 
 ## protect main
 
-Purpose: keep `main` as the audited release source branch. It should move through release pull requests from `dev`, and a merge to `main` must not publish by itself.
+Purpose: keep `main` as the audited release source branch. It should move through release pull requests from `dev` by merge queue, and a merge to `main` must not publish by itself.
 
 Ruleset basics:
 
@@ -50,7 +50,14 @@ Branch rules:
 - [ ] Restrict updates.
 - [x] Restrict deletions.
 - [ ] Require linear history.
-- [ ] Require merge queue.
+- [x] Require merge queue.
+  - Merge method: merge.
+  - Build concurrency: 1.
+  - Minimum pull requests to merge: 1.
+  - Maximum pull requests to merge: 1.
+  - Wait time to merge: 0 minutes.
+  - Only merge non-failing pull requests: enabled.
+  - Status check timeout: 60 minutes.
 - [ ] Require deployments to succeed.
 - [x] Require signed commits.
 - [x] Require a pull request before merging.
@@ -62,7 +69,7 @@ Branch rules:
   - [x] Require conversation resolution before merging.
   - Allowed merge methods: merge only.
 - [x] Require status checks to pass.
-  - [x] Require branches to be up to date before merging.
+  - [ ] Require branches to be up to date before merging.
   - [x] Do not require status checks on creation.
   - Required status checks: `linux validation` and `windows Rust check`.
   - Required status check source: GitHub Actions.
@@ -82,7 +89,8 @@ Rationale:
 - Release publication happens only from `app-v*` tags and a protected release environment.
 - Merge commits on `main` are intentional because release pull requests are promotion events from `dev` to `main`.
 - `Require linear history` is off because release pull requests should preserve useful pull request history for generated release notes.
-- `Require merge queue` is off because release pull requests are low volume and the current required checks do not run on `merge_group`.
+- `Require merge queue` is enabled because it validates the merge result without forcing `dev` to merge `main`. GitHub documents merge queue as providing the same benefit as requiring branches to be up to date, without requiring authors to update the pull request branch: <https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue>.
+- `Require branches to be up to date before merging` is off on `main` because merge queue provides the stale-base protection. Keeping both would force `dev` to absorb `main` merge commits and conflict with the linear-history policy on `dev`.
 - `Require deployments to succeed` is off because the protected `release` environment belongs to the tag-based release workflow after `main` is updated, not to the branch merge gate.
 - `Require signed commits` is enabled on `main` after SSH commit signing was configured locally and a test commit verified successfully on GitHub.
 - Review requirements that need another reviewer stay off while the repository has one maintainer. Raise required approvals, stale approval dismissal, Code Owners, and most-recent-push approval before granting write access to more maintainers.
@@ -139,7 +147,7 @@ Rationale:
 - Squash merges keep `dev` readable while preserving the original PR as review history.
 - `dev` requires signed commits so unsigned history cannot accumulate and later block promotion into `main`.
 - `dev` should not require release-specific controls such as deployment gates.
-- `Require merge queue` is off because traffic is currently low and required checks do not run on `merge_group`.
+- `Require merge queue` is off for `dev` because traffic is currently low, `dev` already requires branches to be up to date, and squash-only merges keep the integration branch linear.
 - Review requirements that need another reviewer stay off while the repository has one maintainer. Raise them before granting write access to more maintainers.
 - Code scanning and code quality gates should stay off until they are configured, stable, and documented.
 - PR title conventions carry release note quality better than a branch-level commit metadata regex.
@@ -195,6 +203,7 @@ GitHub Actions:
 - Do not allow GitHub Actions to create or approve pull requests unless a specific reviewed workflow requires it.
 - Prefer selected actions and full SHA pins for third-party actions.
 - Keep release jobs cache-free.
+- Required checks for `main` must run on `merge_group` as well as `pull_request`, otherwise merge queue cannot satisfy branch protection.
 
 Protected environment:
 
