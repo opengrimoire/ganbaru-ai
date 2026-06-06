@@ -81,6 +81,7 @@
   const ACTIVE_BLOCK_CHECK_INTERVAL_MS = 1000;
   const EVENT_NOTIFICATION_CHECK_INTERVAL_MS = 1000;
   const DESKTOP_BLOCKING_CHECK_INTERVAL_MS = 5_000;
+  const AUTOMATIC_UPDATE_CHECK_DELAY_MS = 3_000;
   const COMPLETION_MUSIC_FADE_OUT_MS = 1_200;
   const COMPLETION_MUSIC_FADE_IN_MS = 1_800;
   const COMPLETION_MUSIC_FADE_STEP_MS = 100;
@@ -182,8 +183,12 @@
 
   onMount(() => {
     perfMark("boot.app-mount");
+    const automaticUpdateCheckTimerId = isMainWindow
+      ? setTimeout(() => {
+        void updates.checkAutomatically();
+      }, AUTOMATIC_UPDATE_CHECK_DELAY_MS)
+      : null;
     if (isMainWindow) {
-      void updates.checkAutomatically();
       listen("calendar-notification-open", () => {
         nav.navigate("calendar");
       })
@@ -289,6 +294,7 @@
       document.removeEventListener("keydown", markKeyboardFocus, { capture: true });
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("focus", checkZone);
+      if (automaticUpdateCheckTimerId) clearTimeout(automaticUpdateCheckTimerId);
       clearTimeout(startupMemoryTimerId);
       clearInterval(zoneIntervalId);
       if (desktopBlockerIntervalId) clearInterval(desktopBlockerIntervalId);
