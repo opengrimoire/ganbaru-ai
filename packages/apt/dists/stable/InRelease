@@ -1,0 +1,38 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Architectures: amd64
+Codename: stable
+Components: main
+Date: Sat, 06 Jun 2026 23:37:09 +0000
+Label: Ganbaru AI
+Origin: Ganbaru AI
+Suite: stable
+MD5Sum:
+ 9de5f46a6c14d2bc20534eaba1c8bdb6              469 main/binary-amd64/Packages
+ aff349294c615a70ca671e4ec3f8e540              358 main/binary-amd64/Packages.gz
+SHA1:
+ 0a2df3b675f7af0e355a9401853c94f5f567799b              469 main/binary-amd64/Packages
+ c1b6e7d7a19113e051fcb58b630b878b9a989230              358 main/binary-amd64/Packages.gz
+SHA256:
+ d2d70efd905a9e3f03ea828f64c9a188eb8eae0330bb1f19a9c24e42da2e50c4              469 main/binary-amd64/Packages
+ f8cafb31ccf33921bdd427c74345b8c7eb1e1e73fbff5eb6b4d4ed1c9866e0d0              358 main/binary-amd64/Packages.gz
+SHA512:
+ a7f535fa16c4b22ab70be794d6e901dfb8e5fa40b05092bbb1165f8640789bf509773e237bedc16623d35a263b7d7c53c60e7ac38f96fc229cec866bf2f85c9e              469 main/binary-amd64/Packages
+ a2caa30127710f9cb2c7f4dfc462edcc0ba45a909f88b12cb4df1a80abd8548eab8db0f660985197facb0184f00b663b1d3c6ed4cac0e9b77eb72aa631434943              358 main/binary-amd64/Packages.gz
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCgAdFiEEBMAHv6rSxNVkeE3EzKJg2pIzX+AFAmokryYACgkQzKJg2pIz
+X+AaJQ/9GpgkrdKGREyGqpHHjhAPZZfPavY7NxuIBDCNgheRdVa7aFV9Z1Dg/nAA
+YZI8IpSGn6537QEJVf1WKy+xvzRNFbwcj8D+eGgViGodvpnWBRbk7e1iUOsF32hd
+BILZuUnZ5zpbrJIgFVX39mNbKGiSi8syOs4g/DB6vA0Hvd1ER0t+gbB+ictFGIW1
+qJJDIr0GMH7csfE2ay30fAwnYSdUvhywg6ADU7KiRD0uFGmvo/U8fEAKMu+BH/7f
+D5pQsR2fkTKTWYHHPTjDvvpoZr7SkwpF92oXeS3anV22djvTnup1zzGbBojT/7iz
+q+tz+vo5htbQECfBqwlhtSX1Ett7MixsfP/+oNPd1Rxqaq5w5iEtW+i+BVA/rLxu
+PpQPi5qtyX5jJrbrTnnX4MQYp7yyfPFIuOoT2kngsaykBOMEKS7+NcweCkIMsUKK
+FD8LFNBI/TCA6d9Yh6vtRI/i0Q94aRm35j98QW245wpMEgUjh0e80tCoXrAUk4ZL
+XoVl6lTbq2iU6WWNrXLgvBH9WjdlCX2BAV31OPtEsMZgY9HSOI3c1rcbptL+bm6F
+KrHs5vaTBJ1KVjeO4GzXyfuLen24Wrzq0qDkY8IJyiYTsf4f5Nyrqt8tX5a9Ezc0
+EixS7Ih1inYb2YKdfqJZxd03yHMSuBlqe1FSQLOnplkHfqSWYTo=
+=Wlju
+-----END PGP SIGNATURE-----
