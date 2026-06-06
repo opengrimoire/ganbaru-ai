@@ -80,7 +80,7 @@ Only organization admins may merge release PRs into `main`, create or update `ap
 
 Do not update `dev` with `main` only to satisfy a release PR. That would add release merge commits to the integration branch and conflict with the linear-history policy on `dev`. The `main` merge queue is the stale-base protection for release PRs.
 
-Pull requests that target `main` and do not come from `dev` should be retargeted to `dev` or closed unless a maintainer deliberately chooses a separate stabilization branch for a broken release. If merge queue is unavailable during an urgent release, a maintainer may use a short-lived branch from `main`, cherry-pick already reviewed commits from `dev`, and then backport any workflow or documentation changes to `dev`. Do not add a `pull_request_target` workflow for branch routing unless a separate security review explicitly accepts the added privileged automation surface.
+Pull requests that target `main` and do not come from `dev` should be retargeted to `dev` or closed. Do not add a `pull_request_target` workflow for branch routing unless a separate security review explicitly accepts the added privileged automation surface.
 
 This policy exists because CI and release infrastructure are part of the supply chain. The May 2026 TanStack npm compromise chained a `pull_request_target` trust-boundary issue, GitHub Actions cache poisoning, and token access into malicious package releases. Ganbaru AI keeps release authority, signing jobs, release tags, and updater metadata behind explicit maintainer controls for the same class of risk. See TanStack's postmortem: <https://tanstack.com/blog/npm-supply-chain-compromise-postmortem>.
 

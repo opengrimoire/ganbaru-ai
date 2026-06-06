@@ -52,6 +52,6 @@ Before opening a release PR:
 
 After the merge queue lands the release PR in `main`, create and push the matching `app-v*` tag from the release commit. The release workflow builds signed assets and creates or updates a draft GitHub Release with generated notes. Inspect the draft release before publishing.
 
-Pull requests that target `main` and do not come from `dev` should be retargeted to `dev` or closed unless a maintainer deliberately chooses a separate stabilization branch for a broken release.
+Pull requests that target `main` and do not come from `dev` should be retargeted to `dev` or closed.
 
 See `docs/release.md` for the full release process.
