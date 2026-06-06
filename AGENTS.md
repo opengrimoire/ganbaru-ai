@@ -1,6 +1,6 @@
 # Ganbaru AI
 
-Ganbaru AI is an anti-procrastination + anti-burnout app. Free, local, open-source (AGPL 3.0), privacy-first, lightweight with opt-in AI (Codex and BYOK for any LLM). It's built with Tauri v2 (Rust) and Svelte 5 with multi-platform in mind (Linux, Windows, macOS, and in the future Android and iOS).
+Ganbaru AI is an anti-procrastination + anti-burnout productivity app. Free, local, open-source (AGPL 3.0), privacy-first, lightweight with opt-in AI (Codex and BYOK for any LLM). It's built with Tauri v2 (Rust) and Svelte 5 with multi-platform in mind (Linux, Windows, and in the future Android, macOS and iOS).
 
 Features are highly interconnected. Current status:
 - Calendar

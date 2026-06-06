@@ -2,7 +2,7 @@
   <img src="apps/client/static/icon.png" alt="Ganbaru AI icon" width="20%" />
   <h1>Ganbaru AI</h1>
 
-Anti-procrastination project manager for life and work.
+Anti-procrastination + anti-burnout productivity app.
 
 Free, local, open-source, privacy-first, lightweight with opt-in AI.
 
@@ -43,7 +43,7 @@ Download the latest release from [GitHub Releases](https://github.com/opengrimoi
 | **Android** | Not available yet. Android support is planned soon after the current desktop release path settles. |
 | **iOS** | Not available yet. iOS depends on the same Apple build and signing path as macOS. |
 
-Use `SHA256SUMS` if you want to verify a download before installing it. The `.sig` files and `latest.json` are used by the automatic updater.
+Use `SHA256SUMS` if you want to verify a download before installing it. The `.sig` files and `latest.json` are used by the updater.
 
 ## Features
 
