@@ -1,7 +1,34 @@
+import { translate, type Translate } from "$lib/i18n/translator.svelte";
+
 export const DEFAULT_AUTO_UPDATE_NOTIFICATIONS = true;
 export const UPDATE_AUTO_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const RELEASE_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u;
 const GITHUB_REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
+const UPDATE_PACKAGE_MANAGERS = new Set([
+  "apt",
+  "dnf",
+  "zypper",
+  "aur-yay",
+  "aur-paru",
+  "fallback",
+]);
+
+export type UpdatePackageManager =
+  | "apt"
+  | "dnf"
+  | "zypper"
+  | "aur-yay"
+  | "aur-paru"
+  | "fallback";
+
+export interface UpdateInstallContext {
+  selfUpdater: boolean;
+  packageManager: UpdatePackageManager | null;
+  copyCommand: string | null;
+  releasePageUrl: string;
+}
+
+export type UpdatePrimaryAction = "self-updater" | "copy-command" | "release-page";
 
 /**
  * Normalize a stored update check timestamp.
@@ -59,6 +86,96 @@ export function releasePageUrl(repository: string, version: string | null): stri
 }
 
 /**
+ * Build the latest GitHub release page URL for fallback update flows.
+ *
+ * @param repository GitHub repository in owner/name form.
+ * @returns Latest release page URL, or null when the repository is invalid.
+ */
+export function latestReleasePageUrl(repository: string): string | null {
+  const normalizedRepository = repository.trim();
+  if (!GITHUB_REPOSITORY_PATTERN.test(normalizedRepository)) return null;
+  return `https://github.com/${normalizedRepository}/releases/latest`;
+}
+
+/**
+ * Parse a backend install-context payload before exposing it to UI state.
+ *
+ * @param value Unknown IPC payload.
+ * @param repository Expected GitHub repository in owner/name form.
+ * @returns Safe install context with a release-page fallback.
+ */
+export function parseUpdateInstallContext(
+  value: unknown,
+  repository: string,
+): UpdateInstallContext {
+  const fallback = fallbackUpdateInstallContext(repository);
+  if (!isRecord(value)) return fallback;
+
+  const selfUpdater = value.selfUpdater === true;
+  const packageManager = parsePackageManager(value.packageManager);
+  const copyCommand =
+    typeof value.copyCommand === "string" && value.copyCommand.trim().length > 0
+      ? value.copyCommand.trim()
+      : null;
+  const releasePage = parseContextReleasePageUrl(value.releasePageUrl, repository)
+    ?? fallback.releasePageUrl;
+
+  return {
+    selfUpdater,
+    packageManager,
+    copyCommand: selfUpdater ? null : copyCommand,
+    releasePageUrl: releasePage,
+  };
+}
+
+/**
+ * Choose the primary available-update action for the current install context.
+ *
+ * @param context Detected install context.
+ * @returns Primary action kind.
+ */
+export function updatePrimaryAction(
+  context: UpdateInstallContext | null,
+): UpdatePrimaryAction {
+  if (context?.selfUpdater) return "self-updater";
+  if (context?.copyCommand) return "copy-command";
+  return "release-page";
+}
+
+function fallbackUpdateInstallContext(repository: string): UpdateInstallContext {
+  return {
+    selfUpdater: false,
+    packageManager: "fallback",
+    copyCommand: null,
+    releasePageUrl: latestReleasePageUrl(repository)
+      ?? "https://github.com/opengrimoire/ganbaru-ai/releases/latest",
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function parsePackageManager(value: unknown): UpdatePackageManager | null {
+  if (typeof value !== "string") return null;
+  return UPDATE_PACKAGE_MANAGERS.has(value) ? (value as UpdatePackageManager) : null;
+}
+
+function parseContextReleasePageUrl(value: unknown, repository: string): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  const latestUrl = latestReleasePageUrl(repository);
+  if (latestUrl && normalized === latestUrl) return normalized;
+
+  const normalizedRepository = repository.trim();
+  if (!GITHUB_REPOSITORY_PATTERN.test(normalizedRepository)) return null;
+  const tagPrefix = `https://github.com/${normalizedRepository}/releases/tag/app-v`;
+  if (!normalized.startsWith(tagPrefix)) return null;
+  const version = normalized.slice(tagPrefix.length);
+  return RELEASE_VERSION_PATTERN.test(version) ? normalized : null;
+}
+
+/**
  * Convert updater errors into user-facing copy.
  *
  * @param error Unknown thrown value.
@@ -86,4 +203,3 @@ export function errorText(error: unknown): string {
   if (typeof error === "string") return error;
   return String(error);
 }
-import { translate, type Translate } from "$lib/i18n/translator.svelte";

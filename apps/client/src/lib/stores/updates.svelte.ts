@@ -5,10 +5,13 @@ import { formatNumber } from "$lib/i18n/formatters";
 import { getLocalization } from "$lib/i18n/translator.svelte";
 import {
   DEFAULT_AUTO_UPDATE_NOTIFICATIONS,
+  type UpdateInstallContext,
   errorText,
   parseStoredUpdateCheckAt,
+  parseUpdateInstallContext,
   releasePageUrl,
   shouldRunAutomaticUpdateCheck,
+  updatePrimaryAction,
   updateCheckErrorMessage,
 } from "./updates";
 import { GITHUB_REPOSITORY } from "$lib/buildInfo";
@@ -56,7 +59,13 @@ class UpdateManagerStore {
   autoNotifications = $state(loadAutoUpdateNotifications());
   lastAutoCheckAt = $state<string | null>(loadLastAutoCheckAt());
   promptDismissed = $state(false);
+  installContext = $state<UpdateInstallContext | null>(null);
   private automaticCheckStarted = false;
+  private installContextCheck: Promise<UpdateInstallContext> | null = null;
+
+  constructor() {
+    void this.loadInstallContext();
+  }
 
   progressPercent = $derived(
     this.contentLength && this.contentLength > 0
@@ -93,7 +102,17 @@ class UpdateManagerStore {
         || this.status === "installed"),
   );
 
-  releasePageUrl = $derived(releasePageUrl(GITHUB_REPOSITORY, this.latestVersion));
+  releasePageUrl = $derived(
+    releasePageUrl(GITHUB_REPOSITORY, this.latestVersion)
+      ?? this.installContext?.releasePageUrl
+      ?? null,
+  );
+
+  primaryAction = $derived(updatePrimaryAction(this.installContext));
+
+  canInstallUpdate = $derived(this.primaryAction === "self-updater");
+
+  copyCommand = $derived(this.installContext?.copyCommand ?? null);
 
   setAutoNotifications(enabled: boolean): void {
     this.autoNotifications = enabled;
@@ -176,6 +195,7 @@ class UpdateManagerStore {
     }
 
     try {
+      await this.loadInstallContext();
       const update = await check({ timeout: 30_000 });
       if (!update) {
         this.status = "current";
@@ -199,6 +219,8 @@ class UpdateManagerStore {
 
   async installUpdate(): Promise<void> {
     if (!this.pendingUpdate || this.status !== "available") return;
+    const context = await this.loadInstallContext();
+    if (!context.selfUpdater) return;
     this.status = "downloading";
     this.errorMessage = null;
     this.downloadedBytes = 0;
@@ -231,6 +253,24 @@ class UpdateManagerStore {
         }
         break;
     }
+  }
+
+  private async loadInstallContext(): Promise<UpdateInstallContext> {
+    if (this.installContext !== null) return this.installContext;
+    this.installContextCheck ??= invoke<unknown>("updater_install_context")
+      .then((payload) => {
+        const context = parseUpdateInstallContext(payload, GITHUB_REPOSITORY);
+        this.installContext = context;
+        return context;
+      })
+      .catch((error: unknown) => {
+        console.error("Failed to detect updater install context:", error);
+        const context = parseUpdateInstallContext(null, GITHUB_REPOSITORY);
+        this.installContext = context;
+        return context;
+      });
+
+    return this.installContextCheck;
   }
 }
 

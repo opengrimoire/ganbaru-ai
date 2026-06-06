@@ -10,6 +10,7 @@ const REPO_ROOT = path.resolve(CLIENT_ROOT, "..", "..");
 const APP_PACKAGE_PATH = path.join(CLIENT_ROOT, "package.json");
 const ASSET_DIR = path.join(REPO_ROOT, "dist", "release-assets");
 const GITHUB_REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
+const DEFAULT_RELEASE_NOTES = "See the release notes and attached assets on GitHub.";
 
 /**
  * Reads a required environment variable without exposing its value.
@@ -61,6 +62,19 @@ function readSignature(assetName) {
 }
 
 /**
+ * Reads generated release notes when the workflow provides them.
+ *
+ * @returns {string} Updater release notes.
+ */
+function releaseNotes() {
+  const notesPath = process.env.GANBARU_AI_RELEASE_NOTES_PATH?.trim();
+  if (!notesPath) return DEFAULT_RELEASE_NOTES;
+
+  const notes = readFileSync(notesPath, "utf8").trim();
+  return notes || DEFAULT_RELEASE_NOTES;
+}
+
+/**
  * Sorts Windows updater assets by preferred installer type.
  *
  * @param {string} left First file name.
@@ -99,7 +113,7 @@ if (!windowsAsset) {
 
 const latest = {
   version: appVersion(),
-  notes: "See the release notes and attached assets on GitHub.",
+  notes: releaseNotes(),
   pub_date: new Date().toISOString(),
   platforms: {
     "linux-x86_64": {

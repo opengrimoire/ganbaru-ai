@@ -22,6 +22,7 @@ mod pomodoro_enforcement;
 mod recurrence;
 mod themes;
 mod tray;
+mod updates;
 mod vault;
 mod window_shape;
 
@@ -755,6 +756,7 @@ pub fn run() {
             teardown_benchmark_db,
             benchmark_seed::benchmark_seed_pomodoro_history,
             restart_app,
+            updates::updater_install_context,
             restart_app_after_delay,
             toggle_devtools,
             get_memory_report,

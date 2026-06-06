@@ -2,6 +2,9 @@ name: release
 
 on:
   workflow_dispatch:
+  release:
+    types:
+      - published
   push:
     tags:
       - "app-v*"
@@ -19,6 +22,7 @@ defaults:
 
 jobs:
   build-release:
+    if: github.event_name != 'release'
     name: build ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
@@ -37,6 +41,7 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       GANBARU_AI_RELEASE_REPOSITORY: ${{ github.repository }}
+      GANBARU_AI_PACKAGE_REPO_PUBLIC_KEY: ${{ vars.GANBARU_AI_PACKAGE_REPO_PUBLIC_KEY }}
       TAURI_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY }}
     steps:
       - name: checkout
@@ -90,8 +95,8 @@ jobs:
         run: node apps/client/scripts/stage-tauri-release-assets.mjs
 
       - name: upload unsigned assets
-        # actions/upload-artifact v5
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        # actions/upload-artifact v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: unsigned-${{ matrix.artifact }}
           path: dist/release-assets/*
@@ -99,6 +104,7 @@ jobs:
           retention-days: 7
 
   sign-release:
+    if: github.event_name != 'release'
     name: sign release assets
     needs: build-release
     runs-on: ubuntu-22.04
@@ -132,8 +138,8 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: download unsigned assets
-        # actions/download-artifact v6
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        # actions/download-artifact v7.0.0
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
           pattern: unsigned-*
           path: dist/release-assets
@@ -146,8 +152,8 @@ jobs:
         run: node apps/client/scripts/sign-tauri-release-assets.mjs
 
       - name: upload signed assets
-        # actions/upload-artifact v5
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        # actions/upload-artifact v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: signed-release-assets
           path: dist/release-assets/*
@@ -155,6 +161,7 @@ jobs:
           retention-days: 7
 
   publish-release:
+    if: github.event_name != 'release'
     name: publish draft release
     needs: sign-release
     runs-on: ubuntu-22.04
@@ -184,42 +191,44 @@ jobs:
         run: node apps/client/scripts/release-metadata.mjs
 
       - name: download signed assets
-        # actions/download-artifact v6
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        # actions/download-artifact v7.0.0
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
           name: signed-release-assets
           path: dist/release-assets
-
-      - name: write updater feed
-        env:
-          GANBARU_AI_RELEASE_REPOSITORY: ${{ github.repository }}
-          GANBARU_AI_RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
-        run: node apps/client/scripts/write-tauri-latest-json.mjs
-
-      - name: write checksums
-        run: |
-          cd dist/release-assets
-          find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%P\0' | sort -z | xargs -0 sha256sum > SHA256SUMS
 
       - name: write generated release notes
         env:
           RELEASE_TAG_NAME: ${{ steps.release.outputs.tag_name }}
         run: |
           mkdir -p dist
-          cat docs/release-notes-template.md > dist/release-notes.md
-          printf '\n\n' >> dist/release-notes.md
           gh api \
             --method POST \
             "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
             -f tag_name="$RELEASE_TAG_NAME" \
             -f target_commitish="$GITHUB_SHA" \
             -f configuration_file_path=".github/release.yml" \
-            --jq .body >> dist/release-notes.md
+            --jq .body > dist/generated-release-notes.md
           sed -i \
             -e "s/^## What's Changed$/## What's changed/" \
             -e "s/^\*\*Full Changelog\*\*:/\*\*Full changelog\*\*:/" \
             -e "s/^Full Changelog:/Full changelog:/" \
-            dist/release-notes.md
+            dist/generated-release-notes.md
+          cat docs/release-notes-template.md > dist/release-notes.md
+          printf '\n\n' >> dist/release-notes.md
+          cat dist/generated-release-notes.md >> dist/release-notes.md
+
+      - name: write updater feed
+        env:
+          GANBARU_AI_RELEASE_REPOSITORY: ${{ github.repository }}
+          GANBARU_AI_RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
+          GANBARU_AI_RELEASE_NOTES_PATH: dist/generated-release-notes.md
+        run: node apps/client/scripts/write-tauri-latest-json.mjs
+
+      - name: write checksums
+        run: |
+          cd dist/release-assets
+          find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%P\0' | sort -z | xargs -0 sha256sum > SHA256SUMS
 
       - name: create or update draft release
         env:
@@ -236,3 +245,102 @@ jobs:
             gh release create "$RELEASE_TAG_NAME" --target "$GITHUB_SHA" --draft --title "$RELEASE_NAME" --notes-file dist/release-notes.md
           fi
           gh release upload "$RELEASE_TAG_NAME" dist/release-assets/* --clobber
+
+  publish-package-repo:
+    if: github.event_name == 'release' && startsWith(github.event.release.tag_name, 'app-v')
+    name: publish package repo
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    environment: release
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GANBARU_AI_PACKAGE_REPO_PUBLIC_KEY: ${{ vars.GANBARU_AI_PACKAGE_REPO_PUBLIC_KEY }}
+      RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
+    steps:
+      - name: checkout
+        # actions/checkout v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: setup node
+        # actions/setup-node v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "24"
+
+      - name: install package repo tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y apt-utils createrepo-c dpkg-dev gnupg
+
+      - name: download release packages
+        run: |
+          mkdir -p dist/release-assets
+          gh release download "$RELEASE_TAG_NAME" --pattern "*.deb" --pattern "*.rpm" --dir dist/release-assets
+
+      - name: import package repo signing key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GANBARU_AI_PACKAGE_REPO_GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GANBARU_AI_PACKAGE_REPO_GPG_PASSPHRASE }}
+        run: |
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            echo "GANBARU_AI_PACKAGE_REPO_GPG_PRIVATE_KEY must be set"
+            exit 1
+          fi
+
+          export GNUPGHOME="$RUNNER_TEMP/package-repo-gnupg"
+          mkdir -p "$GNUPGHOME"
+          chmod 700 "$GNUPGHOME"
+          printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
+
+          key_id="$(gpg --batch --list-secret-keys --with-colons | awk -F: '/^fpr:/ { print $10; exit }')"
+          if [ -z "$key_id" ]; then
+            echo "Package repo signing key import did not produce a secret key"
+            exit 1
+          fi
+
+          passphrase_file="$RUNNER_TEMP/package-repo-gpg-passphrase"
+          printf '%s' "$GPG_PASSPHRASE" > "$passphrase_file"
+          chmod 600 "$passphrase_file"
+
+          {
+            echo "GNUPGHOME=$GNUPGHOME"
+            echo "GANBARU_AI_PACKAGE_REPO_GPG_KEY_ID=$key_id"
+            echo "GANBARU_AI_PACKAGE_REPO_GPG_PASSPHRASE_FILE=$passphrase_file"
+          } >> "$GITHUB_ENV"
+
+      - name: prepare Pages branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          rm -rf dist/pages
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git fetch origin gh-pages:refs/remotes/origin/gh-pages
+            git worktree add -B gh-pages dist/pages origin/gh-pages
+          else
+            mkdir -p dist/pages
+            git -C dist/pages init
+            git -C dist/pages checkout --orphan gh-pages
+          fi
+          git -C dist/pages remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" || git -C dist/pages remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git -C dist/pages config user.name "github-actions[bot]"
+          git -C dist/pages config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: build package repo
+        env:
+          GANBARU_AI_PACKAGE_PAGES_DIR: dist/pages
+        run: node apps/client/scripts/build-package-repo.mjs
+
+      - name: push package repo
+        run: |
+          git -C dist/pages add .nojekyll packages
+          if git -C dist/pages diff --cached --quiet; then
+            echo "Package repo is unchanged"
+            exit 0
+          fi
+          git -C dist/pages commit -m "chore: update package repository for $RELEASE_TAG_NAME"
+          git -C dist/pages push origin HEAD:gh-pages

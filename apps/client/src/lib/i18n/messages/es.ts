@@ -469,8 +469,14 @@ export const es = {
       version: (version: string) => `Versión ${version}`,
       availableUpdateDescription:
         "Descarga e instala la actualización disponible de Ganbaru AI.",
-      downloadAndInstall: "Descargar e instalar",
+      manualInstallUpdateDescription:
+        "Usa tu gestor de paquetes para instalar la actualización disponible de Ganbaru AI.",
+      updateAndRestart: "Actualizar y reiniciar",
+      copyCommand: "Copiar comando",
+      commandCopied: "Copiado",
+      updateCommand: "Comando de actualización",
       releaseNotes: "Notas de la versión",
+      whatsChanged: "Qué cambió",
     },
     music: {
       pomodoroHeading: "Pomodoro",
@@ -1245,8 +1251,9 @@ export const es = {
     promptAvailable: (version: string) => `Hay una actualización disponible: ${version}`,
     downloaded: (bytes: string) => `${bytes} descargados`,
     downloadedOfTotal: (downloaded: string, total: string) => `${downloaded} de ${total}`,
-    installUpdate: "Instalar actualización",
-    later: "Más tarde",
+    updateAndRestart: "Actualizar y reiniciar",
+    copyCommand: "Copiar comando",
+    commandCopied: "Copiado",
     releaseNotes: "Notas de la versión",
     dismissNotification: "Descartar notificación de actualización",
     feedNotConfigured: "Esta compilación no tiene configurado un feed de actualizaciones",
