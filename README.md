@@ -2,13 +2,14 @@
   <img src="apps/client/static/icon.png" alt="Ganbaru AI icon" width="20%" />
   <h1>Ganbaru AI</h1>
 
-Anti-procrastination project manager for life and work.
+Anti-procrastination + anti-burnout productivity app.
 
 Free, local, open-source, privacy-first, lightweight with opt-in AI.
 
 </div>
 
 <p align="center">
+  <a href="#download">Download</a>&nbsp;&nbsp;&nbsp;&nbsp;
   <a href="#features">Features</a>&nbsp;&nbsp;&nbsp;&nbsp;
   <a href="#building-from-source">Building from source</a>&nbsp;&nbsp;&nbsp;&nbsp;
   <a href="#contributing">Contributing</a>&nbsp;&nbsp;&nbsp;&nbsp;
@@ -27,6 +28,22 @@ Free, local, open-source, privacy-first, lightweight with opt-in AI.
 
 > [!WARNING]
 > The app is under heavy development and is unstable.
+
+## Download
+
+Download the latest release from [GitHub Releases](https://github.com/opengrimoire/ganbaru-ai/releases/latest).
+
+| Platform | Download |
+|---|---|
+| **Ubuntu, Debian, Linux Mint** | `.deb` package |
+| **Fedora, RHEL, openSUSE** | `.rpm` package |
+| **Other Linux x64 desktops** | `.AppImage` |
+| **Windows 10 or Windows 11 x64** | `.msi` installer, or the `.exe` setup if preferred |
+| **macOS** | Not available yet. macOS builds are planned, but they need Apple hardware and signing before release. |
+| **Android** | Not available yet. Android support is planned soon after the current desktop release path settles. |
+| **iOS** | Not available yet. iOS depends on the same Apple build and signing path as macOS. |
+
+Use `SHA256SUMS` if you want to verify a download before installing it. The `.sig` files and `latest.json` are used by the updater.
 
 ## Features
 
@@ -132,10 +149,13 @@ Contributions are welcome, but keep in mind:
 - The app is in heavy early development. Architecture, APIs, and data models are still changing.
 - Active testing is limited to **Ubuntu Linux** and **Windows 10**. macOS and iOS builds are untested since no Apple hardware is available for development, so contributions for those platforms are especially valuable.
 - If you are considering a large change, open an issue first to discuss the approach.
+- Before contributing, read [CONTRIBUTING.md](CONTRIBUTING.md).
+- Participation in project spaces is governed by the [code of conduct](.github/CODE_OF_CONDUCT.md).
+- Please report security vulnerabilities privately through the process in [SECURITY.md](.github/SECURITY.md), not through public issues.
 
 ## License
 
-Ganbaru AI is licensed under [AGPL-3.0](LICENSE).
+Ganbaru AI is licensed under [AGPL-3.0](LICENSE). It's free and open source. You can use, modify, share, and sell Ganbaru AI. If you distribute or host a modified version, you must provide the source code and license that version under AGPL 3.0. Patent rights from contributors are included. The app is provided without warranty, and authors are not liable for damages.
 
 ## Funding
 

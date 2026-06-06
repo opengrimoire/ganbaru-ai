@@ -1,6 +1,6 @@
 # Ganbaru AI
 
-Ganbaru AI is an anti-procrastination + anti-burnout app. Free, local, open-source (AGPL 3.0), privacy-first, lightweight with opt-in AI (Codex and BYOK for any LLM). It's built with Tauri v2 (Rust) and Svelte 5 with multi-platform in mind (Linux, Windows, macOS, and in the future Android and iOS).
+Ganbaru AI is an anti-procrastination + anti-burnout productivity app. Free, local, open-source (AGPL 3.0), privacy-first, lightweight with opt-in AI (Codex and BYOK for any LLM). It's built with Tauri v2 (Rust) and Svelte 5 with multi-platform in mind (Linux, Windows, and in the future Android, macOS and iOS).
 
 Features are highly interconnected. Current status:
 - Calendar
@@ -39,7 +39,12 @@ Docs describe the optimal/ideal end state of the app, not the current implementa
 
 ```
 .github/
+  CODE_OF_CONDUCT.md: GitHub community behavior policy
+  ISSUE_TEMPLATE/: GitHub issue forms and template chooser config
+  SECURITY.md: GitHub security policy and private vulnerability reporting instructions
   workflows/: GitHub Actions release workflows
+  release.yml: generated GitHub Release notes config
+  pull_request_template.md: default GitHub pull request template
 apps/
   client/: Tauri app (Svelte frontend + Rust backend)
     src/: Svelte frontend
@@ -147,6 +152,8 @@ Tauri's platform app config directory stores device-local bootstrap and runtime 
 - **State management:** Svelte 5 runes ($state, $derived, $effect), no external state manager
 - **Localization:** user-facing UI text must use the typed i18n catalog. Language selectors show explicit languages as autonyms, such as `English` and `Español`, while non-language options like system preference are localized. User-facing date, time, number, plural, relative-minute, and list formatting should use the current locale helpers.
 - **Branching and releases:** normal work uses topic branches from `dev` and PRs back to `dev`. Direct pushes to `dev` or `main` are not normal workflow. `main`, `release/*` branches, `app-v*` tags, release environment approval, and published GitHub Releases are controlled by organization admins for supply-chain safety. Releases are explicit `app-v*` tags that build draft GitHub Releases. See `CONTRIBUTING.md`, `docs/release.md`, and `docs/rulesets.md`.
+- **Pull request workflow:** for review work, create a neutral topic branch from current `dev` before committing. Branch names describe the work, such as `docs/github-templates` or `fix/calendar-import`; never use tool names, assistant names, or vanity prefixes in branches, commits, or PR titles. Open PRs into `dev` unless the user explicitly asks for a release PR. After opening a PR, wait about 5 minutes before checking GitHub Actions unless the user asks for closer monitoring. When a PR is merged, fetch `origin/dev`, switch back to `dev`, sync local `dev` to `origin/dev`, and delete merged topic branches locally and remotely. Do not keep backup branches unless the user explicitly asks.
+- **Commit signing:** commits should be signed with the configured SSH signing key. If signing fails, stop and report it instead of creating an unsigned commit.
 - **Sync:** Yjs + Hocuspocus (CRDT-based, E2E encrypted, self-hosted by the user)
 - **Build tool:** Vite (default with Tauri + Svelte scaffold)
 
