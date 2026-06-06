@@ -53,10 +53,10 @@ Branch rules:
 - [x] Require merge queue.
   - Merge method: merge.
   - Build concurrency: 1.
-  - Minimum pull requests to merge: 1.
-  - Maximum pull requests to merge: 1.
-  - Wait time to merge: 0 minutes.
-  - Only merge non-failing pull requests: enabled.
+  - Minimum group size: 1.
+  - Maximum group size: 1.
+  - Wait time to meet minimum group size: 0 minutes.
+  - Require all queue entries to pass required checks: enabled.
   - Status check timeout: 60 minutes.
 - [ ] Require deployments to succeed.
 - [x] Require signed commits.
