@@ -204,6 +204,7 @@ GitHub Actions:
 - Prefer selected actions and full SHA pins for third-party actions.
 - Keep release jobs cache-free.
 - Required checks for `main` must run on `merge_group` as well as `pull_request`, otherwise merge queue cannot satisfy branch protection.
+- The `check` workflow should not run on branch pushes to `dev` or `main`. Those branches are PR-only through rulesets, and branch push checks would duplicate the pull request or merge queue checks that already gated the merge.
 
 Protected environment:
 
