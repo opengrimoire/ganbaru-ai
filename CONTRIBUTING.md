@@ -8,7 +8,7 @@ Branch and release restrictions are supply-chain controls, not a judgment about 
 
 ## Branch flow
 
-- `main` is the release source branch. It should move through release pull requests from `dev`.
+- `main` is the release source branch. It should move through release pull requests from `dev` by merge queue.
 - `dev` is the integration branch for accepted work between releases.
 - Normal work happens on short-lived topic branches created from `dev`.
 - Topic branches open pull requests into `dev`.
@@ -39,7 +39,7 @@ When a PR should not appear in generated release notes, add the `skip-changelog`
 
 ## Release pull requests
 
-Release PRs merge `dev` into `main` after accepted work and release preparation are ready. Use a direct `dev` to `main` pull request so the release source matches the integration branch.
+Release PRs merge `dev` into `main` after accepted work and release preparation are ready. Use a direct `dev` to `main` pull request so the release source matches the integration branch. Do not update `dev` with `main` only to satisfy the release PR; `main` uses merge queue to validate the merge result without adding release merge commits to `dev`.
 
 Before opening a release PR:
 
@@ -48,9 +48,10 @@ Before opening a release PR:
 3. Run `pnpm -w run validate:full`.
 4. Open a pull request from `dev` into `main`.
 5. Summarize the user-facing changes since the previous release.
+6. After review and green pull request checks, add the PR to the `main` merge queue.
 
-After the release PR merges to `main`, create and push the matching `app-v*` tag from the release commit. The release workflow builds signed assets and creates or updates a draft GitHub Release with generated notes. Inspect the draft release before publishing.
+After the merge queue lands the release PR in `main`, create and push the matching `app-v*` tag from the release commit. The release workflow builds signed assets and creates or updates a draft GitHub Release with generated notes. Inspect the draft release before publishing.
 
-Pull requests that target `main` and do not come from `dev` should be retargeted to `dev` or closed unless a maintainer deliberately chooses a separate stabilization branch for that release.
+Pull requests that target `main` and do not come from `dev` should be retargeted to `dev` or closed.
 
 See `docs/release.md` for the full release process.
