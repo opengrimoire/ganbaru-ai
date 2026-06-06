@@ -8,11 +8,11 @@ Branch and release restrictions are supply-chain controls, not a judgment about 
 
 ## Branch flow
 
-- `main` is the release source branch. It should move through release pull requests from release branches based on `dev`.
+- `main` is the release source branch. It should move through release pull requests from `dev`.
 - `dev` is the integration branch for accepted work between releases.
 - Normal work happens on short-lived topic branches created from `dev`.
 - Topic branches open pull requests into `dev`.
-- Release preparation uses a release branch based on `dev` and opens one pull request into `main`.
+- Release preparation changes, such as version bumps, happen through normal pull requests into `dev` before `dev` is promoted to `main`.
 - Releases are created from `app-v*` tags on the release commit, not from every merge to `main`.
 
 Do not push directly to `main` or `dev` for normal feature, fix, or docs work. All normal changes must enter through pull requests. Use direct pushes only for exceptional repository maintenance where a project maintainer explicitly approves it.
@@ -39,17 +39,18 @@ When a PR should not appear in generated release notes, add the `skip-changelog`
 
 ## Release pull requests
 
-Release PRs merge a release branch based on `dev` into `main` and should include only release preparation changes, such as version bumps and release documentation updates.
+Release PRs merge `dev` into `main` after accepted work and release preparation are ready. Use a direct `dev` to `main` pull request so the release source matches the integration branch.
 
 Before opening a release PR:
 
 1. Verify `dev` is green.
-2. Update the app version in `apps/client/package.json`, `apps/client/src-tauri/Cargo.toml`, and `apps/client/src-tauri/tauri.conf.json`.
+2. If needed, update the app version in `apps/client/package.json`, `apps/client/src-tauri/Cargo.toml`, and `apps/client/src-tauri/tauri.conf.json` through a normal pull request into `dev`.
 3. Run `pnpm -w run validate:full`.
-4. Summarize the user-facing changes since the previous release.
+4. Open a pull request from `dev` into `main`.
+5. Summarize the user-facing changes since the previous release.
 
 After the release PR merges to `main`, create and push the matching `app-v*` tag from the release commit. The release workflow builds signed assets and creates or updates a draft GitHub Release with generated notes. Inspect the draft release before publishing.
 
-Pull requests that target `main` directly and do not come from same-repository `release/*` branches should be retargeted to `dev` or closed. GitHub branch and tag rulesets are the enforcement mechanism.
+Pull requests that target `main` and do not come from `dev` should be retargeted to `dev` or closed unless a maintainer deliberately chooses a separate stabilization branch for that release.
 
 See `docs/release.md` for the full release process.
