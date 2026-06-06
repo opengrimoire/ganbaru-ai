@@ -34,9 +34,8 @@ Store this repository variable:
 
 Also configure repository protections:
 
-- Protect `main` so only organization admins can merge release pull requests from same-repository `release/*` branches. Require pull requests, required checks, conversation resolution, signed commits if enabled for the organization, and no force-push or deletion.
+- Protect `main` so only organization admins can merge release pull requests from `dev`. Require pull requests, required checks, conversation resolution, signed commits if enabled for the organization, and no force-push or deletion.
 - Protect `dev` so normal changes reach it only through pull requests from topic branches. Require pull requests, required checks, conversation resolution, and no direct pushes, force-pushes, or deletion.
-- Protect or restrict same-repository `release/*` branches so only organization admins can create or update release preparation branches.
 - Protect `app-v*` tags so only organization admins can create, update, or delete release tags.
 - Require review for changes to `.github/workflows/release.yml` and release scripts.
 - In GitHub Actions settings, allow only selected actions and prefer SHA-pinned actions where the repository settings support that policy.
@@ -63,15 +62,15 @@ Ganbaru AI uses `dev` as the integration branch and `main` as the release source
 
 - Normal work starts from `dev` on a short-lived topic branch.
 - Topic branches open pull requests into `dev`.
-- Release preparation uses a release branch based on `dev` and opens one pull request into `main`.
-- Release PRs should come from same-repository `release/*` branches and contain release preparation only, such as version bumps and release documentation updates.
+- Release preparation changes, such as version bumps and release documentation updates, go through normal pull requests into `dev`.
+- Release promotion opens one pull request from `dev` into `main`.
 - A merge to `main` does not publish by itself. The release workflow is intentionally tag-based so signed desktop assets can be inspected before publishing.
 
 This keeps frequent development PRs visible for review and generated release notes while preserving an explicit release gate for installers, updater metadata, checksums, and signing.
 
 Only organization admins may merge release PRs into `main`, create or update `app-v*` tags, approve the protected release environment, or publish GitHub Releases. Today that means the organization owner unless release authority is explicitly delegated.
 
-Pull requests that target `main` directly and do not come from same-repository `release/*` branches are rejected by repository rulesets and maintainer review. Do not add a `pull_request_target` workflow for branch routing unless a separate security review explicitly accepts the added privileged automation surface.
+Pull requests that target `main` and do not come from `dev` should be retargeted to `dev` or closed unless a maintainer deliberately chooses a separate stabilization branch for that release. Do not add a `pull_request_target` workflow for branch routing unless a separate security review explicitly accepts the added privileged automation surface.
 
 This policy exists because CI and release infrastructure are part of the supply chain. The May 2026 TanStack npm compromise chained a `pull_request_target` trust-boundary issue, GitHub Actions cache poisoning, and token access into malicious package releases. Ganbaru AI keeps release authority, signing jobs, release tags, and updater metadata behind explicit maintainer controls for the same class of risk. See TanStack's postmortem: <https://tanstack.com/blog/npm-supply-chain-compromise-postmortem>.
 
@@ -83,9 +82,9 @@ Use concise PR titles because they become release-note entries. Labels control c
 
 ## Publishing
 
-1. Update the app version in `apps/client/package.json`, `apps/client/src-tauri/Cargo.toml`, and `apps/client/src-tauri/tauri.conf.json` on a release branch from `dev`.
+1. Update the app version in `apps/client/package.json`, `apps/client/src-tauri/Cargo.toml`, and `apps/client/src-tauri/tauri.conf.json` through a normal pull request into `dev`.
 2. Run `pnpm -w run validate:full`.
-3. Open a release pull request from the release branch into `main`.
+3. Open a release pull request from `dev` into `main`.
 4. Merge the release PR after review and green checks.
 5. Create a tag like `app-v0.1.0` on the release commit.
 6. Push the tag to GitHub.

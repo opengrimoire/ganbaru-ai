@@ -10,11 +10,10 @@ If the live GitHub settings differ from this file, treat that as configuration d
 
 Rulesets are the enforcement layer for branch and tag movement. GitHub Actions workflows must not be used to enforce branch routing, especially through `pull_request_target`, unless a separate security review explicitly accepts the added privileged automation surface.
 
-This document defines these four rulesets:
+This document defines these three rulesets:
 
 - `protect main`
 - `protect dev`
-- `protect release branches`
 - `protect release tags`
 
 ## Table of contents
@@ -22,14 +21,13 @@ This document defines these four rulesets:
 - [Roles](#roles)
 - [protect main](#protect-main)
 - [protect dev](#protect-dev)
-- [protect release branches](#protect-release-branches)
 - [protect release tags](#protect-release-tags)
 - [Required adjacent settings](#required-adjacent-settings)
 - [Review cadence](#review-cadence)
 
 ## Roles
 
-`Organization admin` is the current GitHub bypass actor for release branches and release tags. It maps to the organization owner today. Do not use `Write`, `Maintain`, `Repository Admin`, or `Deploy keys` for release bypass unless this policy is deliberately changed.
+`Organization admin` is the current GitHub bypass actor for release tags and the protected release environment. It maps to the organization owner today. Do not use `Write`, `Maintain`, `Repository Admin`, or `Deploy keys` for release bypass unless this policy is deliberately changed.
 
 `Project maintainer` means a trusted maintainer with write or maintain access for normal repository work. Today this is expected to be the same person as the organization admin unless access is deliberately delegated.
 
@@ -37,7 +35,7 @@ Do not grant write, maintain, or admin access casually. If more maintainers are 
 
 ## protect main
 
-Purpose: keep `main` as the audited release source branch. It should move only through release pull requests from same-repository `release/*` branches, and a merge to `main` must not publish by itself.
+Purpose: keep `main` as the audited release source branch. It should move through release pull requests from `dev`, and a merge to `main` must not publish by itself.
 
 Ruleset basics:
 
@@ -83,7 +81,7 @@ Rationale:
 - `main` is a release staging boundary, not the daily integration branch.
 - Release publication happens only from `app-v*` tags and a protected release environment.
 - Merge commits on `main` are intentional because release pull requests are promotion events from `dev` to `main`.
-- `Require linear history` is off because release pull requests should keep the release branch boundary and preserve useful pull request history for generated release notes.
+- `Require linear history` is off because release pull requests should preserve useful pull request history for generated release notes.
 - `Require merge queue` is off because release pull requests are low volume and the current required checks do not run on `merge_group`.
 - `Require deployments to succeed` is off because the protected `release` environment belongs to the tag-based release workflow after `main` is updated, not to the branch merge gate.
 - `Require signed commits` is enabled on `main` after SSH commit signing was configured locally and a test commit verified successfully on GitHub.
@@ -145,48 +143,6 @@ Rationale:
 - Code scanning and code quality gates should stay off until they are configured, stable, and documented.
 - PR title conventions carry release note quality better than a branch-level commit metadata regex.
 - `Restrict branch names` is off because the ruleset target already narrows the branch namespace to `dev`.
-
-## protect release branches
-
-Purpose: prevent untrusted users from creating or changing same-repository release preparation branches.
-
-Ruleset basics:
-
-- Ruleset type: branch.
-- Enforcement: active.
-- Bypass list: `Organization admin`, with `Always allow`.
-- Target branches: include `release/*`.
-
-Branch rules:
-
-- [x] Restrict creations.
-- [x] Restrict updates.
-- [x] Restrict deletions.
-- [ ] Require linear history.
-- [ ] Require merge queue.
-- [ ] Require deployments to succeed.
-- [ ] Require signed commits.
-- [ ] Require a pull request before merging.
-- [ ] Require status checks to pass.
-- [x] Block force pushes.
-- [ ] Require code scanning results.
-- [ ] Require code quality results.
-- [ ] Automatically request Copilot code review.
-
-Restrictions:
-
-- [ ] Restrict commit metadata.
-- [ ] Restrict branch names.
-
-Rationale:
-
-- Release branches are privileged because they are the only accepted source for pull requests into `main`.
-- The organization admin needs to create and update these branches directly during release preparation.
-- The branch still gets reviewed through the release PR into `main`.
-- Release branches are source branches for release PRs, not protected integration targets.
-- Release branch history is short-lived and controlled by the organization admin, so linear history is not required.
-- Commit signing should be enabled here only after it is enabled successfully for `main`.
-- `Restrict branch names` is off because the ruleset target already narrows the branch namespace to `release/*`.
 
 ## protect release tags
 
