@@ -35,7 +35,7 @@ Store this repository variable:
 Also configure repository protections:
 
 - Protect `main` so only organization admins can merge release pull requests from `dev`. Require pull requests, required checks, conversation resolution, signed commits if enabled for the organization, and no force-push or deletion.
-- Protect `dev` so normal changes reach it only through pull requests from topic branches. Require pull requests, required checks, conversation resolution, and no direct pushes, force-pushes, or deletion.
+- Protect `dev` so normal changes reach it only through pull requests from topic branches. Require pull requests, signed commits, required checks, conversation resolution, and no direct pushes, force-pushes, or deletion.
 - Protect `app-v*` tags so only organization admins can create, update, or delete release tags.
 - Require review for changes to `.github/workflows/release.yml` and release scripts.
 - In GitHub Actions settings, allow only selected actions and prefer SHA-pinned actions where the repository settings support that policy.

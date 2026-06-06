@@ -109,7 +109,7 @@ Branch rules:
 - [x] Require linear history.
 - [ ] Require merge queue.
 - [ ] Require deployments to succeed.
-- [ ] Require signed commits.
+- [x] Require signed commits.
 - [x] Require a pull request before merging.
   - Required approvals: 0 while the repository has a single maintainer.
   - [ ] Dismiss stale pull request approvals when new commits are pushed.
@@ -137,7 +137,8 @@ Rationale:
 
 - All normal work should be visible in pull requests.
 - Squash merges keep `dev` readable while preserving the original PR as review history.
-- `dev` should not require release-specific controls such as signed release commits or deployment gates.
+- `dev` requires signed commits so unsigned history cannot accumulate and later block promotion into `main`.
+- `dev` should not require release-specific controls such as deployment gates.
 - `Require merge queue` is off because traffic is currently low and required checks do not run on `merge_group`.
 - Review requirements that need another reviewer stay off while the repository has one maintainer. Raise them before granting write access to more maintainers.
 - Code scanning and code quality gates should stay off until they are configured, stable, and documented.
