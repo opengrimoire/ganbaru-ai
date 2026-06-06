@@ -8,10 +8,6 @@ on:
   merge_group:
     types:
       - checks_requested
-  push:
-    branches:
-      - main
-      - dev
 
 concurrency:
   group: check-${{ github.workflow }}-${{ github.ref }}
