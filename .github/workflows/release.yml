@@ -90,8 +90,8 @@ jobs:
         run: node apps/client/scripts/stage-tauri-release-assets.mjs
 
       - name: upload unsigned assets
-        # actions/upload-artifact v5
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        # actions/upload-artifact v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: unsigned-${{ matrix.artifact }}
           path: dist/release-assets/*
@@ -132,8 +132,8 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: download unsigned assets
-        # actions/download-artifact v6
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        # actions/download-artifact v7.0.0
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
           pattern: unsigned-*
           path: dist/release-assets
@@ -146,8 +146,8 @@ jobs:
         run: node apps/client/scripts/sign-tauri-release-assets.mjs
 
       - name: upload signed assets
-        # actions/upload-artifact v5
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        # actions/upload-artifact v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: signed-release-assets
           path: dist/release-assets/*
@@ -184,8 +184,8 @@ jobs:
         run: node apps/client/scripts/release-metadata.mjs
 
       - name: download signed assets
-        # actions/download-artifact v6
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        # actions/download-artifact v7.0.0
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
           name: signed-release-assets
           path: dist/release-assets
