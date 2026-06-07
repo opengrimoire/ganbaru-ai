@@ -45,6 +45,7 @@ Also configure repository protections:
 - Protect `app-v*` tags so only organization admins can create, update, or delete release tags.
 - Require review for changes to `.github/workflows/release.yml` and release scripts.
 - In GitHub Actions settings, allow only selected actions and prefer SHA-pinned actions where the repository settings support that policy.
+- Keep the `check` workflow on pull requests and merge queue checks, not branch push checks. Direct branch updates are blocked by rulesets, so branch push checks only add a redundant post-merge run.
 
 The exact intended rulesets, including disabled fields and rationale, live in `docs/rulesets.md`.
 
