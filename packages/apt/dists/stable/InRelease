@@ -4,35 +4,39 @@ Hash: SHA512
 Architectures: amd64
 Codename: stable
 Components: main
-Date: Sat, 06 Jun 2026 23:37:09 +0000
+Date: Sun, 07 Jun 2026 01:03:56 +0000
 Label: Ganbaru AI
 Origin: Ganbaru AI
 Suite: stable
 MD5Sum:
- 9de5f46a6c14d2bc20534eaba1c8bdb6              469 main/binary-amd64/Packages
- aff349294c615a70ca671e4ec3f8e540              358 main/binary-amd64/Packages.gz
+ ba913459fd60295b6f2326b9f706a2e6             1082 Release
+ 8d466a14c547aab8cb377932edc5538b              469 main/binary-amd64/Packages
+ e61434d9aa69ec4a68aa99d65dfb92d7              360 main/binary-amd64/Packages.gz
 SHA1:
- 0a2df3b675f7af0e355a9401853c94f5f567799b              469 main/binary-amd64/Packages
- c1b6e7d7a19113e051fcb58b630b878b9a989230              358 main/binary-amd64/Packages.gz
+ 6a76fe416f4356a587f2d90fc58341f913b7fee1             1082 Release
+ 89aff664898463f843ab369ed8e077048a6b0f62              469 main/binary-amd64/Packages
+ 90646185e85a77810786bf25c57f943abc41bab2              360 main/binary-amd64/Packages.gz
 SHA256:
- d2d70efd905a9e3f03ea828f64c9a188eb8eae0330bb1f19a9c24e42da2e50c4              469 main/binary-amd64/Packages
- f8cafb31ccf33921bdd427c74345b8c7eb1e1e73fbff5eb6b4d4ed1c9866e0d0              358 main/binary-amd64/Packages.gz
+ b5e0ff37d6c165ed58fde63ec434e8e2a9e9ce5fde3266fdfe0b114555f4195a             1082 Release
+ cd865055b9cbcb3d2da49187b9bfa2ca2d627fcafd6746a02613b257be17d261              469 main/binary-amd64/Packages
+ 4649c31ec18aef771ebab2862eb4e605cd6e79f73e00098a16563163178df232              360 main/binary-amd64/Packages.gz
 SHA512:
- a7f535fa16c4b22ab70be794d6e901dfb8e5fa40b05092bbb1165f8640789bf509773e237bedc16623d35a263b7d7c53c60e7ac38f96fc229cec866bf2f85c9e              469 main/binary-amd64/Packages
- a2caa30127710f9cb2c7f4dfc462edcc0ba45a909f88b12cb4df1a80abd8548eab8db0f660985197facb0184f00b663b1d3c6ed4cac0e9b77eb72aa631434943              358 main/binary-amd64/Packages.gz
+ 90f6d72549a49ae43e8e6cdedb27adce713e22a4427f88d381121964a69612ee24ecd6061a5ec3705036c2c15989e415bf7b4c7c0846228e5ca4e5e69e04dccc             1082 Release
+ 65d2f039f0336947f11d8d28a4e7fb20f64dc761f247e950d335e4dc2a0d0685054f8c462438d3627582fd669328a27c3e24c1492871aed8dd01697397adeb1b              469 main/binary-amd64/Packages
+ f991a0d2e7fcc038d409fbcca4966c114d945a06f48761967fc5f08c4aa03312510a545edc0ac1f3ac7a9a391df6a19c7723b3fdfcc0f74775cdfcfa8eb59472              360 main/binary-amd64/Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iQIzBAEBCgAdFiEEBMAHv6rSxNVkeE3EzKJg2pIzX+AFAmokryYACgkQzKJg2pIz
-X+AaJQ/9GpgkrdKGREyGqpHHjhAPZZfPavY7NxuIBDCNgheRdVa7aFV9Z1Dg/nAA
-YZI8IpSGn6537QEJVf1WKy+xvzRNFbwcj8D+eGgViGodvpnWBRbk7e1iUOsF32hd
-BILZuUnZ5zpbrJIgFVX39mNbKGiSi8syOs4g/DB6vA0Hvd1ER0t+gbB+ictFGIW1
-qJJDIr0GMH7csfE2ay30fAwnYSdUvhywg6ADU7KiRD0uFGmvo/U8fEAKMu+BH/7f
-D5pQsR2fkTKTWYHHPTjDvvpoZr7SkwpF92oXeS3anV22djvTnup1zzGbBojT/7iz
-q+tz+vo5htbQECfBqwlhtSX1Ett7MixsfP/+oNPd1Rxqaq5w5iEtW+i+BVA/rLxu
-PpQPi5qtyX5jJrbrTnnX4MQYp7yyfPFIuOoT2kngsaykBOMEKS7+NcweCkIMsUKK
-FD8LFNBI/TCA6d9Yh6vtRI/i0Q94aRm35j98QW245wpMEgUjh0e80tCoXrAUk4ZL
-XoVl6lTbq2iU6WWNrXLgvBH9WjdlCX2BAV31OPtEsMZgY9HSOI3c1rcbptL+bm6F
-KrHs5vaTBJ1KVjeO4GzXyfuLen24Wrzq0qDkY8IJyiYTsf4f5Nyrqt8tX5a9Ezc0
-EixS7Ih1inYb2YKdfqJZxd03yHMSuBlqe1FSQLOnplkHfqSWYTo=
-=Wlju
+iQIzBAEBCgAdFiEEBMAHv6rSxNVkeE3EzKJg2pIzX+AFAmokw30ACgkQzKJg2pIz
+X+D9bxAAlEO9DnzOXGth4NMUj89b+SJQLFqiXVfrdRwCwDtl5DRJgT7wESBeH/CM
+3O/UuTQgyFBMsY9VDUaQou+GwjBCBxK41kX51sQY9beFzcdYv6OuojvIfKmjMrQ8
+unemn7GkjIXOheNcAqRo0CQWH9t9+ZskIGrxxyNp5AKYFu/zBwQuBo+gmxTliPGP
+skDYAEiBfsMropxbW+BcYVzC87fJYy4z0sASw/xsS34UqTUAxV0IUZdiRa2FagGU
+wGdbJjq6peUfvZtAVumHjgv+wUAIG0H6lqa5yl2MDL5J3UPgEZJqISLDHhfIY1nc
+ZBuCZ22LVjMv6nwNRbuciwAUT9lUGtHVEgj8bB4fQn2L4Z/PB32UW8uSrYGNKHJb
++ox0pefPA1PFfZhYtIEciBGeTCK6RTssAczFHABOFuWa6OAtLcnsfuIsPEMknp0U
+m+rabbFZhC68koVIKSg+P1xWEPmFOyLYQTuuNLhUgl5JR/GuwcxxWRgsCVOVaWg/
++p1ApRI9i45F0ptWc5LeGpme7MFSdef4AzVKDWvC1CCXh1NvX4kMaFwCp1Ffe81z
+I3XChTb6VZ+KcmiGP0BXdB2wPbNVV9u2Xz+6FYBvQ7+jGiOyKaldbB/s6Nblt+if
+pVStlA7R5ZmL35xPzdoziqwccgSiq0q7zSly3PIoz5GHa8wl4AI=
+=sbWX
 -----END PGP SIGNATURE-----
