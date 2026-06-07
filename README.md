@@ -37,11 +37,14 @@ Download the latest release from [GitHub Releases](https://github.com/opengrimoi
 |---|---|
 | **Ubuntu, Debian, Linux Mint** | `.deb` package |
 | **Fedora, RHEL, openSUSE** | `.rpm` package |
+| **Arch Linux, Manjaro, EndeavourOS, Garuda** | `ganbaru-ai-bin` from the AUR |
 | **Other Linux x64 desktops** | `.AppImage` |
 | **Windows 10 or Windows 11 x64** | `.msi` installer, or the `.exe` setup if preferred |
 | **macOS** | Not available yet. macOS builds are planned, but they need Apple hardware and signing before release. |
 | **Android** | Not available yet. Android support is planned soon after the current desktop release path settles. |
 | **iOS** | Not available yet. iOS depends on the same Apple build and signing path as macOS. |
+
+Arch-based distro users can install with `yay -S ganbaru-ai-bin` or another AUR helper.
 
 Use `SHA256SUMS` if you want to check that your downloaded installer matches the checksum published with this release. The `.sig` files and `latest.json` are used by Ganbaru AI's built-in updater, not files you need to download.
 

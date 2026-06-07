@@ -210,7 +210,7 @@ Protected environment:
 
 - Environment name: `release`.
 - Required reviewers: the organization owner, or a dedicated release team if release authority is delegated later.
-- Environment secrets: Tauri updater signing private key and password, plus package repository GPG private key and passphrase.
+- Environment secrets: Tauri updater signing private key and password, package repository GPG private key and passphrase, plus the dedicated AUR publish SSH private key.
 - Do not expose signing secrets to build or test jobs.
 
 Workflow policy:
