@@ -29,6 +29,7 @@ export interface UpdateInstallContext {
 }
 
 export type UpdatePrimaryAction = "self-updater" | "copy-command" | "release-page";
+export type AutomaticUpdateCheckKind = "startup" | "periodic";
 
 /**
  * Normalize a stored update check timestamp.
@@ -49,14 +50,18 @@ export function parseStoredUpdateCheckAt(value: unknown): string | null {
  * @param enabled User preference for automatic update notifications.
  * @param lastCheckAt Last attempted automatic check timestamp.
  * @param nowMs Current wall-clock timestamp.
- * @returns Whether the daily check should run now.
+ * @param kind Startup checks run once per app launch. Periodic checks use the
+ * daily timestamp gate for long-running sessions.
+ * @returns Whether the automatic check should run now.
  */
 export function shouldRunAutomaticUpdateCheck(
   enabled: boolean,
   lastCheckAt: string | null,
   nowMs = Date.now(),
+  kind: AutomaticUpdateCheckKind = "periodic",
 ): boolean {
   if (!enabled) return false;
+  if (kind === "startup") return true;
   if (!lastCheckAt) return true;
 
   const lastCheckMs = Date.parse(lastCheckAt);

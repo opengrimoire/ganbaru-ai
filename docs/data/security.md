@@ -90,7 +90,7 @@ The app does not send analytics, telemetry, crash reports, or usage data. Networ
 - Sync goes to the user's chosen Hocuspocus server.
 - AI calls go to the user's chosen provider (OpenAI API, OpenAI-compatible provider, another explicitly configured provider, or local Ollama).
 - Doomscrolling extension only talks to the local Tauri backend.
-- Release builds check the configured GitHub Releases feed at most once per day by default to notify the user when an update is available. Users can turn this off in Settings, Updates. The app never downloads or installs updates until the user chooses that action. Linux package-manager installs (`.deb`, `.rpm`, and AUR packages) do not expose in-app installation because the Linux updater artifact is the AppImage. They show a copyable package-manager command instead, and the app never executes `sudo` or package-manager commands.
+- Release builds check the configured GitHub Releases feed once on app launch by default to notify the user when an update is available. A long-running app process repeats the automatic check daily. Users can turn this off in Settings, Updates. The app never downloads or installs updates until the user chooses that action. Linux package-manager installs (`.deb`, `.rpm`, and AUR packages) do not expose in-app installation because the Linux updater artifact is the AppImage. They show a copyable package-manager command instead, and the app never executes `sudo` or package-manager commands.
 - The update prompt can open the matching GitHub Release page in the default browser. The Tauri opener permission is scoped to Ganbaru AI release pages, not broad HTTP or HTTPS URL opening.
 - No crash report, no usage analytics, no font loading from CDNs, no analytics scripts in the webview.
 
