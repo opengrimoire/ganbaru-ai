@@ -5,6 +5,7 @@ import { formatNumber } from "$lib/i18n/formatters";
 import { getLocalization } from "$lib/i18n/translator.svelte";
 import {
   DEFAULT_AUTO_UPDATE_NOTIFICATIONS,
+  type AutomaticUpdateCheckKind,
   type UpdateInstallContext,
   errorText,
   parseStoredUpdateCheckAt,
@@ -30,6 +31,10 @@ const LAST_AUTO_UPDATE_CHECK_AT_CONFIG_KEY = "updates.lastAutoCheckAt";
 
 interface CheckForUpdatesOptions {
   automatic?: boolean;
+}
+
+interface CheckAutomaticallyOptions {
+  kind?: AutomaticUpdateCheckKind;
 }
 
 function loadAutoUpdateNotifications(): boolean {
@@ -60,7 +65,7 @@ class UpdateManagerStore {
   lastAutoCheckAt = $state<string | null>(loadLastAutoCheckAt());
   promptDismissed = $state(false);
   installContext = $state<UpdateInstallContext | null>(null);
-  private automaticCheckStarted = false;
+  private automaticCheckPromise: Promise<void> | null = null;
   private installContextCheck: Promise<UpdateInstallContext> | null = null;
 
   constructor() {
@@ -160,14 +165,30 @@ class UpdateManagerStore {
     })} ${units[unitIndex]}`;
   }
 
-  async checkAutomatically(): Promise<void> {
-    if (import.meta.env.DEV || this.automaticCheckStarted) return;
-    if (!shouldRunAutomaticUpdateCheck(this.autoNotifications, this.lastAutoCheckAt)) {
+  async checkAutomatically(options: CheckAutomaticallyOptions = {}): Promise<void> {
+    if (import.meta.env.DEV || this.automaticCheckPromise) return;
+    if (
+      this.status === "available"
+      || this.status === "downloading"
+      || this.status === "installed"
+    ) {
+      return;
+    }
+    if (
+      !shouldRunAutomaticUpdateCheck(
+        this.autoNotifications,
+        this.lastAutoCheckAt,
+        Date.now(),
+        options.kind ?? "startup",
+      )
+    ) {
       return;
     }
 
-    this.automaticCheckStarted = true;
-    await this.checkForUpdates({ automatic: true });
+    this.automaticCheckPromise = this.checkForUpdates({ automatic: true }).finally(() => {
+      this.automaticCheckPromise = null;
+    });
+    await this.automaticCheckPromise;
   }
 
   async checkForUpdates(options: CheckForUpdatesOptions = {}): Promise<void> {

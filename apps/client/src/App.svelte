@@ -16,6 +16,7 @@
   import { getZoom } from "$lib/stores/zoom.svelte";
   import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
   import { getUpdateManager } from "$lib/stores/updates.svelte";
+  import { UPDATE_AUTO_CHECK_INTERVAL_MS } from "$lib/stores/updates";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { getDetachedWindows } from "$lib/stores/detached-windows.svelte";
   import { selectActivePomodoroBlock } from "$lib/stores/pomodoro-scheduler";
@@ -185,8 +186,13 @@
     perfMark("boot.app-mount");
     const automaticUpdateCheckTimerId = isMainWindow
       ? setTimeout(() => {
-        void updates.checkAutomatically();
+        void updates.checkAutomatically({ kind: "startup" });
       }, AUTOMATIC_UPDATE_CHECK_DELAY_MS)
+      : null;
+    const automaticUpdateCheckIntervalId = isMainWindow
+      ? setInterval(() => {
+        void updates.checkAutomatically({ kind: "periodic" });
+      }, UPDATE_AUTO_CHECK_INTERVAL_MS + AUTOMATIC_UPDATE_CHECK_DELAY_MS + 1_000)
       : null;
     if (isMainWindow) {
       listen("calendar-notification-open", () => {
@@ -295,6 +301,7 @@
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("focus", checkZone);
       if (automaticUpdateCheckTimerId) clearTimeout(automaticUpdateCheckTimerId);
+      if (automaticUpdateCheckIntervalId) clearInterval(automaticUpdateCheckIntervalId);
       clearTimeout(startupMemoryTimerId);
       clearInterval(zoneIntervalId);
       if (desktopBlockerIntervalId) clearInterval(desktopBlockerIntervalId);
