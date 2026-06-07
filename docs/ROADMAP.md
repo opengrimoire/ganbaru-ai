@@ -12,8 +12,8 @@ The minimum viable cycle: plan sessions, focus with a timer, track tasks.
 
 - Monorepo scaffold: Turborepo + pnpm workspaces + Tauri v2 + Svelte 5 + Vite
 - SQLite setup through Rust commands with initial schema (calendar events, pomodoro configs, pomodoro runs, tasks)
-- Calendar with session blocks: day/week/month views, drag-and-drop event creation and resizing, session blocks carrying task references and Pomodoro counts
-- Basic Pomodoro timer: configurable focus/break durations, cycle counting per session block, timer state in Svelte runes, auto-start when session block activates
+- Calendar with session blocks: day/week/month views, drag-and-drop event creation and resizing, session blocks carrying task references and Pomodoro rhythm settings
+- Basic Pomodoro timer: configurable focus/break durations, simple cycle counting per session block, timer state in Svelte runes, auto-start when session block activates
 - Basic personal Kanban: four default columns (backlog, to do, in progress, done), task cards with priority tiers (easy/medium/hard/epic), estimated Pomodoro count, drag-and-drop reordering (svelte-dnd-action), task-to-session-block linking
 - UI shell: shadcn-svelte component setup, global CSS theme variables, main window layout with navigation between calendar/kanban views
 
@@ -258,6 +258,7 @@ The general-user AI path, advanced AI capabilities, and external access layer. B
 - BYOK configuration UI: API key management (stored locally), model selection, provider setup with guided instructions, consent controls
 - Natural language calendar management: "move my 3pm session to tomorrow", AI modifies events via CLI
 - Mood-aware motivation: using diary mood/energy baselines, AI adapts communication and suggests schedule adjustments
+- Adaptive Pomodoro rhythm recommendations: local-only analysis of focus rhythm outcomes, custom cadence experiments, and opt-in automatic tuning bounded by recovery and satisfaction guardrails
 - Content-specific browsing relevance detection: LLM analyzes page content (not just URLs) for task relevance, smarter blocking on YouTube and similar platforms
 - Local LLM diary analysis: small local models (via Ollama) analyze diary language for goal-setting, reflection quality, mood trends, no data leaves the device
 - MCP server: exposes Ganbaru AI data to external AI clients (ChatGPT, teammate agents, and other MCP-compatible clients) that don't run locally
@@ -315,6 +316,7 @@ Every system from the product spec is accounted for:
 | BYOK chat widget (OpenAI, compatible APIs, Ollama)               | 11            |
 | AI: natural language calendar management                         | 11            |
 | AI: mood-aware motivation                                        | 11            |
+| Adaptive Pomodoro rhythm recommendations                         | 11            |
 | AI: content-specific blocking                                    | 11            |
 | AI: local LLM diary analysis                                     | 11            |
 | MCP server/client (external AI access)                           | 11            |

@@ -2,13 +2,28 @@
 
 A pomodoro session writes data to four history tables: `pomodoro_runs`, `pomodoro_segments`, `pomodoro_pauses`, and `pomodoro_run_events` (see `data/schema.md`). The run row is the session header, segments are the actual phases that ran, pauses are interruptions within segments, and run events are the audit trail for lifecycle decisions such as skip break, focus extension, reconfigure, transition, stop, complete, and crash recovery. The user-facing pomodoro mechanics in `features/pomodoro.md` are implemented on top of this structure.
 
-A core decision in this design: the **plan** for a session (the schedule of focus and break phases) is **never stored**. It is derived on demand from the run's config snapshot and inherited state. Segments record what actually happened. Comparing actuals to the derived plan gives plan-vs-actual analysis without ever needing a plan table.
+A core decision in this design: the **plan** for a session (the schedule of focus and break phases) is **never stored**. It is derived on demand from the run's config snapshot, break-plan snapshot, adaptive-policy snapshot, and inherited state. Segments record what actually happened. Comparing actuals to the derived plan gives plan-vs-actual analysis without ever needing a plan table. The future adaptive recommendation and experimentation model is defined in `algorithms/pomodoro-adaptive-rhythm.md`.
 
 This doc explains how that derivation works, why segments are written lazily, what the inherited fields mean, and how pauses fit in. Worked examples cover the common scenarios.
 
+## Rhythm configuration shape
+
+The current implementation stores a simple count-based rhythm: `focus_duration_minutes`, `short_break_minutes`, `long_break_minutes`, and `pomodoro_count`. That should be treated as the first storage shape for a broader focus rhythm model.
+
+The target rhythm model has these conceptual parts:
+
+| Part | Meaning |
+|------|---------|
+| Focus duration policy | Fixed duration today, later either a bounded per-position list or an adaptive recommendation for future focus phases. |
+| Break plan | The rule that chooses the next break after a focus phase. The simple plan is "long break after N focus periods"; custom plans can be repeating sequences such as short, short, long. |
+| Break durations | Short and long durations today, later optional per-break durations inside a custom plan. |
+| Adaptive policy | Fixed, assisted recommendations, or opt-in automatic tuning. Automatic tuning can change future phases, but not historical segments. |
+
+The data model can evolve from the current scalar columns to explicit break-plan fields later. The invariant remains the same: active runs snapshot the rhythm they are using so history is explainable even if the event's future config changes.
+
 ## Plan vs segments
 
-Given a run's `started_at`, config snapshot (`focus_duration_minutes`, `short_break_minutes`, `long_break_minutes`, `pomodoro_count`), and inherited state (`inherited_focus_minutes`, `inherited_cycle`), the planned schedule is fully deterministic:
+Given a run's `started_at`, rhythm snapshot, and inherited state (`inherited_focus_minutes`, `inherited_cycle`), the planned schedule is fully deterministic for fixed plans. The current simple count-based derivation is:
 
 - If `inherited_focus_minutes >= focus_duration_minutes`: the first phase is a break. Short break if `inherited_cycle < pomodoro_count`, long break otherwise.
 - If `0 < inherited_focus_minutes < focus_duration_minutes`: the first phase is focus, lasting `focus_duration_minutes - inherited_focus_minutes` minutes (the remaining focus needed to complete the current cycle).
@@ -22,6 +37,10 @@ After the first phase, the standard cycle rules apply using the run's config:
 
 Repeating these rules produces the planned schedule for the rest of the session.
 
+For future custom break plans, replace the `cycle < pomodoro_count` test with a break-plan lookup. A break plan answers "what break is owed after focus position N?" For example, the simple default maps positions 1, 2, and 3 to short break and position 4 to long break, then repeats. A custom `short, long` plan maps odd positions to short break and even positions to long break. A custom plan with per-position durations returns both the break type and the duration.
+
+Adaptive plans must remain deterministic from the persisted snapshot and recorded adaptation events. A recommendation engine may choose a new duration for a future phase, following `algorithms/pomodoro-adaptive-rhythm.md`, but once that phase is started, the chosen value is written into the segment's `planned_end` and the reason is recorded in `pomodoro_run_events`. Later analytics should be able to answer both "what happened?" and "why did the app choose this plan?"
+
 This derivation covers all run origins:
 
 - **Fresh session** (`new_session`): inherited values are 0 and 1, so the first phase is a full-length focus at cycle 1. This includes restarts after any stop, because concentration is assumed broken.
@@ -29,6 +48,16 @@ This derivation covers all run origins:
 - **Reconfiguration**: inherited values carry the position within the reconfigured run. The bridge segment (same phase as the interrupted one, with the remaining time from the old config) is the first actual segment of the new run.
 
 Storing plan rows would duplicate this information and create a synchronization problem: every block transition and reconfiguration would have to update both the inherited fields and the plan rows, with the risk of them diverging silently. By keeping the plan derived, the inherited fields are the only source of truth.
+
+### Custom and adaptive plan constraints
+
+Flexible plans should not make the timer feel unpredictable. The derivation rules must keep these constraints:
+
+- Phase changes are decided at boundaries. A running focus period is not shortened by an adaptive update unless the user explicitly asks to go to break now.
+- User-visible predictions should be stable for the current phase. Future projected breaks may move after a reconfiguration or adaptive decision, but past segments never change.
+- Custom plans are bounded patterns, not arbitrary scripts. A break plan can choose among known break types and durations, but it cannot run side effects or depend on network services.
+- A skipped break still creates no break segment row. The skip remains an event in `pomodoro_run_events`.
+- A custom or adaptive plan must still respect the calendar event end. The calendar window clips the plan.
 
 ### Inherited focus during a break phase
 
@@ -144,6 +173,8 @@ Events written by the timer include:
 | `crash_recovery` | Recovery closes a run left open by a crash. |
 
 Focus extension updates the active focus segment's `planned_end` and writes an `extend_focus` event with the extension duration in seconds. This preserves both the visible plan change and the behavioral decision that caused it.
+
+Future adaptive rhythm changes should add an explicit run event, for example `adapt_rhythm`, carrying the previous value, selected value, bounded reason code, and whether the user accepted, rejected, or automatically allowed the change. The event should avoid storing sensitive free-form diary text; analytics can join to local structured diary signals when needed.
 
 ## Worked examples
 

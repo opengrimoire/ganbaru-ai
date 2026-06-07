@@ -94,7 +94,7 @@ The primary component source. Generates component source code directly into the 
 
 ### Calendar widget
 
-The calendar and scheduler component. Handles day/week/month views, drag-and-drop event creation and resizing, overlapping event layout, and multi-day event spanning (the parts that would take months to build correctly from scratch). Has a native Svelte adapter and supports injecting custom Svelte components for event rendering, which is how the calendar integrates with the rest of the app's state. Calendar events ("session blocks") carry references to Pomodoro counts,s work environment configs, and playlist assignments.
+The calendar and scheduler component. Handles day/week/month views, drag-and-drop event creation and resizing, overlapping event layout, and multi-day event spanning (the parts that would take months to build correctly from scratch). Has a native Svelte adapter and supports injecting custom Svelte components for event rendering, which is how the calendar integrates with the rest of the app's state. Calendar events ("session blocks") carry references to Pomodoro rhythm settings, work environment configs, and playlist assignments.
 
 ### svelte-dnd-action
 

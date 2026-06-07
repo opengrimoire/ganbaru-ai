@@ -175,10 +175,12 @@ One row per timed calendar event with Pomodoro enabled. All-day events cannot ha
 | `focus_duration_minutes` | integer | Focus period length. |
 | `short_break_minutes` | integer | Short break length. |
 | `long_break_minutes` | integer | Long break length. |
-| `pomodoro_count` | integer | Cycles before a long break. |
+| `pomodoro_count` | integer | Focus periods before a long break in the current simple count-based rhythm. |
 | `idle_timeout_minutes` | integer or null | Auto-pause threshold. Null disables idle detection for this event. |
 
 Built-in presets the UI can apply: automatic (40/5/10), deep focus (40/5/10), creative (25/5/15), extended (50/10/10), custom.
+
+These columns encode the simple break plan described in `features/pomodoro.md`: fixed focus duration, fixed short break, fixed long break, and a long break after N focus periods. A future custom or adaptive rhythm migration must map existing rows to that simple break plan, preserve historical run snapshots, and add explicit plan fields only with a fallback that keeps older count-based configs readable. The adaptive data requirements are specified in `algorithms/pomodoro-adaptive-rhythm.md`.
 
 ### `pomodoro_runs`
 
@@ -198,12 +200,12 @@ One row per continuous session of pomodoro work. Created when the timer starts, 
 | `focus_duration_minutes` | integer | Config snapshot. |
 | `short_break_minutes` | integer | Config snapshot. |
 | `long_break_minutes` | integer | Config snapshot. |
-| `pomodoro_count` | integer | Cycles before a long break. Config snapshot. |
+| `pomodoro_count` | integer | Focus periods before a long break in the simple count-based rhythm. Config snapshot. |
 | `idle_timeout_minutes` | integer or null | Idle threshold. Null disables idle detection for this run. Config snapshot. |
 | `last_heartbeat` | ISO datetime | Updated every ~30 seconds while the session is active. Used for crash recovery. |
 | `event_title_snapshot` | text or null | Event title at the time of the run. Preserved for analytics after archival. |
 | `inherited_focus_minutes` | integer | Focus minutes accumulated in the current cycle, carried from the preceding run. 0 for fresh sessions. Non-zero when created by block transition or reconfiguration. |
-| `inherited_cycle` | integer | Cycle number carried from the preceding run. 1 for fresh sessions. Determines whether the next break is short or long. |
+| `inherited_cycle` | integer | Cycle or break-plan position carried from the preceding run. 1 for fresh sessions. Determines which break is owed next in the simple count-based rhythm. |
 | `inherited_from_run_id` | UUID or null | FK to `pomodoro_runs`. The run from which state was inherited. Null for fresh sessions. Enables tracing transition chains in analytics. |
 | `start_trigger` | enum | `manual`, `block_auto`, `block_transition`, `reconfigure`, `crash_recovery`. |
 | `created_at` | ISO datetime | Row creation time. |

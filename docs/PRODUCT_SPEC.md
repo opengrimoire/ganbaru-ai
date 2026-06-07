@@ -46,13 +46,13 @@ Tasks can be linked to calendar session blocks. When a task is marked as done, t
 
 The Pomodoro timer is the heartbeat of the app. Every productivity signal flows through it.
 
-**Session structure:** a standard Pomodoro cycle is 25 minutes of focus followed by a 5-minute break. Every 4 cycles, a longer break (15-30 minutes) occurs. These defaults are configurable. Sessions are grouped into session blocks defined in the calendar.
+**Session structure:** Pomodoro sessions are focus rhythms attached to calendar blocks. The default rhythm can be classic Pomodoro-style focus and break timing, but the long-term product model is more flexible: users can choose how many focus periods earn a long break, and advanced users can define short repeating break patterns or custom durations. Future adaptive settings can recommend focus and break timing from the user's own history, without making the default setup feel complicated. The adaptive direction is a constrained personal optimization problem: maximize useful progress while protecting recovery, happiness, sustainability, and user trust.
 
 **During a focus period:** Doomscrolling is active, the work environment is enforced, screen activity is monitored for productivity analytics (app switches, active tool use, idle time), and the music player continues the focus playlist.
 
 **During a break:** the break screen appears fullscreen (desktop only, covering the taskbar and acting as a custom screen saver). The break screen shows: a countdown timer, session completion stats, an option to extend the break, and the break playlist. On mobile, the break is a notification-based timer without the fullscreen overlay.
 
-**When all Pomodoros in a session block complete:** the system transitions to the next session block's environment automatically.
+**When a session block ends or transitions:** the system closes or hands off the active rhythm and transitions to the next session block's environment automatically when appropriate.
 
 **Pomodoro data captured per session:** start/end timestamps, task ID, project ID, app-switch count, active creation time vs. passive time, distraction events (blocker triggers, extended breaks), focus quality score (composite of the above). All stored in SQLite.
 
@@ -275,7 +275,7 @@ When a session block's scheduled time arrives, the calendar triggers the work en
 
 ### Calendar → Pomodoro
 
-Each session block contains a Pomodoro count. When the session block activates, the Pomodoro timer starts automatically with the configured cycle count. The timer knows how many cycles remain in the current block.
+Each session block can contain a Pomodoro rhythm. When the session block activates, the Pomodoro timer starts automatically with the configured focus and break plan. The timer knows the next phase transition, how earned breaks carry across back-to-back blocks, and when the calendar window requires the rhythm to stop or hand off.
 
 ### Calendar → Kanban
 
