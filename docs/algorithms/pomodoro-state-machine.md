@@ -2,7 +2,7 @@
 
 The pomodoro feature's behavior is governed by a small set of pure decision functions. Each function takes the current state (the run, the active segment, recent ticks, the calendar context) and returns a decision (continue, advance, transition, reconfigure, recover, do nothing). The functions have no side effects: they read state and return a decision; the caller applies the decision by writing to the database and updating the UI.
 
-This doc covers the decision functions, why they are pure, the heartbeat that backs crash recovery, the named constants, and the recovery procedure. The user-facing surfaces are in `features/pomodoro.md` and the data model is in `algorithms/pomodoro-segments-and-plan.md` and `data/schema.md`.
+This doc covers the decision functions, why they are pure, the heartbeat that backs crash recovery, the named constants, and the recovery procedure. The user-facing surfaces are in `features/pomodoro.md`, the data model is in `algorithms/pomodoro-segments-and-plan.md` and `data/schema.md`, and the future adaptive optimization model is in `algorithms/pomodoro-adaptive-rhythm.md`.
 
 ## Pure decision functions
 
@@ -29,11 +29,13 @@ The order of checks inside `decideTick` is: suspend first (because a long tick g
 
 Called when `decideTick` returns `advance`.
 
-**Inputs:** the current run, the active segment, the run's config, the cycle position.
+**Inputs:** the current run, the active segment, the run's rhythm snapshot, the cycle or break-plan position.
 
-**Returns:** the next phase (`focus`, `short_break`, `long_break`) and a flag indicating whether to skip (only relevant if `skipNextBreak` is set on the next break).
+**Returns:** the next phase (`focus`, `short_break`, `long_break`), the selected planned duration, and a flag indicating whether to skip (only relevant if `skipNextBreak` is set on the next break).
 
-The rule is straightforward: focus → break (short or long depending on cycle), break → focus (cycle increments after short, resets after long). The `skipNextBreak` flag, if set, causes the function to skip directly from focus to focus, recorded as the absence of a break segment between two focus segments.
+The current simple rule is straightforward: focus → break (short or long depending on cycle), break → focus (cycle increments after short, resets after long). In the target rhythm model, focus completion asks the active break plan which break is owed at the current position. The simple four-focus rhythm is just one break plan: short, short, short, long, repeated. The `skipNextBreak` flag, if set, causes the function to skip directly from focus to focus, recorded as the absence of a break segment between two focus segments.
+
+Adaptive plans can propose a different duration for a future phase, following `algorithms/pomodoro-adaptive-rhythm.md`, but this decision still belongs in `decideAdvancePhase` or `decideReconfigure`, not in the writer. Once selected, the duration is persisted through the segment's planned timestamps and an explanatory run event so the plan remains auditable.
 
 ### `decideTransition`
 
@@ -41,7 +43,7 @@ Called when `decideTick` returns `expire` and the calendar has a consecutive or 
 
 **Inputs:** the ending run, the ending segment, the new event, the time of the transition.
 
-**Returns:** the inherited state (`inherited_focus_minutes`, `inherited_cycle`) for the new run and the first phase of the new run (derived using the new event's config and the inherited state, see `algorithms/pomodoro-segments-and-plan.md` "Plan vs segments").
+**Returns:** the inherited state (`inherited_focus_minutes`, `inherited_cycle`) for the new run and the first phase of the new run (derived using the new event's rhythm snapshot and the inherited state, see `algorithms/pomodoro-segments-and-plan.md` "Plan vs segments").
 
 If the calendar has no consecutive event, `decideTick` returns `expire` directly (without calling `decideTransition`) and the run ends with `end_reason = completed`.
 

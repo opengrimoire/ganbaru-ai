@@ -28,7 +28,7 @@ Granular docs (read the relevant one when working on a feature):
 
 - **docs/features/**: per-feature behavior and UX (calendar, calendar-recurrence, localization, music, doomscrolling, pomodoro, pomodoro-break-screen, pomodoro-idle-detection, pomodoro-progress-displays, plus placeholders for unbuilt features)
 - **docs/data/**: data architecture, schema, invariants, sync, hazards, security
-- **docs/algorithms/**: pure-logic specs (recurrence-expansion, pomodoro-segments-and-plan, pomodoro-state-machine, idle-detection, time-conflict-detection, undo-redo)
+- **docs/algorithms/**: pure-logic specs (recurrence-expansion, pomodoro-adaptive-rhythm, pomodoro-segments-and-plan, pomodoro-state-machine, idle-detection, time-conflict-detection, undo-redo)
 - **docs/interop/**: interoperability plans, standards scope, conformance fixtures, client behavior, and migration strategy for external formats and calendar clients
 
 Docs describe the optimal/ideal end state of the app, not the current implementation. They preserve the "why" behind decisions over time. When implementation work discovers a better product direction than an older spec, update the relevant spec to that improved ideal. When a meaningful feature or behavior has no suitable spec yet, create the smallest appropriate spec instead of leaving design intent only in code or chat. `AGENTS.md` should carry durable repo context for agents; detailed feature behavior belongs in the relevant `docs/features/` or `docs/data/` spec.

@@ -80,7 +80,7 @@ Anchor positioning rules:
 
 Inside the panel, sections are split per concern:
 
-- **PomodoroSection:** toggle pomodoro on or off, pick a preset, override individual config fields. Contains the per-event focus duration, short and long break, pomodoro count, and idle timeout. Hidden for all-day events.
+- **PomodoroSection:** toggle pomodoro on or off, pick a preset, override individual config fields. The current simple editor contains the per-event focus duration, short and long break, long break after N focus periods, and idle timeout. A later advanced rhythm editor can expose custom break sequences without replacing the simple path. Hidden for all-day events.
 - **RecurrenceSection:** pick a preset (none, daily, weekdays, weekly, monthly, yearly) or open the advanced editor for custom RRULEs.
 - **NotificationsSection:** add and remove notification offsets.
 - **MeetingSection:** toggle Meeting on or off, edit location, edit call link, show organizer metadata, show the local user's participation row, and add or remove attendees with role and read-only RSVP status on locally authored events. Imported events with an external organizer keep organizer and attendee rows as read-only metadata until identity and permissions exist. The app must not let users change another attendee's RSVP response unless a future shared-calendar identity model can prove that attendee is the current user.
