@@ -50,7 +50,7 @@ Before opening a release PR:
 5. Summarize the user-facing changes since the previous release.
 6. After review and green pull request checks, add the PR to the `main` merge queue.
 
-After the merge queue lands the release PR in `main`, create and push the matching `app-v*` tag from the release commit. The release workflow builds signed assets and creates or updates a draft GitHub Release with generated notes. Inspect the draft release before publishing.
+After the merge queue lands the release PR in `main`, create and push the matching `app-v*` tag from the release commit. The release workflow builds signed assets and creates or updates a draft GitHub Release with generated notes. Inspect the draft release before publishing. Publishing the GitHub Release updates the apt, RPM, and AUR package paths.
 
 Pull requests that target `main` and do not come from `dev` should be retargeted to `dev` or closed.
 

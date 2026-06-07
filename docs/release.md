@@ -1,6 +1,6 @@
 # Release process
 
-Ganbaru AI releases are published through GitHub Releases. The release workflow builds Linux x64 packages and Windows x64 installers, signs updater assets in a protected job, writes the `latest.json` updater feed, and uploads everything to a draft release for inspection before publishing. After the draft is published, the release workflow updates the GitHub Pages package repository for `.deb` and `.rpm` users.
+Ganbaru AI releases are published through GitHub Releases. The release workflow builds Linux x64 packages and Windows x64 installers, signs updater assets in a protected job, writes the `latest.json` updater feed, and uploads everything to a draft release for inspection before publishing. After the draft is published, the release workflow updates the GitHub Pages package repository for `.deb` and `.rpm` users and publishes the `ganbaru-ai-bin` AUR package for Arch-based users.
 
 The workflow is intentionally conservative:
 
@@ -8,7 +8,8 @@ The workflow is intentionally conservative:
 - Only the publish and package repository jobs get `contents: write`.
 - The Tauri updater private key is used only in the signing job.
 - The package repository GPG private key is used only in the package repository job.
-- The signing, publishing, and package repository jobs use the protected `release` GitHub Environment.
+- The AUR SSH private key is used only in the AUR publish job.
+- The signing, publishing, package repository, and AUR jobs use the protected `release` GitHub Environment.
 - Dependency caches are disabled in release jobs.
 - Third-party release upload actions are not used.
 - GitHub Actions are pinned to full commit SHAs.
@@ -30,6 +31,7 @@ Create a GitHub Environment named `release` before running the workflow. Configu
 - Environment secret `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: the key password, if one was set.
 - Environment secret `GANBARU_AI_PACKAGE_REPO_GPG_PRIVATE_KEY`: the ASCII-armored private key for signing package repository metadata.
 - Environment secret `GANBARU_AI_PACKAGE_REPO_GPG_PASSPHRASE`: the package repository signing key passphrase.
+- Environment secret `AUR_SSH_PRIVATE_KEY`: the dedicated private SSH key that can push to `ssh://aur@aur.archlinux.org/ganbaru-ai-bin.git`.
 
 Store these repository variables:
 
@@ -64,6 +66,8 @@ Keep a backup of the private key in a password manager or another durable secret
 This signing is for Tauri updater verification only. It is not Windows Authenticode signing, so Windows may still warn that the installer is from an unknown publisher until a separate code-signing certificate is added.
 
 The package repository also needs a stable OpenPGP signing key before `.deb` and `.rpm` releases are useful through system package managers. Create or approve that key as a maintainer action, export its ASCII-armored public key into `GANBARU_AI_PACKAGE_REPO_PUBLIC_KEY`, and store the ASCII-armored private key plus passphrase in the protected `release` environment secrets listed above. Losing this key means package-manager users must replace their configured repository key before future apt, dnf, or zypper updates can verify metadata.
+
+The AUR package publish job needs a dedicated SSH key, separate from personal SSH keys. Add the public key to the maintainer's AUR account and store the private key in `AUR_SSH_PRIVATE_KEY` in the protected `release` environment. This key should only have AUR access and should be rotated if it is exposed.
 
 ## Branch flow
 
@@ -105,8 +109,9 @@ Use concise PR titles because they become release-note entries. Labels control c
 10. Download and smoke test the draft release assets.
 11. Inspect generated release notes, `latest.json`, and `SHA256SUMS`.
 12. Publish the draft GitHub Release.
-13. Wait for the `publish package repo` job triggered by the published release event.
+13. Wait for the `publish package repo` and `publish AUR package` jobs triggered by the published release event.
 14. Verify that GitHub Pages serves the updated apt and RPM metadata.
+15. Verify that AUR shows `ganbaru-ai-bin` for the released version.
 
 The workflow also supports manual dispatch from the default branch. On manual dispatch, the workflow creates or updates `app-v<version>` for the current app version at the selected commit. Prefer a pushed tag when publishing a public release because it is easier to audit.
 
@@ -126,7 +131,7 @@ Release builds check the configured GitHub Releases feed at most once per day by
 
 When an update is available, the main window shows a small prompt without a Later button. AppImage and Windows installs show Update and restart, Release notes, and dismiss actions. Update and restart downloads the signed artifact, verifies it through Tauri's updater, installs it, and restarts the app. Linux package-manager installs (`.deb`, `.rpm`, and AUR packages) do not use the Tauri self-updater because the Linux updater artifact is the AppImage. Those installs show Copy command, Release notes, and dismiss actions. Copy command copies the exact package-manager command, such as `sudo apt update && sudo apt install ganbaru-ai`, `sudo dnf upgrade ganbaru-ai`, `sudo zypper refresh && sudo zypper update ganbaru-ai`, `yay -Syu ganbaru-ai-bin`, or `paru -Syu ganbaru-ai-bin`. The app does not execute privileged package-manager commands. Release notes opens the matching GitHub Release page in the default browser, using a Tauri opener permission scoped to Ganbaru AI release pages. Users can also run the same check manually from Settings, Updates.
 
-## Linux package repositories
+## Linux package repositories and AUR
 
 Published releases provide package-manager update paths through the project GitHub Pages site:
 
@@ -137,4 +142,4 @@ Release `.deb` packages install a Deb822 source file at `/etc/apt/sources.list.d
 
 The tag workflow builds and signs the draft release assets first. The package repository is updated only when the GitHub Release is published, through the `publish package repo` job. That job downloads the published `.deb` and `.rpm`, copies them into the Pages repository, regenerates apt and RPM metadata, signs apt `Release` plus RPM `repomd.xml` metadata with the package repository GPG key, and pushes the updated `packages/` directory to `gh-pages`.
 
-AUR remains separate from the Pages package repository. Publish `ganbaru-ai-bin` through the normal AUR process. Ganbaru AI suggests `yay -Syu ganbaru-ai-bin` by default for Arch-like systems and switches to `paru -Syu ganbaru-ai-bin` when `paru` is detected without `yay`.
+AUR remains separate from the Pages package repository. The published `ganbaru-ai-bin` package repackages the released `.deb` artifact and removes the apt repository files that are only useful on Debian-like systems. The release workflow updates `ganbaru-ai-bin` through the `publish AUR package` job after a GitHub Release is published. Ganbaru AI suggests `yay -Syu ganbaru-ai-bin` by default for Arch-like systems and switches to `paru -Syu ganbaru-ai-bin` when `paru` is detected without `yay`.
