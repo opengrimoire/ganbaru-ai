@@ -344,3 +344,73 @@ jobs:
           fi
           git -C dist/pages commit -m "chore: update package repository for $RELEASE_TAG_NAME"
           git -C dist/pages push origin HEAD:gh-pages
+
+  publish-aur:
+    if: github.event_name == 'release' && startsWith(github.event.release.tag_name, 'app-v')
+    name: publish AUR package
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
+      GANBARU_AI_RELEASE_REPOSITORY: ${{ github.repository }}
+    steps:
+      - name: checkout
+        # actions/checkout v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: setup node
+        # actions/setup-node v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "24"
+
+      - name: download Debian release package
+        run: |
+          mkdir -p dist/release-assets
+          gh release download "$RELEASE_TAG_NAME" --pattern "*.deb" --dir dist/release-assets
+
+      - name: configure AUR SSH
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          if [ -z "$AUR_SSH_PRIVATE_KEY" ]; then
+            echo "AUR_SSH_PRIVATE_KEY must be set"
+            exit 1
+          fi
+
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > "$HOME/.ssh/ganbaru-ai-aur-publish"
+          chmod 600 "$HOME/.ssh/ganbaru-ai-aur-publish"
+          printf '%s\n' "aur.archlinux.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEuBKrPzbawxA/k2g6NcyV5jmqwJ2s+zpgZGZ7tpLIcN" > "$HOME/.ssh/known_hosts"
+          ssh -i "$HOME/.ssh/ganbaru-ai-aur-publish" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes aur@aur.archlinux.org help >/dev/null
+
+      - name: clone AUR package
+        run: |
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/ganbaru-ai-aur-publish -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+          mkdir -p dist/aur
+          git clone ssh://aur@aur.archlinux.org/ganbaru-ai-bin.git dist/aur/ganbaru-ai-bin
+          git -C dist/aur/ganbaru-ai-bin config user.name "Victor Benito Garcia Rocha"
+          git -C dist/aur/ganbaru-ai-bin config user.email "victorbenitogr@gmail.com"
+
+      - name: write AUR package files
+        env:
+          GANBARU_AI_AUR_DIR: dist/aur/ganbaru-ai-bin
+        run: node apps/client/scripts/write-aur-package.mjs
+
+      - name: push AUR package
+        run: |
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/ganbaru-ai-aur-publish -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+          git -C dist/aur/ganbaru-ai-bin add PKGBUILD .SRCINFO .gitignore
+          if git -C dist/aur/ganbaru-ai-bin diff --cached --quiet; then
+            echo "AUR package is unchanged"
+            exit 0
+          fi
+          version="${RELEASE_TAG_NAME#app-v}"
+          git -C dist/aur/ganbaru-ai-bin commit -m "update to $version"
+          git -C dist/aur/ganbaru-ai-bin push origin HEAD:master
