@@ -9,7 +9,14 @@ import {
 } from "./updates";
 
 describe("automatic update checks", () => {
-  it("runs when enabled and no previous check exists", () => {
+  it("runs a startup check when enabled even if a previous check exists", () => {
+    const now = Date.UTC(2026, 0, 2);
+    const recent = new Date(now - 1_000).toISOString();
+
+    expect(shouldRunAutomaticUpdateCheck(true, recent, now, "startup")).toBe(true);
+  });
+
+  it("runs a periodic check when enabled and no previous check exists", () => {
     expect(shouldRunAutomaticUpdateCheck(true, null, Date.UTC(2026, 0, 2))).toBe(true);
   });
 
@@ -17,7 +24,7 @@ describe("automatic update checks", () => {
     expect(shouldRunAutomaticUpdateCheck(false, null, Date.UTC(2026, 0, 2))).toBe(false);
   });
 
-  it("waits until the daily interval has elapsed", () => {
+  it("waits until the daily interval has elapsed for periodic checks", () => {
     const now = Date.UTC(2026, 0, 2);
     const recent = new Date(now - UPDATE_AUTO_CHECK_INTERVAL_MS + 1).toISOString();
     const old = new Date(now - UPDATE_AUTO_CHECK_INTERVAL_MS).toISOString();
