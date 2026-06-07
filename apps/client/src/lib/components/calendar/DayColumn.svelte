@@ -430,14 +430,7 @@
     const hh = getRenderedHourHeight();
     const rawMinute = (offsetY / hh) * 60;
     const clickMinute = snapSimpleClickStartMinute(rawMinute);
-    let selectionMinute = clampMinute(snapToGrid(rawMinute, calZoom.gridMinutes));
-
-    if (isToday && currentTimeMinute >= 0) {
-      const currentTimeY = (currentTimeMinute / 60) * hh;
-      if (Math.abs(offsetY - currentTimeY) < getResizeThreshold()) {
-        selectionMinute = Math.floor(currentTimeMinute);
-      }
-    }
+    const selectionMinute = clampMinute(snapToGrid(rawMinute, calZoom.gridMinutes));
 
     return { selectionMinute, clickMinute };
   }
