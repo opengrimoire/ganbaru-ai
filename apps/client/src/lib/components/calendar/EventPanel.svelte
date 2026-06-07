@@ -1721,6 +1721,7 @@
     if (!panelCanDrag) return;
     if (parked) return;
     isDragging = true;
+    userDragged = true;
     dragStart = { x: e.clientX - dragOffset.x, y: e.clientY - dragOffset.y };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
@@ -1728,7 +1729,6 @@
     if (isDragging && panelCanDrag) dragOffset = { x: e.clientX - dragStart.x, y: e.clientY - dragStart.y };
   }
   function handleDragEnd() {
-    if (isDragging) userDragged = panelCanDrag;
     isDragging = false;
   }
 
@@ -1797,6 +1797,7 @@
     onpointerdown={handleDragStart}
     onpointermove={handleDragMove}
     onpointerup={handleDragEnd}
+    onpointercancel={handleDragEnd}
   >
     <div class="flex flex-1 items-center justify-center py-2.5">
       <div class="h-[1.5px] w-9 bg-muted-foreground/50"></div>
