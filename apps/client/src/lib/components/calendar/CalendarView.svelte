@@ -1959,12 +1959,7 @@
       await calendarStore.updateBlock(updated);
       await pomodoro.startFromBlock(
         s.originalEvent.id,
-        {
-          focusMinutes: config.focusDurationMinutes,
-          shortBreakMinutes: config.shortBreakMinutes,
-          longBreakMinutes: config.longBreakMinutes,
-          cyclesBeforeLongBreak: config.pomodoroCount,
-        },
+        config,
         data.end,
         data.start.split(" ")[0],
         config.idleTimeoutMinutes,
@@ -2138,12 +2133,7 @@
     if (!pomodoro.isActive || !activeId || event.id !== activeId || !config) return;
     await pomodoro.startFromBlock(
       activeId,
-      {
-        focusMinutes: config.focusDurationMinutes,
-        shortBreakMinutes: config.shortBreakMinutes,
-        longBreakMinutes: config.longBreakMinutes,
-        cyclesBeforeLongBreak: config.pomodoroCount,
-      },
+      config,
       event.end,
       event.start.split(" ")[0],
       config.idleTimeoutMinutes,

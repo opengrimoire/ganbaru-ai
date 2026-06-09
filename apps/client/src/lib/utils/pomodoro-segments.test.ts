@@ -7,14 +7,12 @@ import {
 } from "./pomodoro-segments";
 import type { PersistedSegment, PomodoroConfig } from "$lib/components/calendar/types";
 import type { TimelineEvent, ActivePomodoroState } from "./pomodoro-segments";
+import {
+  createCustomCountPomodoroConfig,
+  createPresetPomodoroConfig,
+} from "$lib/pomodoro/rhythm";
 
-const DEFAULT_CONFIG: PomodoroConfig = {
-  focusDurationMinutes: 40,
-  shortBreakMinutes: 5,
-  longBreakMinutes: 10,
-  pomodoroCount: 4,
-  idleTimeoutMinutes: null,
-};
+const DEFAULT_CONFIG: PomodoroConfig = createPresetPomodoroConfig("auto");
 
 describe("computePlannedSegments", () => {
   it("returns empty for zero or negative duration", () => {
@@ -25,14 +23,14 @@ describe("computePlannedSegments", () => {
   it("handles single focus period that fits exactly", () => {
     const segments = computePlannedSegments(DEFAULT_CONFIG, 40);
     expect(segments).toEqual([
-      { cycleNumber: 1, phase: "focus", startOffsetMinutes: 0, endOffsetMinutes: 40 },
+      { rhythmPosition: 1, phase: "focus", startOffsetMinutes: 0, endOffsetMinutes: 40 },
     ]);
   });
 
   it("clips focus period when event is shorter than one focus", () => {
     const segments = computePlannedSegments(DEFAULT_CONFIG, 25);
     expect(segments).toEqual([
-      { cycleNumber: 1, phase: "focus", startOffsetMinutes: 0, endOffsetMinutes: 25 },
+      { rhythmPosition: 1, phase: "focus", startOffsetMinutes: 0, endOffsetMinutes: 25 },
     ]);
   });
 
@@ -40,19 +38,19 @@ describe("computePlannedSegments", () => {
     // 90 min: focus 0-40, break 40-45, focus 45-85, clipped focus 85-90
     const segments = computePlannedSegments(DEFAULT_CONFIG, 90);
     expect(segments).toHaveLength(4);
-    expect(segments[0]).toEqual({ cycleNumber: 1, phase: "focus", startOffsetMinutes: 0, endOffsetMinutes: 40 });
-    expect(segments[1]).toEqual({ cycleNumber: 1, phase: "short_break", startOffsetMinutes: 40, endOffsetMinutes: 45 });
-    expect(segments[2]).toEqual({ cycleNumber: 2, phase: "focus", startOffsetMinutes: 45, endOffsetMinutes: 85 });
-    expect(segments[3]).toEqual({ cycleNumber: 2, phase: "short_break", startOffsetMinutes: 85, endOffsetMinutes: 90 });
+    expect(segments[0]).toEqual({ rhythmPosition: 1, phase: "focus", startOffsetMinutes: 0, endOffsetMinutes: 40 });
+    expect(segments[1]).toEqual({ rhythmPosition: 1, phase: "short_break", startOffsetMinutes: 40, endOffsetMinutes: 45 });
+    expect(segments[2]).toEqual({ rhythmPosition: 2, phase: "focus", startOffsetMinutes: 45, endOffsetMinutes: 85 });
+    expect(segments[3]).toEqual({ rhythmPosition: 2, phase: "short_break", startOffsetMinutes: 85, endOffsetMinutes: 90 });
   });
 
   it("clips break when event ends mid-break", () => {
     const segments = computePlannedSegments(DEFAULT_CONFIG, 43);
     expect(segments).toHaveLength(2);
-    expect(segments[1]).toEqual({ cycleNumber: 1, phase: "short_break", startOffsetMinutes: 40, endOffsetMinutes: 43 });
+    expect(segments[1]).toEqual({ rhythmPosition: 1, phase: "short_break", startOffsetMinutes: 40, endOffsetMinutes: 43 });
   });
 
-  it("produces long break after pomodoroCount cycles", () => {
+  it("produces long break after the count rhythm length", () => {
     // 4 focus (40) + 3 short breaks (5) + 1 long break (10) = 185 min
     const segments = computePlannedSegments(DEFAULT_CONFIG, 185);
     const breaks = segments.filter((s) => s.phase !== "focus");
@@ -63,18 +61,23 @@ describe("computePlannedSegments", () => {
     expect(breaks[3].phase).toBe("long_break");
   });
 
-  it("resets cycle count after long break", () => {
-    // Enough for full cycle + start of next
+  it("wraps rhythm position after long break", () => {
+    // Enough for full pattern plus start of next
     const segments = computePlannedSegments(DEFAULT_CONFIG, 230);
     const focusAfterLong = segments.find(
       (s) => s.phase === "focus" && s.startOffsetMinutes >= 185,
     );
     expect(focusAfterLong).toBeDefined();
-    expect(focusAfterLong!.cycleNumber).toBe(1);
+    expect(focusAfterLong!.rhythmPosition).toBe(1);
   });
 
-  it("handles pomodoroCount = 1 (every break is long)", () => {
-    const config: PomodoroConfig = { ...DEFAULT_CONFIG, pomodoroCount: 1 };
+  it("handles longBreakAfterFocusCount = 1 (every break is long)", () => {
+    const config = createCustomCountPomodoroConfig({
+      focusDurationMinutes: 40,
+      shortBreakMinutes: 5,
+      longBreakMinutes: 10,
+      longBreakAfterFocusCount: 1,
+    });
     const segments = computePlannedSegments(config, 100);
     const breaks = segments.filter((s) => s.phase !== "focus");
     for (const b of breaks) {
@@ -82,7 +85,7 @@ describe("computePlannedSegments", () => {
     }
   });
 
-  it("handles exact fit for full cycle", () => {
+  it("handles exact fit for full count rhythm pattern", () => {
     // 4*40 + 3*5 + 1*10 = 185
     const segments = computePlannedSegments(DEFAULT_CONFIG, 185);
     const last = segments[segments.length - 1];
@@ -92,9 +95,9 @@ describe("computePlannedSegments", () => {
   it("shortens first focus with initialFocusOffset", () => {
     // 30 min inherited: first focus is 10 min (40 - 30), then break
     const segments = computePlannedSegments(DEFAULT_CONFIG, 60, 30);
-    expect(segments[0]).toEqual({ cycleNumber: 1, phase: "focus", startOffsetMinutes: 0, endOffsetMinutes: 10 });
-    expect(segments[1]).toEqual({ cycleNumber: 1, phase: "short_break", startOffsetMinutes: 10, endOffsetMinutes: 15 });
-    expect(segments[2]).toEqual({ cycleNumber: 2, phase: "focus", startOffsetMinutes: 15, endOffsetMinutes: 55 });
+    expect(segments[0]).toEqual({ rhythmPosition: 1, phase: "focus", startOffsetMinutes: 0, endOffsetMinutes: 10 });
+    expect(segments[1]).toEqual({ rhythmPosition: 1, phase: "short_break", startOffsetMinutes: 10, endOffsetMinutes: 15 });
+    expect(segments[2]).toEqual({ rhythmPosition: 2, phase: "focus", startOffsetMinutes: 15, endOffsetMinutes: 55 });
   });
 
   it("starts with break when inherited focus exceeds threshold", () => {
@@ -123,80 +126,80 @@ describe("computePlannedSegments", () => {
     // 30 min inherited, but event is only 5 min long
     const segments = computePlannedSegments(DEFAULT_CONFIG, 5, 30);
     expect(segments).toHaveLength(1);
-    expect(segments[0]).toEqual({ cycleNumber: 1, phase: "focus", startOffsetMinutes: 0, endOffsetMinutes: 5 });
+    expect(segments[0]).toEqual({ rhythmPosition: 1, phase: "focus", startOffsetMinutes: 0, endOffsetMinutes: 5 });
   });
 
   it("clips inherited break to event duration", () => {
     // 40 min inherited: starts with break, but event is only 3 min
     const segments = computePlannedSegments(DEFAULT_CONFIG, 3, 40);
     expect(segments).toHaveLength(1);
-    expect(segments[0]).toEqual({ cycleNumber: 1, phase: "short_break", startOffsetMinutes: 0, endOffsetMinutes: 3 });
+    expect(segments[0]).toEqual({ rhythmPosition: 1, phase: "short_break", startOffsetMinutes: 0, endOffsetMinutes: 3 });
   });
 
-  it("starts at inherited cycle number", () => {
-    // Start at cycle 3 (pomodoroCount=4): first break should be short, second should trigger long
+  it("starts at inherited rhythm position", () => {
+    // Start at position 3: first break should be short, second should trigger long
     const segments = computePlannedSegments(DEFAULT_CONFIG, 185, 0, 3);
     const breaks = segments.filter((s) => s.phase !== "focus");
-    // Cycle 3: short break, cycle 4: long break, then reset
+    // Position 3: short break, position 4: long break, then wrap
     expect(breaks[0].phase).toBe("short_break");
-    expect(breaks[0].cycleNumber).toBe(3);
+    expect(breaks[0].rhythmPosition).toBe(3);
     expect(breaks[1].phase).toBe("long_break");
-    expect(breaks[1].cycleNumber).toBe(4);
+    expect(breaks[1].rhythmPosition).toBe(4);
   });
 
-  it("triggers long break immediately when inherited cycle equals pomodoroCount", () => {
-    // Start at cycle 4 (pomodoroCount=4): first break is long
+  it("triggers long break immediately at the long-break position", () => {
+    // Start at position 4: first break is long
     const segments = computePlannedSegments(DEFAULT_CONFIG, 100, 0, 4);
     const breaks = segments.filter((s) => s.phase !== "focus");
     expect(breaks[0].phase).toBe("long_break");
-    expect(breaks[0].cycleNumber).toBe(4);
-    // After long break, cycle resets: next break should be short at cycle 1
+    expect(breaks[0].rhythmPosition).toBe(4);
+    // After long break, the next break should be short at position 1
     if (breaks.length > 1) {
       expect(breaks[1].phase).toBe("short_break");
-      expect(breaks[1].cycleNumber).toBe(1);
+      expect(breaks[1].rhythmPosition).toBe(1);
     }
   });
 
-  it("triggers long break when inherited cycle exceeds pomodoroCount", () => {
-    // Start at cycle 5 (pomodoroCount=4): cycle 5 >= 4 so first break is long
+  it("wraps inherited rhythm positions beyond the count rhythm length", () => {
     const segments = computePlannedSegments(DEFAULT_CONFIG, 100, 0, 5);
     const breaks = segments.filter((s) => s.phase !== "focus");
-    expect(breaks[0].phase).toBe("long_break");
+    expect(breaks[0].phase).toBe("short_break");
+    expect(breaks[0].rhythmPosition).toBe(1);
   });
 
-  it("combines focus offset and cycle inheritance", () => {
-    // 30 min focus inherited, cycle 3: shortened focus, then short break (cycle 3 < 4)
+  it("combines focus offset and rhythm position inheritance", () => {
+    // 30 min focus inherited, position 3: shortened focus, then short break
     const segments = computePlannedSegments(DEFAULT_CONFIG, 120, 30, 3);
-    expect(segments[0]).toEqual({ cycleNumber: 3, phase: "focus", startOffsetMinutes: 0, endOffsetMinutes: 10 });
+    expect(segments[0]).toEqual({ rhythmPosition: 3, phase: "focus", startOffsetMinutes: 0, endOffsetMinutes: 10 });
     expect(segments[1].phase).toBe("short_break");
-    expect(segments[1].cycleNumber).toBe(3);
-    // Next focus at cycle 4, its break should be long
-    const cycle4Break = segments.find((s) => s.cycleNumber === 4 && s.phase !== "focus");
+    expect(segments[1].rhythmPosition).toBe(3);
+    // Next focus at position 4, its break should be long
+    const cycle4Break = segments.find((s) => s.rhythmPosition === 4 && s.phase !== "focus");
     expect(cycle4Break).toBeDefined();
     expect(cycle4Break!.phase).toBe("long_break");
   });
 
-  it("inherited break at high cycle uses long break", () => {
-    // 40 min focus inherited + cycle 4 (pomodoroCount=4): starts with long break
+  it("inherited break at long-break position uses long break", () => {
+    // 40 min focus inherited at position 4: starts with long break
     const segments = computePlannedSegments(DEFAULT_CONFIG, 60, 40, 4);
     expect(segments[0].phase).toBe("long_break");
     expect(segments[0].endOffsetMinutes).toBe(10); // long break = 10 min
-    // After long break, reset to cycle 1
+    // After long break, wrap to position 1
     expect(segments[1].phase).toBe("focus");
-    expect(segments[1].cycleNumber).toBe(1);
+    expect(segments[1].rhythmPosition).toBe(1);
   });
 
-  it("cross-block scenario: Block A trailing cycle carries to Block B", () => {
-    // Block A: 80 min, pomodoroCount=4
-    // Cycle 1: focus 0-40, short_break 40-45, cycle 2: focus 45-80 (clipped)
+  it("cross-block scenario: Block A trailing rhythm position carries to Block B", () => {
+    // Block A: 80 min, long break after 4 focus periods.
+    // Position 1: focus 0-40, short_break 40-45, position 2: focus 45-80 (clipped).
     const blockA = computePlannedSegments(DEFAULT_CONFIG, 80);
     expect(computeTrailingFocusMinutes(blockA)).toBe(35); // 80-45=35 min focus
     expect(computeTrailingCycleNumber(blockA)).toBe(2);
 
-    // Block B: 220 min, inherits 35 min focus + cycle 2
+    // Block B: 220 min, inherits 35 min focus at position 2.
     const blockB = computePlannedSegments(DEFAULT_CONFIG, 220, 35, 2);
-    // First focus shortened to 5 min (40-35), then short break (cycle 2 < 4)
-    expect(blockB[0]).toEqual({ cycleNumber: 2, phase: "focus", startOffsetMinutes: 0, endOffsetMinutes: 5 });
+    // First focus shortened to 5 min (40-35), then short break.
+    expect(blockB[0]).toEqual({ rhythmPosition: 2, phase: "focus", startOffsetMinutes: 0, endOffsetMinutes: 5 });
     expect(blockB[1].phase).toBe("short_break");
     // Count breaks before the first long break
     let shortBreaksBeforeLong = 0;
@@ -204,11 +207,11 @@ describe("computePlannedSegments", () => {
       if (s.phase === "short_break") shortBreaksBeforeLong++;
       if (s.phase === "long_break") break;
     }
-    // Block A had 1 short break, Block B should have 2 more before long break (total 3 short + 1 long = 4 cycles)
+    // Block A had 1 short break. Block B should have 2 more before the long break.
     expect(shortBreaksBeforeLong).toBe(2);
   });
 
-  it("defaults to cycle 1 with zero or negative initialCycleNumber", () => {
+  it("defaults to position 1 with zero initial rhythm position", () => {
     const withZero = computePlannedSegments(DEFAULT_CONFIG, 90, 0, 0);
     const withDefault = computePlannedSegments(DEFAULT_CONFIG, 90);
     expect(withZero).toEqual(withDefault);
@@ -220,24 +223,24 @@ describe("computePlannedSegments", () => {
     // Block B should inherit from Block A, not Block C.
     const blockA = computePlannedSegments(DEFAULT_CONFIG, 120);
     const trailingFocusA = computeTrailingFocusMinutes(blockA);
-    const trailingCycleA = computeTrailingCycleNumber(blockA);
+    const trailingPositionA = computeTrailingCycleNumber(blockA);
 
     // Block B inheriting from Block A (correct predecessor)
-    const blockB = computePlannedSegments(DEFAULT_CONFIG, 240, trailingFocusA, trailingCycleA);
+    const blockB = computePlannedSegments(DEFAULT_CONFIG, 240, trailingFocusA, trailingPositionA);
 
     // Block C inheriting from Block A (stacked event)
-    const blockC = computePlannedSegments(DEFAULT_CONFIG, 120, trailingFocusA, trailingCycleA);
+    const blockC = computePlannedSegments(DEFAULT_CONFIG, 120, trailingFocusA, trailingPositionA);
     const trailingFocusC = computeTrailingFocusMinutes(blockC);
-    const trailingCycleC = computeTrailingCycleNumber(blockC);
+    const trailingPositionC = computeTrailingCycleNumber(blockC);
 
     // Block B inheriting from Block C (wrong predecessor) would differ
-    const blockBFromC = computePlannedSegments(DEFAULT_CONFIG, 240, trailingFocusC, trailingCycleC);
+    const blockBFromC = computePlannedSegments(DEFAULT_CONFIG, 240, trailingFocusC, trailingPositionC);
 
     // The correct result (from A) should differ from the wrong result (from C)
     // because C's trailing state differs from A's
     expect(trailingFocusA).not.toBe(trailingFocusC);
     // And Block B from A should be stable regardless of C's existence
-    expect(blockB).toEqual(computePlannedSegments(DEFAULT_CONFIG, 240, trailingFocusA, trailingCycleA));
+    expect(blockB).toEqual(computePlannedSegments(DEFAULT_CONFIG, 240, trailingFocusA, trailingPositionA));
     expect(blockB).not.toEqual(blockBFromC);
   });
 });
@@ -268,56 +271,50 @@ describe("computeTrailingFocusMinutes", () => {
   });
 });
 
-describe("computeTrailingCycleNumber", () => {
+describe("computeTrailingCycleNumber compatibility helper", () => {
   it("returns 1 for empty segments", () => {
     expect(computeTrailingCycleNumber([])).toBe(1);
   });
 
-  it("returns cycle number when last segment is focus", () => {
+  it("returns rhythm position when last segment is focus", () => {
     const segments = computePlannedSegments(DEFAULT_CONFIG, 25);
-    // Single focus at cycle 1
+    // Single focus at position 1.
     expect(computeTrailingCycleNumber(segments)).toBe(1);
   });
 
-  it("returns cycle + 1 when last segment is short break", () => {
+  it("returns the next position when last segment is short break", () => {
     const segments = computePlannedSegments(DEFAULT_CONFIG, 45);
-    // focus 0-40, short_break 40-45 at cycle 1
+    // Focus 0-40, short_break 40-45 at position 1.
     expect(computeTrailingCycleNumber(segments)).toBe(2);
   });
 
   it("returns 1 when last segment is long break", () => {
     const segments = computePlannedSegments(DEFAULT_CONFIG, 185);
-    // Full cycle: 4 focus + 3 short + 1 long
+    // Full count rhythm pattern: 4 focus + 3 short + 1 long.
     const last = segments[segments.length - 1];
     expect(last.phase).toBe("long_break");
     expect(computeTrailingCycleNumber(segments)).toBe(1);
   });
 
-  it("returns correct cycle for mid-focus at cycle 2", () => {
+  it("returns correct position for mid-focus at position 2", () => {
     const segments = computePlannedSegments(DEFAULT_CONFIG, 70);
-    // focus 0-40, short_break 40-45, focus 45-70 (cycle 2)
+    // Focus 0-40, short_break 40-45, focus 45-70 (position 2).
     expect(computeTrailingCycleNumber(segments)).toBe(2);
   });
 
-  it("returns correct cycle after multiple short breaks", () => {
-    // 3 full cycles: 3*40 + 3*5 = 135 min, ending with short_break at cycle 3
+  it("returns correct position after multiple short breaks", () => {
+    // 3 focus positions: 3*40 + 3*5 = 135 min, ending with short_break at position 3.
     const segments = computePlannedSegments(DEFAULT_CONFIG, 135);
     const last = segments[segments.length - 1];
     expect(last.phase).toBe("short_break");
-    expect(last.cycleNumber).toBe(3);
+    expect(last.rhythmPosition).toBe(3);
     expect(computeTrailingCycleNumber(segments)).toBe(4);
   });
 });
 
 // computeDayTimelineBands
 
-const CREATIVE_CONFIG: PomodoroConfig = {
-  focusDurationMinutes: 25,
-  shortBreakMinutes: 5,
-  longBreakMinutes: 15,
-  pomodoroCount: 4,
-  idleTimeoutMinutes: null,
-};
+const CREATIVE_CONFIG: PomodoroConfig = createPresetPomodoroConfig("creative");
 
 /** Helper: create a TimelineEvent from hour ranges on a fixed day */
 function makeEvent(
@@ -355,9 +352,9 @@ describe("computeDayTimelineBands", () => {
     expect(bands[1]).toEqual({ topMinute: 685, heightMinutes: 5, phase: "short_break", status: "planned" });
   });
 
-  it("inherits focus and cycle across sequential events", () => {
-    // A: 10:00-11:20 (80 min). Segments: focus 0-40, break 40-45, focus 45-80 (trailing: 35min focus, cycle 2)
-    // B: 11:20-13:00 (100 min). Should inherit 35min focus, cycle 2.
+  it("inherits focus and rhythm position across sequential events", () => {
+    // A: 10:00-11:20 (80 min). Segments: focus 0-40, break 40-45, focus 45-80 (trailing: 35min focus, position 2).
+    // B: 11:20-13:00 (100 min). Should inherit 35min focus, position 2.
     const A = makeEvent("A", 10, 11 + 20 / 60);
     const B = makeEvent("B", 11 + 20 / 60, 13);
     const bands = computeDayTimelineBands([A, B], null, DAY_MS, PAST_NOW);
@@ -367,8 +364,8 @@ describe("computeDayTimelineBands", () => {
     expect(aBands.length).toBe(1);
     expect(aBands[0].topMinute).toBe(640);
 
-    // B starts at 680 (11:20). Inherited 35min focus (cycle 2): shortened focus = 5min,
-    // then short break at 685 (cycle 2 < 4)
+    // B starts at 680 (11:20). Inherited 35min focus at position 2: shortened focus = 5min,
+    // then short break at 685.
     const bBands = bands.filter((b) => b.topMinute >= 680);
     expect(bBands.length).toBeGreaterThanOrEqual(1);
     expect(bBands[0].topMinute).toBe(685); // 680 + 5min focus
@@ -423,7 +420,7 @@ describe("computeDayTimelineBands", () => {
 
     // B (creative, 25min focus) is main (shorter focus). A is contained.
     // B: 240min with creative config (25/5/15, count=4)
-    // Breaks at: 25, 55, 85, long at 115 (cycle 4)
+    // Breaks at: 25, 55, 85, long at 115 (position 4).
     expect(bands[0].topMinute).toBe(960 + 25); // 16*60 + 25
     expect(bands[0].heightMinutes).toBe(5);
   });
@@ -475,7 +472,7 @@ describe("computeDayTimelineBands", () => {
     persistedSegments.set("A", [
       {
         id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
-        cycleNumber: 1, phase: "focus",
+        rhythmPosition: 1, phase: "focus",
         plannedStart: new Date(DAY_MS + 9 * 60 * 60000).toISOString(),
         plannedEnd: new Date(DAY_MS + (9 * 60 + 40) * 60000).toISOString(),
         actualStart: new Date(DAY_MS + 9 * 60 * 60000).toISOString(),
@@ -516,7 +513,7 @@ describe("computeDayTimelineBands", () => {
       segments: [
         {
           id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
-          cycleNumber: 1, phase: "focus",
+          rhythmPosition: 1, phase: "focus",
           plannedStart: new Date(segStartMs).toISOString(),
           plannedEnd: new Date(segStartMs + 40 * 60000).toISOString(),
           actualStart: new Date(segStartMs).toISOString(),
@@ -526,7 +523,7 @@ describe("computeDayTimelineBands", () => {
         },
         {
           id: "s2", eventId: "A", eventDate: "2026-03-21", runId: "r1",
-          cycleNumber: 1, phase: "short_break",
+          rhythmPosition: 1, phase: "short_break",
           plannedStart: new Date(segStartMs + 40 * 60000).toISOString(),
           plannedEnd: new Date(segStartMs + 45 * 60000).toISOString(),
           actualStart: new Date(segStartMs + 40 * 60000).toISOString(),
@@ -536,7 +533,7 @@ describe("computeDayTimelineBands", () => {
         },
         {
           id: "s3", eventId: "A", eventDate: "2026-03-21", runId: "r1",
-          cycleNumber: 2, phase: "focus",
+          rhythmPosition: 2, phase: "focus",
           plannedStart: new Date(segStartMs + 45 * 60000).toISOString(),
           plannedEnd: new Date(segStartMs + 85 * 60000).toISOString(),
           actualStart: null, actualEnd: null,
@@ -545,7 +542,7 @@ describe("computeDayTimelineBands", () => {
         },
         {
           id: "s4", eventId: "A", eventDate: "2026-03-21", runId: "r1",
-          cycleNumber: 2, phase: "short_break",
+          rhythmPosition: 2, phase: "short_break",
           plannedStart: new Date(segStartMs + 85 * 60000).toISOString(),
           plannedEnd: new Date(segStartMs + 90 * 60000).toISOString(),
           actualStart: null, actualEnd: null,
@@ -584,7 +581,7 @@ describe("computeDayTimelineBands", () => {
       segments: [
         {
           id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
-          cycleNumber: 1, phase: "focus",
+          rhythmPosition: 1, phase: "focus",
           plannedStart: new Date(segStartMs).toISOString(),
           plannedEnd: new Date(segStartMs + 25 * 60000).toISOString(),
           actualStart: new Date(segStartMs).toISOString(),
@@ -617,7 +614,7 @@ describe("computeDayTimelineBands", () => {
       segments: [
         {
           id: "current-s1", eventId: "A", eventDate: "2026-03-21", runId: "current-run",
-          cycleNumber: 1, phase: "focus",
+          rhythmPosition: 1, phase: "focus",
           plannedStart: new Date(secondRunStartMs).toISOString(),
           plannedEnd: new Date(secondRunStartMs + 40 * 60000).toISOString(),
           actualStart: new Date(secondRunStartMs).toISOString(),
@@ -634,7 +631,7 @@ describe("computeDayTimelineBands", () => {
     persistedSegments.set("A", [
       {
         id: "recovered-s1", eventId: "A", eventDate: "2026-03-21", runId: "recovered-run",
-        cycleNumber: 1, phase: "focus",
+        rhythmPosition: 1, phase: "focus",
         plannedStart: new Date(firstRunStartMs).toISOString(),
         plannedEnd: new Date(firstRunStartMs + 40 * 60000).toISOString(),
         actualStart: new Date(firstRunStartMs).toISOString(),
@@ -644,7 +641,7 @@ describe("computeDayTimelineBands", () => {
       },
       {
         id: "current-s1", eventId: "A", eventDate: "2026-03-21", runId: "current-run",
-        cycleNumber: 1, phase: "focus",
+        rhythmPosition: 1, phase: "focus",
         plannedStart: new Date(secondRunStartMs).toISOString(),
         plannedEnd: new Date(secondRunStartMs + 40 * 60000).toISOString(),
         actualStart: new Date(secondRunStartMs).toISOString(),
@@ -677,7 +674,7 @@ describe("computeDayTimelineBands", () => {
     const A = makeEvent("A", 10, 14);
     const B: TimelineEvent = {
       id: "B",
-      config: { focusDurationMinutes: 25, shortBreakMinutes: 5, longBreakMinutes: 15, pomodoroCount: 4, idleTimeoutMinutes: null },
+      config: createPresetPomodoroConfig("creative"),
       startMs: DAY_MS + 10.5 * 3600000,
       endMs: DAY_MS + 14.5 * 3600000,
       startMinute: 630,
@@ -690,7 +687,7 @@ describe("computeDayTimelineBands", () => {
       segments: [
         {
           id: "s1", eventId: "B", eventDate: "2026-03-21", runId: "r1",
-          cycleNumber: 1, phase: "focus",
+          rhythmPosition: 1, phase: "focus",
           plannedStart: new Date(sessionStartMs).toISOString(),
           plannedEnd: new Date(sessionStartMs + 25 * 60000).toISOString(),
           actualStart: new Date(sessionStartMs).toISOString(),
@@ -700,7 +697,7 @@ describe("computeDayTimelineBands", () => {
         },
         {
           id: "s2", eventId: "B", eventDate: "2026-03-21", runId: "r1",
-          cycleNumber: 1, phase: "short_break",
+          rhythmPosition: 1, phase: "short_break",
           plannedStart: new Date(sessionStartMs + 25 * 60000).toISOString(),
           plannedEnd: new Date(sessionStartMs + 30 * 60000).toISOString(),
           actualStart: null, actualEnd: null,
@@ -738,15 +735,15 @@ describe("computeDayTimelineBands", () => {
     expect(bands.length).toBe(0);
   });
 
-  it("inherits cycle count causing long break in successor", () => {
-    // A: 3 full cycles (3*40 + 3*5 = 135 min). Trailing: cycle 4.
-    // B starts right after. Its first break should be long break (cycle 4).
+  it("inherits rhythm position causing long break in successor", () => {
+    // A: 3 focus positions (3*40 + 3*5 = 135 min). Trailing: position 4.
+    // B starts right after. Its first break should be long break (position 4).
     const A = makeEvent("A", 8, 8 + 135 / 60); // 8:00-10:15
     const B = makeEvent("B", 8 + 135 / 60, 8 + 135 / 60 + 100 / 60); // 10:15-11:55
     const bands = computeDayTimelineBands([A, B], null, DAY_MS, PAST_NOW);
 
-    // A's trailing cycle = 4. B inherits cycle 4.
-    // B: first focus 0-40, then break at cycle 4 => long_break
+    // A's trailing position = 4. B inherits position 4.
+    // B: first focus 0-40, then break at position 4 => long_break.
     const bBands = bands.filter((b) => b.topMinute >= 8 * 60 + 135);
     const firstBBreak = bBands[0];
     expect(firstBBreak).toBeDefined();
@@ -764,7 +761,7 @@ describe("computeDayTimelineBands", () => {
       segments: [
         {
           id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
-          cycleNumber: 1, phase: "focus",
+          rhythmPosition: 1, phase: "focus",
           plannedStart: new Date(segStartMs).toISOString(),
           plannedEnd: new Date(segStartMs + plannedDurMs).toISOString(),
           actualStart: new Date(segStartMs).toISOString(),
@@ -796,7 +793,7 @@ describe("computeDayTimelineBands", () => {
       segments: [
         {
           id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
-          cycleNumber: 1, phase: "focus",
+          rhythmPosition: 1, phase: "focus",
           plannedStart: new Date(segStartMs).toISOString(),
           plannedEnd: new Date(segStartMs + plannedDurMs).toISOString(),
           actualStart: new Date(segStartMs).toISOString(),
@@ -826,7 +823,7 @@ describe("computeDayTimelineBands", () => {
       segments: [
         {
           id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
-          cycleNumber: 1, phase: "focus",
+          rhythmPosition: 1, phase: "focus",
           plannedStart: new Date(segStartMs).toISOString(),
           plannedEnd: new Date(segStartMs + 40 * 60000).toISOString(),
           actualStart: new Date(segStartMs).toISOString(),
@@ -854,7 +851,7 @@ describe("computeDayTimelineBands", () => {
       segments: [
         {
           id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
-          cycleNumber: 1, phase: "focus",
+          rhythmPosition: 1, phase: "focus",
           plannedStart: new Date(segStartMs).toISOString(),
           plannedEnd: new Date(segStartMs + 10 * 60000).toISOString(),
           actualStart: new Date(segStartMs).toISOString(),
@@ -889,7 +886,7 @@ describe("computeDayTimelineBands", () => {
       segments: [
         {
           id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
-          cycleNumber: 1, phase: "focus",
+          rhythmPosition: 1, phase: "focus",
           plannedStart: new Date(segStartMs).toISOString(),
           plannedEnd: new Date(segStartMs + 40 * 60000).toISOString(),
           actualStart: new Date(segStartMs).toISOString(),
@@ -899,7 +896,7 @@ describe("computeDayTimelineBands", () => {
         },
         {
           id: "s2", eventId: "A", eventDate: "2026-03-21", runId: "r1",
-          cycleNumber: 1, phase: "short_break",
+          rhythmPosition: 1, phase: "short_break",
           plannedStart: new Date(segStartMs + 40 * 60000).toISOString(),
           plannedEnd: new Date(segStartMs + 45 * 60000).toISOString(),
           actualStart: new Date(segStartMs + 40 * 60000).toISOString(),
@@ -931,7 +928,7 @@ describe("computeDayTimelineBands", () => {
       segments: [
         {
           id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
-          cycleNumber: 1, phase: "short_break",
+          rhythmPosition: 1, phase: "short_break",
           plannedStart: new Date(breakStartMs).toISOString(),
           plannedEnd: new Date(breakEndMs).toISOString(),
           actualStart: new Date(breakStartMs).toISOString(),
@@ -964,7 +961,7 @@ describe("computeDayTimelineBands", () => {
       segments: [
         {
           id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
-          cycleNumber: 1, phase: "short_break",
+          rhythmPosition: 1, phase: "short_break",
           plannedStart: new Date(breakStartMs).toISOString(),
           plannedEnd: new Date(extendedBreakEndMs).toISOString(),
           actualStart: new Date(breakStartMs).toISOString(),
@@ -995,7 +992,7 @@ describe("computeDayTimelineBands", () => {
     persistedSegments.set("A", [
       {
         id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
-        cycleNumber: 1, phase: "short_break",
+        rhythmPosition: 1, phase: "short_break",
         plannedStart: new Date(breakStartMs).toISOString(),
         plannedEnd: new Date(breakEndMs).toISOString(),
         actualStart: new Date(breakStartMs).toISOString(),
@@ -1021,7 +1018,7 @@ describe("computeDayTimelineBands", () => {
     persistedSegments.set("A", [
       {
         id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
-        cycleNumber: 1, phase: "focus",
+        rhythmPosition: 1, phase: "focus",
         plannedStart: new Date(segStartMs).toISOString(),
         plannedEnd: new Date(segStartMs + 40 * 60000).toISOString(),
         actualStart: new Date(segStartMs).toISOString(),
@@ -1031,7 +1028,7 @@ describe("computeDayTimelineBands", () => {
       },
       {
         id: "s2", eventId: "A", eventDate: "2026-03-21", runId: "r1",
-        cycleNumber: 1, phase: "short_break",
+        rhythmPosition: 1, phase: "short_break",
         plannedStart: new Date(segStartMs + 40 * 60000).toISOString(),
         plannedEnd: new Date(segStartMs + 45 * 60000).toISOString(),
         actualStart: new Date(segStartMs + 40 * 60000).toISOString(),
@@ -1041,7 +1038,7 @@ describe("computeDayTimelineBands", () => {
       },
       {
         id: "s3", eventId: "A", eventDate: "2026-03-21", runId: "r1",
-        cycleNumber: 2, phase: "focus",
+        rhythmPosition: 2, phase: "focus",
         plannedStart: new Date(segStartMs + 45 * 60000).toISOString(),
         plannedEnd: new Date(segStartMs + 85 * 60000).toISOString(),
         actualStart: new Date(segStartMs + 45 * 60000).toISOString(),
@@ -1089,7 +1086,7 @@ describe("computeDayTimelineBands", () => {
     persistedSegments.set("A", [
       {
         id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
-        cycleNumber: 1, phase: "focus",
+        rhythmPosition: 1, phase: "focus",
         plannedStart: new Date(segStartMs).toISOString(),
         plannedEnd: new Date(segStartMs + 40 * 60000).toISOString(),
         actualStart: new Date(segStartMs).toISOString(),
@@ -1099,7 +1096,7 @@ describe("computeDayTimelineBands", () => {
       },
       {
         id: "s2", eventId: "A", eventDate: "2026-03-21", runId: "r1",
-        cycleNumber: 1, phase: "short_break",
+        rhythmPosition: 1, phase: "short_break",
         plannedStart: new Date(segStartMs + 40 * 60000).toISOString(),
         plannedEnd: new Date(segStartMs + 45 * 60000).toISOString(),
         actualStart: null, actualEnd: null,
@@ -1126,7 +1123,7 @@ describe("computeDayTimelineBands", () => {
       segments: [
         {
           id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
-          cycleNumber: 1, phase: "focus",
+          rhythmPosition: 1, phase: "focus",
           plannedStart: new Date(segStartMs).toISOString(),
           plannedEnd: new Date(segStartMs + plannedDurMs).toISOString(),
           actualStart: new Date(segStartMs).toISOString(),
@@ -1167,7 +1164,7 @@ describe("computeDayTimelineBands", () => {
     persistedSegments.set("A", [
       {
         id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
-        cycleNumber: 1, phase: "focus",
+        rhythmPosition: 1, phase: "focus",
         plannedStart: new Date(segStartMs).toISOString(),
         plannedEnd: new Date(segStartMs + 40 * 60000).toISOString(),
         actualStart: new Date(segStartMs).toISOString(),

@@ -29,11 +29,11 @@ The order of checks inside `decideTick` is: suspend first (because a long tick g
 
 Called when `decideTick` returns `advance`.
 
-**Inputs:** the current run, the active segment, the run's rhythm snapshot, the cycle or break-plan position.
+**Inputs:** the current run, the active segment, the run's rhythm snapshot, the current rhythm position.
 
-**Returns:** the next phase (`focus`, `short_break`, `long_break`), the selected planned duration, and a flag indicating whether to skip (only relevant if `skipNextBreak` is set on the next break).
+**Returns:** the next phase (`focus`, `short_break`, `long_break`), the selected planned duration, and the rhythm position for the next focus or the break owed.
 
-The current simple rule is straightforward: focus → break (short or long depending on cycle), break → focus (cycle increments after short, resets after long). In the target rhythm model, focus completion asks the active break plan which break is owed at the current position. The simple four-focus rhythm is just one break plan: short, short, short, long, repeated. The `skipNextBreak` flag, if set, causes the function to skip directly from focus to focus, recorded as the absence of a break segment between two focus segments.
+The rule is straightforward: focus asks the active rhythm which break is owed at the current position, and break advances to focus at the next rhythm position. The simple four-focus rhythm is one count plan: short, short, short, long, repeated. A sequence rhythm looks up the current step directly. The `skipNextBreak` flag, if set, causes the function to skip directly from focus to focus at the next position, recorded as a `skip_break` run event and the absence of a break segment between two focus segments.
 
 Adaptive plans can propose a different duration for a future phase, following `algorithms/pomodoro-adaptive-rhythm.md`, but this decision still belongs in `decideAdvancePhase` or `decideReconfigure`, not in the writer. Once selected, the duration is persisted through the segment's planned timestamps and an explanatory run event so the plan remains auditable.
 
@@ -43,7 +43,7 @@ Called when `decideTick` returns `expire` and the calendar has a consecutive or 
 
 **Inputs:** the ending run, the ending segment, the new event, the time of the transition.
 
-**Returns:** the inherited state (`inherited_focus_minutes`, `inherited_cycle`) for the new run and the first phase of the new run (derived using the new event's rhythm snapshot and the inherited state, see `algorithms/pomodoro-segments-and-plan.md` "Plan vs segments").
+**Returns:** the inherited state (`inherited_focus_minutes`, `inherited_rhythm_position`) for the new run and the first phase of the new run (derived using the new event's rhythm snapshot and the inherited state, see `algorithms/pomodoro-segments-and-plan.md` "Plan vs segments").
 
 If the calendar has no consecutive event, `decideTick` returns `expire` directly (without calling `decideTransition`) and the run ends with `end_reason = completed`.
 
@@ -53,9 +53,9 @@ Called when the user changes the pomodoro config mid-session.
 
 **Inputs:** the current run, the active segment, the time of reconfiguration, the new config.
 
-**Returns:** the inherited state for the new run and the bridge segment specification (same phase as the interrupted segment, with remaining time from the old config). After the bridge, the new config's cycle rules take over.
+**Returns:** the inherited state for the new run and the bridge segment specification. Running focus is not silently shortened by a config change. The elapsed time is preserved against the new phase duration, which may leave zero remaining and then advance at the next boundary. Break reconfiguration preserves elapsed break time in the same way.
 
-The reason for the bridge segment: a reconfiguration mid-focus should let the user finish their current train of thought, not snap them into a break or a fresh focus immediately. The bridge gives them the rest of the planned phase under the old config; the new config kicks in after.
+The reason for preserving the current phase: a reconfiguration mid-focus should let the user finish their current train of thought, not snap them into a break or a fresh focus immediately. The new config controls future boundaries and projections, but the active focus is not cut short without the user explicitly ending it.
 
 ### `decideIdleCheck`
 

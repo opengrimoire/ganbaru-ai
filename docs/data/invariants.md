@@ -26,7 +26,7 @@ Across all runs in the database, at most one segment row carries `status = activ
 
 ## 3. Break positions are stable within a session
 
-For a running session, the planned positions of upcoming breaks are deterministic from the run's `started_at`, config snapshot, and inherited state (`inherited_focus_minutes`, `inherited_cycle`). Once the session is running, these positions do not shift.
+For a running session, the planned positions of upcoming breaks are deterministic from the run's `started_at`, rhythm snapshot, and inherited state (`inherited_focus_minutes`, `inherited_rhythm_position`). Once the session is running, these positions do not shift.
 
 For events without an active session, projected break marks are computed from "now" and naturally shift each tick. This is a different surface, see `features/pomodoro-progress-displays.md`.
 

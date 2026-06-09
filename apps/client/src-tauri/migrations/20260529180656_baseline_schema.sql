@@ -273,11 +273,31 @@ CREATE TABLE calendar_event_organizers (
 
 CREATE TABLE pomodoro_configs (
     event_id TEXT PRIMARY KEY REFERENCES calendar_events(id) ON DELETE CASCADE,
-    focus_duration_minutes INTEGER NOT NULL DEFAULT 40 CHECK (focus_duration_minutes > 0),
-    short_break_minutes INTEGER NOT NULL DEFAULT 5 CHECK (short_break_minutes > 0),
-    long_break_minutes INTEGER NOT NULL DEFAULT 10 CHECK (long_break_minutes > 0),
-    pomodoro_count INTEGER NOT NULL DEFAULT 4 CHECK (pomodoro_count > 0),
+    rhythm_kind TEXT NOT NULL CHECK (rhythm_kind IN ('count', 'sequence')),
+    rhythm_source TEXT NOT NULL CHECK (rhythm_source IN ('preset', 'custom')),
+    preset_key TEXT CHECK (
+        preset_key IS NULL OR preset_key IN ('auto', 'deep', 'creative', 'extended')
+    ),
     idle_timeout_minutes INTEGER CHECK (idle_timeout_minutes IS NULL OR idle_timeout_minutes > 0)
+);
+
+CREATE TABLE pomodoro_config_count_rhythms (
+    event_id TEXT PRIMARY KEY REFERENCES pomodoro_configs(event_id) ON DELETE CASCADE,
+    focus_duration_minutes INTEGER NOT NULL CHECK (focus_duration_minutes > 0),
+    short_break_minutes INTEGER NOT NULL CHECK (short_break_minutes > 0),
+    long_break_minutes INTEGER NOT NULL CHECK (long_break_minutes > 0),
+    long_break_after_focus_count INTEGER NOT NULL CHECK (
+        long_break_after_focus_count >= 1 AND long_break_after_focus_count <= 12
+    )
+);
+
+CREATE TABLE pomodoro_config_sequence_steps (
+    event_id TEXT NOT NULL REFERENCES pomodoro_configs(event_id) ON DELETE CASCADE,
+    step_index INTEGER NOT NULL CHECK (step_index >= 0 AND step_index < 12),
+    focus_duration_minutes INTEGER NOT NULL CHECK (focus_duration_minutes > 0),
+    break_phase TEXT NOT NULL CHECK (break_phase IN ('short_break', 'long_break')),
+    break_duration_minutes INTEGER NOT NULL CHECK (break_duration_minutes > 0),
+    PRIMARY KEY (event_id, step_index)
 );
 
 CREATE TABLE pomodoro_runs (
@@ -290,15 +310,16 @@ CREATE TABLE pomodoro_runs (
     started_at TEXT NOT NULL,
     ended_at TEXT,
     end_reason TEXT CHECK (end_reason IS NULL OR end_reason IN ('completed', 'stopped', 'interrupted', 'reconfigured', 'block_transition')),
-    focus_duration_minutes INTEGER NOT NULL,
-    short_break_minutes INTEGER NOT NULL,
-    long_break_minutes INTEGER NOT NULL,
-    pomodoro_count INTEGER NOT NULL,
+    rhythm_kind TEXT NOT NULL CHECK (rhythm_kind IN ('count', 'sequence')),
+    rhythm_source TEXT NOT NULL CHECK (rhythm_source IN ('preset', 'custom')),
+    preset_key TEXT CHECK (
+        preset_key IS NULL OR preset_key IN ('auto', 'deep', 'creative', 'extended')
+    ),
     idle_timeout_minutes INTEGER,
     last_heartbeat TEXT NOT NULL,
     event_title_snapshot TEXT,
     inherited_focus_minutes INTEGER NOT NULL DEFAULT 0,
-    inherited_cycle INTEGER NOT NULL DEFAULT 1,
+    inherited_rhythm_position INTEGER NOT NULL DEFAULT 1,
     inherited_from_run_id TEXT REFERENCES pomodoro_runs(id) ON DELETE SET NULL,
     start_trigger TEXT NOT NULL DEFAULT 'manual' CHECK (start_trigger IN ('manual', 'block_auto', 'block_transition', 'reconfigure', 'crash_recovery')),
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -308,12 +329,31 @@ CREATE INDEX idx_pomodoro_runs_original_event ON pomodoro_runs(original_event_id
 CREATE INDEX idx_pomodoro_runs_open ON pomodoro_runs(ended_at);
 CREATE UNIQUE INDEX idx_pomodoro_runs_single_open ON pomodoro_runs((1)) WHERE ended_at IS NULL;
 
+CREATE TABLE pomodoro_run_count_rhythms (
+    run_id TEXT PRIMARY KEY REFERENCES pomodoro_runs(id) ON DELETE CASCADE,
+    focus_duration_minutes INTEGER NOT NULL CHECK (focus_duration_minutes > 0),
+    short_break_minutes INTEGER NOT NULL CHECK (short_break_minutes > 0),
+    long_break_minutes INTEGER NOT NULL CHECK (long_break_minutes > 0),
+    long_break_after_focus_count INTEGER NOT NULL CHECK (
+        long_break_after_focus_count >= 1 AND long_break_after_focus_count <= 12
+    )
+);
+
+CREATE TABLE pomodoro_run_sequence_steps (
+    run_id TEXT NOT NULL REFERENCES pomodoro_runs(id) ON DELETE CASCADE,
+    step_index INTEGER NOT NULL CHECK (step_index >= 0 AND step_index < 12),
+    focus_duration_minutes INTEGER NOT NULL CHECK (focus_duration_minutes > 0),
+    break_phase TEXT NOT NULL CHECK (break_phase IN ('short_break', 'long_break')),
+    break_duration_minutes INTEGER NOT NULL CHECK (break_duration_minutes > 0),
+    PRIMARY KEY (run_id, step_index)
+);
+
 CREATE TABLE pomodoro_segments (
     id TEXT PRIMARY KEY,
     event_id TEXT REFERENCES calendar_events(id) ON DELETE SET NULL,
     event_date TEXT NOT NULL,
     run_id TEXT NOT NULL REFERENCES pomodoro_runs(id) ON DELETE CASCADE,
-    cycle_number INTEGER NOT NULL,
+    rhythm_position INTEGER NOT NULL CHECK (rhythm_position > 0),
     phase TEXT NOT NULL CHECK (phase IN ('focus', 'short_break', 'long_break')),
     planned_start TEXT NOT NULL,
     planned_end TEXT NOT NULL,
@@ -405,11 +445,31 @@ CREATE INDEX idx_calendar_events_archive_calendar ON calendar_events_archive(cal
 
 CREATE TABLE calendar_event_archive_pomodoro_configs (
     archive_event_id TEXT PRIMARY KEY REFERENCES calendar_events_archive(id) ON DELETE CASCADE,
+    rhythm_kind TEXT NOT NULL CHECK (rhythm_kind IN ('count', 'sequence')),
+    rhythm_source TEXT NOT NULL CHECK (rhythm_source IN ('preset', 'custom')),
+    preset_key TEXT CHECK (
+        preset_key IS NULL OR preset_key IN ('auto', 'deep', 'creative', 'extended')
+    ),
+    idle_timeout_minutes INTEGER CHECK (idle_timeout_minutes IS NULL OR idle_timeout_minutes > 0)
+);
+
+CREATE TABLE calendar_event_archive_pomodoro_config_count_rhythms (
+    archive_event_id TEXT PRIMARY KEY REFERENCES calendar_event_archive_pomodoro_configs(archive_event_id) ON DELETE CASCADE,
     focus_duration_minutes INTEGER NOT NULL CHECK (focus_duration_minutes > 0),
     short_break_minutes INTEGER NOT NULL CHECK (short_break_minutes > 0),
     long_break_minutes INTEGER NOT NULL CHECK (long_break_minutes > 0),
-    pomodoro_count INTEGER NOT NULL CHECK (pomodoro_count > 0),
-    idle_timeout_minutes INTEGER CHECK (idle_timeout_minutes IS NULL OR idle_timeout_minutes > 0)
+    long_break_after_focus_count INTEGER NOT NULL CHECK (
+        long_break_after_focus_count >= 1 AND long_break_after_focus_count <= 12
+    )
+);
+
+CREATE TABLE calendar_event_archive_pomodoro_config_sequence_steps (
+    archive_event_id TEXT NOT NULL REFERENCES calendar_event_archive_pomodoro_configs(archive_event_id) ON DELETE CASCADE,
+    step_index INTEGER NOT NULL CHECK (step_index >= 0 AND step_index < 12),
+    focus_duration_minutes INTEGER NOT NULL CHECK (focus_duration_minutes > 0),
+    break_phase TEXT NOT NULL CHECK (break_phase IN ('short_break', 'long_break')),
+    break_duration_minutes INTEGER NOT NULL CHECK (break_duration_minutes > 0),
+    PRIMARY KEY (archive_event_id, step_index)
 );
 
 CREATE TABLE calendar_event_archive_notifications (

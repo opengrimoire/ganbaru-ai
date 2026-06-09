@@ -24,7 +24,7 @@ Situations most likely to produce bugs, data corruption, or confusing UX. Every 
 
 **Scenario, convert away from pomodoro.** The user disables the pomodoro toggle on the active event. The system must stop the session (`end_reason = stopped`), save all segment data, and remove the rail rendering. Re-enabling pomodoro later starts a fresh session, no inheritance.
 
-**Scenario, reconfigure while running.** The user changes focus duration from 25 to 40 minutes while in a focus phase at minute 18. The system must end the current run (`end_reason = reconfigured`), create a new run with the new config, carry `inherited_focus_minutes = 18` and `inherited_cycle` from the old run, and create a bridge focus segment with remaining time computed under the new config (40 - 18 = 22 minutes).
+**Scenario, reconfigure while running.** The user changes focus duration from 25 to 40 minutes while in a focus phase at minute 18. The system must end the current run (`end_reason = reconfigured`), create a new run with the new rhythm snapshot, carry `inherited_focus_minutes = 18` and `inherited_rhythm_position` from the old run, and preserve elapsed focus so the active focus has 22 minutes remaining under the new config (40 - 18 = 22 minutes).
 
 **Governed by:** `algorithms/pomodoro-state-machine.md` (reconfiguration), `features/calendar.md` (active event protection), invariant 6.
 

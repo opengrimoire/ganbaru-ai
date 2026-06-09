@@ -1,14 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarEvent, PomodoroConfig } from "$lib/components/calendar/types";
+import { createPresetPomodoroConfig } from "$lib/pomodoro/rhythm";
 import { selectActivePomodoroBlock } from "./pomodoro-scheduler";
 
-const config: PomodoroConfig = {
-  focusDurationMinutes: 40,
-  shortBreakMinutes: 5,
-  longBreakMinutes: 10,
-  pomodoroCount: 4,
-  idleTimeoutMinutes: null,
-};
+const config: PomodoroConfig = createPresetPomodoroConfig("auto");
 
 function event(overrides: Partial<CalendarEvent> & Pick<CalendarEvent, "id" | "start" | "end">): CalendarEvent {
   return {

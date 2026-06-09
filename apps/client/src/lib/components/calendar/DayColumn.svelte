@@ -259,13 +259,7 @@
       remainingSeconds: pomodoro.remainingSeconds,
       phaseElapsedSeconds: pomodoro.phaseElapsedSeconds,
       phaseWorkDurationSeconds: pomodoro.phaseWorkDurationSeconds,
-      currentConfig: {
-        focusDurationMinutes: pomodoro.currentConfig.focusMinutes,
-        shortBreakMinutes: pomodoro.currentConfig.shortBreakMinutes,
-        longBreakMinutes: pomodoro.currentConfig.longBreakMinutes,
-        pomodoroCount: pomodoro.currentConfig.cyclesBeforeLongBreak,
-        idleTimeoutMinutes: null,
-      },
+      currentConfig: pomodoro.currentConfig,
       breakOvertimeSeconds: pomodoro.breakOvertimeSeconds,
     }, dayStartMs, nowMs, persistedSegmentsByEvent);
   });

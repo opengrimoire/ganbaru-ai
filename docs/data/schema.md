@@ -144,6 +144,8 @@ Archive rows do not FK to `calendars` or live iCalendar component rows. The arch
 Archive child data stays normalized, not JSON. Snapshot tables exist for pomodoro config, notifications, EXDATEs, RDATEs, categories, extended properties, organizer, attendees, alarms, recurrence overrides, and override extended properties:
 
 - `calendar_event_archive_pomodoro_configs`
+- `calendar_event_archive_pomodoro_config_count_rhythms`
+- `calendar_event_archive_pomodoro_config_sequence_steps`
 - `calendar_event_archive_notifications`
 - `calendar_event_archive_exdates`
 - `calendar_event_archive_rdates`
@@ -172,15 +174,19 @@ One row per timed calendar event with Pomodoro enabled. All-day events cannot ha
 | Field | Type | Description |
 |---|---|---|
 | `event_id` | UUID | Primary key and FK to `calendar_events` (CASCADE delete). |
-| `focus_duration_minutes` | integer | Focus period length. |
-| `short_break_minutes` | integer | Short break length. |
-| `long_break_minutes` | integer | Long break length. |
-| `pomodoro_count` | integer | Focus periods before a long break in the current simple count-based rhythm. |
+| `rhythm_kind` | enum | `count` or `sequence`. |
+| `rhythm_source` | enum | `preset` or `custom`. |
+| `preset_key` | enum or null | `auto`, `deep`, `creative`, or `extended` for preset rhythms. Null for custom rhythms. |
 | `idle_timeout_minutes` | integer or null | Auto-pause threshold. Null disables idle detection for this event. |
 
-Built-in presets the UI can apply: automatic (40/5/10), deep focus (40/5/10), creative (25/5/15), extended (50/10/10), custom.
+Built-in presets the UI can apply: automatic (40/5/10), deep focus (40/5/10), creative (25/5/15), extended (50/10/10), custom. Presets are count rhythms with a long break after 4 focus periods.
 
-These columns encode the simple break plan described in `features/pomodoro.md`: fixed focus duration, fixed short break, fixed long break, and a long break after N focus periods. A future custom or adaptive rhythm migration must map existing rows to that simple break plan, preserve historical run snapshots, and add explicit plan fields only with a fallback that keeps older count-based configs readable. The adaptive data requirements are specified in `algorithms/pomodoro-adaptive-rhythm.md`.
+The actual rhythm payload lives in one child table:
+
+- `pomodoro_config_count_rhythms`: `event_id`, `focus_duration_minutes`, `short_break_minutes`, `long_break_minutes`, `long_break_after_focus_count`.
+- `pomodoro_config_sequence_steps`: `event_id`, `step_index`, `focus_duration_minutes`, `break_phase`, `break_duration_minutes`.
+
+Count rhythms store the simple break plan described in `features/pomodoro.md`: fixed focus duration, fixed short break, fixed long break, and a long break after N focus periods. Sequence rhythms store a repeating pattern with 1 to 12 positions. The parent and child rows are replaced transactionally; invalid replacements fail before deleting the previous child rows. The adaptive data requirements are specified in `algorithms/pomodoro-adaptive-rhythm.md`.
 
 ### `pomodoro_runs`
 
@@ -197,20 +203,26 @@ One row per continuous session of pomodoro work. Created when the timer starts, 
 | `started_at` | ISO datetime | When the session started. |
 | `ended_at` | ISO datetime or null | When the session ended. Null if still running. |
 | `end_reason` | enum or null | `completed`, `stopped`, `interrupted`, `reconfigured`, `block_transition`. Null if still running. |
-| `focus_duration_minutes` | integer | Config snapshot. |
-| `short_break_minutes` | integer | Config snapshot. |
-| `long_break_minutes` | integer | Config snapshot. |
-| `pomodoro_count` | integer | Focus periods before a long break in the simple count-based rhythm. Config snapshot. |
+| `rhythm_kind` | enum | `count` or `sequence`. Run snapshot. |
+| `rhythm_source` | enum | `preset` or `custom`. Run snapshot. |
+| `preset_key` | enum or null | Preset key for preset runs. Null for custom runs. |
 | `idle_timeout_minutes` | integer or null | Idle threshold. Null disables idle detection for this run. Config snapshot. |
 | `last_heartbeat` | ISO datetime | Updated every ~30 seconds while the session is active. Used for crash recovery. |
 | `event_title_snapshot` | text or null | Event title at the time of the run. Preserved for analytics after archival. |
-| `inherited_focus_minutes` | integer | Focus minutes accumulated in the current cycle, carried from the preceding run. 0 for fresh sessions. Non-zero when created by block transition or reconfiguration. |
-| `inherited_cycle` | integer | Cycle or break-plan position carried from the preceding run. 1 for fresh sessions. Determines which break is owed next in the simple count-based rhythm. |
+| `inherited_focus_minutes` | integer | Focus minutes accumulated at the inherited rhythm position, carried from the preceding run. 0 for fresh sessions. Non-zero when created by block transition or reconfiguration. |
+| `inherited_rhythm_position` | integer | Rhythm position carried from the preceding run. 1 for fresh sessions. Determines which break is owed next. |
 | `inherited_from_run_id` | UUID or null | FK to `pomodoro_runs`. The run from which state was inherited. Null for fresh sessions. Enables tracing transition chains in analytics. |
 | `start_trigger` | enum | `manual`, `block_auto`, `block_transition`, `reconfigure`, `crash_recovery`. |
 | `created_at` | ISO datetime | Row creation time. |
 
 Indexes: `(event_id, event_date)`, `(original_event_id)`, `(ended_at)`, plus a partial unique index that allows only one open run where `ended_at IS NULL`.
+
+The exact rhythm snapshot lives in one child table:
+
+- `pomodoro_run_count_rhythms`: `run_id`, `focus_duration_minutes`, `short_break_minutes`, `long_break_minutes`, `long_break_after_focus_count`.
+- `pomodoro_run_sequence_steps`: `run_id`, `step_index`, `focus_duration_minutes`, `break_phase`, `break_duration_minutes`.
+
+Event config changes never mutate these child rows. They are the historical truth for reconstructing plans, rail projections, and analytics.
 
 Why the inherited fields are on the run instead of derived from the chain of previous runs: traversing the chain is fragile (previous runs might reference archived events) and slow (the chain length is unbounded). Capturing the inherited state on the run itself makes each run self-contained for plan derivation. See `algorithms/pomodoro-segments-and-plan.md`.
 
@@ -226,7 +238,7 @@ One row per uninterrupted stretch of focus or break. A row is only created when 
 | `event_id` | UUID or null | Nullable FK to the live canonical `calendar_events.id`. For recurring occurrences this stores the parent template ID while live. It becomes null after archive; `run_id` still preserves the segment through the run. |
 | `event_date` | `YYYY-MM-DD` | The calendar day this segment belongs to. |
 | `run_id` | UUID | FK to `pomodoro_runs` (CASCADE delete). |
-| `cycle_number` | integer | Which pomodoro cycle (1 to `pomodoro_count`). |
+| `rhythm_position` | integer | The focus position or break-owed position represented by this segment. |
 | `phase` | enum | `focus`, `short_break`, `long_break`. |
 | `planned_start` | ISO datetime | When the segment was scheduled to begin. |
 | `planned_end` | ISO datetime | When the segment was scheduled to end. |

@@ -8,6 +8,10 @@ import {
   DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
   clampFocusIdleThresholdMinutes,
 } from "$lib/stores/preferences";
+import {
+  clonePomodoroConfig,
+  createPresetPomodoroConfig,
+} from "$lib/pomodoro/rhythm";
 
 export type PanelAnchor = { x: number; y: number; width: number; height: number };
 
@@ -79,10 +83,7 @@ function normalizePomodoroConfig(
   if (!config) return undefined;
   const { thresholdMinutes } = normalizeFocusIdleDefaults(focusIdleDefaults);
   return {
-    focusDurationMinutes: config.focusDurationMinutes,
-    shortBreakMinutes: config.shortBreakMinutes,
-    longBreakMinutes: config.longBreakMinutes,
-    pomodoroCount: 4,
+    ...clonePomodoroConfig(config),
     idleTimeoutMinutes: config.idleTimeoutMinutes !== null ? thresholdMinutes : null,
   };
 }
@@ -158,13 +159,7 @@ export function buildCreatePanelInitialChanges(
     notifications: [0],
     pomodoroConfig: allDay
       ? undefined
-      : {
-          focusDurationMinutes: 40,
-          shortBreakMinutes: 5,
-          longBreakMinutes: 10,
-          pomodoroCount: 4,
-          idleTimeoutMinutes: pauseWhenIdle ? thresholdMinutes : null,
-        },
+      : createPresetPomodoroConfig("auto", pauseWhenIdle ? thresholdMinutes : null),
     allDay: allDay || undefined,
     meetingEnabled: undefined,
     location: undefined,

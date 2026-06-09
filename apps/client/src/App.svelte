@@ -639,12 +639,7 @@
       const pc = activeBlock.pomodoroConfig!;
       void pomodoro.startFromBlock(
         activeBlock.id,
-        {
-          focusMinutes: pc.focusDurationMinutes,
-          shortBreakMinutes: pc.shortBreakMinutes,
-          longBreakMinutes: pc.longBreakMinutes,
-          cyclesBeforeLongBreak: pc.pomodoroCount,
-        },
+        pc,
         activeBlock.end,
         activeBlock.start.split(" ")[0],
         pc.idleTimeoutMinutes,

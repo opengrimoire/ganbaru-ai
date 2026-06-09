@@ -12,6 +12,16 @@ import { getMusicPlayer } from "$lib/stores/music-player.svelte";
 import { getPreferences } from "$lib/stores/preferences.svelte";
 import { computePlannedSegments } from "$lib/utils/pomodoro-segments";
 import {
+  breakAfterFocusPosition,
+  clonePomodoroConfig,
+  focusDurationMinutesAtPosition,
+  isValidPomodoroConfig,
+  nextRhythmPosition,
+  normalizeRhythmPosition,
+  phaseDurationMinutesAtPosition,
+  rhythmPositionCount,
+} from "$lib/pomodoro/rhythm";
+import {
   normalizePauseForSegment,
   normalizePausesForSegment,
   normalizeSegmentEndIso,
@@ -61,8 +71,8 @@ interface PomodoroWindowSnapshot {
   remainingSeconds: number;
   phaseTotalSeconds: number;
   phaseWorkDurationSeconds: number;
-  currentCycle: number;
-  totalCycles: number;
+  currentRhythmPosition: number;
+  totalRhythmPositions: number;
   isRunning: boolean;
   config: PomodoroConfig;
   completedPomodoros: number;
@@ -96,7 +106,7 @@ type PomodoroWindowCommand =
   | {
       kind: "start-from-block";
       blockId: string;
-      blockConfig: Partial<PomodoroConfig>;
+      blockConfig: PomodoroConfig;
       eventEnd?: string;
       eventDate?: string;
       blockIdleTimeoutMinutes?: number | null;
@@ -114,15 +124,16 @@ type PomodoroWindowCommand =
   | { kind: "add-focus-time"; seconds: number }
   | { kind: "cleanup-orphans" };
 
+const DEFAULT_FOCUS_SECONDS = focusDurationMinutesAtPosition(DEFAULT_CONFIG, 1) * TIME_MULTIPLIER;
+
 let phase = $state<PomodoroPhase>("focus");
-let remainingSeconds = $state(DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER);
-let phaseTotalSeconds = $state(DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER);
+let remainingSeconds = $state(DEFAULT_FOCUS_SECONDS);
+let phaseTotalSeconds = $state(DEFAULT_FOCUS_SECONDS);
 let phaseElapsedSeconds = 0;
-let phaseWorkDurationSeconds = DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER;
-let currentCycle = $state(1);
-let totalCycles = $state(DEFAULT_CONFIG.cyclesBeforeLongBreak);
+let phaseWorkDurationSeconds = DEFAULT_FOCUS_SECONDS;
+let currentRhythmPosition = $state(1);
 let isRunning = $state(false);
-let config = $state<PomodoroConfig>({ ...DEFAULT_CONFIG });
+let config = $state<PomodoroConfig>(clonePomodoroConfig(DEFAULT_CONFIG));
 let intervalId: ReturnType<typeof setInterval> | null = null;
 let pausedOpportunityIntervalId: ReturnType<typeof setInterval> | null = null;
 let pausedTrayPulseIntervalId: ReturnType<typeof setInterval> | null = null;
@@ -231,8 +242,7 @@ function buildSnapshot(): TimerSnapshot {
   return {
     phase,
     remainingSeconds,
-    currentCycle,
-    totalCycles,
+    currentRhythmPosition,
     config,
     skipNextBreak,
     notificationShown,
@@ -281,27 +291,7 @@ function isNonNegativeNumber(value: unknown): value is number {
 }
 
 function isPomodoroConfig(value: unknown): value is PomodoroConfig {
-  if (!isRecord(value)) return false;
-  return (
-    isPositiveNumber(value.focusMinutes) &&
-    isPositiveNumber(value.shortBreakMinutes) &&
-    isPositiveNumber(value.longBreakMinutes) &&
-    isPositiveNumber(value.cyclesBeforeLongBreak)
-  );
-}
-
-function isPartialPomodoroConfig(value: unknown): value is Partial<PomodoroConfig> {
-  if (!isRecord(value)) return false;
-  for (const key of [
-    "focusMinutes",
-    "shortBreakMinutes",
-    "longBreakMinutes",
-    "cyclesBeforeLongBreak",
-  ] as const) {
-    const found = value[key];
-    if (found !== undefined && !isPositiveNumber(found)) return false;
-  }
-  return true;
+  return isRecord(value) && isValidPomodoroConfig(value as unknown as PomodoroConfig);
 }
 
 function isPauseInterval(value: unknown): value is PauseInterval {
@@ -322,7 +312,7 @@ function isPersistedSegment(value: unknown): value is PersistedSegment {
     typeof value.eventId === "string" &&
     typeof value.eventDate === "string" &&
     typeof value.runId === "string" &&
-    typeof value.cycleNumber === "number" &&
+    typeof value.rhythmPosition === "number" &&
     isSegmentPhase(value.phase) &&
     typeof value.plannedStart === "string" &&
     typeof value.plannedEnd === "string" &&
@@ -358,8 +348,8 @@ function isPomodoroWindowSnapshot(value: unknown): value is PomodoroWindowSnapsh
     isNonNegativeNumber(value.remainingSeconds) &&
     isNonNegativeNumber(value.phaseTotalSeconds) &&
     isNonNegativeNumber(value.phaseWorkDurationSeconds) &&
-    isPositiveNumber(value.currentCycle) &&
-    isPositiveNumber(value.totalCycles) &&
+    isPositiveNumber(value.currentRhythmPosition) &&
+    isPositiveNumber(value.totalRhythmPositions) &&
     typeof value.isRunning === "boolean" &&
     isPomodoroConfig(value.config) &&
     isNonNegativeNumber(value.completedPomodoros) &&
@@ -405,7 +395,7 @@ function isPomodoroWindowCommand(value: unknown): value is PomodoroWindowCommand
     case "start-from-block":
       return (
         typeof value.blockId === "string" &&
-        isPartialPomodoroConfig(value.blockConfig) &&
+        isPomodoroConfig(value.blockConfig) &&
         (value.eventEnd === undefined || typeof value.eventEnd === "string") &&
         (value.eventDate === undefined || typeof value.eventDate === "string") &&
         (
@@ -441,10 +431,10 @@ function buildWindowSnapshot(): PomodoroWindowSnapshot {
     remainingSeconds,
     phaseTotalSeconds,
     phaseWorkDurationSeconds,
-    currentCycle,
-    totalCycles,
+    currentRhythmPosition,
+    totalRhythmPositions: rhythmPositionCount(config),
     isRunning,
-    config: { ...config },
+    config: clonePomodoroConfig(config),
     completedPomodoros,
     activeBlockId,
     activeRunId,
@@ -466,10 +456,9 @@ function applyWindowSnapshot(snapshot: PomodoroWindowSnapshot): void {
   remainingSeconds = snapshot.remainingSeconds;
   phaseTotalSeconds = snapshot.phaseTotalSeconds;
   phaseWorkDurationSeconds = snapshot.phaseWorkDurationSeconds;
-  currentCycle = snapshot.currentCycle;
-  totalCycles = snapshot.totalCycles;
+  currentRhythmPosition = snapshot.currentRhythmPosition;
   isRunning = snapshot.isRunning;
-  config = { ...snapshot.config };
+  config = clonePomodoroConfig(snapshot.config);
   completedPomodoros = snapshot.completedPomodoros;
   activeBlockId = snapshot.activeBlockId;
   activeRunId = snapshot.activeRunId;
@@ -514,7 +503,7 @@ interface PomodoroSegmentWrite {
   eventId: string;
   eventDate: string;
   runId: string;
-  cycleNumber: number;
+  rhythmPosition: number;
   phase: SegmentPhase;
   plannedStart: string;
   plannedEnd: string;
@@ -571,14 +560,13 @@ interface PomodoroRunWrite {
   plannedStart: string;
   plannedEnd: string;
   startedAt: string;
-  focusDurationMinutes: number;
-  shortBreakMinutes: number;
-  longBreakMinutes: number;
-  pomodoroCount: number;
+  rhythm: PomodoroConfig["rhythm"];
+  rhythmSource: PomodoroConfig["rhythmSource"];
+  presetKey: PomodoroConfig["presetKey"];
   idleTimeoutMinutes: number | null;
   eventTitleSnapshot: string | null;
   inheritedFocusMinutes: number;
-  inheritedCycle: number;
+  inheritedRhythmPosition: number;
   inheritedFromRunId: string | null;
   startTrigger: PomodoroStartTrigger;
 }
@@ -650,9 +638,10 @@ function runWrite(
   plannedEnd: string,
   startTrigger: PomodoroStartTrigger,
   inheritedFocusMinutes = 0,
-  inheritedCycle = 1,
+  inheritedRhythmPosition = 1,
   inheritedFromRunId: string | null = null,
 ): PomodoroRunWrite {
+  const configSnapshot = clonePomodoroConfig(config);
   return {
     id: runId,
     eventId,
@@ -660,14 +649,13 @@ function runWrite(
     plannedStart,
     plannedEnd,
     startedAt,
-    focusDurationMinutes: config.focusMinutes,
-    shortBreakMinutes: config.shortBreakMinutes,
-    longBreakMinutes: config.longBreakMinutes,
-    pomodoroCount: config.cyclesBeforeLongBreak,
+    rhythm: configSnapshot.rhythm,
+    rhythmSource: configSnapshot.rhythmSource,
+    presetKey: configSnapshot.presetKey,
     idleTimeoutMinutes: idleTimeoutMs === null ? null : Math.round(idleTimeoutMs / 60000),
     eventTitleSnapshot: null,
     inheritedFocusMinutes,
-    inheritedCycle,
+    inheritedRhythmPosition,
     inheritedFromRunId,
     startTrigger,
   };
@@ -1070,7 +1058,11 @@ function canPauseResumeSession(nowMs: number = Date.now()): boolean {
 
 function usedBreakExtensionSeconds(): number {
   if (!isBreakPhase(phase)) return 0;
-  const configuredBreakSeconds = phaseDurationSeconds(phase, config);
+  const configuredBreakSeconds = phaseDurationSeconds(
+    phase,
+    config,
+    currentRhythmPosition,
+  );
   return Math.max(0, phaseWorkDurationSeconds - configuredBreakSeconds);
 }
 
@@ -1176,7 +1168,7 @@ function segmentWrite(seg: PersistedSegment): PomodoroSegmentWrite {
     eventId: seg.eventId,
     eventDate: seg.eventDate,
     runId: seg.runId,
-    cycleNumber: seg.cycleNumber,
+    rhythmPosition: seg.rhythmPosition,
     phase: seg.phase,
     plannedStart: seg.plannedStart,
     plannedEnd: seg.plannedEnd,
@@ -1441,16 +1433,7 @@ async function createSegments(eventId: string, eventEnd: string, eventDate: stri
   const end = new Date(eventEnd.replace(" ", "T"));
   const remainingMinutes = Math.max(0, (end.getTime() - now.getTime()) / 60000);
 
-  const planned = computePlannedSegments(
-    {
-      focusDurationMinutes: config.focusMinutes,
-      shortBreakMinutes: config.shortBreakMinutes,
-      longBreakMinutes: config.longBreakMinutes,
-      pomodoroCount: config.cyclesBeforeLongBreak,
-      idleTimeoutMinutes: null,
-    },
-    remainingMinutes,
-  );
+  const planned = computePlannedSegments(config, remainingMinutes, 0, currentRhythmPosition);
 
   const baseIso = now.toISOString();
 
@@ -1459,7 +1442,7 @@ async function createSegments(eventId: string, eventEnd: string, eventDate: stri
     eventId,
     eventDate,
     runId,
-    cycleNumber: s.cycleNumber,
+    rhythmPosition: s.rhythmPosition,
     phase: s.phase as SegmentPhase,
     plannedStart: addMinutesToIso(baseIso, s.startOffsetMinutes),
     plannedEnd: addMinutesToIso(baseIso, s.endOffsetMinutes),
@@ -1516,7 +1499,7 @@ interface RebuildRunOptions {
   eventType: PomodoroRunEventType;
   startTrigger: PomodoroStartTrigger;
   inheritedFocusSeconds: number;
-  inheritedCycle: number;
+  inheritedRhythmPosition: number;
 }
 
 function plannedSegmentsAfterCurrentPhase(
@@ -1528,18 +1511,21 @@ function plannedSegmentsAfterCurrentPhase(
 ): PersistedSegment[] {
   const newSegments: PersistedSegment[] = [];
   let offset = 0;
-  let cycle = currentCycle;
   let nextIsFocus = phase !== "focus";
+  let rhythmPosition = nextIsFocus
+    ? nextRhythmPosition(config, currentRhythmPosition)
+    : currentRhythmPosition;
 
   while (offset < afterMinutes) {
     if (nextIsFocus) {
-      const duration = Math.min(config.focusMinutes, afterMinutes - offset);
+      const focusDuration = focusDurationMinutesAtPosition(config, rhythmPosition);
+      const duration = Math.min(focusDuration, afterMinutes - offset);
       newSegments.push({
         id: crypto.randomUUID(),
         eventId: blockId,
         eventDate,
         runId,
-        cycleNumber: cycle,
+        rhythmPosition,
         phase: "focus",
         plannedStart: addMinutesToIso(baseAfter, offset),
         plannedEnd: addMinutesToIso(baseAfter, offset + duration),
@@ -1552,17 +1538,15 @@ function plannedSegmentsAfterCurrentPhase(
       if (offset >= afterMinutes) break;
       nextIsFocus = false;
     } else {
-      const isLongBreak = cycle >= config.cyclesBeforeLongBreak;
-      const breakPhase: SegmentPhase = isLongBreak ? "long_break" : "short_break";
-      const breakDur = isLongBreak ? config.longBreakMinutes : config.shortBreakMinutes;
-      const duration = Math.min(breakDur, afterMinutes - offset);
+      const breakInfo = breakAfterFocusPosition(config, rhythmPosition);
+      const duration = Math.min(breakInfo.durationMinutes, afterMinutes - offset);
       newSegments.push({
         id: crypto.randomUUID(),
         eventId: blockId,
         eventDate,
         runId,
-        cycleNumber: cycle,
-        phase: breakPhase,
+        rhythmPosition,
+        phase: breakInfo.phase,
         plannedStart: addMinutesToIso(baseAfter, offset),
         plannedEnd: addMinutesToIso(baseAfter, offset + duration),
         actualStart: null,
@@ -1571,7 +1555,7 @@ function plannedSegmentsAfterCurrentPhase(
         status: "planned",
       });
       offset += duration;
-      cycle = isLongBreak ? 1 : cycle + 1;
+      rhythmPosition = nextRhythmPosition(config, rhythmPosition);
       nextIsFocus = true;
     }
   }
@@ -1653,7 +1637,7 @@ async function rebuildSegments(
       eventId: blockId,
       eventDate,
       runId,
-      cycleNumber: currentCycle,
+      rhythmPosition: currentRhythmPosition,
       phase: currentPhaseType,
       plannedStart: nowStr,
       plannedEnd: addMinutesToIso(nowStr, bridgeMinutes),
@@ -1690,7 +1674,7 @@ async function rebuildSegments(
       runPlannedEndForSegment(firstSegment),
       options.startTrigger,
       Math.floor(options.inheritedFocusSeconds / 60),
-      options.inheritedCycle,
+      options.inheritedRhythmPosition,
       previousRunId,
     );
     try {
@@ -1755,11 +1739,12 @@ async function reconfigureSession(
     elapsedSeconds,
     currentConfig: config,
     newConfig,
+    currentRhythmPosition,
     hasOvertimeInterval: overtimeIntervalId !== null,
   });
 
-  config = newConfig;
-  totalCycles = config.cyclesBeforeLongBreak;
+  config = clonePomodoroConfig(newConfig);
+  currentRhythmPosition = normalizeRhythmPosition(config, currentRhythmPosition);
   const nowMs = Date.now();
   setPhaseRemainingSeconds(result.newRemainingSeconds, elapsedSeconds, nowMs);
 
@@ -1785,7 +1770,7 @@ async function reconfigureSession(
     eventType: "reconfigure",
     startTrigger: "reconfigure",
     inheritedFocusSeconds: phase === "focus" ? elapsedSeconds : 0,
-    inheritedCycle: currentCycle,
+    inheritedRhythmPosition: currentRhythmPosition,
   });
   updateTray();
 }
@@ -1806,7 +1791,7 @@ async function transitionToBlock(
   const previousConfig = config;
   const elapsedSeconds = actualPhaseElapsedSeconds();
   const inheritedFocusSeconds = phase === "focus" ? elapsedSeconds : 0;
-  const inheritedCycle = currentCycle;
+  const inheritedRhythmPosition = currentRhythmPosition;
   activeBlockId = blockId;
   activeBlockEndMs = new Date(eventEnd.replace(" ", "T")).getTime();
   initListeners();
@@ -1817,12 +1802,12 @@ async function transitionToBlock(
     phase,
     remainingSeconds,
     elapsedFocusSeconds: phase === "focus" ? elapsedSeconds : undefined,
-    currentCycle,
+    currentRhythmPosition,
     blockExpired,
   });
 
-  config = newConfig;
-  totalCycles = config.cyclesBeforeLongBreak;
+  config = clonePomodoroConfig(newConfig);
+  currentRhythmPosition = normalizeRhythmPosition(config, currentRhythmPosition);
 
   switch (result.kind) {
     case "trigger_break": {
@@ -1832,7 +1817,7 @@ async function transitionToBlock(
 
       phase = result.breakPhase;
       setPhaseRemainingSeconds(result.breakDurationSeconds);
-      currentCycle = result.nextCycle;
+      currentRhythmPosition = result.rhythmPosition;
 
       phaseEndTime = Date.now() + remainingSeconds * 1000;
       if (!isRunning) {
@@ -1867,7 +1852,7 @@ async function transitionToBlock(
       stopOvertime();
       phase = "focus";
       setPhaseRemainingSeconds(result.remainingSeconds);
-      currentCycle = 1;
+      currentRhythmPosition = 1;
       completedPomodoros = 0;
       resetFocusNotificationState();
       isRunning = true;
@@ -1893,7 +1878,7 @@ async function transitionToBlock(
     eventType: "block_transition",
     startTrigger: "block_transition",
     inheritedFocusSeconds,
-    inheritedCycle,
+    inheritedRhythmPosition,
   });
   updateTray();
 }
@@ -2204,8 +2189,14 @@ function startFocusSession() {
     intervalId = null;
   }
   stopOvertime();
+  const nextPosition = isBreakPhase(phase)
+    ? nextRhythmPosition(config, currentRhythmPosition)
+    : currentRhythmPosition;
   phase = "focus";
-  setPhaseRemainingSeconds(config.focusMinutes * TIME_MULTIPLIER);
+  currentRhythmPosition = nextPosition;
+  setPhaseRemainingSeconds(
+    focusDurationMinutesAtPosition(config, currentRhythmPosition) * TIME_MULTIPLIER,
+  );
   resetFocusNotificationState();
   isRunning = true;
   phaseEndTime = Date.now() + remainingSeconds * 1000;
@@ -2260,8 +2251,8 @@ async function dismissSuspend(resume: boolean): Promise<void> {
     idleTimeoutMs = null;
     lastTickMs = null;
     phase = "focus";
-    resetPhaseProgress(DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER);
-    currentCycle = 1;
+    resetPhaseProgress(DEFAULT_FOCUS_SECONDS);
+    currentRhythmPosition = 1;
     completedPomodoros = 0;
     sessionStartTime = null;
     skipNextBreak = false;
@@ -2392,7 +2383,11 @@ async function restartFocusAfterFailedIdle(): Promise<void> {
   phase = "focus";
   resetFocusNotificationState();
   const nowMs = Date.now();
-  const remaining = setPhaseRemainingSeconds(config.focusMinutes * TIME_MULTIPLIER, 0, nowMs);
+  const remaining = setPhaseRemainingSeconds(
+    focusDurationMinutesAtPosition(config, currentRhythmPosition) * TIME_MULTIPLIER,
+    0,
+    nowMs,
+  );
   if (remaining <= 0) {
     idlePaused = null;
     await expirePausedBlockAtDeadlineAndWait();
@@ -2406,7 +2401,7 @@ async function restartFocusAfterFailedIdle(): Promise<void> {
     eventId: blockId,
     eventDate,
     runId,
-    cycleNumber: currentCycle,
+    rhythmPosition: currentRhythmPosition,
     phase: "focus",
     plannedStart: now,
     plannedEnd: new Date(phaseEndMs).toISOString(),
@@ -2588,8 +2583,8 @@ async function dismissIdle(resume: boolean): Promise<void> {
     activeBlockEndMs = null;
     lastTickMs = null;
     phase = "focus";
-    resetPhaseProgress(DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER);
-    currentCycle = 1;
+    resetPhaseProgress(DEFAULT_FOCUS_SECONDS);
+    currentRhythmPosition = 1;
     completedPomodoros = 0;
     sessionStartTime = null;
     skipNextBreak = false;
@@ -2801,7 +2796,7 @@ function advancePhase() {
       setPhaseRemainingSeconds(result.remainingSeconds);
       resetFocusNotificationState();
       phaseEndTime = Date.now() + remainingSeconds * 1000;
-      currentCycle = result.nextCycle;
+      currentRhythmPosition = result.nextRhythmPosition;
 
       // Mark the break segment as skipped, activate next focus
       const breakIdx = currentSegmentIndex + 1;
@@ -2836,7 +2831,7 @@ function advancePhase() {
       phase = "long_break";
       setPhaseRemainingSeconds(result.remainingSeconds);
       phaseEndTime = Date.now() + remainingSeconds * 1000;
-      currentCycle = result.nextCycle;
+      currentRhythmPosition = result.rhythmPosition;
 
       const breakIdx = currentSegmentIndex + 1;
       if (breakIdx < segments.length && segments[breakIdx].phase === "long_break") {
@@ -2850,7 +2845,7 @@ function advancePhase() {
       phase = "short_break";
       setPhaseRemainingSeconds(result.remainingSeconds);
       phaseEndTime = Date.now() + remainingSeconds * 1000;
-      currentCycle = result.nextCycle;
+      currentRhythmPosition = result.rhythmPosition;
 
       const breakIdx = currentSegmentIndex + 1;
       if (breakIdx < segments.length && segments[breakIdx].phase === "short_break") {
@@ -2863,6 +2858,7 @@ function advancePhase() {
     case "break_to_focus": {
       markSegment(currentSegmentIndex, "completed", true, cappedActiveBreakEndIso());
       phase = "focus";
+      currentRhythmPosition = result.nextRhythmPosition;
       setPhaseRemainingSeconds(result.remainingSeconds);
       resetFocusNotificationState();
       phaseEndTime = Date.now() + remainingSeconds * 1000;
@@ -2926,16 +2922,17 @@ function adoptTransferredBlockIdInternal(
 
 async function startFromBlockInternal(
   blockId: string,
-  blockConfig: Partial<PomodoroConfig>,
+  blockConfig: PomodoroConfig,
   eventEnd?: string,
   eventDate?: string,
   blockIdleTimeoutMinutes?: number | null,
   syncIdleTimeoutOnExistingBlock = true,
 ): Promise<void> {
-  const newConfig = { ...DEFAULT_CONFIG, ...blockConfig };
+  const newConfig = clonePomodoroConfig(blockConfig);
 
-  const newIdleMs = (blockIdleTimeoutMinutes != null && blockIdleTimeoutMinutes > 0)
-    ? blockIdleTimeoutMinutes * 60_000 : null;
+  const idleMinutes = blockIdleTimeoutMinutes ?? newConfig.idleTimeoutMinutes;
+  const newIdleMs = (idleMinutes != null && idleMinutes > 0)
+    ? idleMinutes * 60_000 : null;
 
   const incomingEndMs = (eventEnd && eventDate)
     ? new Date(eventEnd.replace(" ", "T")).getTime()
@@ -2986,11 +2983,12 @@ async function startFromBlockInternal(
 
       activeBlockId = blockId;
       activeBlockEndMs = decision.newEndMs;
-      config = decision.newConfig;
-      totalCycles = config.cyclesBeforeLongBreak;
+      config = clonePomodoroConfig(decision.newConfig);
       phase = "focus";
-      setPhaseRemainingSeconds(config.focusMinutes * TIME_MULTIPLIER);
-      currentCycle = 1;
+      currentRhythmPosition = 1;
+      setPhaseRemainingSeconds(
+        focusDurationMinutesAtPosition(config, currentRhythmPosition) * TIME_MULTIPLIER,
+      );
       completedPomodoros = 0;
       skipNextBreak = false;
       resetFocusNotificationState();
@@ -3046,8 +3044,8 @@ async function stopSessionInternal(): Promise<void> {
   idleTimeoutMs = null;
   blockExpired = false;
   phase = "focus";
-  resetPhaseProgress(DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER);
-  currentCycle = 1;
+  resetPhaseProgress(DEFAULT_FOCUS_SECONDS);
+  currentRhythmPosition = 1;
   completedPomodoros = 0;
   sessionStartTime = null;
   skipNextBreak = false;
@@ -3110,8 +3108,8 @@ async function completeActiveBlockAtInternal(endIso: string = nowIso()): Promise
   suspendedAway = null;
   idlePaused = null;
   phase = "focus";
-  resetPhaseProgress(DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER);
-  currentCycle = 1;
+  resetPhaseProgress(DEFAULT_FOCUS_SECONDS);
+  currentRhythmPosition = 1;
   completedPomodoros = 0;
   sessionStartTime = null;
   skipNextBreak = false;
@@ -3206,11 +3204,17 @@ export function getPomodoro() {
     get currentConfig() {
       return config;
     },
+    get currentRhythmPosition() {
+      return currentRhythmPosition;
+    },
+    get totalRhythmPositions() {
+      return rhythmPositionCount(config);
+    },
     get currentCycle() {
-      return currentCycle;
+      return currentRhythmPosition;
     },
     get totalCycles() {
-      return totalCycles;
+      return rhythmPositionCount(config);
     },
     get isRunning() {
       return isRunning;
@@ -3304,7 +3308,7 @@ export function getPomodoro() {
     },
     async startFromBlock(
       blockId: string,
-      blockConfig: Partial<PomodoroConfig>,
+      blockConfig: PomodoroConfig,
       eventEnd?: string,
       eventDate?: string,
       blockIdleTimeoutMinutes?: number | null,

@@ -47,11 +47,11 @@ pub struct CalendarActiveEventReferenceTransfer {
 #[serde(tag = "type")]
 pub enum CalendarRecurrenceCommitOperation {
     #[serde(rename = "update_event")]
-    UpdateEvent { patch: CalendarEventUpdate },
+    UpdateEvent { patch: Box<CalendarEventUpdate> },
     #[serde(rename = "detach_instance")]
-    DetachInstance { input: CalendarDetachInstance },
+    DetachInstance { input: Box<CalendarDetachInstance> },
     #[serde(rename = "split_series")]
-    SplitSeries { input: CalendarSplitSeries },
+    SplitSeries { input: Box<CalendarSplitSeries> },
     #[serde(rename = "transfer_active_event_reference")]
     TransferActiveEventReference {
         transfer: CalendarActiveEventReferenceTransfer,
@@ -112,11 +112,36 @@ pub struct CalendarEventCreate {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CalendarPomodoroConfig {
-    focus_duration_minutes: i64,
-    short_break_minutes: i64,
-    long_break_minutes: i64,
-    pomodoro_count: i64,
+    rhythm: CalendarPomodoroRhythm,
+    rhythm_source: String,
+    preset_key: Option<String>,
     idle_timeout_minutes: Option<i64>,
+}
+
+#[derive(Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+enum CalendarPomodoroRhythm {
+    Count {
+        focus_duration_minutes: i64,
+        short_break_minutes: i64,
+        long_break_minutes: i64,
+        long_break_after_focus_count: i64,
+    },
+    Sequence {
+        steps: Vec<CalendarPomodoroSequenceStep>,
+    },
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CalendarPomodoroSequenceStep {
+    focus_duration_minutes: i64,
+    break_phase: String,
+    break_duration_minutes: i64,
 }
 
 #[derive(Deserialize)]
@@ -380,20 +405,7 @@ pub async fn calendar_add_event<R: Runtime>(
     replace_organizer(&mut tx, &event.id, parse_organizer(&event.organizer)?).await?;
 
     if let Some(config) = &event.pomodoro_config {
-        sqlx::query(
-            "INSERT INTO pomodoro_configs
-               (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count, idle_timeout_minutes)
-             VALUES (?, ?, ?, ?, ?, ?)",
-        )
-        .bind(&event.id)
-        .bind(config.focus_duration_minutes)
-        .bind(config.short_break_minutes)
-        .bind(config.long_break_minutes)
-        .bind(config.pomodoro_count)
-        .bind(config.idle_timeout_minutes)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| format!("insert calendar pomodoro config: {e}"))?;
+        insert_pomodoro_config(&mut tx, &event.id, config).await?;
     }
 
     for (sort_order, attendee) in event.attendees.iter().enumerate() {
@@ -776,10 +788,8 @@ async fn restore_archived_event_children(
 ) -> Result<(), String> {
     sqlx::query(
         "INSERT INTO pomodoro_configs
-            (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes,
-             pomodoro_count, idle_timeout_minutes)
-         SELECT ?, focus_duration_minutes, short_break_minutes, long_break_minutes,
-                pomodoro_count, idle_timeout_minutes
+            (event_id, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes)
+         SELECT ?, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes
          FROM calendar_event_archive_pomodoro_configs
          WHERE archive_event_id = ?",
     )
@@ -788,6 +798,35 @@ async fn restore_archived_event_children(
     .execute(&mut **tx)
     .await
     .map_err(|e| format!("restore archived pomodoro config: {e}"))?;
+
+    sqlx::query(
+        "INSERT INTO pomodoro_config_count_rhythms
+            (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes,
+             long_break_after_focus_count)
+         SELECT ?, focus_duration_minutes, short_break_minutes, long_break_minutes,
+                long_break_after_focus_count
+         FROM calendar_event_archive_pomodoro_config_count_rhythms
+         WHERE archive_event_id = ?",
+    )
+    .bind(source_event_id)
+    .bind(archive_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("restore archived count pomodoro rhythm: {e}"))?;
+
+    sqlx::query(
+        "INSERT INTO pomodoro_config_sequence_steps
+            (event_id, step_index, focus_duration_minutes, break_phase, break_duration_minutes)
+         SELECT ?, step_index, focus_duration_minutes, break_phase, break_duration_minutes
+         FROM calendar_event_archive_pomodoro_config_sequence_steps
+         WHERE archive_event_id = ?
+         ORDER BY step_index ASC",
+    )
+    .bind(source_event_id)
+    .bind(archive_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("restore archived sequence pomodoro rhythm: {e}"))?;
 
     for (archive_table, live_table, column) in [
         (
@@ -1382,6 +1421,8 @@ async fn clear_archive_children(
         "calendar_event_archive_rdates",
         "calendar_event_archive_exdates",
         "calendar_event_archive_notifications",
+        "calendar_event_archive_pomodoro_config_sequence_steps",
+        "calendar_event_archive_pomodoro_config_count_rhythms",
         "calendar_event_archive_pomodoro_configs",
     ] {
         let query = format!("DELETE FROM {table} WHERE archive_event_id = ?");
@@ -1401,10 +1442,8 @@ async fn copy_archive_children(
 ) -> Result<(), String> {
     sqlx::query(
         "INSERT INTO calendar_event_archive_pomodoro_configs
-            (archive_event_id, focus_duration_minutes, short_break_minutes,
-             long_break_minutes, pomodoro_count, idle_timeout_minutes)
-         SELECT ?, focus_duration_minutes, short_break_minutes, long_break_minutes,
-                pomodoro_count, idle_timeout_minutes
+            (archive_event_id, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes)
+         SELECT ?, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes
          FROM pomodoro_configs
          WHERE event_id = ?",
     )
@@ -1413,6 +1452,35 @@ async fn copy_archive_children(
     .execute(&mut **tx)
     .await
     .map_err(|e| format!("archive pomodoro config: {e}"))?;
+
+    sqlx::query(
+        "INSERT INTO calendar_event_archive_pomodoro_config_count_rhythms
+            (archive_event_id, focus_duration_minutes, short_break_minutes, long_break_minutes,
+             long_break_after_focus_count)
+         SELECT ?, focus_duration_minutes, short_break_minutes, long_break_minutes,
+                long_break_after_focus_count
+         FROM pomodoro_config_count_rhythms
+         WHERE event_id = ?",
+    )
+    .bind(archive_event_id)
+    .bind(source_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("archive count pomodoro rhythm: {e}"))?;
+
+    sqlx::query(
+        "INSERT INTO calendar_event_archive_pomodoro_config_sequence_steps
+            (archive_event_id, step_index, focus_duration_minutes, break_phase, break_duration_minutes)
+         SELECT ?, step_index, focus_duration_minutes, break_phase, break_duration_minutes
+         FROM pomodoro_config_sequence_steps
+         WHERE event_id = ?
+         ORDER BY step_index ASC",
+    )
+    .bind(archive_event_id)
+    .bind(source_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("archive sequence pomodoro rhythm: {e}"))?;
 
     for (source_table, archive_table, column) in [
         (
@@ -1892,20 +1960,7 @@ async fn update_calendar_event_unchecked_tx(
     if let Some(config_patch) = &patch.pomodoro_config {
         match config_patch {
             CalendarPomodoroConfigPatch::Set(config) => {
-                sqlx::query(
-                    "INSERT OR REPLACE INTO pomodoro_configs
-                       (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count, idle_timeout_minutes)
-                     VALUES (?, ?, ?, ?, ?, ?)",
-                )
-                .bind(&patch.id)
-                .bind(config.focus_duration_minutes)
-                .bind(config.short_break_minutes)
-                .bind(config.long_break_minutes)
-                .bind(config.pomodoro_count)
-                .bind(config.idle_timeout_minutes)
-                .execute(&mut **tx)
-                .await
-                .map_err(|e| format!("upsert calendar pomodoro config: {e}"))?;
+                replace_pomodoro_config(tx, &patch.id, config).await?;
             }
             CalendarPomodoroConfigPatch::Clear => {
                 sqlx::query("DELETE FROM pomodoro_configs WHERE event_id = ?")
@@ -2475,8 +2530,8 @@ async fn copy_pomodoro_config(
 ) -> Result<(), String> {
     sqlx::query(
         "INSERT INTO pomodoro_configs
-           (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count, idle_timeout_minutes)
-         SELECT ?, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count, idle_timeout_minutes
+           (event_id, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes)
+         SELECT ?, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes
          FROM pomodoro_configs WHERE event_id = ?",
     )
     .bind(target_event_id)
@@ -2484,7 +2539,48 @@ async fn copy_pomodoro_config(
     .execute(&mut **tx)
     .await
     .map_err(|e| format!("copy pomodoro config: {e}"))?;
+
+    sqlx::query(
+        "INSERT INTO pomodoro_config_count_rhythms
+           (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes,
+            long_break_after_focus_count)
+         SELECT ?, focus_duration_minutes, short_break_minutes, long_break_minutes,
+                long_break_after_focus_count
+         FROM pomodoro_config_count_rhythms WHERE event_id = ?",
+    )
+    .bind(target_event_id)
+    .bind(source_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("copy count pomodoro rhythm: {e}"))?;
+
+    sqlx::query(
+        "INSERT INTO pomodoro_config_sequence_steps
+           (event_id, step_index, focus_duration_minutes, break_phase, break_duration_minutes)
+         SELECT ?, step_index, focus_duration_minutes, break_phase, break_duration_minutes
+         FROM pomodoro_config_sequence_steps WHERE event_id = ?
+         ORDER BY step_index ASC",
+    )
+    .bind(target_event_id)
+    .bind(source_event_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("copy sequence pomodoro rhythm: {e}"))?;
     Ok(())
+}
+
+async fn replace_pomodoro_config(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    event_id: &str,
+    config: &CalendarPomodoroConfig,
+) -> Result<(), String> {
+    validate_pomodoro_config(config)?;
+    sqlx::query("DELETE FROM pomodoro_configs WHERE event_id = ?")
+        .bind(event_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("delete previous pomodoro config: {e}"))?;
+    insert_pomodoro_config(tx, event_id, config).await
 }
 
 async fn insert_pomodoro_config(
@@ -2492,20 +2588,65 @@ async fn insert_pomodoro_config(
     event_id: &str,
     config: &CalendarPomodoroConfig,
 ) -> Result<(), String> {
+    validate_pomodoro_config(config)?;
+    let rhythm_kind = match &config.rhythm {
+        CalendarPomodoroRhythm::Count { .. } => "count",
+        CalendarPomodoroRhythm::Sequence { .. } => "sequence",
+    };
     sqlx::query(
         "INSERT INTO pomodoro_configs
-           (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, pomodoro_count, idle_timeout_minutes)
-         VALUES (?, ?, ?, ?, ?, ?)",
+           (event_id, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes)
+         VALUES (?, ?, ?, ?, ?)",
     )
     .bind(event_id)
-    .bind(config.focus_duration_minutes)
-    .bind(config.short_break_minutes)
-    .bind(config.long_break_minutes)
-    .bind(config.pomodoro_count)
+    .bind(rhythm_kind)
+    .bind(&config.rhythm_source)
+    .bind(&config.preset_key)
     .bind(config.idle_timeout_minutes)
     .execute(&mut **tx)
     .await
     .map_err(|e| format!("insert pomodoro config: {e}"))?;
+
+    match &config.rhythm {
+        CalendarPomodoroRhythm::Count {
+            focus_duration_minutes,
+            short_break_minutes,
+            long_break_minutes,
+            long_break_after_focus_count,
+        } => {
+            sqlx::query(
+                "INSERT INTO pomodoro_config_count_rhythms
+                   (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes,
+                    long_break_after_focus_count)
+                 VALUES (?, ?, ?, ?, ?)",
+            )
+            .bind(event_id)
+            .bind(focus_duration_minutes)
+            .bind(short_break_minutes)
+            .bind(long_break_minutes)
+            .bind(long_break_after_focus_count)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| format!("insert count pomodoro rhythm: {e}"))?;
+        }
+        CalendarPomodoroRhythm::Sequence { steps } => {
+            for (step_index, step) in steps.iter().enumerate() {
+                sqlx::query(
+                    "INSERT INTO pomodoro_config_sequence_steps
+                       (event_id, step_index, focus_duration_minutes, break_phase, break_duration_minutes)
+                     VALUES (?, ?, ?, ?, ?)",
+                )
+                .bind(event_id)
+                .bind(step_index as i64)
+                .bind(step.focus_duration_minutes)
+                .bind(&step.break_phase)
+                .bind(step.break_duration_minutes)
+                .execute(&mut **tx)
+                .await
+                .map_err(|e| format!("insert sequence pomodoro rhythm step: {e}"))?;
+            }
+        }
+    }
     Ok(())
 }
 
@@ -3139,14 +3280,74 @@ fn validate_optional_attendee_status(value: &Option<String>, field: &str) -> Res
 }
 
 fn validate_pomodoro_config(config: &CalendarPomodoroConfig) -> Result<(), String> {
-    validate_positive(config.focus_duration_minutes, "focus_duration_minutes")?;
-    validate_positive(config.short_break_minutes, "short_break_minutes")?;
-    validate_positive(config.long_break_minutes, "long_break_minutes")?;
-    validate_positive(config.pomodoro_count, "pomodoro_count")?;
+    validate_rhythm_source(&config.rhythm_source, config.preset_key.as_deref())?;
+    match &config.rhythm {
+        CalendarPomodoroRhythm::Count {
+            focus_duration_minutes,
+            short_break_minutes,
+            long_break_minutes,
+            long_break_after_focus_count,
+        } => {
+            validate_positive(*focus_duration_minutes, "focus_duration_minutes")?;
+            validate_positive(*short_break_minutes, "short_break_minutes")?;
+            validate_positive(*long_break_minutes, "long_break_minutes")?;
+            validate_rhythm_position_count(
+                *long_break_after_focus_count,
+                "long_break_after_focus_count",
+            )?;
+        }
+        CalendarPomodoroRhythm::Sequence { steps } => {
+            if steps.is_empty() {
+                return Err("sequence rhythm must include at least one step".to_string());
+            }
+            validate_rhythm_position_count(steps.len() as i64, "sequence step count")?;
+            for (index, step) in steps.iter().enumerate() {
+                validate_positive(
+                    step.focus_duration_minutes,
+                    &format!("sequence step {index} focus_duration_minutes"),
+                )?;
+                validate_enum(
+                    &step.break_phase,
+                    &format!("sequence step {index} break_phase"),
+                    &["short_break", "long_break"],
+                )?;
+                validate_positive(
+                    step.break_duration_minutes,
+                    &format!("sequence step {index} break_duration_minutes"),
+                )?;
+            }
+        }
+    }
     if let Some(idle) = config.idle_timeout_minutes {
         validate_non_negative(idle, "idle_timeout_minutes")?;
     }
     Ok(())
+}
+
+fn validate_rhythm_source(source: &str, preset_key: Option<&str>) -> Result<(), String> {
+    match source {
+        "preset" => {
+            let Some(key) = preset_key else {
+                return Err("preset rhythm_source requires preset_key".to_string());
+            };
+            validate_enum(key, "preset_key", &["auto", "deep", "creative", "extended"])
+        }
+        "custom" => {
+            if preset_key.is_some() {
+                return Err("custom rhythm_source cannot include preset_key".to_string());
+            }
+            Ok(())
+        }
+        _ => Err(format!("invalid rhythm_source: {source}")),
+    }
+}
+
+fn validate_rhythm_position_count(value: i64, field: &str) -> Result<(), String> {
+    if !(1..=12).contains(&value) {
+        Err(format!("{field} must be between 1 and 12"))
+    } else {
+        Ok(())
+    }
 }
 
 fn validate_alarm(alarm: &CalendarEventAlarm) -> Result<(), String> {
@@ -3261,14 +3462,16 @@ mod tests {
         apply_delete_archive_operations_tx, apply_recurrence_commit_operations_tx,
         apply_update_field, archive_calendar_event_tx, cap_calendar_series_tx,
         delete_calendar_event_tx, filter_excluded_dates, insert_calendar_event_row,
-        protected_active_event_end_update_allowed, restore_archived_calendar_event_tx,
-        sanitize_stored_event_description, split_calendar_series_tx, update_calendar_event_tx,
-        validate_color, validate_event_create, validate_non_negative, validate_positive,
-        validate_priority, validate_update_field, CalendarActiveEventReferenceTransfer,
-        CalendarDeleteArchiveOperation, CalendarDetachInstance, CalendarEventCreate,
-        CalendarEventMutationContext, CalendarEventMutationTarget, CalendarEventUpdate,
-        CalendarEventUpdateField, CalendarGuestPermissions, CalendarPomodoroConfig,
-        CalendarPomodoroConfigPatch, CalendarRecurrenceCommitOperation, CalendarSplitSeries,
+        insert_pomodoro_config, protected_active_event_end_update_allowed, replace_pomodoro_config,
+        restore_archived_calendar_event_tx, sanitize_stored_event_description,
+        split_calendar_series_tx, update_calendar_event_tx, validate_color, validate_event_create,
+        validate_non_negative, validate_positive, validate_priority, validate_update_field,
+        CalendarActiveEventReferenceTransfer, CalendarDeleteArchiveOperation,
+        CalendarDetachInstance, CalendarEventCreate, CalendarEventMutationContext,
+        CalendarEventMutationTarget, CalendarEventUpdate, CalendarEventUpdateField,
+        CalendarGuestPermissions, CalendarPomodoroConfig, CalendarPomodoroConfigPatch,
+        CalendarPomodoroRhythm, CalendarPomodoroSequenceStep, CalendarRecurrenceCommitOperation,
+        CalendarSplitSeries,
     };
 
     fn event_create() -> CalendarEventCreate {
@@ -3313,11 +3516,46 @@ mod tests {
 
     fn pomodoro_config() -> CalendarPomodoroConfig {
         CalendarPomodoroConfig {
-            focus_duration_minutes: 40,
-            short_break_minutes: 5,
-            long_break_minutes: 10,
-            pomodoro_count: 4,
+            rhythm: CalendarPomodoroRhythm::Count {
+                focus_duration_minutes: 40,
+                short_break_minutes: 5,
+                long_break_minutes: 10,
+                long_break_after_focus_count: 4,
+            },
+            rhythm_source: "preset".to_string(),
+            preset_key: Some("auto".to_string()),
             idle_timeout_minutes: Some(3),
+        }
+    }
+
+    fn sequence_pomodoro_config() -> CalendarPomodoroConfig {
+        CalendarPomodoroConfig {
+            rhythm: CalendarPomodoroRhythm::Sequence {
+                steps: vec![
+                    CalendarPomodoroSequenceStep {
+                        focus_duration_minutes: 25,
+                        break_phase: "short_break".to_string(),
+                        break_duration_minutes: 5,
+                    },
+                    CalendarPomodoroSequenceStep {
+                        focus_duration_minutes: 35,
+                        break_phase: "long_break".to_string(),
+                        break_duration_minutes: 12,
+                    },
+                ],
+            },
+            rhythm_source: "custom".to_string(),
+            preset_key: None,
+            idle_timeout_minutes: None,
+        }
+    }
+
+    fn invalid_sequence_pomodoro_config() -> CalendarPomodoroConfig {
+        CalendarPomodoroConfig {
+            rhythm: CalendarPomodoroRhythm::Sequence { steps: Vec::new() },
+            rhythm_source: "custom".to_string(),
+            preset_key: None,
+            idle_timeout_minutes: None,
         }
     }
 
@@ -3847,15 +4085,7 @@ mod tests {
                     fields: vec![],
                     attendees: None,
                     alarms: None,
-                    pomodoro_config: Some(CalendarPomodoroConfigPatch::Set(
-                        CalendarPomodoroConfig {
-                            focus_duration_minutes: 40,
-                            short_break_minutes: 5,
-                            long_break_minutes: 10,
-                            pomodoro_count: 4,
-                            idle_timeout_minutes: Some(3),
-                        },
-                    )),
+                    pomodoro_config: Some(CalendarPomodoroConfigPatch::Set(pomodoro_config())),
                 },
             )
             .await
@@ -3869,6 +4099,46 @@ mod tests {
             .await
             .unwrap();
             assert_eq!(count, 1);
+        });
+    }
+
+    #[test]
+    fn invalid_config_replacement_preserves_existing_child_rows() {
+        tauri::async_runtime::block_on(async {
+            let pool = in_memory_pool().await;
+            insert_test_event_at(
+                &pool,
+                "event-1",
+                "2000-05-09T10:00:00Z",
+                "2999-05-09T11:00:00Z",
+                None,
+            )
+            .await;
+
+            let mut tx = pool.begin().await.unwrap();
+            insert_pomodoro_config(&mut tx, "event-1", &sequence_pomodoro_config())
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+
+            let mut tx = pool.begin().await.unwrap();
+            let result =
+                replace_pomodoro_config(&mut tx, "event-1", &invalid_sequence_pomodoro_config())
+                    .await;
+            assert!(result.is_err());
+            tx.rollback().await.unwrap();
+
+            let saved: (String, i64) = sqlx::query_as(
+                "SELECT pc.rhythm_kind, COUNT(pcss.step_index)
+                 FROM pomodoro_configs pc
+                 JOIN pomodoro_config_sequence_steps pcss ON pcss.event_id = pc.event_id
+                 WHERE pc.event_id = 'event-1'
+                 GROUP BY pc.rhythm_kind",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(saved, ("sequence".to_string(), 2));
         });
     }
 
@@ -4571,14 +4841,14 @@ mod tests {
                 &mut tx,
                 vec![
                     CalendarRecurrenceCommitOperation::UpdateEvent {
-                        patch: CalendarEventUpdate {
+                        patch: Box::new(CalendarEventUpdate {
                             id: "event-1".to_string(),
                             updated_at: "2026-05-09T10:30:00Z".to_string(),
                             fields: vec![CalendarEventUpdateField::Title("Changed".to_string())],
                             attendees: None,
                             alarms: None,
                             pomodoro_config: None,
-                        },
+                        }),
                     },
                     CalendarRecurrenceCommitOperation::TransferActiveEventReference {
                         transfer: CalendarActiveEventReferenceTransfer {
@@ -4634,17 +4904,17 @@ mod tests {
                 &mut tx,
                 vec![
                     CalendarRecurrenceCommitOperation::UpdateEvent {
-                        patch: CalendarEventUpdate {
+                        patch: Box::new(CalendarEventUpdate {
                             id: "event-1".to_string(),
                             updated_at: "2026-05-09T10:30:00Z".to_string(),
                             fields: vec![CalendarEventUpdateField::Title("Changed".to_string())],
                             attendees: None,
                             alarms: None,
                             pomodoro_config: None,
-                        },
+                        }),
                     },
                     CalendarRecurrenceCommitOperation::DetachInstance {
-                        input: CalendarDetachInstance {
+                        input: Box::new(CalendarDetachInstance {
                             parent_id: "missing-parent".to_string(),
                             instance_date: "2026-05-10".to_string(),
                             exceptions: "[\"2026-05-10\"]".to_string(),
@@ -4661,7 +4931,7 @@ mod tests {
                             transparency: "opaque".to_string(),
                             status: "confirmed".to_string(),
                             now: "2026-05-09T10:30:00Z".to_string(),
-                        },
+                        }),
                     },
                 ],
             )
@@ -4979,11 +5249,11 @@ mod tests {
         sqlx::query(
             "INSERT INTO pomodoro_runs
                 (id, event_id, original_event_id, event_date, planned_start, planned_end,
-                 started_at, focus_duration_minutes, short_break_minutes, long_break_minutes,
-                 pomodoro_count, last_heartbeat, start_trigger)
+                 started_at, rhythm_kind, rhythm_source, preset_key, last_heartbeat,
+                 start_trigger)
              VALUES ('run-1', 'event-1', 'event-1', '2026-05-09',
                      '2026-05-09T10:00:00Z', '2026-05-09T11:00:00Z',
-                     '2026-05-09T10:00:00Z', 40, 5, 10, 4,
+                     '2026-05-09T10:00:00Z', 'count', 'preset', 'auto',
                      '2026-05-09T10:05:00Z', 'manual')",
         )
         .execute(pool)
@@ -4994,7 +5264,7 @@ mod tests {
     async fn insert_test_active_pomodoro_segment(pool: &sqlx::SqlitePool) {
         sqlx::query(
             "INSERT INTO pomodoro_segments
-                (id, event_id, event_date, run_id, cycle_number, phase,
+                (id, event_id, event_date, run_id, rhythm_position, phase,
                  planned_start, planned_end, actual_start, status)
              VALUES ('segment-1', 'event-1', '2026-05-09', 'run-1', 1, 'focus',
                      '2026-05-09T10:00:00Z', '2026-05-09T10:40:00Z',
@@ -5008,9 +5278,18 @@ mod tests {
     async fn insert_test_pomodoro_config(pool: &sqlx::SqlitePool, event_id: &str) {
         sqlx::query(
             "INSERT INTO pomodoro_configs
+                (event_id, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes)
+             VALUES (?, 'count', 'preset', 'auto', 3)",
+        )
+        .bind(event_id)
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO pomodoro_config_count_rhythms
                 (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes,
-                 pomodoro_count, idle_timeout_minutes)
-             VALUES (?, 40, 5, 10, 4, 3)",
+                 long_break_after_focus_count)
+             VALUES (?, 40, 5, 10, 4)",
         )
         .bind(event_id)
         .execute(pool)
@@ -5030,11 +5309,11 @@ mod tests {
         sqlx::query(
             "INSERT INTO pomodoro_runs
                 (id, event_id, original_event_id, event_date, planned_start, planned_end,
-                 started_at, ended_at, end_reason, focus_duration_minutes,
-                 short_break_minutes, long_break_minutes, pomodoro_count, last_heartbeat,
+                 started_at, ended_at, end_reason, rhythm_kind, rhythm_source, preset_key,
+                 last_heartbeat,
                  start_trigger)
              VALUES ('run-1', ?, ?, ?, ?, ?, ?, ?, 'completed',
-                     40, 5, 10, 4, ?, 'manual')",
+                     'count', 'preset', 'auto', ?, 'manual')",
         )
         .bind(event_id)
         .bind(original_event_id)
@@ -5050,7 +5329,7 @@ mod tests {
 
         sqlx::query(
             "INSERT INTO pomodoro_segments
-                (id, event_id, event_date, run_id, cycle_number, phase,
+                (id, event_id, event_date, run_id, rhythm_position, phase,
                  planned_start, planned_end, actual_start, actual_end, status, end_reason)
              VALUES ('segment-1', ?, ?, 'run-1', 1, 'focus',
                      ?, ?, ?, ?, 'completed', 'completed')",

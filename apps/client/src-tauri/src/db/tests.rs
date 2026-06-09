@@ -32,11 +32,10 @@ async fn insert_open_run(
     sqlx::query(
         "INSERT INTO pomodoro_runs
             (id, event_id, original_event_id, event_date, planned_start, planned_end,
-             started_at, focus_duration_minutes, short_break_minutes, long_break_minutes,
-             pomodoro_count, last_heartbeat, start_trigger)
+             started_at, rhythm_kind, rhythm_source, preset_key, last_heartbeat, start_trigger)
          VALUES (?, 'event-1', 'event-1', '2026-05-23',
                  '2026-05-23T09:00:00Z', '2026-05-23T10:00:00Z',
-                 '2026-05-23T09:00:00Z', 40, 5, 10, 4,
+                 '2026-05-23T09:00:00Z', 'count', 'preset', 'auto',
                  '2026-05-23T09:00:00Z', 'manual')",
     )
     .bind(id)
@@ -93,6 +92,8 @@ fn schema_creates_normalized_calendar_archive_tables() {
         let archive_tables = [
             "calendar_events_archive",
             "calendar_event_archive_pomodoro_configs",
+            "calendar_event_archive_pomodoro_config_count_rhythms",
+            "calendar_event_archive_pomodoro_config_sequence_steps",
             "calendar_event_archive_notifications",
             "calendar_event_archive_exdates",
             "calendar_event_archive_rdates",
@@ -212,7 +213,7 @@ fn schema_allows_only_one_active_pomodoro_segment() {
 
         sqlx::query(
             "INSERT INTO pomodoro_segments
-                (id, event_id, event_date, run_id, cycle_number, phase,
+                (id, event_id, event_date, run_id, rhythm_position, phase,
                  planned_start, planned_end, actual_start, status)
              VALUES ('segment-1', 'event-1', '2026-05-23', 'run-1', 1, 'focus',
                      '2026-05-23T09:00:00Z', '2026-05-23T09:40:00Z',
@@ -224,7 +225,7 @@ fn schema_allows_only_one_active_pomodoro_segment() {
 
         let second_active = sqlx::query(
             "INSERT INTO pomodoro_segments
-                (id, event_id, event_date, run_id, cycle_number, phase,
+                (id, event_id, event_date, run_id, rhythm_position, phase,
                  planned_start, planned_end, actual_start, status)
              VALUES ('segment-2', 'event-1', '2026-05-23', 'run-1', 1, 'short_break',
                      '2026-05-23T09:40:00Z', '2026-05-23T09:45:00Z',
@@ -246,7 +247,7 @@ fn schema_accepts_focus_failed_pomodoro_history() {
 
         sqlx::query(
             "INSERT INTO pomodoro_segments
-                (id, event_id, event_date, run_id, cycle_number, phase,
+                (id, event_id, event_date, run_id, rhythm_position, phase,
                  planned_start, planned_end, actual_start, actual_end, status, end_reason)
              VALUES ('segment-1', 'event-1', '2026-05-23', 'run-1', 1, 'focus',
                      '2026-05-23T09:00:00Z', '2026-05-23T09:40:00Z',
@@ -278,7 +279,7 @@ fn deleting_calendar_event_preserves_pomodoro_segments() {
 
         sqlx::query(
             "INSERT INTO pomodoro_segments
-                (id, event_id, event_date, run_id, cycle_number, phase,
+                (id, event_id, event_date, run_id, rhythm_position, phase,
                  planned_start, planned_end, actual_start, actual_end, status, end_reason)
              VALUES ('segment-1', 'event-1', '2026-05-23', 'run-1', 1, 'focus',
                      '2026-05-23T09:00:00Z', '2026-05-23T09:40:00Z',
@@ -317,7 +318,7 @@ fn schema_allows_only_one_open_pause_per_segment() {
         insert_open_run(&pool, "run-1").await.unwrap();
         sqlx::query(
             "INSERT INTO pomodoro_segments
-                (id, event_id, event_date, run_id, cycle_number, phase,
+                (id, event_id, event_date, run_id, rhythm_position, phase,
                  planned_start, planned_end, actual_start, status)
              VALUES ('segment-1', 'event-1', '2026-05-23', 'run-1', 1, 'focus',
                      '2026-05-23T09:00:00Z', '2026-05-23T09:40:00Z',

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarEvent } from "./types";
+import { createPresetPomodoroConfig } from "$lib/pomodoro/rhythm";
 import {
   mapPomodoroSegmentRows,
   pomodoroSegmentSnapshotKey,
@@ -8,13 +9,7 @@ import {
   type DbPomodoroSegmentRow,
 } from "./pomodoro-rail-segments";
 
-const pomodoroConfig = {
-  focusDurationMinutes: 25,
-  shortBreakMinutes: 5,
-  longBreakMinutes: 15,
-  pomodoroCount: 4,
-  idleTimeoutMinutes: null,
-};
+const pomodoroConfig = createPresetPomodoroConfig("deep");
 
 function event(id: string, pomodoro = true): CalendarEvent {
   return {
@@ -34,7 +29,7 @@ function row(eventId: string, eventDate: string): DbPomodoroSegmentRow {
     event_id: eventId,
     event_date: eventDate,
     run_id: "run-1",
-    cycle_number: 1,
+    rhythm_position: 1,
     phase: "focus",
     planned_start: `${eventDate}T09:00:00Z`,
     planned_end: `${eventDate}T09:25:00Z`,

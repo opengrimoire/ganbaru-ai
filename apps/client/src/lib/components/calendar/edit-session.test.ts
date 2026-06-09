@@ -7,6 +7,22 @@ import {
   isDirtyDiff,
   minuteOffsetFromDateStart,
 } from "./edit-session.svelte";
+import { createCustomCountPomodoroConfig, createPresetPomodoroConfig } from "$lib/pomodoro/rhythm";
+
+function countConfig(
+  focusDurationMinutes = 40,
+  shortBreakMinutes = 5,
+  longBreakMinutes = 10,
+  longBreakAfterFocusCount = 4,
+  idleTimeoutMinutes: number | null = null,
+) {
+  return createCustomCountPomodoroConfig({
+    focusDurationMinutes,
+    shortBreakMinutes,
+    longBreakMinutes,
+    longBreakAfterFocusCount,
+  }, idleTimeoutMinutes);
+}
 
 describe("fieldEqual", () => {
   it("treats two undefined values as equal", () => {
@@ -116,16 +132,10 @@ describe("isDirtyDiff", () => {
   });
 
   it("deep-compares nested pomodoro config", () => {
-    const pomodoro = {
-      focusDurationMinutes: 40,
-      shortBreakMinutes: 5,
-      longBreakMinutes: 10,
-      pomodoroCount: 4,
-      idleTimeoutMinutes: 1,
-    };
+    const pomodoro = countConfig(40, 5, 10, 4, 1);
     const baseline = { pomodoroConfig: pomodoro };
-    const same = { pomodoroConfig: { ...pomodoro } };
-    const different = { pomodoroConfig: { ...pomodoro, focusDurationMinutes: 25 } };
+    const same = { pomodoroConfig: countConfig(40, 5, 10, 4, 1) };
+    const different = { pomodoroConfig: countConfig(25, 5, 10, 4, 1) };
     expect(isDirtyDiff(same, baseline)).toBe(false);
     expect(isDirtyDiff(different, baseline)).toBe(true);
   });
@@ -203,26 +213,14 @@ describe("panel initial changes", () => {
   it("normalizes edit baseline to the panel emit shape", () => {
     const result = buildEditPanelInitialChanges(makeEvent({
       notifications: [30, 0, 30],
-      pomodoroConfig: {
-        focusDurationMinutes: 40,
-        shortBreakMinutes: 5,
-        longBreakMinutes: 10,
-        pomodoroCount: 2,
-        idleTimeoutMinutes: 15,
-      },
+      pomodoroConfig: countConfig(40, 5, 10, 2, 15),
       location: "Office",
       visibility: "private",
     }));
 
     expect(result.title).toBe("Focus");
     expect(result.notifications).toEqual([0, 30]);
-    expect(result.pomodoroConfig).toEqual({
-      focusDurationMinutes: 40,
-      shortBreakMinutes: 5,
-      longBreakMinutes: 10,
-      pomodoroCount: 4,
-      idleTimeoutMinutes: 3,
-    });
+    expect(result.pomodoroConfig).toEqual(countConfig(40, 5, 10, 2, 3));
     expect(result.location).toBe("Office");
     expect(result.meetingEnabled).toBe(true);
     expect(result.visibility).toBe("private");
@@ -240,13 +238,7 @@ describe("panel initial changes", () => {
   it("omits pomodoro config from all-day edit baselines", () => {
     const result = buildEditPanelInitialChanges(makeEvent({
       allDay: true,
-      pomodoroConfig: {
-        focusDurationMinutes: 40,
-        shortBreakMinutes: 5,
-        longBreakMinutes: 10,
-        pomodoroCount: 4,
-        idleTimeoutMinutes: 3,
-      },
+      pomodoroConfig: countConfig(40, 5, 10, 4, 3),
     }));
 
     expect(result.allDay).toBe(true);
@@ -274,25 +266,13 @@ describe("panel initial changes", () => {
       { pauseWhenIdle: false, thresholdMinutes: 7 },
     );
 
-    expect(result.pomodoroConfig).toEqual({
-      focusDurationMinutes: 40,
-      shortBreakMinutes: 5,
-      longBreakMinutes: 10,
-      pomodoroCount: 4,
-      idleTimeoutMinutes: null,
-    });
+    expect(result.pomodoroConfig).toEqual(createPresetPomodoroConfig("auto", null));
   });
 
   it("normalizes enabled edit baselines to the focus idle threshold", () => {
     const result = buildEditPanelInitialChanges(
       makeEvent({
-        pomodoroConfig: {
-          focusDurationMinutes: 40,
-          shortBreakMinutes: 5,
-          longBreakMinutes: 10,
-          pomodoroCount: 2,
-          idleTimeoutMinutes: 15,
-        },
+        pomodoroConfig: countConfig(40, 5, 10, 2, 15),
       }),
       { pauseWhenIdle: true, thresholdMinutes: 5 },
     );

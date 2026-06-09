@@ -15,16 +15,41 @@ pub struct PomodoroRunWrite {
     planned_start: String,
     planned_end: String,
     started_at: String,
-    focus_duration_minutes: i64,
-    short_break_minutes: i64,
-    long_break_minutes: i64,
-    pomodoro_count: i64,
+    rhythm: PomodoroRunRhythm,
+    rhythm_source: String,
+    preset_key: Option<String>,
     idle_timeout_minutes: Option<i64>,
     event_title_snapshot: Option<String>,
     inherited_focus_minutes: i64,
-    inherited_cycle: i64,
+    inherited_rhythm_position: i64,
     inherited_from_run_id: Option<String>,
     start_trigger: String,
+}
+
+#[derive(Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+pub enum PomodoroRunRhythm {
+    Count {
+        focus_duration_minutes: i64,
+        short_break_minutes: i64,
+        long_break_minutes: i64,
+        long_break_after_focus_count: i64,
+    },
+    Sequence {
+        steps: Vec<PomodoroRunSequenceStep>,
+    },
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PomodoroRunSequenceStep {
+    focus_duration_minutes: i64,
+    break_phase: String,
+    break_duration_minutes: i64,
 }
 
 #[derive(Deserialize)]
@@ -68,7 +93,7 @@ pub struct PomodoroSegmentWrite {
     event_id: String,
     event_date: String,
     run_id: String,
-    cycle_number: i64,
+    rhythm_position: i64,
     phase: String,
     planned_start: String,
     planned_end: String,
@@ -118,7 +143,7 @@ pub struct PomodoroSegmentRead {
     event_id: String,
     event_date: String,
     run_id: String,
-    cycle_number: i64,
+    rhythm_position: i64,
     phase: String,
     planned_start: String,
     planned_end: String,
@@ -133,7 +158,7 @@ struct PomodoroSegmentRow {
     event_id: String,
     event_date: String,
     run_id: String,
-    cycle_number: i64,
+    rhythm_position: i64,
     phase: String,
     planned_start: String,
     planned_end: String,
@@ -146,7 +171,7 @@ impl_sqlite_from_row!(PomodoroSegmentRow {
     event_id,
     event_date,
     run_id,
-    cycle_number,
+    rhythm_position,
     phase,
     planned_start,
     planned_end,
@@ -195,7 +220,7 @@ pub async fn pomodoro_load_segments_for_events<R: Runtime>(
         .collect::<Vec<_>>()
         .join(",");
     let query = format!(
-        "SELECT id, event_id, event_date, run_id, cycle_number, phase,
+        "SELECT id, event_id, event_date, run_id, rhythm_position, phase,
                 planned_start, planned_end, actual_start, actual_end, status
          FROM pomodoro_segments
          WHERE event_id IN ({placeholders})
@@ -261,7 +286,7 @@ pub async fn pomodoro_load_segments_for_events<R: Runtime>(
                 event_id: row.event_id,
                 event_date: row.event_date,
                 run_id: row.run_id,
-                cycle_number: row.cycle_number,
+                rhythm_position: row.rhythm_position,
                 phase: row.phase,
                 planned_start: row.planned_start,
                 planned_end: row.planned_end,
@@ -600,10 +625,10 @@ async fn insert_run_tx(
     sqlx::query(
         "INSERT INTO pomodoro_runs
             (id, event_id, original_event_id, event_date, planned_start, planned_end,
-             started_at, focus_duration_minutes, short_break_minutes, long_break_minutes,
-             pomodoro_count, idle_timeout_minutes, last_heartbeat, event_title_snapshot,
-             inherited_focus_minutes, inherited_cycle, inherited_from_run_id, start_trigger)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             started_at, rhythm_kind, rhythm_source, preset_key,
+             idle_timeout_minutes, last_heartbeat, event_title_snapshot,
+             inherited_focus_minutes, inherited_rhythm_position, inherited_from_run_id, start_trigger)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&run.id)
     .bind(&canonical_event_id)
@@ -612,20 +637,21 @@ async fn insert_run_tx(
     .bind(&run.planned_start)
     .bind(&run.planned_end)
     .bind(&run.started_at)
-    .bind(run.focus_duration_minutes)
-    .bind(run.short_break_minutes)
-    .bind(run.long_break_minutes)
-    .bind(run.pomodoro_count)
+    .bind(run_rhythm_kind(&run.rhythm))
+    .bind(&run.rhythm_source)
+    .bind(&run.preset_key)
     .bind(run.idle_timeout_minutes)
     .bind(&run.started_at)
     .bind(&run.event_title_snapshot)
     .bind(run.inherited_focus_minutes)
-    .bind(run.inherited_cycle)
+    .bind(run.inherited_rhythm_position)
     .bind(&run.inherited_from_run_id)
     .bind(&run.start_trigger)
     .execute(&mut **tx)
     .await
     .map_err(|e| format!("insert pomodoro run: {e}"))?;
+
+    insert_run_rhythm_snapshot_tx(tx, run).await?;
 
     insert_segment_tx(tx, initial_segment).await?;
     insert_run_event_tx(
@@ -661,6 +687,60 @@ async fn insert_run_tx(
     log_new_pause_events(tx, &run.id, initial_segment).await
 }
 
+fn run_rhythm_kind(rhythm: &PomodoroRunRhythm) -> &'static str {
+    match rhythm {
+        PomodoroRunRhythm::Count { .. } => "count",
+        PomodoroRunRhythm::Sequence { .. } => "sequence",
+    }
+}
+
+async fn insert_run_rhythm_snapshot_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    run: &PomodoroRunWrite,
+) -> Result<(), String> {
+    match &run.rhythm {
+        PomodoroRunRhythm::Count {
+            focus_duration_minutes,
+            short_break_minutes,
+            long_break_minutes,
+            long_break_after_focus_count,
+        } => {
+            sqlx::query(
+                "INSERT INTO pomodoro_run_count_rhythms
+                    (run_id, focus_duration_minutes, short_break_minutes, long_break_minutes,
+                     long_break_after_focus_count)
+                 VALUES (?, ?, ?, ?, ?)",
+            )
+            .bind(&run.id)
+            .bind(focus_duration_minutes)
+            .bind(short_break_minutes)
+            .bind(long_break_minutes)
+            .bind(long_break_after_focus_count)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| format!("insert pomodoro run count rhythm: {e}"))?;
+        }
+        PomodoroRunRhythm::Sequence { steps } => {
+            for (step_index, step) in steps.iter().enumerate() {
+                sqlx::query(
+                    "INSERT INTO pomodoro_run_sequence_steps
+                        (run_id, step_index, focus_duration_minutes, break_phase, break_duration_minutes)
+                     VALUES (?, ?, ?, ?, ?)",
+                )
+                .bind(&run.id)
+                .bind(step_index as i64)
+                .bind(step.focus_duration_minutes)
+                .bind(&step.break_phase)
+                .bind(step.break_duration_minutes)
+                .execute(&mut **tx)
+                .await
+                .map_err(|e| format!("insert pomodoro run sequence step: {e}"))?;
+            }
+        }
+    }
+    Ok(())
+}
+
 async fn insert_segment_tx(
     tx: &mut Transaction<'_, Sqlite>,
     segment: &PomodoroSegmentWrite,
@@ -687,7 +767,7 @@ async fn insert_segment_tx(
     }
     sqlx::query(
         "INSERT INTO pomodoro_segments
-            (id, event_id, event_date, run_id, cycle_number, phase,
+            (id, event_id, event_date, run_id, rhythm_position, phase,
              planned_start, planned_end, actual_start, actual_end, status, end_reason)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
@@ -695,7 +775,7 @@ async fn insert_segment_tx(
     .bind(event_id)
     .bind(&segment.event_date)
     .bind(&segment.run_id)
-    .bind(segment.cycle_number)
+    .bind(segment.rhythm_position)
     .bind(&segment.phase)
     .bind(&segment.planned_start)
     .bind(&segment.planned_end)
@@ -1100,10 +1180,8 @@ fn validate_run_write(run: &PomodoroRunWrite) -> Result<(), String> {
     require_non_empty(&run.planned_start, "run.planned_start")?;
     require_non_empty(&run.planned_end, "run.planned_end")?;
     require_non_empty(&run.started_at, "run.started_at")?;
-    validate_config_minutes(run.focus_duration_minutes, "focus_duration_minutes")?;
-    validate_config_minutes(run.short_break_minutes, "short_break_minutes")?;
-    validate_config_minutes(run.long_break_minutes, "long_break_minutes")?;
-    validate_config_minutes(run.pomodoro_count, "pomodoro_count")?;
+    validate_rhythm_source(&run.rhythm_source, run.preset_key.as_deref())?;
+    validate_run_rhythm(&run.rhythm)?;
     if let Some(idle_timeout) = run.idle_timeout_minutes {
         if idle_timeout < 0 {
             return Err("idle_timeout_minutes cannot be negative".to_string());
@@ -1112,8 +1190,8 @@ fn validate_run_write(run: &PomodoroRunWrite) -> Result<(), String> {
     if run.inherited_focus_minutes < 0 {
         return Err("inherited_focus_minutes cannot be negative".to_string());
     }
-    if run.inherited_cycle <= 0 {
-        return Err("inherited_cycle must be positive".to_string());
+    if run.inherited_rhythm_position <= 0 {
+        return Err("inherited_rhythm_position must be positive".to_string());
     }
     validate_start_trigger(&run.start_trigger)
 }
@@ -1150,8 +1228,8 @@ fn validate_segment_write(segment: &PomodoroSegmentWrite) -> Result<(), String> 
     canonical_event_id(&segment.event_id)?;
     require_non_empty(&segment.event_date, "event_date")?;
     require_non_empty(&segment.run_id, "run_id")?;
-    if segment.cycle_number <= 0 {
-        return Err("cycle_number must be positive".to_string());
+    if segment.rhythm_position <= 0 {
+        return Err("rhythm_position must be positive".to_string());
     }
     validate_phase(&segment.phase)?;
     require_non_empty(&segment.planned_start, "planned_start")?;
@@ -1225,6 +1303,72 @@ fn validate_start_trigger(trigger: &str) -> Result<(), String> {
     match trigger {
         "manual" | "block_auto" | "block_transition" | "reconfigure" | "crash_recovery" => Ok(()),
         _ => Err(format!("invalid pomodoro start trigger: {trigger}")),
+    }
+}
+
+fn validate_run_rhythm(rhythm: &PomodoroRunRhythm) -> Result<(), String> {
+    match rhythm {
+        PomodoroRunRhythm::Count {
+            focus_duration_minutes,
+            short_break_minutes,
+            long_break_minutes,
+            long_break_after_focus_count,
+        } => {
+            validate_config_minutes(*focus_duration_minutes, "focus_duration_minutes")?;
+            validate_config_minutes(*short_break_minutes, "short_break_minutes")?;
+            validate_config_minutes(*long_break_minutes, "long_break_minutes")?;
+            validate_rhythm_position_count(
+                *long_break_after_focus_count,
+                "long_break_after_focus_count",
+            )
+        }
+        PomodoroRunRhythm::Sequence { steps } => {
+            if steps.is_empty() {
+                return Err("sequence rhythm must include at least one step".to_string());
+            }
+            validate_rhythm_position_count(steps.len() as i64, "sequence step count")?;
+            for (index, step) in steps.iter().enumerate() {
+                validate_config_minutes(
+                    step.focus_duration_minutes,
+                    &format!("sequence step {index} focus_duration_minutes"),
+                )?;
+                validate_phase(&step.break_phase)?;
+                validate_config_minutes(
+                    step.break_duration_minutes,
+                    &format!("sequence step {index} break_duration_minutes"),
+                )?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn validate_rhythm_source(source: &str, preset_key: Option<&str>) -> Result<(), String> {
+    match source {
+        "preset" => {
+            let Some(key) = preset_key else {
+                return Err("preset rhythm_source requires preset_key".to_string());
+            };
+            match key {
+                "auto" | "deep" | "creative" | "extended" => Ok(()),
+                _ => Err(format!("invalid preset_key: {key}")),
+            }
+        }
+        "custom" => {
+            if preset_key.is_some() {
+                return Err("custom rhythm_source cannot include preset_key".to_string());
+            }
+            Ok(())
+        }
+        _ => Err(format!("invalid rhythm_source: {source}")),
+    }
+}
+
+fn validate_rhythm_position_count(value: i64, field: &str) -> Result<(), String> {
+    if !(1..=12).contains(&value) {
+        Err(format!("{field} must be between 1 and 12"))
+    } else {
+        Ok(())
     }
 }
 
@@ -1325,10 +1469,11 @@ mod tests {
     use crate::db::run_migrations;
 
     use super::{
-        canonical_event_id, close_run_tx, normalize_segment_update, validate_event_type,
-        validate_pause_reason, validate_phase, validate_run_end_reason, validate_run_window_update,
-        validate_segment_end_reason, validate_status, PomodoroPauseWrite, PomodoroRunClosure,
-        PomodoroRunWindowUpdate, PomodoroSegmentUpdate,
+        canonical_event_id, close_run_tx, insert_run_tx, normalize_segment_update,
+        validate_event_type, validate_pause_reason, validate_phase, validate_run_end_reason,
+        validate_run_window_update, validate_segment_end_reason, validate_status,
+        PomodoroPauseWrite, PomodoroRunClosure, PomodoroRunRhythm, PomodoroRunSequenceStep,
+        PomodoroRunWindowUpdate, PomodoroRunWrite, PomodoroSegmentUpdate, PomodoroSegmentWrite,
     };
     use sqlx::Row;
 
@@ -1370,6 +1515,137 @@ mod tests {
         );
     }
 
+    async fn migrated_pool_with_event() -> sqlx::SqlitePool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::raw_sql("PRAGMA foreign_keys=ON")
+            .execute(&pool)
+            .await
+            .unwrap();
+        run_migrations(&pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO calendar_events (id, title, start_time, end_time)
+             VALUES ('event-1', 'Focus block', '2026-05-29T10:00:00Z', '2026-05-29T11:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool
+    }
+
+    fn run_write(rhythm: PomodoroRunRhythm) -> PomodoroRunWrite {
+        PomodoroRunWrite {
+            id: "run-1".to_string(),
+            event_id: "event-1".to_string(),
+            event_date: "2026-05-29".to_string(),
+            planned_start: "2026-05-29T10:00:00Z".to_string(),
+            planned_end: "2026-05-29T11:00:00Z".to_string(),
+            started_at: "2026-05-29T10:00:00Z".to_string(),
+            rhythm,
+            rhythm_source: "custom".to_string(),
+            preset_key: None,
+            idle_timeout_minutes: Some(3),
+            event_title_snapshot: Some("Focus block".to_string()),
+            inherited_focus_minutes: 0,
+            inherited_rhythm_position: 1,
+            inherited_from_run_id: None,
+            start_trigger: "manual".to_string(),
+        }
+    }
+
+    fn initial_segment() -> PomodoroSegmentWrite {
+        PomodoroSegmentWrite {
+            id: "segment-1".to_string(),
+            event_id: "event-1".to_string(),
+            event_date: "2026-05-29".to_string(),
+            run_id: "run-1".to_string(),
+            rhythm_position: 1,
+            phase: "focus".to_string(),
+            planned_start: "2026-05-29T10:00:00Z".to_string(),
+            planned_end: "2026-05-29T10:40:00Z".to_string(),
+            actual_start: Some("2026-05-29T10:00:00Z".to_string()),
+            actual_end: None,
+            pauses: Vec::new(),
+            status: "active".to_string(),
+            end_reason: None,
+        }
+    }
+
+    #[test]
+    fn insert_run_snapshots_count_rhythm() {
+        tauri::async_runtime::block_on(async {
+            let pool = migrated_pool_with_event().await;
+            let run = run_write(PomodoroRunRhythm::Count {
+                focus_duration_minutes: 40,
+                short_break_minutes: 5,
+                long_break_minutes: 10,
+                long_break_after_focus_count: 4,
+            });
+            let segment = initial_segment();
+
+            let mut tx = pool.begin().await.unwrap();
+            insert_run_tx(&mut tx, &run, &segment).await.unwrap();
+            tx.commit().await.unwrap();
+
+            let saved: (String, i64, i64) = sqlx::query_as(
+                "SELECT r.rhythm_kind, c.focus_duration_minutes, c.long_break_after_focus_count
+                 FROM pomodoro_runs r
+                 JOIN pomodoro_run_count_rhythms c ON c.run_id = r.id
+                 WHERE r.id = 'run-1'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(saved, ("count".to_string(), 40, 4));
+        });
+    }
+
+    #[test]
+    fn insert_run_snapshots_sequence_rhythm() {
+        tauri::async_runtime::block_on(async {
+            let pool = migrated_pool_with_event().await;
+            let run = run_write(PomodoroRunRhythm::Sequence {
+                steps: vec![
+                    PomodoroRunSequenceStep {
+                        focus_duration_minutes: 25,
+                        break_phase: "short_break".to_string(),
+                        break_duration_minutes: 5,
+                    },
+                    PomodoroRunSequenceStep {
+                        focus_duration_minutes: 35,
+                        break_phase: "long_break".to_string(),
+                        break_duration_minutes: 12,
+                    },
+                ],
+            });
+            let segment = initial_segment();
+
+            let mut tx = pool.begin().await.unwrap();
+            insert_run_tx(&mut tx, &run, &segment).await.unwrap();
+            tx.commit().await.unwrap();
+
+            let steps: Vec<(i64, i64, String, i64)> = sqlx::query_as(
+                "SELECT step_index, focus_duration_minutes, break_phase, break_duration_minutes
+                 FROM pomodoro_run_sequence_steps
+                 WHERE run_id = 'run-1'
+                 ORDER BY step_index",
+            )
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+            assert_eq!(
+                steps,
+                vec![
+                    (0, 25, "short_break".to_string(), 5),
+                    (1, 35, "long_break".to_string(), 12),
+                ],
+            );
+        });
+    }
+
     #[test]
     fn close_run_clamps_end_to_active_segment_start() {
         tauri::async_runtime::block_on(async {
@@ -1394,11 +1670,11 @@ mod tests {
             sqlx::query(
                 "INSERT INTO pomodoro_runs
                     (id, event_id, original_event_id, event_date, planned_start, planned_end,
-                     started_at, focus_duration_minutes, short_break_minutes, long_break_minutes,
-                     pomodoro_count, last_heartbeat, start_trigger)
+                     started_at, rhythm_kind, rhythm_source, preset_key, last_heartbeat,
+                     start_trigger)
                  VALUES ('run-1', 'event-1', 'event-1', '2026-05-29',
                          '2026-05-29T10:00:00Z', '2026-05-29T11:00:00Z',
-                         '2026-05-29T10:05:00Z', 40, 5, 10, 4,
+                         '2026-05-29T10:05:00Z', 'count', 'preset', 'auto',
                          '2026-05-29T10:05:00Z', 'manual')",
             )
             .execute(&pool)
@@ -1406,7 +1682,7 @@ mod tests {
             .unwrap();
             sqlx::query(
                 "INSERT INTO pomodoro_segments
-                    (id, event_id, event_date, run_id, cycle_number, phase,
+                    (id, event_id, event_date, run_id, rhythm_position, phase,
                      planned_start, planned_end, actual_start, status)
                  VALUES ('segment-1', 'event-1', '2026-05-29', 'run-1', 1, 'focus',
                          '2026-05-29T10:00:00Z', '2026-05-29T10:40:00Z',

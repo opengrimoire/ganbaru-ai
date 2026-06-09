@@ -12,7 +12,7 @@ function segment(overrides: Partial<PersistedSegment> = {}): PersistedSegment {
     eventId: "event-1",
     eventDate: "2026-05-29",
     runId: "run-1",
-    cycleNumber: 1,
+    rhythmPosition: 1,
     phase: "focus",
     plannedStart: "2026-05-29T10:00:00.000Z",
     plannedEnd: "2026-05-29T10:40:00.000Z",

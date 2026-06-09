@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarEvent, PomodoroConfig } from "./types";
+import { createPresetPomodoroConfig } from "$lib/pomodoro/rhythm";
 import {
   activePomodoroSaveWouldStopSession,
   endActiveEventWouldStopProductivity,
@@ -7,13 +8,7 @@ import {
   sameConcreteOccurrence,
 } from "./active-event-end";
 
-const pomodoroConfig: PomodoroConfig = {
-  focusDurationMinutes: 40,
-  shortBreakMinutes: 5,
-  longBreakMinutes: 10,
-  pomodoroCount: 4,
-  idleTimeoutMinutes: 1,
-};
+const pomodoroConfig: PomodoroConfig = createPresetPomodoroConfig("auto", 1);
 
 function event(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
   return {

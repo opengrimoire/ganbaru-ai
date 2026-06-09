@@ -1,20 +1,23 @@
 import type { PomodoroPhase } from "@ganbaru-ai/shared-types";
+import {
+  breakAfterFocusPosition,
+  configEquals,
+  DEFAULT_POMODORO_CONFIG,
+  focusDurationMinutesAtPosition,
+  nextRhythmPosition,
+  normalizeRhythmPosition,
+  phaseDurationMinutesAtPosition,
+  type PomodoroConfig,
+} from "$lib/pomodoro/rhythm";
 
-// Types
-
-export interface PomodoroConfig {
-  focusMinutes: number;
-  shortBreakMinutes: number;
-  longBreakMinutes: number;
-  cyclesBeforeLongBreak: number;
-}
+export { configEquals } from "$lib/pomodoro/rhythm";
+export type { PomodoroConfig } from "$lib/pomodoro/rhythm";
 
 /** Read-only snapshot of timer state, passed to pure decision functions. */
 export interface TimerSnapshot {
   phase: PomodoroPhase;
   remainingSeconds: number;
-  currentCycle: number;
-  totalCycles: number;
+  currentRhythmPosition: number;
   config: PomodoroConfig;
   skipNextBreak: boolean;
   notificationShown: boolean;
@@ -25,12 +28,7 @@ export interface TimerSnapshot {
 
 // Constants
 
-export const DEFAULT_CONFIG: PomodoroConfig = {
-  focusMinutes: 40,
-  shortBreakMinutes: 5,
-  longBreakMinutes: 10,
-  cyclesBeforeLongBreak: 4,
-};
+export const DEFAULT_CONFIG: PomodoroConfig = DEFAULT_POMODORO_CONFIG;
 
 export const TIME_MULTIPLIER = 60;
 export const SUSPEND_THRESHOLD_MS = 15_000;
@@ -47,22 +45,12 @@ export const IDLE_CHECK_MAX_INTERVAL_MS = 15_000;
 
 // Utility functions
 
-export function configEquals(a: PomodoroConfig, b: PomodoroConfig): boolean {
-  return (
-    a.focusMinutes === b.focusMinutes &&
-    a.shortBreakMinutes === b.shortBreakMinutes &&
-    a.longBreakMinutes === b.longBreakMinutes &&
-    a.cyclesBeforeLongBreak === b.cyclesBeforeLongBreak
-  );
-}
-
 export function phaseDurationSeconds(
   phase: PomodoroPhase,
   config: PomodoroConfig,
+  rhythmPosition: number,
 ): number {
-  if (phase === "focus") return config.focusMinutes * TIME_MULTIPLIER;
-  if (phase === "short_break") return config.shortBreakMinutes * TIME_MULTIPLIER;
-  return config.longBreakMinutes * TIME_MULTIPLIER;
+  return phaseDurationMinutesAtPosition(phase, config, rhythmPosition) * TIME_MULTIPLIER;
 }
 
 export function limitRemainingSecondsToBlockEnd(
@@ -226,21 +214,22 @@ export type AdvancePhaseResult =
   | {
       kind: "skip_break_to_focus";
       remainingSeconds: number;
-      nextCycle: number;
+      nextRhythmPosition: number;
     }
   | {
       kind: "focus_to_long_break";
       remainingSeconds: number;
-      nextCycle: 1;
+      rhythmPosition: number;
     }
   | {
       kind: "focus_to_short_break";
       remainingSeconds: number;
-      nextCycle: number;
+      rhythmPosition: number;
     }
   | {
       kind: "break_to_focus";
       remainingSeconds: number;
+      nextRhythmPosition: number;
     };
 
 /**
@@ -250,38 +239,45 @@ export type AdvancePhaseResult =
  * @returns Next phase and its duration.
  */
 export function decideAdvancePhase(snapshot: TimerSnapshot): AdvancePhaseResult {
+  const rhythmPosition = normalizeRhythmPosition(
+    snapshot.config,
+    snapshot.currentRhythmPosition,
+  );
   if (snapshot.phase === "focus") {
     if (snapshot.skipNextBreak) {
-      const nextCycle =
-        snapshot.currentCycle < snapshot.totalCycles
-          ? snapshot.currentCycle + 1
-          : 1;
+      const nextPosition = nextRhythmPosition(
+        snapshot.config,
+        rhythmPosition,
+      );
       return {
         kind: "skip_break_to_focus",
-        remainingSeconds: snapshot.config.focusMinutes * TIME_MULTIPLIER,
-        nextCycle,
+        remainingSeconds: focusDurationMinutesAtPosition(snapshot.config, nextPosition) * TIME_MULTIPLIER,
+        nextRhythmPosition: nextPosition,
       };
     }
 
-    if (snapshot.currentCycle >= snapshot.totalCycles) {
+    const breakInfo = breakAfterFocusPosition(snapshot.config, rhythmPosition);
+    if (breakInfo.phase === "long_break") {
       return {
         kind: "focus_to_long_break",
-        remainingSeconds: snapshot.config.longBreakMinutes * TIME_MULTIPLIER,
-        nextCycle: 1,
+        remainingSeconds: breakInfo.durationMinutes * TIME_MULTIPLIER,
+        rhythmPosition,
       };
     }
 
     return {
       kind: "focus_to_short_break",
-      remainingSeconds: snapshot.config.shortBreakMinutes * TIME_MULTIPLIER,
-      nextCycle: snapshot.currentCycle + 1,
+      remainingSeconds: breakInfo.durationMinutes * TIME_MULTIPLIER,
+      rhythmPosition,
     };
   }
 
   // Break -> focus
+  const nextPosition = nextRhythmPosition(snapshot.config, rhythmPosition);
   return {
     kind: "break_to_focus",
-    remainingSeconds: snapshot.config.focusMinutes * TIME_MULTIPLIER,
+    remainingSeconds: focusDurationMinutesAtPosition(snapshot.config, nextPosition) * TIME_MULTIPLIER,
+    nextRhythmPosition: nextPosition,
   };
 }
 
@@ -293,7 +289,7 @@ export interface TransitionInput {
   phase: PomodoroPhase;
   remainingSeconds: number;
   elapsedFocusSeconds?: number;
-  currentCycle: number;
+  currentRhythmPosition: number;
   blockExpired: boolean;
 }
 
@@ -302,7 +298,7 @@ export type TransitionResult =
       kind: "trigger_break";
       breakPhase: "short_break" | "long_break";
       breakDurationSeconds: number;
-      nextCycle: number;
+      rhythmPosition: number;
       accumulatedFocusSeconds: number;
     }
   | {
@@ -324,22 +320,30 @@ export type TransitionResult =
  */
 export function decideTransition(input: TransitionInput): TransitionResult {
   if (input.phase === "focus") {
-    const oldFocusSec = input.previousConfig.focusMinutes * TIME_MULTIPLIER;
+    const oldFocusSec = focusDurationMinutesAtPosition(
+      input.previousConfig,
+      input.currentRhythmPosition,
+    ) * TIME_MULTIPLIER;
     const accumulatedFocusSec = Math.max(
       0,
       input.elapsedFocusSeconds ?? oldFocusSec - input.remainingSeconds,
     );
-    const newFocusThresholdSec = input.newConfig.focusMinutes * TIME_MULTIPLIER;
+    const newFocusThresholdSec = focusDurationMinutesAtPosition(
+      input.newConfig,
+      input.currentRhythmPosition,
+    ) * TIME_MULTIPLIER;
 
     if (accumulatedFocusSec >= newFocusThresholdSec) {
-      const isLong = input.currentCycle >= input.newConfig.cyclesBeforeLongBreak;
+      const rhythmPosition = normalizeRhythmPosition(
+        input.newConfig,
+        input.currentRhythmPosition,
+      );
+      const breakInfo = breakAfterFocusPosition(input.newConfig, rhythmPosition);
       return {
         kind: "trigger_break",
-        breakPhase: isLong ? "long_break" : "short_break",
-        breakDurationSeconds: isLong
-          ? input.newConfig.longBreakMinutes * TIME_MULTIPLIER
-          : input.newConfig.shortBreakMinutes * TIME_MULTIPLIER,
-        nextCycle: isLong ? 1 : input.currentCycle + 1,
+        breakPhase: breakInfo.phase,
+        breakDurationSeconds: breakInfo.durationMinutes * TIME_MULTIPLIER,
+        rhythmPosition,
         accumulatedFocusSeconds: accumulatedFocusSec,
       };
     }
@@ -356,7 +360,7 @@ export function decideTransition(input: TransitionInput): TransitionResult {
   if (input.blockExpired) {
     return {
       kind: "fresh_start",
-      remainingSeconds: input.newConfig.focusMinutes * TIME_MULTIPLIER,
+      remainingSeconds: focusDurationMinutesAtPosition(input.newConfig, 1) * TIME_MULTIPLIER,
     };
   }
 
@@ -441,6 +445,7 @@ export interface ReconfigureInput {
   elapsedSeconds?: number;
   currentConfig: PomodoroConfig;
   newConfig: PomodoroConfig;
+  currentRhythmPosition: number;
   hasOvertimeInterval: boolean;
 }
 
@@ -457,13 +462,21 @@ export interface ReconfigureResult {
  * @returns New remaining seconds and flags for overtime/notification reset.
  */
 export function decideReconfigure(input: ReconfigureInput): ReconfigureResult {
-  const oldDuration = phaseDurationSeconds(input.phase, input.currentConfig);
+  const oldDuration = phaseDurationSeconds(
+    input.phase,
+    input.currentConfig,
+    input.currentRhythmPosition,
+  );
   const elapsed = Math.max(
     0,
     input.elapsedSeconds ?? oldDuration - input.remainingSeconds,
   );
 
-  const newDuration = phaseDurationSeconds(input.phase, input.newConfig);
+  const newDuration = phaseDurationSeconds(
+    input.phase,
+    input.newConfig,
+    input.currentRhythmPosition,
+  );
   const newRemaining = Math.max(0, newDuration - elapsed);
 
   return {
