@@ -4,11 +4,6 @@
   import { cubicOut } from "svelte/easing";
   import { commitIntegerDraft, moveRovingIndex, panelInputKeydown } from "./event-panel-utils";
   import Timer from "@lucide/svelte/icons/timer";
-  import Plus from "@lucide/svelte/icons/plus";
-  import CopyIcon from "@lucide/svelte/icons/copy";
-  import Trash2 from "@lucide/svelte/icons/trash-2";
-  import ArrowUp from "@lucide/svelte/icons/arrow-up";
-  import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
     COUNT_PRESET_RHYTHMS,
@@ -20,16 +15,25 @@
     MIN_LONG_BREAK_MINUTES,
     MIN_RHYTHM_POSITIONS,
     MIN_SHORT_BREAK_MINUTES,
-    type PomodoroBreakPhase,
     type SequencePomodoroRhythmStep,
   } from "$lib/pomodoro/rhythm";
 
   type PomodoroPreset = "auto" | "deep" | "creative" | "extended" | "custom";
   type BuiltInPomodoroPreset = Exclude<PomodoroPreset, "custom">;
   type CustomRhythmMode = "simple" | "sequence";
+  type SummarySlotClass = "duration-summary-slot" | "cycle-summary-slot";
 
+  const CUSTOM_DURATION_SLOT_MAX = 99;
+  const CUSTOM_CYCLE_SLOT_MAX = 9;
+  const CUSTOM_COUNT_DEFAULT = {
+    focusDurationMinutes: 40,
+    shortBreakMinutes: 10,
+    longBreakMinutes: 15,
+    longBreakAfterFocusCount: 4,
+  } as const;
   const POMO_PRESETS = COUNT_PRESET_RHYTHMS;
-  const POMO_PRESET_ENTRIES = Object.entries(POMO_PRESETS) as Array<[
+  const POMO_PRESET_ORDER: BuiltInPomodoroPreset[] = ["auto", "creative", "deep", "extended"];
+  const POMO_PRESET_ENTRIES = POMO_PRESET_ORDER.map((key) => [key, POMO_PRESETS[key]]) as Array<[
     BuiltInPomodoroPreset,
     typeof POMO_PRESETS[BuiltInPomodoroPreset],
   ]>;
@@ -76,19 +80,19 @@
   let longBreakAfterDraft = $state("4");
 
   $effect(() => {
-    focusDurationDraft = String(focusDuration);
+    focusDurationDraft = formatDurationSlot(focusDuration);
   });
 
   $effect(() => {
-    shortBreakDraft = String(shortBreak);
+    shortBreakDraft = formatDurationSlot(shortBreak);
   });
 
   $effect(() => {
-    longBreakDraft = String(longBreak);
+    longBreakDraft = formatDurationSlot(longBreak);
   });
 
   $effect(() => {
-    longBreakAfterDraft = String(longBreakAfterFocusCount);
+    longBreakAfterDraft = formatCycleSlot(longBreakAfterFocusCount);
   });
 
   $effect(() => {
@@ -98,59 +102,72 @@
     if (index >= 0) presetFocusIndex = index;
   });
 
+  $effect(() => {
+    if (preset === "custom" && customRhythmMode !== "simple") customRhythmMode = "simple";
+  });
+
   const localizedPresetEntries = $derived(
     POMO_PRESET_ENTRIES.map(([key, val]) => ({
       key,
       label: presetLabel(key),
-      desc: presetDescription(key, val),
+      summarySlots: presetSummarySlots(key, val),
     })),
   );
 
   const customFields = $derived([
     {
       label: t("calendar.pomodoro.focus"),
+      compactLabel: t("calendar.pomodoro.focusCompact"),
       value: focusDurationDraft,
-      setDraft: (v: string) => { focusDurationDraft = v; },
+      setDraft: (v: string) => { focusDurationDraft = sanitizeCustomSlotDraft(v, 2); },
       commit: commitFocusDurationDraft,
-      restore: () => { focusDurationDraft = String(focusDuration); },
+      restore: () => { focusDurationDraft = formatDurationSlot(focusDuration); },
       min: MIN_FOCUS_MINUTES,
-      max: MAX_FOCUS_MINUTES,
+      max: Math.min(MAX_FOCUS_MINUTES, CUSTOM_DURATION_SLOT_MAX),
+      maxLength: 2,
+      slotClass: "duration-summary-slot" as SummarySlotClass,
     },
     {
       label: t("calendar.pomodoro.shortBreak"),
+      compactLabel: t("calendar.pomodoro.shortBreakCompact"),
       value: shortBreakDraft,
-      setDraft: (v: string) => { shortBreakDraft = v; },
+      setDraft: (v: string) => { shortBreakDraft = sanitizeCustomSlotDraft(v, 2); },
       commit: commitShortBreakDraft,
-      restore: () => { shortBreakDraft = String(shortBreak); },
+      restore: () => { shortBreakDraft = formatDurationSlot(shortBreak); },
       min: MIN_SHORT_BREAK_MINUTES,
-      max: MAX_SHORT_BREAK_MINUTES,
+      max: Math.min(MAX_SHORT_BREAK_MINUTES, CUSTOM_DURATION_SLOT_MAX),
+      maxLength: 2,
+      slotClass: "duration-summary-slot" as SummarySlotClass,
     },
     {
       label: t("calendar.pomodoro.longBreak"),
+      compactLabel: t("calendar.pomodoro.longBreakCompact"),
       value: longBreakDraft,
-      setDraft: (v: string) => { longBreakDraft = v; },
+      setDraft: (v: string) => { longBreakDraft = sanitizeCustomSlotDraft(v, 2); },
       commit: commitLongBreakDraft,
-      restore: () => { longBreakDraft = String(longBreak); },
+      restore: () => { longBreakDraft = formatDurationSlot(longBreak); },
       min: MIN_LONG_BREAK_MINUTES,
-      max: MAX_LONG_BREAK_MINUTES,
+      max: Math.min(MAX_LONG_BREAK_MINUTES, CUSTOM_DURATION_SLOT_MAX),
+      maxLength: 2,
+      slotClass: "duration-summary-slot" as SummarySlotClass,
     },
     {
       label: t("calendar.pomodoro.longBreakAfter"),
+      compactLabel: t("calendar.pomodoro.cycleCompact"),
       value: longBreakAfterDraft,
-      setDraft: (v: string) => { longBreakAfterDraft = v; },
+      setDraft: (v: string) => { longBreakAfterDraft = sanitizeCustomSlotDraft(v, 1); },
       commit: commitLongBreakAfterDraft,
-      restore: () => { longBreakAfterDraft = String(longBreakAfterFocusCount); },
+      restore: () => { longBreakAfterDraft = formatCycleSlot(longBreakAfterFocusCount); },
       min: MIN_RHYTHM_POSITIONS,
-      max: MAX_RHYTHM_POSITIONS,
+      max: Math.min(MAX_RHYTHM_POSITIONS, CUSTOM_CYCLE_SLOT_MAX),
+      maxLength: 1,
+      slotClass: "cycle-summary-slot" as SummarySlotClass,
     },
   ]);
 
   const summary = $derived.by(() => {
     if (!enabled) return "";
     if (preset === "custom") {
-      if (customRhythmMode === "sequence") {
-        return t("calendar.pomodoro.sequenceSummary", sequenceSteps.length);
-      }
       return t("calendar.pomodoro.customSummary", focusDuration, shortBreak, longBreak);
     }
     return presetLabel(preset) ?? t("calendar.pomodoro.custom");
@@ -161,26 +178,43 @@
   );
 
   function presetLabel(p: BuiltInPomodoroPreset): string {
-    if (p === "auto") return t("calendar.pomodoro.automatic");
+    if (p === "auto") return t("calendar.pomodoro.adaptative");
     if (p === "deep") return t("calendar.pomodoro.deepFocus");
     if (p === "creative") return t("calendar.pomodoro.creative");
     return t("calendar.pomodoro.extended");
   }
 
-  function presetDescription(
+  function presetSummarySlots(
     p: BuiltInPomodoroPreset,
     val: typeof COUNT_PRESET_RHYTHMS[BuiltInPomodoroPreset],
-  ): string {
-    if (p === "auto") return t("calendar.pomodoro.default");
-    return t(
-      "calendar.pomodoro.durationSummary",
-      val.focusDurationMinutes,
-      val.shortBreakMinutes,
-      val.longBreakMinutes,
-    );
+  ): Array<{ label: string; value: string; slotClass: SummarySlotClass }> {
+    if (p === "auto") return [];
+    return [
+      {
+        label: t("calendar.pomodoro.focusCompact"),
+        value: formatDurationSlot(val.focusDurationMinutes),
+        slotClass: "duration-summary-slot",
+      },
+      {
+        label: t("calendar.pomodoro.shortBreakCompact"),
+        value: formatDurationSlot(val.shortBreakMinutes),
+        slotClass: "duration-summary-slot",
+      },
+      {
+        label: t("calendar.pomodoro.longBreakCompact"),
+        value: formatDurationSlot(val.longBreakMinutes),
+        slotClass: "duration-summary-slot",
+      },
+      {
+        label: t("calendar.pomodoro.cycleCompact"),
+        value: formatCycleSlot(val.longBreakAfterFocusCount),
+        slotClass: "cycle-summary-slot",
+      },
+    ];
   }
 
   function applyPreset(p: PomodoroPreset) {
+    const wasCustom = preset === "custom";
     preset = p;
     if (p !== "custom") {
       const vals = POMO_PRESETS[p];
@@ -188,8 +222,13 @@
       shortBreak = vals.shortBreakMinutes;
       longBreak = vals.longBreakMinutes;
       longBreakAfterFocusCount = vals.longBreakAfterFocusCount;
-      customRhythmMode = "simple";
+    } else if (!wasCustom) {
+      focusDuration = CUSTOM_COUNT_DEFAULT.focusDurationMinutes;
+      shortBreak = CUSTOM_COUNT_DEFAULT.shortBreakMinutes;
+      longBreak = CUSTOM_COUNT_DEFAULT.longBreakMinutes;
+      longBreakAfterFocusCount = CUSTOM_COUNT_DEFAULT.longBreakAfterFocusCount;
     }
+    customRhythmMode = "simple";
     onchange();
   }
 
@@ -220,9 +259,9 @@
       focusDurationDraft,
       focusDuration,
       MIN_FOCUS_MINUTES,
-      MAX_FOCUS_MINUTES,
+      Math.min(MAX_FOCUS_MINUTES, CUSTOM_DURATION_SLOT_MAX),
     );
-    focusDurationDraft = String(result.value);
+    focusDurationDraft = formatDurationSlot(result.value);
     if (!result.committed) return;
     focusDuration = result.value;
     onchange();
@@ -233,9 +272,9 @@
       shortBreakDraft,
       shortBreak,
       MIN_SHORT_BREAK_MINUTES,
-      MAX_SHORT_BREAK_MINUTES,
+      Math.min(MAX_SHORT_BREAK_MINUTES, CUSTOM_DURATION_SLOT_MAX),
     );
-    shortBreakDraft = String(result.value);
+    shortBreakDraft = formatDurationSlot(result.value);
     if (!result.committed) return;
     shortBreak = result.value;
     onchange();
@@ -246,9 +285,9 @@
       longBreakDraft,
       longBreak,
       MIN_LONG_BREAK_MINUTES,
-      MAX_LONG_BREAK_MINUTES,
+      Math.min(MAX_LONG_BREAK_MINUTES, CUSTOM_DURATION_SLOT_MAX),
     );
-    longBreakDraft = String(result.value);
+    longBreakDraft = formatDurationSlot(result.value);
     if (!result.committed) return;
     longBreak = result.value;
     onchange();
@@ -259,12 +298,24 @@
       longBreakAfterDraft,
       longBreakAfterFocusCount,
       MIN_RHYTHM_POSITIONS,
-      MAX_RHYTHM_POSITIONS,
+      Math.min(MAX_RHYTHM_POSITIONS, CUSTOM_CYCLE_SLOT_MAX),
     );
-    longBreakAfterDraft = String(result.value);
+    longBreakAfterDraft = formatCycleSlot(result.value);
     if (!result.committed) return;
     longBreakAfterFocusCount = result.value;
     onchange();
+  }
+
+  function formatDurationSlot(value: number): string {
+    return String(value);
+  }
+
+  function formatCycleSlot(value: number): string {
+    return String(value);
+  }
+
+  function sanitizeCustomSlotDraft(value: string, maxLength: number): string {
+    return value.replace(/\D/g, "").slice(0, maxLength);
   }
 
   function handleNumberDraftKeydown(e: KeyboardEvent, commit: () => void, restore: () => void) {
@@ -285,92 +336,6 @@
     panelInputKeydown(e);
   }
 
-  function clampMinutes(value: number, min: number, max: number): number {
-    if (!Number.isFinite(value)) return min;
-    return Math.min(max, Math.max(min, Math.round(value)));
-  }
-
-  function sequenceBreakMax(phase: PomodoroBreakPhase): number {
-    return phase === "long_break" ? MAX_LONG_BREAK_MINUTES : MAX_SHORT_BREAK_MINUTES;
-  }
-
-  function sequenceBreakMin(phase: PomodoroBreakPhase): number {
-    return phase === "long_break" ? MIN_LONG_BREAK_MINUTES : MIN_SHORT_BREAK_MINUTES;
-  }
-
-  function updateStep(index: number, patch: Partial<SequencePomodoroRhythmStep>) {
-    sequenceSteps = sequenceSteps.map((step, stepIndex) => {
-      if (stepIndex !== index) return step;
-      const nextPhase = patch.breakPhase ?? step.breakPhase;
-      return {
-        focusDurationMinutes: clampMinutes(
-          patch.focusDurationMinutes ?? step.focusDurationMinutes,
-          MIN_FOCUS_MINUTES,
-          MAX_FOCUS_MINUTES,
-        ),
-        breakPhase: nextPhase,
-        breakDurationMinutes: clampMinutes(
-          patch.breakDurationMinutes ?? step.breakDurationMinutes,
-          sequenceBreakMin(nextPhase),
-          sequenceBreakMax(nextPhase),
-        ),
-      };
-    });
-    onchange();
-  }
-
-  function ensureSequenceStep(): SequencePomodoroRhythmStep {
-    return {
-      focusDurationMinutes: focusDuration,
-      breakPhase: "short_break",
-      breakDurationMinutes: shortBreak,
-    };
-  }
-
-  function setCustomRhythmMode(mode: CustomRhythmMode) {
-    customRhythmMode = mode;
-    if (mode === "sequence" && sequenceSteps.length === 0) {
-      sequenceSteps = [ensureSequenceStep()];
-    }
-    onchange();
-  }
-
-  function addStep() {
-    if (sequenceSteps.length >= MAX_RHYTHM_POSITIONS) return;
-    sequenceSteps = [...sequenceSteps, ensureSequenceStep()];
-    onchange();
-  }
-
-  function deleteStep(index: number) {
-    if (sequenceSteps.length <= MIN_RHYTHM_POSITIONS) return;
-    sequenceSteps = sequenceSteps.filter((_, stepIndex) => stepIndex !== index);
-    onchange();
-  }
-
-  function duplicateStep(index: number) {
-    if (sequenceSteps.length >= MAX_RHYTHM_POSITIONS) return;
-    const step = sequenceSteps[index];
-    if (!step) return;
-    sequenceSteps = [
-      ...sequenceSteps.slice(0, index + 1),
-      { ...step },
-      ...sequenceSteps.slice(index + 1),
-    ];
-    onchange();
-  }
-
-  function moveStep(index: number, direction: -1 | 1) {
-    const target = index + direction;
-    if (target < 0 || target >= sequenceSteps.length) return;
-    const next = [...sequenceSteps];
-    const current = next[index];
-    const other = next[target];
-    if (!current || !other) return;
-    next[index] = other;
-    next[target] = current;
-    sequenceSteps = next;
-    onchange();
-  }
 </script>
 
 <div bind:this={sectionEl} class="flex flex-col overflow-hidden rounded-none" style="background-color: var(--panel-contrast);">
@@ -388,8 +353,8 @@
     </button>
   </div>
   {#if expanded}
-    <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="pomodoro" class="flex flex-col gap-1 p-2.5" style="background-color: var(--panel-bg);">
-      {#each localizedPresetEntries as { key, label, desc }, index}
+    <div transition:slide={{ duration: 180, easing: cubicOut }} data-section="pomodoro" class="flex flex-col gap-0 p-2.5" style="background-color: var(--panel-bg);">
+      {#each localizedPresetEntries as { key, label, summarySlots }, index}
         <button
           onclick={() => applyPreset(key as PomodoroPreset)}
           onfocus={() => { presetFocusIndex = index; }}
@@ -402,108 +367,63 @@
             {preset === key ? 'bg-black/5 text-foreground dark:bg-black/15' : 'text-foreground'}"
         >
           <span>{label}</span>
-          <span class="ml-auto text-[0.733333rem] text-muted-foreground">{desc}</span>
+          {#if summarySlots.length > 0}
+            <span class="rhythm-summary ml-auto text-[0.733333rem] text-muted-foreground">
+              {#each summarySlots as field, fieldIndex}
+                <span>{field.label}</span>
+                <span class="rhythm-summary-number {field.slotClass}">{field.value}</span>
+                {#if fieldIndex < summarySlots.length - 1}
+                  <span class="rhythm-summary-separator">/</span>
+                {/if}
+              {/each}
+            </span>
+          {/if}
         </button>
       {/each}
-      <button
-        onclick={() => applyPreset("custom")}
-        onfocus={() => { presetFocusIndex = POMO_PRESET_ENTRIES.length; }}
-        onkeydown={(e) => handlePresetKeydown(e, POMO_PRESET_ENTRIES.length)}
-        data-pomodoro-roving="preset"
-        data-roving-index={POMO_PRESET_ENTRIES.length}
-        tabindex={presetFocusIndex === POMO_PRESET_ENTRIES.length ? 0 : -1}
-        class="flex items-center gap-2.5 rounded-none px-3 py-1.5 text-left text-[0.8rem]
-          {readonlyInteractiveClass}
-          {preset === 'custom' ? 'bg-black/5 text-foreground dark:bg-black/15' : 'text-foreground'}"
-      >
-        <span>{t("calendar.pomodoro.custom")}</span>
-      </button>
       {#if preset === "custom"}
-        <div class="flex gap-1 px-3 pt-1">
+        <div
+          class="flex items-center gap-2.5 rounded-none bg-black/5 px-3 py-1.5 text-left text-[0.8rem] text-foreground dark:bg-black/15"
+        >
           <button
-            onclick={() => setCustomRhythmMode("simple")}
-            class="rounded-none px-2 py-1 text-[0.733333rem] {customRhythmMode === 'simple' ? 'bg-black/5 text-foreground dark:bg-black/15' : 'text-muted-foreground'} {readonlyInteractiveClass}">
-            {t("calendar.pomodoro.simple")}
+            onclick={() => applyPreset("custom")}
+            onfocus={() => { presetFocusIndex = POMO_PRESET_ENTRIES.length; }}
+            onkeydown={(e) => handlePresetKeydown(e, POMO_PRESET_ENTRIES.length)}
+            data-pomodoro-roving="preset"
+            data-roving-index={POMO_PRESET_ENTRIES.length}
+            tabindex={presetFocusIndex === POMO_PRESET_ENTRIES.length ? 0 : -1}
+            class="text-left {readonlyInteractiveClass}"
+          >
+            {t("calendar.pomodoro.custom")}
           </button>
-          <button
-            onclick={() => setCustomRhythmMode("sequence")}
-            class="rounded-none px-2 py-1 text-[0.733333rem] {customRhythmMode === 'sequence' ? 'bg-black/5 text-foreground dark:bg-black/15' : 'text-muted-foreground'} {readonlyInteractiveClass}">
-            {t("calendar.pomodoro.pattern")}
-          </button>
-        </div>
-        {#if customRhythmMode === "simple"}
-          <div class="flex flex-col gap-1.5 px-3 pt-1">
-            {#each customFields as field}
-              <label class="flex items-center gap-2 text-[0.733333rem] text-muted-foreground">
-                <span class="w-24">{field.label}</span>
-                <input type="number" value={field.value} min={field.min} max={field.max}
+          <span class="rhythm-summary ml-auto text-[0.733333rem] text-muted-foreground">
+            {#each customFields as field, fieldIndex}
+              <span>{field.compactLabel}</span>
+              <label class="contents">
+                <input type="text" inputmode="numeric" value={field.value} maxlength={field.maxLength}
+                  aria-label={field.label}
                   oninput={(e) => field.setDraft(e.currentTarget.value)}
                   onblur={field.commit}
-                  class="num-input w-11 rounded bg-black/5 px-1 py-0.5 text-center text-[0.733333rem] text-event-panel-input-text outline-none dark:bg-black/15 {readonlyInteractiveInputClass}"
+                  class="num-input rhythm-summary-number {field.slotClass} bg-transparent px-0 text-[0.733333rem] text-event-panel-input-text outline-none {readonlyInteractiveInputClass}"
                   onkeydown={(e) => handleNumberDraftKeydown(e, field.commit, field.restore)} />
-                <span class="text-muted-foreground">
-                  {field.label === t("calendar.pomodoro.longBreakAfter")
-                    ? t("calendar.pomodoro.positionsShort")
-                    : t("calendar.pomodoro.minutesShort")}
-                </span>
               </label>
+              {#if fieldIndex < customFields.length - 1}
+                <span class="rhythm-summary-separator">/</span>
+              {/if}
             {/each}
-          </div>
-        {:else}
-          <div class="flex flex-col gap-1.5 px-3 pt-1">
-            {#each sequenceSteps as step, index}
-              <div class="grid grid-cols-[minmax(0,1fr)_auto_auto_auto_auto_auto] items-center gap-1 text-[0.733333rem] text-muted-foreground">
-                <label class="flex min-w-0 items-center gap-1">
-                  <span class="shrink-0">{t("calendar.pomodoro.focus")}</span>
-                  <input
-                    type="number"
-                    value={step.focusDurationMinutes}
-                    min={MIN_FOCUS_MINUTES}
-                    max={MAX_FOCUS_MINUTES}
-                    onblur={(e) => updateStep(index, { focusDurationMinutes: Number(e.currentTarget.value) })}
-                    onkeydown={panelInputKeydown}
-                    class="num-input w-10 rounded bg-black/5 px-1 py-0.5 text-center text-[0.733333rem] text-event-panel-input-text outline-none dark:bg-black/15 {readonlyInteractiveInputClass}" />
-                </label>
-                <span class="text-muted-foreground">-&gt;</span>
-                <select
-                  value={step.breakPhase}
-                  onchange={(e) => updateStep(index, { breakPhase: e.currentTarget.value as PomodoroBreakPhase })}
-                  class="rounded-none bg-black/5 px-1 py-0.5 text-[0.733333rem] text-event-panel-input-text outline-none dark:bg-black/15 {readonlyInteractiveInputClass}">
-                  <option value="short_break">{t("calendar.pomodoro.shortBreak")}</option>
-                  <option value="long_break">{t("calendar.pomodoro.longBreak")}</option>
-                </select>
-                <input
-                  type="number"
-                  value={step.breakDurationMinutes}
-                  min={sequenceBreakMin(step.breakPhase)}
-                  max={sequenceBreakMax(step.breakPhase)}
-                  onblur={(e) => updateStep(index, { breakDurationMinutes: Number(e.currentTarget.value) })}
-                  onkeydown={panelInputKeydown}
-                  class="num-input w-10 rounded bg-black/5 px-1 py-0.5 text-center text-[0.733333rem] text-event-panel-input-text outline-none dark:bg-black/15 {readonlyInteractiveInputClass}" />
-                <div class="flex">
-                  <button type="button" title={t("calendar.pomodoro.moveUp")} onclick={() => moveStep(index, -1)} class="icon-button {readonlyInteractiveClass}" disabled={index === 0}>
-                    <ArrowUp size={12} />
-                  </button>
-                  <button type="button" title={t("calendar.pomodoro.moveDown")} onclick={() => moveStep(index, 1)} class="icon-button {readonlyInteractiveClass}" disabled={index === sequenceSteps.length - 1}>
-                    <ArrowDown size={12} />
-                  </button>
-                </div>
-                <div class="flex">
-                  <button type="button" title={t("calendar.pomodoro.duplicateStep")} onclick={() => duplicateStep(index)} class="icon-button {readonlyInteractiveClass}" disabled={sequenceSteps.length >= MAX_RHYTHM_POSITIONS}>
-                    <CopyIcon size={12} />
-                  </button>
-                  <button type="button" title={t("calendar.pomodoro.deleteStep")} onclick={() => deleteStep(index)} class="icon-button {readonlyInteractiveClass}" disabled={sequenceSteps.length <= MIN_RHYTHM_POSITIONS}>
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              </div>
-            {/each}
-            <button type="button" onclick={addStep} class="flex w-fit items-center gap-1 rounded-none px-2 py-1 text-[0.733333rem] text-foreground {readonlyInteractiveClass}" disabled={sequenceSteps.length >= MAX_RHYTHM_POSITIONS}>
-              <Plus size={12} />
-              <span>{t("calendar.pomodoro.addStep")}</span>
-            </button>
-          </div>
-        {/if}
+          </span>
+        </div>
+      {:else}
+        <button
+          onclick={() => applyPreset("custom")}
+          onfocus={() => { presetFocusIndex = POMO_PRESET_ENTRIES.length; }}
+          onkeydown={(e) => handlePresetKeydown(e, POMO_PRESET_ENTRIES.length)}
+          data-pomodoro-roving="preset"
+          data-roving-index={POMO_PRESET_ENTRIES.length}
+          tabindex={presetFocusIndex === POMO_PRESET_ENTRIES.length ? 0 : -1}
+          class="flex items-center gap-2.5 rounded-none px-3 py-1.5 text-left text-[0.8rem] text-foreground {readonlyInteractiveClass}"
+        >
+          <span>{t("calendar.pomodoro.custom")}</span>
+        </button>
       {/if}
       <div class="mt-1 border-t border-border/40 px-0 pt-0.5">
         <button
@@ -530,15 +450,24 @@
     -webkit-appearance: none;
     margin: 0;
   }
-  .icon-button {
-    display: inline-flex;
-    height: 1.35rem;
-    width: 1.35rem;
+  .rhythm-summary {
+    display: grid;
+    grid-template-columns: max-content 2ch max-content max-content 2ch max-content max-content 2ch max-content max-content 1ch;
+    column-gap: 0.25rem;
     align-items: center;
-    justify-content: center;
-    color: hsl(var(--muted-foreground));
+    font-variant-numeric: tabular-nums;
   }
-  .icon-button:disabled {
-    opacity: 0.35;
+  .rhythm-summary-separator {
+    text-align: center;
+  }
+  .rhythm-summary-number {
+    display: inline-block;
+    text-align: right;
+  }
+  .duration-summary-slot {
+    width: 2ch;
+  }
+  .cycle-summary-slot {
+    width: 1ch;
   }
 </style>
