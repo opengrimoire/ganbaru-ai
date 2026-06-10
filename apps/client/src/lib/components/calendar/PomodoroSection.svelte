@@ -28,7 +28,7 @@
   const CUSTOM_COUNT_DEFAULT = {
     focusDurationMinutes: 40,
     shortBreakMinutes: 10,
-    longBreakMinutes: 15,
+    longBreakMinutes: 10,
     longBreakAfterFocusCount: 4,
   } as const;
   const POMO_PRESETS = COUNT_PRESET_RHYTHMS;
@@ -199,17 +199,17 @@
     return [
       {
         label: t("calendar.pomodoro.focusCompact"),
-        value: formatDurationSlot(val.focusDurationMinutes),
+        value: formatPresetDurationSlot(val.focusDurationMinutes),
         slotClass: "duration-summary-slot",
       },
       {
         label: t("calendar.pomodoro.shortBreakCompact"),
-        value: formatDurationSlot(val.shortBreakMinutes),
+        value: formatPresetDurationSlot(val.shortBreakMinutes),
         slotClass: "duration-summary-slot",
       },
       {
         label: t("calendar.pomodoro.longBreakCompact"),
-        value: formatDurationSlot(val.longBreakMinutes),
+        value: formatPresetDurationSlot(val.longBreakMinutes),
         slotClass: "duration-summary-slot",
       },
       {
@@ -315,6 +315,10 @@
 
   function formatDurationSlot(value: number): string {
     return String(value);
+  }
+
+  function formatPresetDurationSlot(value: number): string {
+    return String(value).padStart(2, "0");
   }
 
   function formatCycleSlot(value: number): string {
