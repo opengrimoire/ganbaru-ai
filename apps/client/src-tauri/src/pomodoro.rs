@@ -1350,7 +1350,7 @@ fn validate_rhythm_source(source: &str, preset_key: Option<&str>) -> Result<(), 
                 return Err("preset rhythm_source requires preset_key".to_string());
             };
             match key {
-                "auto" | "deep" | "creative" | "extended" => Ok(()),
+                "auto" | "creative" | "balanced" | "deep" | "extended" => Ok(()),
                 _ => Err(format!("invalid preset_key: {key}")),
             }
         }

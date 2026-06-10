@@ -124,7 +124,11 @@ function isPomodoroRhythmSource(value: unknown): value is PomodoroRhythmSource {
 }
 
 function isPomodoroPresetKey(value: unknown): value is PomodoroPresetKey {
-  return value === "auto" || value === "deep" || value === "creative" || value === "extended";
+  return value === "auto" ||
+    value === "creative" ||
+    value === "balanced" ||
+    value === "deep" ||
+    value === "extended";
 }
 
 function isPomodoroBreakPhase(value: unknown): value is PomodoroBreakPhase {

@@ -34,14 +34,14 @@ The current deterministic rhythm model has two shapes:
 - **Count rhythm:** fixed focus duration, fixed short break, fixed long break, and `longBreakAfterFocusCount`. This is what presets use.
 - **Sequence rhythm:** a compact repeating pattern. Each position has its own focus duration, break type (`short_break` or `long_break`), and break duration. A `short, long` sequence repeats position 1, position 2, position 1, position 2, and so on.
 
-The event panel exposes presets first, a simple custom count mode second, and an advanced custom pattern editor when the user needs per-position control. Adaptive plans remain future work. They can recommend or, with explicit opt-in, adjust future focus and break durations based on the user's own history, current session behavior, diary signals, and post-session feedback.
+The event panel exposes presets first and a simple custom count row second. Sequence rhythms remain in the model for future advanced editors, but the current UI keeps custom editing to the simple count rhythm. Adaptive plans remain future work. They can recommend or, with explicit opt-in, adjust future focus and break durations based on the user's own history, current session behavior, diary signals, and post-session feedback.
 
 The count rhythm field answers the question "how many focus periods until the long break?" This must be shown clearly in the UI. Users should not have to infer from the word "cycle" that the fourth focus period gets the long break. Sequence rhythms are repeating patterns, not scripts.
 
 The UI should avoid overwhelming the user:
 
 - New users start with presets and one clear "long break after N focus periods" control.
-- Advanced break sequences stay behind a custom or advanced mode.
+- Advanced break sequences stay out of the event panel until they have a compact editor that does not overwhelm the preset flow.
 - Redundant plans should be normalized where possible. For example, a plan with one short break and one long break after two focus periods may be better presented as a two-focus rhythm than as a larger pattern with repeated labels.
 - Adaptive changes should be visible, explainable, and reversible. The app should say what changed, why it thinks the change may help, and how to return to the previous rhythm.
 
@@ -65,13 +65,14 @@ Defaults are set globally in user settings. Focus settings control the idle thre
 
 Built-in presets give the user a starting point without dialing in numbers. They are count rhythms with a long break after 4 focus periods:
 
-- **Automatic** 40/5/10: the global default. Long focus, short breaks.
-- **Deep focus** 40/5/10: same numbers as automatic, named separately so the user can mark intent.
+- **Adaptative** 40/5/10: the global default. Long focus, short breaks.
 - **Creative** 25/5/15: shorter focus with a longer recovery break.
+- **Balanced** 30/5/10: moderate focus with the standard short and long breaks.
+- **Deep focus** 40/5/10: same numbers as adaptative, named separately so the user can mark intent.
 - **Extended** 50/10/10: even longer focus for tasks that need warmup.
 - **Custom**: any combination.
 
-Presets are starting points only; the user can edit any field after picking one. `Automatic` currently means the default 40/5/10 count-based rhythm. In the long-term adaptive model, `Automatic` should become an opt-in recommendation mode that can tune future phases and future sessions from the user's local history.
+Presets are starting points only; the user can edit any field after picking one. `Adaptative` currently means the default 40/5/10 count-based rhythm. In the long-term adaptive model, it should become an opt-in recommendation mode that can tune future phases and future sessions from the user's local history.
 
 ## Adaptive focus rhythm direction
 

@@ -3330,7 +3330,11 @@ fn validate_rhythm_source(source: &str, preset_key: Option<&str>) -> Result<(), 
             let Some(key) = preset_key else {
                 return Err("preset rhythm_source requires preset_key".to_string());
             };
-            validate_enum(key, "preset_key", &["auto", "deep", "creative", "extended"])
+            validate_enum(
+                key,
+                "preset_key",
+                &["auto", "creative", "balanced", "deep", "extended"],
+            )
         }
         "custom" => {
             if preset_key.is_some() {

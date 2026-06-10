@@ -223,7 +223,7 @@
 
   // ─── Pomodoro ───────────────────────────────────────────────────
   let pomodoroEnabled = $state(false);
-  let pomodoroPreset: "auto" | "deep" | "creative" | "extended" | "custom" = $state("auto");
+  let pomodoroPreset: "auto" | "creative" | "balanced" | "deep" | "extended" | "custom" = $state("auto");
   let focusDuration = $state(40);
   let shortBreak = $state(5);
   let longBreak = $state(10);

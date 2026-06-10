@@ -176,10 +176,10 @@ One row per timed calendar event with Pomodoro enabled. All-day events cannot ha
 | `event_id` | UUID | Primary key and FK to `calendar_events` (CASCADE delete). |
 | `rhythm_kind` | enum | `count` or `sequence`. |
 | `rhythm_source` | enum | `preset` or `custom`. |
-| `preset_key` | enum or null | `auto`, `deep`, `creative`, or `extended` for preset rhythms. Null for custom rhythms. |
+| `preset_key` | enum or null | `auto`, `creative`, `balanced`, `deep`, or `extended` for preset rhythms. Null for custom rhythms. |
 | `idle_timeout_minutes` | integer or null | Auto-pause threshold. Null disables idle detection for this event. |
 
-Built-in presets the UI can apply: automatic (40/5/10), deep focus (40/5/10), creative (25/5/15), extended (50/10/10), custom. Presets are count rhythms with a long break after 4 focus periods.
+Built-in presets the UI can apply: adaptative (40/5/10), creative (25/5/15), balanced (30/5/10), deep focus (40/5/10), extended (50/10/10), custom. Presets are count rhythms with a long break after 4 focus periods.
 
 The actual rhythm payload lives in one child table:
 

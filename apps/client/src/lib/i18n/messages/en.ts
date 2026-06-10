@@ -225,8 +225,9 @@ export const en = {
       title: "Pomodoro",
       automatic: "Adaptative",
       adaptative: "Adaptative",
-      deepFocus: "Deep focus",
       creative: "Creative",
+      balanced: "Balanced",
+      deepFocus: "Deep focus",
       extended: "Extended",
       custom: "Custom",
       customSummary: (focus: number, shortBreak: number, longBreak: number) =>

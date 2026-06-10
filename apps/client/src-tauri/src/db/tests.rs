@@ -183,6 +183,57 @@ fn schema_rejects_invalid_calendar_values() {
 }
 
 #[test]
+fn schema_accepts_balanced_pomodoro_preset_key() {
+    tauri::async_runtime::block_on(async {
+        let pool = migrated_memory_pool().await;
+        insert_event(&pool).await;
+
+        sqlx::query(
+            "INSERT INTO pomodoro_configs
+                (event_id, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes)
+             VALUES ('event-1', 'count', 'preset', 'balanced', 3)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO pomodoro_runs
+                (id, event_id, original_event_id, event_date, planned_start, planned_end,
+                 started_at, rhythm_kind, rhythm_source, preset_key, last_heartbeat, start_trigger)
+             VALUES ('run-balanced', 'event-1', 'event-1', '2026-05-23',
+                     '2026-05-23T09:00:00Z', '2026-05-23T10:00:00Z',
+                     '2026-05-23T09:00:00Z', 'count', 'preset', 'balanced',
+                     '2026-05-23T09:00:00Z', 'manual')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO calendar_events_archive
+                (id, source_event_id, archived_at, title, start_time, end_time,
+                 calendar_id, created_at, updated_at)
+             VALUES ('archive-1', 'event-1', '2026-05-23T11:00:00Z', 'Focus block',
+                     '2026-05-23T09:00:00Z', '2026-05-23T10:00:00Z',
+                     'local', '2026-05-23T08:00:00Z', '2026-05-23T08:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO calendar_event_archive_pomodoro_configs
+                (archive_event_id, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes)
+             VALUES ('archive-1', 'count', 'preset', 'balanced', 3)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+    });
+}
+
+#[test]
 fn schema_allows_only_one_open_pomodoro_run() {
     tauri::async_runtime::block_on(async {
         let pool = migrated_memory_pool().await;

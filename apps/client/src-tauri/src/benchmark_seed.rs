@@ -390,7 +390,7 @@ fn validate_config(config: &BenchmarkPomodoroConfig) -> Result<(), String> {
 
 fn validate_source_and_preset(source: &str, preset_key: Option<&str>) -> Result<(), String> {
     match (source, preset_key) {
-        ("preset", Some("auto" | "deep" | "creative" | "extended")) => Ok(()),
+        ("preset", Some("auto" | "creative" | "balanced" | "deep" | "extended")) => Ok(()),
         ("preset", Some(other)) => Err(format!("invalid pomodoro preset key: {other}")),
         ("preset", None) => Err("preset pomodoro config requires a preset key".into()),
         ("custom", None) => Ok(()),

@@ -18,7 +18,7 @@
     type SequencePomodoroRhythmStep,
   } from "$lib/pomodoro/rhythm";
 
-  type PomodoroPreset = "auto" | "deep" | "creative" | "extended" | "custom";
+  type PomodoroPreset = "auto" | "creative" | "balanced" | "deep" | "extended" | "custom";
   type BuiltInPomodoroPreset = Exclude<PomodoroPreset, "custom">;
   type CustomRhythmMode = "simple" | "sequence";
   type SummarySlotClass = "duration-summary-slot" | "cycle-summary-slot";
@@ -32,7 +32,13 @@
     longBreakAfterFocusCount: 4,
   } as const;
   const POMO_PRESETS = COUNT_PRESET_RHYTHMS;
-  const POMO_PRESET_ORDER: BuiltInPomodoroPreset[] = ["auto", "creative", "deep", "extended"];
+  const POMO_PRESET_ORDER: BuiltInPomodoroPreset[] = [
+    "auto",
+    "creative",
+    "balanced",
+    "deep",
+    "extended",
+  ];
   const POMO_PRESET_ENTRIES = POMO_PRESET_ORDER.map((key) => [key, POMO_PRESETS[key]]) as Array<[
     BuiltInPomodoroPreset,
     typeof POMO_PRESETS[BuiltInPomodoroPreset],
@@ -179,8 +185,9 @@
 
   function presetLabel(p: BuiltInPomodoroPreset): string {
     if (p === "auto") return t("calendar.pomodoro.adaptative");
-    if (p === "deep") return t("calendar.pomodoro.deepFocus");
     if (p === "creative") return t("calendar.pomodoro.creative");
+    if (p === "balanced") return t("calendar.pomodoro.balanced");
+    if (p === "deep") return t("calendar.pomodoro.deepFocus");
     return t("calendar.pomodoro.extended");
   }
 
