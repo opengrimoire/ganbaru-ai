@@ -16,43 +16,46 @@ import {
   breakAfterFocusPosition,
   clonePomodoroConfig,
   focusDurationMinutesAtPosition,
-  isValidPomodoroConfig,
   nextRhythmPosition,
   normalizeRhythmPosition,
   phaseDurationMinutesAtPosition,
   rhythmPositionCount,
 } from "$lib/pomodoro/rhythm";
 import {
-  DEFAULT_ADAPTIVE_POLICY_ID,
-  adaptiveContextKey,
   buildRunStartAdaptiveSnapshot,
-  decideBoundaryAdaptiveRhythm,
-  decideRunStartAdaptiveRhythm,
   snapshotFromBoundaryAdaptiveDecision,
   snapshotFromRunStartAdaptiveDecision,
   type PomodoroAdaptiveDecisionEnvelopeWrite,
-  type PomodoroAdaptiveHistoryRead,
   type PomodoroAdaptivePlannedBlockWrite,
   type PomodoroBoundaryAdaptiveDecision,
   type PomodoroRunAdaptiveSnapshotWrite,
   type PomodoroRunStartAdaptiveDecision,
 } from "$lib/pomodoro/adaptive/persistence";
 import {
-  buildDefaultBoundedReplayRunStartPolicyCandidates,
-  evaluateGatedReplayRunStartPolicyCandidates,
-  selectBestUsableReplayRunStartPolicyCandidateForContext,
-} from "$lib/pomodoro/adaptive/replay";
-import {
-  buildReplayObservedRunOutcomesFromDataset,
-  buildReplayRunStartOpportunitiesFromDataset,
-  scoreReplayObservedRunOutcomesByCandidateFromDataset,
-  type PomodoroAdaptiveReplayDatasetRead,
-} from "$lib/pomodoro/adaptive/replay-dataset";
-import {
   normalizePauseForSegment,
-  normalizePausesForSegment,
   normalizeSegmentEndIso,
 } from "./pomodoro-segment-intervals";
+import {
+  buildPomodoroSegmentUpdate,
+  buildPomodoroSegmentWrite,
+  nowIso,
+  type PomodoroActiveEventReferenceTransfer,
+  type PomodoroBackendWriteOptions,
+  type PomodoroRunClosure,
+  type PomodoroRunEndReason,
+  type PomodoroRunEventType,
+  type PomodoroRunEventWrite,
+  type PomodoroRunWindowUpdate,
+  type PomodoroRunWrite,
+  type PomodoroSegmentEndReason,
+  type PomodoroStartTrigger,
+  type PomodoroTransitionRunWrite,
+} from "./pomodoro-backend-writes";
+import {
+  decideBoundaryAdaptiveForState,
+  decideRunStartAdaptiveForState,
+  isAdaptiveCountConfig,
+} from "./pomodoro-adaptive-decisions";
 import { emit, listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -85,74 +88,21 @@ import {
   isForeignWindowSyncEnvelope,
   isWindowSyncEnvelope,
 } from "$lib/window-sync";
+import {
+  cloneSegmentsForWindowSync,
+  isPomodoroWindowCommand,
+  isPomodoroWindowSnapshot,
+  type IdlePauseState,
+  type PomodoroWindowCommand,
+  type PomodoroWindowSnapshot,
+} from "./pomodoro-window-sync";
 
 const POMODORO_WINDOW_SYNC_EVENT = "pomodoro-window-sync";
 const POMODORO_WINDOW_COMMAND_EVENT = "pomodoro-window-command";
 const PAUSED_FOCUS_NOTIFICATION_RESUME_EVENT = "pomodoro-paused-focus-resume";
 const PAUSED_FOCUS_NOTIFICATION_STOP_ASKING_EVENT =
   "pomodoro-paused-focus-stop-asking";
-const ADAPTIVE_HISTORY_SEGMENT_LIMIT = 80;
-const ADAPTIVE_REPLAY_DATASET_LIMIT = 50;
 const pomodoroCoordinator = getCurrentWindow().label === "main";
-
-interface PomodoroWindowSnapshot {
-  phase: PomodoroPhase;
-  remainingSeconds: number;
-  phaseTotalSeconds: number;
-  phaseWorkDurationSeconds: number;
-  currentRhythmPosition: number;
-  totalRhythmPositions: number;
-  isRunning: boolean;
-  config: PomodoroConfig;
-  completedPomodoros: number;
-  activeBlockId: string | null;
-  activeRunId: string | null;
-  activeBlockEndMs: number | null;
-  dismissedBlockId: string | null;
-  breakOvertimeSeconds: number;
-  segments: PersistedSegment[];
-  segmentVersion: number;
-  blockExpired: boolean;
-  focusExtensionUsed: boolean;
-  suspendedAway: { awaySeconds: number } | null;
-  idlePaused: IdlePauseState | null;
-}
-
-interface IdlePauseState {
-  idleSeconds: number;
-  nativeOverlay: boolean;
-  idleStartMs: number;
-  overlayStartedAtMs: number;
-  focusFailed: boolean;
-  focusFailedAtMs: number | null;
-}
-
-type PomodoroWindowCommand =
-  | { kind: "request-snapshot" }
-  | { kind: "set-dismissed-block-id"; id: string | null }
-  | { kind: "clear-block-expired" }
-  | { kind: "transfer-block-id"; newBlockId: string; newEndTime?: string }
-  | {
-      kind: "start-from-block";
-      blockId: string;
-      blockConfig: PomodoroConfig;
-      eventEnd?: string;
-      eventDate?: string;
-      blockIdleTimeoutMinutes?: number | null;
-      syncIdleTimeoutOnExistingBlock?: boolean;
-      adaptivePlannedBlocks?: PomodoroAdaptivePlannedBlockWrite[];
-    }
-  | { kind: "set-active-idle-threshold-minutes"; minutes: number }
-  | { kind: "dismiss-suspend"; resume: boolean }
-  | { kind: "dismiss-idle"; resume: boolean }
-  | { kind: "mark-idle-focus-failed"; failedAtMs?: number }
-  | { kind: "complete-active-block-at"; endIso: string }
-  | { kind: "stop-session" }
-  | { kind: "pause" }
-  | { kind: "start" }
-  | { kind: "skip" }
-  | { kind: "add-focus-time"; seconds: number }
-  | { kind: "cleanup-orphans" };
 
 const DEFAULT_FOCUS_SECONDS = focusDurationMinutesAtPosition(DEFAULT_CONFIG, 1) * TIME_MULTIPLIER;
 
@@ -283,203 +233,6 @@ function buildSnapshot(): TimerSnapshot {
   };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function isPomodoroPhase(value: unknown): value is PomodoroPhase {
-  return value === "focus" || value === "short_break" || value === "long_break";
-}
-
-function isSegmentPhase(value: unknown): value is SegmentPhase {
-  return isPomodoroPhase(value);
-}
-
-function isSegmentStatus(value: unknown): value is PersistedSegment["status"] {
-  return (
-    value === "planned" ||
-    value === "active" ||
-    value === "completed" ||
-    value === "skipped" ||
-    value === "interrupted"
-  );
-}
-
-function isNullableString(value: unknown): value is string | null {
-  return typeof value === "string" || value === null;
-}
-
-function isNullableNumber(value: unknown): value is number | null {
-  return (typeof value === "number" && Number.isFinite(value)) || value === null;
-}
-
-function isPositiveNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value > 0;
-}
-
-function isNonNegativeNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0;
-}
-
-function isPomodoroConfig(value: unknown): value is PomodoroConfig {
-  return isRecord(value) && isValidPomodoroConfig(value as unknown as PomodoroConfig);
-}
-
-function isAdaptivePlannedBlock(value: unknown): value is PomodoroAdaptivePlannedBlockWrite {
-  if (!isRecord(value)) return false;
-  return (
-    typeof value.eventDate === "string" &&
-    isNullableString(value.eventId) &&
-    typeof value.originalEventId === "string" &&
-    typeof value.plannedStart === "string" &&
-    typeof value.plannedEnd === "string" &&
-    (
-      value.sourceKind === "live_event" ||
-      value.sourceKind === "archived_event" ||
-      value.sourceKind === "scheduler_snapshot"
-    )
-  );
-}
-
-function isAdaptivePlannedBlockList(value: unknown): value is PomodoroAdaptivePlannedBlockWrite[] {
-  return Array.isArray(value) && value.every(isAdaptivePlannedBlock);
-}
-
-function isPauseInterval(value: unknown): value is PauseInterval {
-  return isRecord(value) &&
-    typeof value.startedAt === "string" &&
-    isNullableString(value.endedAt) &&
-    isPauseReason(value.reason);
-}
-
-function isPauseReason(value: unknown): value is PauseReason {
-  return value === "idle" || value === "manual" || value === "suspend";
-}
-
-function isPersistedSegment(value: unknown): value is PersistedSegment {
-  if (!isRecord(value)) return false;
-  return (
-    typeof value.id === "string" &&
-    typeof value.eventId === "string" &&
-    typeof value.eventDate === "string" &&
-    typeof value.runId === "string" &&
-    typeof value.rhythmPosition === "number" &&
-    isSegmentPhase(value.phase) &&
-    typeof value.plannedStart === "string" &&
-    typeof value.plannedEnd === "string" &&
-    isNullableString(value.actualStart) &&
-    isNullableString(value.actualEnd) &&
-    Array.isArray(value.pauseLog) &&
-    value.pauseLog.every(isPauseInterval) &&
-    isSegmentStatus(value.status)
-  );
-}
-
-function isPomodoroWindowSnapshot(value: unknown): value is PomodoroWindowSnapshot {
-  if (!isRecord(value)) return false;
-  const suspendedAwayValue = value.suspendedAway;
-  const idlePausedValue = value.idlePaused;
-  const validSuspendedAway =
-    suspendedAwayValue === null ||
-    (isRecord(suspendedAwayValue) && isNonNegativeNumber(suspendedAwayValue.awaySeconds));
-  const validIdlePaused =
-    idlePausedValue === null ||
-    (
-      isRecord(idlePausedValue) &&
-      isNonNegativeNumber(idlePausedValue.idleSeconds) &&
-      typeof idlePausedValue.nativeOverlay === "boolean" &&
-      isNonNegativeNumber(idlePausedValue.idleStartMs) &&
-      isNonNegativeNumber(idlePausedValue.overlayStartedAtMs) &&
-      typeof idlePausedValue.focusFailed === "boolean" &&
-      isNullableNumber(idlePausedValue.focusFailedAtMs)
-    );
-
-  return (
-    isPomodoroPhase(value.phase) &&
-    isNonNegativeNumber(value.remainingSeconds) &&
-    isNonNegativeNumber(value.phaseTotalSeconds) &&
-    isNonNegativeNumber(value.phaseWorkDurationSeconds) &&
-    isPositiveNumber(value.currentRhythmPosition) &&
-    isPositiveNumber(value.totalRhythmPositions) &&
-    typeof value.isRunning === "boolean" &&
-    isPomodoroConfig(value.config) &&
-    isNonNegativeNumber(value.completedPomodoros) &&
-    isNullableString(value.activeBlockId) &&
-    isNullableString(value.activeRunId) &&
-    isNullableNumber(value.activeBlockEndMs) &&
-    isNullableString(value.dismissedBlockId) &&
-    isNonNegativeNumber(value.breakOvertimeSeconds) &&
-    Array.isArray(value.segments) &&
-    value.segments.every(isPersistedSegment) &&
-    isNonNegativeNumber(value.segmentVersion) &&
-    typeof value.blockExpired === "boolean" &&
-    typeof value.focusExtensionUsed === "boolean" &&
-    validSuspendedAway &&
-    validIdlePaused
-  );
-}
-
-function isPomodoroWindowCommand(value: unknown): value is PomodoroWindowCommand {
-  if (!isRecord(value) || typeof value.kind !== "string") return false;
-  switch (value.kind) {
-    case "request-snapshot":
-    case "clear-block-expired":
-    case "stop-session":
-    case "pause":
-    case "start":
-    case "skip":
-    case "cleanup-orphans":
-      return true;
-    case "mark-idle-focus-failed":
-      return value.failedAtMs === undefined || isNonNegativeNumber(value.failedAtMs);
-    case "add-focus-time":
-      return isPositiveNumber(value.seconds);
-    case "set-active-idle-threshold-minutes":
-      return isPositiveNumber(value.minutes);
-    case "set-dismissed-block-id":
-      return isNullableString(value.id);
-    case "transfer-block-id":
-      return (
-        typeof value.newBlockId === "string" &&
-        (value.newEndTime === undefined || typeof value.newEndTime === "string")
-      );
-    case "start-from-block":
-      return (
-        typeof value.blockId === "string" &&
-        isPomodoroConfig(value.blockConfig) &&
-        (value.eventEnd === undefined || typeof value.eventEnd === "string") &&
-        (value.eventDate === undefined || typeof value.eventDate === "string") &&
-        (
-          value.blockIdleTimeoutMinutes === undefined ||
-          value.blockIdleTimeoutMinutes === null ||
-          isNonNegativeNumber(value.blockIdleTimeoutMinutes)
-        ) &&
-        (
-          value.syncIdleTimeoutOnExistingBlock === undefined ||
-          typeof value.syncIdleTimeoutOnExistingBlock === "boolean"
-        ) &&
-        (
-          value.adaptivePlannedBlocks === undefined ||
-          isAdaptivePlannedBlockList(value.adaptivePlannedBlocks)
-        )
-      );
-    case "dismiss-suspend":
-    case "dismiss-idle":
-      return typeof value.resume === "boolean";
-    case "complete-active-block-at":
-      return typeof value.endIso === "string";
-    default:
-      return false;
-  }
-}
-
-function cloneSegmentsForWindowSync(source: readonly PersistedSegment[]): PersistedSegment[] {
-  return source.map((segment) => ({
-    ...segment,
-    pauseLog: segment.pauseLog.map((pause) => ({ ...pause })),
-  }));
-}
-
 function buildWindowSnapshot(): PomodoroWindowSnapshot {
   return {
     phase,
@@ -553,127 +306,6 @@ function forwardWindowCommand(command: PomodoroWindowCommand): boolean {
 
 // Segment helpers
 
-interface PomodoroSegmentWrite {
-  id: string;
-  eventId: string;
-  eventDate: string;
-  runId: string;
-  rhythmPosition: number;
-  phase: SegmentPhase;
-  plannedStart: string;
-  plannedEnd: string;
-  actualStart: string | null;
-  actualEnd: string | null;
-  pauses: PauseInterval[];
-  status: PersistedSegment["status"];
-  endReason: PomodoroSegmentEndReason | null;
-}
-
-interface PomodoroSegmentUpdate {
-  id: string;
-  status: PersistedSegment["status"];
-  plannedEnd: string;
-  actualStart: string | null;
-  actualEnd: string | null;
-  endReason: PomodoroSegmentEndReason | null;
-  occurredAt: string | null;
-  pauses: PauseInterval[];
-}
-
-type PomodoroStartTrigger = "manual" | "block_auto" | "block_transition" | "reconfigure" | "crash_recovery";
-type PomodoroRunEndReason = "completed" | "stopped" | "interrupted" | "reconfigured" | "block_transition";
-type PomodoroSegmentEndReason =
-  | "completed"
-  | "stopped"
-  | "skipped_by_user"
-  | "event_expired"
-  | "focus_failed"
-  | "reconfigured"
-  | "block_transition"
-  | "crash_recovery";
-type PomodoroRunEventType =
-  | "start"
-  | "phase_start"
-  | "phase_complete"
-  | "pause_start"
-  | "pause_end"
-  | "idle_detected"
-  | "focus_failed"
-  | "suspend_detected"
-  | "skip_break"
-  | "extend_focus"
-  | "go_to_break_now"
-  | "start_focus_now"
-  | "reconfigure"
-  | "block_transition"
-  | "stop"
-  | "complete"
-  | "crash_recovery";
-
-interface PomodoroRunWrite {
-  id: string;
-  eventId: string;
-  eventDate: string;
-  plannedStart: string;
-  plannedEnd: string;
-  startedAt: string;
-  rhythm: PomodoroConfig["rhythm"];
-  rhythmSource: PomodoroConfig["rhythmSource"];
-  presetKey: PomodoroConfig["presetKey"];
-  idleTimeoutMinutes: number | null;
-  eventTitleSnapshot: string | null;
-  inheritedFocusMinutes: number;
-  inheritedRhythmPosition: number;
-  inheritedFromRunId: string | null;
-  startTrigger: PomodoroStartTrigger;
-  adaptiveSnapshot: PomodoroRunAdaptiveSnapshotWrite | null;
-}
-
-interface PomodoroRunClosure {
-  runId: string;
-  endedAt: string;
-  endReason: PomodoroRunEndReason;
-  segmentStatus: "completed" | "interrupted";
-  segmentEndReason: PomodoroSegmentEndReason;
-  eventType: PomodoroRunEventType;
-}
-
-interface PomodoroRunWindowUpdate {
-  runId: string;
-  plannedEnd: string;
-}
-
-interface PomodoroActiveEventReferenceTransfer {
-  newEventId: string;
-  newEventDate: string | null;
-  plannedEnd: string | null;
-}
-
-interface PomodoroTransitionRunWrite {
-  closure: PomodoroRunClosure;
-  run: PomodoroRunWrite;
-  segment: PomodoroSegmentWrite;
-}
-
-interface PomodoroBackendWriteOptions {
-  bumpSegmentVersion?: boolean;
-  publishSnapshot?: boolean;
-}
-
-interface PomodoroRunEventWrite {
-  runId: string;
-  segmentId: string | null;
-  eventType: PomodoroRunEventType;
-  occurredAt: string;
-  phase: SegmentPhase | null;
-  reason: string | null;
-  durationSeconds: number | null;
-}
-
-function nowIso(): string {
-  return new Date().toISOString();
-}
-
 function segmentEndReasonFor(seg: PersistedSegment): PomodoroSegmentEndReason | null {
   const explicit = segmentEndReasons.get(seg.id);
   if (explicit) return explicit;
@@ -685,123 +317,6 @@ function segmentEndReasonFor(seg: PersistedSegment): PomodoroSegmentEndReason | 
 
 function runPlannedEndForSegment(seg: PersistedSegment): string {
   return activeBlockEndMs === null ? seg.plannedEnd : new Date(activeBlockEndMs).toISOString();
-}
-
-function isAdaptiveCountConfig(
-  value: PomodoroConfig,
-): value is PomodoroConfig & {
-  rhythm: CountPomodoroRhythm;
-  rhythmSource: "preset";
-  presetKey: "adaptive";
-} {
-  return value.rhythm.kind === "count" &&
-    value.rhythmSource === "preset" &&
-    value.presetKey === "adaptive";
-}
-
-async function loadAdaptiveHistory(before: string): Promise<PomodoroAdaptiveHistoryRead | null> {
-  try {
-    return await invoke<PomodoroAdaptiveHistoryRead>("pomodoro_load_adaptive_history", {
-      dbUrl: dbUrl(),
-      before,
-      policyId: DEFAULT_ADAPTIVE_POLICY_ID,
-      segmentLimit: ADAPTIVE_HISTORY_SEGMENT_LIMIT,
-    });
-  } catch (e) {
-    console.warn("Failed to load adaptive pomodoro history:", e);
-    return null;
-  }
-}
-
-async function loadAdaptiveReplayDataset(
-  before: string,
-): Promise<PomodoroAdaptiveReplayDatasetRead | null> {
-  try {
-    return await invoke<PomodoroAdaptiveReplayDatasetRead>("pomodoro_load_adaptive_replay_dataset", {
-      dbUrl: dbUrl(),
-      before,
-      policyId: DEFAULT_ADAPTIVE_POLICY_ID,
-      limit: ADAPTIVE_REPLAY_DATASET_LIMIT,
-      historySegmentLimit: ADAPTIVE_HISTORY_SEGMENT_LIMIT,
-    });
-  } catch (e) {
-    console.warn("Failed to load adaptive pomodoro replay dataset:", e);
-    return null;
-  }
-}
-
-async function decideRunStartAdaptive(
-  startedAt: string,
-  plannedStart: string,
-  plannedEnd: string,
-): Promise<PomodoroRunStartAdaptiveDecision | null> {
-  const configSnapshot = clonePomodoroConfig(config);
-  if (!isAdaptiveCountConfig(configSnapshot)) return null;
-  const history = await loadAdaptiveHistory(startedAt);
-  const input = {
-    startedAt,
-    plannedStart,
-    plannedEnd,
-    currentRhythm: configSnapshot.rhythm,
-    idleDetectionEnabled: idleTimeoutMs !== null,
-    history,
-  };
-  const decision = decideRunStartAdaptiveRhythm(input);
-  return selectReplayApprovedRunStartAdaptiveDecision(input, decision);
-}
-
-async function selectReplayApprovedRunStartAdaptiveDecision(
-  input: Parameters<typeof decideRunStartAdaptiveRhythm>[0],
-  decision: PomodoroRunStartAdaptiveDecision,
-): Promise<PomodoroRunStartAdaptiveDecision> {
-  const dataset = await loadAdaptiveReplayDataset(input.startedAt);
-  if (!dataset || dataset.opportunities.length === 0 || dataset.outcomes.length === 0) {
-    return decision;
-  }
-
-  const candidates = buildDefaultBoundedReplayRunStartPolicyCandidates();
-  const workflow = evaluateGatedReplayRunStartPolicyCandidates(
-    buildReplayRunStartOpportunitiesFromDataset(dataset),
-    candidates,
-    buildReplayObservedRunOutcomesFromDataset(dataset),
-    {
-      observedCandidateOutcomeScores: scoreReplayObservedRunOutcomesByCandidateFromDataset(dataset),
-    },
-  );
-  const review = selectBestUsableReplayRunStartPolicyCandidateForContext(
-    workflow,
-    adaptiveContextKey(decision.context),
-  );
-  if (!review) return decision;
-
-  const candidate = candidates.find((entry) => entry.id === review.candidateId);
-  if (!candidate) return decision;
-
-  return candidate.decide({
-    id: "current-run-start",
-    ...input,
-  });
-}
-
-async function decideBoundaryAdaptive(
-  opportunityKind: "focus_start" | "break_start",
-  occurredAt: string,
-): Promise<PomodoroBoundaryAdaptiveDecision | null> {
-  const configSnapshot = clonePomodoroConfig(config);
-  if (!isAdaptiveCountConfig(configSnapshot)) return null;
-  const plannedEnd = activeBlockEndMs === null
-    ? activeSegment()?.plannedEnd ?? occurredAt
-    : new Date(activeBlockEndMs).toISOString();
-  const history = await loadAdaptiveHistory(occurredAt);
-  return decideBoundaryAdaptiveRhythm({
-    opportunityKind,
-    startedAt: occurredAt,
-    plannedStart: occurredAt,
-    plannedEnd,
-    currentRhythm: configSnapshot.rhythm,
-    idleDetectionEnabled: idleTimeoutMs !== null,
-    history,
-  });
 }
 
 function applyRunStartAdaptiveDecision(decision: PomodoroRunStartAdaptiveDecision): void {
@@ -1383,37 +898,6 @@ function eventDateFromBlockId(blockId: string): string | null {
   return blockId.split("::")[1] ?? null;
 }
 
-function segmentWrite(seg: PersistedSegment): PomodoroSegmentWrite {
-  return {
-    id: seg.id,
-    eventId: seg.eventId,
-    eventDate: seg.eventDate,
-    runId: seg.runId,
-    rhythmPosition: seg.rhythmPosition,
-    phase: seg.phase,
-    plannedStart: seg.plannedStart,
-    plannedEnd: seg.plannedEnd,
-    actualStart: seg.actualStart,
-    actualEnd: seg.actualEnd,
-    pauses: normalizePausesForSegment(seg, seg.pauseLog),
-    status: seg.status,
-    endReason: null,
-  };
-}
-
-function segmentUpdate(seg: PersistedSegment, occurredAt: string | null = null): PomodoroSegmentUpdate {
-  return {
-    id: seg.id,
-    status: seg.status,
-    plannedEnd: seg.plannedEnd,
-    actualStart: seg.actualStart,
-    actualEnd: seg.actualEnd,
-    endReason: segmentEndReasonFor(seg),
-    occurredAt,
-    pauses: normalizePausesForSegment(seg, seg.pauseLog),
-  };
-}
-
 function persistSegmentsToBackend(
   updatedSegments: PersistedSegment[],
   warning: string,
@@ -1426,7 +910,9 @@ function persistSegmentsToBackend(
   return enqueuePomodoroWrite(async () => {
     await invoke("pomodoro_update_segments", {
       dbUrl: dbUrl(),
-      segments: persisted.map((segment) => segmentUpdate(segment, occurredAt)),
+      segments: persisted.map((segment) =>
+        buildPomodoroSegmentUpdate(segment, segmentEndReasonFor(segment), occurredAt),
+      ),
     });
     if (bumpSegmentVersion) {
       segmentVersion++;
@@ -1454,7 +940,7 @@ async function insertSegmentsToBackend(newSegments: PersistedSegment[]) {
   await enqueuePomodoroWrite(async () => {
     await invoke("pomodoro_insert_segments", {
       dbUrl: dbUrl(),
-      segments: persisted.map(segmentWrite),
+      segments: persisted.map(buildPomodoroSegmentWrite),
     });
     segmentVersion++;
     publishWindowSnapshot();
@@ -1468,7 +954,7 @@ async function insertSegmentWithAdaptiveDecisionToBackend(
   await enqueuePomodoroWrite(async () => {
     await invoke("pomodoro_insert_segment_with_adaptive_decision", {
       dbUrl: dbUrl(),
-      segment: segmentWrite(segment),
+      segment: buildPomodoroSegmentWrite(segment),
       adaptiveDecision,
     });
     segmentVersion++;
@@ -1490,7 +976,7 @@ async function startRunInBackend(
     await invoke("pomodoro_start_run", {
       dbUrl: dbUrl(),
       run,
-      segment: segmentWrite(segment),
+      segment: buildPomodoroSegmentWrite(segment),
     });
     completePomodoroBackendWrite(options);
   });
@@ -1754,11 +1240,13 @@ async function createSegments(
   const now = new Date();
   const end = new Date(eventEnd.replace(" ", "T"));
   const baseIso = now.toISOString();
-  const runStartAdaptiveDecision = await decideRunStartAdaptive(
-    baseIso,
-    baseIso,
-    end.toISOString(),
-  );
+  const runStartAdaptiveDecision = await decideRunStartAdaptiveForState({
+    config,
+    idleDetectionEnabled: idleTimeoutMs !== null,
+    startedAt: baseIso,
+    plannedStart: baseIso,
+    plannedEnd: end.toISOString(),
+  });
   if (runStartAdaptiveDecision) {
     applyRunStartAdaptiveDecision(runStartAdaptiveDecision);
   }
@@ -2032,7 +1520,7 @@ async function rebuildSegments(
             eventType: options.eventType,
           },
           run,
-          segment: segmentWrite(firstSegment),
+          segment: buildPomodoroSegmentWrite(firstSegment),
         }, { bumpSegmentVersion: false, publishSnapshot: false });
       } else {
         await startRunInBackend(run, firstSegment, { bumpSegmentVersion: false, publishSnapshot: false });
@@ -2538,7 +2026,15 @@ async function startFocusSession() {
     intervalId = null;
   }
   stopOvertime();
-  const adaptiveDecision = await decideBoundaryAdaptive("focus_start", nowIso());
+  const boundaryOccurredAt = nowIso();
+  const adaptiveDecision = await decideBoundaryAdaptiveForState({
+    config,
+    idleDetectionEnabled: idleTimeoutMs !== null,
+    activeBlockEndMs,
+    activeSegmentPlannedEnd: activeSegment()?.plannedEnd ?? null,
+    opportunityKind: "focus_start",
+    occurredAt: boundaryOccurredAt,
+  });
   applyBoundaryAdaptiveDecision(adaptiveDecision);
   const nextPosition = isBreakPhase(phase)
     ? nextRhythmPosition(config, currentRhythmPosition)
@@ -3165,7 +2661,14 @@ async function advancePhase() {
       await markSegment(currentSegmentIndex, "completed", true, boundaryOccurredAt);
     }
 
-    const adaptiveDecision = await decideBoundaryAdaptive(boundaryOpportunity, boundaryOccurredAt);
+    const adaptiveDecision = await decideBoundaryAdaptiveForState({
+    config,
+    idleDetectionEnabled: idleTimeoutMs !== null,
+    activeBlockEndMs,
+    activeSegmentPlannedEnd: activeSegment()?.plannedEnd ?? null,
+    opportunityKind: boundaryOpportunity,
+    occurredAt: boundaryOccurredAt,
+  });
     applyBoundaryAdaptiveDecision(adaptiveDecision);
     const result = decideAdvancePhase(buildSnapshot());
 

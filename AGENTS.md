@@ -89,11 +89,13 @@ apps/
         main.rs: desktop binary entry
         lib.rs: Tauri app setup and command registration
         bin/: auxiliary Rust binaries, including native messaging host
+          ganbaru-ai-native-messaging/: native messaging host test modules
         db.rs, db/: SQLite pool, migration execution, schema invariant tests
         vault.rs, db_path.rs, sqlite_row.rs: data folder, database path, and row helpers
         calendar_*.rs, calendars.rs, recurrence.rs: calendar persistence, import, reads, and recurrence logic
-        pomodoro*.rs, notification.rs, tray.rs, window_shape.rs: timer, overlays, notifications, tray, and window integration
-        doomscrolling.rs: browser and desktop blocking commands and runtime helpers
+        pomodoro.rs, pomodoro/: timer commands, DTOs, persistence, validation, reads, and tests
+        pomodoro_enforcement.rs, notification.rs, tray.rs, window_shape.rs: timer overlays, notifications, tray, and window integration
+        doomscrolling.rs, doomscrolling/: browser and desktop blocking commands, runtime helpers, and tests
         media_player.rs, media_controls.rs, music.rs: local playback, media controls, and music commands
         themes.rs, benchmark_seed.rs: theme validation and benchmark dataset setup
       migrations/: embedded SQLx SQLite migrations
