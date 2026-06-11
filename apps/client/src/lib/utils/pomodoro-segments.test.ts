@@ -12,7 +12,7 @@ import {
   createPresetPomodoroConfig,
 } from "$lib/pomodoro/rhythm";
 
-const DEFAULT_CONFIG: PomodoroConfig = createPresetPomodoroConfig("auto");
+const DEFAULT_CONFIG: PomodoroConfig = createPresetPomodoroConfig("adaptive");
 
 describe("computePlannedSegments", () => {
   it("returns empty for zero or negative duration", () => {

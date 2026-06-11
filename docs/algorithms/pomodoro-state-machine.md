@@ -35,7 +35,7 @@ Called when `decideTick` returns `advance`.
 
 The rule is straightforward: focus asks the active rhythm which break is owed at the current position, and break advances to focus at the next rhythm position. The simple four-focus rhythm is one count plan: short, short, short, long, repeated. A sequence rhythm looks up the current step directly. The `skipNextBreak` flag, if set, causes the function to skip directly from focus to focus at the next position, recorded as a `skip_break` run event and the absence of a break segment between two focus segments.
 
-Adaptive plans can propose a different duration for a future phase, following `algorithms/pomodoro-adaptive-rhythm.md`, but this decision still belongs in `decideAdvancePhase` or `decideReconfigure`, not in the writer. Once selected, the duration is persisted through the segment's planned timestamps and an explanatory run event so the plan remains auditable.
+Adaptive plans can silently select a different duration for a future phase, following `algorithms/pomodoro-adaptive-rhythm.md`, but this decision still belongs in `decideAdvancePhase`, `decideReconfigure`, or the boundary policy path immediately before a new started segment is written. Once selected, the duration is persisted through the segment's planned timestamps and adaptive decision rows so the plan remains auditable.
 
 ### `decideTransition`
 

@@ -266,7 +266,7 @@ describe("panel initial changes", () => {
       { pauseWhenIdle: false, thresholdMinutes: 7 },
     );
 
-    expect(result.pomodoroConfig).toEqual(createPresetPomodoroConfig("auto", null));
+    expect(result.pomodoroConfig).toEqual(createPresetPomodoroConfig("adaptive", null));
   });
 
   it("normalizes enabled edit baselines to the focus idle threshold", () => {

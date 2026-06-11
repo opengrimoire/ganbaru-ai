@@ -3,7 +3,7 @@ import { wallClockToUtcIso } from "$lib/components/calendar/utils";
 import { createPresetPomodoroConfig } from "$lib/pomodoro/rhythm";
 import { computePlannedSegments } from "$lib/utils/pomodoro-segments";
 
-export const DENSE_TIMED_POMODORO_CONFIG: PomodoroConfig = createPresetPomodoroConfig("auto");
+export const DENSE_TIMED_POMODORO_CONFIG: PomodoroConfig = createPresetPomodoroConfig("adaptive");
 
 export interface BenchmarkPomodoroConfigSeed {
   eventId: string;

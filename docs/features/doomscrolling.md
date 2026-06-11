@@ -4,7 +4,7 @@ Doomscrolling enforces the browsing and app rules that belong to the user's curr
 
 Doomscrolling is not a separate productivity tool. It is a guardrail attached to the calendar, Pomodoro, and work environment systems. The user plans the work context once, then Ganbaru AI applies the matching rules while the session is active.
 
-## Current implementation status
+## current implementation status
 
 The current desktop implementation is an early Chromium-based browser development slice:
 
@@ -23,7 +23,7 @@ The current desktop implementation is an early Chromium-based browser developmen
 - The app stores usage samples in the active Ganbaru AI folder's `ganbaru-ai.sqlite`, derives daily totals for the user's local day and weekly totals for the Monday-based local week, and writes a small local limit snapshot for the native host. The snapshot includes the active SQLite path so extension samples go into the same database the UI reads. The native host includes the current limit totals in its rules fingerprint so the extension can recheck already open tabs when limits change or become exhausted.
 - The extension popup shows connection, phase, remaining time, the last blocked host, and a `Recheck now` button. The button asks the service worker to refresh native state, flush active website usage, and re-run enforcement against open normal tabs and existing block pages.
 - Built-in browser category definitions live in `apps/client/src/lib/doomscrolling/categories.json`, which is shared by the frontend rule model and the Rust native messaging host. This avoids separate browser and native-host category lists drifting apart.
-- Block events are logged locally as JSON lines with host, phase, rule snapshot, and decision.
+- Browser block events are logged locally as JSON lines with host, phase, rule snapshot, and decision, and the native host also writes normalized host-only rows into `doomscrolling_block_events` and `doomscrolling_block_event_rule_snapshots` when the active SQLite database is available. Desktop app blocking writes normalized app-key rows to the same tables when a matched app is enforced, attaching the fresh active Pomodoro run and phase when available. Protected apps remain rejected before they can become adaptive signals.
 - Desktop usage limits count focused foreground app time on Windows, macOS, Linux X11, and Wayland compositors that expose the wlroots foreign-toplevel protocol. On Wayland sessions that do not expose focused app tracking, including Ubuntu GNOME Wayland, desktop limits count selected apps while their matching process is open. Existing Pomodoro-phase desktop app blocking remains separate and still uses protected app and process safeguards.
 
 This is intentionally smaller than the full spec below. It supports domain-level browser blocking, preset categories, daily and weekly website usage limits, desktop usage counting on supported foreground APIs, exhausted desktop-limit closing, and automatic Linux desktop app closing during Pomodoro sessions first. Work environment rules, access-change analytics, tab actions, Firefox, mobile blocking, and content-aware matching remain later stages.
@@ -101,7 +101,7 @@ It should make the desired action easier than the distracted action. It should n
 
 **The browser surface stays small.** The extension popup and block page are status and recovery surfaces, not full configuration surfaces. Configuration lives in the app.
 
-**Logs are signals, not punishment.** Block events feed analytics and future recommendations. They should help the user tune rules, not create shame.
+**Logs are signals, not punishment.** Block events feed analytics and adaptive decisions. They should help the user tune rules, not create shame.
 
 **Local-first is non-negotiable.** The extension only talks to the local Ganbaru AI backend through native messaging. It does not send URLs, rule matches, or page content to any remote endpoint.
 

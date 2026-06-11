@@ -18,7 +18,7 @@
     type SequencePomodoroRhythmStep,
   } from "$lib/pomodoro/rhythm";
 
-  type PomodoroPreset = "auto" | "creative" | "balanced" | "deep" | "extended" | "custom";
+  type PomodoroPreset = "adaptive" | "creative" | "balanced" | "deep" | "extended" | "custom";
   type BuiltInPomodoroPreset = Exclude<PomodoroPreset, "custom">;
   type CustomRhythmMode = "simple" | "sequence";
   type SummarySlotClass = "duration-summary-slot" | "cycle-summary-slot";
@@ -33,7 +33,7 @@
   } as const;
   const POMO_PRESETS = COUNT_PRESET_RHYTHMS;
   const POMO_PRESET_ORDER: BuiltInPomodoroPreset[] = [
-    "auto",
+    "adaptive",
     "creative",
     "balanced",
     "deep",
@@ -47,7 +47,7 @@
 
   let {
     enabled,
-    preset = $bindable<PomodoroPreset>("auto"),
+    preset = $bindable<PomodoroPreset>("adaptive"),
     focusDuration = $bindable(40),
     shortBreak = $bindable(5),
     longBreak = $bindable(10),
@@ -184,7 +184,7 @@
   );
 
   function presetLabel(p: BuiltInPomodoroPreset): string {
-    if (p === "auto") return t("calendar.pomodoro.adaptative");
+    if (p === "adaptive") return t("calendar.pomodoro.adaptive");
     if (p === "creative") return t("calendar.pomodoro.creative");
     if (p === "balanced") return t("calendar.pomodoro.balanced");
     if (p === "deep") return t("calendar.pomodoro.deepFocus");
@@ -195,7 +195,7 @@
     p: BuiltInPomodoroPreset,
     val: typeof COUNT_PRESET_RHYTHMS[BuiltInPomodoroPreset],
   ): Array<{ label: string; value: string; slotClass: SummarySlotClass }> {
-    if (p === "auto") return [];
+    if (p === "adaptive") return [];
     return [
       {
         label: t("calendar.pomodoro.focusCompact"),

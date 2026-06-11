@@ -12,6 +12,7 @@ import { getMusicPlayer } from "$lib/stores/music-player.svelte";
 import { getPreferences } from "$lib/stores/preferences.svelte";
 import { computePlannedSegments } from "$lib/utils/pomodoro-segments";
 import {
+  type CountPomodoroRhythm,
   breakAfterFocusPosition,
   clonePomodoroConfig,
   focusDurationMinutesAtPosition,
@@ -21,6 +22,32 @@ import {
   phaseDurationMinutesAtPosition,
   rhythmPositionCount,
 } from "$lib/pomodoro/rhythm";
+import {
+  DEFAULT_ADAPTIVE_POLICY_ID,
+  adaptiveContextKey,
+  buildRunStartAdaptiveSnapshot,
+  decideBoundaryAdaptiveRhythm,
+  decideRunStartAdaptiveRhythm,
+  snapshotFromBoundaryAdaptiveDecision,
+  snapshotFromRunStartAdaptiveDecision,
+  type PomodoroAdaptiveDecisionEnvelopeWrite,
+  type PomodoroAdaptiveHistoryRead,
+  type PomodoroAdaptivePlannedBlockWrite,
+  type PomodoroBoundaryAdaptiveDecision,
+  type PomodoroRunAdaptiveSnapshotWrite,
+  type PomodoroRunStartAdaptiveDecision,
+} from "$lib/pomodoro/adaptive/persistence";
+import {
+  buildDefaultBoundedReplayRunStartPolicyCandidates,
+  evaluateGatedReplayRunStartPolicyCandidates,
+  selectBestUsableReplayRunStartPolicyCandidateForContext,
+} from "$lib/pomodoro/adaptive/replay";
+import {
+  buildReplayObservedRunOutcomesFromDataset,
+  buildReplayRunStartOpportunitiesFromDataset,
+  scoreReplayObservedRunOutcomesByCandidateFromDataset,
+  type PomodoroAdaptiveReplayDatasetRead,
+} from "$lib/pomodoro/adaptive/replay-dataset";
 import {
   normalizePauseForSegment,
   normalizePausesForSegment,
@@ -64,6 +91,8 @@ const POMODORO_WINDOW_COMMAND_EVENT = "pomodoro-window-command";
 const PAUSED_FOCUS_NOTIFICATION_RESUME_EVENT = "pomodoro-paused-focus-resume";
 const PAUSED_FOCUS_NOTIFICATION_STOP_ASKING_EVENT =
   "pomodoro-paused-focus-stop-asking";
+const ADAPTIVE_HISTORY_SEGMENT_LIMIT = 80;
+const ADAPTIVE_REPLAY_DATASET_LIMIT = 50;
 const pomodoroCoordinator = getCurrentWindow().label === "main";
 
 interface PomodoroWindowSnapshot {
@@ -111,6 +140,7 @@ type PomodoroWindowCommand =
       eventDate?: string;
       blockIdleTimeoutMinutes?: number | null;
       syncIdleTimeoutOnExistingBlock?: boolean;
+      adaptivePlannedBlocks?: PomodoroAdaptivePlannedBlockWrite[];
     }
   | { kind: "set-active-idle-threshold-minutes"; minutes: number }
   | { kind: "dismiss-suspend"; resume: boolean }
@@ -138,6 +168,7 @@ let intervalId: ReturnType<typeof setInterval> | null = null;
 let pausedOpportunityIntervalId: ReturnType<typeof setInterval> | null = null;
 let pausedTrayPulseIntervalId: ReturnType<typeof setInterval> | null = null;
 let heartbeatIntervalId: ReturnType<typeof setInterval> | null = null;
+let phaseAdvanceInFlight = false;
 let pomodoroWriteQueue: Promise<void> = Promise.resolve();
 let pausedTrayPulseFrame = $state(0);
 let completedPomodoros = $state(0);
@@ -294,6 +325,26 @@ function isPomodoroConfig(value: unknown): value is PomodoroConfig {
   return isRecord(value) && isValidPomodoroConfig(value as unknown as PomodoroConfig);
 }
 
+function isAdaptivePlannedBlock(value: unknown): value is PomodoroAdaptivePlannedBlockWrite {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.eventDate === "string" &&
+    isNullableString(value.eventId) &&
+    typeof value.originalEventId === "string" &&
+    typeof value.plannedStart === "string" &&
+    typeof value.plannedEnd === "string" &&
+    (
+      value.sourceKind === "live_event" ||
+      value.sourceKind === "archived_event" ||
+      value.sourceKind === "scheduler_snapshot"
+    )
+  );
+}
+
+function isAdaptivePlannedBlockList(value: unknown): value is PomodoroAdaptivePlannedBlockWrite[] {
+  return Array.isArray(value) && value.every(isAdaptivePlannedBlock);
+}
+
 function isPauseInterval(value: unknown): value is PauseInterval {
   return isRecord(value) &&
     typeof value.startedAt === "string" &&
@@ -406,6 +457,10 @@ function isPomodoroWindowCommand(value: unknown): value is PomodoroWindowCommand
         (
           value.syncIdleTimeoutOnExistingBlock === undefined ||
           typeof value.syncIdleTimeoutOnExistingBlock === "boolean"
+        ) &&
+        (
+          value.adaptivePlannedBlocks === undefined ||
+          isAdaptivePlannedBlockList(value.adaptivePlannedBlocks)
         )
       );
     case "dismiss-suspend":
@@ -547,6 +602,8 @@ type PomodoroRunEventType =
   | "suspend_detected"
   | "skip_break"
   | "extend_focus"
+  | "go_to_break_now"
+  | "start_focus_now"
   | "reconfigure"
   | "block_transition"
   | "stop"
@@ -569,6 +626,7 @@ interface PomodoroRunWrite {
   inheritedRhythmPosition: number;
   inheritedFromRunId: string | null;
   startTrigger: PomodoroStartTrigger;
+  adaptiveSnapshot: PomodoroRunAdaptiveSnapshotWrite | null;
 }
 
 interface PomodoroRunClosure {
@@ -629,8 +687,155 @@ function runPlannedEndForSegment(seg: PersistedSegment): string {
   return activeBlockEndMs === null ? seg.plannedEnd : new Date(activeBlockEndMs).toISOString();
 }
 
+function isAdaptiveCountConfig(
+  value: PomodoroConfig,
+): value is PomodoroConfig & {
+  rhythm: CountPomodoroRhythm;
+  rhythmSource: "preset";
+  presetKey: "adaptive";
+} {
+  return value.rhythm.kind === "count" &&
+    value.rhythmSource === "preset" &&
+    value.presetKey === "adaptive";
+}
+
+async function loadAdaptiveHistory(before: string): Promise<PomodoroAdaptiveHistoryRead | null> {
+  try {
+    return await invoke<PomodoroAdaptiveHistoryRead>("pomodoro_load_adaptive_history", {
+      dbUrl: dbUrl(),
+      before,
+      policyId: DEFAULT_ADAPTIVE_POLICY_ID,
+      segmentLimit: ADAPTIVE_HISTORY_SEGMENT_LIMIT,
+    });
+  } catch (e) {
+    console.warn("Failed to load adaptive pomodoro history:", e);
+    return null;
+  }
+}
+
+async function loadAdaptiveReplayDataset(
+  before: string,
+): Promise<PomodoroAdaptiveReplayDatasetRead | null> {
+  try {
+    return await invoke<PomodoroAdaptiveReplayDatasetRead>("pomodoro_load_adaptive_replay_dataset", {
+      dbUrl: dbUrl(),
+      before,
+      policyId: DEFAULT_ADAPTIVE_POLICY_ID,
+      limit: ADAPTIVE_REPLAY_DATASET_LIMIT,
+      historySegmentLimit: ADAPTIVE_HISTORY_SEGMENT_LIMIT,
+    });
+  } catch (e) {
+    console.warn("Failed to load adaptive pomodoro replay dataset:", e);
+    return null;
+  }
+}
+
+async function decideRunStartAdaptive(
+  startedAt: string,
+  plannedStart: string,
+  plannedEnd: string,
+): Promise<PomodoroRunStartAdaptiveDecision | null> {
+  const configSnapshot = clonePomodoroConfig(config);
+  if (!isAdaptiveCountConfig(configSnapshot)) return null;
+  const history = await loadAdaptiveHistory(startedAt);
+  const input = {
+    startedAt,
+    plannedStart,
+    plannedEnd,
+    currentRhythm: configSnapshot.rhythm,
+    idleDetectionEnabled: idleTimeoutMs !== null,
+    history,
+  };
+  const decision = decideRunStartAdaptiveRhythm(input);
+  return selectReplayApprovedRunStartAdaptiveDecision(input, decision);
+}
+
+async function selectReplayApprovedRunStartAdaptiveDecision(
+  input: Parameters<typeof decideRunStartAdaptiveRhythm>[0],
+  decision: PomodoroRunStartAdaptiveDecision,
+): Promise<PomodoroRunStartAdaptiveDecision> {
+  const dataset = await loadAdaptiveReplayDataset(input.startedAt);
+  if (!dataset || dataset.opportunities.length === 0 || dataset.outcomes.length === 0) {
+    return decision;
+  }
+
+  const candidates = buildDefaultBoundedReplayRunStartPolicyCandidates();
+  const workflow = evaluateGatedReplayRunStartPolicyCandidates(
+    buildReplayRunStartOpportunitiesFromDataset(dataset),
+    candidates,
+    buildReplayObservedRunOutcomesFromDataset(dataset),
+    {
+      observedCandidateOutcomeScores: scoreReplayObservedRunOutcomesByCandidateFromDataset(dataset),
+    },
+  );
+  const review = selectBestUsableReplayRunStartPolicyCandidateForContext(
+    workflow,
+    adaptiveContextKey(decision.context),
+  );
+  if (!review) return decision;
+
+  const candidate = candidates.find((entry) => entry.id === review.candidateId);
+  if (!candidate) return decision;
+
+  return candidate.decide({
+    id: "current-run-start",
+    ...input,
+  });
+}
+
+async function decideBoundaryAdaptive(
+  opportunityKind: "focus_start" | "break_start",
+  occurredAt: string,
+): Promise<PomodoroBoundaryAdaptiveDecision | null> {
+  const configSnapshot = clonePomodoroConfig(config);
+  if (!isAdaptiveCountConfig(configSnapshot)) return null;
+  const plannedEnd = activeBlockEndMs === null
+    ? activeSegment()?.plannedEnd ?? occurredAt
+    : new Date(activeBlockEndMs).toISOString();
+  const history = await loadAdaptiveHistory(occurredAt);
+  return decideBoundaryAdaptiveRhythm({
+    opportunityKind,
+    startedAt: occurredAt,
+    plannedStart: occurredAt,
+    plannedEnd,
+    currentRhythm: configSnapshot.rhythm,
+    idleDetectionEnabled: idleTimeoutMs !== null,
+    history,
+  });
+}
+
+function applyRunStartAdaptiveDecision(decision: PomodoroRunStartAdaptiveDecision): void {
+  if (!isAdaptiveCountConfig(config)) return;
+  config = {
+    ...clonePomodoroConfig(config),
+    rhythm: { ...decision.selectedRhythm },
+  };
+  currentRhythmPosition = normalizeRhythmPosition(config, currentRhythmPosition);
+  if (phase !== "focus") return;
+  const startedMs = Date.parse(decision.occurredAt);
+  const nowMs = Number.isFinite(startedMs) ? startedMs : Date.now();
+  setPhaseRemainingSeconds(
+    focusDurationMinutesAtPosition(config, currentRhythmPosition) * TIME_MULTIPLIER,
+    0,
+    nowMs,
+  );
+  if (isRunning) {
+    phaseEndTime = nowMs + remainingSeconds * 1000;
+  }
+}
+
+function applyBoundaryAdaptiveDecision(decision: PomodoroBoundaryAdaptiveDecision | null): void {
+  if (!decision || !isAdaptiveCountConfig(config)) return;
+  config = {
+    ...clonePomodoroConfig(config),
+    rhythm: { ...decision.selectedRhythm },
+  };
+  currentRhythmPosition = normalizeRhythmPosition(config, currentRhythmPosition);
+}
+
 function runWrite(
   runId: string,
+  segmentId: string,
   eventId: string,
   eventDate: string,
   startedAt: string,
@@ -640,8 +845,23 @@ function runWrite(
   inheritedFocusMinutes = 0,
   inheritedRhythmPosition = 1,
   inheritedFromRunId: string | null = null,
+  adaptiveSnapshotOverride?: PomodoroRunAdaptiveSnapshotWrite,
+  adaptivePlannedBlocks: readonly PomodoroAdaptivePlannedBlockWrite[] = [],
 ): PomodoroRunWrite {
   const configSnapshot = clonePomodoroConfig(config);
+  const adaptiveSnapshot = adaptiveSnapshotOverride ??
+    (isAdaptiveCountConfig(configSnapshot)
+      ? buildRunStartAdaptiveSnapshot({
+          runId,
+          segmentId,
+          startedAt,
+          plannedStart,
+          plannedEnd,
+          currentRhythm: configSnapshot.rhythm,
+          idleDetectionEnabled: idleTimeoutMs !== null,
+          plannedBlocks: adaptivePlannedBlocks,
+        })
+      : null);
   return {
     id: runId,
     eventId,
@@ -658,6 +878,7 @@ function runWrite(
     inheritedRhythmPosition,
     inheritedFromRunId,
     startTrigger,
+    adaptiveSnapshot,
   };
 }
 
@@ -1240,6 +1461,21 @@ async function insertSegmentsToBackend(newSegments: PersistedSegment[]) {
   }).catch((e) => console.warn("Failed to insert segments:", e));
 }
 
+async function insertSegmentWithAdaptiveDecisionToBackend(
+  segment: PersistedSegment,
+  adaptiveDecision: PomodoroAdaptiveDecisionEnvelopeWrite,
+) {
+  await enqueuePomodoroWrite(async () => {
+    await invoke("pomodoro_insert_segment_with_adaptive_decision", {
+      dbUrl: dbUrl(),
+      segment: segmentWrite(segment),
+      adaptiveDecision,
+    });
+    segmentVersion++;
+    publishWindowSnapshot();
+  }).catch((e) => console.warn("Failed to insert adaptive boundary segment:", e));
+}
+
 function completePomodoroBackendWrite(options: PomodoroBackendWriteOptions = {}): void {
   if (options.bumpSegmentVersion !== false) segmentVersion++;
   if (options.publishSnapshot !== false) publishWindowSnapshot();
@@ -1320,6 +1556,34 @@ function recordRunEvent(event: PomodoroRunEventWrite, warning = "Failed to recor
       event,
     });
   }).catch((e) => console.warn(warning, e));
+}
+
+function recordManualPhaseAdvanceEvent(occurredAt: string): void {
+  if (!activeRunId) return;
+  const seg = activeSegment();
+  if (phase === "focus" && seg?.status === "active") {
+    recordRunEvent({
+      runId: activeRunId,
+      segmentId: seg.id,
+      eventType: "go_to_break_now",
+      occurredAt,
+      phase: "focus",
+      reason: "manual",
+      durationSeconds: null,
+    }, "Failed to record early focus end:");
+    return;
+  }
+  if (isBreakPhase(phase) && seg?.status === "active" && phaseWorkRemainingSeconds() > 0) {
+    recordRunEvent({
+      runId: activeRunId,
+      segmentId: seg.id,
+      eventType: "start_focus_now",
+      occurredAt,
+      phase,
+      reason: "manual",
+      durationSeconds: null,
+    }, "Failed to record early break end:");
+  }
 }
 
 function sendHeartbeat(): void {
@@ -1426,16 +1690,81 @@ function activateSegment(index: number): Promise<void> {
   return persisted;
 }
 
-async function createSegments(eventId: string, eventEnd: string, eventDate: string) {
+async function activateBoundarySegment(
+  segment: PersistedSegment,
+  adaptiveDecision: PomodoroBoundaryAdaptiveDecision | null,
+): Promise<void> {
+  const kept = currentSegmentIndex >= 0
+    ? segments.slice(0, currentSegmentIndex + 1)
+    : [];
+  segments = [...kept, segment];
+  currentSegmentIndex = kept.length;
+
+  const persisted = adaptiveDecision && activeRunId
+    ? insertSegmentWithAdaptiveDecisionToBackend(
+        segment,
+        snapshotFromBoundaryAdaptiveDecision(adaptiveDecision, {
+          runId: activeRunId,
+          segmentId: segment.id,
+        }),
+      )
+    : insertSegmentsToBackend([segment]);
+  publishWindowSnapshot();
+  await persisted;
+  refreshFutureSegmentsForActiveWindow(segment.eventId, segment.eventDate);
+  publishWindowSnapshot();
+}
+
+function boundarySegment(
+  phase: SegmentPhase,
+  rhythmPosition: number,
+  plannedStart: string,
+): PersistedSegment | null {
+  if (!activeRunId || !activeBlockId) return null;
+  const eventDate = activeSegment()?.eventDate ?? eventDateFromBlockId(activeBlockId);
+  if (!eventDate) return null;
+  const plannedStartMs = Date.parse(plannedStart);
+  const plannedEndMs = Number.isFinite(plannedStartMs)
+    ? plannedStartMs + remainingSeconds * 1000
+    : Date.now() + remainingSeconds * 1000;
+  return {
+    id: crypto.randomUUID(),
+    eventId: activeBlockId,
+    eventDate,
+    runId: activeRunId,
+    rhythmPosition,
+    phase,
+    plannedStart,
+    plannedEnd: new Date(plannedEndMs).toISOString(),
+    actualStart: plannedStart,
+    actualEnd: null,
+    pauseLog: [],
+    status: "active",
+  };
+}
+
+async function createSegments(
+  eventId: string,
+  eventEnd: string,
+  eventDate: string,
+  adaptivePlannedBlocks: readonly PomodoroAdaptivePlannedBlockWrite[] = [],
+) {
   const runId = crypto.randomUUID();
 
   const now = new Date();
   const end = new Date(eventEnd.replace(" ", "T"));
+  const baseIso = now.toISOString();
+  const runStartAdaptiveDecision = await decideRunStartAdaptive(
+    baseIso,
+    baseIso,
+    end.toISOString(),
+  );
+  if (runStartAdaptiveDecision) {
+    applyRunStartAdaptiveDecision(runStartAdaptiveDecision);
+  }
   const remainingMinutes = Math.max(0, (end.getTime() - now.getTime()) / 60000);
 
   const planned = computePlannedSegments(config, remainingMinutes, 0, currentRhythmPosition);
-
-  const baseIso = now.toISOString();
 
   const newSegments: PersistedSegment[] = planned.map((s, i) => ({
     id: crypto.randomUUID(),
@@ -1455,16 +1784,29 @@ async function createSegments(eventId: string, eventEnd: string, eventDate: stri
   const firstSegment = newSegments.find((segment) => segment.status === "active");
   if (firstSegment) {
     const startedAt = firstSegment.actualStart ?? baseIso;
+    const adaptiveSnapshot = runStartAdaptiveDecision
+      ? snapshotFromRunStartAdaptiveDecision(runStartAdaptiveDecision, {
+          runId,
+          segmentId: firstSegment.id,
+          plannedBlocks: adaptivePlannedBlocks,
+        })
+      : undefined;
     try {
       await startRunInBackend(
         runWrite(
           runId,
+          firstSegment.id,
           eventId,
           eventDate,
           startedAt,
           firstSegment.plannedStart,
           runPlannedEndForSegment(firstSegment),
           "block_auto",
+          0,
+          1,
+          null,
+          adaptiveSnapshot,
+          adaptivePlannedBlocks,
         ),
         firstSegment,
       );
@@ -1667,6 +2009,7 @@ async function rebuildSegments(
     const startedAt = firstSegment.actualStart ?? nowStr;
     const run = runWrite(
       runId,
+      firstSegment.id,
       blockId,
       eventDate,
       startedAt,
@@ -1946,6 +2289,7 @@ function handleWindowCommand(command: PomodoroWindowCommand): void {
         command.eventDate,
         command.blockIdleTimeoutMinutes,
         command.syncIdleTimeoutOnExistingBlock,
+        command.adaptivePlannedBlocks,
       );
       return;
     case "set-active-idle-threshold-minutes":
@@ -2018,6 +2362,7 @@ function initListeners() {
     document.dispatchEvent(new Event("ganbaru-ai-clear-snap"));
     if (phase === "short_break" || phase === "long_break") {
       const occurredAt = nowIso();
+      recordManualPhaseAdvanceEvent(occurredAt);
       if (activeRunId) {
         recordRunEvent({
           runId: activeRunId,
@@ -2029,8 +2374,10 @@ function initListeners() {
           durationSeconds: null,
         }, "Failed to record skipped break:");
       }
-      markSegment(currentSegmentIndex, "interrupted", true, occurredAt, "skipped_by_user");
-      startFocusSession();
+      void (async () => {
+        await markSegment(currentSegmentIndex, "interrupted", true, occurredAt, "skipped_by_user");
+        await startFocusSession();
+      })();
     } else {
       skipNextBreak = true;
     }
@@ -2039,8 +2386,10 @@ function initListeners() {
   listen("pomodoro-break-acknowledged", () => {
     document.dispatchEvent(new Event("ganbaru-ai-clear-snap"));
     if (phase === "short_break" || phase === "long_break") {
-      markSegment(currentSegmentIndex, "completed", true, cappedActiveBreakEndIso());
-      startFocusSession();
+      void (async () => {
+        await markSegment(currentSegmentIndex, "completed", true, cappedActiveBreakEndIso());
+        await startFocusSession();
+      })();
     }
   }).catch((e) => console.warn("Failed to listen for pomodoro-break-acknowledged:", e));
 
@@ -2071,7 +2420,7 @@ function initListeners() {
 
   listen("tray-skip", () => {
     if (suspendedAway || idlePaused) return;
-    advancePhase();
+    void advancePhase();
     updateTray();
   }).catch((e) => console.warn("Failed to listen for tray-skip:", e));
 
@@ -2178,7 +2527,7 @@ function resumeMusicFromPomodoroPause(): void {
   });
 }
 
-function startFocusSession() {
+async function startFocusSession() {
   closePomodoroOverlay();
   clearBreakEndWarning();
   clearMusicPausedByPomodoro();
@@ -2189,6 +2538,8 @@ function startFocusSession() {
     intervalId = null;
   }
   stopOvertime();
+  const adaptiveDecision = await decideBoundaryAdaptive("focus_start", nowIso());
+  applyBoundaryAdaptiveDecision(adaptiveDecision);
   const nextPosition = isBreakPhase(phase)
     ? nextRhythmPosition(config, currentRhythmPosition)
     : currentRhythmPosition;
@@ -2199,17 +2550,31 @@ function startFocusSession() {
   );
   resetFocusNotificationState();
   isRunning = true;
+  const startedAt = nowIso();
   phaseEndTime = Date.now() + remainingSeconds * 1000;
-  sessionStartTime = new Date().toISOString();
+  sessionStartTime = startedAt;
   intervalId = setInterval(tick, 1000);
   lastTickMs = Date.now();
 
-  // Activate the next focus segment
-  const nextFocus = segments.findIndex(
-    (s, i) => i > currentSegmentIndex && s.phase === "focus" && s.status === "planned",
-  );
-  if (nextFocus !== -1) {
-    activateSegment(nextFocus);
+  if (adaptiveDecision) {
+    const segment = boundarySegment("focus", currentRhythmPosition, startedAt);
+    if (segment) {
+      await activateBoundarySegment(segment, adaptiveDecision);
+    } else {
+      const nextFocus = segments.findIndex(
+        (s, i) => i > currentSegmentIndex && s.phase === "focus" && s.status === "planned",
+      );
+      if (nextFocus !== -1) {
+        await activateSegment(nextFocus);
+      }
+    }
+  } else {
+    const nextFocus = segments.findIndex(
+      (s, i) => i > currentSegmentIndex && s.phase === "focus" && s.status === "planned",
+    );
+    if (nextFocus !== -1) {
+      await activateSegment(nextFocus);
+    }
   }
 
   updateTray();
@@ -2727,8 +3092,10 @@ function tick() {
           breakOvertimeSeconds += 1;
           publishWindowSnapshot();
           if (breakOvertimeSeconds >= MAX_BREAK_OVERTIME_SECONDS) {
-            markSegment(currentSegmentIndex, "completed", true, cappedActiveBreakEndIso());
-            startFocusSession();
+            void (async () => {
+              await markSegment(currentSegmentIndex, "completed", true, cappedActiveBreakEndIso());
+              await startFocusSession();
+            })();
           }
         }, 1000);
       }
@@ -2747,7 +3114,7 @@ function tick() {
     case "focus_finished": {
       lastTickMs = now;
       recordRunningPhaseProgress(0);
-      advancePhase();
+      void advancePhase();
       return;
     }
 
@@ -2776,31 +3143,41 @@ function markCurrentAndSkipRemaining(endIso: string = nowIso()) {
   }
 }
 
-function advancePhase() {
-  const result = decideAdvancePhase(buildSnapshot());
+async function advancePhase() {
+  if (phaseAdvanceInFlight) return;
+  phaseAdvanceInFlight = true;
+  try {
+    const boundaryOpportunity = phase === "focus" && !skipNextBreak ? "break_start" : "focus_start";
+    const skippedBreakPhase = phase === "focus" && skipNextBreak
+      ? breakAfterFocusPosition(config, currentRhythmPosition).phase
+      : "short_break";
 
-  // Save completed focus session before transitioning away from focus
-  if (phase === "focus") {
-    clearMusicPausedByPomodoro();
-    const endTime = new Date().toISOString();
-    completedPomodoros += 1;
-    sessionStartTime = null;
-    notificationShown = false;
-    markSegment(currentSegmentIndex, "completed", true, endTime, "completed");
-  }
+    // Persist the ending phase before boundary adaptation so the next decision can see it.
+    let boundaryOccurredAt = nowIso();
+    if (phase === "focus") {
+      clearMusicPausedByPomodoro();
+      completedPomodoros += 1;
+      sessionStartTime = null;
+      notificationShown = false;
+      await markSegment(currentSegmentIndex, "completed", true, boundaryOccurredAt, "completed");
+    } else {
+      boundaryOccurredAt = cappedActiveBreakEndIso();
+      await markSegment(currentSegmentIndex, "completed", true, boundaryOccurredAt);
+    }
 
-  switch (result.kind) {
-    case "skip_break_to_focus": {
-      skipNextBreak = false;
-      phase = "focus";
-      setPhaseRemainingSeconds(result.remainingSeconds);
-      resetFocusNotificationState();
-      phaseEndTime = Date.now() + remainingSeconds * 1000;
-      currentRhythmPosition = result.nextRhythmPosition;
+    const adaptiveDecision = await decideBoundaryAdaptive(boundaryOpportunity, boundaryOccurredAt);
+    applyBoundaryAdaptiveDecision(adaptiveDecision);
+    const result = decideAdvancePhase(buildSnapshot());
 
-      // Mark the break segment as skipped, activate next focus
-      const breakIdx = currentSegmentIndex + 1;
-      if (breakIdx < segments.length && segments[breakIdx].phase !== "focus") {
+    switch (result.kind) {
+      case "skip_break_to_focus": {
+        skipNextBreak = false;
+        phase = "focus";
+        setPhaseRemainingSeconds(result.remainingSeconds);
+        resetFocusNotificationState();
+        phaseEndTime = Date.now() + remainingSeconds * 1000;
+        currentRhythmPosition = result.nextRhythmPosition;
+
         const now = nowIso();
         if (activeRunId) {
           recordRunEvent({
@@ -2808,71 +3185,106 @@ function advancePhase() {
             segmentId: null,
             eventType: "skip_break",
             occurredAt: now,
-            phase: segments[breakIdx].phase,
+            phase: skippedBreakPhase,
             reason: "skip_next_break",
             durationSeconds: null,
           }, "Failed to record skipped break:");
         }
-        segments[breakIdx].status = "skipped";
-        segments[breakIdx].actualStart = now;
-        segments[breakIdx].actualEnd = now;
+        const segment = adaptiveDecision
+          ? boundarySegment("focus", currentRhythmPosition, now)
+          : null;
+        if (segment) {
+          await activateBoundarySegment(segment, adaptiveDecision);
+        } else {
+          const breakIdx = currentSegmentIndex + 1;
+          if (breakIdx < segments.length && segments[breakIdx].phase !== "focus") {
+            segments[breakIdx].status = "skipped";
+            segments[breakIdx].actualStart = now;
+            segments[breakIdx].actualEnd = now;
 
-        const nextFocus = segments.findIndex(
-          (s, i) => i > breakIdx && s.phase === "focus" && s.status === "planned",
-        );
-        if (nextFocus !== -1) {
-          activateSegment(nextFocus);
+            const nextFocus = segments.findIndex(
+              (s, i) => i > breakIdx && s.phase === "focus" && s.status === "planned",
+            );
+            if (nextFocus !== -1) {
+              await activateSegment(nextFocus);
+            }
+          }
         }
+        break;
       }
-      break;
-    }
 
-    case "focus_to_long_break": {
-      phase = "long_break";
-      setPhaseRemainingSeconds(result.remainingSeconds);
-      phaseEndTime = Date.now() + remainingSeconds * 1000;
-      currentRhythmPosition = result.rhythmPosition;
+      case "focus_to_long_break": {
+        phase = "long_break";
+        setPhaseRemainingSeconds(result.remainingSeconds);
+        phaseEndTime = Date.now() + remainingSeconds * 1000;
+        currentRhythmPosition = result.rhythmPosition;
 
-      const breakIdx = currentSegmentIndex + 1;
-      if (breakIdx < segments.length && segments[breakIdx].phase === "long_break") {
-        activateSegment(breakIdx);
+        const now = nowIso();
+        const segment = adaptiveDecision
+          ? boundarySegment("long_break", currentRhythmPosition, now)
+          : null;
+        if (segment) {
+          await activateBoundarySegment(segment, adaptiveDecision);
+        } else {
+          const breakIdx = currentSegmentIndex + 1;
+          if (breakIdx < segments.length && segments[breakIdx].phase === "long_break") {
+            await activateSegment(breakIdx);
+          }
+        }
+        showBreakOverlay(remainingSeconds);
+        break;
       }
-      showBreakOverlay(remainingSeconds);
-      break;
-    }
 
-    case "focus_to_short_break": {
-      phase = "short_break";
-      setPhaseRemainingSeconds(result.remainingSeconds);
-      phaseEndTime = Date.now() + remainingSeconds * 1000;
-      currentRhythmPosition = result.rhythmPosition;
+      case "focus_to_short_break": {
+        phase = "short_break";
+        setPhaseRemainingSeconds(result.remainingSeconds);
+        phaseEndTime = Date.now() + remainingSeconds * 1000;
+        currentRhythmPosition = result.rhythmPosition;
 
-      const breakIdx = currentSegmentIndex + 1;
-      if (breakIdx < segments.length && segments[breakIdx].phase === "short_break") {
-        activateSegment(breakIdx);
+        const now = nowIso();
+        const segment = adaptiveDecision
+          ? boundarySegment("short_break", currentRhythmPosition, now)
+          : null;
+        if (segment) {
+          await activateBoundarySegment(segment, adaptiveDecision);
+        } else {
+          const breakIdx = currentSegmentIndex + 1;
+          if (breakIdx < segments.length && segments[breakIdx].phase === "short_break") {
+            await activateSegment(breakIdx);
+          }
+        }
+        showBreakOverlay(remainingSeconds);
+        break;
       }
-      showBreakOverlay(remainingSeconds);
-      break;
-    }
 
-    case "break_to_focus": {
-      markSegment(currentSegmentIndex, "completed", true, cappedActiveBreakEndIso());
-      phase = "focus";
-      currentRhythmPosition = result.nextRhythmPosition;
-      setPhaseRemainingSeconds(result.remainingSeconds);
-      resetFocusNotificationState();
-      phaseEndTime = Date.now() + remainingSeconds * 1000;
+      case "break_to_focus": {
+        phase = "focus";
+        currentRhythmPosition = result.nextRhythmPosition;
+        setPhaseRemainingSeconds(result.remainingSeconds);
+        resetFocusNotificationState();
+        phaseEndTime = Date.now() + remainingSeconds * 1000;
 
-      const nextFocus = segments.findIndex(
-        (s, i) => i > currentSegmentIndex && s.phase === "focus" && s.status === "planned",
-      );
-      if (nextFocus !== -1) {
-        activateSegment(nextFocus);
+        const now = nowIso();
+        const segment = adaptiveDecision
+          ? boundarySegment("focus", currentRhythmPosition, now)
+          : null;
+        if (segment) {
+          await activateBoundarySegment(segment, adaptiveDecision);
+        } else {
+          const nextFocus = segments.findIndex(
+            (s, i) => i > currentSegmentIndex && s.phase === "focus" && s.status === "planned",
+          );
+          if (nextFocus !== -1) {
+            await activateSegment(nextFocus);
+          }
+        }
+        break;
       }
-      break;
     }
+    updateTray();
+  } finally {
+    phaseAdvanceInFlight = false;
   }
-  updateTray();
 }
 
 function setDismissedBlockId(id: string | null): void {
@@ -2927,6 +3339,7 @@ async function startFromBlockInternal(
   eventDate?: string,
   blockIdleTimeoutMinutes?: number | null,
   syncIdleTimeoutOnExistingBlock = true,
+  adaptivePlannedBlocks: readonly PomodoroAdaptivePlannedBlockWrite[] = [],
 ): Promise<void> {
   const newConfig = clonePomodoroConfig(blockConfig);
 
@@ -3001,7 +3414,7 @@ async function startFromBlockInternal(
       startIdleChecking();
 
       if (eventEnd && eventDate) {
-        await createSegments(blockId, eventEnd, eventDate);
+        await createSegments(blockId, eventEnd, eventDate, adaptivePlannedBlocks);
       }
 
       updateTray();
@@ -3171,7 +3584,8 @@ function resumeSession(): void {
 }
 
 function skipSession(): void {
-  advancePhase();
+  recordManualPhaseAdvanceEvent(nowIso());
+  void advancePhase();
 }
 
 async function cleanupOrphansInternal(): Promise<void> {
@@ -3313,6 +3727,7 @@ export function getPomodoro() {
       eventDate?: string,
       blockIdleTimeoutMinutes?: number | null,
       syncIdleTimeoutOnExistingBlock?: boolean,
+      adaptivePlannedBlocks?: PomodoroAdaptivePlannedBlockWrite[],
     ) {
       if (forwardWindowCommand({
         kind: "start-from-block",
@@ -3322,6 +3737,7 @@ export function getPomodoro() {
         eventDate,
         blockIdleTimeoutMinutes,
         syncIdleTimeoutOnExistingBlock,
+        adaptivePlannedBlocks,
       })) return;
       await startFromBlockInternal(
         blockId,
@@ -3330,6 +3746,7 @@ export function getPomodoro() {
         eventDate,
         blockIdleTimeoutMinutes,
         syncIdleTimeoutOnExistingBlock,
+        adaptivePlannedBlocks,
       );
     },
     setActiveIdleThresholdMinutes(minutes: number) {

@@ -8,7 +8,7 @@ This doc covers the user-facing loop. The pieces that make it work each have the
 - `features/tray-icon.md`: tray menu behavior and platform-specific tray icon implementation details.
 - `features/pomodoro-break-screen.md`: the overlay that enforces breaks.
 - `features/pomodoro-idle-detection.md`: what happens when the user steps away.
-- `algorithms/pomodoro-adaptive-rhythm.md`: the future optimization, recommendation, and experimentation model for adaptive rhythms.
+- `algorithms/pomodoro-adaptive-rhythm.md`: the adaptive optimization and experimentation model.
 - `algorithms/pomodoro-state-machine.md`: the decision functions behind ticks and transitions.
 - `algorithms/pomodoro-segments-and-plan.md`: how the plan is derived and how segments are written.
 - `algorithms/idle-detection.md`: per-OS idle detection.
@@ -34,7 +34,7 @@ The current deterministic rhythm model has two shapes:
 - **Count rhythm:** fixed focus duration, fixed short break, fixed long break, and `longBreakAfterFocusCount`. This is what presets use.
 - **Sequence rhythm:** a compact repeating pattern. Each position has its own focus duration, break type (`short_break` or `long_break`), and break duration. A `short, long` sequence repeats position 1, position 2, position 1, position 2, and so on.
 
-The event panel exposes presets first and a simple custom count row second. Sequence rhythms remain in the model for future advanced editors, but the current UI keeps custom editing to the simple count rhythm. Adaptive plans remain future work. They can recommend or, with explicit opt-in, adjust future focus and break durations based on the user's own history, current session behavior, diary signals, and post-session feedback.
+The event panel exposes presets first and a simple custom count row second. Sequence rhythms remain in the model for future advanced editors, but the current UI keeps custom editing to the simple count rhythm. Adaptive uses the same count-rhythm shape at first, then can silently adjust future focus and break durations after the policy has enough local history, current session behavior, diary signals, and blocker pressure.
 
 The count rhythm field answers the question "how many focus periods until the long break?" This must be shown clearly in the UI. Users should not have to infer from the word "cycle" that the fourth focus period gets the long break. Sequence rhythms are repeating patterns, not scripts.
 
@@ -43,7 +43,7 @@ The UI should avoid overwhelming the user:
 - New users start with presets and one clear "long break after N focus periods" control.
 - Advanced break sequences stay out of the event panel until they have a compact editor that does not overwhelm the preset flow.
 - Redundant plans should be normalized where possible. For example, a plan with one short break and one long break after two focus periods may be better presented as a two-focus rhythm than as a larger pattern with repeated labels.
-- Adaptive changes should be visible, explainable, and reversible. The app should say what changed, why it thinks the change may help, and how to return to the previous rhythm.
+- Adaptive changes should be bounded, auditable, and reversible. The normal timer path should not interrupt the user with approval prompts, but later analytics should explain what changed and why.
 
 ## Default config and current storage
 
@@ -58,21 +58,21 @@ A Pomodoro event stores a tagged rhythm payload plus idle behavior:
 | `rhythm.longBreakAfterFocusCount` | 4 | Count rhythm positions before a long break |
 | `rhythm.steps[]` | none | Sequence rhythm steps, each with focus minutes, break type, and break minutes |
 | `rhythmSource` | `preset` | `preset` or `custom` |
-| `presetKey` | `auto` | Preset identifier for preset rhythms, null for custom rhythms |
+| `presetKey` | `adaptive` | Preset identifier for preset rhythms, null for custom rhythms |
 | `idleTimeoutMinutes` | 3 | Auto-pause threshold; null disables idle detection |
 
 Defaults are set globally in user settings. Focus settings control the idle threshold for new Pomodoro events, whether new events start with Pause on inactivity enabled, the paused focus notification interval, and break screen behavior. Idle pause is enabled at 3 minutes by default, with supported thresholds of 1, 2, 3, 4, 5, 10, and 15 minutes, and with a warning confirmation before turning it off. Changing the Focus settings threshold during an active focus session updates that session immediately when idle detection is already enabled. Paused focus notifications default to every 3 minutes and can be set to none, 3, 5, 10, or 15 minutes. Early break ending defaults to 10 Esc presses and can be set to disabled, 1, 3, 10, 20, or 50 presses. Break extensions default to 3 added minutes and can be set to disabled, 1, 3, 5, 10, or 15 added minutes. Each event stores its own config; the event panel can still turn Pause on inactivity off, which writes `null`. The override is per-event, not per-recurrence-instance: changing the config on a recurring template applies to all instances; changing it on a detached or split instance applies only to that instance and its forward continuations (see `features/calendar-recurrence.md`).
 
 Built-in presets give the user a starting point without dialing in numbers. They are count rhythms with a long break after 4 focus periods:
 
-- **Adaptative** 40/5/10: the global default. Long focus, short breaks.
+- **Adaptive** 40/5/10: the global default. Long focus, short breaks.
 - **Creative** 25/5/15: shorter focus with a longer recovery break.
 - **Balanced** 30/5/10: moderate focus with the standard short and long breaks.
-- **Deep focus** 40/5/10: same numbers as adaptative, named separately so the user can mark intent.
+- **Deep focus** 40/5/10: same numbers as adaptive, named separately so the user can mark intent.
 - **Extended** 50/10/10: even longer focus for tasks that need warmup.
 - **Custom**: any combination.
 
-Presets are starting points only; the user can edit any field after picking one. `Adaptative` currently means the default 40/5/10 count-based rhythm. In the long-term adaptive model, it should become an opt-in recommendation mode that can tune future phases and future sessions from the user's local history.
+Presets are starting points only; the user can edit any field after picking one. `Adaptive` currently starts from the default 40/5/10 count-based rhythm, loads recent local Pomodoro and blocker history before a fresh session, selects only a matching prior context state when one exists, and writes a run-start adaptive snapshot with context, reason codes, selected values, data quality, and the scheduler-expanded planned Pomodoro blocks for that date. When confidence and guardrails allow it, the policy can choose a different effective count rhythm for that fresh session. The policy separates idle and blocked-site pressure near the start of focus from pressure near the end of focus, so startup avoidance does not automatically shorten work while late-focus pressure can protect recovery. Repeated attempts against the same blocked source raise avoidance pressure but hold the rhythm when focus is still clean. The policy also separates early and late `Go to break now` actions, treats ending a break early as positive only when the following focus succeeds, avoids lengthening short breaks when late return is paired with blocked-site pressure after the planned break end, and protects long recovery when skipped breaks are followed by failed focus. Clean-momentum low-risk run starts can enter the local 40 vs 45 minute focus-duration experiment, with assignment stored before outcomes are known. Low-risk short-break drift run starts can enter the local 5 vs 7 minute short-break-duration experiment. Clean long-break drift run starts can enter the local 10 vs 15 minute long-break-duration experiment. Mild late-cycle recovery-pressure run starts can enter the local C4 vs C3 long-break-cadence experiment. Very clean high-momentum run starts can enter the local C4 vs C5 cadence-expansion experiment. Terminal experiment results create a 14-day cooldown, and abandoned experiments hold the control value during that cooldown. Focus-start and break-start boundaries can also select the next effective rhythm before the new segment starts. When the run closes, the backend records run outcomes, phase outcomes for adaptive segment decisions, matured same-day and next-day outcomes for older run-start decisions, and updates the hidden context state used by later sessions.
 
 ## Adaptive focus rhythm direction
 
@@ -92,9 +92,9 @@ Controlled experiments are allowed, but they must respect the session:
 - The app may adjust the next focus or break inside the same calendar session when the user opted into automatic tuning and the adjustment is bounded.
 - Experiments should change a small number of variables at once so later analytics can explain what likely helped.
 - Comparisons should use similar contexts where practical, such as the same project type, time of day, or energy level.
-- The user can pin a rhythm, pause experimentation, or reject a recommendation.
+- The user can pin a rhythm, pause experimentation, or leave Adaptive.
 
-The scientific direction is individualized and cautious: measure outcomes, prefer reversible recommendations, avoid hidden manipulation, and protect happiness and recovery as first-class outcomes rather than treating them as secondary to throughput.
+The scientific direction is individualized and cautious: measure outcomes, prefer reversible changes, avoid unauditable manipulation, and protect happiness and recovery as first-class outcomes rather than treating them as secondary to throughput.
 
 ## Session lifecycle (high level)
 

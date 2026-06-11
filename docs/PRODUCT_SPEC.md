@@ -46,7 +46,7 @@ Tasks can be linked to calendar session blocks. When a task is marked as done, t
 
 The Pomodoro timer is the heartbeat of the app. Every productivity signal flows through it.
 
-**Session structure:** Pomodoro sessions are focus rhythms attached to calendar blocks. The default rhythm can be classic Pomodoro-style focus and break timing, but the long-term product model is more flexible: users can choose how many focus periods earn a long break, and advanced users can define short repeating break patterns or custom durations. Future adaptive settings can recommend focus and break timing from the user's own history, without making the default setup feel complicated. The adaptive direction is a constrained personal optimization problem: maximize useful progress while protecting recovery, happiness, sustainability, and user trust.
+**Session structure:** Pomodoro sessions are focus rhythms attached to calendar blocks. The default rhythm can be classic Pomodoro-style focus and break timing, but the long-term product model is more flexible: users can choose how many focus periods earn a long break, and advanced users can define short repeating break patterns or custom durations. Adaptative settings can choose focus and break timing from the user's own history without making the default setup feel complicated. The adaptive direction is a constrained personal optimization problem: maximize useful progress while protecting recovery, happiness, sustainability, and user trust.
 
 **During a focus period:** Doomscrolling is active, the work environment is enforced, screen activity is monitored for productivity analytics (app switches, active tool use, idle time), and the music player continues the focus playlist.
 

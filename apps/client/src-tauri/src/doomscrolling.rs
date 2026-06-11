@@ -1,7 +1,7 @@
 use crate::{db_path::connect_sqlite, vault};
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::Row;
+use sqlx::{Row, SqlitePool};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -12,6 +12,7 @@ const STATE_FILE: &str = "doomscrolling-state.json";
 const EXTENSION_CONNECTION_FILE: &str = "doomscrolling-extension-status.json";
 const LIMIT_STATE_FILE: &str = "doomscrolling-limit-state.json";
 const EXTENSION_CONNECTION_STALE_SECONDS: i64 = 60;
+const ACTIVE_STATE_STALE_SECONDS: i64 = 45;
 const EXTENSION_INSTALL_README_URL: &str =
     "https://github.com/opengrimoire/ganbaru-ai/blob/dev/extensions/chrome/README.md";
 const PROTECTED_DESKTOP_APP_NAMES: &[&str] = &[
@@ -184,6 +185,20 @@ pub struct DoomscrollingUsageSampleInput {
     local_date: String,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DoomscrollingDesktopBlockEventInput {
+    app_name: String,
+    process_name: Option<String>,
+    process_id: Option<u32>,
+}
+
+struct NormalizedDesktopBlockEvent {
+    source_key: String,
+    display_name: Option<String>,
+    process_id: Option<u32>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DoomscrollingUsageSampleRow {
@@ -327,6 +342,44 @@ fn validate_state(state: &DoomscrollingRuntimeState) -> Result<(), String> {
     Ok(())
 }
 
+fn read_fresh_runtime_state(
+    path: &Path,
+    checked_at: DateTime<Utc>,
+) -> Option<DoomscrollingRuntimeState> {
+    let contents = std::fs::read_to_string(path).ok()?;
+    let state = serde_json::from_str::<DoomscrollingRuntimeState>(&contents).ok()?;
+    if validate_state(&state).is_err() {
+        return None;
+    }
+    let updated_at = DateTime::parse_from_rfc3339(&state.updated_at)
+        .ok()?
+        .with_timezone(&Utc);
+    let age_seconds = (checked_at - updated_at).num_seconds().max(0);
+    if age_seconds > ACTIVE_STATE_STALE_SECONDS {
+        return None;
+    }
+    Some(state)
+}
+
+fn block_event_phase_from_runtime(runtime: Option<&DoomscrollingRuntimeState>) -> Option<String> {
+    let runtime = runtime?;
+    if !runtime.active {
+        return None;
+    }
+    if runtime.paused {
+        return match runtime.pause_reason.as_deref() {
+            Some("idle") => Some("idle_pause".to_string()),
+            Some("suspend") => Some("suspend_pause".to_string()),
+            Some("manual") | None => Some("manual_pause".to_string()),
+            Some(_) => None,
+        };
+    }
+    match runtime.phase.as_str() {
+        "focus" | "short_break" | "long_break" => Some(runtime.phase.clone()),
+        _ => None,
+    }
+}
+
 fn now_utc() -> DateTime<Utc> {
     std::time::SystemTime::now().into()
 }
@@ -444,6 +497,22 @@ fn normalize_usage_display_name(value: Option<String>) -> Option<String> {
         } else {
             Some(normalized.chars().take(120).collect())
         }
+    })
+}
+
+fn normalize_desktop_block_event(
+    input: DoomscrollingDesktopBlockEventInput,
+) -> Result<NormalizedDesktopBlockEvent, String> {
+    let source_name = input.process_name.as_deref().unwrap_or(&input.app_name);
+    let source_key = normalize_usage_source_key("desktop-app", source_name)
+        .ok_or_else(|| "desktop block event source key is invalid".to_string())?;
+    if is_protected_desktop_app_name(&source_key) {
+        return Err("protected desktop apps cannot be tracked".to_string());
+    }
+    Ok(NormalizedDesktopBlockEvent {
+        source_key,
+        display_name: normalize_usage_display_name(Some(input.app_name)),
+        process_id: input.process_id,
     })
 }
 
@@ -2025,6 +2094,68 @@ pub async fn doomscrolling_record_usage_sample<R: Runtime>(
     Ok(())
 }
 
+async fn insert_desktop_block_event(
+    pool: &SqlitePool,
+    event: NormalizedDesktopBlockEvent,
+    runtime: Option<&DoomscrollingRuntimeState>,
+    occurred_at: &str,
+) -> Result<(), String> {
+    let phase = block_event_phase_from_runtime(runtime);
+    let run_id = phase
+        .as_deref()
+        .and(runtime)
+        .and_then(|state| state.active_run_id.clone());
+    let event_id = format!(
+        "desktop-block-{}-{}-{}",
+        now_epoch_ms(),
+        std::process::id(),
+        event.process_id.unwrap_or(0),
+    );
+
+    sqlx::query(
+        "INSERT OR IGNORE INTO doomscrolling_block_events
+            (id, run_id, segment_id, occurred_at, source_type, source_key,
+             display_name, phase, decision, rule_id, category_id)
+         VALUES (?, ?, NULL, ?, 'desktop_app', ?, ?, ?, 'blocked', NULL, NULL)",
+    )
+    .bind(&event_id)
+    .bind(&run_id)
+    .bind(occurred_at)
+    .bind(&event.source_key)
+    .bind(&event.display_name)
+    .bind(&phase)
+    .execute(pool)
+    .await
+    .map_err(|e| format!("record desktop block event: {e}"))?;
+
+    sqlx::query(
+        "INSERT OR REPLACE INTO doomscrolling_block_event_rule_snapshots
+            (block_event_id, rule_id, rule_kind, rule_label, environment_id, blocker_mode)
+         VALUES (?, NULL, 'desktop_app', ?, NULL, 'blacklist')",
+    )
+    .bind(&event_id)
+    .bind(&event.display_name)
+    .execute(pool)
+    .await
+    .map_err(|e| format!("record desktop block event rule snapshot: {e}"))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn doomscrolling_record_desktop_block_event<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    event: DoomscrollingDesktopBlockEventInput,
+) -> Result<(), String> {
+    let event = normalize_desktop_block_event(event)?;
+    let checked_at = now_utc();
+    let occurred_at = checked_at.to_rfc3339_opts(SecondsFormat::Millis, true);
+    let runtime_state_path = state_path(&app)?;
+    let runtime = read_fresh_runtime_state(&runtime_state_path, checked_at);
+    let pool = connect_sqlite(app, "sqlite:ganbaru-ai.sqlite".to_string()).await?;
+    insert_desktop_block_event(&pool, event, runtime.as_ref(), &occurred_at).await
+}
+
 #[tauri::command]
 pub async fn doomscrolling_list_usage_samples<R: Runtime>(
     app: tauri::AppHandle<R>,
@@ -2155,6 +2286,7 @@ mod tests {
         DoomscrollingUsageSampleInput,
     };
     use chrono::{DateTime, Utc};
+    use sqlx::Row;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn state(phase: &str) -> DoomscrollingRuntimeState {
@@ -2328,6 +2460,136 @@ mod tests {
         };
 
         assert!(super::normalize_usage_sample(sample, "test").is_err());
+    }
+
+    #[test]
+    fn desktop_block_events_reject_protected_apps() {
+        let event = super::DoomscrollingDesktopBlockEventInput {
+            app_name: "Terminal".to_string(),
+            process_name: Some("gnome-terminal".to_string()),
+            process_id: Some(123),
+        };
+
+        assert!(super::normalize_desktop_block_event(event).is_err());
+    }
+
+    #[test]
+    fn records_desktop_block_event_to_sqlite_without_process_id() {
+        tauri::async_runtime::block_on(async {
+            let pool = sqlx::sqlite::SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect("sqlite::memory:")
+                .await
+                .unwrap();
+            sqlx::raw_sql("PRAGMA foreign_keys=ON")
+                .execute(&pool)
+                .await
+                .unwrap();
+            sqlx::raw_sql(
+                "CREATE TABLE pomodoro_runs (id TEXT PRIMARY KEY);
+                 CREATE TABLE pomodoro_segments (
+                   id TEXT PRIMARY KEY,
+                   run_id TEXT REFERENCES pomodoro_runs(id) ON DELETE CASCADE
+                 );
+                 CREATE TABLE doomscrolling_block_events (
+                   id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+                   run_id TEXT REFERENCES pomodoro_runs(id) ON DELETE SET NULL,
+                   segment_id TEXT REFERENCES pomodoro_segments(id) ON DELETE SET NULL,
+                   occurred_at TEXT NOT NULL CHECK (trim(occurred_at) <> ''),
+                   source_type TEXT NOT NULL CHECK (source_type IN ('browser', 'desktop_app', 'mobile_app')),
+                   source_key TEXT NOT NULL CHECK (trim(source_key) <> '' AND instr(source_key, '://') = 0),
+                   display_name TEXT,
+                   phase TEXT CHECK (
+                     phase IS NULL OR
+                     phase IN ('focus', 'short_break', 'long_break', 'manual_pause', 'idle_pause', 'suspend_pause')
+                   ),
+                   decision TEXT NOT NULL CHECK (
+                     decision IN ('blocked', 'temporary_allowed', 'false_positive_reported', 'limit_exhausted')
+                   ),
+                   rule_id TEXT,
+                   category_id TEXT,
+                   created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                 );
+                 CREATE TABLE doomscrolling_block_event_rule_snapshots (
+                   block_event_id TEXT PRIMARY KEY REFERENCES doomscrolling_block_events(id) ON DELETE CASCADE,
+                   rule_id TEXT,
+                   rule_kind TEXT CHECK (
+                     rule_kind IS NULL OR
+                     rule_kind IN ('domain', 'url_pattern', 'category', 'custom_category', 'usage_limit', 'desktop_app')
+                   ),
+                   rule_label TEXT,
+                   environment_id TEXT,
+                   blocker_mode TEXT CHECK (
+                     blocker_mode IS NULL OR
+                     blocker_mode IN ('blacklist', 'whitelist', 'limit')
+                   )
+                 );",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query("INSERT INTO pomodoro_runs (id) VALUES ('run-1')")
+                .execute(&pool)
+                .await
+                .unwrap();
+            let mut runtime = state("focus");
+            runtime.active_run_id = Some("run-1".to_string());
+            let event =
+                super::normalize_desktop_block_event(super::DoomscrollingDesktopBlockEventInput {
+                    app_name: "Steam".to_string(),
+                    process_name: Some("steam".to_string()),
+                    process_id: Some(42),
+                })
+                .unwrap();
+
+            super::insert_desktop_block_event(
+                &pool,
+                event,
+                Some(&runtime),
+                "2026-06-10T12:00:00.000Z",
+            )
+            .await
+            .unwrap();
+
+            let row = sqlx::query(
+                "SELECT run_id, source_type, source_key, display_name, phase, decision
+                 FROM doomscrolling_block_events",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let source_key: String = row.try_get("source_key").unwrap();
+            assert_eq!(row.try_get::<String, _>("run_id").unwrap(), "run-1");
+            assert_eq!(
+                row.try_get::<String, _>("source_type").unwrap(),
+                "desktop_app"
+            );
+            assert_eq!(source_key, "steam");
+            assert!(!source_key.contains("://"));
+            assert_eq!(row.try_get::<String, _>("display_name").unwrap(), "Steam");
+            assert_eq!(row.try_get::<String, _>("phase").unwrap(), "focus");
+            assert_eq!(row.try_get::<String, _>("decision").unwrap(), "blocked");
+
+            let snapshot = sqlx::query(
+                "SELECT rule_kind, rule_label, blocker_mode
+                 FROM doomscrolling_block_event_rule_snapshots",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(
+                snapshot.try_get::<String, _>("rule_kind").unwrap(),
+                "desktop_app"
+            );
+            assert_eq!(
+                snapshot.try_get::<String, _>("rule_label").unwrap(),
+                "Steam"
+            );
+            assert_eq!(
+                snapshot.try_get::<String, _>("blocker_mode").unwrap(),
+                "blacklist"
+            );
+        });
     }
 
     #[test]

@@ -2,7 +2,7 @@
 
 A pomodoro session writes data to four history tables: `pomodoro_runs`, `pomodoro_segments`, `pomodoro_pauses`, and `pomodoro_run_events` (see `data/schema.md`). The run row is the session header, segments are the actual phases that ran, pauses are interruptions within segments, and run events are the audit trail for lifecycle decisions such as skip break, focus extension, reconfigure, transition, stop, complete, and crash recovery. The user-facing pomodoro mechanics in `features/pomodoro.md` are implemented on top of this structure.
 
-A core decision in this design: the **plan** for a session (the schedule of focus and break phases) is **never stored**. It is derived on demand from the run's rhythm snapshot and inherited state. Segments record what actually happened. Comparing actuals to the derived plan gives plan-vs-actual analysis without ever needing a plan table. The future adaptive recommendation and experimentation model is defined in `algorithms/pomodoro-adaptive-rhythm.md`.
+A core decision in this design: the **plan** for a session (the schedule of focus and break phases) is **never stored**. It is derived on demand from the run's rhythm snapshot and inherited state. Segments record what actually happened. Comparing actuals to the derived plan gives plan-vs-actual analysis without ever needing a plan table. The adaptive decision and experimentation model is defined in `algorithms/pomodoro-adaptive-rhythm.md`.
 
 This doc explains how that derivation works, why segments are written lazily, what the inherited fields mean, and how pauses fit in. Worked examples cover the common scenarios.
 
@@ -17,7 +17,7 @@ The current implementation stores a tagged rhythm snapshot. There are two determ
 | Rhythm source | `preset` or `custom`, plus `preset_key` for preset configs. This keeps future analytics from mixing defaults with user-authored rhythms. |
 | Idle timeout | Stored outside the rhythm. It affects auto-pause, not the focus or break plan. |
 
-Adaptive plans are out of scope for the current deterministic implementation. The invariant remains the same when they arrive: active runs snapshot the exact rhythm they are using so history is explainable even if the event's future config changes.
+Adaptive plans use the same invariant: active runs snapshot the exact rhythm they are using so history is explainable even if the event's future config changes.
 
 ## Plan vs segments
 
@@ -36,7 +36,7 @@ After the first phase, the standard rhythm rules apply using the run's snapshot:
 
 Repeating these rules produces the planned schedule for the rest of the session.
 
-Adaptive plans must remain deterministic from the persisted snapshot and recorded adaptation events. A recommendation engine may choose a new duration for a future phase, following `algorithms/pomodoro-adaptive-rhythm.md`, but once that phase is started, the chosen value is written into the segment's `planned_end` and the reason is recorded in `pomodoro_run_events`. Later analytics should be able to answer both "what happened?" and "why did the app choose this plan?"
+Adaptive plans must remain deterministic from the persisted snapshot and recorded adaptation events. The adaptive engine may choose a new duration for a future phase, following `algorithms/pomodoro-adaptive-rhythm.md`, but once that phase is started, the chosen value is written into the segment's `planned_end` and the adaptive decision tables record the previous value, selected value, context, reason codes, and state scores in the same backend transaction as the segment start. Later analytics should be able to answer both "what happened?" and "why did the app choose this plan?"
 
 This derivation covers all run origins:
 

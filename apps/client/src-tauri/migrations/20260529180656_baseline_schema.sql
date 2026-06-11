@@ -276,7 +276,7 @@ CREATE TABLE pomodoro_configs (
     rhythm_kind TEXT NOT NULL CHECK (rhythm_kind IN ('count', 'sequence')),
     rhythm_source TEXT NOT NULL CHECK (rhythm_source IN ('preset', 'custom')),
     preset_key TEXT CHECK (
-        preset_key IS NULL OR preset_key IN ('auto', 'deep', 'creative', 'extended')
+        preset_key IS NULL OR preset_key IN ('adaptive', 'creative', 'balanced', 'deep', 'extended')
     ),
     idle_timeout_minutes INTEGER CHECK (idle_timeout_minutes IS NULL OR idle_timeout_minutes > 0)
 );
@@ -313,7 +313,7 @@ CREATE TABLE pomodoro_runs (
     rhythm_kind TEXT NOT NULL CHECK (rhythm_kind IN ('count', 'sequence')),
     rhythm_source TEXT NOT NULL CHECK (rhythm_source IN ('preset', 'custom')),
     preset_key TEXT CHECK (
-        preset_key IS NULL OR preset_key IN ('auto', 'deep', 'creative', 'extended')
+        preset_key IS NULL OR preset_key IN ('adaptive', 'creative', 'balanced', 'deep', 'extended')
     ),
     idle_timeout_minutes INTEGER,
     last_heartbeat TEXT NOT NULL,
@@ -385,7 +385,27 @@ CREATE TABLE pomodoro_run_events (
     id TEXT PRIMARY KEY,
     run_id TEXT NOT NULL REFERENCES pomodoro_runs(id) ON DELETE CASCADE,
     segment_id TEXT REFERENCES pomodoro_segments(id) ON DELETE SET NULL,
-    event_type TEXT NOT NULL CHECK (event_type IN ('start', 'phase_start', 'phase_complete', 'pause_start', 'pause_end', 'idle_detected', 'focus_failed', 'suspend_detected', 'skip_break', 'extend_focus', 'reconfigure', 'block_transition', 'stop', 'complete', 'crash_recovery')),
+    event_type TEXT NOT NULL CHECK (
+        event_type IN (
+            'start',
+            'phase_start',
+            'phase_complete',
+            'pause_start',
+            'pause_end',
+            'idle_detected',
+            'focus_failed',
+            'suspend_detected',
+            'skip_break',
+            'extend_focus',
+            'go_to_break_now',
+            'start_focus_now',
+            'reconfigure',
+            'block_transition',
+            'stop',
+            'complete',
+            'crash_recovery'
+        )
+    ),
     occurred_at TEXT NOT NULL,
     phase TEXT CHECK (phase IS NULL OR phase IN ('focus', 'short_break', 'long_break')),
     reason TEXT,
@@ -448,7 +468,7 @@ CREATE TABLE calendar_event_archive_pomodoro_configs (
     rhythm_kind TEXT NOT NULL CHECK (rhythm_kind IN ('count', 'sequence')),
     rhythm_source TEXT NOT NULL CHECK (rhythm_source IN ('preset', 'custom')),
     preset_key TEXT CHECK (
-        preset_key IS NULL OR preset_key IN ('auto', 'deep', 'creative', 'extended')
+        preset_key IS NULL OR preset_key IN ('adaptive', 'creative', 'balanced', 'deep', 'extended')
     ),
     idle_timeout_minutes INTEGER CHECK (idle_timeout_minutes IS NULL OR idle_timeout_minutes > 0)
 );
@@ -699,3 +719,334 @@ CREATE TABLE doomscrolling_usage_samples (
 );
 CREATE INDEX idx_doomscrolling_usage_samples_date_source ON doomscrolling_usage_samples(local_date, source_type, source_key);
 CREATE INDEX idx_doomscrolling_usage_samples_started ON doomscrolling_usage_samples(started_at);
+
+CREATE TABLE pomodoro_adaptive_policies (
+    id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+    status TEXT NOT NULL CHECK (status IN ('active', 'paused', 'archived')),
+    policy_version INTEGER NOT NULL CHECK (policy_version > 0),
+    model_version INTEGER NOT NULL CHECK (model_version > 0),
+    exploration_budget_per_week INTEGER NOT NULL DEFAULT 2 CHECK (
+        exploration_budget_per_week >= 0 AND exploration_budget_per_week <= 20
+    ),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX idx_pomodoro_adaptive_single_active_policy
+ON pomodoro_adaptive_policies((1))
+WHERE status = 'active';
+
+CREATE TABLE pomodoro_adaptive_policy_bounds (
+    policy_id TEXT NOT NULL REFERENCES pomodoro_adaptive_policies(id) ON DELETE CASCADE,
+    parameter_key TEXT NOT NULL CHECK (
+        parameter_key IN (
+            'focus_duration_minutes',
+            'short_break_minutes',
+            'long_break_minutes',
+            'long_break_after_focus_count'
+        )
+    ),
+    min_value REAL NOT NULL,
+    max_value REAL NOT NULL,
+    PRIMARY KEY (policy_id, parameter_key),
+    CHECK (min_value <= max_value)
+);
+
+CREATE TABLE pomodoro_adaptive_context_states (
+    policy_id TEXT NOT NULL REFERENCES pomodoro_adaptive_policies(id) ON DELETE CASCADE,
+    context_key TEXT NOT NULL CHECK (trim(context_key) <> ''),
+    readiness REAL NOT NULL CHECK (readiness >= 0.0 AND readiness <= 1.0),
+    strain REAL NOT NULL CHECK (strain >= 0.0 AND strain <= 1.0),
+    recovery_debt REAL NOT NULL CHECK (recovery_debt >= 0.0 AND recovery_debt <= 1.0),
+    avoidance_pressure REAL NOT NULL CHECK (avoidance_pressure >= 0.0 AND avoidance_pressure <= 1.0),
+    momentum REAL NOT NULL CHECK (momentum >= 0.0 AND momentum <= 1.0),
+    confidence REAL NOT NULL CHECK (confidence >= 0.0 AND confidence <= 1.0),
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (policy_id, context_key)
+);
+
+CREATE TABLE pomodoro_adaptive_context_state_history (
+    id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+    policy_id TEXT NOT NULL REFERENCES pomodoro_adaptive_policies(id) ON DELETE CASCADE,
+    context_key TEXT NOT NULL CHECK (trim(context_key) <> ''),
+    observed_at TEXT NOT NULL CHECK (trim(observed_at) <> ''),
+    readiness REAL NOT NULL CHECK (readiness >= 0.0 AND readiness <= 1.0),
+    strain REAL NOT NULL CHECK (strain >= 0.0 AND strain <= 1.0),
+    recovery_debt REAL NOT NULL CHECK (recovery_debt >= 0.0 AND recovery_debt <= 1.0),
+    avoidance_pressure REAL NOT NULL CHECK (avoidance_pressure >= 0.0 AND avoidance_pressure <= 1.0),
+    momentum REAL NOT NULL CHECK (momentum >= 0.0 AND momentum <= 1.0),
+    confidence REAL NOT NULL CHECK (confidence >= 0.0 AND confidence <= 1.0),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_pomodoro_adaptive_state_history_policy
+ON pomodoro_adaptive_context_state_history(policy_id, context_key, observed_at);
+
+CREATE TABLE pomodoro_adaptive_context_snapshots (
+    id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+    run_id TEXT REFERENCES pomodoro_runs(id) ON DELETE SET NULL,
+    segment_id TEXT REFERENCES pomodoro_segments(id) ON DELETE SET NULL,
+    local_started_at TEXT NOT NULL CHECK (trim(local_started_at) <> ''),
+    time_of_day TEXT NOT NULL CHECK (time_of_day IN ('morning', 'midday', 'afternoon', 'evening', 'late')),
+    session_position TEXT NOT NULL CHECK (session_position IN ('first', 'middle', 'late')),
+    event_length TEXT NOT NULL CHECK (event_length IN ('short', 'medium', 'long')),
+    workload TEXT NOT NULL CHECK (workload IN ('low', 'normal', 'high')),
+    energy TEXT NOT NULL CHECK (energy IN ('low', 'normal', 'high', 'unknown')),
+    environment_id TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_pomodoro_adaptive_context_snapshots_run
+ON pomodoro_adaptive_context_snapshots(run_id, created_at);
+
+CREATE TABLE pomodoro_adaptive_context_snapshot_features (
+    snapshot_id TEXT NOT NULL REFERENCES pomodoro_adaptive_context_snapshots(id) ON DELETE CASCADE,
+    feature_key TEXT NOT NULL CHECK (trim(feature_key) <> ''),
+    numeric_value REAL,
+    categorical_value TEXT,
+    boolean_value INTEGER CHECK (boolean_value IS NULL OR boolean_value IN (0, 1)),
+    missing INTEGER NOT NULL DEFAULT 0 CHECK (missing IN (0, 1)),
+    source_kind TEXT NOT NULL CHECK (
+        source_kind IN ('pomodoro', 'doomscrolling', 'calendar', 'diary', 'project', 'environment', 'device')
+    ),
+    PRIMARY KEY (snapshot_id, feature_key),
+    CHECK (
+        missing = 1 OR
+        numeric_value IS NOT NULL OR
+        categorical_value IS NOT NULL OR
+        boolean_value IS NOT NULL
+    )
+);
+
+CREATE TABLE pomodoro_adaptive_data_quality_flags (
+    snapshot_id TEXT NOT NULL REFERENCES pomodoro_adaptive_context_snapshots(id) ON DELETE CASCADE,
+    flag TEXT NOT NULL CHECK (
+        flag IN (
+            'extension_unavailable',
+            'desktop_tracking_unavailable',
+            'diary_missing',
+            'idle_detection_disabled',
+            'crash_recovered',
+            'calendar_clipped'
+        )
+    ),
+    PRIMARY KEY (snapshot_id, flag)
+);
+
+CREATE TABLE pomodoro_adaptive_decisions (
+    id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+    policy_id TEXT REFERENCES pomodoro_adaptive_policies(id) ON DELETE SET NULL,
+    run_id TEXT REFERENCES pomodoro_runs(id) ON DELETE SET NULL,
+    segment_id TEXT REFERENCES pomodoro_segments(id) ON DELETE SET NULL,
+    context_snapshot_id TEXT REFERENCES pomodoro_adaptive_context_snapshots(id) ON DELETE SET NULL,
+    opportunity_kind TEXT NOT NULL CHECK (
+        opportunity_kind IN (
+            'run_start',
+            'focus_start',
+            'break_start',
+            'focus_tick',
+            'break_overtime',
+            'block_event',
+            'idle_failure',
+            'run_outcome'
+        )
+    ),
+    candidate_id TEXT CHECK (candidate_id IS NULL OR trim(candidate_id) <> ''),
+    decision_mode TEXT NOT NULL CHECK (
+        decision_mode IN ('fallback', 'hold', 'recovery', 'guardrail', 'exploit', 'explore')
+    ),
+    policy_version INTEGER NOT NULL CHECK (policy_version > 0),
+    model_version INTEGER NOT NULL CHECK (model_version > 0),
+    occurred_at TEXT NOT NULL CHECK (trim(occurred_at) <> ''),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_pomodoro_adaptive_decisions_run
+ON pomodoro_adaptive_decisions(run_id, occurred_at);
+CREATE INDEX idx_pomodoro_adaptive_decisions_policy
+ON pomodoro_adaptive_decisions(policy_id, occurred_at);
+
+CREATE TABLE pomodoro_adaptive_decision_values (
+    decision_id TEXT NOT NULL REFERENCES pomodoro_adaptive_decisions(id) ON DELETE CASCADE,
+    value_key TEXT NOT NULL CHECK (
+        value_key IN (
+            'focus_duration_minutes',
+            'short_break_minutes',
+            'long_break_minutes',
+            'long_break_after_focus_count'
+        )
+    ),
+    previous_numeric_value REAL,
+    selected_numeric_value REAL NOT NULL,
+    value_unit TEXT NOT NULL CHECK (value_unit IN ('minutes', 'count')),
+    PRIMARY KEY (decision_id, value_key)
+);
+
+CREATE TABLE pomodoro_adaptive_decision_reasons (
+    decision_id TEXT NOT NULL REFERENCES pomodoro_adaptive_decisions(id) ON DELETE CASCADE,
+    reason_code TEXT NOT NULL CHECK (
+        reason_code IN (
+            'no_history',
+            'low_confidence',
+            'missing_extension_data',
+            'missing_diary_data',
+            'high_strain',
+            'high_avoidance_pressure',
+            'high_recovery_debt',
+            'clean_momentum',
+            'break_return_drift',
+            'break_transition_pressure',
+            'skipped_break_recovery',
+            'focus_idle_pressure',
+            'repeated_blocked_source_pressure',
+            'capacity_rebuild',
+            'experiment_assignment',
+            'experiment_guardrail',
+            'guardrail_recovery',
+            'replay_candidate',
+            'hold_current_rhythm'
+        )
+    ),
+    PRIMARY KEY (decision_id, reason_code)
+);
+
+CREATE TABLE pomodoro_adaptive_decision_state_scores (
+    decision_id TEXT PRIMARY KEY REFERENCES pomodoro_adaptive_decisions(id) ON DELETE CASCADE,
+    readiness REAL NOT NULL CHECK (readiness >= 0.0 AND readiness <= 1.0),
+    strain REAL NOT NULL CHECK (strain >= 0.0 AND strain <= 1.0),
+    recovery_debt REAL NOT NULL CHECK (recovery_debt >= 0.0 AND recovery_debt <= 1.0),
+    avoidance_pressure REAL NOT NULL CHECK (avoidance_pressure >= 0.0 AND avoidance_pressure <= 1.0),
+    momentum REAL NOT NULL CHECK (momentum >= 0.0 AND momentum <= 1.0),
+    confidence REAL NOT NULL CHECK (confidence >= 0.0 AND confidence <= 1.0)
+);
+
+CREATE TABLE pomodoro_run_adaptive_snapshots (
+    run_id TEXT PRIMARY KEY REFERENCES pomodoro_runs(id) ON DELETE CASCADE,
+    policy_id TEXT REFERENCES pomodoro_adaptive_policies(id) ON DELETE SET NULL,
+    policy_version INTEGER NOT NULL CHECK (policy_version > 0),
+    model_version INTEGER NOT NULL CHECK (model_version > 0),
+    context_snapshot_id TEXT REFERENCES pomodoro_adaptive_context_snapshots(id) ON DELETE SET NULL,
+    decision_id TEXT REFERENCES pomodoro_adaptive_decisions(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE pomodoro_adaptive_planned_blocks (
+    id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+    capture_run_id TEXT REFERENCES pomodoro_runs(id) ON DELETE SET NULL,
+    event_date TEXT NOT NULL CHECK (trim(event_date) <> ''),
+    event_id TEXT CHECK (event_id IS NULL OR trim(event_id) <> ''),
+    original_event_id TEXT NOT NULL CHECK (trim(original_event_id) <> ''),
+    planned_start TEXT NOT NULL CHECK (trim(planned_start) <> ''),
+    planned_end TEXT NOT NULL CHECK (trim(planned_end) <> ''),
+    source_kind TEXT NOT NULL CHECK (
+        source_kind IN ('live_event', 'archived_event', 'scheduler_snapshot')
+    ),
+    captured_at TEXT NOT NULL CHECK (trim(captured_at) <> '')
+);
+CREATE UNIQUE INDEX idx_pomodoro_adaptive_planned_blocks_unique
+ON pomodoro_adaptive_planned_blocks(event_date, original_event_id, planned_start);
+CREATE INDEX idx_pomodoro_adaptive_planned_blocks_date
+ON pomodoro_adaptive_planned_blocks(event_date);
+
+CREATE TABLE pomodoro_adaptive_experiments (
+    id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+    policy_id TEXT REFERENCES pomodoro_adaptive_policies(id) ON DELETE SET NULL,
+    parameter_key TEXT NOT NULL CHECK (
+        parameter_key IN (
+            'focus_duration_minutes',
+            'short_break_minutes',
+            'long_break_minutes',
+            'long_break_after_focus_count',
+            'rhythm_bundle'
+        )
+    ),
+    assignment_unit TEXT NOT NULL CHECK (assignment_unit IN ('phase', 'run', 'day', 'context')),
+    status TEXT NOT NULL CHECK (status IN ('draft', 'active', 'paused', 'completed', 'abandoned')),
+    started_at TEXT,
+    ended_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    CHECK (ended_at IS NULL OR started_at IS NOT NULL)
+);
+
+CREATE TABLE pomodoro_adaptive_experiment_variants (
+    experiment_id TEXT NOT NULL REFERENCES pomodoro_adaptive_experiments(id) ON DELETE CASCADE,
+    variant_key TEXT NOT NULL CHECK (trim(variant_key) <> ''),
+    numeric_value REAL NOT NULL,
+    is_control INTEGER NOT NULL DEFAULT 0 CHECK (is_control IN (0, 1)),
+    PRIMARY KEY (experiment_id, variant_key)
+);
+CREATE UNIQUE INDEX idx_pomodoro_adaptive_one_control_variant
+ON pomodoro_adaptive_experiment_variants(experiment_id)
+WHERE is_control = 1;
+
+CREATE TABLE pomodoro_adaptive_assignments (
+    id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+    experiment_id TEXT NOT NULL REFERENCES pomodoro_adaptive_experiments(id) ON DELETE CASCADE,
+    variant_key TEXT NOT NULL,
+    run_id TEXT REFERENCES pomodoro_runs(id) ON DELETE SET NULL,
+    segment_id TEXT REFERENCES pomodoro_segments(id) ON DELETE SET NULL,
+    context_snapshot_id TEXT REFERENCES pomodoro_adaptive_context_snapshots(id) ON DELETE SET NULL,
+    assignment_seed TEXT NOT NULL CHECK (trim(assignment_seed) <> ''),
+    assigned_at TEXT NOT NULL CHECK (trim(assigned_at) <> ''),
+    FOREIGN KEY (experiment_id, variant_key)
+        REFERENCES pomodoro_adaptive_experiment_variants(experiment_id, variant_key)
+        ON DELETE CASCADE
+);
+CREATE INDEX idx_pomodoro_adaptive_assignments_experiment
+ON pomodoro_adaptive_assignments(experiment_id, assigned_at);
+
+CREATE TABLE pomodoro_adaptive_outcomes (
+    id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+    decision_id TEXT REFERENCES pomodoro_adaptive_decisions(id) ON DELETE SET NULL,
+    assignment_id TEXT REFERENCES pomodoro_adaptive_assignments(id) ON DELETE SET NULL,
+    outcome_window TEXT NOT NULL CHECK (outcome_window IN ('phase', 'run', 'day', 'next_day')),
+    outcome_key TEXT NOT NULL CHECK (trim(outcome_key) <> ''),
+    numeric_value REAL,
+    boolean_value INTEGER CHECK (boolean_value IS NULL OR boolean_value IN (0, 1)),
+    categorical_value TEXT,
+    measured_at TEXT NOT NULL CHECK (trim(measured_at) <> ''),
+    CHECK (
+        numeric_value IS NOT NULL OR
+        boolean_value IS NOT NULL OR
+        categorical_value IS NOT NULL
+    )
+);
+CREATE INDEX idx_pomodoro_adaptive_outcomes_decision
+ON pomodoro_adaptive_outcomes(decision_id, measured_at);
+CREATE INDEX idx_pomodoro_adaptive_outcomes_assignment
+ON pomodoro_adaptive_outcomes(assignment_id, measured_at);
+
+CREATE TABLE doomscrolling_block_events (
+    id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+    run_id TEXT REFERENCES pomodoro_runs(id) ON DELETE SET NULL,
+    segment_id TEXT REFERENCES pomodoro_segments(id) ON DELETE SET NULL,
+    occurred_at TEXT NOT NULL CHECK (trim(occurred_at) <> ''),
+    source_type TEXT NOT NULL CHECK (source_type IN ('browser', 'desktop_app', 'mobile_app')),
+    source_key TEXT NOT NULL CHECK (trim(source_key) <> '' AND instr(source_key, '://') = 0),
+    display_name TEXT,
+    phase TEXT CHECK (
+        phase IS NULL OR
+        phase IN ('focus', 'short_break', 'long_break', 'manual_pause', 'idle_pause', 'suspend_pause')
+    ),
+    decision TEXT NOT NULL CHECK (
+        decision IN ('blocked', 'temporary_allowed', 'false_positive_reported', 'limit_exhausted')
+    ),
+    rule_id TEXT,
+    category_id TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_doomscrolling_block_events_run
+ON doomscrolling_block_events(run_id, occurred_at);
+CREATE INDEX idx_doomscrolling_block_events_source
+ON doomscrolling_block_events(source_type, source_key, occurred_at);
+
+CREATE TABLE doomscrolling_block_event_rule_snapshots (
+    block_event_id TEXT PRIMARY KEY REFERENCES doomscrolling_block_events(id) ON DELETE CASCADE,
+    rule_id TEXT,
+    rule_kind TEXT CHECK (
+        rule_kind IS NULL OR
+        rule_kind IN ('domain', 'url_pattern', 'category', 'custom_category', 'usage_limit', 'desktop_app')
+    ),
+    rule_label TEXT,
+    environment_id TEXT,
+    blocker_mode TEXT CHECK (
+        blocker_mode IS NULL OR
+        blocker_mode IN ('blacklist', 'whitelist', 'limit')
+    )
+);

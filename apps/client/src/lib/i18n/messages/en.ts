@@ -223,8 +223,7 @@ export const en = {
     },
     pomodoro: {
       title: "Pomodoro",
-      automatic: "Adaptative",
-      adaptative: "Adaptative",
+      adaptive: "Adaptive",
       creative: "Creative",
       balanced: "Balanced",
       deepFocus: "Deep focus",

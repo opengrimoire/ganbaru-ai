@@ -123,12 +123,17 @@ function isPomodoroRhythmSource(value: unknown): value is PomodoroRhythmSource {
   return value === "preset" || value === "custom";
 }
 
-function isPomodoroPresetKey(value: unknown): value is PomodoroPresetKey {
-  return value === "auto" ||
+function normalizePomodoroPresetKey(value: unknown): PomodoroPresetKey | null {
+  if (
+    value === "adaptive" ||
     value === "creative" ||
     value === "balanced" ||
     value === "deep" ||
-    value === "extended";
+    value === "extended"
+  ) {
+    return value;
+  }
+  return null;
 }
 
 function isPomodoroBreakPhase(value: unknown): value is PomodoroBreakPhase {
@@ -149,7 +154,7 @@ function mapPomodoroConfig(r: DbCalendarEvent): PomodoroConfig | undefined {
   const rhythmSource = isPomodoroRhythmSource(r.rhythm_source)
     ? r.rhythm_source
     : "custom";
-  const presetKey = isPomodoroPresetKey(r.preset_key) ? r.preset_key : null;
+  const presetKey = normalizePomodoroPresetKey(r.preset_key);
 
   if (r.rhythm_kind === "count") {
     if (

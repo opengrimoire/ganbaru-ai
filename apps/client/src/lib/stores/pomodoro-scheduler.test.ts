@@ -3,7 +3,7 @@ import type { CalendarEvent, PomodoroConfig } from "$lib/components/calendar/typ
 import { createPresetPomodoroConfig } from "$lib/pomodoro/rhythm";
 import { selectActivePomodoroBlock } from "./pomodoro-scheduler";
 
-const config: PomodoroConfig = createPresetPomodoroConfig("auto");
+const config: PomodoroConfig = createPresetPomodoroConfig("adaptive");
 
 function event(overrides: Partial<CalendarEvent> & Pick<CalendarEvent, "id" | "start" | "end">): CalendarEvent {
   return {

@@ -159,7 +159,7 @@ export function buildCreatePanelInitialChanges(
     notifications: [0],
     pomodoroConfig: allDay
       ? undefined
-      : createPresetPomodoroConfig("auto", pauseWhenIdle ? thresholdMinutes : null),
+      : createPresetPomodoroConfig("adaptive", pauseWhenIdle ? thresholdMinutes : null),
     allDay: allDay || undefined,
     meetingEnabled: undefined,
     location: undefined,

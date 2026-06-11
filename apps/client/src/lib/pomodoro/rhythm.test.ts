@@ -123,8 +123,8 @@ describe("pomodoro rhythm engine", () => {
   });
 
   it("compares config snapshots by exact rhythm fields", () => {
-    expect(configEquals(createPresetPomodoroConfig("auto"), createPresetPomodoroConfig("auto"))).toBe(true);
-    expect(configEquals(createPresetPomodoroConfig("auto"), createPresetPomodoroConfig("deep"))).toBe(false);
+    expect(configEquals(createPresetPomodoroConfig("adaptive"), createPresetPomodoroConfig("adaptive"))).toBe(true);
+    expect(configEquals(createPresetPomodoroConfig("adaptive"), createPresetPomodoroConfig("deep"))).toBe(false);
     expect(createPresetPomodoroConfig("balanced").rhythm).toEqual({
       kind: "count",
       focusDurationMinutes: 30,

@@ -3,7 +3,7 @@ import type { PomodoroPhase } from "@ganbaru-ai/shared-types";
 export type PomodoroBreakPhase = "short_break" | "long_break";
 export type PomodoroRhythmKind = "count" | "sequence";
 export type PomodoroRhythmSource = "preset" | "custom";
-export type PomodoroPresetKey = "auto" | "creative" | "balanced" | "deep" | "extended";
+export type PomodoroPresetKey = "adaptive" | "creative" | "balanced" | "deep" | "extended";
 
 export const MIN_FOCUS_MINUTES = 1;
 export const MAX_FOCUS_MINUTES = 120;
@@ -66,7 +66,7 @@ export interface RhythmPlan {
 }
 
 export const COUNT_PRESET_RHYTHMS: Record<PomodoroPresetKey, CountPomodoroRhythm> = {
-  auto: {
+  adaptive: {
     kind: "count",
     focusDurationMinutes: 40,
     shortBreakMinutes: 5,
@@ -104,9 +104,9 @@ export const COUNT_PRESET_RHYTHMS: Record<PomodoroPresetKey, CountPomodoroRhythm
 };
 
 export const DEFAULT_POMODORO_CONFIG: PomodoroConfig = {
-  rhythm: { ...COUNT_PRESET_RHYTHMS.auto },
+  rhythm: { ...COUNT_PRESET_RHYTHMS.adaptive },
   rhythmSource: "preset",
-  presetKey: "auto",
+  presetKey: "adaptive",
   idleTimeoutMinutes: null,
 };
 

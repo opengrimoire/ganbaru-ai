@@ -8,7 +8,7 @@ import {
   sameConcreteOccurrence,
 } from "./active-event-end";
 
-const pomodoroConfig: PomodoroConfig = createPresetPomodoroConfig("auto", 1);
+const pomodoroConfig: PomodoroConfig = createPresetPomodoroConfig("adaptive", 1);
 
 function event(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
   return {

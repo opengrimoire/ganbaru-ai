@@ -3333,7 +3333,7 @@ fn validate_rhythm_source(source: &str, preset_key: Option<&str>) -> Result<(), 
             validate_enum(
                 key,
                 "preset_key",
-                &["auto", "creative", "balanced", "deep", "extended"],
+                &["adaptive", "creative", "balanced", "deep", "extended"],
             )
         }
         "custom" => {
@@ -3527,7 +3527,7 @@ mod tests {
                 long_break_after_focus_count: 4,
             },
             rhythm_source: "preset".to_string(),
-            preset_key: Some("auto".to_string()),
+            preset_key: Some("adaptive".to_string()),
             idle_timeout_minutes: Some(3),
         }
     }
@@ -5257,7 +5257,7 @@ mod tests {
                  start_trigger)
              VALUES ('run-1', 'event-1', 'event-1', '2026-05-09',
                      '2026-05-09T10:00:00Z', '2026-05-09T11:00:00Z',
-                     '2026-05-09T10:00:00Z', 'count', 'preset', 'auto',
+                     '2026-05-09T10:00:00Z', 'count', 'preset', 'adaptive',
                      '2026-05-09T10:05:00Z', 'manual')",
         )
         .execute(pool)
@@ -5283,7 +5283,7 @@ mod tests {
         sqlx::query(
             "INSERT INTO pomodoro_configs
                 (event_id, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes)
-             VALUES (?, 'count', 'preset', 'auto', 3)",
+             VALUES (?, 'count', 'preset', 'adaptive', 3)",
         )
         .bind(event_id)
         .execute(pool)
@@ -5317,7 +5317,7 @@ mod tests {
                  last_heartbeat,
                  start_trigger)
              VALUES ('run-1', ?, ?, ?, ?, ?, ?, ?, 'completed',
-                     'count', 'preset', 'auto', ?, 'manual')",
+                     'count', 'preset', 'adaptive', ?, 'manual')",
         )
         .bind(event_id)
         .bind(original_event_id)

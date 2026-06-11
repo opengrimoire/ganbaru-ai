@@ -223,7 +223,7 @@
 
   // ─── Pomodoro ───────────────────────────────────────────────────
   let pomodoroEnabled = $state(false);
-  let pomodoroPreset: "auto" | "creative" | "balanced" | "deep" | "extended" | "custom" = $state("auto");
+  let pomodoroPreset: "adaptive" | "creative" | "balanced" | "deep" | "extended" | "custom" = $state("adaptive");
   let focusDuration = $state(40);
   let shortBreak = $state(5);
   let longBreak = $state(10);
@@ -725,7 +725,7 @@
     } else {
       // Enable with defaults
       if (s === "meeting") { meetingEnabled = true; emitChange(); handleExpand("meeting"); return; }
-      if (s === "pomodoro") { pomodoroEnabled = true; pomodoroPreset = "auto"; focusDuration = 40; shortBreak = 5; longBreak = 10; applyDefaultIdleTimeoutPreference(); }
+      if (s === "pomodoro") { pomodoroEnabled = true; pomodoroPreset = "adaptive"; focusDuration = 40; shortBreak = 5; longBreak = 10; applyDefaultIdleTimeoutPreference(); }
       if (s === "notifications") { notifEnabled = true; notifSelected = new Set([0]); }
       if (s === "repeat") recurrence = { frequency: "daily", interval: 1, end: { type: "never" } };
     }
@@ -944,17 +944,17 @@
           }];
         } else {
           const firstStep = pc.rhythm.steps[0] ?? {
-            focusDurationMinutes: COUNT_PRESET_RHYTHMS.auto.focusDurationMinutes,
+            focusDurationMinutes: COUNT_PRESET_RHYTHMS.adaptive.focusDurationMinutes,
             breakPhase: "short_break" as const,
-            breakDurationMinutes: COUNT_PRESET_RHYTHMS.auto.shortBreakMinutes,
+            breakDurationMinutes: COUNT_PRESET_RHYTHMS.adaptive.shortBreakMinutes,
           };
           focusDuration = firstStep.focusDurationMinutes;
           shortBreak = firstStep.breakPhase === "short_break"
             ? firstStep.breakDurationMinutes
-            : COUNT_PRESET_RHYTHMS.auto.shortBreakMinutes;
+            : COUNT_PRESET_RHYTHMS.adaptive.shortBreakMinutes;
           longBreak = firstStep.breakPhase === "long_break"
             ? firstStep.breakDurationMinutes
-            : COUNT_PRESET_RHYTHMS.auto.longBreakMinutes;
+            : COUNT_PRESET_RHYTHMS.adaptive.longBreakMinutes;
           longBreakAfterFocusCount = pc.rhythm.steps.length;
           customRhythmMode = "sequence";
           sequenceSteps = pc.rhythm.steps.map((step: SequencePomodoroRhythmStep) => ({ ...step }));
@@ -965,7 +965,7 @@
         longBreakAfterFocusCount = 4;
         customRhythmMode = "simple";
         sequenceSteps = [{ focusDurationMinutes: 40, breakPhase: "short_break", breakDurationMinutes: 5 }];
-        pomodoroPreset = "auto";
+        pomodoroPreset = "adaptive";
         applyDefaultIdleTimeoutPreference();
       }
 
@@ -1003,7 +1003,7 @@
       description = "";
       recurrence = undefined;
       pomodoroEnabled = true;
-      pomodoroPreset = "auto";
+      pomodoroPreset = "adaptive";
       focusDuration = 40; shortBreak = 5; longBreak = 10;
       longBreakAfterFocusCount = 4;
       customRhythmMode = "simple";
