@@ -8,7 +8,7 @@ This doc covers the user-facing loop. The pieces that make it work each have the
 - `features/tray-icon.md`: tray menu behavior and platform-specific tray icon implementation details.
 - `features/pomodoro-break-screen.md`: the overlay that enforces breaks.
 - `features/pomodoro-idle-detection.md`: what happens when the user steps away.
-- `algorithms/pomodoro-adaptive-rhythm.md`: the future optimization, recommendation, and experimentation model for adaptive rhythms.
+- `algorithms/pomodoro-adaptive-rhythm.md`: the adaptive optimization and experimentation model.
 - `algorithms/pomodoro-state-machine.md`: the decision functions behind ticks and transitions.
 - `algorithms/pomodoro-segments-and-plan.md`: how the plan is derived and how segments are written.
 - `algorithms/idle-detection.md`: per-OS idle detection.
@@ -21,52 +21,58 @@ The pomodoro technique is not the only valid focus method, but it has two proper
 The implementation extends the classic technique in two ways:
 
 - **Sessions are bound to calendar events.** A pomodoro is not a free-floating timer; it is the work pattern for a specific block of scheduled time. When the event ends, the session ends. When the next event begins, a new session begins. The user does not have to remember to start or stop.
-- **State carries across consecutive events.** If the user finishes 25 minutes of focus on one event and the next event starts immediately, the new event begins with a break (the focus was earned). The cycle does not reset. See "Block transitions" below.
+- **State carries across consecutive events.** If the user finishes 25 minutes of focus on one event and the next event starts immediately, the new event begins with a break (the focus was earned). The rhythm state does not reset. See "Block transitions" below.
 
 These two extensions turn the timer from a per-task tool into a continuous work rhythm that lasts as long as the calendar has back-to-back work blocks.
 
 ## Focus rhythm model
 
-The classic "four focus periods, then one long break" rhythm is a useful default, not the product's final model. Ganbaru AI should treat a Pomodoro config as a **focus rhythm**: a plan for focus duration, break duration, and the rule that decides which break comes next. The simple count-based rhythm remains the first supported version because it is easy to understand and maps cleanly to today's data model.
+The classic "four focus periods, then one long break" rhythm is a useful default, not the whole model. Ganbaru AI treats a Pomodoro config as a **focus rhythm**: a plan for focus duration, break duration, and the rule that decides which break comes next.
 
-The long-term model needs three levels of control:
+The current deterministic rhythm model has two shapes:
 
-- **Simple presets:** the normal user sees a small set of evidence-informed presets and can change focus, short break, long break, and how many focus periods are needed before the long break.
-- **Advanced custom plans:** the user can specify a repeating break sequence, such as short, short, long, or short, long, and can optionally give individual focus or break positions their own durations. The UI should make this feel like editing a short pattern, not filling out a spreadsheet.
-- **Adaptive plans:** the app can recommend or, with explicit opt-in, adjust future focus and break durations based on the user's own history, current session behavior, diary signals, and post-session feedback.
+- **Count rhythm:** fixed focus duration, fixed short break, fixed long break, and `longBreakAfterFocusCount`. This is what presets use.
+- **Sequence rhythm:** a compact repeating pattern. Each position has its own focus duration, break type (`short_break` or `long_break`), and break duration. A `short, long` sequence repeats position 1, position 2, position 1, position 2, and so on.
 
-The current count field answers the question "how many focus periods until the long break?" This must be shown clearly in the UI. Users should not have to infer from the word "cycle" that the fourth focus period gets the long break. If advanced custom plans are enabled later, the simple count field becomes one way to define a break plan, not a separate competing concept.
+The event panel exposes presets first and a simple custom count row second. Sequence rhythms remain in the model for future advanced editors, but the current UI keeps custom editing to the simple count rhythm. Adaptive uses the same count-rhythm shape at first, then can silently adjust future focus and break durations after the policy has enough local history, current session behavior, diary signals, and blocker pressure.
+
+The count rhythm field answers the question "how many focus periods until the long break?" This must be shown clearly in the UI. Users should not have to infer from the word "cycle" that the fourth focus period gets the long break. Sequence rhythms are repeating patterns, not scripts.
 
 The UI should avoid overwhelming the user:
 
 - New users start with presets and one clear "long break after N focus periods" control.
-- Advanced break sequences stay behind a custom or advanced mode.
-- Redundant plans should be normalized where possible. For example, a plan with one short break and one long break after two focus periods may be better presented as a two-focus rhythm than as a larger cycle with repeated labels.
-- Adaptive changes should be visible, explainable, and reversible. The app should say what changed, why it thinks the change may help, and how to return to the previous rhythm.
+- Advanced break sequences stay out of the event panel until they have a compact editor that does not overwhelm the preset flow.
+- Redundant plans should be normalized where possible. For example, a plan with one short break and one long break after two focus periods may be better presented as a two-focus rhythm than as a larger pattern with repeated labels.
+- Adaptive changes should be bounded, auditable, and reversible. The normal timer path should not interrupt the user with approval prompts, but later analytics should explain what changed and why.
 
 ## Default config and current storage
 
-A pomodoro config currently has five fields:
+A Pomodoro event stores a tagged rhythm payload plus idle behavior:
 
 | Field | Default | Meaning |
 |-------|---------|---------|
-| `focusDurationMinutes` | 40 | Length of one focus period |
-| `shortBreakMinutes` | 5 | Break between focus periods within a cycle |
-| `longBreakMinutes` | 10 | Break after `pomodoroCount` focus periods |
-| `pomodoroCount` | 4 | Number of focus periods before a long break in the simple count-based rhythm |
+| `rhythm.kind` | `count` | `count` for fixed count rhythms, `sequence` for repeating custom patterns |
+| `rhythm.focusDurationMinutes` | 40 | Count rhythm focus period length |
+| `rhythm.shortBreakMinutes` | 5 | Count rhythm short break length |
+| `rhythm.longBreakMinutes` | 10 | Count rhythm long break length |
+| `rhythm.longBreakAfterFocusCount` | 4 | Count rhythm positions before a long break |
+| `rhythm.steps[]` | none | Sequence rhythm steps, each with focus minutes, break type, and break minutes |
+| `rhythmSource` | `preset` | `preset` or `custom` |
+| `presetKey` | `adaptive` | Preset identifier for preset rhythms, null for custom rhythms |
 | `idleTimeoutMinutes` | 3 | Auto-pause threshold; null disables idle detection |
 
 Defaults are set globally in user settings. Focus settings control the idle threshold for new Pomodoro events, whether new events start with Pause on inactivity enabled, the paused focus notification interval, and break screen behavior. Idle pause is enabled at 3 minutes by default, with supported thresholds of 1, 2, 3, 4, 5, 10, and 15 minutes, and with a warning confirmation before turning it off. Changing the Focus settings threshold during an active focus session updates that session immediately when idle detection is already enabled. Paused focus notifications default to every 3 minutes and can be set to none, 3, 5, 10, or 15 minutes. Early break ending defaults to 10 Esc presses and can be set to disabled, 1, 3, 10, 20, or 50 presses. Break extensions default to 3 added minutes and can be set to disabled, 1, 3, 5, 10, or 15 added minutes. Each event stores its own config; the event panel can still turn Pause on inactivity off, which writes `null`. The override is per-event, not per-recurrence-instance: changing the config on a recurring template applies to all instances; changing it on a detached or split instance applies only to that instance and its forward continuations (see `features/calendar-recurrence.md`).
 
-Built-in presets give the user a starting point without dialing in numbers:
+Built-in presets give the user a starting point without dialing in numbers. They are count rhythms with a long break after 4 focus periods:
 
-- **Automatic** 40/5/10: the global default. Long focus, short breaks.
-- **Deep focus** 40/5/10: same numbers as automatic, named separately so the user can mark intent.
+- **Adaptive** 40/5/10: the global default. Long focus, short breaks.
 - **Creative** 25/5/15: shorter focus with a longer recovery break.
+- **Balanced** 30/5/10: moderate focus with the standard short and long breaks.
+- **Deep focus** 40/5/10: same numbers as adaptive, named separately so the user can mark intent.
 - **Extended** 50/10/10: even longer focus for tasks that need warmup.
 - **Custom**: any combination.
 
-Presets are starting points only; the user can edit any field after picking one. `Automatic` currently means the default 40/5/10 count-based rhythm. In the long-term adaptive model, `Automatic` should become an opt-in recommendation mode that can tune future phases and future sessions from the user's local history.
+Presets are starting points only; the user can edit any field after picking one. `Adaptive` currently starts from the default 40/5/10 count-based rhythm, loads recent local Pomodoro and blocker history before a fresh session, selects only a matching prior context state when one exists, and writes a run-start adaptive snapshot with context, reason codes, selected values, data quality, and the scheduler-expanded planned Pomodoro blocks for that date. When confidence and guardrails allow it, the policy can choose a different effective count rhythm for that fresh session. The policy separates idle and blocked-site pressure near the start of focus from pressure near the end of focus, so startup avoidance does not automatically shorten work while late-focus pressure can protect recovery. Repeated attempts against the same blocked source raise avoidance pressure but hold the rhythm when focus is still clean. The policy also separates early and late `Go to break now` actions, treats ending a break early as positive only when the following focus succeeds, avoids lengthening short breaks when late return is paired with blocked-site pressure after the planned break end, and protects long recovery when skipped breaks are followed by failed focus. Clean-momentum low-risk run starts can enter the local 40 vs 45 minute focus-duration experiment, with assignment stored before outcomes are known. Low-risk short-break drift run starts can enter the local 5 vs 7 minute short-break-duration experiment. Clean long-break drift run starts can enter the local 10 vs 15 minute long-break-duration experiment. Mild late-cycle recovery-pressure run starts can enter the local C4 vs C3 long-break-cadence experiment. Very clean high-momentum run starts can enter the local C4 vs C5 cadence-expansion experiment. Terminal experiment results create a 14-day cooldown, and abandoned experiments hold the control value during that cooldown. Focus-start and break-start boundaries can also select the next effective rhythm before the new segment starts. When the run closes, the backend records run outcomes, phase outcomes for adaptive segment decisions, matured same-day and next-day outcomes for older run-start decisions, and updates the hidden context state used by later sessions.
 
 ## Adaptive focus rhythm direction
 
@@ -86,9 +92,9 @@ Controlled experiments are allowed, but they must respect the session:
 - The app may adjust the next focus or break inside the same calendar session when the user opted into automatic tuning and the adjustment is bounded.
 - Experiments should change a small number of variables at once so later analytics can explain what likely helped.
 - Comparisons should use similar contexts where practical, such as the same project type, time of day, or energy level.
-- The user can pin a rhythm, pause experimentation, or reject a recommendation.
+- The user can pin a rhythm, pause experimentation, or leave Adaptive.
 
-The scientific direction is individualized and cautious: measure outcomes, prefer reversible recommendations, avoid hidden manipulation, and protect happiness and recovery as first-class outcomes rather than treating them as secondary to throughput.
+The scientific direction is individualized and cautious: measure outcomes, prefer reversible changes, avoid unauditable manipulation, and protect happiness and recovery as first-class outcomes rather than treating them as secondary to throughput.
 
 ## Session lifecycle (high level)
 
@@ -102,7 +108,7 @@ A session has three structural moments: it begins, it runs through phases, it en
 
 The session always begins from the current moment, never from the event's scheduled start. If the event was scheduled for 14:00 and the user opens the app at 14:40, the session covers 14:40 onward. The 40-minute gap is honest: the user was not working.
 
-**Run.** Once started, the session loops through phases. The first phase is a full-length focus period unless the event window ends first (concentration is assumed broken at any session start, including restarts after a stop). In the current simple rhythm, focus enters a short break until the cycle count reaches `pomodoroCount`, then enters a long break. In the target rhythm model, focus asks the active break plan which break comes next. Each break is followed by another focus, and the loop repeats until the calendar event ends or a transition takes over.
+**Run.** Once started, the session loops through phases. The first phase is a full-length focus period unless the event window ends first (concentration is assumed broken at any session start, including restarts after a stop). Focus asks the active rhythm which break is owed at the current position. Each break is followed by another focus at the next rhythm position, and the loop repeats until the calendar event ends or a transition takes over.
 
 The user can pause manually, the system can auto-pause for idle, and the system can register a suspend pause when the OS sleeps. All three are handled with the same data structure (a row in `pomodoro_pauses`), but their UX differs (see `features/pomodoro-idle-detection.md`). Paused time never counts as focus progress or break credit. If the event deadline becomes the limiting factor while manually paused, the title bar and tray countdown continue to show the usable focus opportunity left in the event, while the calendar rail keeps the paused interval empty.
 
@@ -122,21 +128,21 @@ After a session ends, the calendar event remains in place. If the event still ha
 
 When one pomodoro event ends and another pomodoro event begins immediately (or starts inside the window of the ending event), the system transitions rather than restarting fresh. The transition carries two pieces of state from the old run to the new run:
 
-- `inherited_focus_minutes`: how many minutes of focus had accumulated in the current cycle when the old run ended.
-- `inherited_cycle`: which cycle number the user was on.
+- `inherited_focus_minutes`: how many minutes of focus had accumulated at the current rhythm position when the old run ended.
+- `inherited_rhythm_position`: which rhythm position the user was on.
 
-These two values let the new run pick up exactly where the old one left off, but with the new event's config. In the current simple rhythm, the first phase of the new run is determined as follows:
+These two values let the new run pick up where the old one left off, but with the new event's config. The first phase of the new run is determined as follows:
 
-- If `inherited_focus_minutes >= focus_duration_minutes` of the new config: the user has earned a break. The first phase is a short break, or a long break if `inherited_cycle >= pomodoro_count`.
-- Otherwise: the first phase is focus, lasting `focus_duration_minutes - inherited_focus_minutes` minutes (the remaining focus needed to complete the current cycle under the new config).
+- If `inherited_focus_minutes >= focus_duration_minutes` at the inherited rhythm position in the new config: the user has earned one break. The first phase is the break type and duration owed at that position.
+- Otherwise: the first phase is focus, lasting the remaining focus needed to complete that rhythm position under the new config.
 
-With future custom break plans, the same principle holds: inherited focus decides whether a break has been earned, and the new event's break plan decides which break type and duration is owed at that position. A transition must never erase earned recovery just because the next event uses a different rhythm.
+Surplus focus does not turn into multiple automatic break credits. A transition can grant one owed break at the inherited position; extra surplus is history for analytics.
 
 This matters because back-to-back events should feel like one continuous session, not a series of resets. Without inheritance, finishing 25 minutes of focus exactly as the event ends would punish the user with another 25-minute focus on the next event, denying them the break they earned.
 
-**Example, transition awarding a break.** "Morning Focus" (09:00-11:00, 40/5) is followed by "Afternoon Sprint" (11:00-13:00, 25/5). The user has been focused since 10:35, accumulating 25 minutes of focus in cycle 3. At 11:00, Morning Focus expires. The system finds Afternoon Sprint starting at 11:00 and transitions: the new run on Sprint gets `inherited_focus_minutes=25, inherited_cycle=3`. Since 25 meets Sprint's 25-minute focus threshold, Sprint starts with a short break. The user takes their well-deserved break, then begins fresh focus periods at Sprint's 25-minute cadence.
+**Example, transition awarding a break.** "Morning Focus" (09:00-11:00, 40/5) is followed by "Afternoon Sprint" (11:00-13:00, 25/5). The user has been focused since 10:35, accumulating 25 minutes of focus at rhythm position 3. At 11:00, Morning Focus expires. The system finds Afternoon Sprint starting at 11:00 and transitions: the new run on Sprint gets `inherited_focus_minutes=25, inherited_rhythm_position=3`. Since 25 meets Sprint's 25-minute focus threshold, Sprint starts with the break owed at position 3. The user takes their earned break, then begins fresh focus periods at Sprint's cadence.
 
-**Example, transition with partial focus.** Same setup, but the user only accumulated 10 minutes of focus in the current cycle when Morning Focus ended. The new run on Sprint gets `inherited_focus_minutes=10, inherited_cycle=3`. Since 10 < 25, the first phase is focus, lasting 25 - 10 = 15 minutes. After this bridge focus, Sprint's 25/5 cadence takes over.
+**Example, transition with partial focus.** Same setup, but the user only accumulated 10 minutes of focus at rhythm position 3 when Morning Focus ended. The new run on Sprint gets `inherited_focus_minutes=10, inherited_rhythm_position=3`. Since 10 < 25, the first phase is focus, lasting 25 - 10 = 15 minutes. After this bridge focus, Sprint's cadence takes over.
 
 Transitions never happen across midnight or across non-pomodoro gaps. If the next event has no pomodoro config, the session ends with `end_reason=completed` and the next event runs without a timer.
 

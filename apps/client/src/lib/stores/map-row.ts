@@ -2,6 +2,13 @@ import type {
   AlarmAction, AttendeeRole, AttendeeStatus, CalendarEvent, EventAlarm,
   EventAttendee, EventOverride, EventStatus, EventSurfaceAttendee, EventTransparency,
 } from "$lib/components/calendar/types";
+import type {
+  PomodoroBreakPhase,
+  PomodoroConfig,
+  PomodoroPresetKey,
+  PomodoroRhythmSource,
+  SequencePomodoroRhythmStep,
+} from "$lib/pomodoro/rhythm";
 import { rruleToRecurrence } from "$lib/components/calendar/rrule";
 import {
   isUtcIso,
@@ -40,11 +47,14 @@ export interface DbCalendarEvent {
   local_rsvp_status: string | null;
   created_at: string;
   rdate: string | null;
-  // LEFT JOIN pomodoro_configs
-  focus_duration_minutes: number | null;
-  short_break_minutes: number | null;
-  long_break_minutes: number | null;
-  pomodoro_count: number | null;
+  rhythm_kind: string | null;
+  rhythm_source: string | null;
+  preset_key: string | null;
+  count_focus_duration_minutes: number | null;
+  count_short_break_minutes: number | null;
+  count_long_break_minutes: number | null;
+  count_long_break_after_focus_count: number | null;
+  sequence_steps: string | null;
   idle_timeout_minutes: number | null;
 }
 
@@ -103,6 +113,87 @@ export function safeJsonParse<T>(json: string | null): T | undefined {
   } catch {
     return undefined;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isPomodoroRhythmSource(value: unknown): value is PomodoroRhythmSource {
+  return value === "preset" || value === "custom";
+}
+
+function normalizePomodoroPresetKey(value: unknown): PomodoroPresetKey | null {
+  if (
+    value === "adaptive" ||
+    value === "creative" ||
+    value === "balanced" ||
+    value === "deep" ||
+    value === "extended"
+  ) {
+    return value;
+  }
+  return null;
+}
+
+function isPomodoroBreakPhase(value: unknown): value is PomodoroBreakPhase {
+  return value === "short_break" || value === "long_break";
+}
+
+function isSequenceStep(value: unknown): value is SequencePomodoroRhythmStep {
+  return isRecord(value) &&
+    typeof value.focusDurationMinutes === "number" &&
+    Number.isFinite(value.focusDurationMinutes) &&
+    isPomodoroBreakPhase(value.breakPhase) &&
+    typeof value.breakDurationMinutes === "number" &&
+    Number.isFinite(value.breakDurationMinutes);
+}
+
+function mapPomodoroConfig(r: DbCalendarEvent): PomodoroConfig | undefined {
+  if (!r.rhythm_kind) return undefined;
+  const rhythmSource = isPomodoroRhythmSource(r.rhythm_source)
+    ? r.rhythm_source
+    : "custom";
+  const presetKey = normalizePomodoroPresetKey(r.preset_key);
+
+  if (r.rhythm_kind === "count") {
+    if (
+      r.count_focus_duration_minutes == null ||
+      r.count_short_break_minutes == null ||
+      r.count_long_break_minutes == null ||
+      r.count_long_break_after_focus_count == null
+    ) {
+      return undefined;
+    }
+    return {
+      rhythm: {
+        kind: "count",
+        focusDurationMinutes: r.count_focus_duration_minutes,
+        shortBreakMinutes: r.count_short_break_minutes,
+        longBreakMinutes: r.count_long_break_minutes,
+        longBreakAfterFocusCount: r.count_long_break_after_focus_count,
+      },
+      rhythmSource,
+      presetKey,
+      idleTimeoutMinutes: r.idle_timeout_minutes,
+    };
+  }
+
+  if (r.rhythm_kind === "sequence") {
+    const steps = safeJsonParse<unknown[]>(r.sequence_steps)?.filter(isSequenceStep) ?? [];
+    if (steps.length === 0) return undefined;
+    return {
+      rhythm: {
+        kind: "sequence",
+        steps: steps.map((step) => ({ ...step })),
+      },
+      rhythmSource,
+      presetKey: null,
+      idleTimeoutMinutes: r.idle_timeout_minutes,
+    };
+  }
+
+  return undefined;
 }
 
 /**
@@ -185,15 +276,8 @@ export function mapRow(r: DbCalendarEvent, renderZone: string): CalendarEvent {
   if (r.created_at) slim.createdAt = r.created_at;
   const rdate = safeJsonParse<string[]>(r.rdate);
   if (rdate) slim.rdate = rdate;
-  if (r.focus_duration_minutes != null) {
-    slim.pomodoroConfig = {
-      focusDurationMinutes: r.focus_duration_minutes,
-      shortBreakMinutes: r.short_break_minutes!,
-      longBreakMinutes: r.long_break_minutes!,
-      pomodoroCount: r.pomodoro_count!,
-      idleTimeoutMinutes: r.idle_timeout_minutes,
-    };
-  }
+  const pomodoroConfig = mapPomodoroConfig(r);
+  if (pomodoroConfig) slim.pomodoroConfig = pomodoroConfig;
   return slim;
 }
 

@@ -44,7 +44,8 @@ coverage/
 .claude/
 
 # Goal
-goal/
+goal/*
+goal/goal.md
 
 # Sample data
 sample/

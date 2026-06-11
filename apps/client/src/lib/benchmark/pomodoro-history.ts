@@ -1,22 +1,13 @@
 import type { CalendarEvent, PauseInterval, PomodoroConfig } from "$lib/components/calendar/types";
 import { wallClockToUtcIso } from "$lib/components/calendar/utils";
+import { createPresetPomodoroConfig } from "$lib/pomodoro/rhythm";
 import { computePlannedSegments } from "$lib/utils/pomodoro-segments";
 
-export const DENSE_TIMED_POMODORO_CONFIG: PomodoroConfig = {
-  focusDurationMinutes: 40,
-  shortBreakMinutes: 5,
-  longBreakMinutes: 10,
-  pomodoroCount: 4,
-  idleTimeoutMinutes: null,
-};
+export const DENSE_TIMED_POMODORO_CONFIG: PomodoroConfig = createPresetPomodoroConfig("adaptive");
 
 export interface BenchmarkPomodoroConfigSeed {
   eventId: string;
-  focusDurationMinutes: number;
-  shortBreakMinutes: number;
-  longBreakMinutes: number;
-  pomodoroCount: number;
-  idleTimeoutMinutes: number | null;
+  config: PomodoroConfig;
 }
 
 export interface BenchmarkPomodoroSegmentSeed {
@@ -24,7 +15,7 @@ export interface BenchmarkPomodoroSegmentSeed {
   eventId: string;
   eventDate: string;
   runId: string;
-  cycleNumber: number;
+  rhythmPosition: number;
   phase: "focus" | "short_break" | "long_break";
   plannedStart: string;
   plannedEnd: string;
@@ -107,11 +98,7 @@ export function buildDensePomodoroHistoryPayload(
 
     payload.configs.push({
       eventId: event.id,
-      focusDurationMinutes: config.focusDurationMinutes,
-      shortBreakMinutes: config.shortBreakMinutes,
-      longBreakMinutes: config.longBreakMinutes,
-      pomodoroCount: config.pomodoroCount,
-      idleTimeoutMinutes: config.idleTimeoutMinutes,
+      config,
     });
 
     if (!isPastTimedPomodoroEvent(event, pastCutoffWallClock)) continue;
@@ -133,7 +120,7 @@ export function buildDensePomodoroHistoryPayload(
         eventId: event.id,
         eventDate,
         runId,
-        cycleNumber: segment.cycleNumber,
+        rhythmPosition: segment.rhythmPosition,
         phase: segment.phase,
         plannedStart,
         plannedEnd,

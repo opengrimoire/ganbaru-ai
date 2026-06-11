@@ -5,7 +5,7 @@ export interface DbPomodoroSegmentRow {
   event_id: string;
   event_date: string;
   run_id: string;
-  cycle_number: number;
+  rhythm_position: number;
   phase: string;
   planned_start: string;
   planned_end: string;
@@ -59,7 +59,7 @@ export function mapPomodoroSegmentRows(
       eventId: mapKey,
       eventDate: row.event_date,
       runId: row.run_id,
-      cycleNumber: row.cycle_number,
+      rhythmPosition: row.rhythm_position,
       phase: row.phase as PersistedSegment["phase"],
       plannedStart: row.planned_start,
       plannedEnd: row.planned_end,

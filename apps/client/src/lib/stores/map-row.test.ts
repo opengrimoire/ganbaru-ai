@@ -35,10 +35,14 @@ function makeDbRow(overrides: Partial<DbCalendarEvent> = {}): DbCalendarEvent {
     local_rsvp_status: null,
     created_at: "2026-03-15T08:00:00Z",
     rdate: null,
-    focus_duration_minutes: null,
-    short_break_minutes: null,
-    long_break_minutes: null,
-    pomodoro_count: null,
+    rhythm_kind: null,
+    rhythm_source: null,
+    preset_key: null,
+    count_focus_duration_minutes: null,
+    count_short_break_minutes: null,
+    count_long_break_minutes: null,
+    count_long_break_after_focus_count: null,
+    sequence_steps: null,
     idle_timeout_minutes: null,
     ...overrides,
   };
@@ -160,17 +164,25 @@ describe("mapRow", () => {
 
   it("maps pomodoro config when present", () => {
     const result = mapRow(makeDbRow({
-      focus_duration_minutes: 25,
-      short_break_minutes: 5,
-      long_break_minutes: 15,
-      pomodoro_count: 4,
+      rhythm_kind: "count",
+      rhythm_source: "preset",
+      preset_key: "deep",
+      count_focus_duration_minutes: 25,
+      count_short_break_minutes: 5,
+      count_long_break_minutes: 15,
+      count_long_break_after_focus_count: 4,
       idle_timeout_minutes: 1,
     }));
     expect(result.pomodoroConfig).toEqual({
-      focusDurationMinutes: 25,
-      shortBreakMinutes: 5,
-      longBreakMinutes: 15,
-      pomodoroCount: 4,
+      rhythm: {
+        kind: "count",
+        focusDurationMinutes: 25,
+        shortBreakMinutes: 5,
+        longBreakMinutes: 15,
+        longBreakAfterFocusCount: 4,
+      },
+      rhythmSource: "preset",
+      presetKey: "deep",
       idleTimeoutMinutes: 1,
     });
   });

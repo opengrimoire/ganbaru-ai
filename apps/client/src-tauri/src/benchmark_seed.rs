@@ -15,11 +15,42 @@ pub struct BenchmarkPomodoroHistoryPayload {
 #[serde(rename_all = "camelCase")]
 struct BenchmarkPomodoroConfigSeed {
     event_id: String,
-    focus_duration_minutes: i64,
-    short_break_minutes: i64,
-    long_break_minutes: i64,
-    pomodoro_count: i64,
+    config: BenchmarkPomodoroConfig,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BenchmarkPomodoroConfig {
+    rhythm: BenchmarkPomodoroRhythm,
+    rhythm_source: String,
+    preset_key: Option<String>,
     idle_timeout_minutes: Option<i64>,
+}
+
+#[derive(Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+enum BenchmarkPomodoroRhythm {
+    Count {
+        focus_duration_minutes: i64,
+        short_break_minutes: i64,
+        long_break_minutes: i64,
+        long_break_after_focus_count: i64,
+    },
+    Sequence {
+        steps: Vec<BenchmarkPomodoroSequenceStep>,
+    },
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BenchmarkPomodoroSequenceStep {
+    focus_duration_minutes: i64,
+    break_phase: String,
+    break_duration_minutes: i64,
 }
 
 #[derive(Deserialize)]
@@ -29,7 +60,7 @@ struct BenchmarkPomodoroSegmentSeed {
     event_id: String,
     event_date: String,
     run_id: String,
-    cycle_number: i64,
+    rhythm_position: i64,
     phase: String,
     planned_start: String,
     planned_end: String,
@@ -73,22 +104,74 @@ async fn insert_config(
     tx: &mut Transaction<'_, Sqlite>,
     config: &BenchmarkPomodoroConfigSeed,
 ) -> Result<(), String> {
+    sqlx::query("DELETE FROM pomodoro_configs WHERE event_id = ?")
+        .bind(&config.event_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("clear benchmark pomodoro config: {e}"))?;
+
     sqlx::query(
-        "INSERT OR REPLACE INTO pomodoro_configs
-            (event_id, focus_duration_minutes, short_break_minutes,
-             long_break_minutes, pomodoro_count, idle_timeout_minutes)
-         VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO pomodoro_configs
+            (event_id, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes)
+         VALUES (?, ?, ?, ?, ?)",
     )
     .bind(&config.event_id)
-    .bind(config.focus_duration_minutes)
-    .bind(config.short_break_minutes)
-    .bind(config.long_break_minutes)
-    .bind(config.pomodoro_count)
-    .bind(config.idle_timeout_minutes)
+    .bind(benchmark_rhythm_kind(&config.config.rhythm))
+    .bind(&config.config.rhythm_source)
+    .bind(&config.config.preset_key)
+    .bind(config.config.idle_timeout_minutes)
     .execute(&mut **tx)
     .await
     .map_err(|e| format!("seed benchmark pomodoro config: {e}"))?;
+
+    match &config.config.rhythm {
+        BenchmarkPomodoroRhythm::Count {
+            focus_duration_minutes,
+            short_break_minutes,
+            long_break_minutes,
+            long_break_after_focus_count,
+        } => {
+            sqlx::query(
+                "INSERT INTO pomodoro_config_count_rhythms
+                    (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes,
+                     long_break_after_focus_count)
+                 VALUES (?, ?, ?, ?, ?)",
+            )
+            .bind(&config.event_id)
+            .bind(focus_duration_minutes)
+            .bind(short_break_minutes)
+            .bind(long_break_minutes)
+            .bind(long_break_after_focus_count)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| format!("seed benchmark count rhythm: {e}"))?;
+        }
+        BenchmarkPomodoroRhythm::Sequence { steps } => {
+            for (step_index, step) in steps.iter().enumerate() {
+                sqlx::query(
+                    "INSERT INTO pomodoro_config_sequence_steps
+                        (event_id, step_index, focus_duration_minutes, break_phase, break_duration_minutes)
+                     VALUES (?, ?, ?, ?, ?)",
+                )
+                .bind(&config.event_id)
+                .bind(step_index as i64)
+                .bind(step.focus_duration_minutes)
+                .bind(&step.break_phase)
+                .bind(step.break_duration_minutes)
+                .execute(&mut **tx)
+                .await
+                .map_err(|e| format!("seed benchmark sequence rhythm: {e}"))?;
+            }
+        }
+    }
     Ok(())
+}
+
+fn benchmark_rhythm_kind(rhythm: &BenchmarkPomodoroRhythm) -> &'static str {
+    match rhythm {
+        BenchmarkPomodoroRhythm::Count { .. } => "count",
+        BenchmarkPomodoroRhythm::Sequence { .. } => "sequence",
+    }
 }
 
 async fn insert_segment(
@@ -96,8 +179,7 @@ async fn insert_segment(
     segment: &BenchmarkPomodoroSegmentSeed,
 ) -> Result<(), String> {
     let config = sqlx::query(
-        "SELECT focus_duration_minutes, short_break_minutes, long_break_minutes,
-                pomodoro_count, idle_timeout_minutes
+        "SELECT rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes
          FROM pomodoro_configs
          WHERE event_id = ?",
     )
@@ -105,18 +187,15 @@ async fn insert_segment(
     .fetch_one(&mut **tx)
     .await
     .map_err(|e| format!("load benchmark pomodoro config for run: {e}"))?;
-    let focus_duration_minutes: i64 = config
-        .try_get("focus_duration_minutes")
-        .map_err(|e| format!("read focus_duration_minutes: {e}"))?;
-    let short_break_minutes: i64 = config
-        .try_get("short_break_minutes")
-        .map_err(|e| format!("read short_break_minutes: {e}"))?;
-    let long_break_minutes: i64 = config
-        .try_get("long_break_minutes")
-        .map_err(|e| format!("read long_break_minutes: {e}"))?;
-    let pomodoro_count: i64 = config
-        .try_get("pomodoro_count")
-        .map_err(|e| format!("read pomodoro_count: {e}"))?;
+    let rhythm_kind: String = config
+        .try_get("rhythm_kind")
+        .map_err(|e| format!("read rhythm_kind: {e}"))?;
+    let rhythm_source: String = config
+        .try_get("rhythm_source")
+        .map_err(|e| format!("read rhythm_source: {e}"))?;
+    let preset_key: Option<String> = config
+        .try_get("preset_key")
+        .map_err(|e| format!("read preset_key: {e}"))?;
     let idle_timeout_minutes: Option<i64> = config
         .try_get("idle_timeout_minutes")
         .map_err(|e| format!("read idle_timeout_minutes: {e}"))?;
@@ -124,10 +203,9 @@ async fn insert_segment(
     sqlx::query(
         "INSERT OR IGNORE INTO pomodoro_runs
             (id, event_id, original_event_id, event_date, planned_start, planned_end,
-             started_at, ended_at, end_reason, focus_duration_minutes,
-             short_break_minutes, long_break_minutes, pomodoro_count,
+             started_at, ended_at, end_reason, rhythm_kind, rhythm_source, preset_key,
              idle_timeout_minutes, last_heartbeat, start_trigger)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?, 'manual')",
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?, 'manual')",
     )
     .bind(&segment.run_id)
     .bind(&segment.event_id)
@@ -142,10 +220,9 @@ async fn insert_segment(
             .unwrap_or(&segment.planned_start),
     )
     .bind(&segment.actual_end)
-    .bind(focus_duration_minutes)
-    .bind(short_break_minutes)
-    .bind(long_break_minutes)
-    .bind(pomodoro_count)
+    .bind(&rhythm_kind)
+    .bind(&rhythm_source)
+    .bind(&preset_key)
     .bind(idle_timeout_minutes)
     .bind(
         segment
@@ -156,6 +233,40 @@ async fn insert_segment(
     .execute(&mut **tx)
     .await
     .map_err(|e| format!("seed benchmark pomodoro run: {e}"))?;
+
+    match rhythm_kind.as_str() {
+        "count" => {
+            sqlx::query(
+                "INSERT OR IGNORE INTO pomodoro_run_count_rhythms
+                    (run_id, focus_duration_minutes, short_break_minutes, long_break_minutes,
+                     long_break_after_focus_count)
+                 SELECT ?, focus_duration_minutes, short_break_minutes, long_break_minutes,
+                        long_break_after_focus_count
+                 FROM pomodoro_config_count_rhythms
+                 WHERE event_id = ?",
+            )
+            .bind(&segment.run_id)
+            .bind(&segment.event_id)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| format!("snapshot benchmark count rhythm: {e}"))?;
+        }
+        "sequence" => {
+            sqlx::query(
+                "INSERT OR IGNORE INTO pomodoro_run_sequence_steps
+                    (run_id, step_index, focus_duration_minutes, break_phase, break_duration_minutes)
+                 SELECT ?, step_index, focus_duration_minutes, break_phase, break_duration_minutes
+                 FROM pomodoro_config_sequence_steps
+                 WHERE event_id = ?",
+            )
+            .bind(&segment.run_id)
+            .bind(&segment.event_id)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| format!("snapshot benchmark sequence rhythm: {e}"))?;
+        }
+        _ => return Err(format!("invalid benchmark rhythm kind: {rhythm_kind}")),
+    }
 
     if let Some(actual_end) = &segment.actual_end {
         sqlx::query(
@@ -179,7 +290,7 @@ async fn insert_segment(
 
     sqlx::query(
         "INSERT OR REPLACE INTO pomodoro_segments
-            (id, event_id, event_date, run_id, cycle_number, phase,
+            (id, event_id, event_date, run_id, rhythm_position, phase,
              planned_start, planned_end, actual_start, actual_end, status)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
@@ -187,7 +298,7 @@ async fn insert_segment(
     .bind(&segment.event_id)
     .bind(&segment.event_date)
     .bind(&segment.run_id)
-    .bind(segment.cycle_number)
+    .bind(segment.rhythm_position)
     .bind(&segment.phase)
     .bind(&segment.planned_start)
     .bind(&segment.planned_end)
@@ -217,17 +328,14 @@ async fn insert_segment(
 fn validate_payload(payload: &BenchmarkPomodoroHistoryPayload) -> Result<(), String> {
     for config in &payload.configs {
         require_non_empty(&config.event_id, "config.event_id")?;
-        require_positive(config.focus_duration_minutes, "focus_duration_minutes")?;
-        require_positive(config.short_break_minutes, "short_break_minutes")?;
-        require_positive(config.long_break_minutes, "long_break_minutes")?;
-        require_positive(config.pomodoro_count, "pomodoro_count")?;
+        validate_config(&config.config)?;
     }
     for segment in &payload.segments {
         require_non_empty(&segment.id, "segment.id")?;
         require_non_empty(&segment.event_id, "segment.event_id")?;
         require_non_empty(&segment.event_date, "segment.event_date")?;
         require_non_empty(&segment.run_id, "segment.run_id")?;
-        require_positive(segment.cycle_number, "cycle_number")?;
+        require_positive(segment.rhythm_position, "rhythm_position")?;
         validate_phase(&segment.phase)?;
         require_non_empty(&segment.planned_start, "planned_start")?;
         require_non_empty(&segment.planned_end, "planned_end")?;
@@ -238,6 +346,62 @@ fn validate_payload(payload: &BenchmarkPomodoroHistoryPayload) -> Result<(), Str
                 return Err(format!("invalid pomodoro pause reason: {}", pause.reason));
             }
         }
+    }
+    Ok(())
+}
+
+fn validate_config(config: &BenchmarkPomodoroConfig) -> Result<(), String> {
+    validate_source_and_preset(&config.rhythm_source, config.preset_key.as_deref())?;
+    if let Some(idle_timeout_minutes) = config.idle_timeout_minutes {
+        require_positive(idle_timeout_minutes, "idle_timeout_minutes")?;
+    }
+    match &config.rhythm {
+        BenchmarkPomodoroRhythm::Count {
+            focus_duration_minutes,
+            short_break_minutes,
+            long_break_minutes,
+            long_break_after_focus_count,
+        } => {
+            require_positive(*focus_duration_minutes, "focus_duration_minutes")?;
+            require_positive(*short_break_minutes, "short_break_minutes")?;
+            require_positive(*long_break_minutes, "long_break_minutes")?;
+            validate_rhythm_position_count(*long_break_after_focus_count)?;
+        }
+        BenchmarkPomodoroRhythm::Sequence { steps } => {
+            if steps.is_empty() {
+                return Err("sequence rhythm requires at least one step".into());
+            }
+            validate_rhythm_position_count(steps.len() as i64)?;
+            for (index, step) in steps.iter().enumerate() {
+                require_positive(
+                    step.focus_duration_minutes,
+                    &format!("sequence step {index} focus_duration_minutes"),
+                )?;
+                validate_break_phase(&step.break_phase)?;
+                require_positive(
+                    step.break_duration_minutes,
+                    &format!("sequence step {index} break_duration_minutes"),
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_source_and_preset(source: &str, preset_key: Option<&str>) -> Result<(), String> {
+    match (source, preset_key) {
+        ("preset", Some("adaptive" | "creative" | "balanced" | "deep" | "extended")) => Ok(()),
+        ("preset", Some(other)) => Err(format!("invalid pomodoro preset key: {other}")),
+        ("preset", None) => Err("preset pomodoro config requires a preset key".into()),
+        ("custom", None) => Ok(()),
+        ("custom", Some(_)) => Err("custom pomodoro config cannot include a preset key".into()),
+        (other, _) => Err(format!("invalid pomodoro rhythm source: {other}")),
+    }
+}
+
+fn validate_rhythm_position_count(value: i64) -> Result<(), String> {
+    if !(1..=12).contains(&value) {
+        return Err("rhythm position count must be between 1 and 12".into());
     }
     Ok(())
 }
@@ -260,6 +424,13 @@ fn validate_phase(phase: &str) -> Result<(), String> {
     match phase {
         "focus" | "short_break" | "long_break" => Ok(()),
         _ => Err(format!("invalid pomodoro segment phase: {phase}")),
+    }
+}
+
+fn validate_break_phase(phase: &str) -> Result<(), String> {
+    match phase {
+        "short_break" | "long_break" => Ok(()),
+        _ => Err(format!("invalid pomodoro break phase: {phase}")),
     }
 }
 

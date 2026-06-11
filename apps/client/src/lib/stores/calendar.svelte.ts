@@ -57,6 +57,7 @@ import type { IcsImportSummary, IcsPreservationPayload } from "$lib/calendar/ics
 import { deriveIcalendarProjectionState } from "$lib/calendar/ics/projection-state";
 import { mark as perfMark } from "$lib/stores/perflog.svelte";
 import { getPreferences } from "$lib/stores/preferences.svelte";
+import { configEquals } from "$lib/pomodoro/rhythm";
 import {
   createWindowSyncEnvelope,
   isForeignWindowSyncEnvelope,
@@ -275,10 +276,7 @@ function hasStructuralChanges(
     if (!oldCfg && newCfg) return true;
     if (oldCfg && !newCfg) return true;
     if (oldCfg && newCfg) {
-      if (oldCfg.focusDurationMinutes !== newCfg.focusDurationMinutes) return true;
-      if (oldCfg.shortBreakMinutes !== newCfg.shortBreakMinutes) return true;
-      if (oldCfg.longBreakMinutes !== newCfg.longBreakMinutes) return true;
-      if (oldCfg.pomodoroCount !== newCfg.pomodoroCount) return true;
+      if (!configEquals(oldCfg, newCfg)) return true;
     }
   }
   return false;

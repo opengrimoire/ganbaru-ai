@@ -19,6 +19,7 @@
   import { UPDATE_AUTO_CHECK_INTERVAL_MS } from "$lib/stores/updates";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { getDetachedWindows } from "$lib/stores/detached-windows.svelte";
+  import { buildAdaptivePlannedBlocksForDate } from "$lib/pomodoro/adaptive/planned-blocks";
   import { selectActivePomodoroBlock } from "$lib/stores/pomodoro-scheduler";
   import {
     classifyPomodoroCompletion,
@@ -475,17 +476,27 @@
     }
   }
 
-  async function findActiveBlock(): Promise<CalendarEvent | undefined> {
+  interface ActivePomodoroBlockSnapshot {
+    activeBlock: CalendarEvent | undefined;
+    plannedBlocks: ReturnType<typeof buildAdaptivePlannedBlocksForDate>;
+  }
+
+  async function findActiveBlock(): Promise<ActivePomodoroBlockSnapshot> {
     const now = new Date();
     const today = Temporal.Now.plainDateISO();
     const events = await calendar.loadPomodoroSchedulerEvents(
       today.subtract({ days: 1 }),
       today.add({ days: 1 }),
     );
-    return selectActivePomodoroBlock(events, {
+    const activeBlock = selectActivePomodoroBlock(events, {
       now,
       activeBlockId: pomodoro.activeBlockId,
     });
+    const eventDate = activeBlock?.start.split(" ")[0] ?? null;
+    return {
+      activeBlock,
+      plannedBlocks: eventDate ? buildAdaptivePlannedBlocksForDate(events, eventDate) : [],
+    };
   }
 
   function soundForCompletionKind(kind: PomodoroCompletionKind): AppSoundId {
@@ -623,7 +634,7 @@
     if (!calendar.loaded) return;
     if (showStopConfirm || reverting || suspendInfo || idleInfo || pomodoro.autoStartSuppressed) return;
 
-    const activeBlock = await findActiveBlock();
+    const { activeBlock, plannedBlocks } = await findActiveBlock();
 
     // Clear dismissed block once its time window passes
     if (pomodoro.dismissedBlockId && activeBlock?.id !== pomodoro.dismissedBlockId) {
@@ -639,16 +650,12 @@
       const pc = activeBlock.pomodoroConfig!;
       void pomodoro.startFromBlock(
         activeBlock.id,
-        {
-          focusMinutes: pc.focusDurationMinutes,
-          shortBreakMinutes: pc.shortBreakMinutes,
-          longBreakMinutes: pc.longBreakMinutes,
-          cyclesBeforeLongBreak: pc.pomodoroCount,
-        },
+        pc,
         activeBlock.end,
         activeBlock.start.split(" ")[0],
         pc.idleTimeoutMinutes,
         false,
+        plannedBlocks,
       );
       trackedBlockSnapshot = { ...activeBlock };
     } else if (pomodoro.activeBlockId && pomodoro.blockExpired) {

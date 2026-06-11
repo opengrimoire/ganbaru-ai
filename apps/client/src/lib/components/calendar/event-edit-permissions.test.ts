@@ -6,6 +6,7 @@ import {
   hasCalendarEventStarted,
   isImportedCalendar,
 } from "./event-edit-permissions";
+import { createPresetPomodoroConfig } from "$lib/pomodoro/rhythm";
 
 const NOW = new Date("2026-05-26T12:00:00");
 
@@ -161,13 +162,7 @@ describe("calendar event edit permissions", () => {
       event({
         start: "2026-05-25 10:00",
         end: "2026-05-25 11:00",
-        pomodoroConfig: {
-          focusDurationMinutes: 25,
-          shortBreakMinutes: 5,
-          longBreakMinutes: 15,
-          pomodoroCount: 4,
-          idleTimeoutMinutes: null,
-        },
+        pomodoroConfig: createPresetPomodoroConfig("creative"),
       }),
       [calendar()],
       { now: NOW },
@@ -185,13 +180,7 @@ describe("calendar event edit permissions", () => {
       event({
         start: "2026-05-25 10:00",
         end: "2026-05-25 11:00",
-        pomodoroConfig: {
-          focusDurationMinutes: 25,
-          shortBreakMinutes: 5,
-          longBreakMinutes: 15,
-          pomodoroCount: 4,
-          idleTimeoutMinutes: null,
-        },
+        pomodoroConfig: createPresetPomodoroConfig("creative"),
       }),
       [calendar()],
       { now: NOW, isActivePomodoroEvent: true },

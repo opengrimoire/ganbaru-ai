@@ -40,6 +40,14 @@
     pickEventPanelLayout,
     type EventPanelLayout,
   } from "$lib/utils/responsive";
+  import {
+    COUNT_PRESET_RHYTHMS,
+    createCustomCountPomodoroConfig,
+    createCustomSequencePomodoroConfig,
+    createPresetPomodoroConfig,
+    type PomodoroPresetKey,
+    type SequencePomodoroRhythmStep,
+  } from "$lib/pomodoro/rhythm";
 
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Archive from "@lucide/svelte/icons/archive";
@@ -215,10 +223,13 @@
 
   // ─── Pomodoro ───────────────────────────────────────────────────
   let pomodoroEnabled = $state(false);
-  let pomodoroPreset: "auto" | "deep" | "creative" | "extended" | "custom" = $state("auto");
+  let pomodoroPreset: "adaptive" | "creative" | "balanced" | "deep" | "extended" | "custom" = $state("adaptive");
   let focusDuration = $state(40);
   let shortBreak = $state(5);
   let longBreak = $state(10);
+  let longBreakAfterFocusCount = $state(4);
+  let customRhythmMode: "simple" | "sequence" = $state("simple");
+  let sequenceSteps: SequencePomodoroRhythmStep[] = $state([]);
   let idleTimeoutEnabled = $state(true);
   const timedSectionsVisible = $derived(!allDay);
   const pomodoroControlsDisabled = $derived(
@@ -238,13 +249,24 @@
 
   function buildPomodoroConfigPayload(): PomodoroConfig | undefined {
     if (allDay || !pomodoroEnabled) return undefined;
-    return {
+    const idleTimeoutMinutes = idleTimeoutMinutesForPayload();
+    if (pomodoroPreset !== "custom") {
+      return createPresetPomodoroConfig(pomodoroPreset as PomodoroPresetKey, idleTimeoutMinutes);
+    }
+    if (customRhythmMode === "sequence") {
+      return createCustomSequencePomodoroConfig(
+        sequenceSteps.length > 0
+          ? sequenceSteps
+          : [{ focusDurationMinutes: focusDuration, breakPhase: "short_break", breakDurationMinutes: shortBreak }],
+        idleTimeoutMinutes,
+      );
+    }
+    return createCustomCountPomodoroConfig({
       focusDurationMinutes: focusDuration,
       shortBreakMinutes: shortBreak,
       longBreakMinutes: longBreak,
-      pomodoroCount: 4,
-      idleTimeoutMinutes: idleTimeoutMinutesForPayload(),
-    };
+      longBreakAfterFocusCount,
+    }, idleTimeoutMinutes);
   }
 
   // ─── Notifications ──────────────────────────────────────────────
@@ -703,7 +725,7 @@
     } else {
       // Enable with defaults
       if (s === "meeting") { meetingEnabled = true; emitChange(); handleExpand("meeting"); return; }
-      if (s === "pomodoro") { pomodoroEnabled = true; pomodoroPreset = "auto"; focusDuration = 40; shortBreak = 5; longBreak = 10; applyDefaultIdleTimeoutPreference(); }
+      if (s === "pomodoro") { pomodoroEnabled = true; pomodoroPreset = "adaptive"; focusDuration = 40; shortBreak = 5; longBreak = 10; applyDefaultIdleTimeoutPreference(); }
       if (s === "notifications") { notifEnabled = true; notifSelected = new Set([0]); }
       if (s === "repeat") recurrence = { frequency: "daily", interval: 1, end: { type: "never" } };
     }
@@ -906,15 +928,44 @@
       const pc = event.pomodoroConfig;
       pomodoroEnabled = !!pc;
       if (pc) {
-        focusDuration = pc.focusDurationMinutes;
-        shortBreak = pc.shortBreakMinutes;
-        longBreak = pc.longBreakMinutes;
-        const f = pc.focusDurationMinutes, s = pc.shortBreakMinutes, l = pc.longBreakMinutes;
-        pomodoroPreset = (f === 25 && s === 5 && l === 15) ? "creative" : (f === 50 && s === 10 && l === 10) ? "extended" : (f === 40 && s === 5 && l === 10) ? "deep" : "custom";
+        pomodoroPreset = pc.rhythmSource === "preset" && pc.presetKey
+          ? pc.presetKey
+          : "custom";
+        if (pc.rhythm.kind === "count") {
+          focusDuration = pc.rhythm.focusDurationMinutes;
+          shortBreak = pc.rhythm.shortBreakMinutes;
+          longBreak = pc.rhythm.longBreakMinutes;
+          longBreakAfterFocusCount = pc.rhythm.longBreakAfterFocusCount;
+          customRhythmMode = "simple";
+          sequenceSteps = [{
+            focusDurationMinutes: pc.rhythm.focusDurationMinutes,
+            breakPhase: "short_break",
+            breakDurationMinutes: pc.rhythm.shortBreakMinutes,
+          }];
+        } else {
+          const firstStep = pc.rhythm.steps[0] ?? {
+            focusDurationMinutes: COUNT_PRESET_RHYTHMS.adaptive.focusDurationMinutes,
+            breakPhase: "short_break" as const,
+            breakDurationMinutes: COUNT_PRESET_RHYTHMS.adaptive.shortBreakMinutes,
+          };
+          focusDuration = firstStep.focusDurationMinutes;
+          shortBreak = firstStep.breakPhase === "short_break"
+            ? firstStep.breakDurationMinutes
+            : COUNT_PRESET_RHYTHMS.adaptive.shortBreakMinutes;
+          longBreak = firstStep.breakPhase === "long_break"
+            ? firstStep.breakDurationMinutes
+            : COUNT_PRESET_RHYTHMS.adaptive.longBreakMinutes;
+          longBreakAfterFocusCount = pc.rhythm.steps.length;
+          customRhythmMode = "sequence";
+          sequenceSteps = pc.rhythm.steps.map((step: SequencePomodoroRhythmStep) => ({ ...step }));
+        }
         idleTimeoutEnabled = pc.idleTimeoutMinutes !== null;
       } else {
         focusDuration = 40; shortBreak = 5; longBreak = 10;
-        pomodoroPreset = "auto";
+        longBreakAfterFocusCount = 4;
+        customRhythmMode = "simple";
+        sequenceSteps = [{ focusDurationMinutes: 40, breakPhase: "short_break", breakDurationMinutes: 5 }];
+        pomodoroPreset = "adaptive";
         applyDefaultIdleTimeoutPreference();
       }
 
@@ -952,8 +1003,11 @@
       description = "";
       recurrence = undefined;
       pomodoroEnabled = true;
-      pomodoroPreset = "auto";
+      pomodoroPreset = "adaptive";
       focusDuration = 40; shortBreak = 5; longBreak = 10;
+      longBreakAfterFocusCount = 4;
+      customRhythmMode = "simple";
+      sequenceSteps = [{ focusDurationMinutes: 40, breakPhase: "short_break", breakDurationMinutes: 5 }];
       applyDefaultIdleTimeoutPreference();
       notifEnabled = true;
       notifSelected = new Set([0]);
@@ -2156,7 +2210,9 @@
         <PomodoroSection
           enabled={pomodoroEnabled}
           bind:preset={pomodoroPreset}
-          bind:focusDuration bind:shortBreak bind:longBreak bind:idleTimeoutEnabled
+          bind:focusDuration bind:shortBreak bind:longBreak
+          bind:longBreakAfterFocusCount bind:customRhythmMode bind:sequenceSteps
+          bind:idleTimeoutEnabled
           expanded={openSection === "pomodoro"}
           readonlyInteractive={pomodoroReadOnlyInteractive}
           ontoggle={() => handleToggle("pomodoro")}

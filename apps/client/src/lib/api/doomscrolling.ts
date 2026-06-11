@@ -39,6 +39,12 @@ export interface DoomscrollingRunningDesktopAppMatch {
   processId: number;
 }
 
+export interface DoomscrollingDesktopBlockEventPayload {
+  appName: string;
+  processName: string | null;
+  processId: number | null;
+}
+
 export interface DoomscrollingUsageSamplePayload {
   id?: string;
   sourceType: "website" | "desktop-app" | "mobile-app";
@@ -125,6 +131,12 @@ export async function listBlockedDoomscrollingDesktopAppMatches(
 
 export async function closeDoomscrollingDesktopApp(processId: number): Promise<void> {
   await invoke("doomscrolling_close_desktop_app", { processId });
+}
+
+export async function recordDoomscrollingDesktopBlockEvent(
+  event: DoomscrollingDesktopBlockEventPayload,
+): Promise<void> {
+  await invoke("doomscrolling_record_desktop_block_event", { event });
 }
 
 export async function showDoomscrollingDesktopBlockNotification(appName: string): Promise<void> {

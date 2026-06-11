@@ -42,6 +42,45 @@ const USAGE_SAMPLE_TABLE_SQL: &str = "
     CREATE INDEX IF NOT EXISTS idx_doomscrolling_usage_samples_started
         ON doomscrolling_usage_samples(started_at);
 ";
+const BLOCK_EVENT_TABLE_SQL: &str = "
+    CREATE TABLE IF NOT EXISTS doomscrolling_block_events (
+        id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+        run_id TEXT REFERENCES pomodoro_runs(id) ON DELETE SET NULL,
+        segment_id TEXT REFERENCES pomodoro_segments(id) ON DELETE SET NULL,
+        occurred_at TEXT NOT NULL CHECK (trim(occurred_at) <> ''),
+        source_type TEXT NOT NULL CHECK (source_type IN ('browser', 'desktop_app', 'mobile_app')),
+        source_key TEXT NOT NULL CHECK (trim(source_key) <> '' AND instr(source_key, '://') = 0),
+        display_name TEXT,
+        phase TEXT CHECK (
+            phase IS NULL OR
+            phase IN ('focus', 'short_break', 'long_break', 'manual_pause', 'idle_pause', 'suspend_pause')
+        ),
+        decision TEXT NOT NULL CHECK (
+            decision IN ('blocked', 'temporary_allowed', 'false_positive_reported', 'limit_exhausted')
+        ),
+        rule_id TEXT,
+        category_id TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_doomscrolling_block_events_run
+        ON doomscrolling_block_events(run_id, occurred_at);
+    CREATE INDEX IF NOT EXISTS idx_doomscrolling_block_events_source
+        ON doomscrolling_block_events(source_type, source_key, occurred_at);
+    CREATE TABLE IF NOT EXISTS doomscrolling_block_event_rule_snapshots (
+        block_event_id TEXT PRIMARY KEY REFERENCES doomscrolling_block_events(id) ON DELETE CASCADE,
+        rule_id TEXT,
+        rule_kind TEXT CHECK (
+            rule_kind IS NULL OR
+            rule_kind IN ('domain', 'url_pattern', 'category', 'custom_category', 'usage_limit', 'desktop_app')
+        ),
+        rule_label TEXT,
+        environment_id TEXT,
+        blocker_mode TEXT CHECK (
+            blocker_mode IS NULL OR
+            blocker_mode IN ('blacklist', 'whitelist', 'limit')
+        )
+    );
+";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -131,6 +170,8 @@ struct RuntimeState {
     paused: bool,
     #[serde(default)]
     pause_reason: Option<String>,
+    #[serde(default)]
+    active_run_id: Option<String>,
     phase: String,
     remaining_seconds: Option<i64>,
     updated_at: String,
@@ -1567,11 +1608,12 @@ fn limit_state_is_fresh(state: &LimitState, vault_path: Option<&Path>) -> bool {
 }
 
 fn log_block_event(snapshot: &StateSnapshot, host: &str, matched_rule_name: Option<&str>) {
+    let occurred_at = now_utc().to_rfc3339_opts(SecondsFormat::Millis, true);
     let Some(config_dir) = &snapshot.config_dir else {
         return;
     };
     let event = serde_json::json!({
-        "occurredAt": now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
+        "occurredAt": occurred_at,
         "urlHost": host,
         "phase": snapshot.runtime.as_ref().map(|state| state.phase.as_str()).unwrap_or("inactive"),
         "ruleNameSnapshot": matched_rule_name,
@@ -1586,16 +1628,161 @@ fn log_block_event(snapshot: &StateSnapshot, host: &str, matched_rule_name: Opti
             let _ = writeln!(file, "{line}");
         }
     }
+    if let Err(err) =
+        record_block_event_in_database(snapshot, &occurred_at, host, matched_rule_name)
+    {
+        eprintln!("failed to record doomscrolling block event: {err}");
+    }
+}
+
+fn record_block_event_in_database(
+    snapshot: &StateSnapshot,
+    occurred_at: &str,
+    host: &str,
+    matched_rule_name: Option<&str>,
+) -> Result<(), String> {
+    let vault_path = snapshot
+        .vault_path
+        .as_deref()
+        .ok_or_else(|| "active Ganbaru AI folder is unavailable".to_string())?;
+    let db_path = usage_db_path(vault_path, snapshot.limit_state.as_ref());
+    if !db_path.exists() {
+        return Err("usage database is unavailable".to_string());
+    }
+    let source_key =
+        normalize_host_rule(host).ok_or_else(|| "block event host is invalid".to_string())?;
+    let phase = block_event_phase(snapshot.runtime.as_ref());
+    let run_id = phase
+        .as_deref()
+        .and(snapshot.runtime.as_ref())
+        .and_then(|runtime| runtime.active_run_id.clone());
+    let decision = block_event_decision(matched_rule_name);
+    let rule_kind = block_event_rule_kind(matched_rule_name);
+    let blocker_mode = block_event_mode(&snapshot.config, decision);
+    let event_nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    let event_id = format!("block-{event_nonce}-{}", std::process::id());
+
+    tauri::async_runtime::block_on(async move {
+        let db_url = format!(
+            "sqlite:{}",
+            db_path.to_str().ok_or_else(|| {
+                "usage database path contains non-utf8 characters".to_string()
+            })?
+        );
+        let options = SqliteConnectOptions::from_str(&db_url)
+            .map_err(|e| format!("parse usage database url: {e}"))?;
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .map_err(|e| format!("connect usage database: {e}"))?;
+        raw_sql("PRAGMA busy_timeout=5000")
+            .execute(&pool)
+            .await
+            .map_err(|e| format!("usage database busy timeout: {e}"))?;
+        raw_sql(BLOCK_EVENT_TABLE_SQL)
+            .execute(&pool)
+            .await
+            .map_err(|e| format!("ensure block event tables: {e}"))?;
+        sqlx::query(
+            "INSERT OR IGNORE INTO doomscrolling_block_events
+                (id, run_id, segment_id, occurred_at, source_type, source_key,
+                 display_name, phase, decision, rule_id, category_id)
+             VALUES (?, ?, NULL, ?, 'browser', ?, ?, ?, ?, NULL, NULL)",
+        )
+        .bind(&event_id)
+        .bind(&run_id)
+        .bind(occurred_at)
+        .bind(&source_key)
+        .bind(&source_key)
+        .bind(&phase)
+        .bind(decision)
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("record block event: {e}"))?;
+        if matched_rule_name.is_some() || rule_kind.is_some() || blocker_mode.is_some() {
+            sqlx::query(
+                "INSERT OR REPLACE INTO doomscrolling_block_event_rule_snapshots
+                    (block_event_id, rule_id, rule_kind, rule_label, environment_id, blocker_mode)
+                 VALUES (?, NULL, ?, ?, NULL, ?)",
+            )
+            .bind(&event_id)
+            .bind(rule_kind)
+            .bind(matched_rule_name)
+            .bind(blocker_mode)
+            .execute(&pool)
+            .await
+            .map_err(|e| format!("record block event rule snapshot: {e}"))?;
+        }
+        pool.close().await;
+        Ok(())
+    })
+}
+
+fn block_event_phase(runtime: Option<&RuntimeState>) -> Option<String> {
+    let runtime = runtime?;
+    if runtime.paused {
+        return match runtime.pause_reason.as_deref() {
+            Some("idle") => Some("idle_pause".to_string()),
+            Some("suspend") => Some("suspend_pause".to_string()),
+            Some("manual") | None => Some("manual_pause".to_string()),
+            Some(_) => None,
+        };
+    }
+    match runtime.phase.as_str() {
+        "focus" | "short_break" | "long_break" => Some(runtime.phase.clone()),
+        _ => None,
+    }
+}
+
+fn block_event_decision(matched_rule_name: Option<&str>) -> &'static str {
+    if matched_rule_name
+        .is_some_and(|rule| rule.starts_with("daily limit:") || rule.starts_with("weekly limit:"))
+    {
+        "limit_exhausted"
+    } else {
+        "blocked"
+    }
+}
+
+fn block_event_rule_kind(matched_rule_name: Option<&str>) -> Option<&'static str> {
+    let rule = matched_rule_name?;
+    if rule.starts_with("daily limit:") || rule.starts_with("weekly limit:") {
+        Some("usage_limit")
+    } else if rule.starts_with("category:") {
+        Some("category")
+    } else if rule.starts_with("custom stack:") {
+        Some("custom_category")
+    } else if rule.starts_with("blocked host:") || rule == "not in whitelist" {
+        Some("domain")
+    } else {
+        None
+    }
+}
+
+fn block_event_mode(config: &DoomscrollingConfig, decision: &str) -> Option<&'static str> {
+    if decision == "limit_exhausted" {
+        return Some("limit");
+    }
+    match config.mode {
+        DoomscrollingMode::Blacklist => Some("blacklist"),
+        DoomscrollingMode::Whitelist => Some("whitelist"),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        decide_url, host_from_url, host_matches_rule, runtime_status_at, should_enforce,
+        block_event_decision, block_event_phase, block_event_rule_kind, decide_url, host_from_url,
+        host_matches_rule, record_block_event_in_database, runtime_status_at, should_enforce,
         DoomscrollingConfig, DoomscrollingMode, NativeResponse, RuntimeState, StateSnapshot,
         UsageLimitsConfig,
     };
     use chrono::{DateTime, SecondsFormat, Utc};
+    use sqlx::Row;
 
     fn config() -> DoomscrollingConfig {
         DoomscrollingConfig {
@@ -1649,10 +1836,124 @@ mod tests {
             active: true,
             paused,
             pause_reason: paused.then(|| "manual".to_string()),
+            active_run_id: Some("run-1".to_string()),
             phase: phase.to_string(),
             remaining_seconds: Some(60),
             updated_at,
         }
+    }
+
+    #[test]
+    fn maps_block_event_metadata() {
+        let focus = runtime_for_phase("focus", false);
+        let idle_pause = RuntimeState {
+            paused: true,
+            pause_reason: Some("idle".to_string()),
+            ..runtime_for_phase("focus", false)
+        };
+
+        assert_eq!(block_event_phase(Some(&focus)).as_deref(), Some("focus"));
+        assert_eq!(
+            block_event_phase(Some(&idle_pause)).as_deref(),
+            Some("idle_pause")
+        );
+        assert_eq!(
+            block_event_decision(Some("daily limit: YouTube")),
+            "limit_exhausted"
+        );
+        assert_eq!(
+            block_event_rule_kind(Some("custom stack: Research traps")),
+            Some("custom_category")
+        );
+        assert_eq!(
+            block_event_rule_kind(Some("blocked host: youtube.com")),
+            Some("domain")
+        );
+    }
+
+    #[test]
+    fn records_block_event_to_sqlite_without_full_url() {
+        let vault_path = std::env::temp_dir().join(format!(
+            "ganbaru-ai-native-block-event-{}-{}",
+            std::process::id(),
+            super::now_epoch_ms()
+        ));
+        let _ = std::fs::remove_dir_all(&vault_path);
+        std::fs::create_dir_all(&vault_path).unwrap();
+        let db_path = vault_path.join("ganbaru-ai.sqlite");
+        std::fs::File::create(&db_path).unwrap();
+        let db_url = format!("sqlite:{}", db_path.to_string_lossy());
+        tauri::async_runtime::block_on(async {
+            let pool = sqlx::sqlite::SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect(&db_url)
+                .await
+                .unwrap();
+            sqlx::raw_sql(
+                "CREATE TABLE pomodoro_runs (id TEXT PRIMARY KEY);
+                 CREATE TABLE pomodoro_segments (id TEXT PRIMARY KEY);",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            pool.close().await;
+        });
+
+        let mut runtime = runtime_for_phase("focus", false);
+        runtime.active_run_id = None;
+        let snapshot = StateSnapshot {
+            config_dir: None,
+            vault_path: Some(vault_path.clone()),
+            config: config(),
+            runtime: Some(runtime),
+            limit_state: None,
+        };
+
+        let rejected = record_block_event_in_database(
+            &snapshot,
+            "2026-06-10T10:00:00.000Z",
+            "https://youtube.com/watch",
+            Some("blocked host: youtube.com"),
+        );
+        assert!(rejected.is_err());
+
+        record_block_event_in_database(
+            &snapshot,
+            "2026-06-10T10:00:00.000Z",
+            "youtube.com",
+            Some("blocked host: youtube.com"),
+        )
+        .unwrap();
+
+        tauri::async_runtime::block_on(async {
+            let pool = sqlx::sqlite::SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect(&db_url)
+                .await
+                .unwrap();
+            let row = sqlx::query(
+                "SELECT e.source_key, e.decision, e.phase, s.rule_kind, s.blocker_mode
+                 FROM doomscrolling_block_events e
+                 JOIN doomscrolling_block_event_rule_snapshots s ON s.block_event_id = e.id",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+            let source_key: String = row.try_get("source_key").unwrap();
+            let decision: String = row.try_get("decision").unwrap();
+            let phase: String = row.try_get("phase").unwrap();
+            let rule_kind: String = row.try_get("rule_kind").unwrap();
+            let blocker_mode: String = row.try_get("blocker_mode").unwrap();
+            assert_eq!(source_key, "youtube.com");
+            assert_eq!(decision, "blocked");
+            assert_eq!(phase, "focus");
+            assert_eq!(rule_kind, "domain");
+            assert_eq!(blocker_mode, "blacklist");
+
+            pool.close().await;
+        });
+        let _ = std::fs::remove_dir_all(&vault_path);
     }
 
     #[test]

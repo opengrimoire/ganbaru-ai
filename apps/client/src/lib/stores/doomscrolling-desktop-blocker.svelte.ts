@@ -1,6 +1,7 @@
 import {
   closeDoomscrollingDesktopApp,
   listBlockedDoomscrollingDesktopAppMatches,
+  recordDoomscrollingDesktopBlockEvent,
   showDoomscrollingDesktopBlockNotification,
   type DoomscrollingDesktopAppRulePayload,
   type DoomscrollingRunningDesktopAppMatch,
@@ -46,6 +47,13 @@ async function enforceBlockedMatch(match: DoomscrollingRunningDesktopAppMatch): 
   if (closingProcessIds.has(match.processId)) return;
   closingProcessIds.add(match.processId);
   try {
+    recordDoomscrollingDesktopBlockEvent({
+      appName: match.appName,
+      processName: match.processName,
+      processId: match.processId,
+    }).catch((err) => {
+      console.warn(`Failed to record blocked desktop app ${match.appName}:`, err);
+    });
     await closeDoomscrollingDesktopApp(match.processId);
     if (shouldNotifyClosedApp()) {
       await showDoomscrollingDesktopBlockNotification(match.appName);

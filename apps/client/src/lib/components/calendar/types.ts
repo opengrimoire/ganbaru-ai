@@ -60,14 +60,7 @@ export interface RecurrenceConfig {
 
 export type RecurringScope = "this" | "following" | "all";
 
-export interface PomodoroConfig {
-  focusDurationMinutes: number;
-  shortBreakMinutes: number;
-  longBreakMinutes: number;
-  pomodoroCount: number;
-  /** Minutes of idle (no mouse/keyboard) before auto-pausing. null = disabled. */
-  idleTimeoutMinutes: number | null;
-}
+export type { PomodoroConfig } from "$lib/pomodoro/rhythm";
 
 export type EventTransparency = "opaque" | "transparent";
 export type EventStatus = "confirmed" | "tentative" | "cancelled";
@@ -303,7 +296,7 @@ export type SegmentPhase = "focus" | "short_break" | "long_break";
 export type SegmentStatus = "planned" | "active" | "completed" | "skipped" | "interrupted";
 
 export interface PlannedSegment {
-  cycleNumber: number;
+  rhythmPosition: number;
   phase: SegmentPhase;
   startOffsetMinutes: number;
   endOffsetMinutes: number;
@@ -322,7 +315,7 @@ export interface PersistedSegment {
   eventId: string;
   eventDate: string;
   runId: string;
-  cycleNumber: number;
+  rhythmPosition: number;
   phase: SegmentPhase;
   plannedStart: string;
   plannedEnd: string;
@@ -352,3 +345,4 @@ export interface DragState {
   columnWidth: number;
   startColumnIndex: number;
 }
+import type { PomodoroConfig } from "$lib/pomodoro/rhythm";

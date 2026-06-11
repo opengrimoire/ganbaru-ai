@@ -27,18 +27,36 @@ import {
   type ReconfigureInput,
   type IdleCheckInput,
 } from "./pomodoro-machine";
+import {
+  clonePomodoroConfig,
+  createCustomCountPomodoroConfig,
+  type CountPomodoroRhythm,
+} from "$lib/pomodoro/rhythm";
 
 // Helpers
 
 const NOW = 1_700_000_000_000;
+const DEFAULT_FOCUS_SECONDS = 40 * TIME_MULTIPLIER;
+
+function countConfig(
+  overrides: Partial<Omit<CountPomodoroRhythm, "kind">> = {},
+): PomodoroConfig {
+  const config = createCustomCountPomodoroConfig({
+    focusDurationMinutes: 40,
+    shortBreakMinutes: 5,
+    longBreakMinutes: 10,
+    longBreakAfterFocusCount: 4,
+    ...overrides,
+  });
+  return config;
+}
 
 function makeSnapshot(overrides: Partial<TimerSnapshot> = {}): TimerSnapshot {
   return {
     phase: "focus",
     remainingSeconds: 2400,
-    currentCycle: 1,
-    totalCycles: 4,
-    config: { ...DEFAULT_CONFIG },
+    currentRhythmPosition: 1,
+    config: clonePomodoroConfig(DEFAULT_CONFIG),
     skipNextBreak: false,
     notificationShown: false,
     phaseEndTime: NOW + 2400_000,
@@ -54,23 +72,23 @@ function makeSnapshot(overrides: Partial<TimerSnapshot> = {}): TimerSnapshot {
 
 describe("configEquals", () => {
   it("returns true for identical configs", () => {
-    expect(configEquals({ ...DEFAULT_CONFIG }, { ...DEFAULT_CONFIG })).toBe(true);
+    expect(configEquals(clonePomodoroConfig(DEFAULT_CONFIG), clonePomodoroConfig(DEFAULT_CONFIG))).toBe(true);
   });
 
   it("returns false when focusMinutes differs", () => {
-    expect(configEquals(DEFAULT_CONFIG, { ...DEFAULT_CONFIG, focusMinutes: 25 })).toBe(false);
+    expect(configEquals(DEFAULT_CONFIG, countConfig({ focusDurationMinutes: 25 }))).toBe(false);
   });
 
   it("returns false when shortBreakMinutes differs", () => {
-    expect(configEquals(DEFAULT_CONFIG, { ...DEFAULT_CONFIG, shortBreakMinutes: 10 })).toBe(false);
+    expect(configEquals(DEFAULT_CONFIG, countConfig({ shortBreakMinutes: 10 }))).toBe(false);
   });
 
   it("returns false when longBreakMinutes differs", () => {
-    expect(configEquals(DEFAULT_CONFIG, { ...DEFAULT_CONFIG, longBreakMinutes: 20 })).toBe(false);
+    expect(configEquals(DEFAULT_CONFIG, countConfig({ longBreakMinutes: 20 }))).toBe(false);
   });
 
-  it("returns false when cyclesBeforeLongBreak differs", () => {
-    expect(configEquals(DEFAULT_CONFIG, { ...DEFAULT_CONFIG, cyclesBeforeLongBreak: 2 })).toBe(false);
+  it("returns false when longBreakAfterFocusCount differs", () => {
+    expect(configEquals(DEFAULT_CONFIG, countConfig({ longBreakAfterFocusCount: 2 }))).toBe(false);
   });
 });
 
@@ -104,23 +122,23 @@ describe("sound cadence helpers", () => {
 // ============================================================
 
 describe("phaseDurationSeconds", () => {
-  const cfg: PomodoroConfig = {
-    focusMinutes: 25,
+  const cfg = countConfig({
+    focusDurationMinutes: 25,
     shortBreakMinutes: 5,
     longBreakMinutes: 15,
-    cyclesBeforeLongBreak: 4,
-  };
+    longBreakAfterFocusCount: 4,
+  });
 
   it("returns focusMinutes * 60 for focus", () => {
-    expect(phaseDurationSeconds("focus", cfg)).toBe(1500);
+    expect(phaseDurationSeconds("focus", cfg, 1)).toBe(1500);
   });
 
   it("returns shortBreakMinutes * 60 for short_break", () => {
-    expect(phaseDurationSeconds("short_break", cfg)).toBe(300);
+    expect(phaseDurationSeconds("short_break", cfg, 1)).toBe(300);
   });
 
   it("returns longBreakMinutes * 60 for long_break", () => {
-    expect(phaseDurationSeconds("long_break", cfg)).toBe(900);
+    expect(phaseDurationSeconds("long_break", cfg, 4)).toBe(900);
   });
 });
 
@@ -150,8 +168,8 @@ describe("isPomodoroSessionActive", () => {
     activeBlockEndMs: NOW + 60_000,
     blockExpired: false,
     isRunning: false,
-    remainingSeconds: DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER,
-    totalSeconds: DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER,
+    remainingSeconds: DEFAULT_FOCUS_SECONDS,
+    totalSeconds: DEFAULT_FOCUS_SECONDS,
     nowMs: NOW,
   };
 
@@ -206,8 +224,8 @@ describe("canPauseResumePomodoro", () => {
     activeBlockEndMs: NOW + 60_000,
     blockExpired: false,
     isRunning: true,
-    remainingSeconds: DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER,
-    totalSeconds: DEFAULT_CONFIG.focusMinutes * TIME_MULTIPLIER,
+    remainingSeconds: DEFAULT_FOCUS_SECONDS,
+    totalSeconds: DEFAULT_FOCUS_SECONDS,
     nowMs: NOW,
     suspendedAway: false,
     idlePaused: false,
@@ -548,71 +566,68 @@ describe("decideAdvancePhase", () => {
       expect(result.kind).toBe("skip_break_to_focus");
     });
 
-    it("skip: advances cycle when currentCycle < totalCycles", () => {
+    it("skip: advances to the next rhythm position", () => {
       const snap = makeSnapshot({
         phase: "focus",
         skipNextBreak: true,
-        currentCycle: 2,
-        totalCycles: 4,
+        currentRhythmPosition: 2,
       });
       const result = decideAdvancePhase(snap);
       expect(result.kind).toBe("skip_break_to_focus");
       if (result.kind === "skip_break_to_focus") {
-        expect(result.nextCycle).toBe(3);
+        expect(result.nextRhythmPosition).toBe(3);
       }
     });
 
-    it("skip: resets cycle to 1 when currentCycle >= totalCycles", () => {
+    it("skip: wraps to position 1 at the end of the rhythm", () => {
       const snap = makeSnapshot({
         phase: "focus",
         skipNextBreak: true,
-        currentCycle: 4,
-        totalCycles: 4,
+        currentRhythmPosition: 4,
       });
       const result = decideAdvancePhase(snap);
       if (result.kind === "skip_break_to_focus") {
-        expect(result.nextCycle).toBe(1);
+        expect(result.nextRhythmPosition).toBe(1);
       }
     });
 
-    it("returns focus_to_long_break when currentCycle equals totalCycles", () => {
+    it("returns focus_to_long_break at the long-break position", () => {
       const snap = makeSnapshot({
         phase: "focus",
-        currentCycle: 4,
-        totalCycles: 4,
+        currentRhythmPosition: 4,
       });
       const result = decideAdvancePhase(snap);
       expect(result.kind).toBe("focus_to_long_break");
     });
 
-    it("returns focus_to_long_break when currentCycle exceeds totalCycles", () => {
+    it("wraps currentRhythmPosition when it exceeds the rhythm length", () => {
       const snap = makeSnapshot({
         phase: "focus",
-        currentCycle: 5,
-        totalCycles: 4,
+        currentRhythmPosition: 5,
       });
       const result = decideAdvancePhase(snap);
-      expect(result.kind).toBe("focus_to_long_break");
+      expect(result.kind).toBe("focus_to_short_break");
+      if (result.kind === "focus_to_short_break") {
+        expect(result.rhythmPosition).toBe(1);
+      }
     });
 
-    it("long break sets nextCycle to 1", () => {
+    it("long break keeps the break owed position", () => {
       const snap = makeSnapshot({
         phase: "focus",
-        currentCycle: 4,
-        totalCycles: 4,
+        currentRhythmPosition: 4,
       });
       const result = decideAdvancePhase(snap);
       if (result.kind === "focus_to_long_break") {
-        expect(result.nextCycle).toBe(1);
+        expect(result.rhythmPosition).toBe(4);
       }
     });
 
     it("long break uses longBreakMinutes for duration", () => {
       const snap = makeSnapshot({
         phase: "focus",
-        currentCycle: 4,
-        totalCycles: 4,
-        config: { ...DEFAULT_CONFIG, longBreakMinutes: 15 },
+        currentRhythmPosition: 4,
+        config: countConfig({ longBreakMinutes: 15 }),
       });
       const result = decideAdvancePhase(snap);
       if (result.kind === "focus_to_long_break") {
@@ -620,33 +635,31 @@ describe("decideAdvancePhase", () => {
       }
     });
 
-    it("returns focus_to_short_break when currentCycle < totalCycles", () => {
+    it("returns focus_to_short_break before the long-break position", () => {
       const snap = makeSnapshot({
         phase: "focus",
-        currentCycle: 2,
-        totalCycles: 4,
+        currentRhythmPosition: 2,
       });
       const result = decideAdvancePhase(snap);
       expect(result.kind).toBe("focus_to_short_break");
     });
 
-    it("short break sets nextCycle to currentCycle + 1", () => {
+    it("short break keeps the break owed position", () => {
       const snap = makeSnapshot({
         phase: "focus",
-        currentCycle: 2,
-        totalCycles: 4,
+        currentRhythmPosition: 2,
       });
       const result = decideAdvancePhase(snap);
       if (result.kind === "focus_to_short_break") {
-        expect(result.nextCycle).toBe(3);
+        expect(result.rhythmPosition).toBe(2);
       }
     });
 
-    it("handles totalCycles = 1 (every break is long)", () => {
+    it("handles one-position count rhythms where every break is long", () => {
       const snap = makeSnapshot({
         phase: "focus",
-        currentCycle: 1,
-        totalCycles: 1,
+        currentRhythmPosition: 1,
+        config: countConfig({ longBreakAfterFocusCount: 1 }),
       });
       const result = decideAdvancePhase(snap);
       expect(result.kind).toBe("focus_to_long_break");
@@ -669,7 +682,7 @@ describe("decideAdvancePhase", () => {
     it("uses focusMinutes for duration", () => {
       const snap = makeSnapshot({
         phase: "short_break",
-        config: { ...DEFAULT_CONFIG, focusMinutes: 25 },
+        config: countConfig({ focusDurationMinutes: 25 }),
       });
       const result = decideAdvancePhase(snap);
       if (result.kind === "break_to_focus") {
@@ -681,7 +694,7 @@ describe("decideAdvancePhase", () => {
       const snap = makeSnapshot({ phase: "long_break" });
       const result = decideAdvancePhase(snap);
       if (result.kind === "break_to_focus") {
-        expect(result.remainingSeconds).toBe(DEFAULT_CONFIG.focusMinutes * 60);
+        expect(result.remainingSeconds).toBe(DEFAULT_FOCUS_SECONDS);
       }
     });
   });
@@ -693,11 +706,11 @@ describe("decideAdvancePhase", () => {
 
 describe("decideTransition", () => {
   const baseInput: TransitionInput = {
-    previousConfig: { ...DEFAULT_CONFIG },
-    newConfig: { ...DEFAULT_CONFIG },
+    previousConfig: clonePomodoroConfig(DEFAULT_CONFIG),
+    newConfig: clonePomodoroConfig(DEFAULT_CONFIG),
     phase: "focus",
     remainingSeconds: 1200, // 20 min left of 40 min focus -> 20 min accumulated
-    currentCycle: 1,
+    currentRhythmPosition: 1,
     blockExpired: false,
   };
 
@@ -707,7 +720,7 @@ describe("decideTransition", () => {
       const input: TransitionInput = {
         ...baseInput,
         remainingSeconds: 0,
-        newConfig: { ...DEFAULT_CONFIG, focusMinutes: 40 },
+        newConfig: countConfig({ focusDurationMinutes: 40 }),
       };
       const result = decideTransition(input);
       expect(result.kind).toBe("trigger_break");
@@ -718,18 +731,18 @@ describe("decideTransition", () => {
       const input: TransitionInput = {
         ...baseInput,
         remainingSeconds: 0,
-        newConfig: { ...DEFAULT_CONFIG, focusMinutes: 25 },
+        newConfig: countConfig({ focusDurationMinutes: 25 }),
       };
       const result = decideTransition(input);
       expect(result.kind).toBe("trigger_break");
     });
 
-    it("returns short_break when currentCycle < newConfig.cyclesBeforeLongBreak", () => {
+    it("returns short_break before the long-break position", () => {
       const input: TransitionInput = {
         ...baseInput,
         remainingSeconds: 0,
-        currentCycle: 1,
-        newConfig: { ...DEFAULT_CONFIG, focusMinutes: 25, cyclesBeforeLongBreak: 4 },
+        currentRhythmPosition: 1,
+        newConfig: countConfig({ focusDurationMinutes: 25, longBreakAfterFocusCount: 4 }),
       };
       const result = decideTransition(input);
       if (result.kind === "trigger_break") {
@@ -737,12 +750,12 @@ describe("decideTransition", () => {
       }
     });
 
-    it("returns long_break when currentCycle >= newConfig.cyclesBeforeLongBreak", () => {
+    it("returns long_break at the long-break position", () => {
       const input: TransitionInput = {
         ...baseInput,
         remainingSeconds: 0,
-        currentCycle: 4,
-        newConfig: { ...DEFAULT_CONFIG, focusMinutes: 25, cyclesBeforeLongBreak: 4 },
+        currentRhythmPosition: 4,
+        newConfig: countConfig({ focusDurationMinutes: 25, longBreakAfterFocusCount: 4 }),
       };
       const result = decideTransition(input);
       if (result.kind === "trigger_break") {
@@ -750,16 +763,16 @@ describe("decideTransition", () => {
       }
     });
 
-    it("long break resets cycle to 1", () => {
+    it("long break keeps the owed rhythm position", () => {
       const input: TransitionInput = {
         ...baseInput,
         remainingSeconds: 0,
-        currentCycle: 4,
-        newConfig: { ...DEFAULT_CONFIG, focusMinutes: 25, cyclesBeforeLongBreak: 4 },
+        currentRhythmPosition: 4,
+        newConfig: countConfig({ focusDurationMinutes: 25, longBreakAfterFocusCount: 4 }),
       };
       const result = decideTransition(input);
       if (result.kind === "trigger_break") {
-        expect(result.nextCycle).toBe(1);
+        expect(result.rhythmPosition).toBe(4);
       }
     });
 
@@ -767,12 +780,12 @@ describe("decideTransition", () => {
       const input: TransitionInput = {
         ...baseInput,
         remainingSeconds: 0,
-        currentCycle: 2,
-        newConfig: { ...DEFAULT_CONFIG, focusMinutes: 25, cyclesBeforeLongBreak: 4 },
+        currentRhythmPosition: 2,
+        newConfig: countConfig({ focusDurationMinutes: 25, longBreakAfterFocusCount: 4 }),
       };
       const result = decideTransition(input);
       if (result.kind === "trigger_break") {
-        expect(result.nextCycle).toBe(3);
+        expect(result.rhythmPosition).toBe(2);
       }
     });
 
@@ -781,7 +794,7 @@ describe("decideTransition", () => {
       const input: TransitionInput = {
         ...baseInput,
         remainingSeconds: 600,
-        newConfig: { ...DEFAULT_CONFIG, focusMinutes: 25 },
+        newConfig: countConfig({ focusDurationMinutes: 25 }),
       };
       const result = decideTransition(input);
       if (result.kind === "trigger_break") {
@@ -820,7 +833,7 @@ describe("decideTransition", () => {
       const input: TransitionInput = {
         ...baseInput,
         remainingSeconds: 2340,
-        newConfig: { ...DEFAULT_CONFIG, focusMinutes: 2 },
+        newConfig: countConfig({ focusDurationMinutes: 2 }),
       };
       const result = decideTransition(input);
       if (result.kind === "continue_focus") {
@@ -832,7 +845,7 @@ describe("decideTransition", () => {
       // 40min old, 1200s remaining -> 20min accumulated. New 60min -> 40min remaining
       const input: TransitionInput = {
         ...baseInput,
-        newConfig: { ...DEFAULT_CONFIG, focusMinutes: 60 },
+        newConfig: countConfig({ focusDurationMinutes: 60 }),
       };
       const result = decideTransition(input);
       if (result.kind === "continue_focus") {
@@ -845,7 +858,7 @@ describe("decideTransition", () => {
       const input: TransitionInput = {
         ...baseInput,
         remainingSeconds: 1800,
-        newConfig: { ...DEFAULT_CONFIG, focusMinutes: 25 },
+        newConfig: countConfig({ focusDurationMinutes: 25 }),
       };
       const result = decideTransition(input);
       if (result.kind === "continue_focus") {
@@ -858,7 +871,7 @@ describe("decideTransition", () => {
         ...baseInput,
         remainingSeconds: 0,
         elapsedFocusSeconds: 10 * TIME_MULTIPLIER,
-        newConfig: { ...DEFAULT_CONFIG, focusMinutes: 25 },
+        newConfig: countConfig({ focusDurationMinutes: 25 }),
       };
       const result = decideTransition(input);
       expect(result.kind).toBe("continue_focus");
@@ -894,7 +907,7 @@ describe("decideTransition", () => {
         ...baseInput,
         phase: "short_break",
         blockExpired: true,
-        newConfig: { ...DEFAULT_CONFIG, focusMinutes: 25 },
+        newConfig: countConfig({ focusDurationMinutes: 25 }),
       };
       const result = decideTransition(input);
       if (result.kind === "fresh_start") {
@@ -928,7 +941,7 @@ describe("decideTransition", () => {
       const input: TransitionInput = {
         ...baseInput,
         remainingSeconds: 2400,
-        newConfig: { ...DEFAULT_CONFIG, focusMinutes: 0 },
+        newConfig: countConfig({ focusDurationMinutes: 0 }),
       };
       const result = decideTransition(input);
       // accumulated = 40*60 - 2400 = 0, threshold = 0, 0 >= 0 -> trigger
@@ -940,7 +953,7 @@ describe("decideTransition", () => {
       const input: TransitionInput = {
         ...baseInput,
         remainingSeconds: 3000, // more than 40*60=2400
-        newConfig: { ...DEFAULT_CONFIG, focusMinutes: 25 },
+        newConfig: countConfig({ focusDurationMinutes: 25 }),
       };
       const result = decideTransition(input);
       // accumulated = max(0, 2400 - 3000) = 0, threshold = 1500 -> continue
@@ -971,8 +984,8 @@ describe("decideStartFromBlock", () => {
   const baseInput: StartFromBlockInput = {
     currentBlockId: "block-1",
     incomingBlockId: "block-1",
-    incomingConfig: { ...DEFAULT_CONFIG },
-    currentConfig: { ...DEFAULT_CONFIG },
+    incomingConfig: clonePomodoroConfig(DEFAULT_CONFIG),
+    currentConfig: clonePomodoroConfig(DEFAULT_CONFIG),
     currentEndMs: NOW + 3600_000,
     incomingEndMs: NOW + 3600_000,
     hasOvertimeInterval: false,
@@ -1009,14 +1022,14 @@ describe("decideStartFromBlock", () => {
       const result = decideStartFromBlock({
         ...baseInput,
         hasOvertimeInterval: true,
-        incomingConfig: { ...DEFAULT_CONFIG, focusMinutes: 25 },
+        incomingConfig: countConfig({ focusDurationMinutes: 25 }),
         incomingEndMs: NOW + 7200_000,
       });
       expect(result.kind).toBe("update_end_only");
     });
 
     it("returns reconfigure when config changed and not in overtime", () => {
-      const newCfg = { ...DEFAULT_CONFIG, focusMinutes: 25 };
+      const newCfg = countConfig({ focusDurationMinutes: 25 });
       const result = decideStartFromBlock({
         ...baseInput,
         incomingConfig: newCfg,
@@ -1040,10 +1053,10 @@ describe("decideStartFromBlock", () => {
     });
 
     it("config equality uses all four fields", () => {
-      // Only cyclesBeforeLongBreak differs
+      // Only longBreakAfterFocusCount differs
       const result = decideStartFromBlock({
         ...baseInput,
-        incomingConfig: { ...DEFAULT_CONFIG, cyclesBeforeLongBreak: 2 },
+        incomingConfig: countConfig({ longBreakAfterFocusCount: 2 }),
       });
       expect(result.kind).toBe("reconfigure");
     });
@@ -1114,8 +1127,9 @@ describe("decideReconfigure", () => {
   const baseInput: ReconfigureInput = {
     phase: "focus",
     remainingSeconds: 1200, // 20 min left of 40 min = 20 min elapsed
-    currentConfig: { ...DEFAULT_CONFIG },
-    newConfig: { ...DEFAULT_CONFIG },
+    currentConfig: clonePomodoroConfig(DEFAULT_CONFIG),
+    newConfig: clonePomodoroConfig(DEFAULT_CONFIG),
+    currentRhythmPosition: 1,
     hasOvertimeInterval: false,
   };
 
@@ -1123,7 +1137,7 @@ describe("decideReconfigure", () => {
     // 20 min elapsed. New focus = 50 min -> 30 min remaining
     const result = decideReconfigure({
       ...baseInput,
-      newConfig: { ...DEFAULT_CONFIG, focusMinutes: 50 },
+      newConfig: countConfig({ focusDurationMinutes: 50 }),
     });
     expect(result.newRemainingSeconds).toBe(1800);
   });
@@ -1133,7 +1147,7 @@ describe("decideReconfigure", () => {
       ...baseInput,
       remainingSeconds: 0,
       elapsedSeconds: 10 * TIME_MULTIPLIER,
-      newConfig: { ...DEFAULT_CONFIG, focusMinutes: 25 },
+      newConfig: countConfig({ focusDurationMinutes: 25 }),
     });
     expect(result.newRemainingSeconds).toBe(15 * TIME_MULTIPLIER);
   });
@@ -1144,7 +1158,7 @@ describe("decideReconfigure", () => {
     const result = decideReconfigure({
       ...baseInput,
       remainingSeconds: 3000,
-      newConfig: { ...DEFAULT_CONFIG, focusMinutes: 25 },
+      newConfig: countConfig({ focusDurationMinutes: 25 }),
     });
     expect(result.newRemainingSeconds).toBe(1500);
   });
@@ -1153,7 +1167,7 @@ describe("decideReconfigure", () => {
     // 20 min elapsed. New focus = 15 min -> max(0, 900-1200) = 0
     const result = decideReconfigure({
       ...baseInput,
-      newConfig: { ...DEFAULT_CONFIG, focusMinutes: 15 },
+      newConfig: countConfig({ focusDurationMinutes: 15 }),
     });
     expect(result.newRemainingSeconds).toBe(0);
   });
@@ -1162,7 +1176,7 @@ describe("decideReconfigure", () => {
     const result = decideReconfigure({
       ...baseInput,
       hasOvertimeInterval: true,
-      newConfig: { ...DEFAULT_CONFIG, focusMinutes: 50 },
+      newConfig: countConfig({ focusDurationMinutes: 50 }),
     });
     expect(result.exitOvertime).toBe(true);
   });
@@ -1171,7 +1185,7 @@ describe("decideReconfigure", () => {
     const result = decideReconfigure({
       ...baseInput,
       hasOvertimeInterval: true,
-      newConfig: { ...DEFAULT_CONFIG, focusMinutes: 15 },
+      newConfig: countConfig({ focusDurationMinutes: 15 }),
     });
     expect(result.exitOvertime).toBe(false);
   });
@@ -1180,7 +1194,7 @@ describe("decideReconfigure", () => {
     const result = decideReconfigure({
       ...baseInput,
       hasOvertimeInterval: false,
-      newConfig: { ...DEFAULT_CONFIG, focusMinutes: 50 },
+      newConfig: countConfig({ focusDurationMinutes: 50 }),
     });
     expect(result.exitOvertime).toBe(false);
   });
@@ -1188,7 +1202,7 @@ describe("decideReconfigure", () => {
   it("resets notification when focus and remaining > 60", () => {
     const result = decideReconfigure({
       ...baseInput,
-      newConfig: { ...DEFAULT_CONFIG, focusMinutes: 50 },
+      newConfig: countConfig({ focusDurationMinutes: 50 }),
     });
     expect(result.resetNotification).toBe(true);
   });
@@ -1198,7 +1212,7 @@ describe("decideReconfigure", () => {
       ...baseInput,
       phase: "short_break",
       remainingSeconds: 100,
-      newConfig: { ...DEFAULT_CONFIG, shortBreakMinutes: 10 },
+      newConfig: countConfig({ shortBreakMinutes: 10 }),
     });
     expect(result.resetNotification).toBe(false);
   });
@@ -1208,7 +1222,7 @@ describe("decideReconfigure", () => {
     const result = decideReconfigure({
       ...baseInput,
       remainingSeconds: 60, // 39m40s elapsed
-      newConfig: { ...DEFAULT_CONFIG, focusMinutes: 40 },
+      newConfig: countConfig({ focusDurationMinutes: 40 }),
     });
     expect(result.resetNotification).toBe(false);
   });
@@ -1217,7 +1231,7 @@ describe("decideReconfigure", () => {
     // 20 min elapsed. Old 40, new 60 -> 40 min remaining
     const result = decideReconfigure({
       ...baseInput,
-      newConfig: { ...DEFAULT_CONFIG, focusMinutes: 60 },
+      newConfig: countConfig({ focusDurationMinutes: 60 }),
     });
     expect(result.newRemainingSeconds).toBe(2400);
   });
@@ -1226,7 +1240,7 @@ describe("decideReconfigure", () => {
     // 20 min elapsed. Old 40, new 30 -> 10 min remaining
     const result = decideReconfigure({
       ...baseInput,
-      newConfig: { ...DEFAULT_CONFIG, focusMinutes: 30 },
+      newConfig: countConfig({ focusDurationMinutes: 30 }),
     });
     expect(result.newRemainingSeconds).toBe(600);
   });
@@ -1237,19 +1251,20 @@ describe("decideReconfigure", () => {
       ...baseInput,
       phase: "short_break",
       remainingSeconds: 180, // 3 min left of 5 min
-      newConfig: { ...DEFAULT_CONFIG, shortBreakMinutes: 10 },
+      newConfig: countConfig({ shortBreakMinutes: 10 }),
     });
     expect(result.newRemainingSeconds).toBe(480); // 10*60 - 2*60
   });
 
   it("handles long_break reconfigure", () => {
     // 5 min elapsed of 10 min break. New 20 min -> 15 min remaining
-    const result = decideReconfigure({
-      ...baseInput,
-      phase: "long_break",
-      remainingSeconds: 300, // 5 min left of 10 min
-      newConfig: { ...DEFAULT_CONFIG, longBreakMinutes: 20 },
-    });
+      const result = decideReconfigure({
+        ...baseInput,
+        phase: "long_break",
+        remainingSeconds: 300, // 5 min left of 10 min
+        currentRhythmPosition: 4,
+        newConfig: countConfig({ longBreakMinutes: 20 }),
+      });
     expect(result.newRemainingSeconds).toBe(900); // 20*60 - 5*60
   });
 

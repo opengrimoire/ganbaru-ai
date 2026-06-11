@@ -144,6 +144,8 @@ Archive rows do not FK to `calendars` or live iCalendar component rows. The arch
 Archive child data stays normalized, not JSON. Snapshot tables exist for pomodoro config, notifications, EXDATEs, RDATEs, categories, extended properties, organizer, attendees, alarms, recurrence overrides, and override extended properties:
 
 - `calendar_event_archive_pomodoro_configs`
+- `calendar_event_archive_pomodoro_config_count_rhythms`
+- `calendar_event_archive_pomodoro_config_sequence_steps`
 - `calendar_event_archive_notifications`
 - `calendar_event_archive_exdates`
 - `calendar_event_archive_rdates`
@@ -172,15 +174,19 @@ One row per timed calendar event with Pomodoro enabled. All-day events cannot ha
 | Field | Type | Description |
 |---|---|---|
 | `event_id` | UUID | Primary key and FK to `calendar_events` (CASCADE delete). |
-| `focus_duration_minutes` | integer | Focus period length. |
-| `short_break_minutes` | integer | Short break length. |
-| `long_break_minutes` | integer | Long break length. |
-| `pomodoro_count` | integer | Focus periods before a long break in the current simple count-based rhythm. |
+| `rhythm_kind` | enum | `count` or `sequence`. |
+| `rhythm_source` | enum | `preset` or `custom`. |
+| `preset_key` | enum or null | `adaptive`, `creative`, `balanced`, `deep`, or `extended` for preset rhythms. Null for custom rhythms. |
 | `idle_timeout_minutes` | integer or null | Auto-pause threshold. Null disables idle detection for this event. |
 
-Built-in presets the UI can apply: automatic (40/5/10), deep focus (40/5/10), creative (25/5/15), extended (50/10/10), custom.
+Built-in presets the UI can apply: adaptive (40/5/10), creative (25/5/15), balanced (30/5/10), deep focus (40/5/10), extended (50/10/10), custom. Presets are count rhythms with a long break after 4 focus periods.
 
-These columns encode the simple break plan described in `features/pomodoro.md`: fixed focus duration, fixed short break, fixed long break, and a long break after N focus periods. A future custom or adaptive rhythm migration must map existing rows to that simple break plan, preserve historical run snapshots, and add explicit plan fields only with a fallback that keeps older count-based configs readable. The adaptive data requirements are specified in `algorithms/pomodoro-adaptive-rhythm.md`.
+The actual rhythm payload lives in one child table:
+
+- `pomodoro_config_count_rhythms`: `event_id`, `focus_duration_minutes`, `short_break_minutes`, `long_break_minutes`, `long_break_after_focus_count`.
+- `pomodoro_config_sequence_steps`: `event_id`, `step_index`, `focus_duration_minutes`, `break_phase`, `break_duration_minutes`.
+
+Count rhythms store the simple break plan described in `features/pomodoro.md`: fixed focus duration, fixed short break, fixed long break, and a long break after N focus periods. Sequence rhythms store a repeating pattern with 1 to 12 positions. The parent and child rows are replaced transactionally; invalid replacements fail before deleting the previous child rows. The adaptive data requirements are specified in `algorithms/pomodoro-adaptive-rhythm.md`.
 
 ### `pomodoro_runs`
 
@@ -197,20 +203,26 @@ One row per continuous session of pomodoro work. Created when the timer starts, 
 | `started_at` | ISO datetime | When the session started. |
 | `ended_at` | ISO datetime or null | When the session ended. Null if still running. |
 | `end_reason` | enum or null | `completed`, `stopped`, `interrupted`, `reconfigured`, `block_transition`. Null if still running. |
-| `focus_duration_minutes` | integer | Config snapshot. |
-| `short_break_minutes` | integer | Config snapshot. |
-| `long_break_minutes` | integer | Config snapshot. |
-| `pomodoro_count` | integer | Focus periods before a long break in the simple count-based rhythm. Config snapshot. |
+| `rhythm_kind` | enum | `count` or `sequence`. Run snapshot. |
+| `rhythm_source` | enum | `preset` or `custom`. Run snapshot. |
+| `preset_key` | enum or null | Preset key for preset runs. Null for custom runs. |
 | `idle_timeout_minutes` | integer or null | Idle threshold. Null disables idle detection for this run. Config snapshot. |
 | `last_heartbeat` | ISO datetime | Updated every ~30 seconds while the session is active. Used for crash recovery. |
 | `event_title_snapshot` | text or null | Event title at the time of the run. Preserved for analytics after archival. |
-| `inherited_focus_minutes` | integer | Focus minutes accumulated in the current cycle, carried from the preceding run. 0 for fresh sessions. Non-zero when created by block transition or reconfiguration. |
-| `inherited_cycle` | integer | Cycle or break-plan position carried from the preceding run. 1 for fresh sessions. Determines which break is owed next in the simple count-based rhythm. |
+| `inherited_focus_minutes` | integer | Focus minutes accumulated at the inherited rhythm position, carried from the preceding run. 0 for fresh sessions. Non-zero when created by block transition or reconfiguration. |
+| `inherited_rhythm_position` | integer | Rhythm position carried from the preceding run. 1 for fresh sessions. Determines which break is owed next. |
 | `inherited_from_run_id` | UUID or null | FK to `pomodoro_runs`. The run from which state was inherited. Null for fresh sessions. Enables tracing transition chains in analytics. |
 | `start_trigger` | enum | `manual`, `block_auto`, `block_transition`, `reconfigure`, `crash_recovery`. |
 | `created_at` | ISO datetime | Row creation time. |
 
 Indexes: `(event_id, event_date)`, `(original_event_id)`, `(ended_at)`, plus a partial unique index that allows only one open run where `ended_at IS NULL`.
+
+The exact rhythm snapshot lives in one child table:
+
+- `pomodoro_run_count_rhythms`: `run_id`, `focus_duration_minutes`, `short_break_minutes`, `long_break_minutes`, `long_break_after_focus_count`.
+- `pomodoro_run_sequence_steps`: `run_id`, `step_index`, `focus_duration_minutes`, `break_phase`, `break_duration_minutes`.
+
+Event config changes never mutate these child rows. They are the historical truth for reconstructing plans, rail projections, and analytics.
 
 Why the inherited fields are on the run instead of derived from the chain of previous runs: traversing the chain is fragile (previous runs might reference archived events) and slow (the chain length is unbounded). Capturing the inherited state on the run itself makes each run self-contained for plan derivation. See `algorithms/pomodoro-segments-and-plan.md`.
 
@@ -226,7 +238,7 @@ One row per uninterrupted stretch of focus or break. A row is only created when 
 | `event_id` | UUID or null | Nullable FK to the live canonical `calendar_events.id`. For recurring occurrences this stores the parent template ID while live. It becomes null after archive; `run_id` still preserves the segment through the run. |
 | `event_date` | `YYYY-MM-DD` | The calendar day this segment belongs to. |
 | `run_id` | UUID | FK to `pomodoro_runs` (CASCADE delete). |
-| `cycle_number` | integer | Which pomodoro cycle (1 to `pomodoro_count`). |
+| `rhythm_position` | integer | The focus position or break-owed position represented by this segment. |
 | `phase` | enum | `focus`, `short_break`, `long_break`. |
 | `planned_start` | ISO datetime | When the segment was scheduled to begin. |
 | `planned_end` | ISO datetime | When the segment was scheduled to end. |
@@ -281,7 +293,7 @@ Append-only event log for lifecycle moments that are useful for audit and analyt
 | `id` | UUID | Primary key. |
 | `run_id` | UUID | FK to `pomodoro_runs` (CASCADE delete). |
 | `segment_id` | UUID or null | FK to `pomodoro_segments` (SET NULL). Null for run-level events. |
-| `event_type` | enum | `start`, `phase_start`, `phase_complete`, `pause_start`, `pause_end`, `idle_detected`, `focus_failed`, `suspend_detected`, `skip_break`, `extend_focus`, `reconfigure`, `block_transition`, `stop`, `complete`, `crash_recovery`. |
+| `event_type` | enum | `start`, `phase_start`, `phase_complete`, `pause_start`, `pause_end`, `idle_detected`, `focus_failed`, `suspend_detected`, `skip_break`, `extend_focus`, `go_to_break_now`, `start_focus_now`, `reconfigure`, `block_transition`, `stop`, `complete`, `crash_recovery`. |
 | `occurred_at` | ISO datetime | When the event happened. |
 | `phase` | enum or null | `focus`, `short_break`, `long_break`, or null for run-level events. |
 | `reason` | text or null | Optional reason or trigger detail. |
@@ -289,6 +301,40 @@ Append-only event log for lifecycle moments that are useful for audit and analyt
 | `created_at` | ISO datetime | Row creation time. |
 
 Index: `(run_id, occurred_at)` for replaying a run's event history.
+
+### Adaptive Pomodoro policy tables
+
+Adaptive mode stores its learning state separately from the core timer rows. The core Pomodoro tables remain the source of truth for what happened; adaptive tables explain why the app selected a rhythm, which context was observed, and how experiments and outcomes were tracked. This separation keeps hidden policy state auditable without mutating historical run or segment facts.
+
+Current runtime behavior loads bounded recent Pomodoro history, run events, doomscrolling block events, recent adaptive context states, recent experiment assignments, and assignment-linked experiment outcome summaries before a fresh Adaptive session starts. The TypeScript engine derives the upcoming context key and blends prior hidden state only from the matching context, so a late-day failure state does not pollute a morning first-session decision. The deterministic policy can then choose the effective run-start count rhythm. With no usable history, it records a fallback decision and keeps the baseline rhythm unchanged. The snapshot stores context, data quality flags, feature rows, selected values, reason codes, and state scores so later learning can replay the evidence trail. Current feature rows include late-focus segment and failure counts, focus idle counts and seconds split by early or late timing, early-focus and late-focus blocked attempt counts derived by matching blocked events against focus segment windows, repeated blocked-source attempt counts split by focus and break phase, break-overtime blocked attempt counts derived by matching break-phase blocked events after the planned break end, early-focus and late-focus `go_to_break_now` counts derived from focus windows, early-break-ending success or failure counts derived from the following focus outcome, and skipped-break success or failure counts derived from the next focus outcome. Eligible clean-momentum run starts can write a deterministic focus-duration experiment assignment before outcomes are known. Eligible low-risk short-break drift run starts can write a deterministic short-break-duration experiment assignment before outcomes are known. Eligible clean long-break drift run starts can write a deterministic long-break-duration experiment assignment before outcomes are known. Eligible mild late-cycle recovery-pressure run starts can write a deterministic C4 vs C3 long-break-cadence experiment assignment before outcomes are known. Eligible very-clean high-momentum run starts can write a deterministic C4 vs C5 cadence-expansion experiment assignment before outcomes are known. Eligible high-confidence clean-momentum run starts with stable completed focus and break history can write a deterministic focus-with-short-break rhythm-bundle experiment assignment before outcomes are known. Eligible clean long-break drift run starts with stable completed focus and break history can write a deterministic long-recovery rhythm-bundle experiment assignment before outcomes are known. If recent assignment history shows that the same comparable context already received two experiment assignments in the previous seven days, run-start assignment is suppressed for that context. If that context has a recent assignment below the budget, the latest assignment defines the active experiment lane, so later run starts continue that experiment instead of interleaving another rhythm parameter in the same seven-day window. Rhythm-bundle assignment is suppressed when one of its scalar component experiments has an abandoned cooldown or current analysis prefers control, preventing combined exploration from reintroducing a component that has already failed in comparable evidence. Focus-start and break-start boundary decisions write their context snapshot and decision rows in the same backend transaction as the segment they start. When an Adaptive run closes, the backend writes run-window outcomes, phase-window outcomes for adaptive segment decisions, matured same-day and next-day outcomes for older run-start decisions, updates the current context state, and appends context-state history in the same close transaction.
+
+The current schema foundation includes:
+
+- `pomodoro_adaptive_policies`: policy id, status, policy version, model version, exploration budget, created and updated timestamps. A partial unique index allows only one active policy.
+- `pomodoro_adaptive_policy_bounds`: per-policy bounds for `focus_duration_minutes`, `short_break_minutes`, `long_break_minutes`, and `long_break_after_focus_count`.
+- `pomodoro_adaptive_context_states`: current readiness, strain, recovery debt, avoidance pressure, momentum, and confidence scores by policy and coarse context key.
+- `pomodoro_adaptive_context_state_history`: append-only score history for replay and diagnostics.
+- `pomodoro_adaptive_context_snapshots`: decision-time context such as run, segment, local start time, time-of-day bucket, session position, event length, workload, energy bucket, and environment id.
+- `pomodoro_adaptive_context_snapshot_features`: bounded feature rows attached to a context snapshot. Each row stores one feature key with numeric, categorical, or boolean value, plus missing state and source kind.
+- `pomodoro_adaptive_data_quality_flags`: per-snapshot flags such as extension unavailable, diary missing, idle detection disabled, crash recovered, or calendar clipped.
+- `pomodoro_adaptive_decisions`: one row per adaptive opportunity, including policy, run, segment, context snapshot, opportunity kind, optional replay candidate id, decision mode, policy version, model version, and occurrence time.
+- `pomodoro_adaptive_decision_values`: selected and previous values for adaptive rhythm parameters.
+- `pomodoro_adaptive_decision_reasons`: bounded reason codes such as high strain, high avoidance pressure, high recovery debt, break return drift, break transition pressure, skipped break recovery, focus idle pressure, repeated blocked-source pressure, capacity rebuild, experiment assignment, experiment guardrail, guardrail recovery, or no history.
+- `pomodoro_adaptive_decision_state_scores`: readiness, strain, recovery debt, avoidance pressure, momentum, and confidence at the moment of decision.
+- `pomodoro_run_adaptive_snapshots`: child snapshot keyed by `run_id`, linking the run to the policy version, model version, context snapshot, and decision that selected its rhythm.
+- `pomodoro_adaptive_planned_blocks`: day-level planned Pomodoro block snapshots captured when an Adaptive run starts. Rows store the event date, visible event id, original event identity, planned start and end, source kind, capture run, and capture time so day outcomes can stay stable after later calendar edits. Source kind is `scheduler_snapshot` for frontend-expanded live plans, including recurring occurrences, with `live_event` and `archived_event` retained for backend fallback rows.
+- `pomodoro_adaptive_experiments`: local experiment metadata for bounded adaptive trials. The current runtime upserts the run-level focus-duration, short-break-duration, long-break-duration, long-break-cadence, and rhythm-bundle experiments when it assigns a run and when terminal analysis marks an experiment `completed` or `abandoned`. `rhythm_bundle` is allowed only as an experiment `parameter_key`; policy bounds and decision value rows continue to use the scalar rhythm parameter keys. Terminal updates write `ended_at`; active assignment payloads cannot reopen a terminal experiment.
+- `pomodoro_adaptive_experiment_variants`: candidate values for one experiment, with at most one control variant. The current focus-duration experiment stores 40 minute control and 45 minute treatment variants. The current short-break-duration experiment stores 5 minute control and 7 minute treatment variants. The current long-break-duration experiment stores 10 minute control and 15 minute treatment variants. The current long-break-cadence experiments store C4 control with C3 recovery treatment, and C4 control with C5 capacity-expansion treatment. The current focus-with-short-break rhythm-bundle experiment stores `control_40_5` and `focus_45_short_break_7` variants for 40/5/10/C4 vs 45/7/10/C4. The current long-recovery rhythm-bundle experiment stores `long_break_15_cadence_4` and `long_break_15_cadence_3` variants for 40/5/15/C4 vs 40/5/15/C3.
+- `pomodoro_adaptive_assignments`: persisted deterministic assignment to a variant before outcomes are known, including the assignment seed used for audit.
+- `pomodoro_adaptive_outcomes`: phase, run, day, or next-day outcome rows attached to a decision or assignment. Phase rows currently store completion, interruption, pause load, clean focus, break overtime, blocker pressure, and post-break next-focus signals for the segment that a decision started. Run rows store aggregate clean focus, pause load, break adherence, blocker pressure, and run end state. Matured day rows are written for run-start decisions once a later calendar date exists; they store daily run counts, clean focus, focus failures, break skips, break overtime, blocker pressure, planned Pomodoro blocks, started planned blocks, missed planned blocks, and planned Pomodoro minutes. Planned blocks use `pomodoro_adaptive_planned_blocks` when a snapshot exists for that date, otherwise they fall back to persisted live and archived non-recurring calendar rows available when the day matures. Scheduler snapshots are preferred because they include recurrence-expanded occurrences and preserve the exact day plan after later edits. Matured next-day rows are written for run-start decisions after the following calendar day has passed. When a decision has an assignment, the same outcome rows carry both `decision_id` and `assignment_id`.
+
+The replay dataset read path uses `pomodoro_adaptive_decisions`, `pomodoro_adaptive_decision_values`, `pomodoro_runs`, and run-window `pomodoro_adaptive_outcomes` to reconstruct bounded run-start opportunities for offline policy evaluation. Each replay opportunity carries the persisted decision id, run id, run timing, optional replay candidate id, previous count rhythm, selected count rhythm, and bounded pre-decision history as of the original decision time. Historical context state is read from append-only `pomodoro_adaptive_context_state_history` rows, not from the current state table, so replay does not leak future state into old decisions. Outcome rows are returned separately and keyed by decision id so frontend replay tools can attribute observed outcomes only when a candidate policy selects the same rhythm that originally produced the run. Frontend replay reports can also score actual observed run outcomes by persisted candidate id, so replay-approved multi-parameter candidates can be diagnosed separately from ordinary selected-value comparisons. Frontend replay reports can build bounded multi-parameter run-start policy candidates, including a default offline catalog for focus growth with short-break support, long-recovery support, and capacity cadence growth, score candidates globally and by comparable context, compare multi-parameter candidates against generated single-parameter component candidates, then classify candidate workflows as usable, unsafe, or inconclusive from minimum matched context evidence and maximum guardrail burden without writing additional schema rows. Candidate builders can adjust focus, short break, long break, and long-break cadence together, while leaving fallback, guardrail, and recovery decisions unchanged. A pure selector can choose the strongest usable candidate from a gated workflow without writing schema rows, but enough direct live-use outcomes for that candidate can suppress it when its observed guardrail burden is too high. Sparse direct candidate evidence stays diagnostic and does not block an otherwise usable candidate. Enough matched component evidence can also suppress a multi-parameter candidate when the combination has materially worse guardrail burden, clean-focus ratio, or completion than its strongest generated single-parameter component. Fresh Adaptive run starts can read this bounded replay dataset before snapshotting a run; if no candidate is usable for the current context, or direct candidate outcomes or interaction evidence suppress the usable candidate, the normal policy decision is persisted unchanged.
+
+Adaptive history loads experiment lifecycle state plus aggregates experiment outcomes by experiment, variant, and coarse context key for the TypeScript analyzer. The current analyzer uses exact-context evidence once both arms have enough observations. Sparse but paired context evidence first borrows a small discounted prior from neighboring contexts with similar time-of-day, session-position, event-length, workload, energy, and matching environment buckets. If neighboring evidence is still insufficient, the analyzer can borrow the same small discounted prior from broader non-context evidence before falling back to global evidence. It uses run observations, completion counts, stop counts, clean focus seconds, run blocker pressure, break skipped counts, short-break overtime, long-break overtime, same-day missed planned blocks, same-day blocker pressure, and next-day observed return behavior. Binary guardrails for completion, stop-rate, and next-day return use Wilson interval harm checks with a severe point-harm safety stop. Numeric primary outcomes and guardrails use aggregate sums and square sums so noisy mean differences remain inconclusive until the conservative interval shows a meaningful effect, or until severe point harm trips a safety stop. The local 40 vs 45 minute focus-duration experiment uses clean-focus gain as its primary outcome. The local 5 vs 7 minute short-break-duration experiment uses reduced short-break overtime as its primary outcome. The local 10 vs 15 minute long-break-duration experiment uses reduced long-break overtime as its primary outcome. The local C4 vs C3 long-break-cadence experiment uses reduced blocker pressure or conservative completion improvement as its primary outcome while guarding clean-focus loss. The local C4 vs C5 cadence-expansion experiment uses clean-focus gain as its primary outcome while guarding blocker pressure, skipped breaks, long-break drift, missed planned work, and next-day return. The local 40/5/10/C4 vs 45/7/10/C4 focus-with-short-break rhythm-bundle experiment uses clean-focus gain as its primary outcome while guarding completion, stop-rate, blocker pressure, skipped breaks, short-break drift, missed planned work, and next-day return. The local 40/5/15/C4 vs 40/5/15/C3 long-recovery rhythm-bundle experiment uses reduced blocker pressure, reduced long-break overtime, or conservative completion improvement as its primary outcome while guarding clean focus, completion, stop-rate, blocker pressure, skipped breaks, long-break drift, missed planned work, and next-day return. When analysis reaches a terminal result, the next adaptive snapshot can upsert the experiment status without creating another assignment. Terminal experiment states create a 14-day cooldown in the frontend policy; an abandoned cooldown suppresses new assignments and holds the control value for that experiment.
+
+Adaptive fields use bounded enums and numeric score ranges. Free-form diary text, full URLs, and inferred mental-health labels do not belong in adaptive decision rows. If a future model needs a new feature, it should add a bounded feature key or a normalized table rather than placing opaque JSON into policy state.
+
+Decision and outcome rows intentionally remain separate. A decision says what the app selected and why. An outcome says what happened afterward. Keeping them apart prevents causal analysis from mixing treatment assignment with results.
 
 ### Run reference integrity (for recurring events)
 
@@ -459,6 +505,33 @@ Indexes:
 - `(started_at)` for timeline and cleanup queries.
 
 Daily and weekly totals are derived from samples and the current `doomscrolling.limits.items` definitions, including each limit entry's website, mobile app, desktop app display label, desktop app match names, and optional source color palette slot. This means editing a limit changes how current-day and current-week historical samples roll up, without rewriting the samples themselves. Daily budgets use `minutesPerDay`, weekly budgets use `minutesPerWeek`, and at least one budget must be present. Weekly totals use the Monday-based local week. The source color is user-facing display metadata for segmenting the limit bars and does not affect matching. A local `doomscrolling-limit-state.json` snapshot in the app config directory contains derived daily and weekly totals, each total's period and local-date window, and the active SQLite filename for the native browser host so URL decisions stay fast and usage samples are recorded into the same database the UI reads.
+
+### `doomscrolling_block_events`
+
+Append-only block and access-change events for adaptive analysis and future user-facing relapse visualization. The browser native host writes normalized blocked-host events here when the active SQLite database is available. The desktop app blocker writes normalized app-key events here when a blocked app match is enforced, attaching the active Pomodoro run and phase when the runtime snapshot is fresh. Existing lightweight runtime logs can stay for debugging, but adaptive analysis uses structured SQLite rows.
+
+Each row stores:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | text | Primary key. |
+| `run_id` | UUID or null | Optional FK to `pomodoro_runs`. Null when no Pomodoro run owns the event. |
+| `segment_id` | UUID or null | Optional FK to `pomodoro_segments`. Null when no segment owns the event. |
+| `occurred_at` | ISO datetime | When the block or access-change event happened. |
+| `source_type` | enum | `browser`, `desktop_app`, or reserved `mobile_app`. |
+| `source_key` | text | Normalized host or app key. Full URLs are rejected. |
+| `display_name` | text or null | Human-readable source snapshot. |
+| `phase` | enum or null | `focus`, `short_break`, `long_break`, `manual_pause`, `idle_pause`, or `suspend_pause`. |
+| `decision` | enum | `blocked`, `temporary_allowed`, `false_positive_reported`, or `limit_exhausted`. |
+| `rule_id` | text or null | Matching rule id snapshot when available. |
+| `category_id` | text or null | Matching category id snapshot when available. |
+| `created_at` | ISO datetime | Row creation time. |
+
+Indexes: `(run_id, occurred_at)` for session analysis and `(source_type, source_key, occurred_at)` for source-specific pressure analysis.
+
+`doomscrolling_block_event_rule_snapshots` stores the rule explanation that was active when the event happened: block event id, rule id, rule kind, rule label, environment id, and blocker mode. This lets future analytics say which rules produced repeated pressure even if the user later renames or deletes the rule.
+
+The adaptive algorithm treats missing block events differently from zero block pressure. If the browser extension or desktop tracker was unavailable, the context snapshot must carry a data quality flag so confidence is reduced instead of assuming the user had no relapse pressure.
 
 ## Other features (stub)
 

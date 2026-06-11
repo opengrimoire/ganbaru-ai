@@ -2,49 +2,46 @@
 
 A pomodoro session writes data to four history tables: `pomodoro_runs`, `pomodoro_segments`, `pomodoro_pauses`, and `pomodoro_run_events` (see `data/schema.md`). The run row is the session header, segments are the actual phases that ran, pauses are interruptions within segments, and run events are the audit trail for lifecycle decisions such as skip break, focus extension, reconfigure, transition, stop, complete, and crash recovery. The user-facing pomodoro mechanics in `features/pomodoro.md` are implemented on top of this structure.
 
-A core decision in this design: the **plan** for a session (the schedule of focus and break phases) is **never stored**. It is derived on demand from the run's config snapshot, break-plan snapshot, adaptive-policy snapshot, and inherited state. Segments record what actually happened. Comparing actuals to the derived plan gives plan-vs-actual analysis without ever needing a plan table. The future adaptive recommendation and experimentation model is defined in `algorithms/pomodoro-adaptive-rhythm.md`.
+A core decision in this design: the **plan** for a session (the schedule of focus and break phases) is **never stored**. It is derived on demand from the run's rhythm snapshot and inherited state. Segments record what actually happened. Comparing actuals to the derived plan gives plan-vs-actual analysis without ever needing a plan table. The adaptive decision and experimentation model is defined in `algorithms/pomodoro-adaptive-rhythm.md`.
 
 This doc explains how that derivation works, why segments are written lazily, what the inherited fields mean, and how pauses fit in. Worked examples cover the common scenarios.
 
 ## Rhythm configuration shape
 
-The current implementation stores a simple count-based rhythm: `focus_duration_minutes`, `short_break_minutes`, `long_break_minutes`, and `pomodoro_count`. That should be treated as the first storage shape for a broader focus rhythm model.
-
-The target rhythm model has these conceptual parts:
+The current implementation stores a tagged rhythm snapshot. There are two deterministic rhythm kinds:
 
 | Part | Meaning |
 |------|---------|
-| Focus duration policy | Fixed duration today, later either a bounded per-position list or an adaptive recommendation for future focus phases. |
-| Break plan | The rule that chooses the next break after a focus phase. The simple plan is "long break after N focus periods"; custom plans can be repeating sequences such as short, short, long. |
-| Break durations | Short and long durations today, later optional per-break durations inside a custom plan. |
-| Adaptive policy | Fixed, assisted recommendations, or opt-in automatic tuning. Automatic tuning can change future phases, but not historical segments. |
+| Count rhythm | Fixed focus duration, fixed short break, fixed long break, and `long_break_after_focus_count`. Position N receives the long break, then the pattern wraps to position 1. |
+| Sequence rhythm | Ordered repeating steps. Each step stores focus minutes, break phase, and break minutes. Position wraps modulo the step count. |
+| Rhythm source | `preset` or `custom`, plus `preset_key` for preset configs. This keeps future analytics from mixing defaults with user-authored rhythms. |
+| Idle timeout | Stored outside the rhythm. It affects auto-pause, not the focus or break plan. |
 
-The data model can evolve from the current scalar columns to explicit break-plan fields later. The invariant remains the same: active runs snapshot the rhythm they are using so history is explainable even if the event's future config changes.
+Adaptive plans use the same invariant: active runs snapshot the exact rhythm they are using so history is explainable even if the event's future config changes.
 
 ## Plan vs segments
 
-Given a run's `started_at`, rhythm snapshot, and inherited state (`inherited_focus_minutes`, `inherited_cycle`), the planned schedule is fully deterministic for fixed plans. The current simple count-based derivation is:
+Given a run's `started_at`, rhythm snapshot, and inherited state (`inherited_focus_minutes`, `inherited_rhythm_position`), the planned schedule is fully deterministic. The derivation is:
 
-- If `inherited_focus_minutes >= focus_duration_minutes`: the first phase is a break. Short break if `inherited_cycle < pomodoro_count`, long break otherwise.
-- If `0 < inherited_focus_minutes < focus_duration_minutes`: the first phase is focus, lasting `focus_duration_minutes - inherited_focus_minutes` minutes (the remaining focus needed to complete the current cycle).
-- If `inherited_focus_minutes == 0`: the first phase is a full-length focus period at cycle `inherited_cycle` (which is 1 for fresh sessions).
+- Normalize `inherited_rhythm_position` to a valid position. Zero, negative, or non-finite values fall back to 1. Overflow wraps within the rhythm length.
+- If `inherited_focus_minutes >= focus_duration_minutes` at that position: the first phase is the break owed at that position.
+- If `0 < inherited_focus_minutes < focus_duration_minutes`: the first phase is focus, lasting the remaining focus needed to complete that position.
+- If `inherited_focus_minutes == 0`: the first phase is a full-length focus period at the inherited position, which is 1 for fresh sessions.
 
-After the first phase, the standard cycle rules apply using the run's config:
+After the first phase, the standard rhythm rules apply using the run's snapshot:
 
-- Focus → short break (if `cycle < pomodoro_count`) or long break (if `cycle == pomodoro_count`).
-- Short break → focus (cycle increments).
-- Long break → focus (cycle resets to 1).
+- Focus creates the break owed by the current rhythm position.
+- A completed break advances to the next rhythm position, wrapping to 1 when needed.
+- A skipped break creates no break segment row and advances directly to focus at the next rhythm position.
 
 Repeating these rules produces the planned schedule for the rest of the session.
 
-For future custom break plans, replace the `cycle < pomodoro_count` test with a break-plan lookup. A break plan answers "what break is owed after focus position N?" For example, the simple default maps positions 1, 2, and 3 to short break and position 4 to long break, then repeats. A custom `short, long` plan maps odd positions to short break and even positions to long break. A custom plan with per-position durations returns both the break type and the duration.
-
-Adaptive plans must remain deterministic from the persisted snapshot and recorded adaptation events. A recommendation engine may choose a new duration for a future phase, following `algorithms/pomodoro-adaptive-rhythm.md`, but once that phase is started, the chosen value is written into the segment's `planned_end` and the reason is recorded in `pomodoro_run_events`. Later analytics should be able to answer both "what happened?" and "why did the app choose this plan?"
+Adaptive plans must remain deterministic from the persisted snapshot and recorded adaptation events. The adaptive engine may choose a new duration for a future phase, following `algorithms/pomodoro-adaptive-rhythm.md`, but once that phase is started, the chosen value is written into the segment's `planned_end` and the adaptive decision tables record the previous value, selected value, context, reason codes, and state scores in the same backend transaction as the segment start. Later analytics should be able to answer both "what happened?" and "why did the app choose this plan?"
 
 This derivation covers all run origins:
 
-- **Fresh session** (`new_session`): inherited values are 0 and 1, so the first phase is a full-length focus at cycle 1. This includes restarts after any stop, because concentration is assumed broken.
-- **Block transition**: inherited values carry the ending run's cycle position and accumulated focus. The first phase reflects the handoff.
+- **Fresh session** (`new_session`): inherited values are 0 and 1, so the first phase is a full-length focus at position 1. This includes restarts after any stop, because concentration is assumed broken.
+- **Block transition**: inherited values carry the ending run's rhythm position and accumulated focus. The first phase reflects the handoff.
 - **Reconfiguration**: inherited values carry the position within the reconfigured run. The bridge segment (same phase as the interrupted one, with the remaining time from the old config) is the first actual segment of the new run.
 
 Storing plan rows would duplicate this information and create a synchronization problem: every block transition and reconfiguration would have to update both the inherited fields and the plan rows, with the risk of them diverging silently. By keeping the plan derived, the inherited fields are the only source of truth.
@@ -61,7 +58,7 @@ Flexible plans should not make the timer feel unpredictable. The derivation rule
 
 ### Inherited focus during a break phase
 
-If a transition or reconfiguration happens while the user is on a break, `inherited_focus_minutes` is 0. The break already "resolved" the accumulated focus. The `inherited_cycle` carries the current cycle number. After the bridge break (if reconfiguring) or the immediate break (if transitioning), the next focus starts fresh at the new config's full duration.
+If a transition or reconfiguration happens while the user is on a break, `inherited_focus_minutes` is 0. The break already resolved the accumulated focus. `inherited_rhythm_position` carries the current break position. After the bridge break (if reconfiguring) or the immediate break (if transitioning), the next focus starts fresh at the next position in the new config.
 
 ## Lazy segment creation
 
@@ -81,8 +78,8 @@ Three fields on `pomodoro_runs` carry state across run boundaries:
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `inherited_focus_minutes` | integer | Focus minutes accumulated in the current cycle, carried from the preceding run. 0 for fresh sessions. |
-| `inherited_cycle` | integer | Cycle number carried from the preceding run. 1 for fresh sessions. |
+| `inherited_focus_minutes` | integer | Focus minutes accumulated at the inherited rhythm position, carried from the preceding run. 0 for fresh sessions. |
+| `inherited_rhythm_position` | integer | Rhythm position carried from the preceding run. 1 for fresh sessions. |
 | `inherited_from_run_id` | UUID or null | FK to the run from which state was inherited. Null for fresh sessions. |
 
 The first two are inputs to the plan derivation above. The third is for traceability: an analytics query can follow the chain back through transitions and reconfigurations to reconstruct a continuous work episode that spans multiple runs.
@@ -93,7 +90,7 @@ Without inheritance, every block transition and reconfiguration would start fres
 
 ### Why store inherited state on the run rather than derive it
 
-Without `inherited_focus_minutes` and `inherited_cycle`, reconstructing the plan for a transition or reconfiguration run would require traversing the chain of previous runs and their segments. This is fragile because previous runs might have null live event FKs after archive and only retain the exact occurrence in `original_event_id`. It is also slow because chain length is unbounded if many transitions happen. Capturing the inherited state on the run itself makes each run self-contained: the plan can be derived from the run alone, without joining anywhere else.
+Without `inherited_focus_minutes` and `inherited_rhythm_position`, reconstructing the plan for a transition or reconfiguration run would require traversing the chain of previous runs and their segments. This is fragile because previous runs might have null live event FKs after archive and only retain the exact occurrence in `original_event_id`. It is also slow because chain length is unbounded if many transitions happen. Capturing the inherited state on the run itself makes each run self-contained: the plan can be derived from the run alone, without joining anywhere else.
 
 ## End reasons
 
@@ -180,19 +177,19 @@ Future adaptive rhythm changes should add an explicit run event, for example `ad
 
 ### Clean session
 
-Config: 25/5/15, `pomodoro_count=4`. Fresh session at 09:00.
+Config: count rhythm 25/5/15, long break after 4 focus periods. Fresh session at 09:00.
 
 | Time | Event |
 |------|-------|
-| 09:00 | Run created. Segment 1 created: focus, cycle 1, active. |
-| 09:25 | Focus complete. Segment 1: completed. Segment 2: short break, cycle 1, active. |
-| 09:30 | Break complete. Segment 2: completed. Segment 3: focus, cycle 2, active. |
-| 09:55 | Focus complete. Segment 3: completed. Segment 4: short break, cycle 2, active. |
-| 10:00 | Break complete. Segment 5: focus, cycle 3, active. |
-| 10:25 | Focus complete. Segment 6: short break, cycle 3, active. |
-| 10:30 | Break complete. Segment 7: focus, cycle 4, active. |
-| 10:55 | Focus complete. Cycle 4 == pomodoro_count, so Segment 8: long break, cycle 4, active. |
-| 11:10 | Long break complete. Cycle resets to 1. Segment 9: focus, cycle 1, active. |
+| 09:00 | Run created. Segment 1 created: focus, position 1, active. |
+| 09:25 | Focus complete. Segment 1: completed. Segment 2: short break, position 1, active. |
+| 09:30 | Break complete. Segment 2: completed. Segment 3: focus, position 2, active. |
+| 09:55 | Focus complete. Segment 3: completed. Segment 4: short break, position 2, active. |
+| 10:00 | Break complete. Segment 5: focus, position 3, active. |
+| 10:25 | Focus complete. Segment 6: short break, position 3, active. |
+| 10:30 | Break complete. Segment 7: focus, position 4, active. |
+| 10:55 | Focus complete. Position 4 receives the long break, so Segment 8: long break, position 4, active. |
+| 11:10 | Long break complete. The rhythm wraps to position 1. Segment 9: focus, position 1, active. |
 
 Rows in `pomodoro_segments`: 9 so far, all but the last in `completed` state.
 
@@ -202,7 +199,7 @@ Same config, fresh session at 10:00. Idle threshold = 5 minutes.
 
 | Time | Event |
 |------|-------|
-| 10:00 | Run created. Segment 1 created: focus, cycle 1, active. |
+| 10:00 | Run created. Segment 1 created: focus, position 1, active. |
 | 10:15 | User steps away. No input. |
 | 10:20 | Idle detected (5 minutes of inactivity). Pause 1 created: `segment_id = Segment 1`, `started_at = 10:15`, `ended_at = NULL`, `reason = idle`. Timer pauses with 10 minutes remaining. |
 | 10:30 | User returns and resumes. Pause 1 updated: `ended_at = 10:30`. Timer resumes with the same remaining seconds (10 minutes). |
@@ -213,8 +210,8 @@ Continuing:
 
 | Time | Event |
 |------|-------|
-| 10:40 | Focus complete. Segment 1: completed, `actual_end = 10:40`. Segment 2: short break, cycle 1, active. |
-| 10:45 | Break complete. Segment 2: completed. Segment 3: focus, cycle 2, active. |
+| 10:40 | Focus complete. Segment 1: completed, `actual_end = 10:40`. Segment 2: short break, position 1, active. |
+| 10:45 | Break complete. Segment 2: completed. Segment 3: focus, position 2, active. |
 
 The rail for Segment 1 shows green 10:00-10:15 and 10:30-10:40, with empty 10:15-10:30 (the pause).
 
@@ -224,7 +221,7 @@ Config: 40/5/10. Event window: 14:00-15:00. Fresh session at 14:00.
 
 | Time | Event |
 |------|-------|
-| 14:00 | Run created. Segment 1: focus, cycle 1, active, `planned_end = 14:40`. |
+| 14:00 | Run created. Segment 1: focus, position 1, active, `planned_end = 14:40`. |
 | 15:00 | Event window expires. The next event has no pomodoro config. Segment 1: interrupted, `actual_end = 15:00`. Run: ended, `end_reason = completed`. |
 
 Notice that the focus segment is `interrupted` even though the run's `end_reason` is `completed`. The run completed (the event window ran out), but the segment was cut short. These are two different concerns.
@@ -235,19 +232,19 @@ Event A: 09:00-11:00, config 40/5/10. Event B: 11:00-13:00, config 25/5/15. Fres
 
 | Time | Event |
 |------|-------|
-| 09:00 | Run A created. Segment A1: focus, cycle 1, active, `planned_end = 09:40`. |
-| 09:40 | Focus complete. Segment A1: completed. Segment A2: short break, cycle 1, active. |
-| 09:45 | Break complete. Segment A3: focus, cycle 2, active. |
-| 10:25 | Focus complete. Segment A3: completed. Segment A4: short break, cycle 2, active. |
-| 10:30 | Break complete. Segment A5: focus, cycle 3, active, `planned_end = 11:10`. |
-| 11:00 | Event A window expires. Block transition fires. Segment A5: interrupted, `actual_end = 11:00`. Run A: ended, `end_reason = block_transition`. Run B created with `inherited_focus_minutes = 30, inherited_cycle = 3, inherited_from_run_id = run_a_id`. |
+| 09:00 | Run A created. Segment A1: focus, position 1, active, `planned_end = 09:40`. |
+| 09:40 | Focus complete. Segment A1: completed. Segment A2: short break, position 1, active. |
+| 09:45 | Break complete. Segment A3: focus, position 2, active. |
+| 10:25 | Focus complete. Segment A3: completed. Segment A4: short break, position 2, active. |
+| 10:30 | Break complete. Segment A5: focus, position 3, active, `planned_end = 11:10`. |
+| 11:00 | Event A window expires. Block transition fires. Segment A5: interrupted, `actual_end = 11:00`. Run A: ended, `end_reason = block_transition`. Run B created with `inherited_focus_minutes = 30, inherited_rhythm_position = 3, inherited_from_run_id = run_a_id`. |
 
-Now derive Run B's first segment. `inherited_focus_minutes = 30 >= focus_duration_minutes = 25` of Run B's config, so the first phase is a break. Cycle 3 < pomodoro_count 4, so it is a short break.
+Now derive Run B's first segment. `inherited_focus_minutes = 30 >= focus_duration_minutes = 25` at position 3 of Run B's config, so the first phase is the break owed by position 3. In the count rhythm, that break is short.
 
 | Time | Event |
 |------|-------|
-| 11:00 | Segment B1: short break, cycle 3, active. |
-| 11:05 | Break complete. Segment B2: focus, cycle 4, active, `planned_end = 11:30`. |
+| 11:00 | Segment B1: short break, position 3, active. |
+| 11:05 | Break complete. Segment B2: focus, position 4, active, `planned_end = 11:30`. |
 
 The user got their earned break, then resumed focus at the new config's 25-minute cadence. The chain `Run A → Run B` is preserved via `inherited_from_run_id`.
 
@@ -257,18 +254,18 @@ Config: 40/5/10, fresh session at 09:00. At 09:28 the user changes config to 25/
 
 | Time | Event |
 |------|-------|
-| 09:00 | Run 1 created. Segment 1: focus, cycle 1, active. |
-| 09:28 | User reconfigures. Segment 1: completed, `actual_end = 09:28` (28 minutes elapsed). Run 1: ended, `end_reason = reconfigured`. Run 2 created with config 25/5/15, `inherited_focus_minutes = 28, inherited_cycle = 1, inherited_from_run_id = run_1_id`. |
+| 09:00 | Run 1 created. Segment 1: focus, position 1, active. |
+| 09:28 | User reconfigures. Segment 1: completed, `actual_end = 09:28` (28 minutes elapsed). Run 1: ended, `end_reason = reconfigured`. Run 2 created with config 25/5/15, `inherited_focus_minutes = 28, inherited_rhythm_position = 1, inherited_from_run_id = run_1_id`. |
 
-Now derive Run 2's first segment. `inherited_focus_minutes = 28 >= focus_duration_minutes = 25`, so the first phase is a break (short break, cycle 1 < pomodoro_count 4). But wait: the user was mid-focus and expected to keep focusing on the same task. This is where the bridge segment idea applies: the bridge has the **same phase as the interrupted one**, with the remaining time from the old config.
+Now derive Run 2's first segment. `inherited_focus_minutes = 28 >= focus_duration_minutes = 25`, so the rhythm would owe the break at position 1. But the user was mid-focus and expected to keep focusing on the same task. This is where the bridge segment idea applies: the bridge has the **same phase as the interrupted one**, with the remaining time from the old config.
 
 So:
 
 | Time | Event |
 |------|-------|
-| 09:28 | Segment 2 (bridge): focus, cycle 1, active, planned to last 12 minutes (40 - 28 = 12 from the old config). |
-| 09:40 | Bridge focus complete. Segment 3: short break, cycle 1, active, 5 minutes (new config). |
-| 09:45 | Break complete. Segment 4: focus, cycle 2, active, 25 minutes (new config). |
+| 09:28 | Segment 2 (bridge): focus, position 1, active, planned to last 12 minutes (40 - 28 = 12 from the old config). |
+| 09:40 | Bridge focus complete. Segment 3: short break, position 1, active, 5 minutes (new config). |
+| 09:45 | Break complete. Segment 4: focus, position 2, active, 25 minutes (new config). |
 
 The user sees no interruption: the current focus continues for 12 more minutes (so they can finish their current train of thought), then the new 25/5 cadence kicks in. The reconfiguration is honored without losing the in-progress phase.
 

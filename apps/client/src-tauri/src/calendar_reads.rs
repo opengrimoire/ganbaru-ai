@@ -28,10 +28,14 @@ pub struct DbCalendarEventRow {
     local_rsvp_status: Option<String>,
     created_at: String,
     rdate: Option<String>,
-    focus_duration_minutes: Option<i64>,
-    short_break_minutes: Option<i64>,
-    long_break_minutes: Option<i64>,
-    pomodoro_count: Option<i64>,
+    rhythm_kind: Option<String>,
+    rhythm_source: Option<String>,
+    preset_key: Option<String>,
+    count_focus_duration_minutes: Option<i64>,
+    count_short_break_minutes: Option<i64>,
+    count_long_break_minutes: Option<i64>,
+    count_long_break_after_focus_count: Option<i64>,
+    sequence_steps: Option<String>,
     idle_timeout_minutes: Option<i64>,
 }
 impl_sqlite_from_row!(DbCalendarEventRow {
@@ -55,10 +59,14 @@ impl_sqlite_from_row!(DbCalendarEventRow {
     local_rsvp_status,
     created_at,
     rdate,
-    focus_duration_minutes,
-    short_break_minutes,
-    long_break_minutes,
-    pomodoro_count,
+    rhythm_kind,
+    rhythm_source,
+    preset_key,
+    count_focus_duration_minutes,
+    count_short_break_minutes,
+    count_long_break_minutes,
+    count_long_break_after_focus_count,
+    sequence_steps,
     idle_timeout_minutes,
 });
 
@@ -186,10 +194,14 @@ pub struct DbFullEventRow {
     icalendar_preservation_status: Option<String>,
     icalendar_projection_warnings: Option<String>,
     icalendar_raw_jcal: Option<String>,
-    focus_duration_minutes: Option<i64>,
-    short_break_minutes: Option<i64>,
-    long_break_minutes: Option<i64>,
-    pomodoro_count: Option<i64>,
+    rhythm_kind: Option<String>,
+    rhythm_source: Option<String>,
+    preset_key: Option<String>,
+    count_focus_duration_minutes: Option<i64>,
+    count_short_break_minutes: Option<i64>,
+    count_long_break_minutes: Option<i64>,
+    count_long_break_after_focus_count: Option<i64>,
+    sequence_steps: Option<String>,
     idle_timeout_minutes: Option<i64>,
 }
 impl_sqlite_from_row!(DbFullEventRow {
@@ -229,10 +241,14 @@ impl_sqlite_from_row!(DbFullEventRow {
     icalendar_preservation_status,
     icalendar_projection_warnings,
     icalendar_raw_jcal,
-    focus_duration_minutes,
-    short_break_minutes,
-    long_break_minutes,
-    pomodoro_count,
+    rhythm_kind,
+    rhythm_source,
+    preset_key,
+    count_focus_duration_minutes,
+    count_short_break_minutes,
+    count_long_break_minutes,
+    count_long_break_after_focus_count,
+    sequence_steps,
     idle_timeout_minutes,
 });
 
@@ -318,11 +334,28 @@ const WINDOW_EVENTS_SQL: &str = r#"
            CASE WHEN ce.url <> '' THEN 1 ELSE 0 END AS has_call_link,
            ce.meeting_enabled, ce.local_rsvp_status, ce.created_at,
            NULL AS rdate,
-           pc.focus_duration_minutes, pc.short_break_minutes,
-           pc.long_break_minutes, pc.pomodoro_count,
+           pc.rhythm_kind, pc.rhythm_source, pc.preset_key,
+           pcc.focus_duration_minutes AS count_focus_duration_minutes,
+           pcc.short_break_minutes AS count_short_break_minutes,
+           pcc.long_break_minutes AS count_long_break_minutes,
+           pcc.long_break_after_focus_count AS count_long_break_after_focus_count,
+           (
+             SELECT '[' || group_concat(step_json) || ']'
+             FROM (
+               SELECT json_object(
+                 'focusDurationMinutes', pcss.focus_duration_minutes,
+                 'breakPhase', pcss.break_phase,
+                 'breakDurationMinutes', pcss.break_duration_minutes
+               ) AS step_json
+               FROM pomodoro_config_sequence_steps pcss
+               WHERE pcss.event_id = ce.id
+               ORDER BY pcss.step_index ASC
+             )
+           ) AS sequence_steps,
            pc.idle_timeout_minutes
     FROM calendar_events ce
     LEFT JOIN pomodoro_configs pc ON pc.event_id = ce.id
+    LEFT JOIN pomodoro_config_count_rhythms pcc ON pcc.event_id = ce.id
     WHERE
       (ce.rrule IS NOT NULL AND ce.rrule <> '')
       OR EXISTS (SELECT 1 FROM calendar_event_rdates r WHERE r.event_id = ce.id)
@@ -345,11 +378,28 @@ const POMODORO_SCHEDULER_EVENTS_SQL: &str = r#"
            CASE WHEN ce.url <> '' THEN 1 ELSE 0 END AS has_call_link,
            ce.meeting_enabled, ce.local_rsvp_status, ce.created_at,
            NULL AS rdate,
-           pc.focus_duration_minutes, pc.short_break_minutes,
-           pc.long_break_minutes, pc.pomodoro_count,
+           pc.rhythm_kind, pc.rhythm_source, pc.preset_key,
+           pcc.focus_duration_minutes AS count_focus_duration_minutes,
+           pcc.short_break_minutes AS count_short_break_minutes,
+           pcc.long_break_minutes AS count_long_break_minutes,
+           pcc.long_break_after_focus_count AS count_long_break_after_focus_count,
+           (
+             SELECT '[' || group_concat(step_json) || ']'
+             FROM (
+               SELECT json_object(
+                 'focusDurationMinutes', pcss.focus_duration_minutes,
+                 'breakPhase', pcss.break_phase,
+                 'breakDurationMinutes', pcss.break_duration_minutes
+               ) AS step_json
+               FROM pomodoro_config_sequence_steps pcss
+               WHERE pcss.event_id = ce.id
+               ORDER BY pcss.step_index ASC
+             )
+           ) AS sequence_steps,
            pc.idle_timeout_minutes
     FROM calendar_events ce
     JOIN pomodoro_configs pc ON pc.event_id = ce.id
+    LEFT JOIN pomodoro_config_count_rhythms pcc ON pcc.event_id = ce.id
     WHERE
       (ce.rrule IS NOT NULL AND ce.rrule <> '')
       OR EXISTS (SELECT 1 FROM calendar_event_rdates r WHERE r.event_id = ce.id)
@@ -421,12 +471,29 @@ const FULL_EVENT_SQL: &str = r#"
            ic.preservation_status AS icalendar_preservation_status,
            NULL AS icalendar_projection_warnings,
            NULL AS icalendar_raw_jcal,
-           pc.focus_duration_minutes, pc.short_break_minutes,
-           pc.long_break_minutes, pc.pomodoro_count,
+           pc.rhythm_kind, pc.rhythm_source, pc.preset_key,
+           pcc.focus_duration_minutes AS count_focus_duration_minutes,
+           pcc.short_break_minutes AS count_short_break_minutes,
+           pcc.long_break_minutes AS count_long_break_minutes,
+           pcc.long_break_after_focus_count AS count_long_break_after_focus_count,
+           (
+             SELECT '[' || group_concat(step_json) || ']'
+             FROM (
+               SELECT json_object(
+                 'focusDurationMinutes', pcss.focus_duration_minutes,
+                 'breakPhase', pcss.break_phase,
+                 'breakDurationMinutes', pcss.break_duration_minutes
+               ) AS step_json
+               FROM pomodoro_config_sequence_steps pcss
+               WHERE pcss.event_id = ce.id
+               ORDER BY pcss.step_index ASC
+             )
+           ) AS sequence_steps,
            pc.idle_timeout_minutes
     FROM calendar_events ce
     LEFT JOIN icalendar_components ic ON ic.id = ce.icalendar_component_id
     LEFT JOIN pomodoro_configs pc ON pc.event_id = ce.id
+    LEFT JOIN pomodoro_config_count_rhythms pcc ON pcc.event_id = ce.id
     WHERE ce.id = ?
 "#;
 
@@ -1459,10 +1526,14 @@ mod tests {
             icalendar_preservation_status: None,
             icalendar_projection_warnings: None,
             icalendar_raw_jcal: None,
-            focus_duration_minutes: None,
-            short_break_minutes: None,
-            long_break_minutes: None,
-            pomodoro_count: None,
+            rhythm_kind: None,
+            rhythm_source: None,
+            preset_key: None,
+            count_focus_duration_minutes: None,
+            count_short_break_minutes: None,
+            count_long_break_minutes: None,
+            count_long_break_after_focus_count: None,
+            sequence_steps: None,
             idle_timeout_minutes: None,
         }
     }
