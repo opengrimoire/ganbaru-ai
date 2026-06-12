@@ -2,7 +2,7 @@
   import type {
     CalendarEvent, EventColor, EventStatus, EventSurfaceStatus, EventTransparency, EventVisibility,
     EventAttendee, EventOrganizer, GeoCoordinates, GuestPermissions, AttendeeStatus,
-    PomodoroConfig, RecurrenceConfig, RecurringScope,
+    RecurrenceConfig, RecurringScope,
   } from "./types";
   import MiniDatePicker from "./MiniDatePicker.svelte";
   import TimePicker, { type TimePickerInputNavigation } from "./TimePicker.svelte";
@@ -30,24 +30,39 @@
     sanitizeTimeDraftInput,
   } from "./event-panel-utils";
   import { buildEventPanelInitKey } from "./event-panel-init-key";
+  import { isPanelArrowKey, panelArrowKeyTarget } from "./event-panel-arrow-nav";
   import { formatCalendarDate, formatTimeLabel } from "./utils";
   import {
     EVENT_PANEL_EDGE_MARGIN,
     EVENT_PANEL_MAX_WIDTH,
     EVENT_PANEL_TITLE_BAR_HEIGHT,
-    getEventPanelUsableHeight,
     getResponsivePanelWidth,
     pickEventPanelLayout,
     type EventPanelLayout,
   } from "$lib/utils/responsive";
   import {
+    buildEventPanelStyle,
+    clampFloatingLeft,
+    clampFloatingTop,
+    getAvailablePanelHeight,
+    getPanelHeightLimit,
+    shouldConstrainPanelHeight,
+    type EventPanelGeometryInput,
+  } from "./event-panel-geometry";
+  import {
     COUNT_PRESET_RHYTHMS,
-    createCustomCountPomodoroConfig,
-    createCustomSequencePomodoroConfig,
-    createPresetPomodoroConfig,
-    type PomodoroPresetKey,
     type SequencePomodoroRhythmStep,
   } from "$lib/pomodoro/rhythm";
+  import {
+    buildEventPanelChangesPayload,
+    buildEventPanelHeavyInitPayload,
+    buildEventPanelPomodoroConfig,
+    buildEventPanelSaveData,
+    collectEventPanelNotifications,
+    hasMeetingState,
+    type EventPanelPayloadInput,
+    type PanelSaveData,
+  } from "./event-panel-payloads";
 
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Archive from "@lucide/svelte/icons/archive";
@@ -73,27 +88,6 @@
   const PANEL_GAP = EVENT_PANEL_EDGE_MARGIN;
   const TITLE_BAR_HEIGHT = EVENT_PANEL_TITLE_BAR_HEIGHT;
   const PANEL_HEIGHT_CONSTRAINT_TOLERANCE = 2;
-
-  type PanelSaveData = {
-    title: string;
-    start: string;
-    end: string;
-    color?: EventColor;
-    description: string;
-    recurrence?: RecurrenceConfig;
-    notifications?: number[];
-    pomodoroConfig?: PomodoroConfig;
-    allDay?: boolean;
-    location?: string;
-    url?: string;
-    transparency?: EventTransparency;
-    status?: EventStatus;
-    visibility?: EventVisibility;
-    meetingEnabled?: boolean;
-    attendees?: EventAttendee[];
-    localParticipationStatus?: AttendeeStatus;
-    guestPermissions?: GuestPermissions;
-  };
 
   let {
     mode,
@@ -200,22 +194,6 @@
   let guestCanInviteOthers = $state(true);
   let guestCanSeeOtherGuests = $state(true);
 
-  function hasNonDefaultGuestPermissions(value: GuestPermissions | undefined): boolean {
-    return !!value && (value.canModify || !value.canInviteOthers || !value.canSeeOtherGuests);
-  }
-
-  function hasMeetingState(value: Partial<CalendarEvent>): boolean {
-    return value.meetingEnabled === true
-      || !!(value.attendees && value.attendees.length > 0)
-      || !!value.organizer
-      || !!value.location
-      || !!value.url
-      || !!value.geo
-      || value.localParticipationStatus !== undefined
-      || hasNonDefaultGuestPermissions(value.guestPermissions);
-  }
-
-
   // ─── Read-only imported fields ────────────────────────────────────
   let organizer: EventOrganizer | undefined = $state(undefined);
   let geo: GeoCoordinates | undefined = $state(undefined);
@@ -247,39 +225,10 @@
     return idleTimeoutEnabled ? preferences.focusIdleThresholdMinutes : null;
   }
 
-  function buildPomodoroConfigPayload(): PomodoroConfig | undefined {
-    if (allDay || !pomodoroEnabled) return undefined;
-    const idleTimeoutMinutes = idleTimeoutMinutesForPayload();
-    if (pomodoroPreset !== "custom") {
-      return createPresetPomodoroConfig(pomodoroPreset as PomodoroPresetKey, idleTimeoutMinutes);
-    }
-    if (customRhythmMode === "sequence") {
-      return createCustomSequencePomodoroConfig(
-        sequenceSteps.length > 0
-          ? sequenceSteps
-          : [{ focusDurationMinutes: focusDuration, breakPhase: "short_break", breakDurationMinutes: shortBreak }],
-        idleTimeoutMinutes,
-      );
-    }
-    return createCustomCountPomodoroConfig({
-      focusDurationMinutes: focusDuration,
-      shortBreakMinutes: shortBreak,
-      longBreakMinutes: longBreak,
-      longBreakAfterFocusCount,
-    }, idleTimeoutMinutes);
-  }
-
   // ─── Notifications ──────────────────────────────────────────────
   let notifEnabled = $state(false);
   let notifSelected = $state(new Set<number>());
   let customNotifs: { amount: number; unit: number }[] = $state([]);
-
-  function collectNotifications(): number[] | undefined {
-    if (!notifEnabled) return undefined;
-    const result: number[] = [...notifSelected];
-    for (const cn of customNotifs) result.push(cn.amount * cn.unit);
-    return result.length > 0 ? [...new Set(result)].sort((a, b) => a - b) : undefined;
-  }
 
   // ─── Recurrence ─────────────────────────────────────────────────
   let recurrence: RecurrenceConfig | undefined = $state(undefined);
@@ -656,7 +605,7 @@
         e.stopPropagation();
         return;
       }
-      if (PANEL_ARROW_KEYS.has(e.key)) return;
+      if (isPanelArrowKey(e.key)) return;
       if (/^[\d:]$/.test(e.key) && !isTimeInputEditing(target)) {
         e.preventDefault();
         e.stopPropagation();
@@ -798,39 +747,24 @@
   let baseTop = $state(0);
   const minTop = TITLE_BAR_HEIGHT + PANEL_GAP;
 
-  function clampFloatingLeft(left: number, viewportWidth: number, width: number): number {
-    const maxLeft = Math.max(PANEL_GAP, viewportWidth - width - PANEL_GAP);
-    return Math.max(PANEL_GAP, Math.min(maxLeft, left));
-  }
-
-  function clampFloatingTop(top: number, viewportHeight: number, visibleHeight: number): number {
-    const maxTop = Math.max(minTop, viewportHeight - visibleHeight - PANEL_GAP);
-    return Math.max(minTop, Math.min(maxTop, top));
-  }
-
-  function getAvailablePanelHeight(viewportHeight: number): number {
-    return Math.max(
-      96,
-      getEventPanelUsableHeight(viewportHeight, TITLE_BAR_HEIGHT, PANEL_GAP),
-    );
-  }
-
-  function getPinnedHeightLimit(viewportHeight: number): number {
-    const dragDelta = dragOffset.y - pinnedDragY;
-    const viewportBottom = Math.max(minTop + 96, viewportHeight - PANEL_GAP);
-    const effectiveBottom = Math.min(pinnedBottom + dragDelta, viewportBottom);
-    return Math.max(96, Math.round(effectiveBottom - minTop));
-  }
-
-  function getPanelHeightLimit(layout: EventPanelLayout, viewportHeight: number): number {
-    const availableHeight = getAvailablePanelHeight(viewportHeight);
-    if (layout === "bottom") return Math.min(560, availableHeight);
-    if (pinnedBottom > 0) return getPinnedHeightLimit(viewportHeight);
-    return availableHeight;
-  }
-
-  function shouldConstrainPanelHeight(limit: number): boolean {
-    return panelHeight > 0 && panelHeight > limit + PANEL_HEIGHT_CONSTRAINT_TOLERANCE;
+  function currentGeometryInput(): EventPanelGeometryInput {
+    return {
+      baseLeft,
+      baseTop,
+      defaultPanelHeight: DEFAULT_PANEL_HEIGHT,
+      dragOffset,
+      gap: PANEL_GAP,
+      heightConstraintTolerance: PANEL_HEIGHT_CONSTRAINT_TOLERANCE,
+      layout: panelLayout,
+      minTop,
+      panelHeight,
+      pinnedBottom,
+      pinnedDragY,
+      titleBarHeight: TITLE_BAR_HEIGHT,
+      viewportHeight: viewport.height,
+      viewportWidth: viewport.width,
+      width: panelWidth,
+    };
   }
 
   const isRecurring = $derived(
@@ -1185,10 +1119,7 @@
       return;
     }
     if (userDragged) return;
-    const availableHeight = Math.max(
-      96,
-      getEventPanelUsableHeight(vh, TITLE_BAR_HEIGHT, PANEL_GAP),
-    );
+    const availableHeight = getAvailablePanelHeight(vh, TITLE_BAR_HEIGHT, PANEL_GAP);
     const visibleHeight = Math.min(ph, availableHeight);
 
     let left: number;
@@ -1205,8 +1136,8 @@
 
     const top = layout === "centered" ? Math.round((vh - visibleHeight) / 2) : _a.y;
 
-    baseLeft = clampFloatingLeft(left, vw, width);
-    baseTop = clampFloatingTop(top, vh, visibleHeight);
+    baseLeft = clampFloatingLeft(left, vw, width, PANEL_GAP);
+    baseTop = clampFloatingTop(top, vh, visibleHeight, minTop, PANEL_GAP);
     dragOffset = { x: 0, y: 0 };
     panelPositionReady = true;
   });
@@ -1222,7 +1153,11 @@
   );
   const eventPanelBodyConstrained = $derived.by(() => (
     panelLayout === "fullscreen"
-    || shouldConstrainPanelHeight(getPanelHeightLimit(panelLayout, viewport.height))
+    || shouldConstrainPanelHeight(
+      panelHeight,
+      getPanelHeightLimit(currentGeometryInput()),
+      PANEL_HEIGHT_CONSTRAINT_TOLERANCE,
+    )
   ));
 
   // ─── Emit changes ───────────────────────────────────────────────
@@ -1234,31 +1169,7 @@
    * detect revert-to-original without false positives.
    */
   function buildChangesPayload(): Partial<CalendarEvent> {
-    const hasNonDefaultPerms = guestCanModify || !guestCanInviteOthers || !guestCanSeeOtherGuests;
-    return {
-      title: title.trim(),
-      start: `${startDate} ${startTime}`,
-      end: `${endDate} ${endTime}`,
-      color,
-      description,
-      recurrence,
-      notifications: collectNotifications(),
-      pomodoroConfig: buildPomodoroConfigPayload(),
-      allDay: allDay || undefined,
-      meetingEnabled: meetingEnabled || undefined,
-      location: meetingEnabled && location ? location : undefined,
-      url: meetingEnabled && eventUrl ? eventUrl : undefined,
-      transparency: transparency !== "opaque" ? transparency : undefined,
-      status: eventStatus !== "confirmed" ? eventStatus : undefined,
-      visibility: visibility !== "public" ? visibility : undefined,
-      attendees: meetingEnabled && attendees.length > 0 ? attendees : undefined,
-      localParticipationStatus: meetingEnabled ? localParticipationStatus : undefined,
-      guestPermissions: meetingEnabled && hasNonDefaultPerms ? {
-        canModify: guestCanModify,
-        canInviteOthers: guestCanInviteOthers,
-        canSeeOtherGuests: guestCanSeeOtherGuests,
-      } : undefined,
-    };
+    return buildEventPanelChangesPayload(currentPayloadInput());
   }
 
   /**
@@ -1270,20 +1181,7 @@
    * an in-progress slim edit that happened during the load window.
    */
   function buildHeavyInitPayload(): Partial<CalendarEvent> {
-    const hasNonDefaultPerms = guestCanModify || !guestCanInviteOthers || !guestCanSeeOtherGuests;
-    return {
-      description,
-      meetingEnabled: meetingEnabled || undefined,
-      url: meetingEnabled && eventUrl ? eventUrl : undefined,
-      visibility: visibility !== "public" ? visibility : undefined,
-      attendees: meetingEnabled && attendees.length > 0 ? attendees : undefined,
-      localParticipationStatus: meetingEnabled ? localParticipationStatus : undefined,
-      guestPermissions: meetingEnabled && hasNonDefaultPerms ? {
-        canModify: guestCanModify,
-        canInviteOthers: guestCanInviteOthers,
-        canSeeOtherGuests: guestCanSeeOtherGuests,
-      } : undefined,
-    };
+    return buildEventPanelHeavyInitPayload(currentPayloadInput());
   }
 
   function emitChange() {
@@ -1299,54 +1197,7 @@
   // its pre-expansion position so it only grows upward. Otherwise the
   // top is pinned and the panel grows downward, nudging up only if
   // it would overflow the viewport.
-  const panelStyle = $derived.by(() => {
-    const vw = viewport.width;
-    const vh = viewport.height;
-    const width = panelWidth;
-    const availableHeight = getAvailablePanelHeight(vh);
-    const layout = panelLayout;
-    const ph = panelHeight || DEFAULT_PANEL_HEIGHT;
-    const visibleHeight = Math.min(ph, availableHeight);
-
-    if (layout === "fullscreen") {
-      return `position:fixed; left:${PANEL_GAP}px; right:${PANEL_GAP}px; top:${minTop}px; bottom:${PANEL_GAP}px; z-index:50;`;
-    }
-
-    if (layout === "bottom") {
-      const maxHeight = getPanelHeightLimit(layout, vh);
-      const heightCss = shouldConstrainPanelHeight(maxHeight)
-        ? `height:${Math.round(maxHeight)}px;`
-        : "";
-      return `position:fixed; left:${PANEL_GAP}px; right:${PANEL_GAP}px; bottom:${PANEL_GAP}px; max-height:${Math.round(maxHeight)}px; ${heightCss} z-index:50;`;
-    }
-
-    const left = clampFloatingLeft(baseLeft + dragOffset.x, vw, width);
-    const rawTop = Math.max(minTop, baseTop + dragOffset.y);
-
-    if (pinnedBottom > 0) {
-      // Section expanding: use CSS bottom to pin the bottom edge perfectly.
-      // The browser keeps it fixed frame-by-frame without JS timing issues.
-      const dragDelta = dragOffset.y - pinnedDragY;
-      const bottomCss = Math.max(PANEL_GAP, Math.round(vh - pinnedBottom - dragDelta));
-      const maxH = getPinnedHeightLimit(vh);
-      const heightCss = shouldConstrainPanelHeight(maxH)
-        ? `height:${maxH}px;`
-        : "";
-      return `position:fixed; left:${Math.round(left)}px; bottom:${bottomCss}px; max-height:${maxH}px; ${heightCss} width:${Math.round(width)}px; z-index:50;`;
-    }
-
-    // Normal: pin top, nudge up if overflowing bottom
-    let top = rawTop;
-    const overflow = top + visibleHeight + PANEL_GAP - vh;
-    if (overflow > 0) {
-      top = Math.max(minTop, top - overflow);
-    }
-
-    const heightCss = shouldConstrainPanelHeight(availableHeight)
-      ? `height:${Math.round(availableHeight)}px;`
-      : "";
-    return `position:fixed; left:${Math.round(left)}px; top:${Math.round(top)}px; width:${Math.round(width)}px; max-height:${Math.round(availableHeight)}px; ${heightCss} z-index:50;`;
-  });
+  const panelStyle = $derived(buildEventPanelStyle(currentGeometryInput()));
   const parkedPanelStyle = $derived(
     `position:fixed; left:-10000px; top:-10000px; width:${Math.round(panelWidth)}px; z-index:-1; pointer-events:none;`,
   );
@@ -1370,30 +1221,48 @@
 
   // ─── Build data and handlers ────────────────────────────────────
   function buildSaveData(): PanelSaveData {
-    const hasNonDefaultPerms = guestCanModify || !guestCanInviteOthers || !guestCanSeeOtherGuests;
+    return buildEventPanelSaveData(currentPayloadInput());
+  }
+
+  function currentPayloadInput(): EventPanelPayloadInput {
     return {
-      title: title.trim(),
-      start: `${startDate} ${startTime}`,
-      end: `${endDate} ${endTime}`,
+      title,
+      startDate,
+      startTime,
+      endDate,
+      endTime,
       color,
       description,
       recurrence,
-      notifications: collectNotifications(),
-      pomodoroConfig: buildPomodoroConfigPayload(),
-      allDay: allDay || undefined,
-      meetingEnabled: meetingEnabled || undefined,
-      location: meetingEnabled && location ? location : undefined,
-      url: meetingEnabled && eventUrl ? eventUrl : undefined,
-      transparency: transparency !== "opaque" ? transparency : undefined,
-      status: eventStatus !== "confirmed" ? eventStatus : undefined,
-      visibility: visibility !== "public" ? visibility : undefined,
-      attendees: meetingEnabled && attendees.length > 0 ? attendees : undefined,
-      localParticipationStatus: meetingEnabled ? localParticipationStatus : undefined,
-      guestPermissions: meetingEnabled && hasNonDefaultPerms ? {
-        canModify: guestCanModify,
-        canInviteOthers: guestCanInviteOthers,
-        canSeeOtherGuests: guestCanSeeOtherGuests,
-      } : undefined,
+      notifications: collectEventPanelNotifications({
+        enabled: notifEnabled,
+        selected: notifSelected,
+        custom: customNotifs,
+      }),
+      pomodoroConfig: buildEventPanelPomodoroConfig({
+        allDay,
+        enabled: pomodoroEnabled,
+        preset: pomodoroPreset,
+        customRhythmMode,
+        sequenceSteps,
+        focusDurationMinutes: focusDuration,
+        shortBreakMinutes: shortBreak,
+        longBreakMinutes: longBreak,
+        longBreakAfterFocusCount,
+        idleTimeoutMinutes: idleTimeoutMinutesForPayload(),
+      }),
+      allDay,
+      meetingEnabled,
+      location,
+      eventUrl,
+      transparency,
+      eventStatus,
+      visibility,
+      attendees,
+      localParticipationStatus,
+      guestCanModify,
+      guestCanInviteOthers,
+      guestCanSeeOtherGuests,
     };
   }
 
@@ -1468,137 +1337,6 @@
     }
   }
 
-  const PANEL_ARROW_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]);
-  const PANEL_FOCUSABLE_SELECTOR = [
-    "button",
-    "input",
-    "textarea",
-    "[contenteditable='true']",
-    "[role='button']",
-    "[tabindex]",
-  ].join(",");
-
-  interface PanelNavCandidate {
-    el: HTMLElement;
-    rect: DOMRect;
-    centerX: number;
-    centerY: number;
-  }
-
-  function isElementVisibleForPanelNav(el: HTMLElement): boolean {
-    if (el.closest("[aria-hidden='true']")) return false;
-    if (el.getClientRects().length === 0) return false;
-    const style = getComputedStyle(el);
-    return style.display !== "none" && style.visibility !== "hidden";
-  }
-
-  function isEditablePanelNavTarget(target: EventTarget | null): boolean {
-    if (!(target instanceof HTMLElement)) return false;
-    if (target.isContentEditable) return true;
-    const input = target.closest("input, textarea");
-    if (input instanceof HTMLTextAreaElement) return true;
-    if (!(input instanceof HTMLInputElement)) return false;
-    if (input.dataset.panelArrowNav === "true") return false;
-    return true;
-  }
-
-  function panelNavTarget(target: EventTarget | null): HTMLElement | null {
-    if (!(target instanceof HTMLElement)) return null;
-    return target.closest<HTMLElement>(PANEL_FOCUSABLE_SELECTOR);
-  }
-
-  function panelNavCandidates(): PanelNavCandidate[] {
-    if (!panelEl) return [];
-    return Array.from(panelEl.querySelectorAll<HTMLElement>(PANEL_FOCUSABLE_SELECTOR))
-      .filter((el) => {
-        if (el instanceof HTMLButtonElement || el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-          if (el.disabled) return false;
-        }
-        return isElementVisibleForPanelNav(el);
-      })
-      .map((el) => {
-        const rect = el.getBoundingClientRect();
-        return {
-          el,
-          rect,
-          centerX: rect.left + rect.width / 2,
-          centerY: rect.top + rect.height / 2,
-        };
-      });
-  }
-
-  function sortPanelNavCandidates(candidates: PanelNavCandidate[]): PanelNavCandidate[] {
-    return [...candidates].sort((a, b) => {
-      const rowDelta = a.centerY - b.centerY;
-      if (Math.abs(rowDelta) > 10) return rowDelta;
-      return a.centerX - b.centerX;
-    });
-  }
-
-  function panelNavRows(candidates: PanelNavCandidate[]): PanelNavCandidate[][] {
-    const rows: PanelNavCandidate[][] = [];
-    for (const candidate of sortPanelNavCandidates(candidates)) {
-      const previousRow = rows.at(-1);
-      const rowCenter = previousRow
-        ? previousRow.reduce((sum, item) => sum + item.centerY, 0) / previousRow.length
-        : 0;
-      const sameRowThreshold = Math.max(10, candidate.rect.height * 0.65);
-      if (previousRow && Math.abs(candidate.centerY - rowCenter) <= sameRowThreshold) {
-        previousRow.push(candidate);
-      } else {
-        rows.push([candidate]);
-      }
-    }
-    return rows.map((row) => row.sort((a, b) => a.centerX - b.centerX));
-  }
-
-  function rowAndIndexFor(
-    rows: PanelNavCandidate[][],
-    current: HTMLElement,
-  ): { rowIndex: number; itemIndex: number } | null {
-    for (const [rowIndex, row] of rows.entries()) {
-      const itemIndex = row.findIndex((candidate) => candidate.el === current);
-      if (itemIndex >= 0) return { rowIndex, itemIndex };
-    }
-    return null;
-  }
-
-  function closestCandidateByX(row: PanelNavCandidate[], x: number): PanelNavCandidate | undefined {
-    let best: { candidate: PanelNavCandidate; distance: number } | undefined;
-    for (const candidate of row) {
-      const distance = Math.abs(candidate.centerX - x);
-      if (!best || distance < best.distance) best = { candidate, distance };
-    }
-    return best?.candidate;
-  }
-
-  function nextPanelArrowTarget(current: HTMLElement, key: string): HTMLElement | null {
-    const rows = panelNavRows(panelNavCandidates());
-    const currentPosition = rowAndIndexFor(rows, current);
-    if (!currentPosition) return null;
-
-    const currentRow = rows[currentPosition.rowIndex];
-    const currentCandidate = currentRow[currentPosition.itemIndex];
-    if (!currentCandidate) return null;
-
-    if (key === "ArrowRight") {
-      return currentRow[currentPosition.itemIndex + 1]?.el
-        ?? rows[currentPosition.rowIndex + 1]?.[0]?.el
-        ?? null;
-    }
-
-    if (key === "ArrowLeft") {
-      return currentRow[currentPosition.itemIndex - 1]?.el
-        ?? rows[currentPosition.rowIndex - 1]?.at(-1)?.el
-        ?? null;
-    }
-
-    const targetRow = key === "ArrowDown"
-      ? rows[currentPosition.rowIndex + 1]
-      : rows[currentPosition.rowIndex - 1];
-    return targetRow ? closestCandidateByX(targetRow, currentCandidate.centerX)?.el ?? null : null;
-  }
-
   function focusPanelArrowTarget(target: HTMLElement) {
     target.focus();
 
@@ -1612,14 +1350,7 @@
   }
 
   function handlePanelArrowKeydown(e: KeyboardEvent) {
-    if (e.defaultPrevented || parked) return;
-    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
-    if (!PANEL_ARROW_KEYS.has(e.key)) return;
-    if (isEditablePanelNavTarget(e.target)) return;
-
-    const current = panelNavTarget(e.target);
-    if (!current || !panelEl?.contains(current)) return;
-    const next = nextPanelArrowTarget(current, e.key);
+    const next = panelArrowKeyTarget(e, panelEl, parked);
     if (!next) return;
 
     e.preventDefault();
