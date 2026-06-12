@@ -16,7 +16,6 @@ mod doomscrolling;
 mod media_controls;
 mod media_player;
 mod music;
-mod music_youtube_host;
 mod notification;
 mod pomodoro;
 mod pomodoro_enforcement;

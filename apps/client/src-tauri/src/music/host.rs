@@ -14,7 +14,7 @@ use tauri::{Manager, State};
 
 use super::artwork::{embedded_artwork_id, extract_embedded_artwork};
 use super::require_absolute_file;
-use crate::music_youtube_host::youtube_host_html;
+use super::youtube_host::youtube_host_html;
 
 pub struct MusicHostState {
     pub youtube_url: String,

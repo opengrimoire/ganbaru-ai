@@ -12,6 +12,7 @@ use crate::db_path::connect_sqlite;
 
 mod artwork;
 pub(crate) mod host;
+mod youtube_host;
 
 pub(crate) use host::setup_youtube_host;
 
@@ -330,8 +331,8 @@ mod tests {
         parse_flac_picture_block, remove_id3_unsynchronization,
     };
     use super::host::{media_content_type, parse_byte_range, ByteRange};
+    use super::youtube_host::youtube_host_html;
     use super::*;
-    use crate::music_youtube_host::youtube_host_html;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn valid_state() -> PlaybackStateWrite {
