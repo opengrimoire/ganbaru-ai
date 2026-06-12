@@ -2,10 +2,10 @@
   import type {
     CalendarEvent, CalendarViewMode, EventAttendee, EventColor, EventStatus, EventSurfaceStatus,
     EventTransparency, EventVisibility, GuestPermissions, AttendeeStatus,
-    PersistedSegment, PomodoroConfig, RecurrenceConfig, RecurringScope,
+    PomodoroConfig, RecurrenceConfig, RecurringScope,
   } from "./types";
   import {
-    addDays, adjacentWorkCycleAnchor, computeViewWindow, formatCalendarDate, formatDatePart,
+    computeViewWindow, formatCalendarDate, formatDatePart,
     formatCalendarDateWithSeconds, getWeekDays, getWorkCycleDays,
     getEventSurfaceStatusForIdentity, getLocalTimezone,
   } from "./utils";
@@ -29,10 +29,8 @@
   import type { EditSessionState, PanelAnchor } from "./edit-session.svelte";
   import { mark as perfMark } from "$lib/stores/perflog.svelte";
   import { isAppShortcutBlockedTarget, isEditableKeyboardTarget } from "$lib/utils";
-  import { formatShortcut, hasOnlyShortcutModifier } from "$lib/keyboard-shortcuts";
+  import { hasOnlyShortcutModifier } from "$lib/keyboard-shortcuts";
   import { getCalendarNavHandle } from "./nav-handle.svelte";
-  import { dbUrl } from "$lib/api/db";
-  import { invoke } from "@tauri-apps/api/core";
   import {
     HeldNavigationController,
     NAV_HOLD_DELAY_MS,
@@ -57,7 +55,6 @@
   import { getCalendarEventEditLock } from "./event-edit-permissions";
   import {
     DEFAULT_DAY_HEADER_RETURN_MODE,
-    nextDayHeaderReturnMode,
     type DayHeaderReturnMode,
   } from "./view-navigation";
   import {
@@ -66,13 +63,16 @@
     type CalendarDeleteArchivePlan,
     type CalendarDeleteArchiveRestoreSnapshot,
   } from "./delete-archive-plan";
+  import { createCalendarViewToastController } from "./calendar-view-toasts.svelte";
+  import { buildEventsByDay } from "./calendar-view-events-by-day";
+  import { createCalendarViewConfirmationController } from "./calendar-view-confirmation.svelte";
   import {
-    mapPomodoroSegmentRows,
-    pomodoroSegmentSnapshotKey,
-    queryPomodoroSegmentEventIds,
-    visiblePomodoroEventIds,
-    type DbPomodoroSegmentRow,
-  } from "./pomodoro-rail-segments";
+    createCalendarOutsideCloseAction,
+    panelAnchorFromRect,
+    panelAnchorFromRenderedEvent as panelAnchorFromRenderedEventElement,
+  } from "./calendar-view-panel-dom";
+  import { createPersistedPomodoroSegmentsController } from "./calendar-view-persisted-segments.svelte";
+  import { createCalendarViewTargetController } from "./calendar-view-target.svelte";
 
   const calendarStore = getCalendar();
   const calendarsStore = getCalendars();
@@ -81,6 +81,12 @@
   const theme = getTheme();
   const preferences = getPreferences();
   const { t } = getLocalization();
+  const toasts = createCalendarViewToastController();
+  const confirm = createCalendarViewConfirmationController({
+    defaultYesLabel: () => t("common.yesShortcut"),
+    defaultNoLabel: () => t("common.noShortcut"),
+  });
+  const requestConfirm = confirm.requestConfirm;
 
   type EventPanelComponent = typeof import("./EventPanel.svelte").default;
   type ParkedPanelSnapshot =
@@ -236,24 +242,6 @@
       });
     }
   }
-
-  /**
-   * Advance a `YYYY-MM-DD` string by one calendar day. Inlined to keep
-   * `eventsByDay` allocation-free of Temporal objects in the hot path.
-   */
-  function nextDayStr(s: string): string {
-    const y = Number(s.substring(0, 4));
-    const m = Number(s.substring(5, 7));
-    const d = Number(s.substring(8, 10));
-    const dt = new Date(y, m - 1, d);
-    dt.setDate(dt.getDate() + 1);
-    const ny = dt.getFullYear();
-    const nm = String(dt.getMonth() + 1).padStart(2, "0");
-    const nd = String(dt.getDate()).padStart(2, "0");
-    return `${ny}-${nm}-${nd}`;
-  }
-
-  type ViewState = { mode: CalendarViewMode; date: Date };
 
   const initialViewMode: CalendarViewMode = preferences.calendarViewMode;
   const initialAnchorDate = new Date();
@@ -471,84 +459,38 @@
         : event,
     );
   });
-  let persistedSegmentsByEvent = $state<ReadonlyMap<string, PersistedSegment[]>>(new Map());
-  let persistedSegmentsSnapshotKey = $state("");
-  let persistedSegmentsRequestSeq = 0;
-
-  function shouldLoadRailSegmentsFor(mode: CalendarViewMode): boolean {
-    return mode === "day" || mode === "workweek" || mode === "week";
-  }
-
-  async function loadPersistedSegmentsForEvents(
-    events: readonly CalendarEvent[],
-  ): Promise<{
-    key: string;
-    map: ReadonlyMap<string, PersistedSegment[]>;
-  }> {
-    const visibleIds = visiblePomodoroEventIds(events);
-    const key = pomodoroSegmentSnapshotKey(pomodoro.segmentVersion, visibleIds);
-    if (key === persistedSegmentsSnapshotKey) {
-      return { key, map: persistedSegmentsByEvent };
-    }
-    if (visibleIds.length === 0) {
-      return { key, map: new Map() };
-    }
-
-    const rows = await invoke<DbPomodoroSegmentRow[]>("pomodoro_load_segments_for_events", {
-      dbUrl: dbUrl(),
-      eventIds: queryPomodoroSegmentEventIds(visibleIds),
-    });
-    return {
-      key,
-      map: mapPomodoroSegmentRows(rows, visibleIds),
-    };
-  }
-
-  async function ensurePersistedSegmentsForTarget(
-    target: ViewState,
-  ): Promise<{
-    key: string;
-    map: ReadonlyMap<string, PersistedSegment[]>;
-  }> {
-    if (!shouldLoadRailSegmentsFor(target.mode)) {
-      return { key: "", map: new Map() };
-    }
-    const targetWindow = computeViewWindow(target.date, target.mode);
-    return loadPersistedSegmentsForEvents(visibleStoreEventsForWindow(targetWindow));
-  }
-
-  function applyPersistedSegmentsSnapshot(
-    snapshot: {
-      key: string;
-      map: ReadonlyMap<string, PersistedSegment[]>;
+  const persistedSegments = createPersistedPomodoroSegmentsController({
+    getSegmentVersion: () => pomodoro.segmentVersion,
+    visibleStoreEventsForWindow,
+  });
+  const targetController = createCalendarViewTargetController({
+    calendarStore,
+    getAnchorDate: () => anchorDate,
+    getDayHeaderReturnMode: () => dayHeaderReturnMode,
+    getViewMode: () => viewMode,
+    getViewWindow: () => viewWindow,
+    getVisibleEventCount: () => visibleEvents.length,
+    persistedSegments,
+    setAnchorDate: (date) => {
+      anchorDate = date;
     },
-  ): void {
-    if (snapshot.key === persistedSegmentsSnapshotKey && snapshot.map === persistedSegmentsByEvent) return;
-    persistedSegmentsSnapshotKey = snapshot.key;
-    persistedSegmentsByEvent = snapshot.map;
-  }
-
-  function refreshPersistedSegmentsForCurrentView(): void {
-    const seq = ++persistedSegmentsRequestSeq;
-    const target: ViewState = { mode: viewMode, date: new Date(anchorDate) };
-    void ensurePersistedSegmentsForTarget(target)
-      .then((snapshot) => {
-        if (seq !== persistedSegmentsRequestSeq) return;
-        applyPersistedSegmentsSnapshot(snapshot);
-      })
-      .catch((error) => {
-        if (seq !== persistedSegmentsRequestSeq) return;
-        console.warn("[CalendarView] Failed to load pomodoro rail segments:", error);
-        applyPersistedSegmentsSnapshot({ key: "", map: new Map() });
-      });
-  }
+    setDayHeaderReturnMode: (mode) => {
+      dayHeaderReturnMode = mode;
+    },
+    setPreferredViewMode: (mode) => {
+      preferences.setCalendarViewMode(mode);
+    },
+    setViewMode: (mode) => {
+      viewMode = mode;
+    },
+  });
 
   $effect(() => {
     if (!calendarStore.loaded) return;
     if (!calendarStore.hasWindow(viewWindow.start, viewWindow.end)) return;
     void pomodoro.segmentVersion;
     void visibleEvents;
-    refreshPersistedSegmentsForCurrentView();
+    persistedSegments.refreshForTarget({ mode: viewMode, date: new Date(anchorDate) });
   });
   let lastSameAnchorPrefetchKey = "";
   $effect(() => {
@@ -557,7 +499,7 @@
     const key = `${viewMode}:${formatDatePart(anchorDate)}`;
     if (key === lastSameAnchorPrefetchKey) return;
     lastSameAnchorPrefetchKey = key;
-    calendarStore.prefetchWindows(sameAnchorPrefetchRequests({ mode: viewMode, date: anchorDate }));
+    targetController.prefetchSameAnchor({ mode: viewMode, date: anchorDate });
   });
   let bootUsablePaintMarked = false;
 
@@ -576,35 +518,7 @@
     });
   });
 
-  /**
-   * Per-day bucket built once per `visibleEvents` recompute. Replaces
-   * `eventsForDay`/`allEventsForDay` linear scans inside DayColumn and
-   * MonthView, which previously cost O(views x columns x N) per nav. The
-   * walk mirrors the old filter logic exactly: an event lands on every day
-   * `d` where `e.end > "${d} 00:00"` for timed events, and on every day in
-   * `[startDay, endDay]` (inclusive) for all-day events.
-   */
-  const eventsByDay = $derived.by(() => {
-    const map = new Map<string, CalendarEvent[]>();
-    for (const e of visibleEvents) {
-      let d = e.start.substring(0, 10);
-      if (e.allDay) {
-        const endDay = e.end.substring(0, 10);
-        while (d <= endDay) {
-          const arr = map.get(d);
-          if (arr) arr.push(e); else map.set(d, [e]);
-          d = nextDayStr(d);
-        }
-      } else {
-        while (e.end > `${d} 00:00`) {
-          const arr = map.get(d);
-          if (arr) arr.push(e); else map.set(d, [e]);
-          d = nextDayStr(d);
-        }
-      }
-    }
-    return map;
-  });
+  const eventsByDay = $derived(buildEventsByDay(visibleEvents));
 
   let suppressEditingGlow = $state(false);
   let endingActiveEvent = $state(false);
@@ -615,7 +529,14 @@
 
   // Track when drag operations end to prevent click-to-close after drag
   let lastDragEndTime = 0;
-  let suppressOutsideClickUntil = 0;
+  const outsideClose = createCalendarOutsideCloseAction({
+    closeGuardMs: CREATE_CLOSE_GUARD_MS,
+    getConfirmOpen: () => !!confirm.action,
+    getLastDragEndTime: () => lastDragEndTime,
+    isPanelCommitHidden: () => panelCommitHidden,
+    isSessionClosed: () => session.state.mode === "closed",
+    onClose: handlePanelClose,
+  });
 
   // Merged event for the panel (original + changes, so panel sees drag/resize updates)
   const panelEvent = $derived.by(() => {
@@ -847,39 +768,6 @@
   // must happen after the save because hybrid logic needs activeBlockId intact.
   let sessionStopPending = false;
 
-  // View history for Alt+Left/Right navigation (capped at 50)
-  const VIEW_HISTORY_LIMIT = 50;
-  let history: ViewState[] = $state([{ mode: initialViewMode, date: new Date(initialAnchorDate) }]);
-  let historyIndex = $state(0);
-  let isNavigatingHistory = false;
-
-  function pushHistory(mode: CalendarViewMode, date: Date) {
-    if (isNavigatingHistory) return;
-    const base = history.slice(0, historyIndex + 1);
-    base[base.length - 1] = { mode: viewMode, date: new Date(anchorDate) };
-    history = [...base, { mode, date }];
-    if (history.length > VIEW_HISTORY_LIMIT) {
-      history = history.slice(history.length - VIEW_HISTORY_LIMIT);
-    }
-    historyIndex = history.length - 1;
-  }
-
-  function historyBack() {
-    if (historyIndex <= 0) return;
-    historyIndex--;
-    isNavigatingHistory = true;
-    void requestCalendarTarget(history[historyIndex], { history: false, reason: "history" });
-    isNavigatingHistory = false;
-  }
-
-  function historyForward() {
-    if (historyIndex >= history.length - 1) return;
-    historyIndex++;
-    isNavigatingHistory = true;
-    void requestCalendarTarget(history[historyIndex], { history: false, reason: "history" });
-    isNavigatingHistory = false;
-  }
-
   // The picker enforces this same cap; keep them in sync if you change one.
   const MAX_TIMEZONES = 5;
 
@@ -907,114 +795,10 @@
     timezones = next;
   }
 
-  const DELETE_UNDO_TIMEOUT_MS = 5_000;
-  const SAVE_SUCCESS_TOAST_TIMEOUT_MS = 3_000;
-  const SAVE_ERROR_TOAST_TIMEOUT_MS = 8_000;
-
-  interface DeleteUndoToast {
-    id: string;
-    pending: boolean;
-    restore?: () => Promise<void>;
-    label: string;
-  }
-
-  interface SaveToast {
-    id: string;
-    pending: boolean;
-    message: string;
-    variant: "success" | "error";
-  }
-
-  let deleteUndoToast: DeleteUndoToast | null = $state(null);
-  let deleteUndoTimer: ReturnType<typeof setTimeout> | undefined;
-  let saveSuccessToast: SaveToast | null = $state(null);
-  let saveSuccessTimer: ReturnType<typeof setTimeout> | undefined;
-
-  function clearDeleteUndoTimer(): void {
-    if (deleteUndoTimer) {
-      clearTimeout(deleteUndoTimer);
-      deleteUndoTimer = undefined;
-    }
-  }
-
-  function dismissDeleteUndoToast(): void {
-    clearDeleteUndoTimer();
-    deleteUndoToast = null;
-  }
-
-  function showDeletePendingToast(label: string): string {
-    clearDeleteUndoTimer();
-    const id = crypto.randomUUID();
-    deleteUndoToast = { id, pending: true, label };
-    return id;
-  }
-
-  function dismissDeleteToastIfCurrent(id: string): void {
-    if (deleteUndoToast?.id === id) dismissDeleteUndoToast();
-  }
-
-  function showDeleteUndoToast(id: string, label: string, restore?: () => Promise<void>): void {
-    clearDeleteUndoTimer();
-    if (deleteUndoToast?.id !== id) return;
-    deleteUndoToast = { id, pending: false, restore, label };
-    deleteUndoTimer = setTimeout(() => {
-      if (deleteUndoToast?.id === id) deleteUndoToast = null;
-      deleteUndoTimer = undefined;
-    }, DELETE_UNDO_TIMEOUT_MS);
-  }
-
-  function clearSaveSuccessTimer(): void {
-    if (saveSuccessTimer) {
-      clearTimeout(saveSuccessTimer);
-      saveSuccessTimer = undefined;
-    }
-  }
-
-  function dismissSaveSuccessToast(): void {
-    clearSaveSuccessTimer();
-    saveSuccessToast = null;
-  }
-
-  function showSavePendingToast(): string {
-    clearSaveSuccessTimer();
-    const id = crypto.randomUUID();
-    saveSuccessToast = { id, pending: true, message: t("calendar.view.saving"), variant: "success" };
-    return id;
-  }
-
-  function dismissSaveToastIfCurrent(id: string): void {
-    if (saveSuccessToast?.id === id) dismissSaveSuccessToast();
-  }
-
-  function showSaveSuccessToast(id: string): void {
-    clearSaveSuccessTimer();
-    if (saveSuccessToast?.id !== id) return;
-    saveSuccessToast = { id, pending: false, message: t("calendar.view.saved"), variant: "success" };
-    saveSuccessTimer = setTimeout(() => {
-      if (saveSuccessToast?.id === id) saveSuccessToast = null;
-      saveSuccessTimer = undefined;
-    }, SAVE_SUCCESS_TOAST_TIMEOUT_MS);
-  }
-
   function saveErrorMessage(error: unknown): string {
     if (error instanceof Error && error.message.trim()) return error.message;
     if (typeof error === "string" && error.trim()) return error;
     return t("calendar.view.unknownSaveError");
-  }
-
-  function showSaveErrorToast(id: string, error: unknown): void {
-    clearSaveSuccessTimer();
-    if (saveSuccessToast?.id !== id) return;
-    saveSuccessToast = {
-      id,
-      pending: false,
-      message: t("calendar.view.saveFailed", saveErrorMessage(error)),
-      variant: "error",
-    };
-    saveSuccessTimer = setTimeout(() => {
-      if (saveSuccessToast?.id === id) saveSuccessToast = null;
-      saveSuccessTimer = undefined;
-    }, SAVE_ERROR_TOAST_TIMEOUT_MS);
   }
 
   function logPanelSaveError(
@@ -1037,9 +821,9 @@
   }
 
   async function undoDeletedEvent(): Promise<void> {
-    const toast = deleteUndoToast;
+    const toast = toasts.deleteUndoToast;
     if (!toast?.restore) return;
-    dismissDeleteUndoToast();
+    toasts.dismissDeleteUndoToast();
     try {
       await toast.restore();
     } catch (e) {
@@ -1102,50 +886,8 @@
   }
 
   onDestroy(() => {
-    clearDeleteUndoTimer();
-    clearSaveSuccessTimer();
+    toasts.destroy();
   });
-
-  // Confirmation dialog
-  let confirmAction: (() => Promise<void>) | null = $state(null);
-  let confirmTitle: string | undefined = $state(undefined);
-  let confirmMessage = $state("");
-  let confirmYesLabel = $state(t("common.yesShortcut"));
-  let confirmNoLabel = $state(t("common.noShortcut"));
-  let confirmExtraShortcut: ((e: KeyboardEvent) => boolean) | undefined = $state(undefined);
-  function requestConfirm(
-    message: string,
-    action: () => Promise<void>,
-    opts?: {
-      title?: string;
-      yesLabel?: string;
-      noLabel?: string;
-      extraConfirmShortcut?: (e: KeyboardEvent) => boolean;
-    },
-  ) {
-    confirmTitle = opts?.title;
-    confirmMessage = message;
-    confirmAction = action;
-    confirmYesLabel = opts?.yesLabel ?? t("common.yesShortcut");
-    confirmNoLabel = opts?.noLabel ?? t("common.noShortcut");
-    confirmExtraShortcut = opts?.extraConfirmShortcut;
-  }
-
-  async function confirmYes() {
-    const action = confirmAction;
-    confirmAction = null;
-    confirmTitle = undefined;
-    confirmMessage = "";
-    confirmExtraShortcut = undefined;
-    if (action) await action();
-  }
-
-  function confirmNo() {
-    confirmAction = null;
-    confirmTitle = undefined;
-    confirmMessage = "";
-    confirmExtraShortcut = undefined;
-  }
 
   let containerEl: HTMLDivElement | undefined = $state();
 
@@ -1183,46 +925,9 @@
     holdDelayMs: NAV_HOLD_DELAY_MS,
     repeatMs: NAV_REPEAT_MS,
     navigate: (direction, source) => navigate(direction, source),
-    canRepeat: canRepeatHeldNavigation,
+    canRepeat: targetController.canRepeatHeldNavigation,
     mark: markHeldNav,
   });
-
-  let pendingTarget: ViewState | null = null;
-  let targetCommitPromise: Promise<void> | null = null;
-  let targetRequestSeq = 0;
-  let targetPaintPending = false;
-
-  function currentTargetState(): ViewState {
-    return pendingTarget ?? { mode: viewMode, date: anchorDate };
-  }
-
-  function targetAnchorForNavigation(direction: "forward" | "back"): Date {
-    const delta = direction === "forward" ? 1 : -1;
-    const currentTarget = currentTargetState();
-    const base = currentTarget.date;
-    if (currentTarget.mode === "week") return addDays(base, 7 * delta);
-    if (currentTarget.mode === "workweek") return adjacentWorkCycleAnchor(base, direction);
-    if (currentTarget.mode === "day") return addDays(base, delta);
-    const d = new Date(base);
-    const targetMonth = d.getMonth() + delta;
-    d.setDate(1);
-    d.setMonth(targetMonth);
-    return d;
-  }
-
-  function canRepeatHeldNavigation(direction: "forward" | "back"): boolean {
-    if (
-      pendingTarget !== null
-      || targetPaintPending
-      || calendarStore.foregroundWindowLoadBusy
-      || !calendarStore.hasWindow(viewWindow.start, viewWindow.end)
-    ) {
-      return false;
-    }
-    const targetMode = currentTargetState().mode;
-    const targetWindow = computeViewWindow(targetAnchorForNavigation(direction), targetMode);
-    return calendarStore.hasWindow(targetWindow.start, targetWindow.end);
-  }
 
   function startNavHold(
     key: HeldNavigationKey,
@@ -1247,7 +952,7 @@
   function markNavReleaseTail(key: string) {
     const seq = ++navReleaseSeq;
     const releasedAt = performance.now();
-    void waitForNavigationSettled()
+    void targetController.waitForSettled()
       .then(() => {
         if (seq !== navReleaseSeq) return;
         perfMark("nav.release-tail", {
@@ -1256,16 +961,6 @@
           count: visibleEvents.length,
         });
       });
-  }
-
-  async function waitForNavigationSettled(): Promise<void> {
-    if (targetCommitPromise) await targetCommitPromise;
-    await tick();
-    await calendarStore.whenForegroundWindowIdle();
-    await tick();
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => resolve());
-    });
   }
 
   function arrowScrollStep(ts: number) {
@@ -1305,7 +1000,7 @@
       if (e.key === "Escape" && session.state.mode !== "closed") {
         e.preventDefault();
         handlePanelClose();
-      } else if (!e.ctrlKey && !e.altKey && !e.metaKey && session.state.mode === "closed" && !confirmAction) {
+      } else if (!e.ctrlKey && !e.altKey && !e.metaKey && session.state.mode === "closed" && !confirm.action) {
         if (e.key === "ArrowLeft") {
           e.preventDefault();
           startNavHold("ArrowLeft", "back", e.repeat);
@@ -1355,7 +1050,7 @@
       navigate,
       setViewMode: (mode) => changeView(mode),
       setAnchorDate: (date) => {
-        void requestCalendarTarget({ mode: currentTargetState().mode, date }, {
+        void targetController.request({ mode: targetController.currentState().mode, date }, {
           history: false,
           reason: "programmatic",
         });
@@ -1364,7 +1059,7 @@
       getVisibleEventCount: getVisibleEventCountForBenchmark,
       openCreatePanel: openCreatePanelForBenchmark,
       closePanel: closePanelForBenchmark,
-      canRepeatHeldNavigation,
+      canRepeatHeldNavigation: targetController.canRepeatHeldNavigation,
       getViewMode: () => viewMode,
     });
 
@@ -1372,87 +1067,12 @@
       unregisterNav();
       stopArrowScroll();
       stopNavHold();
-      pendingTarget = null;
-      targetPaintPending = false;
+      targetController.clearPending();
       window.removeEventListener("keydown", handleKeydown);
       window.removeEventListener("keyup", handleKeyup);
       window.removeEventListener("blur", handleBlur);
     };
   });
-
-  function sameAnchorPrefetchRequests(target: ViewState): Array<{
-    start: typeof viewWindow.start;
-    end: typeof viewWindow.end;
-  }> {
-    const modes: CalendarViewMode[] = ["day", "workweek", "week", "month"];
-    const seen = new Set<string>();
-    const requests: Array<{ start: typeof viewWindow.start; end: typeof viewWindow.end }> = [];
-    for (const mode of modes) {
-      const requestWindow = computeViewWindow(target.date, mode);
-      const key = `${requestWindow.start.toString()}..${requestWindow.end.toString()}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      if (calendarStore.hasWindow(requestWindow.start, requestWindow.end)) continue;
-      requests.push(requestWindow);
-    }
-    return requests;
-  }
-
-  function requestCalendarTarget(
-    target: ViewState,
-    options: {
-      history: boolean;
-      reason: "history" | "nav" | "programmatic" | "view";
-    },
-  ): Promise<void> {
-    const requestId = ++targetRequestSeq;
-    const normalizedTarget: ViewState = { mode: target.mode, date: new Date(target.date) };
-    pendingTarget = normalizedTarget;
-    targetPaintPending = true;
-    const targetWindow = computeViewWindow(normalizedTarget.date, normalizedTarget.mode);
-
-    const promise = (async () => {
-      try {
-        await calendarStore.ensureWindowReady(targetWindow.start, targetWindow.end);
-        if (requestId !== targetRequestSeq) return;
-        const segmentSnapshot = await ensurePersistedSegmentsForTarget(normalizedTarget);
-        if (requestId !== targetRequestSeq) return;
-
-        if (options.history) pushHistory(normalizedTarget.mode, normalizedTarget.date);
-        applyPersistedSegmentsSnapshot(segmentSnapshot);
-        dayHeaderReturnMode = nextDayHeaderReturnMode(dayHeaderReturnMode, normalizedTarget.mode);
-        viewMode = normalizedTarget.mode;
-        preferences.setCalendarViewMode(normalizedTarget.mode);
-        anchorDate = normalizedTarget.date;
-        void calendarStore.loadWindow(targetWindow.start, targetWindow.end)
-          .catch((error) => console.error("[CalendarView] target state apply failed:", error));
-        pendingTarget = null;
-        calendarStore.prefetchWindows(sameAnchorPrefetchRequests(normalizedTarget));
-        void tick().then(() => {
-          if (requestId !== targetRequestSeq) return;
-          perfMark(
-            options.reason === "view" ? "view.mounted" : "nav.display-ready",
-            { count: visibleEvents.length },
-          );
-          requestAnimationFrame(() => {
-            if (requestId !== targetRequestSeq) return;
-            targetPaintPending = false;
-            perfMark(options.reason === "view" ? "view.paint-done" : "nav.paint-done");
-          });
-        });
-      } catch (error) {
-        if (requestId !== targetRequestSeq) return;
-        pendingTarget = null;
-        targetPaintPending = false;
-        console.error("[CalendarView] target commit failed:", error);
-      } finally {
-        if (requestId === targetRequestSeq) targetCommitPromise = null;
-      }
-    })();
-
-    targetCommitPromise = promise;
-    return promise;
-  }
 
   function navigate(
     direction: "today" | "back" | "forward",
@@ -1460,15 +1080,18 @@
   ) {
     perfMark("nav.start", { dir: direction, source });
     if (direction === "today") {
-      void requestCalendarTarget(
-        { mode: currentTargetState().mode, date: new Date() },
+      void targetController.request(
+        { mode: targetController.currentState().mode, date: new Date() },
         { history: false, reason: "nav" },
       );
       return;
     }
 
-    void requestCalendarTarget(
-      { mode: currentTargetState().mode, date: targetAnchorForNavigation(direction) },
+    void targetController.request(
+      {
+        mode: targetController.currentState().mode,
+        date: targetController.targetAnchorForNavigation(direction),
+      },
       { history: false, reason: "nav" },
     );
   }
@@ -1479,8 +1102,8 @@
 
   function changeView(mode: CalendarViewMode) {
     perfMark("view.start", { from: viewMode, to: mode });
-    void requestCalendarTarget(
-      { mode, date: currentTargetState().date },
+    void targetController.request(
+      { mode, date: targetController.currentState().date },
       { history: true, reason: "view" },
     );
   }
@@ -1534,45 +1157,8 @@
     await openCreate();
   }
 
-  function fallbackPanelAnchor(): PanelAnchor {
-    return { x: window.innerWidth / 2, y: window.innerHeight / 3, width: 0, height: 0 };
-  }
-
-  function panelAnchorFromRect(rect: DOMRect | undefined): PanelAnchor {
-    return rect
-      ? { x: rect.right, y: rect.top, width: rect.width, height: rect.height }
-      : fallbackPanelAnchor();
-  }
-
-  function findRenderedEventElement(eventId: string): HTMLElement | undefined {
-    if (!containerEl) return undefined;
-    for (const el of containerEl.querySelectorAll<HTMLElement>("[data-event-id]")) {
-      if (el.dataset.eventId === eventId) return el;
-    }
-    return undefined;
-  }
-
   function panelAnchorFromRenderedEvent(eventId: string): PanelAnchor {
-    const el = findRenderedEventElement(eventId);
-    if (!el) return fallbackPanelAnchor();
-
-    const eventRect = el.getBoundingClientRect();
-    const columnRect = el.closest("[data-day-column]")?.getBoundingClientRect();
-    if (columnRect) {
-      return {
-        x: columnRect.right,
-        y: eventRect.top,
-        width: columnRect.width,
-        height: eventRect.height,
-      };
-    }
-
-    return {
-      x: eventRect.right,
-      y: eventRect.top,
-      width: eventRect.width,
-      height: eventRect.height,
-    };
+    return panelAnchorFromRenderedEventElement(containerEl, eventId);
   }
 
   async function handleEventClick(event: CalendarEvent, rect?: DOMRect): Promise<void> {
@@ -1814,70 +1400,6 @@
     closeSession();
   }
 
-  function isPanelOrEventTarget(target: EventTarget | null): boolean {
-    return target instanceof Element
-      && (
-        target.closest("[data-event-id]") !== null
-        || target.closest("[data-create-preview]") !== null
-        || target.closest(".panel-root") !== null
-      );
-  }
-
-  function isConfirmDialogPanelTarget(target: EventTarget | null): boolean {
-    return target instanceof Element && target.closest(".confirm-dialog") !== null;
-  }
-
-  function isInteractiveControlTarget(target: EventTarget | null): boolean {
-    return target instanceof Element
-      && target.closest(
-        "button, a[href], input, textarea, select, [contenteditable='true'], [role='button'], [role='menuitem'], [role='checkbox'], [role='switch'], [role='combobox']",
-      ) !== null;
-  }
-
-  function isCalendarEditCloseTarget(target: EventTarget | null): boolean {
-    return target instanceof Element
-      && target.closest("[data-calendar-edit-close-ignore]") === null
-      && target.closest("[data-calendar-edit-close-zone]") !== null;
-  }
-
-  function handleOutsidePointerDown(e: PointerEvent) {
-    if (confirmAction) return;
-    if (panelCommitHidden) return;
-    if (session.state.mode === "closed") return;
-    if (isPanelOrEventTarget(e.target)) return;
-    if (isInteractiveControlTarget(e.target)) return;
-    if (!isCalendarEditCloseTarget(e.target)) return;
-
-    suppressOutsideClickUntil = performance.now() + 750;
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (Date.now() - lastDragEndTime < CREATE_CLOSE_GUARD_MS) return;
-    handlePanelClose();
-  }
-
-  function handleOutsideClick(e: MouseEvent) {
-    if (confirmAction && isConfirmDialogPanelTarget(e.target)) return;
-    if (performance.now() > suppressOutsideClickUntil) {
-      suppressOutsideClickUntil = 0;
-      return;
-    }
-    suppressOutsideClickUntil = 0;
-    e.preventDefault();
-    e.stopPropagation();
-  }
-
-  function outsideClose(node: HTMLElement) {
-    node.addEventListener("pointerdown", handleOutsidePointerDown, true);
-    node.addEventListener("click", handleOutsideClick, true);
-    return {
-      destroy() {
-        node.removeEventListener("pointerdown", handleOutsidePointerDown, true);
-        node.removeEventListener("click", handleOutsideClick, true);
-      },
-    };
-  }
-
   async function persistPanelData(
     data: PanelSaveData,
     scope?: RecurringScope,
@@ -1952,7 +1474,7 @@
     suppressEditingGlow = true;
     suppressEditPreview = true;
     saveDisplayFreeze = buildSaveDisplayFreeze(data);
-    const saveToastId = showSavePendingToast();
+    const saveToastId = toasts.showSavePendingToast(t("calendar.view.saving"));
 
     try {
       const updated: CalendarEvent = { ...s.originalEvent, ...data };
@@ -1966,14 +1488,14 @@
       );
       await calendarStore.refreshWindow(viewWindow.start, viewWindow.end);
       closeSession();
-      showSaveSuccessToast(saveToastId);
+      toasts.showSaveSuccessToast(saveToastId, t("calendar.view.saved"));
       await tick();
     } catch (error) {
       logPanelSaveError("enable-active-pomodoro", error, data);
-      showSaveErrorToast(saveToastId, error);
+      toasts.showSaveErrorToast(saveToastId, t("calendar.view.saveFailed", saveErrorMessage(error)));
     } finally {
-      if (saveSuccessToast?.id === saveToastId && saveSuccessToast.pending) {
-        dismissSaveToastIfCurrent(saveToastId);
+      if (toasts.saveSuccessToast?.id === saveToastId && toasts.saveSuccessToast.pending) {
+        toasts.dismissSaveToastIfCurrent(saveToastId);
       }
       suppressEditingGlow = false;
       suppressEditPreview = false;
@@ -2016,7 +1538,7 @@
     suppressEditPreview = true;
     saveDisplayFreeze = saveFreeze;
     if (suppressPomodoroAutoStart) pomodoro.autoStartSuppressed = true;
-    const saveToastId = showSavePendingToast();
+    const saveToastId = toasts.showSavePendingToast(t("calendar.view.saving"));
 
     try {
       saveRefreshedVisibleWindow = await persistPanelData(data, scope);
@@ -2030,15 +1552,15 @@
         await calendarStore.refreshWindow(viewWindow.start, viewWindow.end);
       }
       closeSession();
-      showSaveSuccessToast(saveToastId);
+      toasts.showSaveSuccessToast(saveToastId, t("calendar.view.saved"));
       await tick();
     } catch (error) {
       sessionStopPending = false;
       logPanelSaveError("panel-save", error, data, scope);
-      showSaveErrorToast(saveToastId, error);
+      toasts.showSaveErrorToast(saveToastId, t("calendar.view.saveFailed", saveErrorMessage(error)));
     } finally {
-      if (saveSuccessToast?.id === saveToastId && saveSuccessToast.pending) {
-        dismissSaveToastIfCurrent(saveToastId);
+      if (toasts.saveSuccessToast?.id === saveToastId && toasts.saveSuccessToast.pending) {
+        toasts.dismissSaveToastIfCurrent(saveToastId);
       }
       if (suppressPomodoroAutoStart) pomodoro.autoStartSuppressed = false;
       suppressEditingGlow = false;
@@ -2148,7 +1670,7 @@
     suppressEditPreview = true;
     panelCommitHidden = true;
     saveDisplayFreeze = cloneDisplayEvents(plan.finalVisibleEvents);
-    const deleteToastId = showDeletePendingToast(eventDeletePendingLabel(plan.outcome));
+    const deleteToastId = toasts.showDeletePendingToast(eventDeletePendingLabel(plan.outcome));
 
     try {
       const restoreDeleted = await buildRestoreCallbackForDeletePlan(plan);
@@ -2159,10 +1681,10 @@
       await calendarStore.applyDeleteArchivePlan(plan.operations);
       await calendarStore.refreshWindow(viewWindow.start, viewWindow.end);
       closeSession();
-      showDeleteUndoToast(deleteToastId, eventDeleteOutcomeLabel(plan.outcome), restoreDeleted);
+      toasts.showDeleteUndoToast(deleteToastId, eventDeleteOutcomeLabel(plan.outcome), restoreDeleted);
     } finally {
-      if (deleteUndoToast?.id === deleteToastId && deleteUndoToast.pending) {
-        dismissDeleteToastIfCurrent(deleteToastId);
+      if (toasts.deleteUndoToast?.id === deleteToastId && toasts.deleteUndoToast.pending) {
+        toasts.dismissDeleteToastIfCurrent(deleteToastId);
       }
       suppressEditPreview = false;
       panelCommitHidden = false;
@@ -2199,16 +1721,16 @@
   }
 
   function handleDayClickFromMonth(date: Date) {
-    void requestCalendarTarget({ mode: "day", date }, { history: true, reason: "view" });
+    void targetController.request({ mode: "day", date }, { history: true, reason: "view" });
   }
 
   function handleWeekDayHeaderClick(date: Date) {
-    void requestCalendarTarget({ mode: "day", date }, { history: true, reason: "view" });
+    void targetController.request({ mode: "day", date }, { history: true, reason: "view" });
   }
 
   function handleDayHeaderClick() {
-    void requestCalendarTarget(
-      { mode: dayHeaderReturnMode, date: currentTargetState().date },
+    void targetController.request(
+      { mode: dayHeaderReturnMode, date: targetController.currentState().date },
       { history: true, reason: "view" },
     );
   }
@@ -2223,7 +1745,7 @@
     onNavigate={navigate}
     onViewChange={changeView}
     onDaySelect={(date) => {
-      void requestCalendarTarget({ mode: currentTargetState().mode, date }, {
+      void targetController.request({ mode: targetController.currentState().mode, date }, {
         history: false,
         reason: "programmatic",
       });
@@ -2242,7 +1764,7 @@
         {tzAbbrMode}
         editingId={visualEditingId}
         {previewedIds}
-        {persistedSegmentsByEvent}
+        persistedSegmentsByEvent={persistedSegments.byEvent}
         initialScrollMinute={scrollMinute}
         onScrollChange={(m) => { scrollMinute = m; }}
         onEventClick={handleEventClick}
@@ -2266,7 +1788,7 @@
         {tzAbbrMode}
         editingId={visualEditingId}
         {previewedIds}
-        {persistedSegmentsByEvent}
+        persistedSegmentsByEvent={persistedSegments.byEvent}
         initialScrollMinute={scrollMinute}
         onScrollChange={(m) => { scrollMinute = m; }}
         onEventClick={handleEventClick}
@@ -2294,15 +1816,15 @@
     {/if}
   </div>
 
-  {#if confirmAction}
+  {#if confirm.action}
     <ConfirmDialog
-      title={confirmTitle}
-      message={confirmMessage}
-      confirmLabel={confirmYesLabel}
-      cancelLabel={confirmNoLabel}
-      extraConfirmShortcut={confirmExtraShortcut}
-      onConfirm={confirmYes}
-      onCancel={confirmNo}
+      title={confirm.title}
+      message={confirm.message}
+      confirmLabel={confirm.yesLabel}
+      cancelLabel={confirm.noLabel}
+      extraConfirmShortcut={confirm.extraShortcut}
+      onConfirm={confirm.confirmYes}
+      onCancel={confirm.confirmNo}
     />
   {/if}
 
@@ -2350,26 +1872,28 @@
     />
   {/if}
 
-  {#if deleteUndoToast}
+  {#if toasts.deleteUndoToast}
+    {@const deleteToast = toasts.deleteUndoToast}
     <ActionToast
-      message={deleteUndoToast.label}
-      actionLabel={!deleteUndoToast.pending && deleteUndoToast.restore ? t("calendar.view.undo") : undefined}
+      message={deleteToast.label}
+      actionLabel={!deleteToast.pending && deleteToast.restore ? t("calendar.view.undo") : undefined}
       reserveActionLabel={t("calendar.view.undo")}
-      controlsVisible={!deleteUndoToast.pending}
+      controlsVisible={!deleteToast.pending}
       dismissLabel={t("calendar.view.dismissEventNotification")}
       onAction={undoDeletedEvent}
-      onDismiss={dismissDeleteUndoToast}
+      onDismiss={toasts.dismissDeleteUndoToast}
     />
   {/if}
 
-  {#if saveSuccessToast}
+  {#if toasts.saveSuccessToast}
+    {@const saveToast = toasts.saveSuccessToast}
     <ActionToast
-      message={saveSuccessToast.message}
-      variant={saveSuccessToast.variant}
-      stacked={!!deleteUndoToast}
-      controlsVisible={!saveSuccessToast.pending}
+      message={saveToast.message}
+      variant={saveToast.variant}
+      stacked={!!toasts.deleteUndoToast}
+      controlsVisible={!saveToast.pending}
       dismissLabel={t("calendar.view.dismissSaveNotification")}
-      onDismiss={dismissSaveSuccessToast}
+      onDismiss={() => toasts.dismissSaveToastIfCurrent(saveToast.id)}
     />
   {/if}
 

@@ -56,23 +56,22 @@ import {
   youtubeVideoSourceFromId,
   type LocalFileSource,
   type MusicSource,
-  type YouTubePlaylistSource,
-  type YouTubeVideoSource,
 } from "$lib/music/sources";
 import { youtubeErrorMessage } from "$lib/music/youtube-player";
 import { getNavigation } from "$lib/stores/navigation.svelte";
-
-type YouTubeSource = YouTubeVideoSource | YouTubePlaylistSource;
-type YouTubeCommandAction = "play" | "pause" | "stop" | "seek" | "volume" | "rate";
-
-interface ResolvingYouTubePlaylist {
-  playlistId: string;
-  preferredVideoId: string | null;
-  startMs: number | null;
-  endMs: number | null;
-  autoplay: boolean;
-  generation: number;
-}
+import {
+  initialMusicSnapshot,
+  loadMusicPlayerSettings,
+  persistMusicPlayerSettings,
+} from "./music-player-settings";
+import {
+  buildYouTubeHostUrl,
+  parseYouTubeHostMessage,
+  type ResolvingYouTubePlaylist,
+  type YouTubeCommandAction,
+  type YouTubeHostPlaylistMessage,
+  type YouTubeSource,
+} from "./music-player-youtube-host";
 
 interface LoadSourceOptions {
   autoplay?: boolean;
@@ -80,65 +79,9 @@ interface LoadSourceOptions {
   preserveQueue?: boolean;
 }
 
-interface YouTubeHostStateMessage {
-  token: string;
-  load: string;
-  type: "ganbaru-ai-youtube-state";
-  status: PlaybackStatus;
-  positionMs: number;
-  durationMs: number | null;
-  videoId: string | null;
-  title: string | null;
-}
-
-interface YouTubeHostReadyMessage {
-  token: string;
-  load: string;
-  type: "ganbaru-ai-youtube-ready";
-}
-
-interface YouTubeHostErrorMessage {
-  token: string;
-  load: string;
-  type: "ganbaru-ai-youtube-error";
-  code: number;
-}
-
-interface YouTubeHostPlaylistMessage {
-  token: string;
-  load: string;
-  type: "ganbaru-ai-youtube-playlist";
-  playlistId: string;
-  videoIds: string[];
-  index: number | null;
-}
-
-interface YouTubeHostPlaylistErrorMessage {
-  token: string;
-  load: string;
-  type: "ganbaru-ai-youtube-playlist-error";
-  playlistId: string;
-}
-
-type YouTubeHostMessage =
-  | YouTubeHostReadyMessage
-  | YouTubeHostStateMessage
-  | YouTubeHostErrorMessage
-  | YouTubeHostPlaylistMessage
-  | YouTubeHostPlaylistErrorMessage;
-
-interface MusicPlayerSettings {
-  volume: number;
-  rate: number;
-  shuffleEnabled: boolean;
-  shuffleExplicit: boolean;
-  muted: boolean;
-}
-
 export type MusicStaleVisual =
   { kind: "image"; url: string; title: string };
 
-const SETTINGS_KEY = "ganbaru-ai-music-player";
 const progressMaxFallback = 1;
 const YOUTUBE_OPTIMISTIC_PAUSE_MS = 1_500;
 const YOUTUBE_PLAYLIST_RESOLVE_TIMEOUT_MS = 18_000;
@@ -147,88 +90,14 @@ const LOCAL_PLAYABLE_START_NUDGE_MS = 1_000;
 const LOCAL_PLAYABLE_START_MAX_NUDGES = 12;
 const MEDIA_HAVE_CURRENT_DATA_READY_STATE = 2;
 
-function loadSettings(): MusicPlayerSettings {
-  if (typeof localStorage === "undefined") {
-    return {
-      volume: DEFAULT_PLAYBACK_SNAPSHOT.volume,
-      rate: DEFAULT_PLAYBACK_SNAPSHOT.rate,
-      shuffleEnabled: true,
-      shuffleExplicit: false,
-      muted: false,
-    };
-  }
-  const raw = localStorage.getItem(SETTINGS_KEY);
-  if (!raw) {
-    return {
-      volume: DEFAULT_PLAYBACK_SNAPSHOT.volume,
-      rate: DEFAULT_PLAYBACK_SNAPSHOT.rate,
-      shuffleEnabled: true,
-      shuffleExplicit: false,
-      muted: false,
-    };
-  }
-  try {
-    const value: unknown = JSON.parse(raw);
-    if (typeof value !== "object" || value === null) {
-      throw new Error("Music settings must be an object.");
-    }
-    const record = value as Record<string, unknown>;
-    const shuffleExplicit = record.shuffleExplicit === true;
-    return {
-      volume: typeof record.volume === "number"
-        ? clampVolume(record.volume)
-        : DEFAULT_PLAYBACK_SNAPSHOT.volume,
-      rate: typeof record.rate === "number"
-        ? clampRate(record.rate)
-        : DEFAULT_PLAYBACK_SNAPSHOT.rate,
-      shuffleEnabled: shuffleExplicit && typeof record.shuffleEnabled === "boolean"
-        ? record.shuffleEnabled
-        : true,
-      shuffleExplicit,
-      muted: record.muted === true,
-    };
-  } catch {
-    return {
-      volume: DEFAULT_PLAYBACK_SNAPSHOT.volume,
-      rate: DEFAULT_PLAYBACK_SNAPSHOT.rate,
-      shuffleEnabled: true,
-      shuffleExplicit: false,
-      muted: false,
-    };
-  }
-}
-
-function persistSettings(settings: MusicPlayerSettings): void {
-  if (typeof localStorage === "undefined") return;
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-}
-
-function isPlaybackStatus(value: unknown): value is PlaybackStatus {
-  return value === "idle"
-    || value === "loading"
-    || value === "ready"
-    || value === "playing"
-    || value === "paused"
-    || value === "ended"
-    || value === "error";
-}
-
-function initialSnapshot(settings: MusicPlayerSettings): PlaybackSnapshot {
-  return {
-    ...DEFAULT_PLAYBACK_SNAPSHOT,
-    volume: settings.volume,
-    rate: settings.rate,
-  };
-}
-
-const initialPlayerSettings = loadSettings();
+const initialPlayerSettings = loadMusicPlayerSettings();
 
 class MusicPlayerStore {
   sourceInput = $state("");
   currentSource = $state<MusicSource | null>(null);
   parseError = $state<string | null>(null);
   playerError = $state<string | null>(null);
-  snapshot = $state<PlaybackSnapshot>(initialSnapshot(initialPlayerSettings));
+  snapshot = $state<PlaybackSnapshot>(initialMusicSnapshot(initialPlayerSettings));
   queue = $state<MusicSource[]>([]);
   folderScanTruncated = $state(false);
   shuffleEnabled = $state(initialPlayerSettings.shuffleEnabled);
@@ -1407,46 +1276,21 @@ class MusicPlayerStore {
     if (!this.youtubeHostBaseUrl) {
       this.youtubeHostBaseUrl = await getYouTubeHostUrl();
     }
-    const url = this.youtubeHostUrlForLoad(generation, source, persisted, autoplay);
+    const url = buildYouTubeHostUrl({
+      baseUrl: this.youtubeHostBaseUrl,
+      generation,
+      source,
+      persisted,
+      autoplay,
+      volume: this.effectiveYouTubeVolume(),
+      rate: this.snapshot.rate,
+    });
     const loadId = url.searchParams.get("load");
     this.youtubeHostUrl = url.toString();
     this.youtubeHostToken = url.searchParams.get("token");
     this.youtubeHostLoadId = loadId;
     this.youtubeHostReady = false;
     await tick();
-  }
-
-  private youtubeHostUrlForLoad(
-    generation: number,
-    source: YouTubeSource,
-    persisted: PersistedPlaybackState | null,
-    autoplay: boolean,
-  ): URL {
-    if (!this.youtubeHostBaseUrl) {
-      throw new Error("YouTube host URL is not initialized.");
-    }
-    const url = new URL(this.youtubeHostBaseUrl);
-    url.searchParams.set("load", String(generation));
-    url.searchParams.set("sourceKind", source.kind);
-    if (source.kind === "youtube-video") {
-      url.searchParams.set("videoId", source.videoId);
-    } else {
-      url.searchParams.set("playlistId", source.playlistId);
-      if (source.videoId) {
-        url.searchParams.set("videoId", source.videoId);
-      }
-    }
-    if (source.startMs !== null) {
-      url.searchParams.set("startMs", String(source.startMs));
-    }
-    if (source.endMs !== null) {
-      url.searchParams.set("endMs", String(source.endMs));
-    }
-    url.searchParams.set("resumeMs", String(persisted?.positionMs ?? source.startMs ?? 0));
-    url.searchParams.set("volume", String(source.kind === "youtube-playlist" ? 0 : this.effectiveYouTubeVolume()));
-    url.searchParams.set("rate", String(this.snapshot.rate));
-    url.searchParams.set("autoplay", String(autoplay));
-    return url;
   }
 
   private handleWindowMessage = (event: MessageEvent<unknown>): void => {
@@ -1463,7 +1307,7 @@ class MusicPlayerStore {
 
   private handleYouTubeHostMessage(event: MessageEvent<unknown>): void {
     if (!this.youtubeFrame?.contentWindow || event.source !== this.youtubeFrame.contentWindow) return;
-    const message = this.parseYouTubeHostMessage(event.data);
+    const message = parseYouTubeHostMessage(event.data);
     if (!message || message.token !== this.youtubeHostToken || message.load !== this.youtubeHostLoadId) return;
     if (message.type === "ganbaru-ai-youtube-ready") {
       this.youtubeHostReady = true;
@@ -1510,69 +1354,6 @@ class MusicPlayerStore {
     if (status === "ended" && !wasEnded) {
       void this.advanceEndedYouTubeTrack();
     }
-  }
-
-  private parseYouTubeHostMessage(value: unknown): YouTubeHostMessage | null {
-    if (typeof value !== "object" || value === null) return null;
-    const record = value as Record<string, unknown>;
-    if (
-      typeof record.token !== "string"
-      || typeof record.load !== "string"
-      || typeof record.type !== "string"
-    ) return null;
-    if (record.type === "ganbaru-ai-youtube-ready") {
-      return { token: record.token, load: record.load, type: "ganbaru-ai-youtube-ready" };
-    }
-    if (record.type === "ganbaru-ai-youtube-error" && typeof record.code === "number") {
-      return { token: record.token, load: record.load, type: "ganbaru-ai-youtube-error", code: record.code };
-    }
-    if (
-      record.type === "ganbaru-ai-youtube-playlist"
-      && typeof record.playlistId === "string"
-      && Array.isArray(record.videoIds)
-      && record.videoIds.every((id) => typeof id === "string" && id.length > 0)
-      && (typeof record.index === "number" || record.index === null)
-    ) {
-      return {
-        token: record.token,
-        load: record.load,
-        type: "ganbaru-ai-youtube-playlist",
-        playlistId: record.playlistId,
-        videoIds: record.videoIds,
-        index: record.index,
-      };
-    }
-    if (
-      record.type === "ganbaru-ai-youtube-playlist-error"
-      && typeof record.playlistId === "string"
-    ) {
-      return {
-        token: record.token,
-        load: record.load,
-        type: "ganbaru-ai-youtube-playlist-error",
-        playlistId: record.playlistId,
-      };
-    }
-    if (
-      record.type === "ganbaru-ai-youtube-state"
-      && isPlaybackStatus(record.status)
-      && typeof record.positionMs === "number"
-      && (typeof record.durationMs === "number" || record.durationMs === null)
-      && (typeof record.videoId === "string" || record.videoId === null)
-      && (typeof record.title === "string" || record.title === null)
-    ) {
-      return {
-        token: record.token,
-        load: record.load,
-        type: "ganbaru-ai-youtube-state",
-        status: record.status,
-        positionMs: record.positionMs,
-        durationMs: record.durationMs,
-        videoId: record.videoId,
-        title: record.title,
-      };
-    }
-    return null;
   }
 
   private applyYouTubeMetadataTitle(videoId: string | null, title: string | null): void {
@@ -1805,7 +1586,7 @@ class MusicPlayerStore {
   }
 
   private persistPlayerSettings(): void {
-    persistSettings({
+    persistMusicPlayerSettings({
       volume: this.snapshot.volume,
       rate: this.snapshot.rate,
       shuffleEnabled: this.shuffleEnabled,
