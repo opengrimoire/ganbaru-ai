@@ -17,6 +17,7 @@ export interface ParsedSemVer {
 export interface ReleaseInfo {
   readonly version: string;
   readonly releasePageUrl: string;
+  readonly apkDownloadUrl: string | null;
   readonly publishedAt: string | null;
 }
 
@@ -131,8 +132,39 @@ export function parseReleaseTag(tagName: string): string | null {
   return parseVersion(version) ? version : null;
 }
 
-function parseReleasePayload(payload: unknown): ReleaseInfo | null {
+function parseApkDownloadUrl(
+  payload: RawReleasePayload,
+  repository: string,
+  tagName: string,
+  version: string,
+): string | null {
+  if (!Array.isArray(payload.assets)) return null;
+
+  const expectedName = `Ganbaru_AI_${version}_android_universal.apk`;
+  const expectedUrl =
+    `https://github.com/${repository}/releases/download/${encodeURIComponent(tagName)}/${encodeURIComponent(expectedName)}`;
+
+  for (const asset of payload.assets) {
+    if (!isRecord(asset) || asset.name !== expectedName) continue;
+    return asset.browser_download_url === expectedUrl ? expectedUrl : null;
+  }
+
+  return null;
+}
+
+/**
+ * Validate the latest-release response used by the Android updater.
+ *
+ * @param payload Unknown GitHub API response.
+ * @param repository Expected GitHub repository in owner/name form.
+ * @returns Validated release details, or null for an unusable response.
+ */
+export function parseReleasePayload(
+  payload: unknown,
+  repository = GITHUB_REPOSITORY,
+): ReleaseInfo | null {
   if (!isRecord(payload)) return null;
+  if (!GITHUB_REPOSITORY_PATTERN.test(repository)) return null;
 
   const rawTag = payload.tag_name;
   if (!isString(rawTag)) return null;
@@ -140,8 +172,10 @@ function parseReleasePayload(payload: unknown): ReleaseInfo | null {
   if (!version) return null;
 
   const publishedAt = isString(payload.published_at) ? payload.published_at : null;
-  const htmlUrl = isString(payload.html_url) ? payload.html_url : null;
-  const fallbackUrl = latestReleasePageUrl(GITHUB_REPOSITORY);
+  const expectedReleaseUrl =
+    `https://github.com/${repository}/releases/tag/${encodeURIComponent(rawTag)}`;
+  const htmlUrl = payload.html_url === expectedReleaseUrl ? expectedReleaseUrl : null;
+  const fallbackUrl = latestReleasePageUrl(repository);
 
   const releasePageUrl = htmlUrl ?? fallbackUrl;
   if (!releasePageUrl) return null;
@@ -149,6 +183,7 @@ function parseReleasePayload(payload: unknown): ReleaseInfo | null {
   return {
     version,
     releasePageUrl,
+    apkDownloadUrl: parseApkDownloadUrl(payload, repository, rawTag, version),
     publishedAt,
   };
 }
@@ -172,6 +207,7 @@ class MobileUpdateStore {
   installedVersion = $state<string | null>(parseInstalledVersion(BUILD_REF));
   latestVersion = $state<string | null>(null);
   latestReleaseUrl = $state<string | null>(null);
+  latestApkUrl = $state<string | null>(null);
   publishedAt = $state<string | null>(null);
   errorMessage = $state<string | null>(null);
 
@@ -243,11 +279,12 @@ class MobileUpdateStore {
         throw new Error(message);
       }
 
-      const release = parseReleasePayload(await response.json());
+      const release = parseReleasePayload(await response.json(), this.repository);
       if (!release) throw new Error(this.localization.t("updates.feedNotConfigured"));
 
       this.latestVersion = release.version;
       this.latestReleaseUrl = release.releasePageUrl;
+      this.latestApkUrl = release.apkDownloadUrl;
       this.publishedAt = release.publishedAt;
 
       if (compareVersions(release.version, this.installedVersion) > 0) {
