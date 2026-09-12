@@ -2,10 +2,12 @@
 
 This file records reviewed Rust advisory exceptions and the most recent known audit snapshot. Lockfiles and current command output are authoritative. Re-run the audits before relying on this snapshot.
 
-Snapshot checked on 2026-09-06:
+Snapshot checked on 2026-09-12:
 
-- pnpm -w run audit:deps reports no known npm vulnerabilities at the low advisory level.
-- pnpm -w run audit:rust exits successfully with three configured vulnerability ignores and 20 allowed warnings.
+- pnpm -w run audit:deps reports no known npm vulnerabilities at the low advisory level after updating Vitest and its coverage integration to 4.1.11 for GHSA-82fw-gwwq-j7x9.
+- pnpm -w run audit:rust exits successfully with three configured vulnerability ignores and 10 allowed warnings.
+
+GitHub Dependabot also reported GHSA-7gcf-g7xr-8hxj for serde_with 3.20.0. Cargo audit did not include that advisory in its RustSec database at the time of review. The lockfile now resolves serde_with and serde_with_macros 3.21.0, which contains the upstream fix.
 
 The `ganbaru-focus` extraction uses existing workspace dependencies and adds no third-party package. The findings below remain unresolved; this extraction does not change their disposition or the audit protections.
 
