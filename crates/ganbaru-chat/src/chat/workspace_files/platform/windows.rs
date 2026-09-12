@@ -1,4 +1,5 @@
 use super::*;
+#[cfg(windows)]
 use ::windows as windows_crate;
 
 #[cfg(windows)]

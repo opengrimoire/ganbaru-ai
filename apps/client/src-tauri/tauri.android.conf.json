@@ -16,6 +16,7 @@
       "capabilities": ["android"],
       "csp": {
         "script-src": "'self'",
+        "connect-src": "ipc: http://ipc.localhost https://api.github.com",
         "frame-src": "http://127.0.0.1:* http://localhost:*"
       },
       "devCsp": {
