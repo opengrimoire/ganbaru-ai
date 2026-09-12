@@ -199,13 +199,19 @@ jobs:
         run: node apps/client/scripts/stage-android-release-assets.mjs
 
       - name: verify Android release signatures
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           android_apk="$(find dist/release-assets -maxdepth 1 -type f -name 'Ganbaru_AI_*_android_universal.apk' -print -quit)"
           android_aab="$(find dist/release-assets -maxdepth 1 -type f -name 'Ganbaru_AI_*_android_universal.aab' -print -quit)"
           test -n "$android_apk"
           test -n "$android_aab"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$android_apk"
-          jarsigner -verify -strict "$android_aab"
+          jarsigner -verify -strict \
+            -keystore "$RUNNER_TEMP/ganbaru-ai-android-release.jks" \
+            -storepass:env ANDROID_KEYSTORE_PASSWORD \
+            "$android_aab" "$ANDROID_KEY_ALIAS"
 
       - name: sign updater assets
         env:
