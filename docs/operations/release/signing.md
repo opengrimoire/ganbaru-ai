@@ -69,7 +69,7 @@ For GitHub Actions, encode the keystore without line wrapping:
 base64 -w 0 ~/.config/ganbaru-ai/android-release.jks
 ```
 
-The protected job decodes it into temporary runner storage, writes restrictive Gradle properties, builds minified universal artifacts, verifies the APK and AAB signatures, and removes temporary signing files before artifact upload.
+The protected job decodes it into temporary runner storage, writes restrictive Gradle properties, builds minified universal artifacts, verifies the APK and AAB signatures, and removes temporary signing files before artifact upload. Android release certificates are normally self-signed. Strict AAB verification therefore uses the same protected keystore as its explicit trust anchor and requires the configured signing alias; it does not rely on the public Java certificate-authority store.
 
 If Google Play is introduced, decide the Play App Signing and upload-key strategy before the first store release. Preserve certificate compatibility when direct and store installations are expected to share an update identity.
 
