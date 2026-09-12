@@ -68,7 +68,7 @@ Do not publish when required checks, signatures, expected artifacts, environment
 
 ## Release trigger
 
-The release build has no manual dispatch entry. A pushed, protected `app-v*` tag is the only build trigger because it binds the workflow run directly to the reviewed release commit. Recovery must preserve that tag and commit identity rather than creating a draft from an untagged branch run.
+The release build has no manual dispatch entry. A pushed, protected `app-v*` tag is the only build trigger because it binds the workflow run directly to the reviewed release commit. Recovery must preserve that tag and commit identity rather than creating a draft from an untagged branch run. Do not move or reuse a tag after a pre-publication workflow failure. Correct the release source through the normal pull request path and use the next application version and tag.
 
 ## Release notes
 
