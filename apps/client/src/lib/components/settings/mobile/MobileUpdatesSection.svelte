@@ -31,6 +31,16 @@
     }
   }
 
+  async function downloadApk(): Promise<void> {
+    if (!updates.latestApkUrl) return;
+    openPageError = null;
+    try {
+      await openUrl(updates.latestApkUrl);
+    } catch (cause: unknown) {
+      openPageError = cause instanceof Error ? cause.message : String(cause);
+    }
+  }
+
   function formatPublishedAt(value: string): string {
     const date = Date.parse(value);
     if (!Number.isFinite(date)) return value;
@@ -114,14 +124,22 @@
           </div>
           <button
             type="button"
-            class={actionButtonClass}
-            disabled={!updates.latestReleaseUrl && !releasePageUrl}
+            class={primaryButtonClass}
+            disabled={!updates.latestApkUrl && !updates.latestReleaseUrl && !releasePageUrl}
             onclick={() => {
-              void openReleasePage();
+              if (updates.latestApkUrl) {
+                void downloadApk();
+              } else {
+                void openReleasePage();
+              }
             }}
           >
             <ExternalLink size={14} strokeWidth={1.9} class="shrink-0" />
-            <span>{t("mobile.settings.viewReleases")}</span>
+            <span>
+              {updates.latestApkUrl
+                ? t("mobile.settings.downloadApk")
+                : t("mobile.settings.viewReleases")}
+            </span>
           </button>
         </div>
       </div>

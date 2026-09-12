@@ -2,7 +2,7 @@
 
 This document is the normative GitHub policy for `opengrimoire/ganbaru-ai`. It records the intended rulesets, adjacent Actions settings, and protected release environment. Rulesets for a public repository are visible and are not treated as secrets.
 
-Last verified against live GitHub settings: 2026-08-30.
+Last verified against live GitHub settings: 2026-09-12.
 
 If live settings differ, treat the difference as configuration drift. Fix the live settings or deliberately change this policy through review. Do not silently rewrite the policy to match weaker enforcement.
 
@@ -228,17 +228,9 @@ Workflow policy:
 
 ## Current configuration drift
 
-The 2026-08-30 read-only audit found these live differences from the intended policy:
+The 2026-09-12 audit and correction found no known drift from this policy. The `dev` and `main` rulesets require all three documented checks, `main` does not require checks on branch creation, the release-tag ruleset requires signed commits, and the `release` environment has a required reviewer, the documented branch and tag restrictions, and all required secret names.
 
-- `dev` and `main` require `linux validation` and `windows Rust check`, but not `Android ARM64 build`.
-- `main` requires status checks on branch creation even though this policy disables that requirement.
-- The `release` environment restricts deployment branches but has no required reviewer.
-- The `release` environment does not contain the Android keystore, store password, alias, or key password secrets required by the release workflow.
-- The release-tag ruleset does not yet require signed commits.
-
-The live pull request rules already require approval for unattributed changes. That protection is now recorded as intended policy above.
-
-Do not publish a release until the missing environment protections and credentials are resolved. Do not remove the Android check from intended policy merely because it is absent from the live ruleset.
+Secret values cannot be read back through GitHub. Their presence does not replace the signed-artifact and installation checks required for each release.
 
 ## Verification
 

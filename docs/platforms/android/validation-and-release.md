@@ -62,4 +62,6 @@ The detailed target and scenario matrix lives in [Android testing](../../testing
 
 The distribution source owns installation and update delivery. Android does not package the desktop self-updater. In-app update information can open signed release history or the appropriate distribution surface.
 
+Direct GitHub installations check the latest published release through the GitHub API. When a newer release contains the expected versioned universal APK, the update surface opens that exact repository-owned asset for download. Android performs installation with the system package installer and accepts an upgrade only when its package identifier and signing certificate match the installed production application. The release page remains the fallback when the expected APK is absent or the release response is unusable.
+
 Release promotion follows the repository's documented operation and signing controls. This platform spec does not duplicate branch or publication procedures.

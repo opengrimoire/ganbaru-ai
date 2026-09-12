@@ -102,14 +102,13 @@ const tagName = `app-v${appVersion}`;
 const releaseName = `Ganbaru AI v${appVersion}`;
 const refType = process.env.GITHUB_REF_TYPE;
 const refName = process.env.GITHUB_REF_NAME;
-const defaultBranch = process.env.GITHUB_DEFAULT_BRANCH;
 
-if (refType === "tag" && refName !== tagName) {
-  throw new Error(`Tag ${refName ?? ""} does not match app version ${tagName}`);
+if (refType !== "tag") {
+  throw new Error("Release builds must run from an explicit app-v* tag");
 }
 
-if (refType !== "tag" && defaultBranch && refName !== defaultBranch) {
-  throw new Error(`Manual release dispatch must run from ${defaultBranch}`);
+if (refName !== tagName) {
+  throw new Error(`Tag ${refName ?? ""} does not match app version ${tagName}`);
 }
 
 writeOutput("version", appVersion);

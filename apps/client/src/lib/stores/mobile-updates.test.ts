@@ -34,6 +34,45 @@ describe("mobile version parsing", () => {
     expect(getModule().parseReleaseTag("release-0.2.0")).toBeNull();
   });
 
+  it("accepts only the expected universal APK asset URL", () => {
+    const release = getModule().parseReleasePayload(
+      {
+        tag_name: "app-v0.2.0",
+        html_url: "https://github.com/opengrimoire/ganbaru-ai/releases/tag/app-v0.2.0",
+        published_at: "2026-09-12T12:00:00Z",
+        assets: [
+          {
+            name: "Ganbaru_AI_0.2.0_android_universal.apk",
+            browser_download_url:
+              "https://github.com/opengrimoire/ganbaru-ai/releases/download/app-v0.2.0/Ganbaru_AI_0.2.0_android_universal.apk",
+          },
+        ],
+      },
+      "opengrimoire/ganbaru-ai",
+    );
+
+    expect(release?.apkDownloadUrl).toBe(
+      "https://github.com/opengrimoire/ganbaru-ai/releases/download/app-v0.2.0/Ganbaru_AI_0.2.0_android_universal.apk",
+    );
+  });
+
+  it("rejects an APK URL outside the expected release asset path", () => {
+    const release = getModule().parseReleasePayload(
+      {
+        tag_name: "app-v0.2.0",
+        assets: [
+          {
+            name: "Ganbaru_AI_0.2.0_android_universal.apk",
+            browser_download_url: "https://example.com/update.apk",
+          },
+        ],
+      },
+      "opengrimoire/ganbaru-ai",
+    );
+
+    expect(release?.apkDownloadUrl).toBeNull();
+  });
+
   it("parses semver with prerelease and build metadata", () => {
     const parsed = getModule().parseVersion("0.1.0-beta.1+build.45");
     expect(parsed).not.toBeNull();

@@ -66,13 +66,9 @@ Check whether release notes, migrations, generated artifacts, signing expectatio
 
 Do not publish when required checks, signatures, expected artifacts, environment protection, or update metadata are missing.
 
-## Manual dispatch
+## Release trigger
 
-Treat manual dispatch as a guarded recovery entry, not as a way to create a release tag. Under the intended tag ruleset, only an authorized organization administrator can create an `app-v*` tag. The workflow token is not that administrator bypass actor, so a dispatch cannot safely create a missing protected tag.
-
-Before a recovery dispatch, an administrator must create the expected tag at the release commit and the operator must verify that the tag resolves to the same commit as the default-branch workflow run. The current workflow validates the application version and default branch, but it does not verify that an existing tag points to `GITHUB_SHA`. Do not use manual dispatch when either check is uncertain.
-
-A pushed tag is the normal public-release trigger because it binds the workflow run directly to the reviewed release commit. Hardening or removing the manual entry remains release-infrastructure work.
+The release build has no manual dispatch entry. A pushed, protected `app-v*` tag is the only build trigger because it binds the workflow run directly to the reviewed release commit. Recovery must preserve that tag and commit identity rather than creating a draft from an untagged branch run.
 
 ## Release notes
 
