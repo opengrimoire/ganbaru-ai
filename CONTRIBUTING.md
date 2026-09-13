@@ -12,6 +12,7 @@ Branch and release restrictions are supply-chain controls, not a judgment about 
 - `dev` is the integration branch for accepted work between releases.
 - Normal work happens on short-lived topic branches created from `dev`.
 - Topic branches open pull requests into `dev`.
+- Topic pull requests merge into `dev` with merge commits so their signed commits, authorship, timestamps, and Git topology remain part of the repository history.
 - Release preparation changes, such as version bumps, happen through normal pull requests into `dev` before `dev` is promoted to `main`.
 - Releases are created from `app-v*` tags on the release commit, not from every merge to `main`.
 
