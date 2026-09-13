@@ -1,15 +1,15 @@
 Package: ganbaru-ai
-Version: 0.1.5
+Version: 0.1.7
 Architecture: amd64
 Maintainer: Ganbaru AI
-Installed-Size: 49279
-Depends: libayatana-appindicator3-1, libwebkit2gtk-4.1-0, libgtk-3-0
-Filename: pool/main/g/ganbaru-ai/ganbaru-ai_0.1.5_amd64.deb
-Size: 22676316
-MD5sum: 2ef01dd66c86464cfc3a13c43be23737
-SHA1: 5e6444555515d47fcd22ff277ca399cbc64649c3
-SHA256: c6d5660f6fa53bcd15250a3213c800549d9fc7e57ae0507b40938729d4d2a063
+Installed-Size: 117192
+Depends: libwebkit2gtk-4.1-0, libgtk-3-0
+Filename: pool/main/g/ganbaru-ai/ganbaru-ai_0.1.7_amd64.deb
+Size: 42272202
+MD5sum: 98e25069ac6a2cf3d328a1b4bf0369ed
+SHA1: 84f5a82202404d652cf9a5f00e26a46feecb0dce
+SHA256: 7ff0264b9b1821f71bb982172a135ec2280318e895d020bb04365d5ef28f2916
 Priority: optional
-Description: Ganbaru AI desktop app
+Description: Ganbaru AI Tauri application
  (none)
 
