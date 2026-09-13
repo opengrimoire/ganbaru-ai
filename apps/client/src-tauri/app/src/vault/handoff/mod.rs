@@ -1,6 +1,8 @@
 //! Secure, LAN-only pairing and whole-vault bundle transport.
 
+pub(crate) mod coordinator;
 pub(crate) mod protocol;
+pub(crate) mod receiver;
 pub(crate) mod state;
 pub(crate) mod transport;
 
@@ -26,6 +28,7 @@ pub(crate) struct CoordinatorLifecycle {
 struct CoordinatorRuntime {
     endpoint: SocketAddr,
     shutdown: tokio::sync::oneshot::Sender<()>,
+    requests: coordinator::CoordinatorSender,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -48,8 +51,9 @@ pub(crate) struct PairingStatus {
 }
 
 impl CoordinatorLifecycle {
-    async fn start_on(
+    async fn start_on<R: Runtime>(
         &self,
+        app: tauri::AppHandle<R>,
         manager: PairingManager,
         address: IpAddr,
     ) -> Result<SocketAddr, String> {
@@ -72,7 +76,14 @@ impl CoordinatorLifecycle {
             .local_addr()
             .map_err(|error| format!("read vault handoff endpoint: {error}"))?;
         let (shutdown, receiver) = tokio::sync::oneshot::channel();
-        tauri::async_runtime::spawn(transport::serve(listener, manager, receiver));
+        let (requests, request_receiver) = tokio::sync::mpsc::channel(8);
+        tauri::async_runtime::spawn(coordinator::run(app, manager.clone(), request_receiver));
+        tauri::async_runtime::spawn(transport::serve_with_coordinator(
+            listener,
+            manager,
+            Some(requests.clone()),
+            receiver,
+        ));
         let mut runtime = self
             .runtime
             .lock()
@@ -81,13 +92,22 @@ impl CoordinatorLifecycle {
             let _ = shutdown.send(());
             return Ok(runtime.as_ref().expect("checked runtime").endpoint);
         }
-        *runtime = Some(CoordinatorRuntime { endpoint, shutdown });
+        *runtime = Some(CoordinatorRuntime {
+            endpoint,
+            shutdown,
+            requests,
+        });
         Ok(endpoint)
     }
 
     pub(crate) fn stop(&self) {
         if let Ok(mut runtime) = self.runtime.lock() {
             if let Some(runtime) = runtime.take() {
+                let (response, _) = tokio::sync::oneshot::channel();
+                let _ = runtime.requests.try_send(coordinator::CoordinatorRequest {
+                    operation: coordinator::CoordinatorOperation::Shutdown,
+                    response,
+                });
                 let _ = runtime.shutdown.send(());
             }
         }
@@ -108,8 +128,17 @@ pub(crate) fn initialize<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), St
         .app_config_dir()
         .map_err(|error| format!("find app config directory: {error}"))?;
     let device_id = super::ensure_device_id(app)?;
-    app.state::<PairingManager>()
-        .initialize(config_dir, device_id)
+    let pairing = app.state::<PairingManager>();
+    pairing.initialize(config_dir, device_id)?;
+    if let Some(coordinator) = pairing.coordinator_pin()? {
+        app.state::<super::ownership::VaultOwnershipManager>()
+            .register_remote_owner_if_missing(
+                &coordinator.vault_id,
+                coordinator.device_id,
+                coordinator.generation,
+            )?;
+    }
+    Ok(())
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -117,7 +146,7 @@ pub(crate) fn start_desktop<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(),
     let address = discover_private_lan_address()?;
     let manager = app.state::<PairingManager>().inner().clone();
     let lifecycle = app.state::<CoordinatorLifecycle>();
-    tauri::async_runtime::block_on(lifecycle.start_on(manager, address))?;
+    tauri::async_runtime::block_on(lifecycle.start_on(app.clone(), manager, address))?;
     Ok(())
 }
 
@@ -132,12 +161,16 @@ pub(crate) async fn handoff_create_pairing_invitation<R: Runtime>(
         Some(endpoint) => endpoint,
         None => {
             let address = discover_private_lan_address()?;
-            lifecycle.start_on(manager.clone(), address).await?
+            lifecycle
+                .start_on(app.clone(), manager.clone(), address)
+                .await?
         }
     };
+    let ownership = super::ownership::active_status(&app)?;
     let invitation = manager.create_invitation(
         endpoint,
-        super::active_vault_id(&app)?,
+        ownership.vault_id,
+        ownership.generation,
         protocol::unix_time_ms(),
     )?;
     let encoded = encode_invitation(&invitation)?;
@@ -168,7 +201,13 @@ pub(crate) async fn handoff_enroll<R: Runtime>(
 ) -> Result<(), String> {
     let invitation = decode_invitation(&invitation, protocol::unix_time_ms())?;
     let manager = app.state::<PairingManager>().inner().clone();
-    transport::enroll(&manager, &invitation, device_label).await
+    transport::enroll(&manager, &invitation, device_label).await?;
+    app.state::<super::ownership::VaultOwnershipManager>()
+        .register_remote_owner(
+            &invitation.vault_id,
+            invitation.coordinator_device_id,
+            invitation.generation,
+        )
 }
 
 #[tauri::command]

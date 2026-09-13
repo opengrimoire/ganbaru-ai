@@ -1,0 +1,384 @@
+//! Android whole-vault receive, activation, acknowledgement, and refresh lifecycle.
+#![cfg_attr(not(target_os = "android"), allow(dead_code, unused_imports))]
+
+use super::protocol::BundlePurpose;
+use super::state::{PairingManager, PendingAcknowledgement};
+use super::transport::TransferCancellation;
+use crate::vault::ownership::{TransferPhase, VaultOwnershipManager};
+use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+#[cfg(target_os = "android")]
+use tauri::Manager;
+
+const RECONNECT_INTERVAL: Duration = Duration::from_secs(30);
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum ReceiveMode {
+    Ownership,
+    Refresh,
+}
+
+impl ReceiveMode {
+    fn purpose(self) -> BundlePurpose {
+        match self {
+            Self::Ownership => BundlePurpose::Ownership,
+            Self::Refresh => BundlePurpose::Refresh,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReceiveOutcome {
+    transfer_id: Option<String>,
+    generation: Option<u64>,
+    activated: bool,
+    in_progress: bool,
+}
+
+#[derive(Default)]
+pub(crate) struct ReceiverLifecycle {
+    operation: Arc<tokio::sync::Mutex<()>>,
+    cancellation: Mutex<Option<TransferCancellation>>,
+    connected: AtomicBool,
+}
+
+impl ReceiverLifecycle {
+    fn begin(&self) -> Result<TransferCancellation, String> {
+        let cancellation = TransferCancellation::default();
+        *self
+            .cancellation
+            .lock()
+            .map_err(|_| "receiver cancellation lock is unavailable".to_string())? =
+            Some(cancellation.clone());
+        Ok(cancellation)
+    }
+
+    fn finish(&self) {
+        if let Ok(mut current) = self.cancellation.lock() {
+            current.take();
+        }
+    }
+
+    fn cancel(&self) -> Result<(), String> {
+        let current = self
+            .cancellation
+            .lock()
+            .map_err(|_| "receiver cancellation lock is unavailable".to_string())?;
+        if let Some(cancellation) = current.as_ref() {
+            cancellation.cancel();
+        }
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub(crate) async fn handoff_receive_desktop_bundle(
+    app: tauri::AppHandle,
+    mode: ReceiveMode,
+) -> Result<ReceiveOutcome, String> {
+    receive_if_idle(app, mode).await
+}
+
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+pub(crate) async fn handoff_receive_desktop_bundle(
+    _mode: ReceiveMode,
+) -> Result<ReceiveOutcome, String> {
+    Err("desktop vault receive is only available on Android".to_string())
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub(crate) fn handoff_cancel_receive(app: tauri::AppHandle) -> Result<(), String> {
+    app.state::<ReceiverLifecycle>().cancel()
+}
+
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+pub(crate) fn handoff_cancel_receive() -> Result<(), String> {
+    Err("desktop vault receive is only available on Android".to_string())
+}
+
+#[cfg(target_os = "android")]
+async fn receive_if_idle(
+    app: tauri::AppHandle,
+    mode: ReceiveMode,
+) -> Result<ReceiveOutcome, String> {
+    let lifecycle = app.state::<ReceiverLifecycle>();
+    let Ok(_operation) = lifecycle.operation.try_lock() else {
+        return Ok(ReceiveOutcome {
+            transfer_id: None,
+            generation: None,
+            activated: false,
+            in_progress: true,
+        });
+    };
+    let cancellation = lifecycle.begin()?;
+    let result = receive(&app, mode, &cancellation).await;
+    lifecycle.connected.store(result.is_ok(), Ordering::Release);
+    lifecycle.finish();
+    result
+}
+
+#[cfg(target_os = "android")]
+async fn receive(
+    app: &tauri::AppHandle,
+    mode: ReceiveMode,
+    cancellation: &TransferCancellation,
+) -> Result<ReceiveOutcome, String> {
+    flush_pending_acknowledgement(app).await?;
+    let pairing = app.state::<PairingManager>().inner().clone();
+    let coordinator = pairing
+        .coordinator_pin()?
+        .ok_or_else(|| "this device is not linked to a coordinator".to_string())?;
+    let ownership = app.state::<VaultOwnershipManager>();
+    let status = ownership.status(&coordinator.vault_id)?;
+    if let TransferPhase::IncomingCommitted {
+        transfer_id,
+        source_device_id,
+        committed_generation,
+    } = status.transfer_phase
+    {
+        if source_device_id != coordinator.device_id {
+            return Err("pending ownership transfer has an unexpected source".to_string());
+        }
+        return resume_committed_ownership(
+            app,
+            &pairing,
+            &coordinator.vault_id,
+            transfer_id,
+            committed_generation,
+        )
+        .await;
+    }
+    if status.can_write || status.owner_device_id != coordinator.device_id {
+        return Err("desktop is not the current owner of this vault".to_string());
+    }
+    if matches!(mode, ReceiveMode::Refresh) && !pairing.replica_ready()? {
+        return Err("the linked vault must be activated before it can refresh".to_string());
+    }
+
+    let purpose = mode.purpose();
+    let metadata = super::transport::request_bundle(&pairing, status.generation, purpose).await?;
+    let archive =
+        super::transport::download_bundle(&pairing, metadata.clone(), cancellation).await?;
+    let staging = crate::vault::backup::android_handoff_staging_path(app, &metadata.transfer_id)?;
+    crate::vault::backup::stage_handoff_archive(&archive, &staging, &metadata.vault_id).await?;
+
+    if purpose == BundlePurpose::Ownership {
+        let (_, generation) =
+            super::transport::commit_staged_ownership(&pairing, metadata.clone()).await?;
+        ownership.accept_incoming_grant(
+            &metadata.vault_id,
+            metadata.transfer_id.clone(),
+            coordinator.device_id,
+            generation,
+        )?;
+    }
+
+    crate::vault::backup::activate_android_handoff(
+        app,
+        &staging,
+        &metadata.transfer_id,
+        &metadata.vault_id,
+        purpose == BundlePurpose::Ownership && !pairing.replica_ready()?,
+    )
+    .await?;
+    let (device_id, _) = pairing.identity()?;
+    let pending = PendingAcknowledgement {
+        vault_id: metadata.vault_id.clone(),
+        device_id,
+        transfer_id: metadata.transfer_id.clone(),
+        generation: metadata.generation,
+        purpose,
+    };
+    pairing.record_activation(pending.clone())?;
+    if purpose == BundlePurpose::Ownership {
+        ownership.finalize_incoming(
+            &metadata.vault_id,
+            &metadata.transfer_id,
+            metadata.generation,
+        )?;
+    }
+    let acknowledgement = super::transport::acknowledge_activation(&pairing, &pending).await;
+    if acknowledgement.is_ok() {
+        pairing.clear_pending_acknowledgement(&pending.transfer_id)?;
+        pairing.remove_staging(&pending.transfer_id)?;
+    }
+    reload_application_shell(app)?;
+    acknowledgement?;
+    Ok(ReceiveOutcome {
+        transfer_id: Some(metadata.transfer_id),
+        generation: Some(metadata.generation),
+        activated: true,
+        in_progress: false,
+    })
+}
+
+#[cfg(target_os = "android")]
+async fn resume_committed_ownership(
+    app: &tauri::AppHandle,
+    pairing: &PairingManager,
+    vault_id: &str,
+    transfer_id: String,
+    generation: u64,
+) -> Result<ReceiveOutcome, String> {
+    let staging = crate::vault::backup::android_handoff_staging_path(app, &transfer_id)?;
+    crate::vault::backup::activate_android_handoff(
+        app,
+        &staging,
+        &transfer_id,
+        vault_id,
+        !pairing.replica_ready()?,
+    )
+    .await?;
+    let (device_id, _) = pairing.identity()?;
+    let pending = PendingAcknowledgement {
+        vault_id: vault_id.to_string(),
+        device_id,
+        transfer_id: transfer_id.clone(),
+        generation,
+        purpose: BundlePurpose::Ownership,
+    };
+    pairing.record_activation(pending.clone())?;
+    app.state::<VaultOwnershipManager>()
+        .finalize_incoming(vault_id, &transfer_id, generation)?;
+    let acknowledgement = super::transport::acknowledge_activation(pairing, &pending).await;
+    if acknowledgement.is_ok() {
+        pairing.clear_pending_acknowledgement(&transfer_id)?;
+        pairing.remove_staging(&transfer_id)?;
+    }
+    reload_application_shell(app)?;
+    acknowledgement?;
+    Ok(ReceiveOutcome {
+        transfer_id: Some(transfer_id),
+        generation: Some(generation),
+        activated: true,
+        in_progress: false,
+    })
+}
+
+#[cfg(target_os = "android")]
+fn reload_application_shell(app: &tauri::AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "main application window is unavailable".to_string())?;
+    window
+        .eval("window.location.reload()")
+        .map_err(|error| format!("reload application after vault activation: {error}"))
+}
+
+#[cfg(target_os = "android")]
+async fn flush_pending_acknowledgement(app: &tauri::AppHandle) -> Result<(), String> {
+    let pairing = app.state::<PairingManager>().inner().clone();
+    let Some(pending) = pairing.pending_acknowledgement()? else {
+        return Ok(());
+    };
+    if pending.purpose == BundlePurpose::Ownership {
+        let ownership = app.state::<VaultOwnershipManager>();
+        let status = ownership.status(&pending.vault_id)?;
+        match status.transfer_phase {
+            TransferPhase::IncomingCommitted { .. } => ownership.finalize_incoming(
+                &pending.vault_id,
+                &pending.transfer_id,
+                pending.generation,
+            )?,
+            TransferPhase::Stable
+                if status.can_write && status.generation == pending.generation => {}
+            _ => {
+                return Err(
+                    "pending activation acknowledgement conflicts with ownership state".to_string(),
+                )
+            }
+        }
+    }
+    super::transport::acknowledge_activation(&pairing, &pending).await?;
+    pairing.clear_pending_acknowledgement(&pending.transfer_id)?;
+    pairing.remove_staging(&pending.transfer_id)
+}
+
+#[cfg(target_os = "android")]
+pub(crate) fn trigger_automatic_refresh(app: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let pairing = app.state::<PairingManager>().inner().clone();
+        if !pairing.replica_ready().unwrap_or(false) {
+            return;
+        }
+        let should_refresh = pairing
+            .coordinator_pin()
+            .ok()
+            .flatten()
+            .and_then(|coordinator| {
+                app.state::<VaultOwnershipManager>()
+                    .status(&coordinator.vault_id)
+                    .ok()
+                    .map(|status| {
+                        !status.can_write && status.owner_device_id == coordinator.device_id
+                    })
+            })
+            .unwrap_or(false);
+        if !should_refresh {
+            return;
+        }
+        if let Err(error) = receive_if_idle(app, ReceiveMode::Refresh).await {
+            eprintln!("automatic vault refresh deferred: {error}");
+        }
+    });
+}
+
+#[cfg(target_os = "android")]
+async fn refresh_after_reconnect(app: &tauri::AppHandle) {
+    let lifecycle = app.state::<ReceiverLifecycle>();
+    let pairing = app.state::<PairingManager>().inner().clone();
+    if !pairing.replica_ready().unwrap_or(false) {
+        return;
+    }
+    let Some(coordinator) = pairing.coordinator_pin().ok().flatten() else {
+        return;
+    };
+    let Some(status) = app
+        .state::<VaultOwnershipManager>()
+        .status(&coordinator.vault_id)
+        .ok()
+    else {
+        return;
+    };
+    if status.can_write || status.owner_device_id != coordinator.device_id {
+        return;
+    }
+    let reachable = super::transport::probe_coordinator(&pairing, status.generation)
+        .await
+        .is_ok();
+    let was_connected = lifecycle.connected.swap(reachable, Ordering::AcqRel);
+    if reachable && !was_connected {
+        trigger_automatic_refresh(app.clone());
+    }
+}
+
+#[cfg(target_os = "android")]
+pub(crate) fn start_reconnect_refresh(app: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        loop {
+            refresh_after_reconnect(&app).await;
+            tokio::time::sleep(RECONNECT_INTERVAL).await;
+        }
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn receive_modes_map_to_the_single_transport_purpose() {
+        assert_eq!(ReceiveMode::Ownership.purpose(), BundlePurpose::Ownership);
+        assert_eq!(ReceiveMode::Refresh.purpose(), BundlePurpose::Refresh);
+        assert_eq!(super::super::protocol::PROTOCOL_VERSION, 1);
+    }
+}

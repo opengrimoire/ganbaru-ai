@@ -22,6 +22,7 @@ pub(crate) struct PairingInvitation {
     pub coordinator_fingerprint: String,
     pub coordinator_device_id: String,
     pub vault_id: String,
+    pub generation: u64,
     pub expires_at_unix_ms: i64,
 }
 
@@ -55,6 +56,13 @@ pub(crate) struct BundleMetadata {
     pub archive_sha256: String,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum BundlePurpose {
+    Ownership,
+    Refresh,
+}
+
 impl BundleMetadata {
     pub(crate) fn validate(&self) -> Result<(), String> {
         validate_protocol(self.protocol_version)?;
@@ -62,9 +70,6 @@ impl BundleMetadata {
         validate_identifier("device id", &self.device_id)?;
         validate_identifier("transfer id", &self.transfer_id)?;
         validate_sha256(&self.archive_sha256)?;
-        if self.generation == 0 {
-            return Err("bundle generation must be positive".to_string());
-        }
         if self.archive_bytes == 0 || self.archive_bytes > MAX_ARCHIVE_BYTES {
             return Err(format!(
                 "bundle size must be between 1 and {MAX_ARCHIVE_BYTES} bytes"
@@ -99,6 +104,17 @@ pub(crate) enum ControlMessage {
         protocol_version: u16,
         coordinator_device_id: String,
     },
+    RequestBundle {
+        protocol_version: u16,
+        vault_id: String,
+        device_id: String,
+        generation: u64,
+        purpose: BundlePurpose,
+    },
+    BundlePrepared {
+        metadata: BundleMetadata,
+        purpose: BundlePurpose,
+    },
     DownloadBundle {
         metadata: BundleMetadata,
     },
@@ -114,7 +130,31 @@ pub(crate) enum ControlMessage {
     BundleComplete {
         transfer_id: String,
     },
+    CommitStagedOwnership {
+        metadata: BundleMetadata,
+    },
+    OwnershipGrant {
+        protocol_version: u16,
+        vault_id: String,
+        transfer_id: String,
+        owner_device_id: String,
+        generation: u64,
+    },
+    ActivationComplete {
+        protocol_version: u16,
+        vault_id: String,
+        device_id: String,
+        transfer_id: String,
+        generation: u64,
+        purpose: BundlePurpose,
+    },
+    ActivationAcknowledged {
+        transfer_id: String,
+    },
     CancelTransfer {
+        transfer_id: String,
+    },
+    TransferCancelled {
         transfer_id: String,
     },
     RefreshRequest {
@@ -177,6 +217,19 @@ impl ControlMessage {
                 validate_protocol(*protocol_version)?;
                 validate_identifier("coordinator device id", coordinator_device_id)?;
             }
+            Self::RequestBundle {
+                protocol_version,
+                vault_id,
+                device_id,
+                ..
+            } => {
+                validate_protocol(*protocol_version)?;
+                validate_identifier("vault id", vault_id)?;
+                validate_identifier("device id", device_id)?;
+            }
+            Self::BundlePrepared { metadata, .. } | Self::CommitStagedOwnership { metadata } => {
+                metadata.validate()?
+            }
             Self::DownloadBundle { metadata }
             | Self::UploadBundle { metadata }
             | Self::BundleMetadata { metadata } => metadata.validate()?,
@@ -185,8 +238,42 @@ impl ControlMessage {
                     return Err("resume offset exceeds the archive limit".to_string());
                 }
             }
-            Self::BundleComplete { transfer_id } | Self::CancelTransfer { transfer_id } => {
+            Self::BundleComplete { transfer_id }
+            | Self::ActivationAcknowledged { transfer_id }
+            | Self::CancelTransfer { transfer_id }
+            | Self::TransferCancelled { transfer_id } => {
                 validate_identifier("transfer id", transfer_id)?;
+            }
+            Self::OwnershipGrant {
+                protocol_version,
+                vault_id,
+                transfer_id,
+                owner_device_id,
+                generation,
+            } => {
+                validate_protocol(*protocol_version)?;
+                validate_identifier("vault id", vault_id)?;
+                validate_identifier("transfer id", transfer_id)?;
+                validate_identifier("owner device id", owner_device_id)?;
+                if *generation == 0 {
+                    return Err("ownership grant generation must be positive".to_string());
+                }
+            }
+            Self::ActivationComplete {
+                protocol_version,
+                vault_id,
+                device_id,
+                transfer_id,
+                generation,
+                purpose,
+            } => {
+                validate_protocol(*protocol_version)?;
+                validate_identifier("vault id", vault_id)?;
+                validate_identifier("device id", device_id)?;
+                validate_identifier("transfer id", transfer_id)?;
+                if *purpose == BundlePurpose::Ownership && *generation == 0 {
+                    return Err("activation generation must be positive".to_string());
+                }
             }
             Self::RefreshRequest {
                 protocol_version,

@@ -146,7 +146,12 @@ impl VaultOwnershipManager {
         self.initialize_from_path(storage_path, device_id)
     }
 
-    fn initialize_from_path(&self, storage_path: PathBuf, device_id: String) -> Result<(), String> {
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn initialize_from_path(
+        &self,
+        storage_path: PathBuf,
+        device_id: String,
+    ) -> Result<(), String> {
         let mut state = read_state_file(&storage_path)?;
         validate_state(&state, &device_id)?;
         let mut recovered = false;
@@ -193,6 +198,84 @@ impl VaultOwnershipManager {
         } else {
             Err(READ_ONLY_ERROR.to_string())
         }
+    }
+
+    pub(crate) fn register_remote_owner(
+        &self,
+        vault_id: &str,
+        owner_device_id: String,
+        generation: u64,
+    ) -> Result<(), String> {
+        require_identifier(vault_id, "vault id")?;
+        require_identifier(&owner_device_id, "owner device id")?;
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| "vault ownership lock is unavailable".to_string())?;
+        let device_id = initialized_device_id(&inner)?.to_string();
+        if owner_device_id == device_id {
+            return Err("linked vault owner must be a different device".to_string());
+        }
+        match inner.state.vaults.get(vault_id) {
+            Some(record)
+                if record.owner_device_id == owner_device_id
+                    && record.generation == generation
+                    && record.transfer_phase == TransferPhase::Stable =>
+            {
+                return Ok(())
+            }
+            Some(_) => return Err("linked vault conflicts with local ownership state".to_string()),
+            None => {}
+        }
+        inner.state.vaults.insert(
+            vault_id.to_string(),
+            OwnershipRecord {
+                vault_id: vault_id.to_string(),
+                owner_device_id,
+                generation,
+                transfer_phase: TransferPhase::Stable,
+            },
+        );
+        if let Err(error) = persist_inner(&inner) {
+            inner.state.vaults.remove(vault_id);
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn register_remote_owner_if_missing(
+        &self,
+        vault_id: &str,
+        owner_device_id: String,
+        generation: u64,
+    ) -> Result<(), String> {
+        require_identifier(vault_id, "vault id")?;
+        require_identifier(&owner_device_id, "owner device id")?;
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| "vault ownership lock is unavailable".to_string())?;
+        if inner.state.vaults.contains_key(vault_id) {
+            return Ok(());
+        }
+        let device_id = initialized_device_id(&inner)?.to_string();
+        if owner_device_id == device_id {
+            return Err("linked vault owner must be a different device".to_string());
+        }
+        inner.state.vaults.insert(
+            vault_id.to_string(),
+            OwnershipRecord {
+                vault_id: vault_id.to_string(),
+                owner_device_id,
+                generation,
+                transfer_phase: TransferPhase::Stable,
+            },
+        );
+        if let Err(error) = persist_inner(&inner) {
+            inner.state.vaults.remove(vault_id);
+            return Err(error);
+        }
+        Ok(())
     }
 
     pub(crate) fn acquire_managed_write(
@@ -303,6 +386,13 @@ impl VaultOwnershipManager {
                     receiver_device_id,
                     next_generation,
                 } if active == transfer_id => (receiver_device_id.clone(), *next_generation),
+                TransferPhase::OutgoingCommitted {
+                    transfer_id: active,
+                    receiver_device_id,
+                    committed_generation,
+                } if active == transfer_id => {
+                    return Ok(*committed_generation);
+                }
                 _ => return Err("outgoing transfer is not ready to commit".to_string()),
             };
             record.owner_device_id = receiver_device_id.clone();
@@ -327,8 +417,30 @@ impl VaultOwnershipManager {
         require_identifier(&transfer_id, "transfer id")?;
         require_identifier(&source_device_id, "source device id")?;
         self.mutate_record(vault_id, |device_id, record| {
-            if generation <= record.generation {
+            if generation == record.generation {
+                return match &record.transfer_phase {
+                    TransferPhase::IncomingCommitted {
+                        transfer_id: active,
+                        source_device_id: source,
+                        committed_generation,
+                    } if active == &transfer_id
+                        && source == &source_device_id
+                        && *committed_generation == generation
+                        && record.owner_device_id == device_id =>
+                    {
+                        Ok(())
+                    }
+                    _ => Err("ownership grant generation is stale".to_string()),
+                };
+            }
+            if generation < record.generation {
                 return Err("ownership grant generation is stale".to_string());
+            }
+            if record.owner_device_id != source_device_id {
+                return Err("ownership grant source is not the current owner".to_string());
+            }
+            if generation != record.generation.saturating_add(1) {
+                return Err("ownership grant generation is not the next generation".to_string());
             }
             record.owner_device_id = device_id.to_string();
             record.generation = generation;
@@ -744,6 +856,9 @@ mod tests {
         let path = test_path("stale");
         let manager = load_manager(&path, "phone");
         manager
+            .register_remote_owner("vault", "desktop".into(), 0)
+            .unwrap();
+        manager
             .accept_incoming_grant("vault", "first".into(), "desktop".into(), 1)
             .unwrap();
         manager.finalize_incoming("vault", "first", 1).unwrap();
@@ -761,12 +876,42 @@ mod tests {
         let path = test_path("incoming");
         let manager = load_manager(&path, "phone");
         manager
+            .register_remote_owner("vault", "desktop".into(), 0)
+            .unwrap();
+        manager
             .accept_incoming_grant("vault", "transfer".into(), "desktop".into(), 1)
             .unwrap();
         assert!(!manager.status("vault").unwrap().can_write);
 
         manager.finalize_incoming("vault", "transfer", 1).unwrap();
         assert!(manager.status("vault").unwrap().can_write);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn committed_receiver_resumes_same_grant_after_restart() {
+        let path = test_path("incoming-restart");
+        let manager = load_manager(&path, "phone");
+        manager
+            .register_remote_owner("vault", "desktop".into(), 0)
+            .unwrap();
+        manager
+            .accept_incoming_grant("vault", "transfer".into(), "desktop".into(), 1)
+            .unwrap();
+        drop(manager);
+
+        let restarted = load_manager(&path, "phone");
+        let status = restarted.status("vault").unwrap();
+        assert!(!status.can_write);
+        assert!(matches!(
+            status.transfer_phase,
+            TransferPhase::IncomingCommitted { ref transfer_id, .. } if transfer_id == "transfer"
+        ));
+        restarted
+            .accept_incoming_grant("vault", "transfer".into(), "desktop".into(), 1)
+            .unwrap();
+        restarted.finalize_incoming("vault", "transfer", 1).unwrap();
+        assert!(restarted.status("vault").unwrap().can_write);
         let _ = fs::remove_file(path);
     }
 
@@ -794,6 +939,9 @@ mod tests {
         let phone_path = test_path("phone");
         let desktop = load_manager(&desktop_path, "desktop");
         let phone = load_manager(&phone_path, "phone");
+        phone
+            .register_remote_owner("vault", "desktop".into(), 0)
+            .unwrap();
         desktop
             .begin_outgoing("vault", 0, "transfer".into(), "phone".into())
             .unwrap();
@@ -813,5 +961,44 @@ mod tests {
         assert!(!desktop.status("vault").unwrap().can_write);
         let _ = fs::remove_file(desktop_path);
         let _ = fs::remove_file(phone_path);
+    }
+
+    #[test]
+    fn incoming_grant_requires_current_owner_and_exact_next_generation() {
+        let path = test_path("grant-boundary");
+        let manager = load_manager(&path, "phone");
+        manager
+            .register_remote_owner("vault", "desktop".into(), 4)
+            .unwrap();
+
+        assert!(manager
+            .accept_incoming_grant("vault", "wrong-source".into(), "other".into(), 5)
+            .is_err());
+        assert!(manager
+            .accept_incoming_grant("vault", "skipped".into(), "desktop".into(), 6)
+            .is_err());
+        let status = manager.status("vault").unwrap();
+        assert_eq!(status.owner_device_id, "desktop");
+        assert_eq!(status.generation, 4);
+        assert!(!status.can_write);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn linked_owner_repair_only_creates_a_missing_record() {
+        let path = test_path("linked-owner-repair");
+        let manager = load_manager(&path, "phone");
+        manager
+            .register_remote_owner_if_missing("vault", "desktop".into(), 4)
+            .unwrap();
+        manager
+            .register_remote_owner_if_missing("vault", "other".into(), 0)
+            .unwrap();
+
+        let status = manager.status("vault").unwrap();
+        assert_eq!(status.owner_device_id, "desktop");
+        assert_eq!(status.generation, 4);
+        assert!(!status.can_write);
+        let _ = fs::remove_file(path);
     }
 }

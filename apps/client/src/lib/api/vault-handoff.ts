@@ -20,6 +20,15 @@ export interface PairingStatus {
   coordinatorEndpoint: string | null;
 }
 
+export type DesktopBundleReceiveMode = "ownership" | "refresh";
+
+export interface DesktopBundleReceiveOutcome {
+  transferId: string | null;
+  generation: number | null;
+  activated: boolean;
+  inProgress: boolean;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -75,6 +84,24 @@ function parseStatus(value: unknown): PairingStatus {
   };
 }
 
+function parseReceiveOutcome(value: unknown): DesktopBundleReceiveOutcome {
+  if (
+    !isRecord(value) ||
+    typeof value.activated !== "boolean" ||
+    typeof value.inProgress !== "boolean" ||
+    (value.transferId !== null && typeof value.transferId !== "string") ||
+    (value.generation !== null && !Number.isSafeInteger(value.generation))
+  ) {
+    throw new Error("Invalid desktop bundle receive response");
+  }
+  return {
+    transferId: value.transferId as string | null,
+    generation: value.generation as number | null,
+    activated: value.activated,
+    inProgress: value.inProgress,
+  };
+}
+
 /** Creates a short-lived single-use invitation on the desktop coordinator. */
 export async function createPairingInvitation(): Promise<PairingInvitation> {
   return parseInvitation(await invoke<unknown>("handoff_create_pairing_invitation"));
@@ -106,4 +133,18 @@ export function enrollWithDesktop(
 /** Reads device-local linked coordinator status. */
 export async function readPairingStatus(): Promise<PairingStatus> {
   return parseStatus(await invoke<unknown>("handoff_pairing_status"));
+}
+
+/** Receives and activates the desktop vault through the shared whole-vault path. */
+export async function receiveDesktopBundle(
+  mode: DesktopBundleReceiveMode,
+): Promise<DesktopBundleReceiveOutcome> {
+  return parseReceiveOutcome(
+    await invoke<unknown>("handoff_receive_desktop_bundle", { mode }),
+  );
+}
+
+/** Cancels the currently streaming desktop bundle, leaving resumable staging. */
+export function cancelDesktopBundleReceive(): Promise<void> {
+  return invoke("handoff_cancel_receive");
 }

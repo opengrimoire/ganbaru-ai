@@ -14,6 +14,12 @@ pub(crate) struct SourceQuiescence {
     transfer_id: String,
 }
 
+/// Holds the central write boundaries while creating an ownership-neutral snapshot.
+pub(crate) struct SnapshotQuiescence {
+    _database_guard: db_path::VaultExclusiveGuard,
+    _managed_write_fence: super::ownership::ManagedVaultWriteFence,
+}
+
 impl SourceQuiescence {
     pub(crate) fn vault_id(&self) -> &str {
         &self.vault_id
@@ -41,7 +47,6 @@ pub(crate) async fn begin_source_quiescence<R: Runtime>(
     check_pomodoro_blocker(app).await?;
     check_chat_blocker(app)?;
 
-    let database_guard = db_path::begin_vault_exclusive().await;
     let ownership = app.state::<VaultOwnershipManager>();
     let managed_write_fence = ownership.fence_managed_writes()?;
     ownership.begin_outgoing(
@@ -50,6 +55,7 @@ pub(crate) async fn begin_source_quiescence<R: Runtime>(
         transfer_id.clone(),
         receiver_device_id,
     )?;
+    let database_guard = db_path::begin_vault_exclusive().await;
 
     let result = async {
         check_chat_blocker(app)?;
@@ -71,6 +77,21 @@ pub(crate) async fn begin_source_quiescence<R: Runtime>(
         _managed_write_fence: managed_write_fence,
         vault_id,
         transfer_id,
+    })
+}
+
+/// Briefly excludes central writers while a read-only replica snapshot is created.
+pub(crate) async fn begin_snapshot_quiescence<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<SnapshotQuiescence, String> {
+    let managed_write_fence = app
+        .state::<VaultOwnershipManager>()
+        .fence_managed_writes()?;
+    let database_guard = db_path::begin_vault_exclusive().await;
+    db_path::close_all_sqlite_pools_for_restore(app).await?;
+    Ok(SnapshotQuiescence {
+        _database_guard: database_guard,
+        _managed_write_fence: managed_write_fence,
     })
 }
 

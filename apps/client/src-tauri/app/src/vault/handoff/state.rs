@@ -1,6 +1,8 @@
 //! Platform-private pairing identity and transfer registry.
 
-use super::protocol::{validate_identifier, BundleMetadata, PairingInvitation, PROTOCOL_VERSION};
+use super::protocol::{
+    validate_identifier, BundleMetadata, BundlePurpose, PairingInvitation, PROTOCOL_VERSION,
+};
 use base64::Engine;
 use rcgen::{CertificateParams, KeyPair};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
@@ -42,6 +44,8 @@ pub(crate) struct CoordinatorPin {
     pub device_id: String,
     pub endpoint: String,
     pub vault_id: String,
+    #[serde(default)]
+    pub generation: u64,
     pub certificate_fingerprint: String,
 }
 
@@ -52,6 +56,20 @@ struct PairingStateFile {
     identity: StoredIdentity,
     linked_peer: Option<LinkedPeer>,
     coordinator: Option<CoordinatorPin>,
+    #[serde(default)]
+    replica_ready: bool,
+    #[serde(default)]
+    pending_acknowledgement: Option<PendingAcknowledgement>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PendingAcknowledgement {
+    pub vault_id: String,
+    pub device_id: String,
+    pub transfer_id: String,
+    pub generation: u64,
+    pub purpose: BundlePurpose,
 }
 
 pub(crate) struct TlsIdentity {
@@ -135,6 +153,8 @@ impl PairingManager {
                 identity: create_identity(device_id.clone())?,
                 linked_peer: None,
                 coordinator: None,
+                replica_ready: false,
+                pending_acknowledgement: None,
             };
             persist_state(&state_path, &state)?;
             state
@@ -172,10 +192,56 @@ impl PairingManager {
         Ok(initialized_state(&inner)?.coordinator.clone())
     }
 
+    #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+    pub(crate) fn replica_ready(&self) -> Result<bool, String> {
+        let inner = self.lock()?;
+        Ok(initialized_state(&inner)?.replica_ready)
+    }
+
+    #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+    pub(crate) fn pending_acknowledgement(&self) -> Result<Option<PendingAcknowledgement>, String> {
+        let inner = self.lock()?;
+        Ok(initialized_state(&inner)?.pending_acknowledgement.clone())
+    }
+
+    #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+    pub(crate) fn record_activation(
+        &self,
+        acknowledgement: PendingAcknowledgement,
+    ) -> Result<(), String> {
+        validate_identifier("vault id", &acknowledgement.vault_id)?;
+        validate_identifier("device id", &acknowledgement.device_id)?;
+        validate_identifier("transfer id", &acknowledgement.transfer_id)?;
+        if acknowledgement.purpose == BundlePurpose::Ownership && acknowledgement.generation == 0 {
+            return Err("activation generation must be positive".to_string());
+        }
+        let mut inner = self.lock()?;
+        let state = initialized_state_mut(&mut inner)?;
+        state.replica_ready = true;
+        state.pending_acknowledgement = Some(acknowledgement);
+        persist_initialized_state(&inner)
+    }
+
+    #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+    pub(crate) fn clear_pending_acknowledgement(&self, transfer_id: &str) -> Result<(), String> {
+        validate_identifier("transfer id", transfer_id)?;
+        let mut inner = self.lock()?;
+        let state = initialized_state_mut(&mut inner)?;
+        match state.pending_acknowledgement.as_ref() {
+            Some(pending) if pending.transfer_id == transfer_id => {
+                state.pending_acknowledgement = None;
+                persist_initialized_state(&inner)
+            }
+            None => Ok(()),
+            Some(_) => Err("pending activation acknowledgement does not match".to_string()),
+        }
+    }
+
     pub(crate) fn create_invitation(
         &self,
         endpoint: std::net::SocketAddr,
         vault_id: String,
+        generation: u64,
         now_unix_ms: i64,
     ) -> Result<PairingInvitation, String> {
         validate_identifier("vault id", &vault_id)?;
@@ -191,6 +257,7 @@ impl PairingManager {
             ),
             coordinator_device_id: state.identity.device_id.clone(),
             vault_id,
+            generation,
             expires_at_unix_ms: now_unix_ms.saturating_add(INVITATION_LIFETIME_MS),
         };
         inner.invitations.clear();
@@ -261,6 +328,7 @@ impl PairingManager {
             device_id: invitation.coordinator_device_id.clone(),
             endpoint: invitation.endpoint.clone(),
             vault_id: invitation.vault_id.clone(),
+            generation: invitation.generation,
             certificate_fingerprint: fingerprint,
         });
         persist_initialized_state(&inner)
@@ -315,6 +383,29 @@ impl PairingManager {
             .ok_or_else(|| "transfer is not available".to_string())
     }
 
+    pub(crate) fn unregister_outgoing_bundle(&self, transfer_id: &str) -> Result<(), String> {
+        validate_identifier("transfer id", transfer_id)?;
+        let mut inner = self.lock()?;
+        inner.outgoing_bundles.remove(transfer_id);
+        Ok(())
+    }
+
+    pub(crate) fn outgoing_snapshot_paths(
+        &self,
+        transfer_id: &str,
+    ) -> Result<(PathBuf, PathBuf), String> {
+        validate_identifier("transfer id", transfer_id)?;
+        let inner = self.lock()?;
+        let root = inner
+            .staging_root
+            .as_ref()
+            .ok_or_else(|| "pairing state is not initialized".to_string())?;
+        Ok((
+            root.join(format!("{transfer_id}.source.sqlite")),
+            root.join(format!("{transfer_id}.source.zip")),
+        ))
+    }
+
     pub(crate) fn staging_paths(
         &self,
         transfer_id: &str,
@@ -335,7 +426,12 @@ impl PairingManager {
     pub(crate) fn remove_staging(&self, transfer_id: &str) -> Result<(), String> {
         let (partial, metadata, complete) = self.staging_paths(transfer_id)?;
         for path in [partial, metadata, complete] {
-            match fs::remove_file(&path) {
+            let result = if path.is_dir() {
+                fs::remove_dir_all(&path)
+            } else {
+                fs::remove_file(&path)
+            };
+            match result {
                 Ok(()) => {}
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
                 Err(error) => return Err(format!("remove staged transfer: {error}")),
@@ -509,6 +605,17 @@ fn validate_state(state: &PairingStateFile, expected_device_id: &str) -> Result<
             return Err("coordinator certificate fingerprint is invalid".to_string());
         }
     }
+    if let Some(pending) = state.pending_acknowledgement.as_ref() {
+        validate_identifier("pending vault id", &pending.vault_id)?;
+        validate_identifier("pending device id", &pending.device_id)?;
+        validate_identifier("pending transfer id", &pending.transfer_id)?;
+        if pending.device_id != expected_device_id
+            || (pending.purpose == BundlePurpose::Ownership && pending.generation == 0)
+            || !state.replica_ready
+        {
+            return Err("pending activation acknowledgement is inconsistent".to_string());
+        }
+    }
     Ok(())
 }
 
@@ -654,6 +761,7 @@ mod tests {
             .create_invitation(
                 "127.0.0.1:41000".parse().expect("endpoint"),
                 "vault-1".to_string(),
+                0,
                 100,
             )
             .expect("invitation");
@@ -687,6 +795,7 @@ mod tests {
             .create_invitation(
                 "127.0.0.1:41000".parse().expect("endpoint"),
                 "vault-1".to_string(),
+                0,
                 100,
             )
             .expect("invitation");
@@ -698,5 +807,46 @@ mod tests {
             )
             .unwrap_err()
             .contains("expired"));
+    }
+
+    #[test]
+    fn activation_acknowledgement_survives_restart() {
+        let temp = TestDirectory::new("pending-ack");
+        let manager = PairingManager::default();
+        manager
+            .initialize(temp.path().to_path_buf(), "device-phone".to_string())
+            .expect("initialize");
+        let pending = PendingAcknowledgement {
+            vault_id: "vault-1".to_string(),
+            device_id: "device-phone".to_string(),
+            transfer_id: "transfer-1".to_string(),
+            generation: 1,
+            purpose: BundlePurpose::Ownership,
+        };
+        manager
+            .record_activation(pending.clone())
+            .expect("record activation");
+        drop(manager);
+
+        let restarted = PairingManager::default();
+        restarted
+            .initialize(temp.path().to_path_buf(), "device-phone".to_string())
+            .expect("restart");
+        assert!(restarted.replica_ready().expect("replica state"));
+        assert_eq!(
+            restarted
+                .pending_acknowledgement()
+                .expect("pending acknowledgement"),
+            Some(pending)
+        );
+        restarted
+            .clear_pending_acknowledgement("transfer-1")
+            .expect("clear acknowledgement");
+        assert_eq!(
+            restarted
+                .pending_acknowledgement()
+                .expect("cleared acknowledgement"),
+            None
+        );
     }
 }

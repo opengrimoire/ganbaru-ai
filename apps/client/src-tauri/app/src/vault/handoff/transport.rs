@@ -1,8 +1,8 @@
 //! Mutual-TLS coordinator transport and resumable archive streaming.
 
 use super::protocol::{
-    read_control, unix_time_ms, write_control, BundleMetadata, ControlMessage, PairingInvitation,
-    PROTOCOL_VERSION, TRANSFER_CHUNK_BYTES,
+    read_control, unix_time_ms, write_control, BundleMetadata, BundlePurpose, ControlMessage,
+    PairingInvitation, PROTOCOL_VERSION, TRANSFER_CHUNK_BYTES,
 };
 use super::state::{
     certificate_fingerprint, decode_certificate, encode_certificate, Enrollment, PairingManager,
@@ -101,9 +101,19 @@ impl ServerCertVerifier for PinnedServerVerifier {
     }
 }
 
+#[cfg(test)]
 pub(crate) async fn serve(
     listener: TcpListener,
     manager: PairingManager,
+    shutdown: tokio::sync::oneshot::Receiver<()>,
+) {
+    serve_with_coordinator(listener, manager, None, shutdown).await;
+}
+
+pub(crate) async fn serve_with_coordinator(
+    listener: TcpListener,
+    manager: PairingManager,
+    coordinator: Option<super::coordinator::CoordinatorSender>,
     mut shutdown: tokio::sync::oneshot::Receiver<()>,
 ) {
     loop {
@@ -113,8 +123,9 @@ pub(crate) async fn serve(
                 match accepted {
                     Ok((socket, _)) => {
                         let manager = manager.clone();
+                        let coordinator = coordinator.clone();
                         tokio::spawn(async move {
-                            if let Err(error) = handle_connection(socket, manager).await {
+                            if let Err(error) = handle_connection(socket, manager, coordinator).await {
                                 eprintln!("vault handoff connection failed: {error}");
                             }
                         });
@@ -129,7 +140,11 @@ pub(crate) async fn serve(
     }
 }
 
-async fn handle_connection(socket: TcpStream, manager: PairingManager) -> Result<(), String> {
+async fn handle_connection(
+    socket: TcpStream,
+    manager: PairingManager,
+    coordinator: Option<super::coordinator::CoordinatorSender>,
+) -> Result<(), String> {
     let config = server_config(&manager)?;
     let mut stream = tokio::time::timeout(
         TLS_HANDSHAKE_TIMEOUT,
@@ -201,6 +216,57 @@ async fn handle_connection(socket: TcpStream, manager: PairingManager) -> Result
             )?;
             serve_download(&mut stream, &manager, metadata).await
         }
+        ControlMessage::RequestBundle {
+            vault_id,
+            device_id,
+            generation,
+            purpose,
+            ..
+        } => {
+            manager.verify_authenticated_peer(&device_id, peer_certificate.as_ref(), &vault_id)?;
+            let operation = super::coordinator::CoordinatorOperation::Prepare {
+                vault_id,
+                device_id,
+                generation,
+                purpose,
+            };
+            send_coordinator_response(&mut stream, coordinator.as_ref(), operation).await
+        }
+        ControlMessage::CommitStagedOwnership { metadata } => {
+            manager.verify_authenticated_peer(
+                &metadata.device_id,
+                peer_certificate.as_ref(),
+                &metadata.vault_id,
+            )?;
+            send_coordinator_response(
+                &mut stream,
+                coordinator.as_ref(),
+                super::coordinator::CoordinatorOperation::CommitOwnership { metadata },
+            )
+            .await
+        }
+        ControlMessage::ActivationComplete {
+            vault_id,
+            device_id,
+            transfer_id,
+            generation,
+            purpose,
+            ..
+        } => {
+            manager.verify_authenticated_peer(&device_id, peer_certificate.as_ref(), &vault_id)?;
+            send_coordinator_response(
+                &mut stream,
+                coordinator.as_ref(),
+                super::coordinator::CoordinatorOperation::Activated {
+                    vault_id,
+                    device_id,
+                    transfer_id,
+                    generation,
+                    purpose,
+                },
+            )
+            .await
+        }
         ControlMessage::CancelTransfer { transfer_id } => {
             let peer = manager
                 .linked_peer()?
@@ -210,11 +276,11 @@ async fn handle_connection(socket: TcpStream, manager: PairingManager) -> Result
                 peer_certificate.as_ref(),
                 &peer.vault_id,
             )?;
-            manager.remove_staging(&transfer_id)?;
-            timeout_control(write_control(
+            send_coordinator_response(
                 &mut stream,
-                &ControlMessage::BundleComplete { transfer_id },
-            ))
+                coordinator.as_ref(),
+                super::coordinator::CoordinatorOperation::Cancel { transfer_id },
+            )
             .await
         }
         ControlMessage::RefreshRequest {
@@ -260,6 +326,50 @@ async fn handle_connection(socket: TcpStream, manager: PairingManager) -> Result
             .await
         }
     }
+}
+
+async fn send_coordinator_response(
+    stream: &mut tokio_rustls::server::TlsStream<TcpStream>,
+    coordinator: Option<&super::coordinator::CoordinatorSender>,
+    operation: super::coordinator::CoordinatorOperation,
+) -> Result<(), String> {
+    let Some(coordinator) = coordinator else {
+        return send_error(
+            stream,
+            "coordinator_unavailable",
+            "vault handoff coordinator operations are unavailable",
+            true,
+        )
+        .await;
+    };
+    let response = match super::coordinator::request(coordinator, operation).await {
+        Ok(response) => response,
+        Err(error) => return send_error(stream, "handoff_rejected", &error, true).await,
+    };
+    let message = match response {
+        super::coordinator::CoordinatorResponse::Prepared { metadata, purpose } => {
+            ControlMessage::BundlePrepared { metadata, purpose }
+        }
+        super::coordinator::CoordinatorResponse::OwnershipGrant {
+            vault_id,
+            transfer_id,
+            owner_device_id,
+            generation,
+        } => ControlMessage::OwnershipGrant {
+            protocol_version: PROTOCOL_VERSION,
+            vault_id,
+            transfer_id,
+            owner_device_id,
+            generation,
+        },
+        super::coordinator::CoordinatorResponse::ActivationAcknowledged { transfer_id } => {
+            ControlMessage::ActivationAcknowledged { transfer_id }
+        }
+        super::coordinator::CoordinatorResponse::Cancelled { transfer_id } => {
+            ControlMessage::TransferCancelled { transfer_id }
+        }
+    };
+    timeout_control(write_control(stream, &message)).await
 }
 
 async fn serve_download(
@@ -395,7 +505,159 @@ pub(crate) async fn enroll(
     }
 }
 
-#[allow(dead_code)] // H04 connects the Android transfer workflow.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub(crate) async fn request_bundle(
+    manager: &PairingManager,
+    generation: u64,
+    purpose: BundlePurpose,
+) -> Result<BundleMetadata, String> {
+    let coordinator = manager
+        .coordinator_pin()?
+        .ok_or_else(|| "this device is not linked to a coordinator".to_string())?;
+    let (device_id, _) = manager.identity()?;
+    match authenticated_exchange(
+        manager,
+        ControlMessage::RequestBundle {
+            protocol_version: PROTOCOL_VERSION,
+            vault_id: coordinator.vault_id.clone(),
+            device_id: device_id.clone(),
+            generation,
+            purpose,
+        },
+    )
+    .await?
+    {
+        ControlMessage::BundlePrepared {
+            metadata,
+            purpose: offered_purpose,
+        } if offered_purpose == purpose
+            && metadata.vault_id == coordinator.vault_id
+            && metadata.device_id == device_id
+            && metadata.generation
+                == match purpose {
+                    BundlePurpose::Ownership => generation.saturating_add(1),
+                    BundlePurpose::Refresh => generation,
+                } =>
+        {
+            Ok(metadata)
+        }
+        ControlMessage::Error { message, .. } => Err(message),
+        _ => Err("coordinator returned an invalid prepared bundle".to_string()),
+    }
+}
+
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub(crate) async fn commit_staged_ownership(
+    manager: &PairingManager,
+    metadata: BundleMetadata,
+) -> Result<(String, u64), String> {
+    match authenticated_exchange(
+        manager,
+        ControlMessage::CommitStagedOwnership {
+            metadata: metadata.clone(),
+        },
+    )
+    .await?
+    {
+        ControlMessage::OwnershipGrant {
+            vault_id,
+            transfer_id,
+            owner_device_id,
+            generation,
+            ..
+        } if vault_id == metadata.vault_id
+            && transfer_id == metadata.transfer_id
+            && owner_device_id == metadata.device_id
+            && generation == metadata.generation =>
+        {
+            Ok((owner_device_id, generation))
+        }
+        ControlMessage::Error { message, .. } => Err(message),
+        _ => Err("coordinator returned an invalid ownership grant".to_string()),
+    }
+}
+
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub(crate) async fn acknowledge_activation(
+    manager: &PairingManager,
+    pending: &super::state::PendingAcknowledgement,
+) -> Result<(), String> {
+    match authenticated_exchange(
+        manager,
+        ControlMessage::ActivationComplete {
+            protocol_version: PROTOCOL_VERSION,
+            vault_id: pending.vault_id.clone(),
+            device_id: pending.device_id.clone(),
+            transfer_id: pending.transfer_id.clone(),
+            generation: pending.generation,
+            purpose: pending.purpose,
+        },
+    )
+    .await?
+    {
+        ControlMessage::ActivationAcknowledged { transfer_id }
+            if transfer_id == pending.transfer_id =>
+        {
+            Ok(())
+        }
+        ControlMessage::Error { message, .. } => Err(message),
+        _ => Err("coordinator returned an invalid activation acknowledgement".to_string()),
+    }
+}
+
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub(crate) async fn probe_coordinator(
+    manager: &PairingManager,
+    generation: u64,
+) -> Result<(), String> {
+    let coordinator = manager
+        .coordinator_pin()?
+        .ok_or_else(|| "this device is not linked to a coordinator".to_string())?;
+    let (device_id, _) = manager.identity()?;
+    match authenticated_exchange(
+        manager,
+        ControlMessage::RefreshRequest {
+            protocol_version: PROTOCOL_VERSION,
+            vault_id: coordinator.vault_id,
+            device_id,
+            generation,
+        },
+    )
+    .await?
+    {
+        ControlMessage::RefreshStatus {
+            generation: returned,
+            ..
+        } if returned == generation => Ok(()),
+        ControlMessage::Error { message, .. } => Err(message),
+        _ => Err("coordinator returned an invalid refresh status".to_string()),
+    }
+}
+
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+async fn authenticated_exchange(
+    manager: &PairingManager,
+    message: ControlMessage,
+) -> Result<ControlMessage, String> {
+    let coordinator = manager
+        .coordinator_pin()?
+        .ok_or_else(|| "this device is not linked to a coordinator".to_string())?;
+    let endpoint = coordinator
+        .endpoint
+        .parse()
+        .map_err(|_| "coordinator endpoint is invalid".to_string())?;
+    let (_, identity) = manager.identity()?;
+    let mut stream = connect_pinned(
+        endpoint,
+        &coordinator.certificate_fingerprint,
+        Some(identity),
+    )
+    .await?;
+    timeout_control(write_control(&mut stream, &message)).await?;
+    timeout_control(read_control(&mut stream)).await
+}
+
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
 pub(crate) async fn download_bundle(
     manager: &PairingManager,
     metadata: BundleMetadata,
@@ -463,7 +725,7 @@ mod tests {
                 .expect("bind coordinator");
             let endpoint = listener.local_addr().expect("coordinator endpoint");
             let invitation = desktop
-                .create_invitation(endpoint, "vault-1".to_string(), unix_time_ms())
+                .create_invitation(endpoint, "vault-1".to_string(), 0, unix_time_ms())
                 .expect("create invitation");
             let (shutdown, receiver) = tokio::sync::oneshot::channel();
             tokio::spawn(serve(listener, desktop.clone(), receiver));
@@ -481,6 +743,51 @@ mod tests {
             super::enroll(&self.phone, &self.invitation, "Phone".to_string())
                 .await
                 .expect("enroll phone");
+        }
+
+        async fn start_with_coordinator() -> (
+            Self,
+            tokio::sync::mpsc::Receiver<super::super::coordinator::CoordinatorRequest>,
+        ) {
+            let desktop_root = TestDirectory::new("controlled-desktop");
+            let phone_root = TestDirectory::new("controlled-phone");
+            let desktop = PairingManager::default();
+            desktop
+                .initialize(
+                    desktop_root.path().to_path_buf(),
+                    "device-desktop".to_string(),
+                )
+                .expect("initialize desktop");
+            let phone = PairingManager::default();
+            phone
+                .initialize(phone_root.path().to_path_buf(), "device-phone".to_string())
+                .expect("initialize phone");
+            let listener = TcpListener::bind("127.0.0.1:0")
+                .await
+                .expect("bind coordinator");
+            let endpoint = listener.local_addr().expect("coordinator endpoint");
+            let invitation = desktop
+                .create_invitation(endpoint, "vault-1".to_string(), 0, unix_time_ms())
+                .expect("create invitation");
+            let (requests, request_receiver) = tokio::sync::mpsc::channel(8);
+            let (shutdown, receiver) = tokio::sync::oneshot::channel();
+            tokio::spawn(serve_with_coordinator(
+                listener,
+                desktop.clone(),
+                Some(requests),
+                receiver,
+            ));
+            (
+                Self {
+                    _desktop_root: desktop_root,
+                    _phone_root: phone_root,
+                    desktop,
+                    phone,
+                    invitation,
+                    shutdown: Some(shutdown),
+                },
+                request_receiver,
+            )
         }
 
         fn register_bundle(&self, bytes: &[u8], transfer_id: &str) -> BundleMetadata {
@@ -522,6 +829,102 @@ mod tests {
             .expect("download bundle");
 
         assert_eq!(fs::read(staged).expect("read staged bundle"), bytes);
+    }
+
+    #[tokio::test]
+    async fn authenticated_control_flow_prepares_commits_and_acknowledges() {
+        use super::super::coordinator::{CoordinatorOperation, CoordinatorResponse};
+        use super::super::state::PendingAcknowledgement;
+
+        let (pair, mut requests) = LocalPair::start_with_coordinator().await;
+        pair.enroll().await;
+        let metadata = pair.register_bundle(b"controlled handoff bundle", "transfer-control");
+        let expected = metadata.clone();
+        let coordinator = tokio::spawn(async move {
+            while let Some(request) = requests.recv().await {
+                let response = match request.operation {
+                    CoordinatorOperation::Prepare {
+                        vault_id,
+                        device_id,
+                        generation,
+                        purpose,
+                    } => {
+                        assert_eq!(vault_id, expected.vault_id);
+                        assert_eq!(device_id, expected.device_id);
+                        assert_eq!(generation, 0);
+                        assert_eq!(purpose, BundlePurpose::Ownership);
+                        CoordinatorResponse::Prepared {
+                            metadata: expected.clone(),
+                            purpose,
+                        }
+                    }
+                    CoordinatorOperation::CommitOwnership { metadata } => {
+                        assert_eq!(metadata, expected);
+                        CoordinatorResponse::OwnershipGrant {
+                            vault_id: expected.vault_id.clone(),
+                            transfer_id: expected.transfer_id.clone(),
+                            owner_device_id: expected.device_id.clone(),
+                            generation: expected.generation,
+                        }
+                    }
+                    CoordinatorOperation::Activated {
+                        vault_id,
+                        device_id,
+                        transfer_id,
+                        generation,
+                        purpose,
+                    } => {
+                        assert_eq!(vault_id, expected.vault_id);
+                        assert_eq!(device_id, expected.device_id);
+                        assert_eq!(transfer_id, expected.transfer_id);
+                        assert_eq!(generation, expected.generation);
+                        assert_eq!(purpose, BundlePurpose::Ownership);
+                        let response = CoordinatorResponse::ActivationAcknowledged {
+                            transfer_id: expected.transfer_id.clone(),
+                        };
+                        request.response.send(Ok(response)).expect("send response");
+                        break;
+                    }
+                    operation => panic!("unexpected coordinator operation: {operation:?}"),
+                };
+                request.response.send(Ok(response)).expect("send response");
+            }
+        });
+
+        let prepared = request_bundle(&pair.phone, 0, BundlePurpose::Ownership)
+            .await
+            .expect("prepare ownership bundle");
+        assert_eq!(prepared, metadata);
+        let staged = download_bundle(
+            &pair.phone,
+            prepared.clone(),
+            &TransferCancellation::default(),
+        )
+        .await
+        .expect("stage ownership bundle");
+        assert_eq!(
+            fs::read(staged).expect("read staged bundle"),
+            b"controlled handoff bundle"
+        );
+        assert_eq!(
+            commit_staged_ownership(&pair.phone, prepared.clone())
+                .await
+                .expect("commit ownership"),
+            ("device-phone".to_string(), 1)
+        );
+        acknowledge_activation(
+            &pair.phone,
+            &PendingAcknowledgement {
+                vault_id: prepared.vault_id,
+                device_id: prepared.device_id,
+                transfer_id: prepared.transfer_id,
+                generation: prepared.generation,
+                purpose: BundlePurpose::Ownership,
+            },
+        )
+        .await
+        .expect("acknowledge activation");
+        coordinator.await.expect("coordinator task");
     }
 
     #[tokio::test]

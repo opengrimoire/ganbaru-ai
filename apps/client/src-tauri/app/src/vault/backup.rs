@@ -5,12 +5,10 @@
 )]
 
 #[cfg(target_os = "android")]
-use super::{
-    active_vault_path, default_data_folder_path, ensure_vault_skeleton, path_to_string,
-    select_vault,
-};
-#[cfg(any(test, target_os = "android"))]
+use super::active_vault_path;
 use super::{database_path, vault_info_from_path};
+#[cfg(target_os = "android")]
+use super::{default_data_folder_path, ensure_vault_skeleton, path_to_string, select_vault};
 use super::{VaultInfo, APP_SQLITE_FILE, CONFIG_LOCK};
 #[cfg(target_os = "android")]
 use crate::db_path;
@@ -18,7 +16,6 @@ use crate::db_path;
 use chrono::{SecondsFormat, Utc};
 #[cfg(target_os = "android")]
 use ganbaru_mobile_documents::MobileDocumentsExt;
-#[cfg(any(test, target_os = "android"))]
 use sqlx::Row;
 use std::fs;
 use std::io::{Read, Write};
@@ -86,7 +83,6 @@ async fn create_database_snapshot<R: Runtime>(
     vacuum_database(&pool, destination).await
 }
 
-#[cfg(any(test, target_os = "android"))]
 async fn vacuum_database(pool: &sqlx::SqlitePool, destination: &Path) -> Result<(), String> {
     let destination = destination
         .to_str()
@@ -249,6 +245,27 @@ fn create_backup_archive(
     Ok(())
 }
 
+/// Creates one consistent whole-vault archive after the caller excludes vault writers.
+pub(crate) async fn create_handoff_archive(
+    vault_root: &Path,
+    database_snapshot: &Path,
+    archive_path: &Path,
+) -> Result<(), String> {
+    for path in [database_snapshot, archive_path] {
+        match fs::remove_file(path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(format!("remove stale handoff snapshot: {error}")),
+        }
+    }
+    let registry = ganbaru_db::DatabasePoolRegistry::default();
+    let pool = registry.connect_path(database_path(vault_root)).await?;
+    let snapshot_result = vacuum_database(&pool, database_snapshot).await;
+    registry.close_all().await?;
+    snapshot_result?;
+    create_backup_archive(vault_root, database_snapshot, archive_path)
+}
+
 fn safe_archive_path(path: &Path) -> Result<PathBuf, String> {
     if path.as_os_str().is_empty()
         || path.is_absolute()
@@ -342,9 +359,37 @@ fn extract_backup_archive(archive_path: &Path, destination: &Path) -> Result<(),
     Ok(())
 }
 
-#[cfg(any(test, target_os = "android"))]
-async fn validate_restored_vault(path: &Path) -> Result<(), String> {
-    vault_info_from_path(path)?;
+/// Extracts and validates a received whole-vault archive in separate staging.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub(crate) async fn stage_handoff_archive(
+    archive_path: &Path,
+    destination: &Path,
+    expected_vault_id: &str,
+) -> Result<VaultInfo, String> {
+    if destination.exists() {
+        fs::remove_dir_all(destination)
+            .map_err(|error| format!("remove stale handoff staging: {error}"))?;
+    }
+    if let Err(error) = extract_backup_archive(archive_path, destination) {
+        let _ = fs::remove_dir_all(destination);
+        return Err(error);
+    }
+    let info = match validate_restored_vault(destination).await {
+        Ok(info) => info,
+        Err(error) => {
+            let _ = fs::remove_dir_all(destination);
+            return Err(error);
+        }
+    };
+    if info.vault_id != expected_vault_id {
+        let _ = fs::remove_dir_all(destination);
+        return Err("received bundle belongs to a different vault".to_string());
+    }
+    Ok(info)
+}
+
+pub(crate) async fn validate_restored_vault(path: &Path) -> Result<VaultInfo, String> {
+    let info = vault_info_from_path(path)?;
     let restored_database = database_path(path);
     let metadata = fs::metadata(&restored_database)
         .map_err(|error| format!("backup is missing its database: {error}"))?;
@@ -352,21 +397,27 @@ async fn validate_restored_vault(path: &Path) -> Result<(), String> {
         return Err("backup database is empty".to_string());
     }
     let registry = ganbaru_db::DatabasePoolRegistry::default();
-    let pool = registry.connect_path(&restored_database).await?;
-    let row = sqlx::query("PRAGMA integrity_check")
-        .fetch_one(&pool)
-        .await
-        .map_err(|error| format!("check restored database: {error}"))?;
-    let result: String = row
-        .try_get(0)
-        .map_err(|error| format!("read restored database check: {error}"))?;
-    registry.close_all().await?;
-    if result != "ok" {
-        return Err(format!(
-            "restored database failed its integrity check: {result}"
-        ));
+    let pool = registry.connect_path_read_only(&restored_database).await?;
+    let validation = async {
+        let row = sqlx::query("PRAGMA integrity_check")
+            .fetch_one(&pool)
+            .await
+            .map_err(|error| format!("check restored database: {error}"))?;
+        let result: String = row
+            .try_get(0)
+            .map_err(|error| format!("read restored database check: {error}"))?;
+        if result != "ok" {
+            return Err(format!(
+                "restored database failed its integrity check: {result}"
+            ));
+        }
+        ganbaru_db::validate_current_schema(&pool).await
     }
-    Ok(())
+    .await;
+    let close_result = registry.close_all().await;
+    validation?;
+    close_result?;
+    Ok(info)
 }
 
 #[cfg(any(test, target_os = "android"))]
@@ -385,6 +436,80 @@ fn replace_vault(staging: &Path, target: &Path, rollback: &Path) -> Result<(), S
     }
     if had_target {
         let _ = fs::remove_dir_all(rollback);
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "android")]
+pub(crate) fn android_handoff_staging_path(
+    app: &tauri::AppHandle,
+    transfer_id: &str,
+) -> Result<PathBuf, String> {
+    let target = default_data_folder_path(app)?;
+    let parent = target
+        .parent()
+        .ok_or_else(|| "Ganbaru AI folder has no parent directory".to_string())?;
+    Ok(parent.join(format!(".ganbaru-ai.handoff-{transfer_id}.staging")))
+}
+
+#[cfg(target_os = "android")]
+pub(crate) async fn activate_android_handoff(
+    app: &tauri::AppHandle,
+    staging: &Path,
+    transfer_id: &str,
+    expected_vault_id: &str,
+    preserve_previous: bool,
+) -> Result<VaultInfo, String> {
+    let target = default_data_folder_path(app)?;
+    let parent = target
+        .parent()
+        .ok_or_else(|| "Ganbaru AI folder has no parent directory".to_string())?;
+    fs::create_dir_all(parent).map_err(|error| format!("create app data directory: {error}"))?;
+    let rollback = if preserve_previous {
+        parent.join(format!(".ganbaru-ai.handoff-previous-{transfer_id}"))
+    } else {
+        parent.join(".ganbaru-ai.handoff-refresh-rollback")
+    };
+    if rollback.exists() && staging.exists() {
+        return Err("a previous handoff copy still requires recovery".to_string());
+    }
+    let restore_guard = db_path::begin_vault_restore().await;
+    db_path::close_all_sqlite_pools_for_restore(app).await?;
+    let activation = if !staging.exists() {
+        Ok(())
+    } else if preserve_previous {
+        replace_vault_preserving_previous(staging, &target, &rollback)
+    } else {
+        replace_vault(staging, &target, &rollback)
+    };
+    let result = activation.and_then(|()| {
+        let info = vault_info_from_path(&target)?;
+        if info.vault_id != expected_vault_id {
+            return Err("activated handoff belongs to a different vault".to_string());
+        }
+        select_vault(app, &info)?;
+        Ok(info)
+    });
+    drop(restore_guard);
+    result
+}
+
+#[cfg(target_os = "android")]
+fn replace_vault_preserving_previous(
+    staging: &Path,
+    target: &Path,
+    previous: &Path,
+) -> Result<(), String> {
+    let had_target = target.exists();
+    if had_target {
+        fs::rename(target, previous)
+            .map_err(|error| format!("preserve current data before handoff: {error}"))?;
+    }
+    if let Err(error) = fs::rename(staging, target) {
+        if had_target {
+            let _ = fs::rename(previous, target);
+        }
+        return Err(format!("activate handed-off data: {error}"));
     }
     Ok(())
 }
@@ -731,6 +856,183 @@ mod tests {
 
         restored_registry.close_all().await.unwrap();
         source_registry.close_all().await.unwrap();
+        fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[tokio::test]
+    async fn desktop_bundle_activates_an_owner_and_refreshes_a_read_only_replica() {
+        use crate::vault::ownership::VaultOwnershipManager;
+
+        let parent = unique_test_path("desktop-android-handoff");
+        let source = parent.join("desktop");
+        let owner_staging = parent.join("owner-staging");
+        let owner_target = parent.join("owner-target");
+        let refresh_staging = parent.join("refresh-staging");
+        let refresh_target = parent.join("refresh-target");
+        let snapshot = parent.join("snapshot.sqlite");
+        let archive = parent.join("handoff.zip");
+        let refresh_snapshot = parent.join("refresh-snapshot.sqlite");
+        let refresh_archive = parent.join("refresh.zip");
+        fs::create_dir_all(&source).unwrap();
+        let source_info = super::super::initialize_vault(&source).unwrap();
+        let registry = ganbaru_db::DatabasePoolRegistry::default();
+        let pool = registry.connect_path(database_path(&source)).await.unwrap();
+        sqlx::query("CREATE TABLE handoff_h04_probe (value TEXT NOT NULL)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO handoff_h04_probe (value) VALUES ('desktop')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let asset = source.join("assets/notes/files/h04.txt");
+        fs::create_dir_all(asset.parent().unwrap()).unwrap();
+        fs::write(&asset, b"desktop asset").unwrap();
+        registry.close_all().await.unwrap();
+
+        create_handoff_archive(&source, &snapshot, &archive)
+            .await
+            .unwrap();
+        stage_handoff_archive(&archive, &owner_staging, &source_info.vault_id)
+            .await
+            .unwrap();
+
+        let desktop_ownership = VaultOwnershipManager::default();
+        desktop_ownership
+            .initialize_from_path(parent.join("desktop-ownership.json"), "desktop".to_string())
+            .unwrap();
+        let phone_ownership = VaultOwnershipManager::default();
+        phone_ownership
+            .initialize_from_path(parent.join("phone-ownership.json"), "phone".to_string())
+            .unwrap();
+        phone_ownership
+            .register_remote_owner(&source_info.vault_id, "desktop".to_string(), 0)
+            .unwrap();
+        desktop_ownership
+            .begin_outgoing(
+                &source_info.vault_id,
+                0,
+                "ownership-transfer".to_string(),
+                "phone".to_string(),
+            )
+            .unwrap();
+        let generation = desktop_ownership
+            .commit_outgoing(&source_info.vault_id, "ownership-transfer")
+            .unwrap();
+        phone_ownership
+            .accept_incoming_grant(
+                &source_info.vault_id,
+                "ownership-transfer".to_string(),
+                "desktop".to_string(),
+                generation,
+            )
+            .unwrap();
+        replace_vault(
+            &owner_staging,
+            &owner_target,
+            &parent.join("owner-rollback"),
+        )
+        .unwrap();
+        phone_ownership
+            .finalize_incoming(&source_info.vault_id, "ownership-transfer", generation)
+            .unwrap();
+        desktop_ownership
+            .finish_outgoing_acknowledgement(
+                &source_info.vault_id,
+                "ownership-transfer",
+                generation,
+            )
+            .unwrap();
+        assert!(
+            !desktop_ownership
+                .status(&source_info.vault_id)
+                .unwrap()
+                .can_write
+        );
+        assert!(
+            phone_ownership
+                .status(&source_info.vault_id)
+                .unwrap()
+                .can_write
+        );
+        assert_eq!(
+            fs::read(owner_target.join("assets/notes/files/h04.txt")).unwrap(),
+            b"desktop asset"
+        );
+
+        let refresh_desktop = VaultOwnershipManager::default();
+        refresh_desktop
+            .initialize_from_path(parent.join("refresh-desktop.json"), "desktop".to_string())
+            .unwrap();
+        let refresh_phone = VaultOwnershipManager::default();
+        refresh_phone
+            .initialize_from_path(parent.join("refresh-phone.json"), "phone".to_string())
+            .unwrap();
+        refresh_phone
+            .register_remote_owner(&source_info.vault_id, "desktop".to_string(), 0)
+            .unwrap();
+        let initial_staging = parent.join("initial-refresh-staging");
+        stage_handoff_archive(&archive, &initial_staging, &source_info.vault_id)
+            .await
+            .unwrap();
+        replace_vault(
+            &initial_staging,
+            &refresh_target,
+            &parent.join("initial-refresh-rollback"),
+        )
+        .unwrap();
+
+        let source_registry = ganbaru_db::DatabasePoolRegistry::default();
+        let source_pool = source_registry
+            .connect_path(database_path(&source))
+            .await
+            .unwrap();
+        sqlx::query("UPDATE handoff_h04_probe SET value = 'refreshed'")
+            .execute(&source_pool)
+            .await
+            .unwrap();
+        source_registry.close_all().await.unwrap();
+        fs::write(&asset, b"refreshed asset").unwrap();
+        create_handoff_archive(&source, &refresh_snapshot, &refresh_archive)
+            .await
+            .unwrap();
+        stage_handoff_archive(&refresh_archive, &refresh_staging, &source_info.vault_id)
+            .await
+            .unwrap();
+        replace_vault(
+            &refresh_staging,
+            &refresh_target,
+            &parent.join("refresh-rollback"),
+        )
+        .unwrap();
+
+        assert!(
+            refresh_desktop
+                .status(&source_info.vault_id)
+                .unwrap()
+                .can_write
+        );
+        assert!(
+            !refresh_phone
+                .status(&source_info.vault_id)
+                .unwrap()
+                .can_write
+        );
+        assert_eq!(
+            fs::read(refresh_target.join("assets/notes/files/h04.txt")).unwrap(),
+            b"refreshed asset"
+        );
+        let restored = ganbaru_db::DatabasePoolRegistry::default();
+        let restored_pool = restored
+            .connect_path_read_only(database_path(&refresh_target))
+            .await
+            .unwrap();
+        let value: String = sqlx::query_scalar("SELECT value FROM handoff_h04_probe")
+            .fetch_one(&restored_pool)
+            .await
+            .unwrap();
+        assert_eq!(value, "refreshed");
+        restored.close_all().await.unwrap();
         fs::remove_dir_all(parent).unwrap();
     }
 }

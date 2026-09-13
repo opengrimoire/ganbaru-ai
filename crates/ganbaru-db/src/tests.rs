@@ -120,3 +120,37 @@ fn read_only_pool_rejects_writes_and_mode_reuse() {
         std::fs::remove_dir_all(directory).unwrap();
     });
 }
+
+#[test]
+fn current_schema_validation_rejects_changed_migration_history() {
+    block_on(async {
+        let directory = std::env::temp_dir().join(format!(
+            "ganbaru-db-schema-validation-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("ganbaru-ai.sqlite");
+        let registry = crate::DatabasePoolRegistry::default();
+        let pool = registry.connect_path(&path).await.unwrap();
+        crate::validate_current_schema(&pool).await.unwrap();
+
+        sqlx::query(
+            "UPDATE _sqlx_migrations SET checksum = X'00'
+             WHERE version = (SELECT MAX(version) FROM _sqlx_migrations)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert!(crate::validate_current_schema(&pool)
+            .await
+            .unwrap_err()
+            .contains("incompatible"));
+
+        registry.close_all().await.unwrap();
+        std::fs::remove_dir_all(directory).unwrap();
+    });
+}

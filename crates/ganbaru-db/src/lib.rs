@@ -1,6 +1,6 @@
 use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous},
-    SqlitePool,
+    Row, SqlitePool,
 };
 use std::{
     collections::HashMap,
@@ -158,6 +158,37 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         .run(pool)
         .await
         .map_err(|error| format!("run database migrations: {error}"))
+}
+
+/// Validates that a read-only database has the complete embedded migration history.
+pub async fn validate_current_schema(pool: &SqlitePool) -> Result<(), String> {
+    let rows =
+        sqlx::query("SELECT version, checksum, success FROM _sqlx_migrations ORDER BY version ASC")
+            .fetch_all(pool)
+            .await
+            .map_err(|error| format!("read database migration history: {error}"))?;
+    let expected = MIGRATOR
+        .iter()
+        .filter(|migration| !migration.migration_type.is_down_migration())
+        .collect::<Vec<_>>();
+    if rows.len() != expected.len() {
+        return Err("database schema does not match the current migration set".to_string());
+    }
+    for (row, migration) in rows.iter().zip(expected) {
+        let version: i64 = row
+            .try_get("version")
+            .map_err(|error| format!("read migration version: {error}"))?;
+        let checksum: Vec<u8> = row
+            .try_get("checksum")
+            .map_err(|error| format!("read migration checksum: {error}"))?;
+        let success: bool = row
+            .try_get("success")
+            .map_err(|error| format!("read migration status: {error}"))?;
+        if version != migration.version || checksum != migration.checksum.as_ref() || !success {
+            return Err("database migration history is incompatible".to_string());
+        }
+    }
+    Ok(())
 }
 
 #[doc(hidden)]
