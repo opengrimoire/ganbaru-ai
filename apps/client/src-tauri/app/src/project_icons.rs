@@ -68,6 +68,14 @@ fn active_project_icon_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, St
         .join(PROJECT_ICON_DIR))
 }
 
+fn active_writable_project_icon_dir<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<vault::WritableVaultPath, String> {
+    Ok(vault::active_writable_vault_path(app)?
+        .join("assets")
+        .join(PROJECT_ICON_DIR))
+}
+
 fn asset_path_for_relative<R: Runtime>(
     app: &AppHandle<R>,
     relative_path: &str,
@@ -191,7 +199,7 @@ fn save_project_icon_bytes<R: Runtime>(
     let kind = validate_project_icon_image(&bytes)?.kind;
     let file_name = format!("{}.{}", hex_hash(&bytes), kind.extension());
     let relative_path = format!("{PROJECT_ICON_DIR}/{file_name}");
-    let path = active_project_icon_dir(app)?.join(file_name);
+    let path = active_writable_project_icon_dir(app)?.join(file_name);
     if !path.exists() {
         write_binary_file_atomically(&path, &bytes)?;
     }
@@ -634,6 +642,7 @@ pub async fn project_icon_delete_assets_if_unreferenced<R: Runtime>(
     db_url: String,
     relative_paths: Vec<String>,
 ) -> Result<(), String> {
+    let _write_permit = vault::active_writable_vault_path(&app)?;
     let mut candidates = HashSet::new();
     for relative_path in relative_paths {
         validate_project_icon_relative_path(&relative_path)?;

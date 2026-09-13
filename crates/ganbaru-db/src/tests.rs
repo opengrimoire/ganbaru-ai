@@ -80,3 +80,43 @@ fn pool_registry_reuses_and_closes_authorized_path() {
         std::fs::remove_dir_all(directory).unwrap();
     });
 }
+
+#[test]
+fn read_only_pool_rejects_writes_and_mode_reuse() {
+    block_on(async {
+        let directory = std::env::temp_dir().join(format!(
+            "ganbaru-db-read-only-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("ganbaru-ai.sqlite");
+        let registry = crate::DatabasePoolRegistry::default();
+        let writable = registry.connect_path(&path).await.unwrap();
+        sqlx::query("CREATE TABLE access_test (value TEXT NOT NULL)")
+            .execute(&writable)
+            .await
+            .unwrap();
+        registry.close_all().await.unwrap();
+
+        let read_only = registry.connect_path_read_only(&path).await.unwrap();
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM access_test")
+            .fetch_one(&read_only)
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+        assert!(
+            sqlx::query("INSERT INTO access_test (value) VALUES ('blocked')")
+                .execute(&read_only)
+                .await
+                .is_err()
+        );
+        assert!(registry.connect_path(&path).await.is_err());
+
+        registry.close_all().await.unwrap();
+        std::fs::remove_dir_all(directory).unwrap();
+    });
+}

@@ -118,4 +118,44 @@ describe("data folder state api", () => {
       developmentBuild: false,
     });
   });
+
+  it("validates the native vault ownership status", async () => {
+    invokeMock.mockResolvedValue({
+      vaultId: "vault-1",
+      deviceId: "phone",
+      ownerDeviceId: "desktop",
+      generation: 4,
+      role: "read-only",
+      canWrite: false,
+      transferPhase: { kind: "stable" },
+    });
+    const { getVaultOwnershipStatus } = await loadModule();
+
+    await expect(getVaultOwnershipStatus()).resolves.toEqual({
+      vaultId: "vault-1",
+      deviceId: "phone",
+      ownerDeviceId: "desktop",
+      generation: 4,
+      role: "read-only",
+      canWrite: false,
+      transferPhase: { kind: "stable" },
+    });
+  });
+
+  it("rejects inconsistent writable ownership responses", async () => {
+    invokeMock.mockResolvedValue({
+      vaultId: "vault-1",
+      deviceId: "phone",
+      ownerDeviceId: "desktop",
+      generation: 4,
+      role: "read-only",
+      canWrite: true,
+      transferPhase: { kind: "stable" },
+    });
+    const { getVaultOwnershipStatus } = await loadModule();
+
+    await expect(getVaultOwnershipStatus()).rejects.toThrow(
+      "vault ownership response has an inconsistent role",
+    );
+  });
 });

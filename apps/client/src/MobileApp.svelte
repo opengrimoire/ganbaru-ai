@@ -4,6 +4,7 @@
   import MobileNavigation from "$lib/components/mobile/MobileNavigation.svelte";
   import MobileTopBar from "$lib/components/mobile/MobileTopBar.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
+  import VaultReadOnlyBanner from "$lib/components/vault/VaultReadOnlyBanner.svelte";
   import { ensureDbUrl } from "$lib/api/db";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
@@ -765,6 +766,8 @@
       onOpenSettings={openSettings}
       onNavigate={navigate}
     />
+
+    <VaultReadOnlyBanner />
 
     <div class="flex min-h-0 flex-1 overflow-hidden">
       {#if useNavigationRail}

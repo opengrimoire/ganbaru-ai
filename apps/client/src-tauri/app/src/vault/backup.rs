@@ -450,6 +450,7 @@ pub async fn vault_backup_to_downloads(
 pub async fn vault_pick_and_restore_backup(
     app: tauri::AppHandle,
 ) -> Result<Option<VaultInfo>, String> {
+    let _write_permit = super::active_writable_vault_path(&app)?;
     let transfer = unique_transfer_directory(&app, "restore")?;
     let archive_path = transfer.join("selected.ganbaru-backup");
     let result = async {

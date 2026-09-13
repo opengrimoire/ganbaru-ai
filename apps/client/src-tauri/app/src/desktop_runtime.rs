@@ -117,9 +117,10 @@ fn force_quit(
 /// Used to reset structured data without deleting the Ganbaru AI folder.
 #[tauri::command]
 async fn reset_database(app: tauri::AppHandle) -> Result<(), String> {
+    let writable_vault = vault::active_writable_vault_path(&app)?;
     doomscrolling::clear_doomscrolling_enforcement_state(&app)?;
     db_path::close_all_sqlite_pools(&app).await?;
-    let db_path = vault::active_database_path(&app)?;
+    let db_path = writable_vault.as_ref().join(vault::APP_SQLITE_FILE);
 
     for suffix in &["", "-wal", "-shm"] {
         let mut path = db_path.clone();
@@ -762,6 +763,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .manage(db_path::DatabaseState::default())
+        .manage(vault::ownership::VaultOwnershipManager::default())
         .manage(notification::AppSoundState::default())
         .manage(notification::PomodoroOverlayState::default())
         .manage(media_player::MediaPlayerState::default())
@@ -1131,6 +1133,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             vault::vault_default_location,
             vault::vault_use_default_folder,
             vault::vault_active_info,
+            vault::ownership::vault_ownership_status,
             vault::vault_pick_create,
             vault::vault_pick_open,
             vault::vault_select_recent,
@@ -1421,6 +1424,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             themes::theme_reset_to_seed,
         ])
         .setup(|app| {
+            vault::ownership::initialize(app.handle())?;
             clear_doomscrolling_enforcement_state_best_effort(app.handle(), "during startup");
             schedule_main_window_reveal_fallback(app.handle());
             chat::revocation::start_startup_recovery(app.handle());

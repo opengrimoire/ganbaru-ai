@@ -1,4 +1,9 @@
-import type { vaultSetup as enVaultSetup, dataFolderError as enDataFolderError, language as enLanguage } from "../en/vault";
+import type {
+  dataFolderError as enDataFolderError,
+  language as enLanguage,
+  vaultOwnership as enVaultOwnership,
+  vaultSetup as enVaultSetup,
+} from "../en/vault";
 import type { MessageShape } from "../types";
 
 export const vaultSetup = {
@@ -57,3 +62,9 @@ export const language = {
   englishOption: "Inglés",
   spanishOption: "Español",
 } as const satisfies MessageShape<typeof enLanguage>;
+
+export const vaultOwnership = {
+  readOnly:
+    "Copia de solo lectura. Usa los controles del dispositivo vinculado para transferir la propiedad aquí.",
+  recovery: "Esta bóveda necesita recuperar la transferencia antes de poder modificarse.",
+} as const satisfies MessageShape<typeof enVaultOwnership>;

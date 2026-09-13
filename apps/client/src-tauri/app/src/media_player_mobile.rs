@@ -5,6 +5,14 @@ use ganbaru_mobile_media::{
     MobilePlayerSnapshot,
 };
 use serde::Deserialize;
+use tauri::Runtime;
+
+#[allow(dead_code)] // Used by the H04 source-freeze flow.
+pub(crate) async fn stop_for_vault_handoff<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<(), String> {
+    app.mobile_media().stop().await.map(|_| ())
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

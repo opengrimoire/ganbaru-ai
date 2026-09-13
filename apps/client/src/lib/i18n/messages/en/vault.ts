@@ -54,3 +54,8 @@ export const language = {
   englishOption: "English",
   spanishOption: "Spanish",
 } as const;
+
+export const vaultOwnership = {
+  readOnly: "Read-only copy. Use the linked-device controls to move ownership here.",
+  recovery: "This vault needs handoff recovery before it can be changed.",
+} as const;

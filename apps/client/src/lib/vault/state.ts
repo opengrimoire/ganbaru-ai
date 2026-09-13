@@ -29,6 +29,38 @@ export interface VaultBackupOutcome {
   destination: "downloads";
 }
 
+export type VaultTransferPhase =
+  | { kind: "stable" }
+  | {
+    kind: "preparingOutgoing";
+    transferId: string;
+    receiverDeviceId: string;
+    nextGeneration: number;
+  }
+  | {
+    kind: "outgoingCommitted";
+    transferId: string;
+    receiverDeviceId: string;
+    committedGeneration: number;
+  }
+  | {
+    kind: "incomingCommitted";
+    transferId: string;
+    sourceDeviceId: string;
+    committedGeneration: number;
+  }
+  | { kind: "recoveryRequired"; transferId: string; reason: string };
+
+export interface VaultOwnershipStatus {
+  vaultId: string;
+  deviceId: string;
+  ownerDeviceId: string;
+  generation: number;
+  role: "owner" | "read-only" | "recovery";
+  canWrite: boolean;
+  transferPhase: VaultTransferPhase;
+}
+
 export type DataFolderErrorAction =
   | "startup"
   | "default"
@@ -48,6 +80,10 @@ function readString(value: unknown): string | null {
 
 function readBoolean(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
+}
+
+function readNonNegativeInteger(value: unknown): number | null {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
 function readStringArray(value: unknown): string[] {
@@ -101,6 +137,73 @@ function parseVaultBackupOutcome(value: unknown): VaultBackupOutcome {
     throw new Error("backup response is incomplete");
   }
   return { fileName, destination: "downloads" };
+}
+
+function parseTransferPhase(value: unknown): VaultTransferPhase {
+  if (!isRecord(value) || typeof value.kind !== "string") {
+    throw new Error("vault ownership transfer phase is invalid");
+  }
+  if (value.kind === "stable") return { kind: "stable" };
+  const transferId = readString(value.transferId);
+  if (!transferId) throw new Error("vault ownership transfer phase is incomplete");
+  if (value.kind === "recoveryRequired") {
+    const reason = readString(value.reason);
+    if (!reason) throw new Error("vault ownership transfer phase is incomplete");
+    return { kind: value.kind, transferId, reason };
+  }
+  const committedGeneration = readNonNegativeInteger(value.committedGeneration);
+  if (value.kind === "incomingCommitted") {
+    const sourceDeviceId = readString(value.sourceDeviceId);
+    if (!sourceDeviceId || committedGeneration === null) {
+      throw new Error("vault ownership transfer phase is incomplete");
+    }
+    return { kind: value.kind, transferId, sourceDeviceId, committedGeneration };
+  }
+  const receiverDeviceId = readString(value.receiverDeviceId);
+  if (!receiverDeviceId) throw new Error("vault ownership transfer phase is incomplete");
+  if (value.kind === "preparingOutgoing") {
+    const nextGeneration = readNonNegativeInteger(value.nextGeneration);
+    if (nextGeneration === null) {
+      throw new Error("vault ownership transfer phase is incomplete");
+    }
+    return { kind: value.kind, transferId, receiverDeviceId, nextGeneration };
+  }
+  if (value.kind === "outgoingCommitted" && committedGeneration !== null) {
+    return { kind: value.kind, transferId, receiverDeviceId, committedGeneration };
+  }
+  throw new Error("vault ownership transfer phase is invalid");
+}
+
+function parseVaultOwnershipStatus(value: unknown): VaultOwnershipStatus {
+  if (!isRecord(value)) throw new Error("vault ownership response is not an object");
+  const vaultId = readString(value.vaultId);
+  const deviceId = readString(value.deviceId);
+  const ownerDeviceId = readString(value.ownerDeviceId);
+  const generation = readNonNegativeInteger(value.generation);
+  const role = value.role;
+  const canWrite = readBoolean(value.canWrite);
+  if (
+    !vaultId
+    || !deviceId
+    || !ownerDeviceId
+    || generation === null
+    || (role !== "owner" && role !== "read-only" && role !== "recovery")
+    || canWrite === null
+  ) {
+    throw new Error("vault ownership response is incomplete");
+  }
+  if (canWrite !== (role === "owner")) {
+    throw new Error("vault ownership response has an inconsistent role");
+  }
+  return {
+    vaultId,
+    deviceId,
+    ownerDeviceId,
+    generation,
+    role,
+    canWrite,
+    transferPhase: parseTransferPhase(value.transferPhase),
+  };
 }
 
 function activateVaultInfo(info: VaultInfo): VaultInfo;
@@ -219,6 +322,10 @@ export async function readVaultAppState(): Promise<VaultAppState> {
 
 export async function getActiveVaultInfo(): Promise<VaultInfo | null> {
   return activateVaultInfo(parseOptionalVaultInfo(await invoke<unknown>("vault_active_info")));
+}
+
+export async function getVaultOwnershipStatus(): Promise<VaultOwnershipStatus> {
+  return parseVaultOwnershipStatus(await invoke<unknown>("vault_ownership_status"));
 }
 
 export async function getDefaultDataFolderLocation(): Promise<DataFolderDefaultLocation> {

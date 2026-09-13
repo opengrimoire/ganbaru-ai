@@ -12,53 +12,108 @@ use std::{
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("../../apps/client/src-tauri/migrations");
 const WRITE_CONTENTION_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// Native access mode applied when opening a vault database pool.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DatabaseAccessMode {
+    ReadOnly,
+    ReadWrite,
+}
+
+struct RegisteredPool {
+    access: DatabaseAccessMode,
+    pool: SqlitePool,
+}
+
 /// Shared registry for SQLite pools keyed by their authorized filesystem path.
 #[derive(Clone, Default)]
 pub struct DatabasePoolRegistry {
-    pools: Arc<Mutex<HashMap<PathBuf, SqlitePool>>>,
+    pools: Arc<Mutex<HashMap<PathBuf, RegisteredPool>>>,
 }
 
 impl DatabasePoolRegistry {
     /// Connects to an authorized SQLite path or returns its existing pool.
     pub async fn connect_path(&self, path: impl AsRef<Path>) -> Result<SqlitePool, String> {
+        self.connect_path_with_access(path, DatabaseAccessMode::ReadWrite)
+            .await
+    }
+
+    /// Connects to an existing authorized SQLite path without write access.
+    pub async fn connect_path_read_only(
+        &self,
+        path: impl AsRef<Path>,
+    ) -> Result<SqlitePool, String> {
+        self.connect_path_with_access(path, DatabaseAccessMode::ReadOnly)
+            .await
+    }
+
+    async fn connect_path_with_access(
+        &self,
+        path: impl AsRef<Path>,
+        access: DatabaseAccessMode,
+    ) -> Result<SqlitePool, String> {
         let path = path.as_ref().to_path_buf();
-        if let Some(pool) = self
+        if let Some(registered) = self
             .pools
             .lock()
             .map_err(|_| "database pool lock poisoned".to_string())?
             .get(&path)
-            .cloned()
         {
-            return Ok(pool);
+            if registered.access != access {
+                return Err("database access changed; close the existing pool first".to_string());
+            }
+            return Ok(registered.pool.clone());
         }
 
-        let options = SqliteConnectOptions::new()
+        let mut options = SqliteConnectOptions::new()
             .filename(&path)
-            .create_if_missing(true)
             .foreign_keys(true)
-            .journal_mode(SqliteJournalMode::Wal)
-            .synchronous(SqliteSynchronous::Full)
             .busy_timeout(WRITE_CONTENTION_TIMEOUT);
+        options = match access {
+            DatabaseAccessMode::ReadOnly => options.read_only(true),
+            DatabaseAccessMode::ReadWrite => options
+                .create_if_missing(true)
+                .journal_mode(SqliteJournalMode::Wal)
+                .synchronous(SqliteSynchronous::Full),
+        };
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
             .connect_with(options)
             .await
             .map_err(|error| format!("connect: {error}"))?;
-        run_migrations(&pool).await?;
-        sqlx::raw_sql("PRAGMA optimize")
-            .execute(&pool)
-            .await
-            .map_err(|error| format!("pragma optimize: {error}"))?;
+        if access == DatabaseAccessMode::ReadWrite {
+            run_migrations(&pool).await?;
+            sqlx::raw_sql("PRAGMA optimize")
+                .execute(&pool)
+                .await
+                .map_err(|error| format!("pragma optimize: {error}"))?;
+        } else {
+            sqlx::raw_sql("PRAGMA query_only = ON")
+                .execute(&pool)
+                .await
+                .map_err(|error| format!("enable query-only database access: {error}"))?;
+        }
 
         let existing = {
             let mut pools = self
                 .pools
                 .lock()
                 .map_err(|_| "database pool lock poisoned".to_string())?;
-            if let Some(existing) = pools.get(&path).cloned() {
-                Some(existing)
+            if let Some(existing) = pools.get(&path) {
+                if existing.access != access {
+                    return Err(
+                        "database access changed while opening; close the existing pool first"
+                            .to_string(),
+                    );
+                }
+                Some(existing.pool.clone())
             } else {
-                pools.insert(path, pool.clone());
+                pools.insert(
+                    path,
+                    RegisteredPool {
+                        access,
+                        pool: pool.clone(),
+                    },
+                );
                 None
             }
         };
@@ -76,8 +131,8 @@ impl DatabasePoolRegistry {
             .lock()
             .map_err(|_| "database pool lock poisoned".to_string())?
             .remove(path.as_ref());
-        if let Some(pool) = pool {
-            pool.close().await;
+        if let Some(registered) = pool {
+            registered.pool.close().await;
         }
         Ok(())
     }
@@ -90,8 +145,8 @@ impl DatabasePoolRegistry {
                 .lock()
                 .map_err(|_| "database pool lock poisoned".to_string())?,
         );
-        for pool in pools.into_values() {
-            pool.close().await;
+        for registered in pools.into_values() {
+            registered.pool.close().await;
         }
         Ok(())
     }

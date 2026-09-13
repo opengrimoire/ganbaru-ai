@@ -30,7 +30,7 @@ pub async fn projects_create_project<R: Runtime>(
     project: ProjectCreate,
 ) -> Result<ProjectsMutationRows, String> {
     let pool = connect_sqlite(app.clone(), db_url).await?;
-    let vault_root = vault::active_vault_path(&app)?;
+    let vault_root = vault::active_writable_vault_path(&app)?;
     create_project_in_pool(&pool, &vault_root, project).await
 }
 

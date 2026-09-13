@@ -34,7 +34,7 @@ pub async fn notes_pick_file_asset<R: Runtime>(
         return Ok(None);
     };
     let pool = connect_sqlite(app.clone(), db_url).await?;
-    let vault_root = vault::active_vault_path(&app)?;
+    let vault_root = vault::active_writable_vault_path(&app)?;
     ganbaru_notes::notes::file_assets::save_selected_file(&pool, &vault_root, block_type, &path)
         .await
         .map(Some)
@@ -48,7 +48,7 @@ pub async fn notes_prepare_import_file_reference<R: Runtime>(
     request: NotesImportFileReferenceRequest,
 ) -> Result<NotesImportFileReferenceDto, String> {
     let pool = connect_sqlite(app.clone(), db_url).await?;
-    let vault_root = vault::active_vault_path(&app)?;
+    let vault_root = vault::active_writable_vault_path(&app)?;
     ganbaru_notes::notes::file_assets::prepare_import_file_reference(&pool, &vault_root, request)
         .await
 }
