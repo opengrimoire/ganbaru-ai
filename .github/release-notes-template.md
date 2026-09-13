@@ -15,4 +15,6 @@ Expand the Assets section below and choose the installer for your platform.
 
 Arch-based distribution users can install with `yay -S ganbaru-ai-bin` or another AUR helper.
 
+Android direct installation: Play Protect may show "App blocked to protect your device" because Ganbaru AI declares an optional Accessibility Service for selected-app blocking. If there is no "Install anyway" option, temporarily turn off **Scan apps with Play Protect** in Play Store > profile > Play Protect > settings, install only the APK from this official release, and turn scanning back on immediately.
+
 Use `SHA256SUMS` to verify downloaded installers. The `.sig` files and `latest.json` are consumed by Ganbaru AI's built-in desktop updater.
