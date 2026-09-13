@@ -36,13 +36,13 @@ First-use contracts are deterministic structural budgets, not elapsed-time bench
 
 | Surface | Critical IPC calls | SQL reads | SQL writes | Serialized response bytes | Source-module ceiling |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Projects | 1 | 6 | 0 | 13,142 | 358 |
-| Notes | 1 | 7 | 0 | 323 | 358 |
-| Chat | Not baselined | Not baselined | Not baselined | Not baselined | 358 |
+| Projects | 1 | 6 | 0 | 13,142 | 360 |
+| Notes | 1 | 7 | 0 | 323 | 360 |
+| Chat | Not baselined | Not baselined | Not baselined | Not baselined | 360 |
 
 The machine-readable frontend ceiling is authoritative in `apps/client/scripts/first-use-bundle-baseline.json`. Rust tests own backend call, statement, and payload limits. Bundle contracts own route closures, required resident modules, and forbidden platform imports.
 
-The module count is a ceiling, not a target to fill. A change that raises it must explain the user-visible benefit and preserve intentional lazy boundaries.
+The route ceiling includes the shared vault ownership store and read-only ownership banner so ownership handoffs are visible on every primary surface. The module count is a ceiling, not a target to fill. A change that raises it must explain the user-visible benefit and preserve intentional lazy boundaries.
 
 ## Memory metrics
 

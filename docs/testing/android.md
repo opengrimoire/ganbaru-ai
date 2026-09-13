@@ -83,9 +83,16 @@ Android testing distinguishes source checks, emulator coverage, physical-device 
 - Notification deep links open the relevant settings.
 - Store-policy declaration matches observed behavior.
 
+## Vault handoff pairing
+
+- Grant and deny camera access from the user-initiated QR pairing scanner.
+- Confirm camera capture stops after a code is decoded, the scanner is canceled, or the pairing surface closes.
+- Confirm malformed, expired, replayed, and wrong-vault invitations cannot enroll the phone.
+- Confirm pairing and later authenticated reconnects work on a private LAN without internet access.
+
 ## Security and artifact checks
 
-- No broad storage, package, overlay, capture, contact, microphone, camera, or location permission.
+- No broad storage, package, overlay, capture, contact, microphone, or location permission. Camera access is limited to user-initiated QR pairing.
 - Native components have intended exported state and internal broadcasts require signature authority.
 - Production content policy and WebView bridge reject unapproved remote or generic commands.
 - Minification preserves required command serialization without widening capabilities.

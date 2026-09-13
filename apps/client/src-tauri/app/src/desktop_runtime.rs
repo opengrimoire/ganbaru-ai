@@ -764,6 +764,8 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
         .plugin(tauri_plugin_opener::init())
         .manage(db_path::DatabaseState::default())
         .manage(vault::ownership::VaultOwnershipManager::default())
+        .manage(vault::handoff::state::PairingManager::default())
+        .manage(vault::handoff::CoordinatorLifecycle::default())
         .manage(notification::AppSoundState::default())
         .manage(notification::PomodoroOverlayState::default())
         .manage(media_player::MediaPlayerState::default())
@@ -1134,6 +1136,10 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             vault::vault_use_default_folder,
             vault::vault_active_info,
             vault::ownership::vault_ownership_status,
+            vault::handoff::handoff_create_pairing_invitation,
+            vault::handoff::handoff_decode_pairing_qr,
+            vault::handoff::handoff_enroll,
+            vault::handoff::handoff_pairing_status,
             vault::vault_pick_create,
             vault::vault_pick_open,
             vault::vault_select_recent,
@@ -1425,6 +1431,10 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
         ])
         .setup(|app| {
             vault::ownership::initialize(app.handle())?;
+            vault::handoff::initialize(app.handle())?;
+            if let Err(error) = vault::handoff::start_desktop(app.handle()) {
+                eprintln!("vault handoff coordinator is unavailable: {error}");
+            }
             clear_doomscrolling_enforcement_state_best_effort(app.handle(), "during startup");
             schedule_main_window_reveal_fallback(app.handle());
             chat::revocation::start_startup_recovery(app.handle());
@@ -1493,6 +1503,9 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             app_handle
                 .state::<chat::preview::ChatPreviewManager>()
                 .close_all(app_handle);
+            app_handle
+                .state::<vault::handoff::CoordinatorLifecycle>()
+                .stop();
             clear_doomscrolling_enforcement_state_best_effort(app_handle, "before app exit");
         }
     });

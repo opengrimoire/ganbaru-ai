@@ -25,6 +25,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
     let app = builder
         .manage(db_path::DatabaseState::default())
         .manage(vault::ownership::VaultOwnershipManager::default())
+        .manage(vault::handoff::state::PairingManager::default())
         .invoke_handler(tauri::generate_handler![
             vault::vault_read_app_state,
             vault::vault_device_id,
@@ -32,6 +33,9 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             vault::vault_use_default_folder,
             vault::vault_active_info,
             vault::ownership::vault_ownership_status,
+            vault::handoff::handoff_decode_pairing_qr,
+            vault::handoff::handoff_enroll,
+            vault::handoff::handoff_pairing_status,
             vault::vault_pick_open,
             vault::vault_pick_and_read_ics_import,
             vault::vault_pick_and_write_ics_export,
@@ -405,6 +409,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
         ])
         .setup(|app| {
             vault::ownership::initialize(app.handle())?;
+            vault::handoff::initialize(app.handle())?;
             #[cfg(target_os = "android")]
             vault::backup::recover_interrupted_restore_for_app(app.handle())?;
             music::setup_youtube_host(app.handle())?;

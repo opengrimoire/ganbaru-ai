@@ -27,6 +27,7 @@ static APP_STATE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 static CONFIG_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 pub(crate) mod backup;
+pub(crate) mod handoff;
 pub(crate) mod ownership;
 #[allow(dead_code)] // H04 consumes the source-freeze boundary.
 pub(crate) mod quiescence;

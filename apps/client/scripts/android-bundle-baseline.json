@@ -8,7 +8,7 @@
         "src/main-mobile.ts",
         "src/MobileApp.svelte"
       ],
-      "maxSourceModules": 162
+      "maxSourceModules": 164
     },
     {
       "name": "calendar",
@@ -55,7 +55,7 @@
       "maxSourceModules": 252
     }
   ],
-  "maxTotalSourceModules": 989,
+  "maxTotalSourceModules": 991,
   "requiredMobileModules": [
     "src/main.ts",
     "src/main-mobile.ts",

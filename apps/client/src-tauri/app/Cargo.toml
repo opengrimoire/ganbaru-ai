@@ -21,7 +21,10 @@ ganbaru-focus = { path = "../../../../crates/ganbaru-focus" }
 ganbaru-notes = { path = "../../../../crates/ganbaru-notes" }
 ganbaru-working-folders = { path = "../../../../crates/ganbaru-working-folders" }
 reqwest = { workspace = true }
+rcgen = { workspace = true }
 rustls = { workspace = true }
+qrcode = { workspace = true }
+quircs = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
@@ -29,6 +32,7 @@ sqlx = { workspace = true }
 tauri = { workspace = true }
 tauri-plugin-opener = { workspace = true }
 tokio = { workspace = true }
+tokio-rustls = { workspace = true }
 zip = { workspace = true }
 
 [target.'cfg(all(unix, not(any(target_os = "android", target_os = "ios"))))'.dependencies]
