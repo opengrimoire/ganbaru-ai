@@ -6,9 +6,11 @@
 
 #[cfg(target_os = "android")]
 use super::{
-    active_vault_path, database_path, default_data_folder_path, ensure_vault_skeleton,
-    path_to_string, select_vault, vault_info_from_path,
+    active_vault_path, default_data_folder_path, ensure_vault_skeleton, path_to_string,
+    select_vault,
 };
+#[cfg(any(test, target_os = "android"))]
+use super::{database_path, vault_info_from_path};
 use super::{VaultInfo, APP_SQLITE_FILE, CONFIG_LOCK};
 #[cfg(target_os = "android")]
 use crate::db_path;
@@ -16,7 +18,7 @@ use crate::db_path;
 use chrono::{SecondsFormat, Utc};
 #[cfg(target_os = "android")]
 use ganbaru_mobile_documents::MobileDocumentsExt;
-#[cfg(target_os = "android")]
+#[cfg(any(test, target_os = "android"))]
 use sqlx::Row;
 use std::fs;
 use std::io::{Read, Write};
@@ -340,7 +342,7 @@ fn extract_backup_archive(archive_path: &Path, destination: &Path) -> Result<(),
     Ok(())
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(test, target_os = "android"))]
 async fn validate_restored_vault(path: &Path) -> Result<(), String> {
     vault_info_from_path(path)?;
     let restored_database = database_path(path);
@@ -367,7 +369,7 @@ async fn validate_restored_vault(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(test, target_os = "android"))]
 fn replace_vault(staging: &Path, target: &Path, rollback: &Path) -> Result<(), String> {
     recover_interrupted_restore(target, rollback)?;
     let had_target = target.exists();
@@ -660,5 +662,74 @@ mod tests {
 
         let _ = fs::remove_file(source);
         let _ = fs::remove_file(snapshot);
+    }
+
+    #[tokio::test]
+    async fn whole_vault_snapshot_restores_database_and_managed_files() {
+        let parent = unique_test_path("whole-vault");
+        let source = parent.join("source");
+        let staging = parent.join("staging");
+        let target = parent.join("receiver");
+        let rollback = parent.join("rollback");
+        let snapshot = parent.join("snapshot.sqlite");
+        let archive_path = parent.join("handoff.ganbaru-backup");
+        fs::create_dir_all(&source).unwrap();
+        let source_info = super::super::initialize_vault(&source).unwrap();
+
+        let source_registry = ganbaru_db::DatabasePoolRegistry::default();
+        let source_pool = source_registry
+            .connect_path(database_path(&source))
+            .await
+            .unwrap();
+        sqlx::query("CREATE TABLE handoff_probe (value TEXT NOT NULL)")
+            .execute(&source_pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO handoff_probe (value) VALUES ('portable row')")
+            .execute(&source_pool)
+            .await
+            .unwrap();
+        let managed_asset = source.join("assets/chat/attachments/context.txt");
+        fs::create_dir_all(managed_asset.parent().unwrap()).unwrap();
+        fs::write(&managed_asset, b"portable managed asset").unwrap();
+
+        let live_wal = source.join(format!("{APP_SQLITE_FILE}-wal"));
+        let live_shm = source.join(format!("{APP_SQLITE_FILE}-shm"));
+        assert!(live_wal.exists(), "source should have an active WAL");
+        assert!(live_shm.exists(), "source should have active shared memory");
+
+        vacuum_database(&source_pool, &snapshot).await.unwrap();
+        create_backup_archive(&source, &snapshot, &archive_path).unwrap();
+
+        let file = fs::File::open(&archive_path).unwrap();
+        let mut archive = ZipArchive::new(file).unwrap();
+        assert!(archive.by_name(&format!("{APP_SQLITE_FILE}-wal")).is_err());
+        assert!(archive.by_name(&format!("{APP_SQLITE_FILE}-shm")).is_err());
+        drop(archive);
+
+        extract_backup_archive(&archive_path, &staging).unwrap();
+        validate_restored_vault(&staging).await.unwrap();
+        replace_vault(&staging, &target, &rollback).unwrap();
+
+        let restored_info = vault_info_from_path(&target).unwrap();
+        assert_eq!(restored_info.vault_id, source_info.vault_id);
+        let restored_registry = ganbaru_db::DatabasePoolRegistry::default();
+        let restored_pool = restored_registry
+            .connect_path(database_path(&target))
+            .await
+            .unwrap();
+        let value: String = sqlx::query_scalar("SELECT value FROM handoff_probe")
+            .fetch_one(&restored_pool)
+            .await
+            .unwrap();
+        assert_eq!(value, "portable row");
+        assert_eq!(
+            fs::read(target.join("assets/chat/attachments/context.txt")).unwrap(),
+            b"portable managed asset"
+        );
+
+        restored_registry.close_all().await.unwrap();
+        source_registry.close_all().await.unwrap();
+        fs::remove_dir_all(parent).unwrap();
     }
 }
