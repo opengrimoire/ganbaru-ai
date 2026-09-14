@@ -30,14 +30,14 @@ This exclusion reduces artifact size and prevents dormant desktop authority from
 
 | Domain | Shared contract | Android adapter or restriction |
 | --- | --- | --- |
-| Vault | Marker, configuration, SQLite, managed assets | Application-private default, document-tree import, portable backup and restore |
+| Vault | Marker, configuration, SQLite, managed assets, single-writer ownership | Application-private default, document-tree import, portable backup and restore, secure LAN handoff and read-only refresh |
 | Calendar | Events, recurrence, reminders, projects, active runs | Native notification and alarm projection |
 | Projects | Full local planning and task views | Responsive UI, no local coding working-folder execution |
 | Notes | Pages, blocks, databases, history, links, assets | Responsive UI, document picker for bounded files, no working-folder Markdown |
 | Chat | Channels, messages, replies, search, drafts, scheduling | Provider-free communication only; no local execution or workspace tools |
 | Pomodoro | Canonical accepted runs, history and recovery in `ganbaru-focus` | Commitment reminders, accepted-phase deadline alarms and ongoing notification |
 | Music | Canonical library, playlists, assignments, player state | Selected document tree and Media3 local audio; no desktop soundscape engine |
-| Doomscrolling | Shared rule and usage-limit intent | Selected packages, Usage Access, Accessibility Home action, native journal |
+| Doomscrolling | Shared rule and usage-limit intent | Selected packages, Usage Access, Accessibility Home action, native journal, linked-device combined usage |
 | Settings | Shared portable preferences | Platform equivalents and direct special-access recovery |
 | Updates | Version and release information | Distribution source owns installation and updates; desktop updater absent |
 

@@ -89,6 +89,7 @@ Android testing distinguishes source checks, emulator coverage, physical-device 
 - Confirm camera capture stops after a code is decoded, the scanner is canceled, or the pairing surface closes.
 - Confirm malformed, expired, replayed, and wrong-vault invitations cannot enroll the phone.
 - Confirm pairing and later authenticated reconnects work on a private LAN without internet access.
+- Run the complete [local vault handoff acceptance](vault-handoff.md) for ownership in both directions, read-only refresh, preserved local backup, native schedule reconciliation, offline Doomscrolling accounting, unlink, and explicit lost-device recovery.
 
 ## Security and artifact checks
 

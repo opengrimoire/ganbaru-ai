@@ -855,17 +855,54 @@ mod tests {
             .connect_path(database_path(&source))
             .await
             .unwrap();
-        sqlx::query("CREATE TABLE handoff_probe (value TEXT NOT NULL)")
-            .execute(&source_pool)
-            .await
-            .unwrap();
-        sqlx::query("INSERT INTO handoff_probe (value) VALUES ('portable row')")
-            .execute(&source_pool)
-            .await
-            .unwrap();
-        let managed_asset = source.join("assets/chat/attachments/context.txt");
-        fs::create_dir_all(managed_asset.parent().unwrap()).unwrap();
-        fs::write(&managed_asset, b"portable managed asset").unwrap();
+        for statement in [
+            "INSERT INTO calendar_events (id, title, start_time, end_time) VALUES ('handoff-calendar', 'Portable calendar', '2026-09-14T09:00:00Z', '2026-09-14T10:00:00Z')",
+            "INSERT INTO calendar_event_alarms (id, event_id, trigger_value) VALUES ('handoff-alarm', 'handoff-calendar', '-PT10M')",
+            "INSERT INTO pomodoro_configs (event_id, rhythm_kind, rhythm_source, preset_key) VALUES ('handoff-calendar', 'count', 'preset', 'balanced')",
+            "INSERT INTO pomodoro_runs (id, event_id, original_event_id, event_date, planned_start, planned_end, started_at, ended_at, end_reason, rhythm_kind, rhythm_source, preset_key, last_heartbeat) VALUES ('handoff-run', 'handoff-calendar', 'handoff-calendar', '2026-09-14', '2026-09-14T09:00:00Z', '2026-09-14T10:00:00Z', '2026-09-14T09:00:00Z', '2026-09-14T09:45:00Z', 'completed', 'count', 'preset', 'balanced', '2026-09-14T09:45:00Z')",
+            "INSERT INTO project_tasks (id, project_id, section_id, status_id, title) VALUES ('handoff-task', 'project-routine-learning', 'section-routine-learning-general', 'status-routine-learning-todo', 'Portable project task')",
+            "INSERT INTO notes_pages (id, parent_type, title) VALUES ('handoff-note', 'workspace', 'Portable note')",
+            "INSERT INTO chat_conversations (id, project_id, conversation_kind, last_activity_at, created_at, updated_at) VALUES ('handoff-conversation', 'project-routine-learning', 'channel', '2026-09-14T09:00:00Z', '2026-09-14T09:00:00Z', '2026-09-14T09:00:00Z')",
+            "INSERT INTO chat_channels (id, project_id, conversation_id, name, created_at, updated_at) VALUES ('handoff-channel', 'project-routine-learning', 'handoff-conversation', 'Portable chat', '2026-09-14T09:00:00Z', '2026-09-14T09:00:00Z')",
+            "INSERT INTO quick_notes (id, title, body_plain_text) VALUES ('handoff-quick-note', 'Portable quick note', 'Portable quick-note body')",
+            "INSERT INTO themes (id, display_name, blend_canvas, seed_blend_canvas, derivation_engine_version, created_at, updated_at, icon_label, seed_icon_label) VALUES ('handoff-theme', 'Portable theme', '{}', '{}', 1, 1, 1, 'dark', 'dark')",
+            "INSERT INTO doomscrolling_usage_samples (id, source_type, source_key, display_name, started_at, elapsed_seconds, local_date, created_at) VALUES ('handoff-usage', 'mobile-app', 'app.example', 'Portable usage', 1, 45, '2026-09-14', 1)",
+            "INSERT INTO music_playlists (id, name, created_at, updated_at) VALUES ('handoff-playlist', 'Portable playlist', 1, 1)",
+            "INSERT INTO music_library_items (id, identity_key, source_kind, original_title, discovered_at, updated_at) VALUES ('handoff-track', 'local:portable-track', 'local-file', 'Portable track', 1, 1)",
+            "INSERT INTO music_playlist_memberships (id, playlist_id, item_id, position, created_at, updated_at) VALUES ('handoff-membership', 'handoff-playlist', 'handoff-track', 0, 1, 1)",
+        ] {
+            sqlx::query(statement)
+                .execute(&source_pool)
+                .await
+                .unwrap();
+        }
+        fs::write(
+            source.join("config.json"),
+            br#"{"preferences":{"language":"es"},"theme":"handoff-theme"}"#,
+        )
+        .unwrap();
+        let managed_files = [
+            (
+                "assets/chat/attachments/context.txt",
+                b"chat attachment".as_slice(),
+            ),
+            (
+                "assets/notes/files/note.txt",
+                b"notes attachment".as_slice(),
+            ),
+            ("assets/project-icons/icon.txt", b"project icon".as_slice()),
+            (
+                "projects/project-routine-learning/brief.md",
+                b"project document".as_slice(),
+            ),
+        ];
+        for (relative, contents) in managed_files {
+            let path = source.join(relative);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, contents).unwrap();
+        }
+        let external_music = parent.join("external-music.mp3");
+        fs::write(&external_music, b"external music bytes").unwrap();
 
         let live_wal = source.join(format!("{APP_SQLITE_FILE}-wal"));
         let live_shm = source.join(format!("{APP_SQLITE_FILE}-shm"));
@@ -892,15 +929,37 @@ mod tests {
             .connect_path(database_path(&target))
             .await
             .unwrap();
-        let value: String = sqlx::query_scalar("SELECT value FROM handoff_probe")
-            .fetch_one(&restored_pool)
-            .await
-            .unwrap();
-        assert_eq!(value, "portable row");
+        for (table, key, identifier) in [
+            ("calendar_events", "id", "handoff-calendar"),
+            ("calendar_event_alarms", "id", "handoff-alarm"),
+            ("pomodoro_configs", "event_id", "handoff-calendar"),
+            ("pomodoro_runs", "id", "handoff-run"),
+            ("project_tasks", "id", "handoff-task"),
+            ("notes_pages", "id", "handoff-note"),
+            ("chat_channels", "id", "handoff-channel"),
+            ("quick_notes", "id", "handoff-quick-note"),
+            ("themes", "id", "handoff-theme"),
+            ("doomscrolling_usage_samples", "id", "handoff-usage"),
+            ("music_playlists", "id", "handoff-playlist"),
+            ("music_library_items", "id", "handoff-track"),
+            ("music_playlist_memberships", "id", "handoff-membership"),
+        ] {
+            let query = format!("SELECT COUNT(*) FROM {table} WHERE {key} = ?");
+            let count: i64 = sqlx::query_scalar(&query)
+                .bind(identifier)
+                .fetch_one(&restored_pool)
+                .await
+                .unwrap();
+            assert_eq!(count, 1, "missing portable row in {table}");
+        }
         assert_eq!(
-            fs::read(target.join("assets/chat/attachments/context.txt")).unwrap(),
-            b"portable managed asset"
+            fs::read(target.join("config.json")).unwrap(),
+            br#"{"preferences":{"language":"es"},"theme":"handoff-theme"}"#
         );
+        for (relative, contents) in managed_files {
+            assert_eq!(fs::read(target.join(relative)).unwrap(), contents);
+        }
+        assert!(!target.join("external-music.mp3").exists());
 
         restored_registry.close_all().await.unwrap();
         source_registry.close_all().await.unwrap();

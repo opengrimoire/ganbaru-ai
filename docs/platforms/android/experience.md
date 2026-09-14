@@ -46,6 +46,14 @@ Settings preserves the desktop category structure when a real shared preference 
 
 Doomscrolling settings include shared usage limits, Android selected-app rules and access status, plus read-only browser and desktop configuration where it helps users understand portable vault settings. The Android surface is not status-only.
 
+## Linked desktop workflow
+
+First use offers standalone setup and `Link to desktop`. The linking action opens the rear-camera QR scanner only after the user requests it. The desktop QR invitation supplies the private-LAN endpoint and pinned coordinator identity, so the user never copies an address or configures a server.
+
+Data settings show the linked device, current writable or read-only role, transfer activity, retry, cancellation, explicit refresh, unlink, and recovery. `Use on this device` is the only normal action that requests write ownership. Before the first desktop vault replaces existing Android data, the app saves a portable recovery backup to Downloads. A read-only vault remains browsable through the ordinary shell.
+
+Already scheduled Calendar alarms and the last accepted Doomscrolling rules continue while the phone is offline or backgrounded. Desktop Calendar changes reach Android notification scheduling only after a successful read-only refresh. If the owning device is permanently unavailable, recovery requires a separate destructive-choice confirmation, preserves both copies, and explains that later changes will not merge.
+
 ## Insets and cutouts
 
 A native bridge publishes system-bar and display-cutout insets. CSS safe-area values remain a fallback. Layout reacts to portrait, landscape, gesture or button navigation, cutouts, and window changes without hardcoded device dimensions.

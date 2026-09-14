@@ -1,10 +1,32 @@
 # Device linking and synchronization
 
-**Status: Planned.** Device enrollment, replication, encryption, conflicts, and the optional relay are not implemented. The first prerequisite work separates Android reminders from recorded execution, extracts focus persistence and recovery into `ganbaru-focus`, and configures authoritative SQLite connections for durable commits. Those changes do not enable device linking.
+**Status: Partial.** A local desktop and Android whole-vault handoff is implemented in source. It provides secure LAN pairing, explicit single-writer ownership, read-only whole-vault refresh, and combined Doomscrolling accounting without concurrent editing. Physical desktop and Android acceptance remains pending. The typed operation replication, conflict handling, end-to-end encrypted relay, and multi-device convergence described later in this document remain planned.
 
 This contract links one person's devices. Multi-person sharing is later work. The phone must provide full offline access to portable Notes, Projects, Calendar, and other synchronized content. Focus execution has its own controller and evidence rules in [Focus authority](../algorithms/pomodoro/focus-authority.md).
 
-## Architecture
+## Implemented local whole-vault handoff
+
+The desktop application runs one embedded coordinator bound to a private LAN address. Android links through a short-lived, single-use QR invitation. The enrolled phone authenticates with a device certificate and pins the coordinator certificate fingerprint from the invitation. Mutual TLS protects all later control and archive traffic. One desktop, one Android phone, and one vault are supported. There is no account, hosted service, relay, internet traversal, or general remote procedure interface.
+
+Ownership is explicit and single-writer. Device-local records hold the current owner, monotonically increasing generation, transfer phase, device identity, pairing identity, and resumable transfer state. SQLite connections and managed-vault file writes enforce the current role centrally. A stale generation cannot restore write access. Active Chat work and an active Pomodoro run block ownership transfer, and local playback stops before the source is frozen.
+
+Ownership transfer and read-only refresh both use one bounded whole-vault path:
+
+1. Fence new writes, drain current writes, close or isolate database access, and create a consistent SQLite snapshot.
+2. Archive the complete portable vault without live WAL or SHM files, then stream it into device-local staging.
+3. Validate identities, generation, bounds, archive hash, paths, required files, schema compatibility, and SQLite integrity.
+4. Commit a new generation only for ownership transfer, atomically activate staging, reopen through normal startup, and acknowledge the same durable transfer.
+5. Preserve post-commit state until acknowledgement so restart retries the same activation instead of granting a second owner.
+
+The non-owner keeps its last activated copy for read-only browsing. It refreshes from the current owner on application start, resume, LAN reconnect, or explicit user action without changing generation. Android reloads its ordinary startup reconciliation after activation, which rebuilds Calendar notification schedules and republishes portable Doomscrolling rules. Already scheduled alarms and accepted rules continue while disconnected. Desktop Calendar changes cannot affect a force-stopped or disconnected phone until Android successfully refreshes.
+
+The first desktop-vault activation on Android saves the previous Android vault as a portable backup in Downloads before ownership commits, and activation also preserves the prior private copy for recovery. Unlink does not silently choose a new owner. If the owning device is permanently lost, an explicit recovery action unlinks the devices and advances the local copy to a new standalone generation; the two copies do not merge.
+
+Doomscrolling is the only inactive-device write exception. Browser, desktop-application, and Android-application usage enters a bounded device-local spool with stable device-scoped sample IDs. Through the authenticated coordinator, the current owner inserts samples transactionally and idempotently, then acknowledges committed IDs and returns the combined counter. Disconnected enforcement uses the last accepted combined value plus new local usage. Reconnection preserves the exact sum without duplication. Simultaneous disconnected use can temporarily exceed a combined limit because neither device knows the other's newest usage.
+
+This handoff is deliberately not the planned concurrent synchronization system. It has no domain operation journal, CRDT, conflict resolution, cloud delivery, or automatic bidirectional editing.
+
+## Target concurrent synchronization architecture
 
 SQLite remains the durable local store. Replicas exchange validated domain operations and immutable assets, never raw database pages, arbitrary SQL, or unclassified application configuration. Foreground saves do not wait for a network.
 
@@ -14,7 +36,7 @@ Local network linking works without an account or server. An optional user-hoste
 
 The intended crates are `ganbaru-sync-contracts`, `ganbaru-sync`, and an optional `ganbaru-sync-relay` binary. They have not been created. Domain services retain validation and projection ownership; the sync engine owns delivery and calls those adapters. Durable replication, live presence, and executable commands are distinct protocols.
 
-## Storage ownership
+## Target storage ownership
 
 Every persisted field requires an explicit replication classification before it can leave a device. Unknown fields fail closed. This table is the target ownership contract, not a claim that existing mixed configuration has already migrated.
 
@@ -32,7 +54,7 @@ Unsent Chat drafts retain their origin and can be explicitly continued on anothe
 
 Shared preferences move into SQLite so preference changes and outbound records can commit atomically. Device preferences stay in application configuration storage. Remove canonical `config.json` and the unused `.yjs` vault skeleton only after their consumers migrate. Both still exist today.
 
-## Transactional operation boundary
+## Target transactional operation boundary
 
 Every synchronizable mutation, including imports, restores, scheduled jobs, and native background writes, must commit these together:
 
@@ -47,7 +69,7 @@ Authoritative connections use WAL and `synchronous=FULL`, including replacement 
 
 The UI distinguishes saved on this device, received by relay, and confirmed on another device.
 
-## Conflict semantics
+## Target conflict semantics
 
 Valid concurrent operations converge regardless of delivery order. Rejecting the second operation to arrive is insufficient.
 
@@ -60,7 +82,7 @@ Valid concurrent operations converge regardless of delivery order. Rejecting the
 - Cross-feature actions such as task scheduling form one operation group.
 - Scheduled messages and other executable jobs have an execution device and stable execution receipts. Receiving their records cannot execute them.
 
-## Notes editing
+## Target Notes editing
 
 Whole-block replacement is not a collaborative text protocol. The editor must submit incremental operations, preserve relative selections and comment anchors, and keep locally authored undo separate from concurrent remote changes. TypeScript and Rust use UTF-16 positions. Composition, autocorrect, paste, marks, mentions, and Unicode need adapter-level tests.
 
@@ -68,7 +90,7 @@ Prepare incoming changes in isolated working state. Validate and atomically comm
 
 Current Notes writes still replace complete block payloads. Their collaboration log covers comments and suggestions, not general replica synchronization.
 
-## Enrollment and key lifecycle
+## Target enrollment and key lifecycle
 
 The first desktop is the administration device. A short-lived, single-use QR invitation contains its identity fingerprint and a high-entropy enrollment secret. Manual entry accepts the complete invitation. Both devices show a verification code; the existing device explicitly confirms enrollment before releasing vault keys.
 
@@ -76,7 +98,7 @@ Direct connections use TLS 1.3 with pinned device identity. Operations are signe
 
 Enrollment and revocation follow signed administration history. A separate owner recovery identity and recovery kit receive resource-key envelopes alongside authorized devices. Revocation rotates affected keys and rejects new operations from the removed device once revocation is known. Preserve rejected pending content for explicit recovery. Removal cannot erase copies already held by that device.
 
-## Bootstrap, assets, backup, and compaction
+## Target bootstrap, assets, backup, and compaction
 
 Bootstrap transfers a consistent typed snapshot and causal checkpoint followed by incremental operations. Stage, validate references and integrity, then activate atomically. If a phone has a different vault, retain it as a recoverable local vault. Combining vaults requires an explicit import preview.
 
@@ -88,7 +110,7 @@ Offline enrolled devices retain the causal state and tombstones they need. Compa
 
 Vault replacement must fence the generation across processes, pause native work, close pools, swap staging, and restart against the new generation. The existing process-local replacement guard is not sufficient for this target.
 
-## Settings and Android delivery
+## Target settings and Android delivery
 
 Onboarding and Settings will provide device linking, linked-device identity, connection method, last successful synchronization, pending changes, unavailable assets, conflicts, recovery status, focus controller, pause, retry, removal, recovery export, and optional relay configuration.
 
@@ -101,7 +123,8 @@ Android uses WorkManager for deferred synchronization and a visible, user-enable
 | Focus correctness and contracts | Partial | Move all transition decisions and command receipts into Rust, add durable device controller ownership and native runtime bridge |
 | Durable mutation and storage boundaries | Partial | WAL durability is configured; scoped preferences, cryptographic writers, journal and domain-wide atomic mutation coverage remain |
 | Local replica convergence | Planned | Notes text and tree merging, all portable domain adapters, two- and three-replica failure tests |
-| Secure local linking | Planned | Enrollment, key storage, staged bootstrap, assets, recovery, onboarding and Settings |
+| Local whole-vault handoff | Partial | Implemented in source for one desktop and one Android phone; physical acceptance remains |
+| Concurrent secure local linking | Planned | End-to-end encrypted operation enrollment, key lifecycle, revocation, typed bootstrap, and convergence |
 | Relay and Android sync | Planned | Encrypted relay, native background runtime, encrypted backup, measurements and physical acceptance |
 
 Required tests include reordered, duplicated, delayed and interrupted delivery; text and tree convergence; deletion, undo and history restore; crashes at persistence and acknowledgement boundaries; full disks, corrupt staging and missing assets; invalid identity, signature, invitation replay, revocation, key epochs, payload bounds and protocol versions; controller handoff failure and expired commands; duplicate jobs; long-offline replicas, compaction, restored backups and cloned writers.
