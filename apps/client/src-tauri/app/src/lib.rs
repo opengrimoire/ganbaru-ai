@@ -22,6 +22,7 @@ mod db;
 mod db_path;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod doomscrolling;
+mod doomscrolling_linked;
 #[cfg(any(target_os = "android", all(test, not(target_os = "ios"))))]
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 mod doomscrolling_mobile;

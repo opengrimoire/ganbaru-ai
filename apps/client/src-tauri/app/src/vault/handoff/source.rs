@@ -123,6 +123,7 @@ async fn prepare(
     purpose: BundlePurpose,
     generation: u64,
 ) -> Result<StoredOutgoingTransfer, String> {
+    crate::doomscrolling_mobile::doomscrolling_mobile_sync_events(app.clone()).await?;
     let transfer_id = super::state::random_token("transfer")?;
     let next_generation = match purpose {
         BundlePurpose::Ownership => generation

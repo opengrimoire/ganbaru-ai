@@ -344,17 +344,23 @@ async fn handle_connection(
         ControlMessage::DoomscrollingExchange {
             vault_id,
             device_id,
+            samples,
+            acknowledged_peer_sample_ids,
+            owner_snapshot,
             ..
         } => {
             manager.verify_authenticated_peer(&device_id, peer_certificate.as_ref(), &vault_id)?;
-            timeout_control(write_control(
+            send_coordinator_response(
                 &mut stream,
-                &ControlMessage::DoomscrollingAcknowledged {
-                    acknowledged_sample_ids: Vec::new(),
-                    combined_duration_ms: 0,
-                    remaining_allowance_ms: None,
+                coordinator.as_ref(),
+                super::coordinator::CoordinatorOperation::DoomscrollingExchange {
+                    vault_id,
+                    device_id,
+                    samples,
+                    acknowledged_peer_sample_ids,
+                    owner_snapshot,
                 },
-            ))
+            )
             .await
         }
         _ => {
@@ -427,6 +433,15 @@ async fn send_coordinator_response(
         super::coordinator::CoordinatorResponse::UploadAuthorized { .. } => {
             return Err("upload authorization cannot be sent as a control response".to_string())
         }
+        super::coordinator::CoordinatorResponse::DoomscrollingAcknowledged {
+            acknowledged_sample_ids,
+            peer_samples,
+            combined_samples,
+        } => ControlMessage::DoomscrollingAcknowledged {
+            acknowledged_sample_ids,
+            peer_samples,
+            combined_samples,
+        },
     };
     timeout_control(write_control(stream, &message)).await
 }
@@ -897,6 +912,47 @@ pub(crate) async fn probe_coordinator(
         } if returned == generation => Ok(requested_upload),
         ControlMessage::Error { message, .. } => Err(message),
         _ => Err("coordinator returned an invalid refresh status".to_string()),
+    }
+}
+
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub(crate) async fn exchange_doomscrolling(
+    manager: &PairingManager,
+    samples: Vec<super::protocol::DoomscrollingSampleMessage>,
+    acknowledged_peer_sample_ids: Vec<String>,
+    owner_snapshot: Vec<super::protocol::DoomscrollingSampleMessage>,
+) -> Result<
+    (
+        Vec<String>,
+        Vec<super::protocol::DoomscrollingSampleMessage>,
+        Vec<super::protocol::DoomscrollingSampleMessage>,
+    ),
+    String,
+> {
+    let coordinator = manager
+        .coordinator_pin()?
+        .ok_or_else(|| "this device is not linked to a coordinator".to_string())?;
+    let (device_id, _) = manager.identity()?;
+    match authenticated_exchange(
+        manager,
+        ControlMessage::DoomscrollingExchange {
+            protocol_version: PROTOCOL_VERSION,
+            vault_id: coordinator.vault_id,
+            device_id,
+            samples,
+            acknowledged_peer_sample_ids,
+            owner_snapshot,
+        },
+    )
+    .await?
+    {
+        ControlMessage::DoomscrollingAcknowledged {
+            acknowledged_sample_ids,
+            peer_samples,
+            combined_samples,
+        } => Ok((acknowledged_sample_ids, peer_samples, combined_samples)),
+        ControlMessage::Error { message, .. } => Err(message),
+        _ => Err("coordinator returned an invalid Doomscrolling response".to_string()),
     }
 }
 

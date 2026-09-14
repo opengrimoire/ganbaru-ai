@@ -166,7 +166,7 @@ internal class DoomscrollingJournal(context: Context) : SQLiteOpenHelper(
       null,
       null,
       null,
-      "occurred_at ASC, id ASC",
+      "CASE WHEN kind = 'usage' THEN 0 ELSE 1 END, occurred_at ASC, id ASC",
       limit.coerceIn(1, 500).toString(),
     ).use { cursor ->
       while (cursor.moveToNext()) {

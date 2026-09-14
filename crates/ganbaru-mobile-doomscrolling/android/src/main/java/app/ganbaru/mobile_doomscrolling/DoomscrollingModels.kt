@@ -1,6 +1,7 @@
 package app.ganbaru.mobile_doomscrolling
 
 import org.json.JSONObject
+import java.time.LocalDate
 
 internal data class MobileAppRule(
   val name: String,
@@ -24,7 +25,22 @@ internal data class MobileLimit(
   val minutesPerDay: Int?,
   val minutesPerWeek: Int?,
   val packages: Set<String>,
+  val acceptedDailyUsage: AcceptedUsage? = null,
+  val acceptedWeeklyUsage: AcceptedUsage? = null,
 )
+
+internal data class AcceptedUsage(
+  val windowStartLocalDate: String,
+  val windowEndLocalDate: String,
+  val usedSeconds: Int,
+)
+
+internal fun combinedUsageSinceAcceptance(
+  acceptedUsedSeconds: Int,
+  localUsedAtAcceptance: Int,
+  currentLocalUsedSeconds: Int,
+): Int = acceptedUsedSeconds +
+  (currentLocalUsedSeconds - localUsedAtAcceptance).coerceAtLeast(0)
 
 internal data class DoomscrollingCopy(
   val channelName: String,
@@ -101,6 +117,8 @@ internal object DoomscrollingRuleCodec {
         minutesPerDay = optionalMinutes(item, "minutesPerDay", 24 * 60),
         minutesPerWeek = optionalMinutes(item, "minutesPerWeek", 7 * 24 * 60),
         packages = packages,
+        acceptedDailyUsage = acceptedUsage(item, "day"),
+        acceptedWeeklyUsage = acceptedUsage(item, "week"),
       )
     }.filter { it.packages.isNotEmpty() }
 
@@ -137,6 +155,19 @@ internal object DoomscrollingRuleCodec {
     require(value.has(key)) { "$key is required" }
     if (value.isNull(key)) return null
     return value.getInt(key).also { require(it in 1..maximum) { "$key is invalid" } }
+  }
+
+  private fun acceptedUsage(value: JSONObject, period: String): AcceptedUsage? {
+    val accepted = value.optJSONObject("acceptedUsage")?.optJSONObject(period) ?: return null
+    val start = accepted.getString("windowStartLocalDate")
+    val end = accepted.getString("windowEndLocalDate")
+    require(runCatching { LocalDate.parse(start) }.isSuccess &&
+      runCatching { LocalDate.parse(end) }.isSuccess && start <= end) {
+      "Accepted Doomscrolling usage window is invalid"
+    }
+    val usedSeconds = accepted.getInt("usedSeconds")
+    require(usedSeconds >= 0) { "Accepted Doomscrolling usage is invalid" }
+    return AcceptedUsage(start, end, usedSeconds)
   }
 
   private fun bounded(value: String, minimum: Int, maximum: Int, label: String): String =

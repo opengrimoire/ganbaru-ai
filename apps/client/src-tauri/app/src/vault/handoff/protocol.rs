@@ -5,11 +5,11 @@ use std::path::Path;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub(crate) const PROTOCOL_VERSION: u16 = 1;
-pub(crate) const MAX_CONTROL_BYTES: usize = 64 * 1024;
+pub(crate) const MAX_CONTROL_BYTES: usize = 1024 * 1024;
 pub(crate) const MAX_ARCHIVE_BYTES: u64 = 100 * 1024 * 1024 * 1024;
 pub(crate) const MAX_IDENTIFIER_BYTES: usize = 160;
 pub(crate) const MAX_DEVICE_LABEL_BYTES: usize = 128;
-pub(crate) const MAX_DOOMSCROLLING_SAMPLES: usize = 4_096;
+pub(crate) const MAX_DOOMSCROLLING_SAMPLES: usize = 1_024;
 pub(crate) const TRANSFER_CHUNK_BYTES: usize = 64 * 1024;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
@@ -84,8 +84,13 @@ impl BundleMetadata {
 pub(crate) struct DoomscrollingSampleMessage {
     pub sample_id: String,
     pub device_id: String,
-    pub occurred_at_unix_ms: i64,
-    pub duration_ms: u64,
+    pub source_type: String,
+    pub source_key: String,
+    pub display_name: Option<String>,
+    pub started_at_unix_ms: i64,
+    pub elapsed_seconds: i64,
+    pub local_date: String,
+    pub created_at_unix_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
@@ -183,11 +188,13 @@ pub(crate) enum ControlMessage {
         vault_id: String,
         device_id: String,
         samples: Vec<DoomscrollingSampleMessage>,
+        acknowledged_peer_sample_ids: Vec<String>,
+        owner_snapshot: Vec<DoomscrollingSampleMessage>,
     },
     DoomscrollingAcknowledged {
         acknowledged_sample_ids: Vec<String>,
-        combined_duration_ms: u64,
-        remaining_allowance_ms: Option<u64>,
+        peer_samples: Vec<DoomscrollingSampleMessage>,
+        combined_samples: Vec<DoomscrollingSampleMessage>,
     },
     Error {
         code: String,
@@ -321,6 +328,8 @@ impl ControlMessage {
                 vault_id,
                 device_id,
                 samples,
+                acknowledged_peer_sample_ids,
+                owner_snapshot,
             } => {
                 validate_protocol(*protocol_version)?;
                 validate_identifier("vault id", vault_id)?;
@@ -329,22 +338,27 @@ impl ControlMessage {
                     return Err("too many Doomscrolling samples".to_string());
                 }
                 for sample in samples {
-                    validate_identifier("sample id", &sample.sample_id)?;
-                    validate_identifier("sample device id", &sample.device_id)?;
-                    if sample.device_id != *device_id || sample.duration_ms == 0 {
+                    validate_doomscrolling_sample(sample)?;
+                    if sample.device_id != *device_id {
                         return Err("Doomscrolling sample metadata is invalid".to_string());
                     }
+                }
+                validate_doomscrolling_sample_ids(acknowledged_peer_sample_ids)?;
+                validate_doomscrolling_samples(owner_snapshot)?;
+                if samples.len() + owner_snapshot.len() > MAX_DOOMSCROLLING_SAMPLES {
+                    return Err("Doomscrolling exchange exceeds the sample limit".to_string());
                 }
             }
             Self::DoomscrollingAcknowledged {
                 acknowledged_sample_ids,
-                ..
+                peer_samples,
+                combined_samples,
             } => {
-                if acknowledged_sample_ids.len() > MAX_DOOMSCROLLING_SAMPLES {
-                    return Err("too many acknowledged Doomscrolling samples".to_string());
-                }
-                for sample_id in acknowledged_sample_ids {
-                    validate_identifier("sample id", sample_id)?;
+                validate_doomscrolling_sample_ids(acknowledged_sample_ids)?;
+                validate_doomscrolling_samples(peer_samples)?;
+                validate_doomscrolling_samples(combined_samples)?;
+                if peer_samples.len() + combined_samples.len() > MAX_DOOMSCROLLING_SAMPLES {
+                    return Err("Doomscrolling response exceeds the sample limit".to_string());
                 }
             }
             Self::Error { code, message, .. } => {
@@ -356,6 +370,52 @@ impl ControlMessage {
         }
         Ok(())
     }
+}
+
+fn validate_doomscrolling_sample_ids(sample_ids: &[String]) -> Result<(), String> {
+    if sample_ids.len() > MAX_DOOMSCROLLING_SAMPLES {
+        return Err("too many acknowledged Doomscrolling samples".to_string());
+    }
+    for sample_id in sample_ids {
+        validate_identifier("sample id", sample_id)?;
+    }
+    Ok(())
+}
+
+fn validate_doomscrolling_samples(samples: &[DoomscrollingSampleMessage]) -> Result<(), String> {
+    if samples.len() > MAX_DOOMSCROLLING_SAMPLES {
+        return Err("too many Doomscrolling samples".to_string());
+    }
+    for sample in samples {
+        validate_doomscrolling_sample(sample)?;
+    }
+    Ok(())
+}
+
+fn validate_doomscrolling_sample(sample: &DoomscrollingSampleMessage) -> Result<(), String> {
+    validate_identifier("sample id", &sample.sample_id)?;
+    validate_identifier("sample device id", &sample.device_id)?;
+    if !matches!(
+        sample.source_type.as_str(),
+        "website" | "desktop-app" | "mobile-app"
+    ) || sample.source_key.trim().is_empty()
+        || sample.source_key.len() > 255
+        || sample
+            .display_name
+            .as_ref()
+            .is_some_and(|name| name.len() > 120)
+        || sample.started_at_unix_ms < 0
+        || !(1..=86_400).contains(&sample.elapsed_seconds)
+        || !valid_local_date(&sample.local_date)
+        || sample.created_at_unix_ms < 0
+    {
+        return Err("Doomscrolling sample metadata is invalid".to_string());
+    }
+    Ok(())
+}
+
+fn valid_local_date(value: &str) -> bool {
+    chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok()
 }
 
 pub(crate) async fn write_control<W>(writer: &mut W, message: &ControlMessage) -> Result<(), String>

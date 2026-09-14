@@ -1,6 +1,8 @@
 //! Desktop coordinator operations behind the bounded transport protocol.
 
-use super::protocol::{BundleMetadata, BundlePurpose, PROTOCOL_VERSION};
+use super::protocol::{
+    BundleMetadata, BundlePurpose, DoomscrollingSampleMessage, PROTOCOL_VERSION,
+};
 use super::state::{random_token, PairingManager, PendingAcknowledgement, StoredOutgoingTransfer};
 use crate::vault::ownership::VaultOwnershipManager;
 use crate::vault::quiescence::{
@@ -35,6 +37,13 @@ pub(crate) enum CoordinatorOperation {
     },
     RequestUpload {
         purpose: BundlePurpose,
+    },
+    DoomscrollingExchange {
+        vault_id: String,
+        device_id: String,
+        samples: Vec<DoomscrollingSampleMessage>,
+        acknowledged_peer_sample_ids: Vec<String>,
+        owner_snapshot: Vec<DoomscrollingSampleMessage>,
     },
     Uploaded {
         metadata: BundleMetadata,
@@ -87,6 +96,11 @@ pub(crate) enum CoordinatorResponse {
     UploadAuthorized {
         transfer_id: String,
         already_received: bool,
+    },
+    DoomscrollingAcknowledged {
+        acknowledged_sample_ids: Vec<String>,
+        peer_samples: Vec<DoomscrollingSampleMessage>,
+        combined_samples: Vec<DoomscrollingSampleMessage>,
     },
 }
 
@@ -198,6 +212,22 @@ impl<R: Runtime> CoordinatorState<R> {
                 generation,
             } => self.poll_upload(vault_id, device_id, generation),
             CoordinatorOperation::RequestUpload { purpose } => self.request_upload(purpose),
+            CoordinatorOperation::DoomscrollingExchange {
+                vault_id,
+                device_id,
+                samples,
+                acknowledged_peer_sample_ids,
+                owner_snapshot,
+            } => {
+                self.doomscrolling_exchange(
+                    vault_id,
+                    device_id,
+                    samples,
+                    acknowledged_peer_sample_ids,
+                    owner_snapshot,
+                )
+                .await
+            }
             CoordinatorOperation::Uploaded {
                 metadata,
                 source_device_id,
@@ -252,6 +282,19 @@ impl<R: Runtime> CoordinatorState<R> {
         if !status.can_write || status.generation != generation {
             return Err("coordinator is not the owner at the requested generation".to_string());
         }
+        let pool = crate::db_path::connect_sqlite(
+            self.app.clone(),
+            format!("sqlite:{}", crate::vault::APP_SQLITE_FILE),
+        )
+        .await?;
+        crate::doomscrolling_linked::drain_local_spool(
+            &self.app,
+            &pool,
+            &vault_id,
+            &status.device_id,
+        )
+        .await?;
+        drop(pool);
         let transfer_id = random_token("transfer")?;
         let next_generation = match purpose {
             BundlePurpose::Ownership => generation
@@ -520,6 +563,77 @@ impl<R: Runtime> CoordinatorState<R> {
         }
         self.pairing.request_upload(purpose)?;
         Ok(CoordinatorResponse::UploadRequested { purpose })
+    }
+
+    async fn doomscrolling_exchange(
+        &mut self,
+        vault_id: String,
+        device_id: String,
+        samples: Vec<DoomscrollingSampleMessage>,
+        acknowledged_peer_sample_ids: Vec<String>,
+        owner_snapshot: Vec<DoomscrollingSampleMessage>,
+    ) -> Result<CoordinatorResponse, String> {
+        self.last_peer_activity = Instant::now();
+        let status = self
+            .app
+            .state::<VaultOwnershipManager>()
+            .status(&vault_id)?;
+        if status.can_write {
+            if !owner_snapshot.is_empty() || !acknowledged_peer_sample_ids.is_empty() {
+                return Err(
+                    "the non-owner cannot publish authoritative Doomscrolling state".to_string(),
+                );
+            }
+            let pool = crate::db_path::connect_sqlite(
+                self.app.clone(),
+                format!("sqlite:{}", crate::vault::APP_SQLITE_FILE),
+            )
+            .await?;
+            crate::doomscrolling_linked::drain_local_spool(
+                &self.app,
+                &pool,
+                &vault_id,
+                &status.device_id,
+            )
+            .await?;
+            let acknowledged_sample_ids =
+                crate::doomscrolling_linked::import_linked_samples(&pool, &samples).await?;
+            let combined_samples =
+                crate::doomscrolling_linked::aggregate_owner_samples(&pool).await?;
+            return Ok(CoordinatorResponse::DoomscrollingAcknowledged {
+                acknowledged_sample_ids,
+                peer_samples: Vec::new(),
+                combined_samples,
+            });
+        }
+        if status.owner_device_id != device_id || !samples.is_empty() {
+            return Err(
+                "Doomscrolling exchange does not match the current vault owner".to_string(),
+            );
+        }
+        crate::doomscrolling_linked::acknowledge(
+            &self.app,
+            &vault_id,
+            &status.device_id,
+            &acknowledged_peer_sample_ids,
+        )
+        .await?;
+        if !owner_snapshot.is_empty() {
+            crate::doomscrolling_linked::replace_accepted(&self.app, &vault_id, &owner_snapshot)
+                .await?;
+        }
+        let peer_samples =
+            crate::doomscrolling_linked::pending(&self.app, &vault_id, &status.device_id).await?;
+        let combined_samples = if peer_samples.is_empty() {
+            crate::doomscrolling_linked::accepted(&self.app, &vault_id).await?
+        } else {
+            Vec::new()
+        };
+        Ok(CoordinatorResponse::DoomscrollingAcknowledged {
+            acknowledged_sample_ids: Vec::new(),
+            peer_samples,
+            combined_samples,
+        })
     }
 
     async fn uploaded(
