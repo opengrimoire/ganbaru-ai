@@ -27,6 +27,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
         .manage(vault::ownership::VaultOwnershipManager::default())
         .manage(vault::handoff::state::PairingManager::default())
         .manage(vault::handoff::receiver::ReceiverLifecycle::default())
+        .manage(vault::handoff::source::SourceLifecycle::default())
         .invoke_handler(tauri::generate_handler![
             vault::vault_read_app_state,
             vault::vault_device_id,
@@ -426,7 +427,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
     app.run(|_app, _event| {
         #[cfg(target_os = "android")]
         if matches!(_event, tauri::RunEvent::Resumed) {
-            vault::handoff::receiver::trigger_automatic_refresh(_app.clone());
+            vault::handoff::receiver::trigger_coordinator_reconciliation(_app.clone());
         }
     });
 }

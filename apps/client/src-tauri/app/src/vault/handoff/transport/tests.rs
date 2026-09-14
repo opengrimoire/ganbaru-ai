@@ -1,0 +1,584 @@
+use super::*;
+use crate::vault::handoff::protocol::{MAX_ARCHIVE_BYTES, PROTOCOL_VERSION};
+use crate::vault::handoff::state::random_token;
+use std::fs;
+
+struct TestDirectory(PathBuf);
+
+impl TestDirectory {
+    fn new(label: &str) -> Self {
+        let path = std::env::temp_dir().join(format!(
+            "ganbaru-transport-{label}-{}",
+            random_token("test").expect("random test directory")
+        ));
+        fs::create_dir_all(&path).expect("create test directory");
+        Self(path)
+    }
+
+    fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for TestDirectory {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+struct LocalPair {
+    _desktop_root: TestDirectory,
+    _phone_root: TestDirectory,
+    desktop: PairingManager,
+    phone: PairingManager,
+    invitation: PairingInvitation,
+    shutdown: Option<tokio::sync::oneshot::Sender<()>>,
+}
+
+impl LocalPair {
+    async fn start() -> Self {
+        let desktop_root = TestDirectory::new("desktop");
+        let phone_root = TestDirectory::new("phone");
+        let desktop = PairingManager::default();
+        desktop
+            .initialize(
+                desktop_root.path().to_path_buf(),
+                "device-desktop".to_string(),
+            )
+            .expect("initialize desktop");
+        let phone = PairingManager::default();
+        phone
+            .initialize(phone_root.path().to_path_buf(), "device-phone".to_string())
+            .expect("initialize phone");
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind coordinator");
+        let endpoint = listener.local_addr().expect("coordinator endpoint");
+        let invitation = desktop
+            .create_invitation(endpoint, "vault-1".to_string(), 0, unix_time_ms())
+            .expect("create invitation");
+        let (shutdown, receiver) = tokio::sync::oneshot::channel();
+        tokio::spawn(serve(listener, desktop.clone(), receiver));
+        Self {
+            _desktop_root: desktop_root,
+            _phone_root: phone_root,
+            desktop,
+            phone,
+            invitation,
+            shutdown: Some(shutdown),
+        }
+    }
+
+    async fn enroll(&self) {
+        super::enroll(&self.phone, &self.invitation, "Phone".to_string())
+            .await
+            .expect("enroll phone");
+    }
+
+    async fn start_with_coordinator() -> (
+        Self,
+        tokio::sync::mpsc::Receiver<super::super::coordinator::CoordinatorRequest>,
+    ) {
+        let desktop_root = TestDirectory::new("controlled-desktop");
+        let phone_root = TestDirectory::new("controlled-phone");
+        let desktop = PairingManager::default();
+        desktop
+            .initialize(
+                desktop_root.path().to_path_buf(),
+                "device-desktop".to_string(),
+            )
+            .expect("initialize desktop");
+        let phone = PairingManager::default();
+        phone
+            .initialize(phone_root.path().to_path_buf(), "device-phone".to_string())
+            .expect("initialize phone");
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind coordinator");
+        let endpoint = listener.local_addr().expect("coordinator endpoint");
+        let invitation = desktop
+            .create_invitation(endpoint, "vault-1".to_string(), 0, unix_time_ms())
+            .expect("create invitation");
+        let (requests, request_receiver) = tokio::sync::mpsc::channel(8);
+        let (shutdown, receiver) = tokio::sync::oneshot::channel();
+        tokio::spawn(serve_with_coordinator(
+            listener,
+            desktop.clone(),
+            Some(requests),
+            receiver,
+        ));
+        (
+            Self {
+                _desktop_root: desktop_root,
+                _phone_root: phone_root,
+                desktop,
+                phone,
+                invitation,
+                shutdown: Some(shutdown),
+            },
+            request_receiver,
+        )
+    }
+
+    fn register_bundle(&self, bytes: &[u8], transfer_id: &str) -> BundleMetadata {
+        let path = self._desktop_root.path().join(format!("{transfer_id}.zip"));
+        fs::write(&path, bytes).expect("write bundle");
+        let metadata = BundleMetadata {
+            protocol_version: PROTOCOL_VERSION,
+            vault_id: "vault-1".to_string(),
+            device_id: "device-phone".to_string(),
+            transfer_id: transfer_id.to_string(),
+            generation: 1,
+            archive_bytes: bytes.len() as u64,
+            archive_sha256: sha256_file(&path).expect("bundle digest"),
+        };
+        self.desktop
+            .register_outgoing_bundle(metadata.clone(), path)
+            .expect("register bundle");
+        metadata
+    }
+}
+
+impl Drop for LocalPair {
+    fn drop(&mut self) {
+        if let Some(shutdown) = self.shutdown.take() {
+            let _ = shutdown.send(());
+        }
+    }
+}
+
+#[tokio::test]
+async fn fresh_phone_enrolls_and_stages_authenticated_bundle() {
+    let pair = LocalPair::start().await;
+    pair.enroll().await;
+    let bytes = b"authenticated whole-vault test bundle";
+    let metadata = pair.register_bundle(bytes, "transfer-fresh");
+
+    let staged = download_bundle(&pair.phone, metadata, &TransferCancellation::default())
+        .await
+        .expect("download bundle");
+
+    assert_eq!(fs::read(staged).expect("read staged bundle"), bytes);
+}
+
+#[tokio::test]
+async fn authenticated_control_flow_prepares_commits_and_acknowledges() {
+    use super::super::coordinator::{CoordinatorOperation, CoordinatorResponse};
+    use super::super::state::PendingAcknowledgement;
+
+    let (pair, mut requests) = LocalPair::start_with_coordinator().await;
+    pair.enroll().await;
+    let metadata = pair.register_bundle(b"controlled handoff bundle", "transfer-control");
+    let expected = metadata.clone();
+    let coordinator = tokio::spawn(async move {
+        while let Some(request) = requests.recv().await {
+            let response = match request.operation {
+                CoordinatorOperation::Prepare {
+                    vault_id,
+                    device_id,
+                    generation,
+                    purpose,
+                } => {
+                    assert_eq!(vault_id, expected.vault_id);
+                    assert_eq!(device_id, expected.device_id);
+                    assert_eq!(generation, 0);
+                    assert_eq!(purpose, BundlePurpose::Ownership);
+                    CoordinatorResponse::Prepared {
+                        metadata: expected.clone(),
+                        purpose,
+                    }
+                }
+                CoordinatorOperation::CommitOwnership { metadata } => {
+                    assert_eq!(metadata, expected);
+                    CoordinatorResponse::OwnershipGrant {
+                        vault_id: expected.vault_id.clone(),
+                        transfer_id: expected.transfer_id.clone(),
+                        owner_device_id: expected.device_id.clone(),
+                        generation: expected.generation,
+                    }
+                }
+                CoordinatorOperation::Activated {
+                    vault_id,
+                    device_id,
+                    transfer_id,
+                    generation,
+                    purpose,
+                } => {
+                    assert_eq!(vault_id, expected.vault_id);
+                    assert_eq!(device_id, expected.device_id);
+                    assert_eq!(transfer_id, expected.transfer_id);
+                    assert_eq!(generation, expected.generation);
+                    assert_eq!(purpose, BundlePurpose::Ownership);
+                    let response = CoordinatorResponse::ActivationAcknowledged {
+                        transfer_id: expected.transfer_id.clone(),
+                    };
+                    request.response.send(Ok(response)).expect("send response");
+                    break;
+                }
+                operation => panic!("unexpected coordinator operation: {operation:?}"),
+            };
+            request.response.send(Ok(response)).expect("send response");
+        }
+    });
+
+    let prepared = request_bundle(&pair.phone, 0, BundlePurpose::Ownership)
+        .await
+        .expect("prepare ownership bundle");
+    assert_eq!(prepared, metadata);
+    let staged = download_bundle(
+        &pair.phone,
+        prepared.clone(),
+        &TransferCancellation::default(),
+    )
+    .await
+    .expect("stage ownership bundle");
+    assert_eq!(
+        fs::read(staged).expect("read staged bundle"),
+        b"controlled handoff bundle"
+    );
+    assert_eq!(
+        commit_staged_ownership(&pair.phone, prepared.clone())
+            .await
+            .expect("commit ownership"),
+        ("device-phone".to_string(), 1)
+    );
+    acknowledge_activation(
+        &pair.phone,
+        &PendingAcknowledgement {
+            vault_id: prepared.vault_id,
+            device_id: prepared.device_id,
+            transfer_id: prepared.transfer_id,
+            generation: prepared.generation,
+            purpose: BundlePurpose::Ownership,
+        },
+    )
+    .await
+    .expect("acknowledge activation");
+    coordinator.await.expect("coordinator task");
+}
+
+#[tokio::test]
+async fn android_upload_resumes_from_durable_desktop_staging() {
+    use super::super::coordinator::{CoordinatorOperation, CoordinatorResponse};
+    use super::super::state::StoredOutgoingTransfer;
+
+    let (pair, mut requests) = LocalPair::start_with_coordinator().await;
+    pair.enroll().await;
+    let bytes = vec![73_u8; TRANSFER_CHUNK_BYTES * 2 + 17];
+    let transfer_id = "transfer-upload";
+    let (_, archive_path) = pair
+        .phone
+        .outgoing_snapshot_paths(transfer_id)
+        .expect("phone outgoing paths");
+    fs::write(&archive_path, &bytes).expect("write Android archive");
+    let metadata = BundleMetadata {
+        protocol_version: PROTOCOL_VERSION,
+        vault_id: "vault-1".to_string(),
+        device_id: "device-desktop".to_string(),
+        transfer_id: transfer_id.to_string(),
+        generation: 1,
+        archive_bytes: bytes.len() as u64,
+        archive_sha256: sha256_file(&archive_path).expect("archive digest"),
+    };
+    pair.phone
+        .store_outgoing_transfer(StoredOutgoingTransfer {
+            metadata: metadata.clone(),
+            purpose: BundlePurpose::Ownership,
+            committed: false,
+        })
+        .expect("persist outgoing transfer");
+    let (partial, metadata_path, complete) = pair
+        .desktop
+        .staging_paths(transfer_id)
+        .expect("desktop staging paths");
+    fs::write(&partial, &bytes[..TRANSFER_CHUNK_BYTES]).expect("write partial upload");
+    pair.desktop
+        .write_staging_metadata(&metadata_path, &metadata)
+        .expect("persist upload metadata");
+
+    let restarted = PairingManager::default();
+    restarted
+        .initialize(
+            pair._desktop_root.path().to_path_buf(),
+            "device-desktop".to_string(),
+        )
+        .expect("restart desktop pairing state");
+    assert_eq!(
+        restarted
+            .read_staging_metadata(&metadata_path)
+            .expect("read restarted staging metadata"),
+        Some(metadata.clone())
+    );
+
+    let expected = metadata.clone();
+    let coordinator = tokio::spawn(async move {
+        while let Some(request) = requests.recv().await {
+            let response = match request.operation {
+                CoordinatorOperation::PollUpload {
+                    vault_id,
+                    device_id,
+                    generation,
+                } => {
+                    assert_eq!(vault_id, expected.vault_id);
+                    assert_eq!(device_id, "device-phone");
+                    assert_eq!(generation, 0);
+                    CoordinatorResponse::UploadStatus {
+                        generation,
+                        requested_upload: Some(BundlePurpose::Ownership),
+                    }
+                }
+                CoordinatorOperation::AuthorizeUpload {
+                    metadata,
+                    source_device_id,
+                    purpose,
+                } => {
+                    assert_eq!(metadata, expected);
+                    assert_eq!(source_device_id, "device-phone");
+                    assert_eq!(purpose, BundlePurpose::Ownership);
+                    CoordinatorResponse::UploadAuthorized {
+                        transfer_id: expected.transfer_id.clone(),
+                        already_received: false,
+                    }
+                }
+                CoordinatorOperation::Uploaded {
+                    metadata,
+                    source_device_id,
+                    purpose,
+                } => {
+                    assert_eq!(metadata, expected);
+                    assert_eq!(source_device_id, "device-phone");
+                    assert_eq!(purpose, BundlePurpose::Ownership);
+                    CoordinatorResponse::IncomingStaged {
+                        transfer_id: expected.transfer_id.clone(),
+                    }
+                }
+                CoordinatorOperation::CommitUploadedOwnership {
+                    metadata,
+                    source_device_id,
+                } => {
+                    assert_eq!(metadata, expected);
+                    assert_eq!(source_device_id, "device-phone");
+                    let response = CoordinatorResponse::ActivationAcknowledged {
+                        transfer_id: expected.transfer_id.clone(),
+                    };
+                    request.response.send(Ok(response)).expect("send response");
+                    break;
+                }
+                operation => panic!("unexpected coordinator operation: {operation:?}"),
+            };
+            request.response.send(Ok(response)).expect("send response");
+        }
+    });
+
+    assert_eq!(
+        probe_coordinator(&pair.phone, 0)
+            .await
+            .expect("poll coordinator"),
+        Some(BundlePurpose::Ownership)
+    );
+    upload_bundle(
+        &pair.phone,
+        metadata.clone(),
+        "device-phone".to_string(),
+        BundlePurpose::Ownership,
+    )
+    .await
+    .expect("resume Android upload");
+    assert_eq!(fs::read(complete).expect("read completed upload"), bytes);
+    commit_uploaded_ownership(&pair.phone, metadata, "device-phone".to_string())
+        .await
+        .expect("acknowledge uploaded ownership");
+    coordinator.await.expect("coordinator task");
+}
+
+#[tokio::test]
+async fn invalid_device_identity_cannot_download_bundle() {
+    let pair = LocalPair::start().await;
+    pair.enroll().await;
+    let metadata = pair.register_bundle(b"private vault", "transfer-identity");
+
+    let attacker_root = TestDirectory::new("attacker");
+    let attacker = PairingManager::default();
+    attacker
+        .initialize(
+            attacker_root.path().to_path_buf(),
+            "device-attacker".to_string(),
+        )
+        .expect("initialize attacker");
+    let (_, desktop_identity) = pair.desktop.identity().expect("desktop identity");
+    attacker
+        .record_coordinator(&pair.invitation, desktop_identity.certificate.as_ref())
+        .expect("record coordinator pin");
+    let mut forged = metadata;
+    forged.device_id = "device-phone".to_string();
+
+    let error = download_bundle(&attacker, forged, &TransferCancellation::default())
+        .await
+        .unwrap_err();
+    assert!(
+        error.contains("TLS")
+            || error.contains("certificate")
+            || error.contains("alert")
+            || error.contains("closed connection"),
+        "unexpected identity error: {error}"
+    );
+}
+
+#[tokio::test]
+async fn invitation_replay_is_rejected_by_coordinator() {
+    let pair = LocalPair::start().await;
+    pair.enroll().await;
+    let error = super::enroll(&pair.phone, &pair.invitation, "Phone".to_string())
+        .await
+        .unwrap_err();
+    assert!(
+        error.contains("already used") || error.contains("unknown"),
+        "unexpected replay error: {error}"
+    );
+}
+
+#[tokio::test]
+async fn malformed_and_oversized_metadata_is_rejected_by_endpoint() {
+    let pair = LocalPair::start().await;
+    pair.enroll().await;
+    let coordinator = pair
+        .phone
+        .coordinator_pin()
+        .expect("coordinator state")
+        .expect("coordinator pin");
+    let (_, phone_identity) = pair.phone.identity().expect("phone identity");
+
+    for (archive_bytes, digest) in [
+        (10_u64, "broken".to_string()),
+        (MAX_ARCHIVE_BYTES + 1, "a".repeat(64)),
+    ] {
+        let mut stream = connect_pinned(
+            coordinator.endpoint.parse().expect("endpoint"),
+            &coordinator.certificate_fingerprint,
+            Some(phone_identity.clone()),
+        )
+        .await
+        .expect("connect authenticated phone");
+        let invalid = serde_json::json!({
+            "kind": "downloadBundle",
+            "metadata": {
+                "protocolVersion": PROTOCOL_VERSION,
+                "vaultId": "vault-1",
+                "deviceId": "device-phone",
+                "transferId": "transfer-invalid",
+                "generation": 1,
+                "archiveBytes": archive_bytes,
+                "archiveSha256": digest,
+            }
+        });
+        let encoded = serde_json::to_vec(&invalid).expect("encode invalid request");
+        stream
+            .write_u32(encoded.len() as u32)
+            .await
+            .expect("write invalid message length");
+        stream
+            .write_all(&encoded)
+            .await
+            .expect("write invalid message");
+        match read_control(&mut stream)
+            .await
+            .expect("bounded error response")
+        {
+            ControlMessage::Error { code, .. } => assert_eq!(code, "malformed_control"),
+            response => panic!("unexpected response: {response:?}"),
+        }
+    }
+}
+
+#[tokio::test]
+async fn interrupted_download_retries_same_transfer_from_partial_file() {
+    let pair = LocalPair::start().await;
+    pair.enroll().await;
+    let bytes = vec![42_u8; TRANSFER_CHUNK_BYTES * 3];
+    let metadata = pair.register_bundle(&bytes, "transfer-resume");
+    let cancellation = TransferCancellation::default();
+
+    let error = download_bundle_inner(
+        &pair.phone,
+        metadata.clone(),
+        &cancellation,
+        Some(TRANSFER_CHUNK_BYTES as u64),
+    )
+    .await
+    .unwrap_err();
+    assert!(error.contains("interrupted"));
+    let (partial, _, _) = pair
+        .phone
+        .staging_paths(&metadata.transfer_id)
+        .expect("staging paths");
+    let partial_bytes = partial.metadata().expect("partial bundle").len();
+    assert!(partial_bytes > 0 && partial_bytes < metadata.archive_bytes);
+
+    let staged = download_bundle(&pair.phone, metadata, &cancellation)
+        .await
+        .expect("resume bundle");
+    assert_eq!(fs::read(staged).expect("read resumed bundle"), bytes);
+}
+
+#[tokio::test]
+async fn cancelled_download_keeps_a_retryable_transfer_identity() {
+    let pair = LocalPair::start().await;
+    pair.enroll().await;
+    let bytes = vec![21_u8; TRANSFER_CHUNK_BYTES + 1];
+    let metadata = pair.register_bundle(&bytes, "transfer-cancel");
+    let cancellation = TransferCancellation::default();
+    cancellation.cancel();
+
+    let error = download_bundle(&pair.phone, metadata.clone(), &cancellation)
+        .await
+        .unwrap_err();
+    assert!(error.contains("cancelled"));
+
+    let staged = download_bundle(&pair.phone, metadata, &TransferCancellation::default())
+        .await
+        .expect("retry cancelled transfer");
+    assert_eq!(fs::read(staged).expect("read retried bundle"), bytes);
+}
+
+#[tokio::test]
+async fn digest_mismatch_removes_corrupt_staging() {
+    let pair = LocalPair::start().await;
+    pair.enroll().await;
+    let original = vec![7_u8; TRANSFER_CHUNK_BYTES + 1];
+    let metadata = pair.register_bundle(&original, "transfer-digest");
+    let registered = pair
+        .desktop
+        .outgoing_bundle(&metadata.transfer_id)
+        .expect("registered bundle");
+    fs::write(&registered.path, vec![8_u8; original.len()]).expect("corrupt source");
+
+    let error = download_bundle(
+        &pair.phone,
+        metadata.clone(),
+        &TransferCancellation::default(),
+    )
+    .await
+    .unwrap_err();
+    assert!(error.contains("digest"), "unexpected digest error: {error}");
+    let (partial, metadata_path, complete) = pair
+        .phone
+        .staging_paths(&metadata.transfer_id)
+        .expect("staging paths");
+    assert!(!partial.exists());
+    assert!(!metadata_path.exists());
+    assert!(!complete.exists());
+}
+
+#[test]
+fn oversized_bundle_metadata_is_rejected_before_network_work() {
+    let metadata = BundleMetadata {
+        protocol_version: PROTOCOL_VERSION,
+        vault_id: "vault-1".to_string(),
+        device_id: "device-phone".to_string(),
+        transfer_id: "transfer-oversize".to_string(),
+        generation: 1,
+        archive_bytes: MAX_ARCHIVE_BYTES + 1,
+        archive_sha256: "a".repeat(64),
+    };
+    assert!(metadata.validate().unwrap_err().contains("bundle size"));
+}

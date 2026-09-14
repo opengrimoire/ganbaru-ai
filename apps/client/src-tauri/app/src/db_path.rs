@@ -14,7 +14,6 @@ static VAULT_CONNECTION_GATE: LazyLock<Arc<tokio::sync::RwLock<()>>> =
 
 #[allow(dead_code)] // Used by the H04 source-freeze flow.
 pub(crate) type VaultExclusiveGuard = tokio::sync::OwnedRwLockWriteGuard<()>;
-#[cfg(target_os = "android")]
 pub(crate) type VaultRestoreGuard = VaultExclusiveGuard;
 
 /// Prevent new SQLite connections while an active vault is being replaced.
@@ -23,7 +22,6 @@ pub(crate) async fn begin_vault_exclusive() -> VaultExclusiveGuard {
     VAULT_CONNECTION_GATE.clone().write_owned().await
 }
 
-#[cfg(target_os = "android")]
 pub(crate) async fn begin_vault_restore() -> VaultRestoreGuard {
     begin_vault_exclusive().await
 }

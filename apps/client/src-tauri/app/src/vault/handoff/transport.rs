@@ -13,6 +13,7 @@ use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, WebPkiSuppo
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{DigitallySignedStruct, RootCertStore, SignatureScheme};
 use sha2::{Digest, Sha256};
+use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -216,6 +217,26 @@ async fn handle_connection(
             )?;
             serve_download(&mut stream, &manager, metadata).await
         }
+        ControlMessage::UploadBundle {
+            metadata,
+            source_device_id,
+            purpose,
+        } => {
+            manager.verify_authenticated_peer(
+                &source_device_id,
+                peer_certificate.as_ref(),
+                &metadata.vault_id,
+            )?;
+            serve_upload(
+                &mut stream,
+                &manager,
+                coordinator.as_ref(),
+                metadata,
+                source_device_id,
+                purpose,
+            )
+            .await
+        }
         ControlMessage::RequestBundle {
             vault_id,
             device_id,
@@ -242,6 +263,25 @@ async fn handle_connection(
                 &mut stream,
                 coordinator.as_ref(),
                 super::coordinator::CoordinatorOperation::CommitOwnership { metadata },
+            )
+            .await
+        }
+        ControlMessage::CommitUploadedOwnership {
+            metadata,
+            source_device_id,
+        } => {
+            manager.verify_authenticated_peer(
+                &source_device_id,
+                peer_certificate.as_ref(),
+                &metadata.vault_id,
+            )?;
+            send_coordinator_response(
+                &mut stream,
+                coordinator.as_ref(),
+                super::coordinator::CoordinatorOperation::CommitUploadedOwnership {
+                    metadata,
+                    source_device_id,
+                },
             )
             .await
         }
@@ -290,14 +330,15 @@ async fn handle_connection(
             ..
         } => {
             manager.verify_authenticated_peer(&device_id, peer_certificate.as_ref(), &vault_id)?;
-            timeout_control(write_control(
+            send_coordinator_response(
                 &mut stream,
-                &ControlMessage::RefreshStatus {
-                    available: false,
+                coordinator.as_ref(),
+                super::coordinator::CoordinatorOperation::PollUpload {
+                    vault_id,
+                    device_id,
                     generation,
-                    transfer_id: None,
                 },
-            ))
+            )
             .await
         }
         ControlMessage::DoomscrollingExchange {
@@ -368,6 +409,24 @@ async fn send_coordinator_response(
         super::coordinator::CoordinatorResponse::Cancelled { transfer_id } => {
             ControlMessage::TransferCancelled { transfer_id }
         }
+        super::coordinator::CoordinatorResponse::UploadStatus {
+            generation,
+            requested_upload,
+        } => ControlMessage::RefreshStatus {
+            available: requested_upload.is_some(),
+            generation,
+            transfer_id: None,
+            requested_upload,
+        },
+        super::coordinator::CoordinatorResponse::IncomingStaged { transfer_id } => {
+            ControlMessage::BundleStaged { transfer_id }
+        }
+        super::coordinator::CoordinatorResponse::UploadRequested { .. } => {
+            return Err("local upload request cannot be sent over the transport".to_string())
+        }
+        super::coordinator::CoordinatorResponse::UploadAuthorized { .. } => {
+            return Err("upload authorization cannot be sent as a control response".to_string())
+        }
     };
     timeout_control(write_control(stream, &message)).await
 }
@@ -424,6 +483,130 @@ async fn serve_download(
         }
         _ => Err("receiver did not acknowledge the completed transfer".to_string()),
     }
+}
+
+async fn serve_upload(
+    stream: &mut tokio_rustls::server::TlsStream<TcpStream>,
+    manager: &PairingManager,
+    coordinator: Option<&super::coordinator::CoordinatorSender>,
+    metadata: BundleMetadata,
+    source_device_id: String,
+    purpose: BundlePurpose,
+) -> Result<(), String> {
+    metadata.validate()?;
+    let coordinator = coordinator
+        .ok_or_else(|| "vault handoff coordinator operations are unavailable".to_string())?;
+    let authorization = super::coordinator::request(
+        coordinator,
+        super::coordinator::CoordinatorOperation::AuthorizeUpload {
+            metadata: metadata.clone(),
+            source_device_id: source_device_id.clone(),
+            purpose,
+        },
+    )
+    .await;
+    match authorization {
+        Err(error) => return send_error(stream, "upload_rejected", &error, false).await,
+        Ok(super::coordinator::CoordinatorResponse::UploadAuthorized {
+            transfer_id,
+            already_received,
+        }) if transfer_id == metadata.transfer_id => {
+            if already_received {
+                timeout_control(write_control(
+                    stream,
+                    &ControlMessage::ResumeAt {
+                        offset: metadata.archive_bytes,
+                    },
+                ))
+                .await?;
+                match timeout_control(read_control(stream)).await? {
+                    ControlMessage::BundleComplete { transfer_id }
+                        if transfer_id == metadata.transfer_id => {}
+                    _ => return Err("source did not complete the uploaded transfer".to_string()),
+                }
+                return send_coordinator_response(
+                    stream,
+                    Some(coordinator),
+                    super::coordinator::CoordinatorOperation::Uploaded {
+                        metadata,
+                        source_device_id,
+                        purpose,
+                    },
+                )
+                .await;
+            }
+        }
+        _ => return Err("coordinator returned invalid upload authorization".to_string()),
+    }
+    let (partial_path, metadata_path, complete_path) =
+        manager.staging_paths(&metadata.transfer_id)?;
+    let resume_offset = if complete_path.exists() {
+        super::protocol::validate_staging_file(&complete_path, &metadata)?;
+        metadata.archive_bytes
+    } else {
+        prepare_partial(manager, &partial_path, &metadata_path, &metadata)?
+    };
+    timeout_control(write_control(
+        stream,
+        &ControlMessage::ResumeAt {
+            offset: resume_offset,
+        },
+    ))
+    .await?;
+
+    if resume_offset < metadata.archive_bytes {
+        let mut file = tokio::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&partial_path)
+            .await
+            .map_err(|error| format!("open incoming transfer: {error}"))?;
+        let mut remaining = metadata.archive_bytes - resume_offset;
+        let mut buffer = vec![0_u8; TRANSFER_CHUNK_BYTES];
+        while remaining > 0 {
+            let count = usize::try_from(remaining.min(buffer.len() as u64))
+                .map_err(|_| "incoming transfer chunk size overflow".to_string())?;
+            tokio::time::timeout(CHUNK_TIMEOUT, stream.read_exact(&mut buffer[..count]))
+                .await
+                .map_err(|_| "receiving the transfer bundle timed out".to_string())?
+                .map_err(|error| format!("receive transfer bundle: {error}"))?;
+            file.write_all(&buffer[..count])
+                .await
+                .map_err(|error| format!("write incoming transfer: {error}"))?;
+            remaining -= count as u64;
+        }
+        file.sync_all()
+            .await
+            .map_err(|error| format!("sync incoming transfer: {error}"))?;
+        drop(file);
+    }
+    match timeout_control(read_control(stream)).await? {
+        ControlMessage::BundleComplete { transfer_id } if transfer_id == metadata.transfer_id => {}
+        _ => return Err("source did not complete the uploaded transfer".to_string()),
+    }
+    if !complete_path.exists() {
+        if let Err(error) = super::protocol::validate_staging_file(&partial_path, &metadata) {
+            let _ = manager.remove_staging(&metadata.transfer_id);
+            return Err(error);
+        }
+        fs::rename(&partial_path, &complete_path)
+            .map_err(|error| format!("complete incoming transfer: {error}"))?;
+        match fs::remove_file(&metadata_path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(format!("remove incoming transfer metadata: {error}")),
+        }
+    }
+    send_coordinator_response(
+        stream,
+        Some(coordinator),
+        super::coordinator::CoordinatorOperation::Uploaded {
+            metadata,
+            source_device_id,
+            purpose,
+        },
+    )
+    .await
 }
 
 async fn stream_file<W>(
@@ -606,10 +789,92 @@ pub(crate) async fn acknowledge_activation(
 }
 
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub(crate) async fn upload_bundle(
+    manager: &PairingManager,
+    metadata: BundleMetadata,
+    source_device_id: String,
+    purpose: BundlePurpose,
+) -> Result<(), String> {
+    let coordinator = manager
+        .coordinator_pin()?
+        .ok_or_else(|| "this device is not linked to a coordinator".to_string())?;
+    if metadata.device_id != coordinator.device_id || metadata.vault_id != coordinator.vault_id {
+        return Err("outgoing bundle does not target the linked coordinator".to_string());
+    }
+    let (_, archive_path) = manager.outgoing_snapshot_paths(&metadata.transfer_id)?;
+    super::protocol::validate_staging_file(&archive_path, &metadata)?;
+    let endpoint = coordinator
+        .endpoint
+        .parse()
+        .map_err(|_| "coordinator endpoint is invalid".to_string())?;
+    let (_, identity) = manager.identity()?;
+    let mut stream = connect_pinned(
+        endpoint,
+        &coordinator.certificate_fingerprint,
+        Some(identity),
+    )
+    .await?;
+    timeout_control(write_control(
+        &mut stream,
+        &ControlMessage::UploadBundle {
+            metadata: metadata.clone(),
+            source_device_id,
+            purpose,
+        },
+    ))
+    .await?;
+    let offset = match timeout_control(read_control(&mut stream)).await? {
+        ControlMessage::ResumeAt { offset } if offset <= metadata.archive_bytes => offset,
+        ControlMessage::Error { message, .. } => return Err(message),
+        _ => return Err("coordinator returned an invalid upload offset".to_string()),
+    };
+    stream_file(&mut stream, &archive_path, offset, metadata.archive_bytes).await?;
+    timeout_control(write_control(
+        &mut stream,
+        &ControlMessage::BundleComplete {
+            transfer_id: metadata.transfer_id.clone(),
+        },
+    ))
+    .await?;
+    match timeout_control(read_control(&mut stream)).await? {
+        ControlMessage::BundleStaged { transfer_id } if transfer_id == metadata.transfer_id => {
+            Ok(())
+        }
+        ControlMessage::Error { message, .. } => Err(message),
+        _ => Err("coordinator did not accept the uploaded bundle".to_string()),
+    }
+}
+
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub(crate) async fn commit_uploaded_ownership(
+    manager: &PairingManager,
+    metadata: BundleMetadata,
+    source_device_id: String,
+) -> Result<(), String> {
+    match authenticated_exchange(
+        manager,
+        ControlMessage::CommitUploadedOwnership {
+            metadata: metadata.clone(),
+            source_device_id,
+        },
+    )
+    .await?
+    {
+        ControlMessage::ActivationAcknowledged { transfer_id }
+            if transfer_id == metadata.transfer_id =>
+        {
+            Ok(())
+        }
+        ControlMessage::Error { message, .. } => Err(message),
+        _ => Err("coordinator returned an invalid ownership acknowledgement".to_string()),
+    }
+}
+
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
 pub(crate) async fn probe_coordinator(
     manager: &PairingManager,
     generation: u64,
-) -> Result<(), String> {
+) -> Result<Option<BundlePurpose>, String> {
     let coordinator = manager
         .coordinator_pin()?
         .ok_or_else(|| "this device is not linked to a coordinator".to_string())?;
@@ -627,8 +892,9 @@ pub(crate) async fn probe_coordinator(
     {
         ControlMessage::RefreshStatus {
             generation: returned,
+            requested_upload,
             ..
-        } if returned == generation => Ok(()),
+        } if returned == generation => Ok(requested_upload),
         ControlMessage::Error { message, .. } => Err(message),
         _ => Err("coordinator returned an invalid refresh status".to_string()),
     }
@@ -667,458 +933,7 @@ pub(crate) async fn download_bundle(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::vault::handoff::protocol::{MAX_ARCHIVE_BYTES, PROTOCOL_VERSION};
-    use crate::vault::handoff::state::random_token;
-    use std::fs;
-
-    struct TestDirectory(PathBuf);
-
-    impl TestDirectory {
-        fn new(label: &str) -> Self {
-            let path = std::env::temp_dir().join(format!(
-                "ganbaru-transport-{label}-{}",
-                random_token("test").expect("random test directory")
-            ));
-            fs::create_dir_all(&path).expect("create test directory");
-            Self(path)
-        }
-
-        fn path(&self) -> &Path {
-            &self.0
-        }
-    }
-
-    impl Drop for TestDirectory {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
-
-    struct LocalPair {
-        _desktop_root: TestDirectory,
-        _phone_root: TestDirectory,
-        desktop: PairingManager,
-        phone: PairingManager,
-        invitation: PairingInvitation,
-        shutdown: Option<tokio::sync::oneshot::Sender<()>>,
-    }
-
-    impl LocalPair {
-        async fn start() -> Self {
-            let desktop_root = TestDirectory::new("desktop");
-            let phone_root = TestDirectory::new("phone");
-            let desktop = PairingManager::default();
-            desktop
-                .initialize(
-                    desktop_root.path().to_path_buf(),
-                    "device-desktop".to_string(),
-                )
-                .expect("initialize desktop");
-            let phone = PairingManager::default();
-            phone
-                .initialize(phone_root.path().to_path_buf(), "device-phone".to_string())
-                .expect("initialize phone");
-            let listener = TcpListener::bind("127.0.0.1:0")
-                .await
-                .expect("bind coordinator");
-            let endpoint = listener.local_addr().expect("coordinator endpoint");
-            let invitation = desktop
-                .create_invitation(endpoint, "vault-1".to_string(), 0, unix_time_ms())
-                .expect("create invitation");
-            let (shutdown, receiver) = tokio::sync::oneshot::channel();
-            tokio::spawn(serve(listener, desktop.clone(), receiver));
-            Self {
-                _desktop_root: desktop_root,
-                _phone_root: phone_root,
-                desktop,
-                phone,
-                invitation,
-                shutdown: Some(shutdown),
-            }
-        }
-
-        async fn enroll(&self) {
-            super::enroll(&self.phone, &self.invitation, "Phone".to_string())
-                .await
-                .expect("enroll phone");
-        }
-
-        async fn start_with_coordinator() -> (
-            Self,
-            tokio::sync::mpsc::Receiver<super::super::coordinator::CoordinatorRequest>,
-        ) {
-            let desktop_root = TestDirectory::new("controlled-desktop");
-            let phone_root = TestDirectory::new("controlled-phone");
-            let desktop = PairingManager::default();
-            desktop
-                .initialize(
-                    desktop_root.path().to_path_buf(),
-                    "device-desktop".to_string(),
-                )
-                .expect("initialize desktop");
-            let phone = PairingManager::default();
-            phone
-                .initialize(phone_root.path().to_path_buf(), "device-phone".to_string())
-                .expect("initialize phone");
-            let listener = TcpListener::bind("127.0.0.1:0")
-                .await
-                .expect("bind coordinator");
-            let endpoint = listener.local_addr().expect("coordinator endpoint");
-            let invitation = desktop
-                .create_invitation(endpoint, "vault-1".to_string(), 0, unix_time_ms())
-                .expect("create invitation");
-            let (requests, request_receiver) = tokio::sync::mpsc::channel(8);
-            let (shutdown, receiver) = tokio::sync::oneshot::channel();
-            tokio::spawn(serve_with_coordinator(
-                listener,
-                desktop.clone(),
-                Some(requests),
-                receiver,
-            ));
-            (
-                Self {
-                    _desktop_root: desktop_root,
-                    _phone_root: phone_root,
-                    desktop,
-                    phone,
-                    invitation,
-                    shutdown: Some(shutdown),
-                },
-                request_receiver,
-            )
-        }
-
-        fn register_bundle(&self, bytes: &[u8], transfer_id: &str) -> BundleMetadata {
-            let path = self._desktop_root.path().join(format!("{transfer_id}.zip"));
-            fs::write(&path, bytes).expect("write bundle");
-            let metadata = BundleMetadata {
-                protocol_version: PROTOCOL_VERSION,
-                vault_id: "vault-1".to_string(),
-                device_id: "device-phone".to_string(),
-                transfer_id: transfer_id.to_string(),
-                generation: 1,
-                archive_bytes: bytes.len() as u64,
-                archive_sha256: sha256_file(&path).expect("bundle digest"),
-            };
-            self.desktop
-                .register_outgoing_bundle(metadata.clone(), path)
-                .expect("register bundle");
-            metadata
-        }
-    }
-
-    impl Drop for LocalPair {
-        fn drop(&mut self) {
-            if let Some(shutdown) = self.shutdown.take() {
-                let _ = shutdown.send(());
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn fresh_phone_enrolls_and_stages_authenticated_bundle() {
-        let pair = LocalPair::start().await;
-        pair.enroll().await;
-        let bytes = b"authenticated whole-vault test bundle";
-        let metadata = pair.register_bundle(bytes, "transfer-fresh");
-
-        let staged = download_bundle(&pair.phone, metadata, &TransferCancellation::default())
-            .await
-            .expect("download bundle");
-
-        assert_eq!(fs::read(staged).expect("read staged bundle"), bytes);
-    }
-
-    #[tokio::test]
-    async fn authenticated_control_flow_prepares_commits_and_acknowledges() {
-        use super::super::coordinator::{CoordinatorOperation, CoordinatorResponse};
-        use super::super::state::PendingAcknowledgement;
-
-        let (pair, mut requests) = LocalPair::start_with_coordinator().await;
-        pair.enroll().await;
-        let metadata = pair.register_bundle(b"controlled handoff bundle", "transfer-control");
-        let expected = metadata.clone();
-        let coordinator = tokio::spawn(async move {
-            while let Some(request) = requests.recv().await {
-                let response = match request.operation {
-                    CoordinatorOperation::Prepare {
-                        vault_id,
-                        device_id,
-                        generation,
-                        purpose,
-                    } => {
-                        assert_eq!(vault_id, expected.vault_id);
-                        assert_eq!(device_id, expected.device_id);
-                        assert_eq!(generation, 0);
-                        assert_eq!(purpose, BundlePurpose::Ownership);
-                        CoordinatorResponse::Prepared {
-                            metadata: expected.clone(),
-                            purpose,
-                        }
-                    }
-                    CoordinatorOperation::CommitOwnership { metadata } => {
-                        assert_eq!(metadata, expected);
-                        CoordinatorResponse::OwnershipGrant {
-                            vault_id: expected.vault_id.clone(),
-                            transfer_id: expected.transfer_id.clone(),
-                            owner_device_id: expected.device_id.clone(),
-                            generation: expected.generation,
-                        }
-                    }
-                    CoordinatorOperation::Activated {
-                        vault_id,
-                        device_id,
-                        transfer_id,
-                        generation,
-                        purpose,
-                    } => {
-                        assert_eq!(vault_id, expected.vault_id);
-                        assert_eq!(device_id, expected.device_id);
-                        assert_eq!(transfer_id, expected.transfer_id);
-                        assert_eq!(generation, expected.generation);
-                        assert_eq!(purpose, BundlePurpose::Ownership);
-                        let response = CoordinatorResponse::ActivationAcknowledged {
-                            transfer_id: expected.transfer_id.clone(),
-                        };
-                        request.response.send(Ok(response)).expect("send response");
-                        break;
-                    }
-                    operation => panic!("unexpected coordinator operation: {operation:?}"),
-                };
-                request.response.send(Ok(response)).expect("send response");
-            }
-        });
-
-        let prepared = request_bundle(&pair.phone, 0, BundlePurpose::Ownership)
-            .await
-            .expect("prepare ownership bundle");
-        assert_eq!(prepared, metadata);
-        let staged = download_bundle(
-            &pair.phone,
-            prepared.clone(),
-            &TransferCancellation::default(),
-        )
-        .await
-        .expect("stage ownership bundle");
-        assert_eq!(
-            fs::read(staged).expect("read staged bundle"),
-            b"controlled handoff bundle"
-        );
-        assert_eq!(
-            commit_staged_ownership(&pair.phone, prepared.clone())
-                .await
-                .expect("commit ownership"),
-            ("device-phone".to_string(), 1)
-        );
-        acknowledge_activation(
-            &pair.phone,
-            &PendingAcknowledgement {
-                vault_id: prepared.vault_id,
-                device_id: prepared.device_id,
-                transfer_id: prepared.transfer_id,
-                generation: prepared.generation,
-                purpose: BundlePurpose::Ownership,
-            },
-        )
-        .await
-        .expect("acknowledge activation");
-        coordinator.await.expect("coordinator task");
-    }
-
-    #[tokio::test]
-    async fn invalid_device_identity_cannot_download_bundle() {
-        let pair = LocalPair::start().await;
-        pair.enroll().await;
-        let metadata = pair.register_bundle(b"private vault", "transfer-identity");
-
-        let attacker_root = TestDirectory::new("attacker");
-        let attacker = PairingManager::default();
-        attacker
-            .initialize(
-                attacker_root.path().to_path_buf(),
-                "device-attacker".to_string(),
-            )
-            .expect("initialize attacker");
-        let (_, desktop_identity) = pair.desktop.identity().expect("desktop identity");
-        attacker
-            .record_coordinator(&pair.invitation, desktop_identity.certificate.as_ref())
-            .expect("record coordinator pin");
-        let mut forged = metadata;
-        forged.device_id = "device-phone".to_string();
-
-        let error = download_bundle(&attacker, forged, &TransferCancellation::default())
-            .await
-            .unwrap_err();
-        assert!(
-            error.contains("TLS")
-                || error.contains("certificate")
-                || error.contains("alert")
-                || error.contains("closed connection"),
-            "unexpected identity error: {error}"
-        );
-    }
-
-    #[tokio::test]
-    async fn invitation_replay_is_rejected_by_coordinator() {
-        let pair = LocalPair::start().await;
-        pair.enroll().await;
-        let error = super::enroll(&pair.phone, &pair.invitation, "Phone".to_string())
-            .await
-            .unwrap_err();
-        assert!(
-            error.contains("already used") || error.contains("unknown"),
-            "unexpected replay error: {error}"
-        );
-    }
-
-    #[tokio::test]
-    async fn malformed_and_oversized_metadata_is_rejected_by_endpoint() {
-        let pair = LocalPair::start().await;
-        pair.enroll().await;
-        let coordinator = pair
-            .phone
-            .coordinator_pin()
-            .expect("coordinator state")
-            .expect("coordinator pin");
-        let (_, phone_identity) = pair.phone.identity().expect("phone identity");
-
-        for (archive_bytes, digest) in [
-            (10_u64, "broken".to_string()),
-            (MAX_ARCHIVE_BYTES + 1, "a".repeat(64)),
-        ] {
-            let mut stream = connect_pinned(
-                coordinator.endpoint.parse().expect("endpoint"),
-                &coordinator.certificate_fingerprint,
-                Some(phone_identity.clone()),
-            )
-            .await
-            .expect("connect authenticated phone");
-            let invalid = serde_json::json!({
-                "kind": "downloadBundle",
-                "metadata": {
-                    "protocolVersion": PROTOCOL_VERSION,
-                    "vaultId": "vault-1",
-                    "deviceId": "device-phone",
-                    "transferId": "transfer-invalid",
-                    "generation": 1,
-                    "archiveBytes": archive_bytes,
-                    "archiveSha256": digest,
-                }
-            });
-            let encoded = serde_json::to_vec(&invalid).expect("encode invalid request");
-            stream
-                .write_u32(encoded.len() as u32)
-                .await
-                .expect("write invalid message length");
-            stream
-                .write_all(&encoded)
-                .await
-                .expect("write invalid message");
-            match read_control(&mut stream)
-                .await
-                .expect("bounded error response")
-            {
-                ControlMessage::Error { code, .. } => assert_eq!(code, "malformed_control"),
-                response => panic!("unexpected response: {response:?}"),
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn interrupted_download_retries_same_transfer_from_partial_file() {
-        let pair = LocalPair::start().await;
-        pair.enroll().await;
-        let bytes = vec![42_u8; TRANSFER_CHUNK_BYTES * 3];
-        let metadata = pair.register_bundle(&bytes, "transfer-resume");
-        let cancellation = TransferCancellation::default();
-
-        let error = download_bundle_inner(
-            &pair.phone,
-            metadata.clone(),
-            &cancellation,
-            Some(TRANSFER_CHUNK_BYTES as u64),
-        )
-        .await
-        .unwrap_err();
-        assert!(error.contains("interrupted"));
-        let (partial, _, _) = pair
-            .phone
-            .staging_paths(&metadata.transfer_id)
-            .expect("staging paths");
-        let partial_bytes = partial.metadata().expect("partial bundle").len();
-        assert!(partial_bytes > 0 && partial_bytes < metadata.archive_bytes);
-
-        let staged = download_bundle(&pair.phone, metadata, &cancellation)
-            .await
-            .expect("resume bundle");
-        assert_eq!(fs::read(staged).expect("read resumed bundle"), bytes);
-    }
-
-    #[tokio::test]
-    async fn cancelled_download_keeps_a_retryable_transfer_identity() {
-        let pair = LocalPair::start().await;
-        pair.enroll().await;
-        let bytes = vec![21_u8; TRANSFER_CHUNK_BYTES + 1];
-        let metadata = pair.register_bundle(&bytes, "transfer-cancel");
-        let cancellation = TransferCancellation::default();
-        cancellation.cancel();
-
-        let error = download_bundle(&pair.phone, metadata.clone(), &cancellation)
-            .await
-            .unwrap_err();
-        assert!(error.contains("cancelled"));
-
-        let staged = download_bundle(&pair.phone, metadata, &TransferCancellation::default())
-            .await
-            .expect("retry cancelled transfer");
-        assert_eq!(fs::read(staged).expect("read retried bundle"), bytes);
-    }
-
-    #[tokio::test]
-    async fn digest_mismatch_removes_corrupt_staging() {
-        let pair = LocalPair::start().await;
-        pair.enroll().await;
-        let original = vec![7_u8; TRANSFER_CHUNK_BYTES + 1];
-        let metadata = pair.register_bundle(&original, "transfer-digest");
-        let registered = pair
-            .desktop
-            .outgoing_bundle(&metadata.transfer_id)
-            .expect("registered bundle");
-        fs::write(&registered.path, vec![8_u8; original.len()]).expect("corrupt source");
-
-        let error = download_bundle(
-            &pair.phone,
-            metadata.clone(),
-            &TransferCancellation::default(),
-        )
-        .await
-        .unwrap_err();
-        assert!(error.contains("digest"), "unexpected digest error: {error}");
-        let (partial, metadata_path, complete) = pair
-            .phone
-            .staging_paths(&metadata.transfer_id)
-            .expect("staging paths");
-        assert!(!partial.exists());
-        assert!(!metadata_path.exists());
-        assert!(!complete.exists());
-    }
-
-    #[test]
-    fn oversized_bundle_metadata_is_rejected_before_network_work() {
-        let metadata = BundleMetadata {
-            protocol_version: PROTOCOL_VERSION,
-            vault_id: "vault-1".to_string(),
-            device_id: "device-phone".to_string(),
-            transfer_id: "transfer-oversize".to_string(),
-            generation: 1,
-            archive_bytes: MAX_ARCHIVE_BYTES + 1,
-            archive_sha256: "a".repeat(64),
-        };
-        assert!(metadata.validate().unwrap_err().contains("bundle size"));
-    }
-}
+mod tests;
 
 #[allow(dead_code)] // H04 connects the Android transfer workflow.
 async fn download_bundle_inner(

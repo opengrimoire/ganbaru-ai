@@ -60,6 +60,14 @@ struct PairingStateFile {
     replica_ready: bool,
     #[serde(default)]
     pending_acknowledgement: Option<PendingAcknowledgement>,
+    #[serde(default)]
+    outgoing_transfer: Option<StoredOutgoingTransfer>,
+    #[serde(default)]
+    incoming_transfer: Option<StoredIncomingTransfer>,
+    #[serde(default)]
+    completed_activation: Option<PendingAcknowledgement>,
+    #[serde(default)]
+    requested_upload: Option<BundlePurpose>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
@@ -69,6 +77,22 @@ pub(crate) struct PendingAcknowledgement {
     pub device_id: String,
     pub transfer_id: String,
     pub generation: u64,
+    pub purpose: BundlePurpose,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct StoredOutgoingTransfer {
+    pub metadata: BundleMetadata,
+    pub purpose: BundlePurpose,
+    pub committed: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct StoredIncomingTransfer {
+    pub metadata: BundleMetadata,
+    pub source_device_id: String,
     pub purpose: BundlePurpose,
 }
 
@@ -155,6 +179,10 @@ impl PairingManager {
                 coordinator: None,
                 replica_ready: false,
                 pending_acknowledgement: None,
+                outgoing_transfer: None,
+                incoming_transfer: None,
+                completed_activation: None,
+                requested_upload: None,
             };
             persist_state(&state_path, &state)?;
             state
@@ -235,6 +263,122 @@ impl PairingManager {
             None => Ok(()),
             Some(_) => Err("pending activation acknowledgement does not match".to_string()),
         }
+    }
+
+    pub(crate) fn store_outgoing_transfer(
+        &self,
+        transfer: StoredOutgoingTransfer,
+    ) -> Result<(), String> {
+        validate_stored_outgoing(&transfer)?;
+        let mut inner = self.lock()?;
+        let state = initialized_state_mut(&mut inner)?;
+        state.outgoing_transfer = Some(transfer);
+        persist_initialized_state(&inner)
+    }
+
+    pub(crate) fn outgoing_transfer(&self) -> Result<Option<StoredOutgoingTransfer>, String> {
+        let inner = self.lock()?;
+        Ok(initialized_state(&inner)?.outgoing_transfer.clone())
+    }
+
+    pub(crate) fn mark_outgoing_committed(&self, transfer_id: &str) -> Result<(), String> {
+        validate_identifier("transfer id", transfer_id)?;
+        let mut inner = self.lock()?;
+        let state = initialized_state_mut(&mut inner)?;
+        let transfer = state
+            .outgoing_transfer
+            .as_mut()
+            .ok_or_else(|| "outgoing transfer is not persisted".to_string())?;
+        if transfer.metadata.transfer_id != transfer_id {
+            return Err("outgoing transfer identity does not match".to_string());
+        }
+        transfer.committed = true;
+        persist_initialized_state(&inner)
+    }
+
+    pub(crate) fn clear_outgoing_transfer(&self, transfer_id: &str) -> Result<(), String> {
+        validate_identifier("transfer id", transfer_id)?;
+        let mut inner = self.lock()?;
+        let state = initialized_state_mut(&mut inner)?;
+        match state.outgoing_transfer.as_ref() {
+            Some(transfer) if transfer.metadata.transfer_id == transfer_id => {
+                state.outgoing_transfer = None;
+                persist_initialized_state(&inner)
+            }
+            None => Ok(()),
+            Some(_) => Err("outgoing transfer identity does not match".to_string()),
+        }
+    }
+
+    pub(crate) fn store_incoming_transfer(
+        &self,
+        transfer: StoredIncomingTransfer,
+    ) -> Result<(), String> {
+        validate_stored_incoming(&transfer)?;
+        let mut inner = self.lock()?;
+        let state = initialized_state_mut(&mut inner)?;
+        state.incoming_transfer = Some(transfer);
+        persist_initialized_state(&inner)
+    }
+
+    pub(crate) fn incoming_transfer(&self) -> Result<Option<StoredIncomingTransfer>, String> {
+        let inner = self.lock()?;
+        Ok(initialized_state(&inner)?.incoming_transfer.clone())
+    }
+
+    pub(crate) fn complete_incoming_activation(
+        &self,
+        completed: PendingAcknowledgement,
+    ) -> Result<(), String> {
+        validate_activation_record(&completed)?;
+        let mut inner = self.lock()?;
+        let state = initialized_state_mut(&mut inner)?;
+        if state
+            .incoming_transfer
+            .as_ref()
+            .is_some_and(|transfer| transfer.metadata.transfer_id != completed.transfer_id)
+        {
+            return Err("completed activation does not match incoming transfer".to_string());
+        }
+        state.incoming_transfer = None;
+        state.completed_activation = Some(completed);
+        state.requested_upload = None;
+        persist_initialized_state(&inner)
+    }
+
+    pub(crate) fn complete_outgoing_activation(
+        &self,
+        completed: PendingAcknowledgement,
+    ) -> Result<(), String> {
+        validate_activation_record(&completed)?;
+        let mut inner = self.lock()?;
+        let state = initialized_state_mut(&mut inner)?;
+        if state
+            .outgoing_transfer
+            .as_ref()
+            .is_some_and(|transfer| transfer.metadata.transfer_id != completed.transfer_id)
+        {
+            return Err("completed activation does not match outgoing transfer".to_string());
+        }
+        state.outgoing_transfer = None;
+        state.completed_activation = Some(completed);
+        persist_initialized_state(&inner)
+    }
+
+    pub(crate) fn completed_activation(&self) -> Result<Option<PendingAcknowledgement>, String> {
+        let inner = self.lock()?;
+        Ok(initialized_state(&inner)?.completed_activation.clone())
+    }
+
+    pub(crate) fn request_upload(&self, purpose: BundlePurpose) -> Result<(), String> {
+        let mut inner = self.lock()?;
+        initialized_state_mut(&mut inner)?.requested_upload = Some(purpose);
+        persist_initialized_state(&inner)
+    }
+
+    pub(crate) fn requested_upload(&self) -> Result<Option<BundlePurpose>, String> {
+        let inner = self.lock()?;
+        Ok(initialized_state(&inner)?.requested_upload)
     }
 
     pub(crate) fn create_invitation(
@@ -577,6 +721,47 @@ fn constant_time_equal(left: &[u8], right: &[u8]) -> bool {
     difference == 0
 }
 
+fn validate_stored_outgoing(transfer: &StoredOutgoingTransfer) -> Result<(), String> {
+    transfer.metadata.validate()?;
+    if transfer.purpose == BundlePurpose::Ownership && transfer.metadata.generation == 0 {
+        return Err("outgoing ownership generation must be positive".to_string());
+    }
+    Ok(())
+}
+
+fn validate_stored_incoming(transfer: &StoredIncomingTransfer) -> Result<(), String> {
+    transfer.metadata.validate()?;
+    validate_identifier("incoming source device id", &transfer.source_device_id)?;
+    if transfer.source_device_id == transfer.metadata.device_id {
+        return Err("incoming transfer source and receiver must differ".to_string());
+    }
+    if transfer.purpose == BundlePurpose::Ownership && transfer.metadata.generation == 0 {
+        return Err("incoming ownership generation must be positive".to_string());
+    }
+    Ok(())
+}
+
+fn validate_pending_acknowledgement(
+    pending: &PendingAcknowledgement,
+    expected_device_id: &str,
+) -> Result<(), String> {
+    validate_activation_record(pending)?;
+    if pending.device_id != expected_device_id {
+        return Err("pending activation acknowledgement is inconsistent".to_string());
+    }
+    Ok(())
+}
+
+fn validate_activation_record(record: &PendingAcknowledgement) -> Result<(), String> {
+    validate_identifier("activation vault id", &record.vault_id)?;
+    validate_identifier("activation device id", &record.device_id)?;
+    validate_identifier("activation transfer id", &record.transfer_id)?;
+    if record.purpose == BundlePurpose::Ownership && record.generation == 0 {
+        return Err("activation acknowledgement is inconsistent".to_string());
+    }
+    Ok(())
+}
+
 fn validate_state(state: &PairingStateFile, expected_device_id: &str) -> Result<(), String> {
     if state.schema_version != PAIRING_STATE_SCHEMA_VERSION {
         return Err("pairing state schema version is unsupported".to_string());
@@ -606,15 +791,19 @@ fn validate_state(state: &PairingStateFile, expected_device_id: &str) -> Result<
         }
     }
     if let Some(pending) = state.pending_acknowledgement.as_ref() {
-        validate_identifier("pending vault id", &pending.vault_id)?;
-        validate_identifier("pending device id", &pending.device_id)?;
-        validate_identifier("pending transfer id", &pending.transfer_id)?;
-        if pending.device_id != expected_device_id
-            || (pending.purpose == BundlePurpose::Ownership && pending.generation == 0)
-            || !state.replica_ready
-        {
+        validate_pending_acknowledgement(pending, expected_device_id)?;
+        if !state.replica_ready {
             return Err("pending activation acknowledgement is inconsistent".to_string());
         }
+    }
+    if let Some(transfer) = state.outgoing_transfer.as_ref() {
+        validate_stored_outgoing(transfer)?;
+    }
+    if let Some(transfer) = state.incoming_transfer.as_ref() {
+        validate_stored_incoming(transfer)?;
+    }
+    if let Some(completed) = state.completed_activation.as_ref() {
+        validate_activation_record(completed)?;
     }
     Ok(())
 }
@@ -846,6 +1035,153 @@ mod tests {
             restarted
                 .pending_acknowledgement()
                 .expect("cleared acknowledgement"),
+            None
+        );
+    }
+
+    #[test]
+    fn bidirectional_transfer_state_survives_restart() {
+        let temp = TestDirectory::new("bidirectional-restart");
+        let manager = PairingManager::default();
+        manager
+            .initialize(temp.path().to_path_buf(), "device-phone".to_string())
+            .expect("initialize");
+        let metadata = BundleMetadata {
+            protocol_version: PROTOCOL_VERSION,
+            vault_id: "vault-1".to_string(),
+            device_id: "device-desktop".to_string(),
+            transfer_id: "transfer-return".to_string(),
+            generation: 2,
+            archive_bytes: 42,
+            archive_sha256: "a".repeat(64),
+        };
+        let outgoing = StoredOutgoingTransfer {
+            metadata: metadata.clone(),
+            purpose: BundlePurpose::Ownership,
+            committed: false,
+        };
+        manager
+            .store_outgoing_transfer(outgoing.clone())
+            .expect("store outgoing transfer");
+        drop(manager);
+
+        let restarted = PairingManager::default();
+        restarted
+            .initialize(temp.path().to_path_buf(), "device-phone".to_string())
+            .expect("restart");
+        assert_eq!(
+            restarted.outgoing_transfer().expect("outgoing transfer"),
+            Some(outgoing)
+        );
+        restarted
+            .mark_outgoing_committed("transfer-return")
+            .expect("commit outgoing transfer");
+        drop(restarted);
+
+        let committed = PairingManager::default();
+        committed
+            .initialize(temp.path().to_path_buf(), "device-phone".to_string())
+            .expect("restart committed state");
+        assert!(
+            committed
+                .outgoing_transfer()
+                .expect("committed outgoing transfer")
+                .expect("stored transfer")
+                .committed
+        );
+        let completed = PendingAcknowledgement {
+            vault_id: metadata.vault_id,
+            device_id: metadata.device_id,
+            transfer_id: metadata.transfer_id,
+            generation: metadata.generation,
+            purpose: BundlePurpose::Ownership,
+        };
+        committed
+            .complete_outgoing_activation(completed.clone())
+            .expect("complete outgoing activation");
+        drop(committed);
+
+        let acknowledged = PairingManager::default();
+        acknowledged
+            .initialize(temp.path().to_path_buf(), "device-phone".to_string())
+            .expect("restart completed transfer");
+        assert_eq!(
+            acknowledged.outgoing_transfer().expect("cleared outgoing"),
+            None
+        );
+        assert_eq!(
+            acknowledged
+                .completed_activation()
+                .expect("completed outgoing activation"),
+            Some(completed)
+        );
+    }
+
+    #[test]
+    fn incoming_transfer_and_completion_survive_restart() {
+        let temp = TestDirectory::new("incoming-restart");
+        let manager = PairingManager::default();
+        manager
+            .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+            .expect("initialize");
+        let metadata = BundleMetadata {
+            protocol_version: PROTOCOL_VERSION,
+            vault_id: "vault-1".to_string(),
+            device_id: "device-desktop".to_string(),
+            transfer_id: "incoming-return".to_string(),
+            generation: 3,
+            archive_bytes: 84,
+            archive_sha256: "b".repeat(64),
+        };
+        let incoming = StoredIncomingTransfer {
+            metadata: metadata.clone(),
+            source_device_id: "device-phone".to_string(),
+            purpose: BundlePurpose::Ownership,
+        };
+        manager
+            .store_incoming_transfer(incoming.clone())
+            .expect("store incoming transfer");
+        manager
+            .request_upload(BundlePurpose::Ownership)
+            .expect("store upload request");
+        drop(manager);
+
+        let restarted = PairingManager::default();
+        restarted
+            .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+            .expect("restart incoming state");
+        assert_eq!(
+            restarted.incoming_transfer().expect("incoming transfer"),
+            Some(incoming)
+        );
+        let completed = PendingAcknowledgement {
+            vault_id: metadata.vault_id,
+            device_id: metadata.device_id,
+            transfer_id: metadata.transfer_id,
+            generation: metadata.generation,
+            purpose: BundlePurpose::Ownership,
+        };
+        restarted
+            .complete_incoming_activation(completed.clone())
+            .expect("complete incoming activation");
+        drop(restarted);
+
+        let acknowledged = PairingManager::default();
+        acknowledged
+            .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+            .expect("restart completed state");
+        assert_eq!(
+            acknowledged
+                .completed_activation()
+                .expect("completed activation"),
+            Some(completed)
+        );
+        assert_eq!(
+            acknowledged.incoming_transfer().expect("cleared incoming"),
+            None
+        );
+        assert_eq!(
+            acknowledged.requested_upload().expect("cleared request"),
             None
         );
     }

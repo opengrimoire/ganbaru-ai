@@ -1140,6 +1140,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             vault::handoff::handoff_decode_pairing_qr,
             vault::handoff::handoff_enroll,
             vault::handoff::handoff_pairing_status,
+            vault::handoff::handoff_request_android_bundle,
             vault::vault_pick_create,
             vault::vault_pick_open,
             vault::vault_select_recent,

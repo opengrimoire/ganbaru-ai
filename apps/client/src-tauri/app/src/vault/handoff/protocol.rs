@@ -120,6 +120,8 @@ pub(crate) enum ControlMessage {
     },
     UploadBundle {
         metadata: BundleMetadata,
+        source_device_id: String,
+        purpose: BundlePurpose,
     },
     BundleMetadata {
         metadata: BundleMetadata,
@@ -128,6 +130,9 @@ pub(crate) enum ControlMessage {
         offset: u64,
     },
     BundleComplete {
+        transfer_id: String,
+    },
+    BundleStaged {
         transfer_id: String,
     },
     CommitStagedOwnership {
@@ -139,6 +144,10 @@ pub(crate) enum ControlMessage {
         transfer_id: String,
         owner_device_id: String,
         generation: u64,
+    },
+    CommitUploadedOwnership {
+        metadata: BundleMetadata,
+        source_device_id: String,
     },
     ActivationComplete {
         protocol_version: u16,
@@ -167,6 +176,7 @@ pub(crate) enum ControlMessage {
         available: bool,
         generation: u64,
         transfer_id: Option<String>,
+        requested_upload: Option<BundlePurpose>,
     },
     DoomscrollingExchange {
         protocol_version: u16,
@@ -230,15 +240,31 @@ impl ControlMessage {
             Self::BundlePrepared { metadata, .. } | Self::CommitStagedOwnership { metadata } => {
                 metadata.validate()?
             }
-            Self::DownloadBundle { metadata }
-            | Self::UploadBundle { metadata }
-            | Self::BundleMetadata { metadata } => metadata.validate()?,
+            Self::DownloadBundle { metadata } | Self::BundleMetadata { metadata } => {
+                metadata.validate()?
+            }
+            Self::UploadBundle {
+                metadata,
+                source_device_id,
+                ..
+            }
+            | Self::CommitUploadedOwnership {
+                metadata,
+                source_device_id,
+            } => {
+                metadata.validate()?;
+                validate_identifier("source device id", source_device_id)?;
+                if source_device_id == &metadata.device_id {
+                    return Err("bundle source and receiver must be different devices".to_string());
+                }
+            }
             Self::ResumeAt { offset } => {
                 if *offset > MAX_ARCHIVE_BYTES {
                     return Err("resume offset exceeds the archive limit".to_string());
                 }
             }
             Self::BundleComplete { transfer_id }
+            | Self::BundleStaged { transfer_id }
             | Self::ActivationAcknowledged { transfer_id }
             | Self::CancelTransfer { transfer_id }
             | Self::TransferCancelled { transfer_id } => {

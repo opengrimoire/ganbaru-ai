@@ -208,7 +208,9 @@ async fn receive(
     let acknowledgement = super::transport::acknowledge_activation(&pairing, &pending).await;
     if acknowledgement.is_ok() {
         pairing.clear_pending_acknowledgement(&pending.transfer_id)?;
-        pairing.remove_staging(&pending.transfer_id)?;
+        if let Err(error) = pairing.remove_staging(&pending.transfer_id) {
+            eprintln!("failed to clean completed vault transfer: {error}");
+        }
     }
     reload_application_shell(app)?;
     acknowledgement?;
@@ -251,7 +253,9 @@ async fn resume_committed_ownership(
     let acknowledgement = super::transport::acknowledge_activation(pairing, &pending).await;
     if acknowledgement.is_ok() {
         pairing.clear_pending_acknowledgement(&transfer_id)?;
-        pairing.remove_staging(&transfer_id)?;
+        if let Err(error) = pairing.remove_staging(&transfer_id) {
+            eprintln!("failed to clean completed vault transfer: {error}");
+        }
     }
     reload_application_shell(app)?;
     acknowledgement?;
@@ -264,7 +268,7 @@ async fn resume_committed_ownership(
 }
 
 #[cfg(target_os = "android")]
-fn reload_application_shell(app: &tauri::AppHandle) -> Result<(), String> {
+pub(super) fn reload_application_shell(app: &tauri::AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| "main application window is unavailable".to_string())?;
@@ -299,7 +303,10 @@ async fn flush_pending_acknowledgement(app: &tauri::AppHandle) -> Result<(), Str
     }
     super::transport::acknowledge_activation(&pairing, &pending).await?;
     pairing.clear_pending_acknowledgement(&pending.transfer_id)?;
-    pairing.remove_staging(&pending.transfer_id)
+    if let Err(error) = pairing.remove_staging(&pending.transfer_id) {
+        eprintln!("failed to clean acknowledged vault transfer: {error}");
+    }
+    Ok(())
 }
 
 #[cfg(target_os = "android")]
@@ -335,6 +342,10 @@ pub(crate) fn trigger_automatic_refresh(app: tauri::AppHandle) {
 async fn refresh_after_reconnect(app: &tauri::AppHandle) {
     let lifecycle = app.state::<ReceiverLifecycle>();
     let pairing = app.state::<PairingManager>().inner().clone();
+    if let Some(transfer) = pairing.outgoing_transfer().ok().flatten() {
+        super::source::trigger_requested_upload(app.clone(), transfer.purpose);
+        return;
+    }
     if !pairing.replica_ready().unwrap_or(false) {
         return;
     }
@@ -348,16 +359,27 @@ async fn refresh_after_reconnect(app: &tauri::AppHandle) {
     else {
         return;
     };
-    if status.can_write || status.owner_device_id != coordinator.device_id {
-        return;
-    }
-    let reachable = super::transport::probe_coordinator(&pairing, status.generation)
-        .await
-        .is_ok();
+    let poll = super::transport::probe_coordinator(&pairing, status.generation).await;
+    let reachable = poll.is_ok();
     let was_connected = lifecycle.connected.swap(reachable, Ordering::AcqRel);
-    if reachable && !was_connected {
+    if let Ok(Some(purpose)) = poll {
+        if status.can_write {
+            super::source::trigger_requested_upload(app.clone(), purpose);
+        }
+    } else if reachable
+        && !was_connected
+        && !status.can_write
+        && status.owner_device_id == coordinator.device_id
+    {
         trigger_automatic_refresh(app.clone());
     }
+}
+
+#[cfg(target_os = "android")]
+pub(crate) fn trigger_coordinator_reconciliation(app: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        refresh_after_reconnect(&app).await;
+    });
 }
 
 #[cfg(target_os = "android")]

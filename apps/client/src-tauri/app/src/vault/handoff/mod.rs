@@ -3,6 +3,7 @@
 pub(crate) mod coordinator;
 pub(crate) mod protocol;
 pub(crate) mod receiver;
+pub(crate) mod source;
 pub(crate) mod state;
 pub(crate) mod transport;
 
@@ -120,6 +121,17 @@ impl CoordinatorLifecycle {
             .map_err(|_| "coordinator lifecycle lock is unavailable".to_string())?;
         Ok(runtime.as_ref().map(|runtime| runtime.endpoint))
     }
+
+    fn request_sender(&self) -> Result<coordinator::CoordinatorSender, String> {
+        let runtime = self
+            .runtime
+            .lock()
+            .map_err(|_| "coordinator lifecycle lock is unavailable".to_string())?;
+        runtime
+            .as_ref()
+            .map(|runtime| runtime.requests.clone())
+            .ok_or_else(|| "vault handoff coordinator is not running".to_string())
+    }
 }
 
 pub(crate) fn initialize<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
@@ -138,7 +150,74 @@ pub(crate) fn initialize<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), St
                 coordinator.generation,
             )?;
     }
+    restore_outgoing_ownership(app, &pairing)?;
     Ok(())
+}
+
+fn restore_outgoing_ownership<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    pairing: &PairingManager,
+) -> Result<(), String> {
+    let Some(transfer) = pairing.outgoing_transfer()? else {
+        return Ok(());
+    };
+    let (_, archive_path) = pairing.outgoing_snapshot_paths(&transfer.metadata.transfer_id)?;
+    if let Err(error) = protocol::validate_staging_file(&archive_path, &transfer.metadata) {
+        if transfer.committed {
+            return Err(format!(
+                "committed handoff snapshot is unavailable: {error}"
+            ));
+        }
+        pairing.clear_outgoing_transfer(&transfer.metadata.transfer_id)?;
+        let _ = std::fs::remove_file(archive_path);
+        return Ok(());
+    }
+    if transfer.purpose != protocol::BundlePurpose::Ownership {
+        return Ok(());
+    }
+    let previous_generation = transfer
+        .metadata
+        .generation
+        .checked_sub(1)
+        .ok_or_else(|| "persisted ownership transfer generation is invalid".to_string())?;
+    let ownership = app.state::<super::ownership::VaultOwnershipManager>();
+    let status = ownership.status(&transfer.metadata.vault_id)?;
+    if transfer.committed {
+        return if status.transfer_phase
+            == (super::ownership::TransferPhase::OutgoingCommitted {
+                transfer_id: transfer.metadata.transfer_id,
+                receiver_device_id: transfer.metadata.device_id,
+                committed_generation: transfer.metadata.generation,
+            }) {
+            Ok(())
+        } else {
+            Err("committed handoff conflicts with durable ownership state".to_string())
+        };
+    }
+    if status.transfer_phase
+        == (super::ownership::TransferPhase::PreparingOutgoing {
+            transfer_id: transfer.metadata.transfer_id.clone(),
+            receiver_device_id: transfer.metadata.device_id.clone(),
+            next_generation: transfer.metadata.generation,
+        })
+    {
+        return Ok(());
+    }
+    if status.transfer_phase
+        == (super::ownership::TransferPhase::OutgoingCommitted {
+            transfer_id: transfer.metadata.transfer_id.clone(),
+            receiver_device_id: transfer.metadata.device_id.clone(),
+            committed_generation: transfer.metadata.generation,
+        })
+    {
+        return pairing.mark_outgoing_committed(&transfer.metadata.transfer_id);
+    }
+    ownership.begin_outgoing(
+        &transfer.metadata.vault_id,
+        previous_generation,
+        transfer.metadata.transfer_id,
+        transfer.metadata.device_id,
+    )
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -225,6 +304,27 @@ pub(crate) fn handoff_pairing_status<R: Runtime>(
         peer_label: peer.map(|peer| peer.device_label),
         coordinator_endpoint: coordinator.map(|coordinator| coordinator.endpoint),
     })
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[tauri::command]
+pub(crate) async fn handoff_request_android_bundle<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    purpose: protocol::BundlePurpose,
+) -> Result<(), String> {
+    let response = coordinator::request(
+        &app.state::<CoordinatorLifecycle>().request_sender()?,
+        coordinator::CoordinatorOperation::RequestUpload { purpose },
+    )
+    .await?;
+    match response {
+        coordinator::CoordinatorResponse::UploadRequested { purpose: requested }
+            if requested == purpose =>
+        {
+            Ok(())
+        }
+        _ => Err("coordinator returned an invalid upload request result".to_string()),
+    }
 }
 
 fn discover_private_lan_address() -> Result<IpAddr, String> {

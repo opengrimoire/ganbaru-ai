@@ -148,3 +148,10 @@ export async function receiveDesktopBundle(
 export function cancelDesktopBundleReceive(): Promise<void> {
   return invoke("handoff_cancel_receive");
 }
+
+/** Requests the linked Android owner to upload a whole-vault bundle. */
+export function requestAndroidBundle(
+  purpose: DesktopBundleReceiveMode,
+): Promise<void> {
+  return invoke("handoff_request_android_bundle", { purpose });
+}
