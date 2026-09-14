@@ -170,6 +170,11 @@ async fn receive(
     let staging = crate::vault::backup::android_handoff_staging_path(app, &metadata.transfer_id)?;
     crate::vault::backup::stage_handoff_archive(&archive, &staging, &metadata.vault_id).await?;
 
+    let preserve_local_copy = purpose == BundlePurpose::Ownership && !pairing.replica_ready()?;
+    if preserve_local_copy {
+        crate::vault::backup::vault_backup_to_downloads(app.clone()).await?;
+    }
+
     if purpose == BundlePurpose::Ownership {
         let (_, generation) =
             super::transport::commit_staged_ownership(&pairing, metadata.clone()).await?;
@@ -186,7 +191,7 @@ async fn receive(
         &staging,
         &metadata.transfer_id,
         &metadata.vault_id,
-        purpose == BundlePurpose::Ownership && !pairing.replica_ready()?,
+        preserve_local_copy,
     )
     .await?;
     let (device_id, _) = pairing.identity()?;

@@ -38,6 +38,8 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             vault::handoff::handoff_decode_pairing_qr,
             vault::handoff::handoff_enroll,
             vault::handoff::handoff_pairing_status,
+            vault::handoff::handoff_unlink,
+            vault::handoff::handoff_recover_local_copy,
             vault::handoff::receiver::handoff_receive_desktop_bundle,
             vault::handoff::receiver::handoff_cancel_receive,
             vault::vault_pick_open,

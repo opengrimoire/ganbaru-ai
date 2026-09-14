@@ -200,6 +200,43 @@ impl VaultOwnershipManager {
         }
     }
 
+    pub(crate) fn ensure_can_recover_local_copy(&self, vault_id: &str) -> Result<(), String> {
+        self.with_record(vault_id, |device_id, record| {
+            if record.owner_device_id == device_id {
+                return Err("this device already owns the vault".to_string());
+            }
+            if !matches!(
+                record.transfer_phase,
+                TransferPhase::Stable | TransferPhase::RecoveryRequired { .. }
+            ) {
+                return Err("finish or retry the committed handoff before recovery".to_string());
+            }
+            Ok(())
+        })
+    }
+
+    pub(crate) fn recover_local_copy(&self, vault_id: &str) -> Result<u64, String> {
+        self.mutate_record(vault_id, |device_id, record| {
+            if record.owner_device_id == device_id {
+                return Err("this device already owns the vault".to_string());
+            }
+            if !matches!(
+                record.transfer_phase,
+                TransferPhase::Stable | TransferPhase::RecoveryRequired { .. }
+            ) {
+                return Err("finish or retry the committed handoff before recovery".to_string());
+            }
+            let generation = record
+                .generation
+                .checked_add(1)
+                .ok_or_else(|| "vault ownership generation is exhausted".to_string())?;
+            record.owner_device_id = device_id.to_string();
+            record.generation = generation;
+            record.transfer_phase = TransferPhase::Stable;
+            Ok(generation)
+        })
+    }
+
     pub(crate) fn register_remote_owner(
         &self,
         vault_id: &str,
@@ -999,6 +1036,24 @@ mod tests {
         assert_eq!(status.owner_device_id, "desktop");
         assert_eq!(status.generation, 4);
         assert!(!status.can_write);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn explicit_lost_device_recovery_creates_a_new_local_generation() {
+        let path = test_path("explicit-recovery");
+        let manager = load_manager(&path, "phone");
+        manager
+            .register_remote_owner("vault", "desktop".into(), 4)
+            .unwrap();
+
+        assert_eq!(manager.recover_local_copy("vault").unwrap(), 5);
+        let status = manager.status("vault").unwrap();
+        assert!(status.can_write);
+        assert_eq!(status.owner_device_id, "phone");
+        assert_eq!(status.generation, 5);
+
+        assert!(manager.recover_local_copy("vault").is_err());
         let _ = fs::remove_file(path);
     }
 }

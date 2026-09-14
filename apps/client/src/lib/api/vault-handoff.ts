@@ -18,6 +18,11 @@ export interface PairingStatus {
   peerDeviceId: string | null;
   peerLabel: string | null;
   coordinatorEndpoint: string | null;
+  vaultId: string | null;
+  canWrite: boolean | null;
+  recoveryRequired: boolean;
+  replicaReady: boolean;
+  pendingTransfer: boolean;
 }
 
 export type DesktopBundleReceiveMode = "ownership" | "refresh";
@@ -72,7 +77,15 @@ function parseInvitation(value: unknown): PairingInvitation {
 }
 
 function parseStatus(value: unknown): PairingStatus {
-  if (!isRecord(value) || typeof value.deviceId !== "string" || typeof value.linked !== "boolean") {
+  if (
+    !isRecord(value) ||
+    typeof value.deviceId !== "string" ||
+    typeof value.linked !== "boolean" ||
+    (value.canWrite !== null && typeof value.canWrite !== "boolean") ||
+    typeof value.recoveryRequired !== "boolean" ||
+    typeof value.replicaReady !== "boolean" ||
+    typeof value.pendingTransfer !== "boolean"
+  ) {
     throw new Error("Invalid pairing status response");
   }
   return {
@@ -81,6 +94,11 @@ function parseStatus(value: unknown): PairingStatus {
     peerDeviceId: nullableString(value.peerDeviceId, "peer device id"),
     peerLabel: nullableString(value.peerLabel, "peer label"),
     coordinatorEndpoint: nullableString(value.coordinatorEndpoint, "coordinator endpoint"),
+    vaultId: nullableString(value.vaultId, "vault id"),
+    canWrite: value.canWrite as boolean | null,
+    recoveryRequired: value.recoveryRequired,
+    replicaReady: value.replicaReady,
+    pendingTransfer: value.pendingTransfer,
   };
 }
 
@@ -154,4 +172,18 @@ export function requestAndroidBundle(
   purpose: DesktopBundleReceiveMode,
 ): Promise<void> {
   return invoke("handoff_request_android_bundle", { purpose });
+}
+
+/** Removes the linked-device relationship without changing the current owner. */
+export function unlinkVaultDevice(): Promise<void> {
+  return invoke("handoff_unlink");
+}
+
+/** Explicitly forks the last local copy after the owning device is permanently unavailable. */
+export async function recoverLocalVaultCopy(): Promise<number> {
+  const generation = await invoke<unknown>("handoff_recover_local_copy");
+  if (!Number.isSafeInteger(generation) || (generation as number) < 0) {
+    throw new Error("Invalid vault recovery generation response");
+  }
+  return generation as number;
 }

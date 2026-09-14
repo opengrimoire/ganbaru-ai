@@ -2,6 +2,7 @@ import type {
   dataFolderError as enDataFolderError,
   language as enLanguage,
   vaultOwnership as enVaultOwnership,
+  vaultHandoff as enVaultHandoff,
   vaultSetup as enVaultSetup,
 } from "../en/vault";
 import type { MessageShape } from "../types";
@@ -68,3 +69,60 @@ export const vaultOwnership = {
     "Copia de solo lectura. Usa los controles del dispositivo vinculado para transferir la propiedad aquí.",
   recovery: "Esta bóveda necesita recuperar la transferencia antes de poder modificarse.",
 } as const satisfies MessageShape<typeof enVaultOwnership>;
+
+export const vaultHandoff = {
+  heading: "Dispositivo vinculado",
+  description:
+    "Mueve una bóveda completa entre este dispositivo y un teléfono Android en la misma red local.",
+  notLinked: "No hay un dispositivo vinculado.",
+  linkedTo: (device: string) => `Vinculado con ${device}`,
+  desktopDevice: "Computadora",
+  androidDevice: "Teléfono Android",
+  thisDeviceOwns: "Este dispositivo puede hacer cambios.",
+  otherDeviceOwns: "Este dispositivo tiene una copia de solo lectura.",
+  transferPending: "Hay una transferencia de la bóveda pendiente de terminar.",
+  linkPhone: "Vincular teléfono Android",
+  linkToDesktop: "Vincular con computadora",
+  createQr: "Mostrar código QR de vinculación",
+  qrInstructions:
+    "En Android, abre los ajustes de Datos y escanea este código. Caduca en cinco minutos.",
+  qrAlt: "Código QR de vinculación",
+  scanQr: "Escanear código QR de la computadora",
+  scanning: "Apunta la cámara al código QR mostrado en la computadora.",
+  cameraStarting: "Iniciando cámara...",
+  stopScanning: "Detener escaneo",
+  deviceLabel: "Teléfono Android",
+  useHere: "Usar en este dispositivo",
+  refreshCopy: "Actualizar copia de solo lectura",
+  retry: "Reintentar",
+  cancel: "Cancelar transferencia",
+  unlink: "Desvincular dispositivo",
+  unlinkTitle: "¿Desvincular este dispositivo?",
+  unlinkMessage:
+    "El propietario actual no cambiará. Una copia de solo lectura seguirá así hasta que la recuperes explícitamente.",
+  recover: "Recuperar esta copia local",
+  recoverTitle: "¿Usar esta copia como una bóveda separada?",
+  recoverMessage:
+    "Usa esto solo si el dispositivo propietario ya no está disponible. Ambas copias se conservan, este dispositivo podrá escribir y los dispositivos se desvincularán. Los cambios posteriores no se combinarán automáticamente.",
+  workingOwnership: "Moviendo la bóveda completa...",
+  workingRefresh: "Actualizando la copia completa de solo lectura...",
+  workingPairing: "Vinculando de forma segura...",
+  workingRequest: "Esperando al otro dispositivo...",
+  linked: "Dispositivo vinculado.",
+  refreshed: "Copia de solo lectura actualizada.",
+  requestSent: "Se envió la solicitud. Mantén ambas apps abiertas en la misma red.",
+  unlinked: "Dispositivo desvinculado.",
+  recovered: "Esta copia local ahora es una bóveda separada con escritura.",
+  localBackup:
+    "Antes de que la bóveda de la computadora reemplace datos de Android por primera vez, Ganbaru AI guarda una copia recuperable en Descargas.",
+  offlineNotice:
+    "Las alarmas de Android ya programadas y las reglas de Doomscrolling aceptadas continúan sin conexión. Los nuevos cambios del Calendario en la computadora llegan a Android solo después de una actualización exitosa.",
+  sameNetwork: "Mantén ambas apps abiertas en la misma red local.",
+  failed: (details: string) => `Falló la acción del dispositivo vinculado: ${details}`,
+  blockerChat: "Termina o detén el trabajo activo de Chat antes de mover la bóveda.",
+  blockerFocus: "Termina o detén la sesión activa de Pomodoro antes de mover la bóveda.",
+  blockerTransfer: "Termina o reintenta primero la transferencia actual de la bóveda.",
+  unreachable:
+    "La computadora no está disponible. Mantén ambas apps abiertas en la misma red local y reintenta.",
+  unknownError: "Error desconocido",
+} as const satisfies MessageShape<typeof enVaultHandoff>;

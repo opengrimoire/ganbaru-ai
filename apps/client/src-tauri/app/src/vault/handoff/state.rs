@@ -220,6 +220,46 @@ impl PairingManager {
         Ok(initialized_state(&inner)?.coordinator.clone())
     }
 
+    pub(crate) fn has_pending_transfer(&self) -> Result<bool, String> {
+        let inner = self.lock()?;
+        let state = initialized_state(&inner)?;
+        Ok(state.pending_acknowledgement.is_some()
+            || state.outgoing_transfer.is_some()
+            || state.incoming_transfer.is_some()
+            || state.requested_upload.is_some())
+    }
+
+    pub(crate) fn ensure_can_unlink(&self) -> Result<(), String> {
+        if self.has_pending_transfer()? {
+            return Err("finish or retry the active handoff before unlinking".to_string());
+        }
+        Ok(())
+    }
+
+    pub(crate) fn unlink(&self) -> Result<(), String> {
+        let mut inner = self.lock()?;
+        let previous = initialized_state(&inner)?.clone();
+        if previous.pending_acknowledgement.is_some()
+            || previous.outgoing_transfer.is_some()
+            || previous.incoming_transfer.is_some()
+            || previous.requested_upload.is_some()
+        {
+            return Err("finish or retry the active handoff before unlinking".to_string());
+        }
+        let state = initialized_state_mut(&mut inner)?;
+        state.linked_peer = None;
+        state.coordinator = None;
+        state.replica_ready = false;
+        state.completed_activation = None;
+        if let Err(error) = persist_initialized_state(&inner) {
+            inner.state = Some(previous);
+            return Err(error);
+        }
+        inner.invitations.clear();
+        inner.outgoing_bundles.clear();
+        Ok(())
+    }
+
     #[cfg_attr(not(target_os = "android"), allow(dead_code))]
     pub(crate) fn replica_ready(&self) -> Result<bool, String> {
         let inner = self.lock()?;
@@ -996,6 +1036,41 @@ mod tests {
             )
             .unwrap_err()
             .contains("expired"));
+    }
+
+    #[test]
+    fn unlink_clears_the_peer_but_refuses_active_transfer_state() {
+        let temp = TestDirectory::new("unlink");
+        let manager = PairingManager::default();
+        manager
+            .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+            .expect("initialize");
+        let invitation = manager
+            .create_invitation(
+                "127.0.0.1:41000".parse().expect("endpoint"),
+                "vault-1".to_string(),
+                0,
+                100,
+            )
+            .expect("invitation");
+        let phone = create_identity("device-phone".to_string()).expect("phone identity");
+        manager
+            .enroll_peer(enrollment(&invitation, &phone), 101)
+            .expect("enroll");
+        manager
+            .request_upload(BundlePurpose::Refresh)
+            .expect("request upload");
+
+        assert!(manager.unlink().is_err());
+        {
+            let mut inner = manager.lock().expect("pairing lock");
+            initialized_state_mut(&mut inner)
+                .expect("pairing state")
+                .requested_upload = None;
+            persist_initialized_state(&inner).expect("clear request");
+        }
+        manager.unlink().expect("unlink stable pairing");
+        assert!(manager.linked_peer().expect("peer status").is_none());
     }
 
     #[test]

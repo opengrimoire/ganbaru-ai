@@ -49,6 +49,11 @@ pub(crate) struct PairingStatus {
     peer_device_id: Option<String>,
     peer_label: Option<String>,
     coordinator_endpoint: Option<String>,
+    vault_id: Option<String>,
+    can_write: Option<bool>,
+    recovery_required: bool,
+    replica_ready: bool,
+    pending_transfer: bool,
 }
 
 impl CoordinatorLifecycle {
@@ -297,13 +302,63 @@ pub(crate) fn handoff_pairing_status<R: Runtime>(
     let (device_id, _) = manager.identity()?;
     let peer = manager.linked_peer()?;
     let coordinator = manager.coordinator_pin()?;
+    let vault_id = peer
+        .as_ref()
+        .map(|peer| peer.vault_id.clone())
+        .or_else(|| {
+            coordinator
+                .as_ref()
+                .map(|coordinator| coordinator.vault_id.clone())
+        })
+        .or_else(|| super::active_vault_id(&app).ok());
+    let ownership = vault_id
+        .as_deref()
+        .map(|vault_id| {
+            app.state::<super::ownership::VaultOwnershipManager>()
+                .status(vault_id)
+        })
+        .transpose()?;
     Ok(PairingStatus {
         device_id,
         linked: peer.is_some() || coordinator.is_some(),
         peer_device_id: peer.as_ref().map(|peer| peer.device_id.clone()),
-        peer_label: peer.map(|peer| peer.device_label),
+        peer_label: peer.as_ref().map(|peer| peer.device_label.clone()),
         coordinator_endpoint: coordinator.map(|coordinator| coordinator.endpoint),
+        vault_id,
+        can_write: ownership.as_ref().map(|status| status.can_write),
+        recovery_required: ownership
+            .as_ref()
+            .is_some_and(|status| status.role == "recovery"),
+        replica_ready: manager.replica_ready()? || peer.is_some(),
+        pending_transfer: manager.has_pending_transfer()?,
     })
+}
+
+#[tauri::command]
+pub(crate) fn handoff_unlink<R: Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
+    let manager = app.state::<PairingManager>();
+    manager.ensure_can_unlink()?;
+    let ownership = super::ownership::active_status(&app)?;
+    if !matches!(
+        ownership.transfer_phase,
+        super::ownership::TransferPhase::Stable
+    ) {
+        return Err("finish or retry the active handoff before unlinking".to_string());
+    }
+    manager.unlink()
+}
+
+#[tauri::command]
+pub(crate) fn handoff_recover_local_copy<R: Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<u64, String> {
+    let manager = app.state::<PairingManager>();
+    manager.ensure_can_unlink()?;
+    let vault_id = super::active_vault_id(&app)?;
+    let ownership = app.state::<super::ownership::VaultOwnershipManager>();
+    ownership.ensure_can_recover_local_copy(&vault_id)?;
+    manager.unlink()?;
+    ownership.recover_local_copy(&vault_id)
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

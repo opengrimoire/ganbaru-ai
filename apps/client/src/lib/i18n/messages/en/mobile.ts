@@ -9,7 +9,7 @@ export const mobile = {
   vaultSetup: {
     title: "Set up your data",
     intro:
-      "Start with new data, restore a .ganbaru-backup file, or import an existing Ganbaru AI folder.",
+      "Start with new data, restore a backup, import a folder, or link to your desktop on the same local network.",
     dataLocation: "Data location",
     startFromZero: "Start from zero",
     restoreBackupFile: "Restore backup file",
