@@ -12,6 +12,7 @@ Android requests access in context, only after the user enables a feature that n
 | Usage Access | Count explicitly selected packages and reconcile selected-app limits | No Android usage counting or limit enforcement; configuration remains readable. |
 | Accessibility Service | Observe selected package transitions and perform Home for matching rules | No selected-app blocking; usage counting may remain if Usage Access is granted. |
 | Document tree and file grants | Import, restore, selected Music tree, and managed files | Only the selected action fails; no broad storage fallback is requested. |
+| Camera runtime permission | Scan a desktop pairing QR code while the user is on the linking screen | Linking remains available later from Data settings; no image or video is stored. |
 
 ## Special-access disclosure
 
@@ -41,7 +42,7 @@ Persisted document permissions are retained only for sources that require ongoin
 
 ## Other excluded permissions
 
-Current features do not request contacts, microphone, camera, location, screen capture, system overlay, device-owner status, or VPN consent. A future feature requires a new spec, localized disclosure, denial behavior, tests, and policy review before such authority enters the manifest.
+Current features do not request contacts, microphone, location, screen capture, system overlay, device-owner status, or VPN consent. Android exposes one camera permission for camera capture, so it cannot be narrowed to a separate still-photo-only permission. Ganbaru AI requests it only when the QR scanner is shown, requests no microphone access, processes preview frames in memory, and stops the stream after a code is decoded or the scanner closes. A future feature requires a new spec, localized disclosure, denial behavior, tests, and policy review before new authority enters the manifest.
 
 ## WebView and bridge
 

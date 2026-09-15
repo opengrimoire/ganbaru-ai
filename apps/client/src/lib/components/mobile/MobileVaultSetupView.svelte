@@ -4,7 +4,6 @@
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import { onMount } from "svelte";
   import VaultSetupContent from "$lib/components/vault/VaultSetupContent.svelte";
-  import VaultHandoffPanel from "$lib/components/vault/VaultHandoffPanel.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
     formatDataFolderError,
@@ -34,7 +33,6 @@
   let defaultLocation = $state<DataFolderDefaultLocation | null>(null);
   let busy = $state<"default" | "restore" | "import" | null>(null);
   let setupError = $state<SetupError | null>(null);
-  let linkedVaultInfo = $state<DataFolderInfo | null>(null);
   const error = $derived(
     setupError ? formatDataFolderError(setupError.raw, setupError.action, t) : null,
   );
@@ -70,13 +68,6 @@
     }
   }
 
-  async function prepareLinkTarget(): Promise<void> {
-    if (!linkedVaultInfo) linkedVaultInfo = await useDefaultDataFolder();
-  }
-
-  function finishLinkedSetup(): void {
-    if (linkedVaultInfo) onReady(linkedVaultInfo);
-  }
 </script>
 
 {#snippet setupActions()}
@@ -121,13 +112,6 @@
       <span>{t("mobile.vaultSetup.importExistingFolder")}</span>
     </button>
 
-    <div class="my-2 h-px bg-border" aria-hidden="true"></div>
-
-    <VaultHandoffPanel
-      platform="android"
-      beforeEnroll={prepareLinkTarget}
-      onActivated={finishLinkedSetup}
-    />
   </div>
 {/snippet}
 

@@ -12,7 +12,8 @@ use std::time::Duration;
 #[cfg(target_os = "android")]
 use tauri::Manager;
 
-const RECONNECT_INTERVAL: Duration = Duration::from_secs(30);
+const CONNECTED_REPOLL_DELAY: Duration = Duration::from_secs(1);
+const DISCONNECTED_RETRY_DELAY: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -344,25 +345,25 @@ pub(crate) fn trigger_automatic_refresh(app: tauri::AppHandle) {
 }
 
 #[cfg(target_os = "android")]
-async fn refresh_after_reconnect(app: &tauri::AppHandle) {
+async fn refresh_after_reconnect(app: &tauri::AppHandle) -> bool {
     let lifecycle = app.state::<ReceiverLifecycle>();
     let pairing = app.state::<PairingManager>().inner().clone();
     if let Some(transfer) = pairing.outgoing_transfer().ok().flatten() {
         super::source::trigger_requested_upload(app.clone(), transfer.purpose);
-        return;
+        return true;
     }
     if !pairing.replica_ready().unwrap_or(false) {
-        return;
+        return false;
     }
     let Some(coordinator) = pairing.coordinator_pin().ok().flatten() else {
-        return;
+        return false;
     };
     let Some(status) = app
         .state::<VaultOwnershipManager>()
         .status(&coordinator.vault_id)
         .ok()
     else {
-        return;
+        return false;
     };
     let poll = super::transport::probe_coordinator(&pairing, status.generation).await;
     let reachable = poll.is_ok();
@@ -378,12 +379,13 @@ async fn refresh_after_reconnect(app: &tauri::AppHandle) {
     {
         trigger_automatic_refresh(app.clone());
     }
+    reachable
 }
 
 #[cfg(target_os = "android")]
 pub(crate) fn trigger_coordinator_reconciliation(app: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
-        refresh_after_reconnect(&app).await;
+        let _ = refresh_after_reconnect(&app).await;
     });
 }
 
@@ -392,8 +394,13 @@ pub(crate) fn start_reconnect_refresh(app: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_secs(5)).await;
         loop {
-            refresh_after_reconnect(&app).await;
-            tokio::time::sleep(RECONNECT_INTERVAL).await;
+            let reachable = refresh_after_reconnect(&app).await;
+            tokio::time::sleep(if reachable {
+                CONNECTED_REPOLL_DELAY
+            } else {
+                DISCONNECTED_RETRY_DELAY
+            })
+            .await;
         }
     });
 }

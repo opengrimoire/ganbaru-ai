@@ -227,12 +227,12 @@
       "src/lib/components/settings/FocusSection.svelte",
       "src/lib/components/settings/MusicSection.svelte",
       "src/lib/components/settings/DoomscrollingSection.svelte",
-      "src/lib/components/settings/DataSection.svelte",
       "src/lib/components/settings/UpdatesSection.svelte",
       "src/lib/components/settings/ShortcutsSection.svelte",
       "src/lib/components/settings/AboutSection.svelte"
     ],
     "forbiddenModules": [
+      "src/lib/components/settings/DataSection.svelte",
       "src/lib/components/settings/DoomscrollingLimitEditor.svelte",
       "src/lib/components/settings/NotesTransferSettingsPanel.svelte",
       "src/lib/components/notes/NotesHtmlImportDialog.svelte",

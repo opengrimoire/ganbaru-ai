@@ -1,31 +1,42 @@
 //! Secure, LAN-only pairing and whole-vault bundle transport.
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) mod coordinator;
+#[cfg(target_os = "linux")]
+mod network_access;
+#[cfg(target_os = "linux")]
+pub(crate) use network_access::run_privileged_helper_if_requested;
 pub(crate) mod protocol;
 pub(crate) mod receiver;
 pub(crate) mod source;
 pub(crate) mod state;
 pub(crate) mod transport;
 
-use protocol::{decode_invitation, QrMatrix};
+use protocol::decode_invitation;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use protocol::{encode_invitation, invitation_qr_matrix};
+use protocol::{encode_invitation, invitation_qr_matrix, QrMatrix};
 use serde::Serialize;
 use state::PairingManager;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::sync::Mutex;
 use tauri::{Manager, Runtime};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tokio::net::TcpListener;
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 const COORDINATOR_PORT: u16 = 43_821;
 
 pub(crate) use transport::sha256_file;
 
 #[derive(Default)]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) struct CoordinatorLifecycle {
     runtime: Mutex<Option<CoordinatorRuntime>>,
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 struct CoordinatorRuntime {
     endpoint: SocketAddr,
     shutdown: tokio::sync::oneshot::Sender<()>,
@@ -34,11 +45,14 @@ struct CoordinatorRuntime {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) struct PairingInvitationView {
     invitation: String,
     qr: QrMatrix,
     endpoint: String,
     expires_at_unix_ms: i64,
+    #[cfg(target_os = "linux")]
+    network_access: network_access::NetworkAccessStatus,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -54,8 +68,11 @@ pub(crate) struct PairingStatus {
     recovery_required: bool,
     replica_ready: bool,
     pending_transfer: bool,
+    #[cfg(target_os = "linux")]
+    network_access: network_access::NetworkAccessStatus,
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 impl CoordinatorLifecycle {
     async fn start_on<R: Runtime>(
         &self,
@@ -263,7 +280,54 @@ pub(crate) async fn handoff_create_pairing_invitation<R: Runtime>(
         invitation: encoded,
         endpoint: endpoint.to_string(),
         expires_at_unix_ms: invitation.expires_at_unix_ms,
+        #[cfg(target_os = "linux")]
+        network_access: network_access::status(
+            &app.path()
+                .app_config_dir()
+                .map_err(|error| format!("find app config directory: {error}"))?,
+            match endpoint.ip() {
+                IpAddr::V4(address) => address,
+                IpAddr::V6(_) => {
+                    return Err("Linux firewall access requires an IPv4 LAN address".to_string())
+                }
+            },
+        ),
     })
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub(crate) async fn handoff_grant_network_access<R: Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<network_access::NetworkAccessStatus, String> {
+    let endpoint = app
+        .state::<CoordinatorLifecycle>()
+        .endpoint()?
+        .ok_or_else(|| "vault handoff coordinator is not running".to_string())?;
+    let IpAddr::V4(address) = endpoint.ip() else {
+        return Err("Linux firewall access requires an IPv4 LAN address".to_string());
+    };
+    let config_dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|error| format!("find app config directory: {error}"))?;
+    tauri::async_runtime::spawn_blocking(move || network_access::grant(&config_dir, address))
+        .await
+        .map_err(|error| format!("authorize Linux network access: {error}"))?
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub(crate) async fn handoff_revoke_network_access<R: Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<network_access::NetworkAccessStatus, String> {
+    let config_dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|error| format!("find app config directory: {error}"))?;
+    tauri::async_runtime::spawn_blocking(move || network_access::revoke(&config_dir))
+        .await
+        .map_err(|error| format!("revoke Linux network access: {error}"))?
 }
 
 #[tauri::command]
@@ -318,6 +382,8 @@ pub(crate) fn handoff_pairing_status<R: Runtime>(
                 .status(vault_id)
         })
         .transpose()?;
+    #[cfg(target_os = "linux")]
+    let network_access = desktop_network_access_status(&app)?;
     Ok(PairingStatus {
         device_id,
         linked: peer.is_some() || coordinator.is_some(),
@@ -331,7 +397,27 @@ pub(crate) fn handoff_pairing_status<R: Runtime>(
             .is_some_and(|status| status.role == "recovery"),
         replica_ready: manager.replica_ready()? || peer.is_some(),
         pending_transfer: manager.has_pending_transfer()?,
+        #[cfg(target_os = "linux")]
+        network_access,
     })
+}
+
+#[cfg(target_os = "linux")]
+fn desktop_network_access_status<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<network_access::NetworkAccessStatus, String> {
+    let endpoint = app
+        .state::<CoordinatorLifecycle>()
+        .endpoint()?
+        .ok_or_else(|| "vault handoff coordinator is not running".to_string())?;
+    let IpAddr::V4(address) = endpoint.ip() else {
+        return Err("Linux firewall access requires an IPv4 LAN address".to_string());
+    };
+    let config_dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|error| format!("find app config directory: {error}"))?;
+    Ok(network_access::status(&config_dir, address))
 }
 
 #[tauri::command]
@@ -382,6 +468,7 @@ pub(crate) async fn handoff_request_android_bundle<R: Runtime>(
     }
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn discover_private_lan_address() -> Result<IpAddr, String> {
     let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))
         .map_err(|error| format!("inspect LAN address: {error}"))?;
@@ -398,6 +485,7 @@ fn discover_private_lan_address() -> Result<IpAddr, String> {
     Ok(address)
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn is_lan_address(address: IpAddr) -> bool {
     match address {
         IpAddr::V4(address) => {
@@ -411,7 +499,7 @@ fn is_lan_address(address: IpAddr) -> bool {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
 mod tests {
     use super::*;
 

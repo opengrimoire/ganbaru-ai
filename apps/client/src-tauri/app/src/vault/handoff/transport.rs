@@ -4,15 +4,17 @@ use super::protocol::{
     read_control, unix_time_ms, write_control, BundleMetadata, BundlePurpose, ControlMessage,
     PairingInvitation, PROTOCOL_VERSION, TRANSFER_CHUNK_BYTES,
 };
-use super::state::{
-    certificate_fingerprint, decode_certificate, encode_certificate, Enrollment, PairingManager,
-    TlsIdentity,
-};
+use super::state::{certificate_fingerprint, encode_certificate, PairingManager, TlsIdentity};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use super::state::{decode_certificate, Enrollment};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, WebPkiSupportedAlgorithms};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
-use rustls::{DigitallySignedStruct, RootCertStore, SignatureScheme};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use rustls::RootCertStore;
+use rustls::{DigitallySignedStruct, SignatureScheme};
 use sha2::{Digest, Sha256};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -20,12 +22,20 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
-use tokio_rustls::{TlsAcceptor, TlsConnector};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use tokio::net::TcpListener;
+use tokio::net::TcpStream;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use tokio_rustls::TlsAcceptor;
+use tokio_rustls::TlsConnector;
 
 const TLS_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(15);
 const CHUNK_TIMEOUT: Duration = Duration::from_secs(20);
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+const UPLOAD_REQUEST_WAIT: Duration = Duration::from_secs(10);
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+const UPLOAD_REQUEST_POLL_INTERVAL: Duration = Duration::from_millis(200);
 
 #[allow(dead_code)] // H04 owns cancellation from the transfer workflow.
 #[derive(Clone, Default)]
@@ -102,7 +112,7 @@ impl ServerCertVerifier for PinnedServerVerifier {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
 pub(crate) async fn serve(
     listener: TcpListener,
     manager: PairingManager,
@@ -111,6 +121,7 @@ pub(crate) async fn serve(
     serve_with_coordinator(listener, manager, None, shutdown).await;
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) async fn serve_with_coordinator(
     listener: TcpListener,
     manager: PairingManager,
@@ -141,6 +152,7 @@ pub(crate) async fn serve_with_coordinator(
     }
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 async fn handle_connection(
     socket: TcpStream,
     manager: PairingManager,
@@ -330,14 +342,12 @@ async fn handle_connection(
             ..
         } => {
             manager.verify_authenticated_peer(&device_id, peer_certificate.as_ref(), &vault_id)?;
-            send_coordinator_response(
+            send_upload_status_response(
                 &mut stream,
                 coordinator.as_ref(),
-                super::coordinator::CoordinatorOperation::PollUpload {
-                    vault_id,
-                    device_id,
-                    generation,
-                },
+                vault_id,
+                device_id,
+                generation,
             )
             .await
         }
@@ -375,6 +385,7 @@ async fn handle_connection(
     }
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 async fn send_coordinator_response(
     stream: &mut tokio_rustls::server::TlsStream<TcpStream>,
     coordinator: Option<&super::coordinator::CoordinatorSender>,
@@ -393,6 +404,58 @@ async fn send_coordinator_response(
         Ok(response) => response,
         Err(error) => return send_error(stream, "handoff_rejected", &error, true).await,
     };
+    send_coordinator_response_value(stream, response).await
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+async fn send_upload_status_response(
+    stream: &mut tokio_rustls::server::TlsStream<TcpStream>,
+    coordinator: Option<&super::coordinator::CoordinatorSender>,
+    vault_id: String,
+    device_id: String,
+    generation: u64,
+) -> Result<(), String> {
+    let Some(coordinator) = coordinator else {
+        return send_error(
+            stream,
+            "coordinator_unavailable",
+            "vault handoff coordinator operations are unavailable",
+            true,
+        )
+        .await;
+    };
+    let started = tokio::time::Instant::now();
+    loop {
+        let response = super::coordinator::request(
+            coordinator,
+            super::coordinator::CoordinatorOperation::PollUpload {
+                vault_id: vault_id.clone(),
+                device_id: device_id.clone(),
+                generation,
+            },
+        )
+        .await;
+        match response {
+            Ok(
+                response @ super::coordinator::CoordinatorResponse::UploadStatus {
+                    requested_upload: Some(_),
+                    ..
+                },
+            ) => return send_coordinator_response_value(stream, response).await,
+            Ok(response) if started.elapsed() >= UPLOAD_REQUEST_WAIT => {
+                return send_coordinator_response_value(stream, response).await;
+            }
+            Ok(_) => tokio::time::sleep(UPLOAD_REQUEST_POLL_INTERVAL).await,
+            Err(error) => return send_error(stream, "handoff_rejected", &error, true).await,
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+async fn send_coordinator_response_value(
+    stream: &mut tokio_rustls::server::TlsStream<TcpStream>,
+    response: super::coordinator::CoordinatorResponse,
+) -> Result<(), String> {
     let message = match response {
         super::coordinator::CoordinatorResponse::Prepared { metadata, purpose } => {
             ControlMessage::BundlePrepared { metadata, purpose }
@@ -446,6 +509,7 @@ async fn send_coordinator_response(
     timeout_control(write_control(stream, &message)).await
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 async fn serve_download(
     stream: &mut tokio_rustls::server::TlsStream<TcpStream>,
     manager: &PairingManager,
@@ -500,6 +564,7 @@ async fn serve_download(
     }
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 async fn serve_upload(
     stream: &mut tokio_rustls::server::TlsStream<TcpStream>,
     manager: &PairingManager,
@@ -988,7 +1053,7 @@ pub(crate) async fn download_bundle(
     download_bundle_inner(manager, metadata, cancellation, None).await
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
 mod tests;
 
 #[allow(dead_code)] // H04 connects the Android transfer workflow.
@@ -1149,6 +1214,7 @@ async fn connect_pinned(
     .map_err(|error| format!("establish pinned TLS connection: {error}"))
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn server_config(manager: &PairingManager) -> Result<rustls::ServerConfig, String> {
     let (_, identity) = manager.identity()?;
     let builder = rustls::ServerConfig::builder();
@@ -1178,6 +1244,7 @@ async fn timeout_control<T>(
         .map_err(|_| "handoff control message timed out".to_string())?
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 async fn send_error<W>(
     writer: &mut W,
     code: &str,

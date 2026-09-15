@@ -470,6 +470,47 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *) {
   background: var(--sidebar);
 }
 
+@keyframes ganbaru-loading-ring-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes ganbaru-loading-ring-length {
+  0% {
+    stroke-dasharray: 2 112;
+    stroke-dashoffset: 0;
+  }
+  50% {
+    stroke-dasharray: 78 36;
+    stroke-dashoffset: -30;
+  }
+  100% {
+    stroke-dasharray: 2 112;
+    stroke-dashoffset: -114;
+  }
+}
+
+.ganbaru-loading-ring {
+  animation: ganbaru-loading-ring-rotate 1.4s linear infinite;
+  transform-origin: center;
+}
+
+.ganbaru-loading-ring-stroke {
+  animation: ganbaru-loading-ring-length 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ganbaru-loading-ring,
+  .ganbaru-loading-ring-stroke {
+    animation: none;
+  }
+
+  .ganbaru-loading-ring-stroke {
+    stroke-dasharray: 78 36;
+  }
+}
+
 .app-shell[data-size-class="compact"] {
   --shell-gap: 0.25rem;
   --content-radius: 0.375rem;

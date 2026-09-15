@@ -10,6 +10,17 @@ export interface PairingInvitation {
   qr: PairingQrMatrix;
   endpoint: string;
   expiresAtUnixMs: number;
+  networkAccess?: DesktopNetworkAccess;
+}
+
+export type DesktopNetworkAccessState =
+  | "notRequired"
+  | "authorizationRequired"
+  | "granted"
+  | "manualActionRequired";
+
+export interface DesktopNetworkAccess {
+  state: DesktopNetworkAccessState;
 }
 
 export interface PairingStatus {
@@ -23,6 +34,7 @@ export interface PairingStatus {
   recoveryRequired: boolean;
   replicaReady: boolean;
   pendingTransfer: boolean;
+  networkAccess?: DesktopNetworkAccess;
 }
 
 export type DesktopBundleReceiveMode = "ownership" | "refresh";
@@ -73,7 +85,25 @@ function parseInvitation(value: unknown): PairingInvitation {
     qr: parseQrMatrix(value.qr),
     endpoint: value.endpoint,
     expiresAtUnixMs: value.expiresAtUnixMs,
+    networkAccess: value.networkAccess === undefined
+      ? undefined
+      : parseDesktopNetworkAccess(value.networkAccess),
   };
+}
+
+function parseDesktopNetworkAccess(value: unknown): DesktopNetworkAccess {
+  if (
+    !isRecord(value)
+    || ![
+      "notRequired",
+      "authorizationRequired",
+      "granted",
+      "manualActionRequired",
+    ].includes(value.state as string)
+  ) {
+    throw new Error("Invalid desktop network access response");
+  }
+  return { state: value.state as DesktopNetworkAccessState };
 }
 
 function parseStatus(value: unknown): PairingStatus {
@@ -99,6 +129,9 @@ function parseStatus(value: unknown): PairingStatus {
     recoveryRequired: value.recoveryRequired,
     replicaReady: value.replicaReady,
     pendingTransfer: value.pendingTransfer,
+    networkAccess: value.networkAccess === undefined
+      ? undefined
+      : parseDesktopNetworkAccess(value.networkAccess),
   };
 }
 
@@ -123,6 +156,20 @@ function parseReceiveOutcome(value: unknown): DesktopBundleReceiveOutcome {
 /** Creates a short-lived single-use invitation on the desktop coordinator. */
 export async function createPairingInvitation(): Promise<PairingInvitation> {
   return parseInvitation(await invoke<unknown>("handoff_create_pairing_invitation"));
+}
+
+/** Requests narrowly scoped Linux firewall access for phone linking. */
+export async function grantDesktopNetworkAccess(): Promise<DesktopNetworkAccess> {
+  return parseDesktopNetworkAccess(
+    await invoke<unknown>("handoff_grant_network_access"),
+  );
+}
+
+/** Removes Linux firewall rules previously created by Ganbaru AI. */
+export async function revokeDesktopNetworkAccess(): Promise<DesktopNetworkAccess> {
+  return parseDesktopNetworkAccess(
+    await invoke<unknown>("handoff_revoke_network_access"),
+  );
 }
 
 /** Decodes a bounded grayscale camera frame into an authenticated invitation. */

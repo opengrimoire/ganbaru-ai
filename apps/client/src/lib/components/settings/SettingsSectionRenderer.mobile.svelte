@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import AppearanceSection from "./AppearanceSection.svelte";
   import ProfileSection from "./ProfileSection.svelte";
   import CalendarsSection from "./CalendarsSection.svelte";
@@ -14,6 +15,8 @@
     initialDoomscrollingTab,
     onOpenDoomscrollingLimitEditor,
   }: SettingsSectionRendererProps = $props();
+
+  const { t } = getLocalization();
 </script>
 
 {#if activeSection === "appearance"}
@@ -51,9 +54,17 @@
     onOpenLimitEditor={onOpenDoomscrollingLimitEditor}
   />
 {:else if activeSection === "data"}
-  {#await import("./mobile/MobileDataSection.svelte") then module}
+  {#await import("./mobile/MobileDataSection.svelte")}
+    <div class="flex min-h-36 items-center justify-center text-sm text-muted-foreground" aria-busy="true">
+      {t("common.loading")}
+    </div>
+  {:then module}
     {@const MobileDataSection = module.default}
     <MobileDataSection />
+  {:catch}
+    <div class="flex min-h-36 items-center justify-center text-sm text-destructive" role="alert">
+      {t("common.viewLoadFailed", t("settings.section.data"))}
+    </div>
   {/await}
 {:else if activeSection === "updates"}
   {#await import("./mobile/MobileUpdatesSection.svelte") then module}

@@ -4,6 +4,7 @@
   import FolderOpen from "@lucide/svelte/icons/folder-open";
   import HardDrive from "@lucide/svelte/icons/hard-drive";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
+  import VaultHandoffPanel from "$lib/components/vault/VaultHandoffPanel.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
     formatDataFolderError,
@@ -78,10 +79,7 @@
 </script>
 
 <div class="flex flex-col gap-6">
-  {#await import("$lib/components/vault/VaultHandoffPanel.svelte") then module}
-    {@const VaultHandoffPanel = module.default}
-    <VaultHandoffPanel platform="desktop" onActivated={restartApp} />
-  {/await}
+  <VaultHandoffPanel platform="desktop" onActivated={restartApp} />
 
   <div class="h-px shrink-0 scale-y-50 bg-border" aria-hidden="true"></div>
 

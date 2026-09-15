@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Component } from "svelte";
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import AppearanceSection from "./AppearanceSection.svelte";
   import ProfileSection from "./ProfileSection.svelte";
   import CalendarsSection from "./CalendarsSection.svelte";
@@ -9,7 +10,6 @@
   import FocusSection from "./FocusSection.svelte";
   import MusicSection from "./MusicSection.svelte";
   import DoomscrollingSection from "./DoomscrollingSection.svelte";
-  import DataSection from "./DataSection.svelte";
   import UpdatesSection from "./UpdatesSection.svelte";
   import ShortcutsSection from "./ShortcutsSection.svelte";
   import AboutSection from "./AboutSection.svelte";
@@ -31,6 +31,8 @@
     onTeammateDraftStateChange,
   }: SettingsSectionRendererProps = $props();
 
+  const { t } = getLocalization();
+
   const BASIC_SECTION_COMPONENTS: Partial<Record<SectionId, Component>> = {
     appearance: AppearanceSection,
     profile: ProfileSection,
@@ -38,7 +40,6 @@
     projects: ProjectsSection,
     focus: FocusSection,
     music: MusicSection,
-    data: DataSection,
     updates: UpdatesSection,
     shortcuts: ShortcutsSection,
     about: AboutSection,
@@ -65,6 +66,19 @@
     {onRequestNavigation}
     {onTeammateDraftStateChange}
   />
+{:else if activeSection === "data"}
+  {#await import("./DataSection.svelte")}
+    <div class="flex min-h-36 items-center justify-center text-sm text-muted-foreground" aria-busy="true">
+      {t("common.loading")}
+    </div>
+  {:then module}
+    {@const DataSection = module.default}
+    <DataSection />
+  {:catch}
+    <div class="flex min-h-36 items-center justify-center text-sm text-destructive" role="alert">
+      {t("common.viewLoadFailed", t("settings.section.data"))}
+    </div>
+  {/await}
 {:else if activeBasicSection}
   {@const SectionComponent = activeBasicSection}
   <SectionComponent />

@@ -56,33 +56,56 @@ export const language = {
 } as const;
 
 export const vaultOwnership = {
-  readOnly: "Read-only copy. Use the linked-device controls to move ownership here.",
   recovery: "This vault needs handoff recovery before it can be changed.",
 } as const;
 
 export const vaultHandoff = {
-  heading: "Linked device",
-  description:
-    "Move one complete vault between this device and one Android phone on the same local network.",
+  heading: "Linked devices",
+  description: "Manage your connected devices.",
+  desktopOnboardingTitle: "Connect your phone",
+  desktopOnboardingDescription:
+    "Install Ganbaru AI on your phone and scan this QR code in the app to link your devices.",
+  androidOnboardingTitle: "Connect to your computer",
+  androidOnboardingDescription:
+    "Use Ganbaru AI on this phone to scan the QR code shown on your computer.",
+  cameraDisclosure: "Camera access is used only while this screen scans the code.",
+  stepOne: "Step 1",
+  stepTwo: "Step 2",
+  networkAccessDescription:
+    "Allow Ganbaru AI to receive connections from your phone on this network.",
+  allowNetworkAccess: "Allow phone connection",
+  networkAccessConfirmTitle: "Allow phone connection?",
+  networkAccessConfirmMessage:
+    "Your Linux firewall protects your computer from unwanted connections. Ganbaru AI needs its permission to link your phone with this computer over your local network. Linux will ask for your password, which Ganbaru AI never sees or stores.",
+  removeNetworkAccess: "Remove phone connection access",
+  networkAccessGranted: "Phone connections are allowed on this network.",
+  networkAccessRevoked: "Phone connection access was removed.",
+  networkAccessManual:
+    "Ganbaru AI cannot request network access automatically on this Linux system.",
   notLinked: "No device is linked.",
   linkedTo: (device: string) => `Linked to ${device}`,
   desktopDevice: "Desktop",
-  androidDevice: "Android phone",
+  androidDevice: "Phone",
   thisDeviceOwns: "This device can make changes.",
   otherDeviceOwns: "This device has a read-only copy.",
   transferPending: "A vault transfer is waiting to finish.",
-  linkPhone: "Link Android phone",
+  linkPhone: "Link phone",
   linkToDesktop: "Link to desktop",
   createQr: "Show pairing QR code",
-  qrInstructions: "On Android, open Data settings and scan this code. It expires in five minutes.",
+  qrDialogTitle: "Connect a phone",
+  qrInstructions: "Open Ganbaru AI on your phone and scan this QR code.",
   qrAlt: "Pairing QR code",
+  refreshesIn: (time: string) => `Code refreshes in ${time}`,
+  refreshingCode: "Refreshing code...",
   scanQr: "Scan desktop QR code",
-  scanning: "Point the camera at the QR code shown on the desktop.",
+  scanning: "Fit the entire QR code inside the square.",
   cameraStarting: "Starting camera...",
   stopScanning: "Stop scanning",
-  deviceLabel: "Android phone",
+  notNow: "Not now",
+  continue: "Continue",
+  deviceLabel: "Phone",
   useHere: "Use on this device",
-  refreshCopy: "Refresh read-only copy",
+  refreshCopy: "Get latest changes",
   retry: "Retry",
   cancel: "Cancel transfer",
   unlink: "Unlink device",
@@ -93,12 +116,12 @@ export const vaultHandoff = {
   recoverTitle: "Use this copy as a separate vault?",
   recoverMessage:
     "Use this only if the owning device is permanently unavailable. Both copies are preserved, this device becomes writable, and the devices are unlinked. Later changes will not merge automatically.",
-  workingOwnership: "Moving the complete vault...",
-  workingRefresh: "Refreshing the complete read-only copy...",
+  workingOwnership: "Preparing this device...",
+  workingRefresh: "Getting the latest changes...",
   workingPairing: "Linking securely...",
   workingRequest: "Waiting for the other device...",
   linked: "Device linked.",
-  refreshed: "Read-only copy refreshed.",
+  refreshed: "Latest changes received.",
   requestSent: "The request was sent. Keep both apps open on the same network.",
   unlinked: "Device unlinked.",
   recovered: "This local copy is now a separate writable vault.",
@@ -111,6 +134,7 @@ export const vaultHandoff = {
   blockerChat: "Finish or stop active Chat work before moving the vault.",
   blockerFocus: "Finish or stop the active Pomodoro session before moving the vault.",
   blockerTransfer: "Finish or retry the current vault transfer first.",
-  unreachable: "The desktop is unavailable. Keep both apps open on the same local network and retry.",
+  unreachable:
+    "The phone could not reach your computer. If prompted there, allow phone connections, then retry.",
   unknownError: "Unknown error",
 } as const;

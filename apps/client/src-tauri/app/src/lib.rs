@@ -80,6 +80,10 @@ mod mobile_runtime_typecheck;
 pub use desktop_runtime::run;
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub use mobile_runtime::run;
+#[cfg(target_os = "linux")]
+pub fn run_privileged_helper_if_requested() -> Option<Result<(), String>> {
+    vault::handoff::run_privileged_helper_if_requested()
+}
 
 #[cfg(test)]
 mod composition_tests {

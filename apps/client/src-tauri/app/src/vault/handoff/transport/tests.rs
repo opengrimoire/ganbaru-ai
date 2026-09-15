@@ -450,6 +450,42 @@ async fn android_upload_resumes_from_durable_desktop_staging() {
 }
 
 #[tokio::test]
+async fn foreground_poll_observes_a_new_upload_request_without_reconnecting() {
+    use super::super::coordinator::{CoordinatorOperation, CoordinatorResponse};
+
+    let (pair, mut requests) = LocalPair::start_with_coordinator().await;
+    pair.enroll().await;
+
+    let coordinator = tokio::spawn(async move {
+        let mut poll_count = 0;
+        while let Some(request) = requests.recv().await {
+            let CoordinatorOperation::PollUpload { generation, .. } = request.operation else {
+                panic!("unexpected coordinator operation");
+            };
+            poll_count += 1;
+            request
+                .response
+                .send(Ok(CoordinatorResponse::UploadStatus {
+                    generation,
+                    requested_upload: (poll_count >= 3).then_some(BundlePurpose::Refresh),
+                }))
+                .expect("send upload status");
+            if poll_count >= 3 {
+                return poll_count;
+            }
+        }
+        poll_count
+    });
+
+    let purpose = tokio::time::timeout(Duration::from_secs(2), probe_coordinator(&pair.phone, 0))
+        .await
+        .expect("foreground poll should remain responsive")
+        .expect("poll coordinator");
+    assert_eq!(purpose, Some(BundlePurpose::Refresh));
+    assert_eq!(coordinator.await.expect("coordinator task"), 3);
+}
+
+#[tokio::test]
 async fn invalid_device_identity_cannot_download_bundle() {
     let pair = LocalPair::start().await;
     pair.enroll().await;

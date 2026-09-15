@@ -920,6 +920,7 @@
         if (!panelLifecycle.isCurrent(requestId)) return;
         panelLifecycle.markPaintDone(requestId);
       } catch (e) {
+        if (panelLifecycle.recoverFailedOpen(requestId)) session.close();
         console.error("[CalendarView] open create panel failed:", e);
       }
     };
@@ -1012,6 +1013,7 @@
         panelLifecycle.markStateOpen(requestId);
         panelLifecycle.markPaintDone(requestId);
       } catch (e) {
+        panelLifecycle.recoverFailedOpen(requestId);
         console.error("[CalendarView] open event failed:", e);
       } finally {
         if (panelLifecycle.isCurrent(requestId)) panelLifecycle.pendingEditEventId = undefined;

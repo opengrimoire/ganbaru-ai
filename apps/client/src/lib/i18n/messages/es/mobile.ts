@@ -11,8 +11,7 @@ export const mobile = {
   pomodoroOpenCalendar: "Abrir calendario",
   vaultSetup: {
     title: "Configura tus datos",
-    intro:
-      "Empieza con datos nuevos, restaura una copia, importa una carpeta o vincula tu computadora en la misma red local.",
+    intro: "Empieza con datos nuevos, restaura una copia o importa una carpeta.",
     dataLocation: "Ubicación de datos",
     startFromZero: "Empezar de cero",
     restoreBackupFile: "Restaurar archivo de copia",

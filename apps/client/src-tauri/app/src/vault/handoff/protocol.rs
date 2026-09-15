@@ -468,6 +468,7 @@ fn decode_bounded_json<T: DeserializeOwned>(encoded: &[u8], label: &str) -> Resu
     serde_json::from_slice(encoded).map_err(|error| format!("decode {label}: {error}"))
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) fn encode_invitation(invitation: &PairingInvitation) -> Result<String, String> {
     invitation.validate(unix_time_ms().saturating_sub(1))?;
     let json = serde_json::to_vec(invitation)
@@ -494,11 +495,13 @@ pub(crate) fn decode_invitation(
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) struct QrMatrix {
     pub width: usize,
     pub modules: Vec<bool>,
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) fn invitation_qr_matrix(encoded: &str) -> Result<QrMatrix, String> {
     let code = qrcode::QrCode::with_error_correction_level(encoded.as_bytes(), qrcode::EcLevel::M)
         .map_err(|error| format!("create pairing QR code: {error}"))?;
@@ -581,7 +584,7 @@ pub(crate) fn unix_time_ms() -> i64 {
         .unwrap_or(0)
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
 mod tests {
     use super::*;
 

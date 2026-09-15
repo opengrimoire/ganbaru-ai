@@ -1,6 +1,6 @@
 import { Temporal } from "@js-temporal/polyfill";
 import "@fontsource-variable/inter";
-import { mount } from "svelte";
+import { mount, unmount } from "svelte";
 import "./app.css";
 import { ensureConfigLoaded, flushConfig } from "$lib/vault/config";
 import { getActiveVaultInfo } from "$lib/vault/state";
@@ -20,6 +20,8 @@ import { hydrateUserThemes } from "$lib/stores/theme.svelte";
 (globalThis as unknown as { Temporal: typeof Temporal }).Temporal = Temporal;
 applyPlatformProfileToDocument();
 installModalKeyboardRouter();
+
+type MountedRoot = ReturnType<typeof mount>;
 
 function safeStorage(): Storage | undefined {
   try {
@@ -77,6 +79,37 @@ async function mountMobileFocusOnboarding() {
   });
 }
 
+async function mountMobileVaultHandoffOnboarding() {
+  const target = document.getElementById("app")!;
+  const mobileAppModulePromise = import("./MobileApp.svelte");
+  void mobileAppModulePromise.catch(() => undefined);
+  const { default: MobileVaultHandoffOnboarding } = await import(
+    "$lib/components/mobile/MobileVaultHandoffOnboarding.svelte"
+  );
+  let onboardingView: MountedRoot;
+  let transitionPromise: Promise<void> | null = null;
+  const openApp = (): Promise<void> => {
+    if (transitionPromise) return transitionPromise;
+    transitionPromise = mobileAppModulePromise
+      .then(async ({ default: MobileApp }) => {
+        await unmount(onboardingView);
+        mount(MobileApp, { target });
+      })
+      .catch((error: unknown) => {
+        transitionPromise = null;
+        throw error;
+      });
+    return transitionPromise;
+  };
+  onboardingView = mount(MobileVaultHandoffOnboarding, {
+    target,
+    props: {
+      onComplete: openApp,
+    },
+  });
+  return onboardingView;
+}
+
 const appPromise = (async () => {
   const preVaultPreference = readPreVaultLanguagePreference(safeStorage());
   await getLocalization().setLanguagePreference(
@@ -96,6 +129,12 @@ const appPromise = (async () => {
     );
     if (!mobileFocusOnboardingCompleted(safeStorage())) {
       return mountMobileFocusOnboarding();
+    }
+    const { vaultHandoffOnboardingCompleted } = await import(
+      "$lib/vault/handoff-onboarding"
+    );
+    if (!vaultHandoffOnboardingCompleted(safeStorage())) {
+      return mountMobileVaultHandoffOnboarding();
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

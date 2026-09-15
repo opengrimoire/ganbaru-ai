@@ -1137,6 +1137,10 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             vault::vault_active_info,
             vault::ownership::vault_ownership_status,
             vault::handoff::handoff_create_pairing_invitation,
+            #[cfg(target_os = "linux")]
+            vault::handoff::handoff_grant_network_access,
+            #[cfg(target_os = "linux")]
+            vault::handoff::handoff_revoke_network_access,
             vault::handoff::handoff_decode_pairing_qr,
             vault::handoff::handoff_enroll,
             vault::handoff::handoff_pairing_status,

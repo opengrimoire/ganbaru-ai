@@ -452,6 +452,7 @@ pub(crate) fn android_handoff_staging_path(
     Ok(parent.join(format!(".ganbaru-ai.handoff-{transfer_id}.staging")))
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) fn active_handoff_staging_path<R: Runtime>(
     app: &tauri::AppHandle<R>,
     transfer_id: &str,
@@ -483,6 +484,7 @@ pub(crate) async fn activate_android_handoff(
     .await
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) async fn activate_active_handoff<R: Runtime>(
     app: &tauri::AppHandle<R>,
     staging: &Path,

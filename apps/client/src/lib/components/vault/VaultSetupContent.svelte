@@ -29,7 +29,7 @@
 </script>
 
 <section class="h-full overflow-y-auto px-4 min-[560px]:px-8 min-[760px]:px-10">
-  <div class="setup-content-grid mx-auto grid min-h-full w-full max-w-2xl py-5 min-[760px]:py-8">
+  <div class="mx-auto grid min-h-full w-full max-w-2xl grid-rows-[minmax(4.5rem,1fr)_auto_minmax(4.5rem,1fr)] py-5 min-[760px]:py-8">
     <div class="flex items-end pb-4">
       <VaultLanguageDropdown />
     </div>
@@ -64,24 +64,18 @@
         {/if}
 
         {@render actions()}
+
+        {#if error}
+          <p
+            role="alert"
+            class="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          >
+            {error}
+          </p>
+        {/if}
       </div>
     </div>
 
-    <div class="pt-4">
-      {#if error}
-        <p
-          role="alert"
-          class="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        >
-          {error}
-        </p>
-      {/if}
-    </div>
+    <div></div>
   </div>
 </section>
-
-<style>
-  .setup-content-grid {
-    grid-template-rows: minmax(4.5rem, 1fr) auto minmax(4.5rem, 1fr);
-  }
-</style>

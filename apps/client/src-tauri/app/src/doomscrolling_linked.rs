@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use tauri::{Manager, Runtime};
 
 const SPOOL_FILE: &str = "doomscrolling-device-spool.sqlite";
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 const MAX_PENDING_SAMPLES: i64 = 4_000;
 const EXCHANGE_BATCH_SAMPLES: i64 = 200;
 
@@ -82,6 +83,7 @@ async fn open_spool(path: &Path) -> Result<SqlitePool, String> {
     Ok(pool)
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) async fn enqueue<R: Runtime>(
     app: &tauri::AppHandle<R>,
     vault_id: &str,
@@ -97,6 +99,7 @@ pub(crate) async fn enqueue<R: Runtime>(
     .await
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 async fn enqueue_at(
     path: &Path,
     vault_id: &str,
@@ -132,6 +135,7 @@ async fn enqueue_at(
     Ok(())
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 async fn compact_pending(pool: &SqlitePool, vault_id: &str, device_id: &str) -> Result<(), String> {
     let rows = sqlx::query(
         "SELECT source_type, source_key, MAX(display_name) AS display_name,
@@ -197,6 +201,7 @@ async fn compact_pending(pool: &SqlitePool, vault_id: &str, device_id: &str) -> 
         .map_err(|error| format!("commit Doomscrolling spool compaction: {error}"))
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) async fn pending<R: Runtime>(
     app: &tauri::AppHandle<R>,
     vault_id: &str,
@@ -205,6 +210,7 @@ pub(crate) async fn pending<R: Runtime>(
     pending_at(&spool_path(app)?, vault_id, device_id).await
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) async fn drain_local_spool<R: Runtime>(
     app: &tauri::AppHandle<R>,
     pool: &SqlitePool,
@@ -220,6 +226,7 @@ pub(crate) async fn drain_local_spool<R: Runtime>(
     Ok(acknowledged.len())
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 async fn pending_at(
     path: &Path,
     vault_id: &str,
@@ -231,6 +238,7 @@ async fn pending_at(
     Ok(samples)
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) async fn acknowledge<R: Runtime>(
     app: &tauri::AppHandle<R>,
     vault_id: &str,
@@ -240,6 +248,7 @@ pub(crate) async fn acknowledge<R: Runtime>(
     acknowledge_at(&spool_path(app)?, vault_id, device_id, sample_ids).await
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 async fn acknowledge_at(
     path: &Path,
     vault_id: &str,
@@ -429,6 +438,7 @@ pub(crate) fn message_to_row(sample: DoomscrollingSampleMessage) -> LinkedUsageR
     }
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) fn row_to_message(
     sample: &LinkedUsageRow,
     device_id: &str,
@@ -453,6 +463,7 @@ fn canonical_sample_id(device_id: &str, sample_id: &str) -> String {
     )
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 async fn insert_message(
     pool: &SqlitePool,
     table: &str,

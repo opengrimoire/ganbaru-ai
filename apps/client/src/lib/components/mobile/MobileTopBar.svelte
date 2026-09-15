@@ -168,8 +168,8 @@
     "mobile-top-bar h-(--cal-header-row-h) shrink-0 items-center border-b px-0.5 text-foreground",
     primaryNavigationVisible
       ? musicVisible
-        ? "grid grid-cols-8"
-        : "grid grid-cols-7"
+        ? "grid grid-cols-9"
+        : "grid grid-cols-8"
       : "flex justify-end",
   )}
   style="background-color: var(--cal-header-bg); border-color: var(--sidebar);"
@@ -240,6 +240,10 @@
       </div>
     {/if}
   </div>
+  {#await import("$lib/components/vault/LinkedDeviceControl.svelte") then module}
+    {@const LinkedDeviceControl = module.default}
+    <LinkedDeviceControl platform="android" presentation="mobile" onOpened={onClosePomodoro} />
+  {/await}
   <button
     type="button"
     data-mobile-quick-notes-trigger

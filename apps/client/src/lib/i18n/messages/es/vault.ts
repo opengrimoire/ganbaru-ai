@@ -65,35 +65,56 @@ export const language = {
 } as const satisfies MessageShape<typeof enLanguage>;
 
 export const vaultOwnership = {
-  readOnly:
-    "Copia de solo lectura. Usa los controles del dispositivo vinculado para transferir la propiedad aquí.",
   recovery: "Esta bóveda necesita recuperar la transferencia antes de poder modificarse.",
 } as const satisfies MessageShape<typeof enVaultOwnership>;
 
 export const vaultHandoff = {
-  heading: "Dispositivo vinculado",
-  description:
-    "Mueve una bóveda completa entre este dispositivo y un teléfono Android en la misma red local.",
+  heading: "Dispositivos vinculados",
+  description: "Administra tus dispositivos conectados.",
+  desktopOnboardingTitle: "Conecta tu teléfono",
+  desktopOnboardingDescription:
+    "Instala Ganbaru AI en tu teléfono y escanea este código QR en la aplicación para vincular tus dispositivos.",
+  androidOnboardingTitle: "Conecta con tu computadora",
+  androidOnboardingDescription:
+    "Usa Ganbaru AI en este teléfono para escanear el código QR mostrado en tu computadora.",
+  cameraDisclosure: "La cámara se usa solo mientras esta pantalla escanea el código.",
+  stepOne: "Paso 1",
+  stepTwo: "Paso 2",
+  networkAccessDescription:
+    "Permite que Ganbaru AI reciba conexiones de tu teléfono en esta red.",
+  allowNetworkAccess: "Permitir conexión del teléfono",
+  networkAccessConfirmTitle: "¿Permitir la conexión del teléfono?",
+  networkAccessConfirmMessage:
+    "El firewall de Linux protege tu computadora de conexiones no deseadas. Ganbaru AI necesita su permiso para vincular tu teléfono con esta computadora mediante tu red local. Linux te pedirá tu contraseña, que Ganbaru AI nunca ve ni guarda.",
+  removeNetworkAccess: "Quitar acceso para conectar el teléfono",
+  networkAccessGranted: "Las conexiones del teléfono están permitidas en esta red.",
+  networkAccessRevoked: "Se quitó el acceso para conectar el teléfono.",
+  networkAccessManual:
+    "Ganbaru AI no puede solicitar acceso a la red automáticamente en este sistema Linux.",
   notLinked: "No hay un dispositivo vinculado.",
   linkedTo: (device: string) => `Vinculado con ${device}`,
   desktopDevice: "Computadora",
-  androidDevice: "Teléfono Android",
+  androidDevice: "Teléfono",
   thisDeviceOwns: "Este dispositivo puede hacer cambios.",
   otherDeviceOwns: "Este dispositivo tiene una copia de solo lectura.",
   transferPending: "Hay una transferencia de la bóveda pendiente de terminar.",
-  linkPhone: "Vincular teléfono Android",
+  linkPhone: "Vincular teléfono",
   linkToDesktop: "Vincular con computadora",
   createQr: "Mostrar código QR de vinculación",
-  qrInstructions:
-    "En Android, abre los ajustes de Datos y escanea este código. Caduca en cinco minutos.",
+  qrDialogTitle: "Conectar un teléfono",
+  qrInstructions: "Abre Ganbaru AI en tu teléfono y escanea este código QR.",
   qrAlt: "Código QR de vinculación",
+  refreshesIn: (time: string) => `El código se renueva en ${time}`,
+  refreshingCode: "Renovando código...",
   scanQr: "Escanear código QR de la computadora",
-  scanning: "Apunta la cámara al código QR mostrado en la computadora.",
+  scanning: "Coloca todo el código QR dentro del recuadro.",
   cameraStarting: "Iniciando cámara...",
   stopScanning: "Detener escaneo",
-  deviceLabel: "Teléfono Android",
+  notNow: "Ahora no",
+  continue: "Continuar",
+  deviceLabel: "Teléfono",
   useHere: "Usar en este dispositivo",
-  refreshCopy: "Actualizar copia de solo lectura",
+  refreshCopy: "Obtener los últimos cambios",
   retry: "Reintentar",
   cancel: "Cancelar transferencia",
   unlink: "Desvincular dispositivo",
@@ -104,12 +125,12 @@ export const vaultHandoff = {
   recoverTitle: "¿Usar esta copia como una bóveda separada?",
   recoverMessage:
     "Usa esto solo si el dispositivo propietario ya no está disponible. Ambas copias se conservan, este dispositivo podrá escribir y los dispositivos se desvincularán. Los cambios posteriores no se combinarán automáticamente.",
-  workingOwnership: "Moviendo la bóveda completa...",
-  workingRefresh: "Actualizando la copia completa de solo lectura...",
+  workingOwnership: "Preparando este dispositivo...",
+  workingRefresh: "Obteniendo los últimos cambios...",
   workingPairing: "Vinculando de forma segura...",
   workingRequest: "Esperando al otro dispositivo...",
   linked: "Dispositivo vinculado.",
-  refreshed: "Copia de solo lectura actualizada.",
+  refreshed: "Se recibieron los últimos cambios.",
   requestSent: "Se envió la solicitud. Mantén ambas apps abiertas en la misma red.",
   unlinked: "Dispositivo desvinculado.",
   recovered: "Esta copia local ahora es una bóveda separada con escritura.",
@@ -123,6 +144,6 @@ export const vaultHandoff = {
   blockerFocus: "Termina o detén la sesión activa de Pomodoro antes de mover la bóveda.",
   blockerTransfer: "Termina o reintenta primero la transferencia actual de la bóveda.",
   unreachable:
-    "La computadora no está disponible. Mantén ambas apps abiertas en la misma red local y reintenta.",
+    "El teléfono no pudo comunicarse con tu computadora. Si aparece una solicitud allí, permite las conexiones del teléfono y reintenta.",
   unknownError: "Error desconocido",
 } as const satisfies MessageShape<typeof enVaultHandoff>;

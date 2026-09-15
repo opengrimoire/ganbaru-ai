@@ -3,45 +3,65 @@
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import ScanLine from "@lucide/svelte/icons/scan-line";
   import Smartphone from "@lucide/svelte/icons/smartphone";
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import {
     cancelDesktopBundleReceive,
     createPairingInvitation,
+    grantDesktopNetworkAccess,
     enrollWithDesktop,
     readPairingStatus,
     receiveDesktopBundle,
     recoverLocalVaultCopy,
     requestAndroidBundle,
+    revokeDesktopNetworkAccess,
     unlinkVaultDevice,
     type PairingInvitation,
     type PairingStatus,
+    type DesktopNetworkAccess,
   } from "$lib/api/vault-handoff";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { formatHandoffError } from "$lib/vault/handoff-workflow";
   import MobilePairingScanner from "./MobilePairingScanner.svelte";
 
-  type BusyAction = "status" | "invite" | "pair" | "ownership" | "refresh" | "unlink" | "recover";
+  type BusyAction = "status" | "invite" | "network" | "pair" | "ownership" | "refresh" | "unlink" | "recover";
 
   let {
     platform,
+    presentation = "settings",
+    initialInvitation = null,
+    initialStatus = null,
     onActivated,
-    beforeEnroll,
+    onStatusChange,
   }: {
     platform: "desktop" | "android";
+    presentation?: "settings" | "onboarding";
+    initialInvitation?: PairingInvitation | null;
+    initialStatus?: PairingStatus | null;
     onActivated?: () => void;
-    beforeEnroll?: () => void | Promise<void>;
+    onStatusChange?: (status: PairingStatus) => void;
   } = $props();
 
   const { t } = getLocalization();
-  let status = $state<PairingStatus | null>(null);
-  let invitation = $state<PairingInvitation | null>(null);
+  const desktopQrAvailable = __GANBARU_AI_BUILD_PLATFORM__ !== "android";
+  let status = $state<PairingStatus | null>(untrack(() => initialStatus));
+  let invitation = $state<PairingInvitation | null>(untrack(() => initialInvitation));
   let scanning = $state(false);
   let scannerVersion = $state(0);
-  let busy = $state<BusyAction | null>("status");
+  let busy = $state<BusyAction | null>(untrack(() => initialStatus ? null : "status"));
   let notice = $state<string | null>(null);
   let error = $state<string | null>(null);
-  let confirmation = $state<"unlink" | "recover" | null>(null);
+  let networkError = $state<string | null>(null);
+  let confirmation = $state<"network" | "unlink" | "recover" | null>(null);
+  let networkAccess = $state<DesktopNetworkAccess | null>(
+    untrack(() => initialInvitation?.networkAccess ?? initialStatus?.networkAccess ?? null),
+  );
+  let networkStepsVisible = $state(
+    untrack(() => {
+      const state = initialInvitation?.networkAccess?.state ?? initialStatus?.networkAccess?.state;
+      return state === "authorizationRequired" || state === "manualActionRequired";
+    }),
+  );
 
   const buttonClass =
     "inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-border px-3 text-[0.8rem] font-medium transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-55";
@@ -51,9 +71,18 @@
     error = formatHandoffError(cause, t);
   }
 
+  function applyNetworkAccess(next: DesktopNetworkAccess): void {
+    networkAccess = next;
+    if (next.state === "authorizationRequired" || next.state === "manualActionRequired") {
+      networkStepsVisible = true;
+    }
+  }
+
   async function loadStatus(): Promise<PairingStatus> {
     const next = await readPairingStatus();
     status = next;
+    if (next.networkAccess) applyNetworkAccess(next.networkAccess);
+    onStatusChange?.(next);
     return next;
   }
 
@@ -75,6 +104,7 @@
     notice = null;
     try {
       invitation = await createPairingInvitation();
+      if (invitation.networkAccess) applyNetworkAccess(invitation.networkAccess);
     } catch (cause) {
       fail(cause);
     } finally {
@@ -82,12 +112,35 @@
     }
   }
 
+  async function updateNetworkAccess(grant: boolean): Promise<void> {
+    busy = "network";
+    error = null;
+    networkError = null;
+    notice = null;
+    try {
+      applyNetworkAccess(
+        grant
+          ? await grantDesktopNetworkAccess()
+          : await revokeDesktopNetworkAccess(),
+      );
+      notice = grant ? null : t("vaultHandoff.networkAccessRevoked");
+    } catch (cause) {
+      networkError = formatHandoffError(cause, t);
+    } finally {
+      busy = null;
+    }
+  }
+
+  async function grantNetworkAccess(): Promise<void> {
+    confirmation = null;
+    await updateNetworkAccess(true);
+  }
+
   async function acceptInvitation(encoded: string): Promise<void> {
     busy = "pair";
     error = null;
     notice = null;
     try {
-      await beforeEnroll?.();
       await enrollWithDesktop(encoded, t("vaultHandoff.deviceLabel"));
       scanning = false;
       await loadStatus();
@@ -190,7 +243,20 @@
   }
 
   onMount(() => {
-    void refreshStatus();
+    const prepareOnboarding = (): void => {
+      if (presentation !== "onboarding" || status?.linked) return;
+      if (platform === "desktop") {
+        if (!invitation) void showInvitation();
+      } else {
+        scanning = true;
+      }
+    };
+    if (status) {
+      onStatusChange?.(status);
+      prepareOnboarding();
+    } else {
+      void refreshStatus().then(prepareOnboarding);
+    }
     const timer = window.setInterval(() => {
       if (busy) return;
       void loadStatus().then((next) => {
@@ -201,56 +267,82 @@
   });
 </script>
 
-<section class="flex flex-col gap-4">
-  <div class="px-1">
-    <h2 class="text-[0.866667rem] font-semibold text-foreground">{t("vaultHandoff.heading")}</h2>
-    <p class="mt-1 text-[0.8rem] leading-5 text-muted-foreground">{t("vaultHandoff.description")}</p>
+{#snippet onboardingLoader()}
+  <div
+    class="grid min-h-56 place-items-center"
+    role="status"
+    aria-label={t("common.loading")}
+  >
+    <LoaderCircle size={24} strokeWidth={1.8} class="animate-spin text-muted-foreground" />
   </div>
+{/snippet}
+
+<section class="flex flex-col gap-4">
+  {#if presentation === "settings"}
+    <div class="px-1">
+      <h2 class="text-[0.866667rem] font-semibold text-foreground">{t("vaultHandoff.heading")}</h2>
+      <p class="mt-1 text-[0.8rem] leading-5 text-muted-foreground">{t("vaultHandoff.description")}</p>
+    </div>
+  {/if}
 
   {#if busy === "status"}
-    <div class="flex items-center gap-2 px-1 text-[0.8rem] text-muted-foreground">
-      <LoaderCircle size={14} strokeWidth={2} class="animate-spin" aria-hidden="true" />
-      {t("settings.data.loadingFolder")}
-    </div>
+    {#if presentation === "onboarding"}
+      {@render onboardingLoader()}
+    {:else}
+      <div class="flex items-center gap-2 px-1 text-[0.8rem] text-muted-foreground">
+        <LoaderCircle size={14} strokeWidth={2} class="animate-spin" aria-hidden="true" />
+        {t("settings.data.loadingFolder")}
+      </div>
+    {/if}
   {:else if status}
-    <div class="rounded-md border border-border bg-card/40 p-3">
-      <div class="flex items-start gap-2">
-        <Smartphone size={17} strokeWidth={1.8} class="mt-0.5 shrink-0" aria-hidden="true" />
-        <div class="min-w-0 flex-1">
-          <div class="text-[0.866667rem] font-medium text-foreground">
-            {status.linked
-              ? t(
-                  "vaultHandoff.linkedTo",
-                  status.peerLabel ??
-                    (platform === "android"
-                      ? t("vaultHandoff.desktopDevice")
-                      : t("vaultHandoff.androidDevice")),
-                )
-              : t("vaultHandoff.notLinked")}
-          </div>
-          {#if status.linked}
-            <p class="mt-0.5 text-[0.8rem] leading-5 text-muted-foreground">
-              {status.recoveryRequired
-                ? t("vaultOwnership.recovery")
-                : status.canWrite
-                  ? t("vaultHandoff.thisDeviceOwns")
-                  : t("vaultHandoff.otherDeviceOwns")}
-              {#if status.pendingTransfer} {t("vaultHandoff.transferPending")}{/if}
-            </p>
-          {/if}
+    {#if presentation === "settings" || status.linked}
+    <div class="flex items-start gap-2 px-1 py-1">
+      <Smartphone size={17} strokeWidth={1.8} class="mt-0.5 shrink-0" aria-hidden="true" />
+      <div class="min-w-0 flex-1">
+        <div class="text-[0.866667rem] font-medium text-foreground">
+          {status.linked
+            ? t(
+                "vaultHandoff.linkedTo",
+                status.peerLabel ??
+                  (platform === "android"
+                    ? t("vaultHandoff.desktopDevice")
+                    : t("vaultHandoff.androidDevice")),
+              )
+            : t("vaultHandoff.notLinked")}
         </div>
+        {#if status.linked}
+          <p class="mt-0.5 text-[0.8rem] leading-5 text-muted-foreground">
+            {status.recoveryRequired
+              ? t("vaultOwnership.recovery")
+              : status.canWrite
+                ? t("vaultHandoff.thisDeviceOwns")
+                : t("vaultHandoff.otherDeviceOwns")}
+            {#if status.pendingTransfer} {t("vaultHandoff.transferPending")}{/if}
+          </p>
+        {/if}
+      </div>
+      {#if presentation === "settings"}
         <button type="button" class={buttonClass} disabled={busy !== null} onclick={() => void refreshStatus()}>
           <RefreshCw size={13} strokeWidth={2} aria-hidden="true" />
           {t("vaultHandoff.retry")}
         </button>
-      </div>
+      {/if}
     </div>
+    {/if}
 
-    {#if !status.linked && platform === "desktop"}
+    {#if !status.linked && platform === "desktop" && presentation === "settings"}
       <button type="button" class={primaryButtonClass} disabled={busy !== null} onclick={() => void showInvitation()}>
         {#if busy === "invite"}<LoaderCircle size={14} class="animate-spin" />{/if}
         {t("vaultHandoff.createQr")}
       </button>
+    {:else if !status.linked && platform === "desktop" && !invitation}
+      {#if error}
+        <button type="button" class={buttonClass} disabled={busy !== null} onclick={() => void showInvitation()}>
+          {t("vaultHandoff.retry")}
+        </button>
+      {:else}
+        {@render onboardingLoader()}
+      {/if}
     {:else if !status.linked && platform === "android"}
       {#if scanning}
         {#key scannerVersion}
@@ -275,25 +367,63 @@
       </button>
     {/if}
 
-    {#if platform === "desktop" && invitation}
-      <div class="grid justify-items-center gap-3 rounded-md border border-border p-4">
-        <svg
-          viewBox={`0 0 ${invitation.qr.width} ${invitation.qr.width}`}
-          class="aspect-square w-full max-w-56 bg-white p-2"
-          role="img"
-          aria-label={t("vaultHandoff.qrAlt")}
-          shape-rendering="crispEdges"
-        >
-          <rect width={invitation.qr.width} height={invitation.qr.width} fill="white" />
-          {#each invitation.qr.modules as enabled, index}
-            {#if enabled}
-              <rect x={index % invitation.qr.width} y={Math.floor(index / invitation.qr.width)} width="1" height="1" fill="black" />
+    {#if desktopQrAvailable && platform === "desktop" && invitation && presentation === "onboarding"}
+      <div class={networkStepsVisible
+        ? "grid items-start gap-7 min-[800px]:grid-cols-2 min-[800px]:gap-10"
+        : "flex flex-col items-center gap-4"}>
+        {#if networkStepsVisible}
+          <div class="flex flex-col items-center gap-3 px-1 text-center">
+            <div class="space-y-1">
+              <p class="text-base font-semibold text-foreground">
+                {t("vaultHandoff.stepOne")}
+              </p>
+              <p class="mx-auto max-w-88 text-sm leading-6 text-muted-foreground">
+                {t("vaultHandoff.networkAccessDescription")}
+              </p>
+            </div>
+            {#if networkAccess?.state === "authorizationRequired"}
+              <button
+                type="button"
+                class={`${buttonClass} bg-background`}
+                disabled={busy !== null}
+                onclick={() => { confirmation = "network"; }}
+              >
+                {#if busy === "network"}<LoaderCircle size={14} class="animate-spin" />{/if}
+                {t("vaultHandoff.allowNetworkAccess")}
+              </button>
+            {:else if networkAccess?.state === "granted" || networkAccess?.state === "notRequired"}
+              <p class="text-[0.8rem] leading-5 text-muted-foreground">
+                {t("vaultHandoff.networkAccessGranted")}
+              </p>
+            {:else if networkAccess?.state === "manualActionRequired"}
+              <p role="alert" class="text-[0.8rem] leading-5 text-destructive">
+                {t("vaultHandoff.networkAccessManual")}
+              </p>
             {/if}
-          {/each}
-        </svg>
-        <p class="max-w-md text-center text-[0.8rem] leading-5 text-muted-foreground">
-          {t("vaultHandoff.qrInstructions")}
-        </p>
+            {#if networkError}
+              <p role="alert" class="w-full max-w-88 text-[0.8rem] leading-5 text-destructive">
+                {networkError}
+              </p>
+            {/if}
+          </div>
+        {/if}
+
+        <div class="flex min-w-0 flex-col items-center gap-4">
+          <div class="space-y-1 px-1 text-center">
+            {#if networkStepsVisible}
+              <p class="text-base font-semibold text-foreground">
+                {t("vaultHandoff.stepTwo")}
+              </p>
+            {/if}
+            <p class="mx-auto max-w-sm text-sm leading-6 text-muted-foreground">
+              {t("vaultHandoff.desktopOnboardingDescription")}
+            </p>
+          </div>
+          {#await import("./PairingQrCode.svelte") then module}
+            {@const PairingQrCode = module.default}
+            <PairingQrCode {invitation} onExpired={() => void showInvitation()} />
+          {/await}
+        </div>
       </div>
     {/if}
 
@@ -309,7 +439,7 @@
             {#if busy === "ownership"}<LoaderCircle size={14} class="animate-spin" />{/if}
             {t("vaultHandoff.useHere")}
           </button>
-          {#if status.replicaReady}
+          {#if status.replicaReady && presentation === "settings"}
             <button
               type="button"
               class={buttonClass}
@@ -326,19 +456,34 @@
             {t("vaultHandoff.cancel")}
           </button>
         {/if}
-        <button type="button" class={buttonClass} disabled={busy !== null || status.pendingTransfer} onclick={() => { confirmation = "unlink"; }}>
-          {t("vaultHandoff.unlink")}
-        </button>
-        {#if !status.canWrite && status.replicaReady && !status.pendingTransfer}
-          <button type="button" class={buttonClass} disabled={busy !== null} onclick={() => { confirmation = "recover"; }}>
-            {t("vaultHandoff.recover")}
+        {#if presentation === "settings"}
+          <button type="button" class={buttonClass} disabled={busy !== null || status.pendingTransfer} onclick={() => { confirmation = "unlink"; }}>
+            {t("vaultHandoff.unlink")}
           </button>
+          {#if !status.canWrite && status.replicaReady && !status.pendingTransfer}
+            <button type="button" class={buttonClass} disabled={busy !== null} onclick={() => { confirmation = "recover"; }}>
+              {t("vaultHandoff.recover")}
+            </button>
+          {/if}
         {/if}
       </div>
-      {#if platform === "android" && !status.replicaReady}
-        <p class="px-1 text-[0.8rem] leading-5 text-muted-foreground">{t("vaultHandoff.localBackup")}</p>
+      {#if presentation === "settings"}
+        {#if platform === "android" && !status.replicaReady}
+          <p class="px-1 text-[0.8rem] leading-5 text-muted-foreground">{t("vaultHandoff.localBackup")}</p>
+        {/if}
+        <p class="px-1 text-[0.8rem] leading-5 text-muted-foreground">{t("vaultHandoff.offlineNotice")}</p>
       {/if}
-      <p class="px-1 text-[0.8rem] leading-5 text-muted-foreground">{t("vaultHandoff.offlineNotice")}</p>
+    {/if}
+
+    {#if presentation === "settings" && platform === "desktop" && networkAccess?.state === "granted"}
+      <button
+        type="button"
+        class={`${buttonClass} self-start`}
+        disabled={busy !== null}
+        onclick={() => void updateNetworkAccess(false)}
+      >
+        {t("vaultHandoff.removeNetworkAccess")}
+      </button>
     {/if}
   {/if}
 
@@ -356,7 +501,32 @@
   {#if error}<p role="alert" class="px-1 text-[0.8rem] leading-5 text-destructive">{error}</p>{/if}
 </section>
 
-{#if confirmation === "unlink"}
+{#if desktopQrAvailable && platform === "desktop" && invitation && presentation === "settings"}
+  {#await import("./PairingQrDialog.svelte") then module}
+    {@const PairingQrDialog = module.default}
+    <PairingQrDialog
+      {invitation}
+      {networkAccess}
+      networkBusy={busy === "network"}
+      {networkError}
+      onGrantNetworkAccess={() => { confirmation = "network"; }}
+      onRefresh={() => void showInvitation()}
+      onClose={() => { invitation = null; }}
+    />
+  {/await}
+{/if}
+
+{#if confirmation === "network"}
+  <ConfirmDialog
+    title={t("vaultHandoff.networkAccessConfirmTitle")}
+    message={t("vaultHandoff.networkAccessConfirmMessage")}
+    confirmLabel={t("vaultHandoff.allowNetworkAccess")}
+    cancelLabel={t("common.cancel")}
+    danger={false}
+    onConfirm={() => void grantNetworkAccess()}
+    onCancel={() => { confirmation = null; }}
+  />
+{:else if confirmation === "unlink"}
   <ConfirmDialog
     title={t("vaultHandoff.unlinkTitle")}
     message={t("vaultHandoff.unlinkMessage")}

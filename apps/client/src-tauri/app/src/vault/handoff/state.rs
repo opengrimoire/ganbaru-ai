@@ -1,13 +1,14 @@
 //! Platform-private pairing identity and transfer registry.
 
-use super::protocol::{
-    validate_identifier, BundleMetadata, BundlePurpose, PairingInvitation, PROTOCOL_VERSION,
-};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use super::protocol::PROTOCOL_VERSION;
+use super::protocol::{validate_identifier, BundleMetadata, BundlePurpose, PairingInvitation};
 use base64::Engine;
 use rcgen::{CertificateParams, KeyPair};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
@@ -17,7 +18,8 @@ use std::sync::Mutex;
 const PAIRING_STATE_FILE: &str = "vault-handoff.json";
 const PAIRING_STATE_SCHEMA_VERSION: u32 = 1;
 const STAGING_DIRECTORY: &str = "vault-handoff-staging";
-const INVITATION_LIFETIME_MS: i64 = 5 * 60 * 1_000;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+const INVITATION_LIFETIME_MS: i64 = 3 * 60 * 1_000;
 const MAX_CERTIFICATE_BYTES: usize = 16 * 1024;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -120,16 +122,19 @@ impl std::fmt::Debug for TlsIdentity {
 }
 
 #[derive(Clone, Debug)]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 struct PendingInvitation {
     invitation: PairingInvitation,
 }
 
 #[derive(Clone, Debug)]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) struct RegisteredBundle {
     pub metadata: BundleMetadata,
     pub path: PathBuf,
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) struct Enrollment<'a> {
     pub invitation_id: &'a str,
     pub secret: &'a str,
@@ -144,7 +149,9 @@ struct PairingManagerInner {
     state_path: Option<PathBuf>,
     staging_root: Option<PathBuf>,
     state: Option<PairingStateFile>,
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     invitations: BTreeMap<String, PendingInvitation>,
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     outgoing_bundles: BTreeMap<String, RegisteredBundle>,
 }
 
@@ -196,8 +203,11 @@ impl PairingManager {
         inner.state_path = Some(state_path);
         inner.staging_root = Some(staging_root);
         inner.state = Some(state);
-        inner.invitations.clear();
-        inner.outgoing_bundles.clear();
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        {
+            inner.invitations.clear();
+            inner.outgoing_bundles.clear();
+        }
         Ok(())
     }
 
@@ -255,8 +265,11 @@ impl PairingManager {
             inner.state = Some(previous);
             return Err(error);
         }
-        inner.invitations.clear();
-        inner.outgoing_bundles.clear();
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        {
+            inner.invitations.clear();
+            inner.outgoing_bundles.clear();
+        }
         Ok(())
     }
 
@@ -350,6 +363,7 @@ impl PairingManager {
         }
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub(crate) fn store_incoming_transfer(
         &self,
         transfer: StoredIncomingTransfer,
@@ -361,11 +375,13 @@ impl PairingManager {
         persist_initialized_state(&inner)
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub(crate) fn incoming_transfer(&self) -> Result<Option<StoredIncomingTransfer>, String> {
         let inner = self.lock()?;
         Ok(initialized_state(&inner)?.incoming_transfer.clone())
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub(crate) fn complete_incoming_activation(
         &self,
         completed: PendingAcknowledgement,
@@ -405,22 +421,26 @@ impl PairingManager {
         persist_initialized_state(&inner)
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub(crate) fn completed_activation(&self) -> Result<Option<PendingAcknowledgement>, String> {
         let inner = self.lock()?;
         Ok(initialized_state(&inner)?.completed_activation.clone())
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub(crate) fn request_upload(&self, purpose: BundlePurpose) -> Result<(), String> {
         let mut inner = self.lock()?;
         initialized_state_mut(&mut inner)?.requested_upload = Some(purpose);
         persist_initialized_state(&inner)
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub(crate) fn requested_upload(&self) -> Result<Option<BundlePurpose>, String> {
         let inner = self.lock()?;
         Ok(initialized_state(&inner)?.requested_upload)
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub(crate) fn create_invitation(
         &self,
         endpoint: std::net::SocketAddr,
@@ -454,6 +474,7 @@ impl PairingManager {
         Ok(invitation)
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub(crate) fn enroll_peer(
         &self,
         enrollment: Enrollment<'_>,
@@ -518,6 +539,7 @@ impl PairingManager {
         persist_initialized_state(&inner)
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub(crate) fn verify_authenticated_peer(
         &self,
         device_id: &str,
@@ -541,6 +563,7 @@ impl PairingManager {
     }
 
     #[allow(dead_code)] // H04 registers consistent snapshots for transport.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub(crate) fn register_outgoing_bundle(
         &self,
         metadata: BundleMetadata,
@@ -557,6 +580,7 @@ impl PairingManager {
         Ok(())
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub(crate) fn outgoing_bundle(&self, transfer_id: &str) -> Result<RegisteredBundle, String> {
         validate_identifier("transfer id", transfer_id)?;
         let inner = self.lock()?;
@@ -567,6 +591,7 @@ impl PairingManager {
             .ok_or_else(|| "transfer is not available".to_string())
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub(crate) fn unregister_outgoing_bundle(&self, transfer_id: &str) -> Result<(), String> {
         validate_identifier("transfer id", transfer_id)?;
         let mut inner = self.lock()?;
@@ -729,6 +754,7 @@ pub(crate) fn certificate_fingerprint(certificate: &[u8]) -> String {
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn random_secret() -> Result<String, String> {
     let mut random = [0_u8; 32];
     rustls::crypto::ring::default_provider()
@@ -750,6 +776,7 @@ pub(crate) fn random_token(prefix: &str) -> Result<String, String> {
     ))
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn constant_time_equal(left: &[u8], right: &[u8]) -> bool {
     let mut difference = left.len() ^ right.len();
     let max_len = left.len().max(right.len());
@@ -859,7 +886,7 @@ fn persist_state(path: &Path, state: &PairingStateFile) -> Result<(), String> {
     write_private_file_atomically(path, &bytes)
 }
 
-fn write_private_file_atomically(path: &Path, bytes: &[u8]) -> Result<(), String> {
+pub(super) fn write_private_file_atomically(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let parent = path
         .parent()
         .ok_or_else(|| "private state path has no parent".to_string())?;
@@ -938,7 +965,7 @@ fn sync_parent_directory(_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
 mod tests {
     use super::*;
 
@@ -994,6 +1021,7 @@ mod tests {
                 100,
             )
             .expect("invitation");
+        assert_eq!(invitation.expires_at_unix_ms, 180_100);
         let phone = create_identity("device-phone".to_string()).expect("phone identity");
         manager
             .enroll_peer(enrollment(&invitation, &phone), 101)

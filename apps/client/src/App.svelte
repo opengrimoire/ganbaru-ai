@@ -49,7 +49,6 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { hasOnlyShortcutModifier, hasShortcutModifier } from "$lib/keyboard-shortcuts";
   import TitleBar from "$lib/components/TitleBar.svelte";
-  import VaultReadOnlyBanner from "$lib/components/vault/VaultReadOnlyBanner.svelte";
   import WindowResizeHandles from "$lib/components/WindowResizeHandles.svelte";
   import CalendarView from "$lib/components/calendar/CalendarView.svelte";
   import CompletionOverlay from "$lib/components/pomodoro/CompletionOverlay.svelte";
@@ -1062,7 +1061,6 @@
 >
   <div class="flex h-full flex-col overflow-hidden bg-sidebar">
     <TitleBar {shellStartupMs} {startupMemorySnapshot} {ensureBenchmarkOverlay} />
-    <VaultReadOnlyBanner />
     <main class="content-panel flex-1 min-h-0 overflow-hidden bg-background">
       {#if nav.current === "calendar"}
         <CalendarView />
