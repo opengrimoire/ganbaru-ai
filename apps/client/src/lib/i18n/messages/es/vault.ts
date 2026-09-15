@@ -2,6 +2,7 @@ import type {
   dataFolderError as enDataFolderError,
   language as enLanguage,
   vaultOwnership as enVaultOwnership,
+  vaultOwnershipPrompt as enVaultOwnershipPrompt,
   vaultHandoff as enVaultHandoff,
   vaultSetup as enVaultSetup,
 } from "../en/vault";
@@ -68,6 +69,13 @@ export const vaultOwnership = {
   recovery: "Esta bóveda necesita recuperar la transferencia antes de poder modificarse.",
 } as const satisfies MessageShape<typeof enVaultOwnership>;
 
+export const vaultOwnershipPrompt = {
+  title: (device: string) => `${device} es el dispositivo principal`,
+  description: "Solo el dispositivo principal puede hacer cambios.",
+  continueReadOnly: "Continuar en solo lectura",
+  switching: "Cambiando a este dispositivo...",
+} as const satisfies MessageShape<typeof enVaultOwnershipPrompt>;
+
 export const vaultHandoff = {
   heading: "Dispositivos vinculados",
   description: "Administra tus dispositivos conectados.",
@@ -113,7 +121,7 @@ export const vaultHandoff = {
   notNow: "Ahora no",
   continue: "Continuar",
   deviceLabel: "Teléfono",
-  useHere: "Usar en este dispositivo",
+  useHere: "Cambiar a este dispositivo",
   refreshCopy: "Obtener los últimos cambios",
   retry: "Reintentar",
   cancel: "Cancelar transferencia",

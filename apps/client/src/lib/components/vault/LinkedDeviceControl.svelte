@@ -38,16 +38,6 @@
   let triggerElement = $state<HTMLButtonElement | null>(null);
   let mobilePanelStyle = $state("");
 
-  const stateLabel = $derived(
-    status?.linked
-      ? status.pendingTransfer
-        ? t("vaultHandoff.transferPending")
-        : status.canWrite
-          ? t("vaultHandoff.thisDeviceOwns")
-          : t("vaultHandoff.otherDeviceOwns")
-      : t("vaultHandoff.notLinked"),
-  );
-
   async function refreshStatus(): Promise<void> {
     try {
       status = await readPairingStatus();
@@ -174,7 +164,7 @@
         : "h-full w-full min-w-0",
       open && (presentation === "desktop" ? "bg-sidebar-accent text-foreground" : "text-foreground"),
     )}
-    title={`${t("vaultHandoff.heading")}\n${stateLabel}`}
+    title={t("vaultHandoff.heading")}
     aria-label={t("vaultHandoff.heading")}
     aria-haspopup="dialog"
     aria-expanded={open}
@@ -188,7 +178,7 @@
       <RefreshCw
         size={presentation === "desktop" ? 14 : 19}
         strokeWidth={presentation === "desktop" ? 1.5 : 1.8}
-        class={cn(status?.pendingTransfer && "animate-spin", presentation === "desktop" && "text-foreground/68 dark:text-white/76")}
+        class={cn(presentation === "desktop" && "text-foreground/68 dark:text-white/76")}
         aria-hidden="true"
       />
     </span>

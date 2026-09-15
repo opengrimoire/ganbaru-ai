@@ -90,6 +90,21 @@ function safeStorage(): Storage | undefined {
   }
 }
 
+async function finishVaultOwnershipTransition(): Promise<void> {
+  const cover = document.getElementById("vault-ownership-transition-cover");
+  const storageKey = cover?.dataset.storageKey;
+  await document.fonts.ready;
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  cover?.remove();
+  if (!storageKey) return;
+  try {
+    window.sessionStorage.removeItem(storageKey);
+  } catch {
+    // The cover can still be removed when session storage is unavailable.
+  }
+}
+
 async function applyPreVaultLanguagePreference(): Promise<void> {
   const storage = safeStorage();
   const preference = readPreVaultLanguagePreference(storage);
@@ -239,12 +254,13 @@ const appPromise = (async () => {
 
 void appPromise
   .then(async () => {
+    await finishVaultOwnershipTransition();
     if (getCurrentWindow().label !== "main") return;
-    await document.fonts.ready;
     await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
     await invoke("reveal_main_window");
   })
-  .catch((error: unknown) => {
+  .catch(async (error: unknown) => {
+    await finishVaultOwnershipTransition();
     console.error("Failed to reveal the initialized main window:", error);
   });
 

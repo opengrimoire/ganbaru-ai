@@ -945,4 +945,9 @@
       onDismiss={() => undefined}
     />
   {/if}
+
+  {#await import("$lib/components/vault/VaultOwnershipPrompt.svelte") then module}
+    {@const VaultOwnershipPrompt = module.default}
+    <VaultOwnershipPrompt platform="android" />
+  {/await}
 </div>

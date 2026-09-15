@@ -59,6 +59,13 @@ export const vaultOwnership = {
   recovery: "This vault needs handoff recovery before it can be changed.",
 } as const;
 
+export const vaultOwnershipPrompt = {
+  title: (device: string) => `${device} is the main device`,
+  description: "Only the main device can make changes.",
+  continueReadOnly: "Continue in read-only",
+  switching: "Switching to this device...",
+} as const;
+
 export const vaultHandoff = {
   heading: "Linked devices",
   description: "Manage your connected devices.",
@@ -104,7 +111,7 @@ export const vaultHandoff = {
   notNow: "Not now",
   continue: "Continue",
   deviceLabel: "Phone",
-  useHere: "Use on this device",
+  useHere: "Switch to this device",
   refreshCopy: "Get latest changes",
   retry: "Retry",
   cancel: "Cancel transfer",

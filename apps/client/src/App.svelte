@@ -49,6 +49,7 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { hasOnlyShortcutModifier, hasShortcutModifier } from "$lib/keyboard-shortcuts";
   import TitleBar from "$lib/components/TitleBar.svelte";
+  import { getAppCloseCoordinator } from "$lib/components/title-bar/title-bar-shortcut-controller.svelte";
   import WindowResizeHandles from "$lib/components/WindowResizeHandles.svelte";
   import CalendarView from "$lib/components/calendar/CalendarView.svelte";
   import CompletionOverlay from "$lib/components/pomodoro/CompletionOverlay.svelte";
@@ -92,6 +93,7 @@
   perfMark("boot.script-start");
 
   const appWindow = getCurrentWindow();
+  const appClose = getAppCloseCoordinator();
   const isMainWindow = appWindow.label === "main";
   const detachedWindowView = detachableTabViewFromWindowLabel(appWindow.label);
   const nav = getNavigation();
@@ -1125,6 +1127,17 @@
   {#if BenchmarkOverlay}
     {@const Overlay = BenchmarkOverlay}
     <Overlay />
+  {/if}
+
+  {#if isMainWindow}
+    {#await import("$lib/components/vault/VaultOwnershipPrompt.svelte") then module}
+      {@const VaultOwnershipPrompt = module.default}
+      <VaultOwnershipPrompt
+        platform="desktop"
+        closeConfirmationOpen={appClose.confirmationOpen}
+        onRequestClose={() => appClose.request()}
+      />
+    {/await}
   {/if}
 
   <MusicPlaybackHost />
