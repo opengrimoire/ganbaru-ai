@@ -21,7 +21,7 @@ vi.mock("$lib/api/vault-handoff", async (importOriginal) => {
       activated: true,
       inProgress: false,
     })),
-    requestAndroidBundle: vi.fn(async () => undefined),
+    requestOwnerBundle: vi.fn(async () => undefined),
   };
 });
 
@@ -29,6 +29,7 @@ function pairingStatus(canWrite: boolean): PairingStatus {
   return {
     deviceId: "desktop",
     linked: true,
+    devices: [{ deviceId: "phone", label: "Phone", isOwner: !canWrite, isCoordinator: false, kind: "phone" }],
     peerDeviceId: "phone",
     peerLabel: "Phone",
     coordinatorEndpoint: "192.168.1.2:43821",
@@ -37,6 +38,7 @@ function pairingStatus(canWrite: boolean): PairingStatus {
     recoveryRequired: false,
     replicaReady: true,
     pendingTransfer: false,
+    canInvite: false,
   };
 }
 

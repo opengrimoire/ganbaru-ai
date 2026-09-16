@@ -2,13 +2,14 @@
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use super::protocol::PROTOCOL_VERSION;
-use super::protocol::{validate_identifier, BundleMetadata, BundlePurpose, PairingInvitation};
+use super::protocol::{
+    validate_identifier, BundleMetadata, BundlePurpose, DeviceKind, PairingInvitation,
+};
 use base64::Engine;
 use rcgen::{CertificateParams, KeyPair};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
@@ -16,11 +17,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 const PAIRING_STATE_FILE: &str = "vault-handoff.json";
-const PAIRING_STATE_SCHEMA_VERSION: u32 = 1;
+const PAIRING_STATE_SCHEMA_VERSION: u32 = 2;
 const STAGING_DIRECTORY: &str = "vault-handoff-staging";
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 const INVITATION_LIFETIME_MS: i64 = 3 * 60 * 1_000;
 const MAX_CERTIFICATE_BYTES: usize = 16 * 1024;
+const MAX_LINKED_PEERS: usize = 32;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,6 +37,8 @@ struct StoredIdentity {
 pub(crate) struct LinkedPeer {
     pub device_id: String,
     pub device_label: String,
+    #[serde(default)]
+    pub device_kind: DeviceKind,
     pub vault_id: String,
     pub certificate: String,
     pub certificate_fingerprint: String,
@@ -56,7 +60,14 @@ pub(crate) struct CoordinatorPin {
 struct PairingStateFile {
     schema_version: u32,
     identity: StoredIdentity,
-    linked_peer: Option<LinkedPeer>,
+    #[serde(default)]
+    linked_peers: BTreeMap<String, LinkedPeer>,
+    #[serde(
+        default,
+        rename = "linkedPeer",
+        skip_serializing_if = "Option::is_none"
+    )]
+    legacy_linked_peer: Option<LinkedPeer>,
     coordinator: Option<CoordinatorPin>,
     #[serde(default)]
     replica_ready: bool,
@@ -141,6 +152,7 @@ pub(crate) struct Enrollment<'a> {
     pub vault_id: &'a str,
     pub device_id: &'a str,
     pub device_label: &'a str,
+    pub device_kind: DeviceKind,
     pub certificate_b64: &'a str,
 }
 
@@ -177,12 +189,21 @@ impl PairingManager {
             .map_err(|error| format!("create handoff staging directory: {error}"))?;
 
         let state = if state_path.exists() {
-            read_state(&state_path)?
+            let mut state = read_state(&state_path)?;
+            if state.schema_version == 1 {
+                if let Some(peer) = state.legacy_linked_peer.take() {
+                    state.linked_peers.insert(peer.device_id.clone(), peer);
+                }
+                state.schema_version = PAIRING_STATE_SCHEMA_VERSION;
+                persist_state(&state_path, &state)?;
+            }
+            state
         } else {
             let state = PairingStateFile {
                 schema_version: PAIRING_STATE_SCHEMA_VERSION,
                 identity: create_identity(device_id.clone())?,
-                linked_peer: None,
+                linked_peers: BTreeMap::new(),
+                legacy_linked_peer: None,
                 coordinator: None,
                 replica_ready: false,
                 pending_acknowledgement: None,
@@ -220,9 +241,22 @@ impl PairingManager {
         ))
     }
 
-    pub(crate) fn linked_peer(&self) -> Result<Option<LinkedPeer>, String> {
+    pub(crate) fn linked_peers(&self) -> Result<Vec<LinkedPeer>, String> {
         let inner = self.lock()?;
-        Ok(initialized_state(&inner)?.linked_peer.clone())
+        Ok(initialized_state(&inner)?
+            .linked_peers
+            .values()
+            .cloned()
+            .collect())
+    }
+
+    pub(crate) fn linked_peer(&self, device_id: &str) -> Result<Option<LinkedPeer>, String> {
+        validate_identifier("peer device id", device_id)?;
+        let inner = self.lock()?;
+        Ok(initialized_state(&inner)?
+            .linked_peers
+            .get(device_id)
+            .cloned())
     }
 
     pub(crate) fn coordinator_pin(&self) -> Result<Option<CoordinatorPin>, String> {
@@ -257,7 +291,7 @@ impl PairingManager {
             return Err("finish or retry the active handoff before unlinking".to_string());
         }
         let state = initialized_state_mut(&mut inner)?;
-        state.linked_peer = None;
+        state.linked_peers.clear();
         state.coordinator = None;
         state.replica_ready = false;
         state.completed_activation = None;
@@ -269,6 +303,42 @@ impl PairingManager {
         {
             inner.invitations.clear();
             inner.outgoing_bundles.clear();
+        }
+        Ok(())
+    }
+
+    pub(crate) fn unlink_device(&self, device_id: &str) -> Result<(), String> {
+        validate_identifier("peer device id", device_id)?;
+        let mut inner = self.lock()?;
+        let previous = initialized_state(&inner)?.clone();
+        if previous.pending_acknowledgement.is_some()
+            || previous.outgoing_transfer.is_some()
+            || previous.incoming_transfer.is_some()
+            || previous.requested_upload.is_some()
+        {
+            return Err("finish or retry the active handoff before unlinking".to_string());
+        }
+        let state = initialized_state_mut(&mut inner)?;
+        let removed_peer = state.linked_peers.remove(device_id).is_some();
+        let removed_coordinator = state
+            .coordinator
+            .as_ref()
+            .is_some_and(|coordinator| coordinator.device_id == device_id);
+        if removed_coordinator {
+            state.coordinator = None;
+            state.replica_ready = false;
+            state.completed_activation = None;
+        }
+        if !removed_peer && !removed_coordinator {
+            return Err("linked device was not found".to_string());
+        }
+        if let Err(error) = persist_initialized_state(&inner) {
+            inner.state = Some(previous);
+            return Err(error);
+        }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        if removed_peer {
+            inner.invitations.clear();
         }
         Ok(())
     }
@@ -430,7 +500,10 @@ impl PairingManager {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub(crate) fn request_upload(&self, purpose: BundlePurpose) -> Result<(), String> {
         let mut inner = self.lock()?;
-        initialized_state_mut(&mut inner)?.requested_upload = Some(purpose);
+        let state = initialized_state_mut(&mut inner)?;
+        if state.requested_upload != Some(BundlePurpose::Ownership) {
+            state.requested_upload = Some(purpose);
+        }
         persist_initialized_state(&inner)
     }
 
@@ -499,20 +572,38 @@ impl PairingManager {
         let peer = LinkedPeer {
             device_id: enrollment.device_id.to_string(),
             device_label: enrollment.device_label.to_string(),
+            device_kind: enrollment.device_kind,
             vault_id: enrollment.vault_id.to_string(),
             certificate: enrollment.certificate_b64.to_string(),
             certificate_fingerprint: certificate_fingerprint(certificate.as_ref()),
         };
         let state = initialized_state_mut(&mut inner)?;
-        if let Some(existing) = state.linked_peer.as_ref() {
-            if existing.device_id != peer.device_id
-                || existing.certificate_fingerprint != peer.certificate_fingerprint
+        if peer.device_id == state.identity.device_id {
+            return Err("a device cannot enroll its coordinator identity".to_string());
+        }
+        if let Some(existing) = state.linked_peers.get(&peer.device_id) {
+            if existing.certificate_fingerprint != peer.certificate_fingerprint
                 || existing.vault_id != peer.vault_id
             {
-                return Err("a different phone is already linked".to_string());
+                return Err(
+                    "this device identity conflicts with an existing linked device".to_string(),
+                );
+            }
+        } else {
+            if state
+                .linked_peers
+                .values()
+                .any(|existing| existing.certificate_fingerprint == peer.certificate_fingerprint)
+            {
+                return Err("this certificate already belongs to another linked device".to_string());
+            }
+            if state.linked_peers.len() >= MAX_LINKED_PEERS {
+                return Err(format!("at most {MAX_LINKED_PEERS} devices can be linked"));
             }
         }
-        state.linked_peer = Some(peer.clone());
+        state
+            .linked_peers
+            .insert(peer.device_id.clone(), peer.clone());
         persist_initialized_state(&inner)?;
         inner.invitations.remove(enrollment.invitation_id);
         Ok(peer)
@@ -550,9 +641,9 @@ impl PairingManager {
             .ok_or_else(|| "authenticated client certificate is required".to_string())?;
         let inner = self.lock()?;
         let peer = initialized_state(&inner)?
-            .linked_peer
-            .as_ref()
-            .ok_or_else(|| "no phone is linked".to_string())?;
+            .linked_peers
+            .get(device_id)
+            .ok_or_else(|| "this device is not linked".to_string())?;
         if peer.device_id != device_id
             || peer.vault_id != vault_id
             || peer.certificate_fingerprint != certificate_fingerprint(certificate.as_ref())
@@ -560,6 +651,23 @@ impl PairingManager {
             return Err("authenticated device identity does not match the request".to_string());
         }
         Ok(())
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    pub(crate) fn authenticated_peer(
+        &self,
+        certificate: Option<&CertificateDer<'_>>,
+    ) -> Result<LinkedPeer, String> {
+        let certificate = certificate
+            .ok_or_else(|| "authenticated client certificate is required".to_string())?;
+        let fingerprint = certificate_fingerprint(certificate.as_ref());
+        let inner = self.lock()?;
+        initialized_state(&inner)?
+            .linked_peers
+            .values()
+            .find(|peer| peer.certificate_fingerprint == fingerprint)
+            .cloned()
+            .ok_or_else(|| "authenticated device is not linked".to_string())
     }
 
     #[allow(dead_code)] // H04 registers consistent snapshots for transport.
@@ -838,12 +946,39 @@ fn validate_state(state: &PairingStateFile, expected_device_id: &str) -> Result<
     }
     validate_identifier("device id", &state.identity.device_id)?;
     decode_identity(&state.identity)?;
-    if let Some(peer) = state.linked_peer.as_ref() {
+    if state.linked_peers.len() > MAX_LINKED_PEERS {
+        return Err("too many linked devices are stored".to_string());
+    }
+    if state.coordinator.is_some() && !state.linked_peers.is_empty() {
+        return Err("a coordinator client cannot store its own linked devices".to_string());
+    }
+    let mut peer_vault_id: Option<&str> = None;
+    let mut certificate_fingerprints = std::collections::BTreeSet::new();
+    for (device_id, peer) in &state.linked_peers {
+        if device_id != &peer.device_id {
+            return Err("linked device index is inconsistent".to_string());
+        }
+        if peer.device_id == state.identity.device_id {
+            return Err("linked device identity duplicates the local device".to_string());
+        }
         validate_identifier("peer device id", &peer.device_id)?;
         validate_identifier("peer vault id", &peer.vault_id)?;
+        if peer.device_label.trim().is_empty()
+            || peer.device_label.len() > super::protocol::MAX_DEVICE_LABEL_BYTES
+            || peer.device_label.chars().any(char::is_control)
+        {
+            return Err("linked device label is invalid".to_string());
+        }
+        if peer_vault_id.is_some_and(|vault_id| vault_id != peer.vault_id) {
+            return Err("linked devices belong to different vaults".to_string());
+        }
+        peer_vault_id = Some(&peer.vault_id);
         let certificate = decode_certificate(&peer.certificate)?;
         if certificate_fingerprint(certificate.as_ref()) != peer.certificate_fingerprint {
             return Err("linked peer certificate fingerprint is inconsistent".to_string());
+        }
+        if !certificate_fingerprints.insert(&peer.certificate_fingerprint) {
+            return Err("linked devices reuse a certificate identity".to_string());
         }
     }
     if let Some(coordinator) = state.coordinator.as_ref() {
@@ -1002,8 +1137,44 @@ mod tests {
             vault_id: &invitation.vault_id,
             device_id: "device-phone",
             device_label: "Phone",
+            device_kind: DeviceKind::Phone,
             certificate_b64: &phone.certificate,
         }
+    }
+
+    fn enroll_device(
+        manager: &PairingManager,
+        device_id: &str,
+        device_label: &str,
+        now_unix_ms: i64,
+    ) {
+        let invitation = manager
+            .create_invitation(
+                "127.0.0.1:41000".parse().expect("endpoint"),
+                "vault-1".to_string(),
+                0,
+                now_unix_ms,
+            )
+            .expect("invitation");
+        let identity = create_identity(device_id.to_string()).expect("peer identity");
+        manager
+            .enroll_peer(
+                Enrollment {
+                    invitation_id: &invitation.invitation_id,
+                    secret: &invitation.secret,
+                    vault_id: &invitation.vault_id,
+                    device_id,
+                    device_label,
+                    device_kind: if device_label == "Phone" {
+                        DeviceKind::Phone
+                    } else {
+                        DeviceKind::Computer
+                    },
+                    certificate_b64: &identity.certificate,
+                },
+                now_unix_ms + 1,
+            )
+            .expect("enroll device");
     }
 
     #[test]
@@ -1039,6 +1210,110 @@ mod tests {
             .enroll_peer(enrollment(&invitation, &phone), 103)
             .unwrap_err()
             .contains("unknown"));
+    }
+
+    #[test]
+    fn several_peers_survive_restart_and_can_be_unlinked_individually() {
+        let temp = TestDirectory::new("several-peers");
+        let manager = PairingManager::default();
+        manager
+            .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+            .expect("initialize");
+        enroll_device(&manager, "device-phone", "Phone", 100);
+        enroll_device(&manager, "device-laptop", "Laptop", 200);
+
+        let restarted = PairingManager::default();
+        restarted
+            .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+            .expect("restart");
+        let peers = restarted.linked_peers().expect("linked peers");
+        assert_eq!(peers.len(), 2);
+        assert_eq!(peers[0].device_id, "device-laptop");
+        assert_eq!(peers[1].device_id, "device-phone");
+
+        restarted
+            .unlink_device("device-phone")
+            .expect("unlink one peer");
+        assert!(restarted
+            .linked_peer("device-phone")
+            .expect("removed peer")
+            .is_none());
+        assert!(restarted
+            .linked_peer("device-laptop")
+            .expect("remaining peer")
+            .is_some());
+    }
+
+    #[test]
+    fn schema_one_peer_migrates_to_membership() {
+        let temp = TestDirectory::new("schema-one-migration");
+        let manager = PairingManager::default();
+        manager
+            .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+            .expect("initialize");
+        enroll_device(&manager, "device-phone", "Phone", 100);
+
+        let state_path = temp.path().join(PAIRING_STATE_FILE);
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&fs::read(&state_path).expect("read current pairing state"))
+                .expect("decode current pairing state");
+        let object = value.as_object_mut().expect("pairing state object");
+        object.insert("schemaVersion".to_string(), serde_json::json!(1));
+        let peers = object
+            .remove("linkedPeers")
+            .expect("current linked peers")
+            .as_object()
+            .expect("linked peer map")
+            .clone();
+        object.insert(
+            "linkedPeer".to_string(),
+            peers.get("device-phone").expect("phone peer").clone(),
+        );
+        fs::write(
+            &state_path,
+            serde_json::to_vec_pretty(&value).expect("encode legacy state"),
+        )
+        .expect("write legacy state");
+
+        let migrated = PairingManager::default();
+        migrated
+            .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+            .expect("migrate legacy state");
+        assert_eq!(
+            migrated
+                .linked_peers()
+                .expect("migrated peers")
+                .into_iter()
+                .map(|peer| peer.device_id)
+                .collect::<Vec<_>>(),
+            vec!["device-phone"]
+        );
+        let persisted: serde_json::Value =
+            serde_json::from_slice(&fs::read(state_path).expect("read migrated state"))
+                .expect("decode migrated state");
+        assert_eq!(persisted["schemaVersion"], PAIRING_STATE_SCHEMA_VERSION);
+        assert!(persisted.get("linkedPeer").is_none());
+    }
+
+    #[test]
+    fn ownership_upload_request_cannot_be_downgraded_to_refresh() {
+        let temp = TestDirectory::new("upload-priority");
+        let manager = PairingManager::default();
+        manager
+            .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+            .expect("initialize");
+
+        manager
+            .request_upload(BundlePurpose::Ownership)
+            .expect("request ownership upload");
+        manager
+            .request_upload(BundlePurpose::Refresh)
+            .expect("request refresh upload");
+
+        assert_eq!(
+            manager.requested_upload().expect("requested upload"),
+            Some(BundlePurpose::Ownership)
+        );
     }
 
     #[test]
@@ -1098,7 +1373,7 @@ mod tests {
             persist_initialized_state(&inner).expect("clear request");
         }
         manager.unlink().expect("unlink stable pairing");
-        assert!(manager.linked_peer().expect("peer status").is_none());
+        assert!(manager.linked_peers().expect("peer status").is_empty());
     }
 
     #[test]

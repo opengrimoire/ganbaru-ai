@@ -19,7 +19,7 @@ The current repository has a substantial local desktop and Android foundation:
 - Local Music library and playlist workflows, desktop audio playback and media controls, Android Media3 playback, and YouTube IFrame integration with a known interaction-compliance redesign requirement.
 - Chromium website blocking, desktop application blocking, Android selected-application usage awareness, and explicitly consented Android enforcement.
 - An adaptive Android shell for Calendar, Projects, Notes, Chat, Quick notes, Pomodoro, Music, Settings, themes, portable backup and restore, notifications, and Doomscrolling controls.
-- A source-complete private-LAN whole-vault handoff between one desktop and one Android phone, with QR pairing, explicit single-writer ownership, read-only refresh, recovery, and combined Doomscrolling usage. Physical acceptance remains pending.
+- A source-complete private-LAN whole-vault handoff coordinated by one administration desktop for a bounded membership of desktop and Android clients, with QR or complete-code pairing, explicit single-writer ownership, read-only refresh, recovery, and combined Doomscrolling usage. Physical multi-device acceptance remains pending.
 
 Implemented does not mean release-complete on every platform. The [feature index](features/README.md) and [Android platform document](platforms/android/README.md) identify partial areas and platform limits.
 

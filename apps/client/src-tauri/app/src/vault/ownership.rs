@@ -490,6 +490,71 @@ impl VaultOwnershipManager {
         })
     }
 
+    pub(crate) fn accept_incoming_coordinator_grant(
+        &self,
+        vault_id: &str,
+        transfer_id: String,
+        coordinator_device_id: String,
+        generation: u64,
+    ) -> Result<(), String> {
+        require_identifier(&transfer_id, "transfer id")?;
+        require_identifier(&coordinator_device_id, "coordinator device id")?;
+        self.mutate_record(vault_id, |device_id, record| {
+            if generation == record.generation {
+                return match &record.transfer_phase {
+                    TransferPhase::IncomingCommitted {
+                        transfer_id: active,
+                        source_device_id,
+                        committed_generation,
+                    } if active == &transfer_id
+                        && source_device_id == &coordinator_device_id
+                        && *committed_generation == generation
+                        && record.owner_device_id == device_id =>
+                    {
+                        Ok(())
+                    }
+                    _ => Err("ownership grant generation is stale".to_string()),
+                };
+            }
+            if generation < record.generation {
+                return Err("ownership grant generation is stale".to_string());
+            }
+            if record.owner_device_id != coordinator_device_id {
+                return Err("ownership grant source is not the linked coordinator".to_string());
+            }
+            record.owner_device_id = device_id.to_string();
+            record.generation = generation;
+            record.transfer_phase = TransferPhase::IncomingCommitted {
+                transfer_id,
+                source_device_id: coordinator_device_id,
+                committed_generation: generation,
+            };
+            Ok(())
+        })
+    }
+
+    pub(crate) fn advance_remote_coordinator(
+        &self,
+        vault_id: &str,
+        coordinator_device_id: &str,
+        generation: u64,
+    ) -> Result<(), String> {
+        require_identifier(coordinator_device_id, "coordinator device id")?;
+        self.mutate_record(vault_id, |device_id, record| {
+            if record.owner_device_id != coordinator_device_id
+                || coordinator_device_id == device_id
+                || !matches!(record.transfer_phase, TransferPhase::Stable)
+            {
+                return Err("remote coordinator state conflicts with local ownership".to_string());
+            }
+            if generation < record.generation {
+                return Err("remote coordinator generation is stale".to_string());
+            }
+            record.generation = generation;
+            Ok(())
+        })
+    }
+
     #[allow(dead_code)] // Used when H04 activates a production transfer.
     pub(crate) fn finalize_incoming(
         &self,
@@ -1018,6 +1083,62 @@ mod tests {
         assert_eq!(status.owner_device_id, "desktop");
         assert_eq!(status.generation, 4);
         assert!(!status.can_write);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn coordinator_grant_can_advance_across_intermediate_owner_generations() {
+        let path = test_path("coordinator-grant");
+        let manager = load_manager(&path, "phone-two");
+        manager
+            .register_remote_owner("vault", "desktop".into(), 2)
+            .unwrap();
+
+        manager
+            .accept_incoming_coordinator_grant("vault", "transfer".into(), "desktop".into(), 5)
+            .unwrap();
+        manager.finalize_incoming("vault", "transfer", 5).unwrap();
+
+        let status = manager.status("vault").unwrap();
+        assert!(status.can_write);
+        assert_eq!(status.owner_device_id, "phone-two");
+        assert_eq!(status.generation, 5);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn coordinator_grant_rejects_an_untrusted_source_and_stale_generation() {
+        let path = test_path("coordinator-grant-boundary");
+        let manager = load_manager(&path, "phone-two");
+        manager
+            .register_remote_owner("vault", "desktop".into(), 4)
+            .unwrap();
+
+        assert!(manager
+            .accept_incoming_coordinator_grant("vault", "wrong-source".into(), "other".into(), 5,)
+            .is_err());
+        assert!(manager
+            .accept_incoming_coordinator_grant("vault", "stale".into(), "desktop".into(), 3,)
+            .is_err());
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn remote_coordinator_generation_advances_after_relayed_refresh() {
+        let path = test_path("coordinator-refresh");
+        let manager = load_manager(&path, "phone-two");
+        manager
+            .register_remote_owner("vault", "desktop".into(), 2)
+            .unwrap();
+
+        manager
+            .advance_remote_coordinator("vault", "desktop", 6)
+            .unwrap();
+
+        let status = manager.status("vault").unwrap();
+        assert!(!status.can_write);
+        assert_eq!(status.owner_device_id, "desktop");
+        assert_eq!(status.generation, 6);
         let _ = fs::remove_file(path);
     }
 

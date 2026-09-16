@@ -57,9 +57,20 @@ pub(crate) struct PairingInvitationView {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct LinkedDeviceView {
+    device_id: String,
+    label: Option<String>,
+    is_owner: bool,
+    is_coordinator: bool,
+    kind: protocol::DeviceKind,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct PairingStatus {
     device_id: String,
     linked: bool,
+    devices: Vec<LinkedDeviceView>,
     peer_device_id: Option<String>,
     peer_label: Option<String>,
     coordinator_endpoint: Option<String>,
@@ -68,6 +79,7 @@ pub(crate) struct PairingStatus {
     recovery_required: bool,
     replica_ready: bool,
     pending_transfer: bool,
+    can_invite: bool,
     #[cfg(target_os = "linux")]
     network_access: network_access::NetworkAccessStatus,
 }
@@ -243,7 +255,11 @@ fn restore_outgoing_ownership<R: Runtime>(
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub(crate) fn start_desktop<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
+pub(crate) fn start_desktop(app: &tauri::AppHandle) -> Result<(), String> {
+    if app.state::<PairingManager>().coordinator_pin()?.is_some() {
+        receiver::start_reconnect_refresh(app.clone());
+        return Ok(());
+    }
     let address = discover_private_lan_address()?;
     let manager = app.state::<PairingManager>().inner().clone();
     let lifecycle = app.state::<CoordinatorLifecycle>();
@@ -257,6 +273,9 @@ pub(crate) async fn handoff_create_pairing_invitation<R: Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<PairingInvitationView, String> {
     let manager = app.state::<PairingManager>().inner().clone();
+    if manager.coordinator_pin()?.is_some() {
+        return Err("a linked client device cannot coordinate additional devices".to_string());
+    }
     let lifecycle = app.state::<CoordinatorLifecycle>();
     let endpoint = match lifecycle.endpoint()? {
         Some(endpoint) => endpoint,
@@ -342,20 +361,80 @@ pub(crate) fn handoff_decode_pairing_qr(
 }
 
 #[tauri::command]
-pub(crate) async fn handoff_enroll<R: Runtime>(
-    app: tauri::AppHandle<R>,
+pub(crate) async fn handoff_enroll(
+    app: tauri::AppHandle,
     invitation: String,
     device_label: String,
 ) -> Result<(), String> {
     let invitation = decode_invitation(&invitation, protocol::unix_time_ms())?;
     let manager = app.state::<PairingManager>().inner().clone();
-    transport::enroll(&manager, &invitation, device_label).await?;
+    if manager.coordinator_pin()?.is_none() && !manager.linked_peers()?.is_empty() {
+        return Err(
+            "unlink coordinated devices before linking this device to another coordinator"
+                .to_string(),
+        );
+    }
+    let device_kind = if cfg!(any(target_os = "android", target_os = "ios")) {
+        protocol::DeviceKind::Phone
+    } else {
+        protocol::DeviceKind::Computer
+    };
+    transport::enroll(&manager, &invitation, device_label, device_kind).await?;
     app.state::<super::ownership::VaultOwnershipManager>()
         .register_remote_owner(
             &invitation.vault_id,
             invitation.coordinator_device_id,
             invitation.generation,
-        )
+        )?;
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        app.state::<CoordinatorLifecycle>().stop();
+        receiver::start_reconnect_refresh(app.clone());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) fn handoff_suggested_device_label() -> String {
+    suggested_device_label()
+}
+
+#[cfg(target_os = "android")]
+fn suggested_device_label() -> String {
+    std::process::Command::new("getprop")
+        .arg("ro.product.model")
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .and_then(|label| normalized_device_label(&label))
+        .unwrap_or_else(|| "Phone".to_string())
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn suggested_device_label() -> String {
+    std::env::var("HOSTNAME")
+        .ok()
+        .and_then(|label| normalized_device_label(&label))
+        .or_else(|| {
+            std::env::var("COMPUTERNAME")
+                .ok()
+                .and_then(|label| normalized_device_label(&label))
+        })
+        .unwrap_or_else(|| "Computer".to_string())
+}
+
+#[cfg(target_os = "ios")]
+fn suggested_device_label() -> String {
+    "Phone".to_string()
+}
+
+fn normalized_device_label(label: &str) -> Option<String> {
+    let label = label.trim();
+    (!label.is_empty()
+        && label.len() <= protocol::MAX_DEVICE_LABEL_BYTES
+        && !label.chars().any(char::is_control))
+    .then(|| label.to_string())
 }
 
 #[tauri::command]
@@ -364,10 +443,10 @@ pub(crate) fn handoff_pairing_status<R: Runtime>(
 ) -> Result<PairingStatus, String> {
     let manager = app.state::<PairingManager>();
     let (device_id, _) = manager.identity()?;
-    let peer = manager.linked_peer()?;
+    let peers = manager.linked_peers()?;
     let coordinator = manager.coordinator_pin()?;
-    let vault_id = peer
-        .as_ref()
+    let vault_id = peers
+        .first()
         .map(|peer| peer.vault_id.clone())
         .or_else(|| {
             coordinator
@@ -382,21 +461,62 @@ pub(crate) fn handoff_pairing_status<R: Runtime>(
                 .status(vault_id)
         })
         .transpose()?;
+    let peer = ownership
+        .as_ref()
+        .and_then(|ownership| {
+            peers
+                .iter()
+                .find(|peer| peer.device_id == ownership.owner_device_id)
+        })
+        .or_else(|| peers.first());
+    let mut devices = peers
+        .iter()
+        .map(|peer| LinkedDeviceView {
+            device_id: peer.device_id.clone(),
+            label: Some(peer.device_label.clone()),
+            is_owner: ownership
+                .as_ref()
+                .is_some_and(|ownership| ownership.owner_device_id == peer.device_id),
+            is_coordinator: false,
+            kind: peer.device_kind,
+        })
+        .collect::<Vec<_>>();
+    if let Some(coordinator) = coordinator.as_ref() {
+        if !devices
+            .iter()
+            .any(|device| device.device_id == coordinator.device_id)
+        {
+            devices.push(LinkedDeviceView {
+                device_id: coordinator.device_id.clone(),
+                label: None,
+                is_owner: ownership
+                    .as_ref()
+                    .is_some_and(|ownership| ownership.owner_device_id == coordinator.device_id),
+                is_coordinator: true,
+                kind: protocol::DeviceKind::Computer,
+            });
+        }
+    }
     #[cfg(target_os = "linux")]
     let network_access = desktop_network_access_status(&app)?;
     Ok(PairingStatus {
         device_id,
-        linked: peer.is_some() || coordinator.is_some(),
-        peer_device_id: peer.as_ref().map(|peer| peer.device_id.clone()),
-        peer_label: peer.as_ref().map(|peer| peer.device_label.clone()),
-        coordinator_endpoint: coordinator.map(|coordinator| coordinator.endpoint),
+        linked: !peers.is_empty() || coordinator.is_some(),
+        devices,
+        peer_device_id: peer.map(|peer| peer.device_id.clone()),
+        peer_label: peer.map(|peer| peer.device_label.clone()),
+        coordinator_endpoint: coordinator
+            .as_ref()
+            .map(|coordinator| coordinator.endpoint.clone()),
         vault_id,
         can_write: ownership.as_ref().map(|status| status.can_write),
         recovery_required: ownership
             .as_ref()
             .is_some_and(|status| status.role == "recovery"),
-        replica_ready: manager.replica_ready()? || peer.is_some(),
+        replica_ready: manager.replica_ready()? || !peers.is_empty(),
         pending_transfer: manager.has_pending_transfer()?,
+        can_invite: cfg!(not(any(target_os = "android", target_os = "ios")))
+            && coordinator.is_none(),
         #[cfg(target_os = "linux")]
         network_access,
     })
@@ -406,10 +526,9 @@ pub(crate) fn handoff_pairing_status<R: Runtime>(
 fn desktop_network_access_status<R: Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<network_access::NetworkAccessStatus, String> {
-    let endpoint = app
-        .state::<CoordinatorLifecycle>()
-        .endpoint()?
-        .ok_or_else(|| "vault handoff coordinator is not running".to_string())?;
+    let Some(endpoint) = app.state::<CoordinatorLifecycle>().endpoint()? else {
+        return Ok(network_access::not_required());
+    };
     let IpAddr::V4(address) = endpoint.ip() else {
         return Err("Linux firewall access requires an IPv4 LAN address".to_string());
     };
@@ -421,17 +540,46 @@ fn desktop_network_access_status<R: Runtime>(
 }
 
 #[tauri::command]
-pub(crate) fn handoff_unlink<R: Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
+pub(crate) fn handoff_unlink<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    device_id: String,
+) -> Result<(), String> {
     let manager = app.state::<PairingManager>();
     manager.ensure_can_unlink()?;
-    let ownership = super::ownership::active_status(&app)?;
+    let coordinator = manager.coordinator_pin()?;
+    let vault_id = if let Some(peer) = manager.linked_peer(&device_id)? {
+        peer.vault_id
+    } else if let Some(coordinator) = coordinator
+        .as_ref()
+        .filter(|coordinator| coordinator.device_id == device_id)
+    {
+        coordinator.vault_id.clone()
+    } else {
+        return Err("linked device was not found".to_string());
+    };
+    let ownership = app
+        .state::<super::ownership::VaultOwnershipManager>()
+        .status(&vault_id)?;
     if !matches!(
         ownership.transfer_phase,
         super::ownership::TransferPhase::Stable
     ) {
         return Err("finish or retry the active handoff before unlinking".to_string());
     }
-    manager.unlink()
+    if ownership.owner_device_id == device_id
+        && ownership.device_id != device_id
+        && manager.replica_ready()?
+    {
+        return Err("switch ownership away from this device before unlinking it".to_string());
+    }
+    if ownership.can_write
+        && coordinator.is_some_and(|coordinator| coordinator.device_id == device_id)
+    {
+        return Err(
+            "switch ownership to the coordinating computer before unlinking it".to_string(),
+        );
+    }
+    manager.unlink_device(&device_id)
 }
 
 #[tauri::command]
@@ -449,7 +597,7 @@ pub(crate) fn handoff_recover_local_copy<R: Runtime>(
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
-pub(crate) async fn handoff_request_android_bundle<R: Runtime>(
+pub(crate) async fn handoff_request_owner_bundle<R: Runtime>(
     app: tauri::AppHandle<R>,
     purpose: protocol::BundlePurpose,
 ) -> Result<(), String> {

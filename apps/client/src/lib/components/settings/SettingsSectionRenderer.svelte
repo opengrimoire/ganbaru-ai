@@ -13,6 +13,10 @@
   import UpdatesSection from "./UpdatesSection.svelte";
   import ShortcutsSection from "./ShortcutsSection.svelte";
   import AboutSection from "./AboutSection.svelte";
+  import {
+    getPreloadedDataSection,
+    preloadDataSection,
+  } from "./settings-sections";
   import type { SectionId } from "./types";
   import type { SettingsSectionRendererProps } from "./settings-section-renderer-contract";
 
@@ -32,6 +36,17 @@
   }: SettingsSectionRendererProps = $props();
 
   const { t } = getLocalization();
+  let DataSection = $state<Component | null>(getPreloadedDataSection());
+  let dataSectionLoadFailed = $state(false);
+
+  function loadDataSection(): void {
+    dataSectionLoadFailed = false;
+    void preloadDataSection()
+      .then((component) => { DataSection = component; })
+      .catch(() => { dataSectionLoadFailed = true; });
+  }
+
+  if (getPreloadedDataSection() === null) loadDataSection();
 
   const BASIC_SECTION_COMPONENTS: Partial<Record<SectionId, Component>> = {
     appearance: AppearanceSection,
@@ -67,18 +82,20 @@
     {onTeammateDraftStateChange}
   />
 {:else if activeSection === "data"}
-  {#await import("./DataSection.svelte")}
+  {#if DataSection}
+    <DataSection />
+  {:else if dataSectionLoadFailed}
+    <div class="flex min-h-36 flex-col items-center justify-center gap-3 text-sm text-destructive" role="alert">
+      <span>{t("common.viewLoadFailed", t("settings.section.data"))}</span>
+      <button type="button" class="rounded-md border border-border px-3 py-1.5 text-foreground" onclick={loadDataSection}>
+        {t("common.retry")}
+      </button>
+    </div>
+  {:else}
     <div class="flex min-h-36 items-center justify-center text-sm text-muted-foreground" aria-busy="true">
       {t("common.loading")}
     </div>
-  {:then module}
-    {@const DataSection = module.default}
-    <DataSection />
-  {:catch}
-    <div class="flex min-h-36 items-center justify-center text-sm text-destructive" role="alert">
-      {t("common.viewLoadFailed", t("settings.section.data"))}
-    </div>
-  {/await}
+  {/if}
 {:else if activeBasicSection}
   {@const SectionComponent = activeBasicSection}
   <SectionComponent />

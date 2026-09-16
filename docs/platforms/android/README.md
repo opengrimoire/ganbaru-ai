@@ -23,7 +23,7 @@ The current source is substantially implemented but the Android product is not y
 | Provider-free Chat channels, messages, replies, search, drafts, and scheduling | Implemented through the shared responsive workspace |
 | Local coding-agent processes, PTYs, Git, terminals, and working folders | Intentionally unavailable |
 | Doomscrolling selected-app usage and Home redirection | Implemented in source; policy and physical acceptance remain |
-| Local desktop linking, whole-vault ownership handoff, and read-only refresh | Implemented in source; physical acceptance remains |
+| Local multi-device linking, whole-vault ownership handoff, and read-only refresh | Implemented in source; physical multi-device acceptance remains |
 | Browser filtering on Android | Planned |
 | Concurrent sync, remote execution, diary, and sleep alarm | Planned |
 

@@ -8,6 +8,7 @@ use crate::vault::ownership::VaultOwnershipManager;
 use crate::vault::quiescence::{
     begin_snapshot_quiescence, begin_source_quiescence, SnapshotQuiescence, SourceQuiescence,
 };
+use std::collections::BTreeSet;
 use std::fs;
 use std::time::{Duration, Instant};
 use tauri::{Manager, Runtime};
@@ -70,6 +71,10 @@ pub(crate) enum CoordinatorResponse {
     Prepared {
         metadata: BundleMetadata,
         purpose: BundlePurpose,
+    },
+    BundlePending {
+        owner_device_id: String,
+        generation: u64,
     },
     OwnershipGrant {
         vault_id: String,
@@ -134,6 +139,8 @@ struct CoordinatorState<R: Runtime> {
     prepared: Option<PreparedTransfer>,
     completed: Option<CompletedActivation>,
     last_peer_activity: Instant,
+    waiting_refresh_targets: BTreeSet<String>,
+    relay_refresh_generation: Option<u64>,
 }
 
 const PEER_RECONNECT_GAP: Duration = Duration::from_secs(75);
@@ -144,11 +151,14 @@ pub(crate) async fn run<R: Runtime>(
     mut receiver: tokio::sync::mpsc::Receiver<CoordinatorRequest>,
 ) {
     if pairing.requested_upload().ok().flatten().is_none() {
-        if let (Ok(status), Ok(Some(peer))) = (
-            crate::vault::ownership::active_status(&app),
-            pairing.linked_peer(),
-        ) {
-            if !status.can_write && status.owner_device_id == peer.device_id {
+        if let Ok(status) = crate::vault::ownership::active_status(&app) {
+            if !status.can_write
+                && pairing
+                    .linked_peer(&status.owner_device_id)
+                    .ok()
+                    .flatten()
+                    .is_some()
+            {
                 let _ = pairing.request_upload(BundlePurpose::Refresh);
             }
         }
@@ -171,6 +181,8 @@ pub(crate) async fn run<R: Runtime>(
         prepared,
         completed,
         last_peer_activity: Instant::now(),
+        waiting_refresh_targets: BTreeSet::new(),
+        relay_refresh_generation: None,
     };
     while let Some(request) = receiver.recv().await {
         if matches!(request.operation, CoordinatorOperation::Shutdown) {
@@ -232,7 +244,14 @@ impl<R: Runtime> CoordinatorState<R> {
                 metadata,
                 source_device_id,
                 purpose,
-            } => self.uploaded(metadata, source_device_id, purpose).await,
+            } => {
+                let generation = metadata.generation;
+                let response = self.uploaded(metadata, source_device_id, purpose).await;
+                if response.is_ok() && purpose == BundlePurpose::Refresh {
+                    self.relay_refresh_generation = Some(generation);
+                }
+                response
+            }
             CoordinatorOperation::AuthorizeUpload {
                 metadata,
                 source_device_id,
@@ -261,46 +280,74 @@ impl<R: Runtime> CoordinatorState<R> {
             if prepared.metadata.vault_id == vault_id
                 && prepared.metadata.device_id == device_id
                 && prepared.purpose == purpose
-                && generation
-                    == match purpose {
-                        BundlePurpose::Ownership => prepared.metadata.generation.saturating_sub(1),
-                        BundlePurpose::Refresh => prepared.metadata.generation,
-                    }
             {
                 return Ok(CoordinatorResponse::Prepared {
                     metadata: prepared.metadata.clone(),
                     purpose,
                 });
             }
-            return Err("another vault handoff transfer is already active".to_string());
+            let status = self
+                .app
+                .state::<VaultOwnershipManager>()
+                .status(&vault_id)?;
+            return Ok(CoordinatorResponse::BundlePending {
+                owner_device_id: status.owner_device_id,
+                generation: status.generation,
+            });
         }
         if crate::vault::active_vault_id(&self.app)? != vault_id {
             return Err("requested vault is not active on the coordinator".to_string());
         }
         let ownership = self.app.state::<VaultOwnershipManager>();
         let status = ownership.status(&vault_id)?;
-        if !status.can_write || status.generation != generation {
-            return Err("coordinator is not the owner at the requested generation".to_string());
+        if generation > status.generation {
+            return Err("requesting replica is ahead of the coordinator".to_string());
         }
-        let pool = crate::db_path::connect_sqlite(
-            self.app.clone(),
-            format!("sqlite:{}", crate::vault::APP_SQLITE_FILE),
-        )
-        .await?;
-        crate::doomscrolling_linked::drain_local_spool(
-            &self.app,
-            &pool,
-            &vault_id,
-            &status.device_id,
-        )
-        .await?;
-        drop(pool);
+        if !status.can_write {
+            if purpose == BundlePurpose::Refresh
+                && self.relay_refresh_generation == Some(status.generation)
+                && self.waiting_refresh_targets.remove(&device_id)
+            {
+                // The coordinator has just activated a fresh owner snapshot and can
+                // relay that immutable copy without becoming the writer.
+            } else {
+                if self.pairing.linked_peer(&status.owner_device_id)?.is_none() {
+                    return Err(
+                        "the current vault owner is not linked to this coordinator".to_string()
+                    );
+                }
+                if purpose == BundlePurpose::Refresh {
+                    self.waiting_refresh_targets.insert(device_id.clone());
+                }
+                self.pairing.request_upload(purpose)?;
+                return Ok(CoordinatorResponse::BundlePending {
+                    owner_device_id: status.owner_device_id,
+                    generation: status.generation,
+                });
+            }
+        }
+        if status.can_write {
+            let pool = crate::db_path::connect_sqlite(
+                self.app.clone(),
+                format!("sqlite:{}", crate::vault::APP_SQLITE_FILE),
+            )
+            .await?;
+            crate::doomscrolling_linked::drain_local_spool(
+                &self.app,
+                &pool,
+                &vault_id,
+                &status.device_id,
+            )
+            .await?;
+            drop(pool);
+        }
         let transfer_id = random_token("transfer")?;
         let next_generation = match purpose {
-            BundlePurpose::Ownership => generation
+            BundlePurpose::Ownership => status
+                .generation
                 .checked_add(1)
                 .ok_or_else(|| "vault ownership generation is exhausted".to_string())?,
-            BundlePurpose::Refresh => generation,
+            BundlePurpose::Refresh => status.generation,
         };
         let (quiescence, snapshot_quiescence): (
             Option<SourceQuiescence>,
@@ -310,7 +357,7 @@ impl<R: Runtime> CoordinatorState<R> {
                 Some(
                     begin_source_quiescence(
                         &self.app,
-                        generation,
+                        status.generation,
                         transfer_id.clone(),
                         device_id.clone(),
                     )
@@ -530,8 +577,20 @@ impl<R: Runtime> CoordinatorState<R> {
             .app
             .state::<VaultOwnershipManager>()
             .status(&vault_id)?;
-        if status.owner_device_id != device_id || status.generation != generation {
-            return Err("polling device is not the owner at the requested generation".to_string());
+        if self.pairing.linked_peer(&device_id)?.is_none() {
+            return Err("polling device is not linked to this coordinator".to_string());
+        }
+        if status.owner_device_id != device_id {
+            if generation > status.generation {
+                return Err("polling replica is ahead of the coordinator".to_string());
+            }
+            return Ok(CoordinatorResponse::UploadStatus {
+                generation: status.generation,
+                requested_upload: None,
+            });
+        }
+        if status.generation != generation {
+            return Err("polling owner generation does not match the coordinator".to_string());
         }
         let reconnected = self.last_peer_activity.elapsed() >= PEER_RECONNECT_GAP;
         self.last_peer_activity = Instant::now();
@@ -549,12 +608,8 @@ impl<R: Runtime> CoordinatorState<R> {
 
     fn request_upload(&self, purpose: BundlePurpose) -> Result<CoordinatorResponse, String> {
         let status = crate::vault::ownership::active_status(&self.app)?;
-        let peer = self
-            .pairing
-            .linked_peer()?
-            .ok_or_else(|| "no phone is linked".to_string())?;
-        if status.can_write || status.owner_device_id != peer.device_id {
-            return Err("the linked phone is not the current vault owner".to_string());
+        if status.can_write || self.pairing.linked_peer(&status.owner_device_id)?.is_none() {
+            return Err("a linked device is not the current vault owner".to_string());
         }
         if let Some(incoming) = self.pairing.incoming_transfer()? {
             if incoming.purpose != purpose {

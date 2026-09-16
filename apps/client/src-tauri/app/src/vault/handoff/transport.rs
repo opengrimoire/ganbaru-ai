@@ -32,6 +32,8 @@ use tokio_rustls::TlsConnector;
 const TLS_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(15);
 const CHUNK_TIMEOUT: Duration = Duration::from_secs(20);
+const BUNDLE_COORDINATION_WAIT: Duration = Duration::from_secs(90);
+const BUNDLE_COORDINATION_POLL_INTERVAL: Duration = Duration::from_secs(1);
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 const UPLOAD_REQUEST_WAIT: Duration = Duration::from_secs(10);
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -186,6 +188,7 @@ async fn handle_connection(
             vault_id,
             device_id,
             device_label,
+            device_kind,
             device_certificate,
             ..
         } => {
@@ -205,6 +208,7 @@ async fn handle_connection(
                     vault_id: &vault_id,
                     device_id: &device_id,
                     device_label: &device_label,
+                    device_kind,
                     certificate_b64: &device_certificate,
                 },
                 unix_time_ms(),
@@ -320,14 +324,7 @@ async fn handle_connection(
             .await
         }
         ControlMessage::CancelTransfer { transfer_id } => {
-            let peer = manager
-                .linked_peer()?
-                .ok_or_else(|| "no phone is linked".to_string())?;
-            manager.verify_authenticated_peer(
-                &peer.device_id,
-                peer_certificate.as_ref(),
-                &peer.vault_id,
-            )?;
+            manager.authenticated_peer(peer_certificate.as_ref())?;
             send_coordinator_response(
                 &mut stream,
                 coordinator.as_ref(),
@@ -460,6 +457,14 @@ async fn send_coordinator_response_value(
         super::coordinator::CoordinatorResponse::Prepared { metadata, purpose } => {
             ControlMessage::BundlePrepared { metadata, purpose }
         }
+        super::coordinator::CoordinatorResponse::BundlePending {
+            owner_device_id,
+            generation,
+        } => ControlMessage::BundlePending {
+            protocol_version: PROTOCOL_VERSION,
+            owner_device_id,
+            generation,
+        },
         super::coordinator::CoordinatorResponse::OwnershipGrant {
             vault_id,
             transfer_id,
@@ -729,6 +734,7 @@ pub(crate) async fn enroll(
     manager: &PairingManager,
     invitation: &PairingInvitation,
     device_label: String,
+    device_kind: super::protocol::DeviceKind,
 ) -> Result<(), String> {
     invitation.validate(unix_time_ms())?;
     let endpoint = invitation
@@ -746,6 +752,7 @@ pub(crate) async fn enroll(
             vault_id: invitation.vault_id.clone(),
             device_id,
             device_label,
+            device_kind,
             device_certificate: encode_certificate(&identity.certificate),
         },
     ))
@@ -773,39 +780,51 @@ pub(crate) async fn request_bundle(
     manager: &PairingManager,
     generation: u64,
     purpose: BundlePurpose,
+    cancellation: &TransferCancellation,
 ) -> Result<BundleMetadata, String> {
     let coordinator = manager
         .coordinator_pin()?
         .ok_or_else(|| "this device is not linked to a coordinator".to_string())?;
     let (device_id, _) = manager.identity()?;
-    match authenticated_exchange(
-        manager,
-        ControlMessage::RequestBundle {
-            protocol_version: PROTOCOL_VERSION,
-            vault_id: coordinator.vault_id.clone(),
-            device_id: device_id.clone(),
-            generation,
-            purpose,
-        },
-    )
-    .await?
-    {
-        ControlMessage::BundlePrepared {
-            metadata,
-            purpose: offered_purpose,
-        } if offered_purpose == purpose
-            && metadata.vault_id == coordinator.vault_id
-            && metadata.device_id == device_id
-            && metadata.generation
-                == match purpose {
-                    BundlePurpose::Ownership => generation.saturating_add(1),
-                    BundlePurpose::Refresh => generation,
-                } =>
-        {
-            Ok(metadata)
+    let started = tokio::time::Instant::now();
+    loop {
+        if cancellation.is_cancelled() {
+            return Err("transfer was cancelled".to_string());
         }
-        ControlMessage::Error { message, .. } => Err(message),
-        _ => Err("coordinator returned an invalid prepared bundle".to_string()),
+        match authenticated_exchange(
+            manager,
+            ControlMessage::RequestBundle {
+                protocol_version: PROTOCOL_VERSION,
+                vault_id: coordinator.vault_id.clone(),
+                device_id: device_id.clone(),
+                generation,
+                purpose,
+            },
+        )
+        .await?
+        {
+            ControlMessage::BundlePrepared {
+                metadata,
+                purpose: offered_purpose,
+            } if offered_purpose == purpose
+                && metadata.vault_id == coordinator.vault_id
+                && metadata.device_id == device_id
+                && metadata.generation >= generation
+                && (purpose != BundlePurpose::Ownership || metadata.generation > generation) =>
+            {
+                return Ok(metadata);
+            }
+            ControlMessage::BundlePending { .. }
+                if started.elapsed() < BUNDLE_COORDINATION_WAIT =>
+            {
+                tokio::time::sleep(BUNDLE_COORDINATION_POLL_INTERVAL).await;
+            }
+            ControlMessage::BundlePending { .. } => {
+                return Err("the current owner did not return the vault in time".to_string());
+            }
+            ControlMessage::Error { message, .. } => return Err(message),
+            _ => return Err("coordinator returned an invalid prepared bundle".to_string()),
+        }
     }
 }
 
@@ -974,7 +993,7 @@ pub(crate) async fn probe_coordinator(
             generation: returned,
             requested_upload,
             ..
-        } if returned == generation => Ok(requested_upload),
+        } if returned >= generation => Ok(requested_upload),
         ControlMessage::Error { message, .. } => Err(message),
         _ => Err("coordinator returned an invalid refresh status".to_string()),
     }
@@ -1218,11 +1237,14 @@ async fn connect_pinned(
 fn server_config(manager: &PairingManager) -> Result<rustls::ServerConfig, String> {
     let (_, identity) = manager.identity()?;
     let builder = rustls::ServerConfig::builder();
-    let config = if let Some(peer) = manager.linked_peer()? {
+    let peers = manager.linked_peers()?;
+    let config = if !peers.is_empty() {
         let mut roots = RootCertStore::empty();
-        roots
-            .add(decode_certificate(&peer.certificate)?)
-            .map_err(|error| format!("trust linked device certificate: {error}"))?;
+        for peer in peers {
+            roots
+                .add(decode_certificate(&peer.certificate)?)
+                .map_err(|error| format!("trust linked device certificate: {error}"))?;
+        }
         let verifier = rustls::server::WebPkiClientVerifier::builder(Arc::new(roots))
             .allow_unauthenticated()
             .build()

@@ -56,6 +56,12 @@ pub(crate) struct NetworkAccessStatus {
     state: NetworkAccessState,
 }
 
+pub(crate) fn not_required() -> NetworkAccessStatus {
+    NetworkAccessStatus {
+        state: NetworkAccessState::NotRequired,
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct LanScope {
     interface: String,

@@ -79,9 +79,18 @@ describe("data folder state api", () => {
       vaultId: "vault-1",
       displayName: "Ganbaru AI",
     });
-    const { getActiveVaultInfo } = await loadModule();
+    const { getActiveVaultInfo, getCachedActiveVaultInfo } = await loadModule();
+
+    expect(getCachedActiveVaultInfo()).toBeUndefined();
 
     await expect(getActiveVaultInfo()).resolves.toEqual({
+      path: "/home/user/Documents/Ganbaru AI",
+      configPath: "/home/user/Documents/Ganbaru AI/config.json",
+      databasePath: "/home/user/Documents/Ganbaru AI/ganbaru-ai.sqlite",
+      vaultId: "vault-1",
+      displayName: "Ganbaru AI",
+    });
+    expect(getCachedActiveVaultInfo()).toEqual({
       path: "/home/user/Documents/Ganbaru AI",
       configPath: "/home/user/Documents/Ganbaru AI/config.json",
       databasePath: "/home/user/Documents/Ganbaru AI/ganbaru-ai.sqlite",

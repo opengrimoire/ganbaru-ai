@@ -1,6 +1,7 @@
 <script lang="ts">
   import X from "@lucide/svelte/icons/x";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
+  import Copy from "@lucide/svelte/icons/copy";
   import { onMount, tick } from "svelte";
   import type {
     DesktopNetworkAccess,
@@ -35,6 +36,19 @@
   const { t } = getLocalization();
   let dialog = $state<HTMLDivElement | null>(null);
   let closeButton = $state<HTMLButtonElement | null>(null);
+  let copied = $state(false);
+  let copyFailed = $state(false);
+
+  async function copyCode(): Promise<void> {
+    copyFailed = false;
+    try {
+      await navigator.clipboard.writeText(invitation.invitation);
+      copied = true;
+      window.setTimeout(() => { copied = false; }, 2_000);
+    } catch {
+      copyFailed = true;
+    }
+  }
 
   function handleKeydown(event: KeyboardEvent): void {
     if (event.key === "Tab" && dialog) {
@@ -103,6 +117,20 @@
     <div class="mt-5">
       <PairingQrCode {invitation} onExpired={onRefresh} />
     </div>
+
+    <button
+      type="button"
+      class="mx-auto mt-3 inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-border px-3 text-[0.8rem] font-medium hover:bg-accent"
+      onclick={() => void copyCode()}
+    >
+      <Copy size={14} strokeWidth={1.8} aria-hidden="true" />
+      {copied ? t("vaultHandoff.codeCopied") : t("vaultHandoff.copyCode")}
+    </button>
+    {#if copyFailed}
+      <p role="alert" class="mt-2 text-center text-[0.8rem] text-destructive">
+        {t("vaultHandoff.copyCodeFailed")}
+      </p>
+    {/if}
 
     {#if networkAccess?.state === "authorizationRequired"}
       <div class="mt-4 space-y-2 text-center">

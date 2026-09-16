@@ -26,6 +26,7 @@ export interface DesktopNetworkAccess {
 export interface PairingStatus {
   deviceId: string;
   linked: boolean;
+  devices: LinkedDevice[];
   peerDeviceId: string | null;
   peerLabel: string | null;
   coordinatorEndpoint: string | null;
@@ -34,8 +35,19 @@ export interface PairingStatus {
   recoveryRequired: boolean;
   replicaReady: boolean;
   pendingTransfer: boolean;
+  canInvite: boolean;
   networkAccess?: DesktopNetworkAccess;
 }
+
+export interface LinkedDevice {
+  deviceId: string;
+  label: string | null;
+  isOwner: boolean;
+  isCoordinator: boolean;
+  kind: "computer" | "phone" | "unknown";
+}
+
+let cachedPairingStatus: PairingStatus | undefined;
 
 export type DesktopBundleReceiveMode = "ownership" | "refresh";
 
@@ -111,16 +123,38 @@ function parseStatus(value: unknown): PairingStatus {
     !isRecord(value) ||
     typeof value.deviceId !== "string" ||
     typeof value.linked !== "boolean" ||
+    !Array.isArray(value.devices) ||
     (value.canWrite !== null && typeof value.canWrite !== "boolean") ||
     typeof value.recoveryRequired !== "boolean" ||
     typeof value.replicaReady !== "boolean" ||
     typeof value.pendingTransfer !== "boolean"
+    || typeof value.canInvite !== "boolean"
   ) {
     throw new Error("Invalid pairing status response");
   }
+  const devices = value.devices.map((device, index) => {
+    if (
+      !isRecord(device)
+      || typeof device.deviceId !== "string"
+      || (device.label !== null && typeof device.label !== "string")
+      || typeof device.isOwner !== "boolean"
+      || typeof device.isCoordinator !== "boolean"
+      || !["computer", "phone", "unknown"].includes(device.kind as string)
+    ) {
+      throw new Error(`Invalid linked device ${index + 1} response`);
+    }
+    return {
+      deviceId: device.deviceId,
+      label: device.label as string | null,
+      isOwner: device.isOwner,
+      isCoordinator: device.isCoordinator,
+      kind: device.kind as LinkedDevice["kind"],
+    };
+  });
   return {
     deviceId: value.deviceId,
     linked: value.linked,
+    devices,
     peerDeviceId: nullableString(value.peerDeviceId, "peer device id"),
     peerLabel: nullableString(value.peerLabel, "peer label"),
     coordinatorEndpoint: nullableString(value.coordinatorEndpoint, "coordinator endpoint"),
@@ -129,6 +163,7 @@ function parseStatus(value: unknown): PairingStatus {
     recoveryRequired: value.recoveryRequired,
     replicaReady: value.replicaReady,
     pendingTransfer: value.pendingTransfer,
+    canInvite: value.canInvite,
     networkAccess: value.networkAccess === undefined
       ? undefined
       : parseDesktopNetworkAccess(value.networkAccess),
@@ -195,9 +230,25 @@ export function enrollWithDesktop(
   return invoke("handoff_enroll", { invitation, deviceLabel });
 }
 
+/** Returns a stable human-readable label for this device when it enrolls. */
+export async function readSuggestedDeviceLabel(): Promise<string> {
+  const value = await invoke<unknown>("handoff_suggested_device_label");
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error("Invalid device label response");
+  }
+  return value;
+}
+
 /** Reads device-local linked coordinator status. */
 export async function readPairingStatus(): Promise<PairingStatus> {
-  return parseStatus(await invoke<unknown>("handoff_pairing_status"));
+  const status = parseStatus(await invoke<unknown>("handoff_pairing_status"));
+  cachedPairingStatus = status;
+  return status;
+}
+
+/** Returns the most recently validated linked-device status without native work. */
+export function getCachedPairingStatus(): PairingStatus | undefined {
+  return cachedPairingStatus;
 }
 
 /** Receives and activates the desktop vault through the shared whole-vault path. */
@@ -214,16 +265,16 @@ export function cancelDesktopBundleReceive(): Promise<void> {
   return invoke("handoff_cancel_receive");
 }
 
-/** Requests the linked Android owner to upload a whole-vault bundle. */
-export function requestAndroidBundle(
+/** Requests the current linked owner to upload a whole-vault bundle. */
+export function requestOwnerBundle(
   purpose: DesktopBundleReceiveMode,
 ): Promise<void> {
-  return invoke("handoff_request_android_bundle", { purpose });
+  return invoke("handoff_request_owner_bundle", { purpose });
 }
 
 /** Removes the linked-device relationship without changing the current owner. */
-export function unlinkVaultDevice(): Promise<void> {
-  return invoke("handoff_unlink");
+export function unlinkVaultDevice(deviceId: string): Promise<void> {
+  return invoke("handoff_unlink", { deviceId });
 }
 
 /** Explicitly forks the last local copy after the owning device is permanently unavailable. */

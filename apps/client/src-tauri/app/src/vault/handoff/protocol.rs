@@ -4,13 +4,22 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::path::Path;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-pub(crate) const PROTOCOL_VERSION: u16 = 1;
+pub(crate) const PROTOCOL_VERSION: u16 = 2;
 pub(crate) const MAX_CONTROL_BYTES: usize = 1024 * 1024;
 pub(crate) const MAX_ARCHIVE_BYTES: u64 = 100 * 1024 * 1024 * 1024;
 pub(crate) const MAX_IDENTIFIER_BYTES: usize = 160;
 pub(crate) const MAX_DEVICE_LABEL_BYTES: usize = 128;
 pub(crate) const MAX_DOOMSCROLLING_SAMPLES: usize = 1_024;
 pub(crate) const TRANSFER_CHUNK_BYTES: usize = 64 * 1024;
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum DeviceKind {
+    Computer,
+    Phone,
+    #[default]
+    Unknown,
+}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -103,6 +112,7 @@ pub(crate) enum ControlMessage {
         vault_id: String,
         device_id: String,
         device_label: String,
+        device_kind: DeviceKind,
         device_certificate: String,
     },
     Enrolled {
@@ -119,6 +129,11 @@ pub(crate) enum ControlMessage {
     BundlePrepared {
         metadata: BundleMetadata,
         purpose: BundlePurpose,
+    },
+    BundlePending {
+        protocol_version: u16,
+        owner_device_id: String,
+        generation: u64,
     },
     DownloadBundle {
         metadata: BundleMetadata,
@@ -213,6 +228,7 @@ impl ControlMessage {
                 vault_id,
                 device_id,
                 device_label,
+                device_kind: _,
                 device_certificate,
             } => {
                 validate_protocol(*protocol_version)?;
@@ -246,6 +262,14 @@ impl ControlMessage {
             }
             Self::BundlePrepared { metadata, .. } | Self::CommitStagedOwnership { metadata } => {
                 metadata.validate()?
+            }
+            Self::BundlePending {
+                protocol_version,
+                owner_device_id,
+                ..
+            } => {
+                validate_protocol(*protocol_version)?;
+                validate_identifier("owner device id", owner_device_id)?;
             }
             Self::DownloadBundle { metadata } | Self::BundleMetadata { metadata } => {
                 metadata.validate()?

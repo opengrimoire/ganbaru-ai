@@ -54,9 +54,7 @@
   );
   const ownerLabel = $derived(
     status?.peerLabel
-      ?? (platform === "desktop"
-        ? t("vaultHandoff.androidDevice")
-        : t("vaultHandoff.desktopDevice")),
+      ?? t("vaultHandoff.anotherDevice"),
   );
   const continueLabel = $derived(
     platform === "desktop"

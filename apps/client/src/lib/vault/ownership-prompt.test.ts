@@ -23,18 +23,26 @@ function memoryStorage(): Storage {
   };
 }
 
-function status(canWrite: boolean | null, linked = true): PairingStatus {
+function status(
+  canWrite: boolean | null,
+  linked = true,
+  coordinatorClient = true,
+): PairingStatus {
   return {
     deviceId: "local",
     linked,
+    devices: linked
+      ? [{ deviceId: "peer", label: "Phone", isOwner: canWrite === false, isCoordinator: true, kind: "computer" }]
+      : [],
     peerDeviceId: linked ? "peer" : null,
     peerLabel: linked ? "Phone" : null,
-    coordinatorEndpoint: linked ? "192.168.1.2:43821" : null,
+    coordinatorEndpoint: linked && coordinatorClient ? "192.168.1.2:43821" : null,
     vaultId: "vault",
     canWrite,
     recoveryRequired: false,
     replicaReady: true,
     pendingTransfer: false,
+    canInvite: false,
   };
 }
 
@@ -43,7 +51,7 @@ function dependencies(statuses: PairingStatus[]): VaultOwnershipRequestDependenc
   return {
     readStatus: vi.fn(async () => statuses[Math.min(index++, statuses.length - 1)]!),
     receiveFromDesktop: vi.fn(async () => ({ activated: true, inProgress: false })),
-    requestFromAndroid: vi.fn(async () => undefined),
+    requestFromCoordinator: vi.fn(async () => undefined),
     wait: vi.fn(async () => undefined),
     attempts: statuses.length,
   };
@@ -78,20 +86,34 @@ describe("vault ownership prompt", () => {
 
     await expect(requestVaultOwnership("android", deps)).resolves.toEqual(status(true));
     expect(deps.receiveFromDesktop).toHaveBeenCalledOnce();
-    expect(deps.requestFromAndroid).not.toHaveBeenCalled();
+    expect(deps.requestFromCoordinator).not.toHaveBeenCalled();
   });
 
   it("keeps polling after a desktop request until ownership changes", async () => {
-    const deps = dependencies([status(false), status(false), status(true)]);
+    const deps = dependencies([
+      status(false, true, false),
+      status(false, true, false),
+      status(true, true, false),
+    ]);
 
-    await expect(requestVaultOwnership("desktop", deps)).resolves.toEqual(status(true));
-    expect(deps.requestFromAndroid).toHaveBeenCalledOnce();
+    await expect(requestVaultOwnership("desktop", deps)).resolves.toEqual(
+      status(true, true, false),
+    );
+    expect(deps.requestFromCoordinator).toHaveBeenCalledOnce();
     expect(deps.receiveFromDesktop).not.toHaveBeenCalled();
     expect(deps.wait).toHaveBeenCalledTimes(2);
   });
 
+  it("lets a secondary desktop receive through its coordinator", async () => {
+    const deps = dependencies([status(false), status(true)]);
+
+    await expect(requestVaultOwnership("desktop", deps)).resolves.toEqual(status(true));
+    expect(deps.receiveFromDesktop).toHaveBeenCalledOnce();
+    expect(deps.requestFromCoordinator).not.toHaveBeenCalled();
+  });
+
   it("stops with a bounded timeout when the owner remains unavailable", async () => {
-    const deps = dependencies([status(false), status(false)]);
+    const deps = dependencies([status(false, true, false), status(false, true, false)]);
 
     await expect(requestVaultOwnership("desktop", deps)).rejects.toThrow(
       "coordinator request timed out",

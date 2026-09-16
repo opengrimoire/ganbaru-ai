@@ -1,5 +1,4 @@
-//! Android whole-vault receive, activation, acknowledgement, and refresh lifecycle.
-#![cfg_attr(not(target_os = "android"), allow(dead_code, unused_imports))]
+//! Whole-vault receive, activation, acknowledgement, and refresh lifecycle.
 
 use super::protocol::BundlePurpose;
 use super::state::{PairingManager, PendingAcknowledgement};
@@ -9,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-#[cfg(target_os = "android")]
 use tauri::Manager;
 
 const CONNECTED_REPOLL_DELAY: Duration = Duration::from_secs(1);
@@ -76,7 +74,6 @@ impl ReceiverLifecycle {
     }
 }
 
-#[cfg(target_os = "android")]
 #[tauri::command]
 pub(crate) async fn handoff_receive_desktop_bundle(
     app: tauri::AppHandle,
@@ -85,27 +82,11 @@ pub(crate) async fn handoff_receive_desktop_bundle(
     receive_if_idle(app, mode).await
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-pub(crate) async fn handoff_receive_desktop_bundle(
-    _mode: ReceiveMode,
-) -> Result<ReceiveOutcome, String> {
-    Err("desktop vault receive is only available on Android".to_string())
-}
-
-#[cfg(target_os = "android")]
 #[tauri::command]
 pub(crate) fn handoff_cancel_receive(app: tauri::AppHandle) -> Result<(), String> {
     app.state::<ReceiverLifecycle>().cancel()
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-pub(crate) fn handoff_cancel_receive() -> Result<(), String> {
-    Err("desktop vault receive is only available on Android".to_string())
-}
-
-#[cfg(target_os = "android")]
 async fn receive_if_idle(
     app: tauri::AppHandle,
     mode: ReceiveMode,
@@ -126,7 +107,6 @@ async fn receive_if_idle(
     result
 }
 
-#[cfg(target_os = "android")]
 async fn receive(
     app: &tauri::AppHandle,
     mode: ReceiveMode,
@@ -165,29 +145,38 @@ async fn receive(
     }
 
     let purpose = mode.purpose();
-    let metadata = super::transport::request_bundle(&pairing, status.generation, purpose).await?;
+    let metadata =
+        super::transport::request_bundle(&pairing, status.generation, purpose, cancellation)
+            .await?;
     let archive =
         super::transport::download_bundle(&pairing, metadata.clone(), cancellation).await?;
-    let staging = crate::vault::backup::android_handoff_staging_path(app, &metadata.transfer_id)?;
+    let staging = handoff_staging_path(app, &metadata.transfer_id)?;
     crate::vault::backup::stage_handoff_archive(&archive, &staging, &metadata.vault_id).await?;
 
     let preserve_local_copy = purpose == BundlePurpose::Ownership && !pairing.replica_ready()?;
-    if preserve_local_copy {
+    if preserve_local_copy && cfg!(target_os = "android") {
+        #[cfg(target_os = "android")]
         crate::vault::backup::vault_backup_to_downloads(app.clone()).await?;
     }
 
     if purpose == BundlePurpose::Ownership {
         let (_, generation) =
             super::transport::commit_staged_ownership(&pairing, metadata.clone()).await?;
-        ownership.accept_incoming_grant(
+        ownership.accept_incoming_coordinator_grant(
             &metadata.vault_id,
             metadata.transfer_id.clone(),
             coordinator.device_id,
             generation,
         )?;
+    } else {
+        ownership.advance_remote_coordinator(
+            &metadata.vault_id,
+            &coordinator.device_id,
+            metadata.generation,
+        )?;
     }
 
-    crate::vault::backup::activate_android_handoff(
+    activate_handoff(
         app,
         &staging,
         &metadata.transfer_id,
@@ -232,7 +221,6 @@ async fn receive(
     })
 }
 
-#[cfg(target_os = "android")]
 async fn resume_committed_ownership(
     app: &tauri::AppHandle,
     pairing: &PairingManager,
@@ -240,8 +228,8 @@ async fn resume_committed_ownership(
     transfer_id: String,
     generation: u64,
 ) -> Result<ReceiveOutcome, String> {
-    let staging = crate::vault::backup::android_handoff_staging_path(app, &transfer_id)?;
-    crate::vault::backup::activate_android_handoff(
+    let staging = handoff_staging_path(app, &transfer_id)?;
+    activate_handoff(
         app,
         &staging,
         &transfer_id,
@@ -277,7 +265,6 @@ async fn resume_committed_ownership(
     })
 }
 
-#[cfg(target_os = "android")]
 pub(super) fn reload_application_shell(app: &tauri::AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window("main")
@@ -287,7 +274,6 @@ pub(super) fn reload_application_shell(app: &tauri::AppHandle) -> Result<(), Str
         .map_err(|error| format!("reload application after vault activation: {error}"))
 }
 
-#[cfg(target_os = "android")]
 pub(super) fn reload_application_shell_after_ownership_change(
     app: &tauri::AppHandle,
 ) -> Result<(), String> {
@@ -301,7 +287,6 @@ pub(super) fn reload_application_shell_after_ownership_change(
         .map_err(|error| format!("reload application after ownership change: {error}"))
 }
 
-#[cfg(target_os = "android")]
 async fn flush_pending_acknowledgement(app: &tauri::AppHandle) -> Result<(), String> {
     let pairing = app.state::<PairingManager>().inner().clone();
     let Some(pending) = pairing.pending_acknowledgement()? else {
@@ -333,7 +318,6 @@ async fn flush_pending_acknowledgement(app: &tauri::AppHandle) -> Result<(), Str
     Ok(())
 }
 
-#[cfg(target_os = "android")]
 pub(crate) fn trigger_automatic_refresh(app: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
         let pairing = app.state::<PairingManager>().inner().clone();
@@ -362,7 +346,6 @@ pub(crate) fn trigger_automatic_refresh(app: tauri::AppHandle) {
     });
 }
 
-#[cfg(target_os = "android")]
 async fn refresh_after_reconnect(app: &tauri::AppHandle) -> bool {
     let lifecycle = app.state::<ReceiverLifecycle>();
     let pairing = app.state::<PairingManager>().inner().clone();
@@ -407,7 +390,6 @@ pub(crate) fn trigger_coordinator_reconciliation(app: tauri::AppHandle) {
     });
 }
 
-#[cfg(target_os = "android")]
 pub(crate) fn start_reconnect_refresh(app: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_secs(5)).await;
@@ -423,6 +405,77 @@ pub(crate) fn start_reconnect_refresh(app: tauri::AppHandle) {
     });
 }
 
+#[cfg(target_os = "android")]
+fn handoff_staging_path(
+    app: &tauri::AppHandle,
+    transfer_id: &str,
+) -> Result<std::path::PathBuf, String> {
+    crate::vault::backup::android_handoff_staging_path(app, transfer_id)
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn handoff_staging_path(
+    app: &tauri::AppHandle,
+    transfer_id: &str,
+) -> Result<std::path::PathBuf, String> {
+    crate::vault::backup::active_handoff_staging_path(app, transfer_id)
+}
+
+#[cfg(target_os = "ios")]
+fn handoff_staging_path(
+    _app: &tauri::AppHandle,
+    _transfer_id: &str,
+) -> Result<std::path::PathBuf, String> {
+    Err("vault handoff is not available on iOS".to_string())
+}
+
+#[cfg(target_os = "android")]
+async fn activate_handoff(
+    app: &tauri::AppHandle,
+    staging: &std::path::Path,
+    transfer_id: &str,
+    vault_id: &str,
+    preserve_previous: bool,
+) -> Result<crate::vault::VaultInfo, String> {
+    crate::vault::backup::activate_android_handoff(
+        app,
+        staging,
+        transfer_id,
+        vault_id,
+        preserve_previous,
+    )
+    .await
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+async fn activate_handoff(
+    app: &tauri::AppHandle,
+    staging: &std::path::Path,
+    transfer_id: &str,
+    vault_id: &str,
+    preserve_previous: bool,
+) -> Result<crate::vault::VaultInfo, String> {
+    crate::vault::backup::activate_active_handoff(
+        app,
+        staging,
+        transfer_id,
+        vault_id,
+        preserve_previous,
+    )
+    .await
+}
+
+#[cfg(target_os = "ios")]
+async fn activate_handoff(
+    _app: &tauri::AppHandle,
+    _staging: &std::path::Path,
+    _transfer_id: &str,
+    _vault_id: &str,
+    _preserve_previous: bool,
+) -> Result<crate::vault::VaultInfo, String> {
+    Err("vault handoff is not available on iOS".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -431,6 +484,6 @@ mod tests {
     fn receive_modes_map_to_the_single_transport_purpose() {
         assert_eq!(ReceiveMode::Ownership.purpose(), BundlePurpose::Ownership);
         assert_eq!(ReceiveMode::Refresh.purpose(), BundlePurpose::Refresh);
-        assert_eq!(super::super::protocol::PROTOCOL_VERSION, 1);
+        assert_eq!(super::super::protocol::PROTOCOL_VERSION, 2);
     }
 }

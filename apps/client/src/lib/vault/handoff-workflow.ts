@@ -1,5 +1,9 @@
 import type { Translate } from "$lib/i18n/translator.svelte";
 
+interface LinkedDeviceIdentity {
+  deviceId: string;
+}
+
 function errorText(cause: unknown): string {
   if (cause instanceof Error) return cause.message;
   return typeof cause === "string" ? cause : String(cause);
@@ -27,4 +31,12 @@ export function formatHandoffError(cause: unknown, t: Translate): string {
     return t("vaultHandoff.unreachable");
   }
   return t("vaultHandoff.failed", raw || t("vaultHandoff.unknownError"));
+}
+
+/** Reports whether an invitation enrolled a device absent when it was created. */
+export function hasNewLinkedDevice(
+  deviceIdsAtInvitation: ReadonlySet<string>,
+  devices: readonly LinkedDeviceIdentity[],
+): boolean {
+  return devices.some((device) => !deviceIdsAtInvitation.has(device.deviceId));
 }

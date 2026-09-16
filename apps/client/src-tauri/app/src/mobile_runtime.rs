@@ -37,6 +37,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             vault::ownership::vault_ownership_status,
             vault::handoff::handoff_decode_pairing_qr,
             vault::handoff::handoff_enroll,
+            vault::handoff::handoff_suggested_device_label,
             vault::handoff::handoff_pairing_status,
             vault::handoff::handoff_unlink,
             vault::handoff::handoff_recover_local_copy,

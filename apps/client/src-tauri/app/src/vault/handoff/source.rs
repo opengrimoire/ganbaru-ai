@@ -1,5 +1,4 @@
-//! Android source workflow for resumable uploads to the desktop coordinator.
-#![cfg_attr(not(target_os = "android"), allow(dead_code, unused_imports))]
+//! Source workflow for resumable uploads to the desktop coordinator.
 
 use super::protocol::{BundleMetadata, BundlePurpose, PROTOCOL_VERSION};
 use super::state::{PairingManager, PendingAcknowledgement, StoredOutgoingTransfer};
@@ -9,7 +8,6 @@ use crate::vault::quiescence::{
 };
 use std::fs;
 use std::sync::Arc;
-#[cfg(target_os = "android")]
 use tauri::Manager;
 
 #[derive(Default)]
@@ -17,7 +15,6 @@ pub(crate) struct SourceLifecycle {
     operation: Arc<tokio::sync::Mutex<()>>,
 }
 
-#[cfg(target_os = "android")]
 pub(crate) fn trigger_requested_upload(app: tauri::AppHandle, purpose: BundlePurpose) {
     tauri::async_runtime::spawn(async move {
         let lifecycle = app.state::<SourceLifecycle>();
@@ -25,12 +22,11 @@ pub(crate) fn trigger_requested_upload(app: tauri::AppHandle, purpose: BundlePur
             return;
         };
         if let Err(error) = upload(&app, purpose).await {
-            eprintln!("Android vault upload deferred: {error}");
+            eprintln!("vault upload deferred: {error}");
         }
     });
 }
 
-#[cfg(target_os = "android")]
 async fn upload(app: &tauri::AppHandle, purpose: BundlePurpose) -> Result<(), String> {
     let pairing = app.state::<PairingManager>().inner().clone();
     let coordinator = pairing
@@ -54,7 +50,7 @@ async fn upload(app: &tauri::AppHandle, purpose: BundlePurpose) -> Result<(), St
         existing
     } else {
         if !status.can_write {
-            return Err("Android is not the stable vault owner".to_string());
+            return Err("this device is not the stable vault owner".to_string());
         }
         prepare(
             app,
@@ -104,18 +100,17 @@ async fn upload(app: &tauri::AppHandle, purpose: BundlePurpose) -> Result<(), St
         })?;
         super::receiver::reload_application_shell_after_ownership_change(app)?;
         if let Err(error) = cleanup(&pairing, &transfer.metadata.transfer_id) {
-            eprintln!("failed to clean completed Android vault upload: {error}");
+            eprintln!("failed to clean completed vault upload: {error}");
         }
     } else {
         pairing.clear_outgoing_transfer(&transfer.metadata.transfer_id)?;
         if let Err(error) = cleanup(&pairing, &transfer.metadata.transfer_id) {
-            eprintln!("failed to clean completed Android vault upload: {error}");
+            eprintln!("failed to clean completed vault upload: {error}");
         }
     }
     Ok(())
 }
 
-#[cfg(target_os = "android")]
 async fn prepare(
     app: &tauri::AppHandle,
     pairing: &PairingManager,
@@ -123,7 +118,7 @@ async fn prepare(
     purpose: BundlePurpose,
     generation: u64,
 ) -> Result<StoredOutgoingTransfer, String> {
-    crate::doomscrolling_mobile::doomscrolling_mobile_sync_events(app.clone()).await?;
+    prepare_local_state_for_snapshot(app).await?;
     let transfer_id = super::state::random_token("transfer")?;
     let next_generation = match purpose {
         BundlePurpose::Ownership => generation
@@ -220,6 +215,32 @@ async fn prepare(
     }
     drop(ownership_quiescence);
     Ok(transfer)
+}
+
+#[cfg(target_os = "android")]
+async fn prepare_local_state_for_snapshot(app: &tauri::AppHandle) -> Result<(), String> {
+    crate::doomscrolling_mobile::doomscrolling_mobile_sync_events(app.clone())
+        .await
+        .map(|_| ())
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+async fn prepare_local_state_for_snapshot(app: &tauri::AppHandle) -> Result<(), String> {
+    let vault_id = crate::vault::active_vault_id(app)?;
+    let (device_id, _) = app.state::<PairingManager>().identity()?;
+    let pool = crate::db_path::connect_sqlite(
+        app.clone(),
+        format!("sqlite:{}", crate::vault::APP_SQLITE_FILE),
+    )
+    .await?;
+    crate::doomscrolling_linked::drain_local_spool(app, &pool, &vault_id, &device_id)
+        .await
+        .map(|_| ())
+}
+
+#[cfg(target_os = "ios")]
+async fn prepare_local_state_for_snapshot(_app: &tauri::AppHandle) -> Result<(), String> {
+    Err("vault handoff is not available on iOS".to_string())
 }
 
 fn cleanup(pairing: &PairingManager, transfer_id: &str) -> Result<(), String> {

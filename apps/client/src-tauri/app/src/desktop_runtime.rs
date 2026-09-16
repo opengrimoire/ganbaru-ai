@@ -766,6 +766,8 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
         .manage(vault::ownership::VaultOwnershipManager::default())
         .manage(vault::handoff::state::PairingManager::default())
         .manage(vault::handoff::CoordinatorLifecycle::default())
+        .manage(vault::handoff::receiver::ReceiverLifecycle::default())
+        .manage(vault::handoff::source::SourceLifecycle::default())
         .manage(notification::AppSoundState::default())
         .manage(notification::PomodoroOverlayState::default())
         .manage(media_player::MediaPlayerState::default())
@@ -1143,10 +1145,13 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             vault::handoff::handoff_revoke_network_access,
             vault::handoff::handoff_decode_pairing_qr,
             vault::handoff::handoff_enroll,
+            vault::handoff::handoff_suggested_device_label,
             vault::handoff::handoff_pairing_status,
             vault::handoff::handoff_unlink,
             vault::handoff::handoff_recover_local_copy,
-            vault::handoff::handoff_request_android_bundle,
+            vault::handoff::handoff_request_owner_bundle,
+            vault::handoff::receiver::handoff_receive_desktop_bundle,
+            vault::handoff::receiver::handoff_cancel_receive,
             vault::vault_pick_create,
             vault::vault_pick_open,
             vault::vault_select_recent,

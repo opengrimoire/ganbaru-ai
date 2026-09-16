@@ -1,5 +1,5 @@
 use super::*;
-use crate::vault::handoff::protocol::{MAX_ARCHIVE_BYTES, PROTOCOL_VERSION};
+use crate::vault::handoff::protocol::{DeviceKind, MAX_ARCHIVE_BYTES, PROTOCOL_VERSION};
 use crate::vault::handoff::state::random_token;
 use std::fs;
 
@@ -70,9 +70,14 @@ impl LocalPair {
     }
 
     async fn enroll(&self) {
-        super::enroll(&self.phone, &self.invitation, "Phone".to_string())
-            .await
-            .expect("enroll phone");
+        super::enroll(
+            &self.phone,
+            &self.invitation,
+            "Phone".to_string(),
+            DeviceKind::Phone,
+        )
+        .await
+        .expect("enroll phone");
     }
 
     async fn start_with_coordinator() -> (
@@ -221,9 +226,14 @@ async fn authenticated_control_flow_prepares_commits_and_acknowledges() {
         }
     });
 
-    let prepared = request_bundle(&pair.phone, 0, BundlePurpose::Ownership)
-        .await
-        .expect("prepare ownership bundle");
+    let prepared = request_bundle(
+        &pair.phone,
+        0,
+        BundlePurpose::Ownership,
+        &TransferCancellation::default(),
+    )
+    .await
+    .expect("prepare ownership bundle");
     assert_eq!(prepared, metadata);
     let staged = download_bundle(
         &pair.phone,
@@ -522,12 +532,62 @@ async fn invalid_device_identity_cannot_download_bundle() {
 async fn invitation_replay_is_rejected_by_coordinator() {
     let pair = LocalPair::start().await;
     pair.enroll().await;
-    let error = super::enroll(&pair.phone, &pair.invitation, "Phone".to_string())
-        .await
-        .unwrap_err();
+    let error = super::enroll(
+        &pair.phone,
+        &pair.invitation,
+        "Phone".to_string(),
+        DeviceKind::Phone,
+    )
+    .await
+    .unwrap_err();
     assert!(
         error.contains("already used") || error.contains("unknown"),
         "unexpected replay error: {error}"
+    );
+}
+
+#[tokio::test]
+async fn several_enrolled_devices_authenticate_with_distinct_certificates() {
+    let pair = LocalPair::start().await;
+    pair.enroll().await;
+    let second_root = TestDirectory::new("second-client");
+    let second = PairingManager::default();
+    second
+        .initialize(
+            second_root.path().to_path_buf(),
+            "device-laptop".to_string(),
+        )
+        .expect("initialize second client");
+    let invitation = pair
+        .desktop
+        .create_invitation(
+            pair.invitation.endpoint.parse().expect("endpoint"),
+            "vault-1".to_string(),
+            0,
+            unix_time_ms(),
+        )
+        .expect("create second invitation");
+    super::enroll(
+        &second,
+        &invitation,
+        "Laptop".to_string(),
+        DeviceKind::Computer,
+    )
+    .await
+    .expect("enroll second client");
+
+    let peers = pair.desktop.linked_peers().expect("linked devices");
+    assert_eq!(peers.len(), 2);
+    assert_ne!(
+        peers[0].certificate_fingerprint,
+        peers[1].certificate_fingerprint
+    );
+    let error = probe_coordinator(&second, 0)
+        .await
+        .expect_err("test server has no coordinator state");
+    assert!(
+        error.contains("coordinator operations are unavailable"),
+        "authenticated request failed before coordinator dispatch: {error}"
     );
 }
 

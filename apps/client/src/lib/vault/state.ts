@@ -17,6 +17,8 @@ export interface VaultInfo {
 
 export type DataFolderInfo = VaultInfo;
 
+let cachedActiveVaultInfo: VaultInfo | null | undefined;
+
 export interface DataFolderDefaultLocation {
   path: string;
   parentPath: string;
@@ -209,6 +211,7 @@ function parseVaultOwnershipStatus(value: unknown): VaultOwnershipStatus {
 function activateVaultInfo(info: VaultInfo): VaultInfo;
 function activateVaultInfo(info: VaultInfo | null): VaultInfo | null;
 function activateVaultInfo(info: VaultInfo | null): VaultInfo | null {
+  cachedActiveVaultInfo = info;
   setActiveVaultIdentity(info?.vaultId ?? null);
   return info;
 }
@@ -322,6 +325,11 @@ export async function readVaultAppState(): Promise<VaultAppState> {
 
 export async function getActiveVaultInfo(): Promise<VaultInfo | null> {
   return activateVaultInfo(parseOptionalVaultInfo(await invoke<unknown>("vault_active_info")));
+}
+
+/** Returns the active vault information most recently validated by the native runtime. */
+export function getCachedActiveVaultInfo(): VaultInfo | null | undefined {
+  return cachedActiveVaultInfo;
 }
 
 export async function getVaultOwnershipStatus(): Promise<VaultOwnershipStatus> {

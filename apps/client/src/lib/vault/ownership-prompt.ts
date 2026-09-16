@@ -1,7 +1,7 @@
 import {
   readPairingStatus,
   receiveDesktopBundle,
-  requestAndroidBundle,
+  requestOwnerBundle,
   type PairingStatus,
 } from "$lib/api/vault-handoff";
 
@@ -19,7 +19,7 @@ export interface VaultOwnershipTransitionSnapshot {
 export interface VaultOwnershipRequestDependencies {
   readStatus: () => Promise<PairingStatus>;
   receiveFromDesktop: () => Promise<{ activated: boolean; inProgress: boolean }>;
-  requestFromAndroid: () => Promise<void>;
+  requestFromCoordinator: () => Promise<void>;
   wait: () => Promise<void>;
   attempts: number;
 }
@@ -27,7 +27,7 @@ export interface VaultOwnershipRequestDependencies {
 const defaultDependencies: VaultOwnershipRequestDependencies = {
   readStatus: readPairingStatus,
   receiveFromDesktop: () => receiveDesktopBundle("ownership"),
-  requestFromAndroid: () => requestAndroidBundle("ownership"),
+  requestFromCoordinator: () => requestOwnerBundle("ownership"),
   wait: () => new Promise<void>((resolve) => window.setTimeout(resolve, 1_000)),
   attempts: 90,
 };
@@ -65,14 +65,15 @@ export async function requestVaultOwnership(
   platform: VaultOwnershipPlatform,
   dependencies: VaultOwnershipRequestDependencies = defaultDependencies,
 ): Promise<PairingStatus> {
-  if (platform === "android") {
+  const initialStatus = await dependencies.readStatus();
+  if (platform === "android" || initialStatus.coordinatorEndpoint !== null) {
     await dependencies.receiveFromDesktop();
   } else {
-    await dependencies.requestFromAndroid();
+    await dependencies.requestFromCoordinator();
   }
 
   for (let attempt = 0; attempt < dependencies.attempts; attempt += 1) {
-    const status = await dependencies.readStatus();
+    const status = attempt === 0 ? initialStatus : await dependencies.readStatus();
     if (status.canWrite) return status;
     if (attempt + 1 < dependencies.attempts) await dependencies.wait();
   }

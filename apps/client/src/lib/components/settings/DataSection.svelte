@@ -8,6 +8,7 @@
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
     formatDataFolderError,
+    getCachedActiveVaultInfo,
     getActiveVaultInfo,
     importDataFolder,
     pickDataFolderLocation,
@@ -15,8 +16,12 @@
     type DataFolderInfo,
   } from "$lib/vault/state";
 
-  let activeDataFolder = $state<DataFolderInfo | null>(null);
-  let busy = $state<"load" | "reveal" | "change" | "import" | null>("load");
+  const cachedDataFolder = getCachedActiveVaultInfo();
+  let activeDataFolder = $state<DataFolderInfo | null>(cachedDataFolder ?? null);
+  let folderStateLoaded = $state(cachedDataFolder !== undefined);
+  let busy = $state<"load" | "reveal" | "change" | "import" | null>(
+    cachedDataFolder === undefined ? "load" : null,
+  );
   let error = $state<string | null>(null);
   const { t } = getLocalization();
 
@@ -27,20 +32,22 @@
     "inline-flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-md px-1 text-[0.8rem] font-medium text-foreground transition-colors hover:text-primary focus:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-55";
 
   const currentFolderPath = $derived(
-    busy === "load"
+    !folderStateLoaded
       ? t("settings.data.loadingFolder")
       : activeDataFolder?.path ?? t("settings.data.noActiveFolder"),
   );
 
   async function loadDataFolderState(): Promise<void> {
-    busy = "load";
+    const showLoadingState = !folderStateLoaded;
+    if (showLoadingState) busy = "load";
     error = null;
     try {
       activeDataFolder = await getActiveVaultInfo();
     } catch (err) {
       error = formatDataFolderError(err, "startup", t);
     } finally {
-      busy = null;
+      folderStateLoaded = true;
+      if (showLoadingState) busy = null;
     }
   }
 
