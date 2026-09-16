@@ -68,7 +68,7 @@ export const vaultOwnershipPrompt = {
 
 export const vaultHandoff = {
   heading: "Linked devices",
-  description: "Manage your connected devices.",
+  description: "Manage your connected devices",
   desktopOnboardingTitle: "Connect your phone",
   desktopOnboardingDescription:
     "Install Ganbaru AI on your phone and scan this QR code in the app to link your devices.",
@@ -84,17 +84,22 @@ export const vaultHandoff = {
   networkAccessConfirmTitle: "Allow phone connection?",
   networkAccessConfirmMessage:
     "Your Linux firewall protects your computer from unwanted connections. Ganbaru AI needs its permission to link your phone with this computer over your local network. Linux will ask for your password, which Ganbaru AI never sees or stores.",
-  removeNetworkAccess: "Remove phone connection access",
+  networkAccessRevokeTitle: "Remove local network access?",
+  networkAccessRevokeMessage:
+    "Your Linux firewall currently allows linked devices to connect to Ganbaru AI on this local network. Linux will ask for your password to remove that permission. Ganbaru AI never sees or stores your password.",
+  networkAccessRevokeAction: "Remove access",
+  networkAccessHeading: "Local network access",
+  networkAccessAllowed: "Allow linked devices to connect to this computer",
+  networkAccessNotRequired: "No firewall permission is required",
   networkAccessGranted: "Phone connections are allowed on this network.",
   networkAccessRevoked: "Phone connection access was removed.",
   networkAccessManual:
     "Ganbaru AI cannot request network access automatically on this Linux system.",
   notLinked: "No device is linked.",
+  devicesHeading: "Devices",
   linkedTo: (device: string) => `Linked to ${device}`,
   desktopDevice: "Desktop",
   androidDevice: "Phone",
-  thisDeviceOwns: "This device can make changes.",
-  otherDeviceOwns: "This device has a read-only copy.",
   transferPending: "A vault transfer is waiting to finish.",
   linkPhone: "Link phone",
   linkToDesktop: "Link to desktop",
@@ -128,14 +133,13 @@ export const vaultHandoff = {
   workingPairing: "Linking securely...",
   workingRequest: "Waiting for the other device...",
   linked: "Device linked.",
+  linkedLabel: "linked",
   refreshed: "Latest changes received.",
   requestSent: "The request was sent. Keep both apps open on the same network.",
   unlinked: "Device unlinked.",
   recovered: "This local copy is now a separate writable vault.",
   localBackup:
     "Before the first desktop vault replaces Android data, Ganbaru AI saves a recoverable backup to Downloads.",
-  offlineNotice:
-    "Already scheduled Android alarms and accepted Doomscrolling rules continue offline. New desktop Calendar changes reach Android only after a successful refresh.",
   sameNetwork: "Keep both apps open on the same local network.",
   failed: (details: string) => `The linked-device action failed: ${details}`,
   blockerChat: "Finish or stop active Chat work before moving the vault.",

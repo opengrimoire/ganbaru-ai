@@ -12,7 +12,7 @@
 
   interface HandoffPanelProps {
     platform: "desktop" | "android";
-    presentation: "settings";
+    presentation: "control";
     initialStatus?: PairingStatus | null;
     onActivated?: () => void;
     onStatusChange?: (status: PairingStatus) => void;
@@ -85,7 +85,7 @@
       anchorLeft: triggerRect.left,
       anchorWidth: triggerRect.width,
       anchorBottom: triggerRect.bottom,
-      desiredWidth: 320,
+      desiredWidth: 256,
       desiredHeight: viewportHeight,
       viewportLeft: viewportOffsetLeft + safeAreaLeft,
       viewportWidth: Math.max(0, viewportWidth - safeAreaLeft - safeAreaRight),
@@ -204,9 +204,9 @@
       role="dialog"
       aria-label={t("vaultHandoff.heading")}
       class={cn(
-        "z-50 overflow-y-auto rounded-lg border border-border bg-popover p-4 text-popover-foreground shadow-xl",
+        "z-50 overflow-x-hidden overflow-y-auto rounded-lg border border-border bg-popover py-1 text-popover-foreground shadow-lg",
         presentation === "desktop"
-          ? "absolute right-0 top-9 max-h-[calc(100vh-3rem)] w-80 max-w-[calc(100vw-1rem)]"
+          ? "absolute right-0 top-9 max-h-[calc(100vh-3rem)] w-60 max-w-[calc(100vw-1rem)]"
           : "fixed rounded-xl",
       )}
       style={presentation === "mobile" ? mobilePanelStyle : undefined}
@@ -214,7 +214,7 @@
       {#if HandoffPanel}
         <HandoffPanel
           {platform}
-          presentation="settings"
+          presentation="control"
           initialStatus={status}
           onStatusChange={handleStatusChange}
           onActivated={handleActivated}

@@ -1,6 +1,8 @@
 <script lang="ts">
+  import ArrowRight from "@lucide/svelte/icons/arrow-right";
+  import Download from "@lucide/svelte/icons/download";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
-  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
+  import Monitor from "@lucide/svelte/icons/monitor";
   import ScanLine from "@lucide/svelte/icons/scan-line";
   import Smartphone from "@lucide/svelte/icons/smartphone";
   import { onMount, untrack } from "svelte";
@@ -21,6 +23,7 @@
     type DesktopNetworkAccess,
   } from "$lib/api/vault-handoff";
   import { getLocalization } from "$lib/i18n/translator.svelte";
+  import ToggleSetting from "$lib/components/settings/ToggleSetting.svelte";
   import { formatHandoffError } from "$lib/vault/handoff-workflow";
   import MobilePairingScanner from "./MobilePairingScanner.svelte";
 
@@ -35,7 +38,7 @@
     onStatusChange,
   }: {
     platform: "desktop" | "android";
-    presentation?: "settings" | "onboarding";
+    presentation?: "settings" | "onboarding" | "control";
     initialInvitation?: PairingInvitation | null;
     initialStatus?: PairingStatus | null;
     onActivated?: () => void;
@@ -52,7 +55,7 @@
   let notice = $state<string | null>(null);
   let error = $state<string | null>(null);
   let networkError = $state<string | null>(null);
-  let confirmation = $state<"network" | "unlink" | "recover" | null>(null);
+  let confirmation = $state<"network" | "networkRevoke" | "unlink" | "recover" | null>(null);
   let networkAccess = $state<DesktopNetworkAccess | null>(
     untrack(() => initialInvitation?.networkAccess ?? initialStatus?.networkAccess ?? null),
   );
@@ -66,6 +69,27 @@
   const buttonClass =
     "inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-border px-3 text-[0.8rem] font-medium transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-55";
   const primaryButtonClass = `${buttonClass} border-primary bg-primary text-primary-foreground hover:bg-primary/90`;
+  const controlButtonClass = $derived(
+    `flex min-w-0 w-full items-center justify-between gap-4 overflow-hidden px-3 text-left text-sm transition-colors ${platform === "android" ? "min-h-12 active:bg-accent" : "py-1.5 hover:bg-accent"} disabled:cursor-not-allowed disabled:text-muted-foreground/50`,
+  );
+  const desktopNetworkAccessSetting = $derived(
+    presentation === "settings"
+      && platform === "desktop"
+      && __GANBARU_AI_BUILD_PLATFORM__ === "linux"
+      && networkAccess !== null,
+  );
+  const networkAccessEnabled = $derived(
+    !desktopNetworkAccessSetting
+      || networkAccess?.state === "granted"
+      || networkAccess?.state === "notRequired",
+  );
+  const networkAccessDescription = $derived(
+    networkAccess?.state === "notRequired"
+      ? t("vaultHandoff.networkAccessNotRequired")
+      : networkAccess?.state === "manualActionRequired"
+        ? t("vaultHandoff.networkAccessManual")
+        : t("vaultHandoff.networkAccessAllowed"),
+  );
 
   function fail(cause: unknown): void {
     error = formatHandoffError(cause, t);
@@ -134,6 +158,16 @@
   async function grantNetworkAccess(): Promise<void> {
     confirmation = null;
     await updateNetworkAccess(true);
+  }
+
+  async function revokeNetworkAccess(): Promise<void> {
+    confirmation = null;
+    await updateNetworkAccess(false);
+  }
+
+  function setNetworkAccess(enabled: boolean): void {
+    if (enabled) confirmation = "network";
+    else confirmation = "networkRevoke";
   }
 
   async function acceptInvitation(encoded: string): Promise<void> {
@@ -277,12 +311,18 @@
   </div>
 {/snippet}
 
-<section class="flex flex-col gap-4">
+<section class={presentation === "control" ? "" : "flex flex-col gap-4"}>
   {#if presentation === "settings"}
-    <div class="px-1">
-      <h2 class="text-[0.866667rem] font-semibold text-foreground">{t("vaultHandoff.heading")}</h2>
-      <p class="mt-1 text-[0.8rem] leading-5 text-muted-foreground">{t("vaultHandoff.description")}</p>
-    </div>
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("vaultHandoff.heading")}</h2>
+    {#if desktopNetworkAccessSetting}
+      <ToggleSetting
+        label={t("vaultHandoff.networkAccessHeading")}
+        description={networkAccessDescription}
+        checked={networkAccessEnabled}
+        disabled={busy !== null || networkAccess?.state === "notRequired" || networkAccess?.state === "manualActionRequired"}
+        onChange={setNetworkAccess}
+      />
+    {/if}
   {/if}
 
   {#if busy === "status"}
@@ -295,36 +335,47 @@
       </div>
     {/if}
   {:else if status}
-    {#if presentation === "settings" || status.linked}
-    <div class="flex items-start gap-2 px-1 py-1">
-      <Smartphone size={17} strokeWidth={1.8} class="mt-0.5 shrink-0" aria-hidden="true" />
-      <div class="min-w-0 flex-1">
-        <div class="text-[0.866667rem] font-medium text-foreground">
+    <fieldset
+      disabled={presentation === "settings" && !networkAccessEnabled}
+      class={presentation === "settings"
+        ? `m-0 flex min-w-0 flex-col gap-3 border-0 p-0 ${networkAccessEnabled ? "" : "opacity-50"}`
+        : "contents"}
+    >
+    {#if presentation === "settings"}
+      <div class="px-1 py-1">
+        <div class="text-[0.866667rem] text-foreground">{t("vaultHandoff.devicesHeading")}</div>
+        <div class="mt-0.5 text-[0.8rem] text-muted-foreground">{t("vaultHandoff.description")}</div>
+      </div>
+    {/if}
+    {#if presentation !== "onboarding" || status.linked}
+    <div class={presentation === "control"
+      ? `flex w-full items-center gap-2 px-3 ${platform === "android" ? "min-h-12" : "py-1.5"}`
+      : "flex items-start gap-2 px-1 py-1"}>
+      {#if platform === "android"}
+        <Monitor size={presentation === "control" ? 14 : 17} strokeWidth={1.8} class={presentation === "control" ? "shrink-0 opacity-70" : "mt-0.5 shrink-0"} aria-hidden="true" />
+      {:else}
+        <Smartphone size={presentation === "control" ? 14 : 17} strokeWidth={1.8} class={presentation === "control" ? "shrink-0 opacity-70" : "mt-0.5 shrink-0"} aria-hidden="true" />
+      {/if}
+      <div class="flex min-w-0 flex-1 items-baseline gap-1 overflow-hidden whitespace-nowrap">
+        <div class={presentation === "control" ? "min-w-0 truncate text-sm text-foreground" : "min-w-0 truncate text-[0.866667rem] font-medium text-foreground"}>
           {status.linked
-            ? t(
-                "vaultHandoff.linkedTo",
-                status.peerLabel ??
-                  (platform === "android"
-                    ? t("vaultHandoff.desktopDevice")
-                    : t("vaultHandoff.androidDevice")),
-              )
+            ? status.peerLabel ?? (platform === "android"
+                ? t("vaultHandoff.desktopDevice")
+                : t("vaultHandoff.androidDevice"))
             : t("vaultHandoff.notLinked")}
         </div>
-        {#if status.linked}
-          <p class="mt-0.5 text-[0.8rem] leading-5 text-muted-foreground">
-            {status.recoveryRequired
-              ? t("vaultOwnership.recovery")
-              : status.canWrite
-                ? t("vaultHandoff.thisDeviceOwns")
-                : t("vaultHandoff.otherDeviceOwns")}
-            {#if status.pendingTransfer} {t("vaultHandoff.transferPending")}{/if}
-          </p>
+        {#if presentation !== "onboarding" && status.linked}
+          <span class={presentation === "control" ? "shrink-0 text-sm text-foreground" : "shrink-0 text-[0.866667rem] font-medium text-foreground"}>{t("vaultHandoff.linkedLabel")}</span>
         {/if}
       </div>
-      {#if presentation === "settings"}
-        <button type="button" class={buttonClass} disabled={busy !== null} onclick={() => void refreshStatus()}>
-          <RefreshCw size={13} strokeWidth={2} aria-hidden="true" />
-          {t("vaultHandoff.retry")}
+      {#if presentation === "settings" && status.linked}
+        <button
+          type="button"
+          class={buttonClass}
+          disabled={busy !== null || status.pendingTransfer}
+          onclick={() => { confirmation = "unlink"; }}
+        >
+          {t("vaultHandoff.unlink")}
         </button>
       {/if}
     </div>
@@ -335,7 +386,7 @@
         {#if busy === "invite"}<LoaderCircle size={14} class="animate-spin" />{/if}
         {t("vaultHandoff.createQr")}
       </button>
-    {:else if !status.linked && platform === "desktop" && !invitation}
+    {:else if !status.linked && platform === "desktop" && presentation === "onboarding" && !invitation}
       {#if error}
         <button type="button" class={buttonClass} disabled={busy !== null} onclick={() => void showInvitation()}>
           {t("vaultHandoff.retry")}
@@ -428,38 +479,67 @@
     {/if}
 
     {#if status.linked}
-      <div class="flex flex-wrap gap-2">
-        {#if !status.canWrite}
+      {#if presentation === "control" || !status.canWrite || (platform === "android" && (busy === "ownership" || busy === "refresh"))}
+      <div class={presentation === "control"
+        ? "flex flex-col"
+        : "flex flex-wrap gap-2"}>
+        {#if presentation === "control"}<div class="mx-3 my-1.5 h-px bg-border"></div>{/if}
+        {#if presentation === "control" || !status.canWrite}
           <button
             type="button"
-            class={primaryButtonClass}
-            disabled={busy !== null || status.pendingTransfer}
-            onclick={() => void (platform === "android" ? receive("ownership") : requestFromAndroid("ownership"))}
+            class={presentation === "control" ? controlButtonClass : primaryButtonClass}
+            disabled={presentation === "control" && busy === "ownership"
+              ? platform !== "android"
+              : busy !== null || status.pendingTransfer || status.canWrite !== false}
+            onclick={() => {
+              if (presentation === "control" && busy === "ownership" && platform === "android") void cancelReceive();
+              else void (platform === "android" ? receive("ownership") : requestFromAndroid("ownership"));
+            }}
           >
-            {#if busy === "ownership"}<LoaderCircle size={14} class="animate-spin" />{/if}
-            {t("vaultHandoff.useHere")}
+            {#if presentation === "control"}
+              <span class="min-w-0 truncate">{busy === "ownership" && platform === "android" ? t("vaultHandoff.cancel") : t("vaultHandoff.useHere")}</span>
+              {#if busy === "ownership"}
+                <LoaderCircle size={14} strokeWidth={1.8} class="shrink-0 animate-spin opacity-70" aria-hidden="true" />
+              {:else}
+                <ArrowRight size={14} strokeWidth={1.8} class="shrink-0 opacity-70" aria-hidden="true" />
+              {/if}
+            {:else}
+              {#if busy === "ownership"}<LoaderCircle size={14} class="animate-spin" />{/if}
+              {t("vaultHandoff.useHere")}
+            {/if}
           </button>
-          {#if status.replicaReady && presentation === "settings"}
+          {#if presentation === "control" || (status.replicaReady && presentation !== "onboarding")}
             <button
               type="button"
-              class={buttonClass}
-              disabled={busy !== null || status.pendingTransfer}
-              onclick={() => void (platform === "android" ? receive("refresh") : requestFromAndroid("refresh"))}
+              class={presentation === "control" ? controlButtonClass : buttonClass}
+              disabled={presentation === "control" && busy === "refresh"
+                ? platform !== "android"
+                : busy !== null || status.pendingTransfer || status.canWrite !== false || !status.replicaReady}
+              onclick={() => {
+                if (presentation === "control" && busy === "refresh" && platform === "android") void cancelReceive();
+                else void (platform === "android" ? receive("refresh") : requestFromAndroid("refresh"));
+              }}
             >
-              {#if busy === "refresh"}<LoaderCircle size={14} class="animate-spin" />{/if}
-              {t("vaultHandoff.refreshCopy")}
+              {#if presentation === "control"}
+                <span class="min-w-0 truncate">{busy === "refresh" && platform === "android" ? t("vaultHandoff.cancel") : t("vaultHandoff.refreshCopy")}</span>
+                {#if busy === "refresh"}
+                  <LoaderCircle size={14} strokeWidth={1.8} class="shrink-0 animate-spin opacity-70" aria-hidden="true" />
+                {:else}
+                  <Download size={14} strokeWidth={1.8} class="shrink-0 opacity-70" aria-hidden="true" />
+                {/if}
+              {:else}
+                {#if busy === "refresh"}<LoaderCircle size={14} class="animate-spin" />{/if}
+                {t("vaultHandoff.refreshCopy")}
+              {/if}
             </button>
           {/if}
         {/if}
-        {#if platform === "android" && (busy === "ownership" || busy === "refresh")}
+        {#if presentation !== "control" && platform === "android" && (busy === "ownership" || busy === "refresh")}
           <button type="button" class={buttonClass} onclick={() => void cancelReceive()}>
             {t("vaultHandoff.cancel")}
           </button>
         {/if}
         {#if presentation === "settings"}
-          <button type="button" class={buttonClass} disabled={busy !== null || status.pendingTransfer} onclick={() => { confirmation = "unlink"; }}>
-            {t("vaultHandoff.unlink")}
-          </button>
           {#if !status.canWrite && status.replicaReady && !status.pendingTransfer}
             <button type="button" class={buttonClass} disabled={busy !== null} onclick={() => { confirmation = "recover"; }}>
               {t("vaultHandoff.recover")}
@@ -467,27 +547,22 @@
           {/if}
         {/if}
       </div>
+      {/if}
       {#if presentation === "settings"}
         {#if platform === "android" && !status.replicaReady}
           <p class="px-1 text-[0.8rem] leading-5 text-muted-foreground">{t("vaultHandoff.localBackup")}</p>
         {/if}
-        <p class="px-1 text-[0.8rem] leading-5 text-muted-foreground">{t("vaultHandoff.offlineNotice")}</p>
       {/if}
     {/if}
 
-    {#if presentation === "settings" && platform === "desktop" && networkAccess?.state === "granted"}
-      <button
-        type="button"
-        class={`${buttonClass} self-start`}
-        disabled={busy !== null}
-        onclick={() => void updateNetworkAccess(false)}
-      >
-        {t("vaultHandoff.removeNetworkAccess")}
-      </button>
-    {/if}
+    </fieldset>
+  {:else if error && presentation !== "onboarding"}
+    <button type="button" class={buttonClass} disabled={busy !== null} onclick={() => void refreshStatus()}>
+      {t("vaultHandoff.retry")}
+    </button>
   {/if}
 
-  {#if busy === "pair" || busy === "ownership" || busy === "refresh"}
+  {#if presentation !== "control" && (busy === "pair" || busy === "ownership" || busy === "refresh")}
     <p role="status" class="flex items-center gap-2 px-1 text-[0.8rem] text-muted-foreground">
       <LoaderCircle size={14} strokeWidth={2} class="animate-spin" aria-hidden="true" />
       {busy === "pair"
@@ -497,7 +572,7 @@
           : t("vaultHandoff.workingRefresh")}
     </p>
   {/if}
-  {#if notice}<p role="status" class="px-1 text-[0.8rem] leading-5 text-muted-foreground">{notice}</p>{/if}
+  {#if notice && presentation !== "control"}<p role="status" class="px-1 text-[0.8rem] leading-5 text-muted-foreground">{notice}</p>{/if}
   {#if error}<p role="alert" class="px-1 text-[0.8rem] leading-5 text-destructive">{error}</p>{/if}
 </section>
 
@@ -524,6 +599,16 @@
     cancelLabel={t("common.cancel")}
     danger={false}
     onConfirm={() => void grantNetworkAccess()}
+    onCancel={() => { confirmation = null; }}
+  />
+{:else if confirmation === "networkRevoke"}
+  <ConfirmDialog
+    title={t("vaultHandoff.networkAccessRevokeTitle")}
+    message={t("vaultHandoff.networkAccessRevokeMessage")}
+    confirmLabel={t("vaultHandoff.networkAccessRevokeAction")}
+    cancelLabel={t("common.cancel")}
+    danger={false}
+    onConfirm={() => void revokeNetworkAccess()}
     onCancel={() => { confirmation = null; }}
   />
 {:else if confirmation === "unlink"}

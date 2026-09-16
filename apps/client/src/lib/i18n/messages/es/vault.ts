@@ -78,7 +78,7 @@ export const vaultOwnershipPrompt = {
 
 export const vaultHandoff = {
   heading: "Dispositivos vinculados",
-  description: "Administra tus dispositivos conectados.",
+  description: "Administra tus dispositivos conectados",
   desktopOnboardingTitle: "Conecta tu teléfono",
   desktopOnboardingDescription:
     "Instala Ganbaru AI en tu teléfono y escanea este código QR en la aplicación para vincular tus dispositivos.",
@@ -94,17 +94,22 @@ export const vaultHandoff = {
   networkAccessConfirmTitle: "¿Permitir la conexión del teléfono?",
   networkAccessConfirmMessage:
     "El firewall de Linux protege tu computadora de conexiones no deseadas. Ganbaru AI necesita su permiso para vincular tu teléfono con esta computadora mediante tu red local. Linux te pedirá tu contraseña, que Ganbaru AI nunca ve ni guarda.",
-  removeNetworkAccess: "Quitar acceso para conectar el teléfono",
+  networkAccessRevokeTitle: "¿Quitar el acceso a la red local?",
+  networkAccessRevokeMessage:
+    "El firewall de Linux permite actualmente que los dispositivos vinculados se conecten con Ganbaru AI en esta red local. Linux te pedirá tu contraseña para quitar ese permiso. Ganbaru AI nunca ve ni guarda tu contraseña.",
+  networkAccessRevokeAction: "Quitar acceso",
+  networkAccessHeading: "Acceso a la red local",
+  networkAccessAllowed: "Permite que los dispositivos vinculados se conecten a esta computadora",
+  networkAccessNotRequired: "No se requiere permiso del firewall",
   networkAccessGranted: "Las conexiones del teléfono están permitidas en esta red.",
   networkAccessRevoked: "Se quitó el acceso para conectar el teléfono.",
   networkAccessManual:
     "Ganbaru AI no puede solicitar acceso a la red automáticamente en este sistema Linux.",
   notLinked: "No hay un dispositivo vinculado.",
+  devicesHeading: "Dispositivos",
   linkedTo: (device: string) => `Vinculado con ${device}`,
   desktopDevice: "Computadora",
   androidDevice: "Teléfono",
-  thisDeviceOwns: "Este dispositivo puede hacer cambios.",
-  otherDeviceOwns: "Este dispositivo tiene una copia de solo lectura.",
   transferPending: "Hay una transferencia de la bóveda pendiente de terminar.",
   linkPhone: "Vincular teléfono",
   linkToDesktop: "Vincular con computadora",
@@ -138,14 +143,13 @@ export const vaultHandoff = {
   workingPairing: "Vinculando de forma segura...",
   workingRequest: "Esperando al otro dispositivo...",
   linked: "Dispositivo vinculado.",
+  linkedLabel: "vinculado",
   refreshed: "Se recibieron los últimos cambios.",
   requestSent: "Se envió la solicitud. Mantén ambas apps abiertas en la misma red.",
   unlinked: "Dispositivo desvinculado.",
   recovered: "Esta copia local ahora es una bóveda separada con escritura.",
   localBackup:
     "Antes de que la bóveda de la computadora reemplace datos de Android por primera vez, Ganbaru AI guarda una copia recuperable en Descargas.",
-  offlineNotice:
-    "Las alarmas de Android ya programadas y las reglas de Doomscrolling aceptadas continúan sin conexión. Los nuevos cambios del Calendario en la computadora llegan a Android solo después de una actualización exitosa.",
   sameNetwork: "Mantén ambas apps abiertas en la misma red local.",
   failed: (details: string) => `Falló la acción del dispositivo vinculado: ${details}`,
   blockerChat: "Termina o detén el trabajo activo de Chat antes de mover la bóveda.",
