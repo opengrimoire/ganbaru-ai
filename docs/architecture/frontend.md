@@ -6,7 +6,7 @@ The frontend is a plain Svelte 5 application built with Vite. It is not SvelteKi
 
 `apps/client/src/main.ts` selects a virtual platform entry. Desktop uses `main-desktop.ts` and `App.svelte`; mobile uses `main-mobile.ts` and `MobileApp.svelte`. Build-time selection keeps desktop-only imports out of Android production assets instead of hiding unsupported controls at runtime.
 
-The shell owns cross-feature navigation and only mounts the selected primary surface. Heavy or uncommon detail workflows load on demand. The benchmark bundle contracts protect intentional resident and lazy boundaries.
+The shell owns cross-feature navigation and only mounts the selected primary surface. Desktop imports its top-level surfaces eagerly and hydrates non-Calendar stores asynchronously after mount. Android preserves separate production chunks: its critical readiness phase produces a usable Calendar, then it automatically resolves the other standard surfaces in prioritized background batches. An early navigation reuses the in-flight preparation instead of starting a separate interaction-triggered load. Heavy or uncommon detail workflows load on demand on both platforms. The benchmark bundle contracts protect intentional resident and lazy boundaries.
 
 ## Source organization
 

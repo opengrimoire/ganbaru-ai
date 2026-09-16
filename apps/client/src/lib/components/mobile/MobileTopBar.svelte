@@ -2,27 +2,15 @@
   import Settings from "@lucide/svelte/icons/settings";
   import Music from "@lucide/svelte/icons/music";
   import StickyNote from "@lucide/svelte/icons/sticky-note";
-  import type { Component } from "svelte";
   import type { View } from "$lib/navigation";
   import { mobileCenteredPanelGeometry } from "$lib/mobile-layout";
   import MobileNavigation from "$lib/components/mobile/MobileNavigation.svelte";
   import PomodoroProgressRing from "$lib/components/pomodoro/PomodoroProgressRing.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import {
-    classifyLoadFailure,
-    recoverLoadFailure,
-    type LoadFailure,
-  } from "$lib/module-load-recovery";
   import { cn } from "$lib/utils";
 
-  interface PomodoroMenuProps {
-    includeMusic: boolean;
-    touch?: boolean;
-    onDismiss: () => void;
-    onOpenMusic: () => void;
-  }
-
-  type PomodoroMenuComponent = Component<PomodoroMenuProps>;
+  type PomodoroMenuComponent = typeof import("$lib/components/pomodoro/PomodoroMenuContent.svelte").default;
+  type LinkedDeviceControlComponent = typeof import("$lib/components/vault/LinkedDeviceControl.svelte").default;
 
   let {
     current,
@@ -33,11 +21,11 @@
     pomodoroPaused,
     pomodoroPausedPulseAmount,
     pomodoroOpen,
+    PomodoroMenuSurface,
+    LinkedDeviceControlSurface,
     quickNotesOpen,
-    quickNotesLoading,
     quickNotesDisabled,
     musicOpen,
-    musicLoading,
     musicDisabled,
     musicVisible = true,
     primaryNavigationVisible = true,
@@ -56,11 +44,11 @@
     pomodoroPaused: boolean;
     pomodoroPausedPulseAmount: number | null;
     pomodoroOpen: boolean;
+    PomodoroMenuSurface: PomodoroMenuComponent;
+    LinkedDeviceControlSurface: LinkedDeviceControlComponent;
     quickNotesOpen: boolean;
-    quickNotesLoading: boolean;
     quickNotesDisabled: boolean;
     musicOpen: boolean;
-    musicLoading: boolean;
     musicDisabled: boolean;
     musicVisible?: boolean;
     primaryNavigationVisible?: boolean;
@@ -75,9 +63,6 @@
   const { t } = getLocalization();
   const utilityButtonClass = "group flex h-full items-center justify-center text-muted-foreground transition-colors disabled:opacity-40";
   const utilityIconClass = "grid h-8 w-8 place-items-center rounded-full transition-colors group-active:bg-accent/70";
-  let PomodoroMenuSurface = $state<PomodoroMenuComponent | null>(null);
-  let pomodoroMenuLoading = $state(false);
-  let pomodoroMenuLoadError = $state<LoadFailure | null>(null);
   let pomodoroAnchorElement = $state<HTMLDivElement | null>(null);
   let pomodoroTriggerElement = $state<HTMLButtonElement | null>(null);
   let pomodoroMenuStyle = $state("left:50%;width:min(16rem,calc(100vw - 1rem));transform:translateX(-50%)");
@@ -115,38 +100,10 @@
     ].join(";");
   }
 
-  async function loadPomodoroMenu(): Promise<void> {
-    if (PomodoroMenuSurface || pomodoroMenuLoading) return;
-    pomodoroMenuLoading = true;
-    pomodoroMenuLoadError = null;
-    try {
-      const module = await import("$lib/components/pomodoro/PomodoroMenuContent.svelte");
-      PomodoroMenuSurface = module.default;
-    } catch (error) {
-      pomodoroMenuLoadError = classifyLoadFailure(error);
-      console.error("Failed to load the mobile Pomodoro menu", error);
-    } finally {
-      pomodoroMenuLoading = false;
-    }
-  }
-
-  function retryPomodoroMenuLoad(): void {
-    const failure = pomodoroMenuLoadError;
-    if (!failure) return;
-    recoverLoadFailure(failure, () => void loadPomodoroMenu());
-  }
-
   function togglePomodoro(): void {
-    if (!pomodoroOpen) {
-      updatePomodoroMenuPosition();
-      void loadPomodoroMenu();
-    }
+    if (!pomodoroOpen) updatePomodoroMenuPosition();
     onTogglePomodoro();
   }
-
-  $effect(() => {
-    if (pomodoroOpen) void loadPomodoroMenu();
-  });
 
   $effect(() => {
     if (!pomodoroOpen || !pomodoroAnchorElement || !pomodoroTriggerElement) return;
@@ -182,7 +139,6 @@
       bind:this={pomodoroTriggerElement}
       type="button"
       data-mobile-pomodoro-trigger
-      onpointerdown={() => void loadPomodoroMenu()}
       onclick={togglePomodoro}
       aria-label={pomodoroActive
         ? t("titleBar.pomodoro.remaining", pomodoroTime)
@@ -216,34 +172,16 @@
         class="absolute top-[calc(100%+0.25rem)] z-50 max-h-[calc(var(--visual-viewport-height)-var(--safe-area-top)-var(--mobile-topbar-h)-0.75rem)] overflow-y-auto rounded-xl border border-border bg-popover py-1 text-popover-foreground shadow-xl"
         style={pomodoroMenuStyle}
       >
-        {#if PomodoroMenuSurface}
-          <PomodoroMenuSurface
-            includeMusic={musicVisible}
-            touch
-            onDismiss={onClosePomodoro}
-            onOpenMusic={onOpenMusic}
-          />
-        {:else if pomodoroMenuLoadError}
-          <div class="flex flex-col gap-2 p-3 text-sm" role="alert">
-            <p class="wrap-break-word text-xs text-muted-foreground">{pomodoroMenuLoadError.message}</p>
-            <button
-              type="button"
-              class="min-h-12 rounded-lg border border-border px-3 font-medium active:bg-accent"
-              onclick={retryPomodoroMenuLoad}
-            >{t("common.retry")}</button>
-          </div>
-        {:else}
-          <p class="p-4 text-center text-sm text-muted-foreground" aria-busy="true">
-            {t("common.loading")}
-          </p>
-        {/if}
+        <PomodoroMenuSurface
+          includeMusic={musicVisible}
+          touch
+          onDismiss={onClosePomodoro}
+          onOpenMusic={onOpenMusic}
+        />
       </div>
     {/if}
   </div>
-  {#await import("$lib/components/vault/LinkedDeviceControl.svelte") then module}
-    {@const LinkedDeviceControl = module.default}
-    <LinkedDeviceControl platform="android" presentation="mobile" onOpened={onClosePomodoro} />
-  {/await}
+  <LinkedDeviceControlSurface platform="android" presentation="mobile" onOpened={onClosePomodoro} />
   <button
     type="button"
     data-mobile-quick-notes-trigger
@@ -252,7 +190,6 @@
     aria-label={t("titleBar.control.quickNotes")}
     aria-haspopup="dialog"
     aria-expanded={quickNotesOpen}
-    aria-busy={quickNotesLoading}
     class={cn(utilityButtonClass, primaryNavigationVisible ? "w-full min-w-0" : "w-11 shrink-0", quickNotesOpen && "text-foreground")}
   >
     <span class={cn(utilityIconClass, quickNotesOpen && "bg-accent/70")}><StickyNote size={19} strokeWidth={1.8} aria-hidden="true" /></span>
@@ -266,7 +203,6 @@
       aria-label={t("titleBar.control.music")}
       aria-haspopup="dialog"
       aria-expanded={musicOpen}
-      aria-busy={musicLoading}
       class={cn(utilityButtonClass, primaryNavigationVisible ? "w-full min-w-0" : "w-11 shrink-0", musicOpen && "text-foreground")}
     >
       <span class={cn(utilityIconClass, musicOpen && "bg-accent/70")}><Music size={19} strokeWidth={1.8} aria-hidden="true" /></span>

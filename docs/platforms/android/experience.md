@@ -6,7 +6,7 @@ Phones use a compact global top bar for primary destinations and utility surface
 
 The shell uses touch-sized controls, visible selection, localized accessible names, system safe areas, and the current theme. It does not repeat the active destination label when that would consume essential phone width.
 
-Inactive complex destinations load lazily, but the shell and current destination remain stable while a feature module is loading or recovering.
+Startup keeps the shell behind a centered loading indicator until the database, Calendar data, Pomodoro recovery, and the standard Pomodoro and linked-device controls are ready. After the usable Calendar paints, Android automatically prepares Projects, Settings, Quick notes, Notes, Chat, and Music in prioritized background batches, yielding a frame between batches. This work is not deferred until interaction. If a destination is opened before its automatic preparation finishes, only that destination shows the loading indicator while it reuses the existing in-flight request. Heavy detail workflows remain lazy only where the desktop composition also defers them, including advanced editors, imports, diagnostics, builders, and optional detail panels.
 
 ## Hierarchical navigation
 

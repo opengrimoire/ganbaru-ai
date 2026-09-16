@@ -19,6 +19,7 @@ Android testing distinguishes source checks, emulator coverage, physical-device 
 - Import a complete vault through a document tree.
 - Create a portable backup, uninstall, reinstall, and restore.
 - Cold and warm startup while offline.
+- During cold and warm startup, confirm the centered readiness indicator hands off to a usable Calendar before background preparation completes. Let preparation settle, then open every primary destination, every standard Project view, Settings, Quick notes, Music, Pomodoro, and linked-device controls without another top-level loading surface. Repeat while opening one destination immediately after Calendar appears and confirm only that destination shows loading until its existing preparation finishes.
 - Calendar creation, editing, recurrence, reminders, and project linkage.
 - Project task views, detail, settings, scheduling, and wide-view touch panning.
 - Notes pages, blocks, databases, history, assets, Archive, and Trash.

@@ -62,7 +62,7 @@
   import ProjectGanttView from "$lib/components/projects/ProjectGanttView.svelte";
   import ProjectKanbanView from "$lib/components/projects/ProjectKanbanView.svelte";
   import ProjectListView from "$lib/components/projects/ProjectListView.svelte";
-  import type { ProjectDesktopViewComponents } from "$lib/components/projects/project-desktop-view-components";
+  import type { ProjectViewComponents } from "$lib/components/projects/project-view-components";
   import ChatWorkspace from "$lib/components/chat/ChatWorkspace.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import TooltipHost from "$lib/components/ui/TooltipHost.svelte";
@@ -120,13 +120,13 @@
   const detachedWindows = getDetachedWindows();
   const notesNotificationSchedule = getNotesNotificationSchedule();
   const notesProjectHistoryScheduler = getNotesProjectHistoryScheduler();
-  const projectDesktopViewComponents = {
+  const projectViewComponents = {
     list: ProjectListView,
     kanban: ProjectKanbanView,
     calendar: CalendarView,
     gantt: ProjectGanttView,
     dashboard: ProjectDashboardView,
-  } satisfies ProjectDesktopViewComponents;
+  } satisfies ProjectViewComponents;
   const projectChatIntegration: ProjectChatIntegration = {
     listWorkingFolders: (projectId) => chat.workingFolders
       .filter((entry) => (
@@ -1068,7 +1068,7 @@
         <CalendarView />
       {:else if nav.current === "projects"}
         <ProjectsView
-          desktopViewComponents={projectDesktopViewComponents}
+          viewComponents={projectViewComponents}
           projectChat={projectChatIntegration}
         />
       {:else if nav.current === "notes"}

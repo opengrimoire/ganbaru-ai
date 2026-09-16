@@ -55,7 +55,7 @@
       "maxSourceModules": 252
     }
   ],
-  "maxTotalSourceModules": 1001,
+  "maxTotalSourceModules": 1002,
   "requiredMobileModules": [
     "src/main.ts",
     "src/main-mobile.ts",
@@ -129,6 +129,7 @@
     "src/lib/components/mobile/MobileNoopMusicSoundscapeControl.svelte",
     "src/lib/components/music/MusicPanel.svelte",
     "src/lib/components/music/MusicPlaybackHost.svelte",
+    "src/lib/music/music-first-use-preload.ts",
     "src/lib/components/chat/ChatWorkspace.svelte",
     "src/lib/chat/local-execution-ui.mobile.ts",
     "src/lib/chat/review-diff-loader.mobile.ts",
