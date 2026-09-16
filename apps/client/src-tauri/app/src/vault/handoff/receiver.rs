@@ -218,7 +218,11 @@ async fn receive(
             eprintln!("failed to clean completed vault transfer: {error}");
         }
     }
-    reload_application_shell(app)?;
+    if purpose == BundlePurpose::Ownership {
+        reload_application_shell_after_ownership_change(app)?;
+    } else {
+        reload_application_shell(app)?;
+    }
     acknowledgement?;
     Ok(ReceiveOutcome {
         transfer_id: Some(metadata.transfer_id),
@@ -263,7 +267,7 @@ async fn resume_committed_ownership(
             eprintln!("failed to clean completed vault transfer: {error}");
         }
     }
-    reload_application_shell(app)?;
+    reload_application_shell_after_ownership_change(app)?;
     acknowledgement?;
     Ok(ReceiveOutcome {
         transfer_id: Some(transfer_id),
@@ -281,6 +285,20 @@ pub(super) fn reload_application_shell(app: &tauri::AppHandle) -> Result<(), Str
     window
         .eval("window.location.reload()")
         .map_err(|error| format!("reload application after vault activation: {error}"))
+}
+
+#[cfg(target_os = "android")]
+pub(super) fn reload_application_shell_after_ownership_change(
+    app: &tauri::AppHandle,
+) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "main application window is unavailable".to_string())?;
+    window
+        .eval(
+            "if (window.dispatchEvent(new Event('ganbaru-ai:mobile-ownership-reload-requested', { cancelable: true }))) window.location.reload()",
+        )
+        .map_err(|error| format!("reload application after ownership change: {error}"))
 }
 
 #[cfg(target_os = "android")]

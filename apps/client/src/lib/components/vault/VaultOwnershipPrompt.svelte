@@ -24,10 +24,12 @@
     platform,
     closeConfirmationOpen = false,
     onRequestClose = () => Promise.resolve(),
+    onStatusReady = () => undefined,
   }: {
     platform: VaultOwnershipPlatform;
     closeConfirmationOpen?: boolean;
     onRequestClose?: () => Promise<void>;
+    onStatusReady?: () => void;
   } = $props();
 
   const { t } = getLocalization();
@@ -43,6 +45,7 @@
   let dialog = $state<HTMLDivElement | null>(null);
   let continueButton = $state<HTMLButtonElement | null>(null);
   let previousCanWrite: boolean | null = null;
+  let statusReadyReported = false;
 
   const visible = $derived(
     shouldPresentVaultOwnershipPrompt(status)
@@ -69,6 +72,11 @@
       status = next;
     } catch (cause) {
       console.warn("Failed to check vault ownership:", cause);
+    } finally {
+      if (!statusReadyReported) {
+        statusReadyReported = true;
+        onStatusReady();
+      }
     }
   }
 

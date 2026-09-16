@@ -94,6 +94,23 @@ describe("VaultOwnershipPrompt", () => {
     expect(target.querySelector("[data-vault-ownership-prompt]")).toBeNull();
   });
 
+  it("reports its initial status decision even when the status read fails", async () => {
+    const onStatusReady = vi.fn();
+    backend.readPairingStatus.mockRejectedValueOnce(new Error("unavailable"));
+    target = document.createElement("div");
+    document.body.append(target);
+    component = mount(VaultOwnershipPrompt, {
+      target,
+      props: {
+        platform: "android",
+        onStatusReady,
+      },
+    });
+
+    await vi.waitFor(() => expect(onStatusReady).toHaveBeenCalledOnce());
+    expect(target.querySelector("[data-vault-ownership-prompt]")).toBeNull();
+  });
+
   it("routes Ctrl+Shift+W to the shell close confirmation", async () => {
     const requestClose = vi.fn(async () => undefined);
     target = document.createElement("div");

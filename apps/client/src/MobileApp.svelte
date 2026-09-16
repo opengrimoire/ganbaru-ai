@@ -34,6 +34,12 @@
   import { getZoom } from "$lib/stores/zoom.svelte";
   import { flushConfig } from "$lib/vault/config";
 
+  let {
+    onInitialSurfacePresented = () => undefined,
+  }: {
+    onInitialSurfacePresented?: () => void;
+  } = $props();
+
   type CalendarComponent = typeof import("$lib/components/calendar/CalendarView.svelte").default;
   type ProjectsComponent = typeof import("$lib/components/projects/ProjectsView.svelte").default;
   type NotesComponent = typeof import("$lib/components/notes/NotesView.svelte").default;
@@ -110,6 +116,9 @@
   let deferredLoadErrors = $state<Partial<Record<DeferredSurface, LoadFailure>>>({});
   const deferredSurfaceLoads = new Map<DeferredSurface, Promise<void>>();
   let deferredPreparationStarted = false;
+  let primarySurfacePresented = false;
+  let ownershipStatusReady = false;
+  let initialSurfaceReported = false;
   let mobileAppDisposed = false;
   let stopMusicPreload = (): void => undefined;
   let removePomodoroBackLayer = (): void => undefined;
@@ -435,6 +444,8 @@
     await afterAnimationFrames(2);
     if (mobileAppDisposed) return;
     perfMark("boot.mobile-calendar-presented");
+    primarySurfacePresented = true;
+    reportInitialSurfacePresentedIfReady();
     void synchronizeMobileDoomscrolling();
     void ensureCalendarNotificationScheduler();
     const batches: readonly (readonly DeferredSurface[])[] = [
@@ -451,6 +462,25 @@
       if (mobileAppDisposed) return;
     }
     perfMark("boot.mobile-standard-surfaces-ready");
+  }
+
+  function reportInitialSurfacePresentedIfReady(): void {
+    if (initialSurfaceReported || !primarySurfacePresented || !ownershipStatusReady) return;
+    initialSurfaceReported = true;
+    onInitialSurfacePresented();
+  }
+
+  function reportOwnershipStatusReady(): void {
+    ownershipStatusReady = true;
+    reportInitialSurfacePresentedIfReady();
+  }
+
+  async function reportInitialErrorAfterPaint(): Promise<void> {
+    await afterAnimationFrames(2);
+    if (!mobileAppDisposed && loadError) {
+      primarySurfacePresented = true;
+      reportInitialSurfacePresentedIfReady();
+    }
   }
 
   async function initializeWorkspace(): Promise<void> {
@@ -477,6 +507,7 @@
     } catch (error) {
       loadError = classifyLoadFailure(error);
       console.error("Failed to initialize the mobile workspace", error);
+      void reportInitialErrorAfterPaint();
     } finally {
       initializingWorkspace = false;
     }
@@ -983,6 +1014,6 @@
 
   {#await import("$lib/components/vault/VaultOwnershipPrompt.svelte") then module}
     {@const VaultOwnershipPrompt = module.default}
-    <VaultOwnershipPrompt platform="android" />
+    <VaultOwnershipPrompt platform="android" onStatusReady={reportOwnershipStatusReady} />
   {/await}
 </div>

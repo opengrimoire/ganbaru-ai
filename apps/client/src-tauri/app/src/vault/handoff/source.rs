@@ -102,7 +102,7 @@ async fn upload(app: &tauri::AppHandle, purpose: BundlePurpose) -> Result<(), St
             generation: transfer.metadata.generation,
             purpose,
         })?;
-        super::receiver::reload_application_shell(app)?;
+        super::receiver::reload_application_shell_after_ownership_change(app)?;
         if let Err(error) = cleanup(&pairing, &transfer.metadata.transfer_id) {
             eprintln!("failed to clean completed Android vault upload: {error}");
         }
