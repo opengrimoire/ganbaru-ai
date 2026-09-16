@@ -1,7 +1,5 @@
 import { Temporal } from "@js-temporal/polyfill";
-import "@fontsource-variable/inter";
 import { mount, unmount } from "svelte";
-import "./app.css";
 import { ensureConfigLoaded, flushConfig } from "$lib/vault/config";
 import { getActiveVaultInfo } from "$lib/vault/state";
 import {

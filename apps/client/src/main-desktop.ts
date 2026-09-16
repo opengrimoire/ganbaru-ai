@@ -1,7 +1,5 @@
 import { Temporal } from "@js-temporal/polyfill";
 (globalThis as unknown as { Temporal: typeof Temporal }).Temporal = Temporal;
-import "@fontsource-variable/inter";
-import "./app.css";
 import { mount, unmount } from "svelte";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
