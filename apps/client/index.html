@@ -40,6 +40,10 @@
         text-align: center;
       }
 
+      #vault-ownership-transition-cover.android-system-font {
+        font-family: ui-sans-serif, system-ui, sans-serif;
+      }
+
       .vault-ownership-transition-content {
         display: flex;
         width: 100%;
@@ -149,6 +153,10 @@
     </div>
     <script>
       try {
+        const cover = document.getElementById("vault-ownership-transition-cover");
+        if (/Android/i.test(navigator.userAgent)) {
+          cover.classList.add("android-system-font");
+        }
         const raw = sessionStorage.getItem("ganbaru:vault-ownership-transition");
         const snapshot = raw ? JSON.parse(raw) : null;
         if (
@@ -162,7 +170,7 @@
           document.getElementById("vault-ownership-transition-description").textContent = snapshot.description;
           document.getElementById("vault-ownership-transition-action").textContent = snapshot.actionLabel;
           document.getElementById("vault-ownership-transition-secondary").textContent = snapshot.secondaryLabel;
-          document.getElementById("vault-ownership-transition-cover").hidden = false;
+          cover.hidden = false;
         }
       } catch {}
     </script>

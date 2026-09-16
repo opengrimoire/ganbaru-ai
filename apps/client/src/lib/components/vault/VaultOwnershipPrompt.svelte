@@ -170,6 +170,7 @@
 {#if visible}
   <div
     class="fixed z-90 flex items-center justify-center overflow-hidden bg-black/55 px-5 py-8"
+    class:android-system-font={platform === "android"}
     style="left: var(--visual-viewport-offset-left); top: var(--visual-viewport-offset-top); width: var(--visual-viewport-width); height: var(--visual-viewport-height); padding-top: calc(var(--safe-area-top) + 2rem); padding-right: calc(var(--safe-area-right) + 1.25rem); padding-bottom: calc(var(--safe-area-bottom) + 2rem); padding-left: calc(var(--safe-area-left) + 1.25rem);"
     data-vault-ownership-prompt
   >
@@ -226,6 +227,10 @@
 {/if}
 
 <style>
+  .android-system-font {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+
   .vault-owner-legible {
     text-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
   }
