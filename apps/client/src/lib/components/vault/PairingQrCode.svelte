@@ -57,7 +57,7 @@
       {/if}
     {/each}
   </svg>
-  <p class="text-center text-[0.8rem] tabular-nums text-muted-foreground" aria-live="polite">
+  <p class="h-5 text-center text-[0.8rem] tabular-nums text-muted-foreground" aria-live="polite">
     {remaining > 0
       ? t("vaultHandoff.refreshesIn", formatPairingCountdown(remaining))
       : t("vaultHandoff.refreshingCode")}

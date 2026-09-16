@@ -125,8 +125,9 @@ export const vaultHandoff = {
   copyCode: "Copiar código de vinculación",
   codeCopied: "Código de vinculación copiado",
   copyCodeFailed: "No se pudo copiar el código de vinculación.",
-  qrDialogTitle: "Conectar un teléfono",
-  qrInstructions: "Abre Ganbaru AI en tu teléfono y escanea este código QR.",
+  qrDialogTitle: "Conectar otro dispositivo",
+  qrInstructions:
+    "Para conectar un teléfono, escanea este código QR en Ajustes > Datos. Para conectar otra computadora, copia el código de vinculación e introdúcelo en Ajustes > Datos.",
   qrAlt: "Código QR de vinculación",
   refreshesIn: (time: string) => `El código se renueva en ${time}`,
   refreshingCode: "Renovando código...",

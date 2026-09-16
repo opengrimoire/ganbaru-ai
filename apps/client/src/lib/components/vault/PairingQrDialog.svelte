@@ -20,16 +20,20 @@
     networkAccess,
     networkBusy,
     networkError,
+    invitationError,
     onGrantNetworkAccess,
     onRefresh,
+    onRetry,
     onClose,
   }: {
-    invitation: PairingInvitation;
+    invitation: PairingInvitation | null;
     networkAccess: DesktopNetworkAccess | null;
     networkBusy: boolean;
     networkError: string | null;
+    invitationError: string | null;
     onGrantNetworkAccess: () => void;
     onRefresh: () => void;
+    onRetry: () => void;
     onClose: () => void;
   } = $props();
 
@@ -40,6 +44,7 @@
   let copyFailed = $state(false);
 
   async function copyCode(): Promise<void> {
+    if (!invitation) return;
     copyFailed = false;
     try {
       await navigator.clipboard.writeText(invitation.invitation);
@@ -115,17 +120,43 @@
     </div>
 
     <div class="mt-5">
-      <PairingQrCode {invitation} onExpired={onRefresh} />
+      {#if invitation}
+        <PairingQrCode {invitation} onExpired={onRefresh} />
+      {:else}
+        <div class="grid justify-items-center gap-3" role="status" aria-label={t("common.loading")}>
+          <div class="grid aspect-square w-full max-w-80 place-items-center bg-white">
+            {#if invitationError}
+              <div class="flex max-w-56 flex-col items-center gap-3 px-4 text-center">
+                <p class="text-[0.8rem] leading-5 text-destructive">{invitationError}</p>
+                <button
+                  type="button"
+                  class="inline-flex min-h-9 items-center justify-center rounded-md border border-border bg-background px-3 text-[0.8rem] font-medium text-foreground hover:bg-accent"
+                  onclick={onRetry}
+                >
+                  {t("common.retry")}
+                </button>
+              </div>
+            {:else}
+              <LoaderCircle size={28} strokeWidth={1.8} class="animate-spin text-black/45" aria-hidden="true" />
+            {/if}
+          </div>
+          <div class="h-5" aria-hidden="true"></div>
+        </div>
+      {/if}
     </div>
 
-    <button
-      type="button"
-      class="mx-auto mt-3 inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-border px-3 text-[0.8rem] font-medium hover:bg-accent"
-      onclick={() => void copyCode()}
-    >
-      <Copy size={14} strokeWidth={1.8} aria-hidden="true" />
-      {copied ? t("vaultHandoff.codeCopied") : t("vaultHandoff.copyCode")}
-    </button>
+    <div class="mx-auto mt-3 min-h-9">
+      {#if invitation}
+        <button
+          type="button"
+          class="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-border px-3 text-[0.8rem] font-medium hover:bg-accent"
+          onclick={() => void copyCode()}
+        >
+          <Copy size={14} strokeWidth={1.8} aria-hidden="true" />
+          {copied ? t("vaultHandoff.codeCopied") : t("vaultHandoff.copyCode")}
+        </button>
+      {/if}
+    </div>
     {#if copyFailed}
       <p role="alert" class="mt-2 text-center text-[0.8rem] text-destructive">
         {t("vaultHandoff.copyCodeFailed")}

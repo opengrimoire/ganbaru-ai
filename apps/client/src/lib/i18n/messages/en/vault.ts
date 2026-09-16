@@ -115,8 +115,9 @@ export const vaultHandoff = {
   copyCode: "Copy pairing code",
   codeCopied: "Pairing code copied",
   copyCodeFailed: "The pairing code could not be copied.",
-  qrDialogTitle: "Connect a phone",
-  qrInstructions: "Open Ganbaru AI on your phone and scan this QR code.",
+  qrDialogTitle: "Connect another device",
+  qrInstructions:
+    "To connect a phone, scan this QR code in Settings > Data. To connect another computer, copy the pairing code and enter it in Settings > Data.",
   qrAlt: "Pairing QR code",
   refreshesIn: (time: string) => `Code refreshes in ${time}`,
   refreshingCode: "Refreshing code...",

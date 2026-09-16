@@ -61,6 +61,7 @@
   );
   let scanning = $state(false);
   let codeDialogVisible = $state(false);
+  let qrDialogVisible = $state(false);
   let scannerVersion = $state(0);
   let busy = $state<BusyAction | null>(untrack(() => status ? null : "status"));
   let statusRefreshing = false;
@@ -90,6 +91,9 @@
       && platform === "desktop"
       && __GANBARU_AI_BUILD_PLATFORM__ === "linux"
       && networkAccess !== null,
+  );
+  const controlsBusy = $derived(
+    busy !== null && !(presentation === "settings" && busy === "invite"),
   );
   const networkAccessEnabled = $derived(
     !desktopNetworkAccessSetting
@@ -154,6 +158,14 @@
     } finally {
       busy = null;
     }
+  }
+
+  function openInvitationDialog(): void {
+    qrDialogVisible = true;
+    if (busy === "invite") return;
+    invitation = null;
+    error = null;
+    void showInvitation();
   }
 
   async function updateNetworkAccess(grant: boolean): Promise<void> {
@@ -351,7 +363,7 @@
         label={t("vaultHandoff.networkAccessHeading")}
         description={networkAccessDescription}
         checked={networkAccessEnabled}
-        disabled={busy !== null || networkAccess?.state === "notRequired" || networkAccess?.state === "manualActionRequired"}
+        disabled={controlsBusy || networkAccess?.state === "notRequired" || networkAccess?.state === "manualActionRequired"}
         onChange={setNetworkAccess}
       />
     {/if}
@@ -402,7 +414,7 @@
               <button
                 type="button"
                 class={buttonClass}
-                disabled={busy !== null || status.pendingTransfer || (device.isOwner && status.replicaReady) || (status.canWrite === true && device.isCoordinator)}
+                disabled={controlsBusy || status.pendingTransfer || (device.isOwner && status.replicaReady) || (status.canWrite === true && device.isCoordinator)}
                 onclick={() => { unlinkDeviceId = device.deviceId; confirmation = "unlink"; }}
               >
                 {t("vaultHandoff.unlink")}
@@ -417,8 +429,7 @@
 
     {#if platform === "desktop" && presentation === "settings" && status.canInvite}
       <div class="flex flex-wrap gap-2">
-        <button type="button" class={status.linked ? buttonClass : primaryButtonClass} disabled={busy !== null} onclick={() => void showInvitation()}>
-          {#if busy === "invite"}<LoaderCircle size={14} class="animate-spin" />{/if}
+        <button type="button" class={status.linked ? buttonClass : primaryButtonClass} disabled={controlsBusy} onclick={openInvitationDialog}>
           {status.linked ? t("vaultHandoff.linkAnotherDevice") : t("vaultHandoff.createQr")}
         </button>
         {#if !status.linked}
@@ -625,17 +636,61 @@
   {#if error}<p role="alert" class="px-1 text-[0.8rem] leading-5 text-destructive">{error}</p>{/if}
 </section>
 
-{#if desktopQrAvailable && platform === "desktop" && invitation && presentation === "settings"}
-  {#await import("./PairingQrDialog.svelte") then module}
+{#if desktopQrAvailable && platform === "desktop" && qrDialogVisible && presentation === "settings"}
+  {#await import("./PairingQrDialog.svelte")}
+    <!-- Keep the panel immediate while its desktop-only implementation finishes loading. -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="fixed inset-0 z-90 flex items-center justify-center p-4" onclick={() => { qrDialogVisible = false; }}>
+      <div class="absolute inset-0 bg-black/50"></div>
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <div
+        class="relative z-10 flex max-h-full w-full max-w-md flex-col overflow-y-auto rounded-md border border-black/20 bg-card px-5 py-5 text-card-foreground shadow-2xl dark:border-white/10 dark:bg-sidebar dark:text-sidebar-foreground sm:px-8"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pairing-qr-loading-title"
+        tabindex="-1"
+        onclick={(event) => event.stopPropagation()}
+      >
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <h2 id="pairing-qr-loading-title" class="text-base font-semibold text-foreground">
+              {t("vaultHandoff.qrDialogTitle")}
+            </h2>
+            <p class="mt-1 text-[0.866667rem] leading-5 text-muted-foreground">
+              {t("vaultHandoff.qrInstructions")}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="flex size-8 shrink-0 items-center justify-center rounded-md text-xl leading-none text-muted-foreground hover:bg-accent hover:text-foreground"
+            aria-label={t("common.close")}
+            onclick={() => { qrDialogVisible = false; }}
+          >
+            &times;
+          </button>
+        </div>
+        <div class="mt-5 grid justify-items-center gap-3" role="status" aria-label={t("common.loading")}>
+          <div class="grid aspect-square w-full max-w-80 place-items-center bg-white">
+            <LoaderCircle size={28} strokeWidth={1.8} class="animate-spin text-black/45" aria-hidden="true" />
+          </div>
+          <div class="h-5" aria-hidden="true"></div>
+        </div>
+        <div class="mx-auto mt-3 min-h-9"></div>
+      </div>
+    </div>
+  {:then module}
     {@const PairingQrDialog = module.default}
     <PairingQrDialog
       {invitation}
       {networkAccess}
       networkBusy={busy === "network"}
       {networkError}
+      invitationError={busy === "invite" ? null : error}
       onGrantNetworkAccess={() => { confirmation = "network"; }}
       onRefresh={() => void showInvitation()}
-      onClose={() => { invitation = null; }}
+      onRetry={() => void showInvitation()}
+      onClose={() => { qrDialogVisible = false; invitation = null; }}
     />
   {/await}
 {/if}
