@@ -25,7 +25,7 @@
 
   function scheduleScan(): void {
     if (stopped || disabled) return;
-    timer = setTimeout(() => void scan(), 350);
+    timer = setTimeout(() => void scan(), 180);
   }
 
   async function scan(): Promise<void> {

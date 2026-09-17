@@ -100,7 +100,7 @@ Current Notes writes still replace complete block payloads. Their collaboration 
 
 ## Target enrollment and key lifecycle
 
-The first desktop is the administration device. A short-lived, single-use QR invitation contains its identity fingerprint and a high-entropy enrollment secret. Manual entry accepts the complete invitation. Both devices show a verification code; the existing device explicitly confirms enrollment before releasing vault keys.
+The first desktop is the administration device. A short-lived, single-use QR invitation contains a compact binary projection of the private-LAN endpoint, identity fingerprint, high-entropy enrollment secret, and vault compatibility fields needed before enrollment. Keeping the camera payload compact is a usability invariant because QR module density directly limits reliable scanning distance. Manual entry accepts the complete textual invitation. Both representations decode to the same validated invitation. Both devices show a verification code; the existing device explicitly confirms enrollment before releasing vault keys.
 
 Direct connections use TLS 1.3 with pinned device identity. Operations are signed. Records and asset chunks use XChaCha20-Poly1305. Resource-key distribution uses HPKE with X25519 and HKDF-SHA256. Secrets use native desktop credential storage or Android Keystore wrapping. Review maintained implementations, minimal features, pinned versions, advisories, and the protocol composition before enabling transport. [HPKE](https://www.rfc-editor.org/rfc/rfc9180.html) does not provide application authorization, replay protection, or downgrade protection by itself.
 

@@ -305,7 +305,7 @@ pub(crate) async fn handoff_create_pairing_invitation<R: Runtime>(
     )?;
     let encoded = encode_invitation(&invitation)?;
     Ok(PairingInvitationView {
-        qr: invitation_qr_matrix(&encoded)?,
+        qr: invitation_qr_matrix(&invitation)?,
         invitation: encoded,
         endpoint: endpoint.to_string(),
         expires_at_unix_ms: invitation.expires_at_unix_ms,
@@ -365,9 +365,9 @@ pub(crate) fn handoff_decode_pairing_qr(
     height: usize,
     luma: Vec<u8>,
 ) -> Result<String, String> {
-    let encoded = protocol::decode_qr_luma(width, height, &luma)?;
-    decode_invitation(&encoded, protocol::unix_time_ms())?;
-    Ok(encoded)
+    let invitation =
+        protocol::decode_pairing_qr_luma(width, height, &luma, protocol::unix_time_ms())?;
+    encode_invitation(&invitation)
 }
 
 #[tauri::command]

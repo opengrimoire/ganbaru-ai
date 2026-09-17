@@ -12,6 +12,7 @@ pub(crate) const MAX_DEVICE_LABEL_BYTES: usize = 128;
 const MAX_APP_VERSION_BYTES: usize = 64;
 pub(crate) const MAX_DOOMSCROLLING_SAMPLES: usize = 1_024;
 pub(crate) const TRANSFER_CHUNK_BYTES: usize = 64 * 1024;
+const PAIRING_QR_MAGIC: &[u8; 4] = b"GBQ\x01";
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -538,7 +539,6 @@ fn decode_bounded_json<T: DeserializeOwned>(encoded: &[u8], label: &str) -> Resu
     serde_json::from_slice(encoded).map_err(|error| format!("decode {label}: {error}"))
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) fn encode_invitation(invitation: &PairingInvitation) -> Result<String, String> {
     invitation.validate(unix_time_ms().saturating_sub(1))?;
     let json = serde_json::to_vec(invitation)
@@ -572,8 +572,9 @@ pub(crate) struct QrMatrix {
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub(crate) fn invitation_qr_matrix(encoded: &str) -> Result<QrMatrix, String> {
-    let code = qrcode::QrCode::with_error_correction_level(encoded.as_bytes(), qrcode::EcLevel::M)
+pub(crate) fn invitation_qr_matrix(invitation: &PairingInvitation) -> Result<QrMatrix, String> {
+    let payload = encode_pairing_qr_payload(invitation)?;
+    let code = qrcode::QrCode::with_error_correction_level(&payload, qrcode::EcLevel::M)
         .map_err(|error| format!("create pairing QR code: {error}"))?;
     let width = code.width();
     let modules = (0..width)
@@ -585,7 +586,7 @@ pub(crate) fn invitation_qr_matrix(encoded: &str) -> Result<QrMatrix, String> {
     Ok(QrMatrix { width, modules })
 }
 
-pub(crate) fn decode_qr_luma(width: usize, height: usize, luma: &[u8]) -> Result<String, String> {
+fn decode_qr_luma(width: usize, height: usize, luma: &[u8]) -> Result<Vec<u8>, String> {
     const MAX_QR_FRAME_PIXELS: usize = 1920 * 1080;
     let pixels = width
         .checked_mul(height)
@@ -597,11 +598,146 @@ pub(crate) fn decode_qr_luma(width: usize, height: usize, luma: &[u8]) -> Result
     for identified in scanner.identify(width, height, luma) {
         let identified = identified.map_err(|error| format!("identify QR code: {error}"))?;
         if let Ok(decoded) = identified.decode() {
-            return String::from_utf8(decoded.payload)
-                .map_err(|_| "pairing QR code is not UTF-8".to_string());
+            return Ok(decoded.payload);
         }
     }
     Err("no readable pairing QR code was found".to_string())
+}
+
+pub(crate) fn decode_pairing_qr_luma(
+    width: usize,
+    height: usize,
+    luma: &[u8],
+    now_unix_ms: i64,
+) -> Result<PairingInvitation, String> {
+    let payload = decode_qr_luma(width, height, luma)?;
+    decode_pairing_qr_payload(&payload, now_unix_ms)
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn encode_pairing_qr_payload(invitation: &PairingInvitation) -> Result<Vec<u8>, String> {
+    invitation.validate(unix_time_ms().saturating_sub(1))?;
+    let mut payload = Vec::with_capacity(256);
+    payload.extend_from_slice(PAIRING_QR_MAGIC);
+    payload.extend_from_slice(&invitation.protocol_version.to_be_bytes());
+    push_qr_string(&mut payload, &invitation.compatibility.app_version)?;
+    payload.extend_from_slice(&decode_qr_digest(
+        &invitation.compatibility.database_schema_sha256,
+        "database compatibility fingerprint",
+    )?);
+    push_qr_string(&mut payload, &invitation.invitation_id)?;
+    push_qr_string(&mut payload, &invitation.secret)?;
+    push_qr_string(&mut payload, &invitation.endpoint)?;
+    payload.extend_from_slice(&decode_qr_digest(
+        &invitation.coordinator_fingerprint,
+        "coordinator fingerprint",
+    )?);
+    push_qr_string(&mut payload, &invitation.coordinator_device_id)?;
+    push_qr_string(&mut payload, &invitation.vault_id)?;
+    payload.extend_from_slice(&invitation.generation.to_be_bytes());
+    payload.extend_from_slice(&invitation.expires_at_unix_ms.to_be_bytes());
+    Ok(payload)
+}
+
+fn decode_pairing_qr_payload(
+    payload: &[u8],
+    now_unix_ms: i64,
+) -> Result<PairingInvitation, String> {
+    if !payload.starts_with(PAIRING_QR_MAGIC) {
+        let encoded = std::str::from_utf8(payload)
+            .map_err(|_| "pairing QR code has an unsupported format".to_string())?;
+        return decode_invitation(encoded, now_unix_ms);
+    }
+
+    let mut position = PAIRING_QR_MAGIC.len();
+    let protocol_version = u16::from_be_bytes(take_qr_array(payload, &mut position)?);
+    let app_version = take_qr_string(payload, &mut position)?;
+    let database_schema_sha256 = encode_qr_digest(take_qr_array(payload, &mut position)?);
+    let invitation_id = take_qr_string(payload, &mut position)?;
+    let secret = take_qr_string(payload, &mut position)?;
+    let endpoint = take_qr_string(payload, &mut position)?;
+    let coordinator_fingerprint = encode_qr_digest(take_qr_array(payload, &mut position)?);
+    let coordinator_device_id = take_qr_string(payload, &mut position)?;
+    let vault_id = take_qr_string(payload, &mut position)?;
+    let generation = u64::from_be_bytes(take_qr_array(payload, &mut position)?);
+    let expires_at_unix_ms = i64::from_be_bytes(take_qr_array(payload, &mut position)?);
+    if position != payload.len() {
+        return Err("pairing QR code contains unexpected data".to_string());
+    }
+
+    let invitation = PairingInvitation {
+        protocol_version,
+        compatibility: HandoffCompatibility {
+            app_version,
+            database_schema_sha256,
+        },
+        invitation_id,
+        secret,
+        endpoint,
+        coordinator_fingerprint,
+        coordinator_device_id,
+        vault_id,
+        generation,
+        expires_at_unix_ms,
+    };
+    invitation.validate(now_unix_ms)?;
+    Ok(invitation)
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn push_qr_string(payload: &mut Vec<u8>, value: &str) -> Result<(), String> {
+    let length =
+        u8::try_from(value.len()).map_err(|_| "pairing QR field is too long".to_string())?;
+    payload.push(length);
+    payload.extend_from_slice(value.as_bytes());
+    Ok(())
+}
+
+fn take_qr_string(payload: &[u8], position: &mut usize) -> Result<String, String> {
+    let length = usize::from(take_qr_array::<1>(payload, position)?[0]);
+    let value = take_qr_bytes(payload, position, length)?;
+    std::str::from_utf8(value)
+        .map(str::to_owned)
+        .map_err(|_| "pairing QR field is not UTF-8".to_string())
+}
+
+fn take_qr_array<const LENGTH: usize>(
+    payload: &[u8],
+    position: &mut usize,
+) -> Result<[u8; LENGTH], String> {
+    take_qr_bytes(payload, position, LENGTH)?
+        .try_into()
+        .map_err(|_| "pairing QR code is truncated".to_string())
+}
+
+fn take_qr_bytes<'a>(
+    payload: &'a [u8],
+    position: &mut usize,
+    length: usize,
+) -> Result<&'a [u8], String> {
+    let end = position
+        .checked_add(length)
+        .ok_or_else(|| "pairing QR field length overflow".to_string())?;
+    let value = payload
+        .get(*position..end)
+        .ok_or_else(|| "pairing QR code is truncated".to_string())?;
+    *position = end;
+    Ok(value)
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn decode_qr_digest(value: &str, label: &str) -> Result<[u8; 32], String> {
+    validate_sha256(value).map_err(|_| format!("{label} is invalid"))?;
+    let mut digest = [0_u8; 32];
+    for (index, byte) in digest.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16)
+            .map_err(|_| format!("{label} is invalid"))?;
+    }
+    Ok(digest)
+}
+
+fn encode_qr_digest(digest: [u8; 32]) -> String {
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 #[allow(dead_code)] // H04 connects validated staging to vault activation.
@@ -666,10 +802,25 @@ pub(crate) fn test_compatibility() -> HandoffCompatibility {
 mod tests {
     use super::*;
 
+    fn qr_invitation() -> PairingInvitation {
+        PairingInvitation {
+            protocol_version: PROTOCOL_VERSION,
+            compatibility: test_compatibility(),
+            invitation_id: "invite-abcdefghijklmnopqrstuv".to_string(),
+            secret: "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG".to_string(),
+            endpoint: "192.168.1.20:43821".to_string(),
+            coordinator_fingerprint: "b".repeat(64),
+            coordinator_device_id: "device-abcdefghijklmnopqrstuv".to_string(),
+            vault_id: "vault-abcdefghijklmnopqrstuv".to_string(),
+            generation: 7,
+            expires_at_unix_ms: i64::MAX,
+        }
+    }
+
     #[test]
     fn invitation_qr_round_trips_through_production_decoder() {
-        let encoded = "eyJ0ZXN0IjoicGFpcmluZyJ9";
-        let matrix = invitation_qr_matrix(encoded).expect("QR should encode");
+        let invitation = qr_invitation();
+        let matrix = invitation_qr_matrix(&invitation).expect("QR should encode");
         let scale = 8;
         let quiet = 4;
         let image_width = (matrix.width + quiet * 2) * scale;
@@ -688,8 +839,45 @@ mod tests {
             }
         }
         assert_eq!(
-            decode_qr_luma(image_width, image_width, &image).expect("QR should decode"),
-            encoded
+            decode_pairing_qr_luma(image_width, image_width, &image, 1).expect("QR should decode"),
+            invitation
+        );
+    }
+
+    #[test]
+    fn compact_pairing_qr_is_materially_smaller_than_the_manual_code() {
+        let invitation = qr_invitation();
+        let payload = encode_pairing_qr_payload(&invitation).expect("QR payload");
+        let manual = encode_invitation(&invitation).expect("manual invitation");
+        let matrix = invitation_qr_matrix(&invitation).expect("QR should encode");
+
+        assert!(payload.len() * 4 < manual.len() * 3);
+        assert!(matrix.width <= 65, "QR width was {} modules", matrix.width);
+    }
+
+    #[test]
+    fn compact_pairing_qr_rejects_truncation_and_trailing_data() {
+        let invitation = qr_invitation();
+        let payload = encode_pairing_qr_payload(&invitation).expect("QR payload");
+
+        assert!(decode_pairing_qr_payload(&payload[..payload.len() - 1], 1)
+            .unwrap_err()
+            .contains("truncated"));
+        let mut trailing = payload;
+        trailing.push(0);
+        assert!(decode_pairing_qr_payload(&trailing, 1)
+            .unwrap_err()
+            .contains("unexpected data"));
+    }
+
+    #[test]
+    fn pairing_qr_decoder_accepts_legacy_full_invitations() {
+        let invitation = qr_invitation();
+        let encoded = encode_invitation(&invitation).expect("manual invitation");
+
+        assert_eq!(
+            decode_pairing_qr_payload(encoded.as_bytes(), 1).expect("legacy QR"),
+            invitation
         );
     }
 

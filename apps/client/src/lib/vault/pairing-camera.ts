@@ -1,7 +1,38 @@
 import { decodePairingQr } from "$lib/api/vault-handoff";
 
-const MAX_SCAN_WIDTH = 1280;
-const MAX_SCAN_HEIGHT = 720;
+const IDEAL_CAMERA_WIDTH = 1920;
+const IDEAL_CAMERA_HEIGHT = 1080;
+const MAX_SCAN_SIDE = 1080;
+
+export interface PairingFrameCrop {
+  sourceX: number;
+  sourceY: number;
+  sourceSize: number;
+  outputSize: number;
+}
+
+interface PairingCameraCapabilities extends MediaTrackCapabilities {
+  focusMode?: string[];
+}
+
+type PairingCameraConstraintSet = MediaTrackConstraintSet & {
+  focusMode?: "continuous";
+};
+
+/** Selects the centered square shown by the scanner without inventing extra pixels. */
+export function pairingFrameCrop(sourceWidth: number, sourceHeight: number): PairingFrameCrop {
+  if (!Number.isFinite(sourceWidth) || !Number.isFinite(sourceHeight)) {
+    throw new Error("Invalid pairing camera dimensions");
+  }
+  const sourceSize = Math.floor(Math.min(sourceWidth, sourceHeight));
+  if (sourceSize <= 0) throw new Error("Invalid pairing camera dimensions");
+  return {
+    sourceX: Math.floor((sourceWidth - sourceSize) / 2),
+    sourceY: Math.floor((sourceHeight - sourceSize) / 2),
+    sourceSize,
+    outputSize: Math.min(sourceSize, MAX_SCAN_SIDE),
+  };
+}
 
 /** Converts an RGBA camera frame into the bounded grayscale input used by the native decoder. */
 export function pairingFrameToLuma(rgba: Uint8ClampedArray): Uint8Array {
@@ -35,10 +66,12 @@ export class PairingCameraScanner {
       audio: false,
       video: {
         facingMode: { ideal: "environment" },
-        width: { ideal: MAX_SCAN_WIDTH },
-        height: { ideal: MAX_SCAN_HEIGHT },
+        width: { ideal: IDEAL_CAMERA_WIDTH },
+        height: { ideal: IDEAL_CAMERA_HEIGHT },
       },
     });
+    const videoTrack = this.#stream.getVideoTracks()[0];
+    if (videoTrack) await enableContinuousFocus(videoTrack);
     this.#video.srcObject = this.#stream;
     this.#video.playsInline = true;
     await this.#video.play();
@@ -51,16 +84,28 @@ export class PairingCameraScanner {
     if (sourceWidth <= 0 || sourceHeight <= 0) {
       throw new Error("Pairing camera is not ready");
     }
-    const scale = Math.min(1, MAX_SCAN_WIDTH / sourceWidth, MAX_SCAN_HEIGHT / sourceHeight);
-    const width = Math.max(1, Math.round(sourceWidth * scale));
-    const height = Math.max(1, Math.round(sourceHeight * scale));
-    this.#canvas.width = width;
-    this.#canvas.height = height;
+    const crop = pairingFrameCrop(sourceWidth, sourceHeight);
+    this.#canvas.width = crop.outputSize;
+    this.#canvas.height = crop.outputSize;
     const context = this.#canvas.getContext("2d", { willReadFrequently: true });
     if (!context) throw new Error("Pairing camera frame is unavailable");
-    context.drawImage(this.#video, 0, 0, width, height);
-    const rgba = context.getImageData(0, 0, width, height).data;
-    return decodePairingQr(width, height, pairingFrameToLuma(rgba));
+    context.drawImage(
+      this.#video,
+      crop.sourceX,
+      crop.sourceY,
+      crop.sourceSize,
+      crop.sourceSize,
+      0,
+      0,
+      crop.outputSize,
+      crop.outputSize,
+    );
+    const rgba = context.getImageData(0, 0, crop.outputSize, crop.outputSize).data;
+    return decodePairingQr(
+      crop.outputSize,
+      crop.outputSize,
+      pairingFrameToLuma(rgba),
+    );
   }
 
   /** Releases the camera immediately. */
@@ -68,5 +113,16 @@ export class PairingCameraScanner {
     for (const track of this.#stream?.getTracks() ?? []) track.stop();
     this.#stream = null;
     this.#video.srcObject = null;
+  }
+}
+
+async function enableContinuousFocus(track: MediaStreamTrack): Promise<void> {
+  const capabilities = track.getCapabilities() as PairingCameraCapabilities;
+  if (!capabilities.focusMode?.includes("continuous")) return;
+  const advanced: PairingCameraConstraintSet[] = [{ focusMode: "continuous" }];
+  try {
+    await track.applyConstraints({ advanced });
+  } catch {
+    // Some Android WebViews advertise this constraint but reject it for the selected camera.
   }
 }
