@@ -379,12 +379,7 @@ pub(crate) async fn handoff_enroll(
     let invitation = decode_invitation(&invitation, protocol::unix_time_ms())?;
     protocol::ensure_compatible(&current_compatibility(&app), &invitation.compatibility)?;
     let manager = app.state::<PairingManager>().inner().clone();
-    if manager.coordinator_pin()?.is_none() && !manager.linked_peers()?.is_empty() {
-        return Err(
-            "unlink coordinated devices before linking this device to another coordinator"
-                .to_string(),
-        );
-    }
+    manager.ensure_enrollment_target(&invitation)?;
     let device_kind = if cfg!(any(target_os = "android", target_os = "ios")) {
         protocol::DeviceKind::Phone
     } else {

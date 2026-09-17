@@ -28,6 +28,9 @@ export function formatHandoffError(cause: unknown, t: Translate): string {
   ) {
     return t("vaultHandoff.incompatibleVersions");
   }
+  if (lower.includes("already linked to another coordinator")) {
+    return t("vaultHandoff.differentCoordinator");
+  }
   if (
     lower.includes("connect") ||
     lower.includes("unavailable") ||

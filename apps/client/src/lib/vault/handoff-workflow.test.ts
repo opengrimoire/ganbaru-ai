@@ -30,6 +30,13 @@ describe("formatHandoffError", () => {
       t,
     )).toBe("vaultHandoff.incompatibleVersions");
   });
+
+  it("explains that another coordinator must be unlinked first", () => {
+    expect(formatHandoffError(
+      "this device is already linked to another coordinator",
+      t,
+    )).toBe("vaultHandoff.differentCoordinator");
+  });
 });
 
 describe("hasNewLinkedDevice", () => {

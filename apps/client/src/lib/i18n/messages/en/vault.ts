@@ -165,6 +165,8 @@ export const vaultHandoff = {
   blockerTransfer: "Finish or retry the current vault transfer first.",
   incompatibleVersions:
     "Update Ganbaru AI on both devices before linking or transferring data. Their data formats are different.",
+  differentCoordinator:
+    "This device is linked to another computer. Unlink it before connecting to a different computer.",
   unreachable:
     "This device could not reach the coordinating computer. Keep both apps open on the same local network, then retry.",
   unknownError: "Unknown error",

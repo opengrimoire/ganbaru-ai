@@ -175,6 +175,8 @@ export const vaultHandoff = {
   blockerTransfer: "Termina o reintenta primero la transferencia actual de la bóveda.",
   incompatibleVersions:
     "Actualiza Ganbaru AI en ambos dispositivos antes de vincular o transferir datos. Sus formatos de datos son diferentes.",
+  differentCoordinator:
+    "Este dispositivo está vinculado con otra computadora. Desvincúlalo antes de conectarlo con una computadora diferente.",
   unreachable:
     "Este dispositivo no pudo comunicarse con la computadora coordinadora. Mantén ambas aplicaciones abiertas en la misma red local y reintenta.",
   unknownError: "Error desconocido",

@@ -265,6 +265,14 @@ impl PairingManager {
         Ok(initialized_state(&inner)?.coordinator.clone())
     }
 
+    pub(crate) fn ensure_enrollment_target(
+        &self,
+        invitation: &PairingInvitation,
+    ) -> Result<(), String> {
+        let inner = self.lock()?;
+        ensure_enrollment_target(initialized_state(&inner)?, invitation)
+    }
+
     pub(crate) fn has_pending_transfer(&self) -> Result<bool, String> {
         let inner = self.lock()?;
         let state = initialized_state(&inner)?;
@@ -624,6 +632,7 @@ impl PairingManager {
         }
         let mut inner = self.lock()?;
         let state = initialized_state_mut(&mut inner)?;
+        ensure_enrollment_target(state, invitation)?;
         state.coordinator = Some(CoordinatorPin {
             device_id: invitation.coordinator_device_id.clone(),
             endpoint: invitation.endpoint.clone(),
@@ -809,6 +818,32 @@ fn initialized_state_mut(inner: &mut PairingManagerInner) -> Result<&mut Pairing
         .state
         .as_mut()
         .ok_or_else(|| "pairing state is not initialized".to_string())
+}
+
+fn ensure_enrollment_target(
+    state: &PairingStateFile,
+    invitation: &PairingInvitation,
+) -> Result<(), String> {
+    match &state.coordinator {
+        Some(coordinator)
+            if coordinator.device_id == invitation.coordinator_device_id
+                && coordinator.vault_id == invitation.vault_id
+                && coordinator
+                    .certificate_fingerprint
+                    .eq_ignore_ascii_case(&invitation.coordinator_fingerprint) =>
+        {
+            Ok(())
+        }
+        Some(_) => Err(
+            "this device is already linked to another coordinator; unlink it before linking to a different coordinator"
+                .to_string(),
+        ),
+        None if !state.linked_peers.is_empty() => Err(
+            "unlink coordinated devices before linking this device to another coordinator"
+                .to_string(),
+        ),
+        None => Ok(()),
+    }
 }
 
 fn persist_initialized_state(inner: &PairingManagerInner) -> Result<(), String> {
@@ -1216,6 +1251,130 @@ mod tests {
             .enroll_peer(enrollment(&invitation, &phone), 103)
             .unwrap_err()
             .contains("unknown"));
+    }
+
+    #[test]
+    fn repeated_enrollment_updates_one_existing_membership() {
+        let temp = TestDirectory::new("repeat-enrollment");
+        let manager = PairingManager::default();
+        manager
+            .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+            .expect("initialize");
+        let phone = create_identity("device-phone".to_string()).expect("phone identity");
+
+        for now_unix_ms in [100, 200] {
+            let invitation = manager
+                .create_invitation(
+                    "127.0.0.1:41000".parse().expect("endpoint"),
+                    "vault-1".to_string(),
+                    0,
+                    crate::vault::handoff::protocol::test_compatibility(),
+                    now_unix_ms,
+                )
+                .expect("invitation");
+            manager
+                .enroll_peer(enrollment(&invitation, &phone), now_unix_ms + 1)
+                .expect("enroll same phone");
+        }
+
+        let peers = manager.linked_peers().expect("linked peers");
+        assert_eq!(peers.len(), 1);
+        assert_eq!(peers[0].device_id, "device-phone");
+    }
+
+    #[test]
+    fn linked_client_accepts_only_its_existing_coordinator() {
+        let phone_root = TestDirectory::new("coordinator-target-phone");
+        let phone = PairingManager::default();
+        phone
+            .initialize(phone_root.path().to_path_buf(), "device-phone".to_string())
+            .expect("initialize phone");
+
+        let first_root = TestDirectory::new("coordinator-target-first");
+        let first = PairingManager::default();
+        first
+            .initialize(first_root.path().to_path_buf(), "device-first".to_string())
+            .expect("initialize first coordinator");
+        let first_invitation = first
+            .create_invitation(
+                "127.0.0.1:41000".parse().expect("endpoint"),
+                "vault-1".to_string(),
+                3,
+                crate::vault::handoff::protocol::test_compatibility(),
+                100,
+            )
+            .expect("first invitation");
+        let (_, first_identity) = first.identity().expect("first identity");
+        phone
+            .record_coordinator(&first_invitation, first_identity.certificate.as_ref())
+            .expect("record first coordinator");
+
+        let mut refreshed = first_invitation.clone();
+        refreshed.endpoint = "127.0.0.1:42000".to_string();
+        refreshed.generation = 4;
+        phone
+            .ensure_enrollment_target(&refreshed)
+            .expect("same coordinator remains valid");
+        phone
+            .record_coordinator(&refreshed, first_identity.certificate.as_ref())
+            .expect("refresh coordinator endpoint");
+        assert_eq!(
+            phone
+                .coordinator_pin()
+                .expect("coordinator pin")
+                .expect("coordinator")
+                .endpoint,
+            "127.0.0.1:42000"
+        );
+
+        let second_root = TestDirectory::new("coordinator-target-second");
+        let second = PairingManager::default();
+        second
+            .initialize(
+                second_root.path().to_path_buf(),
+                "device-second".to_string(),
+            )
+            .expect("initialize second coordinator");
+        let second_invitation = second
+            .create_invitation(
+                "127.0.0.1:43000".parse().expect("endpoint"),
+                "vault-1".to_string(),
+                4,
+                crate::vault::handoff::protocol::test_compatibility(),
+                200,
+            )
+            .expect("second invitation");
+        let (_, second_identity) = second.identity().expect("second identity");
+
+        assert!(phone
+            .ensure_enrollment_target(&second_invitation)
+            .unwrap_err()
+            .contains("already linked to another coordinator"));
+        assert!(phone
+            .record_coordinator(&second_invitation, second_identity.certificate.as_ref())
+            .unwrap_err()
+            .contains("already linked to another coordinator"));
+        let mut different_vault = refreshed.clone();
+        different_vault.vault_id = "vault-2".to_string();
+        assert!(phone
+            .ensure_enrollment_target(&different_vault)
+            .unwrap_err()
+            .contains("already linked to another coordinator"));
+        let mut different_certificate = refreshed.clone();
+        different_certificate.coordinator_fingerprint =
+            second_invitation.coordinator_fingerprint.clone();
+        assert!(phone
+            .ensure_enrollment_target(&different_certificate)
+            .unwrap_err()
+            .contains("already linked to another coordinator"));
+        assert_eq!(
+            phone
+                .coordinator_pin()
+                .expect("coordinator pin")
+                .expect("coordinator")
+                .device_id,
+            "device-first"
+        );
     }
 
     #[test]
