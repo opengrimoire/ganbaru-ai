@@ -21,6 +21,7 @@
 
   interface MobileLinkingProps {
     initialStatus?: PairingStatus | null;
+    bootstrapReplicaOnLink?: boolean;
     onComplete: () => void | Promise<void>;
   }
 

@@ -169,6 +169,13 @@ impl Drop for LocalPair {
 async fn fresh_phone_enrolls_and_stages_authenticated_bundle() {
     let pair = LocalPair::start().await;
     pair.enroll().await;
+    assert!(pair
+        .phone
+        .coordinator_pin()
+        .expect("coordinator pin")
+        .expect("coordinator")
+        .device_label
+        .is_some());
     let bytes = b"authenticated whole-vault test bundle";
     let metadata = pair.register_bundle(bytes, "transfer-fresh");
 
@@ -562,7 +569,11 @@ async fn invalid_device_identity_cannot_download_bundle() {
         .expect("initialize attacker");
     let (_, desktop_identity) = pair.desktop.identity().expect("desktop identity");
     attacker
-        .record_coordinator(&pair.invitation, desktop_identity.certificate.as_ref())
+        .record_coordinator(
+            &pair.invitation,
+            desktop_identity.certificate.as_ref(),
+            Some("Desktop".to_string()),
+        )
         .expect("record coordinator pin");
     let mut forged = metadata;
     forged.device_id = "device-phone".to_string();

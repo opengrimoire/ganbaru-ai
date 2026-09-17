@@ -40,6 +40,7 @@
     presentation = "settings",
     initialInvitation = null,
     initialStatus = null,
+    bootstrapReplicaOnLink = false,
     onActivated,
     onStatusChange,
   }: {
@@ -47,6 +48,7 @@
     presentation?: "settings" | "onboarding" | "control";
     initialInvitation?: PairingInvitation | null;
     initialStatus?: PairingStatus | null;
+    bootstrapReplicaOnLink?: boolean;
     onActivated?: () => void;
     onStatusChange?: (status: PairingStatus) => void;
   } = $props();
@@ -213,8 +215,17 @@
       await enrollWithDesktop(encoded, deviceLabel);
       scanning = false;
       codeDialogVisible = false;
-      await loadStatus();
-      notice = t("vaultHandoff.linked");
+      const next = await loadStatus();
+      if (
+        platform === "android"
+        && presentation === "onboarding"
+        && bootstrapReplicaOnLink
+        && !next.replicaReady
+      ) {
+        const outcome = await receiveDesktopBundle("bootstrap");
+        if (outcome.inProgress) throw new Error("initial linked vault activation is already running");
+        await loadStatus();
+      }
     } catch (cause) {
       fail(cause);
       scannerVersion += 1;
@@ -418,7 +429,15 @@
         <div class="mt-0.5 text-[0.8rem] text-muted-foreground">{t("vaultHandoff.description")}</div>
       </div>
     {/if}
-    {#if presentation !== "onboarding" || status.linked}
+    {#if presentation === "onboarding" && status.linked}
+      {#if bootstrapReplicaOnLink && !status.replicaReady}
+        {@render onboardingLoader()}
+      {:else}
+        <p class="text-center text-base font-medium leading-6 text-foreground">
+          {t("vaultHandoff.linkedSuccessfully", status.peerLabel ?? t("vaultHandoff.desktopDevice"))}
+        </p>
+      {/if}
+    {:else}
       {#if status.devices.length > 0}
         {#each status.devices as device (device.deviceId)}
           <div class={presentation === "control"
@@ -449,7 +468,7 @@
             {/if}
           </div>
         {/each}
-      {:else if presentation !== "onboarding"}
+      {:else}
         <p class="px-1 py-1 text-[0.866667rem] text-muted-foreground">{t("vaultHandoff.notLinked")}</p>
       {/if}
     {/if}
@@ -479,7 +498,6 @@
           <MobilePairingScanner
             disabled={busy !== null}
             onInvitation={acceptInvitation}
-            onCancel={() => { scanning = false; }}
             onError={(cause) => { fail(cause); scanning = false; }}
           />
         {/key}
@@ -491,7 +509,7 @@
       {/if}
     {/if}
 
-    {#if !status.linked && status.canWrite === false}
+    {#if presentation === "settings" && !status.linked && status.canWrite === false}
       <button type="button" class={buttonClass} disabled={busy !== null} onclick={() => { confirmation = "recover"; }}>
         {t("vaultHandoff.recover")}
       </button>
@@ -565,7 +583,7 @@
       </div>
     {/if}
 
-    {#if status.linked}
+    {#if status.linked && presentation !== "onboarding"}
       {#if presentation === "control" || !status.canWrite || (platform === "android" && (busy === "ownership" || busy === "refresh"))}
       <div class={presentation === "control"
         ? "flex flex-col"
@@ -599,7 +617,7 @@
               {ownershipError}
             </p>
           {/if}
-          {#if presentation === "control" || (status.replicaReady && presentation !== "onboarding")}
+          {#if presentation === "control" || status.replicaReady}
             <button
               type="button"
               class={presentation === "control" ? controlButtonClass : buttonClass}
@@ -668,7 +686,7 @@
       {t("vaultHandoff.revokedByCoordinator")}
     </p>
   {/if}
-  {#if notice && presentation !== "control"}<p role="status" class="px-1 text-[0.8rem] leading-5 text-muted-foreground">{notice}</p>{/if}
+  {#if notice && presentation !== "control" && presentation !== "onboarding"}<p role="status" class="px-1 text-[0.8rem] leading-5 text-muted-foreground">{notice}</p>{/if}
   {#if error}<p role="alert" class="px-1 text-[0.8rem] leading-5 text-destructive">{error}</p>{/if}
 </section>
 

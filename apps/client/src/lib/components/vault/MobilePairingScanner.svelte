@@ -7,12 +7,10 @@
   let {
     disabled = false,
     onInvitation,
-    onCancel,
     onError,
   }: {
     disabled?: boolean;
     onInvitation: (invitation: string) => void | Promise<void>;
-    onCancel: () => void;
     onError: (cause: unknown) => void;
   } = $props();
 
@@ -56,8 +54,8 @@
   });
 </script>
 
-<div class="grid gap-3">
-  <div class="relative aspect-square max-h-72 overflow-hidden rounded-md bg-black">
+<div class="grid w-full">
+  <div class="relative mx-auto aspect-square w-full overflow-hidden rounded-md bg-black">
     <video bind:this={video} muted class="h-full w-full object-cover" aria-label={t("vaultHandoff.scanQr")}></video>
     {#if !ready}
       <div class="absolute inset-0 flex items-center justify-center gap-2 text-sm text-white">
@@ -67,13 +65,4 @@
     {/if}
     <div class="pointer-events-none absolute inset-[12%] rounded-lg border-2 border-white/80"></div>
   </div>
-  <p class="text-[0.8rem] leading-5 text-muted-foreground">{t("vaultHandoff.scanning")}</p>
-  <button
-    type="button"
-    disabled={disabled}
-    class="inline-flex h-8 items-center justify-center rounded-md border border-border px-3 text-[0.8rem] font-medium disabled:opacity-55"
-    onclick={() => { stop(); onCancel(); }}
-  >
-    {t("vaultHandoff.stopScanning")}
-  </button>
 </div>

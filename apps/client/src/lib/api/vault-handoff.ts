@@ -50,7 +50,8 @@ export interface LinkedDevice {
 
 let cachedPairingStatus: PairingStatus | undefined;
 
-export type DesktopBundleReceiveMode = "ownership" | "refresh";
+export type DesktopBundleReceiveMode = "ownership" | "refresh" | "bootstrap";
+export type OwnerBundlePurpose = Exclude<DesktopBundleReceiveMode, "bootstrap">;
 
 export interface DesktopBundleReceiveOutcome {
   transferId: string | null;
@@ -270,7 +271,7 @@ export function cancelDesktopBundleReceive(): Promise<void> {
 
 /** Requests the current linked owner to upload a whole-vault bundle. */
 export function requestOwnerBundle(
-  purpose: DesktopBundleReceiveMode,
+  purpose: OwnerBundlePurpose,
 ): Promise<void> {
   return invoke("handoff_request_owner_bundle", { purpose });
 }

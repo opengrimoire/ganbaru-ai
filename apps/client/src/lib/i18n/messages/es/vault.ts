@@ -91,7 +91,6 @@ export const vaultHandoff = {
   androidOnboardingTitle: "Conecta con tu computadora",
   androidOnboardingDescription:
     "Usa Ganbaru AI en este teléfono para escanear el código QR mostrado en tu computadora.",
-  cameraDisclosure: "La cámara se usa solo mientras esta pantalla escanea el código.",
   stepOne: "Paso 1",
   stepTwo: "Paso 2",
   networkAccessDescription:
@@ -138,9 +137,7 @@ export const vaultHandoff = {
   refreshesIn: (time: string) => `El código se renueva en ${time}`,
   refreshingCode: "Renovando código...",
   scanQr: "Escanear código QR de la computadora",
-  scanning: "Coloca todo el código QR dentro del recuadro.",
   cameraStarting: "Iniciando cámara...",
-  stopScanning: "Detener escaneo",
   notNow: "Ahora no",
   continue: "Continuar",
   deviceLabel: "Teléfono",
@@ -161,6 +158,7 @@ export const vaultHandoff = {
   workingPairing: "Vinculando de forma segura...",
   workingRequest: "Esperando al otro dispositivo...",
   linked: "Dispositivo vinculado.",
+  linkedSuccessfully: (device: string) => `${device} se vinculó correctamente.`,
   linkedLabel: "vinculado",
   refreshed: "Se recibieron los últimos cambios.",
   requestSent: "Se envió la solicitud. Mantén ambas apps abiertas en la misma red.",

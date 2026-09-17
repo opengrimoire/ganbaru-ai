@@ -18,13 +18,14 @@ const DISCONNECTED_RETRY_DELAY: Duration = Duration::from_secs(30);
 pub(crate) enum ReceiveMode {
     Ownership,
     Refresh,
+    Bootstrap,
 }
 
 impl ReceiveMode {
     fn purpose(self) -> BundlePurpose {
         match self {
             Self::Ownership => BundlePurpose::Ownership,
-            Self::Refresh => BundlePurpose::Refresh,
+            Self::Refresh | Self::Bootstrap => BundlePurpose::Refresh,
         }
     }
 }
@@ -142,6 +143,9 @@ async fn receive(
     }
     if matches!(mode, ReceiveMode::Refresh) && !pairing.replica_ready()? {
         return Err("the linked vault must be activated before it can refresh".to_string());
+    }
+    if matches!(mode, ReceiveMode::Bootstrap) && pairing.replica_ready()? {
+        return Err("the linked vault is already active on this device".to_string());
     }
 
     let purpose = mode.purpose();
@@ -501,6 +505,7 @@ mod tests {
     fn receive_modes_map_to_the_single_transport_purpose() {
         assert_eq!(ReceiveMode::Ownership.purpose(), BundlePurpose::Ownership);
         assert_eq!(ReceiveMode::Refresh.purpose(), BundlePurpose::Refresh);
+        assert_eq!(ReceiveMode::Bootstrap.purpose(), BundlePurpose::Refresh);
         assert_eq!(super::super::protocol::PROTOCOL_VERSION, 3);
     }
 }

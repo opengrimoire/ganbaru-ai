@@ -159,6 +159,8 @@ pub(crate) enum ControlMessage {
     Enrolled {
         protocol_version: u16,
         coordinator_device_id: String,
+        #[serde(default)]
+        coordinator_device_label: Option<String>,
     },
     RequestBundle {
         protocol_version: u16,
@@ -289,9 +291,17 @@ impl ControlMessage {
             Self::Enrolled {
                 protocol_version,
                 coordinator_device_id,
+                coordinator_device_label,
             } => {
                 validate_protocol(*protocol_version)?;
                 validate_identifier("coordinator device id", coordinator_device_id)?;
+                if coordinator_device_label.as_ref().is_some_and(|label| {
+                    label.trim().is_empty()
+                        || label.len() > MAX_DEVICE_LABEL_BYTES
+                        || label.chars().any(char::is_control)
+                }) {
+                    return Err("coordinator device label is invalid".to_string());
+                }
             }
             Self::RequestBundle {
                 protocol_version,

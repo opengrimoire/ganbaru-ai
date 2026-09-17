@@ -221,6 +221,7 @@ async function mountMobileVaultHandoffOnboarding() {
   onboardingView = mount(MobileVaultHandoffOnboarding, {
     target,
     props: {
+      bootstrapReplicaOnLink: true,
       onComplete: openApp,
     },
   });

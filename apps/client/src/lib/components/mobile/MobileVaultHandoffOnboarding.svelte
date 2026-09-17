@@ -4,9 +4,11 @@
 
   let {
     initialStatus = null,
+    bootstrapReplicaOnLink = false,
     onComplete,
   }: {
     initialStatus?: PairingStatus | null;
+    bootstrapReplicaOnLink?: boolean;
     onComplete: () => void | Promise<void>;
   } = $props();
 </script>
@@ -15,5 +17,10 @@
   class="mobile-viewport-height w-screen overflow-y-auto bg-background pb-(--safe-area-bottom) pt-(--safe-area-top) text-foreground"
   style="padding-left: var(--safe-area-left); padding-right: var(--safe-area-right);"
 >
-  <VaultHandoffOnboardingContent platform="android" {initialStatus} {onComplete} />
+  <VaultHandoffOnboardingContent
+    platform="android"
+    {initialStatus}
+    {bootstrapReplicaOnLink}
+    {onComplete}
+  />
 </main>

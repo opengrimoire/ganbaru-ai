@@ -2,27 +2,39 @@
   import { untrack } from "svelte";
   import type { PairingInvitation, PairingStatus } from "$lib/api/vault-handoff";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import { completeVaultHandoffOnboarding } from "$lib/vault/handoff-onboarding";
+  import {
+    canBootstrapUntouchedVault,
+    completeVaultHandoffOnboarding,
+    markIndependentVaultUsed,
+  } from "$lib/vault/handoff-onboarding";
   import VaultHandoffPanel from "./VaultHandoffPanel.svelte";
 
   let {
     platform,
     initialInvitation = null,
     initialStatus = null,
+    bootstrapReplicaOnLink = false,
     onComplete,
   }: {
     platform: "desktop" | "android";
     initialInvitation?: PairingInvitation | null;
     initialStatus?: PairingStatus | null;
+    bootstrapReplicaOnLink?: boolean;
     onComplete: () => void | Promise<void>;
   } = $props();
 
   const { t } = getLocalization();
   let status = $state<PairingStatus | null>(untrack(() => initialStatus));
   let completing = $state(false);
+  const bootstrapUntouchedVault = untrack(
+    () => bootstrapReplicaOnLink && canBootstrapUntouchedVault(safeStorage()),
+  );
   const readyToContinue = $derived(
     status?.linked === true
-      && (platform === "desktop" || status.replicaReady || status.canWrite === true),
+      && (platform === "desktop"
+        || status.replicaReady
+        || status.canWrite === true
+        || !bootstrapUntouchedVault),
   );
 
   function safeStorage(): Storage | undefined {
@@ -37,6 +49,10 @@
     if (completing) return;
     completing = true;
     try {
+      if (!persistCompletion) {
+        const storage = safeStorage();
+        if (storage) markIndependentVaultUsed(storage);
+      }
       await onComplete();
       if (persistCompletion) {
         const storage = safeStorage();
@@ -90,9 +106,6 @@
         <p class="text-sm leading-6 text-muted-foreground">
           {t("vaultHandoff.androidOnboardingDescription")}
         </p>
-        <p class="text-xs leading-5 text-muted-foreground">
-          {t("vaultHandoff.cameraDisclosure")}
-        </p>
       {/if}
     </div>
 
@@ -100,6 +113,7 @@
       {platform}
       {initialInvitation}
       {initialStatus}
+      bootstrapReplicaOnLink={bootstrapUntouchedVault}
       presentation="onboarding"
       onStatusChange={(next) => { status = next; }}
       onActivated={() => void leave(true)}

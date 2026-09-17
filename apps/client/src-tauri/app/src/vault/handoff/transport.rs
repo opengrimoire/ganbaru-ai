@@ -229,11 +229,13 @@ async fn handle_connection(
                 return send_error(&mut stream, "enrollment_rejected", &error, false).await;
             }
             let (coordinator_device_id, _) = manager.identity()?;
+            let coordinator_device_label = super::suggested_device_label();
             timeout_control(write_control(
                 &mut stream,
                 &ControlMessage::Enrolled {
                     protocol_version: PROTOCOL_VERSION,
                     coordinator_device_id,
+                    coordinator_device_label: Some(coordinator_device_label),
                 },
             ))
             .await
@@ -779,6 +781,7 @@ pub(crate) async fn enroll(
     match timeout_control(read_control(&mut stream)).await? {
         ControlMessage::Enrolled {
             coordinator_device_id,
+            coordinator_device_label,
             ..
         } if coordinator_device_id == invitation.coordinator_device_id => {
             let coordinator_certificate = stream
@@ -787,7 +790,11 @@ pub(crate) async fn enroll(
                 .peer_certificates()
                 .and_then(|certificates| certificates.first())
                 .ok_or_else(|| "coordinator did not provide a certificate".to_string())?;
-            manager.record_coordinator(invitation, coordinator_certificate.as_ref())
+            manager.record_coordinator(
+                invitation,
+                coordinator_certificate.as_ref(),
+                coordinator_device_label,
+            )
         }
         ControlMessage::Error { message, .. } => Err(message),
         _ => Err("coordinator returned an invalid enrollment response".to_string()),

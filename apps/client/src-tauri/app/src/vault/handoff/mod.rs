@@ -495,7 +495,7 @@ pub(crate) fn handoff_pairing_status<R: Runtime>(
         {
             devices.push(LinkedDeviceView {
                 device_id: coordinator.device_id.clone(),
-                label: None,
+                label: coordinator.device_label.clone(),
                 is_owner: ownership
                     .as_ref()
                     .is_some_and(|ownership| ownership.owner_device_id == coordinator.device_id),
@@ -510,8 +510,16 @@ pub(crate) fn handoff_pairing_status<R: Runtime>(
         device_id,
         linked: !peers.is_empty() || coordinator.is_some(),
         devices,
-        peer_device_id: peer.map(|peer| peer.device_id.clone()),
-        peer_label: peer.map(|peer| peer.device_label.clone()),
+        peer_device_id: peer.map(|peer| peer.device_id.clone()).or_else(|| {
+            coordinator
+                .as_ref()
+                .map(|coordinator| coordinator.device_id.clone())
+        }),
+        peer_label: peer.map(|peer| peer.device_label.clone()).or_else(|| {
+            coordinator
+                .as_ref()
+                .and_then(|coordinator| coordinator.device_label.clone())
+        }),
         coordinator_endpoint: coordinator
             .as_ref()
             .map(|coordinator| coordinator.endpoint.clone()),

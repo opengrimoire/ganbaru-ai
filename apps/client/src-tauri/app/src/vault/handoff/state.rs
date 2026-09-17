@@ -51,6 +51,8 @@ pub(crate) struct LinkedPeer {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CoordinatorPin {
     pub device_id: String,
+    #[serde(default)]
+    pub device_label: Option<String>,
     pub endpoint: String,
     pub vault_id: String,
     #[serde(default)]
@@ -749,6 +751,7 @@ impl PairingManager {
         &self,
         invitation: &PairingInvitation,
         coordinator_certificate: &[u8],
+        coordinator_device_label: Option<String>,
     ) -> Result<(), String> {
         let fingerprint = certificate_fingerprint(coordinator_certificate);
         if fingerprint != invitation.coordinator_fingerprint {
@@ -759,6 +762,7 @@ impl PairingManager {
         ensure_enrollment_target(state, invitation)?;
         state.coordinator = Some(CoordinatorPin {
             device_id: invitation.coordinator_device_id.clone(),
+            device_label: coordinator_device_label,
             endpoint: invitation.endpoint.clone(),
             vault_id: invitation.vault_id.clone(),
             generation: invitation.generation,
@@ -1532,7 +1536,11 @@ mod tests {
             .expect("first invitation");
         let (_, first_identity) = first.identity().expect("first identity");
         phone
-            .record_coordinator(&first_invitation, first_identity.certificate.as_ref())
+            .record_coordinator(
+                &first_invitation,
+                first_identity.certificate.as_ref(),
+                Some("Desktop".to_string()),
+            )
             .expect("record first coordinator");
 
         let mut refreshed = first_invitation.clone();
@@ -1542,7 +1550,11 @@ mod tests {
             .ensure_enrollment_target(&refreshed)
             .expect("same coordinator remains valid");
         phone
-            .record_coordinator(&refreshed, first_identity.certificate.as_ref())
+            .record_coordinator(
+                &refreshed,
+                first_identity.certificate.as_ref(),
+                Some("Desktop".to_string()),
+            )
             .expect("refresh coordinator endpoint");
         assert_eq!(
             phone
@@ -1577,7 +1589,11 @@ mod tests {
             .unwrap_err()
             .contains("already linked to another coordinator"));
         assert!(phone
-            .record_coordinator(&second_invitation, second_identity.certificate.as_ref())
+            .record_coordinator(
+                &second_invitation,
+                second_identity.certificate.as_ref(),
+                Some("Other desktop".to_string()),
+            )
             .unwrap_err()
             .contains("already linked to another coordinator"));
         let mut different_vault = refreshed.clone();
