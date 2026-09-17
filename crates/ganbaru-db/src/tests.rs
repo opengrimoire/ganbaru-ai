@@ -19,6 +19,13 @@ fn block_on<F: std::future::Future>(future: F) -> F::Output {
 }
 
 #[test]
+fn migration_set_identity_is_stable_and_nonempty() {
+    let first = crate::migration_set_identity_material();
+    assert!(!first.is_empty());
+    assert_eq!(first, crate::migration_set_identity_material());
+}
+
+#[test]
 fn pool_registry_reuses_and_closes_authorized_path() {
     block_on(async {
         let directory = std::env::temp_dir().join(format!(

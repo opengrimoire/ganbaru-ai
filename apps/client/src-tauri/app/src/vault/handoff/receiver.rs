@@ -145,9 +145,21 @@ async fn receive(
     }
 
     let purpose = mode.purpose();
-    let metadata =
-        super::transport::request_bundle(&pairing, status.generation, purpose, cancellation)
-            .await?;
+    let metadata = super::transport::request_bundle(
+        &pairing,
+        super::current_compatibility(app),
+        status.generation,
+        purpose,
+        cancellation,
+    )
+    .await?;
+    if let Err(error) = super::protocol::ensure_compatible(
+        &super::current_compatibility(app),
+        &metadata.compatibility,
+    ) {
+        let _ = super::transport::cancel_prepared_transfer(&pairing, &metadata.transfer_id).await;
+        return Err(error);
+    }
     let archive =
         super::transport::download_bundle(&pairing, metadata.clone(), cancellation).await?;
     let staging = handoff_staging_path(app, &metadata.transfer_id)?;
@@ -366,7 +378,12 @@ async fn refresh_after_reconnect(app: &tauri::AppHandle) -> bool {
     else {
         return false;
     };
-    let poll = super::transport::probe_coordinator(&pairing, status.generation).await;
+    let poll = super::transport::probe_coordinator(
+        &pairing,
+        super::current_compatibility(app),
+        status.generation,
+    )
+    .await;
     let reachable = poll.is_ok();
     let was_connected = lifecycle.connected.swap(reachable, Ordering::AcqRel);
     if let Ok(Some(purpose)) = poll {
@@ -484,6 +501,6 @@ mod tests {
     fn receive_modes_map_to_the_single_transport_purpose() {
         assert_eq!(ReceiveMode::Ownership.purpose(), BundlePurpose::Ownership);
         assert_eq!(ReceiveMode::Refresh.purpose(), BundlePurpose::Refresh);
-        assert_eq!(super::super::protocol::PROTOCOL_VERSION, 2);
+        assert_eq!(super::super::protocol::PROTOCOL_VERSION, 3);
     }
 }

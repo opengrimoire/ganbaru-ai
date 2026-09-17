@@ -68,7 +68,7 @@
   let notice = $state<string | null>(null);
   let error = $state<string | null>(null);
   let networkError = $state<string | null>(null);
-  let confirmation = $state<"network" | "networkRevoke" | "unlink" | "recover" | null>(null);
+  let confirmation = $state<"network" | "networkRevoke" | "unlink" | "recover" | "replace" | null>(null);
   let unlinkDeviceId = $state<string | null>(null);
   let networkAccess = $state<DesktopNetworkAccess | null>(
     untrack(() => initialInvitation?.networkAccess ?? status?.networkAccess ?? null),
@@ -312,6 +312,22 @@
     }
   }
 
+  function beginOwnershipTransfer(): void {
+    void (isCoordinatorClient ? receive("ownership") : requestFromAndroid("ownership"));
+  }
+
+  function handleOwnershipAction(): void {
+    if (presentation === "control" && busy === "ownership" && isCoordinatorClient) {
+      void cancelReceive();
+      return;
+    }
+    if (status?.replicaReady === false) {
+      confirmation = "replace";
+      return;
+    }
+    beginOwnershipTransfer();
+  }
+
   onMount(() => {
     const prepareOnboarding = (): void => {
       if (presentation !== "onboarding" || status?.linked) return;
@@ -551,10 +567,7 @@
             disabled={presentation === "control" && busy === "ownership"
               ? !isCoordinatorClient
               : busy !== null || status.pendingTransfer || status.canWrite !== false}
-            onclick={() => {
-              if (presentation === "control" && busy === "ownership" && isCoordinatorClient) void cancelReceive();
-              else void (isCoordinatorClient ? receive("ownership") : requestFromAndroid("ownership"));
-            }}
+            onclick={handleOwnershipAction}
           >
             {#if presentation === "control"}
               <span class="min-w-0 truncate">{busy === "ownership" && isCoordinatorClient ? t("vaultHandoff.cancel") : t("vaultHandoff.useHere")}</span>
@@ -743,6 +756,21 @@
     confirmLabel={t("vaultHandoff.recover")}
     cancelLabel={t("common.cancel")}
     onConfirm={() => void recover()}
+    onCancel={() => { confirmation = null; }}
+  />
+{:else if confirmation === "replace"}
+  <ConfirmDialog
+    title={t("vaultOwnershipPrompt.replacementTitle")}
+    message={platform === "android"
+      ? t("vaultOwnershipPrompt.replacementAndroid")
+      : t("vaultOwnershipPrompt.replacementDesktop")}
+    confirmLabel={t("vaultOwnershipPrompt.replacementConfirm")}
+    cancelLabel={t("common.cancel")}
+    danger={false}
+    onConfirm={() => {
+      confirmation = null;
+      beginOwnershipTransfer();
+    }}
     onCancel={() => { confirmation = null; }}
   />
 {/if}

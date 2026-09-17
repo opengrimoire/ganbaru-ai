@@ -74,6 +74,12 @@ export const vaultOwnershipPrompt = {
   description: "Solo el dispositivo principal puede hacer cambios.",
   continueReadOnly: "Continuar en solo lectura",
   switching: "Cambiando a este dispositivo...",
+  replacementTitle: "¿Reemplazar los datos actuales de este dispositivo?",
+  replacementAndroid:
+    "Este teléfono tiene una bóveda de Ganbaru AI separada. Sus datos no se pueden combinar con la bóveda vinculada. Ganbaru AI guardará una copia completa en Descargas antes de reemplazarla.",
+  replacementDesktop:
+    "Esta computadora tiene una bóveda de Ganbaru AI separada. Sus datos no se pueden combinar con la bóveda vinculada. Ganbaru AI conservará una copia de recuperación junto a la carpeta actual de Ganbaru AI antes de reemplazarla.",
+  replacementConfirm: "Reemplazar con la bóveda vinculada",
 } as const satisfies MessageShape<typeof enVaultOwnershipPrompt>;
 
 export const vaultHandoff = {
@@ -167,6 +173,8 @@ export const vaultHandoff = {
   blockerChat: "Termina o detén el trabajo activo de Chat antes de mover la bóveda.",
   blockerFocus: "Termina o detén la sesión activa de Pomodoro antes de mover la bóveda.",
   blockerTransfer: "Termina o reintenta primero la transferencia actual de la bóveda.",
+  incompatibleVersions:
+    "Actualiza Ganbaru AI en ambos dispositivos antes de vincular o transferir datos. Sus formatos de datos son diferentes.",
   unreachable:
     "Este dispositivo no pudo comunicarse con la computadora coordinadora. Mantén ambas aplicaciones abiertas en la misma red local y reintenta.",
   unknownError: "Error desconocido",

@@ -23,6 +23,12 @@ export function formatHandoffError(cause: unknown, t: Translate): string {
     return t("vaultHandoff.blockerTransfer");
   }
   if (
+    lower.includes("handoff compatibility mismatch") ||
+    lower.includes("handoff protocol version is unsupported")
+  ) {
+    return t("vaultHandoff.incompatibleVersions");
+  }
+  if (
     lower.includes("connect") ||
     lower.includes("unavailable") ||
     lower.includes("timed out") ||

@@ -254,6 +254,7 @@ async fn handle_connection(
             .await
         }
         ControlMessage::RequestBundle {
+            compatibility,
             vault_id,
             device_id,
             generation,
@@ -262,6 +263,7 @@ async fn handle_connection(
         } => {
             manager.verify_authenticated_peer(&device_id, peer_certificate.as_ref(), &vault_id)?;
             let operation = super::coordinator::CoordinatorOperation::Prepare {
+                compatibility,
                 vault_id,
                 device_id,
                 generation,
@@ -333,6 +335,7 @@ async fn handle_connection(
             .await
         }
         ControlMessage::RefreshRequest {
+            compatibility,
             vault_id,
             device_id,
             generation,
@@ -342,6 +345,7 @@ async fn handle_connection(
             send_upload_status_response(
                 &mut stream,
                 coordinator.as_ref(),
+                compatibility,
                 vault_id,
                 device_id,
                 generation,
@@ -408,6 +412,7 @@ async fn send_coordinator_response(
 async fn send_upload_status_response(
     stream: &mut tokio_rustls::server::TlsStream<TcpStream>,
     coordinator: Option<&super::coordinator::CoordinatorSender>,
+    compatibility: super::protocol::HandoffCompatibility,
     vault_id: String,
     device_id: String,
     generation: u64,
@@ -426,6 +431,7 @@ async fn send_upload_status_response(
         let response = super::coordinator::request(
             coordinator,
             super::coordinator::CoordinatorOperation::PollUpload {
+                compatibility: compatibility.clone(),
                 vault_id: vault_id.clone(),
                 device_id: device_id.clone(),
                 generation,
@@ -778,6 +784,7 @@ pub(crate) async fn enroll(
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 pub(crate) async fn request_bundle(
     manager: &PairingManager,
+    compatibility: super::protocol::HandoffCompatibility,
     generation: u64,
     purpose: BundlePurpose,
     cancellation: &TransferCancellation,
@@ -795,6 +802,7 @@ pub(crate) async fn request_bundle(
             manager,
             ControlMessage::RequestBundle {
                 protocol_version: PROTOCOL_VERSION,
+                compatibility: compatibility.clone(),
                 vault_id: coordinator.vault_id.clone(),
                 device_id: device_id.clone(),
                 generation,
@@ -856,6 +864,26 @@ pub(crate) async fn commit_staged_ownership(
         }
         ControlMessage::Error { message, .. } => Err(message),
         _ => Err("coordinator returned an invalid ownership grant".to_string()),
+    }
+}
+
+pub(crate) async fn cancel_prepared_transfer(
+    manager: &PairingManager,
+    transfer_id: &str,
+) -> Result<(), String> {
+    match authenticated_exchange(
+        manager,
+        ControlMessage::CancelTransfer {
+            transfer_id: transfer_id.to_string(),
+        },
+    )
+    .await?
+    {
+        ControlMessage::TransferCancelled {
+            transfer_id: cancelled,
+        } if cancelled == transfer_id => Ok(()),
+        ControlMessage::Error { message, .. } => Err(message),
+        _ => Err("coordinator returned an invalid cancellation response".to_string()),
     }
 }
 
@@ -972,6 +1000,7 @@ pub(crate) async fn commit_uploaded_ownership(
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 pub(crate) async fn probe_coordinator(
     manager: &PairingManager,
+    compatibility: super::protocol::HandoffCompatibility,
     generation: u64,
 ) -> Result<Option<BundlePurpose>, String> {
     let coordinator = manager
@@ -982,6 +1011,7 @@ pub(crate) async fn probe_coordinator(
         manager,
         ControlMessage::RefreshRequest {
             protocol_version: PROTOCOL_VERSION,
+            compatibility,
             vault_id: coordinator.vault_id,
             device_id,
             generation,

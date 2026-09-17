@@ -12,10 +12,11 @@ pub(crate) mod source;
 pub(crate) mod state;
 pub(crate) mod transport;
 
-use protocol::decode_invitation;
+use protocol::{decode_invitation, HandoffCompatibility};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use protocol::{encode_invitation, invitation_qr_matrix, QrMatrix};
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use state::PairingManager;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
@@ -29,6 +30,14 @@ use tokio::net::TcpListener;
 const COORDINATOR_PORT: u16 = 43_821;
 
 pub(crate) use transport::sha256_file;
+
+pub(crate) fn current_compatibility<R: Runtime>(app: &tauri::AppHandle<R>) -> HandoffCompatibility {
+    let schema = Sha256::digest(ganbaru_db::migration_set_identity_material());
+    HandoffCompatibility {
+        app_version: app.package_info().version.to_string(),
+        database_schema_sha256: format!("{schema:x}"),
+    }
+}
 
 #[derive(Default)]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -291,6 +300,7 @@ pub(crate) async fn handoff_create_pairing_invitation<R: Runtime>(
         endpoint,
         ownership.vault_id,
         ownership.generation,
+        current_compatibility(&app),
         protocol::unix_time_ms(),
     )?;
     let encoded = encode_invitation(&invitation)?;
@@ -367,6 +377,7 @@ pub(crate) async fn handoff_enroll(
     device_label: String,
 ) -> Result<(), String> {
     let invitation = decode_invitation(&invitation, protocol::unix_time_ms())?;
+    protocol::ensure_compatible(&current_compatibility(&app), &invitation.compatibility)?;
     let manager = app.state::<PairingManager>().inner().clone();
     if manager.coordinator_pin()?.is_none() && !manager.linked_peers()?.is_empty() {
         return Err(

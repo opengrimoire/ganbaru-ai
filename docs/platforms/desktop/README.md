@@ -8,6 +8,8 @@ On Linux, the linking screen detects active UFW and firewalld configurations. Be
 
 When another device owns the vault, desktop keeps its last complete copy available read-only. Opening that copy presents the current main-device state and asks whether to switch control here or continue read-only. The same prompt appears immediately when a completed handoff makes the open desktop copy read-only. `Switch to this device` requests the current owner snapshot through the coordinator and advances ownership only after staging and validation. Reachable clients keep a bounded authenticated coordinator poll active so refresh and ownership requests begin promptly. The slower reconnect interval remains the offline fallback. Desktop browser and application Doomscrolling usage continues in a bounded device-local spool and joins the owner's combined counter when the LAN connection is available. The toolbar control uses a stable status indicator for queued work; only an explicitly running foreground action shows continuous progress animation.
 
+Linking does not merge independently created vaults. Before a first linked-vault activation replaces desktop data, Ganbaru AI requires explicit confirmation and preserves the previous vault in a visible sibling folder beside the selected Ganbaru AI folder. Invitations and later transfers verify both the handoff protocol and the exact embedded database migration fingerprint before snapshot preparation. Incompatible installations ask the user to update Ganbaru AI on both devices, and final staging validation still verifies SQLite migration history and checksums.
+
 Shared feature behavior lives under [features](../../features/README.md). Desktop-specific documents currently include:
 
 - [Tray](tray.md)

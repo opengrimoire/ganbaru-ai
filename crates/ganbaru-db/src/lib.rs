@@ -160,6 +160,23 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         .map_err(|error| format!("run database migrations: {error}"))
 }
 
+/// Returns deterministic bytes identifying the complete embedded up-migration set.
+///
+/// Callers can hash this bounded material when negotiating database compatibility
+/// without exposing migration contents over an external protocol.
+pub fn migration_set_identity_material() -> Vec<u8> {
+    let mut identity = Vec::new();
+    for migration in MIGRATOR
+        .iter()
+        .filter(|migration| !migration.migration_type.is_down_migration())
+    {
+        identity.extend_from_slice(&migration.version.to_be_bytes());
+        identity.extend_from_slice(&(migration.checksum.len() as u64).to_be_bytes());
+        identity.extend_from_slice(migration.checksum.as_ref());
+    }
+    identity
+}
+
 /// Validates that a read-only database has the complete embedded migration history.
 pub async fn validate_current_schema(pool: &SqlitePool) -> Result<(), String> {
     let rows =

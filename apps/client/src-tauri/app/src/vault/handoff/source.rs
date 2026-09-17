@@ -180,6 +180,7 @@ async fn prepare(
     let metadata_result: Result<BundleMetadata, String> = (|| {
         Ok(BundleMetadata {
             protocol_version: PROTOCOL_VERSION,
+            compatibility: super::current_compatibility(app),
             vault_id: crate::vault::active_vault_id(app)?,
             device_id: receiver_device_id.to_string(),
             transfer_id,

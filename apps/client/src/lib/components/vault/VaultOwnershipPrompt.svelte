@@ -1,6 +1,7 @@
 <script lang="ts">
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import { onMount, tick } from "svelte";
+  import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import { readPairingStatus, type PairingStatus } from "$lib/api/vault-handoff";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { hasOnlyShortcutModifier } from "$lib/keyboard-shortcuts";
@@ -41,6 +42,7 @@
   let status = $state<PairingStatus | null>(null);
   let dismissed = $state(false);
   let switching = $state(false);
+  let replacementConfirmationOpen = $state(false);
   let error = $state<string | null>(null);
   let dialog = $state<HTMLDivElement | null>(null);
   let continueButton = $state<HTMLButtonElement | null>(null);
@@ -84,7 +86,7 @@
     error = null;
   }
 
-  async function useOnThisDevice(): Promise<void> {
+  async function performOwnershipSwitch(): Promise<void> {
     if (switching) return;
     switching = true;
     error = null;
@@ -103,6 +105,15 @@
     } finally {
       switching = false;
     }
+  }
+
+  function useOnThisDevice(): void {
+    if (switching) return;
+    if (status?.replicaReady === false) {
+      replacementConfirmationOpen = true;
+      return;
+    }
+    void performOwnershipSwitch();
   }
 
   function handleKeydown(event: KeyboardEvent): void {
@@ -126,7 +137,7 @@
     }
     if (event.key === "Enter") {
       event.preventDefault();
-      void useOnThisDevice();
+      useOnThisDevice();
       return;
     }
     event.stopPropagation();
@@ -192,7 +203,7 @@
         <button
           type="button"
           disabled={switching}
-          onclick={() => void useOnThisDevice()}
+          onclick={useOnThisDevice}
           class="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-white px-5 text-[0.9rem] font-semibold text-[#111217] shadow-[0_2px_8px_rgba(0,0,0,0.10)] transition-[background-color,transform] hover:bg-white/90 active:scale-[0.985] disabled:pointer-events-none disabled:opacity-65"
         >
           {#if switching}
@@ -222,6 +233,23 @@
       {/if}
     </div>
   </div>
+{/if}
+
+{#if replacementConfirmationOpen}
+  <ConfirmDialog
+    title={t("vaultOwnershipPrompt.replacementTitle")}
+    message={platform === "android"
+      ? t("vaultOwnershipPrompt.replacementAndroid")
+      : t("vaultOwnershipPrompt.replacementDesktop")}
+    confirmLabel={t("vaultOwnershipPrompt.replacementConfirm")}
+    cancelLabel={t("common.cancel")}
+    danger={false}
+    onConfirm={() => {
+      replacementConfirmationOpen = false;
+      void performOwnershipSwitch();
+    }}
+    onCancel={() => { replacementConfirmationOpen = false; }}
+  />
 {/if}
 
 <style>

@@ -64,6 +64,12 @@ export const vaultOwnershipPrompt = {
   description: "Only the main device can make changes.",
   continueReadOnly: "Continue in read-only",
   switching: "Switching to this device...",
+  replacementTitle: "Replace this device's current data?",
+  replacementAndroid:
+    "This phone has a separate Ganbaru AI vault. Its data cannot be merged with the linked vault. Ganbaru AI will save a complete backup to Downloads before replacing it.",
+  replacementDesktop:
+    "This computer has a separate Ganbaru AI vault. Its data cannot be merged with the linked vault. Ganbaru AI will preserve a recovery copy beside the current Ganbaru AI folder before replacing it.",
+  replacementConfirm: "Replace with linked vault",
 } as const;
 
 export const vaultHandoff = {
@@ -157,6 +163,8 @@ export const vaultHandoff = {
   blockerChat: "Finish or stop active Chat work before moving the vault.",
   blockerFocus: "Finish or stop the active Pomodoro session before moving the vault.",
   blockerTransfer: "Finish or retry the current vault transfer first.",
+  incompatibleVersions:
+    "Update Ganbaru AI on both devices before linking or transferring data. Their data formats are different.",
   unreachable:
     "This device could not reach the coordinating computer. Keep both apps open on the same local network, then retry.",
   unknownError: "Unknown error",

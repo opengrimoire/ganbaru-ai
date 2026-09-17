@@ -55,7 +55,13 @@ impl LocalPair {
             .expect("bind coordinator");
         let endpoint = listener.local_addr().expect("coordinator endpoint");
         let invitation = desktop
-            .create_invitation(endpoint, "vault-1".to_string(), 0, unix_time_ms())
+            .create_invitation(
+                endpoint,
+                "vault-1".to_string(),
+                0,
+                super::super::protocol::test_compatibility(),
+                unix_time_ms(),
+            )
             .expect("create invitation");
         let (shutdown, receiver) = tokio::sync::oneshot::channel();
         tokio::spawn(serve(listener, desktop.clone(), receiver));
@@ -102,7 +108,13 @@ impl LocalPair {
             .expect("bind coordinator");
         let endpoint = listener.local_addr().expect("coordinator endpoint");
         let invitation = desktop
-            .create_invitation(endpoint, "vault-1".to_string(), 0, unix_time_ms())
+            .create_invitation(
+                endpoint,
+                "vault-1".to_string(),
+                0,
+                super::super::protocol::test_compatibility(),
+                unix_time_ms(),
+            )
             .expect("create invitation");
         let (requests, request_receiver) = tokio::sync::mpsc::channel(8);
         let (shutdown, receiver) = tokio::sync::oneshot::channel();
@@ -130,6 +142,7 @@ impl LocalPair {
         fs::write(&path, bytes).expect("write bundle");
         let metadata = BundleMetadata {
             protocol_version: PROTOCOL_VERSION,
+            compatibility: super::super::protocol::test_compatibility(),
             vault_id: "vault-1".to_string(),
             device_id: "device-phone".to_string(),
             transfer_id: transfer_id.to_string(),
@@ -179,11 +192,13 @@ async fn authenticated_control_flow_prepares_commits_and_acknowledges() {
         while let Some(request) = requests.recv().await {
             let response = match request.operation {
                 CoordinatorOperation::Prepare {
+                    compatibility,
                     vault_id,
                     device_id,
                     generation,
                     purpose,
                 } => {
+                    assert_eq!(compatibility, super::super::protocol::test_compatibility());
                     assert_eq!(vault_id, expected.vault_id);
                     assert_eq!(device_id, expected.device_id);
                     assert_eq!(generation, 0);
@@ -228,6 +243,7 @@ async fn authenticated_control_flow_prepares_commits_and_acknowledges() {
 
     let prepared = request_bundle(
         &pair.phone,
+        super::super::protocol::test_compatibility(),
         0,
         BundlePurpose::Ownership,
         &TransferCancellation::default(),
@@ -341,6 +357,7 @@ async fn android_upload_resumes_from_durable_desktop_staging() {
     fs::write(&archive_path, &bytes).expect("write Android archive");
     let metadata = BundleMetadata {
         protocol_version: PROTOCOL_VERSION,
+        compatibility: super::super::protocol::test_compatibility(),
         vault_id: "vault-1".to_string(),
         device_id: "device-desktop".to_string(),
         transfer_id: transfer_id.to_string(),
@@ -383,10 +400,12 @@ async fn android_upload_resumes_from_durable_desktop_staging() {
         while let Some(request) = requests.recv().await {
             let response = match request.operation {
                 CoordinatorOperation::PollUpload {
+                    compatibility,
                     vault_id,
                     device_id,
                     generation,
                 } => {
+                    assert_eq!(compatibility, super::super::protocol::test_compatibility());
                     assert_eq!(vault_id, expected.vault_id);
                     assert_eq!(device_id, "device-phone");
                     assert_eq!(generation, 0);
@@ -439,7 +458,7 @@ async fn android_upload_resumes_from_durable_desktop_staging() {
     });
 
     assert_eq!(
-        probe_coordinator(&pair.phone, 0)
+        probe_coordinator(&pair.phone, super::super::protocol::test_compatibility(), 0,)
             .await
             .expect("poll coordinator"),
         Some(BundlePurpose::Ownership)
@@ -487,10 +506,13 @@ async fn foreground_poll_observes_a_new_upload_request_without_reconnecting() {
         poll_count
     });
 
-    let purpose = tokio::time::timeout(Duration::from_secs(2), probe_coordinator(&pair.phone, 0))
-        .await
-        .expect("foreground poll should remain responsive")
-        .expect("poll coordinator");
+    let purpose = tokio::time::timeout(
+        Duration::from_secs(2),
+        probe_coordinator(&pair.phone, super::super::protocol::test_compatibility(), 0),
+    )
+    .await
+    .expect("foreground poll should remain responsive")
+    .expect("poll coordinator");
     assert_eq!(purpose, Some(BundlePurpose::Refresh));
     assert_eq!(coordinator.await.expect("coordinator task"), 3);
 }
@@ -564,6 +586,7 @@ async fn several_enrolled_devices_authenticate_with_distinct_certificates() {
             pair.invitation.endpoint.parse().expect("endpoint"),
             "vault-1".to_string(),
             0,
+            super::super::protocol::test_compatibility(),
             unix_time_ms(),
         )
         .expect("create second invitation");
@@ -582,7 +605,7 @@ async fn several_enrolled_devices_authenticate_with_distinct_certificates() {
         peers[0].certificate_fingerprint,
         peers[1].certificate_fingerprint
     );
-    let error = probe_coordinator(&second, 0)
+    let error = probe_coordinator(&second, super::super::protocol::test_compatibility(), 0)
         .await
         .expect_err("test server has no coordinator state");
     assert!(
@@ -727,6 +750,7 @@ async fn digest_mismatch_removes_corrupt_staging() {
 fn oversized_bundle_metadata_is_rejected_before_network_work() {
     let metadata = BundleMetadata {
         protocol_version: PROTOCOL_VERSION,
+        compatibility: super::super::protocol::test_compatibility(),
         vault_id: "vault-1".to_string(),
         device_id: "device-phone".to_string(),
         transfer_id: "transfer-oversize".to_string(),

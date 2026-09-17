@@ -3,7 +3,8 @@
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use super::protocol::PROTOCOL_VERSION;
 use super::protocol::{
-    validate_identifier, BundleMetadata, BundlePurpose, DeviceKind, PairingInvitation,
+    validate_identifier, BundleMetadata, BundlePurpose, DeviceKind, HandoffCompatibility,
+    PairingInvitation,
 };
 use base64::Engine;
 use rcgen::{CertificateParams, KeyPair};
@@ -519,13 +520,16 @@ impl PairingManager {
         endpoint: std::net::SocketAddr,
         vault_id: String,
         generation: u64,
+        compatibility: HandoffCompatibility,
         now_unix_ms: i64,
     ) -> Result<PairingInvitation, String> {
         validate_identifier("vault id", &vault_id)?;
+        compatibility.validate()?;
         let mut inner = self.lock()?;
         let state = initialized_state(&inner)?;
         let invitation = PairingInvitation {
             protocol_version: PROTOCOL_VERSION,
+            compatibility,
             invitation_id: random_token("invite")?,
             secret: random_secret()?,
             endpoint: endpoint.to_string(),
@@ -1153,6 +1157,7 @@ mod tests {
                 "127.0.0.1:41000".parse().expect("endpoint"),
                 "vault-1".to_string(),
                 0,
+                crate::vault::handoff::protocol::test_compatibility(),
                 now_unix_ms,
             )
             .expect("invitation");
@@ -1189,6 +1194,7 @@ mod tests {
                 "127.0.0.1:41000".parse().expect("endpoint"),
                 "vault-1".to_string(),
                 0,
+                crate::vault::handoff::protocol::test_compatibility(),
                 100,
             )
             .expect("invitation");
@@ -1328,6 +1334,7 @@ mod tests {
                 "127.0.0.1:41000".parse().expect("endpoint"),
                 "vault-1".to_string(),
                 0,
+                crate::vault::handoff::protocol::test_compatibility(),
                 100,
             )
             .expect("invitation");
@@ -1353,6 +1360,7 @@ mod tests {
                 "127.0.0.1:41000".parse().expect("endpoint"),
                 "vault-1".to_string(),
                 0,
+                crate::vault::handoff::protocol::test_compatibility(),
                 100,
             )
             .expect("invitation");
@@ -1426,6 +1434,7 @@ mod tests {
             .expect("initialize");
         let metadata = BundleMetadata {
             protocol_version: PROTOCOL_VERSION,
+            compatibility: crate::vault::handoff::protocol::test_compatibility(),
             vault_id: "vault-1".to_string(),
             device_id: "device-desktop".to_string(),
             transfer_id: "transfer-return".to_string(),
@@ -1504,6 +1513,7 @@ mod tests {
             .expect("initialize");
         let metadata = BundleMetadata {
             protocol_version: PROTOCOL_VERSION,
+            compatibility: crate::vault::handoff::protocol::test_compatibility(),
             vault_id: "vault-1".to_string(),
             device_id: "device-desktop".to_string(),
             transfer_id: "incoming-return".to_string(),

@@ -517,7 +517,7 @@ async fn activate_handoff_at_path<R: Runtime>(
         .ok_or_else(|| "Ganbaru AI folder has no parent directory".to_string())?;
     fs::create_dir_all(parent).map_err(|error| format!("create app data directory: {error}"))?;
     let rollback = if preserve_previous {
-        parent.join(format!(".ganbaru-ai.handoff-previous-{transfer_id}"))
+        preserved_handoff_path(parent, target, transfer_id)
     } else {
         parent.join(".ganbaru-ai.handoff-refresh-rollback")
     };
@@ -543,6 +543,20 @@ async fn activate_handoff_at_path<R: Runtime>(
     });
     drop(restore_guard);
     result
+}
+
+fn preserved_handoff_path(parent: &Path, target: &Path, transfer_id: &str) -> PathBuf {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let folder_name = target
+            .file_name()
+            .and_then(|name| name.to_str())
+            .filter(|name| !name.trim().is_empty())
+            .unwrap_or("Ganbaru AI");
+        parent.join(format!("{folder_name} before linking {transfer_id}"))
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    parent.join(format!(".ganbaru-ai.handoff-previous-{transfer_id}"))
 }
 
 fn replace_vault_preserving_previous(
@@ -716,6 +730,18 @@ mod tests {
         assert!(safe_archive_path(Path::new("../vault.json")).is_err());
         assert!(safe_archive_path(Path::new("/vault.json")).is_err());
         assert!(safe_archive_path(Path::new(".")).is_err());
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[test]
+    fn first_link_preserves_desktop_data_in_a_visible_sibling_folder() {
+        let parent = Path::new("/documents");
+        let preserved = preserved_handoff_path(parent, &parent.join("Ganbaru AI"), "transfer-123");
+
+        assert_eq!(
+            preserved,
+            parent.join("Ganbaru AI before linking transfer-123")
+        );
     }
 
     #[test]

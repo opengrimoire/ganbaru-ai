@@ -8,6 +8,12 @@ import VaultOwnershipPrompt from "./VaultOwnershipPrompt.svelte";
 const backend = vi.hoisted(() => ({
   status: null as PairingStatus | null,
   readPairingStatus: vi.fn<() => Promise<PairingStatus>>(),
+  receiveDesktopBundle: vi.fn(async () => ({
+    transferId: "transfer",
+    generation: 2,
+    activated: true,
+    inProgress: false,
+  })),
 }));
 
 vi.mock("$lib/api/vault-handoff", async (importOriginal) => {
@@ -15,12 +21,7 @@ vi.mock("$lib/api/vault-handoff", async (importOriginal) => {
   return {
     ...actual,
     readPairingStatus: backend.readPairingStatus,
-    receiveDesktopBundle: vi.fn(async () => ({
-      transferId: "transfer",
-      generation: 2,
-      activated: true,
-      inProgress: false,
-    })),
+    receiveDesktopBundle: backend.receiveDesktopBundle,
     requestOwnerBundle: vi.fn(async () => undefined),
   };
 });
@@ -94,6 +95,29 @@ describe("VaultOwnershipPrompt", () => {
     await vi.waitFor(() => expect(backend.readPairingStatus).toHaveBeenCalled());
 
     expect(target.querySelector("[data-vault-ownership-prompt]")).toBeNull();
+  });
+
+  it("requires confirmation before the first linked vault replaces local data", async () => {
+    backend.status = { ...pairingStatus(false), replicaReady: false };
+    target = document.createElement("div");
+    document.body.append(target);
+    component = mount(VaultOwnershipPrompt, {
+      target,
+      props: { platform: "android" },
+    });
+    await vi.waitFor(() => {
+      expect(target?.querySelector("[data-vault-ownership-prompt]")).not.toBeNull();
+    });
+
+    const switchButton = [...target.querySelectorAll("button")]
+      .find((button) => button.textContent?.trim() === "Switch to this device");
+    switchButton?.click();
+    await tick();
+
+    expect(target.textContent).toContain("Replace this device's current data?");
+    expect(target.textContent).toContain("cannot be merged");
+    expect(target.textContent).toContain("backup to Downloads");
+    expect(backend.receiveDesktopBundle).not.toHaveBeenCalled();
   });
 
   it("reports its initial status decision even when the status read fails", async () => {

@@ -19,6 +19,17 @@ describe("formatHandoffError", () => {
       "vaultHandoff.unreachable",
     );
   });
+
+  it("turns schema mismatches into update guidance", () => {
+    expect(formatHandoffError(
+      "handoff compatibility mismatch between Ganbaru AI 1.0 and 2.0",
+      t,
+    )).toBe("vaultHandoff.incompatibleVersions");
+    expect(formatHandoffError(
+      "handoff protocol version is unsupported",
+      t,
+    )).toBe("vaultHandoff.incompatibleVersions");
+  });
 });
 
 describe("hasNewLinkedDevice", () => {

@@ -1,7 +1,8 @@
 //! Desktop coordinator operations behind the bounded transport protocol.
 
 use super::protocol::{
-    BundleMetadata, BundlePurpose, DoomscrollingSampleMessage, PROTOCOL_VERSION,
+    BundleMetadata, BundlePurpose, DoomscrollingSampleMessage, HandoffCompatibility,
+    PROTOCOL_VERSION,
 };
 use super::state::{random_token, PairingManager, PendingAcknowledgement, StoredOutgoingTransfer};
 use crate::vault::ownership::VaultOwnershipManager;
@@ -16,6 +17,7 @@ use tauri::{Manager, Runtime};
 #[derive(Debug)]
 pub(crate) enum CoordinatorOperation {
     Prepare {
+        compatibility: HandoffCompatibility,
         vault_id: String,
         device_id: String,
         generation: u64,
@@ -32,6 +34,7 @@ pub(crate) enum CoordinatorOperation {
         purpose: BundlePurpose,
     },
     PollUpload {
+        compatibility: HandoffCompatibility,
         vault_id: String,
         device_id: String,
         generation: u64,
@@ -205,11 +208,18 @@ impl<R: Runtime> CoordinatorState<R> {
     ) -> Result<CoordinatorResponse, String> {
         match operation {
             CoordinatorOperation::Prepare {
+                compatibility,
                 vault_id,
                 device_id,
                 generation,
                 purpose,
-            } => self.prepare(vault_id, device_id, generation, purpose).await,
+            } => {
+                super::protocol::ensure_compatible(
+                    &super::current_compatibility(&self.app),
+                    &compatibility,
+                )?;
+                self.prepare(vault_id, device_id, generation, purpose).await
+            }
             CoordinatorOperation::CommitOwnership { metadata } => self.commit_ownership(metadata),
             CoordinatorOperation::Activated {
                 vault_id,
@@ -219,10 +229,17 @@ impl<R: Runtime> CoordinatorState<R> {
                 purpose,
             } => self.activated(vault_id, device_id, transfer_id, generation, purpose),
             CoordinatorOperation::PollUpload {
+                compatibility,
                 vault_id,
                 device_id,
                 generation,
-            } => self.poll_upload(vault_id, device_id, generation),
+            } => {
+                super::protocol::ensure_compatible(
+                    &super::current_compatibility(&self.app),
+                    &compatibility,
+                )?;
+                self.poll_upload(vault_id, device_id, generation)
+            }
             CoordinatorOperation::RequestUpload { purpose } => self.request_upload(purpose),
             CoordinatorOperation::DoomscrollingExchange {
                 vault_id,
@@ -404,6 +421,7 @@ impl<R: Runtime> CoordinatorState<R> {
         let metadata_result: Result<BundleMetadata, String> = (|| {
             Ok(BundleMetadata {
                 protocol_version: PROTOCOL_VERSION,
+                compatibility: super::current_compatibility(&self.app),
                 vault_id,
                 device_id,
                 transfer_id,
@@ -812,6 +830,10 @@ impl<R: Runtime> CoordinatorState<R> {
         purpose: BundlePurpose,
     ) -> Result<CoordinatorResponse, String> {
         self.last_peer_activity = Instant::now();
+        super::protocol::ensure_compatible(
+            &super::current_compatibility(&self.app),
+            &metadata.compatibility,
+        )?;
         if let Some(completed) = self.pairing.completed_activation()? {
             if completed.vault_id == metadata.vault_id
                 && completed.device_id == metadata.device_id
@@ -1037,6 +1059,7 @@ mod tests {
         fs::write(&archive_path, b"durable prepared archive").unwrap();
         let metadata = BundleMetadata {
             protocol_version: PROTOCOL_VERSION,
+            compatibility: crate::vault::handoff::protocol::test_compatibility(),
             vault_id: "vault".to_string(),
             device_id: "phone".to_string(),
             transfer_id: transfer_id.to_string(),

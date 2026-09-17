@@ -4,11 +4,12 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::path::Path;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-pub(crate) const PROTOCOL_VERSION: u16 = 2;
+pub(crate) const PROTOCOL_VERSION: u16 = 3;
 pub(crate) const MAX_CONTROL_BYTES: usize = 1024 * 1024;
 pub(crate) const MAX_ARCHIVE_BYTES: u64 = 100 * 1024 * 1024 * 1024;
 pub(crate) const MAX_IDENTIFIER_BYTES: usize = 160;
 pub(crate) const MAX_DEVICE_LABEL_BYTES: usize = 128;
+const MAX_APP_VERSION_BYTES: usize = 64;
 pub(crate) const MAX_DOOMSCROLLING_SAMPLES: usize = 1_024;
 pub(crate) const TRANSFER_CHUNK_BYTES: usize = 64 * 1024;
 
@@ -21,10 +22,46 @@ pub(crate) enum DeviceKind {
     Unknown,
 }
 
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct HandoffCompatibility {
+    pub app_version: String,
+    pub database_schema_sha256: String,
+}
+
+impl HandoffCompatibility {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        if self.app_version.trim().is_empty()
+            || self.app_version.len() > MAX_APP_VERSION_BYTES
+            || self.app_version.chars().any(char::is_control)
+        {
+            return Err("application version is invalid".to_string());
+        }
+        validate_sha256(&self.database_schema_sha256)
+            .map_err(|_| "database compatibility fingerprint is invalid".to_string())
+    }
+}
+
+pub(crate) fn ensure_compatible(
+    local: &HandoffCompatibility,
+    remote: &HandoffCompatibility,
+) -> Result<(), String> {
+    local.validate()?;
+    remote.validate()?;
+    if local.database_schema_sha256 != remote.database_schema_sha256 {
+        return Err(format!(
+            "handoff compatibility mismatch between Ganbaru AI {} and {}; update Ganbaru AI on both devices",
+            local.app_version, remote.app_version
+        ));
+    }
+    Ok(())
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PairingInvitation {
     pub protocol_version: u16,
+    pub compatibility: HandoffCompatibility,
     pub invitation_id: String,
     pub secret: String,
     pub endpoint: String,
@@ -38,6 +75,7 @@ pub(crate) struct PairingInvitation {
 impl PairingInvitation {
     pub(crate) fn validate(&self, now_unix_ms: i64) -> Result<(), String> {
         validate_protocol(self.protocol_version)?;
+        self.compatibility.validate()?;
         validate_identifier("invitation id", &self.invitation_id)?;
         validate_identifier("invitation secret", &self.secret)?;
         validate_identifier("coordinator fingerprint", &self.coordinator_fingerprint)?;
@@ -57,6 +95,7 @@ impl PairingInvitation {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct BundleMetadata {
     pub protocol_version: u16,
+    pub compatibility: HandoffCompatibility,
     pub vault_id: String,
     pub device_id: String,
     pub transfer_id: String,
@@ -75,6 +114,7 @@ pub(crate) enum BundlePurpose {
 impl BundleMetadata {
     pub(crate) fn validate(&self) -> Result<(), String> {
         validate_protocol(self.protocol_version)?;
+        self.compatibility.validate()?;
         validate_identifier("vault id", &self.vault_id)?;
         validate_identifier("device id", &self.device_id)?;
         validate_identifier("transfer id", &self.transfer_id)?;
@@ -121,6 +161,7 @@ pub(crate) enum ControlMessage {
     },
     RequestBundle {
         protocol_version: u16,
+        compatibility: HandoffCompatibility,
         vault_id: String,
         device_id: String,
         generation: u64,
@@ -188,6 +229,7 @@ pub(crate) enum ControlMessage {
     },
     RefreshRequest {
         protocol_version: u16,
+        compatibility: HandoffCompatibility,
         vault_id: String,
         device_id: String,
         generation: u64,
@@ -252,11 +294,13 @@ impl ControlMessage {
             }
             Self::RequestBundle {
                 protocol_version,
+                compatibility,
                 vault_id,
                 device_id,
                 ..
             } => {
                 validate_protocol(*protocol_version)?;
+                compatibility.validate()?;
                 validate_identifier("vault id", vault_id)?;
                 validate_identifier("device id", device_id)?;
             }
@@ -334,11 +378,13 @@ impl ControlMessage {
             }
             Self::RefreshRequest {
                 protocol_version,
+                compatibility,
                 vault_id,
                 device_id,
                 ..
             } => {
                 validate_protocol(*protocol_version)?;
+                compatibility.validate()?;
                 validate_identifier("vault id", vault_id)?;
                 validate_identifier("device id", device_id)?;
             }
@@ -608,6 +654,14 @@ pub(crate) fn unix_time_ms() -> i64 {
         .unwrap_or(0)
 }
 
+#[cfg(test)]
+pub(crate) fn test_compatibility() -> HandoffCompatibility {
+    HandoffCompatibility {
+        app_version: "test".to_string(),
+        database_schema_sha256: "a".repeat(64),
+    }
+}
+
 #[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
 mod tests {
     use super::*;
@@ -643,6 +697,7 @@ mod tests {
     fn malformed_and_oversized_metadata_is_rejected() {
         let mut metadata = BundleMetadata {
             protocol_version: PROTOCOL_VERSION,
+            compatibility: test_compatibility(),
             vault_id: "vault-1".to_string(),
             device_id: "device-1".to_string(),
             transfer_id: "transfer-1".to_string(),
@@ -655,5 +710,19 @@ mod tests {
         metadata.archive_sha256 = "a".repeat(64);
         metadata.archive_bytes = MAX_ARCHIVE_BYTES + 1;
         assert!(metadata.validate().unwrap_err().contains("bundle size"));
+    }
+
+    #[test]
+    fn compatibility_requires_the_same_database_migration_set() {
+        let local = test_compatibility();
+        let mut remote = local.clone();
+        ensure_compatible(&local, &remote).expect("matching schemas should interoperate");
+
+        remote.app_version = "newer".to_string();
+        remote.database_schema_sha256 = "b".repeat(64);
+        let error = ensure_compatible(&local, &remote).unwrap_err();
+        assert!(error.contains("compatibility mismatch"));
+        assert!(error.contains("test"));
+        assert!(error.contains("newer"));
     }
 }
