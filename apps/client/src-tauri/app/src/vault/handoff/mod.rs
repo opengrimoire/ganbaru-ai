@@ -12,9 +12,9 @@ pub(crate) mod source;
 pub(crate) mod state;
 pub(crate) mod transport;
 
-use protocol::{decode_invitation, HandoffCompatibility};
+use protocol::{decode_invitation, encode_invitation, HandoffCompatibility};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use protocol::{encode_invitation, invitation_qr_matrix, QrMatrix};
+use protocol::{invitation_qr_matrix, QrMatrix};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use state::PairingManager;
@@ -86,6 +86,7 @@ pub(crate) struct PairingStatus {
     vault_id: Option<String>,
     can_write: Option<bool>,
     recovery_required: bool,
+    revoked_by_coordinator: bool,
     replica_ready: bool,
     pending_transfer: bool,
     can_invite: bool,
@@ -519,6 +520,7 @@ pub(crate) fn handoff_pairing_status<R: Runtime>(
         recovery_required: ownership
             .as_ref()
             .is_some_and(|status| status.role == "recovery"),
+        revoked_by_coordinator: manager.revoked_by_coordinator()?,
         replica_ready: manager.replica_ready()? || !peers.is_empty(),
         pending_transfer: manager.has_pending_transfer()?,
         can_invite: cfg!(not(any(target_os = "android", target_os = "ios")))

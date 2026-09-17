@@ -37,6 +37,7 @@ function pairingStatus(canWrite: boolean): PairingStatus {
     vaultId: "vault",
     canWrite,
     recoveryRequired: false,
+    revokedByCoordinator: false,
     replicaReady: true,
     pendingTransfer: false,
     canInvite: false,

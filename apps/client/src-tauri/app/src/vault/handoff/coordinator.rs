@@ -142,11 +142,13 @@ struct CoordinatorState<R: Runtime> {
     prepared: Option<PreparedTransfer>,
     completed: Option<CompletedActivation>,
     last_peer_activity: Instant,
+    last_owner_poll: Option<(String, Instant)>,
     waiting_refresh_targets: BTreeSet<String>,
     relay_refresh_generation: Option<u64>,
 }
 
 const PEER_RECONNECT_GAP: Duration = Duration::from_secs(75);
+const OWNER_REACHABILITY_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(crate) async fn run<R: Runtime>(
     app: tauri::AppHandle<R>,
@@ -184,6 +186,7 @@ pub(crate) async fn run<R: Runtime>(
         prepared,
         completed,
         last_peer_activity: Instant::now(),
+        last_owner_poll: None,
         waiting_refresh_targets: BTreeSet::new(),
         relay_refresh_generation: None,
     };
@@ -333,6 +336,7 @@ impl<R: Runtime> CoordinatorState<R> {
                         "the current vault owner is not linked to this coordinator".to_string()
                     );
                 }
+                self.ensure_owner_is_reachable(&status.owner_device_id, purpose)?;
                 if purpose == BundlePurpose::Refresh {
                     self.waiting_refresh_targets.insert(device_id.clone());
                 }
@@ -546,6 +550,7 @@ impl<R: Runtime> CoordinatorState<R> {
                     &completed.transfer_id,
                     completed.generation,
                 )?;
+            self.last_owner_poll = Some((completed.device_id.clone(), Instant::now()));
         }
         self.pairing
             .complete_outgoing_activation(PendingAcknowledgement {
@@ -610,7 +615,12 @@ impl<R: Runtime> CoordinatorState<R> {
         if status.generation != generation {
             return Err("polling owner generation does not match the coordinator".to_string());
         }
-        let reconnected = self.last_peer_activity.elapsed() >= PEER_RECONNECT_GAP;
+        let reconnected = self
+            .last_owner_poll
+            .as_ref()
+            .filter(|(owner_device_id, _)| owner_device_id == &device_id)
+            .is_none_or(|(_, activity)| activity.elapsed() >= PEER_RECONNECT_GAP);
+        self.last_owner_poll = Some((device_id, Instant::now()));
         self.last_peer_activity = Instant::now();
         if reconnected
             && self.pairing.requested_upload()?.is_none()
@@ -629,6 +639,7 @@ impl<R: Runtime> CoordinatorState<R> {
         if status.can_write || self.pairing.linked_peer(&status.owner_device_id)?.is_none() {
             return Err("a linked device is not the current vault owner".to_string());
         }
+        self.ensure_owner_is_reachable(&status.owner_device_id, purpose)?;
         if let Some(incoming) = self.pairing.incoming_transfer()? {
             if incoming.purpose != purpose {
                 return Err("another uploaded vault transfer requires recovery".to_string());
@@ -636,6 +647,19 @@ impl<R: Runtime> CoordinatorState<R> {
         }
         self.pairing.request_upload(purpose)?;
         Ok(CoordinatorResponse::UploadRequested { purpose })
+    }
+
+    fn ensure_owner_is_reachable(
+        &self,
+        owner_device_id: &str,
+        purpose: BundlePurpose,
+    ) -> Result<(), String> {
+        if owner_poll_is_fresh(self.last_owner_poll.as_ref(), owner_device_id) {
+            Ok(())
+        } else {
+            self.pairing.cancel_requested_upload(purpose)?;
+            Err("the current vault owner is unreachable".to_string())
+        }
     }
 
     async fn doomscrolling_exchange(
@@ -1021,6 +1045,12 @@ fn restore_prepared(pairing: &PairingManager) -> Result<Option<PreparedTransfer>
     }))
 }
 
+fn owner_poll_is_fresh(last_owner_poll: Option<&(String, Instant)>, owner_device_id: &str) -> bool {
+    last_owner_poll.is_some_and(|(polled_device_id, activity)| {
+        polled_device_id == owner_device_id && activity.elapsed() <= OWNER_REACHABILITY_TIMEOUT
+    })
+}
+
 pub(crate) async fn request(
     sender: &CoordinatorSender,
     operation: CoordinatorOperation,
@@ -1042,6 +1072,22 @@ pub(crate) async fn request(
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn owner_reachability_requires_a_recent_poll_from_the_current_owner() {
+        let now = Instant::now();
+        let current = ("phone-owner".to_string(), now);
+        let stale = (
+            "phone-owner".to_string(),
+            now - OWNER_REACHABILITY_TIMEOUT - Duration::from_millis(1),
+        );
+        let other = ("other-phone".to_string(), now);
+
+        assert!(owner_poll_is_fresh(Some(&current), "phone-owner"));
+        assert!(!owner_poll_is_fresh(Some(&stale), "phone-owner"));
+        assert!(!owner_poll_is_fresh(Some(&other), "phone-owner"));
+        assert!(!owner_poll_is_fresh(None, "phone-owner"));
+    }
 
     #[test]
     fn prepared_download_is_restored_from_private_state() {

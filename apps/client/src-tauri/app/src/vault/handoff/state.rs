@@ -1,10 +1,11 @@
 //! Platform-private pairing identity and transfer registry.
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
+use super::protocol::HandoffCompatibility;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use super::protocol::PROTOCOL_VERSION;
 use super::protocol::{
-    validate_identifier, BundleMetadata, BundlePurpose, DeviceKind, HandoffCompatibility,
-    PairingInvitation,
+    validate_identifier, BundleMetadata, BundlePurpose, DeviceKind, PairingInvitation,
 };
 use base64::Engine;
 use rcgen::{CertificateParams, KeyPair};
@@ -24,6 +25,7 @@ const STAGING_DIRECTORY: &str = "vault-handoff-staging";
 const INVITATION_LIFETIME_MS: i64 = 3 * 60 * 1_000;
 const MAX_CERTIFICATE_BYTES: usize = 16 * 1024;
 const MAX_LINKED_PEERS: usize = 32;
+const MAX_REVOKED_PEERS: usize = 64;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -58,11 +60,23 @@ pub(crate) struct CoordinatorPin {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct RevokedPeer {
+    device_id: String,
+    vault_id: String,
+    certificate: String,
+    certificate_fingerprint: String,
+    revoked_at_unix_ms: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct PairingStateFile {
     schema_version: u32,
     identity: StoredIdentity,
     #[serde(default)]
     linked_peers: BTreeMap<String, LinkedPeer>,
+    #[serde(default)]
+    revoked_peers: BTreeMap<String, RevokedPeer>,
     #[serde(
         default,
         rename = "linkedPeer",
@@ -70,6 +84,8 @@ struct PairingStateFile {
     )]
     legacy_linked_peer: Option<LinkedPeer>,
     coordinator: Option<CoordinatorPin>,
+    #[serde(default)]
+    revoked_by_coordinator: bool,
     #[serde(default)]
     replica_ready: bool,
     #[serde(default)]
@@ -204,8 +220,10 @@ impl PairingManager {
                 schema_version: PAIRING_STATE_SCHEMA_VERSION,
                 identity: create_identity(device_id.clone())?,
                 linked_peers: BTreeMap::new(),
+                revoked_peers: BTreeMap::new(),
                 legacy_linked_peer: None,
                 coordinator: None,
+                revoked_by_coordinator: false,
                 replica_ready: false,
                 pending_acknowledgement: None,
                 outgoing_transfer: None,
@@ -265,6 +283,44 @@ impl PairingManager {
         Ok(initialized_state(&inner)?.coordinator.clone())
     }
 
+    pub(crate) fn revoked_by_coordinator(&self) -> Result<bool, String> {
+        let inner = self.lock()?;
+        Ok(initialized_state(&inner)?.revoked_by_coordinator)
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    pub(crate) fn client_auth_certificates(&self) -> Result<Vec<CertificateDer<'static>>, String> {
+        let inner = self.lock()?;
+        let state = initialized_state(&inner)?;
+        state
+            .linked_peers
+            .values()
+            .map(|peer| decode_certificate(&peer.certificate))
+            .chain(
+                state
+                    .revoked_peers
+                    .values()
+                    .map(|peer| decode_certificate(&peer.certificate)),
+            )
+            .collect()
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    pub(crate) fn is_revoked_certificate(
+        &self,
+        certificate: Option<&CertificateDer<'_>>,
+    ) -> Result<bool, String> {
+        let Some(certificate) = certificate else {
+            return Ok(false);
+        };
+        let fingerprint = certificate_fingerprint(certificate.as_ref());
+        let inner = self.lock()?;
+        Ok(initialized_state(&inner)?
+            .revoked_peers
+            .values()
+            .any(|peer| peer.certificate_fingerprint == fingerprint))
+    }
+
     pub(crate) fn ensure_enrollment_target(
         &self,
         invitation: &PairingInvitation,
@@ -300,8 +356,12 @@ impl PairingManager {
             return Err("finish or retry the active handoff before unlinking".to_string());
         }
         let state = initialized_state_mut(&mut inner)?;
-        state.linked_peers.clear();
+        let removed_peers = std::mem::take(&mut state.linked_peers);
+        for peer in removed_peers.into_values() {
+            remember_revoked_peer(state, peer, super::protocol::unix_time_ms());
+        }
         state.coordinator = None;
+        state.revoked_by_coordinator = false;
         state.replica_ready = false;
         state.completed_activation = None;
         if let Err(error) = persist_initialized_state(&inner) {
@@ -328,17 +388,22 @@ impl PairingManager {
             return Err("finish or retry the active handoff before unlinking".to_string());
         }
         let state = initialized_state_mut(&mut inner)?;
-        let removed_peer = state.linked_peers.remove(device_id).is_some();
+        let removed_peer = state.linked_peers.remove(device_id);
+        let removed_peer_exists = removed_peer.is_some();
+        if let Some(peer) = removed_peer {
+            remember_revoked_peer(state, peer, super::protocol::unix_time_ms());
+        }
         let removed_coordinator = state
             .coordinator
             .as_ref()
             .is_some_and(|coordinator| coordinator.device_id == device_id);
         if removed_coordinator {
             state.coordinator = None;
+            state.revoked_by_coordinator = false;
             state.replica_ready = false;
             state.completed_activation = None;
         }
-        if !removed_peer && !removed_coordinator {
+        if !removed_peer_exists && !removed_coordinator {
             return Err("linked device was not found".to_string());
         }
         if let Err(error) = persist_initialized_state(&inner) {
@@ -346,8 +411,37 @@ impl PairingManager {
             return Err(error);
         }
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        if removed_peer {
+        if removed_peer_exists {
             inner.invitations.clear();
+        }
+        Ok(())
+    }
+
+    pub(crate) fn accept_coordinator_revocation(
+        &self,
+        expected: &CoordinatorPin,
+    ) -> Result<(), String> {
+        let mut inner = self.lock()?;
+        let previous = initialized_state(&inner)?.clone();
+        let state = initialized_state_mut(&mut inner)?;
+        let matches = state.coordinator.as_ref().is_some_and(|coordinator| {
+            coordinator.device_id == expected.device_id
+                && coordinator.vault_id == expected.vault_id
+                && coordinator.certificate_fingerprint == expected.certificate_fingerprint
+        });
+        if !matches {
+            return Err("coordinator changed before revocation could be applied".to_string());
+        }
+        state.coordinator = None;
+        state.revoked_by_coordinator = true;
+        state.pending_acknowledgement = None;
+        state.outgoing_transfer = None;
+        state.incoming_transfer = None;
+        state.completed_activation = None;
+        state.requested_upload = None;
+        if let Err(error) = persist_initialized_state(&inner) {
+            inner.state = Some(previous);
+            return Err(error);
         }
         Ok(())
     }
@@ -517,6 +611,22 @@ impl PairingManager {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    pub(crate) fn cancel_requested_upload(&self, purpose: BundlePurpose) -> Result<(), String> {
+        let mut inner = self.lock()?;
+        let previous = initialized_state(&inner)?.clone();
+        let state = initialized_state_mut(&mut inner)?;
+        if state.requested_upload != Some(purpose) {
+            return Ok(());
+        }
+        state.requested_upload = None;
+        if let Err(error) = persist_initialized_state(&inner) {
+            inner.state = Some(previous);
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub(crate) fn requested_upload(&self) -> Result<Option<BundlePurpose>, String> {
         let inner = self.lock()?;
         Ok(initialized_state(&inner)?.requested_upload)
@@ -589,6 +699,7 @@ impl PairingManager {
             certificate: enrollment.certificate_b64.to_string(),
             certificate_fingerprint: certificate_fingerprint(certificate.as_ref()),
         };
+        let previous = initialized_state(&inner)?.clone();
         let state = initialized_state_mut(&mut inner)?;
         if peer.device_id == state.identity.device_id {
             return Err("a device cannot enroll its coordinator identity".to_string());
@@ -613,10 +724,23 @@ impl PairingManager {
                 return Err(format!("at most {MAX_LINKED_PEERS} devices can be linked"));
             }
         }
+        if state.revoked_peers.values().any(|revoked| {
+            revoked.device_id != peer.device_id
+                && revoked.certificate_fingerprint == peer.certificate_fingerprint
+        }) {
+            return Err("this certificate belonged to another revoked device".to_string());
+        }
         state
             .linked_peers
             .insert(peer.device_id.clone(), peer.clone());
-        persist_initialized_state(&inner)?;
+        state.revoked_peers.remove(&peer.device_id);
+        state
+            .revoked_peers
+            .retain(|_, revoked| revoked.certificate_fingerprint != peer.certificate_fingerprint);
+        if let Err(error) = persist_initialized_state(&inner) {
+            inner.state = Some(previous);
+            return Err(error);
+        }
         inner.invitations.remove(enrollment.invitation_id);
         Ok(peer)
     }
@@ -640,6 +764,7 @@ impl PairingManager {
             generation: invitation.generation,
             certificate_fingerprint: fingerprint,
         });
+        state.revoked_by_coordinator = false;
         persist_initialized_state(&inner)
     }
 
@@ -976,6 +1101,30 @@ fn validate_activation_record(record: &PendingAcknowledgement) -> Result<(), Str
     Ok(())
 }
 
+fn remember_revoked_peer(state: &mut PairingStateFile, peer: LinkedPeer, revoked_at_unix_ms: i64) {
+    state.revoked_peers.insert(
+        peer.device_id.clone(),
+        RevokedPeer {
+            device_id: peer.device_id,
+            vault_id: peer.vault_id,
+            certificate: peer.certificate,
+            certificate_fingerprint: peer.certificate_fingerprint,
+            revoked_at_unix_ms,
+        },
+    );
+    while state.revoked_peers.len() > MAX_REVOKED_PEERS {
+        let Some(oldest_device_id) = state
+            .revoked_peers
+            .values()
+            .min_by_key(|peer| (peer.revoked_at_unix_ms, peer.device_id.as_str()))
+            .map(|peer| peer.device_id.clone())
+        else {
+            break;
+        };
+        state.revoked_peers.remove(&oldest_device_id);
+    }
+}
+
 fn validate_state(state: &PairingStateFile, expected_device_id: &str) -> Result<(), String> {
     if state.schema_version != PAIRING_STATE_SCHEMA_VERSION {
         return Err("pairing state schema version is unsupported".to_string());
@@ -988,8 +1137,14 @@ fn validate_state(state: &PairingStateFile, expected_device_id: &str) -> Result<
     if state.linked_peers.len() > MAX_LINKED_PEERS {
         return Err("too many linked devices are stored".to_string());
     }
+    if state.revoked_peers.len() > MAX_REVOKED_PEERS {
+        return Err("too many revoked devices are stored".to_string());
+    }
     if state.coordinator.is_some() && !state.linked_peers.is_empty() {
         return Err("a coordinator client cannot store its own linked devices".to_string());
+    }
+    if state.coordinator.is_some() && state.revoked_by_coordinator {
+        return Err("a linked coordinator cannot also be recorded as revoked".to_string());
     }
     let mut peer_vault_id: Option<&str> = None;
     let mut certificate_fingerprints = std::collections::BTreeSet::new();
@@ -1018,6 +1173,23 @@ fn validate_state(state: &PairingStateFile, expected_device_id: &str) -> Result<
         }
         if !certificate_fingerprints.insert(&peer.certificate_fingerprint) {
             return Err("linked devices reuse a certificate identity".to_string());
+        }
+    }
+    for (device_id, peer) in &state.revoked_peers {
+        if device_id != &peer.device_id {
+            return Err("revoked device index is inconsistent".to_string());
+        }
+        if state.linked_peers.contains_key(device_id) {
+            return Err("a device cannot be linked and revoked".to_string());
+        }
+        validate_identifier("revoked device id", &peer.device_id)?;
+        validate_identifier("revoked vault id", &peer.vault_id)?;
+        let certificate = decode_certificate(&peer.certificate)?;
+        if certificate_fingerprint(certificate.as_ref()) != peer.certificate_fingerprint {
+            return Err("revoked peer certificate fingerprint is inconsistent".to_string());
+        }
+        if !certificate_fingerprints.insert(&peer.certificate_fingerprint) {
+            return Err("linked and revoked devices reuse a certificate identity".to_string());
         }
     }
     if let Some(coordinator) = state.coordinator.as_ref() {
@@ -1283,6 +1455,60 @@ mod tests {
     }
 
     #[test]
+    fn revoked_peer_is_remembered_across_restart_and_removed_by_reenrollment() {
+        let temp = TestDirectory::new("revoked-peer");
+        let manager = PairingManager::default();
+        manager
+            .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+            .expect("initialize");
+        let phone = create_identity("device-phone".to_string()).expect("phone identity");
+        let invitation = manager
+            .create_invitation(
+                "127.0.0.1:41000".parse().expect("endpoint"),
+                "vault-1".to_string(),
+                0,
+                crate::vault::handoff::protocol::test_compatibility(),
+                100,
+            )
+            .expect("invitation");
+        manager
+            .enroll_peer(enrollment(&invitation, &phone), 101)
+            .expect("enroll phone");
+        let phone_certificate = decode_certificate(&phone.certificate).expect("phone certificate");
+
+        manager.unlink_device("device-phone").expect("unlink phone");
+        assert!(manager.linked_peers().expect("linked peers").is_empty());
+        assert!(manager
+            .is_revoked_certificate(Some(&phone_certificate))
+            .expect("revoked certificate"));
+
+        let restarted = PairingManager::default();
+        restarted
+            .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+            .expect("restart");
+        assert!(restarted
+            .is_revoked_certificate(Some(&phone_certificate))
+            .expect("persisted revoked certificate"));
+
+        let invitation = restarted
+            .create_invitation(
+                "127.0.0.1:41000".parse().expect("endpoint"),
+                "vault-1".to_string(),
+                0,
+                crate::vault::handoff::protocol::test_compatibility(),
+                200,
+            )
+            .expect("new invitation");
+        restarted
+            .enroll_peer(enrollment(&invitation, &phone), 201)
+            .expect("reenroll phone");
+        assert!(!restarted
+            .is_revoked_certificate(Some(&phone_certificate))
+            .expect("active certificate"));
+        assert_eq!(restarted.linked_peers().expect("linked peers").len(), 1);
+    }
+
+    #[test]
     fn linked_client_accepts_only_its_existing_coordinator() {
         let phone_root = TestDirectory::new("coordinator-target-phone");
         let phone = PairingManager::default();
@@ -1479,6 +1705,17 @@ mod tests {
             manager.requested_upload().expect("requested upload"),
             Some(BundlePurpose::Ownership)
         );
+        manager
+            .cancel_requested_upload(BundlePurpose::Refresh)
+            .expect("ignore lower-priority cancellation");
+        assert_eq!(
+            manager.requested_upload().expect("requested upload"),
+            Some(BundlePurpose::Ownership)
+        );
+        manager
+            .cancel_requested_upload(BundlePurpose::Ownership)
+            .expect("cancel ownership upload");
+        assert_eq!(manager.requested_upload().expect("requested upload"), None);
     }
 
     #[test]

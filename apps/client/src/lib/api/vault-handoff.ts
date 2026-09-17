@@ -33,6 +33,7 @@ export interface PairingStatus {
   vaultId: string | null;
   canWrite: boolean | null;
   recoveryRequired: boolean;
+  revokedByCoordinator: boolean;
   replicaReady: boolean;
   pendingTransfer: boolean;
   canInvite: boolean;
@@ -126,6 +127,7 @@ function parseStatus(value: unknown): PairingStatus {
     !Array.isArray(value.devices) ||
     (value.canWrite !== null && typeof value.canWrite !== "boolean") ||
     typeof value.recoveryRequired !== "boolean" ||
+    typeof value.revokedByCoordinator !== "boolean" ||
     typeof value.replicaReady !== "boolean" ||
     typeof value.pendingTransfer !== "boolean"
     || typeof value.canInvite !== "boolean"
@@ -161,6 +163,7 @@ function parseStatus(value: unknown): PairingStatus {
     vaultId: nullableString(value.vaultId, "vault id"),
     canWrite: value.canWrite as boolean | null,
     recoveryRequired: value.recoveryRequired,
+    revokedByCoordinator: value.revokedByCoordinator,
     replicaReady: value.replicaReady,
     pendingTransfer: value.pendingTransfer,
     canInvite: value.canInvite,

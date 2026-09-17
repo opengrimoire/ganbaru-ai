@@ -556,7 +556,10 @@ fn preserved_handoff_path(parent: &Path, target: &Path, transfer_id: &str) -> Pa
         parent.join(format!("{folder_name} before linking {transfer_id}"))
     }
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    parent.join(format!(".ganbaru-ai.handoff-previous-{transfer_id}"))
+    {
+        let _ = target;
+        parent.join(format!(".ganbaru-ai.handoff-previous-{transfer_id}"))
+    }
 }
 
 fn replace_vault_preserving_previous(

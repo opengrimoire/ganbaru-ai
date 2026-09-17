@@ -165,6 +165,8 @@ export const vaultHandoff = {
   refreshed: "Se recibieron los últimos cambios.",
   requestSent: "Se envió la solicitud. Mantén ambas apps abiertas en la misma red.",
   unlinked: "Dispositivo desvinculado.",
+  revokedByCoordinator:
+    "Este dispositivo fue desvinculado por la computadora coordinadora. Su copia local seguirá siendo de solo lectura a menos que la recuperes como una bóveda separada.",
   recovered: "Esta copia local ahora es una bóveda separada con escritura.",
   localBackup:
     "Antes de que la bóveda de la computadora reemplace datos de Android por primera vez, Ganbaru AI guarda una copia recuperable en Descargas.",
@@ -179,5 +181,7 @@ export const vaultHandoff = {
     "Este dispositivo está vinculado con otra computadora. Desvincúlalo antes de conectarlo con una computadora diferente.",
   unreachable:
     "Este dispositivo no pudo comunicarse con la computadora coordinadora. Mantén ambas aplicaciones abiertas en la misma red local y reintenta.",
+  ownerUnreachable:
+    "El dispositivo principal no está disponible. Mantenlo abierto en la misma red local y vuelve a intentarlo.",
   unknownError: "Error desconocido",
 } as const satisfies MessageShape<typeof enVaultHandoff>;

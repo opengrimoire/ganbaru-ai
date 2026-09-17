@@ -4,9 +4,11 @@ use super::protocol::{
     read_control, unix_time_ms, write_control, BundleMetadata, BundlePurpose, ControlMessage,
     PairingInvitation, PROTOCOL_VERSION, TRANSFER_CHUNK_BYTES,
 };
-use super::state::{certificate_fingerprint, encode_certificate, PairingManager, TlsIdentity};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use super::state::{decode_certificate, Enrollment};
+use super::state::Enrollment;
+use super::state::{
+    certificate_fingerprint, encode_certificate, CoordinatorPin, PairingManager, TlsIdentity,
+};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, WebPkiSupportedAlgorithms};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
@@ -34,6 +36,7 @@ const CONTROL_TIMEOUT: Duration = Duration::from_secs(15);
 const CHUNK_TIMEOUT: Duration = Duration::from_secs(20);
 const BUNDLE_COORDINATION_WAIT: Duration = Duration::from_secs(90);
 const BUNDLE_COORDINATION_POLL_INTERVAL: Duration = Duration::from_secs(1);
+const MEMBERSHIP_REVOKED_CODE: &str = "membership_revoked";
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 const UPLOAD_REQUEST_WAIT: Duration = Duration::from_secs(10);
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -180,6 +183,16 @@ async fn handle_connection(
             return send_error(&mut stream, "malformed_control", &error, false).await;
         }
     };
+
+    if manager.is_revoked_certificate(peer_certificate.as_ref())? {
+        return send_error(
+            &mut stream,
+            MEMBERSHIP_REVOKED_CODE,
+            "this device was unlinked by the coordinator",
+            false,
+        )
+        .await;
+    }
 
     match request {
         ControlMessage::Enroll {
@@ -950,7 +963,7 @@ pub(crate) async fn upload_bundle(
         },
     ))
     .await?;
-    let offset = match timeout_control(read_control(&mut stream)).await? {
+    let offset = match read_authenticated_response(manager, &coordinator, &mut stream).await? {
         ControlMessage::ResumeAt { offset } if offset <= metadata.archive_bytes => offset,
         ControlMessage::Error { message, .. } => return Err(message),
         _ => return Err("coordinator returned an invalid upload offset".to_string()),
@@ -963,7 +976,7 @@ pub(crate) async fn upload_bundle(
         },
     ))
     .await?;
-    match timeout_control(read_control(&mut stream)).await? {
+    match read_authenticated_response(manager, &coordinator, &mut stream).await? {
         ControlMessage::BundleStaged { transfer_id } if transfer_id == metadata.transfer_id => {
             Ok(())
         }
@@ -1090,7 +1103,25 @@ async fn authenticated_exchange(
     )
     .await?;
     timeout_control(write_control(&mut stream, &message)).await?;
-    timeout_control(read_control(&mut stream)).await
+    read_authenticated_response(manager, &coordinator, &mut stream).await
+}
+
+async fn read_authenticated_response<R>(
+    manager: &PairingManager,
+    coordinator: &CoordinatorPin,
+    reader: &mut R,
+) -> Result<ControlMessage, String>
+where
+    R: tokio::io::AsyncRead + Unpin,
+{
+    let response = timeout_control(read_control(reader)).await?;
+    if matches!(
+        &response,
+        ControlMessage::Error { code, .. } if code == MEMBERSHIP_REVOKED_CODE
+    ) {
+        manager.accept_coordinator_revocation(coordinator)?;
+    }
+    Ok(response)
 }
 
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
@@ -1137,7 +1168,7 @@ async fn download_bundle_inner(
         },
     ))
     .await?;
-    match timeout_control(read_control(&mut stream)).await? {
+    match read_authenticated_response(manager, &coordinator, &mut stream).await? {
         ControlMessage::BundleMetadata { metadata: offered } if offered == metadata => {}
         ControlMessage::Error { message, .. } => return Err(message),
         _ => return Err("coordinator returned inconsistent transfer metadata".to_string()),
@@ -1267,12 +1298,12 @@ async fn connect_pinned(
 fn server_config(manager: &PairingManager) -> Result<rustls::ServerConfig, String> {
     let (_, identity) = manager.identity()?;
     let builder = rustls::ServerConfig::builder();
-    let peers = manager.linked_peers()?;
-    let config = if !peers.is_empty() {
+    let client_certificates = manager.client_auth_certificates()?;
+    let config = if !client_certificates.is_empty() {
         let mut roots = RootCertStore::empty();
-        for peer in peers {
+        for certificate in client_certificates {
             roots
-                .add(decode_certificate(&peer.certificate)?)
+                .add(certificate)
                 .map_err(|error| format!("trust linked device certificate: {error}"))?;
         }
         let verifier = rustls::server::WebPkiClientVerifier::builder(Arc::new(roots))

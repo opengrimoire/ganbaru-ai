@@ -7,6 +7,7 @@
   } from "$lib/api/vault-handoff";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { mobileTopBarPanelGeometry } from "$lib/mobile-layout";
+  import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
   import { cn } from "$lib/utils";
   import { getVaultOwnership } from "$lib/vault/ownership.svelte";
 
@@ -16,6 +17,11 @@
     initialStatus?: PairingStatus | null;
     onActivated?: () => void;
     onStatusChange?: (status: PairingStatus) => void;
+  }
+
+  interface MobileLinkingProps {
+    initialStatus?: PairingStatus | null;
+    onComplete: () => void | Promise<void>;
   }
 
   let {
@@ -29,36 +35,66 @@
   } = $props();
 
   const { t } = getLocalization();
+  const mobileBackStack = getMobileBackStack();
   const ownership = getVaultOwnership();
   let status = $state<PairingStatus | null>(null);
   let open = $state(false);
-  let loading = $state(false);
-  let loadError = $state<string | null>(null);
+  let panelLoading = $state(false);
+  let panelLoadError = $state<string | null>(null);
+  let mobileLinkingLoading = $state(false);
+  let mobileLinkingLoadError = $state<string | null>(null);
   let HandoffPanel = $state<Component<HandoffPanelProps> | null>(null);
+  let MobileLinkingScreen = $state<Component<MobileLinkingProps> | null>(null);
   let triggerElement = $state<HTMLButtonElement | null>(null);
   let mobilePanelStyle = $state("");
 
-  async function refreshStatus(): Promise<void> {
+  const mobileLinking = $derived(
+    open && presentation === "mobile" && status?.linked !== true,
+  );
+
+  async function refreshStatus(): Promise<PairingStatus | null> {
     try {
-      status = await readPairingStatus();
+      const next = await readPairingStatus();
+      status = next;
       await ownership.refresh();
+      if (open && presentation === "mobile") {
+        if (next.linked) void loadPanel();
+        else void loadMobileLinkingScreen();
+      }
+      return next;
     } catch (error) {
       console.warn("Failed to read linked-device status:", error);
+      return null;
     }
   }
 
   async function loadPanel(): Promise<void> {
-    if (HandoffPanel || loading) return;
-    loading = true;
-    loadError = null;
+    if (HandoffPanel || panelLoading) return;
+    panelLoading = true;
+    panelLoadError = null;
     try {
       const module = await import("./VaultHandoffPanel.svelte");
       HandoffPanel = module.default;
     } catch (error) {
-      loadError = error instanceof Error ? error.message : t("vaultHandoff.unknownError");
+      panelLoadError = error instanceof Error ? error.message : t("vaultHandoff.unknownError");
       console.error("Failed to load linked-device controls:", error);
     } finally {
-      loading = false;
+      panelLoading = false;
+    }
+  }
+
+  async function loadMobileLinkingScreen(): Promise<void> {
+    if (MobileLinkingScreen || mobileLinkingLoading) return;
+    mobileLinkingLoading = true;
+    mobileLinkingLoadError = null;
+    try {
+      const module = await import("$lib/components/mobile/MobileVaultHandoffOnboarding.svelte");
+      MobileLinkingScreen = module.default;
+    } catch (error) {
+      mobileLinkingLoadError = error instanceof Error ? error.message : t("vaultHandoff.unknownError");
+      console.error("Failed to load device linking:", error);
+    } finally {
+      mobileLinkingLoading = false;
     }
   }
 
@@ -104,8 +140,12 @@
     onOpened?.();
     updateMobilePanelPosition();
     open = true;
+    if (presentation === "mobile" && status?.linked !== true) {
+      void loadMobileLinkingScreen();
+    } else {
+      void loadPanel();
+    }
     void refreshStatus();
-    void loadPanel();
   }
 
   function closePanel(): void {
@@ -114,9 +154,17 @@
 
   function handleStatusChange(next: PairingStatus): void {
     status = next;
+    if (open && presentation === "mobile") {
+      if (next.linked) void loadPanel();
+      else void loadMobileLinkingScreen();
+    }
     void ownership.refresh();
   }
 
+  function handleMobileLinkingComplete(): void {
+    closePanel();
+    void refreshStatus();
+  }
   function handleActivated(): void {
     closePanel();
     void refreshStatus();
@@ -149,6 +197,11 @@
       visualViewport?.removeEventListener("resize", updateMobilePanelPosition);
       visualViewport?.removeEventListener("scroll", updateMobilePanelPosition);
     };
+  });
+
+  $effect(() => {
+    if (!mobileLinking) return;
+    return mobileBackStack.activate({ handle: closePanel });
   });
 </script>
 
@@ -193,7 +246,46 @@
     {/if}
   </button>
 
-  {#if open}
+  {#if mobileLinking}
+    <div
+      class="fixed inset-0 z-80 bg-background text-foreground"
+      role="dialog"
+      aria-modal="true"
+      aria-label={t("vaultHandoff.androidOnboardingTitle")}
+    >
+      {#if MobileLinkingScreen}
+        <MobileLinkingScreen initialStatus={status} onComplete={handleMobileLinkingComplete} />
+      {:else if mobileLinkingLoadError}
+        <div
+          class="mobile-viewport-height grid place-items-center px-6 text-center"
+          style="padding-top: var(--safe-area-top); padding-bottom: var(--safe-area-bottom);"
+          role="alert"
+        >
+          <div class="flex max-w-sm flex-col items-center gap-4">
+            <p class="text-sm leading-6 text-muted-foreground">{mobileLinkingLoadError}</p>
+            <button
+              type="button"
+              class="min-h-11 rounded-md border border-border px-4 text-sm font-medium"
+              onclick={() => void loadMobileLinkingScreen()}
+            >
+              {t("vaultHandoff.retry")}
+            </button>
+          </div>
+        </div>
+      {:else}
+        <div
+          class="mobile-viewport-height grid place-items-center"
+          style="padding-top: var(--safe-area-top); padding-bottom: var(--safe-area-bottom);"
+          role="status"
+          aria-label={t("common.loading")}
+        >
+          <svg viewBox="0 0 48 48" class="ganbaru-loading-ring size-12 text-foreground" aria-hidden="true">
+            <circle class="ganbaru-loading-ring-stroke" cx="24" cy="24" r="18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+          </svg>
+        </div>
+      {/if}
+    </div>
+  {:else if open}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="fixed inset-0 z-40"
@@ -219,9 +311,9 @@
           onStatusChange={handleStatusChange}
           onActivated={handleActivated}
         />
-      {:else if loadError}
+      {:else if panelLoadError}
         <div class="flex flex-col gap-3 text-sm" role="alert">
-          <p class="wrap-break-word text-xs text-muted-foreground">{loadError}</p>
+          <p class="wrap-break-word text-xs text-muted-foreground">{panelLoadError}</p>
           <button
             type="button"
             class="min-h-9 rounded-md border border-border px-3 font-medium hover:bg-accent"

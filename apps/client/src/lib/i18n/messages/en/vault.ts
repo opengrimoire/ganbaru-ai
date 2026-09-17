@@ -155,6 +155,8 @@ export const vaultHandoff = {
   refreshed: "Latest changes received.",
   requestSent: "The request was sent. Keep both apps open on the same network.",
   unlinked: "Device unlinked.",
+  revokedByCoordinator:
+    "This device was unlinked by the coordinating computer. Its local copy remains read-only unless you recover it as a separate vault.",
   recovered: "This local copy is now a separate writable vault.",
   localBackup:
     "Before the first desktop vault replaces Android data, Ganbaru AI saves a recoverable backup to Downloads.",
@@ -169,5 +171,7 @@ export const vaultHandoff = {
     "This device is linked to another computer. Unlink it before connecting to a different computer.",
   unreachable:
     "This device could not reach the coordinating computer. Keep both apps open on the same local network, then retry.",
+  ownerUnreachable:
+    "The main device is unavailable. Keep it open on the same local network, then retry.",
   unknownError: "Unknown error",
 } as const;

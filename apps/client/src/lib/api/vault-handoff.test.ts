@@ -29,6 +29,7 @@ describe("linked-device status cache", () => {
       vaultId: "vault-1",
       canWrite: true,
       recoveryRequired: false,
+      revokedByCoordinator: false,
       replicaReady: true,
       pendingTransfer: false,
       canInvite: true,

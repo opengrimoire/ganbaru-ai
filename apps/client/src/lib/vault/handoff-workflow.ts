@@ -9,6 +9,14 @@ function errorText(cause: unknown): string {
   return typeof cause === "string" ? cause : String(cause);
 }
 
+function isConnectivityFailure(message: string): boolean {
+  return message.includes("connect")
+    || message.includes("unavailable")
+    || message.includes("unreachable")
+    || message.includes("timed out")
+    || message.includes("network");
+}
+
 /** Converts native handoff failures into concise localized recovery guidance. */
 export function formatHandoffError(cause: unknown, t: Translate): string {
   const raw = errorText(cause);
@@ -31,15 +39,19 @@ export function formatHandoffError(cause: unknown, t: Translate): string {
   if (lower.includes("already linked to another coordinator")) {
     return t("vaultHandoff.differentCoordinator");
   }
-  if (
-    lower.includes("connect") ||
-    lower.includes("unavailable") ||
-    lower.includes("timed out") ||
-    lower.includes("network")
-  ) {
+  if (isConnectivityFailure(lower)) {
     return t("vaultHandoff.unreachable");
   }
   return t("vaultHandoff.failed", raw || t("vaultHandoff.unknownError"));
+}
+
+/** Converts ownership connectivity failures into main-device guidance. */
+export function formatOwnershipHandoffError(cause: unknown, t: Translate): string {
+  const raw = errorText(cause);
+  if (isConnectivityFailure(raw.toLowerCase())) {
+    return t("vaultHandoff.ownerUnreachable");
+  }
+  return formatHandoffError(cause, t);
 }
 
 /** Reports whether an invitation enrolled a device absent when it was created. */

@@ -28,6 +28,7 @@
   import ToggleSetting from "$lib/components/settings/ToggleSetting.svelte";
   import {
     formatHandoffError,
+    formatOwnershipHandoffError,
     hasNewLinkedDevice,
   } from "$lib/vault/handoff-workflow";
   import MobilePairingScanner from "./MobilePairingScanner.svelte";
@@ -67,6 +68,7 @@
   let statusRefreshing = false;
   let notice = $state<string | null>(null);
   let error = $state<string | null>(null);
+  let ownershipError = $state<string | null>(null);
   let networkError = $state<string | null>(null);
   let confirmation = $state<"network" | "networkRevoke" | "unlink" | "recover" | "replace" | null>(null);
   let unlinkDeviceId = $state<string | null>(null);
@@ -225,6 +227,7 @@
   async function receive(mode: "ownership" | "refresh"): Promise<void> {
     busy = mode;
     error = null;
+    if (mode === "ownership") ownershipError = null;
     notice = null;
     try {
       const outcome = await receiveDesktopBundle(mode);
@@ -236,7 +239,10 @@
       notice = mode === "ownership" ? t("vaultHandoff.linked") : t("vaultHandoff.refreshed");
       if (outcome.activated) onActivated?.();
     } catch (cause) {
-      fail(cause);
+      if (mode === "ownership") {
+        ownershipError = formatOwnershipHandoffError(cause, t);
+        notice = null;
+      } else fail(cause);
     } finally {
       busy = null;
     }
@@ -250,6 +256,7 @@
       sawPending ||= next.pendingTransfer;
       if (mode === "ownership" && next.canWrite) return;
       if (mode === "refresh" && sawPending && !next.pendingTransfer) return;
+      await requestOwnerBundle(mode);
     }
     throw new Error("coordinator request timed out");
   }
@@ -257,6 +264,7 @@
   async function requestFromAndroid(mode: "ownership" | "refresh"): Promise<void> {
     busy = mode;
     error = null;
+    if (mode === "ownership") ownershipError = null;
     notice = t("vaultHandoff.requestSent");
     try {
       await requestOwnerBundle(mode);
@@ -264,7 +272,10 @@
       notice = mode === "ownership" ? t("vaultHandoff.linked") : t("vaultHandoff.refreshed");
       onActivated?.();
     } catch (cause) {
-      fail(cause);
+      if (mode === "ownership") {
+        ownershipError = formatOwnershipHandoffError(cause, t);
+        notice = null;
+      } else fail(cause);
     } finally {
       busy = null;
     }
@@ -581,6 +592,13 @@
               {t("vaultHandoff.useHere")}
             {/if}
           </button>
+          {#if ownershipError}
+            <p role="status" class={presentation === "control"
+              ? "w-full basis-full px-3 pb-1 text-[0.75rem] leading-5 text-muted-foreground"
+              : "w-full basis-full px-1 text-[0.8rem] leading-5 text-muted-foreground"}>
+              {ownershipError}
+            </p>
+          {/if}
           {#if presentation === "control" || (status.replicaReady && presentation !== "onboarding")}
             <button
               type="button"
@@ -643,6 +661,11 @@
         : busy === "ownership"
           ? t("vaultHandoff.workingOwnership")
           : t("vaultHandoff.workingRefresh")}
+    </p>
+  {/if}
+  {#if status?.revokedByCoordinator && presentation === "settings"}
+    <p role="status" class="px-1 text-[0.8rem] leading-5 text-muted-foreground">
+      {t("vaultHandoff.revokedByCoordinator")}
     </p>
   {/if}
   {#if notice && presentation !== "control"}<p role="status" class="px-1 text-[0.8rem] leading-5 text-muted-foreground">{notice}</p>{/if}

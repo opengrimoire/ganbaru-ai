@@ -180,6 +180,35 @@ async fn fresh_phone_enrolls_and_stages_authenticated_bundle() {
 }
 
 #[tokio::test]
+async fn revoked_phone_clears_its_stale_link_after_authenticated_reconnect() {
+    let pair = LocalPair::start().await;
+    pair.enroll().await;
+    pair.desktop
+        .unlink_device("device-phone")
+        .expect("unlink offline phone");
+
+    let error = probe_coordinator(&pair.phone, super::super::protocol::test_compatibility(), 0)
+        .await
+        .expect_err("revoked phone must be rejected");
+
+    assert!(error.contains("unlinked by the coordinator"));
+    assert!(pair
+        .phone
+        .coordinator_pin()
+        .expect("coordinator pin")
+        .is_none());
+    assert!(pair
+        .phone
+        .revoked_by_coordinator()
+        .expect("revocation status"));
+    assert!(pair
+        .desktop
+        .linked_peers()
+        .expect("linked peers")
+        .is_empty());
+}
+
+#[tokio::test]
 async fn authenticated_control_flow_prepares_commits_and_acknowledges() {
     use super::super::coordinator::{CoordinatorOperation, CoordinatorResponse};
     use super::super::state::PendingAcknowledgement;
