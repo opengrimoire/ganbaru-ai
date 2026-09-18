@@ -1,6 +1,6 @@
 [package]
 name = "ganbaru-ai"
-version = "0.1.7"
+version = "0.1.8"
 description = "Ganbaru AI Tauri application"
 authors = ["Ganbaru AI"]
 license = "AGPL-3.0-only"
