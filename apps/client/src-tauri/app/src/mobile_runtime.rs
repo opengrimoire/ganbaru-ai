@@ -24,12 +24,25 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
         .plugin(tauri_plugin_fs::init());
     let app = builder
         .manage(db_path::DatabaseState::default())
+        .manage(vault::ownership::VaultOwnershipManager::default())
+        .manage(vault::handoff::state::PairingManager::default())
+        .manage(vault::handoff::receiver::ReceiverLifecycle::default())
+        .manage(vault::handoff::source::SourceLifecycle::default())
         .invoke_handler(tauri::generate_handler![
             vault::vault_read_app_state,
             vault::vault_device_id,
             vault::vault_default_location,
             vault::vault_use_default_folder,
             vault::vault_active_info,
+            vault::ownership::vault_ownership_status,
+            vault::handoff::handoff_decode_pairing_qr,
+            vault::handoff::handoff_enroll,
+            vault::handoff::handoff_suggested_device_label,
+            vault::handoff::handoff_pairing_status,
+            vault::handoff::handoff_unlink,
+            vault::handoff::handoff_recover_local_copy,
+            vault::handoff::receiver::handoff_receive_desktop_bundle,
+            vault::handoff::receiver::handoff_cancel_receive,
             vault::vault_pick_open,
             vault::vault_pick_and_read_ics_import,
             vault::vault_pick_and_write_ics_export,
@@ -402,13 +415,22 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             themes::theme_reset_to_seed,
         ])
         .setup(|app| {
+            vault::ownership::initialize(app.handle())?;
+            vault::handoff::initialize(app.handle())?;
             #[cfg(target_os = "android")]
             vault::backup::recover_interrupted_restore_for_app(app.handle())?;
             music::setup_youtube_host(app.handle())?;
+            #[cfg(target_os = "android")]
+            vault::handoff::receiver::start_reconnect_refresh(app.handle().clone());
             Ok(())
         })
         .build(context)
         .expect("error while building Tauri mobile application");
 
-    app.run(|_, _| {});
+    app.run(|_app, _event| {
+        #[cfg(target_os = "android")]
+        if matches!(_event, tauri::RunEvent::Resumed) {
+            vault::handoff::receiver::trigger_coordinator_reconciliation(_app.clone());
+        }
+    });
 }

@@ -13,9 +13,7 @@
     ProjectSection,
     ProjectStatus,
     ProjectTask,
-    ProjectViewId,
   } from "$lib/projects/types";
-  import type { LoadFailure } from "$lib/module-load-recovery";
   import {
     projectCalendarCreateDefaults as buildProjectCalendarCreateDefaults,
     projectEventDurationMinutesInDateRange,
@@ -25,28 +23,18 @@
   } from "$lib/projects/project-toolbar";
   import ProjectEmptyState from "./ProjectEmptyState.svelte";
   import ProjectWorkspaceHeader from "./ProjectWorkspaceHeader.svelte";
-  import type { ProjectDesktopViewComponents } from "./project-desktop-view-components";
+  import type { ProjectViewComponents } from "./project-view-components";
   import { ProjectTaskQueryController } from "./project-task-query-controller.svelte";
   import { ProjectRouteLoadController } from "./project-route-load-controller.svelte";
   import { ProjectRouteUiController } from "./project-route-ui-controller.svelte";
 
-  type ProjectListComponent = typeof import("./ProjectListView.svelte").default;
-  interface MobileViewLoadRecovery {
-    classify(error: unknown): LoadFailure;
-    recover(failure: LoadFailure, retry: () => void): void;
-  }
-
   let {
     mobileLayout = false,
-    listComponent = null,
-    mobileViewLoadRecovery = null,
-    desktopViewComponents = null,
+    viewComponents = null,
     projectChat = null,
   }: {
     mobileLayout?: boolean;
-    listComponent?: ProjectListComponent | null;
-    mobileViewLoadRecovery?: MobileViewLoadRecovery | null;
-    desktopViewComponents?: ProjectDesktopViewComponents | null;
+    viewComponents?: ProjectViewComponents | null;
     projectChat?: ProjectChatIntegration | null;
   } = $props();
 
@@ -59,12 +47,6 @@
   let showInactiveProjects = $state(false);
   let projectCalendarViewMode = $state<CalendarViewMode>("week");
   let projectCalendarViewModeInitialized = false;
-  let MobileDashboardView = $state<typeof import("./ProjectDashboardView.svelte").default | null>(null);
-  let MobileKanbanView = $state<typeof import("./ProjectKanbanView.svelte").default | null>(null);
-  let MobileProjectCalendarView = $state<typeof import("$lib/components/calendar/CalendarView.svelte").default | null>(null);
-  let MobileGanttView = $state<typeof import("./ProjectGanttView.svelte").default | null>(null);
-  let mobileViewLoadError = $state<{ view: ProjectViewId; failure: LoadFailure } | null>(null);
-  const mobileViewLoads = new Map<ProjectViewId, Promise<void>>();
 
   $effect(() => {
     if (projectCalendarViewModeInitialized) return;
@@ -77,48 +59,6 @@
     setActiveView: (view) => { projects.activeView = view; },
   });
 
-  function mobileViewLoaded(view: ProjectViewId): boolean {
-    if (view === "dashboard") return MobileDashboardView !== null;
-    if (view === "kanban") return MobileKanbanView !== null;
-    if (view === "calendar") return MobileProjectCalendarView !== null;
-    if (view === "gantt") return MobileGanttView !== null;
-    return true;
-  }
-
-  function loadMobileView(view: ProjectViewId): Promise<void> {
-    if (view === "list" || mobileViewLoaded(view)) return Promise.resolve();
-    const existing = mobileViewLoads.get(view);
-    if (existing) return existing;
-    mobileViewLoadError = null;
-    const request = (async () => {
-      if (view === "dashboard") {
-        MobileDashboardView = (await import("./ProjectDashboardView.svelte")).default;
-      } else if (view === "kanban") {
-        MobileKanbanView = (await import("./ProjectKanbanView.svelte")).default;
-      } else if (view === "calendar") {
-        MobileProjectCalendarView = (await import("$lib/components/calendar/CalendarView.svelte")).default;
-      } else if (view === "gantt") {
-        MobileGanttView = (await import("./ProjectGanttView.svelte")).default;
-      }
-    })().catch((error: unknown) => {
-      const failure = mobileViewLoadRecovery?.classify(error);
-      if (failure) mobileViewLoadError = { view, failure };
-      throw error;
-    }).finally(() => {
-      mobileViewLoads.delete(view);
-    });
-    mobileViewLoads.set(view, request);
-    return request;
-  }
-
-  $effect(() => {
-    if (!mobileLayout) return;
-    const view = projects.activeView;
-    if (view === "list" || mobileViewLoaded(view)) return;
-    void loadMobileView(view).catch((error: unknown) => {
-      console.error(`load mobile Project ${view} view failed`, error);
-    });
-  });
 
   const toolbarLoadState = $derived(routeLoad.optionalState("toolbar"));
   const bulkActionsLoadState = $derived(routeLoad.optionalState("bulk-actions"));
@@ -493,30 +433,8 @@
       style="background-color: var(--cal-bg);"
     >
       {#if selectedProject && selectedGroup}
-          {#if mobileLayout && mobileViewLoadError?.view === projects.activeView}
-            <div class="flex h-full flex-col items-center justify-center gap-3 p-6 text-center" role="alert">
-              <p class="max-w-sm text-sm text-muted-foreground">{mobileViewLoadError.failure.message}</p>
-              <button
-                type="button"
-                class="min-h-12 rounded-xl border border-border bg-card px-5 text-sm font-medium active:bg-accent"
-                onclick={() => {
-                  const failed = mobileViewLoadError;
-                  if (!failed) return;
-                  const retry = () => {
-                    mobileViewLoadError = null;
-                    void loadMobileView(failed.view).catch((error: unknown) => {
-                      console.error(`retry mobile Project ${failed.view} view failed`, error);
-                    });
-                  };
-                  if (mobileViewLoadRecovery) mobileViewLoadRecovery.recover(failed.failure, retry);
-                  else retry();
-                }}
-              >
-                {t("common.retry")}
-              </button>
-            </div>
-          {:else if projects.activeView === "list"}
-            {@const ProjectListView = mobileLayout ? listComponent : desktopViewComponents?.list ?? null}
+          {#if projects.activeView === "list"}
+            {@const ProjectListView = viewComponents?.list ?? null}
             {#if ProjectListView}
             <ProjectListView
               {mobileLayout}
@@ -551,8 +469,8 @@
                 {t("common.loading")}
               </div>
             {/if}
-          {:else if projects.activeView === "kanban" && (desktopViewComponents?.kanban || MobileKanbanView)}
-            {@const ProjectKanbanView = desktopViewComponents?.kanban ?? MobileKanbanView}
+          {:else if projects.activeView === "kanban" && viewComponents?.kanban}
+            {@const ProjectKanbanView = viewComponents.kanban}
             {#if ProjectKanbanView}
             <ProjectKanbanView
               {mobileLayout}
@@ -568,8 +486,8 @@
               onNeedMore={() => taskQuery.loadNextKanban(routeUi.selectedTaskIds)}
             />
             {/if}
-          {:else if projects.activeView === "calendar" && (desktopViewComponents?.calendar || MobileProjectCalendarView)}
-            {@const CalendarView = desktopViewComponents?.calendar ?? MobileProjectCalendarView}
+          {:else if projects.activeView === "calendar" && viewComponents?.calendar}
+            {@const CalendarView = viewComponents.calendar}
             {#if CalendarView}
             <div class="h-full min-h-112 overflow-hidden">
               <CalendarView
@@ -583,8 +501,8 @@
               />
             </div>
             {/if}
-          {:else if projects.activeView === "gantt" && (desktopViewComponents?.gantt || MobileGanttView)}
-            {@const ProjectGanttView = desktopViewComponents?.gantt ?? MobileGanttView}
+          {:else if projects.activeView === "gantt" && viewComponents?.gantt}
+            {@const ProjectGanttView = viewComponents.gantt}
             {#if ProjectGanttView}
             <ProjectGanttView
               tasks={tasks}
@@ -597,8 +515,8 @@
               }}
             />
             {/if}
-          {:else if projects.activeView === "dashboard" && (desktopViewComponents?.dashboard || MobileDashboardView)}
-            {@const ProjectDashboardView = desktopViewComponents?.dashboard ?? MobileDashboardView}
+          {:else if projects.activeView === "dashboard" && viewComponents?.dashboard}
+            {@const ProjectDashboardView = viewComponents.dashboard}
             {#if ProjectDashboardView}
             <ProjectDashboardView
               {mobileLayout}

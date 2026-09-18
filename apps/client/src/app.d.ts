@@ -17,9 +17,15 @@ declare global {
     setLightTheme(lightTheme: boolean): void;
   }
 
+  interface GanbaruAndroidTransitionBridge {
+    holdCurrentFrame(): void;
+    releaseHeldFrame(): void;
+  }
+
   interface Window {
     GanbaruAndroidInsets?: GanbaruAndroidInsetsBridge;
     GanbaruAndroidAppearance?: GanbaruAndroidAppearanceBridge;
+    GanbaruAndroidTransition?: GanbaruAndroidTransitionBridge;
   }
 
   const __GANBARU_AI_BUILD_REF__: string;

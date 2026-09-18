@@ -18,6 +18,8 @@ import android.telecom.TelecomManager
 import android.view.accessibility.AccessibilityManager
 import java.time.Instant
 import java.time.ZoneId
+import org.json.JSONArray
+import org.json.JSONObject
 
 internal const val ACTION_DOOMSCROLLING_PHASE = "app.ganbaru.intent.action.DOOMSCROLLING_PHASE"
 internal const val ACTION_DOOMSCROLLING_PHASE_CLEAR =
@@ -33,6 +35,7 @@ private const val PHASE_KIND_KEY = "phaseKind"
 private const val PHASE_RUNNING_KEY = "phaseRunning"
 private const val PHASE_VALID_UNTIL_KEY = "phaseValidUntil"
 private const val NOTIFICATION_TIMESTAMPS_KEY = "notificationTimestamps"
+private const val COMBINED_USAGE_BASELINES_KEY = "combinedUsageBaselines"
 private const val BLOCK_CHANNEL_ID = "doomscrolling-blocks-v1"
 private const val BLOCK_NOTIFICATION_BASE_ID = 1_500_100_000
 
@@ -45,9 +48,36 @@ internal object DoomscrollingRuntimeStore {
     if (incompletePreviousRules || (previousVaultId != null && previousVaultId != next.vaultId)) {
       DoomscrollingJournal(context).clearTotalsAndCheckpoints()
     }
+    val baselines = JSONObject().apply {
+      put("revision", next.revision)
+      put("items", JSONArray().apply {
+        val journal = DoomscrollingJournal(context)
+        for (limit in next.limits) {
+          for ((period, accepted) in listOf(
+            "day" to limit.acceptedDailyUsage,
+            "week" to limit.acceptedWeeklyUsage,
+          )) {
+            if (accepted == null) continue
+            put(JSONObject().apply {
+              put("limitId", limit.id)
+              put("period", period)
+              put("windowStartLocalDate", accepted.windowStartLocalDate)
+              put("windowEndLocalDate", accepted.windowEndLocalDate)
+              put("acceptedUsedSeconds", accepted.usedSeconds)
+              put("localUsedSeconds", journal.usedSeconds(
+                limit.packages,
+                accepted.windowStartLocalDate,
+                accepted.windowEndLocalDate,
+              ))
+            })
+          }
+        }
+      })
+    }
     check(prefs.edit()
       .putString(RULES_KEY, encoded)
       .putString(RULES_VAULT_ID_KEY, next.vaultId)
+      .putString(COMBINED_USAGE_BASELINES_KEY, baselines.toString())
       .commit()) { "Doomscrolling rule snapshot could not be persisted" }
   }
 
@@ -58,6 +88,34 @@ internal object DoomscrollingRuntimeStore {
     } catch (_: Exception) {
       null
     }
+  }
+
+  fun combinedUsedSeconds(
+    context: Context,
+    rules: DoomscrollingRulesSnapshot,
+    limit: MobileLimit,
+    period: String,
+    accepted: AcceptedUsage,
+    currentLocalUsedSeconds: Int,
+  ): Int {
+    val encoded = preferences(context).getString(COMBINED_USAGE_BASELINES_KEY, null)
+      ?: return currentLocalUsedSeconds
+    val baseline = runCatching {
+      val root = JSONObject(encoded)
+      if (root.getString("revision") != rules.revision) return@runCatching null
+      val items = root.getJSONArray("items")
+      (0 until items.length()).asSequence()
+        .map(items::getJSONObject)
+        .firstOrNull {
+          it.getString("limitId") == limit.id &&
+            it.getString("period") == period &&
+            it.getString("windowStartLocalDate") == accepted.windowStartLocalDate &&
+            it.getString("windowEndLocalDate") == accepted.windowEndLocalDate
+        }
+    }.getOrNull() ?: return currentLocalUsedSeconds
+    val acceptedUsed = baseline.getInt("acceptedUsedSeconds")
+    val localAtAcceptance = baseline.getInt("localUsedSeconds")
+    return combinedUsageSinceAcceptance(acceptedUsed, localAtAcceptance, currentLocalUsedSeconds)
   }
 
   fun savePhase(
@@ -401,10 +459,40 @@ internal class DoomscrollingEngine(private val context: Context) {
     for (limit in rules.limits) {
       if (!limit.enabled || packageName.lowercase() !in limit.packages) continue
       val dailyExhausted = limit.minutesPerDay?.let {
-        journal.usedSeconds(limit.packages, localDate, localDate) >= it * 60
+        val localUsed = journal.usedSeconds(limit.packages, localDate, localDate)
+        val combinedUsed = limit.acceptedDailyUsage
+          ?.takeIf { accepted ->
+            accepted.windowStartLocalDate == localDate && accepted.windowEndLocalDate == localDate
+          }
+          ?.let { accepted ->
+            DoomscrollingRuntimeStore.combinedUsedSeconds(
+              context,
+              rules,
+              limit,
+              "day",
+              accepted,
+              localUsed,
+            )
+          } ?: localUsed
+        combinedUsed >= it * 60
       } ?: false
       val weeklyExhausted = limit.minutesPerWeek?.let {
-        journal.usedSeconds(limit.packages, weekStart, localDate) >= it * 60
+        val localUsed = journal.usedSeconds(limit.packages, weekStart, localDate)
+        val combinedUsed = limit.acceptedWeeklyUsage
+          ?.takeIf { accepted ->
+            accepted.windowStartLocalDate == weekStart && accepted.windowEndLocalDate == localDate
+          }
+          ?.let { accepted ->
+            DoomscrollingRuntimeStore.combinedUsedSeconds(
+              context,
+              rules,
+              limit,
+              "week",
+              accepted,
+              localUsed,
+            )
+          } ?: localUsed
+        combinedUsed >= it * 60
       } ?: false
       if (dailyExhausted || weeklyExhausted) {
         return BlockDecision(true, "usage_limit", limit.id)

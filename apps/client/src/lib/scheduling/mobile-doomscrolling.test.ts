@@ -101,4 +101,26 @@ describe("mobile Doomscrolling rule projection", () => {
 
     expect(snapshot.limits.items.map((limit) => limit.id)).toEqual(["video"]);
   });
+
+  it("projects accepted combined counters for offline native enforcement", () => {
+    const snapshot = buildMobileDoomscrollingSnapshot(config(), "vault-android", 1, [{
+      limitId: "video",
+      period: "day",
+      windowStartLocalDate: "2026-09-13",
+      windowEndLocalDate: "2026-09-13",
+      usedSeconds: 900,
+      limitSeconds: 1_200,
+      remainingSeconds: 300,
+      exhausted: false,
+    }]);
+
+    expect(snapshot.limits.items[0]?.acceptedUsage).toEqual({
+      day: {
+        windowStartLocalDate: "2026-09-13",
+        windowEndLocalDate: "2026-09-13",
+        usedSeconds: 900,
+      },
+      week: null,
+    });
+  });
 });

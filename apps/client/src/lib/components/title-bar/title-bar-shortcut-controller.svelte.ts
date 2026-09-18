@@ -8,6 +8,36 @@ import { isEditableKeyboardTarget } from "$lib/utils";
 const RESET_REQUIRED_PRESSES = 10;
 const RESET_WINDOW_MS = 8_000;
 
+type AppCloseRequestHandler = () => Promise<void>;
+
+/** Coordinates close requests that originate above the desktop shell. */
+class AppCloseCoordinator {
+  confirmationOpen = $state(false);
+  private requestHandler: AppCloseRequestHandler | null = null;
+
+  registerRequestHandler(handler: AppCloseRequestHandler): () => void {
+    this.requestHandler = handler;
+    return () => {
+      if (this.requestHandler === handler) this.requestHandler = null;
+      this.confirmationOpen = false;
+    };
+  }
+
+  request(): Promise<void> {
+    return this.requestHandler?.() ?? Promise.resolve();
+  }
+
+  setConfirmationOpen(open: boolean): void {
+    this.confirmationOpen = open;
+  }
+}
+
+const appClose = new AppCloseCoordinator();
+
+export function getAppCloseCoordinator(): AppCloseCoordinator {
+  return appClose;
+}
+
 export interface TitleBarShortcutControllerContext {
   benchmarkLocked: () => boolean;
   themeEditorLocked: () => boolean;

@@ -15,6 +15,11 @@ import HardDrive from "@lucide/svelte/icons/hard-drive";
 import type { SectionId } from "./types";
 import type { PlatformShell } from "$lib/platform";
 
+type DataSectionComponent = typeof import("./DataSection.svelte").default;
+
+let loadedDataSection: DataSectionComponent | null = null;
+let dataSectionLoadRequest: Promise<DataSectionComponent> | null = null;
+
 export interface SettingsSectionMeta {
   id: SectionId;
   labelKey: `settings.section.${SectionId}`;
@@ -41,4 +46,23 @@ export const SETTINGS_SECTIONS: SettingsSectionMeta[] = [
 export function settingsSectionsForShell(shell: PlatformShell): readonly SettingsSectionMeta[] {
   if (shell === "desktop") return SETTINGS_SECTIONS;
   return SETTINGS_SECTIONS.filter((section) => section.id !== "shortcuts");
+}
+
+/** Loads desktop Data settings once and retains its constructor for synchronous reuse. */
+export function preloadDataSection(): Promise<DataSectionComponent> {
+  dataSectionLoadRequest ??= import("./DataSection.svelte")
+    .then((module) => {
+      loadedDataSection = module.default;
+      return loadedDataSection;
+    })
+    .catch((error: unknown) => {
+      dataSectionLoadRequest = null;
+      throw error;
+    });
+  return dataSectionLoadRequest;
+}
+
+/** Returns the preloaded desktop Data constructor without creating a promise. */
+export function getPreloadedDataSection(): DataSectionComponent | null {
+  return loadedDataSection;
 }

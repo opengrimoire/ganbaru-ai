@@ -34,7 +34,7 @@ pub fn ensure_managed_working_folder_binding<R: Runtime>(
     if relative_path != expected {
         return Err(path_validation_error());
     }
-    let vault_root = vault::active_vault_path(app).map_err(device_state_error)?;
+    let vault_root = vault::active_writable_vault_path(app).map_err(device_state_error)?;
     let folder_path = vault_root.join(relative_path);
     fs::create_dir_all(&folder_path).map_err(|_| {
         ChatError::new(

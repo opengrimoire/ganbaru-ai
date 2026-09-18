@@ -23,8 +23,9 @@ The current source is substantially implemented but the Android product is not y
 | Provider-free Chat channels, messages, replies, search, drafts, and scheduling | Implemented through the shared responsive workspace |
 | Local coding-agent processes, PTYs, Git, terminals, and working folders | Intentionally unavailable |
 | Doomscrolling selected-app usage and Home redirection | Implemented in source; policy and physical acceptance remain |
+| Local multi-device linking, whole-vault ownership handoff, and read-only refresh | Implemented in source; physical multi-device acceptance remains |
 | Browser filtering on Android | Planned |
-| Sync, remote execution, diary, and sleep alarm | Planned |
+| Concurrent sync, remote execution, diary, and sleep alarm | Planned |
 
 ## Product boundary
 
@@ -37,7 +38,7 @@ Android 10, API level 29, is the minimum supported version. The app uses one Act
 - Canonical user data stays in the active vault.
 - The default Android vault is application-private and can be removed by uninstall.
 - Portable backup and restore are explicit user workflows.
-- The app does not request broad storage, broad package visibility, overlay, screen capture, contacts, microphone, camera, or location authority for current features.
+- The app does not request broad storage, broad package visibility, overlay, screen capture, contacts, microphone, or location authority. Camera access is requested only from the user-initiated desktop-linking QR scanner.
 - Desktop processes and capabilities are excluded at build time, not merely hidden in the UI.
 - JavaScript timers do not own background deadlines.
 - Permission denial leaves truthful recovery and useful unaffected features.

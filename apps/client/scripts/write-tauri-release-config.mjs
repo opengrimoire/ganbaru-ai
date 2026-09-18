@@ -21,6 +21,10 @@ const PACKAGE_REPO_PUBLIC_KEY_BUNDLE_SOURCE =
   "package-repo/ganbaru-ai-package-repo.asc";
 const PACKAGE_REPO_PUBLIC_KEY_INSTALL_PATH =
   "/usr/lib/ganbaru-ai/package-repo/ganbaru-ai-package-repo.asc";
+const POLKIT_POLICY_BUNDLE_SOURCE =
+  "package-scripts/linux/org.opengrimoire.ganbaruai.policy";
+const POLKIT_POLICY_INSTALL_PATH =
+  "/usr/share/polkit-1/actions/org.opengrimoire.ganbaruai.policy";
 const GITHUB_REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 
 /**
@@ -86,6 +90,7 @@ const config = {
       deb: {
         files: {
           [PACKAGE_REPO_PUBLIC_KEY_INSTALL_PATH]: PACKAGE_REPO_PUBLIC_KEY_BUNDLE_SOURCE,
+          [POLKIT_POLICY_INSTALL_PATH]: POLKIT_POLICY_BUNDLE_SOURCE,
         },
         postInstallScript: "package-scripts/deb/postinst",
         postRemoveScript: "package-scripts/deb/postrm",
@@ -93,6 +98,7 @@ const config = {
       rpm: {
         files: {
           [PACKAGE_REPO_PUBLIC_KEY_INSTALL_PATH]: PACKAGE_REPO_PUBLIC_KEY_BUNDLE_SOURCE,
+          [POLKIT_POLICY_INSTALL_PATH]: POLKIT_POLICY_BUNDLE_SOURCE,
         },
         postInstallScript: "package-scripts/rpm/postinstall.sh",
         postRemoveScript: "package-scripts/rpm/postremove.sh",

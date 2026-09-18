@@ -117,9 +117,10 @@ fn force_quit(
 /// Used to reset structured data without deleting the Ganbaru AI folder.
 #[tauri::command]
 async fn reset_database(app: tauri::AppHandle) -> Result<(), String> {
+    let writable_vault = vault::active_writable_vault_path(&app)?;
     doomscrolling::clear_doomscrolling_enforcement_state(&app)?;
     db_path::close_all_sqlite_pools(&app).await?;
-    let db_path = vault::active_database_path(&app)?;
+    let db_path = writable_vault.as_ref().join(vault::APP_SQLITE_FILE);
 
     for suffix in &["", "-wal", "-shm"] {
         let mut path = db_path.clone();
@@ -762,6 +763,11 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .manage(db_path::DatabaseState::default())
+        .manage(vault::ownership::VaultOwnershipManager::default())
+        .manage(vault::handoff::state::PairingManager::default())
+        .manage(vault::handoff::CoordinatorLifecycle::default())
+        .manage(vault::handoff::receiver::ReceiverLifecycle::default())
+        .manage(vault::handoff::source::SourceLifecycle::default())
         .manage(notification::AppSoundState::default())
         .manage(notification::PomodoroOverlayState::default())
         .manage(media_player::MediaPlayerState::default())
@@ -1131,6 +1137,21 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             vault::vault_default_location,
             vault::vault_use_default_folder,
             vault::vault_active_info,
+            vault::ownership::vault_ownership_status,
+            vault::handoff::handoff_create_pairing_invitation,
+            #[cfg(target_os = "linux")]
+            vault::handoff::handoff_grant_network_access,
+            #[cfg(target_os = "linux")]
+            vault::handoff::handoff_revoke_network_access,
+            vault::handoff::handoff_decode_pairing_qr,
+            vault::handoff::handoff_enroll,
+            vault::handoff::handoff_suggested_device_label,
+            vault::handoff::handoff_pairing_status,
+            vault::handoff::handoff_unlink,
+            vault::handoff::handoff_recover_local_copy,
+            vault::handoff::handoff_request_owner_bundle,
+            vault::handoff::receiver::handoff_receive_desktop_bundle,
+            vault::handoff::receiver::handoff_cancel_receive,
             vault::vault_pick_create,
             vault::vault_pick_open,
             vault::vault_select_recent,
@@ -1421,6 +1442,11 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             themes::theme_reset_to_seed,
         ])
         .setup(|app| {
+            vault::ownership::initialize(app.handle())?;
+            vault::handoff::initialize(app.handle())?;
+            if let Err(error) = vault::handoff::start_desktop(app.handle()) {
+                eprintln!("vault handoff coordinator is unavailable: {error}");
+            }
             clear_doomscrolling_enforcement_state_best_effort(app.handle(), "during startup");
             schedule_main_window_reveal_fallback(app.handle());
             chat::revocation::start_startup_recovery(app.handle());
@@ -1489,6 +1515,9 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             app_handle
                 .state::<chat::preview::ChatPreviewManager>()
                 .close_all(app_handle);
+            app_handle
+                .state::<vault::handoff::CoordinatorLifecycle>()
+                .stop();
             clear_doomscrolling_enforcement_state_best_effort(app_handle, "before app exit");
         }
     });

@@ -22,6 +22,7 @@ mod db;
 mod db_path;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod doomscrolling;
+mod doomscrolling_linked;
 #[cfg(any(target_os = "android", all(test, not(target_os = "ios"))))]
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 mod doomscrolling_mobile;
@@ -79,6 +80,10 @@ mod mobile_runtime_typecheck;
 pub use desktop_runtime::run;
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub use mobile_runtime::run;
+#[cfg(target_os = "linux")]
+pub fn run_privileged_helper_if_requested() -> Option<Result<(), String>> {
+    vault::handoff::run_privileged_helper_if_requested()
+}
 
 #[cfg(test)]
 mod composition_tests {

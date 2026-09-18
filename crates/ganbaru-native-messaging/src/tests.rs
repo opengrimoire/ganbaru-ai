@@ -214,7 +214,7 @@ fn records_block_event_to_sqlite_without_full_url() {
 }
 
 #[test]
-fn usage_samples_require_the_migrated_application_schema() {
+fn usage_samples_are_spooled_outside_the_vault_until_the_app_acknowledges_them() {
     let vault_path = std::env::temp_dir().join(format!(
         "ganbaru-ai-native-usage-sample-{}-{}",
         std::process::id(),
@@ -222,9 +222,16 @@ fn usage_samples_require_the_migrated_application_schema() {
     ));
     let _ = std::fs::remove_dir_all(&vault_path);
     std::fs::create_dir_all(&vault_path).unwrap();
+    let config_path = vault_path.join("device-state");
+    std::fs::create_dir_all(&config_path).unwrap();
+    std::fs::write(vault_path.join("vault.json"), r#"{"vaultId":"vault-test"}"#).unwrap();
+    std::fs::write(
+        config_path.join("app-state.json"),
+        r#"{"deviceId":"desktop-test","activeVaultPath":null}"#,
+    )
+    .unwrap();
     let db_path = vault_path.join("ganbaru-ai.sqlite");
     std::fs::File::create(&db_path).unwrap();
-    let db_url = format!("sqlite:{}", db_path.to_string_lossy());
     let sample = || super::UsageSample {
         id: "sample-1".to_string(),
         source_type: "website".to_string(),
@@ -236,40 +243,83 @@ fn usage_samples_require_the_migrated_application_schema() {
         created_at: 1_700_000_030_000,
     };
 
-    assert!(super::record_usage_sample(Some(&vault_path), None, sample()).is_err());
-    super::block_on(async {
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(&db_url)
-            .await
-            .unwrap();
-        let table_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM sqlite_schema
-             WHERE type = 'table' AND name = 'doomscrolling_usage_samples'",
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-        assert_eq!(table_count, 0);
-        APP_MIGRATOR.run(&pool).await.unwrap();
-        pool.close().await;
-    });
-    super::record_usage_sample(Some(&vault_path), None, sample()).unwrap();
+    assert!(super::record_usage_sample(None, Some(&vault_path), sample()).is_err());
+    super::record_usage_sample(Some(&config_path), Some(&vault_path), sample()).unwrap();
 
     super::block_on(async {
+        let spool_url = format!(
+            "sqlite:{}",
+            config_path
+                .join("doomscrolling-device-spool.sqlite")
+                .to_string_lossy()
+        );
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)
-            .connect(&db_url)
+            .connect(&spool_url)
             .await
             .unwrap();
-        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM doomscrolling_usage_samples")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        assert_eq!(count, 1);
+        let row =
+            sqlx::query("SELECT vault_id, device_id, elapsed_seconds FROM pending_usage_samples")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(row.try_get::<String, _>("vault_id").unwrap(), "vault-test");
+        assert_eq!(
+            row.try_get::<String, _>("device_id").unwrap(),
+            "desktop-test"
+        );
+        assert_eq!(row.try_get::<i64, _>("elapsed_seconds").unwrap(), 30);
         pool.close().await;
     });
     let _ = std::fs::remove_dir_all(&vault_path);
+}
+
+#[test]
+fn retried_browser_usage_keeps_the_same_device_sample_id() {
+    let request = super::NativeRequest {
+        message_type: "record_usage".to_string(),
+        url: None,
+        host: None,
+        log_event: None,
+        source_type: Some("website".to_string()),
+        source_key: Some("example.com".to_string()),
+        display_name: Some("Example".to_string()),
+        elapsed_seconds: Some(30),
+        started_at: Some(1_700_000_000_000),
+        local_date: Some("2026-06-10".to_string()),
+    };
+    let first = super::normalize_usage_sample(&request).unwrap();
+    let retry = super::normalize_usage_sample(&request).unwrap();
+    assert_eq!(first.id, retry.id);
+}
+
+#[test]
+fn native_vault_writes_require_stable_local_ownership() {
+    let root = std::env::temp_dir().join(format!(
+        "ganbaru-ai-native-ownership-{}-{}",
+        std::process::id(),
+        super::now_epoch_ms()
+    ));
+    let config = root.join("config");
+    let vault = root.join("vault");
+    std::fs::create_dir_all(&config).unwrap();
+    std::fs::create_dir_all(&vault).unwrap();
+    std::fs::write(
+        config.join("app-state.json"),
+        r#"{"deviceId":"desktop","activeVaultPath":null}"#,
+    )
+    .unwrap();
+    std::fs::write(vault.join("vault.json"), r#"{"vaultId":"vault"}"#).unwrap();
+    let ownership = |owner: &str| {
+        format!(
+            r#"{{"schemaVersion":1,"vaults":{{"vault":{{"vaultId":"vault","ownerDeviceId":"{owner}","generation":1,"transferPhase":{{"kind":"stable"}}}}}}}}"#
+        )
+    };
+    std::fs::write(config.join("vault-ownership.json"), ownership("desktop")).unwrap();
+    assert!(super::native_vault_is_writable(&config, Some(&vault)));
+    std::fs::write(config.join("vault-ownership.json"), ownership("phone")).unwrap();
+    assert!(!super::native_vault_is_writable(&config, Some(&vault)));
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]

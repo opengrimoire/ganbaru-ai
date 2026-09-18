@@ -35,7 +35,7 @@ pub async fn notes_pick_page_icon_file<R: Runtime>(
         .map(ToOwned::to_owned);
     let bytes = ganbaru_notes::notes::page_icon_assets::read_file_capped(&path)?;
     let pool = connect_sqlite(app.clone(), db_url).await?;
-    let vault_root = vault::active_vault_path(&app)?;
+    let vault_root = vault::active_writable_vault_path(&app)?;
     ganbaru_notes::notes::page_icon_assets::save_page_icon_bytes(
         &pool,
         &vault_root,
@@ -55,7 +55,7 @@ pub async fn notes_save_page_icon_data_url<R: Runtime>(
 ) -> Result<NotePageIconAssetDto, String> {
     let bytes = ganbaru_notes::notes::page_icon_assets::decode_page_icon_data_url(&data_url)?;
     let pool = connect_sqlite(app.clone(), db_url).await?;
-    let vault_root = vault::active_vault_path(&app)?;
+    let vault_root = vault::active_writable_vault_path(&app)?;
     ganbaru_notes::notes::page_icon_assets::save_page_icon_bytes(
         &pool,
         &vault_root,

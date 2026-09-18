@@ -19,6 +19,7 @@ The current repository has a substantial local desktop and Android foundation:
 - Local Music library and playlist workflows, desktop audio playback and media controls, Android Media3 playback, and YouTube IFrame integration with a known interaction-compliance redesign requirement.
 - Chromium website blocking, desktop application blocking, Android selected-application usage awareness, and explicitly consented Android enforcement.
 - An adaptive Android shell for Calendar, Projects, Notes, Chat, Quick notes, Pomodoro, Music, Settings, themes, portable backup and restore, notifications, and Doomscrolling controls.
+- A source-complete private-LAN whole-vault handoff coordinated by one administration desktop for a bounded membership of desktop and Android clients, with QR or complete-code pairing, explicit single-writer ownership, read-only refresh, recovery, and combined Doomscrolling usage. Physical multi-device acceptance remains pending.
 
 Implemented does not mean release-complete on every platform. The [feature index](features/README.md) and [Android platform document](platforms/android/README.md) identify partial areas and platform limits.
 
@@ -34,11 +35,11 @@ These domains already have useful implementations but still need hardening or mi
 
 See [Calendar](features/calendar/README.md), [Pomodoro](features/pomodoro/README.md), [recurrence expansion](algorithms/calendar/recurrence-expansion.md), and [time-conflict detection](algorithms/calendar/time-conflict-detection.md).
 
-### Local device linking and synchronization
+### Concurrent device synchronization
 
-Implement the accepted one-person device-linking design with typed domain operations, SQLite-persisted Yrs/Yjs text, secure local enrollment, and an optional user-hosted Rust relay for opaque encrypted records. Hocuspocus is no longer the relay candidate.
+Build concurrent one-person synchronization beyond the implemented local single-writer whole-vault handoff. The future design uses typed domain operations, SQLite-persisted Yrs/Yjs text, end-to-end encrypted enrollment, and an optional user-hosted Rust relay for opaque encrypted records. Hocuspocus is no longer the relay candidate.
 
-The synchronization mechanisms remain unimplemented. Prerequisites are partial: focus persistence and recovery live in Rust, Android uses explicit starts and commitment reminders, desktop automatic admission requires fresh activity, and authoritative SQLite connections use durable commits. Scoped preferences, the transactional operation journal, domain convergence, cryptographic enrollment, explicit focus-controller ownership, native runtime bridges, and relay delivery remain required. The [sync milestone table](data/sync.md#delivery-and-acceptance) tracks the implemented boundary and remaining work.
+Concurrent synchronization remains unimplemented. The current handoff moves one validated complete vault and permits only one writer, so it does not provide CRDT editing, conflict resolution, asynchronous delivery, or cloud access. Scoped preferences, the transactional operation journal, domain convergence, cryptographic writer and key lifecycle, explicit focus-controller ownership, native runtime bridges, and relay delivery remain required. The [sync milestone table](data/sync.md#delivery-and-acceptance) tracks the implemented boundary and remaining work.
 
 ### Android release readiness
 

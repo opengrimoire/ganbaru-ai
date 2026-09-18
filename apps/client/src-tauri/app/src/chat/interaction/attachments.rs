@@ -37,7 +37,7 @@ pub(crate) async fn import_image(
         WorkingFolderAuthorizationOperation::FileRead,
     )
     .await?;
-    let vault_root = vault::active_vault_path(&app).map_err(vault_error)?;
+    let vault_root = vault::active_writable_vault_path(&app).map_err(vault_error)?;
     let now = now_timestamp()?;
     attachments::import_attachment_bytes(
         &pool,
@@ -106,7 +106,7 @@ pub(crate) async fn pick_images(
         WorkingFolderAuthorizationOperation::FileRead,
     )
     .await?;
-    let vault_root = vault::active_vault_path(&app).map_err(vault_error)?;
+    let vault_root = vault::active_writable_vault_path(&app).map_err(vault_error)?;
     let mut total_bytes = 0_u64;
     for path in &selected {
         let metadata = fs::symlink_metadata(path).map_err(attachment_io_error)?;
@@ -237,7 +237,7 @@ pub(crate) async fn import_text_snippet(
     let now = now_timestamp()?;
     attachments::import_attachment_bytes(
         &pool,
-        &vault::active_vault_path(&app).map_err(vault_error)?,
+        &vault::active_writable_vault_path(&app).map_err(vault_error)?,
         attachments::AttachmentBytesImport {
             working_folder_id: &request.working_folder_id,
             attachment_id: request.attachment_id,

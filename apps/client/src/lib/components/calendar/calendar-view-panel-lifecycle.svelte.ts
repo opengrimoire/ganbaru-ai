@@ -91,6 +91,15 @@ export class CalendarViewPanelLifecycle {
     return requestId === this.requestId;
   }
 
+  /** Release interaction state after the current panel open fails. */
+  recoverFailedOpen(requestId: number): boolean {
+    if (!this.isCurrent(requestId)) return false;
+    this.invalidate();
+    this.surfaceStatus = undefined;
+    this.surfaceStatusEventId = undefined;
+    return true;
+  }
+
   markDetailsReady(requestId: number, found: boolean): void {
     if (this.isCurrent(requestId)) {
       this.options.mark("panel.details-ready", { found: found ? 1 : 0, request: requestId });

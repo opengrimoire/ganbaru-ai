@@ -46,6 +46,14 @@ fn active_profile_image_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, S
         .join(PROFILE_IMAGE_DIR))
 }
 
+fn active_writable_profile_image_dir<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<vault::WritableVaultPath, String> {
+    Ok(vault::active_writable_vault_path(app)?
+        .join("assets")
+        .join(PROFILE_IMAGE_DIR))
+}
+
 fn validate_profile_image_relative_path(relative_path: &str) -> Result<&str, String> {
     let relative_path = relative_path.trim();
     let prefix = format!("{PROFILE_IMAGE_DIR}/");
@@ -168,7 +176,7 @@ fn save_profile_image_bytes<R: Runtime>(
     let kind = validate_profile_image(&bytes)?.kind;
     let file_name = format!("{}.{}", content_hash(&bytes), kind.extension());
     let relative_path = format!("{PROFILE_IMAGE_DIR}/{file_name}");
-    let path = active_profile_image_dir(app)?.join(file_name);
+    let path = active_writable_profile_image_dir(app)?.join(file_name);
     if !path.exists() {
         write_binary_file_atomically(&path, &bytes)?;
     }
@@ -260,6 +268,7 @@ pub fn profile_image_delete_file<R: Runtime>(
     app: AppHandle<R>,
     relative_path: String,
 ) -> Result<(), String> {
+    let _write_permit = vault::active_writable_vault_path(&app)?;
     let path = profile_image_asset_path(&app, &relative_path)?;
     if path.exists() {
         fs::remove_file(path).map_err(|error| format!("delete profile image: {error}"))?;

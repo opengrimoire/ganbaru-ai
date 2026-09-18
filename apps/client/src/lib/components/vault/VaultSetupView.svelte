@@ -34,7 +34,7 @@
     onReady,
   }: {
     initialError?: string | null;
-    onReady: (info: DataFolderInfo) => void;
+    onReady: (info: DataFolderInfo, preparation: Promise<void>) => void | Promise<void>;
   } = $props();
 
   const appWindow = getCurrentWindow();
@@ -129,7 +129,6 @@
   async function chooseDataFolder(mode: "default" | "change" | "import"): Promise<void> {
     if (busy) return;
     busy = mode;
-    setupError = null;
     try {
       const info =
         mode === "default"
@@ -138,8 +137,9 @@
             ? await pickDataFolderLocation()
             : await importDataFolder();
       if (info) {
-        await persistPreVaultLanguagePreference();
-        onReady(info);
+        const preparation = persistPreVaultLanguagePreference();
+        void preparation.catch(() => undefined);
+        await onReady(info, preparation);
       }
     } catch (err) {
       setupError = { raw: err, action: mode };

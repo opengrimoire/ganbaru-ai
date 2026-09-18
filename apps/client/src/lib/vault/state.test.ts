@@ -79,9 +79,18 @@ describe("data folder state api", () => {
       vaultId: "vault-1",
       displayName: "Ganbaru AI",
     });
-    const { getActiveVaultInfo } = await loadModule();
+    const { getActiveVaultInfo, getCachedActiveVaultInfo } = await loadModule();
+
+    expect(getCachedActiveVaultInfo()).toBeUndefined();
 
     await expect(getActiveVaultInfo()).resolves.toEqual({
+      path: "/home/user/Documents/Ganbaru AI",
+      configPath: "/home/user/Documents/Ganbaru AI/config.json",
+      databasePath: "/home/user/Documents/Ganbaru AI/ganbaru-ai.sqlite",
+      vaultId: "vault-1",
+      displayName: "Ganbaru AI",
+    });
+    expect(getCachedActiveVaultInfo()).toEqual({
       path: "/home/user/Documents/Ganbaru AI",
       configPath: "/home/user/Documents/Ganbaru AI/config.json",
       databasePath: "/home/user/Documents/Ganbaru AI/ganbaru-ai.sqlite",
@@ -117,5 +126,45 @@ describe("data folder state api", () => {
       folderName: "Ganbaru AI",
       developmentBuild: false,
     });
+  });
+
+  it("validates the native vault ownership status", async () => {
+    invokeMock.mockResolvedValue({
+      vaultId: "vault-1",
+      deviceId: "phone",
+      ownerDeviceId: "desktop",
+      generation: 4,
+      role: "read-only",
+      canWrite: false,
+      transferPhase: { kind: "stable" },
+    });
+    const { getVaultOwnershipStatus } = await loadModule();
+
+    await expect(getVaultOwnershipStatus()).resolves.toEqual({
+      vaultId: "vault-1",
+      deviceId: "phone",
+      ownerDeviceId: "desktop",
+      generation: 4,
+      role: "read-only",
+      canWrite: false,
+      transferPhase: { kind: "stable" },
+    });
+  });
+
+  it("rejects inconsistent writable ownership responses", async () => {
+    invokeMock.mockResolvedValue({
+      vaultId: "vault-1",
+      deviceId: "phone",
+      ownerDeviceId: "desktop",
+      generation: 4,
+      role: "read-only",
+      canWrite: true,
+      transferPhase: { kind: "stable" },
+    });
+    const { getVaultOwnershipStatus } = await loadModule();
+
+    await expect(getVaultOwnershipStatus()).rejects.toThrow(
+      "vault ownership response has an inconsistent role",
+    );
   });
 });

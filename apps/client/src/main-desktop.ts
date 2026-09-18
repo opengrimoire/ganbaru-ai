@@ -1,8 +1,6 @@
 import { Temporal } from "@js-temporal/polyfill";
 (globalThis as unknown as { Temporal: typeof Temporal }).Temporal = Temporal;
-import "@fontsource-variable/inter";
-import "./app.css";
-import { mount } from "svelte";
+import { mount, unmount } from "svelte";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ensureConfigLoaded, flushConfig } from "./lib/vault/config";
@@ -90,6 +88,21 @@ function safeStorage(): Storage | undefined {
   }
 }
 
+async function finishVaultOwnershipTransition(): Promise<void> {
+  const cover = document.getElementById("vault-ownership-transition-cover");
+  const storageKey = cover?.dataset.storageKey;
+  await document.fonts.ready;
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  cover?.remove();
+  if (!storageKey) return;
+  try {
+    window.sessionStorage.removeItem(storageKey);
+  } catch {
+    // The cover can still be removed when session storage is unavailable.
+  }
+}
+
 async function applyPreVaultLanguagePreference(): Promise<void> {
   const storage = safeStorage();
   const preference = readPreVaultLanguagePreference(storage);
@@ -105,6 +118,9 @@ async function applyPreVaultLanguagePreference(): Promise<void> {
 // reads block first paint so the initial render matches what the user has on
 // disk, with no flash of defaults.
 const appPromise = (async () => {
+  const target = document.getElementById("app")!;
+  type MountedRoot = ReturnType<typeof mount>;
+
   const preVaultPreference = readPreVaultLanguagePreference(safeStorage());
   await getLocalization().setLanguagePreference(
     preVaultPreference ?? DEFAULT_LANGUAGE_PREFERENCE,
@@ -132,18 +148,77 @@ const appPromise = (async () => {
   }
 
   async function mountVaultSetupView(initialError: string | null) {
+    const handoffOnboardingModulePromise = import(
+      "$lib/components/vault/VaultHandoffOnboardingView.svelte"
+    );
+    void handoffOnboardingModulePromise.catch(() => undefined);
+    const pairingQrModulePromise = import("$lib/components/vault/PairingQrCode.svelte");
+    void pairingQrModulePromise.catch(() => undefined);
     const { default: VaultSetupView } = await import(
       "$lib/components/vault/VaultSetupView.svelte"
     );
-    return mount(VaultSetupView, {
-      target: document.getElementById("app")!,
+    let setupView: MountedRoot;
+    setupView = mount(VaultSetupView, {
+      target,
       props: {
         initialError,
-        onReady: () => {
-          window.location.reload();
+        onReady: async (_info, preferenceReady) => {
+          const appRuntimeReady = preferenceReady.then(async () => {
+            await ensureConfigLoaded();
+            await initializeLocalizationFromConfig();
+            await applyPreVaultLanguagePreference();
+            await hydrateUserThemes();
+          });
+          void appRuntimeReady.catch(() => undefined);
+          await mountVaultHandoffOnboarding(setupView, appRuntimeReady);
         },
       },
     });
+    return setupView;
+  }
+
+  async function mountVaultHandoffOnboarding(
+    currentView?: MountedRoot,
+    appRuntimeReady: Promise<void> = Promise.resolve(),
+  ) {
+    const appModulePromise = import("./App.svelte");
+    void appModulePromise.catch(() => undefined);
+    const [{ default: VaultHandoffOnboardingView }, handoffApi] = await Promise.all([
+      import("$lib/components/vault/VaultHandoffOnboardingView.svelte"),
+      import("$lib/api/vault-handoff"),
+      import("$lib/components/vault/PairingQrCode.svelte"),
+    ]);
+    const initialStatus = await handoffApi.readPairingStatus();
+    const initialInvitation = initialStatus.linked
+      ? null
+      : await handoffApi.createPairingInvitation();
+
+    if (currentView) await unmount(currentView);
+
+    let onboardingView: MountedRoot;
+    let transitionPromise: Promise<void> | null = null;
+    const openApp = (): Promise<void> => {
+      if (transitionPromise) return transitionPromise;
+      transitionPromise = Promise.all([appModulePromise, appRuntimeReady])
+        .then(async ([{ default: App }]) => {
+          await unmount(onboardingView);
+          mount(App, { target });
+        })
+        .catch((error: unknown) => {
+          transitionPromise = null;
+          throw error;
+        });
+      return transitionPromise;
+    };
+    onboardingView = mount(VaultHandoffOnboardingView, {
+      target,
+      props: {
+        initialInvitation,
+        initialStatus,
+        onComplete: openApp,
+      },
+    });
+    return onboardingView;
   }
 
   try {
@@ -157,6 +232,12 @@ const appPromise = (async () => {
     const benchmarkResumePending = await hasFreshBenchmarkResumeState();
     if (!benchmarkResumePending) {
       await hydrateUserThemes();
+      const { vaultHandoffOnboardingCompleted } = await import(
+        "./lib/vault/handoff-onboarding"
+      );
+      if (!vaultHandoffOnboardingCompleted(safeStorage())) {
+        return await mountVaultHandoffOnboarding();
+      }
     }
   } catch (err) {
     const vaultError = err instanceof Error ? err.message : String(err);
@@ -165,18 +246,19 @@ const appPromise = (async () => {
 
   const { default: App } = await import("./App.svelte");
   return mount(App, {
-    target: document.getElementById("app")!,
+    target,
   });
 })();
 
 void appPromise
   .then(async () => {
+    await finishVaultOwnershipTransition();
     if (getCurrentWindow().label !== "main") return;
-    await document.fonts.ready;
     await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
     await invoke("reveal_main_window");
   })
-  .catch((error: unknown) => {
+  .catch(async (error: unknown) => {
+    await finishVaultOwnershipTransition();
     console.error("Failed to reveal the initialized main window:", error);
   });
 

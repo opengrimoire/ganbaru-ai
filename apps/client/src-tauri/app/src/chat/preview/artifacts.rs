@@ -7,7 +7,7 @@ pub(super) async fn persist_browser_artifact(
     payload: BrowserArtifactPayload<'_>,
 ) -> ChatResult<ChatResourceRead> {
     let pool = chat_pool(app, db_url).await?;
-    let vault_root = vault::active_vault_path(app).map_err(|_| persistence_error())?;
+    let vault_root = vault::active_writable_vault_path(app).map_err(|_| persistence_error())?;
     persist_browser_artifact_with_pool(&pool, &vault_root, tab, payload).await
 }
 

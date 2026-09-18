@@ -44,4 +44,23 @@ describe("CalendarViewPanelLifecycle", () => {
 
     expect(mark).not.toHaveBeenCalledWith("panel.flush-done", { request });
   });
+
+  it("releases the current interaction after a panel load failure", () => {
+    const lifecycle = new CalendarViewPanelLifecycle({
+      importPanel: () => Promise.reject(new Error("failed")),
+      mark: vi.fn(),
+      afterRender: (callback) => callback(),
+      afterPaint: (callback) => callback(),
+    });
+    const failedRequest = lifecycle.beginOpen("create", "open");
+    lifecycle.pendingEditEventId = "pending";
+    lifecycle.setSurfaceStatus("tentative", "pending");
+
+    expect(lifecycle.recoverFailedOpen(failedRequest)).toBe(true);
+    expect(lifecycle.isCurrent(failedRequest)).toBe(false);
+    expect(lifecycle.pendingEditEventId).toBeUndefined();
+    expect(lifecycle.surfaceStatus).toBeUndefined();
+    expect(lifecycle.surfaceStatusEventId).toBeUndefined();
+    expect(lifecycle.recoverFailedOpen(failedRequest)).toBe(false);
+  });
 });
