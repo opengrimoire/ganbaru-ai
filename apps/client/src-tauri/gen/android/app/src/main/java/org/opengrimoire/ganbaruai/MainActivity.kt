@@ -1,8 +1,12 @@
 package org.opengrimoire.ganbaruai
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.os.Bundle
+import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
+import android.widget.ImageView
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -13,7 +17,10 @@ import kotlin.math.roundToInt
 
 private const val ANDROID_INSETS_BRIDGE_NAME = "GanbaruAndroidInsets"
 private const val ANDROID_APPEARANCE_BRIDGE_NAME = "GanbaruAndroidAppearance"
+private const val ANDROID_TRANSITION_BRIDGE_NAME = "GanbaruAndroidTransition"
 private const val ANDROID_INSETS_EVENT_NAME = "ganbaru:android-insets"
+private const val ANDROID_TRANSITION_FRAME_HELD_EVENT_NAME =
+  "ganbaru:android-transition-frame-held"
 
 private class AndroidInsetsBridge(displayDensity: Float) {
   private val density = displayDensity.takeIf { it.isFinite() && it > 0f } ?: 1f
@@ -48,6 +55,61 @@ private class AndroidAppearanceBridge(private val activity: MainActivity) {
   }
 }
 
+private class AndroidTransitionBridge(
+  private val activity: MainActivity,
+  private val webView: WebView,
+) {
+  private var heldFrame: ImageView? = null
+  private var heldBitmap: Bitmap? = null
+
+  @JavascriptInterface
+  fun holdCurrentFrame() {
+    activity.runOnUiThread {
+      if (heldFrame == null) {
+        val parent = webView.parent as? ViewGroup
+        val width = webView.width
+        val height = webView.height
+        if (parent != null && width > 0 && height > 0) {
+          val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+          webView.draw(Canvas(bitmap))
+          val frame = ImageView(activity).apply {
+            setImageBitmap(bitmap)
+            scaleType = ImageView.ScaleType.FIT_XY
+            isClickable = true
+            importantForAccessibility = ImageView.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+          }
+          parent.addView(
+            frame,
+            ViewGroup.LayoutParams(
+              ViewGroup.LayoutParams.MATCH_PARENT,
+              ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
+          )
+          heldBitmap = bitmap
+          heldFrame = frame
+        }
+      }
+      webView.evaluateJavascript(
+        "window.dispatchEvent(new Event('$ANDROID_TRANSITION_FRAME_HELD_EVENT_NAME'))",
+        null,
+      )
+    }
+  }
+
+  @JavascriptInterface
+  fun releaseHeldFrame() {
+    activity.runOnUiThread {
+      heldFrame?.let { frame ->
+        (frame.parent as? ViewGroup)?.removeView(frame)
+        frame.setImageDrawable(null)
+      }
+      heldFrame = null
+      heldBitmap?.recycle()
+      heldBitmap = null
+    }
+  }
+}
+
 class MainActivity : TauriActivity() {
   private val androidInsetsBridge by lazy {
     AndroidInsetsBridge(resources.displayMetrics.density)
@@ -66,6 +128,10 @@ class MainActivity : TauriActivity() {
     }
     webView.addJavascriptInterface(androidInsetsBridge, ANDROID_INSETS_BRIDGE_NAME)
     webView.addJavascriptInterface(androidAppearanceBridge, ANDROID_APPEARANCE_BRIDGE_NAME)
+    webView.addJavascriptInterface(
+      AndroidTransitionBridge(this, webView),
+      ANDROID_TRANSITION_BRIDGE_NAME,
+    )
     ViewCompat.setOnApplyWindowInsetsListener(webView) { _, windowInsets ->
       val systemBars = windowInsets.getInsets(
         WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()

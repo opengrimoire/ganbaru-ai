@@ -19,6 +19,7 @@ Android testing distinguishes source checks, emulator coverage, physical-device 
 - Import a complete vault through a document tree.
 - Create a portable backup, uninstall, reinstall, and restore.
 - Cold and warm startup while offline.
+- During cold and warm startup, confirm the centered readiness indicator hands off to a usable Calendar before background preparation completes. Let preparation settle, then open every primary destination, every standard Project view, Settings, Quick notes, Music, Pomodoro, and linked-device controls without another top-level loading surface. Repeat while opening one destination immediately after Calendar appears and confirm only that destination shows loading until its existing preparation finishes.
 - Calendar creation, editing, recurrence, reminders, and project linkage.
 - Project task views, detail, settings, scheduling, and wide-view touch panning.
 - Notes pages, blocks, databases, history, assets, Archive, and Trash.
@@ -83,9 +84,17 @@ Android testing distinguishes source checks, emulator coverage, physical-device 
 - Notification deep links open the relevant settings.
 - Store-policy declaration matches observed behavior.
 
+## Vault handoff pairing
+
+- Grant and deny camera access from the user-initiated QR pairing scanner.
+- Confirm camera capture stops after a code is decoded, the scanner is canceled, or the pairing surface closes.
+- Confirm malformed, expired, replayed, and wrong-vault invitations cannot enroll the phone.
+- Confirm pairing and later authenticated reconnects work on a private LAN without internet access.
+- Run the complete [local vault handoff acceptance](vault-handoff.md) for ownership in both directions, read-only refresh, preserved local backup, native schedule reconciliation, offline Doomscrolling accounting, unlink, and explicit lost-device recovery.
+
 ## Security and artifact checks
 
-- No broad storage, package, overlay, capture, contact, microphone, camera, or location permission.
+- No broad storage, package, overlay, capture, contact, microphone, or location permission. Camera access is limited to user-initiated QR pairing.
 - Native components have intended exported state and internal broadcasts require signature authority.
 - Production content policy and WebView bridge reject unapproved remote or generic commands.
 - Minification preserves required command serialization without widening capabilities.

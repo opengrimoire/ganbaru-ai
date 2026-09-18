@@ -1,11 +1,13 @@
 use crate::db_path::connect_sqlite;
 #[cfg(target_os = "android")]
-use crate::vault;
+use crate::vault::{self, handoff::state::PairingManager, ownership::VaultOwnershipManager};
 use chrono::{DateTime, SecondsFormat, Utc};
 #[cfg(target_os = "android")]
 use ganbaru_mobile_doomscrolling::{MobileDoomscrollingExt, PendingEvent};
 use serde::Serialize;
 use sqlx::{Row, SqlitePool};
+#[cfg(target_os = "android")]
+use tauri::Manager;
 use tauri::Runtime;
 
 const ACTIVE_DB_URL: &str = "sqlite:ganbaru-ai.sqlite";
@@ -234,37 +236,138 @@ pub async fn doomscrolling_mobile_sync_events<R: Runtime>(
     if events.len() > MAX_BATCH {
         return Err("mobile Doomscrolling journal batch is too large".to_string());
     }
-    let full_batch = events.len() == MAX_BATCH;
-    let processed_ids = events
-        .iter()
-        .map(|event| event.id.clone())
-        .collect::<Vec<_>>();
     let active_vault_id = vault::active_vault_id(&app)?;
-    let normalized = events
+    let normalized_events = events
         .into_iter()
         .map(normalize_event)
-        .collect::<Result<Vec<_>, _>>()?
+        .collect::<Result<Vec<_>, _>>()?;
+    let stale_ids = normalized_events
+        .iter()
+        .filter(|event| event.vault_id != active_vault_id)
+        .map(|event| event.id.clone())
+        .collect::<Vec<_>>();
+    if !stale_ids.is_empty() {
+        app.mobile_doomscrolling().acknowledge_events(&stale_ids)?;
+    }
+    let normalized = normalized_events
         .into_iter()
         .filter(|event| event.vault_id == active_vault_id)
         .collect::<Vec<_>>();
-    if normalized.is_empty() {
-        if !processed_ids.is_empty() {
+    let ownership = app
+        .state::<VaultOwnershipManager>()
+        .status(&active_vault_id)?;
+    let pairing = app.state::<PairingManager>().inner().clone();
+    let linked = pairing.coordinator_pin()?.is_some();
+    let mut imported = 0;
+    let mut full_batch = false;
+
+    if ownership.can_write {
+        full_batch = normalized.len() == MAX_BATCH;
+        if !normalized.is_empty() {
+            let pool = connect_sqlite(app.clone(), ACTIVE_DB_URL.to_string()).await?;
+            import_events(&pool, &normalized).await?;
+            let processed_ids = normalized
+                .iter()
+                .map(|event| event.id.clone())
+                .collect::<Vec<_>>();
             app.mobile_doomscrolling()
                 .acknowledge_events(&processed_ids)?;
+            imported += normalized.len();
         }
-        return Ok(MobileDoomscrollingSyncResult {
-            imported: 0,
-            full_batch,
-        });
+        if linked {
+            if let Err(error) = exchange_as_owner(&app, &pairing, &active_vault_id).await {
+                eprintln!("linked Doomscrolling exchange deferred: {error}");
+            }
+        }
+    } else if linked {
+        let usage_events = normalized
+            .iter()
+            .filter(|event| event.kind == "usage")
+            .cloned()
+            .collect::<Vec<_>>();
+        let samples = usage_events
+            .iter()
+            .map(|event| pending_event_message(event, &ownership.device_id))
+            .collect();
+        match crate::vault::handoff::transport::exchange_doomscrolling(
+            &pairing,
+            samples,
+            Vec::new(),
+            Vec::new(),
+        )
+        .await
+        {
+            Ok((acknowledged, _, combined)) => {
+                app.mobile_doomscrolling()
+                    .acknowledge_events(&acknowledged)?;
+                crate::doomscrolling_linked::replace_accepted(&app, &active_vault_id, &combined)
+                    .await?;
+                imported += acknowledged.len();
+                full_batch = acknowledged.len() == MAX_BATCH;
+            }
+            Err(error) => eprintln!("linked Doomscrolling exchange deferred: {error}"),
+        }
     }
-    let pool = connect_sqlite(app.clone(), ACTIVE_DB_URL.to_string()).await?;
-    import_events(&pool, &normalized).await?;
-    app.mobile_doomscrolling()
-        .acknowledge_events(&processed_ids)?;
     Ok(MobileDoomscrollingSyncResult {
-        imported: normalized.len(),
+        imported,
         full_batch,
     })
+}
+
+#[cfg(target_os = "android")]
+async fn exchange_as_owner<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    pairing: &PairingManager,
+    vault_id: &str,
+) -> Result<(), String> {
+    let pool = connect_sqlite(app.clone(), ACTIVE_DB_URL.to_string()).await?;
+    let snapshot = owner_snapshot(&pool).await?;
+    let (_, peer_samples, combined) = crate::vault::handoff::transport::exchange_doomscrolling(
+        pairing,
+        Vec::new(),
+        Vec::new(),
+        snapshot,
+    )
+    .await?;
+    if peer_samples.is_empty() {
+        return crate::doomscrolling_linked::replace_accepted(app, vault_id, &combined).await;
+    }
+    let acknowledged =
+        crate::doomscrolling_linked::import_linked_samples(&pool, &peer_samples).await?;
+    let refreshed = owner_snapshot(&pool).await?;
+    let (_, _, combined) = crate::vault::handoff::transport::exchange_doomscrolling(
+        pairing,
+        Vec::new(),
+        acknowledged,
+        refreshed,
+    )
+    .await?;
+    crate::doomscrolling_linked::replace_accepted(app, vault_id, &combined).await
+}
+
+#[cfg(target_os = "android")]
+async fn owner_snapshot(
+    pool: &SqlitePool,
+) -> Result<Vec<crate::vault::handoff::protocol::DoomscrollingSampleMessage>, String> {
+    crate::doomscrolling_linked::aggregate_owner_samples(pool).await
+}
+
+#[cfg(target_os = "android")]
+fn pending_event_message(
+    event: &PendingEvent,
+    device_id: &str,
+) -> crate::vault::handoff::protocol::DoomscrollingSampleMessage {
+    crate::vault::handoff::protocol::DoomscrollingSampleMessage {
+        sample_id: event.id.clone(),
+        device_id: device_id.to_string(),
+        source_type: "mobile-app".to_string(),
+        source_key: event.package_name.clone(),
+        display_name: Some(event.display_name.clone()),
+        started_at_unix_ms: event.started_at,
+        elapsed_seconds: event.elapsed_seconds,
+        local_date: event.local_date.clone(),
+        created_at_unix_ms: event.occurred_at,
+    }
 }
 
 #[tauri::command]
@@ -286,6 +389,47 @@ pub async fn doomscrolling_mobile_list_usage_samples<R: Runtime>(
         || start_local_date > end_local_date
     {
         return Err("mobile Doomscrolling date window is invalid".to_string());
+    }
+    #[cfg(target_os = "android")]
+    {
+        let vault_id = vault::active_vault_id(&app)?;
+        let ownership = app.state::<VaultOwnershipManager>().status(&vault_id)?;
+        if !ownership.can_write {
+            let mut samples = crate::doomscrolling_linked::accepted(&app, &vault_id).await?;
+            let pending = app.mobile_doomscrolling().pending_events()?;
+            samples.extend(
+                pending
+                    .into_iter()
+                    .map(normalize_event)
+                    .collect::<Result<Vec<_>, _>>()?
+                    .into_iter()
+                    .filter(|event| event.kind == "usage" && event.vault_id == vault_id)
+                    .map(|event| pending_event_message(&event, &ownership.device_id)),
+            );
+            samples.retain(|sample| {
+                sample.local_date.as_str() >= start_local_date.as_str()
+                    && sample.local_date.as_str() <= end_local_date.as_str()
+            });
+            samples.sort_by(|left, right| {
+                left.started_at_unix_ms
+                    .cmp(&right.started_at_unix_ms)
+                    .then_with(|| left.sample_id.cmp(&right.sample_id))
+            });
+            return Ok(samples
+                .into_iter()
+                .map(crate::doomscrolling_linked::message_to_row)
+                .map(|row| MobileDoomscrollingUsageSample {
+                    id: row.id,
+                    source_type: row.source_type,
+                    source_key: row.source_key,
+                    display_name: row.display_name,
+                    started_at: row.started_at,
+                    elapsed_seconds: row.elapsed_seconds,
+                    local_date: row.local_date,
+                    created_at: row.created_at,
+                })
+                .collect());
+        }
     }
     let pool = connect_sqlite(app, ACTIVE_DB_URL.to_string()).await?;
     let rows = sqlx::query(

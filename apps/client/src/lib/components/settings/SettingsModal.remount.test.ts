@@ -82,6 +82,24 @@ describe("SettingsModal remount state", () => {
     expect(target.textContent).not.toContain("Loading");
   });
 
+  it("loads Data as one stable section on its first visit", async () => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    vi.stubGlobal("__GANBARU_AI_BUILD_PLATFORM__", "linux");
+    target = document.createElement("div");
+    document.body.append(target);
+
+    component = mount(SettingsModal, {
+      target,
+      props: { initialSection: "data", onClose: () => undefined },
+    });
+
+    await vi.waitFor(() => {
+      expect(target?.textContent).toContain("Linked devices");
+      expect(target?.textContent).toContain("Current folder");
+      expect(target?.textContent).not.toContain("Could not load Data");
+    });
+  });
+
   it("uses categories before details and omits shortcuts in the mobile presentation", async () => {
     vi.stubGlobal("ResizeObserver", ResizeObserverStub);
     originalScrollTo = HTMLElement.prototype.scrollTo;

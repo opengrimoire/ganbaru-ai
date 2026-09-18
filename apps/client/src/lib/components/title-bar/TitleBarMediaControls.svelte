@@ -3,6 +3,7 @@
   import StickyNote from "@lucide/svelte/icons/sticky-note";
   import PomodoroMenuContent from "$lib/components/pomodoro/PomodoroMenuContent.svelte";
   import PomodoroProgressRing from "$lib/components/pomodoro/PomodoroProgressRing.svelte";
+  import LinkedDeviceControl from "$lib/components/vault/LinkedDeviceControl.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getMusicPlayer } from "$lib/stores/music-player.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
@@ -131,6 +132,15 @@
         {/if}
       </div>
     {/if}
+
+    <LinkedDeviceControl
+      platform="desktop"
+      presentation="desktop"
+      onOpened={() => {
+        showMenu = false;
+        onMenuOpened();
+      }}
+    />
 
     <button
       type="button"

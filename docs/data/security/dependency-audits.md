@@ -2,10 +2,11 @@
 
 This file records reviewed Rust advisory exceptions and the most recent known audit snapshot. Lockfiles and current command output are authoritative. Re-run the audits before relying on this snapshot.
 
-Snapshot checked on 2026-09-12:
+Snapshot checked on 2026-09-14:
 
 - pnpm -w run audit:deps reports no known npm vulnerabilities at the low advisory level after updating Vitest and its coverage integration to 4.1.11 for GHSA-82fw-gwwq-j7x9.
 - pnpm -w run audit:rust exits successfully with three configured vulnerability ignores and 10 allowed warnings.
+- rustls 0.23.45 resolves RUSTSEC-2026-0285, a TLS 1.3 encryption-level boundary vulnerability reported against the previously locked 0.23.40 release.
 
 GitHub Dependabot also reported GHSA-7gcf-g7xr-8hxj for serde_with 3.20.0. Cargo audit did not include that advisory in its RustSec database at the time of review. The lockfile now resolves serde_with and serde_with_macros 3.21.0, which contains the upstream fix.
 

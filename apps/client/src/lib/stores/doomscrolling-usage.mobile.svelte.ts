@@ -7,6 +7,7 @@ import {
 } from "$lib/doomscrolling";
 import { getDoomscrolling } from "$lib/stores/doomscrolling.svelte";
 import type { SchedulerRunContext } from "$lib/scheduling/lifecycle-scheduler";
+import { publishMobileDoomscrollingUsage } from "$lib/scheduling/mobile-doomscrolling";
 
 interface MobileUsageSampleRow extends DoomscrollingUsageSample {
   id: string;
@@ -61,11 +62,13 @@ async function performRefresh(context?: SchedulerRunContext): Promise<void> {
     localDate = nextLocalDate;
     weekStartLocalDate = nextWeekStart;
     samples = nextSamples;
+    const doomscrolling = getDoomscrolling();
     totals = computeDoomscrollingLimitTotals(
-      getDoomscrolling().config,
+      doomscrolling.config,
       nextSamples,
       nextLocalDate,
     );
+    await publishMobileDoomscrollingUsage(doomscrolling.config, totals);
   } catch (error) {
     console.warn("Failed to refresh mobile Doomscrolling usage", error);
   }

@@ -114,24 +114,7 @@ pub async fn doomscrolling_record_usage_sample<R: Runtime>(
     sample: DoomscrollingUsageSampleInput,
 ) -> Result<(), String> {
     let sample = normalize_usage_sample(sample, "app")?;
-    let pool = connect_sqlite(app, db_url).await?;
-    sqlx::query(
-        "INSERT OR IGNORE INTO doomscrolling_usage_samples
-            (id, source_type, source_key, display_name, started_at, elapsed_seconds, local_date, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-    )
-    .bind(sample.id)
-    .bind(sample.source_type)
-    .bind(sample.source_key)
-    .bind(sample.display_name)
-    .bind(sample.started_at)
-    .bind(sample.elapsed_seconds)
-    .bind(sample.local_date)
-    .bind(sample.created_at)
-    .execute(&pool)
-    .await
-    .map_err(|e| format!("record doomscrolling usage sample: {e}"))?;
-    Ok(())
+    route_usage_samples(&app, db_url, vec![sample]).await
 }
 
 #[tauri::command]
@@ -147,8 +130,38 @@ pub async fn doomscrolling_record_usage_samples<R: Runtime>(
         .into_iter()
         .map(|sample| normalize_usage_sample(sample, "app"))
         .collect::<Result<Vec<_>, _>>()?;
-    let pool = connect_sqlite(app, db_url).await?;
-    insert_usage_samples(&pool, samples).await
+    route_usage_samples(&app, db_url, samples).await
+}
+
+async fn route_usage_samples<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    db_url: String,
+    samples: Vec<DoomscrollingUsageSampleRow>,
+) -> Result<(), String> {
+    if db_url != format!("sqlite:{}", crate::vault::APP_SQLITE_FILE) {
+        let pool = connect_sqlite(app.clone(), db_url).await?;
+        return insert_usage_samples(&pool, samples).await;
+    }
+    let vault_id = crate::vault::active_vault_id(app)?;
+    let status = app
+        .state::<crate::vault::ownership::VaultOwnershipManager>()
+        .status(&vault_id)?;
+    if status.can_write {
+        let pool = connect_sqlite(app.clone(), db_url).await?;
+        crate::doomscrolling_linked::drain_local_spool(app, &pool, &vault_id, &status.device_id)
+            .await?;
+        return insert_usage_samples(&pool, samples).await;
+    }
+    for sample in &samples {
+        crate::doomscrolling_linked::enqueue(
+            app,
+            &vault_id,
+            &status.device_id,
+            &linked_row(sample),
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 pub(super) async fn insert_usage_samples(
@@ -253,7 +266,32 @@ pub async fn doomscrolling_list_usage_samples<R: Runtime>(
     if start_local_date > end_local_date {
         return Err("start_local_date must not be after end_local_date".to_string());
     }
-    let pool = connect_sqlite(app, db_url).await?;
+    let vault_id = crate::vault::active_vault_id(&app)?;
+    let status = app
+        .state::<crate::vault::ownership::VaultOwnershipManager>()
+        .status(&vault_id)?;
+    if !status.can_write {
+        let mut samples = crate::doomscrolling_linked::accepted(&app, &vault_id).await?;
+        samples.extend(
+            crate::doomscrolling_linked::pending(&app, &vault_id, &status.device_id).await?,
+        );
+        samples.retain(|sample| {
+            sample.local_date >= start_local_date && sample.local_date <= end_local_date
+        });
+        samples.sort_by(|left, right| {
+            left.started_at_unix_ms
+                .cmp(&right.started_at_unix_ms)
+                .then_with(|| left.sample_id.cmp(&right.sample_id))
+        });
+        return Ok(samples
+            .into_iter()
+            .map(crate::doomscrolling_linked::message_to_row)
+            .map(usage_row)
+            .collect());
+    }
+    let pool = connect_sqlite(app.clone(), db_url).await?;
+    crate::doomscrolling_linked::drain_local_spool(&app, &pool, &vault_id, &status.device_id)
+        .await?;
     let rows = sqlx::query(
         "SELECT id, source_type, source_key, display_name, started_at,
                 elapsed_seconds, local_date, created_at
@@ -281,4 +319,30 @@ pub async fn doomscrolling_list_usage_samples<R: Runtime>(
             })
         })
         .collect()
+}
+
+fn linked_row(sample: &DoomscrollingUsageSampleRow) -> crate::doomscrolling_linked::LinkedUsageRow {
+    crate::doomscrolling_linked::LinkedUsageRow {
+        id: sample.id.clone(),
+        source_type: sample.source_type.clone(),
+        source_key: sample.source_key.clone(),
+        display_name: sample.display_name.clone(),
+        started_at: sample.started_at,
+        elapsed_seconds: sample.elapsed_seconds,
+        local_date: sample.local_date.clone(),
+        created_at: sample.created_at,
+    }
+}
+
+fn usage_row(sample: crate::doomscrolling_linked::LinkedUsageRow) -> DoomscrollingUsageSampleRow {
+    DoomscrollingUsageSampleRow {
+        id: sample.id,
+        source_type: sample.source_type,
+        source_key: sample.source_key,
+        display_name: sample.display_name,
+        started_at: sample.started_at,
+        elapsed_seconds: sample.elapsed_seconds,
+        local_date: sample.local_date,
+        created_at: sample.created_at,
+    }
 }

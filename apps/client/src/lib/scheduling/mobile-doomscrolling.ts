@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { DoomscrollingConfig } from "$lib/doomscrolling";
+import type { DoomscrollingConfig, DoomscrollingLimitTotal } from "$lib/doomscrolling";
 import { translate } from "$lib/i18n/translator.svelte";
 import { flushConfig } from "$lib/vault/config";
 import { getActiveVaultInfo } from "$lib/vault/state";
@@ -48,6 +48,10 @@ interface MobileDoomscrollingSnapshot {
       minutesPerDay: number | null;
       minutesPerWeek: number | null;
       packages: string[];
+      acceptedUsage: {
+        day: MobileAcceptedUsage | null;
+        week: MobileAcceptedUsage | null;
+      };
     }>;
   };
   copy: {
@@ -56,6 +60,12 @@ interface MobileDoomscrollingSnapshot {
     blockedMessage: string;
     limitMessage: string;
   };
+}
+
+interface MobileAcceptedUsage {
+  windowStartLocalDate: string;
+  windowEndLocalDate: string;
+  usedSeconds: number;
 }
 
 /** Read whether Android has granted the two accesses required for app enforcement. */
@@ -101,6 +111,7 @@ export function buildMobileDoomscrollingSnapshot(
   config: DoomscrollingConfig,
   vaultId: string,
   generatedAtEpochMs = Date.now(),
+  totals: readonly DoomscrollingLimitTotal[] = [],
 ): MobileDoomscrollingSnapshot {
   return {
     schemaVersion: 1,
@@ -119,6 +130,10 @@ export function buildMobileDoomscrollingSnapshot(
         packages: [...new Set(limit.entries.flatMap((entry) => (
           entry.mobileAppPackage ? [entry.mobileAppPackage] : []
         )))],
+        acceptedUsage: {
+          day: acceptedUsage(totals, limit.id, "day"),
+          week: acceptedUsage(totals, limit.id, "week"),
+        },
       })).filter((limit) => limit.packages.length > 0),
     },
     copy: {
@@ -130,14 +145,46 @@ export function buildMobileDoomscrollingSnapshot(
   };
 }
 
+function acceptedUsage(
+  totals: readonly DoomscrollingLimitTotal[],
+  limitId: string,
+  period: "day" | "week",
+): MobileAcceptedUsage | null {
+  const total = totals.find((candidate) => (
+    candidate.limitId === limitId && (candidate.period ?? "day") === period
+  ));
+  if (!total?.windowStartLocalDate || !total.windowEndLocalDate) return null;
+  return {
+    windowStartLocalDate: total.windowStartLocalDate,
+    windowEndLocalDate: total.windowEndLocalDate,
+    usedSeconds: total.usedSeconds,
+  };
+}
+
 /** Flush config first, then atomically replace the native rule projection. */
 export async function publishMobileDoomscrollingConfig(config: DoomscrollingConfig): Promise<void> {
+  await publishMobileDoomscrollingSnapshot(config, [], true);
+}
+
+/** Refresh native accepted counters while preserving offline local accumulation. */
+export async function publishMobileDoomscrollingUsage(
+  config: DoomscrollingConfig,
+  totals: readonly DoomscrollingLimitTotal[],
+): Promise<void> {
+  await publishMobileDoomscrollingSnapshot(config, totals, false);
+}
+
+async function publishMobileDoomscrollingSnapshot(
+  config: DoomscrollingConfig,
+  totals: readonly DoomscrollingLimitTotal[],
+  shouldFlushConfig: boolean,
+): Promise<void> {
   if (__GANBARU_AI_BUILD_PLATFORM__ !== "android") return;
   const generation = ++publicationGeneration;
-  await flushConfig();
+  if (shouldFlushConfig) await flushConfig();
   if (generation !== publicationGeneration) return;
   const vault = await getActiveVaultInfo();
   if (!vault) throw new Error("Cannot publish mobile Doomscrolling rules without an active data folder");
-  const snapshot = buildMobileDoomscrollingSnapshot(config, vault.vaultId);
+  const snapshot = buildMobileDoomscrollingSnapshot(config, vault.vaultId, Date.now(), totals);
   await invoke(`${PLUGIN_COMMAND}|applyRules`, { snapshotJson: JSON.stringify(snapshot) });
 }

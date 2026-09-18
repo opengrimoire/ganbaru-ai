@@ -16,7 +16,7 @@ import { settings } from "./settings";
 import { theme } from "./theme";
 import { titleBar } from "./title-bar";
 import { updates } from "./updates";
-import { dataFolderError, language, vaultSetup } from "./vault";
+import { dataFolderError, language, vaultHandoff, vaultOwnership, vaultOwnershipPrompt, vaultSetup } from "./vault";
 import { window } from "./window";
 
 export const es = {
@@ -25,6 +25,9 @@ export const es = {
   vaultSetup,
   dataFolderError,
   language,
+  vaultOwnership,
+  vaultOwnershipPrompt,
+  vaultHandoff,
   focusDialog,
   pomodoroOverlay,
   pomodoroNotification,

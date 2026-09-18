@@ -6,6 +6,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DoomscrollingEvaluatorTest {
+  @Test
+  fun acceptedCombinedUsageAddsOnlyNewOfflineLocalUsage() {
+    assertEquals(75, combinedUsageSinceAcceptance(60, 20, 35))
+    assertEquals(60, combinedUsageSinceAcceptance(60, 20, 10))
+  }
+
   private val schedule = MobileSchedule(
     enabled = true,
     blockDuringFocus = true,

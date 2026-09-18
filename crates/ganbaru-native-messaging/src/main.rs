@@ -8,6 +8,10 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::OnceLock;
 
+mod linked_usage;
+
+use linked_usage::{native_vault_is_writable, record_usage_sample, UsageSample};
+
 fn block_on<F: std::future::Future>(future: F) -> F::Output {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -226,18 +230,6 @@ struct LimitStateItem {
     exhausted: bool,
 }
 
-#[derive(Debug)]
-struct UsageSample {
-    id: String,
-    source_type: String,
-    source_key: String,
-    display_name: Option<String>,
-    started_at: i64,
-    elapsed_seconds: i64,
-    local_date: String,
-    created_at: i64,
-}
-
 fn main() {
     let response = match run() {
         Ok(response) => response,
@@ -304,8 +296,8 @@ fn run() -> Result<NativeResponse, String> {
         match normalize_usage_sample(&request) {
             Ok(sample) => {
                 match record_usage_sample(
+                    snapshot.config_dir.as_deref(),
                     snapshot.vault_path.as_deref(),
-                    snapshot.limit_state.as_ref(),
                     sample,
                 ) {
                     Ok(()) => {}
@@ -1340,13 +1332,18 @@ fn normalize_usage_sample(request: &NativeRequest) -> Result<UsageSample, String
         let normalized = value.split_whitespace().collect::<Vec<_>>().join(" ");
         (!normalized.is_empty()).then(|| normalized.chars().take(120).collect::<String>())
     });
+    let mut identity_hash = 14_695_981_039_346_656_037_u64;
+    for value in [
+        source_type,
+        source_key.as_str(),
+        &started_at.to_string(),
+        &elapsed_seconds.to_string(),
+        local_date.as_str(),
+    ] {
+        feed_fingerprint(&mut identity_hash, value);
+    }
     Ok(UsageSample {
-        id: format!(
-            "ext-{}-{}-{}",
-            started_at,
-            now_epoch_ms(),
-            std::process::id()
-        ),
+        id: format!("ext-{identity_hash:016x}"),
         source_type: source_type.to_string(),
         source_key,
         display_name,
@@ -1392,56 +1389,6 @@ fn usage_db_path(vault_path: &Path, limit_state: Option<&LimitState>) -> PathBuf
         .map(|state| PathBuf::from(&state.database_path))
         .filter(|path| database_path_is_allowed(path, Some(vault_path)))
         .unwrap_or_else(|| vault_path.join(APP_SQLITE_FILE))
-}
-
-fn record_usage_sample(
-    vault_path: Option<&Path>,
-    limit_state: Option<&LimitState>,
-    sample: UsageSample,
-) -> Result<(), String> {
-    let vault_path =
-        vault_path.ok_or_else(|| "active Ganbaru AI folder is unavailable".to_string())?;
-    let db_path = usage_db_path(vault_path, limit_state);
-    if !db_path.exists() {
-        return Err("usage database is unavailable".to_string());
-    }
-    block_on(async move {
-        let db_url = format!(
-            "sqlite:{}",
-            db_path
-                .to_str()
-                .ok_or_else(|| "usage database path contains non-utf8 characters".to_string())?
-        );
-        let options = SqliteConnectOptions::from_str(&db_url)
-            .map_err(|e| format!("parse usage database url: {e}"))?;
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect_with(options)
-            .await
-            .map_err(|e| format!("connect usage database: {e}"))?;
-        sqlx::query("PRAGMA busy_timeout=5000")
-            .execute(&pool)
-            .await
-            .map_err(|e| format!("usage database busy timeout: {e}"))?;
-        sqlx::query(
-            "INSERT OR IGNORE INTO doomscrolling_usage_samples
-                (id, source_type, source_key, display_name, started_at, elapsed_seconds, local_date, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(sample.id)
-        .bind(sample.source_type)
-        .bind(sample.source_key)
-        .bind(sample.display_name)
-        .bind(sample.started_at)
-        .bind(sample.elapsed_seconds)
-        .bind(sample.local_date)
-        .bind(sample.created_at)
-        .execute(&pool)
-        .await
-        .map_err(|e| format!("record usage sample: {e}"))?;
-        pool.close().await;
-        Ok(())
-    })
 }
 
 fn host_from_url(url: &str) -> Option<String> {
@@ -1542,10 +1489,12 @@ fn log_block_event(snapshot: &StateSnapshot, host: &str, matched_rule_name: Opti
             let _ = writeln!(file, "{line}");
         }
     }
-    if let Err(err) =
-        record_block_event_in_database(snapshot, &occurred_at, host, matched_rule_name)
-    {
-        eprintln!("failed to record doomscrolling block event: {err}");
+    if native_vault_is_writable(config_dir, snapshot.vault_path.as_deref()) {
+        if let Err(err) =
+            record_block_event_in_database(snapshot, &occurred_at, host, matched_rule_name)
+        {
+            eprintln!("failed to record doomscrolling block event: {err}");
+        }
     }
 }
 

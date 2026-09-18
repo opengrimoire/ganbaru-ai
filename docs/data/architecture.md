@@ -93,6 +93,14 @@ Before adding persisted data, answer:
 
 These questions are more durable than a table inventory. Exact current schema relationships are indexed in [Schema](schema/README.md).
 
-## Planned replication boundary
+## Implemented whole-vault handoff boundary
 
-[Device linking and synchronization](sync.md) defines portable and device-local field ownership. Shared defaults will move into transactional SQLite preferences; current `config.json` consumers have not migrated. No field can synchronize before its classification, validation, mutation journal, and conflict semantics exist.
+The linked desktop and Android workflow transfers one consistent copy of the complete portable vault. It includes `vault.json`, portable `config.json`, the SQLite snapshot, managed project folders, and managed assets. Live WAL and SHM files are never archived. External music bytes, external project folders, credentials, executable and provider paths, operating-system permissions, active-vault pointers, device keys, pairing records, ownership records, transfer recovery state, and live process state remain device-local.
+
+Only the current ownership generation may open the active vault for native writes. The other device opens its last activated replica read-only. Ownership changes and read-only refreshes reuse the same staged archive validation and atomic activation path. Doomscrolling usage is the sole exception: inactive-device samples wait in a bounded device-local spool until the current owner commits them idempotently to portable SQLite.
+
+This boundary transfers current state and does not merge independently edited vaults. Initial Android replacement creates a recoverable portable backup first. Explicit lost-device recovery creates a separate writable copy and does not claim that later changes can merge.
+
+## Planned concurrent replication boundary
+
+[Device linking and synchronization](sync.md) separates the implemented single-writer whole-vault handoff from planned concurrent replication. Shared defaults will move into transactional SQLite preferences for concurrent replication; current `config.json` consumers have not migrated. No field can participate in concurrent operation sync before its classification, validation, mutation journal, and conflict semantics exist.

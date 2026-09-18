@@ -9,6 +9,7 @@
   import QuickNotesPanel from "$lib/components/quick-notes/QuickNotesPanel.svelte";
   import { preloadQuickNotesInitialSnapshot } from "$lib/quick-notes/initial-snapshot";
   import { startMusicFirstUsePreload } from "$lib/music/music-first-use-preload";
+  import { preloadDataSection } from "$lib/components/settings/settings-sections";
 
   type PerformancePopoverComponent = typeof import("$lib/components/perf/PerformancePopover.svelte").default;
   type FloatingThemeEditorComponent = typeof import("$lib/components/settings/FloatingThemeEditor.svelte").default;
@@ -77,6 +78,9 @@
 
   onMount(() => {
     const stopMusicPreload = startMusicFirstUsePreload();
+    void preloadDataSection().catch((error: unknown) => {
+      console.warn("Data settings preload failed", error);
+    });
     void preloadQuickNotesInitialSnapshot().catch((error: unknown) => {
       console.warn("Quick notes preload failed", error);
     });

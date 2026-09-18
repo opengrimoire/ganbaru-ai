@@ -12,13 +12,18 @@ const ALLOWED_SQLITE_FILES: &[&str] = &["ganbaru-ai.sqlite", "benchmark.sqlite"]
 static VAULT_CONNECTION_GATE: LazyLock<Arc<tokio::sync::RwLock<()>>> =
     LazyLock::new(|| Arc::new(tokio::sync::RwLock::new(())));
 
-#[cfg(target_os = "android")]
-pub(crate) type VaultRestoreGuard = tokio::sync::OwnedRwLockWriteGuard<()>;
+#[allow(dead_code)] // Used by the H04 source-freeze flow.
+pub(crate) type VaultExclusiveGuard = tokio::sync::OwnedRwLockWriteGuard<()>;
+pub(crate) type VaultRestoreGuard = VaultExclusiveGuard;
 
 /// Prevent new SQLite connections while an active vault is being replaced.
-#[cfg(target_os = "android")]
-pub(crate) async fn begin_vault_restore() -> VaultRestoreGuard {
+#[allow(dead_code)] // Used by the H04 source-freeze flow.
+pub(crate) async fn begin_vault_exclusive() -> VaultExclusiveGuard {
     VAULT_CONNECTION_GATE.clone().write_owned().await
+}
+
+pub(crate) async fn begin_vault_restore() -> VaultRestoreGuard {
+    begin_vault_exclusive().await
 }
 
 fn resolve_sqlite_path<R: Runtime>(app: &AppHandle<R>, db_url: &str) -> Result<PathBuf, String> {
@@ -50,14 +55,27 @@ pub async fn connect_sqlite<R: Runtime>(
     db_url: String,
 ) -> Result<sqlx::SqlitePool, String> {
     let _connection_guard = VAULT_CONNECTION_GATE.read().await;
+    let is_vault_database = db_url == format!("sqlite:{}", vault::APP_SQLITE_FILE);
     let path = resolve_sqlite_path(&app, &db_url)?;
     let registry = app.state::<DatabaseState>().inner().clone();
+    let access = if is_vault_database {
+        let vault_id = vault::active_vault_id(&app)?;
+        app.state::<vault::ownership::VaultOwnershipManager>()
+            .database_access(&vault_id)?
+    } else {
+        vault::ownership::VaultDatabaseAccess::ReadWrite
+    };
     drop(app);
     drop(db_url);
-    registry.connect_path(path).await
+    match access {
+        vault::ownership::VaultDatabaseAccess::ReadOnly => {
+            registry.connect_path_read_only(path).await
+        }
+        vault::ownership::VaultDatabaseAccess::ReadWrite => registry.connect_path(path).await,
+    }
 }
 
-#[cfg(target_os = "android")]
+#[allow(dead_code)] // Used by vault restore now and the H04 source-freeze flow.
 pub(crate) async fn close_all_sqlite_pools_for_restore<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<(), String> {

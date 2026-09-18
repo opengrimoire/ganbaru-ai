@@ -52,7 +52,7 @@ The machine-readable ceilings and required or forbidden module sets are authorit
 - `apps/client/scripts/first-use-bundle-baseline.json`
 - `apps/client/scripts/android-bundle-baseline.json`
 
-The current Projects, Notes, and Chat desktop route ceiling is 358 source modules. Changes to a ceiling require a concrete user-visible rationale and should remove obsolete narrative rather than accumulating a chronology in documentation.
+The current Projects, Notes, and Chat desktop route ceiling is 360 source modules. The shared route graph includes the vault ownership store and read-only ownership banner so every primary surface immediately reflects a handoff. Changes to a ceiling require a concrete user-visible rationale and should remove obsolete narrative rather than accumulating a chronology in documentation.
 
 ## Android project and pull request build
 

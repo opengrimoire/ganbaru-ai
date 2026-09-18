@@ -54,3 +54,122 @@ export const language = {
   englishOption: "English",
   spanishOption: "Spanish",
 } as const;
+
+export const vaultOwnership = {
+  recovery: "This vault needs handoff recovery before it can be changed.",
+} as const;
+
+export const vaultOwnershipPrompt = {
+  title: (device: string) => `${device} is the main device`,
+  description: "Only the main device can make changes.",
+  continueReadOnly: "Continue in read-only",
+  switching: "Switching to this device...",
+  replacementTitle: "Replace this device's current data?",
+  replacementAndroid:
+    "This phone has a separate Ganbaru AI vault. Its data cannot be merged with the linked vault. Ganbaru AI will save a complete backup to Downloads before replacing it.",
+  replacementDesktop:
+    "This computer has a separate Ganbaru AI vault. Its data cannot be merged with the linked vault. Ganbaru AI will preserve a recovery copy beside the current Ganbaru AI folder before replacing it.",
+  replacementConfirm: "Replace with linked vault",
+} as const;
+
+export const vaultHandoff = {
+  heading: "Linked devices",
+  description: "Manage your connected devices",
+  desktopOnboardingTitle: "Connect your phone",
+  desktopOnboardingDescription:
+    "Install Ganbaru AI on your phone and scan this QR code in the app to link your devices.",
+  androidOnboardingTitle: "Connect to your computer",
+  androidOnboardingDescription:
+    "Use Ganbaru AI on this phone to scan the QR code shown on your computer.",
+  stepOne: "Step 1",
+  stepTwo: "Step 2",
+  networkAccessDescription:
+    "Allow Ganbaru AI to receive connections from your phone on this network.",
+  allowNetworkAccess: "Allow phone connection",
+  networkAccessConfirmTitle: "Allow phone connection?",
+  networkAccessConfirmMessage:
+    "Your Linux firewall protects your computer from unwanted connections. Ganbaru AI needs its permission to link your phone with this computer over your local network. Linux will ask for your password, which Ganbaru AI never sees or stores.",
+  networkAccessRevokeTitle: "Remove local network access?",
+  networkAccessRevokeMessage:
+    "Your Linux firewall currently allows linked devices to connect to Ganbaru AI on this local network. Linux will ask for your password to remove that permission. Ganbaru AI never sees or stores your password.",
+  networkAccessRevokeAction: "Remove access",
+  networkAccessHeading: "Local network access",
+  networkAccessAllowed: "Allow linked devices to connect to this computer",
+  networkAccessNotRequired: "No firewall permission is required",
+  networkAccessGranted: "Phone connections are allowed on this network.",
+  networkAccessRevoked: "Phone connection access was removed.",
+  networkAccessManual:
+    "Ganbaru AI cannot request network access automatically on this Linux system.",
+  notLinked: "No devices linked",
+  devicesHeading: "Devices",
+  linkedTo: (device: string) => `Linked to ${device}`,
+  desktopDevice: "Desktop",
+  androidDevice: "Phone",
+  anotherDevice: "Another device",
+  transferPending: "A vault transfer is waiting to finish.",
+  linkPhone: "Link phone",
+  linkToDesktop: "Link to desktop",
+  createQr: "Show pairing QR code",
+  linkAnotherDevice: "Link another device",
+  enterCode: "Enter pairing code",
+  linkThisComputer: "Link this computer to another",
+  codeDialogTitle: "Link this computer",
+  codeInstructions: "Paste the pairing code shown on the coordinating computer.",
+  codePlaceholder: "Pairing code",
+  linkDevice: "Link device",
+  copyCode: "Copy pairing code",
+  codeCopied: "Pairing code copied",
+  copyCodeFailed: "The pairing code could not be copied.",
+  qrDialogTitle: "Connect another device",
+  qrInstructions:
+    "To connect a phone, scan this QR code in Settings > Data. To connect another computer, copy the pairing code and enter it in Settings > Data.",
+  qrAlt: "Pairing QR code",
+  refreshesIn: (time: string) => `Code refreshes in ${time}`,
+  refreshingCode: "Refreshing code...",
+  scanQr: "Scan desktop QR code",
+  cameraStarting: "Starting camera...",
+  notNow: "Not now",
+  continue: "Continue",
+  deviceLabel: "Phone",
+  useHere: "Switch to this device",
+  refreshCopy: "Get latest changes",
+  retry: "Retry",
+  cancel: "Cancel transfer",
+  unlink: "Unlink device",
+  unlinkTitle: "Unlink this device?",
+  unlinkMessage:
+    "The current owner will not change. A read-only copy stays read-only until you explicitly recover it.",
+  recover: "Recover this local copy",
+  recoverTitle: "Use this copy as a separate vault?",
+  recoverMessage:
+    "Use this only if the owning device is permanently unavailable. Both copies are preserved, this device becomes writable, and the devices are unlinked. Later changes will not merge automatically.",
+  workingOwnership: "Preparing this device...",
+  workingRefresh: "Getting the latest changes...",
+  workingPairing: "Linking securely...",
+  workingRequest: "Waiting for the other device...",
+  linked: "Device linked.",
+  linkedSuccessfully: (device: string) => `${device} was successfully linked.`,
+  linkedLabel: "linked",
+  refreshed: "Latest changes received.",
+  requestSent: "The request was sent. Keep both apps open on the same network.",
+  unlinked: "Device unlinked.",
+  revokedByCoordinator:
+    "This device was unlinked by the coordinating computer. Its local copy remains read-only unless you recover it as a separate vault.",
+  recovered: "This local copy is now a separate writable vault.",
+  localBackup:
+    "Before the first desktop vault replaces Android data, Ganbaru AI saves a recoverable backup to Downloads.",
+  sameNetwork: "Keep both apps open on the same local network.",
+  failed: (details: string) => `The linked-device action failed: ${details}`,
+  blockerChat: "Finish or stop active Chat work before moving the vault.",
+  blockerFocus: "Finish or stop the active Pomodoro session before moving the vault.",
+  blockerTransfer: "Finish or retry the current vault transfer first.",
+  incompatibleVersions:
+    "Update Ganbaru AI on both devices before linking or transferring data. Their data formats are different.",
+  differentCoordinator:
+    "This device is linked to another computer. Unlink it before connecting to a different computer.",
+  unreachable:
+    "This device could not reach the coordinating computer. Keep both apps open on the same local network, then retry.",
+  ownerUnreachable:
+    "The main device is unavailable. Keep it open on the same local network, then retry.",
+  unknownError: "Unknown error",
+} as const;

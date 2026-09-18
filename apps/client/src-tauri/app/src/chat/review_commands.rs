@@ -441,7 +441,7 @@ pub async fn chat_attach_review_comment(
     }
     let context = bounded_review_context(&comment);
     let now = now_timestamp()?;
-    let vault_root = vault::active_vault_path(&app).map_err(vault_error)?;
+    let vault_root = vault::active_writable_vault_path(&app).map_err(vault_error)?;
     let _guard = REVIEW_ATTACHMENT_LOCK
         .get_or_init(|| tokio::sync::Mutex::new(()))
         .lock()

@@ -7,6 +7,7 @@ This document is the command and gate-selection reference. Supporting documents 
 - [Validation infrastructure](validation-infrastructure.md): ordering, resource limits, caching, bundle contracts, and topology changes.
 - [Test authoring](test-authoring.md): useful frontend, Rust, SQLite, authorization, and UI tests.
 - [Android acceptance](android.md): physical-device, emulator, permission, lifecycle, and release cases.
+- [Local vault handoff](vault-handoff.md): concise physical desktop and Android round-trip acceptance and result record.
 - [Calendar recurrence](calendar-recurrence.md): recurrence editing and interoperability matrices.
 - [Notes editor](notes-editor.md): editor, database, transfer, and recovery matrices.
 - [Performance harness](../performance/harness.md): benchmark-only contracts outside normal validation.

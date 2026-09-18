@@ -361,7 +361,7 @@ pub async fn chat_terminal_import_context(
     let display_name = format!("{} terminal context.txt", terminal.name);
     let attachment = attachments::import_attachment_bytes(
         &pool,
-        &vault::active_vault_path(&app).map_err(vault_error)?,
+        &vault::active_writable_vault_path(&app).map_err(vault_error)?,
         attachments::AttachmentBytesImport {
             working_folder_id: &request.working_folder_id,
             attachment_id: request.attachment_id.clone(),

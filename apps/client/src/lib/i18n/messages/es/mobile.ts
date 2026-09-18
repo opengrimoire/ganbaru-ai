@@ -11,8 +11,7 @@ export const mobile = {
   pomodoroOpenCalendar: "Abrir calendario",
   vaultSetup: {
     title: "Configura tus datos",
-    intro:
-      "Empieza con datos nuevos, restaura un archivo .ganbaru-backup o importa una carpeta de Ganbaru AI existente.",
+    intro: "Empieza con datos nuevos, restaura una copia o importa una carpeta.",
     dataLocation: "Ubicación de datos",
     startFromZero: "Empezar de cero",
     restoreBackupFile: "Restaurar archivo de copia",

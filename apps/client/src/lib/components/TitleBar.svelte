@@ -30,7 +30,10 @@
   import { createTitleBarWindowController } from "$lib/components/title-bar/title-bar-window-controller.svelte";
   import { createTitleBarDetachedController } from "$lib/components/title-bar/title-bar-detached-controller.svelte";
   import TitleBarMenus from "$lib/components/title-bar/TitleBarMenus.svelte";
-  import { createTitleBarShortcutController } from "$lib/components/title-bar/title-bar-shortcut-controller.svelte";
+  import {
+    createTitleBarShortcutController,
+    getAppCloseCoordinator,
+  } from "$lib/components/title-bar/title-bar-shortcut-controller.svelte";
   import TitleBarWindowControls from "$lib/components/title-bar/TitleBarWindowControls.svelte";
   import { flushQuickNoteEditors } from "$lib/quick-notes/persistence";
   import { preloadQuickNotesInitialSnapshot } from "$lib/quick-notes/initial-snapshot";
@@ -57,6 +60,7 @@
   const { t } = getLocalization();
   const detachedWindows = getDetachedWindows();
   const benchmarkStatus = getBenchmarkStatus();
+  const appClose = getAppCloseCoordinator();
 
   let showCloseConfirm = $state(false);
   let showPomodoroMenu = $state(false);
@@ -220,6 +224,7 @@
 
   function cancelClose() {
     showCloseConfirm = false;
+    appClose.setConfirmationOpen(false);
   }
 
 
@@ -236,8 +241,11 @@
     markDetachedViewAttached: (view) => detachedWindows.markAttached(view),
     benchmarkLocked: () => lockedByBenchmark,
     resetConfirmationOpen: () => showResetSequenceConfirm || showResetConfirm,
-    requestCloseConfirmation: () => { showCloseConfirm = true; },
-    closeConfirmation: () => { showCloseConfirm = false; },
+    requestCloseConfirmation: () => {
+      showCloseConfirm = true;
+      appClose.setConfirmationOpen(true);
+    },
+    closeConfirmation: cancelClose,
     ensureBenchmarkOverlay: () => ensureBenchmarkOverlay(),
     beforeClose: flushQuickNoteEditors,
     themeEditOpen: () => !!themeEditor.editingId,
@@ -248,6 +256,8 @@
   const handleClose = windowController.requestClose;
   const confirmClose = windowController.confirmClose;
 
+  $effect(() => appClose.registerRequestHandler(handleClose));
+
   createTitleBarShortcutController({
     benchmarkLocked: () => lockedByBenchmark,
     themeEditorLocked: () => lockedByThemeEditor,
@@ -255,6 +265,7 @@
     showResetSequenceConfirmation: () => { showResetSequenceConfirm = true; },
     closeOtherConfirmations: () => {
       showCloseConfirm = false;
+      appClose.setConfirmationOpen(false);
       showResetConfirm = false;
     },
     requestClose: handleClose,

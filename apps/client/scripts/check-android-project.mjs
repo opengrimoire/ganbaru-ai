@@ -252,6 +252,7 @@ for (const expected of [
 }
 
 requireText(manifest, '<uses-permission android:name="android.permission.INTERNET" />', "manifest", failures);
+requireText(manifest, '<uses-permission android:name="android.permission.CAMERA" />', "manifest", failures);
 requireText(manifest, 'android:allowBackup="false"', "manifest", failures);
 requireText(manifest, 'android:fullBackupContent="@xml/backup_rules"', "manifest", failures);
 requireText(manifest, 'android:dataExtractionRules="@xml/data_extraction_rules"', "manifest", failures);
@@ -259,8 +260,8 @@ requireText(manifest, 'android:icon="@mipmap/ic_launcher"', "manifest", failures
 requireText(manifest, 'android:roundIcon="@mipmap/ic_launcher_round"', "manifest", failures);
 rejectText(manifest, "LEANBACK_LAUNCHER", "manifest", failures);
 rejectText(manifest, "android.software.leanback", "manifest", failures);
-if (countText(manifest, "<uses-permission ") !== 1) {
-  failures.push("manifest must declare exactly the INTERNET permission");
+if (countText(manifest, "<uses-permission ") !== 2) {
+  failures.push("manifest must declare exactly the INTERNET and CAMERA permissions");
 }
 
 const launcherIconSha256 = createHash("sha256").update(launcherIcon).digest("hex");

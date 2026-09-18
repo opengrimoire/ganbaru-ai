@@ -49,6 +49,7 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { hasOnlyShortcutModifier, hasShortcutModifier } from "$lib/keyboard-shortcuts";
   import TitleBar from "$lib/components/TitleBar.svelte";
+  import { getAppCloseCoordinator } from "$lib/components/title-bar/title-bar-shortcut-controller.svelte";
   import WindowResizeHandles from "$lib/components/WindowResizeHandles.svelte";
   import CalendarView from "$lib/components/calendar/CalendarView.svelte";
   import CompletionOverlay from "$lib/components/pomodoro/CompletionOverlay.svelte";
@@ -61,7 +62,7 @@
   import ProjectGanttView from "$lib/components/projects/ProjectGanttView.svelte";
   import ProjectKanbanView from "$lib/components/projects/ProjectKanbanView.svelte";
   import ProjectListView from "$lib/components/projects/ProjectListView.svelte";
-  import type { ProjectDesktopViewComponents } from "$lib/components/projects/project-desktop-view-components";
+  import type { ProjectViewComponents } from "$lib/components/projects/project-view-components";
   import ChatWorkspace from "$lib/components/chat/ChatWorkspace.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import TooltipHost from "$lib/components/ui/TooltipHost.svelte";
@@ -92,6 +93,7 @@
   perfMark("boot.script-start");
 
   const appWindow = getCurrentWindow();
+  const appClose = getAppCloseCoordinator();
   const isMainWindow = appWindow.label === "main";
   const detachedWindowView = detachableTabViewFromWindowLabel(appWindow.label);
   const nav = getNavigation();
@@ -118,13 +120,13 @@
   const detachedWindows = getDetachedWindows();
   const notesNotificationSchedule = getNotesNotificationSchedule();
   const notesProjectHistoryScheduler = getNotesProjectHistoryScheduler();
-  const projectDesktopViewComponents = {
+  const projectViewComponents = {
     list: ProjectListView,
     kanban: ProjectKanbanView,
     calendar: CalendarView,
     gantt: ProjectGanttView,
     dashboard: ProjectDashboardView,
-  } satisfies ProjectDesktopViewComponents;
+  } satisfies ProjectViewComponents;
   const projectChatIntegration: ProjectChatIntegration = {
     listWorkingFolders: (projectId) => chat.workingFolders
       .filter((entry) => (
@@ -1066,7 +1068,7 @@
         <CalendarView />
       {:else if nav.current === "projects"}
         <ProjectsView
-          desktopViewComponents={projectDesktopViewComponents}
+          viewComponents={projectViewComponents}
           projectChat={projectChatIntegration}
         />
       {:else if nav.current === "notes"}
@@ -1125,6 +1127,17 @@
   {#if BenchmarkOverlay}
     {@const Overlay = BenchmarkOverlay}
     <Overlay />
+  {/if}
+
+  {#if isMainWindow}
+    {#await import("$lib/components/vault/VaultOwnershipPrompt.svelte") then module}
+      {@const VaultOwnershipPrompt = module.default}
+      <VaultOwnershipPrompt
+        platform="desktop"
+        closeConfirmationOpen={appClose.confirmationOpen}
+        onRequestClose={() => appClose.request()}
+      />
+    {/await}
   {/if}
 
   <MusicPlaybackHost />

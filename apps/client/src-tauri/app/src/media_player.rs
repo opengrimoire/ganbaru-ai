@@ -566,6 +566,11 @@ pub(crate) struct MediaPlayerState {
     controller: PlaybackController,
 }
 
+#[allow(dead_code)] // Used by the H04 source-freeze flow.
+pub(crate) fn stop_for_vault_handoff(state: &MediaPlayerState) -> Result<(), MediaPlayerError> {
+    state.controller.dispatch(BackendCommand::Stop).map(|_| ())
+}
+
 #[tauri::command]
 pub(crate) fn media_player_probe(path: String) -> Result<MediaProbe, MediaPlayerError> {
     probe_local_file(&path)

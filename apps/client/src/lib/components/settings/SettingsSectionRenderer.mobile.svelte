@@ -7,6 +7,7 @@
   import AboutSection from "./AboutSection.svelte";
   import FocusSection from "./FocusSection.svelte";
   import DoomscrollingSection from "./DoomscrollingSection.svelte";
+  import MobileDataSection from "./mobile/MobileDataSection.svelte";
   import type { SettingsSectionRendererProps } from "./settings-section-renderer-contract";
 
   let {
@@ -14,6 +15,7 @@
     initialDoomscrollingTab,
     onOpenDoomscrollingLimitEditor,
   }: SettingsSectionRendererProps = $props();
+
 </script>
 
 {#if activeSection === "appearance"}
@@ -51,10 +53,7 @@
     onOpenLimitEditor={onOpenDoomscrollingLimitEditor}
   />
 {:else if activeSection === "data"}
-  {#await import("./mobile/MobileDataSection.svelte") then module}
-    {@const MobileDataSection = module.default}
-    <MobileDataSection />
-  {/await}
+  <MobileDataSection />
 {:else if activeSection === "updates"}
   {#await import("./mobile/MobileUpdatesSection.svelte") then module}
     {@const MobileUpdatesSection = module.default}

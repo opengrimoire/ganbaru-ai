@@ -328,7 +328,7 @@ pub async fn chat_promote_scratch_file(
                     false,
                 )
             })?;
-            let vault_root = vault::active_vault_path(&app).map_err(vault_error)?;
+            let vault_root = vault::active_writable_vault_path(&app).map_err(vault_error)?;
             if let Err(error) = attachments::import_attachment_bytes(
                 &pool,
                 &vault_root,

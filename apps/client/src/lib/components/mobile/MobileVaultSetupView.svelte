@@ -67,6 +67,7 @@
       busy = null;
     }
   }
+
 </script>
 
 {#snippet setupActions()}
@@ -110,6 +111,7 @@
       {/if}
       <span>{t("mobile.vaultSetup.importExistingFolder")}</span>
     </button>
+
   </div>
 {/snippet}
 

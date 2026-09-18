@@ -8,8 +8,7 @@ export const mobile = {
   pomodoroOpenCalendar: "Open calendar",
   vaultSetup: {
     title: "Set up your data",
-    intro:
-      "Start with new data, restore a .ganbaru-backup file, or import an existing Ganbaru AI folder.",
+    intro: "Start with new data, restore a backup, or import a folder.",
     dataLocation: "Data location",
     startFromZero: "Start from zero",
     restoreBackupFile: "Restore backup file",

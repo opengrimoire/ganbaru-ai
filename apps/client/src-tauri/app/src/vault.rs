@@ -27,6 +27,10 @@ static APP_STATE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 static CONFIG_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 pub(crate) mod backup;
+pub(crate) mod handoff;
+pub(crate) mod ownership;
+#[allow(dead_code)] // H04 consumes the source-freeze boundary.
+pub(crate) mod quiescence;
 
 pub const APP_SQLITE_FILE: &str = "ganbaru-ai.sqlite";
 const PRODUCTION_DATA_FOLDER_NAME: &str = "Ganbaru AI";
@@ -72,12 +76,16 @@ where
 
 #[tauri::command]
 pub(crate) fn vault_device_id<R: Runtime>(app: tauri::AppHandle<R>) -> Result<String, String> {
+    ensure_device_id(&app)
+}
+
+pub(crate) fn ensure_device_id<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<String, String> {
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|error| format!("create device id timestamp: {error}"))?
         .as_nanos();
     let candidate = format!("device-{timestamp:x}-{:x}", std::process::id());
-    update_app_state(&app, |state| {
+    update_app_state(app, |state| {
         if let Some(device_id) = state
             .device_id
             .as_ref()
@@ -545,6 +553,46 @@ pub fn active_vault_path<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBu
     Ok(path)
 }
 
+pub(crate) struct WritableVaultPath {
+    path: PathBuf,
+    _permit: ownership::ManagedVaultWritePermit,
+}
+
+impl WritableVaultPath {
+    pub(crate) fn join(mut self, path: impl AsRef<Path>) -> Self {
+        self.path.push(path);
+        self
+    }
+}
+
+impl std::ops::Deref for WritableVaultPath {
+    type Target = Path;
+
+    fn deref(&self) -> &Self::Target {
+        &self.path
+    }
+}
+
+impl AsRef<Path> for WritableVaultPath {
+    fn as_ref(&self) -> &Path {
+        &self.path
+    }
+}
+
+pub(crate) fn active_writable_vault_path<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<WritableVaultPath, String> {
+    let path = active_vault_path(app)?;
+    let vault_id = read_vault_manifest(&path)?.vault_id;
+    let permit = app
+        .state::<ownership::VaultOwnershipManager>()
+        .acquire_managed_write(&vault_id)?;
+    Ok(WritableVaultPath {
+        path,
+        _permit: permit,
+    })
+}
+
 pub(crate) fn active_vault_id<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<String, String> {
     let path = active_vault_path(app)?;
     Ok(read_vault_manifest(&path)?.vault_id)
@@ -574,10 +622,11 @@ pub(crate) fn mutate_active_vault_config<R: Runtime, T, E>(
     mutate: impl FnOnce(&mut serde_json::Value) -> Result<T, E>,
     map_storage_error: impl Fn(String) -> E,
 ) -> Result<T, E> {
+    let writable_root = active_writable_vault_path(app).map_err(&map_storage_error)?;
     let _guard = CONFIG_LOCK
         .lock()
         .map_err(|_| map_storage_error("vault config lock is unavailable".to_string()))?;
-    let path = config_path(&active_vault_path(app).map_err(&map_storage_error)?);
+    let path = config_path(&writable_root);
     let raw = if path.exists() {
         fs::read_to_string(&path).map_err(|error| map_storage_error(error.to_string()))?
     } else {

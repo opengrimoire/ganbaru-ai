@@ -22,6 +22,16 @@ Restore uses the system document picker, extracts into private staging with path
 
 The portable format is the recovery path after reinstall. Android system backup and device transfer exclude the unencrypted live vault until a deliberate encrypted design exists.
 
+## Linked desktop handoff
+
+Android can enroll with one desktop coordinator on the same private LAN by scanning a short-lived QR invitation. Device identity, the pinned coordinator fingerprint, ownership generation, transfer state, and staging stay in application-private platform state and are excluded from the transferred vault.
+
+Ownership receive and read-only refresh use the portable archive validator and atomic activation path. The current owner must freeze and snapshot the vault before transfer. Android validates the archive and SQLite integrity in staging, accepts a new generation only for ownership, activates the complete vault, and reloads the application. A lost acknowledgement resumes the same committed transfer. During uninterrupted first-use onboarding, the untouched starter vault may be replaced by an initial read-only snapshot without a redundant replacement warning. Entering the app through **Not now** permanently disables that shortcut for the installation. Linking does not merge an independently edited phone vault with the linked vault. Before the first ownership activation of an independent vault, Android asks for explicit replacement confirmation, exports the previous local vault to Downloads, and also preserves the prior private copy during activation. Backup failure aborts the transfer before ownership commits.
+
+Pairing and every later transfer negotiate the exact handoff protocol and embedded database migration fingerprint before replacement. Incompatible installations cannot exchange a vault and direct the user to update Ganbaru AI on both devices. Archive staging independently verifies the recorded migration history and checksums before activation.
+
+Startup after activation runs the normal Calendar notification and Doomscrolling projection reconciliation. Device-local alarms, native enforcement, Media3 state, permissions, external document-tree grants, and other runtime state are not replaced by the incoming vault.
+
 ## Lifecycle and process death
 
 Visibility and page lifecycle hooks perform best-effort configuration, Notes, and Quick notes flushes. Canonical writes remain responsible for correctness because Android can remove a process without a final callback.
@@ -62,7 +72,7 @@ Android selected-app rules use a private guardian process containing phase alarm
 
 Non-exported provider boundaries publish signed projections and import journal rows. The guardian is the only process opening its private runtime preferences and journal database.
 
-Journal import accepts the current vault identity and writes normalized usage and block history to canonical SQLite. Runtime rows are compacted and bounded. User configuration remains active-vault `config.json`.
+Journal import accepts the current vault identity. The current owner writes normalized usage and block history to canonical SQLite. A non-owner keeps usage in the bounded private journal and exchanges stable sample IDs through the authenticated coordinator. The accepted combined total plus newer local usage drives disconnected enforcement, and acknowledgements remove only samples committed by the owner. Runtime rows are compacted and bounded. User configuration remains active-vault `config.json`.
 
 ## Managed files
 
