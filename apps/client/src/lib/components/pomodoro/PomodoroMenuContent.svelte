@@ -184,7 +184,7 @@
 </button>
 
 {#if includeMusic}
-  <div class="mx-3 my-1.5 h-px bg-border"></div>
+  <div class="mx-3 my-1.5 border-t border-border"></div>
   {#if musicPlayer.contextPlayback && musicPlayer.contextPlayback.state !== "overridden"}
     <button
       type="button"

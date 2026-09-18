@@ -8,6 +8,7 @@
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { mobileTopBarPanelGeometry } from "$lib/mobile-layout";
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
+  import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
   import { cn } from "$lib/utils";
   import { getVaultOwnership } from "$lib/vault/ownership.svelte";
 
@@ -17,6 +18,7 @@
     initialStatus?: PairingStatus | null;
     onActivated?: () => void;
     onStatusChange?: (status: PairingStatus) => void;
+    onOpenDataSettings?: () => void;
   }
 
   interface MobileLinkingProps {
@@ -37,6 +39,7 @@
 
   const { t } = getLocalization();
   const mobileBackStack = getMobileBackStack();
+  const settingsLauncher = getSettingsLauncher();
   const ownership = getVaultOwnership();
   let status = $state<PairingStatus | null>(null);
   let open = $state(false);
@@ -169,6 +172,11 @@
   function handleActivated(): void {
     closePanel();
     void refreshStatus();
+  }
+
+  function openDataSettings(): void {
+    closePanel();
+    settingsLauncher.open("data");
   }
 
   onMount(() => {
@@ -311,6 +319,7 @@
           initialStatus={status}
           onStatusChange={handleStatusChange}
           onActivated={handleActivated}
+          onOpenDataSettings={openDataSettings}
         />
       {:else if panelLoadError}
         <div class="flex flex-col gap-3 text-sm" role="alert">

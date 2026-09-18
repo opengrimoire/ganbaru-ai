@@ -100,7 +100,7 @@ export const vaultHandoff = {
   networkAccessRevoked: "Phone connection access was removed.",
   networkAccessManual:
     "Ganbaru AI cannot request network access automatically on this Linux system.",
-  notLinked: "No device is linked.",
+  notLinked: "No devices linked",
   devicesHeading: "Devices",
   linkedTo: (device: string) => `Linked to ${device}`,
   desktopDevice: "Desktop",

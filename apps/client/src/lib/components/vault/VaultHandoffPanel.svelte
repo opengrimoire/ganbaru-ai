@@ -4,6 +4,7 @@
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import Monitor from "@lucide/svelte/icons/monitor";
   import ScanLine from "@lucide/svelte/icons/scan-line";
+  import Settings from "@lucide/svelte/icons/settings";
   import Smartphone from "@lucide/svelte/icons/smartphone";
   import { onMount, untrack } from "svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
@@ -43,6 +44,7 @@
     bootstrapReplicaOnLink = false,
     onActivated,
     onStatusChange,
+    onOpenDataSettings,
   }: {
     platform: "desktop" | "android";
     presentation?: "settings" | "onboarding" | "control";
@@ -51,6 +53,7 @@
     bootstrapReplicaOnLink?: boolean;
     onActivated?: () => void;
     onStatusChange?: (status: PairingStatus) => void;
+    onOpenDataSettings?: () => void;
   } = $props();
 
   const { t } = getLocalization();
@@ -469,7 +472,21 @@
           </div>
         {/each}
       {:else}
-        <p class="px-1 py-1 text-[0.866667rem] text-muted-foreground">{t("vaultHandoff.notLinked")}</p>
+        {#if presentation === "control"}
+          <div class={`flex w-full min-w-0 items-center justify-between gap-3 px-3 text-sm text-muted-foreground ${platform === "android" ? "min-h-12" : "h-8"}`}>
+            <span class="min-w-0 truncate">{t("vaultHandoff.notLinked")}</span>
+            <button
+              type="button"
+              class="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              aria-label={t("settings.section.data")}
+              onclick={() => onOpenDataSettings?.()}
+            >
+              <Settings size={14} strokeWidth={1.8} aria-hidden="true" />
+            </button>
+          </div>
+        {:else}
+          <p class="px-1 py-1 text-[0.866667rem] text-muted-foreground">{t("vaultHandoff.notLinked")}</p>
+        {/if}
       {/if}
     {/if}
 
@@ -583,19 +600,19 @@
       </div>
     {/if}
 
-    {#if status.linked && presentation !== "onboarding"}
+    {#if presentation === "control" || (status.linked && presentation !== "onboarding")}
       {#if presentation === "control" || !status.canWrite || (platform === "android" && (busy === "ownership" || busy === "refresh"))}
       <div class={presentation === "control"
         ? "flex flex-col"
         : "flex flex-wrap gap-2"}>
-        {#if presentation === "control"}<div class="mx-3 my-1.5 h-px bg-border"></div>{/if}
+        {#if presentation === "control"}<div class="mx-3 my-1.5 border-t border-border"></div>{/if}
         {#if presentation === "control" || !status.canWrite}
           <button
             type="button"
             class={presentation === "control" ? controlButtonClass : primaryButtonClass}
             disabled={presentation === "control" && busy === "ownership"
               ? !isCoordinatorClient
-              : busy !== null || status.pendingTransfer || status.canWrite !== false}
+              : busy !== null || !status.linked || status.pendingTransfer || status.canWrite !== false}
             onclick={handleOwnershipAction}
           >
             {#if presentation === "control"}
@@ -623,7 +640,7 @@
               class={presentation === "control" ? controlButtonClass : buttonClass}
               disabled={presentation === "control" && busy === "refresh"
                 ? !isCoordinatorClient
-                : busy !== null || status.pendingTransfer || status.canWrite !== false || !status.replicaReady}
+                : busy !== null || !status.linked || status.pendingTransfer || status.canWrite !== false || !status.replicaReady}
               onclick={() => {
                 if (presentation === "control" && busy === "refresh" && isCoordinatorClient) void cancelReceive();
                 else void (isCoordinatorClient ? receive("refresh") : requestFromAndroid("refresh"));
@@ -706,23 +723,23 @@
         tabindex="-1"
         onclick={(event) => event.stopPropagation()}
       >
-        <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0">
-            <h2 id="pairing-qr-loading-title" class="text-base font-semibold text-foreground">
+        <div>
+          <div class="flex items-center justify-between gap-3">
+            <h2 id="pairing-qr-loading-title" class="min-w-0 text-base font-semibold text-foreground">
               {t("vaultHandoff.qrDialogTitle")}
             </h2>
-            <p class="mt-1 text-[0.866667rem] leading-5 text-muted-foreground">
-              {t("vaultHandoff.qrInstructions")}
-            </p>
+            <button
+              type="button"
+              class="flex size-8 shrink-0 items-center justify-center rounded-md text-xl leading-none text-muted-foreground hover:bg-accent hover:text-foreground"
+              aria-label={t("common.close")}
+              onclick={() => { qrDialogVisible = false; }}
+            >
+              &times;
+            </button>
           </div>
-          <button
-            type="button"
-            class="flex size-8 shrink-0 items-center justify-center rounded-md text-xl leading-none text-muted-foreground hover:bg-accent hover:text-foreground"
-            aria-label={t("common.close")}
-            onclick={() => { qrDialogVisible = false; }}
-          >
-            &times;
-          </button>
+          <p class="mt-1 text-[0.866667rem] leading-5 text-muted-foreground">
+            {t("vaultHandoff.qrInstructions")}
+          </p>
         </div>
         <div class="mt-5 grid justify-items-center gap-3" role="status" aria-label={t("common.loading")}>
           <div class="grid aspect-square w-full max-w-80 place-items-center bg-white">

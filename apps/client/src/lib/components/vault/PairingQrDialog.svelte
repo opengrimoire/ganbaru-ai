@@ -99,24 +99,24 @@
     onclick={(event) => event.stopPropagation()}
     onkeydown={handleKeydown}
   >
-    <div class="flex items-start justify-between gap-3">
-      <div class="min-w-0">
-        <h2 id="pairing-qr-title" class="text-base font-semibold text-foreground">
+    <div>
+      <div class="flex items-center justify-between gap-3">
+        <h2 id="pairing-qr-title" class="min-w-0 text-base font-semibold text-foreground">
           {t("vaultHandoff.qrDialogTitle")}
         </h2>
-        <p class="mt-1 text-[0.866667rem] leading-5 text-muted-foreground">
-          {t("vaultHandoff.qrInstructions")}
-        </p>
+        <button
+          bind:this={closeButton}
+          type="button"
+          class="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          aria-label={t("common.close")}
+          onclick={onClose}
+        >
+          <X size={16} strokeWidth={2} aria-hidden="true" />
+        </button>
       </div>
-      <button
-        bind:this={closeButton}
-        type="button"
-        class="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-        aria-label={t("common.close")}
-        onclick={onClose}
-      >
-        <X size={16} strokeWidth={2} aria-hidden="true" />
-      </button>
+      <p class="mt-1 text-[0.866667rem] leading-5 text-muted-foreground">
+        {t("vaultHandoff.qrInstructions")}
+      </p>
     </div>
 
     <div class="mt-5">
