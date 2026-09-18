@@ -54,6 +54,8 @@ The machine-readable ceilings and required or forbidden module sets are authorit
 
 The current Projects, Notes, and Chat desktop route ceiling is 360 source modules. The shared route graph includes the vault ownership store and read-only ownership banner so every primary surface immediately reflects a handoff. Changes to a ceiling require a concrete user-visible rationale and should remove obsolete narrative rather than accumulating a chronology in documentation.
 
+Android ceilings include the three theme modules and three Notes block modules behind their existing public APIs. These splits preserve theme editing, import/export, and the supported Notes block operations while separating their maintenance boundaries. The production graph contains 1,008 source modules; excluding the six extracted files brings every destination back within its previous ceiling. Route limits match the measured graph without extra headroom. Required mobile modules and forbidden platform imports remain enforced unchanged.
+
 ## Android project and pull request build
 
 The generated-project contract verifies pinned Gradle, Android Gradle Plugin, Kotlin, SDK, NDK, Java, application identifiers, manifests, backup exclusions, provider paths, and Rust task behavior.

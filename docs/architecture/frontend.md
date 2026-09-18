@@ -19,6 +19,8 @@ The frontend uses four broad layers under `apps/client/src/lib/`:
 
 Components should not duplicate command contracts or parse unknown backend values ad hoc. Untrusted or versioned responses pass through bounded validation before entering typed state.
 
+The Notes block API separates payload creation, read-only inspection, and edit operations behind `notes/block-factory.ts`. Payload construction does not depend on editing or store lifecycle. Typed block switches preserve each block variant's payload and metadata explicitly.
+
 ## State model
 
 Svelte runes provide in-memory presentation state. Durable user data is loaded from native services and persisted through typed commands. A store can cache, coordinate, or optimistically present data, but it does not become a second source of truth.
@@ -37,6 +39,8 @@ Changing responsive variants must preserve active drafts, selections, scroll int
 Generated shadcn-svelte primitives live under `components/ui/`. Product-specific components compose them rather than modifying generated primitives without a clear shared reason. Tailwind CSS provides layout utilities, while semantic CSS variables provide theme colors.
 
 Themes are data-driven and validated before application. Feature code should consume semantic tokens, not embed user-facing palette values. The full contract is in [Themes](../features/themes/README.md).
+
+The stable `stores/themes.ts` API delegates to definitions, runtime color derivation, and JSON transfer modules under `stores/themes/`. Definitions are independent of derivation and transfer. This keeps changes to import validation separate from the color engine and preserves existing consumer imports.
 
 ## Localization
 

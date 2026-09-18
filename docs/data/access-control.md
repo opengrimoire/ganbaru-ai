@@ -109,6 +109,8 @@ Scratch content is not published to a channel merely because the run completed. 
 
 Replacing a scratch generation revokes the old generation for new work. A provider continuation that materialized the old scratch cannot be silently rebound to the new one.
 
+Scratch reuse resolves the teammate through the run's assignment, matched to its authorization revision and scope digest. The generation must belong to that teammate and destination, remain active, and satisfy all retained-source restrictions. Unknown or revoked authorization and mismatched ownership are denied.
+
 ## Attachments, references, and derived context
 
 Attachments are imported through Rust into a managed, bounded store. A message or draft reference controls retention. Referencing an attachment from another channel requires authority to both the source material and destination audience.

@@ -1,34 +1,31 @@
-//! Mutual-TLS coordinator transport and resumable archive streaming.
+//! Pinned client transport and shared resumable archive streaming.
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod server;
+#[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
+use server::serve;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub(crate) use server::serve_with_coordinator;
 
 use super::protocol::{
     read_control, unix_time_ms, write_control, BundleMetadata, BundlePurpose, ControlMessage,
     PairingInvitation, PROTOCOL_VERSION, TRANSFER_CHUNK_BYTES,
 };
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use super::state::Enrollment;
 use super::state::{
     certificate_fingerprint, encode_certificate, CoordinatorPin, PairingManager, TlsIdentity,
 };
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, WebPkiSupportedAlgorithms};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use rustls::RootCertStore;
 use rustls::{DigitallySignedStruct, SignatureScheme};
 use sha2::{Digest, Sha256};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use tokio::net::TcpListener;
 use tokio::net::TcpStream;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use tokio_rustls::TlsAcceptor;
 use tokio_rustls::TlsConnector;
 
 const TLS_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
@@ -37,18 +34,12 @@ const CHUNK_TIMEOUT: Duration = Duration::from_secs(20);
 const BUNDLE_COORDINATION_WAIT: Duration = Duration::from_secs(90);
 const BUNDLE_COORDINATION_POLL_INTERVAL: Duration = Duration::from_secs(1);
 const MEMBERSHIP_REVOKED_CODE: &str = "membership_revoked";
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-const UPLOAD_REQUEST_WAIT: Duration = Duration::from_secs(10);
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-const UPLOAD_REQUEST_POLL_INTERVAL: Duration = Duration::from_millis(200);
 
-#[allow(dead_code)] // H04 owns cancellation from the transfer workflow.
 #[derive(Clone, Default)]
 pub(crate) struct TransferCancellation {
     cancelled: Arc<AtomicBool>,
 }
 
-#[allow(dead_code)] // H04 owns cancellation from the transfer workflow.
 impl TransferCancellation {
     pub(crate) fn cancel(&self) {
         self.cancelled.store(true, Ordering::Release);
@@ -115,604 +106,6 @@ impl ServerCertVerifier for PinnedServerVerifier {
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         self.algorithms.supported_schemes()
     }
-}
-
-#[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
-pub(crate) async fn serve(
-    listener: TcpListener,
-    manager: PairingManager,
-    shutdown: tokio::sync::oneshot::Receiver<()>,
-) {
-    serve_with_coordinator(listener, manager, None, shutdown).await;
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub(crate) async fn serve_with_coordinator(
-    listener: TcpListener,
-    manager: PairingManager,
-    coordinator: Option<super::coordinator::CoordinatorSender>,
-    mut shutdown: tokio::sync::oneshot::Receiver<()>,
-) {
-    loop {
-        tokio::select! {
-            _ = &mut shutdown => break,
-            accepted = listener.accept() => {
-                match accepted {
-                    Ok((socket, _)) => {
-                        let manager = manager.clone();
-                        let coordinator = coordinator.clone();
-                        tokio::spawn(async move {
-                            if let Err(error) = handle_connection(socket, manager, coordinator).await {
-                                eprintln!("vault handoff connection failed: {error}");
-                            }
-                        });
-                    }
-                    Err(error) => {
-                        eprintln!("vault handoff coordinator accept failed: {error}");
-                        break;
-                    }
-                }
-            }
-        }
-    }
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-async fn handle_connection(
-    socket: TcpStream,
-    manager: PairingManager,
-    coordinator: Option<super::coordinator::CoordinatorSender>,
-) -> Result<(), String> {
-    let config = server_config(&manager)?;
-    let mut stream = tokio::time::timeout(
-        TLS_HANDSHAKE_TIMEOUT,
-        TlsAcceptor::from(Arc::new(config)).accept(socket),
-    )
-    .await
-    .map_err(|_| "TLS handshake timed out".to_string())?
-    .map_err(|error| format!("accept TLS connection: {error}"))?;
-    let peer_certificate = stream
-        .get_ref()
-        .1
-        .peer_certificates()
-        .and_then(|certificates| certificates.first())
-        .cloned();
-    let request = match timeout_control(read_control(&mut stream)).await {
-        Ok(request) => request,
-        Err(error) => {
-            return send_error(&mut stream, "malformed_control", &error, false).await;
-        }
-    };
-
-    if manager.is_revoked_certificate(peer_certificate.as_ref())? {
-        return send_error(
-            &mut stream,
-            MEMBERSHIP_REVOKED_CODE,
-            "this device was unlinked by the coordinator",
-            false,
-        )
-        .await;
-    }
-
-    match request {
-        ControlMessage::Enroll {
-            invitation_id,
-            secret,
-            vault_id,
-            device_id,
-            device_label,
-            device_kind,
-            device_certificate,
-            ..
-        } => {
-            if peer_certificate.is_some() {
-                return send_error(
-                    &mut stream,
-                    "enrollment_identity",
-                    "enrollment must use the invitation identity",
-                    false,
-                )
-                .await;
-            }
-            if let Err(error) = manager.enroll_peer(
-                Enrollment {
-                    invitation_id: &invitation_id,
-                    secret: &secret,
-                    vault_id: &vault_id,
-                    device_id: &device_id,
-                    device_label: &device_label,
-                    device_kind,
-                    certificate_b64: &device_certificate,
-                },
-                unix_time_ms(),
-            ) {
-                return send_error(&mut stream, "enrollment_rejected", &error, false).await;
-            }
-            let (coordinator_device_id, _) = manager.identity()?;
-            let coordinator_device_label = super::suggested_device_label();
-            timeout_control(write_control(
-                &mut stream,
-                &ControlMessage::Enrolled {
-                    protocol_version: PROTOCOL_VERSION,
-                    coordinator_device_id,
-                    coordinator_device_label: Some(coordinator_device_label),
-                },
-            ))
-            .await
-        }
-        ControlMessage::DownloadBundle { metadata } => {
-            manager.verify_authenticated_peer(
-                &metadata.device_id,
-                peer_certificate.as_ref(),
-                &metadata.vault_id,
-            )?;
-            serve_download(&mut stream, &manager, metadata).await
-        }
-        ControlMessage::UploadBundle {
-            metadata,
-            source_device_id,
-            purpose,
-        } => {
-            manager.verify_authenticated_peer(
-                &source_device_id,
-                peer_certificate.as_ref(),
-                &metadata.vault_id,
-            )?;
-            serve_upload(
-                &mut stream,
-                &manager,
-                coordinator.as_ref(),
-                metadata,
-                source_device_id,
-                purpose,
-            )
-            .await
-        }
-        ControlMessage::RequestBundle {
-            compatibility,
-            vault_id,
-            device_id,
-            generation,
-            purpose,
-            ..
-        } => {
-            manager.verify_authenticated_peer(&device_id, peer_certificate.as_ref(), &vault_id)?;
-            let operation = super::coordinator::CoordinatorOperation::Prepare {
-                compatibility,
-                vault_id,
-                device_id,
-                generation,
-                purpose,
-            };
-            send_coordinator_response(&mut stream, coordinator.as_ref(), operation).await
-        }
-        ControlMessage::CommitStagedOwnership { metadata } => {
-            manager.verify_authenticated_peer(
-                &metadata.device_id,
-                peer_certificate.as_ref(),
-                &metadata.vault_id,
-            )?;
-            send_coordinator_response(
-                &mut stream,
-                coordinator.as_ref(),
-                super::coordinator::CoordinatorOperation::CommitOwnership { metadata },
-            )
-            .await
-        }
-        ControlMessage::CommitUploadedOwnership {
-            metadata,
-            source_device_id,
-        } => {
-            manager.verify_authenticated_peer(
-                &source_device_id,
-                peer_certificate.as_ref(),
-                &metadata.vault_id,
-            )?;
-            send_coordinator_response(
-                &mut stream,
-                coordinator.as_ref(),
-                super::coordinator::CoordinatorOperation::CommitUploadedOwnership {
-                    metadata,
-                    source_device_id,
-                },
-            )
-            .await
-        }
-        ControlMessage::ActivationComplete {
-            vault_id,
-            device_id,
-            transfer_id,
-            generation,
-            purpose,
-            ..
-        } => {
-            manager.verify_authenticated_peer(&device_id, peer_certificate.as_ref(), &vault_id)?;
-            send_coordinator_response(
-                &mut stream,
-                coordinator.as_ref(),
-                super::coordinator::CoordinatorOperation::Activated {
-                    vault_id,
-                    device_id,
-                    transfer_id,
-                    generation,
-                    purpose,
-                },
-            )
-            .await
-        }
-        ControlMessage::CancelTransfer { transfer_id } => {
-            manager.authenticated_peer(peer_certificate.as_ref())?;
-            send_coordinator_response(
-                &mut stream,
-                coordinator.as_ref(),
-                super::coordinator::CoordinatorOperation::Cancel { transfer_id },
-            )
-            .await
-        }
-        ControlMessage::RefreshRequest {
-            compatibility,
-            vault_id,
-            device_id,
-            generation,
-            ..
-        } => {
-            manager.verify_authenticated_peer(&device_id, peer_certificate.as_ref(), &vault_id)?;
-            send_upload_status_response(
-                &mut stream,
-                coordinator.as_ref(),
-                compatibility,
-                vault_id,
-                device_id,
-                generation,
-            )
-            .await
-        }
-        ControlMessage::DoomscrollingExchange {
-            vault_id,
-            device_id,
-            samples,
-            acknowledged_peer_sample_ids,
-            owner_snapshot,
-            ..
-        } => {
-            manager.verify_authenticated_peer(&device_id, peer_certificate.as_ref(), &vault_id)?;
-            send_coordinator_response(
-                &mut stream,
-                coordinator.as_ref(),
-                super::coordinator::CoordinatorOperation::DoomscrollingExchange {
-                    vault_id,
-                    device_id,
-                    samples,
-                    acknowledged_peer_sample_ids,
-                    owner_snapshot,
-                },
-            )
-            .await
-        }
-        _ => {
-            send_error(
-                &mut stream,
-                "unsupported_message",
-                "the coordinator does not accept this message in the current state",
-                false,
-            )
-            .await
-        }
-    }
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-async fn send_coordinator_response(
-    stream: &mut tokio_rustls::server::TlsStream<TcpStream>,
-    coordinator: Option<&super::coordinator::CoordinatorSender>,
-    operation: super::coordinator::CoordinatorOperation,
-) -> Result<(), String> {
-    let Some(coordinator) = coordinator else {
-        return send_error(
-            stream,
-            "coordinator_unavailable",
-            "vault handoff coordinator operations are unavailable",
-            true,
-        )
-        .await;
-    };
-    let response = match super::coordinator::request(coordinator, operation).await {
-        Ok(response) => response,
-        Err(error) => return send_error(stream, "handoff_rejected", &error, true).await,
-    };
-    send_coordinator_response_value(stream, response).await
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-async fn send_upload_status_response(
-    stream: &mut tokio_rustls::server::TlsStream<TcpStream>,
-    coordinator: Option<&super::coordinator::CoordinatorSender>,
-    compatibility: super::protocol::HandoffCompatibility,
-    vault_id: String,
-    device_id: String,
-    generation: u64,
-) -> Result<(), String> {
-    let Some(coordinator) = coordinator else {
-        return send_error(
-            stream,
-            "coordinator_unavailable",
-            "vault handoff coordinator operations are unavailable",
-            true,
-        )
-        .await;
-    };
-    let started = tokio::time::Instant::now();
-    loop {
-        let response = super::coordinator::request(
-            coordinator,
-            super::coordinator::CoordinatorOperation::PollUpload {
-                compatibility: compatibility.clone(),
-                vault_id: vault_id.clone(),
-                device_id: device_id.clone(),
-                generation,
-            },
-        )
-        .await;
-        match response {
-            Ok(
-                response @ super::coordinator::CoordinatorResponse::UploadStatus {
-                    requested_upload: Some(_),
-                    ..
-                },
-            ) => return send_coordinator_response_value(stream, response).await,
-            Ok(response) if started.elapsed() >= UPLOAD_REQUEST_WAIT => {
-                return send_coordinator_response_value(stream, response).await;
-            }
-            Ok(_) => tokio::time::sleep(UPLOAD_REQUEST_POLL_INTERVAL).await,
-            Err(error) => return send_error(stream, "handoff_rejected", &error, true).await,
-        }
-    }
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-async fn send_coordinator_response_value(
-    stream: &mut tokio_rustls::server::TlsStream<TcpStream>,
-    response: super::coordinator::CoordinatorResponse,
-) -> Result<(), String> {
-    let message = match response {
-        super::coordinator::CoordinatorResponse::Prepared { metadata, purpose } => {
-            ControlMessage::BundlePrepared { metadata, purpose }
-        }
-        super::coordinator::CoordinatorResponse::BundlePending {
-            owner_device_id,
-            generation,
-        } => ControlMessage::BundlePending {
-            protocol_version: PROTOCOL_VERSION,
-            owner_device_id,
-            generation,
-        },
-        super::coordinator::CoordinatorResponse::OwnershipGrant {
-            vault_id,
-            transfer_id,
-            owner_device_id,
-            generation,
-        } => ControlMessage::OwnershipGrant {
-            protocol_version: PROTOCOL_VERSION,
-            vault_id,
-            transfer_id,
-            owner_device_id,
-            generation,
-        },
-        super::coordinator::CoordinatorResponse::ActivationAcknowledged { transfer_id } => {
-            ControlMessage::ActivationAcknowledged { transfer_id }
-        }
-        super::coordinator::CoordinatorResponse::Cancelled { transfer_id } => {
-            ControlMessage::TransferCancelled { transfer_id }
-        }
-        super::coordinator::CoordinatorResponse::UploadStatus {
-            generation,
-            requested_upload,
-        } => ControlMessage::RefreshStatus {
-            available: requested_upload.is_some(),
-            generation,
-            transfer_id: None,
-            requested_upload,
-        },
-        super::coordinator::CoordinatorResponse::IncomingStaged { transfer_id } => {
-            ControlMessage::BundleStaged { transfer_id }
-        }
-        super::coordinator::CoordinatorResponse::UploadRequested { .. } => {
-            return Err("local upload request cannot be sent over the transport".to_string())
-        }
-        super::coordinator::CoordinatorResponse::UploadAuthorized { .. } => {
-            return Err("upload authorization cannot be sent as a control response".to_string())
-        }
-        super::coordinator::CoordinatorResponse::DoomscrollingAcknowledged {
-            acknowledged_sample_ids,
-            peer_samples,
-            combined_samples,
-        } => ControlMessage::DoomscrollingAcknowledged {
-            acknowledged_sample_ids,
-            peer_samples,
-            combined_samples,
-        },
-    };
-    timeout_control(write_control(stream, &message)).await
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-async fn serve_download(
-    stream: &mut tokio_rustls::server::TlsStream<TcpStream>,
-    manager: &PairingManager,
-    requested: BundleMetadata,
-) -> Result<(), String> {
-    let registered = manager.outgoing_bundle(&requested.transfer_id)?;
-    if registered.metadata != requested {
-        return send_error(
-            stream,
-            "transfer_metadata",
-            "requested transfer metadata does not match the registered bundle",
-            false,
-        )
-        .await;
-    }
-    timeout_control(write_control(
-        stream,
-        &ControlMessage::BundleMetadata {
-            metadata: registered.metadata.clone(),
-        },
-    ))
-    .await?;
-    let response = timeout_control(read_control(stream)).await?;
-    let offset = match response {
-        ControlMessage::ResumeAt { offset } if offset <= registered.metadata.archive_bytes => {
-            offset
-        }
-        _ => {
-            return send_error(
-                stream,
-                "resume_offset",
-                "transfer resume offset is invalid",
-                false,
-            )
-            .await
-        }
-    };
-    stream_file(
-        stream,
-        &registered.path,
-        offset,
-        registered.metadata.archive_bytes,
-    )
-    .await?;
-    match timeout_control(read_control(stream)).await? {
-        ControlMessage::BundleComplete { transfer_id }
-            if transfer_id == registered.metadata.transfer_id =>
-        {
-            Ok(())
-        }
-        _ => Err("receiver did not acknowledge the completed transfer".to_string()),
-    }
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-async fn serve_upload(
-    stream: &mut tokio_rustls::server::TlsStream<TcpStream>,
-    manager: &PairingManager,
-    coordinator: Option<&super::coordinator::CoordinatorSender>,
-    metadata: BundleMetadata,
-    source_device_id: String,
-    purpose: BundlePurpose,
-) -> Result<(), String> {
-    metadata.validate()?;
-    let coordinator = coordinator
-        .ok_or_else(|| "vault handoff coordinator operations are unavailable".to_string())?;
-    let authorization = super::coordinator::request(
-        coordinator,
-        super::coordinator::CoordinatorOperation::AuthorizeUpload {
-            metadata: metadata.clone(),
-            source_device_id: source_device_id.clone(),
-            purpose,
-        },
-    )
-    .await;
-    match authorization {
-        Err(error) => return send_error(stream, "upload_rejected", &error, false).await,
-        Ok(super::coordinator::CoordinatorResponse::UploadAuthorized {
-            transfer_id,
-            already_received,
-        }) if transfer_id == metadata.transfer_id => {
-            if already_received {
-                timeout_control(write_control(
-                    stream,
-                    &ControlMessage::ResumeAt {
-                        offset: metadata.archive_bytes,
-                    },
-                ))
-                .await?;
-                match timeout_control(read_control(stream)).await? {
-                    ControlMessage::BundleComplete { transfer_id }
-                        if transfer_id == metadata.transfer_id => {}
-                    _ => return Err("source did not complete the uploaded transfer".to_string()),
-                }
-                return send_coordinator_response(
-                    stream,
-                    Some(coordinator),
-                    super::coordinator::CoordinatorOperation::Uploaded {
-                        metadata,
-                        source_device_id,
-                        purpose,
-                    },
-                )
-                .await;
-            }
-        }
-        _ => return Err("coordinator returned invalid upload authorization".to_string()),
-    }
-    let (partial_path, metadata_path, complete_path) =
-        manager.staging_paths(&metadata.transfer_id)?;
-    let resume_offset = if complete_path.exists() {
-        super::protocol::validate_staging_file(&complete_path, &metadata)?;
-        metadata.archive_bytes
-    } else {
-        prepare_partial(manager, &partial_path, &metadata_path, &metadata)?
-    };
-    timeout_control(write_control(
-        stream,
-        &ControlMessage::ResumeAt {
-            offset: resume_offset,
-        },
-    ))
-    .await?;
-
-    if resume_offset < metadata.archive_bytes {
-        let mut file = tokio::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&partial_path)
-            .await
-            .map_err(|error| format!("open incoming transfer: {error}"))?;
-        let mut remaining = metadata.archive_bytes - resume_offset;
-        let mut buffer = vec![0_u8; TRANSFER_CHUNK_BYTES];
-        while remaining > 0 {
-            let count = usize::try_from(remaining.min(buffer.len() as u64))
-                .map_err(|_| "incoming transfer chunk size overflow".to_string())?;
-            tokio::time::timeout(CHUNK_TIMEOUT, stream.read_exact(&mut buffer[..count]))
-                .await
-                .map_err(|_| "receiving the transfer bundle timed out".to_string())?
-                .map_err(|error| format!("receive transfer bundle: {error}"))?;
-            file.write_all(&buffer[..count])
-                .await
-                .map_err(|error| format!("write incoming transfer: {error}"))?;
-            remaining -= count as u64;
-        }
-        file.sync_all()
-            .await
-            .map_err(|error| format!("sync incoming transfer: {error}"))?;
-        drop(file);
-    }
-    match timeout_control(read_control(stream)).await? {
-        ControlMessage::BundleComplete { transfer_id } if transfer_id == metadata.transfer_id => {}
-        _ => return Err("source did not complete the uploaded transfer".to_string()),
-    }
-    if !complete_path.exists() {
-        if let Err(error) = super::protocol::validate_staging_file(&partial_path, &metadata) {
-            let _ = manager.remove_staging(&metadata.transfer_id);
-            return Err(error);
-        }
-        fs::rename(&partial_path, &complete_path)
-            .map_err(|error| format!("complete incoming transfer: {error}"))?;
-        match fs::remove_file(&metadata_path) {
-            Ok(()) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(format!("remove incoming transfer metadata: {error}")),
-        }
-    }
-    send_coordinator_response(
-        stream,
-        Some(coordinator),
-        super::coordinator::CoordinatorOperation::Uploaded {
-            metadata,
-            source_device_id,
-            purpose,
-        },
-    )
-    .await
 }
 
 async fn stream_file<W>(
@@ -801,7 +194,6 @@ pub(crate) async fn enroll(
     }
 }
 
-#[cfg_attr(not(target_os = "android"), allow(dead_code))]
 pub(crate) async fn request_bundle(
     manager: &PairingManager,
     compatibility: super::protocol::HandoffCompatibility,
@@ -856,7 +248,6 @@ pub(crate) async fn request_bundle(
     }
 }
 
-#[cfg_attr(not(target_os = "android"), allow(dead_code))]
 pub(crate) async fn commit_staged_ownership(
     manager: &PairingManager,
     metadata: BundleMetadata,
@@ -907,7 +298,6 @@ pub(crate) async fn cancel_prepared_transfer(
     }
 }
 
-#[cfg_attr(not(target_os = "android"), allow(dead_code))]
 pub(crate) async fn acknowledge_activation(
     manager: &PairingManager,
     pending: &super::state::PendingAcknowledgement,
@@ -935,7 +325,6 @@ pub(crate) async fn acknowledge_activation(
     }
 }
 
-#[cfg_attr(not(target_os = "android"), allow(dead_code))]
 pub(crate) async fn upload_bundle(
     manager: &PairingManager,
     metadata: BundleMetadata,
@@ -992,7 +381,6 @@ pub(crate) async fn upload_bundle(
     }
 }
 
-#[cfg_attr(not(target_os = "android"), allow(dead_code))]
 pub(crate) async fn commit_uploaded_ownership(
     manager: &PairingManager,
     metadata: BundleMetadata,
@@ -1017,7 +405,6 @@ pub(crate) async fn commit_uploaded_ownership(
     }
 }
 
-#[cfg_attr(not(target_os = "android"), allow(dead_code))]
 pub(crate) async fn probe_coordinator(
     manager: &PairingManager,
     compatibility: super::protocol::HandoffCompatibility,
@@ -1049,7 +436,7 @@ pub(crate) async fn probe_coordinator(
     }
 }
 
-#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+#[cfg(any(target_os = "android", all(test, not(target_os = "ios"))))]
 pub(crate) async fn exchange_doomscrolling(
     manager: &PairingManager,
     samples: Vec<super::protocol::DoomscrollingSampleMessage>,
@@ -1090,7 +477,6 @@ pub(crate) async fn exchange_doomscrolling(
     }
 }
 
-#[cfg_attr(not(target_os = "android"), allow(dead_code))]
 async fn authenticated_exchange(
     manager: &PairingManager,
     message: ControlMessage,
@@ -1131,7 +517,6 @@ where
     Ok(response)
 }
 
-#[cfg_attr(not(target_os = "android"), allow(dead_code))]
 pub(crate) async fn download_bundle(
     manager: &PairingManager,
     metadata: BundleMetadata,
@@ -1143,7 +528,6 @@ pub(crate) async fn download_bundle(
 #[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
 mod tests;
 
-#[allow(dead_code)] // H04 connects the Android transfer workflow.
 async fn download_bundle_inner(
     manager: &PairingManager,
     metadata: BundleMetadata,
@@ -1249,7 +633,6 @@ async fn download_bundle_inner(
     Ok(complete_path)
 }
 
-#[allow(dead_code)] // H04 connects the Android transfer workflow.
 fn prepare_partial(
     manager: &PairingManager,
     partial_path: &Path,
@@ -1301,31 +684,6 @@ async fn connect_pinned(
     .map_err(|error| format!("establish pinned TLS connection: {error}"))
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn server_config(manager: &PairingManager) -> Result<rustls::ServerConfig, String> {
-    let (_, identity) = manager.identity()?;
-    let builder = rustls::ServerConfig::builder();
-    let client_certificates = manager.client_auth_certificates()?;
-    let config = if !client_certificates.is_empty() {
-        let mut roots = RootCertStore::empty();
-        for certificate in client_certificates {
-            roots
-                .add(certificate)
-                .map_err(|error| format!("trust linked device certificate: {error}"))?;
-        }
-        let verifier = rustls::server::WebPkiClientVerifier::builder(Arc::new(roots))
-            .allow_unauthenticated()
-            .build()
-            .map_err(|error| format!("configure linked device verifier: {error}"))?;
-        builder.with_client_cert_verifier(verifier)
-    } else {
-        builder.with_no_client_auth()
-    }
-    .with_single_cert(vec![identity.certificate], identity.private_key.clone_key())
-    .map_err(|error| format!("configure coordinator TLS identity: {error}"))?;
-    Ok(config)
-}
-
 async fn timeout_control<T>(
     future: impl std::future::Future<Output = Result<T, String>>,
 ) -> Result<T, String> {
@@ -1334,33 +692,10 @@ async fn timeout_control<T>(
         .map_err(|_| "handoff control message timed out".to_string())?
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-async fn send_error<W>(
-    writer: &mut W,
-    code: &str,
-    message: &str,
-    retryable: bool,
-) -> Result<(), String>
-where
-    W: tokio::io::AsyncWrite + Unpin,
-{
-    timeout_control(write_control(
-        writer,
-        &ControlMessage::Error {
-            code: code.to_string(),
-            message: message.to_string(),
-            retryable,
-        },
-    ))
-    .await
-}
-
-#[allow(dead_code)] // H04 connects the Android transfer workflow.
 fn fs_rename(source: &Path, target: &Path) -> Result<(), String> {
     std::fs::rename(source, target).map_err(|error| format!("finalize staged transfer: {error}"))
 }
 
-#[allow(dead_code)] // H04 hashes generated whole-vault snapshots.
 pub(crate) fn sha256_file(path: &Path) -> Result<String, String> {
     let mut file = std::fs::File::open(path)
         .map_err(|error| format!("open file for SHA-256 digest: {error}"))?;

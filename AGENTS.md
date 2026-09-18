@@ -104,6 +104,7 @@ apps/
           messages/: split locale catalog entry points, domain modules, and shape tests
         music/: frontend music source and playback helpers
         notes/: Notes contracts, validation, editor operations, databases, and tree helpers
+          block-factory.ts, block-payloads.ts, block-queries.ts, block-updates.ts: stable block API and separate payload creation, inspection, and edit operations
           contracts/: typed Notes DTO families and view models
           validation/: split validation helpers
         pomodoro/: adaptive rhythm and Pomodoro domain logic
@@ -112,6 +113,7 @@ apps/
         quick-notes/: Quick notes contracts, rich-text operations, masonry, persistence, and window sync
         scheduling/: lifecycle and notification schedulers
         stores/: Svelte rune stores and domain controllers for active runtime state
+          themes.ts, themes/: stable theme API, definitions, color derivation, and JSON transfer
           chat.svelte.ts, chat-communication-controller.svelte.ts, chat-organizational-controller.svelte.ts, chat-timeline-controller.svelte.ts: root Chat state and split communication, organization, and timeline controllers
         types/: frontend-specific TypeScript types
         utils/: shared helpers, formatters
@@ -130,10 +132,18 @@ apps/
         src/: Tauri commands, managed state, setup and exit hooks, and platform integrations
           desktop_runtime.rs, mobile_runtime.rs: platform-specific Tauri composition roots
           db.rs, db_path.rs, vault.rs, vault/: active-folder authorization, SQLite adapter boundary, and portable Android backup and restore
+            config.rs, documents.rs: bounded vault config mutations and native Calendar/theme document transfer behind the vault command facade
+            handoff/: local single-writer linking, ownership transfer, refresh, and recovery
+              state/, state.rs: one pairing-state owner with split transfer operations, persistence validation, and restart tests
+              coordinator/, coordinator.rs: serialized coordinator dispatch with separate outgoing and incoming transfer workflows
+              transport/, transport.rs: pinned client and shared streaming transport, desktop server adapter, and transport tests
           calendar_events/, calendar_import/, calendar_reads/: split calendar persistence, import, and query services
           calendar_description.rs, calendar_import.rs, calendar_reads.rs, calendars.rs, recurrence.rs: calendar command roots and shared logic
           chat.rs, chat/: desktop Tauri Chat adapters, application command flows, and platform integrations
             coordination_commands/, send/, interaction/: messages, scheduling, turn orchestration, attachments, drafts, and follow-ups
+            coordination_commands/access/: access-profile lifecycle, assignment targets, channel access resolution, and retained-reference disclosure checks
+            internal_mcp_tools/: live authorization, invocation audits, bounded channel reads, and workspace operations behind the internal host-tool dispatcher
+            scratch_commands/: scratch inspection, explicit artifact promotion, and confirmed cleanup behind the public command facade
             checkpoints/, restore_commands/: authorization cleanup and restoration workflows over the core Chat service
             preview/, workspace_observer/: browser previews, webviews, and workspace change observation
             settings/: provider discovery, native credentials, preferences, model mapping, and pickers
@@ -146,7 +156,7 @@ apps/
           notification.rs, notification/: notification commands, scheduling, and platform delivery
           pomodoro_enforcement.rs, tray.rs: timer overlays and tray integration
           doomscrolling.rs, doomscrolling/: browser and desktop blocking commands, runtime helpers, and tests
-          media_player.rs, media_controls.rs, music.rs, music/: local playback, media controls, metadata, and music commands
+          media_player.rs, media_controls.rs, media_controls/, music.rs, music/: local playback, platform media-control adapters, metadata, and music commands
           project_icons.rs: managed project icon assets
           themes.rs, updates.rs: theme validation and application updates
           benchmark_seed.rs, first_use_contracts.rs: benchmark data and first-use query contracts

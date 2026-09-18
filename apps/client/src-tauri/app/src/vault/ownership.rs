@@ -146,7 +146,6 @@ impl VaultOwnershipManager {
         self.initialize_from_path(storage_path, device_id)
     }
 
-    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn initialize_from_path(
         &self,
         storage_path: PathBuf,
@@ -411,7 +410,6 @@ impl VaultOwnershipManager {
         })
     }
 
-    #[allow(dead_code)] // Used when H04 commits a production transfer.
     pub(crate) fn commit_outgoing(&self, vault_id: &str, transfer_id: &str) -> Result<u64, String> {
         self.mutate_record(vault_id, |device_id, record| {
             if record.owner_device_id != device_id {
@@ -443,7 +441,7 @@ impl VaultOwnershipManager {
         })
     }
 
-    #[allow(dead_code)] // Used when H04 receives a production grant.
+    #[cfg(any(test, not(any(target_os = "android", target_os = "ios"))))]
     pub(crate) fn accept_incoming_grant(
         &self,
         vault_id: &str,
@@ -555,7 +553,6 @@ impl VaultOwnershipManager {
         })
     }
 
-    #[allow(dead_code)] // Used when H04 activates a production transfer.
     pub(crate) fn finalize_incoming(
         &self,
         vault_id: &str,
@@ -580,7 +577,6 @@ impl VaultOwnershipManager {
         })
     }
 
-    #[allow(dead_code)] // Used when H04 acknowledges production transfers.
     pub(crate) fn finish_outgoing_acknowledgement(
         &self,
         vault_id: &str,
