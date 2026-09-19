@@ -4,39 +4,39 @@ Hash: SHA512
 Architectures: amd64
 Codename: stable
 Components: main
-Date: Sun, 13 Sep 2026 01:57:06 +0000
+Date: Sat, 19 Sep 2026 00:02:08 +0000
 Label: Ganbaru AI
 Origin: Ganbaru AI
 Suite: stable
 MD5Sum:
- 6e4b1cf2879db4d8407a00c2f3555107             1454 Release
- b0f653b9b9b10ef3cd68c195ad27fb6f              448 main/binary-amd64/Packages
- ecbe3e2bb26f92431f82afe628cd0ad6              346 main/binary-amd64/Packages.gz
+ 5d5f17a979ffca96057d581e7bc72da0             1454 Release
+ 95aa97082b412c325177d8e55137ad0c              448 main/binary-amd64/Packages
+ e8aadc8470dd06a14c702cb8f79d1b59              340 main/binary-amd64/Packages.gz
 SHA1:
- c29af0074eaeb7c4aec0d033be99b02e79e2a822             1454 Release
- 9f426820c4e16407b5e65f6a1e3662bb2d8977bc              448 main/binary-amd64/Packages
- bc66bab032702279aa007a1b64b9b1603dc48abc              346 main/binary-amd64/Packages.gz
+ 2c8862855ea94ffca3c86c6006d2ba7bcaa65941             1454 Release
+ fcc60acefc237301a765d7486fa8c23b1be7f1f2              448 main/binary-amd64/Packages
+ 017f515e12df397b68286b249773144bb252e924              340 main/binary-amd64/Packages.gz
 SHA256:
- 4ddbb087c813b2e9354b07acba2b2a0d4ae97d0cc82a561702b5193e0f091cc7             1454 Release
- 129cdfb724e4975891be21c4d4ebeb98d22389e31d161ec170f86842d68fecc6              448 main/binary-amd64/Packages
- 207657fc714e212090a64f05d724cf6c2c63ad78ccb78e320fb90a73a3c72a9d              346 main/binary-amd64/Packages.gz
+ de101415b0467dab901a06058b12a080e2177ac24e5d2df2dcd46bae43636233             1454 Release
+ b92c0ef39232e9715276d826ef8d3c67434c2c2f7eac4c3bdac43f022a2d0589              448 main/binary-amd64/Packages
+ af30aa8168f486475476ada3eb26e10ac1dfc29b08b308346153ed487ecfaba4              340 main/binary-amd64/Packages.gz
 SHA512:
- e473f4325ffd463b88bf321f34115836d7a6e00ffa41f9150e1d777209ad7a3ff1c6546069ea7b6e12462563718969013794b8e3d226fca3ddc8a57f6ecbc091             1454 Release
- dea62a0bc4456a8ee359a6b6fce2bf7101fcc339665445c30ce8286634049761adb5e8a6629040ec9aa2eb3013d0389d7cfc4550b9de373298028cd7156c2ea5              448 main/binary-amd64/Packages
- bc47561686bb389825fbbab46c9fc05ba6272cf382d5deaa515af25aaa1daaeb02bb613164bced713c6622e2fb2cd5d3f8b2ce5793418c3e08ebc02365c472db              346 main/binary-amd64/Packages.gz
+ 5cfa48b507a146c0e950a3a85be7aa8cf44e4c55a09b1b484de6c823e10b4d3d1883f31c626a851d204f1840b23f73400bccb0a89c77e01772f14b302aaae342             1454 Release
+ 467f9a43c68af1eb1dde981ac8f7b63814664a17a7bad082aa4bc45ef7dbc253c45737bfcce72816947c3a987dc91a2a7544aa1fe8eeac132cc5a493ebe3b2ef              448 main/binary-amd64/Packages
+ 200c772027f0e2ce769ef64605a21d64d4fafe8b2d32ec6e4ba6bb7c26070f31b9d3ce0a00d7a264223082d5dc50685cf63036eeee545e38679141ba6678a7f7              340 main/binary-amd64/Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iQIzBAEBCgAdFiEEBMAHv6rSxNVkeE3EzKJg2pIzX+AFAmqmAvMACgkQzKJg2pIz
-X+AZ6Q//ahkOp1C+Irea90UMHaQ98eosDusu78+yUs6B1t1Q+zvwzgimzYFsfApP
-dtVeRmVz7C+fSTzF1PvdB3ppRzgyXyZyLrRqUypmQ+6PEXlQKEOarLnDnC3cB4/y
-LUsnG4NfHhldoNi8hFNIweE+B4jS7ZRyyoOutolYZa3f9l6n7DAkMb4cH/9hpy9t
-MhIPNRj3PzLOaK1FrpaUHUV713URnCsQWk3FgjUY4vVVDN+nFqLkS2Ry5tQ5y2nv
-7H1Uzd4qJlAdsAX5mkJpz+DPrYMxJ3vg4552XyaagoYQ5otqK93/BiqLqhChCRvI
-b+cpNcYnr0u8PcAryVPbuM5rSEVNv2WV0oW8ikmwcRb+V8Y4sSN278Shf4L0Xd2q
-ye2MRT6lJ4Z6+CF3DvexKtUSDCnylT9+hSbv8PKTUPYVCbl0+6aSTRDrd/XrWViR
-eFEItIGSz5I1he0Jgg9pWY4u0KUvULDMHi0LE6KF/6KyKT2GWGMIwYC+5sgpUeq9
-RzBBZmEm3tvvgfAebQ5uJl4yh2mSlHV8o21M1eopDLK2SjtN7+dhdG7uj75UoqTa
-u73+w8Sa6OA9jyfVVMohoxlum9Y0lQ4IF8uofAmMD47/1yFWL6XFt7evSAiWqd5L
-E3xIS7idHpcdsPU6hmzksG2K/UTQQ5gngPmA9rMiu1yn/CIkIQg=
-=3cPH
+iQIzBAEBCgAdFiEEBMAHv6rSxNVkeE3EzKJg2pIzX+AFAmqt0QEACgkQzKJg2pIz
+X+BhAg/9Hjqb+6RtK/qbqDA7ZHMwr9Xm8t0MC2BuGsRt6nw6iSjv2ioAHGKNQyEp
+DTTZq67foYGbH0xawqb2drHxCPOQj1m+6cJt6OJFuNdbFr/D8VfGlC3Oa8SHbp7M
+qS+aoi9Waub2vNvbFoPwGNZfcyCoZLFVs42D0/t63P42NV6rLsrvzgKLc25JFBcr
+Lu+E8PqQ32ooXnpZ+RxXVyGJ8MqM+NAeo+4PLDclkHdCKkxvjCDPzJ736EtxcZg6
+sltF66bt8+UppCpAg4T1dJVNA8zlOiCVPb2f17DtoqGcsz9tzUC9TDg3wdsUZg1I
+VWfVxH7EkjEUsRxf6AvsoiCMgaTRixbr+a4ABleMbJ7y1UfgxZrucF7d2S4nCOaK
+5BJG/jg5WREmcEBxck8JOhGXpsbh3TCkjYAV2GldY/gEN9ZjAy9loe4OTnIr5IKV
+h8Q81NO7aqj/6W1jH6Gf3uua3Vo2uTKtzu43ZSExuYVNtB+YI+QKdZsqmaYsoR+K
+ZZhRrNimi9gafWbZ0jeQfgOScPlIezt0gl+3vg99+79Av+XNfqYQ+gq4xPxuJ3bM
+9OI3LfehB3LnNcNWtGsCdFJdUiNq/fV3qGEPv8J6qD1pBtIwTcoXWpDearqAhtg7
+/4Ya0Vhywf561xBjaYKTVBYxrAaybhMzvzHgIF7XVLiS14iKzds=
+=MYUR
 -----END PGP SIGNATURE-----
