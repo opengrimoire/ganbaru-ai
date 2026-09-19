@@ -2,12 +2,16 @@
 name = "ganbaru-chat-contracts"
 version = "0.1.5"
 description = "Provider-neutral Ganbaru AI Chat contracts"
-authors = ["Ganbaru AI"]
-license = "AGPL-3.0-only"
-edition = "2021"
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 
 [lib]
 doctest = false
+
+[lints]
+workspace = true
 
 [dependencies]
 ganbaru-working-folders = { path = "../ganbaru-working-folders" }

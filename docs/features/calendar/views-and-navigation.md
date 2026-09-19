@@ -51,3 +51,5 @@ Calendar visibility affects presentation and scheduling queries without deleting
 Every view provides a non-pointer route for navigation, event opening, creation, and overflow access. Color is never the only status signal. Patterns, labels, and accessible names communicate cancellation, response state, active focus, and controls.
 
 Touch layouts retain appropriately sized controls and native panning. Desktop hover affordances also appear on focus.
+
+Timed blocks and all-day chips are focusable controls with visible focus and accessible event names. Enter and Space open the same event panel as a click without starting a drag; held activation keys do not repeatedly reopen it.

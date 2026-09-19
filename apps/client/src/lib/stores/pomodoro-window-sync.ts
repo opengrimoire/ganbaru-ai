@@ -109,7 +109,7 @@ function isNonNegativeNumber(value: unknown): value is number {
 }
 
 function isPomodoroConfig(value: unknown): value is PomodoroConfig {
-  return isRecord(value) && isValidPomodoroConfig(value as unknown as PomodoroConfig);
+  return isValidPomodoroConfig(value);
 }
 
 function isAdaptivePlannedBlock(value: unknown): value is PomodoroAdaptivePlannedBlockWrite {

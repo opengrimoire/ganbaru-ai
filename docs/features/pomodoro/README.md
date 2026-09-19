@@ -29,6 +29,8 @@ Pomodoro turns a calendar commitment into an adaptive sequence of focus and reco
 
 A simple rhythm defines focus count, focus duration, short-break duration, long-break duration, and which focus boundary receives the long break. Presets provide common patterns and custom configuration uses the same explicit fields.
 
+Configuration received from another window is untrusted input. Validate the rhythm discriminant, bounded numeric fields, every sequence step, and the preset's own catalog key before accepting it. Malformed configurations are rejected without throwing or changing the active configuration.
+
 Adaptive mode proposes a focus opportunity from local completed history and current context. It remains bounded by the active event deadline and a documented safe range. The visible plan states the current opportunity and next transition.
 
 Detailed pure logic belongs in:

@@ -2,6 +2,16 @@
 
 This document explains the resource, ordering, caching, and production-build constraints behind the commands in [Testing](README.md).
 
+## Rust baseline
+
+The workspace uses Rust edition 2024 and Cargo resolver 3. `Cargo.toml` declares Rust 1.98 as the supported minimum; `rust-toolchain.toml` pins compiler 1.98.0 with Clippy and rustfmt for local, pull request, and release validation. Shared package metadata is inherited from the workspace, while package versions remain independent. `rustfmt.toml` keeps the existing 2021 formatting style separate from language semantics.
+
+Run commands through rustup without a conflicting toolchain override. CI installs the repository-selected toolchain with `rustup show`, then adds the targets required by each job. A Linux gate does not replace the independent Windows composition check or Android APK build. macOS and iOS are future platforms and are not validated by these jobs.
+
+Toolchain or edition changes require `validate:full` and the platform checks. Compatibility diagnostics must be reviewed for temporary lifetimes, lock and resource cleanup, and native unsafe boundaries rather than fixed mechanically to suppress warnings.
+
+The shared Clippy policy allows `collapsible_if`: nested guards and edition-2024 let-chains are both valid styles. Choose the form that makes control flow and resource scope clearest. This avoids a mandatory rewrite of existing guards merely because the edition now permits let-chains. Other compiler and Clippy warnings remain errors in the normal gate; dependency audit policy is unchanged.
+
 ## Root execution order
 
 The complete normal gate runs in this order:
@@ -14,6 +24,8 @@ The complete normal gate runs in this order:
 6. Desktop and Android production builds and bundle contracts through Turbo.
 
 Rust runs first because compiler and linker peaks are less predictable. Rust and frontend tools do not overlap. Sequential Vitest shards release transformed module graphs between groups.
+
+The hosted Linux pull request and merge-queue job runs this same complete gate. It does not substitute static checks for regression tests or bundle contracts.
 
 Benchmark fixture and harness contracts are deliberately outside `validate`. Run `pnpm -w run test:benchmark-contracts` when changing the harness. Performance measurement remains manual release-build work.
 

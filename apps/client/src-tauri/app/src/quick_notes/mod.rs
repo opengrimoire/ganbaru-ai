@@ -20,6 +20,20 @@ const MAX_RUNS: usize = 4_096;
 const PREVIEW_CHARS: usize = 4_096;
 const TRASH_RETENTION_DAYS: i64 = 7;
 
+/// Stable write outcomes for conflict recovery, independent of diagnostic wording.
+#[derive(Debug, Serialize)]
+#[serde(tag = "code", content = "message", rename_all = "snake_case")]
+pub enum QuickNoteWriteError {
+    RevisionConflict(String),
+    Failed(String),
+}
+
+impl From<String> for QuickNoteWriteError {
+    fn from(message: String) -> Self {
+        Self::Failed(message)
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct QuickNoteTextRun {
@@ -587,11 +601,11 @@ pub async fn quick_notes_update<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     note: QuickNoteUpdate,
-) -> Result<QuickNoteRead, String> {
+) -> Result<QuickNoteRead, QuickNoteWriteError> {
     let runs = validate_content(&note.id, &note.title, &note.runs, note.color)?;
     validate_optional_tag_id(note.tag_id.as_deref())?;
     if note.expected_revision < 1 {
-        return Err("quick note revision must be positive".to_string());
+        return Err("quick note revision must be positive".to_string().into());
     }
     let body = body_plain_text(&runs);
     let pool = connect_sqlite(app, db_url).await?;
@@ -618,13 +632,17 @@ pub async fn quick_notes_update<R: Runtime>(
     .await
     .map_err(|error| format!("update quick note: {error}"))?;
     if result.rows_affected() != 1 {
-        return Err("quick note revision conflict".to_string());
+        return Err(QuickNoteWriteError::RevisionConflict(
+            "quick note revision conflict".to_string(),
+        ));
     }
     replace_runs(&mut tx, &note.id, &runs).await?;
     tx.commit()
         .await
         .map_err(|error| format!("commit quick note update: {error}"))?;
-    load_note_from_pool(&pool, &note.id).await
+    load_note_from_pool(&pool, &note.id)
+        .await
+        .map_err(Into::into)
 }
 
 async fn revision_mutation(
@@ -632,7 +650,7 @@ async fn revision_mutation(
     request: &QuickNoteRevisionRequest,
     sql: &str,
     context: &str,
-) -> Result<QuickNoteRead, String> {
+) -> Result<QuickNoteRead, QuickNoteWriteError> {
     validate_id(&request.id)?;
     let result = sqlx::query(sql)
         .bind(&request.id)
@@ -641,9 +659,13 @@ async fn revision_mutation(
         .await
         .map_err(|error| format!("{context}: {error}"))?;
     if result.rows_affected() != 1 {
-        return Err("quick note revision conflict".to_string());
+        return Err(QuickNoteWriteError::RevisionConflict(
+            "quick note revision conflict".to_string(),
+        ));
     }
-    load_note_from_pool(pool, &request.id).await
+    load_note_from_pool(pool, &request.id)
+        .await
+        .map_err(Into::into)
 }
 
 #[tauri::command]
@@ -651,7 +673,7 @@ pub async fn quick_notes_set_pinned<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     request: QuickNotePinRequest,
-) -> Result<QuickNoteRead, String> {
+) -> Result<QuickNoteRead, QuickNoteWriteError> {
     validate_id(&request.id)?;
     let pool = connect_sqlite(app, db_url).await?;
     let result = sqlx::query(
@@ -679,9 +701,13 @@ pub async fn quick_notes_set_pinned<R: Runtime>(
     .await
     .map_err(|error| format!("set quick note pinned state: {error}"))?;
     if result.rows_affected() != 1 {
-        return Err("quick note revision conflict".to_string());
+        return Err(QuickNoteWriteError::RevisionConflict(
+            "quick note revision conflict".to_string(),
+        ));
     }
-    load_note_from_pool(&pool, &request.id).await
+    load_note_from_pool(&pool, &request.id)
+        .await
+        .map_err(Into::into)
 }
 
 #[derive(Debug, FromRow)]
@@ -827,7 +853,7 @@ pub async fn quick_notes_archive<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     request: QuickNoteRevisionRequest,
-) -> Result<QuickNoteRead, String> {
+) -> Result<QuickNoteRead, QuickNoteWriteError> {
     let pool = connect_sqlite(app, db_url).await?;
     revision_mutation(
         &pool,
@@ -845,7 +871,7 @@ pub async fn quick_notes_unarchive<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     request: QuickNoteRevisionRequest,
-) -> Result<QuickNoteRead, String> {
+) -> Result<QuickNoteRead, QuickNoteWriteError> {
     let pool = connect_sqlite(app, db_url).await?;
     revision_mutation(
         &pool,
@@ -871,7 +897,7 @@ pub async fn quick_notes_trash<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     request: QuickNoteRevisionRequest,
-) -> Result<QuickNoteRead, String> {
+) -> Result<QuickNoteRead, QuickNoteWriteError> {
     let pool = connect_sqlite(app, db_url).await?;
     revision_mutation(
         &pool,
@@ -890,7 +916,7 @@ pub async fn quick_notes_restore<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     request: QuickNoteRevisionRequest,
-) -> Result<QuickNoteRead, String> {
+) -> Result<QuickNoteRead, QuickNoteWriteError> {
     let pool = connect_sqlite(app, db_url).await?;
     revision_mutation(
         &pool,

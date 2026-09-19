@@ -64,10 +64,17 @@
 
   let chipEl: HTMLDivElement | undefined = $state();
 
-  function handleClick(e: MouseEvent) {
+  function handleClick(e: MouseEvent | KeyboardEvent) {
     e.stopPropagation();
     const rect = chipEl?.getBoundingClientRect();
     onclick(rect);
+  }
+
+  function handleKeydown(e: KeyboardEvent): void {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (!e.repeat) handleClick(e);
   }
 
   function handlePointerDown(e: PointerEvent) {
@@ -78,10 +85,11 @@
 
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
   bind:this={chipEl}
+  role="button"
+  tabindex="0"
+  aria-label={eventTitle}
   data-event-id={event.id}
   class="allday-chip relative min-w-0 flex-1 select-none truncate rounded px-1.5 text-[0.666667rem] leading-5 {statusPatternClass} {mobileLayout ? 'mobile-allday-chip' : ''}
     {editing || preview || grabbing ? 'chip-editing' : ''}"
@@ -95,6 +103,8 @@
     filter: none;
   "
   onclick={handleClick}
+  onkeydown={handleKeydown}
+  onfocus={onprefetch}
   onpointerenter={onprefetch}
   onpointerdown={handlePointerDown}
 >
@@ -125,6 +135,11 @@
 </div>
 
 <style>
+  .allday-chip:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+  }
+
   .allday-chip::before {
     content: "";
     position: absolute;

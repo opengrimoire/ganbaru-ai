@@ -26,6 +26,8 @@ The background uses a theme-aware event-palette slot. Notes store the slot ident
 
 Edits autosave after a short debounce, and pending writes flush at relevant lifecycle boundaries. Revision checks prevent another window from silently overwriting newer content. Conflicts can reload the canonical note or preserve local work as a separate copy.
 
+Revision-sensitive native writes return a stable `revision_conflict` code for stale revisions and `failed` for other failures. Recovery decisions use that code, never words in the diagnostic message.
+
 ## Lifecycle
 
 Active notes can be pinned, archived, or moved to Trash. Archive and Trash clear pin state. Trash remembers whether the note came from active or Archive so restore returns it appropriately.

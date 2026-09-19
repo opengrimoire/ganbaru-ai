@@ -12,7 +12,6 @@ mod calendar_import;
 mod calendar_reads;
 mod calendars;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-#[allow(dead_code)]
 mod chat;
 #[cfg(any(target_os = "android", target_os = "ios"))]
 #[path = "chat_mobile.rs"]

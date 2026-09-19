@@ -212,6 +212,7 @@ pub async fn chat_list_channel_memberships(
 }
 
 #[tauri::command]
+#[cfg(any(test, target_os = "android", target_os = "ios"))]
 pub async fn chat_read_mobile_channel_roster(
     app: tauri::AppHandle,
     db_url: String,
@@ -763,15 +764,6 @@ pub async fn chat_retry_assignment(
     expected_revision: u64,
 ) -> ChatResult<ChatWorkAssignmentRead> {
     assignments::retry_assignment(app, db_url, assignment_id, expected_revision).await
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub(crate) async fn project_provider_event_in_transaction(
-    transaction: &mut Transaction<'_, Sqlite>,
-    runtime: &super::events::CanonicalRuntimeEvent,
-) -> ChatResult<bool> {
-    super::coordination::projection::project_provider_event_in_transaction(transaction, runtime)
-        .await
 }
 
 #[cfg(test)]

@@ -20,6 +20,10 @@
 8. Attempt new pairing with builds that have different embedded migration sets. Confirm enrollment is rejected before membership changes and the UI asks to update both devices. Repeat with devices that were linked before one build changed, then request both refresh and ownership. Confirm each request fails before the source creates a new snapshot, neither active vault is replaced, and updating both devices restores transfer capability.
 9. Link a desktop that already contains an independent event or note, then request first ownership there. Confirm the replacement warning appears, cancellation preserves the current vault, and confirmation preserves the old vault in a visible sibling folder before activating the linked vault.
 
+## Automated ownership durability checks
+
+The ownership tests cover failure before file replacement and injected directory-sync failure after replacement during initial registration, outgoing commit, and incoming activation. They verify that uncertain persistence cannot restore write authority, accept a retry, or grant database access in the same process, and that restart reloads the visible committed generation. These are filesystem-boundary failure tests, not proof of power-loss durability on every supported platform.
+
 ## Maintainer record
 
 | Field | Result |

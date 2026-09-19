@@ -1,7 +1,4 @@
-//! Local coding-agent Chat contracts.
-//!
-//! The module freezes provider, event, lifecycle, credential, configuration,
-//! and workspace authorization boundaries before runtime processes exist.
+//! Desktop Chat command adapters, native execution, and workspace integrations.
 
 pub(crate) use ganbaru_chat::chat::agent_runs;
 pub mod channel_commands;

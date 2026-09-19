@@ -15,6 +15,7 @@
     createQuickNote,
     getQuickNote,
     updateQuickNote,
+    QuickNoteWriteError,
   } from "$lib/api/quick-notes";
   import { FALLBACK_COLOR_INDEX } from "$lib/components/calendar/types";
   import {
@@ -108,7 +109,6 @@
   let selection = $state<QuickNoteSelection>({ start: 0, end: 0 });
   let typingFormatting = $state<QuickNoteFormatting>({ ...EMPTY_QUICK_NOTE_FORMATTING });
   let status = $state<"idle" | "saving" | "saved" | "failed" | "conflict">(initialNote ? "saved" : "idle");
-  let errorMessage = $state("");
   let limitError = $state("");
   let dirtyVersion = 0;
   let savedVersion = 0;
@@ -145,7 +145,6 @@
   function markDirty(): void {
     dirtyVersion += 1;
     status = "idle";
-    errorMessage = "";
     scheduleSave();
   }
 
@@ -191,8 +190,7 @@
       status = dirtyVersion === targetVersion ? "saved" : "idle";
       if (dirtyVersion !== targetVersion) scheduleSave();
     } catch (error: unknown) {
-      errorMessage = error instanceof Error ? error.message : String(error);
-      status = errorMessage.includes("revision conflict") ? "conflict" : "failed";
+      status = error instanceof QuickNoteWriteError && error.code === "revision_conflict" ? "conflict" : "failed";
       throw error;
     }
   }

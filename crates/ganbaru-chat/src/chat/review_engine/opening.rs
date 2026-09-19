@@ -22,6 +22,19 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+enum MissingReviewSource {
+    CheckpointPair,
+    ProviderTurn,
+}
+
+fn missing_review_source(reason: MissingReviewSource, message: &str) -> ChatError {
+    let mut error = ChatError::new(ChatErrorCode::NotFound, message, true);
+    error.details = Some(Box::new(serde_json::json!({ "reason": reason })));
+    error
+}
+
 pub async fn open_review(
     authorizer: &dyn ReviewWorkspaceAuthorizer,
     state: &ChatReviewRegistry,
@@ -64,10 +77,9 @@ pub async fn open_review(
                 let (pre, post) = checkpoint_pair(pool, thread_id, *range, turn_id.as_ref())
                     .await?
                     .ok_or_else(|| {
-                        ChatError::new(
-                            ChatErrorCode::NotFound,
+                        missing_review_source(
+                            MissingReviewSource::CheckpointPair,
                             "A settled checkpoint pair is not available for this review",
-                            true,
                         )
                     })?;
                 let pre = read_stored_checkpoint(pool, &pre).await?;
@@ -206,10 +218,9 @@ pub async fn open_review(
                     files.push(file_from_summary(String::new(), summary, &request.source));
                 }
                 if files.is_empty() {
-                    return Err(ChatError::new(
-                        ChatErrorCode::NotFound,
+                    return Err(missing_review_source(
+                        MissingReviewSource::ProviderTurn,
                         "The provider did not report usable workspace-relative paths for this turn",
-                        true,
                     ));
                 }
                 (
@@ -463,10 +474,9 @@ pub async fn provider_turn_patch(
     .await
     .map_err(persistence_error)?
     .ok_or_else(|| {
-        ChatError::new(
-            ChatErrorCode::NotFound,
+        missing_review_source(
+            MissingReviewSource::ProviderTurn,
             "The provider did not report a patch for this turn",
-            true,
         )
     })?;
     match serde_json::from_str::<CanonicalEvent>(&payload).map_err(|_| corrupt_data())? {
@@ -475,10 +485,9 @@ pub async fn provider_turn_patch(
             .filter(|patch| !patch.is_empty())
             .map(|patch| (event.files, patch))
             .ok_or_else(|| {
-                ChatError::new(
-                    ChatErrorCode::NotFound,
+                missing_review_source(
+                    MissingReviewSource::ProviderTurn,
                     "The provider did not report patch content for this turn",
-                    true,
                 )
             }),
         _ => Err(corrupt_data()),
@@ -634,4 +643,48 @@ fn extract_provider_file_patch(
         .map(|index| index + 2)
         .unwrap_or(remainder.len());
     Some(remainder[..end].to_string())
+}
+
+#[cfg(test)]
+mod source_error_tests {
+    use super::*;
+
+    #[test]
+    fn missing_sources_keep_stable_recovery_reasons_when_messages_change() {
+        for (reason, expected) in [
+            (MissingReviewSource::CheckpointPair, "checkpoint_pair"),
+            (MissingReviewSource::ProviderTurn, "provider_turn"),
+        ] {
+            let value =
+                serde_json::to_value(missing_review_source(reason, "Changed diagnostic")).unwrap();
+            assert_eq!(value["code"], "not_found");
+            assert_eq!(value["details"]["reason"], expected);
+            assert_eq!(value["message"], "Changed diagnostic");
+        }
+    }
+
+    #[tokio::test]
+    async fn absent_provider_patch_is_recoverable_but_database_failure_is_not() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        let thread = ChatThreadId::new("thread:missing-patch").unwrap();
+        let turn = ChatTurnId::new("turn:missing-patch").unwrap();
+        let failure = provider_turn_patch(&pool, &thread, &turn)
+            .await
+            .unwrap_err();
+        assert_ne!(failure.code, ChatErrorCode::NotFound);
+        sqlx::query("CREATE TABLE chat_events (thread_id TEXT, turn_id TEXT, sequence INTEGER, event_type TEXT, payload_data TEXT)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let missing = provider_turn_patch(&pool, &thread, &turn)
+            .await
+            .unwrap_err();
+        assert_eq!(missing.code, ChatErrorCode::NotFound);
+        assert_eq!(missing.details.unwrap()["reason"], "provider_turn");
+        pool.close().await;
+    }
 }
