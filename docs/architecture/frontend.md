@@ -34,6 +34,8 @@ State is scoped to the smallest useful owner:
 
 Changing responsive variants must preserve active drafts, selections, scroll intent, and open workflows.
 
+The Chat teammate settings editor uses a component-scoped controller for draft baselines, revision checks, asynchronous access loading, and save/conflict recovery. Its Svelte component owns rendering, menus, focus restoration, and layout. The controller reuses the pure access and draft helpers; backend authorization remains authoritative. A save captures its submitted draft so edits made during the request remain unsaved, and access confirmation is valid only for the exact previewed snapshot.
+
 ## UI foundations
 
 Generated shadcn-svelte primitives live under `components/ui/`. Product-specific components compose them rather than modifying generated primitives without a clear shared reason. Tailwind CSS provides layout utilities, while semantic CSS variables provide theme colors.

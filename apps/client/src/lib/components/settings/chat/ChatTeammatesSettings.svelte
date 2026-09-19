@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createTeammateEditorController } from "$lib/chat/teammate-editor-controller.svelte";
   import { onMount, tick, untrack } from "svelte";
   import Archive from "@lucide/svelte/icons/archive";
   import ArchiveRestore from "@lucide/svelte/icons/archive-restore";
@@ -13,52 +14,25 @@
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import X from "@lucide/svelte/icons/x";
   import * as chatApi from "$lib/api/chat";
-  import {
-    copyModelOptionSelections,
-    copyVersionedJson,
-    resolveDefaultProviderModel,
-  } from "$lib/chat/composer-model";
   import type {
-    ChatAccessProfileRead,
     ChatAiTeammateRead,
     ChatChannelRead,
     ChatFolderCapability,
     ChatRuntimeApprovalPolicy,
-    ChatTeammatePolicyInput,
-    ChatTeammateAccessRead,
     ChatTeammateChannelAccessInput,
-    ModelOptionSelection,
-    ReplaceChatTeammateAccessRequest,
-    SafetyMode,
-    VersionedJson,
   } from "$lib/chat/contracts";
-  import { chatErrorCode, chatErrorField, chatErrorMessage } from "$lib/chat/error-presentation";
+  import { chatErrorMessage } from "$lib/chat/error-presentation";
   import { modelCompany } from "$lib/chat/model-company";
   import { preferredProjectWorkingFolder } from "$lib/chat/working-folder-selection";
   import {
     applyAccessProfileToScope,
     applyChannelPresetToScope,
-    capabilitiesForPreset,
     channelCapabilityPreset,
     folderCapabilityFits,
-    teammateAccessConfirmationImpact,
-    teammateAccessDraftErrors,
-    teammateAccessDraftSnapshot,
-    teammateAccessNeedsConfirmation,
     toggleSelectionGroup,
     type ChatTeammateAccessConfirmationImpact,
     type ChatChannelCapabilityPreset,
   } from "$lib/chat/teammate-access";
-  import {
-    teammateExecutionSummary,
-    teammateProfileDraftSnapshot,
-  } from "$lib/chat/teammate-draft";
-  import {
-    cloneChatTeammateStudioDraft,
-    compareChatTeammateStudioDrafts,
-    rebaseChatTeammateStudioDraft,
-    type ChatTeammateStudioDraft,
-  } from "$lib/chat/teammate-access-conflict";
   import { formatList } from "$lib/i18n/formatters";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getChat } from "$lib/stores/chat.svelte";
@@ -92,16 +66,6 @@
   } = $props();
 
   type LifecycleAction = "archive" | "delete";
-  type ConflictRecoveryNotice = "rebased" | "reloaded";
-
-  interface TeammateAccessConflictState {
-    teammateId: string;
-    localDraft: ChatTeammateStudioDraft;
-    baselineDraft: ChatTeammateStudioDraft;
-    durableDraft: ChatTeammateStudioDraft;
-    durableTeammate: ChatAiTeammateRead;
-    durableAccess: ChatTeammateAccessRead;
-  }
 
   interface TeammateAccessSummaryChannel {
     channel: ChatChannelRead;
@@ -128,54 +92,31 @@
   const localization = getLocalization();
   const { t } = localization;
 
-  let selectedId = $state<string | null>(null);
-  let creating = $state(false);
-  let showArchived = $state(false);
+  const editor = createTeammateEditorController({
+    chat,
+    t,
+    initialChannelId: () => initialChannelId ?? null,
+    closeAccessPicker: () => { accessPickerOpen = false; },
+    setExpandedAccessChannel: (channelId) => { expandedAccessChannelId = channelId; },
+    focusConflict: async () => {
+      await tick();
+      conflictPanelElement?.focus();
+    },
+    focusRecoveryNotice: () => {
+      void tick().then(() => recoveryNoticeElement?.focus());
+    },
+  });
+
   let directoryQuery = $state("");
-  let archivedTeammates = $state<ChatAiTeammateRead[]>([]);
-  let navigationChannels = $state<ChatChannelRead[]>([]);
-  let accessProfiles = $state<ChatAccessProfileRead[]>([]);
-  let loadingDirectory = $state(true);
-  let loadingAccess = $state(false);
-  let saving = $state(false);
-  let error = $state<string | null>(null);
-  let errorField = $state<string | null>(null);
+
   let directoryScrollElement = $state<HTMLElement>();
   let detailScrollElement = $state<HTMLElement>();
   let saveButtonElement = $state<HTMLButtonElement>();
   let accessPickerOpen = $state(false);
   let accessPickerTriggerElement = $state<HTMLButtonElement>();
 
-  let displayName = $state("");
-  let role = $state("");
-  let instructions = $state("");
-  let providerId = $state("");
-  let safetyMode = $state<SafetyMode>("ask_for_approval");
-  let modelId = $state("");
-  let providerManagedModel = $state(false);
-  let modelOptions = $state<ModelOptionSelection[]>([]);
-  let effort = $state<string | null>(null);
-  let speed = $state<string | null>(null);
-  let providerOptions = $state<VersionedJson>({ schemaVersion: 1, value: {} });
-  let teammateDefaultRuntimeApproval = $state<ChatRuntimeApprovalPolicy>("ask");
-  let profileExpectedRevision = $state(0);
-  let profileAvatar = $state<VersionedJson>({ schemaVersion: 1, value: { kind: "initials" } });
-  let accessRevision = $state(0);
-  let accessDraft = $state<ChatTeammateChannelAccessInput[]>([]);
-  let profileBaseline = $state<string | null>(null);
-  let accessBaseline = $state<string | null>(null);
-  let studioDraftBaseline = $state<ChatTeammateStudioDraft | null>(null);
-  let accessConfirmationImpact = $state<ChatTeammateAccessConfirmationImpact | null>(null);
-  let accessConfirmationSnapshot = $state<string | null>(null);
-  let accessConflict = $state<TeammateAccessConflictState | null>(null);
-  let conflictPendingDraft = $state<ChatTeammateStudioDraft | null>(null);
-  let conflictLoading = $state(false);
-  let conflictError = $state<string | null>(null);
-  let conflictRecoveryNotice = $state<ConflictRecoveryNotice | null>(null);
   let conflictPanelElement = $state<HTMLElement>();
   let recoveryNoticeElement = $state<HTMLElement>();
-  let accessLoadRequest = 0;
-  let conflictLoadRequest = 0;
 
   let profileManagerOpen = $state(false);
   let toolsMenuOpen = $state(false);
@@ -190,56 +131,41 @@
   let lifecycleAction = $state<LifecycleAction | null>(null);
   let lifecycleTarget = $state<ChatAiTeammateRead | null>(null);
   let lifecycleBusy = $state(false);
-  let lifecycleError = $state<string | null>(null);
-  let initialSelectionApplied = false;
-  let preserveStudioDraftForId: string | null = null;
 
-  const allDirectoryTeammates = $derived(showArchived
-    ? [...chat.teammates, ...archivedTeammates]
-    : chat.teammates);
+  let initialSelectionApplied = false;
+
   const filteredDirectoryTeammates = $derived.by(() => {
     const query = directoryQuery.trim().toLocaleLowerCase();
-    if (!query) return allDirectoryTeammates;
-    return allDirectoryTeammates.filter((teammate) => (
+    if (!query) return editor.allDirectoryTeammates;
+    return editor.allDirectoryTeammates.filter((teammate) => (
       `${teammate.participant.displayName} ${teammate.role}`.toLocaleLowerCase().includes(query)
     ));
   });
-  const allTeammates = $derived([...chat.teammates, ...archivedTeammates]);
-  const selected = $derived(allDirectoryTeammates.find((entry) => entry.participant.id === selectedId) ?? null);
-  const archivedMode = $derived(Boolean(selected?.participant.archivedAt));
-  const providers = $derived(chat.settings?.providerInstances ?? []);
-  const selectedProvider = $derived(providers.find((entry) => entry.configuration.instanceId === providerId) ?? null);
-  const providerAuthoritySupport = $derived(selectedProvider?.lastProbe?.authoritySupport ?? null);
-  const availableModels = $derived(selectedProvider?.modelCatalog?.models.filter((model) => model.availability !== "deprecated") ?? []);
-  const selectedModel = $derived(availableModels.find((model) => model.id === modelId) ?? null);
+
   const permissionWorkingFolderId = $derived(
-    accessDraft.flatMap((channel) => channel.folderGrants)
+    editor.accessDraft.flatMap((channel) => channel.folderGrants)
       .find((grant) => grant.isDefault)?.workingFolderId ?? null,
   );
-  const draftCompany = $derived(selectedProvider ? modelCompany(selectedProvider.configuration.familyId, selectedModel) : null);
-  const modelSelectionValid = $derived(providerManagedModel !== Boolean(modelId));
+  const draftCompany = $derived(editor.selectedProvider ? modelCompany(editor.selectedProvider.configuration.familyId, editor.selectedModel) : null);
+
   const draftConfigurationState = $derived(
-    selectedProvider?.configuration.enabled
-      && selectedProvider.lastProbe?.state === "healthy"
-      && modelSelectionValid
+    editor.selectedProvider?.configuration.enabled
+      && editor.selectedProvider.lastProbe?.state === "healthy"
+      && editor.modelSelectionValid
       ? "healthy"
       : "needs_setup",
   );
-  const normalizedDisplayName = $derived(displayName.trim().toLocaleLowerCase());
-  const nameTaken = $derived(Boolean(normalizedDisplayName && allTeammates.some((teammate) => (
-    teammate.participant.id !== selectedId
-      && teammate.participant.displayName.trim().toLocaleLowerCase() === normalizedDisplayName
-  ))));
-  const activeNavigationChannels = $derived(navigationChannels.filter((channel) => channel.archivedAt === null));
-  const selectedChannelIds = $derived(new Set(accessDraft.map((channel) => channel.channelId)));
+
+  const activeNavigationChannels = $derived(editor.navigationChannels.filter((channel) => channel.archivedAt === null));
+  const selectedChannelIds = $derived(new Set(editor.accessDraft.map((channel) => channel.channelId)));
   const accessSummaryGroups = $derived.by(() => {
     const projectById = new Map(projects.projects.map((project) => [project.id, project]));
     const groupById = new Map(projects.groups.map((group) => [group.id, group]));
     const channelOrder = new Map(activeNavigationChannels.map((channel, index) => [channel.id, index]));
     const grouped = new Map<string, TeammateAccessSummaryGroup>();
 
-    for (const access of accessDraft) {
-      const channel = navigationChannels.find((entry) => entry.id === access.channelId);
+    for (const access of editor.accessDraft) {
+      const channel = editor.navigationChannels.find((entry) => entry.id === access.channelId);
       if (!channel) continue;
       const project = projectById.get(channel.projectId);
       const group = groupById.get(project?.groupId ?? "");
@@ -283,15 +209,8 @@
           })),
       }));
   });
-  const profileCeilings = $derived(new Map(accessProfiles.map((profile) => [
-    profile.id,
-    profile.latestRevision.maximumFolderCapability,
-  ])));
-  const accessErrors = $derived(teammateAccessDraftErrors(accessDraft, profileCeilings));
-  const providerResourceBlockers = $derived(accessDraft
-    .flatMap(providerResourceIssuesForChannel)
-    .filter((issue, index, issues) => issues.indexOf(issue) === index));
-  const accessProfileOptions = $derived<ChatControlOption[]>(accessProfiles.map((profile) => ({
+
+  const accessProfileOptions = $derived<ChatControlOption[]>(editor.accessProfiles.map((profile) => ({
     value: profile.id,
     label: profile.builtinKey
       ? t(`settings.chat.teammates.profiles.${profile.builtinKey}`)
@@ -299,48 +218,6 @@
     description: profileDescription(profile.latestRevision.maximumFolderCapability),
     icon: profileIcon(profile.latestRevision.maximumFolderCapability),
   })));
-  const currentProfileSnapshot = $derived(teammateProfileDraftSnapshot({
-    displayName,
-    role,
-    instructions,
-    providerId,
-    safetyMode,
-    modelId,
-    providerManagedModel,
-    modelOptions,
-    effort,
-    speed,
-  }));
-  const currentAccessSnapshot = $derived(JSON.stringify({
-    teammateDefaultRuntimeApproval,
-    channels: teammateAccessDraftSnapshot(accessDraft),
-  }));
-  const currentDraftSnapshot = $derived(JSON.stringify({
-    profile: currentProfileSnapshot,
-    providerOptions: JSON.stringify(providerOptions),
-    access: currentAccessSnapshot,
-  }));
-  const conflictComparison = $derived(accessConflict
-    ? compareChatTeammateStudioDrafts(captureStudioDraft(), accessConflict.durableDraft)
-    : null);
-  const profileDirty = $derived(profileBaseline !== null && currentProfileSnapshot !== profileBaseline);
-  const accessDirty = $derived(accessBaseline !== null && currentAccessSnapshot !== accessBaseline);
-  const dirty = $derived(profileDirty || accessDirty);
-  const canSave = $derived(Boolean(
-    displayName.trim()
-      && role.trim()
-      && providerId
-      && modelSelectionValid
-      && !nameTaken
-      && accessErrors.length === 0
-      && providerResourceBlockers.length === 0
-      && dirty
-      && !loadingAccess
-      && !accessConflict
-      && !conflictLoading
-      && !conflictError
-      && !archivedMode,
-  ));
 
   const historyOptions = $derived([
     { value: "entire", label: t("settings.chat.teammates.historyEntire") },
@@ -362,41 +239,37 @@
   ]);
 
   $effect(() => {
-    onDraftStateChange(creating || dirty);
+    onDraftStateChange(editor.creating || editor.dirty);
     return () => onDraftStateChange(false);
   });
 
   $effect(() => {
-    const snapshot = currentDraftSnapshot;
-    if (accessConfirmationImpact && accessConfirmationSnapshot !== snapshot) {
-      clearAccessConfirmation();
+    const snapshot = editor.currentDraftSnapshot;
+    if (editor.accessConfirmationImpact && editor.accessConfirmationSnapshot !== snapshot) {
+      editor.clearAccessConfirmation();
     }
   });
 
   $effect(() => {
-    if (initialSelectionApplied || loadingDirectory) return;
+    if (initialSelectionApplied || editor.loadingDirectory) return;
     initialSelectionApplied = true;
     if (initialCreate) {
-      beginCreate(initialChannelId ?? null);
+      editor.beginCreate(initialChannelId ?? null);
       return;
     }
-    if (initialTeammateId && allDirectoryTeammates.some((entry) => entry.participant.id === initialTeammateId)) {
-      selectedId = initialTeammateId;
+    if (initialTeammateId && editor.allDirectoryTeammates.some((entry) => entry.participant.id === initialTeammateId)) {
+      editor.selectedId = initialTeammateId;
       expandedAccessChannelId = initialChannelId ?? null;
       return;
     }
-    if (chat.teammates.length === 0) beginCreate(initialChannelId ?? null);
-    else selectedId = chat.teammates[0]?.participant.id ?? null;
+    if (chat.teammates.length === 0) editor.beginCreate(initialChannelId ?? null);
+    else editor.selectedId = chat.teammates[0]?.participant.id ?? null;
   });
 
   $effect(() => {
-    const teammate = selected;
-    if (!teammate || creating) return;
-    if (preserveStudioDraftForId === teammate.participant.id) {
-      preserveStudioDraftForId = null;
-      return;
-    }
-    untrack(() => initializeSelectedTeammate(teammate));
+    const teammate = editor.selected;
+    if (!teammate || editor.creating) return;
+    untrack(() => editor.initializeSelectedTeammate(teammate));
   });
 
   $effect(() => {
@@ -411,439 +284,12 @@
   });
 
   onMount(() => {
-    void loadDirectoryData();
+    void editor.loadDirectoryData();
   });
-
-  async function loadDirectoryData(): Promise<void> {
-    loadingDirectory = true;
-    error = null;
-    const [archivedResult, channelResult, profileResult] = await Promise.allSettled([
-      chatApi.listChatTeammates(true),
-      chatApi.listChatNavigationChannels(),
-      chatApi.listChatAccessProfiles(false),
-    ]);
-    if (archivedResult.status === "fulfilled") {
-      archivedTeammates = archivedResult.value;
-      chat.archivedTeammates = archivedResult.value;
-    }
-    if (channelResult.status === "fulfilled") navigationChannels = channelResult.value;
-    if (profileResult.status === "fulfilled") accessProfiles = profileResult.value;
-    const failure = [archivedResult, channelResult, profileResult]
-      .find((result) => result.status === "rejected");
-    if (failure?.status === "rejected") {
-      error = chatErrorMessage(failure.reason, t("settings.chat.teammates.loadFailed"));
-    }
-    loadingDirectory = false;
-  }
-
-  function captureStudioDraft(): ChatTeammateStudioDraft {
-    return {
-      profile: {
-        displayName,
-        role,
-        instructions,
-        providerId,
-        safetyMode,
-        modelId,
-        providerManagedModel,
-        modelOptions: copyModelOptionSelections(modelOptions),
-        effort,
-        speed,
-        providerOptions: copyVersionedJson(providerOptions),
-      },
-      teammateDefaultRuntimeApproval,
-      channels: copyChannelAccessInputs(accessDraft),
-    };
-  }
-
-  function draftFromReads(
-    teammate: ChatAiTeammateRead,
-    access: ChatTeammateAccessRead,
-  ): ChatTeammateStudioDraft {
-    const policy = teammate.latestPolicy;
-    const options = copyModelOptionSelections(policy?.modelOptions ?? []);
-    const provider = providers.find((entry) => (
-      entry.configuration.instanceId === policy?.providerInstanceId
-    )) ?? null;
-    const model = provider?.modelCatalog?.models.find((entry) => entry.id === policy?.modelId) ?? null;
-    const summary = teammateExecutionSummary(options, model);
-    return {
-      profile: {
-        displayName: teammate.participant.displayName,
-        role: teammate.role,
-        instructions: teammate.instructions,
-        providerId: policy?.providerInstanceId ?? "",
-        safetyMode: policy?.safetyMode ?? "ask_for_approval",
-        modelId: policy?.modelId ?? "",
-        providerManagedModel: policy?.providerManagedModel ?? false,
-        modelOptions: options,
-        effort: summary.effort ?? policy?.effort ?? null,
-        speed: summary.speed ?? policy?.speed ?? null,
-        providerOptions: copyVersionedJson(
-          policy?.providerOptions ?? { schemaVersion: 1, value: {} },
-        ),
-      },
-      teammateDefaultRuntimeApproval: access.teammateDefaultRuntimeApproval,
-      channels: access.channels
-        .filter((channel) => channel.removedAt === null)
-        .map((channel) => ({
-          channelId: channel.channelId,
-          accessProfileId: channel.accessProfileId,
-          accessProfileRevision: channel.accessProfileRevision,
-          capabilities: { ...channel.capabilities },
-          historyBoundary: channel.historyBoundary.kind === "entire"
-            ? { kind: "entire" as const }
-            : { kind: "fromGrant" as const },
-          runtimeApprovalOverride: channel.runtimeApprovalOverride,
-          scratchRuntimeApprovalOverride: channel.scratchRuntimeApprovalOverride,
-          folderGrants: channel.folderGrants
-            .filter((grant) => grant.revokedAt === null)
-            .map((grant) => ({
-              workingFolderId: grant.workingFolderId,
-              capability: grant.capability,
-              isDefault: grant.isDefault,
-              runtimeApprovalOverride: grant.runtimeApprovalOverride,
-            })),
-        })),
-    };
-  }
-
-  function applyStudioDraft(draft: ChatTeammateStudioDraft): void {
-    const copy = cloneChatTeammateStudioDraft(draft);
-    displayName = copy.profile.displayName;
-    role = copy.profile.role;
-    instructions = copy.profile.instructions;
-    providerId = copy.profile.providerId;
-    safetyMode = copy.profile.safetyMode;
-    modelId = copy.profile.modelId;
-    providerManagedModel = copy.profile.providerManagedModel;
-    modelOptions = copy.profile.modelOptions;
-    effort = copy.profile.effort;
-    speed = copy.profile.speed;
-    providerOptions = copy.profile.providerOptions;
-    teammateDefaultRuntimeApproval = copy.teammateDefaultRuntimeApproval;
-    accessDraft = copy.channels;
-  }
-
-  function setStudioDraftBaseline(draft: ChatTeammateStudioDraft): void {
-    const copy = cloneChatTeammateStudioDraft(draft);
-    studioDraftBaseline = copy;
-    profileBaseline = profileSnapshotForDraft(copy);
-    accessBaseline = accessSnapshotForDraft(copy);
-  }
-
-  function profileSnapshotForDraft(draft: ChatTeammateStudioDraft): string {
-    return teammateProfileDraftSnapshot(draft.profile);
-  }
-
-  function accessSnapshotForDraft(draft: ChatTeammateStudioDraft): string {
-    return JSON.stringify({
-      teammateDefaultRuntimeApproval: draft.teammateDefaultRuntimeApproval,
-      channels: teammateAccessDraftSnapshot(draft.channels),
-    });
-  }
-
-  function draftSnapshotForDraft(draft: ChatTeammateStudioDraft): string {
-    return JSON.stringify({
-      profile: profileSnapshotForDraft(draft),
-      providerOptions: JSON.stringify(draft.profile.providerOptions),
-      access: accessSnapshotForDraft(draft),
-    });
-  }
-
-  function copyChannelAccessInputs(
-    channels: readonly ChatTeammateChannelAccessInput[],
-  ): ChatTeammateChannelAccessInput[] {
-    return channels.map((channel) => ({
-      ...channel,
-      capabilities: { ...channel.capabilities },
-      historyBoundary: channel.historyBoundary.kind === "entire"
-        ? { kind: "entire" }
-        : { kind: "fromGrant", lowerOrdinal: channel.historyBoundary.lowerOrdinal },
-      folderGrants: channel.folderGrants.map((grant) => ({ ...grant })),
-    }));
-  }
-
-  function clearAccessConflict(): void {
-    conflictLoadRequest += 1;
-    accessConflict = null;
-    conflictPendingDraft = null;
-    conflictLoading = false;
-    conflictError = null;
-    conflictRecoveryNotice = null;
-  }
-
-  function clearAccessConfirmation(): void {
-    accessConfirmationImpact = null;
-    accessConfirmationSnapshot = null;
-  }
-
-  function beginCreate(channelId: string | null = null): void {
-    clearAccessConflict();
-    lifecycleError = null;
-    accessPickerOpen = false;
-    creating = true;
-    selectedId = null;
-    expandedAccessChannelId = channelId;
-    displayName = "";
-    role = "";
-    instructions = "";
-    const resolved = resolveDefaultProviderModel(providers);
-    providerId = resolved?.provider.configuration.instanceId ?? "";
-    safetyMode = "ask_for_approval";
-    modelId = resolved?.model?.id ?? "";
-    providerManagedModel = resolved?.providerManaged ?? false;
-    modelOptions = copyModelOptionSelections(resolved?.options ?? []);
-    const summary = teammateExecutionSummary(modelOptions, resolved?.model ?? null);
-    effort = summary.effort;
-    speed = summary.speed;
-    providerOptions = { schemaVersion: 1, value: {} };
-    teammateDefaultRuntimeApproval = "ask";
-    profileExpectedRevision = 0;
-    profileAvatar = { schemaVersion: 1, value: { kind: "initials" } };
-    accessRevision = 0;
-    accessDraft = channelId ? [defaultChannelAccess(channelId)] : [];
-    setStudioDraftBaseline(captureStudioDraft());
-    clearAccessConfirmation();
-    error = null;
-    errorField = null;
-  }
-
-  function cancelCreate(): void {
-    clearAccessConflict();
-    lifecycleError = null;
-    creating = false;
-    selectedId = chat.teammates[0]?.participant.id ?? null;
-    profileBaseline = null;
-    accessBaseline = null;
-    studioDraftBaseline = null;
-    clearAccessConfirmation();
-    accessPickerOpen = false;
-  }
 
   function closeAccessPicker(): void {
     accessPickerOpen = false;
     void tick().then(() => accessPickerTriggerElement?.focus());
-  }
-
-  function initializeSelectedTeammate(teammate: ChatAiTeammateRead): void {
-    clearAccessConflict();
-    lifecycleError = null;
-    accessPickerOpen = false;
-    profileBaseline = null;
-    accessBaseline = null;
-    studioDraftBaseline = null;
-    clearAccessConfirmation();
-    error = null;
-    errorField = null;
-    accessDraft = [];
-    expandedAccessChannelId = null;
-    displayName = teammate.participant.displayName;
-    role = teammate.role;
-    instructions = teammate.instructions;
-    providerId = teammate.latestPolicy?.providerInstanceId ?? "";
-    safetyMode = teammate.latestPolicy?.safetyMode ?? "ask_for_approval";
-    modelId = teammate.latestPolicy?.modelId ?? "";
-    providerManagedModel = teammate.latestPolicy?.providerManagedModel ?? false;
-    modelOptions = copyModelOptionSelections(teammate.latestPolicy?.modelOptions ?? []);
-    const summary = teammateExecutionSummary(modelOptions, selectedModel);
-    effort = summary.effort ?? teammate.latestPolicy?.effort ?? null;
-    speed = summary.speed ?? teammate.latestPolicy?.speed ?? null;
-    providerOptions = copyVersionedJson(
-      teammate.latestPolicy?.providerOptions ?? { schemaVersion: 1, value: {} },
-    );
-    profileExpectedRevision = teammate.participant.revision;
-    profileAvatar = copyVersionedJson(teammate.participant.avatar);
-    profileBaseline = currentProfileSnapshot;
-    void loadTeammateAccess(teammate.participant.id);
-  }
-
-  async function loadTeammateAccess(teammateId: string): Promise<void> {
-    const request = ++accessLoadRequest;
-    loadingAccess = true;
-    try {
-      const access = await chatApi.readChatTeammateAccess(teammateId);
-      if (request !== accessLoadRequest || selectedId !== teammateId) return;
-      const teammate = allDirectoryTeammates.find((entry) => entry.participant.id === teammateId);
-      if (!teammate) return;
-      const durableDraft = draftFromReads(teammate, access);
-      accessRevision = access.accessRevision;
-      profileExpectedRevision = teammate.participant.revision;
-      profileAvatar = copyVersionedJson(teammate.participant.avatar);
-      teammateDefaultRuntimeApproval = durableDraft.teammateDefaultRuntimeApproval;
-      accessDraft = copyChannelAccessInputs(durableDraft.channels);
-      expandedAccessChannelId = initialChannelId ?? null;
-      setStudioDraftBaseline(durableDraft);
-      if (initialChannelId) {
-        if (!accessDraft.some((channel) => channel.channelId === initialChannelId)) {
-          accessDraft = [...accessDraft, defaultChannelAccess(initialChannelId)];
-        }
-      }
-    } catch (cause: unknown) {
-      if (request === accessLoadRequest) {
-        error = chatErrorMessage(cause, t("settings.chat.teammates.accessLoadFailed"));
-      }
-    } finally {
-      if (request === accessLoadRequest) loadingAccess = false;
-    }
-  }
-
-  async function loadAccessConflict(
-    teammateId: string,
-    localDraft: ChatTeammateStudioDraft,
-  ): Promise<void> {
-    const request = ++conflictLoadRequest;
-    const retainedLocalDraft = cloneChatTeammateStudioDraft(localDraft);
-    const retainedBaseline = cloneChatTeammateStudioDraft(
-      studioDraftBaseline ?? retainedLocalDraft,
-    );
-    conflictPendingDraft = retainedLocalDraft;
-    accessConflict = null;
-    conflictError = null;
-    conflictRecoveryNotice = null;
-    clearAccessConfirmation();
-    conflictLoading = true;
-    try {
-      const [durableTeammate, durableAccess] = await Promise.all([
-        chatApi.readChatTeammate(teammateId),
-        chatApi.readChatTeammateAccess(teammateId),
-      ]);
-      if (request !== conflictLoadRequest || selectedId !== teammateId) return;
-      accessConflict = {
-        teammateId,
-        localDraft: retainedLocalDraft,
-        baselineDraft: retainedBaseline,
-        durableDraft: draftFromReads(durableTeammate, durableAccess),
-        durableTeammate,
-        durableAccess,
-      };
-    } catch (cause: unknown) {
-      if (request !== conflictLoadRequest) return;
-      conflictError = chatErrorMessage(
-        cause,
-        t("settings.chat.teammates.conflict.loadFailed"),
-      );
-    } finally {
-      if (request === conflictLoadRequest) {
-        conflictLoading = false;
-        await tick();
-        conflictPanelElement?.focus();
-      }
-    }
-  }
-
-  function retryAccessConflict(): void {
-    if (!selectedId || !conflictPendingDraft || conflictLoading) return;
-    void loadAccessConflict(selectedId, conflictPendingDraft);
-  }
-
-  function rebaseAccessConflict(): void {
-    const conflict = accessConflict;
-    if (!conflict) return;
-    const rebased = rebaseChatTeammateStudioDraft(
-      conflict.baselineDraft,
-      captureStudioDraft(),
-      conflict.durableDraft,
-    );
-    applyStudioDraft(rebased);
-    accessRevision = conflict.durableAccess.accessRevision;
-    profileExpectedRevision = conflict.durableTeammate.participant.revision;
-    profileAvatar = copyVersionedJson(conflict.durableTeammate.participant.avatar);
-    setStudioDraftBaseline(conflict.durableDraft);
-    settleAccessConflict("rebased");
-  }
-
-  async function reloadCurrentAccessConflict(): Promise<void> {
-    const conflict = accessConflict;
-    if (!conflict) return;
-    applyStudioDraft(conflict.durableDraft);
-    accessRevision = conflict.durableAccess.accessRevision;
-    profileExpectedRevision = conflict.durableTeammate.participant.revision;
-    profileAvatar = copyVersionedJson(conflict.durableTeammate.participant.avatar);
-    setStudioDraftBaseline(conflict.durableDraft);
-    preserveStudioDraftForId = conflict.teammateId;
-    settleAccessConflict("reloaded");
-    try {
-      await chat.refreshTeammates();
-    } catch (cause: unknown) {
-      error = chatErrorMessage(cause, t("settings.chat.teammates.loadFailed"));
-    }
-  }
-
-  function settleAccessConflict(notice: ConflictRecoveryNotice): void {
-    conflictLoadRequest += 1;
-    accessConflict = null;
-    conflictPendingDraft = null;
-    conflictLoading = false;
-    conflictError = null;
-    conflictRecoveryNotice = notice;
-    clearAccessConfirmation();
-    error = null;
-    errorField = null;
-    void tick().then(() => recoveryNoticeElement?.focus());
-  }
-
-  function conversationProfile(): ChatAccessProfileRead | null {
-    return accessProfiles.find((profile) => profile.builtinKey === "conversationOnly")
-      ?? accessProfiles[0]
-      ?? null;
-  }
-
-  function providerCapabilityIssue(capability: ChatFolderCapability): string | null {
-    if (capability === "none") return null;
-    const support = providerAuthoritySupport;
-    if (!support) return t("settings.chat.teammates.providerAuthorityUnknown");
-    if (capability === "read" && !support.internalHostTools && !support.readOnlyRoot) {
-      return t("settings.chat.teammates.providerCannotRead");
-    }
-    if (capability === "edit" && !support.internalHostTools && !support.writableRoot) {
-      return t("settings.chat.teammates.providerCannotEdit");
-    }
-    if (capability === "execute" && (
-      !support.writableRoot
-      || !support.confinedCommands
-      || !support.networkBoundary
-    )) {
-      return t("settings.chat.teammates.providerCannotExecute");
-    }
-    if (capability === "publish" && (
-      !support.writableRoot
-      || !support.confinedCommands
-      || !support.networkBoundary
-      || !support.classifiedPublish
-    )) {
-      return t("settings.chat.teammates.providerCannotPublish");
-    }
-    return null;
-  }
-
-  function providerGrantIssue(
-    capability: ChatFolderCapability,
-    isDefault: boolean,
-  ): string | null {
-    const issue = providerCapabilityIssue(capability);
-    if (issue) return issue;
-    const support = providerAuthoritySupport;
-    if (!isDefault || !support) return null;
-    if (capability === "read" && (!support.readOnlyRoot || !support.denyShell)) {
-      return t("settings.chat.teammates.providerCannotTargetReadOnly");
-    }
-    if (capability === "edit" && (!support.writableRoot || !support.denyShell)) {
-      return t("settings.chat.teammates.providerCannotTargetWritable");
-    }
-    return null;
-  }
-
-  function providerResourceIssuesForChannel(channel: ChatTeammateChannelAccessInput): string[] {
-    const grants = channel.folderGrants.filter((grant) => grant.capability !== "none");
-    const issues = grants.flatMap((grant) => {
-      const issue = providerGrantIssue(grant.capability, grant.isDefault);
-      return issue ? [issue] : [];
-    });
-    if (grants.some((grant) => !grant.isDefault) && !providerAuthoritySupport?.internalHostTools) {
-      issues.push(t("settings.chat.teammates.providerNeedsHostTools"));
-    }
-    return issues.filter((issue, index) => issues.indexOf(issue) === index);
   }
 
   function profileDescription(capability: ChatFolderCapability): string {
@@ -870,22 +316,8 @@
     return t("settings.chat.teammates.folderCapabilities.none");
   }
 
-  function defaultChannelAccess(channelId: string): ChatTeammateChannelAccessInput {
-    const profile = conversationProfile();
-    return {
-      channelId,
-      accessProfileId: profile?.id ?? "",
-      accessProfileRevision: profile?.latestRevision.revision ?? 0,
-      capabilities: capabilitiesForPreset("isolatedResponder"),
-      historyBoundary: { kind: "entire" },
-      runtimeApprovalOverride: null,
-      scratchRuntimeApprovalOverride: null,
-      folderGrants: [],
-    };
-  }
-
   function channelById(channelId: string): ChatChannelRead | null {
-    return navigationChannels.find((channel) => channel.id === channelId) ?? null;
+    return editor.navigationChannels.find((channel) => channel.id === channelId) ?? null;
   }
 
   function compactChannelList(channelIds: readonly string[]): string {
@@ -900,7 +332,7 @@
   }
 
   function accessConfirmationMessage(impact: ChatTeammateAccessConfirmationImpact): string {
-    const teammateName = displayName.trim();
+    const teammateName = editor.displayName.trim();
     const consequences: string[] = [];
     if (impact.historyChannelIds.length > 0) {
       consequences.push(t(
@@ -943,15 +375,15 @@
     channelId: string,
     update: (channel: ChatTeammateChannelAccessInput) => ChatTeammateChannelAccessInput,
   ): void {
-    accessDraft = accessDraft.map((channel) => channel.channelId === channelId ? update(channel) : channel);
-    clearAccessConfirmation();
+    editor.accessDraft = editor.accessDraft.map((channel) => channel.channelId === channelId ? update(channel) : channel);
+    editor.clearAccessConfirmation();
   }
 
   function setBoundedSelection(channelIds: readonly string[], selectedValue: boolean): void {
     const next = toggleSelectionGroup([...channelIds], selectedChannelIds, selectedValue);
-    const byId = new Map(accessDraft.map((channel) => [channel.channelId, channel]));
-    accessDraft = [...next].map((channelId) => byId.get(channelId) ?? defaultChannelAccess(channelId));
-    clearAccessConfirmation();
+    const byId = new Map(editor.accessDraft.map((channel) => [channel.channelId, channel]));
+    editor.accessDraft = [...next].map((channelId) => byId.get(channelId) ?? editor.defaultChannelAccess(channelId));
+    editor.clearAccessConfirmation();
   }
 
   function handleChannelSelection(channelIds: readonly string[], selectedValue: boolean): void {
@@ -962,7 +394,7 @@
   }
 
   function channelHasAdditionalAccess(channel: ChatTeammateChannelAccessInput): boolean {
-    const profile = accessProfiles.find((entry) => entry.id === channel.accessProfileId);
+    const profile = editor.accessProfiles.find((entry) => entry.id === channel.accessProfileId);
     return channel.capabilities.readHistory
       || channelCapabilityPreset(channel.capabilities) === "custom"
       || (profile?.latestRevision.maximumFolderCapability ?? "none") !== "none"
@@ -979,7 +411,7 @@
 
   function setChannelAccessProfile(channelId: string, profileId: string): void {
     setAccessProfileForChannels([channelId], profileId);
-    const profile = accessProfiles.find((entry) => entry.id === profileId);
+    const profile = editor.accessProfiles.find((entry) => entry.id === profileId);
     if (profile?.latestRevision.maximumFolderCapability !== "none") {
       expandedAccessChannelId = channelId;
     }
@@ -1013,8 +445,8 @@
     channelIds: readonly string[],
     preset: Exclude<ChatChannelCapabilityPreset, "custom">,
   ): void {
-    accessDraft = applyChannelPresetToScope(accessDraft, new Set(channelIds), preset);
-    clearAccessConfirmation();
+    editor.accessDraft = applyChannelPresetToScope(editor.accessDraft, new Set(channelIds), preset);
+    editor.clearAccessConfirmation();
   }
 
   function folderCapabilityOptions(ceiling: ChatFolderCapability) {
@@ -1024,16 +456,16 @@
   }
 
   function setAccessProfileForChannels(channelIds: readonly string[], accessProfileId: string): void {
-    const profile = accessProfiles.find((entry) => entry.id === accessProfileId);
+    const profile = editor.accessProfiles.find((entry) => entry.id === accessProfileId);
     const selectedIds = new Set(channelIds);
     const capability = profile?.latestRevision.maximumFolderCapability ?? "none";
-    accessDraft = applyAccessProfileToScope(accessDraft, selectedIds, {
+    editor.accessDraft = applyAccessProfileToScope(editor.accessDraft, selectedIds, {
       id: accessProfileId,
       revision: profile?.latestRevision.revision ?? 0,
       maximumFolderCapability: capability,
     });
     if (capability !== "none") {
-      accessDraft = accessDraft.map((channel) => {
+      editor.accessDraft = editor.accessDraft.map((channel) => {
         if (!selectedIds.has(channel.channelId)) return channel;
         if (channel.folderGrants.length > 0) {
           const nativeTarget = capability === "execute" || capability === "publish";
@@ -1063,7 +495,7 @@
         };
       });
     }
-    clearAccessConfirmation();
+    editor.clearAccessConfirmation();
   }
 
   function foldersForChannel(channelId: string) {
@@ -1077,7 +509,7 @@
     updateAccessChannel(channelId, (channel) => {
       const grants = channel.folderGrants.filter((grant) => grant.workingFolderId !== workingFolderId);
       if (!selectedValue) return { ...channel, folderGrants: grants };
-      const ceiling = profileCeilings.get(channel.accessProfileId) ?? "none";
+      const ceiling = editor.profileCeilings.get(channel.accessProfileId) ?? "none";
       const capability = ceiling === "none" ? "none" : ceiling;
       return {
         ...channel,
@@ -1131,15 +563,6 @@
     }));
   }
 
-  function teammateDirectoryStatus(teammate: ChatAiTeammateRead): string {
-    const health = teammate.configurationState === "healthy"
-      ? t("settings.chat.teammates.available")
-      : t("settings.chat.teammates.needsSetup");
-    return teammate.participant.archivedAt
-      ? `${health} · ${t("settings.chat.teammates.archived")}`
-      : health;
-  }
-
   async function recoverFolder(folderId: string, bindingStatus: string, managed: boolean): Promise<void> {
     try {
       if (managed && bindingStatus === "missing") {
@@ -1150,7 +573,7 @@
         await chat.locateWorkingFolder(folderId, t("settings.chat.teammates.locateFolder"));
       }
     } catch (cause: unknown) {
-      error = chatErrorMessage(cause, t("settings.chat.teammates.folderRecoveryFailed"));
+      editor.error = chatErrorMessage(cause, t("settings.chat.teammates.folderRecoveryFailed"));
     }
   }
 
@@ -1170,181 +593,22 @@
       await loadProfileManager();
       profileManagerOpen = true;
     } catch (cause: unknown) {
-      errorField = null;
-      error = chatErrorMessage(cause, t("settings.chat.teammates.loadFailed"));
+      editor.errorField = null;
+      editor.error = chatErrorMessage(cause, t("settings.chat.teammates.loadFailed"));
     } finally {
       profileManagerLoading = false;
     }
   }
 
-  function handleProfilesChange(nextProfiles: ChatAccessProfileRead[]): void {
-    accessProfiles = nextProfiles;
-    const teammateId = selected?.participant.id;
-    if (teammateId) void loadTeammateAccess(teammateId);
-  }
-
-  function selectExecution(selection: {
-    providerInstanceId: string | null;
-    modelId: string | null;
-    providerManaged: boolean;
-    options: ModelOptionSelection[];
-  }): void {
-    providerId = selection.providerInstanceId ?? "";
-    modelId = selection.modelId ?? "";
-    providerManagedModel = selection.providerManaged;
-    modelOptions = copyModelOptionSelections(selection.options);
-    const provider = providers.find((entry) => entry.configuration.instanceId === providerId) ?? null;
-    const model = provider?.modelCatalog?.models.find((entry) => entry.id === modelId) ?? null;
-    const summary = teammateExecutionSummary(modelOptions, model);
-    effort = summary.effort;
-    speed = summary.speed;
-  }
-
-  function accessReplacementRequest(
-    teammateId: string,
-    policy: ChatTeammatePolicyInput,
-    draft: ChatTeammateStudioDraft,
-    includeProfile: boolean,
-  ): ReplaceChatTeammateAccessRequest {
-    return {
-      teammateId,
-      expectedAccessRevision: accessRevision,
-      teammateDefaultRuntimeApproval: draft.teammateDefaultRuntimeApproval,
-      channels: copyChannelAccessInputs(draft.channels),
-      teammateProfile: includeProfile ? {
-        teammateId,
-        displayName: draft.profile.displayName.trim(),
-        avatar: copyVersionedJson(profileAvatar),
-        role: draft.profile.role.trim(),
-        instructions: draft.profile.instructions.trim(),
-        expectedRevision: profileExpectedRevision,
-      } : null,
-      policy: includeProfile ? policy : null,
-    };
-  }
-
-  function policyForDraft(draft: ChatTeammateStudioDraft): ChatTeammatePolicyInput {
-    return {
-      providerInstanceId: draft.profile.providerId,
-      safetyMode: draft.profile.safetyMode,
-      providerManagedModel: draft.profile.providerManagedModel,
-      modelId: draft.profile.modelId || null,
-      modelOptions: copyModelOptionSelections(draft.profile.modelOptions),
-      effort: draft.profile.effort,
-      speed: draft.profile.speed,
-      providerOptions: copyVersionedJson(draft.profile.providerOptions),
-    };
-  }
-
-  async function save(confirmAccess = false): Promise<void> {
-    if (saving || !canSave) return;
-    if (confirmAccess && (
-      !accessConfirmationImpact
-      || accessConfirmationSnapshot !== currentDraftSnapshot
-    )) {
-      clearAccessConfirmation();
-      return;
-    }
-    if (confirmAccess) clearAccessConfirmation();
-    const creatingAtStart = creating;
-    let requestDraft = captureStudioDraft();
-    let includeProfile = !creatingAtStart && profileDirty;
-    let includesAccessChange = !creatingAtStart && accessDirty;
-    let savedDraft: ChatTeammateStudioDraft | null = null;
-    let teammateId = selected?.participant.id ?? null;
-    saving = true;
-    error = null;
-    errorField = null;
-    conflictRecoveryNotice = null;
-    try {
-      if (creatingAtStart) {
-        const creationPolicy = policyForDraft(requestDraft);
-        const created = await chatApi.createChatTeammate({
-          teammateId: `participant:${crypto.randomUUID()}`,
-          displayName: requestDraft.profile.displayName.trim(),
-          avatar: { schemaVersion: 1, value: { kind: "initials" } },
-          role: requestDraft.profile.role.trim(),
-          instructions: requestDraft.profile.instructions.trim(),
-          policy: creationPolicy,
-        });
-        teammateId = created.participant.id;
-        creating = false;
-        selectedId = teammateId;
-        profileExpectedRevision = created.participant.revision;
-        profileAvatar = copyVersionedJson(created.participant.avatar);
-        const inertAccess = await chatApi.readChatTeammateAccess(teammateId);
-        const durableInertDraft = draftFromReads(created, inertAccess);
-        requestDraft = captureStudioDraft();
-        accessRevision = inertAccess.accessRevision;
-        setStudioDraftBaseline(durableInertDraft);
-        includeProfile = profileSnapshotForDraft(requestDraft)
-          !== profileSnapshotForDraft(durableInertDraft);
-        includesAccessChange = accessSnapshotForDraft(requestDraft)
-          !== accessSnapshotForDraft(durableInertDraft);
-        preserveStudioDraftForId = teammateId;
-        await chat.refreshTeammates();
-        if (!includeProfile && !includesAccessChange) savedDraft = durableInertDraft;
-      }
-
-      if (teammateId && (includeProfile || includesAccessChange)) {
-        const policy = policyForDraft(requestDraft);
-        const request = accessReplacementRequest(teammateId, policy, requestDraft, includeProfile);
-        const requestSnapshot = draftSnapshotForDraft(requestDraft);
-        if (!creatingAtStart && !confirmAccess && includesAccessChange) {
-          const impact = teammateAccessConfirmationImpact(
-            studioDraftBaseline?.channels ?? [],
-            requestDraft.channels,
-          );
-          if (teammateAccessNeedsConfirmation(impact)) {
-            const preview = await chatApi.previewChatTeammateAccess(request);
-            const issue = preview.issues[0];
-            if (issue) {
-              error = issue.message;
-              errorField = issue.fieldPath;
-              return;
-            }
-            accessConfirmationImpact = impact;
-            accessConfirmationSnapshot = requestSnapshot;
-            return;
-          }
-        }
-        const replaced = await chatApi.replaceChatTeammateAccess(request);
-        accessRevision = replaced.accessRevision;
-        savedDraft = requestDraft;
-        clearAccessConfirmation();
-      }
-      if (!teammateId || !savedDraft) return;
-      preserveStudioDraftForId = teammateId;
-      await chat.refreshTeammates();
-      const refreshed = chat.teammates.find((teammate) => teammate.participant.id === teammateId);
-      if (refreshed) {
-        profileExpectedRevision = refreshed.participant.revision;
-        profileAvatar = copyVersionedJson(refreshed.participant.avatar);
-      }
-      setStudioDraftBaseline(savedDraft);
-    } catch (cause: unknown) {
-      if (teammateId && chatErrorCode(cause) === "stale_revision") {
-        error = null;
-        errorField = null;
-        await loadAccessConflict(teammateId, captureStudioDraft());
-      } else {
-        error = chatErrorMessage(cause, t("settings.chat.teammates.saveFailed"));
-        errorField = chatErrorField(cause);
-      }
-    } finally {
-      saving = false;
-    }
-  }
-
   function requestLifecycle(action: LifecycleAction): void {
-    if (!selected || lifecycleBusy) return;
-    lifecycleError = null;
-    if (action === "archive" && selected.activeAssignmentCount > 0) {
-      lifecycleError = t("settings.chat.teammates.archiveBlocked", selected.activeAssignmentCount);
+    if (!editor.selected || lifecycleBusy) return;
+    editor.lifecycleError = null;
+    if (action === "archive" && editor.selected.activeAssignmentCount > 0) {
+      editor.lifecycleError = t("settings.chat.teammates.archiveBlocked", editor.selected.activeAssignmentCount);
       return;
     }
     lifecycleAction = action;
-    lifecycleTarget = selected;
+    lifecycleTarget = editor.selected;
   }
 
   async function confirmLifecycle(): Promise<void> {
@@ -1353,7 +617,7 @@
     lifecycleAction = null;
     lifecycleTarget = null;
     if (!action || !target) return;
-    lifecycleError = null;
+    editor.lifecycleError = null;
     lifecycleBusy = true;
     try {
       if (action === "archive") {
@@ -1361,67 +625,62 @@
       } else {
         await chatApi.deleteUnusedChatTeammate(target.participant.id, target.participant.revision);
       }
-      selectedId = null;
+      editor.selectedId = null;
       await chat.refreshTeammates();
-      await loadDirectoryData();
-      lifecycleError = null;
+      await editor.loadDirectoryData();
+      editor.lifecycleError = null;
     } catch (cause: unknown) {
-      lifecycleError = chatErrorMessage(cause, t("settings.chat.teammates.lifecycleFailed"));
+      editor.lifecycleError = chatErrorMessage(cause, t("settings.chat.teammates.lifecycleFailed"));
     } finally {
       lifecycleBusy = false;
     }
   }
 
   async function restoreSelected(): Promise<void> {
-    if (!selected || lifecycleBusy) return;
-    lifecycleError = null;
+    if (!editor.selected || lifecycleBusy) return;
+    editor.lifecycleError = null;
     lifecycleBusy = true;
     try {
       const restored = await chatApi.archiveChatTeammate(
-        selected.participant.id,
-        selected.participant.revision,
+        editor.selected.participant.id,
+        editor.selected.participant.revision,
         false,
       );
       await chat.refreshTeammates();
-      await loadDirectoryData();
-      showArchived = false;
-      selectedId = restored.participant.id;
-      lifecycleError = null;
+      await editor.loadDirectoryData();
+      editor.showArchived = false;
+      editor.selectedId = restored.participant.id;
+      editor.lifecycleError = null;
     } catch (cause: unknown) {
-      lifecycleError = chatErrorMessage(cause, t("settings.chat.teammates.restoreFailed"));
+      editor.lifecycleError = chatErrorMessage(cause, t("settings.chat.teammates.restoreFailed"));
     } finally {
       lifecycleBusy = false;
     }
   }
 
-  function clearFieldError(field: string): void {
-    if (errorField !== field) return;
-    error = null;
-    errorField = null;
-  }
 </script>
 
 {#snippet channelAdditionalDetails(channelAccess: ChatTeammateChannelAccessInput)}
-  {@const selectedProfile = accessProfiles.find((profile) => profile.id === channelAccess.accessProfileId) ?? null}
+  {@const selectedProfile = editor.accessProfiles.find((profile) => profile.id === channelAccess.accessProfileId) ?? null}
   {@const preset = channelCapabilityPreset(channelAccess.capabilities)}
   <div class="access-details">
     {#if channelAccess.capabilities.readHistory}
-      <div class="field history-field"><span>{t("settings.chat.teammates.history")}</span><CustomSelect inline class="w-full" value={channelAccess.historyBoundary.kind} options={historyOptions} ariaLabel={t("settings.chat.teammates.history")} disabled={archivedMode} onChange={(value) => updateAccessChannel(channelAccess.channelId, (channel) => ({ ...channel, historyBoundary: value === "fromGrant" ? { kind: "fromGrant" } : { kind: "entire" } }))} /></div>
+      <div class="field history-field"><span>{t("settings.chat.teammates.history")}</span><CustomSelect inline class="w-full" value={channelAccess.historyBoundary.kind} options={historyOptions} ariaLabel={t("settings.chat.teammates.history")} disabled={editor.archivedMode} onChange={(value) => updateAccessChannel(channelAccess.channelId, (channel) => ({ ...channel, historyBoundary: value === "fromGrant" ? { kind: "fromGrant" } : { kind: "entire" } }))} /></div>
     {/if}
     {#if preset === "custom"}
-      <fieldset class="capability-switches" disabled={archivedMode}>
+      <fieldset class="capability-switches" disabled={editor.archivedMode}>
         <legend>{t("settings.chat.teammates.channelCapabilities")}</legend>
-        <div><SettingsCheckbox checked={channelAccess.capabilities.readHistory} label={t("settings.chat.teammates.readHistory")} disabled={archivedMode} onChange={(checked) => updateAccessChannel(channelAccess.channelId, (channel) => ({ ...channel, capabilities: { ...channel.capabilities, readHistory: checked }, historyBoundary: { kind: "entire" } }))} /><span><strong>{t("settings.chat.teammates.readHistory")}</strong><small>{t("settings.chat.teammates.readHistoryDescription")}</small></span></div>
-        <div><SettingsCheckbox checked={channelAccess.capabilities.participate} label={t("settings.chat.teammates.participate")} disabled={archivedMode} onChange={(checked) => updateAccessChannel(channelAccess.channelId, (channel) => ({ ...channel, capabilities: { ...channel.capabilities, participate: checked } }))} /><span><strong>{t("settings.chat.teammates.participate")}</strong><small>{t("settings.chat.teammates.participateDescription")}</small></span></div>
+        <div><SettingsCheckbox checked={channelAccess.capabilities.readHistory} label={t("settings.chat.teammates.readHistory")} disabled={editor.archivedMode} onChange={(checked) => updateAccessChannel(channelAccess.channelId, (channel) => ({ ...channel, capabilities: { ...channel.capabilities, readHistory: checked }, historyBoundary: { kind: "entire" } }))} /><span><strong>{t("settings.chat.teammates.readHistory")}</strong><small>{t("settings.chat.teammates.readHistoryDescription")}</small></span></div>
+        <div><SettingsCheckbox checked={channelAccess.capabilities.participate} label={t("settings.chat.teammates.participate")} disabled={editor.archivedMode} onChange={(checked) => updateAccessChannel(channelAccess.channelId, (channel) => ({ ...channel, capabilities: { ...channel.capabilities, participate: checked } }))} /><span><strong>{t("settings.chat.teammates.participate")}</strong><small>{t("settings.chat.teammates.participateDescription")}</small></span></div>
       </fieldset>
     {/if}
     {#if selectedProfile?.latestRevision.maximumFolderCapability !== "none"}
-      <fieldset class="folder-access" disabled={archivedMode}>
+      <fieldset class="folder-access" disabled={editor.archivedMode}>
         <legend>{t("settings.chat.teammates.foldersForChannel")}</legend>
         {#each foldersForChannel(channelAccess.channelId) as folderRead (folderRead.workingFolder.id)}
           {@const grant = channelAccess.folderGrants.find((entry) => entry.workingFolderId === folderRead.workingFolder.id)}
           <div class="folder-row">
-            <SettingsCheckbox checked={Boolean(grant)} label={t("settings.chat.teammates.allowFolder", folderRead.workingFolder.displayName)} disabled={archivedMode} onChange={(checked) => toggleFolderGrant(channelAccess.channelId, folderRead.workingFolder.id, checked)} />
+            <SettingsCheckbox checked={Boolean(grant)} label={t("settings.chat.teammates.allowFolder", folderRead.workingFolder.displayName)} disabled={editor.archivedMode} onChange={(checked) => toggleFolderGrant(channelAccess.channelId, folderRead.workingFolder.id, checked)} />
             <Folder size={14} />
             <span class="folder-name"><strong>{folderRead.workingFolder.displayName}</strong><small data-status={folderRead.bindingStatus}>{t(`settings.chat.teammates.binding.${folderRead.bindingStatus}`)}</small></span>
             <div class="folder-controls">
@@ -1441,7 +700,7 @@
     {/if}
     {#if channelAccess.folderGrants.length > 0 && advancedChannelIds.has(channelAccess.channelId)}
       <div class="field-grid compact advanced-fields">
-        <div class="field"><span>{t("settings.chat.teammates.channelRuntimeApproval")}</span><CustomSelect inline class="w-full" value={channelAccess.runtimeApprovalOverride ?? "inherit"} options={channelRuntimeOptions} ariaLabel={t("settings.chat.teammates.channelRuntimeApproval")} disabled={archivedMode} onChange={(value) => updateAccessChannel(channelAccess.channelId, (channel) => ({ ...channel, runtimeApprovalOverride: value === "inherit" ? null : value as ChatRuntimeApprovalPolicy }))} /></div>
+        <div class="field"><span>{t("settings.chat.teammates.channelRuntimeApproval")}</span><CustomSelect inline class="w-full" value={channelAccess.runtimeApprovalOverride ?? "inherit"} options={channelRuntimeOptions} ariaLabel={t("settings.chat.teammates.channelRuntimeApproval")} disabled={editor.archivedMode} onChange={(value) => updateAccessChannel(channelAccess.channelId, (channel) => ({ ...channel, runtimeApprovalOverride: value === "inherit" ? null : value as ChatRuntimeApprovalPolicy }))} /></div>
       </div>
     {/if}
   </div>
@@ -1451,13 +710,13 @@
   <header class="directory-header">
     <div><h2>{t("settings.chat.teammates.heading")}</h2><p>{t("settings.chat.teammates.description")}</p></div>
     <div class="header-actions">
-      <button type="button" class="settings-button" disabled={creating || dirty} onclick={() => beginCreate(null)}><Plus size={13} />{t("settings.chat.teammates.add")}</button>
-      {#if archivedTeammates.length > 0}
-        {@const archiveFilterLabel = showArchived ? t("settings.chat.teammates.hideArchived") : t("settings.chat.teammates.includeArchived")}
-        <button type="button" class="archive-filter" aria-label={archiveFilterLabel} aria-pressed={showArchived} data-app-tooltip={archiveFilterLabel} disabled={creating || dirty || lifecycleBusy} onclick={() => { showArchived = !showArchived; }}><Archive size={14} /><span aria-hidden="true">{#if showArchived}<Eye size={8} />{:else}<EyeOff size={8} />{/if}</span></button>
+      <button type="button" class="settings-button" disabled={editor.creating || editor.dirty} onclick={() => editor.beginCreate(null)}><Plus size={13} />{t("settings.chat.teammates.add")}</button>
+      {#if editor.archivedTeammates.length > 0}
+        {@const archiveFilterLabel = editor.showArchived ? t("settings.chat.teammates.hideArchived") : t("settings.chat.teammates.includeArchived")}
+        <button type="button" class="archive-filter" aria-label={archiveFilterLabel} aria-pressed={editor.showArchived} data-app-tooltip={archiveFilterLabel} disabled={editor.creating || editor.dirty || lifecycleBusy} onclick={() => { editor.showArchived = !editor.showArchived; }}><Archive size={14} /><span aria-hidden="true">{#if editor.showArchived}<Eye size={8} />{:else}<EyeOff size={8} />{/if}</span></button>
       {/if}
       <div class="tools-menu-anchor">
-        <button bind:this={toolsMenuTrigger} type="button" class="archive-filter" aria-label={t("settings.chat.teammates.accessTools")} aria-haspopup="menu" aria-expanded={toolsMenuOpen} disabled={dirty} onclick={() => { toolsMenuOpen = !toolsMenuOpen; }}><Ellipsis size={15} /></button>
+        <button bind:this={toolsMenuTrigger} type="button" class="archive-filter" aria-label={t("settings.chat.teammates.accessTools")} aria-haspopup="menu" aria-expanded={toolsMenuOpen} disabled={editor.dirty} onclick={() => { toolsMenuOpen = !toolsMenuOpen; }}><Ellipsis size={15} /></button>
         {#if toolsMenuOpen}
           <div bind:this={toolsMenuElement} role="menu" class="tools-menu" data-app-floating-surface>
             <button type="button" role="menuitem" disabled={profileManagerLoading} onclick={() => void openProfileManager()}>{profileManagerLoading ? t("common.loading") : t("settings.chat.teammates.profileManager.heading")}</button>
@@ -1469,20 +728,20 @@
 
   <div class="directory-layout">
     <aside class="directory-panel">
-      {#if allDirectoryTeammates.length > 8}<label class="directory-search"><Search size={13} /><input bind:value={directoryQuery} aria-label={t("settings.chat.teammates.searchDirectory")} placeholder={t("settings.chat.teammates.searchDirectory")} /></label>{/if}
+      {#if editor.allDirectoryTeammates.length > 8}<label class="directory-search"><Search size={13} /><input bind:value={directoryQuery} aria-label={t("settings.chat.teammates.searchDirectory")} placeholder={t("settings.chat.teammates.searchDirectory")} /></label>{/if}
       <div class="scroll-frame">
         <div bind:this={directoryScrollElement} class="directory-scroll hide-scrollbar">
           <nav aria-label={t("settings.chat.teammates.directoryLabel")} class="directory-list teammate-directory">
-            {#if creating}
-              <button type="button" class="directory-row active" aria-current="page"><span class="draft-avatar">{#if draftCompany}<ChatModelAvatar familyId={draftCompany.iconFamilyId} label={draftCompany.name} size={30} />{:else}<Plus size={15} />{/if}</span><span><strong>{displayName.trim() || t("settings.chat.teammates.name")}</strong><small>{role.trim() || t("settings.chat.teammates.role")}</small></span></button>
+            {#if editor.creating}
+              <button type="button" class="directory-row active" aria-current="page"><span class="draft-avatar">{#if draftCompany}<ChatModelAvatar familyId={draftCompany.iconFamilyId} label={draftCompany.name} size={30} />{:else}<Plus size={15} />{/if}</span><span><strong>{editor.displayName.trim() || t("settings.chat.teammates.name")}</strong><small>{editor.role.trim() || t("settings.chat.teammates.role")}</small></span></button>
             {/if}
             {#each filteredDirectoryTeammates as teammate (teammate.participant.id)}
-              <button type="button" class:active={!creating && selectedId === teammate.participant.id} class="directory-row" aria-current={!creating && selectedId === teammate.participant.id ? "page" : undefined} disabled={dirty || lifecycleBusy} onclick={() => { creating = false; selectedId = teammate.participant.id; }}>
+              <button type="button" class:active={!editor.creating && editor.selectedId === teammate.participant.id} class="directory-row" aria-current={!editor.creating && editor.selectedId === teammate.participant.id ? "page" : undefined} disabled={editor.dirty || lifecycleBusy} onclick={() => { editor.creating = false; editor.selectedId = teammate.participant.id; }}>
                 <span class="directory-avatar"><ChatParticipantAvatar participant={teammate.participant} {teammate} size={32} /></span>
                 <span class="directory-summary"><strong>{teammate.participant.displayName}</strong><small>{teammate.role}</small></span>
               </button>
             {/each}
-            {#if loadingDirectory}<p class="empty-copy" role="status">{t("common.loading")}</p>{:else if !creating && filteredDirectoryTeammates.length === 0}<p class="empty-copy">{t("settings.chat.teammates.empty")}</p>{/if}
+            {#if editor.loadingDirectory}<p class="empty-copy" role="status">{t("common.loading")}</p>{:else if !editor.creating && filteredDirectoryTeammates.length === 0}<p class="empty-copy">{t("settings.chat.teammates.empty")}</p>{/if}
           </nav>
         </div>
         <CalendarScrollbar scrollContainer={directoryScrollElement} wheelPassthrough />
@@ -1490,68 +749,68 @@
     </aside>
 
     <div class="detail-panel">
-      {#if creating || selected}
-        <form class="editor teammate-editor" aria-busy={saving || conflictLoading} onsubmit={(event) => { event.preventDefault(); void save(); }}>
+      {#if editor.creating || editor.selected}
+        <form class="editor teammate-editor" aria-busy={editor.saving || editor.conflictLoading} onsubmit={(event) => { event.preventDefault(); void editor.save(); }}>
           <div class="editor-scroll-frame">
             <div bind:this={detailScrollElement} class="editor-scroll hide-scrollbar">
               <div class="editor-heading">
-                {#if creating}
+                {#if editor.creating}
                   {#if draftCompany}<ChatModelAvatar familyId={draftCompany.iconFamilyId} label={draftCompany.name} size={38} />{:else}<span class="draft-avatar large"><Plus size={16} /></span>{/if}
-                {:else if selected}<ChatParticipantAvatar participant={selected.participant} teammate={selected} size={38} />{/if}
+                {:else if editor.selected}<ChatParticipantAvatar participant={editor.selected.participant} teammate={editor.selected} size={38} />{/if}
                 <div class="editor-title">
                   <div class="editor-name-line">
-                    <h3>{displayName.trim() || t("settings.chat.teammates.name")}</h3>
-                    {#if creating}
+                    <h3>{editor.displayName.trim() || t("settings.chat.teammates.name")}</h3>
+                    {#if editor.creating}
                       <span class="editor-state" data-state={draftConfigurationState}><i></i>{draftConfigurationState === "healthy" ? t("settings.chat.teammates.available") : t("settings.chat.teammates.needsSetup")}</span>
-                    {:else if selected}
-                      {#if archivedMode}
+                    {:else if editor.selected}
+                      {#if editor.archivedMode}
                         <span class="editor-state archived-state"><Archive size={12} />{t("settings.chat.teammates.archived")}</span>
                       {:else}
-                        <span class="editor-state" data-state={selected.configurationState}><i></i>{selected.configurationState === "healthy" ? t("settings.chat.teammates.available") : t("settings.chat.teammates.needsSetup")}</span>
+                        <span class="editor-state" data-state={editor.selected.configurationState}><i></i>{editor.selected.configurationState === "healthy" ? t("settings.chat.teammates.available") : t("settings.chat.teammates.needsSetup")}</span>
                       {/if}
                     {/if}
                   </div>
-                  <p>{role.trim() || t("settings.chat.teammates.role")}</p>
+                  <p>{editor.role.trim() || t("settings.chat.teammates.role")}</p>
                 </div>
               </div>
 
-              {#if conflictLoading}
+              {#if editor.conflictLoading}
                 <aside bind:this={conflictPanelElement} class="conflict-panel" role="status" tabindex="-1">
                   <div>
                     <strong>{t("settings.chat.teammates.conflict.loadingTitle")}</strong>
                     <p>{t("settings.chat.teammates.conflict.loadingDescription")}</p>
                   </div>
                 </aside>
-              {:else if accessConflict && conflictComparison}
+              {:else if editor.accessConflict && editor.conflictComparison}
                 <aside bind:this={conflictPanelElement} class="conflict-panel" role="alert" tabindex="-1">
                   <div class="conflict-copy">
                     <strong>{t("settings.chat.teammates.conflict.title")}</strong>
                     <p>{t("settings.chat.teammates.conflict.description")}</p>
                     <ul>
-                      <li>{conflictComparison.identityChanged ? t("settings.chat.teammates.conflict.identityChanged") : t("settings.chat.teammates.conflict.identityUnchanged")}</li>
-                      <li>{conflictComparison.policyChanged ? t("settings.chat.teammates.conflict.policyChanged") : t("settings.chat.teammates.conflict.policyUnchanged")}</li>
-                      <li>{conflictComparison.runtimeApprovalChanged ? t("settings.chat.teammates.conflict.runtimeChanged") : t("settings.chat.teammates.conflict.runtimeUnchanged")}</li>
-                      <li>{t("settings.chat.teammates.conflict.channelSummary", conflictComparison.addedChannelCount, conflictComparison.removedChannelCount, conflictComparison.changedChannelCount)}</li>
+                      <li>{editor.conflictComparison.identityChanged ? t("settings.chat.teammates.conflict.identityChanged") : t("settings.chat.teammates.conflict.identityUnchanged")}</li>
+                      <li>{editor.conflictComparison.policyChanged ? t("settings.chat.teammates.conflict.policyChanged") : t("settings.chat.teammates.conflict.policyUnchanged")}</li>
+                      <li>{editor.conflictComparison.runtimeApprovalChanged ? t("settings.chat.teammates.conflict.runtimeChanged") : t("settings.chat.teammates.conflict.runtimeUnchanged")}</li>
+                      <li>{t("settings.chat.teammates.conflict.channelSummary", editor.conflictComparison.addedChannelCount, editor.conflictComparison.removedChannelCount, editor.conflictComparison.changedChannelCount)}</li>
                     </ul>
                   </div>
                   <div class="conflict-actions">
-                    <button type="button" class="primary-button" onclick={rebaseAccessConflict}>{t("settings.chat.teammates.conflict.keepAndRebase")}</button>
-                    <button type="button" class="secondary-button" onclick={() => void reloadCurrentAccessConflict()}>{t("settings.chat.teammates.conflict.reloadCurrent")}</button>
+                    <button type="button" class="primary-button" onclick={editor.rebaseAccessConflict}>{t("settings.chat.teammates.conflict.keepAndRebase")}</button>
+                    <button type="button" class="secondary-button" onclick={() => void editor.reloadCurrentAccessConflict()}>{t("settings.chat.teammates.conflict.reloadCurrent")}</button>
                   </div>
                 </aside>
-              {:else if conflictError}
+              {:else if editor.conflictError}
                 <aside bind:this={conflictPanelElement} class="conflict-panel" role="alert" tabindex="-1">
                   <div>
                     <strong>{t("settings.chat.teammates.conflict.loadFailedTitle")}</strong>
-                    <p>{conflictError}</p>
+                    <p>{editor.conflictError}</p>
                   </div>
-                  <button type="button" class="secondary-button" onclick={retryAccessConflict}>{t("common.retry")}</button>
+                  <button type="button" class="secondary-button" onclick={editor.retryAccessConflict}>{t("common.retry")}</button>
                 </aside>
               {/if}
 
-              {#if conflictRecoveryNotice}
+              {#if editor.conflictRecoveryNotice}
                 <aside bind:this={recoveryNoticeElement} class="conflict-recovery-notice" role="status" tabindex="-1">
-                  {conflictRecoveryNotice === "rebased"
+                  {editor.conflictRecoveryNotice === "rebased"
                     ? t("settings.chat.teammates.conflict.rebasedNotice")
                     : t("settings.chat.teammates.conflict.reloadedNotice")}
                 </aside>
@@ -1559,14 +818,14 @@
 
               <div class="editor-content">
                 <section class="editor-section"><div class="section-heading"><h4>{t("settings.chat.teammates.identitySection")}</h4></div><div class="field-grid">
-                  <div class="field full"><span id="teammate-name-label">{t("settings.chat.teammates.name")}<i class="required-marker" aria-hidden="true">*</i></span><input bind:value={displayName} aria-labelledby="teammate-name-label" aria-describedby={nameTaken || (error && errorField === "displayName") ? "teammate-name-error" : undefined} aria-invalid={nameTaken || (error && errorField === "displayName") ? "true" : undefined} placeholder={t("settings.chat.teammates.namePlaceholder")} maxlength="160" required disabled={archivedMode} oninput={() => clearFieldError("displayName")} />{#if nameTaken}<small id="teammate-name-error" class="field-error" role="alert">{t("settings.chat.teammates.nameTaken")}</small>{:else if error && errorField === "displayName"}<small id="teammate-name-error" class="field-error" role="alert">{error}</small>{/if}</div>
-                  <div class="field full"><span id="teammate-role-label">{t("settings.chat.teammates.role")}<i class="required-marker" aria-hidden="true">*</i></span><input bind:value={role} aria-labelledby="teammate-role-label" aria-describedby={error && errorField === "role" ? "teammate-role-error" : undefined} aria-invalid={error && errorField === "role" ? "true" : undefined} placeholder={t("settings.chat.teammates.rolePlaceholder")} maxlength="1000" required disabled={archivedMode} oninput={() => clearFieldError("role")} />{#if error && errorField === "role"}<small id="teammate-role-error" class="field-error" role="alert">{error}</small>{/if}</div>
-                  <div class="field full"><span id="teammate-instructions-label">{t("settings.chat.teammates.instructions")}</span><textarea bind:value={instructions} aria-labelledby="teammate-instructions-label" rows="4" maxlength="65536" disabled={archivedMode} placeholder={t("settings.chat.teammates.instructionsPlaceholder")}></textarea></div>
+                  <div class="field full"><span id="teammate-name-label">{t("settings.chat.teammates.name")}<i class="required-marker" aria-hidden="true">*</i></span><input bind:value={editor.displayName} aria-labelledby="teammate-name-label" aria-describedby={editor.nameTaken || (editor.error && editor.errorField === "displayName") ? "teammate-name-error" : undefined} aria-invalid={editor.nameTaken || (editor.error && editor.errorField === "displayName") ? "true" : undefined} placeholder={t("settings.chat.teammates.namePlaceholder")} maxlength="160" required disabled={editor.archivedMode} oninput={() => editor.clearFieldError("displayName")} />{#if editor.nameTaken}<small id="teammate-name-error" class="field-error" role="alert">{t("settings.chat.teammates.nameTaken")}</small>{:else if editor.error && editor.errorField === "displayName"}<small id="teammate-name-error" class="field-error" role="alert">{editor.error}</small>{/if}</div>
+                  <div class="field full"><span id="teammate-role-label">{t("settings.chat.teammates.role")}<i class="required-marker" aria-hidden="true">*</i></span><input bind:value={editor.role} aria-labelledby="teammate-role-label" aria-describedby={editor.error && editor.errorField === "role" ? "teammate-role-error" : undefined} aria-invalid={editor.error && editor.errorField === "role" ? "true" : undefined} placeholder={t("settings.chat.teammates.rolePlaceholder")} maxlength="1000" required disabled={editor.archivedMode} oninput={() => editor.clearFieldError("role")} />{#if editor.error && editor.errorField === "role"}<small id="teammate-role-error" class="field-error" role="alert">{editor.error}</small>{/if}</div>
+                  <div class="field full"><span id="teammate-instructions-label">{t("settings.chat.teammates.instructions")}</span><textarea bind:value={editor.instructions} aria-labelledby="teammate-instructions-label" rows="4" maxlength="65536" disabled={editor.archivedMode} placeholder={t("settings.chat.teammates.instructionsPlaceholder")}></textarea></div>
                 </div></section>
 
                 <section class="editor-section"><div class="section-heading"><h4>{t("settings.chat.teammates.executionSection")}</h4></div><div class="field-grid execution-fields">
-                  <div class="field execution-model-field"><span>{t("settings.chat.teammates.model")}<i class="required-marker" aria-hidden="true">*</i></span><ChatModelControls value={{ providerInstanceId: providerId || null, modelId: modelId || null, providerManaged: providerManagedModel, options: modelOptions }} disabled={archivedMode} onChange={selectExecution} /></div>
-                  <div class="field execution-approval-field"><span>{t("settings.chat.teammates.approval")}</span><ChatAccessControl value={safetyMode} providerInstanceId={providerId || null} workingFolderId={permissionWorkingFolderId} disabled={archivedMode} onChange={(value) => { safetyMode = value; }} /></div>
+                  <div class="field execution-model-field"><span>{t("settings.chat.teammates.model")}<i class="required-marker" aria-hidden="true">*</i></span><ChatModelControls value={{ providerInstanceId: editor.providerId || null, modelId: editor.modelId || null, providerManaged: editor.providerManagedModel, options: editor.modelOptions }} disabled={editor.archivedMode} onChange={editor.selectExecution} /></div>
+                  <div class="field execution-approval-field"><span>{t("settings.chat.teammates.approval")}</span><ChatAccessControl value={editor.safetyMode} providerInstanceId={editor.providerId || null} workingFolderId={permissionWorkingFolderId} disabled={editor.archivedMode} onChange={(value) => { editor.safetyMode = value; }} /></div>
                 </div></section>
 
                 <section class="editor-section access-section">
@@ -1579,7 +838,7 @@
                       aria-label={t("settings.chat.teammates.configureChannelAccess")}
                       aria-haspopup="dialog"
                       aria-expanded={accessPickerOpen}
-                      disabled={loadingAccess || archivedMode || accessProfiles.length === 0}
+                      disabled={editor.loadingAccess || editor.archivedMode || editor.accessProfiles.length === 0}
                       onclick={() => { accessPickerOpen = !accessPickerOpen; }}
                     >
                       <span>{t("settings.chat.teammates.configureChannelAccessAction")}</span>
@@ -1617,7 +876,7 @@
                                       <strong class="access-channel-name" use:overflowTooltip={summaryChannel.channel.name}>#{summaryChannel.channel.name}</strong>
                                     {/if}
                                     <div class="channel-primary-control">
-                                      <ChatChannelScopeControls channels={[summaryChannel.access]} disabled={archivedMode} onPresetChange={(preset) => setChannelPreset(summaryChannel.channel.id, preset)} />
+                                      <ChatChannelScopeControls channels={[summaryChannel.access]} disabled={editor.archivedMode} onPresetChange={(preset) => setChannelPreset(summaryChannel.channel.id, preset)} />
                                     </div>
                                     <div class="channel-primary-control work-access-control">
                                       <ChatControlMenu
@@ -1625,7 +884,7 @@
                                         options={accessProfileOptions}
                                         ariaLabel={t("settings.chat.teammates.workAccess")}
                                         onChange={(profileId) => setChannelAccessProfile(summaryChannel.channel.id, profileId)}
-                                        disabled={archivedMode}
+                                        disabled={editor.archivedMode}
                                         showTooltip={false}
                                       />
                                     </div>
@@ -1642,7 +901,7 @@
                         </section>
                       {/each}
                     </div>
-                  {:else if !loadingAccess}
+                  {:else if !editor.loadingAccess}
                     <p class="access-summary-empty">{t("settings.chat.teammates.noAccessTitle")}</p>
                   {/if}
                 </section>
@@ -1651,7 +910,7 @@
             <CalendarScrollbar scrollContainer={detailScrollElement} wheelPassthrough />
           </div>
 
-          <footer class="editor-footer"><div>{#if creating}<button type="button" class="secondary-button" onclick={cancelCreate}><X size={14} />{t("common.cancel")}</button>{:else if selected && archivedMode}<button type="button" class="danger-button" disabled={selected.hasDurableHistory} onclick={() => requestLifecycle("delete")}><Trash2 size={14} />{t("settings.chat.teammates.deletePermanently")}</button>{:else if selected}<button type="button" class="secondary-button" disabled={selected.activeAssignmentCount > 0} onclick={() => requestLifecycle("archive")}><Archive size={14} />{t("settings.chat.teammates.archive")}</button>{/if}{#if lifecycleError}<span class="field-error" role="alert">{lifecycleError}</span>{/if}</div><div class="save-area">{#if error && errorField !== "displayName" && errorField !== "role"}<span class="field-error" role="alert">{error}</span>{:else if accessErrors.length > 0}<span class="field-error" role="alert">{t("settings.chat.teammates.accessValidationFailed")}</span>{:else if providerResourceBlockers[0]}<span class="field-error" role="alert">{providerResourceBlockers[0]}</span>{/if}{#if archivedMode}<button type="button" class="primary-button" onclick={() => void restoreSelected()}><ArchiveRestore size={14} />{t("settings.chat.teammates.restore")}</button>{:else}<button bind:this={saveButtonElement} type="submit" class="primary-button" disabled={saving || !canSave}>{saving ? t("settings.chat.teammates.saving") : creating ? t("settings.chat.teammates.createInert") : t("settings.chat.teammates.save")}</button>{/if}</div></footer>
+          <footer class="editor-footer"><div>{#if editor.creating}<button type="button" class="secondary-button" onclick={editor.cancelCreate}><X size={14} />{t("common.cancel")}</button>{:else if editor.selected && editor.archivedMode}<button type="button" class="danger-button" disabled={editor.selected.hasDurableHistory} onclick={() => requestLifecycle("delete")}><Trash2 size={14} />{t("settings.chat.teammates.deletePermanently")}</button>{:else if editor.selected}<button type="button" class="secondary-button" disabled={editor.selected.activeAssignmentCount > 0} onclick={() => requestLifecycle("archive")}><Archive size={14} />{t("settings.chat.teammates.archive")}</button>{/if}{#if editor.lifecycleError}<span class="field-error" role="alert">{editor.lifecycleError}</span>{/if}</div><div class="save-area">{#if editor.error && editor.errorField !== "displayName" && editor.errorField !== "role"}<span class="field-error" role="alert">{editor.error}</span>{:else if editor.accessErrors.length > 0}<span class="field-error" role="alert">{t("settings.chat.teammates.accessValidationFailed")}</span>{:else if editor.providerResourceBlockers[0]}<span class="field-error" role="alert">{editor.providerResourceBlockers[0]}</span>{/if}{#if editor.archivedMode}<button type="button" class="primary-button" onclick={() => void restoreSelected()}><ArchiveRestore size={14} />{t("settings.chat.teammates.restore")}</button>{:else}<button bind:this={saveButtonElement} type="submit" class="primary-button" disabled={editor.saving || !editor.canSave}>{editor.saving ? t("settings.chat.teammates.saving") : editor.creating ? t("settings.chat.teammates.createInert") : t("settings.chat.teammates.save")}</button>{/if}</div></footer>
         </form>
       {:else}
         <div class="empty-detail"><Bot size={24} /><p>{t("settings.chat.teammates.selectPrompt")}</p></div>
@@ -1665,22 +924,22 @@
     anchor={accessPickerTriggerElement}
     channels={activeNavigationChannels}
     {selectedChannelIds}
-    disabled={archivedMode || accessProfiles.length === 0}
+    disabled={editor.archivedMode || editor.accessProfiles.length === 0}
     onSelectionChange={handleChannelSelection}
     onClose={closeAccessPicker}
   />
 {/if}
 
-{#if accessConfirmationImpact}
+{#if editor.accessConfirmationImpact}
   <ConfirmDialog
     title={t("settings.chat.teammates.accessConfirmation.title")}
-    message={accessConfirmationMessage(accessConfirmationImpact)}
+    message={accessConfirmationMessage(editor.accessConfirmationImpact)}
     confirmLabel={t("settings.chat.teammates.accessConfirmation.confirm")}
     cancelLabel={t("common.cancel")}
-    danger={accessConfirmationImpact.removedChannelIds.length > 0}
-    onConfirm={() => void save(true)}
+    danger={editor.accessConfirmationImpact.removedChannelIds.length > 0}
+    onConfirm={() => void editor.save(true)}
     onCancel={() => {
-      clearAccessConfirmation();
+      editor.clearAccessConfirmation();
       void tick().then(() => saveButtonElement?.focus());
     }}
   />
@@ -1701,12 +960,11 @@
 {#if profileManagerOpen && ChatAccessProfilesManager}
   {@const Manager = ChatAccessProfilesManager}
   <Manager
-    profiles={accessProfiles}
-    onProfilesChange={handleProfilesChange}
+    profiles={editor.accessProfiles}
+    onProfilesChange={editor.handleProfilesChange}
     onClose={() => { profileManagerOpen = false; }}
   />
 {/if}
-
 
 <style>
   .header-actions,.editor-footer,.save-area { display:flex; align-items:center; }

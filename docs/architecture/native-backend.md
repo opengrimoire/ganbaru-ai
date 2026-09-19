@@ -68,6 +68,8 @@ Media controls keep the shared command and hardware-event payload in `media_cont
 
 Android composition uses plugin adapters and system-owned surfaces instead of importing desktop implementations. Notification schedules, selected document grants, Media3 playback, and Doomscrolling access projections remain subordinate to canonical vault data.
 
+The independent browser native messaging host separates configuration parsing, device snapshot freshness, pure rule evaluation, and event persistence. Blocking reasons are typed internally: extension labels and database classifications are derived from the same decision, rather than classifying events by parsing display text. Existing wire labels, rule fingerprints, stored event values, stale-state behavior, and vault ownership checks remain unchanged. Device-local usage spooling stays separate from canonical vault event writes.
+
 ## Error and security boundary
 
 Native commands return bounded, user-meaningful errors without embedding secrets, full remote bodies, unnecessary home paths, or unchecked provider data. Secrets are stored only through operating-system credential references where the feature requires persistence.

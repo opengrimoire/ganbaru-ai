@@ -97,6 +97,7 @@ apps/
           validation/: bounded parsers for untrusted Chat responses and events
           composer-controller.ts, composer-model.ts, inspector-model.ts, review-model.ts, terminal-model.ts, timeline-model.ts: split interaction and presentation models and controllers
           file-editor-session.svelte.ts, review-session.svelte.ts, workspace-panel-tabs.svelte.ts: stateful editor, review, and workspace controllers
+          teammate-editor-controller.svelte.ts: component-scoped teammate drafts, revision checks, and save/conflict recovery
         data/: shared static/domain data helpers
         doomscrolling/: shared browser and desktop blocking rules
         hooks/: reusable Svelte hooks
@@ -184,6 +185,7 @@ crates/
   ganbaru-chat/: Chat persistence, runtime, Git workspaces, checkpoints, review, source control, and application services
   ganbaru-notes/: Notes domain, persistence, transfers, history, assets, validation, and bounded filesystem operations
   ganbaru-native-messaging/: independent ganbaru-ai-native-messaging binary and tests
+    src/config.rs, rules.rs, snapshot.rs, events.rs: configuration validation, typed browser decisions, device snapshot freshness, and event persistence
 packages/
   shared-types/: TypeScript types shared across workspaces
 extensions/
