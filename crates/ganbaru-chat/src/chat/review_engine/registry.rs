@@ -4,11 +4,11 @@ use super::super::models::{
     ChatError, ChatErrorCode, ChatResult, ChatThreadId, ProjectWorkingFolderId,
 };
 use super::super::workspace::WorkingFolderAuthorizationOperation;
+use super::ReviewWorkspaceAuthorizer;
 use super::authorization::authorize_snapshot;
 use super::contracts::*;
-use super::patch_store::{read_patch_page, PatchIndex, ReviewObjectStore};
+use super::patch_store::{PatchIndex, ReviewObjectStore, read_patch_page};
 use super::selection::{select_provider_patch_lines, select_text_range};
-use super::ReviewWorkspaceAuthorizer;
 use super::{corrupt_data, registry_error, review_output};
 use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;

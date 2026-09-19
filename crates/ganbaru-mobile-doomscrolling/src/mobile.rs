@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::{
-    plugin::{PluginApi, PluginHandle},
     AppHandle, Manager, Runtime,
+    plugin::{PluginApi, PluginHandle},
 };
 
 const PLUGIN_IDENTIFIER: &str = "app.ganbaru.mobile_doomscrolling";

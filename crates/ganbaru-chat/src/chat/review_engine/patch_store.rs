@@ -6,13 +6,13 @@ use super::contracts::{ReviewDiffSource, ReviewFilePatchRead, ReviewHunkRead, Re
 use super::material::deterministic_diff_arguments;
 use super::patch_parser::{parse_hunk_header, parse_patch};
 use super::registry::{ReviewFileInternal, ReviewSnapshot};
-use super::{corrupt_data, git_text, review_error, MAX_PATCH_PAGE_BYTES};
+use super::{MAX_PATCH_PAGE_BYTES, corrupt_data, git_text, review_error};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 const MAX_PATCH_HUNKS_PER_RESPONSE: usize = 2_048;
 const MAX_PATCH_SPOOL_BYTES: usize = 512 * 1024 * 1024;

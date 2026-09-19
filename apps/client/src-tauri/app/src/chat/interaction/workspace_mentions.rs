@@ -3,8 +3,8 @@
 use super::support::{chat_pool, require_workspace};
 use crate::chat::composer::prompt_catalog::{merge_prompt_entries, read_static_prompt_catalog};
 use crate::chat::composer::workspace_mentions::{
-    search_workspace_paths, workspace_mention_is_safety_excluded as mention_is_safety_excluded,
-    ProjectWorkingFolderPathPage,
+    ProjectWorkingFolderPathPage, search_workspace_paths,
+    workspace_mention_is_safety_excluded as mention_is_safety_excluded,
 };
 use crate::chat::interaction_commands::SearchWorkingFolderPathsRequest;
 use crate::chat::models::{
@@ -13,7 +13,7 @@ use crate::chat::models::{
 };
 use crate::chat::runtime::ChatRuntimeRegistry;
 use crate::chat::workspace::{
-    resolve_workspace_relative_path, WorkingFolderAuthorizationOperation,
+    WorkingFolderAuthorizationOperation, resolve_workspace_relative_path,
 };
 use tauri::Manager;
 

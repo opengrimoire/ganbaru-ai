@@ -8,8 +8,8 @@ use super::common::{
 };
 use super::workflow::{parse_model_selection, read_message_references};
 use super::{
-    i64_value, identifier_error, now_timestamp, optional_timestamp, persistence_error, timestamp,
-    u64_value, LOCAL_PARTICIPANT_ID,
+    LOCAL_PARTICIPANT_ID, i64_value, identifier_error, now_timestamp, optional_timestamp,
+    persistence_error, timestamp, u64_value,
 };
 use ganbaru_chat::chat::coordination::access::history_boundary_is_expansion;
 use sqlx::{Row, SqlitePool};

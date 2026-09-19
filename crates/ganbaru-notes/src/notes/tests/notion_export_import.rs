@@ -69,12 +69,14 @@ fn notion_export_import_reconstructs_pages_database_rows_links_and_provenance() 
         assert_eq!(value["imported_data_source_count"], 1);
         assert_eq!(value["imported_page_count"], 5);
         assert_eq!(value["imported_file_count"], 0);
-        assert!(value["diagnostics"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|diagnostic| diagnostic["code"] == "sitemap_skipped"
-                && diagnostic["source_path"] == "index.html"));
+        assert!(
+            value["diagnostics"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|diagnostic| diagnostic["code"] == "sitemap_skipped"
+                    && diagnostic["source_path"] == "index.html")
+        );
 
         let serialized = serde_json::to_string(&value).unwrap();
         assert!(serialized.contains("http://localhost:1420/?view=notes#notes?title=Task+A"));

@@ -509,10 +509,12 @@ fn page_history_snapshots_restore_copy_and_retention_settings() {
         )
         .await
         .unwrap();
-        assert!(history::list_page_history_snapshots(&pool, PAGE_A)
-            .await
-            .unwrap()
-            .is_empty());
+        assert!(
+            history::list_page_history_snapshots(&pool, PAGE_A)
+                .await
+                .unwrap()
+                .is_empty()
+        );
         let retained_block_bundles: i64 = sqlx::query_scalar(
             "SELECT COUNT(*)
              FROM notes_history_bundles
@@ -538,10 +540,12 @@ fn page_history_snapshots_restore_copy_and_retention_settings() {
         )
         .await
         .unwrap();
-        assert!(history::list_page_history_snapshots(&pool, PAGE_A)
-            .await
-            .unwrap()
-            .is_empty());
+        assert!(
+            history::list_page_history_snapshots(&pool, PAGE_A)
+                .await
+                .unwrap()
+                .is_empty()
+        );
     });
 }
 

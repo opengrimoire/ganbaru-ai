@@ -1,20 +1,20 @@
 //! Review snapshot opening and source-specific material resolution.
 
-use super::super::checkpoints::{read_stored_checkpoint, verify_checkpoint, StoredCheckpoint};
+use super::super::checkpoints::{StoredCheckpoint, read_stored_checkpoint, verify_checkpoint};
 use super::super::events::{CanonicalEvent, ChangedFileSummary};
 use super::super::models::{
     ChatCheckpointId, ChatError, ChatErrorCode, ChatResult, ChatThreadId, ChatTurnId,
 };
 use super::super::workspace::{AuthorizedWorkingFolder, WorkingFolderAuthorizationOperation};
+use super::ReviewWorkspaceAuthorizer;
 use super::authorization::authorize_review_request;
 use super::contracts::*;
 use super::material::{enrich_working_tree_files, git_files, working_tree_material};
 use super::registry::{
-    file_id, review_revision, snapshot_id, snapshot_read, ChatReviewRegistry, ReviewFileInternal,
-    ReviewSnapshot,
+    ChatReviewRegistry, ReviewFileInternal, ReviewSnapshot, file_id, review_revision, snapshot_id,
+    snapshot_read,
 };
 use super::validation::{thread_required, validate_path, validate_reference};
-use super::ReviewWorkspaceAuthorizer;
 use super::{corrupt_data, empty_tree, git_text, persistence_error, review_error};
 use sha2::{Digest, Sha256};
 use sqlx::{Row, SqlitePool};
@@ -235,7 +235,7 @@ pub async fn open_review(
             ReviewDiffSource::ChangeRequest { .. } => {
                 return Err(ChatError::unsupported(
                     "Hosted change-request review is unavailable for this source-control adapter",
-                ))
+                ));
             }
         };
     let revision = if let (Some(before), Some(after)) = (&before_oid, &after_oid) {

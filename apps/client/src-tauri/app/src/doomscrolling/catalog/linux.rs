@@ -58,11 +58,7 @@ fn first_exec_token(exec: &str) -> Option<String> {
         }
         token.push(ch);
     }
-    if token.is_empty() {
-        None
-    } else {
-        Some(token)
-    }
+    if token.is_empty() { None } else { Some(token) }
 }
 
 #[cfg(target_os = "linux")]

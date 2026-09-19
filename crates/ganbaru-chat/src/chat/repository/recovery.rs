@@ -1,4 +1,4 @@
-use super::events::{append_canonical_event, AppendCanonicalEventRequest};
+use super::events::{AppendCanonicalEventRequest, append_canonical_event};
 use crate::chat::events::{CanonicalEvent, CanonicalRuntimeEvent, TurnAbortedEvent};
 use crate::chat::models::{
     ChatError, ChatErrorCode, ChatEventId, ChatResult, ChatThreadId, ChatTurnId, ChatTurnState,

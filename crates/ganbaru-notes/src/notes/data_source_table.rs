@@ -14,7 +14,7 @@ use super::{
     },
     data_source_window, history, writes,
 };
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use sqlx::{Sqlite, SqlitePool, Transaction};
 use std::cmp::Ordering;
 use std::collections::HashSet;
@@ -661,7 +661,7 @@ fn property_value_from_edit(property: &TableProperty, value: &Value) -> Result<V
         "place" => edit_place_payload(value)?,
         "files" | "people" | "created_time" | "created_by" | "last_edited_time"
         | "last_edited_by" | "unique_id" | "rollup" | "formula" | "button" => {
-            return Err("this property is read-only in the table view".to_string())
+            return Err("this property is read-only in the table view".to_string());
         }
         other => return Err(format!("unsupported row property type: {other}")),
     };

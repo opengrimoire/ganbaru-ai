@@ -1,8 +1,8 @@
 use super::block_comments::update_block_comment_thread_pages;
 use super::block_tree::{load_block_row_in_tx, load_blocks_by_ids, normalize_selection_root_ids};
 use super::parents::{
-    parent_target_from_block_row, refresh_parent_has_children, resolve_block_parent, touch_page,
-    validate_block_for_parent, ParentTarget,
+    ParentTarget, parent_target_from_block_row, refresh_parent_has_children, resolve_block_parent,
+    touch_page, validate_block_for_parent,
 };
 use super::sort::{next_sort_orders, sort_order_before, sort_orders_before};
 use crate::notes::models::{NoteBlockDto, NoteMoveBlock, NoteMoveBlocks, NotePaginatedBlockList};

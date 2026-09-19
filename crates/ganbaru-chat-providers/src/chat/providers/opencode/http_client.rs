@@ -3,16 +3,16 @@
 use super::config::OpenCodeSecret;
 use super::permissions::OpenCodePermissionRule;
 use super::protocol::{
-    parse_commands, protocol_error, validate_identifier, OpenCodeCommand, MAX_HTTP_BODY_BYTES,
+    MAX_HTTP_BODY_BYTES, OpenCodeCommand, parse_commands, protocol_error, validate_identifier,
 };
 use crate::chat::models::{ChatError, ChatErrorCode, ChatResult};
-use base64::{engine::general_purpose::STANDARD, Engine as _};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use reqwest::{
-    header::{HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE},
     Method, StatusCode, Url,
+    header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, HeaderValue},
 };
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::Path;
 use std::time::Duration;
 

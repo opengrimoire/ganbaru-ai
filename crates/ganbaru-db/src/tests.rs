@@ -152,10 +152,12 @@ fn current_schema_validation_rejects_changed_migration_history() {
         .execute(&pool)
         .await
         .unwrap();
-        assert!(crate::validate_current_schema(&pool)
-            .await
-            .unwrap_err()
-            .contains("incompatible"));
+        assert!(
+            crate::validate_current_schema(&pool)
+                .await
+                .unwrap_err()
+                .contains("incompatible")
+        );
 
         registry.close_all().await.unwrap();
         std::fs::remove_dir_all(directory).unwrap();

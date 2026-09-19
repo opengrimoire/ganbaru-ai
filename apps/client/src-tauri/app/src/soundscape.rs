@@ -2,7 +2,7 @@ use std::{
     fs::File,
     io::BufReader,
     path::Path,
-    sync::{mpsc, Mutex},
+    sync::{Mutex, mpsc},
     thread::{self, JoinHandle},
     time::Duration,
 };
@@ -277,7 +277,7 @@ impl ActiveOutput {
             _ => {
                 return Err(SoundscapeError::validation(
                     "Choose one generated noise or local loop source.",
-                ))
+                ));
             }
         }
         ramp_volume(&player, 0.0, clamp_volume(request.volume));
@@ -666,9 +666,10 @@ mod tests {
         let down = ramp_values(0.8, 0.0).collect::<Vec<_>>();
         assert_eq!(down.last().copied(), Some(0.0));
         assert!(down.windows(2).all(|pair| pair[1] <= pair[0]));
-        assert!(down
-            .windows(2)
-            .all(|pair| (pair[1] - pair[0]).abs() <= 0.11));
+        assert!(
+            down.windows(2)
+                .all(|pair| (pair[1] - pair[0]).abs() <= 0.11)
+        );
         let up = ramp_values(0.0, 0.8).collect::<Vec<_>>();
         assert_eq!(up.last().copied(), Some(0.8));
         assert!(up.windows(2).all(|pair| pair[1] >= pair[0]));

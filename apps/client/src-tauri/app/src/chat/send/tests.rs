@@ -1,5 +1,5 @@
 use super::persistence::{
-    persist_user_turn, read_thread_runtime_data, PersistUserTurnContext, TurnPersistenceTarget,
+    PersistUserTurnContext, TurnPersistenceTarget, persist_user_turn, read_thread_runtime_data,
 };
 use super::session::{normalize_changed_file_paths, reuse_existing_session};
 use super::validation::{
@@ -259,20 +259,22 @@ fn model_options_require_declared_types_values_and_unique_keys() {
             default_value: None,
         },
     ];
-    assert!(validate_model_options(
-        &definitions,
-        &[
-            ModelOptionSelection {
-                key: "effort".to_string(),
-                value: ModelOptionValue::Choice("high".to_string()),
-            },
-            ModelOptionSelection {
-                key: "budget".to_string(),
-                value: ModelOptionValue::Integer(6),
-            },
-        ],
-    )
-    .is_ok());
+    assert!(
+        validate_model_options(
+            &definitions,
+            &[
+                ModelOptionSelection {
+                    key: "effort".to_string(),
+                    value: ModelOptionValue::Choice("high".to_string()),
+                },
+                ModelOptionSelection {
+                    key: "budget".to_string(),
+                    value: ModelOptionValue::Integer(6),
+                },
+            ],
+        )
+        .is_ok()
+    );
     for invalid in [
         vec![ModelOptionSelection {
             key: "effort".to_string(),

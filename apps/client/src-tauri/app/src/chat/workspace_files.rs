@@ -1,7 +1,7 @@
 //! Tauri command adapters for bounded core workspace-file services.
 
 use super::models::{ChatError, ChatErrorCode, ChatResult, ProjectWorkingFolderId};
-use super::workspace::{resolve_workspace_relative_path, AuthorizedWorkingFolder};
+use super::workspace::{AuthorizedWorkingFolder, resolve_workspace_relative_path};
 use crate::db_path;
 use sqlx::SqlitePool;
 

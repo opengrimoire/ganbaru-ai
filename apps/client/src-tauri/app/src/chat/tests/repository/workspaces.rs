@@ -32,15 +32,17 @@ fn project_working_folder_mutations_are_sqlite_backed_and_revision_checked() {
                 .count(),
             2
         );
-        assert!(rename_workspace(
-            &pool,
-            &request.id,
-            "Stale rename",
-            1,
-            &UtcTimestamp::new(NOW).unwrap(),
-        )
-        .await
-        .is_err());
+        assert!(
+            rename_workspace(
+                &pool,
+                &request.id,
+                "Stale rename",
+                1,
+                &UtcTimestamp::new(NOW).unwrap(),
+            )
+            .await
+            .is_err()
+        );
     });
 }
 

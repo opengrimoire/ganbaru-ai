@@ -722,12 +722,16 @@ fn organizational_access_schema_has_one_authority_path_and_optional_native_targe
 
         assert_eq!(legacy_authorization, None);
         assert_eq!(legacy_reference_tables, 0);
-        assert!(!membership_columns
-            .iter()
-            .any(|column| column == "addressable"));
-        assert!(!membership_columns
-            .iter()
-            .any(|column| column == "approval_policy"));
+        assert!(
+            !membership_columns
+                .iter()
+                .any(|column| column == "addressable")
+        );
+        assert!(
+            !membership_columns
+                .iter()
+                .any(|column| column == "approval_policy")
+        );
         assert!(thread_sql.contains("scratch_generation_id"));
         assert!(
             thread_sql.contains("working_folder_id IS NULL AND execution_environment_id IS NULL")

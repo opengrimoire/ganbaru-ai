@@ -2,7 +2,7 @@ use std::{
     fs::File,
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
-    sync::{mpsc, Mutex},
+    sync::{Mutex, mpsc},
     thread::{self, JoinHandle},
     time::Duration,
 };

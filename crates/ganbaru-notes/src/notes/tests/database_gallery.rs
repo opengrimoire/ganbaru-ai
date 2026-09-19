@@ -144,13 +144,13 @@ fn gallery_database_view_persists_card_preview_filters_and_sorts() {
             default_json["view"]["configuration"]["gallery"]["cover_source"],
             "page_cover"
         );
-        let mut default_visible_property_ids = default_json["view"]["configuration"]["gallery"]
-            ["visible_property_ids"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|value| value.as_str().unwrap())
-            .collect::<Vec<_>>();
+        let mut default_visible_property_ids =
+            default_json["view"]["configuration"]["gallery"]["visible_property_ids"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|value| value.as_str().unwrap())
+                .collect::<Vec<_>>();
         default_visible_property_ids.sort_unstable();
         assert_eq!(
             default_visible_property_ids,

@@ -13,11 +13,11 @@ use super::repository::provider_lifecycle::{
 use super::repository::{lifecycle, reads};
 use super::workspace::WorkingFolderAuthorizationOperation;
 use super::workspace_commands::authorize_working_folder;
-use super::{credentials::materialize_provider_environment, credentials::PlatformCredentialStore};
+use super::{credentials::PlatformCredentialStore, credentials::materialize_provider_environment};
 use crate::db_path;
 use chrono::{SecondsFormat, Utc};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sqlx::SqlitePool;
 use std::time::{Duration, Instant, SystemTime};
 use tauri::Manager;
@@ -302,7 +302,7 @@ fn provider_resume_cursor(
         _ => {
             return Err(ChatError::unsupported(
                 "Provider does not expose a resumable native fork",
-            ))
+            ));
         }
     };
     Ok(super::models::VersionedJson {

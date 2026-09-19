@@ -1,4 +1,4 @@
-use crate::chat::process::{spawn_provider_process, ProviderProcessConfig};
+use crate::chat::process::{ProviderProcessConfig, spawn_provider_process};
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
@@ -187,13 +187,13 @@ fn run_async(future: impl std::future::Future<Output = ()>) {
 }
 
 fn process_is_running(process_id: u32) -> bool {
-    use windows::core::{Owned, HRESULT};
     use windows::Win32::Foundation::{
         ERROR_INVALID_PARAMETER, WAIT_FAILED, WAIT_OBJECT_0, WAIT_TIMEOUT,
     };
     use windows::Win32::System::Threading::{
-        OpenProcess, WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, WaitForSingleObject,
     };
+    use windows::core::{HRESULT, Owned};
 
     // SAFETY: No pointers are passed, inheritance is disabled, and Windows
     // returns a fresh owning process handle on success.

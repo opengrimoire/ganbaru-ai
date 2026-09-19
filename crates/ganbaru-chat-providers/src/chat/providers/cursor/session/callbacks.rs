@@ -90,7 +90,7 @@ pub(super) async fn handle_terminal_create(
     let request: CreateTerminalRequest = match serde_json::from_value(params) {
         Ok(request) => request,
         Err(_) => {
-            return reject_callback(resources, rpc_id, "Invalid terminal create request").await
+            return reject_callback(resources, rpc_id, "Invalid terminal create request").await;
         }
     };
     let result = create_acp_terminal(&resources.terminal_callbacks, request).await;
@@ -116,7 +116,7 @@ pub(super) async fn handle_terminal_output(
     let request: TerminalOutputRequest = match serde_json::from_value(params) {
         Ok(request) => request,
         Err(_) => {
-            return reject_callback(resources, rpc_id, "Invalid terminal output request").await
+            return reject_callback(resources, rpc_id, "Invalid terminal output request").await;
         }
     };
     let result = (|| {
@@ -219,7 +219,7 @@ pub(super) async fn handle_terminal_release(
     let request: ReleaseTerminalRequest = match serde_json::from_value(params) {
         Ok(request) => request,
         Err(_) => {
-            return reject_callback(resources, rpc_id, "Invalid terminal release request").await
+            return reject_callback(resources, rpc_id, "Invalid terminal release request").await;
         }
     };
     let result = (|| {
@@ -479,7 +479,7 @@ pub(super) fn reject_symlink_components(
         current.push(component.as_os_str());
         match fs::symlink_metadata(&current) {
             Ok(metadata) if metadata.file_type().is_symlink() => {
-                return Err(callback_permission_error())
+                return Err(callback_permission_error());
             }
             Ok(_) => {}
             Err(_) if allow_missing_file && index + 1 == component_count => {}

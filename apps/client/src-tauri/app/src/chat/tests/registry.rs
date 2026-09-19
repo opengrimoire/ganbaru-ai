@@ -123,14 +123,18 @@ fn opencode_driver_is_available_with_a_version_floor() {
         driver.metadata().minimum_tested_cli_version.as_deref(),
         Some("1.14.19")
     );
-    assert!(driver
-        .capabilities()
-        .supports(crate::chat::models::ProviderCapability::NativePlan));
-    assert!(driver
-        .capabilities()
-        .entries
-        .iter()
-        .all(|entry| entry.supported));
+    assert!(
+        driver
+            .capabilities()
+            .supports(crate::chat::models::ProviderCapability::NativePlan)
+    );
+    assert!(
+        driver
+            .capabilities()
+            .entries
+            .iter()
+            .all(|entry| entry.supported)
+    );
 }
 
 #[test]
@@ -146,11 +150,13 @@ fn cursor_driver_is_available_with_an_acp_version_floor() {
         driver.metadata().minimum_tested_cli_version.as_deref(),
         Some("2026.04.08")
     );
-    assert!(driver
-        .capabilities()
-        .entries
-        .iter()
-        .all(|entry| entry.supported));
+    assert!(
+        driver
+            .capabilities()
+            .entries
+            .iter()
+            .all(|entry| entry.supported)
+    );
 }
 
 #[test]
@@ -164,12 +170,16 @@ fn grok_driver_is_available_with_native_acp_models() {
 
     assert_eq!(driver.metadata().display_name, "xAI");
     assert_eq!(driver.metadata().default_executable_candidates, ["grok"]);
-    assert!(driver
-        .capabilities()
-        .supports(crate::chat::models::ProviderCapability::DynamicModelChange));
-    assert!(driver
-        .capabilities()
-        .supports(crate::chat::models::ProviderCapability::StructuredQuestions));
+    assert!(
+        driver
+            .capabilities()
+            .supports(crate::chat::models::ProviderCapability::DynamicModelChange)
+    );
+    assert!(
+        driver
+            .capabilities()
+            .supports(crate::chat::models::ProviderCapability::StructuredQuestions)
+    );
 }
 
 #[test]
@@ -185,11 +195,13 @@ fn claude_driver_is_available_with_a_version_floor() {
         driver.metadata().minimum_tested_cli_version.as_deref(),
         Some("2.1.170")
     );
-    assert!(driver
-        .capabilities()
-        .entries
-        .iter()
-        .all(|entry| entry.supported));
+    assert!(
+        driver
+            .capabilities()
+            .entries
+            .iter()
+            .all(|entry| entry.supported)
+    );
 }
 
 #[test]
@@ -225,11 +237,13 @@ fn codex_driver_is_available_with_declared_capabilities() {
     let configuration = fixture.configuration();
     let mut driver = ProviderDriverRegistry.create_driver(configuration).unwrap();
     assert!(!driver.capabilities().entries.is_empty());
-    assert!(driver
-        .capabilities()
-        .entries
-        .iter()
-        .all(|entry| entry.supported));
+    assert!(
+        driver
+            .capabilities()
+            .entries
+            .iter()
+            .all(|entry| entry.supported)
+    );
 
     let context = crate::chat::providers::DriverOperationContext {
         operation_id: "probe-1".to_string(),

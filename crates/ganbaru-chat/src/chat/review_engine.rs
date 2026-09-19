@@ -67,15 +67,15 @@ use opening::open_review;
 use opening::{file_contract, provider_turn_patch};
 #[cfg(test)]
 use patch_parser::{hunk_id, parse_patch};
-use patch_store::{read_patch_page, unavailable_patch, ReviewObjectStore};
+use patch_store::{ReviewObjectStore, read_patch_page, unavailable_patch};
 pub use registry::ChatReviewRegistry;
 pub use registry::ResolveReviewSelectionRequest;
 use registry::{
-    action_request_fingerprint, review_revision, stale_snapshot_read, CompletedReviewOperation,
-    ReviewSnapshot, DEFAULT_PATCH_PAGE_BYTES,
+    CompletedReviewOperation, DEFAULT_PATCH_PAGE_BYTES, ReviewSnapshot, action_request_fingerprint,
+    review_revision, stale_snapshot_read,
 };
 #[cfg(test)]
-use registry::{completed_operation_key, file_id, snapshot_id, ReviewFileInternal};
+use registry::{ReviewFileInternal, completed_operation_key, file_id, snapshot_id};
 #[cfg(test)]
 use selection::{select_provider_patch_lines, select_text_range};
 #[cfg(test)]

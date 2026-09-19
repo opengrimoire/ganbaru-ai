@@ -17,11 +17,11 @@ use crate::chat::workspace_mutation::{
 };
 use std::collections::HashMap;
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
     Arc, Mutex,
+    atomic::{AtomicU64, Ordering},
 };
 use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, oneshot, Mutex as AsyncMutex, OwnedMutexGuard};
+use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard, mpsc, oneshot};
 use tokio::task::JoinHandle;
 
 mod event_sink;
@@ -706,7 +706,7 @@ impl ChatRuntimeRegistry {
 #[cfg(test)]
 mod event_scope_tests {
     use super::*;
-    use crate::chat::events::{ItemLifecycleEvent, CANONICAL_EVENT_SCHEMA_VERSION};
+    use crate::chat::events::{CANONICAL_EVENT_SCHEMA_VERSION, ItemLifecycleEvent};
     use crate::chat::models::{
         ActivityStatus, CanonicalItemKind, ChatEventId, ProviderFamilyId, ProviderInstanceId,
         UtcTimestamp,

@@ -4,13 +4,13 @@ use super::models::{
     ChatWorkAssignmentId, ProjectWorkingFolderId,
 };
 use super::repository::resources::{self, ChatResourceKind};
+use axum::Router;
 use axum::body::Body;
 use axum::extract::DefaultBodyLimit;
-use axum::http::{header, Request, StatusCode};
+use axum::http::{Request, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
-use axum::Router;
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use rmcp::model::{
     CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, ListResourcesResult,
     ListToolsResult, PaginatedRequestParams, ReadResourceRequestParams, ReadResourceResponse,
@@ -19,7 +19,7 @@ use rmcp::model::{
 };
 use rmcp::service::{NotificationContext, RequestContext, RoleServer};
 use rmcp::transport::streamable_http_server::{
-    session::local::LocalSessionManager, StreamableHttpServerConfig, StreamableHttpService,
+    StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
 };
 use rmcp::{ErrorData as McpError, ServerHandler};
 use sqlx::SqlitePool;
@@ -27,12 +27,12 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc,
+    atomic::{AtomicBool, Ordering},
 };
 use std::time::Duration;
 use tauri::Manager;
-use tokio::sync::{oneshot, Mutex, Notify, RwLock, Semaphore};
+use tokio::sync::{Mutex, Notify, RwLock, Semaphore, oneshot};
 
 const MAX_MCP_REQUEST_BYTES: usize = 1024 * 1024;
 const MAX_MCP_CONCURRENCY: usize = 8;

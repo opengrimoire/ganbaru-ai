@@ -3,7 +3,7 @@ use sqlx::{Row, Sqlite, Transaction};
 use tauri::{AppHandle, Runtime};
 
 use crate::db_path::connect_sqlite;
-use crate::music::library::fixtures::{seed_dense_music_fixture, DenseMusicFixtureSummary};
+use crate::music::library::fixtures::{DenseMusicFixtureSummary, seed_dense_music_fixture};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]

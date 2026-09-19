@@ -38,10 +38,12 @@ fn rejects_confidential_event_visibility() {
     let mut event = event_create();
     event.visibility = "confidential".to_string();
     assert!(validate_event_create(&event).is_err());
-    assert!(validate_update_field(&CalendarEventUpdateField::Visibility(
-        "confidential".to_string()
-    ))
-    .is_err());
+    assert!(
+        validate_update_field(&CalendarEventUpdateField::Visibility(
+            "confidential".to_string()
+        ))
+        .is_err()
+    );
 }
 
 #[test]

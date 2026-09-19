@@ -3,8 +3,8 @@ use super::{
     provider_not_found,
 };
 use crate::chat::config::{
-    parse_chat_config_branch, replace_chat_config_branch, ChatPortableProviderConfig,
-    ChatVaultConfig,
+    ChatPortableProviderConfig, ChatVaultConfig, parse_chat_config_branch,
+    replace_chat_config_branch,
 };
 use crate::chat::credentials::{CredentialStore, PlatformCredentialStore};
 use crate::chat::device_state::read_active_device_scope;

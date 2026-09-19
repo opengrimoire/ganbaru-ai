@@ -3,9 +3,9 @@ use super::block_tree::{
     normalize_selection_root_ids, set_block_subtree_trash,
 };
 use super::parents::{
-    insert_block, parent_target_from_block_row, refresh_parent_has_children, resolve_block_parent,
-    touch_page, validate_block_update_children, validate_block_update_parent,
-    validate_children_for_parent, ParentTarget,
+    ParentTarget, insert_block, parent_target_from_block_row, refresh_parent_has_children,
+    resolve_block_parent, touch_page, validate_block_update_children, validate_block_update_parent,
+    validate_children_for_parent,
 };
 use super::payloads::page_title_properties;
 use super::sort::next_sort_orders;

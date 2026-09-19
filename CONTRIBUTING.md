@@ -14,7 +14,7 @@ Rust 1.98 is the supported minimum compiler version, with 1.98.0 pinned for repr
 
 Cargo resolver 3 prefers dependencies compatible with the declared compiler requirement when resolving versions. Keep `Cargo.lock` committed and use locked builds in CI; the resolver is not a replacement for dependency review or security audits.
 
-Toolchain upgrades are deliberate maintenance changes. Update the pin and supported compiler requirement together, run `pnpm -w run validate:full`, and verify Linux, Windows, and Android builds. Review platform-specific code as well as host compatibility diagnostics when changing editions. Rustfmt retains the 2021 style edition in `rustfmt.toml` so the language migration does not introduce unrelated repository-wide formatting changes.
+Toolchain upgrades are deliberate maintenance changes. Update the pin and supported compiler requirement together, run `pnpm -w run validate:full`, and verify Linux, Windows, and Android builds. Review platform-specific code as well as host compatibility diagnostics when changing editions. Rustfmt uses the 2024 style edition in `rustfmt.toml`, matching the workspace language edition. Run `cargo fmt --all` to format the Rust workspace with the pinned toolchain.
 
 ## Branch flow
 

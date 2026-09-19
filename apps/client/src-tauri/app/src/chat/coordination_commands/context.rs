@@ -2,10 +2,10 @@
 
 use super::super::internal_mcp::generate_opaque_handle;
 use super::super::models::*;
-use super::common::{new_id, sha256_hex, truncate_utf8, MAX_MESSAGE_BYTES};
+use super::common::{MAX_MESSAGE_BYTES, new_id, sha256_hex, truncate_utf8};
 use super::{
-    i64_value, identifier_error, persistence_error, u64_value, MAX_CHANNEL_CONTEXT_MESSAGES,
-    MAX_THREAD_CONTEXT_REPLIES,
+    MAX_CHANNEL_CONTEXT_MESSAGES, MAX_THREAD_CONTEXT_REPLIES, i64_value, identifier_error,
+    persistence_error, u64_value,
 };
 use sqlx::{Row, Sqlite, Transaction};
 
@@ -860,8 +860,8 @@ fn unique_referenced_execution_environment(
 #[cfg(test)]
 mod target_inference_tests {
     use super::{
-        capability_can_select_native_target, unique_referenced_execution_environment,
-        ChatErrorCode, ReferencedExecutionEnvironment,
+        ChatErrorCode, ReferencedExecutionEnvironment, capability_can_select_native_target,
+        unique_referenced_execution_environment,
     };
 
     #[test]
@@ -878,9 +878,11 @@ mod target_inference_tests {
             execution_environment_id: id.to_string(),
             working_folder_id: "folder:test".to_string(),
         };
-        assert!(unique_referenced_execution_environment(&[])
-            .unwrap()
-            .is_none());
+        assert!(
+            unique_referenced_execution_environment(&[])
+                .unwrap()
+                .is_none()
+        );
         assert_eq!(
             unique_referenced_execution_environment(&[environment("environment:one")])
                 .unwrap()

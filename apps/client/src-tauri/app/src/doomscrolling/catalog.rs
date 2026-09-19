@@ -67,8 +67,8 @@ use windows::list_installed_desktop_apps;
 pub(super) use linux::{parse_desktop_entry, process_name_from_exec};
 
 #[tauri::command]
-pub async fn doomscrolling_list_desktop_apps(
-) -> Result<Vec<DoomscrollingDesktopAppCandidate>, String> {
+pub async fn doomscrolling_list_desktop_apps()
+-> Result<Vec<DoomscrollingDesktopAppCandidate>, String> {
     let generation = DESKTOP_APP_LIST_GENERATION.fetch_add(1, Ordering::AcqRel) + 1;
     tauri::async_runtime::spawn_blocking(move || {
         let apps = sort_and_deduplicate_candidates(list_installed_desktop_apps());

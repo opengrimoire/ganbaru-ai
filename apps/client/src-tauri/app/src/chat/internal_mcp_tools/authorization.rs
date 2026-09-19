@@ -298,11 +298,7 @@ pub(super) async fn verify_channel_source(
     .fetch_one(pool)
     .await
     .map_err(persistence_error)?;
-    if valid {
-        Ok(())
-    } else {
-        Err(generic_denial())
-    }
+    if valid { Ok(()) } else { Err(generic_denial()) }
 }
 
 pub(super) async fn verify_folder_source(
@@ -391,11 +387,7 @@ pub(super) async fn verify_folder_source(
     .fetch_one(pool)
     .await
     .map_err(persistence_error)?;
-    if valid {
-        Ok(())
-    } else {
-        Err(generic_denial())
-    }
+    if valid { Ok(()) } else { Err(generic_denial()) }
 }
 
 fn wire_runtime_approval_policy(policy: ChatRuntimeApprovalPolicy) -> &'static str {

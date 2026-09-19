@@ -1,6 +1,6 @@
 #![cfg(unix)]
 
-use crate::chat::process::{spawn_provider_process, ProviderProcessConfig};
+use crate::chat::process::{ProviderProcessConfig, spawn_provider_process};
 use std::collections::BTreeMap;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;

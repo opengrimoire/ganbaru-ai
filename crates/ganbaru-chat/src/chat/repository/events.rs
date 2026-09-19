@@ -1,13 +1,13 @@
 use crate::chat::events::{
-    CanonicalEvent, CanonicalRuntimeEvent, CanonicalStoredEvent, ChangedFileSummary,
-    CANONICAL_EVENT_SCHEMA_VERSION,
+    CANONICAL_EVENT_SCHEMA_VERSION, CanonicalEvent, CanonicalRuntimeEvent, CanonicalStoredEvent,
+    ChangedFileSummary,
 };
 use crate::chat::models::{
     ActivityStatus, ChatChangeNotification, ChatError, ChatErrorCode, ChatResult, ChatThreadId,
     UtcTimestamp, VersionedJson,
 };
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 
 mod codec;

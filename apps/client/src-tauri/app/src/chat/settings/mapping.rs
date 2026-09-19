@@ -1,6 +1,6 @@
 use super::{device_state_error, provider_not_found, store::read_chat_config};
 use crate::chat::config::ChatPortableProviderConfig;
-use crate::chat::device_state::{read_active_device_scope, ChatProviderDeviceState};
+use crate::chat::device_state::{ChatProviderDeviceState, read_active_device_scope};
 use crate::chat::models::{
     ChatResult, ProviderInstanceConfig, ProviderInstanceId, ProviderModelCatalog,
 };

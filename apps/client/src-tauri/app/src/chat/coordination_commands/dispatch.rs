@@ -875,7 +875,7 @@ fn assignment_turn_modes(
 
 #[cfg(test)]
 mod tests {
-    use super::{assignment_turn_modes, ChatApprovalPolicy, InteractionMode, SafetyMode};
+    use super::{ChatApprovalPolicy, InteractionMode, SafetyMode, assignment_turn_modes};
 
     #[test]
     fn targetless_assignments_use_a_narrow_conversation_mode() {

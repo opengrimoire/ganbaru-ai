@@ -1,8 +1,8 @@
 use reqwest::{
-    header::{HeaderMap, CONTENT_TYPE},
     Method, StatusCode, Url,
+    header::{CONTENT_TYPE, HeaderMap},
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sqlx::__rt::sleep;
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
@@ -833,9 +833,11 @@ mod tests {
             "has_more": false,
             "next_cursor": null
         });
-        assert!(pagination
-            .accept_page(&over_object_limit, "test objects")
-            .is_err());
+        assert!(
+            pagination
+                .accept_page(&over_object_limit, "test objects")
+                .is_err()
+        );
 
         let mut pagination = PaginationGuard::new(MAX_PAGINATED_OBJECTS);
         for page_index in 0..MAX_PAGINATION_PAGES {

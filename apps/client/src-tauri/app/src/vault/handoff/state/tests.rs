@@ -88,19 +88,23 @@ fn invitation_is_single_use_and_not_restored_after_restart() {
     manager
         .enroll_peer(enrollment(&invitation, &phone), 101)
         .expect("enroll");
-    assert!(manager
-        .enroll_peer(enrollment(&invitation, &phone), 102)
-        .unwrap_err()
-        .contains("already used"));
+    assert!(
+        manager
+            .enroll_peer(enrollment(&invitation, &phone), 102)
+            .unwrap_err()
+            .contains("already used")
+    );
 
     let restarted = PairingManager::default();
     restarted
         .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
         .expect("restart");
-    assert!(restarted
-        .enroll_peer(enrollment(&invitation, &phone), 103)
-        .unwrap_err()
-        .contains("unknown"));
+    assert!(
+        restarted
+            .enroll_peer(enrollment(&invitation, &phone), 103)
+            .unwrap_err()
+            .contains("unknown")
+    );
 }
 
 #[test]
@@ -156,17 +160,21 @@ fn revoked_peer_is_remembered_across_restart_and_removed_by_reenrollment() {
 
     manager.unlink_device("device-phone").expect("unlink phone");
     assert!(manager.linked_peers().expect("linked peers").is_empty());
-    assert!(manager
-        .is_revoked_certificate(Some(&phone_certificate))
-        .expect("revoked certificate"));
+    assert!(
+        manager
+            .is_revoked_certificate(Some(&phone_certificate))
+            .expect("revoked certificate")
+    );
 
     let restarted = PairingManager::default();
     restarted
         .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
         .expect("restart");
-    assert!(restarted
-        .is_revoked_certificate(Some(&phone_certificate))
-        .expect("persisted revoked certificate"));
+    assert!(
+        restarted
+            .is_revoked_certificate(Some(&phone_certificate))
+            .expect("persisted revoked certificate")
+    );
 
     let invitation = restarted
         .create_invitation(
@@ -180,9 +188,11 @@ fn revoked_peer_is_remembered_across_restart_and_removed_by_reenrollment() {
     restarted
         .enroll_peer(enrollment(&invitation, &phone), 201)
         .expect("reenroll phone");
-    assert!(!restarted
-        .is_revoked_certificate(Some(&phone_certificate))
-        .expect("active certificate"));
+    assert!(
+        !restarted
+            .is_revoked_certificate(Some(&phone_certificate))
+            .expect("active certificate")
+    );
     assert_eq!(restarted.linked_peers().expect("linked peers").len(), 1);
 }
 
@@ -258,31 +268,39 @@ fn linked_client_accepts_only_its_existing_coordinator() {
         .expect("second invitation");
     let (_, second_identity) = second.identity().expect("second identity");
 
-    assert!(phone
-        .ensure_enrollment_target(&second_invitation)
-        .unwrap_err()
-        .contains("already linked to another coordinator"));
-    assert!(phone
-        .record_coordinator(
-            &second_invitation,
-            second_identity.certificate.as_ref(),
-            Some("Other desktop".to_string()),
-        )
-        .unwrap_err()
-        .contains("already linked to another coordinator"));
+    assert!(
+        phone
+            .ensure_enrollment_target(&second_invitation)
+            .unwrap_err()
+            .contains("already linked to another coordinator")
+    );
+    assert!(
+        phone
+            .record_coordinator(
+                &second_invitation,
+                second_identity.certificate.as_ref(),
+                Some("Other desktop".to_string()),
+            )
+            .unwrap_err()
+            .contains("already linked to another coordinator")
+    );
     let mut different_vault = refreshed.clone();
     different_vault.vault_id = "vault-2".to_string();
-    assert!(phone
-        .ensure_enrollment_target(&different_vault)
-        .unwrap_err()
-        .contains("already linked to another coordinator"));
+    assert!(
+        phone
+            .ensure_enrollment_target(&different_vault)
+            .unwrap_err()
+            .contains("already linked to another coordinator")
+    );
     let mut different_certificate = refreshed.clone();
     different_certificate.coordinator_fingerprint =
         second_invitation.coordinator_fingerprint.clone();
-    assert!(phone
-        .ensure_enrollment_target(&different_certificate)
-        .unwrap_err()
-        .contains("already linked to another coordinator"));
+    assert!(
+        phone
+            .ensure_enrollment_target(&different_certificate)
+            .unwrap_err()
+            .contains("already linked to another coordinator")
+    );
     assert_eq!(
         phone
             .coordinator_pin()
@@ -315,14 +333,18 @@ fn several_peers_survive_restart_and_can_be_unlinked_individually() {
     restarted
         .unlink_device("device-phone")
         .expect("unlink one peer");
-    assert!(restarted
-        .linked_peer("device-phone")
-        .expect("removed peer")
-        .is_none());
-    assert!(restarted
-        .linked_peer("device-laptop")
-        .expect("remaining peer")
-        .is_some());
+    assert!(
+        restarted
+            .linked_peer("device-phone")
+            .expect("removed peer")
+            .is_none()
+    );
+    assert!(
+        restarted
+            .linked_peer("device-laptop")
+            .expect("remaining peer")
+            .is_some()
+    );
 }
 
 #[test]
@@ -425,13 +447,15 @@ fn expired_invitation_is_rejected() {
         )
         .expect("invitation");
     let phone = create_identity("device-phone".to_string()).expect("phone identity");
-    assert!(manager
-        .enroll_peer(
-            enrollment(&invitation, &phone),
-            invitation.expires_at_unix_ms,
-        )
-        .unwrap_err()
-        .contains("expired"));
+    assert!(
+        manager
+            .enroll_peer(
+                enrollment(&invitation, &phone),
+                invitation.expires_at_unix_ms,
+            )
+            .unwrap_err()
+            .contains("expired")
+    );
 }
 
 #[test]

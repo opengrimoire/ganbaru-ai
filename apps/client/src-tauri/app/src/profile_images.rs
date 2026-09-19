@@ -1,7 +1,7 @@
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use ganbaru_notes::image_metadata::{
-    parse_managed_image_metadata, validate_managed_image_dimensions, ManagedImageDimensionError,
-    ManagedImageMetadata, ManagedImageMetadataError,
+    ManagedImageDimensionError, ManagedImageMetadata, ManagedImageMetadataError,
+    parse_managed_image_metadata, validate_managed_image_dimensions,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};

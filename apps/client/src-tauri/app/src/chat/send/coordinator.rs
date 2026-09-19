@@ -2,25 +2,25 @@
 
 use super::checkpoints::ensure_pre_turn_checkpoint;
 use super::persistence::{
-    mark_turn_dispatch_failed, persist_user_turn, read_attachment_references,
-    read_thread_runtime_data, replay_send_receipt, PersistUserTurnContext, TurnPersistenceTarget,
+    PersistUserTurnContext, TurnPersistenceTarget, mark_turn_dispatch_failed, persist_user_turn,
+    read_attachment_references, read_thread_runtime_data, replay_send_receipt,
 };
-use super::session::{ensure_session_with_executable_recovery, EnsureSessionContext};
+use super::session::{EnsureSessionContext, ensure_session_with_executable_recovery};
 use super::support::{
-    chat_pool, device_state_error, now_timestamp, operation_context, versioned_value,
-    PROVIDER_START_TIMEOUT, TURN_OPERATION_TIMEOUT,
+    PROVIDER_START_TIMEOUT, TURN_OPERATION_TIMEOUT, chat_pool, device_state_error, now_timestamp,
+    operation_context, versioned_value,
 };
 use super::validation::{
     validate_explicit_model, validate_mentions, validate_modes, validate_prompt,
     validate_provider_selection, validate_send_mentions,
 };
 use crate::chat::agent_runs::{AgentRunBinding, TurnOrigin};
-use crate::chat::credentials::{materialize_provider_environment, PlatformCredentialStore};
+use crate::chat::credentials::{PlatformCredentialStore, materialize_provider_environment};
 use crate::chat::device_state::{full_access_is_trusted, read_active_device_scope};
 use crate::chat::models::*;
 use crate::chat::providers::{ProviderDriverFactory, ProviderDriverRegistry};
 use crate::chat::repository::receipts::{
-    complete_command_receipt, read_command_receipt, CommandReceiptState,
+    CommandReceiptState, complete_command_receipt, read_command_receipt,
 };
 use crate::chat::repository::{reads, workspaces};
 use crate::chat::runtime::ChatRuntimeRegistry;
@@ -50,7 +50,7 @@ pub(crate) async fn send_turn(
             return Err(ChatError::validation(
                 "newThreadId",
                 "A new Chat thread ID is required",
-            ))
+            ));
         }
     };
     let pool = chat_pool(app.clone(), db_url).await?;

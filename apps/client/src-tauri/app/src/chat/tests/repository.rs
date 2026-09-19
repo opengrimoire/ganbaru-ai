@@ -14,11 +14,11 @@ use crate::chat::models::{
 };
 use crate::chat::models::{ChatChangeNotification, ChatError, ChatResult};
 use crate::chat::repository::attachments::{
-    import_attachment, run_due_attachment_cleanup, ChatAttachmentKind,
+    ChatAttachmentKind, import_attachment, run_due_attachment_cleanup,
 };
-use crate::chat::repository::drafts::{delete_draft, read_draft, save_draft, ChatDraftWrite};
+use crate::chat::repository::drafts::{ChatDraftWrite, delete_draft, read_draft, save_draft};
 use crate::chat::repository::events::{
-    append_canonical_event, read_canonical_events, AppendCanonicalEventRequest,
+    AppendCanonicalEventRequest, append_canonical_event, read_canonical_events,
 };
 use crate::chat::repository::lifecycle::{
     permanently_delete_thread, resolve_project_deletion, set_thread_archived, set_thread_read,
@@ -29,12 +29,12 @@ use crate::chat::repository::reads::{
 };
 use crate::chat::repository::rebuild::rebuild_thread_projections;
 use crate::chat::repository::receipts::{
-    claim_command_receipt, complete_command_receipt, CommandReceiptClaim, CommandReceiptState,
+    CommandReceiptClaim, CommandReceiptState, claim_command_receipt, complete_command_receipt,
 };
 use crate::chat::repository::recovery::recover_orphaned_turns;
 use crate::chat::repository::resources::{
-    list_thread_resources, read_thread_resource_bytes, store_browser_artifact, ChatResourceKind,
-    StoreBrowserArtifact,
+    ChatResourceKind, StoreBrowserArtifact, list_thread_resources, read_thread_resource_bytes,
+    store_browser_artifact,
 };
 use crate::chat::repository::workspaces::{create_workspace, list_workspaces, rename_workspace};
 use crate::chat::workspace::CreateProjectWorkingFolderRequest;

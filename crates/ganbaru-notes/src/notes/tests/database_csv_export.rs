@@ -63,14 +63,10 @@ fn csv_export_all_includes_hidden_properties_and_unfiltered_rows() {
                 "Gamma,Zeta,5,true,\n",
             )
         );
-        assert!(value["diagnostics"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(
-                |diagnostic| diagnostic["code"] == "csv_export_plain_text_property"
-                    && diagnostic["property_id"] == "files"
-            ));
+        assert!(value["diagnostics"].as_array().unwrap().iter().any(
+            |diagnostic| diagnostic["code"] == "csv_export_plain_text_property"
+                && diagnostic["property_id"] == "files"
+        ));
     });
 }
 

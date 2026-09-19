@@ -600,7 +600,7 @@ fn validate_managed_asset(asset: &NotesManagedAssetWrite<'_>) -> Result<&'static
             validate_no_control_characters(missing_at, "notes asset missing_at")?;
         }
         ("available", Some(_)) => {
-            return Err("available notes assets must not have missing_at".to_string())
+            return Err("available notes assets must not have missing_at".to_string());
         }
         ("missing", _) => return Err("missing notes assets must have missing_at".to_string()),
         _ => {}

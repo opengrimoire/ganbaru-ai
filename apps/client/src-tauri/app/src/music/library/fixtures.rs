@@ -1,7 +1,7 @@
 use serde::Serialize;
 use sqlx::{QueryBuilder, Sqlite, SqlitePool, Transaction};
 
-use super::{search, MusicLibraryError, MusicLibraryResult};
+use super::{MusicLibraryError, MusicLibraryResult, search};
 
 pub(crate) const DENSE_MUSIC_FIXTURE_PROFILE: &str = "dense-music-v1";
 const FIXTURE_PREFIX: &str = "benchmark-music-";
@@ -736,9 +736,9 @@ mod tests {
             .await
             .unwrap();
             assert_eq!(
-            stable_sample,
-            "benchmark-music-item-000000:unreviewed:missing|benchmark-music-item-000001:reviewed:available|benchmark-music-item-000002:deferred:available|benchmark-music-item-000003:ignored:available|benchmark-music-item-000004:unreviewed:available"
-        );
+                stable_sample,
+                "benchmark-music-item-000000:unreviewed:missing|benchmark-music-item-000001:reviewed:available|benchmark-music-item-000002:deferred:available|benchmark-music-item-000003:ignored:available|benchmark-music-item-000004:unreviewed:available"
+            );
         });
     }
 }

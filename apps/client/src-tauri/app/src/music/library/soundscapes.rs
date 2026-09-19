@@ -443,9 +443,11 @@ mod tests {
             let pool = pool().await;
             let generated = definitions(&pool, "device-a").await.unwrap();
             assert_eq!(generated.len(), 3);
-            assert!(generated
-                .iter()
-                .all(|entry| entry.availability == MusicSoundscapeAvailability::Available));
+            assert!(
+                generated
+                    .iter()
+                    .all(|entry| entry.availability == MusicSoundscapeAvailability::Available)
+            );
 
             let path = std::env::temp_dir().join(format!(
                 "ganbaru-soundscape-{}-{}.wav",
@@ -503,18 +505,20 @@ mod tests {
             .unwrap();
             assert_eq!(playing.active_soundscape_id.as_deref(), Some("local-rain"));
             assert_eq!(playing.volume, 0.42);
-            assert!(update_state(
-                &pool,
-                MusicSoundscapeStateWrite {
-                    active_soundscape_id: None,
-                    desired_playing: true,
-                    volume: 0.5,
-                    expected_version: playing.version,
-                    updated_at: 1_700_000_000_002,
-                }
-            )
-            .await
-            .is_err());
+            assert!(
+                update_state(
+                    &pool,
+                    MusicSoundscapeStateWrite {
+                        active_soundscape_id: None,
+                        desired_playing: true,
+                        volume: 0.5,
+                        expected_version: playing.version,
+                        updated_at: 1_700_000_000_002,
+                    }
+                )
+                .await
+                .is_err()
+            );
 
             std::fs::remove_file(&path).unwrap();
             let missing = definitions(&pool, "device-a")
@@ -525,11 +529,13 @@ mod tests {
                 .unwrap();
             assert_eq!(missing.availability, MusicSoundscapeAvailability::Missing);
             remove(&pool, &saved.id, saved.version).await.unwrap();
-            assert!(definitions(&pool, "device-a")
-                .await
-                .unwrap()
-                .iter()
-                .all(|entry| entry.id != saved.id));
+            assert!(
+                definitions(&pool, "device-a")
+                    .await
+                    .unwrap()
+                    .iter()
+                    .all(|entry| entry.id != saved.id)
+            );
         });
     }
 }

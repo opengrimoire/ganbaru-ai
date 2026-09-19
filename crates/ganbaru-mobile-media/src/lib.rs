@@ -11,7 +11,7 @@ pub use mobile::{
 
 #[cfg(target_os = "android")]
 use tauri::Manager;
-use tauri::{plugin::TauriPlugin, Runtime};
+use tauri::{Runtime, plugin::TauriPlugin};
 
 /// Initialize Ganbaru AI's native mobile media adapter.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {

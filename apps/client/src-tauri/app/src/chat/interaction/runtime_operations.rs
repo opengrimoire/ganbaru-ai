@@ -1,7 +1,7 @@
 //! Provider runtime operations initiated by interaction controls.
 
 use super::support::{chat_pool, now_timestamp, persistence_error, require_workspace};
-use crate::chat::credentials::{materialize_provider_environment, PlatformCredentialStore};
+use crate::chat::credentials::{PlatformCredentialStore, materialize_provider_environment};
 use crate::chat::device_state::{read_active_device_scope, update_active_device_scope};
 use crate::chat::driver_operations::{complete_driver_operation, replay_driver_receipt};
 use crate::chat::models::{
@@ -12,7 +12,7 @@ use crate::chat::models::{
 use crate::chat::providers::{
     DriverCancellation, DriverOperationContext, ProviderDriverFactory, ProviderDriverRegistry,
 };
-use crate::chat::repository::receipts::{claim_command_receipt, CommandReceiptClaim};
+use crate::chat::repository::receipts::{CommandReceiptClaim, claim_command_receipt};
 use crate::chat::runtime::ChatRuntimeRegistry;
 use crate::chat::workspace::WorkingFolderAuthorizationOperation;
 use sqlx::Row;

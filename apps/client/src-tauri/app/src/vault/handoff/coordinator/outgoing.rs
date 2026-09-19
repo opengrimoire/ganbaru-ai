@@ -2,11 +2,11 @@
 
 use super::{CompletedActivation, CoordinatorResponse, CoordinatorState, PreparedTransfer};
 use crate::vault::handoff::protocol::{BundleMetadata, BundlePurpose, PROTOCOL_VERSION};
-use crate::vault::handoff::state::{random_token, PendingAcknowledgement, StoredOutgoingTransfer};
+use crate::vault::handoff::state::{PendingAcknowledgement, StoredOutgoingTransfer, random_token};
 use crate::vault::handoff::{current_compatibility, sha256_file};
 use crate::vault::ownership::VaultOwnershipManager;
 use crate::vault::quiescence::{
-    begin_snapshot_quiescence, begin_source_quiescence, SnapshotQuiescence, SourceQuiescence,
+    SnapshotQuiescence, SourceQuiescence, begin_snapshot_quiescence, begin_source_quiescence,
 };
 use std::fs;
 use std::time::Instant;

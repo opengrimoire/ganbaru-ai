@@ -429,7 +429,9 @@ async fn fetch_ancestors(
     if ids.is_empty() {
         return Ok(Vec::new());
     }
-    let mut query = QueryBuilder::new("WITH RECURSIVE ancestors(id, depth) AS (SELECT parent_page_id, 1 FROM notes_pages WHERE id IN (");
+    let mut query = QueryBuilder::new(
+        "WITH RECURSIVE ancestors(id, depth) AS (SELECT parent_page_id, 1 FROM notes_pages WHERE id IN (",
+    );
     let mut separated = query.separated(", ");
     for id in ids {
         separated.push_bind(id);
@@ -453,7 +455,10 @@ async fn fetch_children(
     if ids.is_empty() {
         return Ok(Vec::new());
     }
-    let mut query = QueryBuilder::new(format!("SELECT {} FROM notes_pages WHERE in_trash = 0 AND archived = 0 AND parent_type = 'page_id' AND parent_page_id IN (", page_projection()));
+    let mut query = QueryBuilder::new(format!(
+        "SELECT {} FROM notes_pages WHERE in_trash = 0 AND archived = 0 AND parent_type = 'page_id' AND parent_page_id IN (",
+        page_projection()
+    ));
     let mut separated = query.separated(", ");
     for id in ids {
         separated.push_bind(id);
@@ -475,7 +480,9 @@ async fn fetch_parent_ids_with_children(
     if ids.is_empty() {
         return Ok(Vec::new());
     }
-    let mut query = QueryBuilder::new("SELECT DISTINCT parent_page_id FROM notes_pages WHERE in_trash = 0 AND archived = 0 AND parent_type = 'page_id' AND parent_page_id IN (");
+    let mut query = QueryBuilder::new(
+        "SELECT DISTINCT parent_page_id FROM notes_pages WHERE in_trash = 0 AND archived = 0 AND parent_type = 'page_id' AND parent_page_id IN (",
+    );
     let mut separated = query.separated(", ");
     for id in ids {
         separated.push_bind(id);
@@ -541,7 +548,9 @@ async fn fetch_folder_window(
     cursor: Option<&FolderCursor>,
     limit: i64,
 ) -> Result<Vec<NoteFolderRow>, String> {
-    let mut query = QueryBuilder::new("SELECT id, project_id, parent_folder_id, name, created_time, last_edited_time FROM notes_folders WHERE 1 = 1");
+    let mut query = QueryBuilder::new(
+        "SELECT id, project_id, parent_folder_id, name, created_time, last_edited_time FROM notes_folders WHERE 1 = 1",
+    );
     if let Some(project_id) = project_id {
         query
             .push(" AND project_id = ")

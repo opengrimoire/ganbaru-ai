@@ -8,21 +8,21 @@ use server::serve;
 pub(crate) use server::serve_with_coordinator;
 
 use super::protocol::{
-    read_control, unix_time_ms, write_control, BundleMetadata, BundlePurpose, ControlMessage,
-    PairingInvitation, PROTOCOL_VERSION, TRANSFER_CHUNK_BYTES,
+    BundleMetadata, BundlePurpose, ControlMessage, PROTOCOL_VERSION, PairingInvitation,
+    TRANSFER_CHUNK_BYTES, read_control, unix_time_ms, write_control,
 };
 use super::state::{
-    certificate_fingerprint, encode_certificate, CoordinatorPin, PairingManager, TlsIdentity,
+    CoordinatorPin, PairingManager, TlsIdentity, certificate_fingerprint, encode_certificate,
 };
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
-use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, WebPkiSupportedAlgorithms};
+use rustls::crypto::{WebPkiSupportedAlgorithms, verify_tls12_signature, verify_tls13_signature};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{DigitallySignedStruct, SignatureScheme};
 use sha2::{Digest, Sha256};
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio::net::TcpStream;

@@ -4,8 +4,8 @@ use super::block_tree::{
     normalize_selection_root_ids, refresh_duplicated_has_children,
 };
 use super::parents::{
-    refresh_parent_has_children, resolve_block_parent, touch_page, validate_block_for_parent,
-    ParentTarget,
+    ParentTarget, refresh_parent_has_children, resolve_block_parent, touch_page,
+    validate_block_for_parent,
 };
 use super::sort::{next_sort_orders, sort_orders_before};
 use crate::notes::models::{

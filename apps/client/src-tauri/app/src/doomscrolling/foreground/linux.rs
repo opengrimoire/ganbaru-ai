@@ -400,8 +400,8 @@ fn wayland_close_active_window(
 }
 
 #[cfg(target_os = "linux")]
-pub(in crate::doomscrolling) fn foreground_desktop_app_status(
-) -> DoomscrollingForegroundDesktopAppStatus {
+pub(in crate::doomscrolling) fn foreground_desktop_app_status()
+-> DoomscrollingForegroundDesktopAppStatus {
     if linux_is_wayland_session() {
         return wayland_foreground_window_status()
             .unwrap_or_else(unavailable_foreground_desktop_app_status);

@@ -1,2 +1,1 @@
-# Keep formatting changes separate from the Rust language edition migration.
-style_edition = "2021"
+style_edition = "2024"

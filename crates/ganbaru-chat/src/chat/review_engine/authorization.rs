@@ -6,7 +6,7 @@ use super::contracts::{
     ApplyChatReviewActionRequest, ChatReviewActionResultRead, OpenChatReviewRequest,
 };
 use super::registry::ReviewSnapshot;
-use super::{default_context_lines, persistence_error, ReviewWorkspaceAuthorizer};
+use super::{ReviewWorkspaceAuthorizer, default_context_lines, persistence_error};
 use sqlx::SqlitePool;
 
 pub async fn require_request_ownership(

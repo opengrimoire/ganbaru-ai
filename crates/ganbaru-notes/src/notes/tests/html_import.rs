@@ -93,11 +93,13 @@ fn html_import_creates_canonical_blocks_rich_text_tables_media_and_toggles() {
             blocks[1]["paragraph"]["rich_text"][0]["annotations"]["bold"],
             true
         );
-        assert!(blocks[1]["paragraph"]["rich_text"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|item| item["text"]["link"]["url"] == "https://example.com/docs"));
+        assert!(
+            blocks[1]["paragraph"]["rich_text"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|item| item["text"]["link"]["url"] == "https://example.com/docs")
+        );
         assert_eq!(blocks[2]["to_do"]["checked"], true);
         assert_eq!(blocks[9]["toggle"]["ganbaru_open"], true);
         assert_eq!(

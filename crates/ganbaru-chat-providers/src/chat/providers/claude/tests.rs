@@ -3,7 +3,7 @@
 use super::home::*;
 use super::normalizer::{ClaudeEventNormalizer, ClaudeRouteState};
 use super::protocol::*;
-use super::session::{route_control_request, PendingClaudeRequestKind};
+use super::session::{PendingClaudeRequestKind, route_control_request};
 use super::support::diagnostic_confirms_resume_not_found;
 use crate::chat::events::{CanonicalEvent, CanonicalRuntimeEvent};
 use crate::chat::models::*;
@@ -11,13 +11,13 @@ use crate::chat::providers::{
     DriverCancellation, DriverFuture, DriverOperationContext, ProviderEventSink,
 };
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
     Mutex,
+    atomic::{AtomicU64, Ordering},
 };
 use std::time::{Duration, Instant};
 
@@ -309,11 +309,13 @@ fn fast_mode_selection_accepts_only_boolean_values() {
         .unwrap(),
         Some(true)
     );
-    assert!(selected_fast_mode(&[ModelOptionSelection {
-        key: "fastMode".to_string(),
-        value: ModelOptionValue::Choice("fast".to_string()),
-    }])
-    .is_err());
+    assert!(
+        selected_fast_mode(&[ModelOptionSelection {
+            key: "fastMode".to_string(),
+            value: ModelOptionValue::Choice("fast".to_string()),
+        }])
+        .is_err()
+    );
 }
 
 #[test]
@@ -345,19 +347,27 @@ fn launch_arguments_preserve_native_safety_and_resume_semantics() {
         },
     )
     .unwrap();
-    assert!(fresh
-        .windows(2)
-        .any(|pair| pair == ["--session-id", "11111111-1111-4111-8111-111111111111"]));
-    assert!(fresh
-        .windows(2)
-        .any(|pair| pair == ["--permission-mode", "bypassPermissions"]));
-    assert!(fresh
-        .iter()
-        .any(|value| value == "--allow-dangerously-skip-permissions"));
+    assert!(
+        fresh
+            .windows(2)
+            .any(|pair| pair == ["--session-id", "11111111-1111-4111-8111-111111111111"])
+    );
+    assert!(
+        fresh
+            .windows(2)
+            .any(|pair| pair == ["--permission-mode", "bypassPermissions"])
+    );
+    assert!(
+        fresh
+            .iter()
+            .any(|value| value == "--allow-dangerously-skip-permissions")
+    );
     assert!(fresh.windows(2).any(|pair| pair == ["--effort", "high"]));
-    assert!(fresh
-        .windows(2)
-        .any(|pair| pair == ["--settings", r#"{"fastMode":true}"#]));
+    assert!(
+        fresh
+            .windows(2)
+            .any(|pair| pair == ["--settings", r#"{"fastMode":true}"#])
+    );
 
     let custom = launch_arguments(
         Vec::new(),
@@ -373,9 +383,11 @@ fn launch_arguments_preserve_native_safety_and_resume_semantics() {
         },
     )
     .unwrap();
-    assert!(!custom
-        .iter()
-        .any(|argument| argument == "--permission-mode"));
+    assert!(
+        !custom
+            .iter()
+            .any(|argument| argument == "--permission-mode")
+    );
 
     let resumed = launch_arguments(
         Vec::new(),
@@ -391,17 +403,21 @@ fn launch_arguments_preserve_native_safety_and_resume_semantics() {
         },
     )
     .unwrap();
-    assert!(resumed
-        .windows(2)
-        .any(|pair| pair == ["--resume", "11111111-1111-4111-8111-111111111111"]));
+    assert!(
+        resumed
+            .windows(2)
+            .any(|pair| pair == ["--resume", "11111111-1111-4111-8111-111111111111"])
+    );
     assert!(resumed.windows(2).any(|pair| pair
         == [
             "--resume-session-at",
             "22222222-2222-4222-8222-222222222222"
         ]));
-    assert!(resumed
-        .windows(2)
-        .any(|pair| pair == ["--permission-mode", "plan"]));
+    assert!(
+        resumed
+            .windows(2)
+            .any(|pair| pair == ["--permission-mode", "plan"])
+    );
 }
 
 #[test]
@@ -454,21 +470,31 @@ fn fixture_normalizes_partial_text_cursor_plan_usage_cost_and_completion() {
             events.extend(normalizer.normalize_message(&mut state, value).unwrap());
         }
     }
-    assert!(events
-        .iter()
-        .any(|event| matches!(event.event, CanonicalEvent::ContentDelta(_))));
-    assert!(events
-        .iter()
-        .any(|event| matches!(event.event, CanonicalEvent::PlanUpdated(_))));
-    assert!(events
-        .iter()
-        .any(|event| matches!(event.event, CanonicalEvent::McpStatus(_))));
-    assert!(events
-        .iter()
-        .any(|event| matches!(event.event, CanonicalEvent::ThreadUsageUpdated(_))));
-    assert!(events
-        .iter()
-        .any(|event| matches!(event.event, CanonicalEvent::TurnCompleted(_))));
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event.event, CanonicalEvent::ContentDelta(_)))
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event.event, CanonicalEvent::PlanUpdated(_)))
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event.event, CanonicalEvent::McpStatus(_)))
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event.event, CanonicalEvent::ThreadUsageUpdated(_)))
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event.event, CanonicalEvent::TurnCompleted(_)))
+    );
     assert_eq!(
         state.resume.last_assistant_uuid.as_deref(),
         Some("22222222-2222-4222-8222-222222222222")
@@ -524,10 +550,12 @@ fn approval_question_and_exit_plan_are_distinct_interactions() {
     let CanonicalEvent::RequestOpened(opened) = without_session_scope.event else {
         panic!("expected an approval request");
     };
-    assert!(!opened
-        .allowed_decisions
-        .iter()
-        .any(|option| option.decision_kind == ApprovalDecisionKind::AllowSession));
+    assert!(
+        !opened
+            .allowed_decisions
+            .iter()
+            .any(|option| option.decision_kind == ApprovalDecisionKind::AllowSession)
+    );
 }
 
 #[test]

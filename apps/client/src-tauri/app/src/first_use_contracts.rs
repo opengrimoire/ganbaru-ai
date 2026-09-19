@@ -1,7 +1,7 @@
 use serde::Serialize;
 use sqlx::{SqliteConnection, SqlitePool};
-use std::ffi::{c_char, c_int, c_uint, c_void, CStr};
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::ffi::{CStr, c_char, c_int, c_uint, c_void};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Mutex};
 
 use crate::{db::run_migrations, notes, projects};
@@ -491,10 +491,12 @@ fn project_refresh_does_not_run_built_in_repair() {
         .expect("count Reading project after refresh");
         assert_eq!(restored, 0);
         assert_eq!(trace.counts.writes, 0);
-        assert!(trace
-            .statements
-            .iter()
-            .all(|statement| !statement.contains("SELECT EXISTS(SELECT 1 FROM project_groups")),);
+        assert!(
+            trace
+                .statements
+                .iter()
+                .all(|statement| !statement.contains("SELECT EXISTS(SELECT 1 FROM project_groups")),
+        );
         assert_no_optional_project_queries(&trace.statements);
     });
 }

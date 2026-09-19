@@ -1,9 +1,9 @@
 use rodio::{ChannelCount, Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, SampleRate};
 use std::io::Cursor;
 use std::sync::{
+    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
     mpsc::{self, Receiver, SyncSender, TrySendError},
-    Arc, Mutex,
 };
 use std::thread::JoinHandle;
 

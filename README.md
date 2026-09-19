@@ -77,7 +77,7 @@ See the [documentation index](docs/README.md), [feature index](docs/features/REA
 
 - [Node.js](https://nodejs.org/) 24 LTS recommended. Node 22.12.0 or newer is also supported while Node 22 remains maintained.
 - [Corepack](https://nodejs.org/api/corepack.html) enabled for the pinned [pnpm](https://pnpm.io/) 11 version in `package.json`
-- [Rust](https://rustup.rs/) (stable)
+- [Rust](https://rustup.rs/) via rustup, using the toolchain pinned in [rust-toolchain.toml](rust-toolchain.toml) (edition 2024)
 - Tauri v2 system dependencies for your platform: [v2.tauri.app/start/prerequisites](https://v2.tauri.app/start/prerequisites/)
 
 ### Setup
@@ -202,7 +202,7 @@ Sound effects live in `apps/client/static/sfx/`. App assets are stored as 48 kHz
     <tr>
       <th>App use</th>
       <th>Filename</th>
-      <th>Source sound</th>
+      <th>Source</th>
       <th>Author</th>
       <th>License</th>
     </tr>
@@ -280,3 +280,9 @@ Sound effects live in `apps/client/static/sfx/`. App assets are stored as 48 kHz
     </tr>
   </tbody>
 </table>
+
+### File icons
+
+| App use | Source | Author | License |
+|---|---|---|---|
+| Chat file icons | [vscode-icons](https://github.com/vscode-icons/vscode-icons) | Roberto Huertas | [MIT](apps/client/static/file-icons/vscode-icons-LICENSE.txt) |

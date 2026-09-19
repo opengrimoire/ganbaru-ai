@@ -271,7 +271,7 @@ pub(super) async fn load_project_graph(
 #[cfg(test)]
 mod tests {
     use super::{extend_scope, row_is_selected};
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use std::collections::BTreeMap;
 
     #[test]

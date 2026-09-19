@@ -1,9 +1,9 @@
 use super::{
+    NativeResponse,
     config::{DoomscrollingConfig, DoomscrollingMode, UsageLimitsConfig},
     events::{block_event_phase, record_block_event_in_database},
-    rules::{decide_url, host_from_url, host_matches_rule, HostDecision},
-    snapshot::{runtime_status_at, should_enforce, RuntimeState, StateSnapshot},
-    NativeResponse,
+    rules::{HostDecision, decide_url, host_from_url, host_matches_rule},
+    snapshot::{RuntimeState, StateSnapshot, runtime_status_at, should_enforce},
 };
 use chrono::{DateTime, SecondsFormat, Utc};
 use sqlx::Row;

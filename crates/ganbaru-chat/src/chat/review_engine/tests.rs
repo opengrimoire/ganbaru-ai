@@ -692,9 +692,11 @@ async fn immutable_git_snapshot_observes_rename_binary_and_untracked_files() {
         Some("src/original.rs")
     );
     assert!(renamed.read.flags.pure_rename);
-    assert!(files
-        .iter()
-        .any(|file| { file.read.relative_path == "assets/data.bin" && file.read.flags.binary }));
+    assert!(
+        files
+            .iter()
+            .any(|file| { file.read.relative_path == "assets/data.bin" && file.read.flags.binary })
+    );
     assert!(files.iter().any(|file| {
         file.read.relative_path == "src/untracked.rs" && file.read.flags.untracked
     }));
@@ -727,10 +729,12 @@ async fn whole_scope_actions_do_not_materialize_large_patch_text() {
     let staged_status = git_service::status(repository.path())
         .await
         .expect("staged status should read");
-    assert!(staged_status
-        .files
-        .iter()
-        .all(|file| file.index_status != "." && !file.untracked));
+    assert!(
+        staged_status
+            .files
+            .iter()
+            .all(|file| file.index_status != "." && !file.untracked)
+    );
 
     let staged = working_snapshot(&repository, ReviewWorkingTreeMode::Staged).await;
     request.snapshot_id = staged.snapshot_id.clone();
@@ -743,10 +747,12 @@ async fn whole_scope_actions_do_not_materialize_large_patch_text() {
     let unstaged_status = git_service::status(repository.path())
         .await
         .expect("unstaged status should read");
-    assert!(unstaged_status
-        .files
-        .iter()
-        .all(|file| file.index_status == "." || file.untracked));
+    assert!(
+        unstaged_status
+            .files
+            .iter()
+            .all(|file| file.index_status == "." || file.untracked)
+    );
 
     let discard = working_snapshot(&repository, ReviewWorkingTreeMode::Unstaged).await;
     request.snapshot_id = discard.snapshot_id.clone();
@@ -757,11 +763,13 @@ async fn whole_scope_actions_do_not_materialize_large_patch_text() {
     apply_action(&discard, &request, ReviewWorkingTreeMode::Unstaged)
         .await
         .expect("whole scope should discard without creating a patch payload");
-    assert!(git_service::status(repository.path())
-        .await
-        .expect("clean status should read")
-        .files
-        .is_empty());
+    assert!(
+        git_service::status(repository.path())
+            .await
+            .expect("clean status should read")
+            .files
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -810,11 +818,13 @@ async fn exact_discard_restores_unstaged_rename_with_untracked_destination() {
         "pub fn original() {}\n"
     );
     assert!(!repository.path().join("src/renamed.rs").exists());
-    assert!(git_service::status(repository.path())
-        .await
-        .expect("discarded rename status should read")
-        .files
-        .is_empty());
+    assert!(
+        git_service::status(repository.path())
+            .await
+            .expect("discarded rename status should read")
+            .files
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -870,11 +880,13 @@ async fn whole_scope_discard_restores_unstaged_rename_with_untracked_destination
             .expect("modified file should be restored"),
         "pub fn value() -> u8 { 1 }\n"
     );
-    assert!(git_service::status(repository.path())
-        .await
-        .expect("discarded scope status should read")
-        .files
-        .is_empty());
+    assert!(
+        git_service::status(repository.path())
+            .await
+            .expect("discarded scope status should read")
+            .files
+            .is_empty()
+    );
 }
 
 #[test]

@@ -43,10 +43,12 @@ fn shell_search_timeline_and_archive_reads_stay_lightweight() {
         )
         .await
         .unwrap();
-        assert!(read_thread_shells(&pool, None, false)
-            .await
-            .unwrap()
-            .is_empty());
+        assert!(
+            read_thread_shells(&pool, None, false)
+                .await
+                .unwrap()
+                .is_empty()
+        );
         assert_eq!(
             read_thread_shells(&pool, None, true).await.unwrap().len(),
             1
@@ -160,9 +162,11 @@ fn scratch_thread_shells_are_exactly_readable_but_hidden_from_direct_navigation(
         );
 
         let listed = read_thread_shells(&pool, None, false).await.unwrap();
-        assert!(listed
-            .iter()
-            .all(|thread| thread.id.as_str() != "thread-scratch"));
+        assert!(
+            listed
+                .iter()
+                .all(|thread| thread.id.as_str() != "thread-scratch")
+        );
         let searched = search_thread_titles(&pool, "scratch", Some(false), 20)
             .await
             .unwrap();

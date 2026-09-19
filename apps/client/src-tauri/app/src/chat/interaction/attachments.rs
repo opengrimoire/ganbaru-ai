@@ -10,7 +10,7 @@ use crate::chat::models::{
 use crate::chat::repository::attachments;
 use crate::chat::workspace::WorkingFolderAuthorizationOperation;
 use crate::vault;
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use tauri_plugin_dialog::{DialogExt, FilePath};

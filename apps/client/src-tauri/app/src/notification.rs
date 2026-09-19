@@ -2,14 +2,14 @@ use serde::Serialize;
 use std::io::Read;
 use std::process::{Command, Stdio};
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Mutex,
+    atomic::{AtomicBool, Ordering},
 };
-use tauri::{window::Color, Emitter, Manager, Runtime, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, Manager, Runtime, State, WebviewUrl, WebviewWindowBuilder, window::Color};
 
 use crate::pomodoro_enforcement::{
-    reinforce_overlay_windows, start_overlay_enforcement, OverlayEnforcementGuard,
-    OverlayReconcileGuard,
+    OverlayEnforcementGuard, OverlayReconcileGuard, reinforce_overlay_windows,
+    start_overlay_enforcement,
 };
 
 pub(crate) mod commands;
@@ -1184,9 +1184,9 @@ pub fn show_pomodoro_completion_overlay(
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::shortcuts::{
-        is_allowed_gsettings_restore_target, read_saved_shortcuts_file_or_clear,
-        validate_saved_shortcuts, validate_saved_shortcuts_or_clear, SavedShortcuts,
-        SHORTCUT_RESTORE_VALUE_MAX_BYTES,
+        SHORTCUT_RESTORE_VALUE_MAX_BYTES, SavedShortcuts, is_allowed_gsettings_restore_target,
+        read_saved_shortcuts_file_or_clear, validate_saved_shortcuts,
+        validate_saved_shortcuts_or_clear,
     };
     use super::*;
     use std::collections::{HashMap, HashSet};

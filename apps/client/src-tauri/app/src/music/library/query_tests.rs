@@ -220,11 +220,13 @@ fn item_windows_are_bounded_stable_filterable_and_grouped() {
             result.groups.iter().map(|group| group.count).sum::<i64>(),
             result.total_count,
         );
-        assert!(result
-            .items
-            .iter()
-            .all(|item| item.artist == "Alpha Composer"
-                && item.availability == MusicItemAvailability::Available));
+        assert!(
+            result
+                .items
+                .iter()
+                .all(|item| item.artist == "Alpha Composer"
+                    && item.availability == MusicItemAvailability::Available)
+        );
     });
 }
 

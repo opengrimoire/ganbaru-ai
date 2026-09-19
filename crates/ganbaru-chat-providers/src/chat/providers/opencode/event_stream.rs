@@ -1,6 +1,6 @@
 //! Bounded OpenCode server-sent event decoding and response streaming.
 
-use super::protocol::{protocol_error, MAX_EVENT_DATA_BYTES};
+use super::protocol::{MAX_EVENT_DATA_BYTES, protocol_error};
 use crate::chat::models::ChatResult;
 use serde_json::Value;
 use std::collections::VecDeque;

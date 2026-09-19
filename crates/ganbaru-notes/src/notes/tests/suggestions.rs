@@ -59,10 +59,12 @@ fn suggestions_preserve_range_content_and_decision_state() {
         assert_eq!(rejected_value["status"], "rejected");
         assert!(rejected_value["rejected_at"].is_string());
         assert!(rejected_value["rejected_by"]["id"].is_string());
-        assert!(suggestions::list_suggestions(&pool, PAGE_A, false)
-            .await
-            .unwrap()
-            .is_empty());
+        assert!(
+            suggestions::list_suggestions(&pool, PAGE_A, false)
+                .await
+                .unwrap()
+                .is_empty()
+        );
         assert_eq!(
             suggestions::list_suggestions(&pool, PAGE_A, true)
                 .await

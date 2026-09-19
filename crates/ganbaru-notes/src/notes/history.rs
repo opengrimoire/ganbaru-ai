@@ -7,7 +7,7 @@ use super::models::{
 use super::validation::{
     plain_text_from_payload, require_uuid, validate_block_payload, validate_sort_order,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sqlx::{Sqlite, SqlitePool, Transaction};
 use std::collections::{HashMap, HashSet};
 

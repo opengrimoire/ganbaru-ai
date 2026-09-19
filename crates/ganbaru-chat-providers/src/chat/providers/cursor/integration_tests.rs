@@ -6,8 +6,8 @@ use super::transport::{AcpInboundMessage, AcpRpcConnection, AcpRpcFailure};
 use crate::chat::events::CanonicalEvent;
 use crate::chat::models::*;
 use crate::chat::providers::{ProviderDriver, ProviderEventSink};
-use serde_json::{json, Value};
-use std::sync::{atomic::Ordering, Arc};
+use serde_json::{Value, json};
+use std::sync::{Arc, atomic::Ordering};
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
@@ -193,9 +193,11 @@ fn driver_fixture_covers_prompt_plan_cancel_and_cleanup() {
             snapshot.provider_thread_id.as_ref().unwrap().as_str(),
             "cursor-session-fixture"
         );
-        assert!(snapshot
-            .capabilities
-            .supports(ProviderCapability::NativePlan));
+        assert!(
+            snapshot
+                .capabilities
+                .supports(ProviderCapability::NativePlan)
+        );
         let receipt = driver
             .send_turn(send_request(&snapshot.session_id), &context("send"))
             .await
@@ -227,10 +229,11 @@ fn driver_fixture_covers_prompt_plan_cancel_and_cleanup() {
             matches!(event, CanonicalEvent::TurnAborted(_))
         })
         .await;
-        assert!(sink
-            .events()
-            .iter()
-            .any(|event| matches!(event.event, CanonicalEvent::ProposedPlanCompleted(_))));
+        assert!(
+            sink.events()
+                .iter()
+                .any(|event| matches!(event.event, CanonicalEvent::ProposedPlanCompleted(_)))
+        );
         driver
             .stop_session(
                 StopSessionRequest {

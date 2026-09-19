@@ -1,7 +1,7 @@
 //! OpenCode driver capabilities, identifiers, prompts, and history helpers.
 
 use super::http_client::{OpenCodePrompt, OpenCodePromptModel, OpenCodePromptPart};
-use super::protocol::{protocol_error, validate_identifier, OpenCodeCommand};
+use super::protocol::{OpenCodeCommand, protocol_error, validate_identifier};
 use crate::chat::models::*;
 use reqwest::Url;
 use serde_json::Value;
@@ -273,7 +273,7 @@ fn string_option(options: &[ModelOptionSelection], key: &str) -> ChatResult<Opti
             return Err(ChatError::validation(
                 "modelOptions",
                 format!("OpenCode {key} option must be text"),
-            ))
+            ));
         }
     };
     validate_identifier(value, key)?;

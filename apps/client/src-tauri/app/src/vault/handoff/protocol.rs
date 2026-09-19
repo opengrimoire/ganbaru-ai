@@ -1,6 +1,6 @@
 //! Bounded wire contracts for the local vault handoff service.
 
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::path::Path;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
@@ -869,14 +869,18 @@ mod tests {
         let invitation = qr_invitation();
         let payload = encode_pairing_qr_payload(&invitation).expect("QR payload");
 
-        assert!(decode_pairing_qr_payload(&payload[..payload.len() - 1], 1)
-            .unwrap_err()
-            .contains("truncated"));
+        assert!(
+            decode_pairing_qr_payload(&payload[..payload.len() - 1], 1)
+                .unwrap_err()
+                .contains("truncated")
+        );
         let mut trailing = payload;
         trailing.push(0);
-        assert!(decode_pairing_qr_payload(&trailing, 1)
-            .unwrap_err()
-            .contains("unexpected data"));
+        assert!(
+            decode_pairing_qr_payload(&trailing, 1)
+                .unwrap_err()
+                .contains("unexpected data")
+        );
     }
 
     #[test]

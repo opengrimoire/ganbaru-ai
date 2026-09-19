@@ -1,10 +1,10 @@
 use super::data_source_formula_parser::{
-    formula_dependencies, parse_formula_expression, BinaryOp, FormulaExpr, UnaryOp,
-    MAX_FORMULA_EXPRESSION_CHARS,
+    BinaryOp, FormulaExpr, MAX_FORMULA_EXPRESSION_CHARS, UnaryOp, formula_dependencies,
+    parse_formula_expression,
 };
 use super::data_source_rollups;
 use super::models::NotePageRow;
-use serde_json::{json, Map, Number, Value};
+use serde_json::{Map, Number, Value, json};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
@@ -792,7 +792,7 @@ fn coerce_number(value: &FormulaValue) -> Result<f64, String> {
             .map_err(|_| "formula value is not numeric".to_string())?,
         FormulaValue::Empty => 0.0,
         FormulaValue::Date(_) | FormulaValue::List(_) => {
-            return Err("formula value is not numeric".to_string())
+            return Err("formula value is not numeric".to_string());
         }
     };
     if number.is_finite() {

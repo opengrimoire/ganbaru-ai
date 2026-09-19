@@ -24,8 +24,8 @@ pub use assets::{validate_icon_value, validate_page_cover_value};
 pub use block::validate_block_payload;
 #[allow(unused_imports)]
 pub use catalog::{
-    block_payload_supports_children, block_type_supports_children, validate_block_type,
-    NOTE_BLOCK_TYPES,
+    NOTE_BLOCK_TYPES, block_payload_supports_children, block_type_supports_children,
+    validate_block_type,
 };
 pub use plain_text::{plain_text_from_payload, rich_text_items_plain_text};
 pub use primitives::{

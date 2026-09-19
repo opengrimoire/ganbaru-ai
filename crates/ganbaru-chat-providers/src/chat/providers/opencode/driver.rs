@@ -7,16 +7,16 @@ use super::http_client::*;
 use super::local_server::OwnedOpenCodeServer;
 use super::normalizer::{OpenCodeEventNormalizer, OpenCodeRouteState};
 use super::permissions::permission_override;
-use super::protocol::{parse_resume_cursor, resume_cursor, OpenCodeCommand};
+use super::protocol::{OpenCodeCommand, parse_resume_cursor, resume_cursor};
 use super::support::*;
 use crate::chat::events::*;
 use crate::chat::models::*;
 use crate::chat::providers::{DriverOperationContext, ProviderEventSink};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::Path;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
 };
 use std::time::Duration;
 use tokio::task::JoinHandle;

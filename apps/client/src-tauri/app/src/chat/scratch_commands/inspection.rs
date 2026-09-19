@@ -1,8 +1,8 @@
 //! Scratch scope projections, bounded directory browsing, and artifact revisions.
 
 use super::{
-    parse_generation_lifecycle, parse_id, parse_scope_lifecycle, read_scratch_identity,
-    require_local_owner, require_scratch_inspection_authority, ScratchIdentity,
+    ScratchIdentity, parse_generation_lifecycle, parse_id, parse_scope_lifecycle,
+    read_scratch_identity, require_local_owner, require_scratch_inspection_authority,
 };
 use crate::chat::channel_commands::{chat_pool, persistence_error, timestamp, u64_value};
 use crate::chat::coordination::contracts::*;

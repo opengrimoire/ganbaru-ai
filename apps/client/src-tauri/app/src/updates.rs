@@ -246,8 +246,9 @@ fn parse_os_release_value(raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
+        InstallDetectionInput, OsRelease, RuntimePlatform, UpdatePackageManager,
         copy_command_for_package_manager, detect_update_install_context, linux_package_manager,
-        parse_os_release, InstallDetectionInput, OsRelease, RuntimePlatform, UpdatePackageManager,
+        parse_os_release,
     };
 
     #[test]

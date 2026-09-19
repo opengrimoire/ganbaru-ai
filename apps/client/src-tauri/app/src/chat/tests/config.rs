@@ -1,7 +1,7 @@
 use crate::chat::{
     config::{
-        parse_chat_config_branch, replace_chat_config_branch, ChatVaultConfig,
-        CHAT_VAULT_CONFIG_SCHEMA_VERSION,
+        CHAT_VAULT_CONFIG_SCHEMA_VERSION, ChatVaultConfig, parse_chat_config_branch,
+        replace_chat_config_branch,
     },
     models::ChatErrorCode,
 };

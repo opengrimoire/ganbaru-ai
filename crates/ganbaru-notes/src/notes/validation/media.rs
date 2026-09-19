@@ -24,7 +24,7 @@ pub fn validate_media_payload(block_type: &str, payload: &Value) -> Result<(), S
         Some(Value::String(_)) => {
             return Err(format!(
                 "{block_type}.name must not contain control characters"
-            ))
+            ));
         }
         _ => return Err(format!("{block_type}.name must be a string")),
     }
@@ -121,7 +121,7 @@ pub fn validate_local_media_metadata(
         _ => {
             return Err(format!(
                 "{block_type}.file.content_type must be a MIME type"
-            ))
+            ));
         }
     };
     if !local_media_content_type_matches_block(block_type, content_type) {
@@ -138,7 +138,7 @@ pub fn validate_local_media_metadata(
         _ => {
             return Err(format!(
                 "{block_type}.file.sha256 must be a lowercase SHA-256 hex digest"
-            ))
+            ));
         }
     }
     Ok(())

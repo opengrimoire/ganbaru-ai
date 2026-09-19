@@ -9,8 +9,8 @@ use crate::chat::repository::rebuild::rebuild_thread_projections;
 use crate::chat::repository::recovery::recover_orphaned_turns;
 use crate::chat::runtime::{ChatRuntimeRegistry, ThreadRuntimeCommand, ThreadRuntimeSnapshot};
 use crate::chat::tests::fake_driver::{
-    approval_request, fake_driver, operation_context, send_request, start_request,
-    FakeDriverControl, RecordingEventSink,
+    FakeDriverControl, RecordingEventSink, approval_request, fake_driver, operation_context,
+    send_request, start_request,
 };
 use crate::chat::workspace_mutation::{
     ChatWorkspaceMutationRegistry, ProviderTurnReservationHandoff,
@@ -178,9 +178,11 @@ fn maintenance_stop_drains_owners_and_allows_new_sessions() {
             .handoff_to_runtime()
             .unwrap()
             .handoff_to_event_sink();
-        assert!(mutations
-            .try_mutation(Path::new("/tmp/ganbaru-runtime-maintenance-test"))
-            .is_err());
+        assert!(
+            mutations
+                .try_mutation(Path::new("/tmp/ganbaru-runtime-maintenance-test"))
+                .is_err()
+        );
         assert_eq!(registry.process_counts().unwrap(), (0, 0));
         assert_eq!(
             registry
@@ -189,9 +191,11 @@ fn maintenance_stop_drains_owners_and_allows_new_sessions() {
                 .unwrap(),
             0
         );
-        assert!(mutations
-            .try_mutation(Path::new("/tmp/ganbaru-runtime-maintenance-test"))
-            .is_ok());
+        assert!(
+            mutations
+                .try_mutation(Path::new("/tmp/ganbaru-runtime-maintenance-test"))
+                .is_ok()
+        );
         assert!(!previous.snapshot().unwrap().accepting_commands);
         let replacement = registry.owner(thread_id).unwrap();
         assert!(replacement.snapshot().unwrap().accepting_commands);
@@ -323,14 +327,16 @@ fn fake_driver_streams_approval_stops_restarts_and_rejects_late_events() {
             )
             .await
             .unwrap();
-        assert!(owner
-            .send_turn(
-                send_request("crash-turn"),
-                turn_reservation("thread-1", "crash-turn"),
-                operation_context("crash", Duration::from_secs(1)),
-            )
-            .await
-            .is_err());
+        assert!(
+            owner
+                .send_turn(
+                    send_request("crash-turn"),
+                    turn_reservation("thread-1", "crash-turn"),
+                    operation_context("crash", Duration::from_secs(1)),
+                )
+                .await
+                .is_err()
+        );
         assert_eq!(
             owner.snapshot().unwrap().session_state,
             ProviderSessionState::Failed
@@ -418,14 +424,16 @@ fn fake_driver_crash_flushes_and_rebuilds_durable_output() {
             )
             .await
             .unwrap();
-        assert!(owner
-            .send_turn(
-                send_request("durable-crash-turn"),
-                turn_reservation("thread-1", "durable-crash-turn"),
-                operation_context("durable-send", Duration::from_secs(1)),
-            )
-            .await
-            .is_err());
+        assert!(
+            owner
+                .send_turn(
+                    send_request("durable-crash-turn"),
+                    turn_reservation("thread-1", "durable-crash-turn"),
+                    operation_context("durable-send", Duration::from_secs(1)),
+                )
+                .await
+                .is_err()
+        );
         owner
             .stop_session(
                 true,
@@ -488,13 +496,15 @@ fn output_emitted_before_a_hung_stop_is_flushed_durably() {
             .await
             .unwrap();
         control.hang_on_stop();
-        assert!(owner
-            .stop_session(
-                true,
-                operation_context("hung-output-stop", Duration::from_millis(120)),
-            )
-            .await
-            .is_err());
+        assert!(
+            owner
+                .stop_session(
+                    true,
+                    operation_context("hung-output-stop", Duration::from_millis(120)),
+                )
+                .await
+                .is_err()
+        );
         let text: String = sqlx::query_scalar(
             "SELECT normalized_markdown FROM chat_messages WHERE id = 'fake-assistant-item'",
         )
@@ -599,10 +609,12 @@ fn ready_session_stops_lazily_and_hung_shutdown_stays_bounded() {
             .await
             .unwrap();
         let started = Instant::now();
-        assert!(registry
-            .shutdown_and_wait(Duration::from_millis(40), &mutations)
-            .await
-            .is_err());
+        assert!(
+            registry
+                .shutdown_and_wait(Duration::from_millis(40), &mutations)
+                .await
+                .is_err()
+        );
         assert!(started.elapsed() < Duration::from_millis(250));
         assert!(!owner.snapshot().unwrap().accepting_commands);
     });

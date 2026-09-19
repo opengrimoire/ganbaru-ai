@@ -1,11 +1,11 @@
 //! Pairing-state validation and crash-recoverable private-file persistence.
 
 use super::{
+    MAX_LINKED_PEERS, MAX_REVOKED_PEERS, PAIRING_STATE_SCHEMA_VERSION, PairingManagerInner,
+    PairingStateFile, PendingAcknowledgement, StoredIncomingTransfer, StoredOutgoingTransfer,
     certificate_fingerprint, decode_certificate, decode_identity, initialized_state, random_token,
-    PairingManagerInner, PairingStateFile, PendingAcknowledgement, StoredIncomingTransfer,
-    StoredOutgoingTransfer, MAX_LINKED_PEERS, MAX_REVOKED_PEERS, PAIRING_STATE_SCHEMA_VERSION,
 };
-use crate::vault::handoff::protocol::{self, validate_identifier, BundlePurpose};
+use crate::vault::handoff::protocol::{self, BundlePurpose, validate_identifier};
 use std::fs;
 use std::io::Write;
 use std::path::Path;

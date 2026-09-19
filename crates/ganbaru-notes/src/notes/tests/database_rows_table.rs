@@ -146,11 +146,13 @@ fn database_view_window_keyset_pages_ten_thousand_rows_with_bounded_payloads() {
             .iter()
             .map(|row| row["id"].as_str().unwrap())
             .collect::<std::collections::HashSet<_>>();
-        assert!(second_json["rows"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|row| { !first_ids.contains(row["id"].as_str().unwrap()) }));
+        assert!(
+            second_json["rows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|row| { !first_ids.contains(row["id"].as_str().unwrap()) })
+        );
     });
 }
 
@@ -247,11 +249,13 @@ fn database_row_pages_are_real_pages_with_page_lifecycle() {
         .await
         .unwrap();
         let sidebar_json = serde_json::to_value(sidebar_pages).unwrap();
-        assert!(!sidebar_json["pages"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|page| page["id"] == PAGE_B));
+        assert!(
+            !sidebar_json["pages"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|page| page["id"] == PAGE_B)
+        );
 
         let rows = data_source_rows::list_data_source_row_pages(&pool, DATA_SOURCE_A)
             .await
@@ -262,11 +266,13 @@ fn database_row_pages_are_real_pages_with_page_lifecycle() {
             .await
             .unwrap();
         let search_json = serde_json::to_value(search_results).unwrap();
-        assert!(search_json
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|result| result["page"]["id"] == PAGE_B));
+        assert!(
+            search_json
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|result| result["page"]["id"] == PAGE_B)
+        );
 
         let duplicated = writes::duplicate_page(&pool, PAGE_B, NoteDuplicatePage { title: None })
             .await
@@ -290,11 +296,13 @@ fn database_row_pages_are_real_pages_with_page_lifecycle() {
         assert_eq!(rows_after_trash.len(), 1);
         let trashed = reads::list_trashed_pages(&pool).await.unwrap();
         let trashed_json = serde_json::to_value(trashed).unwrap();
-        assert!(trashed_json
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|page| page["id"] == PAGE_B));
+        assert!(
+            trashed_json
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|page| page["id"] == PAGE_B)
+        );
 
         let restored = writes::trash_page(&pool, PAGE_B, false).await.unwrap();
         let restored_json = serde_json::to_value(restored).unwrap();
@@ -317,11 +325,13 @@ fn database_row_pages_are_real_pages_with_page_lifecycle() {
             .await
             .unwrap();
         let hidden_search_json = serde_json::to_value(hidden_search).unwrap();
-        assert!(!hidden_search_json
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|result| result["page"]["parent"]["type"] == "data_source_id"));
+        assert!(
+            !hidden_search_json
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|result| result["page"]["parent"]["type"] == "data_source_id")
+        );
     });
 }
 

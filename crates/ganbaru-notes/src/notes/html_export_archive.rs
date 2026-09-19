@@ -35,8 +35,8 @@ fn write_zip_archive_inner(
     path: &Path,
     archive: &mut HtmlArchive,
 ) -> Result<(), String> {
-    use zip::write::{SimpleFileOptions, ZipWriter};
     use zip::CompressionMethod;
+    use zip::write::{SimpleFileOptions, ZipWriter};
 
     let file = fs::File::create(path).map_err(|e| format!("create HTML archive: {e}"))?;
     let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);

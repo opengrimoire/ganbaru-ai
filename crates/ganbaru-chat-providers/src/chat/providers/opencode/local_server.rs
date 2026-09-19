@@ -1,9 +1,9 @@
 //! Owned loopback OpenCode server lifecycle.
 
 use super::cli::{process_environment, resolve_executable};
-use super::config::{OpenCodeSecret, OPENCODE_PASSWORD_ENVIRONMENT};
+use super::config::{OPENCODE_PASSWORD_ENVIRONMENT, OpenCodeSecret};
 use crate::chat::models::{ChatError, ChatErrorCode, ChatResult, ProviderInstanceConfig};
-use crate::chat::process::{spawn_provider_process, ProviderProcessConfig, ProviderProcessHandle};
+use crate::chat::process::{ProviderProcessConfig, ProviderProcessHandle, spawn_provider_process};
 use reqwest::Url;
 use std::path::Path;
 use std::time::Duration;
