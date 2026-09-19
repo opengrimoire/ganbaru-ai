@@ -1,14 +1,14 @@
-//! Desktop coordinator operations behind the bounded transport protocol.
+//! Desktop coordinator dispatch and shared single-transfer state.
+
+mod incoming;
+mod outgoing;
 
 use super::protocol::{
     BundleMetadata, BundlePurpose, DoomscrollingSampleMessage, HandoffCompatibility,
-    PROTOCOL_VERSION,
 };
-use super::state::{random_token, PairingManager, PendingAcknowledgement, StoredOutgoingTransfer};
+use super::state::PairingManager;
 use crate::vault::ownership::VaultOwnershipManager;
-use crate::vault::quiescence::{
-    begin_snapshot_quiescence, begin_source_quiescence, SnapshotQuiescence, SourceQuiescence,
-};
+use crate::vault::quiescence::SourceQuiescence;
 use std::collections::BTreeSet;
 use std::fs;
 use std::time::{Duration, Instant};
@@ -141,7 +141,6 @@ struct CoordinatorState<R: Runtime> {
     pairing: PairingManager,
     prepared: Option<PreparedTransfer>,
     completed: Option<CompletedActivation>,
-    last_peer_activity: Instant,
     last_owner_poll: Option<(String, Instant)>,
     waiting_refresh_targets: BTreeSet<String>,
     relay_refresh_generation: Option<u64>,
@@ -185,7 +184,6 @@ pub(crate) async fn run<R: Runtime>(
         pairing,
         prepared,
         completed,
-        last_peer_activity: Instant::now(),
         last_owner_poll: None,
         waiting_refresh_targets: BTreeSet::new(),
         relay_refresh_generation: None,
@@ -289,304 +287,6 @@ impl<R: Runtime> CoordinatorState<R> {
         }
     }
 
-    async fn prepare(
-        &mut self,
-        vault_id: String,
-        device_id: String,
-        generation: u64,
-        purpose: BundlePurpose,
-    ) -> Result<CoordinatorResponse, String> {
-        if let Some(prepared) = self.prepared.as_ref() {
-            if prepared.metadata.vault_id == vault_id
-                && prepared.metadata.device_id == device_id
-                && prepared.purpose == purpose
-            {
-                return Ok(CoordinatorResponse::Prepared {
-                    metadata: prepared.metadata.clone(),
-                    purpose,
-                });
-            }
-            let status = self
-                .app
-                .state::<VaultOwnershipManager>()
-                .status(&vault_id)?;
-            return Ok(CoordinatorResponse::BundlePending {
-                owner_device_id: status.owner_device_id,
-                generation: status.generation,
-            });
-        }
-        if crate::vault::active_vault_id(&self.app)? != vault_id {
-            return Err("requested vault is not active on the coordinator".to_string());
-        }
-        let ownership = self.app.state::<VaultOwnershipManager>();
-        let status = ownership.status(&vault_id)?;
-        if generation > status.generation {
-            return Err("requesting replica is ahead of the coordinator".to_string());
-        }
-        if !status.can_write {
-            if purpose == BundlePurpose::Refresh
-                && self.relay_refresh_generation == Some(status.generation)
-                && self.waiting_refresh_targets.remove(&device_id)
-            {
-                // The coordinator has just activated a fresh owner snapshot and can
-                // relay that immutable copy without becoming the writer.
-            } else {
-                if self.pairing.linked_peer(&status.owner_device_id)?.is_none() {
-                    return Err(
-                        "the current vault owner is not linked to this coordinator".to_string()
-                    );
-                }
-                self.ensure_owner_is_reachable(&status.owner_device_id, purpose)?;
-                if purpose == BundlePurpose::Refresh {
-                    self.waiting_refresh_targets.insert(device_id.clone());
-                }
-                self.pairing.request_upload(purpose)?;
-                return Ok(CoordinatorResponse::BundlePending {
-                    owner_device_id: status.owner_device_id,
-                    generation: status.generation,
-                });
-            }
-        }
-        if status.can_write {
-            let pool = crate::db_path::connect_sqlite(
-                self.app.clone(),
-                format!("sqlite:{}", crate::vault::APP_SQLITE_FILE),
-            )
-            .await?;
-            crate::doomscrolling_linked::drain_local_spool(
-                &self.app,
-                &pool,
-                &vault_id,
-                &status.device_id,
-            )
-            .await?;
-            drop(pool);
-        }
-        let transfer_id = random_token("transfer")?;
-        let next_generation = match purpose {
-            BundlePurpose::Ownership => status
-                .generation
-                .checked_add(1)
-                .ok_or_else(|| "vault ownership generation is exhausted".to_string())?,
-            BundlePurpose::Refresh => status.generation,
-        };
-        let (quiescence, snapshot_quiescence): (
-            Option<SourceQuiescence>,
-            Option<SnapshotQuiescence>,
-        ) = match purpose {
-            BundlePurpose::Ownership => (
-                Some(
-                    begin_source_quiescence(
-                        &self.app,
-                        status.generation,
-                        transfer_id.clone(),
-                        device_id.clone(),
-                    )
-                    .await?,
-                ),
-                None,
-            ),
-            BundlePurpose::Refresh => (None, Some(begin_snapshot_quiescence(&self.app).await?)),
-        };
-        let (database_snapshot, archive_path) =
-            match self.pairing.outgoing_snapshot_paths(&transfer_id) {
-                Ok(paths) => paths,
-                Err(error) => {
-                    if let Some(quiescence) = quiescence {
-                        let _ = quiescence.abort(&self.app);
-                    }
-                    return Err(error);
-                }
-            };
-        let vault_root = match crate::vault::active_vault_path(&self.app) {
-            Ok(path) => path,
-            Err(error) => {
-                if let Some(quiescence) = quiescence {
-                    let _ = quiescence.abort(&self.app);
-                }
-                return Err(error);
-            }
-        };
-        let snapshot_result = crate::vault::backup::create_handoff_archive(
-            &vault_root,
-            &database_snapshot,
-            &archive_path,
-        )
-        .await;
-        drop(snapshot_quiescence);
-        let _ = fs::remove_file(&database_snapshot);
-        if let Err(error) = snapshot_result {
-            if let Some(quiescence) = quiescence {
-                let _ = quiescence.abort(&self.app);
-            }
-            let _ = fs::remove_file(&archive_path);
-            return Err(error);
-        }
-        let metadata_result: Result<BundleMetadata, String> = (|| {
-            Ok(BundleMetadata {
-                protocol_version: PROTOCOL_VERSION,
-                compatibility: super::current_compatibility(&self.app),
-                vault_id,
-                device_id,
-                transfer_id,
-                generation: next_generation,
-                archive_bytes: archive_path
-                    .metadata()
-                    .map_err(|error| format!("inspect handoff archive: {error}"))?
-                    .len(),
-                archive_sha256: super::sha256_file(&archive_path)?,
-            })
-        })();
-        let metadata = match metadata_result {
-            Ok(metadata) => metadata,
-            Err(error) => {
-                if let Some(quiescence) = quiescence {
-                    let _ = quiescence.abort(&self.app);
-                }
-                let _ = fs::remove_file(&archive_path);
-                return Err(error);
-            }
-        };
-        if let Err(error) = self
-            .pairing
-            .register_outgoing_bundle(metadata.clone(), archive_path.clone())
-        {
-            if let Some(quiescence) = quiescence {
-                let _ = quiescence.abort(&self.app);
-            }
-            let _ = fs::remove_file(&archive_path);
-            return Err(error);
-        }
-        if let Err(error) = self
-            .pairing
-            .store_outgoing_transfer(StoredOutgoingTransfer {
-                metadata: metadata.clone(),
-                purpose,
-                committed: false,
-            })
-        {
-            let _ = self
-                .pairing
-                .unregister_outgoing_bundle(&metadata.transfer_id);
-            if let Some(quiescence) = quiescence {
-                let _ = quiescence.abort(&self.app);
-            }
-            let _ = fs::remove_file(&archive_path);
-            return Err(error);
-        }
-        self.prepared = Some(PreparedTransfer {
-            metadata: metadata.clone(),
-            purpose,
-            archive_path,
-            quiescence,
-            committed: false,
-        });
-        Ok(CoordinatorResponse::Prepared { metadata, purpose })
-    }
-
-    fn commit_ownership(
-        &mut self,
-        metadata: BundleMetadata,
-    ) -> Result<CoordinatorResponse, String> {
-        let prepared = self
-            .prepared
-            .as_mut()
-            .ok_or_else(|| "ownership transfer is no longer available".to_string())?;
-        if prepared.purpose != BundlePurpose::Ownership || prepared.metadata != metadata {
-            return Err("staged ownership transfer does not match the coordinator".to_string());
-        }
-        let generation = self
-            .app
-            .state::<VaultOwnershipManager>()
-            .commit_outgoing(&metadata.vault_id, &metadata.transfer_id)?;
-        self.pairing
-            .mark_outgoing_committed(&metadata.transfer_id)?;
-        prepared.committed = true;
-        prepared.quiescence.take();
-        Ok(CoordinatorResponse::OwnershipGrant {
-            vault_id: metadata.vault_id,
-            transfer_id: metadata.transfer_id,
-            owner_device_id: metadata.device_id,
-            generation,
-        })
-    }
-
-    fn activated(
-        &mut self,
-        vault_id: String,
-        device_id: String,
-        transfer_id: String,
-        generation: u64,
-        purpose: BundlePurpose,
-    ) -> Result<CoordinatorResponse, String> {
-        let completed = CompletedActivation {
-            vault_id,
-            device_id,
-            transfer_id: transfer_id.clone(),
-            generation,
-            purpose,
-        };
-        if self.completed.as_ref() == Some(&completed) {
-            return Ok(CoordinatorResponse::ActivationAcknowledged { transfer_id });
-        }
-        let prepared = self
-            .prepared
-            .as_ref()
-            .ok_or_else(|| "activation does not match an active transfer".to_string())?;
-        if prepared.metadata.vault_id != completed.vault_id
-            || prepared.metadata.device_id != completed.device_id
-            || prepared.metadata.transfer_id != completed.transfer_id
-            || prepared.metadata.generation != completed.generation
-            || prepared.purpose != completed.purpose
-            || (completed.purpose == BundlePurpose::Ownership && !prepared.committed)
-        {
-            return Err("activation does not match the prepared transfer".to_string());
-        }
-        if completed.purpose == BundlePurpose::Ownership {
-            self.app
-                .state::<VaultOwnershipManager>()
-                .finish_outgoing_acknowledgement(
-                    &completed.vault_id,
-                    &completed.transfer_id,
-                    completed.generation,
-                )?;
-            self.last_owner_poll = Some((completed.device_id.clone(), Instant::now()));
-        }
-        self.pairing
-            .complete_outgoing_activation(PendingAcknowledgement {
-                vault_id: completed.vault_id.clone(),
-                device_id: completed.device_id.clone(),
-                transfer_id: completed.transfer_id.clone(),
-                generation: completed.generation,
-                purpose: completed.purpose,
-            })?;
-        self.cleanup_prepared();
-        self.completed = Some(completed);
-        Ok(CoordinatorResponse::ActivationAcknowledged { transfer_id })
-    }
-
-    fn cancel(&mut self, transfer_id: String) -> Result<CoordinatorResponse, String> {
-        let prepared = self
-            .prepared
-            .as_ref()
-            .ok_or_else(|| "transfer is no longer active".to_string())?;
-        if prepared.metadata.transfer_id != transfer_id {
-            return Err("cancelled transfer does not match the active transfer".to_string());
-        }
-        if prepared.committed {
-            return Err("committed ownership cannot be cancelled".to_string());
-        }
-        if let Some(quiescence) = self
-            .prepared
-            .as_mut()
-            .and_then(|prepared| prepared.quiescence.take())
-        {
-            quiescence.abort(&self.app)?;
-        }
-        self.cleanup_prepared();
-        Ok(CoordinatorResponse::Cancelled { transfer_id })
-    }
-
     fn poll_upload(
         &mut self,
         vault_id: String,
@@ -621,7 +321,6 @@ impl<R: Runtime> CoordinatorState<R> {
             .filter(|(owner_device_id, _)| owner_device_id == &device_id)
             .is_none_or(|(_, activity)| activity.elapsed() >= PEER_RECONNECT_GAP);
         self.last_owner_poll = Some((device_id, Instant::now()));
-        self.last_peer_activity = Instant::now();
         if reconnected
             && self.pairing.requested_upload()?.is_none()
             && self.pairing.incoming_transfer()?.is_none()
@@ -670,7 +369,6 @@ impl<R: Runtime> CoordinatorState<R> {
         acknowledged_peer_sample_ids: Vec<String>,
         owner_snapshot: Vec<DoomscrollingSampleMessage>,
     ) -> Result<CoordinatorResponse, String> {
-        self.last_peer_activity = Instant::now();
         let status = self
             .app
             .state::<VaultOwnershipManager>()
@@ -730,273 +428,6 @@ impl<R: Runtime> CoordinatorState<R> {
             acknowledged_sample_ids: Vec::new(),
             peer_samples,
             combined_samples,
-        })
-    }
-
-    async fn uploaded(
-        &mut self,
-        metadata: BundleMetadata,
-        source_device_id: String,
-        purpose: BundlePurpose,
-    ) -> Result<CoordinatorResponse, String> {
-        self.last_peer_activity = Instant::now();
-        self.authorize_upload(&metadata, &source_device_id, purpose)?;
-        if let Some(completed) = self.pairing.completed_activation()? {
-            if completed.transfer_id == metadata.transfer_id
-                && completed.purpose == purpose
-                && completed.generation == metadata.generation
-            {
-                return Ok(CoordinatorResponse::IncomingStaged {
-                    transfer_id: metadata.transfer_id,
-                });
-            }
-        }
-        if let Some(incoming) = self.pairing.incoming_transfer()? {
-            if incoming.metadata == metadata
-                && incoming.source_device_id == source_device_id
-                && incoming.purpose == purpose
-            {
-                if purpose == BundlePurpose::Refresh {
-                    let staging = crate::vault::backup::active_handoff_staging_path(
-                        &self.app,
-                        &metadata.transfer_id,
-                    )?;
-                    crate::vault::backup::activate_active_handoff(
-                        &self.app,
-                        &staging,
-                        &metadata.transfer_id,
-                        &metadata.vault_id,
-                        false,
-                    )
-                    .await?;
-                    let (device_id, _) = self.pairing.identity()?;
-                    self.pairing
-                        .complete_incoming_activation(PendingAcknowledgement {
-                            vault_id: metadata.vault_id.clone(),
-                            device_id,
-                            transfer_id: metadata.transfer_id.clone(),
-                            generation: metadata.generation,
-                            purpose,
-                        })?;
-                    self.reload_shell()?;
-                    if let Err(error) = self.pairing.remove_staging(&metadata.transfer_id) {
-                        eprintln!("failed to clean completed vault upload: {error}");
-                    }
-                }
-                return Ok(CoordinatorResponse::IncomingStaged {
-                    transfer_id: metadata.transfer_id,
-                });
-            }
-            return Err("another uploaded vault transfer is pending".to_string());
-        }
-        let (local_device_id, _) = self.pairing.identity()?;
-        let status = self
-            .app
-            .state::<VaultOwnershipManager>()
-            .status(&metadata.vault_id)?;
-        let expected_generation = match purpose {
-            BundlePurpose::Ownership => status
-                .generation
-                .checked_add(1)
-                .ok_or_else(|| "vault ownership generation is exhausted".to_string())?,
-            BundlePurpose::Refresh => status.generation,
-        };
-        if metadata.device_id != local_device_id
-            || status.can_write
-            || status.owner_device_id != source_device_id
-            || metadata.generation != expected_generation
-            || self.pairing.requested_upload()? != Some(purpose)
-        {
-            return Err("uploaded bundle does not match the requested owner state".to_string());
-        }
-        let (_, _, archive) = self.pairing.staging_paths(&metadata.transfer_id)?;
-        let staging =
-            crate::vault::backup::active_handoff_staging_path(&self.app, &metadata.transfer_id)?;
-        crate::vault::backup::stage_handoff_archive(&archive, &staging, &metadata.vault_id).await?;
-        self.pairing
-            .store_incoming_transfer(super::state::StoredIncomingTransfer {
-                metadata: metadata.clone(),
-                source_device_id,
-                purpose,
-            })?;
-        if purpose == BundlePurpose::Refresh {
-            crate::vault::backup::activate_active_handoff(
-                &self.app,
-                &staging,
-                &metadata.transfer_id,
-                &metadata.vault_id,
-                false,
-            )
-            .await?;
-            let (device_id, _) = self.pairing.identity()?;
-            self.pairing
-                .complete_incoming_activation(PendingAcknowledgement {
-                    vault_id: metadata.vault_id.clone(),
-                    device_id,
-                    transfer_id: metadata.transfer_id.clone(),
-                    generation: metadata.generation,
-                    purpose,
-                })?;
-            self.reload_shell()?;
-            if let Err(error) = self.pairing.remove_staging(&metadata.transfer_id) {
-                eprintln!("failed to clean completed vault upload: {error}");
-            }
-        }
-        Ok(CoordinatorResponse::IncomingStaged {
-            transfer_id: metadata.transfer_id,
-        })
-    }
-
-    fn authorize_upload(
-        &mut self,
-        metadata: &BundleMetadata,
-        source_device_id: &str,
-        purpose: BundlePurpose,
-    ) -> Result<CoordinatorResponse, String> {
-        self.last_peer_activity = Instant::now();
-        super::protocol::ensure_compatible(
-            &super::current_compatibility(&self.app),
-            &metadata.compatibility,
-        )?;
-        if let Some(completed) = self.pairing.completed_activation()? {
-            if completed.vault_id == metadata.vault_id
-                && completed.device_id == metadata.device_id
-                && completed.transfer_id == metadata.transfer_id
-                && completed.purpose == purpose
-                && completed.generation == metadata.generation
-            {
-                return Ok(CoordinatorResponse::UploadAuthorized {
-                    transfer_id: metadata.transfer_id.clone(),
-                    already_received: true,
-                });
-            }
-        }
-        if let Some(incoming) = self.pairing.incoming_transfer()? {
-            if incoming.metadata == *metadata
-                && incoming.source_device_id == source_device_id
-                && incoming.purpose == purpose
-            {
-                return Ok(CoordinatorResponse::UploadAuthorized {
-                    transfer_id: metadata.transfer_id.clone(),
-                    already_received: true,
-                });
-            }
-            return Err("another uploaded vault transfer is pending".to_string());
-        }
-        let (local_device_id, _) = self.pairing.identity()?;
-        let status = self
-            .app
-            .state::<VaultOwnershipManager>()
-            .status(&metadata.vault_id)?;
-        let expected_generation = match purpose {
-            BundlePurpose::Ownership => status
-                .generation
-                .checked_add(1)
-                .ok_or_else(|| "vault ownership generation is exhausted".to_string())?,
-            BundlePurpose::Refresh => status.generation,
-        };
-        if metadata.device_id != local_device_id
-            || status.can_write
-            || status.owner_device_id != source_device_id
-            || metadata.generation != expected_generation
-            || self.pairing.requested_upload()? != Some(purpose)
-        {
-            return Err("uploaded bundle does not match the requested owner state".to_string());
-        }
-        Ok(CoordinatorResponse::UploadAuthorized {
-            transfer_id: metadata.transfer_id.clone(),
-            already_received: false,
-        })
-    }
-
-    async fn commit_uploaded_ownership(
-        &mut self,
-        metadata: BundleMetadata,
-        source_device_id: String,
-    ) -> Result<CoordinatorResponse, String> {
-        self.last_peer_activity = Instant::now();
-        if let Some(completed) = self.pairing.completed_activation()? {
-            if completed.vault_id == metadata.vault_id
-                && completed.transfer_id == metadata.transfer_id
-                && completed.generation == metadata.generation
-                && completed.purpose == BundlePurpose::Ownership
-            {
-                return Ok(CoordinatorResponse::ActivationAcknowledged {
-                    transfer_id: metadata.transfer_id,
-                });
-            }
-        }
-        let incoming = self
-            .pairing
-            .incoming_transfer()?
-            .ok_or_else(|| "uploaded ownership transfer is not staged".to_string())?;
-        if incoming.metadata != metadata
-            || incoming.source_device_id != source_device_id
-            || incoming.purpose != BundlePurpose::Ownership
-        {
-            return Err("uploaded ownership grant does not match staged data".to_string());
-        }
-        let ownership = self.app.state::<VaultOwnershipManager>();
-        let status = ownership.status(&metadata.vault_id)?;
-        let needs_finalize = match status.transfer_phase {
-            crate::vault::ownership::TransferPhase::IncomingCommitted {
-                ref transfer_id,
-                ref source_device_id,
-                committed_generation,
-            } if transfer_id == &metadata.transfer_id
-                && source_device_id == &incoming.source_device_id
-                && committed_generation == metadata.generation =>
-            {
-                true
-            }
-            crate::vault::ownership::TransferPhase::Stable
-                if status.can_write && status.generation == metadata.generation =>
-            {
-                false
-            }
-            crate::vault::ownership::TransferPhase::Stable => {
-                ownership.accept_incoming_grant(
-                    &metadata.vault_id,
-                    metadata.transfer_id.clone(),
-                    source_device_id,
-                    metadata.generation,
-                )?;
-                true
-            }
-            _ => return Err("desktop ownership state conflicts with uploaded grant".to_string()),
-        };
-        let staging =
-            crate::vault::backup::active_handoff_staging_path(&self.app, &metadata.transfer_id)?;
-        crate::vault::backup::activate_active_handoff(
-            &self.app,
-            &staging,
-            &metadata.transfer_id,
-            &metadata.vault_id,
-            true,
-        )
-        .await?;
-        if needs_finalize {
-            ownership.finalize_incoming(
-                &metadata.vault_id,
-                &metadata.transfer_id,
-                metadata.generation,
-            )?;
-        }
-        let (device_id, _) = self.pairing.identity()?;
-        self.pairing
-            .complete_incoming_activation(PendingAcknowledgement {
-                vault_id: metadata.vault_id,
-                device_id,
-                transfer_id: metadata.transfer_id.clone(),
-                generation: metadata.generation,
-                purpose: BundlePurpose::Ownership,
-            })?;
-        self.reload_shell()?;
-        if let Err(error) = self.pairing.remove_staging(&metadata.transfer_id) {
-            eprintln!("failed to clean completed vault upload: {error}");
-        }
-        Ok(CoordinatorResponse::ActivationAcknowledged {
-            transfer_id: metadata.transfer_id,
         })
     }
 
@@ -1071,6 +502,8 @@ pub(crate) async fn request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::vault::handoff::protocol::PROTOCOL_VERSION;
+    use crate::vault::handoff::state::{random_token, StoredOutgoingTransfer};
     use std::path::PathBuf;
 
     #[test]

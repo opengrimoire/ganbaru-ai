@@ -394,9 +394,11 @@ export function deriveInitialPhaseFromInheritedFocus(
   };
 }
 
-export function isValidPomodoroConfig(config: PomodoroConfig): boolean {
+/** Validate a complete configuration at JSON and cross-window boundaries. */
+export function isValidPomodoroConfig(config: unknown): config is PomodoroConfig {
+  if (!isRecord(config)) return false;
   if (config.rhythmSource === "preset") {
-    if (!config.presetKey || !(config.presetKey in COUNT_PRESET_RHYTHMS)) return false;
+    if (typeof config.presetKey !== "string" || !Object.hasOwn(COUNT_PRESET_RHYTHMS, config.presetKey)) return false;
   } else if (config.rhythmSource === "custom") {
     if (config.presetKey !== null) return false;
   } else {
@@ -405,11 +407,12 @@ export function isValidPomodoroConfig(config: PomodoroConfig): boolean {
 
   if (
     config.idleTimeoutMinutes !== null &&
-    (!Number.isInteger(config.idleTimeoutMinutes) || config.idleTimeoutMinutes <= 0)
+    (typeof config.idleTimeoutMinutes !== "number" || !Number.isInteger(config.idleTimeoutMinutes) || config.idleTimeoutMinutes <= 0)
   ) {
     return false;
   }
 
+  if (!isRecord(config.rhythm)) return false;
   if (config.rhythm.kind === "count") {
     return isBoundedInteger(config.rhythm.focusDurationMinutes, MIN_FOCUS_MINUTES, MAX_FOCUS_MINUTES) &&
       isBoundedInteger(config.rhythm.shortBreakMinutes, MIN_SHORT_BREAK_MINUTES, MAX_SHORT_BREAK_MINUTES) &&
@@ -421,9 +424,11 @@ export function isValidPomodoroConfig(config: PomodoroConfig): boolean {
       );
   }
 
+  if (config.rhythm.kind !== "sequence" || !Array.isArray(config.rhythm.steps)) return false;
   return config.rhythm.steps.length >= MIN_RHYTHM_POSITIONS &&
     config.rhythm.steps.length <= MAX_RHYTHM_POSITIONS &&
-    config.rhythm.steps.every((step) => {
+    Array.from(config.rhythm.steps).every((step: unknown) => {
+      if (!isRecord(step)) return false;
       const maxBreak = step.breakPhase === "long_break"
         ? MAX_LONG_BREAK_MINUTES
         : MAX_SHORT_BREAK_MINUTES;
@@ -433,6 +438,10 @@ export function isValidPomodoroConfig(config: PomodoroConfig): boolean {
     });
 }
 
-function isBoundedInteger(value: number, min: number, max: number): boolean {
-  return Number.isInteger(value) && value >= min && value <= max;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isBoundedInteger(value: unknown, min: number, max: number): boolean {
+  return typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
 }

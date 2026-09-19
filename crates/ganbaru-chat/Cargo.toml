@@ -2,9 +2,10 @@
 name = "ganbaru-chat"
 version = "0.1.5"
 description = "Ganbaru AI Chat application service"
-authors = ["Ganbaru AI"]
-license = "AGPL-3.0-only"
-edition = "2021"
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 
 [lib]
 doctest = false
@@ -13,6 +14,9 @@ doctest = false
 default = ["native-runtime"]
 native-runtime = ["dep:ganbaru-chat-providers"]
 test-support = ["native-runtime"]
+
+[lints]
+workspace = true
 
 [dependencies]
 chrono = { workspace = true }

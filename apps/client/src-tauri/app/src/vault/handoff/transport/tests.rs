@@ -2,6 +2,7 @@ use super::*;
 use crate::vault::handoff::protocol::{DeviceKind, MAX_ARCHIVE_BYTES, PROTOCOL_VERSION};
 use crate::vault::handoff::state::random_token;
 use std::fs;
+use tokio::net::TcpListener;
 
 struct TestDirectory(PathBuf);
 

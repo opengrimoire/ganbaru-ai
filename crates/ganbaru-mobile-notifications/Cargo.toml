@@ -2,14 +2,18 @@
 name = "ganbaru-mobile-notifications"
 version = "0.1.0"
 description = "Android notification capability bridge for Ganbaru AI"
-authors = ["Ganbaru AI"]
-license = "AGPL-3.0-only"
-edition = "2021"
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 build = "build.rs"
 links = "ganbaru-mobile-notifications"
 
 [lib]
 doctest = false
+
+[lints]
+workspace = true
 
 [dependencies]
 serde = { workspace = true }

@@ -45,7 +45,7 @@ Always use the workspace flag for root scripts.
 
 `validate` is the normal comprehensive gate. `validate:full` is required for dependency or lockfile changes, security-sensitive dependency work, releases, and explicit full-security requests.
 
-The hosted `linux validation` pull request workflow currently runs the static `check` task. Local pre-pull-request policy is broader and includes tests, editor diagnostics, and bundle contracts through `validate`. The independent Android job builds an ARM64 debug APK, while the Windows job checks Rust composition without producing an installer.
+The hosted `linux validation` pull request workflow runs `validate`, including static checks, tests, editor diagnostics, and bundle contracts with the same bounded execution as local validation. The independent Android job builds an ARM64 debug APK, while the Windows job checks Rust composition without producing an installer.
 
 ## Choosing a gate
 

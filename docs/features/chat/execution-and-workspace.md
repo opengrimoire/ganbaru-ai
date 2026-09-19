@@ -34,6 +34,8 @@ Review presents file changes, diffs, checkpoints, and source-control status with
 
 Generated diffs and repository status are derived views. The filesystem and Git repository remain canonical for workspace content; the vault stores the run, checkpoint metadata, and review links.
 
+When a checkpoint pair is unavailable, review can fall back to the provider-reported turn and then to the working tree. Native `not_found` errors identify these cases with `details.reason` values `checkpoint_pair` or `provider_turn`. Permission, storage, and unrelated missing-resource errors remain errors; diagnostic wording never selects another review source.
+
 ## Terminal
 
 Terminals are bound to one authorized execution target and thread context. The frontend receives a narrow terminal stream and input boundary, not a generic process API. Closing a visible terminal does not necessarily terminate its process; lifecycle and explicit stop controls remain truthful.

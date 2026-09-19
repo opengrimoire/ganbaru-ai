@@ -2,9 +2,10 @@
 name = "ganbaru-ai"
 version = "0.1.8"
 description = "Ganbaru AI Tauri application"
-authors = ["Ganbaru AI"]
-license = "AGPL-3.0-only"
-edition = "2021"
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 default-run = "ganbaru-ai"
 
 [lib]
@@ -20,6 +21,9 @@ bench = false
 
 [build-dependencies]
 tauri-build = { workspace = true }
+
+[lints]
+workspace = true
 
 [dependencies]
 ganbaru-tauri-app = { path = "app" }

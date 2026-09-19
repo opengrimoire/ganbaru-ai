@@ -6,6 +6,16 @@ Participation in issues, pull requests, and other project spaces is governed by 
 
 Branch and release restrictions are supply-chain controls, not a judgment about individual contributors. Signed desktop artifacts, updater metadata, release tags, workflow files, and CI state are privileged paths. The May 2026 TanStack npm compromise showed how a CI trust-boundary issue, including GitHub Actions cache poisoning through `pull_request_target`, can become a package release compromise. This repository keeps normal contribution review, integration, and release authority separate for that reason. See TanStack's postmortem: <https://tanstack.com/blog/npm-supply-chain-compromise-postmortem>.
 
+## Rust toolchain
+
+Install Rust through rustup. Repository commands use the exact compiler and the Clippy and rustfmt components in `rust-toolchain.toml`; CI and release jobs use that same file instead of following the floating stable channel.
+
+Rust 1.98 is the supported minimum compiler version, with 1.98.0 pinned for reproducible validation. This is the tested project baseline, not a claim that earlier compilers cannot compile individual crates. All workspace packages inherit Rust edition 2024, the compiler requirement, authors, and license from `[workspace.package]`. Package versions stay local because the app, internal libraries, and mobile plugins have different version histories.
+
+Cargo resolver 3 prefers dependencies compatible with the declared compiler requirement when resolving versions. Keep `Cargo.lock` committed and use locked builds in CI; the resolver is not a replacement for dependency review or security audits.
+
+Toolchain upgrades are deliberate maintenance changes. Update the pin and supported compiler requirement together, run `pnpm -w run validate:full`, and verify Linux, Windows, and Android builds. Review platform-specific code as well as host compatibility diagnostics when changing editions. Rustfmt retains the 2021 style edition in `rustfmt.toml` so the language migration does not introduce unrelated repository-wide formatting changes.
+
 ## Branch flow
 
 - `main` is the release source branch. It should move through release pull requests from `dev` by merge queue.

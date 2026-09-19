@@ -12,12 +12,10 @@ const ALLOWED_SQLITE_FILES: &[&str] = &["ganbaru-ai.sqlite", "benchmark.sqlite"]
 static VAULT_CONNECTION_GATE: LazyLock<Arc<tokio::sync::RwLock<()>>> =
     LazyLock::new(|| Arc::new(tokio::sync::RwLock::new(())));
 
-#[allow(dead_code)] // Used by the H04 source-freeze flow.
 pub(crate) type VaultExclusiveGuard = tokio::sync::OwnedRwLockWriteGuard<()>;
 pub(crate) type VaultRestoreGuard = VaultExclusiveGuard;
 
 /// Prevent new SQLite connections while an active vault is being replaced.
-#[allow(dead_code)] // Used by the H04 source-freeze flow.
 pub(crate) async fn begin_vault_exclusive() -> VaultExclusiveGuard {
     VAULT_CONNECTION_GATE.clone().write_owned().await
 }
@@ -75,7 +73,6 @@ pub async fn connect_sqlite<R: Runtime>(
     }
 }
 
-#[allow(dead_code)] // Used by vault restore now and the H04 source-freeze flow.
 pub(crate) async fn close_all_sqlite_pools_for_restore<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<(), String> {

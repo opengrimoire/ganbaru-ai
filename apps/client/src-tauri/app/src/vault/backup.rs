@@ -1,8 +1,4 @@
-//! Portable Android vault backups and transactional restore.
-#![cfg_attr(
-    not(any(test, target_os = "android")),
-    allow(dead_code, unused_imports)
-)]
+//! Whole-vault snapshots and activation, with portable Android backup commands.
 
 #[cfg(target_os = "android")]
 use super::active_vault_path;
@@ -35,6 +31,7 @@ const BACKUP_MAX_BYTES: u64 = 100 * 1024 * 1024 * 1024;
 const BACKUP_MAX_DEPTH: usize = 64;
 const COPY_BUFFER_BYTES: usize = 64 * 1024;
 
+#[cfg(any(test, target_os = "android", target_os = "ios"))]
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VaultBackupOutcome {
@@ -361,7 +358,6 @@ fn extract_backup_archive(archive_path: &Path, destination: &Path) -> Result<(),
 }
 
 /// Extracts and validates a received whole-vault archive in separate staging.
-#[cfg_attr(not(target_os = "android"), allow(dead_code))]
 pub(crate) async fn stage_handoff_archive(
     archive_path: &Path,
     destination: &Path,
@@ -695,14 +691,14 @@ pub async fn vault_pick_and_restore_backup(
     result
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(all(not(target_os = "android"), any(test, target_os = "ios")))]
 #[tauri::command]
 /// Report that portable mobile backup is unavailable outside Android.
 pub async fn vault_backup_to_downloads() -> Result<VaultBackupOutcome, String> {
     Err("portable mobile backups are only available on Android".to_string())
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(all(not(target_os = "android"), any(test, target_os = "ios")))]
 #[tauri::command]
 /// Report that portable mobile restore is unavailable outside Android.
 pub async fn vault_pick_and_restore_backup() -> Result<Option<VaultInfo>, String> {

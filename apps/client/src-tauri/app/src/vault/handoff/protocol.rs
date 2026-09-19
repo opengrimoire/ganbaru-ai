@@ -750,7 +750,6 @@ fn encode_qr_digest(digest: [u8; 32]) -> String {
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-#[allow(dead_code)] // H04 connects validated staging to vault activation.
 pub(crate) fn validate_staging_file(path: &Path, metadata: &BundleMetadata) -> Result<(), String> {
     metadata.validate()?;
     let actual_bytes = path

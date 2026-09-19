@@ -68,6 +68,10 @@ struct OwnershipManagerInner {
     storage_path: Option<PathBuf>,
     device_id: Option<String>,
     state: OwnershipStateFile,
+    // A replaced file cannot safely be rolled back only in memory.
+    persistence_uncertain: Option<String>,
+    #[cfg(test)]
+    fail_next_directory_sync: bool,
 }
 
 /// Process-local facade over the platform-private ownership state file.
@@ -146,7 +150,6 @@ impl VaultOwnershipManager {
         self.initialize_from_path(storage_path, device_id)
     }
 
-    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn initialize_from_path(
         &self,
         storage_path: PathBuf,
@@ -171,8 +174,9 @@ impl VaultOwnershipManager {
         inner.storage_path = Some(storage_path);
         inner.device_id = Some(device_id);
         inner.state = state;
+        inner.persistence_uncertain = None;
         if recovered {
-            persist_inner(&inner)?;
+            persist_inner(&mut inner)?;
         }
         Ok(())
     }
@@ -273,8 +277,10 @@ impl VaultOwnershipManager {
                 transfer_phase: TransferPhase::Stable,
             },
         );
-        if let Err(error) = persist_inner(&inner) {
-            inner.state.vaults.remove(vault_id);
+        if let Err(error) = persist_inner(&mut inner) {
+            if inner.persistence_uncertain.is_none() {
+                inner.state.vaults.remove(vault_id);
+            }
             return Err(error);
         }
         Ok(())
@@ -292,6 +298,7 @@ impl VaultOwnershipManager {
             .inner
             .lock()
             .map_err(|_| "vault ownership lock is unavailable".to_string())?;
+        initialized_device_id(&inner)?;
         if inner.state.vaults.contains_key(vault_id) {
             return Ok(());
         }
@@ -308,8 +315,10 @@ impl VaultOwnershipManager {
                 transfer_phase: TransferPhase::Stable,
             },
         );
-        if let Err(error) = persist_inner(&inner) {
-            inner.state.vaults.remove(vault_id);
+        if let Err(error) = persist_inner(&mut inner) {
+            if inner.persistence_uncertain.is_none() {
+                inner.state.vaults.remove(vault_id);
+            }
             return Err(error);
         }
         Ok(())
@@ -411,7 +420,6 @@ impl VaultOwnershipManager {
         })
     }
 
-    #[allow(dead_code)] // Used when H04 commits a production transfer.
     pub(crate) fn commit_outgoing(&self, vault_id: &str, transfer_id: &str) -> Result<u64, String> {
         self.mutate_record(vault_id, |device_id, record| {
             if record.owner_device_id != device_id {
@@ -443,7 +451,7 @@ impl VaultOwnershipManager {
         })
     }
 
-    #[allow(dead_code)] // Used when H04 receives a production grant.
+    #[cfg(any(test, not(any(target_os = "android", target_os = "ios"))))]
     pub(crate) fn accept_incoming_grant(
         &self,
         vault_id: &str,
@@ -555,7 +563,6 @@ impl VaultOwnershipManager {
         })
     }
 
-    #[allow(dead_code)] // Used when H04 activates a production transfer.
     pub(crate) fn finalize_incoming(
         &self,
         vault_id: &str,
@@ -580,7 +587,6 @@ impl VaultOwnershipManager {
         })
     }
 
-    #[allow(dead_code)] // Used when H04 acknowledges production transfers.
     pub(crate) fn finish_outgoing_acknowledgement(
         &self,
         vault_id: &str,
@@ -645,8 +651,10 @@ impl VaultOwnershipManager {
                 return Err(error);
             }
         };
-        if let Err(error) = persist_inner(&inner) {
-            inner.state.vaults.insert(vault_id.to_string(), previous);
+        if let Err(error) = persist_inner(&mut inner) {
+            if inner.persistence_uncertain.is_none() {
+                inner.state.vaults.insert(vault_id.to_string(), previous);
+            }
             return Err(error);
         }
         Ok(result)
@@ -667,7 +675,9 @@ fn ensure_record(inner: &mut OwnershipManagerInner, vault_id: &str) -> Result<()
             },
         );
         if let Err(error) = persist_inner(inner) {
-            inner.state.vaults.remove(vault_id);
+            if inner.persistence_uncertain.is_none() {
+                inner.state.vaults.remove(vault_id);
+            }
             return Err(error);
         }
     }
@@ -675,6 +685,9 @@ fn ensure_record(inner: &mut OwnershipManagerInner, vault_id: &str) -> Result<()
 }
 
 fn initialized_device_id(inner: &OwnershipManagerInner) -> Result<&str, String> {
+    if let Some(error) = &inner.persistence_uncertain {
+        return Err(error.clone());
+    }
     inner
         .device_id
         .as_deref()
@@ -741,6 +754,8 @@ fn read_state_file(path: &Path) -> Result<OwnershipStateFile, String> {
             state.schema_version
         ));
     }
+    // Confirm the visible replacement or recovered rollback before admitting writes.
+    sync_parent_directory(path)?;
     Ok(state)
 }
 
@@ -806,7 +821,7 @@ fn recover_state_file(path: &Path) -> Result<(), String> {
     }
 }
 
-fn persist_inner(inner: &OwnershipManagerInner) -> Result<(), String> {
+fn persist_inner(inner: &mut OwnershipManagerInner) -> Result<(), String> {
     let path = inner
         .storage_path
         .as_deref()
@@ -836,14 +851,32 @@ fn persist_inner(inner: &OwnershipManagerInner) -> Result<(), String> {
     }
     if let Err(error) = fs::rename(&temporary, path) {
         if had_current {
-            let _ = fs::rename(&rollback, path);
+            if let Err(rollback_error) = fs::rename(&rollback, path) {
+                let message = format!("activate vault ownership state: {error}; restore previous state: {rollback_error}; restart after resolving the storage error");
+                inner.persistence_uncertain = Some(message.clone());
+                return Err(message);
+            }
         }
         return Err(format!("activate vault ownership state: {error}"));
     }
-    if had_current {
-        let _ = fs::remove_file(&rollback);
+    #[cfg(test)]
+    let sync_result = if std::mem::take(&mut inner.fail_next_directory_sync) {
+        Err("injected vault ownership directory sync failure".to_string())
+    } else {
+        sync_parent_directory(path)
+    };
+    #[cfg(not(test))]
+    let sync_result = sync_parent_directory(path);
+    if let Err(error) = sync_result {
+        let message = format!("vault ownership replacement durability is uncertain: {error}; restart after resolving the storage error");
+        inner.persistence_uncertain = Some(message.clone());
+        return Err(message);
     }
-    let _ = sync_parent_directory(path);
+    if had_current {
+        if let Err(error) = fs::remove_file(&rollback) {
+            eprintln!("remove completed vault ownership rollback: {error}");
+        }
+    }
     Ok(())
 }
 
@@ -901,6 +934,105 @@ mod tests {
             .initialize_from_path(path.to_path_buf(), device_id.to_string())
             .unwrap();
         manager
+    }
+
+    #[test]
+    fn failure_before_replacement_preserves_the_durable_owner() {
+        let path = test_path("before-replacement");
+        let manager = load_manager(&path, "desktop");
+        assert!(manager.status("vault").unwrap().can_write);
+        let temporary = path.with_extension("json.tmp");
+        fs::create_dir(&temporary).unwrap();
+        assert!(manager
+            .begin_outgoing("vault", 0, "transfer".into(), "phone".into())
+            .is_err());
+        assert!(manager.status("vault").unwrap().can_write);
+        assert!(
+            load_manager(&path, "desktop")
+                .status("vault")
+                .unwrap()
+                .can_write
+        );
+        fs::remove_dir(temporary).unwrap();
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn uncertain_outgoing_commit_never_restores_the_previous_owner_in_memory() {
+        let path = test_path("uncertain-outgoing");
+        let manager = load_manager(&path, "desktop");
+        manager
+            .begin_outgoing("vault", 0, "transfer".into(), "phone".into())
+            .unwrap();
+        manager.inner.lock().unwrap().fail_next_directory_sync = true;
+        assert!(manager
+            .commit_outgoing("vault", "transfer")
+            .unwrap_err()
+            .contains("durability is uncertain"));
+        assert!(manager.status("vault").is_err());
+        assert!(manager.acquire_managed_write("vault").is_err());
+        assert!(manager.abort_outgoing("vault", "transfer").is_err());
+        assert!(manager.commit_outgoing("vault", "transfer").is_err());
+        assert!(manager
+            .register_remote_owner_if_missing("vault", "phone".into(), 1)
+            .is_err());
+        {
+            let inner = manager.inner.lock().unwrap();
+            assert_eq!(inner.state.vaults["vault"].owner_device_id, "phone");
+            assert_eq!(inner.state.vaults["vault"].generation, 1);
+        }
+        let restarted = load_manager(&path, "desktop");
+        let status = restarted.status("vault").unwrap();
+        assert!(!status.can_write);
+        assert_eq!(status.owner_device_id, "phone");
+        assert_eq!(status.generation, 1);
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn uncertain_incoming_activation_blocks_writes_until_durable_reload() {
+        let path = test_path("uncertain-incoming");
+        let manager = load_manager(&path, "phone");
+        manager
+            .register_remote_owner("vault", "desktop".into(), 0)
+            .unwrap();
+        manager
+            .accept_incoming_grant("vault", "transfer".into(), "desktop".into(), 1)
+            .unwrap();
+        manager.inner.lock().unwrap().fail_next_directory_sync = true;
+        assert!(manager.finalize_incoming("vault", "transfer", 1).is_err());
+        assert!(manager.acquire_managed_write("vault").is_err());
+        assert!(manager.database_access("vault").is_err());
+        assert!(
+            load_manager(&path, "phone")
+                .status("vault")
+                .unwrap()
+                .can_write
+        );
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn uncertain_initial_record_is_not_removed_or_recreated_as_writable() {
+        let path = test_path("uncertain-initial");
+        let manager = load_manager(&path, "desktop");
+        manager.inner.lock().unwrap().fail_next_directory_sync = true;
+        assert!(manager.status("vault").is_err());
+        assert!(manager
+            .inner
+            .lock()
+            .unwrap()
+            .state
+            .vaults
+            .contains_key("vault"));
+        assert!(manager.status("vault").is_err());
+        assert!(
+            load_manager(&path, "desktop")
+                .status("vault")
+                .unwrap()
+                .can_write
+        );
+        fs::remove_file(path).unwrap();
     }
 
     #[test]

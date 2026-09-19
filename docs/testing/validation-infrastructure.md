@@ -2,6 +2,16 @@
 
 This document explains the resource, ordering, caching, and production-build constraints behind the commands in [Testing](README.md).
 
+## Rust baseline
+
+The workspace uses Rust edition 2024 and Cargo resolver 3. `Cargo.toml` declares Rust 1.98 as the supported minimum; `rust-toolchain.toml` pins compiler 1.98.0 with Clippy and rustfmt for local, pull request, and release validation. Shared package metadata is inherited from the workspace, while package versions remain independent. `rustfmt.toml` keeps the existing 2021 formatting style separate from language semantics.
+
+Run commands through rustup without a conflicting toolchain override. CI installs the repository-selected toolchain with `rustup show`, then adds the targets required by each job. A Linux gate does not replace the independent Windows composition check or Android APK build. macOS and iOS are future platforms and are not validated by these jobs.
+
+Toolchain or edition changes require `validate:full` and the platform checks. Compatibility diagnostics must be reviewed for temporary lifetimes, lock and resource cleanup, and native unsafe boundaries rather than fixed mechanically to suppress warnings.
+
+The shared Clippy policy allows `collapsible_if`: nested guards and edition-2024 let-chains are both valid styles. Choose the form that makes control flow and resource scope clearest. This avoids a mandatory rewrite of existing guards merely because the edition now permits let-chains. Other compiler and Clippy warnings remain errors in the normal gate; dependency audit policy is unchanged.
+
 ## Root execution order
 
 The complete normal gate runs in this order:
@@ -14,6 +24,8 @@ The complete normal gate runs in this order:
 6. Desktop and Android production builds and bundle contracts through Turbo.
 
 Rust runs first because compiler and linker peaks are less predictable. Rust and frontend tools do not overlap. Sequential Vitest shards release transformed module graphs between groups.
+
+The hosted Linux pull request and merge-queue job runs this same complete gate. It does not substitute static checks for regression tests or bundle contracts.
 
 Benchmark fixture and harness contracts are deliberately outside `validate`. Run `pnpm -w run test:benchmark-contracts` when changing the harness. Performance measurement remains manual release-build work.
 
@@ -52,7 +64,9 @@ The machine-readable ceilings and required or forbidden module sets are authorit
 - `apps/client/scripts/first-use-bundle-baseline.json`
 - `apps/client/scripts/android-bundle-baseline.json`
 
-The current Projects, Notes, and Chat desktop route ceiling is 360 source modules. The shared route graph includes the vault ownership store and read-only ownership banner so every primary surface immediately reflects a handoff. Changes to a ceiling require a concrete user-visible rationale and should remove obsolete narrative rather than accumulating a chronology in documentation.
+The current Projects, Notes, and Chat desktop route ceiling is 361 source modules. The shared route graph includes the vault ownership store and read-only ownership banner so every primary surface immediately reflects a handoff. It also includes the component-scoped teammate editor controller, extracted to test draft preservation, access confirmation, and revision-conflict recovery independently of rendering. That controller and its existing settings component remain in the same emitted chunk, and its dependencies were already imported by the component. Excluding the extracted file restores the prior 360-module count for all three routes. The ceiling has no extra headroom, and required and forbidden loading boundaries remain unchanged. Changes to a ceiling require a concrete user-visible rationale and should remove obsolete narrative rather than accumulating a chronology in documentation.
+
+Android ceilings include the three theme modules and three Notes block modules behind their existing public APIs. These splits preserve theme editing, import/export, and the supported Notes block operations while separating their maintenance boundaries. The production graph contains 1,008 source modules; excluding the six extracted files brings every destination back within its previous ceiling. Route limits match the measured graph without extra headroom. Required mobile modules and forbidden platform imports remain enforced unchanged.
 
 ## Android project and pull request build
 

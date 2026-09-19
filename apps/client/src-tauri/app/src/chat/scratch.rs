@@ -237,6 +237,7 @@ pub(crate) async fn require_reusable_generation(
          FROM chat_scratch_generations generation
          JOIN chat_scratch_scopes scope ON scope.id = generation.scratch_scope_id
          JOIN chat_agent_runs run ON run.scratch_generation_id = generation.id
+         JOIN chat_work_assignments assignment ON assignment.id = run.assignment_id
          JOIN chat_assignment_authorization_revisions authorization
            ON authorization.id = run.authorization_revision_id
           AND authorization.assignment_id = run.assignment_id
@@ -678,6 +679,222 @@ fn io_error<T>(_error: T) -> ChatError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const NOW: &str = "2026-09-18T12:00:00.000Z";
+    const GENERATION: &str = "generation:reuse";
+    const AUTHORIZATION: &str = "authorization:reuse";
+    const TEAMMATE: &str = "participant:scratch-agent";
+
+    /// Builds a real-schema scratch assignment without disabling foreign keys or triggers.
+    async fn pool_with_scratch_assignment(scope_owner: &str) -> SqlitePool {
+        let pool = crate::chat::tests::repository::pool_with_thread().await;
+        sqlx::query(
+            "UPDATE chat_conversations SET id = 'conversation:scratch'
+             WHERE project_id = 'project-chat' AND conversation_kind = 'channel'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        for (id, name) in [
+            (TEAMMATE, "Scratch agent"),
+            ("participant:other-agent", "Other agent"),
+        ] {
+            sqlx::query(
+                "INSERT INTO chat_participants
+                    (id, participant_kind, display_name, created_at, updated_at)
+                 VALUES (?, 'ai_teammate', ?, ?, ?)",
+            )
+            .bind(id)
+            .bind(name)
+            .bind(NOW)
+            .bind(NOW)
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO chat_ai_teammates
+                    (participant_id, role, created_at, updated_at)
+                 VALUES (?, 'Test', ?, ?)",
+            )
+            .bind(id)
+            .bind(NOW)
+            .bind(NOW)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        sqlx::raw_sql(&format!(
+            "INSERT INTO chat_teammate_policy_revisions
+                (id, teammate_id, revision, provider_instance_id, model_selection_data, created_at)
+             VALUES ('policy:scratch', '{TEAMMATE}', 1, 'codex-personal', '{{}}', '{NOW}');
+             INSERT INTO chat_conversation_memberships
+                (conversation_id, participant_id, membership_role, created_at, updated_at)
+             VALUES ('conversation:scratch', '{TEAMMATE}', 'member', '{NOW}', '{NOW}');
+             INSERT INTO chat_ai_channel_memberships
+                (conversation_id, teammate_id, access_profile_id,
+                 read_history, participate, history_boundary, created_at, updated_at)
+             VALUES ('conversation:scratch', '{TEAMMATE}', 'access-profile:conversation-only',
+                     1, 1, 'entire', '{NOW}', '{NOW}');
+             INSERT INTO chat_conversation_items
+                (id, conversation_id, item_kind, ordinal, created_at)
+             VALUES ('item:scratch', 'conversation:scratch', 'message', 1, '{NOW}');
+             INSERT INTO chat_communication_messages
+                (item_id, author_participant_id, created_at)
+             VALUES ('item:scratch', 'participant:local-owner', '{NOW}');
+             INSERT INTO chat_reply_threads
+                (id, conversation_id, root_item_id, last_activity_at, created_at, updated_at)
+             VALUES ('reply:scratch', 'conversation:scratch', 'item:scratch', '{NOW}', '{NOW}', '{NOW}');
+             INSERT INTO chat_work_assignments
+                (id, reply_thread_id, teammate_id, triggering_message_item_id, state, created_at, updated_at)
+             VALUES ('assignment:scratch', 'reply:scratch', '{TEAMMATE}', 'item:scratch',
+                     'working', '{NOW}', '{NOW}');"
+        ))
+        .execute(&pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO chat_scratch_scopes
+                (id, reply_thread_id, teammate_id, created_at, updated_at)
+             VALUES ('scope:scratch', 'reply:scratch', ?, ?, ?)",
+        )
+        .bind(scope_owner)
+        .bind(NOW)
+        .bind(NOW)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::raw_sql(&format!(
+            "INSERT INTO chat_scratch_generations
+                (id, scratch_scope_id, generation, created_at, updated_at)
+             VALUES ('{GENERATION}', 'scope:scratch', 1, '{NOW}', '{NOW}');
+             INSERT INTO chat_execution_environments
+                (id, scratch_generation_id, kind, display_name, created_at, updated_at)
+             VALUES ('environment:scratch', '{GENERATION}', 'scratch', 'Private scratch', '{NOW}', '{NOW}');
+             UPDATE chat_threads SET working_folder_id = NULL,
+                 execution_environment_id = 'environment:scratch', scratch_generation_id = '{GENERATION}'
+             WHERE id = 'thread-1';
+             INSERT INTO chat_assignment_authorization_revisions
+                (id, assignment_id, revision, requester_participant_id, teammate_policy_revision_id,
+                 teammate_access_revision, destination_conversation_id, access_profile_revision_id,
+                 execution_environment_id, resolved_runtime_approval_policy, scope_digest,
+                 decision_state, created_at)
+             VALUES ('{AUTHORIZATION}', 'assignment:scratch', 1, 'participant:local-owner',
+                     'policy:scratch', 1, 'conversation:scratch', 'access-profile-revision:conversation-only:1',
+                     'environment:scratch', 'ask', printf('%064d', 0), 'allowed', '{NOW}');
+             INSERT INTO chat_turns
+                (id, thread_id, ordinal, state, safety_mode, interaction_mode, created_at, updated_at)
+             VALUES ('turn:scratch', 'thread-1', 1, 'active', 'ask_for_approval', 'build', '{NOW}', '{NOW}');
+             INSERT INTO chat_agent_runs
+                (id, assignment_id, project_id, execution_environment_id, scratch_generation_id,
+                 teammate_policy_revision_id, authorization_revision_id, authorization_scope_digest,
+                 provider_turn_id, provider_thread_id, state, run_ordinal, created_at, updated_at)
+             VALUES ('run:scratch', 'assignment:scratch', 'project-chat', 'environment:scratch',
+                     '{GENERATION}', 'policy:scratch', '{AUTHORIZATION}', printf('%064d', 0),
+                     'turn:scratch', 'thread-1', 'working', 1, '{NOW}', '{NOW}');"
+        ))
+        .execute(&pool).await.unwrap();
+        pool
+    }
+
+    async fn retain_destination_source(pool: &SqlitePool) {
+        let inserted = sqlx::query(
+            "INSERT INTO chat_scratch_generation_sources
+                (scratch_generation_id, conversation_id, lower_ordinal, high_ordinal,
+                 audience_revision, created_at)
+             SELECT ?, conversation_id, 1, 1, revision, ?
+             FROM chat_conversation_audience_state WHERE conversation_id = 'conversation:scratch'",
+        )
+        .bind(GENERATION)
+        .bind(NOW)
+        .execute(pool)
+        .await
+        .unwrap();
+        assert_eq!(inserted.rows_affected(), 1);
+    }
+
+    #[tokio::test]
+    async fn scratch_reuse_resolves_the_assignment_teammate_and_retained_sources() {
+        let pool = pool_with_scratch_assignment(TEAMMATE).await;
+        require_reusable_generation(&pool, GENERATION, AUTHORIZATION)
+            .await
+            .unwrap();
+        retain_destination_source(&pool).await;
+        require_reusable_generation(&pool, GENERATION, AUTHORIZATION)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn scratch_reuse_rejects_a_different_scope_owner() {
+        let pool = pool_with_scratch_assignment("participant:other-agent").await;
+        let error = require_reusable_generation(&pool, GENERATION, AUTHORIZATION)
+            .await
+            .unwrap_err();
+        assert_eq!(error.code, ChatErrorCode::Permission);
+    }
+
+    #[tokio::test]
+    async fn scratch_reuse_rejects_revoked_authorization() {
+        let pool = pool_with_scratch_assignment(TEAMMATE).await;
+        require_reusable_generation(&pool, GENERATION, AUTHORIZATION)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE chat_assignment_authorization_revisions SET decision_state = 'revoked', revoked_at = ? WHERE id = ?")
+            .bind(NOW).bind(AUTHORIZATION).execute(&pool).await.unwrap();
+        let error = require_reusable_generation(&pool, GENERATION, AUTHORIZATION)
+            .await
+            .unwrap_err();
+        assert_eq!(error.code, ChatErrorCode::Permission);
+    }
+
+    #[tokio::test]
+    async fn scratch_reuse_rejects_unknown_identifiers_and_inactive_generations() {
+        let pool = pool_with_scratch_assignment(TEAMMATE).await;
+        for (generation, authorization) in [
+            ("generation:unknown", AUTHORIZATION),
+            (GENERATION, "authorization:unknown"),
+        ] {
+            let error = require_reusable_generation(&pool, generation, authorization)
+                .await
+                .unwrap_err();
+            assert_eq!(error.code, ChatErrorCode::Permission);
+        }
+        for state in [
+            "quarantined",
+            "cleanup_pending",
+            "cleanup_failed",
+            "removed",
+        ] {
+            sqlx::query("UPDATE chat_scratch_generations SET lifecycle_state = ? WHERE id = ?")
+                .bind(state)
+                .bind(GENERATION)
+                .execute(&pool)
+                .await
+                .unwrap();
+            let error = require_reusable_generation(&pool, GENERATION, AUTHORIZATION)
+                .await
+                .unwrap_err();
+            assert_eq!(error.code, ChatErrorCode::Permission);
+        }
+    }
+
+    #[tokio::test]
+    async fn scratch_reuse_rechecks_retained_source_access() {
+        let pool = pool_with_scratch_assignment(TEAMMATE).await;
+        retain_destination_source(&pool).await;
+        require_reusable_generation(&pool, GENERATION, AUTHORIZATION)
+            .await
+            .unwrap();
+        sqlx::query(
+            "UPDATE chat_ai_channel_memberships SET read_history = 0 WHERE teammate_id = ?",
+        )
+        .bind(TEAMMATE)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let error = require_reusable_generation(&pool, GENERATION, AUTHORIZATION)
+            .await
+            .unwrap_err();
+        assert_eq!(error.code, ChatErrorCode::Permission);
+    }
 
     #[test]
     fn scratch_paths_use_only_bounded_digest_segments() {

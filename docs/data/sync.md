@@ -16,6 +16,8 @@ Linking does not merge two independently created vaults. An uninterrupted first-
 
 Every invitation, transfer request, owner poll, and archive declares the handoff protocol and a fingerprint of the complete embedded SQLite migration set. A device rejects linking or transfer before snapshot preparation when the protocol or database fingerprint differs and asks the user to update Ganbaru AI on both devices. The package version is included only to make that incompatibility diagnosable. Equal package versions are not used as a substitute for checking the actual data format. Final staging validation still verifies the archive's recorded migration history and checksums before activation.
 
+Ownership persistence distinguishes failure before replacement from uncertain durability after replacement. A pre-replacement failure can restore the previous in-memory record. After replacement, a directory-sync failure blocks ownership reads, new database access, managed writes, and further ownership mutations until the storage problem is resolved and the application successfully reloads the state. It must not restore the old writable owner only in memory. Unix builds synchronize the containing directory before reporting success; other platforms retain their existing filesystem behavior and still require physical crash and power-loss acceptance.
+
 Ownership transfer and read-only refresh both use one bounded whole-vault path:
 
 1. Fence new writes, drain current writes, close or isolate database access, and create a consistent SQLite snapshot.
