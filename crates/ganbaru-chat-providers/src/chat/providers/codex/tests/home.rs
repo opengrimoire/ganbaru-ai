@@ -14,11 +14,13 @@ fn launch_arguments_are_configuration_only() {
         4
     );
     assert!(validated_app_server_arguments(&["exec".to_string()]).is_err());
-    assert!(validated_app_server_arguments(&[
-        "--config".to_string(),
-        "--dangerously-bypass-approvals-and-sandbox".to_string(),
-    ])
-    .is_err());
+    assert!(
+        validated_app_server_arguments(&[
+            "--config".to_string(),
+            "--dangerously-bypass-approvals-and-sandbox".to_string(),
+        ])
+        .is_err()
+    );
 }
 
 #[test]
@@ -83,18 +85,24 @@ fn shadow_home_links_shared_state_but_keeps_auth_private() {
 
     materialize_codex_shadow_home(&mut layout).unwrap();
     verify_codex_shadow_home(&layout).unwrap();
-    assert!(fs::symlink_metadata(shadow.join("sessions"))
-        .unwrap()
-        .file_type()
-        .is_symlink());
-    assert!(fs::symlink_metadata(shadow.join("config.toml"))
-        .unwrap()
-        .file_type()
-        .is_symlink());
+    assert!(
+        fs::symlink_metadata(shadow.join("sessions"))
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert!(
+        fs::symlink_metadata(shadow.join("config.toml"))
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
     fs::write(shadow.join("auth.json"), b"redacted private auth").unwrap();
     verify_codex_shadow_home(&layout).unwrap();
-    assert!(!fs::symlink_metadata(shadow.join("auth.json"))
-        .unwrap()
-        .file_type()
-        .is_symlink());
+    assert!(
+        !fs::symlink_metadata(shadow.join("auth.json"))
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
 }

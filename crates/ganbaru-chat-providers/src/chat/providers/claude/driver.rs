@@ -8,14 +8,14 @@ use super::support::*;
 use super::transport::ClaudeJsonlConnection;
 use crate::chat::events::*;
 use crate::chat::models::*;
-use crate::chat::process::{spawn_provider_process, ProviderProcessConfig};
+use crate::chat::process::{ProviderProcessConfig, spawn_provider_process};
 use crate::chat::providers::{DriverOperationContext, ProviderEventSink};
 use serde_json::json;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{
-    atomic::{AtomicBool, AtomicU64, Ordering},
     Arc, Mutex,
+    atomic::{AtomicBool, AtomicU64, Ordering},
 };
 use std::time::Duration;
 use tokio::task::JoinHandle;

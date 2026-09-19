@@ -4,13 +4,13 @@
 mod tools;
 
 use super::protocol::{
-    bounded_text, object, parse_available_commands_update, parse_config_options_update,
-    protocol_error, safe_shape, valid_identifier, AcpAvailableCommand, AcpConfigOption,
-    MAX_PROTOCOL_TEXT_BYTES,
+    AcpAvailableCommand, AcpConfigOption, MAX_PROTOCOL_TEXT_BYTES, bounded_text, object,
+    parse_available_commands_update, parse_config_options_update, protocol_error, safe_shape,
+    valid_identifier,
 };
 use crate::chat::events::*;
 use crate::chat::models::*;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};

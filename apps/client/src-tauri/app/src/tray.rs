@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::sync::{LazyLock, Mutex};
 use tauri::{
+    AppHandle, Emitter,
     image::Image,
     menu::{Menu, MenuBuilder, MenuItem, MenuItemBuilder, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Emitter,
 };
 
 const ICON_SIZE: u32 = 32;

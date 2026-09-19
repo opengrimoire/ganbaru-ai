@@ -1,6 +1,6 @@
 //! Typed Codex app-server request builders and response decoders.
 
-use super::organizational::{organizational_safety, ORGANIZATIONAL_PERMISSION_PROFILE};
+use super::organizational::{ORGANIZATIONAL_PERMISSION_PROFILE, organizational_safety};
 use super::transport::CodexRpcFailure;
 use crate::chat::models::{
     ChatError, ChatResult, InteractionMode, ModelAvailability, ModelChoiceOption, ModelId,
@@ -8,7 +8,7 @@ use crate::chat::models::{
     ProviderModel, SafetyMode, SendTurnRequest, TurnModeSnapshot,
 };
 use serde::Deserialize;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -723,7 +723,7 @@ fn parse_model_options(
                 return Err(ChatError::validation(
                     "modelOptions",
                     "Codex model option is unsupported or duplicated",
-                ))
+                ));
             }
         }
     }

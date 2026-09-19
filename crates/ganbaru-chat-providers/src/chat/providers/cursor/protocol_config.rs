@@ -57,7 +57,7 @@ pub(in crate::chat::providers::cursor) fn resolve_configuration_updates(
                 return Err(ChatError::validation(
                     "modelOptions",
                     format!("Cursor model option {key} has the wrong value type"),
-                ))
+                ));
             }
         };
         push_update(&mut updates, option, value);

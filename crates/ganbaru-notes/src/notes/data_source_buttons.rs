@@ -1,7 +1,7 @@
 use super::data_source_table;
 use super::models::{NoteDataSourceButtonClick, NoteDataSourceRowPropertyUpdate, NotePageDto};
 use super::validation::require_uuid;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 

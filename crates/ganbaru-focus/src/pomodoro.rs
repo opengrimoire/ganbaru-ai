@@ -21,9 +21,9 @@ use validation::{
 };
 #[cfg(test)]
 use writes::{
-    close_run_tx, insert_adaptive_decision_envelope_tx, insert_run_event_tx, insert_run_tx,
-    insert_segment_tx, record_matured_adaptive_day_outcomes_tx,
-    record_matured_adaptive_next_day_outcomes_tx, RunEventInsert,
+    RunEventInsert, close_run_tx, insert_adaptive_decision_envelope_tx, insert_run_event_tx,
+    insert_run_tx, insert_segment_tx, record_matured_adaptive_day_outcomes_tx,
+    record_matured_adaptive_next_day_outcomes_tx,
 };
 
 const MAX_ADAPTIVE_PLANNED_BLOCKS_PER_SNAPSHOT: usize = 512;

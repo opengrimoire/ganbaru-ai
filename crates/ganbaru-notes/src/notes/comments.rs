@@ -5,7 +5,7 @@ use super::models::{
 };
 use super::validation::{require_uuid, rich_text_items_plain_text, validate_comment_rich_text};
 use super::{assets, collaboration_operations, local_user, mention_notifications};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sqlx::{QueryBuilder, Sqlite, SqlitePool, Transaction};
 use std::collections::HashSet;
 
@@ -141,7 +141,7 @@ pub async fn create_comment(
     validate_comment_attachments(&attachments)?;
     match (&request.parent, &request.discussion_id) {
         (Some(_), Some(_)) => {
-            return Err("provide either parent or discussion_id, not both".to_string())
+            return Err("provide either parent or discussion_id, not both".to_string());
         }
         (None, None) => return Err("parent or discussion_id is required".to_string()),
         _ => {}

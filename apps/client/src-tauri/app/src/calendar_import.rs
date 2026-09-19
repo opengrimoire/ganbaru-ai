@@ -870,10 +870,10 @@ mod tests {
         validate_priority,
     };
     use super::{
-        contains_older_revisions, insert_child_rows, insert_event, update_event,
         CalendarImportAlarm, CalendarImportAttendee, CalendarImportEvent, CalendarImportOverride,
         CalendarImportPreservation, CalendarImportPreservedComponent,
-        CalendarImportPreservedObject, ExistingEventRow,
+        CalendarImportPreservedObject, ExistingEventRow, contains_older_revisions,
+        insert_child_rows, insert_event, update_event,
     };
 
     #[test]

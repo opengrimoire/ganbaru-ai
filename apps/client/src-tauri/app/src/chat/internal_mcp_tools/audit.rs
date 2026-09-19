@@ -2,7 +2,7 @@
 
 use super::{generic_denial, persistence_error};
 use crate::chat::internal_mcp::{
-    generate_opaque_handle, InternalMcpChannelSource, InternalMcpRunScope,
+    InternalMcpChannelSource, InternalMcpRunScope, generate_opaque_handle,
 };
 use crate::chat::models::{ChatError, ChatErrorCode, ChatResult};
 use serde_json::Value;

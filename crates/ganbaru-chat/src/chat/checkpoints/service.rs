@@ -2,8 +2,8 @@
 
 use super::git::{capture_git, delete_exact_ref};
 use super::repository::{
-    available_checkpoint_exists, insert_checkpoint_and_associate_turn, latest_checkpoint_oid,
-    StoreCheckpointRequest,
+    StoreCheckpointRequest, available_checkpoint_exists, insert_checkpoint_and_associate_turn,
+    latest_checkpoint_oid,
 };
 use super::{CapturedCheckpoint, CheckpointKind};
 use crate::chat::models::{

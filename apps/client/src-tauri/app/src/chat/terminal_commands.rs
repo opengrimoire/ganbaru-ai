@@ -580,11 +580,13 @@ mod tests {
         let workspace =
             ProjectWorkingFolderId::new("workspace:test").expect("workspace ID should be valid");
         assert!(validate_terminal_thread_scope(None, &workspace).is_ok());
-        assert!(validate_terminal_thread_scope(
-            Some(&("workspace:test".to_string(), "active".to_string(), None,)),
-            &workspace,
-        )
-        .is_ok());
+        assert!(
+            validate_terminal_thread_scope(
+                Some(&("workspace:test".to_string(), "active".to_string(), None,)),
+                &workspace,
+            )
+            .is_ok()
+        );
 
         let closed = validate_terminal_thread_scope(
             Some(&("workspace:test".to_string(), "closed".to_string(), None)),

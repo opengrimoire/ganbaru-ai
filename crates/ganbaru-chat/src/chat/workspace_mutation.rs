@@ -281,9 +281,11 @@ mod tests {
             .begin_provider_turn(root, &thread, &turn)
             .expect("provider reservation should start");
         assert!(registry.begin_provider_turn(root, &thread, &turn).is_err());
-        assert!(registry
-            .begin_provider_turn(root, &other_thread, &other_turn)
-            .is_err());
+        assert!(
+            registry
+                .begin_provider_turn(root, &other_thread, &other_turn)
+                .is_err()
+        );
         assert!(registry.try_mutation(root).is_err());
         registry.finish_thread(&thread);
         assert!(registry.try_mutation(root).is_err());

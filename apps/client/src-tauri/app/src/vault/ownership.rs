@@ -263,7 +263,7 @@ impl VaultOwnershipManager {
                     && record.generation == generation
                     && record.transfer_phase == TransferPhase::Stable =>
             {
-                return Ok(())
+                return Ok(());
             }
             Some(_) => return Err("linked vault conflicts with local ownership state".to_string()),
             None => {}
@@ -852,7 +852,9 @@ fn persist_inner(inner: &mut OwnershipManagerInner) -> Result<(), String> {
     if let Err(error) = fs::rename(&temporary, path) {
         if had_current {
             if let Err(rollback_error) = fs::rename(&rollback, path) {
-                let message = format!("activate vault ownership state: {error}; restore previous state: {rollback_error}; restart after resolving the storage error");
+                let message = format!(
+                    "activate vault ownership state: {error}; restore previous state: {rollback_error}; restart after resolving the storage error"
+                );
                 inner.persistence_uncertain = Some(message.clone());
                 return Err(message);
             }
@@ -868,7 +870,9 @@ fn persist_inner(inner: &mut OwnershipManagerInner) -> Result<(), String> {
     #[cfg(not(test))]
     let sync_result = sync_parent_directory(path);
     if let Err(error) = sync_result {
-        let message = format!("vault ownership replacement durability is uncertain: {error}; restart after resolving the storage error");
+        let message = format!(
+            "vault ownership replacement durability is uncertain: {error}; restart after resolving the storage error"
+        );
         inner.persistence_uncertain = Some(message.clone());
         return Err(message);
     }
@@ -943,9 +947,11 @@ mod tests {
         assert!(manager.status("vault").unwrap().can_write);
         let temporary = path.with_extension("json.tmp");
         fs::create_dir(&temporary).unwrap();
-        assert!(manager
-            .begin_outgoing("vault", 0, "transfer".into(), "phone".into())
-            .is_err());
+        assert!(
+            manager
+                .begin_outgoing("vault", 0, "transfer".into(), "phone".into())
+                .is_err()
+        );
         assert!(manager.status("vault").unwrap().can_write);
         assert!(
             load_manager(&path, "desktop")
@@ -965,17 +971,21 @@ mod tests {
             .begin_outgoing("vault", 0, "transfer".into(), "phone".into())
             .unwrap();
         manager.inner.lock().unwrap().fail_next_directory_sync = true;
-        assert!(manager
-            .commit_outgoing("vault", "transfer")
-            .unwrap_err()
-            .contains("durability is uncertain"));
+        assert!(
+            manager
+                .commit_outgoing("vault", "transfer")
+                .unwrap_err()
+                .contains("durability is uncertain")
+        );
         assert!(manager.status("vault").is_err());
         assert!(manager.acquire_managed_write("vault").is_err());
         assert!(manager.abort_outgoing("vault", "transfer").is_err());
         assert!(manager.commit_outgoing("vault", "transfer").is_err());
-        assert!(manager
-            .register_remote_owner_if_missing("vault", "phone".into(), 1)
-            .is_err());
+        assert!(
+            manager
+                .register_remote_owner_if_missing("vault", "phone".into(), 1)
+                .is_err()
+        );
         {
             let inner = manager.inner.lock().unwrap();
             assert_eq!(inner.state.vaults["vault"].owner_device_id, "phone");
@@ -1018,13 +1028,15 @@ mod tests {
         let manager = load_manager(&path, "desktop");
         manager.inner.lock().unwrap().fail_next_directory_sync = true;
         assert!(manager.status("vault").is_err());
-        assert!(manager
-            .inner
-            .lock()
-            .unwrap()
-            .state
-            .vaults
-            .contains_key("vault"));
+        assert!(
+            manager
+                .inner
+                .lock()
+                .unwrap()
+                .state
+                .vaults
+                .contains_key("vault")
+        );
         assert!(manager.status("vault").is_err());
         assert!(
             load_manager(&path, "desktop")
@@ -1098,9 +1110,11 @@ mod tests {
         manager.finalize_incoming("vault", "first", 1).unwrap();
         assert!(manager.status("vault").unwrap().can_write);
 
-        assert!(manager
-            .accept_incoming_grant("vault", "stale".into(), "desktop".into(), 1)
-            .is_err());
+        assert!(
+            manager
+                .accept_incoming_grant("vault", "stale".into(), "desktop".into(), 1)
+                .is_err()
+        );
         assert!(manager.status("vault").unwrap().can_write);
         let _ = fs::remove_file(path);
     }
@@ -1189,9 +1203,11 @@ mod tests {
 
         assert!(!desktop.status("vault").unwrap().can_write);
         assert!(phone.status("vault").unwrap().can_write);
-        assert!(desktop
-            .accept_incoming_grant("vault", "stale".into(), "phone".into(), generation,)
-            .is_err());
+        assert!(
+            desktop
+                .accept_incoming_grant("vault", "stale".into(), "phone".into(), generation,)
+                .is_err()
+        );
         assert!(!desktop.status("vault").unwrap().can_write);
         let _ = fs::remove_file(desktop_path);
         let _ = fs::remove_file(phone_path);
@@ -1205,12 +1221,16 @@ mod tests {
             .register_remote_owner("vault", "desktop".into(), 4)
             .unwrap();
 
-        assert!(manager
-            .accept_incoming_grant("vault", "wrong-source".into(), "other".into(), 5)
-            .is_err());
-        assert!(manager
-            .accept_incoming_grant("vault", "skipped".into(), "desktop".into(), 6)
-            .is_err());
+        assert!(
+            manager
+                .accept_incoming_grant("vault", "wrong-source".into(), "other".into(), 5)
+                .is_err()
+        );
+        assert!(
+            manager
+                .accept_incoming_grant("vault", "skipped".into(), "desktop".into(), 6)
+                .is_err()
+        );
         let status = manager.status("vault").unwrap();
         assert_eq!(status.owner_device_id, "desktop");
         assert_eq!(status.generation, 4);
@@ -1246,12 +1266,21 @@ mod tests {
             .register_remote_owner("vault", "desktop".into(), 4)
             .unwrap();
 
-        assert!(manager
-            .accept_incoming_coordinator_grant("vault", "wrong-source".into(), "other".into(), 5,)
-            .is_err());
-        assert!(manager
-            .accept_incoming_coordinator_grant("vault", "stale".into(), "desktop".into(), 3,)
-            .is_err());
+        assert!(
+            manager
+                .accept_incoming_coordinator_grant(
+                    "vault",
+                    "wrong-source".into(),
+                    "other".into(),
+                    5,
+                )
+                .is_err()
+        );
+        assert!(
+            manager
+                .accept_incoming_coordinator_grant("vault", "stale".into(), "desktop".into(), 3,)
+                .is_err()
+        );
         let _ = fs::remove_file(path);
     }
 

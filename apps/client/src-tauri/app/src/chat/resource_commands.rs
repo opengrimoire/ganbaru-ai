@@ -1,7 +1,7 @@
 use super::models::{ChatError, ChatErrorCode, ChatResult, ChatThreadId};
 use super::repository::resources::{self, ChatResourceKind, ChatResourceRead};
 use crate::{db_path, vault};
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use serde::Serialize;
 use sqlx::SqlitePool;
 

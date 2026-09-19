@@ -4,8 +4,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer};
 use std::path::{Path, PathBuf};
 
-use crate::config::{default_config, read_config, DoomscrollingConfig};
-use crate::{now_utc, NativeResponse};
+use crate::config::{DoomscrollingConfig, default_config, read_config};
+use crate::{NativeResponse, now_utc};
 
 const STATE_FILE: &str = "doomscrolling-state.json";
 const LIMIT_STATE_FILE: &str = "doomscrolling-limit-state.json";

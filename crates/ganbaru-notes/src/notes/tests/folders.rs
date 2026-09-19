@@ -165,8 +165,7 @@ fn folder_page_moves_keep_notion_parent_and_child_page_block_consistent() {
         assert_eq!(nested["page"]["parent"]["page_id"], PAGE_B);
         assert!(nested["page"]["folder_id"].is_null());
         assert_eq!(
-            serde_json::to_value(reads::get_block(&pool, PAGE_A, false).await.unwrap()).unwrap()
-                ["type"],
+            serde_json::to_value(reads::get_block(&pool, PAGE_A, false).await.unwrap()).unwrap()["type"],
             "child_page"
         );
 

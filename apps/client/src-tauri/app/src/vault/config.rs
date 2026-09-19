@@ -1,8 +1,8 @@
 //! Serialized, bounded mutations of portable vault configuration.
 
 use super::{
-    active_vault_path, active_writable_vault_path, config_path, write_text_file_atomically,
-    CONFIG_LOCK,
+    CONFIG_LOCK, active_vault_path, active_writable_vault_path, config_path,
+    write_text_file_atomically,
 };
 use std::fs;
 use tauri::Runtime;

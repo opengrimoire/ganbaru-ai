@@ -44,9 +44,9 @@ use schedule::{
 #[allow(unused_imports)]
 pub use schedule::{notes_flush_due_project_history, notes_initialize_project_history};
 
-use super::{local_user, writes, NoteParent};
+use super::{NoteParent, local_user, writes};
 use bundles::{garbage_collect_bundles_tx, load_bundle_tx, store_bundle_tx};
-use scope::{load_project_graph, ProjectHistoryGraph};
+use scope::{ProjectHistoryGraph, load_project_graph};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::{Row, Sqlite, SqlitePool, Transaction};

@@ -2,8 +2,8 @@ use std::{
     io::{self, Read, Write},
     net::{TcpListener, TcpStream},
     sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     },
     thread,
     time::{Duration, Instant},
@@ -11,7 +11,7 @@ use std::{
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::{
-    collections::{hash_map::DefaultHasher, HashMap, HashSet},
+    collections::{HashMap, HashSet, hash_map::DefaultHasher},
     fs::File,
     hash::{Hash, Hasher},
     io::{Seek, SeekFrom},

@@ -80,9 +80,11 @@ fn failed_maintenance_rolls_back_garbage_collection() {
         .await
         .unwrap();
 
-        assert!(super::super::retention::run_due_maintenance(&pool)
-            .await
-            .is_err());
+        assert!(
+            super::super::retention::run_due_maintenance(&pool)
+                .await
+                .is_err()
+        );
         let retained: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM notes_history_bundles WHERE hash = ?")
                 .bind(orphan_hash)
@@ -114,17 +116,19 @@ fn disabled_project_history_prunes_versions_and_skips_new_checkpoints() {
         .execute(&pool)
         .await
         .unwrap();
-        assert!(create_checkpoint(
-            &pool,
-            PROJECT_ID,
-            "checkpoint",
-            None,
-            None,
-            "This version must not be stored",
-        )
-        .await
-        .unwrap()
-        .is_none());
+        assert!(
+            create_checkpoint(
+                &pool,
+                PROJECT_ID,
+                "checkpoint",
+                None,
+                None,
+                "This version must not be stored",
+            )
+            .await
+            .unwrap()
+            .is_none()
+        );
 
         let version_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*)

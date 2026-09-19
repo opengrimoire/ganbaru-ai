@@ -503,7 +503,7 @@ pub(crate) async fn request(
 mod tests {
     use super::*;
     use crate::vault::handoff::protocol::PROTOCOL_VERSION;
-    use crate::vault::handoff::state::{random_token, StoredOutgoingTransfer};
+    use crate::vault::handoff::state::{StoredOutgoingTransfer, random_token};
     use std::path::PathBuf;
 
     #[test]

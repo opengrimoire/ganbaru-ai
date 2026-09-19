@@ -1,8 +1,8 @@
 //! Pure browser decisions and stable rule fingerprints.
 
 use crate::config::{
-    built_in_category, normalize_host_rule, usage_limit_entry_source_keys, BuiltInCategory,
-    DoomscrollingConfig, DoomscrollingMode, UsageLimitEntry, BUILT_IN_CATEGORIES_JSON,
+    BUILT_IN_CATEGORIES_JSON, BuiltInCategory, DoomscrollingConfig, DoomscrollingMode,
+    UsageLimitEntry, built_in_category, normalize_host_rule, usage_limit_entry_source_keys,
 };
 use crate::snapshot::LimitState;
 

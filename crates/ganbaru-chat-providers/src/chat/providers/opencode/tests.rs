@@ -110,15 +110,19 @@ fn server_origin_policy_requires_tls_or_an_explicit_override() {
         .connection,
         OpenCodeConnectionMode::Local
     );
-    assert!(OpenCodeProviderSettings::parse(&configuration(json!({
-        "mode": "external",
-        "endpoint": "https://unsupported.example.test"
-    })))
-    .is_err());
-    assert!(OpenCodeProviderSettings::parse(&configuration(json!({
-        "mode": "external"
-    })))
-    .is_err());
+    assert!(
+        OpenCodeProviderSettings::parse(&configuration(json!({
+            "mode": "external",
+            "endpoint": "https://unsupported.example.test"
+        })))
+        .is_err()
+    );
+    assert!(
+        OpenCodeProviderSettings::parse(&configuration(json!({
+            "mode": "external"
+        })))
+        .is_err()
+    );
     assert_eq!(
         settings(json!({
             "mode": "external",
@@ -143,16 +147,20 @@ fn server_origin_policy_requires_tls_or_an_explicit_override() {
             insecure_http: false,
         }
     );
-    assert!(OpenCodeProviderSettings::parse(&configuration(json!({
-        "mode": "external",
-        "serverUrl": "https://confirmation-required.example.test"
-    })))
-    .is_err());
-    assert!(OpenCodeProviderSettings::parse(&configuration(json!({
-        "mode": "external",
-        "serverUrl": "http://example.test"
-    })))
-    .is_err());
+    assert!(
+        OpenCodeProviderSettings::parse(&configuration(json!({
+            "mode": "external",
+            "serverUrl": "https://confirmation-required.example.test"
+        })))
+        .is_err()
+    );
+    assert!(
+        OpenCodeProviderSettings::parse(&configuration(json!({
+            "mode": "external",
+            "serverUrl": "http://example.test"
+        })))
+        .is_err()
+    );
     assert_eq!(
         settings(json!({
             "mode": "external",
@@ -173,11 +181,13 @@ fn server_origin_policy_requires_tls_or_an_explicit_override() {
         "https://example.test?token=secret",
         "http://localhost.evil.test",
     ] {
-        assert!(OpenCodeProviderSettings::parse(&configuration(json!({
-            "mode": "external",
-            "serverUrl": invalid
-        })))
-        .is_err());
+        assert!(
+            OpenCodeProviderSettings::parse(&configuration(json!({
+                "mode": "external",
+                "serverUrl": invalid
+            })))
+            .is_err()
+        );
     }
 }
 
@@ -195,12 +205,16 @@ fn password_is_extracted_and_redacted_from_driver_configuration() {
     let password = take_server_password(&mut configuration).unwrap();
     assert_eq!(password.expose(), "sentinel-secret");
     assert_eq!(format!("{password:?}"), "OpenCodeSecret([REDACTED])");
-    assert!(!configuration
-        .environment
-        .contains_key(OPENCODE_PASSWORD_ENVIRONMENT));
-    assert!(!serde_json::to_string(&configuration)
-        .unwrap()
-        .contains("sentinel-secret"));
+    assert!(
+        !configuration
+            .environment
+            .contains_key(OPENCODE_PASSWORD_ENVIRONMENT)
+    );
+    assert!(
+        !serde_json::to_string(&configuration)
+            .unwrap()
+            .contains("sentinel-secret")
+    );
 }
 
 #[test]
@@ -235,9 +249,11 @@ fn typed_http_scopes_requests_and_redacts_authorization_failures() {
             .await
             .unwrap_err();
         assert_eq!(error.code, ChatErrorCode::AuthenticationRequired);
-        assert!(!serde_json::to_string(&error)
-            .unwrap()
-            .contains("sentinel-secret"));
+        assert!(
+            !serde_json::to_string(&error)
+                .unwrap()
+                .contains("sentinel-secret")
+        );
 
         let request = fixture.request();
         assert!(request.starts_with("POST /session?directory="));
@@ -329,10 +345,12 @@ fn typed_http_reads_history_cursor_and_uses_exact_prompt_endpoint() {
 #[test]
 fn event_stream_decoder_handles_chunks_replay_fields_and_bounds() {
     let mut decoder = OpenCodeSseDecoder::default();
-    assert!(decoder
-        .feed(b": heartbeat\r\nid: ignored\r\ndata: {\"type\":\"server.")
-        .unwrap()
-        .is_empty());
+    assert!(
+        decoder
+            .feed(b": heartbeat\r\nid: ignored\r\ndata: {\"type\":\"server.")
+            .unwrap()
+            .is_empty()
+    );
     let events = decoder
         .feed(b"connected\",\"properties\":{}}\r\n\r\n")
         .unwrap();
@@ -348,9 +366,11 @@ fn event_stream_decoder_handles_chunks_replay_fields_and_bounds() {
             .unwrap(),
         vec![json!({ "type": "server.connected", "properties": {} })]
     );
-    assert!(OpenCodeSseDecoder::default()
-        .feed(&vec![b'x'; MAX_EVENT_DATA_BYTES + 64 * 1024 + 1])
-        .is_err());
+    assert!(
+        OpenCodeSseDecoder::default()
+            .feed(&vec![b'x'; MAX_EVENT_DATA_BYTES + 64 * 1024 + 1])
+            .is_err()
+    );
 }
 
 #[test]
@@ -381,9 +401,11 @@ fn model_and_agent_fixtures_are_bounded_validated_and_typed() {
     assert_eq!(models[1].availability, ModelAvailability::Deprecated);
     let agents = parse_agents_cli_output(include_bytes!("fixtures/agents.txt")).unwrap();
     assert_eq!(agents.len(), 4);
-    assert!(agents
-        .iter()
-        .any(|agent| agent.name == "compaction" && agent.hidden));
+    assert!(
+        agents
+            .iter()
+            .any(|agent| agent.name == "compaction" && agent.hidden)
+    );
     assert!(!agents.iter().any(|agent| agent.name == "broken"));
 
     let catalog = provider_models(&models, &agents).unwrap();
@@ -639,11 +661,7 @@ fn owned_server_reports_early_exit_timeout_and_oversized_output() {
         ] {
             let executable = directory.path().join(name);
             std::fs::write(&executable, script).unwrap();
-            std::fs::set_permissions(
-                &executable,
-                std::fs::Permissions::from_mode(0o700),
-            )
-            .unwrap();
+            std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
             let mut configuration = configuration(json!({ "mode": "local" }));
             configuration.executable = executable.to_string_lossy().into_owned();
             let result = OwnedOpenCodeServer::start_with_timeout(
@@ -733,10 +751,12 @@ fn event_fixture_normalizes_core_activity_and_deduplicates_replay() {
     let rollback_cursor = parse_rollback_cursor(rollback_cursor).unwrap();
     assert_eq!(rollback_cursor.message_id, "msg_assistant");
     assert_eq!(rollback_cursor.part_id, None);
-    assert!(normalizer
-        .normalize(&mut state, fixture[1].clone())
-        .unwrap()
-        .is_empty());
+    assert!(
+        normalizer
+            .normalize(&mut state, fixture[1].clone())
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]

@@ -19,7 +19,7 @@ use super::protocol::HandoffCompatibility;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use super::protocol::PROTOCOL_VERSION;
 use super::protocol::{
-    validate_identifier, BundleMetadata, BundlePurpose, DeviceKind, PairingInvitation,
+    BundleMetadata, BundlePurpose, DeviceKind, PairingInvitation, validate_identifier,
 };
 use base64::Engine;
 use rcgen::{CertificateParams, KeyPair};

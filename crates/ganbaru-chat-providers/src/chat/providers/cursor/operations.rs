@@ -3,7 +3,7 @@
 use super::driver::*;
 use super::executable::acp_continuation_group;
 use super::interactions::{
-    resolve_approval_result, resolve_question_result, PendingCursorRequestKind,
+    PendingCursorRequestKind, resolve_approval_result, resolve_question_result,
 };
 use super::protocol::*;
 use super::session::*;
@@ -13,11 +13,11 @@ use crate::chat::providers::{
     DriverCancellation, DriverFuture, DriverOperationContext, ProviderAuthoritySupport,
     ProviderDriver, ProviderEventSink,
 };
-use base64::{engine::general_purpose, Engine as _};
-use serde_json::{json, Value};
+use base64::{Engine as _, engine::general_purpose};
+use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
-use std::sync::{atomic::Ordering, Arc};
+use std::sync::{Arc, atomic::Ordering};
 use std::time::{Duration, Instant};
 
 const MAX_PROMPT_BYTES: usize = 4 * 1024 * 1024;
@@ -412,13 +412,13 @@ impl ProviderDriver for CursorProviderDriver {
                             ChatErrorCode::Conflict,
                             format!("{provider_name} cancellation does not match the active turn"),
                             false,
-                        ))
+                        ));
                     }
                     None => {
                         return Ok(operation_receipt(
                             request.command.client_command_id.as_str(),
                             &format!("{provider_name} turn was already settled"),
-                        ))
+                        ));
                     }
                 }
                 state.provider_thread_id.clone()
@@ -719,7 +719,7 @@ fn build_prompt(request: &SendTurnRequest, flavor: AcpProviderFlavor) -> ChatRes
             _ => {
                 return Err(ChatError::unsupported(format!(
                     "{provider_name} prompt attachment kind is unsupported"
-                )))
+                )));
             }
         }
     }

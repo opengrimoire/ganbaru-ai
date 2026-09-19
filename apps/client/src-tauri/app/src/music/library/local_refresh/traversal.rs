@@ -9,7 +9,7 @@ use std::time::UNIX_EPOCH;
 use crate::music::artwork::{extract_embedded_artwork, find_track_artwork};
 
 use super::super::MusicMediaKind;
-use super::metadata::{read_container_duration_ms, read_tags, LocalTags};
+use super::metadata::{LocalTags, read_container_duration_ms, read_tags};
 
 pub(super) const DISCOVERY_BATCH_SIZE: usize = 128;
 pub(super) const RECONCILE_BATCH_SIZE: i64 = 256;

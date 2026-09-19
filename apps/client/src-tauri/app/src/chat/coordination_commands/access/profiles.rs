@@ -1,7 +1,6 @@
 //! Access-profile lifecycle and immutable revision persistence.
 
 use super::retained_references::retained_profile_reference_issues_in_transaction;
-use super::{history_boundary_is_expansion, issue, revoke_teammate_authorizations};
 use super::{
     ArchiveChatAccessProfileCommand, ChatAccessIssueCode, ChatAccessProfileId,
     ChatAccessProfileImpactPreview, ChatAccessProfileRead, ChatAccessProfileRevision,
@@ -10,6 +9,7 @@ use super::{
     CreateChatAccessProfileCommand, DuplicateChatAccessProfileCommand,
     PreviewChatAccessProfileRevisionCommand, PublishChatAccessProfileRevisionCommand, UtcTimestamp,
 };
+use super::{history_boundary_is_expansion, issue, revoke_teammate_authorizations};
 use crate::chat::channel_commands::{
     chat_pool, i64_value, identifier_error, now_timestamp, optional_timestamp, persistence_error,
     timestamp, u64_value,

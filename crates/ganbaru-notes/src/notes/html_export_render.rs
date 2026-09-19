@@ -1,7 +1,7 @@
 use super::html_export::{ExportBlock, ExportCommentThread, ExportDatabase, ExportPage};
 use super::html_export_format::{escape_attr, escape_html, relative_link};
 use super::links::{
-    block_id_from_local_notes_url, page_ids_from_local_notes_url, LocalLinkResolver,
+    LocalLinkResolver, block_id_from_local_notes_url, page_ids_from_local_notes_url,
 };
 use super::models::NoteHtmlExportDiagnosticDto;
 use super::validation::rich_text_items_plain_text;

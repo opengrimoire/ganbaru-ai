@@ -3,10 +3,10 @@
 #[cfg(target_os = "android")]
 use super::active_vault_path;
 use super::select_vault;
+use super::{APP_SQLITE_FILE, CONFIG_LOCK, VaultInfo};
 use super::{database_path, vault_info_from_path};
 #[cfg(target_os = "android")]
 use super::{default_data_folder_path, ensure_vault_skeleton, path_to_string};
-use super::{VaultInfo, APP_SQLITE_FILE, CONFIG_LOCK};
 use crate::db_path;
 #[cfg(target_os = "android")]
 use chrono::{SecondsFormat, Utc};
@@ -898,10 +898,7 @@ mod tests {
             "INSERT INTO music_library_items (id, identity_key, source_kind, original_title, discovered_at, updated_at) VALUES ('handoff-track', 'local:portable-track', 'local-file', 'Portable track', 1, 1)",
             "INSERT INTO music_playlist_memberships (id, playlist_id, item_id, position, created_at, updated_at) VALUES ('handoff-membership', 'handoff-playlist', 'handoff-track', 0, 1, 1)",
         ] {
-            sqlx::query(statement)
-                .execute(&source_pool)
-                .await
-                .unwrap();
+            sqlx::query(statement).execute(&source_pool).await.unwrap();
         }
         fs::write(
             source.join("config.json"),

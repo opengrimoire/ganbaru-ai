@@ -1,7 +1,7 @@
 use super::data_source_views::{
-    canonical_filter, canonical_sorts, generated_uuid_tx, load_active_data_source_and_database_tx,
-    normalized_row_for_schema, parse_json, stored_filters, stored_sorts,
-    view_schema as board_schema, ViewProperty as BoardProperty,
+    ViewProperty as BoardProperty, canonical_filter, canonical_sorts, generated_uuid_tx,
+    load_active_data_source_and_database_tx, normalized_row_for_schema, parse_json, stored_filters,
+    stored_sorts, view_schema as board_schema,
 };
 use super::models::{
     NoteDataSourceGalleryConfigurationUpdate, NoteDataSourceGalleryViewDto,
@@ -12,7 +12,7 @@ use super::{
     data_source_buttons, data_source_formulas, data_source_relations, data_source_rollups,
     data_source_views, data_source_window,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sqlx::{Sqlite, SqlitePool, Transaction};
 use std::collections::HashSet;
 

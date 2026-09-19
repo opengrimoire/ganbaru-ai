@@ -1,7 +1,7 @@
 use super::models::{NoteDataSourceRowPageCreate, NoteLoadedPage, NotePageDto, NotePageRow};
 use super::validation::{plain_text_from_payload, require_uuid};
 use super::{assets, data_source_relations, data_source_rollups, reads, writes};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use sqlx::{Sqlite, SqlitePool, Transaction};
 
 const MAX_ROW_PROPERTIES_BYTES: usize = 50 * 1024;

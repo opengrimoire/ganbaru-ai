@@ -10,8 +10,8 @@ fn ns_string_to_string(
 }
 
 #[cfg(target_os = "macos")]
-pub(in crate::doomscrolling) fn foreground_desktop_app_status(
-) -> DoomscrollingForegroundDesktopAppStatus {
+pub(in crate::doomscrolling) fn foreground_desktop_app_status()
+-> DoomscrollingForegroundDesktopAppStatus {
     use objc2_app_kit::NSWorkspace;
 
     let workspace = NSWorkspace::sharedWorkspace();

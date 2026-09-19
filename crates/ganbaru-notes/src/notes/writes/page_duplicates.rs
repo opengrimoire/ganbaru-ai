@@ -7,7 +7,7 @@ use super::parents::{parent_target_from_block_row, refresh_parent_has_children, 
 use super::payloads::{child_page_payload, page_row_properties_for_title};
 use super::sort::next_sort_orders;
 use crate::notes::models::{
-    page_parent_columns, NoteBlockRow, NoteDuplicatePage, NoteLoadedPage, NotePageRow, NoteParent,
+    NoteBlockRow, NoteDuplicatePage, NoteLoadedPage, NotePageRow, NoteParent, page_parent_columns,
 };
 use crate::notes::validation::{
     plain_text_from_payload, require_uuid, validate_parent, validate_sort_order,

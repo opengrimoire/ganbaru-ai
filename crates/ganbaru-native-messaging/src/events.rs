@@ -8,7 +8,7 @@ use std::str::FromStr;
 use crate::config::normalize_host_rule;
 use crate::linked_usage::native_vault_is_writable;
 use crate::rules::HostDecision;
-use crate::snapshot::{usage_db_path, RuntimeState, StateSnapshot};
+use crate::snapshot::{RuntimeState, StateSnapshot, usage_db_path};
 use crate::{block_on, now_utc};
 
 const EVENTS_FILE: &str = "doomscrolling-events.jsonl";

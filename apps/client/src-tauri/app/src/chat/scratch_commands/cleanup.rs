@@ -1,7 +1,7 @@
 //! Confirmed scratch cleanup, including unavailable-device and retryable failure records.
 
 use super::inspection::read_generation_size;
-use super::{read_scratch_identity, require_local_owner, ScratchIdentity};
+use super::{ScratchIdentity, read_scratch_identity, require_local_owner};
 use crate::chat::channel_commands::{
     chat_pool, i64_value, identifier_error, now_timestamp, persistence_error, u64_value,
 };

@@ -8,7 +8,7 @@ pub use mobile::{MobileDocuments, MobileDocumentsExt};
 
 #[cfg(target_os = "android")]
 use tauri::Manager;
-use tauri::{plugin::TauriPlugin, Runtime};
+use tauri::{Runtime, plugin::TauriPlugin};
 
 /// Initialize Ganbaru AI's native mobile document adapter.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {

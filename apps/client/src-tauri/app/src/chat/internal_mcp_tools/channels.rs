@@ -2,12 +2,12 @@
 
 use super::authorization::verify_channel_source;
 use super::{
+    DEFAULT_PAGE_SIZE, HostToolContext, MAX_QUERY_BYTES, MAX_RESPONSE_BYTES, OpaqueCursor,
     generic_denial, internal_error, optional_limit, optional_string, persistence_error,
-    required_string, sha256_hex, truncate_utf8, HostToolContext, OpaqueCursor, DEFAULT_PAGE_SIZE,
-    MAX_QUERY_BYTES, MAX_RESPONSE_BYTES,
+    required_string, sha256_hex, truncate_utf8,
 };
 use crate::chat::models::ChatResult;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use sqlx::{QueryBuilder, Row, Sqlite};
 
 const MAX_QUERY_TERMS: usize = 20;

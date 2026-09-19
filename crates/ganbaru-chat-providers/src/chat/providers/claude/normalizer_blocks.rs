@@ -1,13 +1,13 @@
 //! Claude streaming content-block normalization.
 
 use super::normalizer::{
-    bounded_text, text, unsigned, ClaudeEventNormalizer, ClaudeItemEvent, ClaudeRouteState,
-    StreamBlock, MAX_TEXT_BYTES,
+    ClaudeEventNormalizer, ClaudeItemEvent, ClaudeRouteState, MAX_TEXT_BYTES, StreamBlock,
+    bounded_text, text, unsigned,
 };
 use super::protocol::protocol_error;
 use crate::chat::events::*;
 use crate::chat::models::*;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 impl ClaudeEventNormalizer {
     pub(super) fn content_block_start(

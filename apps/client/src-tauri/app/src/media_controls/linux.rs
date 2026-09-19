@@ -1,9 +1,9 @@
 //! Linux MPRIS integration.
 
 use super::{
-    clamp_playback_rate, clamp_unit, control, control_delta, control_position, control_rate,
-    control_shuffle, control_volume, emit_control, ms_to_us_i64, us_to_ms_i64, us_to_ms_u64,
-    MediaControlsUpdate, MAX_PLAYBACK_RATE, MIN_PLAYBACK_RATE,
+    MAX_PLAYBACK_RATE, MIN_PLAYBACK_RATE, MediaControlsUpdate, clamp_playback_rate, clamp_unit,
+    control, control_delta, control_position, control_rate, control_shuffle, control_volume,
+    emit_control, ms_to_us_i64, us_to_ms_i64, us_to_ms_u64,
 };
 use gtk::gio;
 use gtk::glib;
@@ -159,11 +159,7 @@ impl MprisState {
     }
 
     fn effective_volume(&self) -> f64 {
-        if self.muted {
-            0.0
-        } else {
-            self.volume
-        }
+        if self.muted { 0.0 } else { self.volume }
     }
 
     fn signal_shape(&self) -> MprisSignalShape {

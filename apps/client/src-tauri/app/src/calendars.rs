@@ -193,7 +193,7 @@ fn require_non_empty(value: &str, field: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_calendar_write, CalendarWrite};
+    use super::{CalendarWrite, validate_calendar_write};
 
     fn calendar() -> CalendarWrite {
         CalendarWrite {

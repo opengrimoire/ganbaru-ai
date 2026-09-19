@@ -3,12 +3,12 @@
 use super::models::{ChatError, ChatErrorCode, ChatResult, ProjectWorkingFolderId, UtcTimestamp};
 use super::repository::workspaces as repository;
 use super::workspace::{
+    AuthorizedWorkingFolder, CreateProjectWorkingFolderRequest, ProjectWorkingFolder,
+    ProjectWorkingFolderRead, WorkingFolderAuthorizationOperation, WorkingFolderKind,
     authorize_workspace, ensure_managed_working_folder_binding, filesystem_identity,
     initialized_repository_identity, open_authorized_workspace, prepare_workspace_binding,
     probe_repository, remove_active_device_binding, store_active_device_binding,
-    validate_external_folder_outside_vault, workspace_read, AuthorizedWorkingFolder,
-    CreateProjectWorkingFolderRequest, ProjectWorkingFolder, ProjectWorkingFolderRead,
-    WorkingFolderAuthorizationOperation, WorkingFolderKind,
+    validate_external_folder_outside_vault, workspace_read,
 };
 use crate::db_path;
 use crate::projects::working_folders::{

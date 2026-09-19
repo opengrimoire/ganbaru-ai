@@ -5,7 +5,7 @@ use super::models::{
     VersionedJson,
 };
 use super::repository::receipts::{
-    complete_command_receipt, CommandReceiptRead, CommandReceiptState,
+    CommandReceiptRead, CommandReceiptState, complete_command_receipt,
 };
 use chrono::{SecondsFormat, Utc};
 use sqlx::SqlitePool;

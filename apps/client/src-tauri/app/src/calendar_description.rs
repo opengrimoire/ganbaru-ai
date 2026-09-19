@@ -59,7 +59,7 @@ fn truncate_calendar_description(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{sanitize_calendar_description_html, MAX_CALENDAR_DESCRIPTION_CHARS};
+    use super::{MAX_CALENDAR_DESCRIPTION_CHARS, sanitize_calendar_description_html};
 
     #[test]
     fn keeps_allowed_formatting_and_http_links() {

@@ -1,12 +1,12 @@
 //! Desktop coordinator listener, authenticated dispatch, and archive serving.
 
 use super::{
-    prepare_partial, stream_file, timeout_control, CHUNK_TIMEOUT, MEMBERSHIP_REVOKED_CODE,
-    TLS_HANDSHAKE_TIMEOUT,
+    CHUNK_TIMEOUT, MEMBERSHIP_REVOKED_CODE, TLS_HANDSHAKE_TIMEOUT, prepare_partial, stream_file,
+    timeout_control,
 };
 use crate::vault::handoff::protocol::{
-    read_control, unix_time_ms, write_control, BundleMetadata, BundlePurpose, ControlMessage,
-    PROTOCOL_VERSION, TRANSFER_CHUNK_BYTES,
+    BundleMetadata, BundlePurpose, ControlMessage, PROTOCOL_VERSION, TRANSFER_CHUNK_BYTES,
+    read_control, unix_time_ms, write_control,
 };
 use crate::vault::handoff::state::{Enrollment, PairingManager};
 use crate::vault::handoff::{coordinator, protocol, suggested_device_label};
@@ -416,10 +416,10 @@ async fn send_coordinator_response_value(
             ControlMessage::BundleStaged { transfer_id }
         }
         coordinator::CoordinatorResponse::UploadRequested { .. } => {
-            return Err("local upload request cannot be sent over the transport".to_string())
+            return Err("local upload request cannot be sent over the transport".to_string());
         }
         coordinator::CoordinatorResponse::UploadAuthorized { .. } => {
-            return Err("upload authorization cannot be sent as a control response".to_string())
+            return Err("upload authorization cannot be sent as a control response".to_string());
         }
         coordinator::CoordinatorResponse::DoomscrollingAcknowledged {
             acknowledged_sample_ids,
@@ -468,7 +468,7 @@ async fn serve_download(
                 "transfer resume offset is invalid",
                 false,
             )
-            .await
+            .await;
         }
     };
     stream_file(

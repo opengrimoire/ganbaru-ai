@@ -10,8 +10,8 @@ mod service;
 #[cfg(test)]
 mod tests;
 
-pub use diff::diff_files;
 pub use diff::ChatChangedFileRead;
+pub use diff::diff_files;
 pub use git::delete_exact_ref;
 pub use git::{current_git_snapshot, restore_git_snapshot, verify_checkpoint};
 pub use repository::read_stored_checkpoint;

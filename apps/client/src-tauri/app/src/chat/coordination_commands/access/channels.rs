@@ -1,7 +1,6 @@
 //! Current channel access and proposed membership resolution.
 
 use super::profiles::read_access_profile;
-use super::{history_boundary_is_expansion, issue, ResolvedChannelAccess};
 use super::{
     ChatAccessIssueCode, ChatAccessProfileId, ChatAccessValidationIssue, ChatChannelCapabilities,
     ChatChannelId, ChatConversationId, ChatError, ChatErrorCode, ChatFolderGrantRead,
@@ -9,6 +8,7 @@ use super::{
     ChatTeammateAccessRead, ChatTeammateChannelAccessInput, ChatTeammateChannelAccessRead,
     ProjectWorkingFolderId,
 };
+use super::{ResolvedChannelAccess, history_boundary_is_expansion, issue};
 use crate::chat::channel_commands::{
     identifier_error, optional_timestamp, persistence_error, u64_value,
 };

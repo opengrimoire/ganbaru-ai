@@ -5,11 +5,11 @@ use super::protocol::{control_success, protocol_error};
 use super::transport::{ClaudeInboundMessage, ClaudeJsonlClient};
 use crate::chat::events::*;
 use crate::chat::models::*;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
 };
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;

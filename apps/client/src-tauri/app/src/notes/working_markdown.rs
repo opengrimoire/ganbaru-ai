@@ -3,8 +3,8 @@
 use crate::chat::models::{ChatError, ChatErrorCode, ChatResult, ProjectWorkingFolderId};
 use crate::chat::repository::workspaces;
 use crate::chat::workspace::{
-    ensure_managed_working_folder_binding, open_authorized_path, AuthorizedWorkingFolder,
-    WorkingFolderAuthorizationOperation,
+    AuthorizedWorkingFolder, WorkingFolderAuthorizationOperation,
+    ensure_managed_working_folder_binding, open_authorized_path,
 };
 use crate::chat::workspace_commands::authorize_working_folder;
 use crate::db_path::connect_sqlite;

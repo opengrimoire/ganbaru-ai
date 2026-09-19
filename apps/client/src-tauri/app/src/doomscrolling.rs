@@ -79,8 +79,8 @@ use authorization::{configured_close_authorization, read_bounded_authorization_c
 
 #[cfg(all(test, target_os = "linux"))]
 use process_control::{
-    close_desktop_process_with, validate_observed_close_process, DesktopProcessController,
-    DesktopProcessSignal,
+    DesktopProcessController, DesktopProcessSignal, close_desktop_process_with,
+    validate_observed_close_process,
 };
 
 const STATE_FILE: &str = "doomscrolling-state.json";

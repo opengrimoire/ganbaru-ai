@@ -10,7 +10,7 @@ use super::test_support::*;
 use crate::chat::events::{CanonicalEvent, CanonicalRuntimeEvent};
 use crate::chat::models::*;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -193,21 +193,27 @@ fn grok_acp_arguments_models_and_questions_preserve_provider_values() {
 #[test]
 fn endpoint_and_continuation_validation_bind_server_home_and_account() {
     let home = TestDirectory::new("identity");
-    assert!(CursorProviderSettings::parse_for(
-        &configuration(home.path(), Some("http://localhost:3000")),
-        "Cursor"
-    )
-    .is_ok());
-    assert!(CursorProviderSettings::parse_for(
-        &configuration(home.path(), Some("http://localhost.evil.test")),
-        "Cursor"
-    )
-    .is_err());
-    assert!(CursorProviderSettings::parse_for(
-        &configuration(home.path(), Some("https://user:secret@cursor.example.test")),
-        "Cursor"
-    )
-    .is_err());
+    assert!(
+        CursorProviderSettings::parse_for(
+            &configuration(home.path(), Some("http://localhost:3000")),
+            "Cursor"
+        )
+        .is_ok()
+    );
+    assert!(
+        CursorProviderSettings::parse_for(
+            &configuration(home.path(), Some("http://localhost.evil.test")),
+            "Cursor"
+        )
+        .is_err()
+    );
+    assert!(
+        CursorProviderSettings::parse_for(
+            &configuration(home.path(), Some("https://user:secret@cursor.example.test")),
+            "Cursor"
+        )
+        .is_err()
+    );
 
     let default = CursorProviderSettings::default();
     let first = continuation_group(
@@ -339,12 +345,14 @@ fn configuration_validation_rejects_partial_unintended_values() {
     )
     .unwrap_err();
     assert_eq!(invalid.field.as_deref(), Some("modelOptions"));
-    assert!(parse_config_update_response(
-        json!({ "configOptions": config_options() }),
-        "fast",
-        &json!(true)
-    )
-    .is_err());
+    assert!(
+        parse_config_update_response(
+            json!({ "configOptions": config_options() }),
+            "fast",
+            &json!(true)
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -469,15 +477,17 @@ fn structured_questions_are_separate_and_validate_provider_choices() {
     )
     .unwrap();
     assert_eq!(result["answers"]["strategy"], "focused");
-    assert!(resolve_question_result(
-        &pending,
-        &[UserInputAnswer {
-            question_id: "strategy".to_string(),
-            selected_option_ids: vec!["invented".to_string()],
-            free_form_text: None,
-        }]
-    )
-    .is_err());
+    assert!(
+        resolve_question_result(
+            &pending,
+            &[UserInputAnswer {
+                question_id: "strategy".to_string(),
+                selected_option_ids: vec!["invented".to_string()],
+                free_form_text: None,
+            }]
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -537,13 +547,17 @@ fn compatibility_fixture_normalizes_core_and_cursor_extensions() {
         event.provider_instance_id.as_str() == "cursor-instance-1"
             && event.thread_id.as_str() == "thread-1"
     }));
-    assert!(events
-        .iter()
-        .filter(|event| matches!(event.event, CanonicalEvent::ItemStarted(_)))
-        .all(|event| event.provider_item_id.is_some()));
-    assert!(!serde_json::to_string(&events)
-        .unwrap()
-        .contains("not-canonicalized"));
+    assert!(
+        events
+            .iter()
+            .filter(|event| matches!(event.event, CanonicalEvent::ItemStarted(_)))
+            .all(|event| event.provider_item_id.is_some())
+    );
+    assert!(
+        !serde_json::to_string(&events)
+            .unwrap()
+            .contains("not-canonicalized")
+    );
 }
 
 #[test]

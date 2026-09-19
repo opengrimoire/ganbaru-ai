@@ -329,9 +329,13 @@ fn push_order<'a>(
     let expression = match request.sort_mode.as_str() {
         "status" => "(SELECT sort_order FROM project_statuses ps WHERE ps.id = t.status_id)",
         "section" => "t.section_sort_order",
-        "priority" => "(SELECT sort_order FROM project_priorities pp WHERE pp.project_id = t.project_id AND pp.id = t.priority)",
+        "priority" => {
+            "(SELECT sort_order FROM project_priorities pp WHERE pp.project_id = t.project_id AND pp.id = t.priority)"
+        }
         "due" => "t.due_date",
-        "scheduled" => "(SELECT MIN(ce.start_time) FROM project_task_event_links el JOIN calendar_events ce ON ce.id = el.event_id WHERE el.task_id = t.id AND el.link_kind = 'scheduled')",
+        "scheduled" => {
+            "(SELECT MIN(ce.start_time) FROM project_task_event_links el JOIN calendar_events ce ON ce.id = el.event_id WHERE el.task_id = t.id AND el.link_kind = 'scheduled')"
+        }
         "created" => "t.created_at",
         "updated" => "t.updated_at",
         "estimate" => "t.estimate_minutes",

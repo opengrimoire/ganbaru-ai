@@ -3,7 +3,7 @@ use super::models::{
     NoteJsonGraphExportSaveDto,
 };
 use serde::Serialize;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use sqlx::{Row, SqlitePool};
 use std::{
     collections::BTreeMap,
@@ -402,7 +402,9 @@ fn json_column(table: &str, column: &str) -> bool {
 fn column_value_expression(table: &str, column: &str) -> String {
     let quoted = quote_identifier(column);
     if json_column(table, column) {
-        format!("CASE WHEN {quoted} IS NULL THEN NULL WHEN json_valid({quoted}) THEN json({quoted}) ELSE {quoted} END")
+        format!(
+            "CASE WHEN {quoted} IS NULL THEN NULL WHEN json_valid({quoted}) THEN json({quoted}) ELSE {quoted} END"
+        )
     } else {
         quoted
     }

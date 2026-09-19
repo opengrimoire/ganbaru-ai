@@ -163,11 +163,7 @@ fn us_to_ms_i64(us: i64) -> i64 {
 
 #[cfg(target_os = "linux")]
 fn us_to_ms_u64(us: i64) -> u64 {
-    if us <= 0 {
-        0
-    } else {
-        (us as u64) / 1_000
-    }
+    if us <= 0 { 0 } else { (us as u64) / 1_000 }
 }
 
 #[cfg(target_os = "windows")]

@@ -11,7 +11,7 @@ use config::{
 
 use crate::chat::models::*;
 use serde::Deserialize;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::collections::BTreeSet;
 
 pub const ACP_PROTOCOL_VERSION: u32 = 1;

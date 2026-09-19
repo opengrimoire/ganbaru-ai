@@ -185,7 +185,7 @@ pub(super) fn validate_adaptive_decision_envelope_for_segment(
         _ => {
             return Err(
                 "adaptive boundary opportunity must match inserted segment phase".to_string(),
-            )
+            );
         }
     }
     validate_adaptive_decision_mode(&decision.decision_mode)?;

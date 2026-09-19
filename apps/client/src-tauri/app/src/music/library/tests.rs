@@ -153,9 +153,11 @@ fn built_in_music_playlists_are_protected_localizable_and_repaired() {
         let repaired = queries::playlist_summaries(&pool, 1_700_000_000_000, 0, 50)
             .await
             .unwrap();
-        assert!(repaired
-            .iter()
-            .any(|playlist| playlist.id == "playlist-default-work-focus"));
+        assert!(
+            repaired
+                .iter()
+                .any(|playlist| playlist.id == "playlist-default-work-focus")
+        );
     });
 }
 

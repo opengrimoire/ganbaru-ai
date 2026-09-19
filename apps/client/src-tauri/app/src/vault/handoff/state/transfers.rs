@@ -6,14 +6,14 @@ use super::storage::{
     validate_activation_record, validate_stored_outgoing, write_private_file_atomically,
 };
 use super::{
-    initialized_state, initialized_state_mut, persist_initialized_state, PairingManager,
-    PendingAcknowledgement, StoredOutgoingTransfer,
+    PairingManager, PendingAcknowledgement, StoredOutgoingTransfer, initialized_state,
+    initialized_state_mut, persist_initialized_state,
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use super::{RegisteredBundle, StoredIncomingTransfer};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::vault::handoff::protocol;
-use crate::vault::handoff::protocol::{validate_identifier, BundleMetadata, BundlePurpose};
+use crate::vault::handoff::protocol::{BundleMetadata, BundlePurpose, validate_identifier};
 use std::fs;
 use std::path::{Path, PathBuf};
 

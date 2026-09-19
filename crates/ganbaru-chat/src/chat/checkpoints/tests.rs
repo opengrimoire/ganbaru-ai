@@ -1,8 +1,8 @@
 use super::diff::file_diff;
 use super::git::{capture_git, repository_fingerprint};
 use super::{
-    current_git_snapshot, delete_exact_ref, diff_files, restore_git_snapshot, verify_checkpoint,
-    CapturedCheckpoint, StoredCheckpoint,
+    CapturedCheckpoint, StoredCheckpoint, current_git_snapshot, delete_exact_ref, diff_files,
+    restore_git_snapshot, verify_checkpoint,
 };
 use crate::chat::models::{
     ChatCheckpointId, ChatErrorCode, ChatThreadId, ProjectWorkingFolderId, RepositoryKind,
@@ -231,10 +231,12 @@ fn diff_covers_staged_unstaged_untracked_deleted_renamed_mode_binary_and_whitesp
         true,
     )
     .expect("whitespace diff should succeed");
-    assert!(normal
-        .patch
-        .as_deref()
-        .is_some_and(|patch| !patch.is_empty()));
+    assert!(
+        normal
+            .patch
+            .as_deref()
+            .is_some_and(|patch| !patch.is_empty())
+    );
     assert_eq!(ignored.patch.as_deref(), Some(""));
 }
 

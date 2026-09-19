@@ -12,7 +12,7 @@ use super::models::{
 use super::mutations::{
     normalized_optional_identifier, normalized_optional_text, project_mutation,
 };
-use super::routine::{built_in_routine_project, ROUTINE_GROUP_ID};
+use super::routine::{ROUTINE_GROUP_ID, built_in_routine_project};
 use super::templates::{
     insert_default_priorities, insert_default_statuses, insert_template_sections,
 };

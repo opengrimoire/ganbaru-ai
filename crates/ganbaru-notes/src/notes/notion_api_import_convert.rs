@@ -1,7 +1,7 @@
 use super::import_writer::ImportBlock;
 use super::models::NoteNotionApiImportDiagnosticDto;
 use super::validation::{validate_block_payload, validate_icon_value, validate_page_cover_value};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 const LOCAL_COLORS: &[&str] = &[
     "default",
@@ -537,7 +537,7 @@ fn media_payload(
             output["file_upload"] = payload.get("file_upload").cloned().unwrap_or(json!({}));
         }
         _ => {
-            return unsupported_payload(notion_type, raw_block, "Unsupported Notion media source.")
+            return unsupported_payload(notion_type, raw_block, "Unsupported Notion media source.");
         }
     }
     stats.imported_file_count += 1;

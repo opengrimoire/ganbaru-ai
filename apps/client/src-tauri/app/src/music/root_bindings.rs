@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::{fs, path::Path};
 use tauri::Runtime;
 
-use crate::vault::{active_vault_id, read_app_state, update_app_state, VaultAppState};
+use crate::vault::{VaultAppState, active_vault_id, read_app_state, update_app_state};
 
 const MAX_ROOT_IDS_PER_REQUEST: usize = 1_000;
 const MAX_ROOT_ID_BYTES: usize = 200;

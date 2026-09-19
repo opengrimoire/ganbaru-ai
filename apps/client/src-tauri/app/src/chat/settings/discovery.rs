@@ -7,7 +7,7 @@ use super::{
     store::{mutate_chat_config, read_chat_config},
 };
 use crate::chat::config::ChatVaultConfig;
-use crate::chat::device_state::{update_active_device_scope, ChatProviderDeviceState};
+use crate::chat::device_state::{ChatProviderDeviceState, update_active_device_scope};
 use crate::chat::models::{
     ChatError, ChatErrorCode, ChatResult, ProbeState, ProviderFamilyId, ProviderFamilyMetadataRead,
     ProviderImplementationStatus, ProviderInstanceConfig, ProviderInstanceId, ProviderModelCatalog,

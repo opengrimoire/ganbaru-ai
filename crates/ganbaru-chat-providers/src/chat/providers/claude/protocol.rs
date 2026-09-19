@@ -1,9 +1,9 @@
 //! Typed builders and bounded decoders for Claude Code's SDK JSONL protocol.
 
 use crate::chat::models::*;
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use serde::Deserialize;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;

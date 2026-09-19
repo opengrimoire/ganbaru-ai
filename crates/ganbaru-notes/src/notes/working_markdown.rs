@@ -363,10 +363,12 @@ mod tests {
             save_markdown(&root, "notes.md", "third", &read.revision),
             Err(WorkingMarkdownError::StaleRevision)
         );
-        assert!(!fs::read_dir(&root)
-            .unwrap()
-            .filter_map(Result::ok)
-            .any(|entry| entry.file_name().to_string_lossy().contains(".ganbaru-")));
+        assert!(
+            !fs::read_dir(&root)
+                .unwrap()
+                .filter_map(Result::ok)
+                .any(|entry| entry.file_name().to_string_lossy().contains(".ganbaru-"))
+        );
         fs::remove_dir_all(root).unwrap();
     }
 

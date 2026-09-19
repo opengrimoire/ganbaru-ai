@@ -1,8 +1,8 @@
 //! Provider-free Chat settings used by mobile clients.
 
 use super::config::{
-    parse_chat_config_branch, replace_chat_config_branch, ChatBehaviorPreferences,
-    ChatPanelPreferences, ChatVaultConfig,
+    ChatBehaviorPreferences, ChatPanelPreferences, ChatVaultConfig, parse_chat_config_branch,
+    replace_chat_config_branch,
 };
 use super::models::{
     ChatResult, ChatThreadId, ProviderFamilyMetadataRead, ProviderInstanceConfig,

@@ -85,28 +85,36 @@ fn listing_is_on_demand_and_respects_common_and_git_ignores() {
     let authorized = directory.authorized(RepositoryKind::Git);
 
     let visible = list_workspace_directory(&authorized, "", false).expect("listing should succeed");
-    assert!(visible
-        .entries
-        .iter()
-        .any(|entry| entry.relative_path == "visible.txt"));
-    assert!(!visible
-        .entries
-        .iter()
-        .any(|entry| entry.relative_path == "ignored.log"));
-    assert!(!visible
-        .entries
-        .iter()
-        .any(|entry| entry.relative_path == "node_modules"));
+    assert!(
+        visible
+            .entries
+            .iter()
+            .any(|entry| entry.relative_path == "visible.txt")
+    );
+    assert!(
+        !visible
+            .entries
+            .iter()
+            .any(|entry| entry.relative_path == "ignored.log")
+    );
+    assert!(
+        !visible
+            .entries
+            .iter()
+            .any(|entry| entry.relative_path == "node_modules")
+    );
     let all = list_workspace_directory(&authorized, "", true)
         .expect("listing with ignored files should succeed");
-    assert!(all
-        .entries
-        .iter()
-        .any(|entry| entry.relative_path == "ignored.log" && entry.ignored));
-    assert!(all
-        .entries
-        .iter()
-        .any(|entry| entry.relative_path == "node_modules" && entry.ignored));
+    assert!(
+        all.entries
+            .iter()
+            .any(|entry| entry.relative_path == "ignored.log" && entry.ignored)
+    );
+    assert!(
+        all.entries
+            .iter()
+            .any(|entry| entry.relative_path == "node_modules" && entry.ignored)
+    );
 }
 
 #[cfg(unix)]
@@ -320,13 +328,15 @@ fn save_rejects_binary_oversized_excluded_and_symbolic_files() {
 
     assert!(save_workspace_file(&authorized, "binary.bin", "text", "missing").is_err());
     assert!(save_workspace_file(&authorized, ".git/config", "text", "missing").is_err());
-    assert!(save_workspace_file(
-        &authorized,
-        "binary.bin",
-        &"x".repeat(MAX_PREVIEW_BYTES as usize + 1),
-        "missing",
-    )
-    .is_err());
+    assert!(
+        save_workspace_file(
+            &authorized,
+            "binary.bin",
+            &"x".repeat(MAX_PREVIEW_BYTES as usize + 1),
+            "missing",
+        )
+        .is_err()
+    );
 
     #[cfg(unix)]
     {
@@ -345,13 +355,15 @@ fn save_rejects_binary_oversized_excluded_and_symbolic_files() {
         .expect("parent symlink should be created");
         assert!(preview_workspace_file(&authorized, "linked-parent/nested.txt").is_err());
         assert!(list_workspace_directory(&authorized, "linked-parent", true).is_err());
-        assert!(save_workspace_file(
-            &authorized,
-            "linked-parent/nested.txt",
-            "changed\n",
-            "missing",
-        )
-        .is_err());
+        assert!(
+            save_workspace_file(
+                &authorized,
+                "linked-parent/nested.txt",
+                "changed\n",
+                "missing",
+            )
+            .is_err()
+        );
         assert!(
             recreate_workspace_file(&authorized, "linked-parent/new.txt", "new\n", true,).is_err()
         );

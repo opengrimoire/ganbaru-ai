@@ -2,15 +2,15 @@
 
 use super::persistence::persist_steer_message;
 use super::support::{
-    chat_pool, json_error, now_timestamp, operation_context, persistence_error,
-    runtime_not_running, TURN_OPERATION_TIMEOUT,
+    TURN_OPERATION_TIMEOUT, chat_pool, json_error, now_timestamp, operation_context,
+    persistence_error, runtime_not_running,
 };
 use super::validation::{
     validate_answers, validate_approval_decision, validate_pending_request, validate_prompt,
 };
 use crate::chat::driver_operations::{complete_driver_operation, replay_driver_receipt};
 use crate::chat::models::*;
-use crate::chat::repository::receipts::{claim_command_receipt, CommandReceiptClaim};
+use crate::chat::repository::receipts::{CommandReceiptClaim, claim_command_receipt};
 use crate::chat::runtime::ChatRuntimeRegistry;
 use crate::chat::send_commands::{
     ResolveChatApprovalCommand, ResolveChatUserInputCommand, SteerChatTurnCommand,

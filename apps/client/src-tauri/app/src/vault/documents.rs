@@ -724,9 +724,9 @@ mod tests {
     /// pairs. Uses the Stored compression method so the test does not depend
     /// on the deflate path being exercised correctly.
     fn write_zip(path: &PathBuf, entries: &[(&str, &[u8])]) {
+        use zip::CompressionMethod;
         use zip::write::SimpleFileOptions;
         use zip::write::ZipWriter;
-        use zip::CompressionMethod;
 
         let file = fs::File::create(path).expect("create zip file");
         let mut writer = ZipWriter::new(file);

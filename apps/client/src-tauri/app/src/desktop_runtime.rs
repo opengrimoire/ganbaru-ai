@@ -541,10 +541,9 @@ fn get_memory_report() -> MemoryReport {
     #[cfg(target_os = "windows")]
     {
         use std::mem::size_of;
-        use windows::core::{Owned, HRESULT};
         use windows::Win32::Foundation::ERROR_NO_MORE_FILES;
         use windows::Win32::System::Diagnostics::ToolHelp::{
-            CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+            CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW,
             TH32CS_SNAPPROCESS,
         };
         use windows::Win32::System::ProcessStatus::{
@@ -553,6 +552,7 @@ fn get_memory_report() -> MemoryReport {
         use windows::Win32::System::Threading::{
             OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
         };
+        use windows::core::{HRESULT, Owned};
 
         let my_pid = std::process::id();
 

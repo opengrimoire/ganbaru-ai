@@ -1,4 +1,4 @@
-use flate2::{read::ZlibDecoder, write::ZlibEncoder, Compression};
+use flate2::{Compression, read::ZlibDecoder, write::ZlibEncoder};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::{Sqlite, Transaction};
@@ -300,7 +300,7 @@ pub(super) async fn garbage_collect_bundles_tx(
 
 #[cfg(test)]
 mod tests {
-    use super::{load_bundle_tx, sha256_hex, store_bundle_tx, MAX_HISTORY_BUNDLE_BYTES};
+    use super::{MAX_HISTORY_BUNDLE_BYTES, load_bundle_tx, sha256_hex, store_bundle_tx};
     use ganbaru_db::run_migrations;
 
     async fn migrated_pool() -> sqlx::SqlitePool {

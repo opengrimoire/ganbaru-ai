@@ -41,10 +41,12 @@ fn aliases_resolve_local_links_backlinks_and_search() {
         .await
         .unwrap();
 
-        assert!(links::list_unresolved_links(&pool, PAGE_A)
-            .await
-            .unwrap()
-            .is_empty());
+        assert!(
+            links::list_unresolved_links(&pool, PAGE_A)
+                .await
+                .unwrap()
+                .is_empty()
+        );
         let backlinks = backlinks::list_backlinks(&pool, PAGE_B).await.unwrap();
         let backlinks_json = serde_json::to_value(backlinks).unwrap();
         assert!(backlinks_json.as_array().unwrap().iter().any(|backlink| {
@@ -56,11 +58,13 @@ fn aliases_resolve_local_links_backlinks_and_search() {
             .await
             .unwrap();
         let search_json = serde_json::to_value(search_results).unwrap();
-        assert!(search_json
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|result| result["type"] == "page" && result["page"]["id"] == PAGE_B));
+        assert!(
+            search_json
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|result| result["type"] == "page" && result["page"]["id"] == PAGE_B)
+        );
     });
 }
 

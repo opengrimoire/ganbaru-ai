@@ -1,10 +1,10 @@
 //! Retained-reference disclosure checks for access previews and transactions.
 
-use super::{history_boundary_is_expansion, issue, ResolvedChannelAccess};
 use super::{
     ChatAccessIssueCode, ChatAccessProfileId, ChatAccessValidationIssue, ChatChannelCapabilities,
     ChatChannelId, ChatConversationId, ChatHistoryBoundary, ChatResult,
 };
+use super::{ResolvedChannelAccess, history_boundary_is_expansion, issue};
 use crate::chat::channel_commands::{identifier_error, persistence_error, u64_value};
 use crate::chat::coordination_commands::common::{
     parse_folder_capability, parse_history_boundary, parse_runtime_approval_policy,

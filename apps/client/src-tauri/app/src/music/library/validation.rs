@@ -379,13 +379,13 @@ pub(crate) fn validate_bulk_membership_edit(
             return Err(MusicLibraryError::validation(
                 "weight",
                 "is required when setting weight",
-            ))
+            ));
         }
         (true, true) => {
             return Err(MusicLibraryError::validation(
                 "weight",
                 "must be empty when no playlist weight is changing",
-            ))
+            ));
         }
         _ => {}
     }

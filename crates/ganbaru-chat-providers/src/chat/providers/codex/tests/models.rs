@@ -118,21 +118,25 @@ fn organizational_launch_arguments_replace_authority_and_disable_inherited_mcp()
             && argument.contains("filesystem")
             && argument.contains("network={enabled=false}")
     }));
-    assert!(arguments
-        .iter()
-        .any(|argument| argument == "mcp_servers.user-server.enabled=false"));
-    assert!(arguments
-        .iter()
-        .any(|argument| argument == "mcp_servers.ganbaru-chat.required=true"));
-    assert!(arguments
-        .iter()
-        .all(|argument| !argument.contains("sandbox_mode")));
-    assert!(append_internal_mcp_arguments(
-        &mut Vec::new(),
-        "ganbaru-chat",
-        "https://example.test/mcp",
-    )
-    .is_err());
+    assert!(
+        arguments
+            .iter()
+            .any(|argument| argument == "mcp_servers.user-server.enabled=false")
+    );
+    assert!(
+        arguments
+            .iter()
+            .any(|argument| argument == "mcp_servers.ganbaru-chat.required=true")
+    );
+    assert!(
+        arguments
+            .iter()
+            .all(|argument| !argument.contains("sandbox_mode"))
+    );
+    assert!(
+        append_internal_mcp_arguments(&mut Vec::new(), "ganbaru-chat", "https://example.test/mcp",)
+            .is_err()
+    );
 }
 
 #[test]
@@ -152,24 +156,30 @@ fn organizational_verification_rejects_profile_and_root_mismatches() {
         runtime_workspace_roots: vec![PathBuf::from(root)],
     };
 
-    assert!(verify_organizational_thread_open(
-        SafetyMode::AskForApproval,
-        Path::new("/workspace"),
-        &response(ORGANIZATIONAL_PERMISSION_PROFILE, "/workspace"),
-    )
-    .is_ok());
-    assert!(verify_organizational_thread_open(
-        SafetyMode::AskForApproval,
-        Path::new("/workspace"),
-        &response("user-profile", "/workspace"),
-    )
-    .is_err());
-    assert!(verify_organizational_thread_open(
-        SafetyMode::AskForApproval,
-        Path::new("/workspace"),
-        &response(ORGANIZATIONAL_PERMISSION_PROFILE, "/other"),
-    )
-    .is_err());
+    assert!(
+        verify_organizational_thread_open(
+            SafetyMode::AskForApproval,
+            Path::new("/workspace"),
+            &response(ORGANIZATIONAL_PERMISSION_PROFILE, "/workspace"),
+        )
+        .is_ok()
+    );
+    assert!(
+        verify_organizational_thread_open(
+            SafetyMode::AskForApproval,
+            Path::new("/workspace"),
+            &response("user-profile", "/workspace"),
+        )
+        .is_err()
+    );
+    assert!(
+        verify_organizational_thread_open(
+            SafetyMode::AskForApproval,
+            Path::new("/workspace"),
+            &response(ORGANIZATIONAL_PERMISSION_PROFILE, "/other"),
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -366,15 +376,17 @@ fn turn_builder_preserves_model_traits_modes_and_verified_images() {
 
     let mut escaping = request;
     escaping.attachments[0].local_path = Some("../outside.png".to_string());
-    assert!(turn_start_params(
-        "provider-thread-1",
-        workspace.path(),
-        "fallback-model",
-        &escaping,
-        None,
-        false,
-    )
-    .is_err());
+    assert!(
+        turn_start_params(
+            "provider-thread-1",
+            workspace.path(),
+            "fallback-model",
+            &escaping,
+            None,
+            false,
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -447,9 +459,11 @@ fn model_catalog_keeps_options_and_image_capability() {
     assert_eq!(model.id.as_str(), "gpt-5.4");
     assert!(model.capabilities.contains(&ProviderCapability::Images));
     assert!(model.capabilities.contains(&ProviderCapability::NativePlan));
-    assert!(model
-        .capabilities
-        .contains(&ProviderCapability::StructuredPlans));
+    assert!(
+        model
+            .capabilities
+            .contains(&ProviderCapability::StructuredPlans)
+    );
     assert_eq!(model.options.len(), 2);
     let ModelOptionDefinition::Choice {
         options,

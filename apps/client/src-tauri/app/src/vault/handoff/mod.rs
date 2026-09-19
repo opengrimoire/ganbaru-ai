@@ -12,9 +12,9 @@ pub(crate) mod source;
 pub(crate) mod state;
 pub(crate) mod transport;
 
-use protocol::{decode_invitation, encode_invitation, HandoffCompatibility};
+use protocol::{HandoffCompatibility, decode_invitation, encode_invitation};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use protocol::{invitation_qr_matrix, QrMatrix};
+use protocol::{QrMatrix, invitation_qr_matrix};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use state::PairingManager;
@@ -318,7 +318,7 @@ pub(crate) async fn handoff_create_pairing_invitation<R: Runtime>(
             match endpoint.ip() {
                 IpAddr::V4(address) => address,
                 IpAddr::V6(_) => {
-                    return Err("Linux firewall access requires an IPv4 LAN address".to_string())
+                    return Err("Linux firewall access requires an IPv4 LAN address".to_string());
                 }
             },
         ),

@@ -65,9 +65,9 @@ use teammate_lifecycle::{delete_unused_teammate, set_teammate_archived};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use workflow::insert_policy_revision;
 use workflow::{
-    insert_channel_copy, insert_communication_message, next_item_ordinal,
-    persist_assignment_routing, read_post_receipt, require_continuation_scope_is_unchanged,
-    require_reply_thread, resolve_invoked_teammate, AssignmentWrite, CommunicationMessageWrite,
+    AssignmentWrite, CommunicationMessageWrite, insert_channel_copy, insert_communication_message,
+    next_item_ordinal, persist_assignment_routing, read_post_receipt,
+    require_continuation_scope_is_unchanged, require_reply_thread, resolve_invoked_teammate,
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

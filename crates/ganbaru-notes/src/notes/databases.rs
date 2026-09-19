@@ -7,7 +7,7 @@ use super::validation::{
     validate_sort_order,
 };
 use super::{history, project_history, writes};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sqlx::{Sqlite, SqlitePool, Transaction};
 
 const DEFAULT_DATABASE_TITLE: &str = "Untitled database";
@@ -731,10 +731,6 @@ trait NonEmptyString {
 
 impl NonEmptyString for String {
     fn or_else_not_empty(self) -> Option<String> {
-        if self.is_empty() {
-            None
-        } else {
-            Some(self)
-        }
+        if self.is_empty() { None } else { Some(self) }
     }
 }

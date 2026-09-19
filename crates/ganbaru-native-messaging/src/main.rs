@@ -11,11 +11,11 @@ mod snapshot;
 
 use config::{is_protected_app_name, normalize_app_name, normalize_host_rule};
 use events::log_block_event;
-use linked_usage::{record_usage_sample, UsageSample};
+use linked_usage::{UsageSample, record_usage_sample};
 use rules::{decide_url_with_limits, feed_fingerprint, host_from_url, rules_fingerprint};
 use snapshot::{
-    config_dir_candidates, load_snapshot, runtime_status, should_enforce, valid_local_date,
-    StateSnapshot,
+    StateSnapshot, config_dir_candidates, load_snapshot, runtime_status, should_enforce,
+    valid_local_date,
 };
 
 fn block_on<F: std::future::Future>(future: F) -> F::Output {

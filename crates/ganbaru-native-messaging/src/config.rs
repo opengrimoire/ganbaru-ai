@@ -320,11 +320,7 @@ fn normalize_usage_limit_name(input: &str) -> Option<String> {
         .chars()
         .take(80)
         .collect::<String>();
-    if name.is_empty() {
-        None
-    } else {
-        Some(name)
-    }
+    if name.is_empty() { None } else { Some(name) }
 }
 
 fn read_usage_limit_entries(value: &Value) -> Option<Vec<UsageLimitEntry>> {

@@ -1,9 +1,9 @@
 //! OpenCode event normalization into provider-neutral Chat events.
 
-use super::protocol::{protocol_error, validate_identifier, MAX_EVENT_DATA_BYTES};
+use super::protocol::{MAX_EVENT_DATA_BYTES, protocol_error, validate_identifier};
 use crate::chat::events::*;
 use crate::chat::models::*;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};

@@ -1,6 +1,6 @@
 use super::data_source_relations;
 use super::models::NotePageRow;
-use serde_json::{json, Map, Number, Value};
+use serde_json::{Map, Number, Value, json};
 use sqlx::{Sqlite, Transaction};
 use std::cmp::Ordering;
 use std::collections::HashSet;
@@ -682,11 +682,7 @@ fn date_values(values: &[Option<Value>]) -> Option<Vec<(String, String)>> {
             Some((start, end))
         })
         .collect::<Vec<_>>();
-    if dates.is_empty() {
-        None
-    } else {
-        Some(dates)
-    }
+    if dates.is_empty() { None } else { Some(dates) }
 }
 
 fn earliest_date(values: Vec<(String, String)>) -> Option<Value> {

@@ -126,21 +126,27 @@ fn driver_fixture_covers_fresh_plan_interrupt_and_shutdown() {
         assert!(fixture.closed.load(Ordering::Acquire));
 
         let received = fixture.received();
-        assert!(received
-            .iter()
-            .any(|message| message["method"] == "thread/start"));
+        assert!(
+            received
+                .iter()
+                .any(|message| message["method"] == "thread/start")
+        );
         let turn = received
             .iter()
             .find(|message| message["method"] == "turn/start")
             .unwrap();
         assert_eq!(turn["params"]["collaborationMode"]["mode"], "plan");
         assert_eq!(turn["params"]["approvalPolicy"], "on-request");
-        assert!(received
-            .iter()
-            .any(|message| message["method"] == "turn/interrupt"));
-        assert!(received
-            .iter()
-            .any(|message| message["method"] == "config/mcpServer/reload"));
+        assert!(
+            received
+                .iter()
+                .any(|message| message["method"] == "turn/interrupt")
+        );
+        assert!(
+            received
+                .iter()
+                .any(|message| message["method"] == "config/mcpServer/reload")
+        );
         let mcp_request = received
             .iter()
             .find(|message| message["method"] == "mcpServerStatus/list")
@@ -206,9 +212,11 @@ fn organizational_fixture_verifies_permissions_and_mcp_before_dispatch() {
             })
             .collect::<Vec<_>>();
         assert!(mcp_status_positions.len() >= 2);
-        assert!(mcp_status_positions
-            .iter()
-            .any(|index| *index < turn_position));
+        assert!(
+            mcp_status_positions
+                .iter()
+                .any(|index| *index < turn_position)
+        );
         let escalation_response = wait_for_fixture_message(&fixture, |message| {
             message["id"] == "fixture-organizational-escalation" && message.get("result").is_some()
         })
@@ -285,9 +293,11 @@ fn driver_fixture_covers_native_resume_and_confirmed_missing_fallback() {
                 expects_fallback
             );
             let received = fixture.received();
-            assert!(received
-                .iter()
-                .any(|message| message["method"] == "thread/resume"));
+            assert!(
+                received
+                    .iter()
+                    .any(|message| message["method"] == "thread/resume")
+            );
             assert_eq!(
                 received
                     .iter()

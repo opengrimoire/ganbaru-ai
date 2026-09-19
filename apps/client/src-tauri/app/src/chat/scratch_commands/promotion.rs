@@ -2,8 +2,8 @@
 
 use super::inspection::{read_scratch_file, validate_required_relative_path};
 use super::{
-    corrupt_scratch, parse_id, read_scratch_identity, require_current_scratch_authority,
-    require_local_owner, ScratchIdentity,
+    ScratchIdentity, corrupt_scratch, parse_id, read_scratch_identity,
+    require_current_scratch_authority, require_local_owner,
 };
 use crate::chat::channel_commands::{chat_pool, now_timestamp, persistence_error, timestamp};
 use crate::chat::coordination::contracts::*;

@@ -1,7 +1,7 @@
 use super::html_export_format::{
     asset_archive_path, database_archive_path, json_file_contents, page_archive_path, slug,
 };
-use super::html_export_render::{render_page, HtmlRenderInput};
+use super::html_export_render::{HtmlRenderInput, render_page};
 use super::links;
 use super::models::{
     NoteBlockRow, NoteCommentAnchorRow, NoteCommentRow, NoteCommentThreadRow,
@@ -9,7 +9,7 @@ use super::models::{
     NoteHtmlExportRequest, NotePageRow,
 };
 use super::validation::require_uuid;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sqlx::{FromRow, SqlitePool};
 use std::collections::{HashMap, HashSet};
 

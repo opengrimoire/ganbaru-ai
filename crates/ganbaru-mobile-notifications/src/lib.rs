@@ -10,7 +10,7 @@ pub use mobile::{
 
 #[cfg(target_os = "android")]
 use tauri::Manager;
-use tauri::{plugin::TauriPlugin, Runtime};
+use tauri::{Runtime, plugin::TauriPlugin};
 
 const PLUGIN_NAME: &str = "ganbaru-mobile-notifications";
 

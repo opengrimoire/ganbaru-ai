@@ -180,11 +180,13 @@ fn mention_notifications_sync_blocks_comments_and_delivery_state() {
         .await
         .unwrap();
         let after_delivery_json = serde_json::to_value(&after_delivery).unwrap();
-        assert!(!after_delivery_json
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|notification| notification["id"] == reminder_id));
+        assert!(
+            !after_delivery_json
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|notification| notification["id"] == reminder_id)
+        );
 
         writes::update_block(
             &pool,

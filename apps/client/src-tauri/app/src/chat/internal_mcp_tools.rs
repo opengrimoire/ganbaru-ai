@@ -1,9 +1,9 @@
 //! Closed-world organizational host tools for provider assignments.
 
-use super::internal_mcp::{generate_opaque_handle, InternalMcpRunScope};
+use super::internal_mcp::{InternalMcpRunScope, generate_opaque_handle};
 use super::models::{ChatError, ChatErrorCode, ChatFolderCapability, ChatResult};
 use rmcp::model::{Tool, ToolAnnotations};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
@@ -539,10 +539,12 @@ mod tests {
             })
             .await
             .unwrap();
-        assert!(runtime
-            .channel_cursor(&channel, "source", "query")
-            .await
-            .is_ok());
+        assert!(
+            runtime
+                .channel_cursor(&channel, "source", "query")
+                .await
+                .is_ok()
+        );
         assert_eq!(
             runtime
                 .workspace_cursor(&workspace, "root", "query")
@@ -551,30 +553,40 @@ mod tests {
             "position"
         );
         for (source, query) in [("other", "query"), ("source", "other")] {
-            assert!(runtime
-                .channel_cursor(&channel, source, query)
-                .await
-                .is_err());
+            assert!(
+                runtime
+                    .channel_cursor(&channel, source, query)
+                    .await
+                    .is_err()
+            );
         }
         for (root, query) in [("other", "query"), ("root", "other")] {
-            assert!(runtime
-                .workspace_cursor(&workspace, root, query)
-                .await
-                .is_err());
+            assert!(
+                runtime
+                    .workspace_cursor(&workspace, root, query)
+                    .await
+                    .is_err()
+            );
         }
-        assert!(runtime
-            .workspace_cursor(&channel, "source", "query")
-            .await
-            .is_err());
-        assert!(runtime
-            .channel_cursor(&workspace, "root", "query")
-            .await
-            .is_err());
+        assert!(
+            runtime
+                .workspace_cursor(&channel, "source", "query")
+                .await
+                .is_err()
+        );
+        assert!(
+            runtime
+                .channel_cursor(&workspace, "root", "query")
+                .await
+                .is_err()
+        );
         runtime.reset_cursors().await;
-        assert!(runtime
-            .workspace_cursor(&workspace, "root", "query")
-            .await
-            .is_err());
+        assert!(
+            runtime
+                .workspace_cursor(&workspace, "root", "query")
+                .await
+                .is_err()
+        );
     }
 
     #[tokio::test]
@@ -594,9 +606,11 @@ mod tests {
             .await
             .expect("active cursor");
         runtime.reset_cursors().await;
-        assert!(runtime
-            .channel_cursor(&cursor, "source", "query")
-            .await
-            .is_err());
+        assert!(
+            runtime
+                .channel_cursor(&cursor, "source", "query")
+                .await
+                .is_err()
+        );
     }
 }

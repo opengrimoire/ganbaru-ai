@@ -1,8 +1,8 @@
 //! Cursor executable, probe, launch, environment, and continuation identity.
 
-use super::protocol::{protocol_error, CursorProviderSettings, MINIMUM_CURSOR_VERSION};
+use super::protocol::{CursorProviderSettings, MINIMUM_CURSOR_VERSION, protocol_error};
 use crate::chat::models::*;
-use crate::chat::process::{spawn_provider_process, ProviderProcessConfig};
+use crate::chat::process::{ProviderProcessConfig, spawn_provider_process};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs;

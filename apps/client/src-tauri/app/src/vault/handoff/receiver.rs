@@ -322,7 +322,7 @@ async fn flush_pending_acknowledgement(app: &tauri::AppHandle) -> Result<(), Str
             _ => {
                 return Err(
                     "pending activation acknowledgement conflicts with ownership state".to_string(),
-                )
+                );
             }
         }
     }

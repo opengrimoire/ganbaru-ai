@@ -32,8 +32,8 @@ pub(super) async fn capture_recording_frames(
 
 pub(super) fn recording_archive(frames: &[Vec<u8>], duration: Duration) -> ChatResult<Vec<u8>> {
     use std::io::{Cursor, Write};
-    use zip::write::{SimpleFileOptions, ZipWriter};
     use zip::CompressionMethod;
+    use zip::write::{SimpleFileOptions, ZipWriter};
 
     let cursor = Cursor::new(Vec::new());
     let mut writer = ZipWriter::new(cursor);
@@ -370,8 +370,8 @@ pub(super) fn capture_platform_png(
 #[cfg(test)]
 mod tests {
     use super::{
-        capture_stream_capacity, capture_stream_read_progress, run_native_capture_callback,
-        MAX_CAPTURE_BYTES,
+        MAX_CAPTURE_BYTES, capture_stream_capacity, capture_stream_read_progress,
+        run_native_capture_callback,
     };
 
     #[test]

@@ -1,13 +1,12 @@
 //! Windows system media transport integration.
 
 use super::{
-    clamp_playback_rate, control, control_delta, control_position, control_rate, control_shuffle,
-    emit_control, ms_to_windows_ticks, run_windows_media_callback, windows_ticks_to_ms_u64,
-    MediaControlsUpdate, MusicHardwareControlPayload,
+    MediaControlsUpdate, MusicHardwareControlPayload, clamp_playback_rate, control, control_delta,
+    control_position, control_rate, control_shuffle, emit_control, ms_to_windows_ticks,
+    run_windows_media_callback, windows_ticks_to_ms_u64,
 };
 use std::sync::{LazyLock, Mutex};
 use tauri::Manager;
-use windows::core::{factory, HSTRING};
 use windows::Foundation::{TimeSpan, TypedEventHandler};
 use windows::Media::{
     MediaPlaybackStatus, MediaPlaybackType, PlaybackPositionChangeRequestedEventArgs,
@@ -18,6 +17,7 @@ use windows::Media::{
 };
 use windows::Win32::Foundation::HWND;
 use windows::Win32::System::WinRT::ISystemMediaTransportControlsInterop;
+use windows::core::{HSTRING, factory};
 
 const SEEK_STEP_MS: i64 = 10_000;
 

@@ -2,16 +2,16 @@
 
 use super::authorization::verify_folder_source;
 use super::{
-    generic_denial, internal_error, optional_limit, optional_string, required_string, sha256_hex,
-    truncate_utf8, wire_folder_capability, HostToolContext, OpaqueCursor, DEFAULT_PAGE_SIZE,
-    MAX_QUERY_BYTES, MAX_WORKSPACE_CONTENT_BYTES, MAX_WORKSPACE_PATCH_EDITS,
+    DEFAULT_PAGE_SIZE, HostToolContext, MAX_QUERY_BYTES, MAX_WORKSPACE_CONTENT_BYTES,
+    MAX_WORKSPACE_PATCH_EDITS, OpaqueCursor, generic_denial, internal_error, optional_limit,
+    optional_string, required_string, sha256_hex, truncate_utf8, wire_folder_capability,
 };
 use crate::chat::internal_mcp::{InternalMcpFolderSource, InternalMcpRunScope};
 use crate::chat::models::{
     ChatError, ChatErrorCode, ChatFolderCapability, ChatResult, ChatRuntimeApprovalPolicy,
 };
 use crate::chat::workspace::WorkingFolderAuthorizationOperation;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use tauri::Manager;
 
 pub(super) async fn list_authorized_roots(context: &HostToolContext<'_>) -> ChatResult<Value> {

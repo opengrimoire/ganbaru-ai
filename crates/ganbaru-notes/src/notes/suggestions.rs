@@ -1,7 +1,7 @@
 use super::models::{NoteBlockRow, NoteSuggestionCreate, NoteSuggestionDto, NoteSuggestionRow};
 use super::validation::require_uuid;
 use super::{collaboration_operations, local_user};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sqlx::{Sqlite, SqlitePool, Transaction};
 
 const SUGGESTION_MAX_TEXT_LENGTH: usize = 2000;

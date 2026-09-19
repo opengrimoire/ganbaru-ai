@@ -2,10 +2,10 @@ use crate::chat::events::{CanonicalEvent, CanonicalRuntimeEvent};
 use crate::chat::models::{
     ChatChangeNotification, ChatError, ChatErrorCode, ChatResult, ContentStreamKind, UtcTimestamp,
 };
-use crate::chat::repository::events::{append_canonical_event, AppendCanonicalEventRequest};
+use crate::chat::repository::events::{AppendCanonicalEventRequest, append_canonical_event};
 use serde_json::Value;
 use sqlx::SqlitePool;
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{HashMap, hash_map::Entry};
 use std::sync::Arc;
 
 const MAX_CANONICAL_EVENT_BYTES: usize = 4 * 1024 * 1024;

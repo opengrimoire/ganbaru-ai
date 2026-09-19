@@ -1,7 +1,7 @@
 //! Bounded checkpoint metadata and patch generation.
 
 use super::git::git_output;
-use super::{checkpoint_error, StoredCheckpoint};
+use super::{StoredCheckpoint, checkpoint_error};
 use crate::chat::events::ChangedFileSummary;
 use crate::chat::models::{ChatResult, ChatThreadId};
 use serde::Serialize;

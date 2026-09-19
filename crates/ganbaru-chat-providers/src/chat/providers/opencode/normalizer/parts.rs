@@ -33,24 +33,26 @@ impl OpenCodeEventNormalizer {
         let Some(effective_model) = effective_model else {
             return Ok(Vec::new());
         };
-        Ok(vec![self.event(
-            state,
-            "message.updated",
-            ProviderItemId::new(id.to_string()).ok(),
-            None,
-            CanonicalEvent::SessionConfigured(SessionConfiguredEvent {
-                session_id: self.session_id.clone(),
-                effective_modes: state.modes,
-                effective_model_id: Some(effective_model),
-                effective_model_options: text(info, "variant")
-                    .map(|variant| ModelOptionSelection {
-                        key: "variant".to_string(),
-                        value: ModelOptionValue::Choice(bounded(variant, 256)),
-                    })
-                    .into_iter()
-                    .collect(),
-            }),
-        )?])
+        Ok(vec![
+            self.event(
+                state,
+                "message.updated",
+                ProviderItemId::new(id.to_string()).ok(),
+                None,
+                CanonicalEvent::SessionConfigured(SessionConfiguredEvent {
+                    session_id: self.session_id.clone(),
+                    effective_modes: state.modes,
+                    effective_model_id: Some(effective_model),
+                    effective_model_options: text(info, "variant")
+                        .map(|variant| ModelOptionSelection {
+                            key: "variant".to_string(),
+                            value: ModelOptionValue::Choice(bounded(variant, 256)),
+                        })
+                        .into_iter()
+                        .collect(),
+                }),
+            )?,
+        ])
     }
 
     pub(super) fn part_delta(
@@ -329,22 +331,24 @@ impl OpenCodeEventNormalizer {
         part: &Map<String, Value>,
     ) -> ChatResult<Vec<CanonicalRuntimeEvent>> {
         let id = identifier(part, "id", "subtask ID")?;
-        Ok(vec![self.event(
-            state,
-            "message.part.updated",
-            ProviderItemId::new(id.to_string()).ok(),
-            None,
-            CanonicalEvent::TaskLifecycle(TaskLifecycleEvent {
-                task_id: id.to_string(),
-                parent_task_id: None,
-                status: ActivityStatus::Active,
-                title: text(part, "description")
-                    .map(|value| bounded(value, 512))
-                    .unwrap_or_else(|| "OpenCode subtask".to_string()),
-                detail: text(part, "prompt").map(|value| bounded(value, 4096)),
-                safe_metadata: Some(safe_shape(&Value::Object(part.clone()))),
-            }),
-        )?])
+        Ok(vec![
+            self.event(
+                state,
+                "message.part.updated",
+                ProviderItemId::new(id.to_string()).ok(),
+                None,
+                CanonicalEvent::TaskLifecycle(TaskLifecycleEvent {
+                    task_id: id.to_string(),
+                    parent_task_id: None,
+                    status: ActivityStatus::Active,
+                    title: text(part, "description")
+                        .map(|value| bounded(value, 512))
+                        .unwrap_or_else(|| "OpenCode subtask".to_string()),
+                    detail: text(part, "prompt").map(|value| bounded(value, 4096)),
+                    safe_metadata: Some(safe_shape(&Value::Object(part.clone()))),
+                }),
+            )?,
+        ])
     }
 
     pub(super) fn compaction(

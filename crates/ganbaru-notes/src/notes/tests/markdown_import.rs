@@ -50,14 +50,16 @@ let value = 1;
             "Weekly plan"
         );
         assert_eq!(result_json["imported_block_count"], 12);
-        assert!(result_json["diagnostics"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|diagnostic| {
-                diagnostic["code"] == "markdown_frontmatter_field_ignored"
-                    && diagnostic["severity"] == "info"
-            }));
+        assert!(
+            result_json["diagnostics"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|diagnostic| {
+                    diagnostic["code"] == "markdown_frontmatter_field_ignored"
+                        && diagnostic["severity"] == "info"
+                })
+        );
 
         let blocks = result_json["page"]["blocks"]["results"].as_array().unwrap();
         let block_types = blocks

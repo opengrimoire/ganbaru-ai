@@ -133,9 +133,11 @@ fn interchange_import_rejects_unsafe_paths_before_writing() {
                 .item
                 .locations[0]
                 .relative_path = unsafe_path.to_string();
-            assert!(super::interchange::import(&pool, unsafe_request.clone())
-                .await
-                .is_err());
+            assert!(
+                super::interchange::import(&pool, unsafe_request.clone())
+                    .await
+                    .is_err()
+            );
         }
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM music_playlists")

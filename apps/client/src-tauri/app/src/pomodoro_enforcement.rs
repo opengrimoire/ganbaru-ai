@@ -242,11 +242,7 @@ fn update_windows_modifier_bits(bits: u16, key_code: u32, key_down: bool) -> u16
     let Some(bit) = windows_modifier_bit(key_code) else {
         return bits;
     };
-    if key_down {
-        bits | bit
-    } else {
-        bits & !bit
-    }
+    if key_down { bits | bit } else { bits & !bit }
 }
 
 #[cfg(any(target_os = "windows", test))]
@@ -410,12 +406,14 @@ impl OverlayReconcileGuard {
         let (stop_tx, stop_rx) = mpsc::sync_channel(1);
         let worker = std::thread::Builder::new()
             .name("ganbaru-ai-pomodoro-overlay-reconcile".to_string())
-            .spawn(move || loop {
-                match stop_rx.recv_timeout(interval) {
-                    Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
-                    Err(mpsc::RecvTimeoutError::Timeout) => {
-                        if !reconcile() {
-                            break;
+            .spawn(move || {
+                loop {
+                    match stop_rx.recv_timeout(interval) {
+                        Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                        Err(mpsc::RecvTimeoutError::Timeout) => {
+                            if !reconcile() {
+                                break;
+                            }
                         }
                     }
                 }
@@ -468,35 +466,36 @@ where
 mod windows {
     use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
     use std::sync::{
+        Arc,
         atomic::{AtomicBool, AtomicU16, Ordering},
         mpsc::{self, SyncSender},
-        Arc,
     };
     use std::thread::JoinHandle;
 
     use super::{
+        VK_LCONTROL_CODE, VK_LMENU_CODE, VK_LSHIFT_CODE, VK_LWIN_CODE, VK_RCONTROL_CODE,
+        VK_RMENU_CODE, VK_RSHIFT_CODE, VK_RWIN_CODE, WindowsOverlayShortcutEvent,
         run_main_thread_setup, should_block_windows_overlay_shortcut, update_windows_modifier_bits,
-        windows_modifiers_from_bits, WindowsOverlayShortcutEvent, VK_LCONTROL_CODE, VK_LMENU_CODE,
-        VK_LSHIFT_CODE, VK_LWIN_CODE, VK_RCONTROL_CODE, VK_RMENU_CODE, VK_RSHIFT_CODE,
-        VK_RWIN_CODE,
+        windows_modifiers_from_bits,
     };
     use tauri::Manager;
-    use windows::core::PCWSTR;
     use windows::Win32::Foundation::{
         HANDLE, HINSTANCE, LPARAM, LRESULT, WAIT_FAILED, WAIT_OBJECT_0, WAIT_TIMEOUT, WPARAM,
     };
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::System::Power::{
-        SetThreadExecutionState, ES_CONTINUOUS, ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED,
+        ES_CONTINUOUS, ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED, SetThreadExecutionState,
     };
     use windows::Win32::System::Threading::{CreateEventW, SetEvent};
     use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
     use windows::Win32::UI::WindowsAndMessaging::{
-        CallNextHookEx, DispatchMessageW, MsgWaitForMultipleObjects, PeekMessageW, SetWindowPos,
-        SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, HC_ACTION, HWND_TOPMOST,
-        KBDLLHOOKSTRUCT, LLKHF_ALTDOWN, MSG, PM_REMOVE, QS_ALLINPUT, SWP_NOMOVE, SWP_NOSIZE,
-        SWP_SHOWWINDOW, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP,
+        CallNextHookEx, DispatchMessageW, HC_ACTION, HWND_TOPMOST, KBDLLHOOKSTRUCT, LLKHF_ALTDOWN,
+        MSG, MsgWaitForMultipleObjects, PM_REMOVE, PeekMessageW, QS_ALLINPUT, SWP_NOMOVE,
+        SWP_NOSIZE, SWP_SHOWWINDOW, SetWindowPos, SetWindowsHookExW, TranslateMessage,
+        UnhookWindowsHookEx, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN,
+        WM_SYSKEYUP,
     };
+    use windows::core::PCWSTR;
 
     static MODIFIER_BITS: AtomicU16 = AtomicU16::new(0);
     const SHORTCUT_HOOK_STOP_POLL_MS: u32 = 250;
@@ -847,7 +846,7 @@ mod macos {
     use tauri::Manager;
 
     use super::{
-        mac_overlay_presentation_options_bits, run_main_thread_setup, MacPresentationLeaseState,
+        MacPresentationLeaseState, mac_overlay_presentation_options_bits, run_main_thread_setup,
     };
 
     type IOPMAssertionId = u32;
@@ -1033,8 +1032,8 @@ mod macos {
 mod tests {
     use super::*;
     use std::sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     };
 
     fn event(

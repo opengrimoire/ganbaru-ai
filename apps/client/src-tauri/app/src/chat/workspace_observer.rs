@@ -22,7 +22,7 @@ use tauri::Emitter;
 mod changes;
 mod git;
 
-use changes::{safe_workspace_relative_path, WorkspaceChangeAccumulator};
+use changes::{WorkspaceChangeAccumulator, safe_workspace_relative_path};
 use git::{discover_git_metadata_roots, git_watch_paths};
 
 pub const CHAT_WORKSPACE_CHANGE_EVENT: &str = "chat://workspace-change";

@@ -140,7 +140,7 @@ pub fn validate_custom_emoji_icon(
         _ => {
             return Err(format!(
                 "{field}.custom_emoji.id must be a non-empty string"
-            ))
+            ));
         }
     }
     validate_optional_non_empty_string(
@@ -259,7 +259,7 @@ pub fn validate_local_image_metadata(
         _ => {
             return Err(format!(
                 "{field}.content_type must be a supported local image type"
-            ))
+            ));
         }
     }
     match file.get("byte_size").and_then(Value::as_i64) {
@@ -271,7 +271,7 @@ pub fn validate_local_image_metadata(
         _ => {
             return Err(format!(
                 "{field}.sha256 must be a lowercase SHA-256 hex digest"
-            ))
+            ));
         }
     }
     Ok(())

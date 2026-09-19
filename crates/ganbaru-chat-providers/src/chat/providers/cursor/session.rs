@@ -9,6 +9,7 @@ use crate::chat::events::*;
 use crate::chat::models::*;
 use crate::chat::providers::{DriverOperationContext, ProviderEventSink};
 use agent_client_protocol::schema::{
+    ProtocolVersion,
     v1::{
         ClientCapabilities, CreateTerminalRequest, CreateTerminalResponse, FileSystemCapabilities,
         HttpHeader, Implementation, InitializeRequest,
@@ -18,21 +19,20 @@ use agent_client_protocol::schema::{
         TerminalOutputResponse, WaitForTerminalExitRequest, WaitForTerminalExitResponse,
         WriteTextFileRequest, WriteTextFileResponse,
     },
-    ProtocolVersion,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{
-    atomic::{AtomicBool, AtomicU64, Ordering},
     Arc, Mutex,
+    atomic::{AtomicBool, AtomicU64, Ordering},
 };
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
-use tokio::sync::{mpsc, oneshot, Notify};
+use tokio::sync::{Notify, mpsc, oneshot};
 use tokio::task::JoinHandle;
 
 mod callbacks;
@@ -47,8 +47,8 @@ use callbacks::{callback_permission_error, require_acp_session};
 #[cfg(test)]
 pub use configuration::initialize_session;
 pub use configuration::{
-    apply_provider_configuration, initialize_provider_session, AcpRequestedConfiguration,
-    AcpSessionInitialization,
+    AcpRequestedConfiguration, AcpSessionInitialization, apply_provider_configuration,
+    initialize_provider_session,
 };
 pub use router::{restore_pending, spawn_cursor_router, take_pending};
 
