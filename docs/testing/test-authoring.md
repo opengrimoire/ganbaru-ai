@@ -38,6 +38,8 @@ Fixture optimizations must preserve isolation, foreign keys, migration order, tr
 
 Standard Cargo commands remain portable. An optional linker optimization must retain the standard linker fallback and be measured before repository-wide use.
 
+Provider probe tests must configure their own temporary provider homes and explicit executable paths instead of depending on installed CLIs, `PATH`, or a developer's home directory. Cover invalid-home and missing-executable results separately because configuration validation can fail before executable discovery.
+
 ## Authorization and security
 
 Authorization tests exercise intersections, not isolated positive flags. For Chat this includes participant capability, history boundary, destination audience, folder tier, execution target, scratch generation, immutable authorization revision, provider enforcement, host-tool scope, continuation, revocation, and result publication.
