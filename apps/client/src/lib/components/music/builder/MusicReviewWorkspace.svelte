@@ -509,9 +509,8 @@
     {#if selectionMode}
       <div class="review-player mt-4 flex min-w-0 items-center gap-4">
         <div class="review-media relative grid h-28 w-28 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary/10 text-primary" aria-hidden="true">
-          <span class="absolute left-6 top-5 h-13 w-15 rounded-lg border border-primary/20"></span>
-          <span class="absolute bottom-5 right-6 h-13 w-15 rounded-lg border border-primary/35 bg-background/45"></span>
-          <Files class="relative" size={34} strokeWidth={1.35} />
+          <span class="absolute left-6 top-6 h-14 w-14 rounded-lg border border-primary/20"></span>
+          <span class="absolute left-8 top-8 h-14 w-14 rounded-lg border border-primary/35 bg-background/45"></span>
           <span class="absolute bottom-3 right-3 grid h-6 w-6 place-items-center rounded-full bg-primary text-primary-foreground"><Check size={13} strokeWidth={2.6} /></span>
         </div>
         <div class="min-w-0 flex-1">
