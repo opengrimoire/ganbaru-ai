@@ -31,7 +31,7 @@ After its first opening, the builder keeps its initialized workspace while the a
 
 ## Playlist management
 
-Playlist management presents built-in and custom playlists in one stored order. Reordering starts from an explicit handle and supports pointer, touch, and keyboard operation. A failed save restores the prior order and reports the error.
+Playlist management presents built-in and custom playlists in one stored order. It preserves the surrounding playlist context, keeps Cancel and Done in the existing header, and makes unrelated builder controls unavailable until management ends. Reordering starts from an explicit handle and supports pointer, touch, and keyboard operation. A failed save restores the prior order and reports the error.
 
 Built-in edit and delete actions remain visibly unavailable with an explanation. Custom deletion explains what happens to memberships and never deletes the underlying library items or media files.
 

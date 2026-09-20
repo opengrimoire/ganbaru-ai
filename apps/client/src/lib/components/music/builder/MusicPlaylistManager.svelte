@@ -21,12 +21,20 @@
     onDelete,
     onReorder,
     onDone,
+    showHeader = true,
+    headerTitle,
+    headerDescription,
+    actionsDisabled = $bindable(false),
   }: {
     playlists: MusicPlaylistSummary[];
     onEdit: (playlistId: string) => void;
     onDelete: (playlistId: string) => void;
     onReorder: (playlistIds: string[]) => Promise<boolean>;
     onDone: () => void;
+    showHeader?: boolean;
+    headerTitle?: string;
+    headerDescription?: string | null;
+    actionsDisabled?: boolean;
   } = $props();
 
   interface PendingPointer {
@@ -72,7 +80,7 @@
   let saving = $state(false);
   let reorderError = $state(false);
   let announcement = $state("");
-  let pendingPointer: PendingPointer | null = null;
+  let pendingPointer = $state.raw<PendingPointer | null>(null);
   let dragFrame: number | null = null;
   let settleTimer: ReturnType<typeof setTimeout> | null = null;
   let handoffFrame: number | null = null;
@@ -136,7 +144,7 @@
     return saved;
   }
 
-  async function finishManaging(): Promise<void> {
+  export async function finishManaging(): Promise<void> {
     if (saving || drag || pendingPointer) return;
     if (keyboardPlaylistId) {
       const origin = keyboardOriginIds;
@@ -147,7 +155,7 @@
     onDone();
   }
 
-  async function cancelManaging(): Promise<void> {
+  export async function cancelManaging(): Promise<void> {
     if (saving || drag || pendingPointer) return;
     keyboardPlaylistId = null;
     keyboardOriginIds = [];
@@ -448,6 +456,10 @@
     void managerWidth;
     applyLayout();
   });
+
+  $effect(() => {
+    actionsDisabled = saving || Boolean(drag) || Boolean(pendingPointer);
+  });
 </script>
 
 <svelte:window
@@ -457,13 +469,18 @@
   onpointercancel={(event) => finishPointerDrag(event, true)}
 />
 
-<div class="sticky top-0 z-20 -mx-1 mb-3 flex min-w-0 items-start justify-between gap-3 px-1 pb-2" style="background-color: var(--cal-bg);">
-  <div class="min-w-0"><h2 class="text-sm font-semibold">{t("music.builder.managePlaylists")}</h2><p class="mt-0.5 text-[0.68rem] leading-relaxed text-muted-foreground">{t("music.builder.managePlaylistsHint")}</p></div>
-  <div class="flex shrink-0 items-center gap-2">
-    <button type="button" onclick={() => { void cancelManaging(); }} disabled={saving || Boolean(drag)} class="h-8 rounded-lg px-3 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-50">{t("music.builder.cancel")}</button>
-    <button type="button" onclick={() => { void finishManaging(); }} disabled={saving || Boolean(drag)} class="h-8 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-50">{t("music.builder.doneManaging")}</button>
+{#if showHeader}
+  <div class="sticky top-0 z-20 -mx-1 mb-3 flex min-w-0 items-center justify-between gap-3 px-1 pb-2" style="background-color: var(--cal-bg);">
+    <div class="min-w-0">
+      <h2 class="text-sm font-semibold">{headerTitle ?? t("music.builder.managePlaylists")}</h2>
+      {#if headerDescription !== null}<p class="mt-0.5 text-[0.68rem] leading-relaxed text-muted-foreground">{headerDescription ?? t("music.builder.managePlaylistsHint")}</p>{/if}
+    </div>
+    <div class="flex shrink-0 items-center gap-2">
+      <button type="button" onclick={() => { void cancelManaging(); }} disabled={actionsDisabled} class="h-8 rounded-lg px-3 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50">{t("music.builder.cancel")}</button>
+      <button type="button" onclick={() => { void finishManaging(); }} disabled={actionsDisabled} class="h-8 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50">{t("music.builder.doneManaging")}</button>
+    </div>
   </div>
-</div>
+{/if}
 <div bind:this={managerRoot} class="relative w-full" style={`height: ${layoutHeight}px;`} aria-busy={saving} role="list">
   {#each renderedPlaylists as playlist (playlist.id)}
     {@const protectedPlaylist = isSystemMusicPlaylistId(playlist.id)}

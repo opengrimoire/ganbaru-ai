@@ -127,6 +127,12 @@
   let firstUseFinalizing = $state(false);
   let firstUseFinalizationGeneration = 0;
   let playlistManagementOpen = $state(false);
+  interface PlaylistManagerHandle {
+    cancelManaging: () => Promise<void>;
+    finishManaging: () => Promise<void>;
+  }
+  let playlistManager = $state<PlaylistManagerHandle | null>(null);
+  let playlistManagerActionsDisabled = $state(false);
   let soundscapeAddRequest = $state(0);
   let toolbarMenuOpen = $state(false);
   let reviewSelectionClearRequest = $state(0);
@@ -137,6 +143,9 @@
   const reviewWorkspaceViewState = $state(createMusicReviewWorkspaceViewState());
   const layout = $derived(projectMusicBuilderLayout({ width, height }));
   const destination = $derived(history.current.destination);
+  const playlistManagementActive = $derived(
+    playlistManagementOpen || (destination.kind === "review" && reviewWorkspaceViewState.managingPlaylists),
+  );
   const hasList = $derived(destination.kind === "playlist");
   const reviewItems = $derived(library.currentWindow.items.filter((item) =>
     showIgnoredReviewItems || item.reviewState !== "ignored"));
@@ -692,6 +701,7 @@
 
   function handleWindowKeydown(event: KeyboardEvent): void {
     if (!active) return;
+    if (playlistManagementActive) return;
     if (event.key === "Escape") {
       if (contextViewState.contextPanelOpen) { event.preventDefault(); event.stopPropagation(); contextViewState.contextPanelOpen = false; return; }
       if (toolbarMenuOpen) { event.preventDefault(); event.stopPropagation(); toolbarMenuOpen = false; return; }
@@ -758,7 +768,7 @@
 <section bind:this={root} use:observeRoot class="builder-root flex h-full min-h-0 select-none flex-col overflow-hidden text-foreground" style="background-color: var(--cal-bg);">
   <div class="builder-shell relative grid min-h-0 flex-1" class:builder-wide={layout.mode === "wide"} class:builder-medium={layout.mode === "medium"} class:builder-narrow={layout.mode === "narrow"} class:builder-contextless={builderPreparation || firstUseNeedsFolder}>
     {#if !builderPreparation && !firstUseNeedsFolder}
-      <aside class:context-open={contextViewState.contextPanelOpen} class="builder-context-panel relative z-20 flex min-h-0 flex-col overflow-hidden bg-background/20">
+      <aside class:context-open={contextViewState.contextPanelOpen} class:builder-controls-locked={playlistManagementActive} class="builder-context-panel relative z-20 flex min-h-0 flex-col overflow-hidden bg-background/20" inert={playlistManagementActive}>
         {#if layout.contextPanelPresentation === "sheet"}
           <div class="flex h-11 shrink-0 items-center px-2">
             <button
@@ -826,9 +836,12 @@
     {/if}
     <main class="relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-background/30">
       {#if destination.kind !== "review"}
-        <MusicBuilderToolbar status={workspaceStatus()} showPanelButton={layout.contextPanelPresentation === "sheet"} onOpenPanel={() => contextViewState.contextPanelOpen = true} onOpenPlayer={openPlayerFromBuilder} compactPlayerLabel={mobilePresentation}>
+        <MusicBuilderToolbar status={workspaceStatus()} showPanelButton={layout.contextPanelPresentation === "sheet"} onOpenPanel={() => contextViewState.contextPanelOpen = true} onOpenPlayer={openPlayerFromBuilder} compactPlayerLabel={mobilePresentation} locked={playlistManagementOpen}>
           {#snippet actions()}
-            {#if destination.kind === "playlists"}
+            {#if playlistManagementOpen && (destination.kind === "playlists" || destination.kind === "playlist")}
+              <button type="button" onclick={() => { void playlistManager?.cancelManaging(); }} disabled={playlistManagerActionsDisabled} class="h-8 rounded-lg px-3 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50">{t("music.builder.cancel")}</button>
+              <button type="button" onclick={() => { void playlistManager?.finishManaging(); }} disabled={playlistManagerActionsDisabled} class="h-8 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50">{t("music.builder.doneManaging")}</button>
+            {:else if destination.kind === "playlists"}
               <button type="button" onclick={createPlaylistFromWorkspace} class="toolbar-primary"><Plus size={13} />{t("music.builder.newPlaylist")}</button>
               <div class="relative"><button type="button" onclick={() => toolbarMenuOpen = !toolbarMenuOpen} class="toolbar-icon" aria-label={t("music.builder.moreActions")}><MoreHorizontal size={15} /></button>{#if toolbarMenuOpen}<div class="toolbar-menu"><button type="button" onclick={() => { toolbarMenuOpen = false; interchange.show("import"); }}>{t("music.builder.importPlaylists")}</button><button type="button" disabled={library.playlistSummaries.length === 0} onclick={() => { toolbarMenuOpen = false; interchange.show("export", null); }}>{t("music.builder.exportPlaylists")}</button></div>{/if}</div>
             {:else if destination.kind === "playlist"}
@@ -902,7 +915,7 @@
           <MusicReviewWorkspace items={reviewItems} totalCount={reviewItems.length} {library} {inspector} {sources} {audition} {review} {bulk} {active} selectedItemIds={reviewTreeViewState.selectedItemIds} selectedFolderIds={reviewTreeViewState.selectedFolderIds} onClearSelection={clearReviewSelection} autoplay={reviewAutoplay} onAutoplayChange={setReviewAutoplay} onOpenPlayer={openPlayerFromBuilder} compactPlayerLabel={mobilePresentation} showPanelButton={layout.contextPanelPresentation === "sheet"} onOpenPanel={() => contextViewState.contextPanelOpen = true} onEditPlaylist={(playlistId) => { void openPlaylistManagementSurface(playlistId, "edit"); }} onDeletePlaylist={(playlistId) => { void openPlaylistManagementSurface(playlistId, "delete"); }} onReorderPlaylists={reorderPlaylistSummaries} issue={activeReviewIssue} repairAvailable={activeReviewIssue ? canRepairIssue(activeReviewIssue) : false} onRepairIssue={repairIssue} viewState={reviewWorkspaceViewState} />
         {/if}
       {:else if playlistManagementOpen && (destination.kind === "playlists" || destination.kind === "playlist")}
-        <div class="min-h-0 flex-1 overflow-y-auto p-3" data-music-scrollable="true"><MusicPlaylistManager playlists={library.playlistSummaries} onEdit={(playlistId) => { void openPlaylistManagementSurface(playlistId, "edit"); }} onDelete={(playlistId) => { void openPlaylistManagementSurface(playlistId, "delete"); }} onReorder={reorderPlaylistSummaries} onDone={() => playlistManagementOpen = false} /></div>
+        <div class="min-h-0 flex-1 overflow-y-auto p-3" data-music-scrollable="true"><MusicPlaylistManager bind:this={playlistManager} bind:actionsDisabled={playlistManagerActionsDisabled} playlists={library.playlistSummaries} onEdit={(playlistId) => { void openPlaylistManagementSurface(playlistId, "edit"); }} onDelete={(playlistId) => { void openPlaylistManagementSurface(playlistId, "delete"); }} onReorder={reorderPlaylistSummaries} onDone={() => playlistManagementOpen = false} showHeader={false} /></div>
       {:else if hasList}
         {#if destination.kind === "playlist" && playlist.detail && playlist.playbackIssue === "no-eligible-items"}
               <div class="mx-3 mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-warning/30 bg-warning/8 px-3 py-2 text-[0.68rem] text-warning" role="status">
@@ -983,7 +996,7 @@
     </main>
 
     {#if layout.dockPresentation === "bottom" && !builderPreparation && !firstUseNeedsFolder}
-      <div class="builder-mobile-dock"><MusicBuilderDock {destination} {reviewCount} compact showAllLabels={mobilePresentation} includeSoundscapes={supportsSoundscapes} onNavigate={navigate} /></div>
+      <div class:builder-controls-locked={playlistManagementActive} class="builder-mobile-dock" inert={playlistManagementActive} aria-disabled={playlistManagementActive}><MusicBuilderDock {destination} {reviewCount} compact showAllLabels={mobilePresentation} includeSoundscapes={supportsSoundscapes} onNavigate={navigate} /></div>
     {/if}
 
     {#if sourceSurface === "add"}
@@ -1042,6 +1055,9 @@
   .builder-root :global(textarea),
   .builder-root :global([contenteditable="true"]) { user-select: text; }
   .builder-context-panel { grid-column: 1; border-right: 1px solid color-mix(in srgb, var(--border) 46%, transparent); }
+  .builder-controls-locked :global(button),
+  .builder-controls-locked :global(input),
+  .builder-controls-locked :global([role="button"]) { cursor: not-allowed !important; opacity: 0.38; }
   .builder-shell > main { grid-column: 2; }
   .builder-wide, .builder-medium { grid-template-columns: minmax(14rem, 0.72fr) minmax(22rem, 2fr); }
   .builder-contextless { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }

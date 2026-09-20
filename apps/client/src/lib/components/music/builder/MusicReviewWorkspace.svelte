@@ -109,6 +109,12 @@
   let preparingNext = $state(false);
   let ignoreConfirmOpen = $state(false);
   let selectionPlaybackHandled = $state(false);
+  interface PlaylistManagerHandle {
+    cancelManaging: () => Promise<void>;
+    finishManaging: () => Promise<void>;
+  }
+  let playlistManager = $state<PlaylistManagerHandle | null>(null);
+  let playlistManagerActionsDisabled = $state(false);
   const selectedIdSet = $derived(new Set(selectedItemIds));
   const selectedFolderIdSet = $derived(new Set(selectedFolderIds));
   const selectionMode = $derived(selectedItemIds.length > 0);
@@ -450,6 +456,7 @@
   }
 
   function handleKeydown(event: KeyboardEvent): void {
+    if (viewState.managingPlaylists) return;
     if (event.isComposing || event.altKey || isMusicReviewEditableTarget(event.target)) return;
     const modified = event.ctrlKey || event.metaKey;
     if (selectionMode) {
@@ -496,7 +503,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <div class="review-main flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-  <section class="review-audition min-h-0 overflow-y-auto px-4 pb-3 pt-2" data-music-scrollable="true">
+  <section class:review-controls-locked={viewState.managingPlaylists} class="review-audition min-h-0 overflow-y-auto px-4 pb-3 pt-2" data-music-scrollable="true" inert={viewState.managingPlaylists}>
     <div class="review-toolbar flex items-center justify-between gap-3">
       {#if showPanelButton}<button type="button" onclick={onOpenPanel} class="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-foreground hover:bg-secondary" aria-label={t("music.builder.openContextPanel")} title={t("music.builder.openContextPanel")}><PanelLeft size={14} /></button>{/if}
       <button type="button" onclick={onOpenPlayer} class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-secondary px-2.5 text-[0.7rem]" aria-label={t("music.backToPlayer")} data-music-focus-key="builder:back-to-player"><ChevronLeft size={14} />{compactPlayerLabel ? t("music.returnToPlayerShort") : t("music.backToPlayer")}</button>
@@ -602,21 +609,10 @@
   </section>
 
   <section class="review-classify flex min-h-0 flex-col">
-    {#if viewState.managingPlaylists}
-      <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3" data-music-scrollable="true">
-        <MusicPlaylistManager
-          playlists={library.playlistSummaries}
-          onEdit={onEditPlaylist}
-          onDelete={onDeletePlaylist}
-          onReorder={onReorderPlaylists}
-          onDone={() => viewState.managingPlaylists = false}
-        />
-      </div>
-    {:else}
-      <div class="shrink-0 p-3">
-        <h2 class="text-sm font-semibold">{t("music.builder.classifyPlaylists")}</h2>
-        {#if selectionMode}<p class="mt-0.5 text-[0.65rem] text-muted-foreground">{t("music.builder.reviewSelectionApplyHint")}</p>{/if}
-      {#if viewState.inlineCreateOpen}
+    <div class="shrink-0 p-3">
+      <h2 class="text-sm font-semibold">{t("music.builder.classifyPlaylists")}</h2>
+      {#if selectionMode}<p class="mt-0.5 text-[0.65rem] text-muted-foreground">{t("music.builder.reviewSelectionApplyHint")}</p>{/if}
+      {#if viewState.inlineCreateOpen && !viewState.managingPlaylists}
         <form class="mt-2" onsubmit={(event) => { event.preventDefault(); void createPlaylistAndAdd(); }}>
           <div class="flex items-center gap-2">
             <IconPicker value={viewState.newPlaylistIcon} onChange={(value) => viewState.newPlaylistIcon = value} ariaLabel={t("music.builder.selectPlaylistIcon")} showUpload={false}>
@@ -645,12 +641,32 @@
         </form>
       {:else}
         <div class="mt-2 flex flex-wrap items-center gap-2">
-          <button type="button" onclick={openInlineCreate} class="inline-flex h-8 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-medium text-primary-foreground"><ListPlus size={14} />{t("music.builder.newPlaylist")}</button>
-          <button type="button" onclick={() => { viewState.inlineCreateOpen = false; review.createError = null; bulk.createError = null; viewState.managingPlaylists = true; }} class="inline-flex h-8 items-center gap-1.5 rounded-full bg-secondary px-3 text-xs font-medium text-foreground"><Pencil size={13} />{t("music.builder.managePlaylists")}</button>
+          <button type="button" onclick={openInlineCreate} disabled={viewState.managingPlaylists} class="inline-flex h-8 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-medium text-primary-foreground disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-50"><ListPlus size={14} />{t("music.builder.newPlaylist")}</button>
+          <button type="button" onclick={() => { viewState.inlineCreateOpen = false; review.createError = null; bulk.createError = null; viewState.managingPlaylists = true; }} disabled={viewState.managingPlaylists} class="inline-flex h-8 items-center gap-1.5 rounded-full bg-secondary px-3 text-xs font-medium text-foreground disabled:cursor-not-allowed disabled:text-muted-foreground disabled:opacity-50"><Pencil size={13} />{t("music.builder.managePlaylists")}</button>
+          {#if viewState.managingPlaylists}
+            <div class="ml-auto flex items-center gap-2">
+              <button type="button" onclick={() => { void playlistManager?.cancelManaging(); }} disabled={playlistManagerActionsDisabled} class="h-8 rounded-lg px-3 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50">{t("music.builder.cancel")}</button>
+              <button type="button" onclick={() => { void playlistManager?.finishManaging(); }} disabled={playlistManagerActionsDisabled} class="h-8 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50">{t("music.builder.doneManaging")}</button>
+            </div>
+          {/if}
         </div>
       {/if}
-      </div>
+    </div>
 
+    {#if viewState.managingPlaylists}
+      <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-3" data-music-scrollable="true">
+        <MusicPlaylistManager
+          bind:this={playlistManager}
+          bind:actionsDisabled={playlistManagerActionsDisabled}
+          playlists={library.playlistSummaries}
+          onEdit={onEditPlaylist}
+          onDelete={onDeletePlaylist}
+          onReorder={onReorderPlaylists}
+          onDone={() => viewState.managingPlaylists = false}
+          showHeader={false}
+        />
+      </div>
+    {:else}
       <div bind:this={checklistRoot} class="flex min-h-0 flex-1 flex-col">
         <MusicPlaylistPicker
           playlists={library.playlistSummaries}
@@ -671,7 +687,7 @@
       </div>
     {/if}
 
-    <div class="review-actions grid shrink-0 grid-cols-2 gap-3 p-3">
+    <div class:review-controls-locked={viewState.managingPlaylists} class="review-actions grid shrink-0 grid-cols-2 gap-3 p-3" inert={viewState.managingPlaylists} aria-disabled={viewState.managingPlaylists}>
       {#if selectionMode}
         <button type="button" onclick={onClearSelection} disabled={bulk.saving || preparingNext} class="review-action h-full w-full border border-border/70 bg-background text-foreground">{t("music.builder.clearReviewSelection")}</button>
       {:else if item?.reviewState === "reviewed"}
@@ -710,6 +726,9 @@
   .review-action { display: inline-flex; min-height: 2.25rem; align-items: center; justify-content: center; gap: 0.375rem; border-radius: 0.5rem; padding: 0 0.5rem; font-size: calc(0.72rem * var(--type-scale)); font-weight: 600; }
   .review-action:disabled { cursor: not-allowed; }
   .review-action:disabled:not(.review-save) { opacity: 0.4; }
+  .review-controls-locked :global(button),
+  .review-controls-locked :global(input),
+  .review-controls-locked :global([role="button"]) { cursor: not-allowed !important; opacity: 0.38; }
   @container (width < 620px) {
     .review-main { min-height: 32rem; flex: 1 0 auto; overflow: visible; }
     .review-toolbar { gap: 0.375rem; }
