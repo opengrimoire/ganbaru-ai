@@ -166,6 +166,8 @@ pub(crate) struct MusicPlaylistPlaybackRow {
     pub youtube_video_id: Option<String>,
     pub youtube_resolution_state: Option<String>,
     pub title: String,
+    pub original_artwork_identity: Option<String>,
+    pub artwork_override: Option<String>,
     pub availability: String,
     pub root_id: Option<String>,
     pub relative_path: Option<String>,
@@ -197,6 +199,8 @@ impl TryFrom<MusicPlaylistPlaybackRow> for MusicPlaylistPlaybackEntry {
                 .map(|value| parse_enum(value, "youtubeResolutionState"))
                 .transpose()?,
             title: row.title,
+            original_artwork_identity: row.original_artwork_identity,
+            artwork_override: row.artwork_override,
             availability: parse_enum(&row.availability, "availability")?,
             root_id: row.root_id,
             relative_path: row.relative_path,

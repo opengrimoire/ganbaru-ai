@@ -112,6 +112,8 @@ export interface MusicPlaylistPlaybackEntry {
   youtubeVideoId: string | null;
   youtubeResolutionState: MusicYouTubeResolutionState | null;
   title: string;
+  originalArtworkIdentity: string | null;
+  artworkOverride: string | null;
   availability: MusicItemAvailability;
   rootId: string | null;
   relativePath: string | null;
@@ -758,6 +760,8 @@ function parsePlaylistPlaybackEntry(value: unknown, label: string): MusicPlaylis
     youtubeVideoId: nullable(row.youtubeVideoId, string, `${label}.youtubeVideoId`),
     youtubeResolutionState: nullable(row.youtubeResolutionState, (entry, entryLabel) => enumeration(entry, youtubeResolutionStates, entryLabel), `${label}.youtubeResolutionState`),
     title: string(row.title, `${label}.title`),
+    originalArtworkIdentity: nullable(row.originalArtworkIdentity, string, `${label}.originalArtworkIdentity`),
+    artworkOverride: nullable(row.artworkOverride, string, `${label}.artworkOverride`),
     availability: enumeration(row.availability, itemAvailability, `${label}.availability`),
     rootId: nullable(row.rootId, string, `${label}.rootId`),
     relativePath: nullable(row.relativePath, string, `${label}.relativePath`),

@@ -283,9 +283,14 @@ function playbackSource(
   const folder = bindingPaths.get(entry.rootId);
   if (!folder) return { source: null, reason: "unbound-root" };
   const path = resolveLocalMusicPath(folder, entry.relativePath);
+  const originalSidecar = entry.originalArtworkIdentity?.startsWith("sidecar:")
+    ? entry.originalArtworkIdentity.slice("sidecar:".length)
+    : null;
+  const artworkPath = entry.artworkOverride
+    ?? (originalSidecar ? resolveLocalMusicPath(folder, originalSidecar) : null);
   return {
     source: {
-      ...localFileSourceFromPath(path, entry.title),
+      ...localFileSourceFromPath(path, entry.title, artworkPath),
       startMs: entry.startMs,
       endMs: entry.endMs,
     },

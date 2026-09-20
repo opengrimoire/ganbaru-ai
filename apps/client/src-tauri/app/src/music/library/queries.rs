@@ -51,6 +51,8 @@ pub(crate) async fn playlist_playback_entries(
             item.youtube_video_id,
             item.youtube_resolution_state,
             COALESCE(NULLIF(item.title_override, ''), item.original_title) AS title,
+            item.original_artwork_identity,
+            item.artwork_override,
             item.availability,
             (SELECT location.root_id FROM music_local_locations AS location
              WHERE location.item_id = item.id AND location.availability = 'available'

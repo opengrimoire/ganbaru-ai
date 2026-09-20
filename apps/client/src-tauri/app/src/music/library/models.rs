@@ -624,6 +624,8 @@ pub struct MusicPlaylistPlaybackEntry {
     pub youtube_video_id: Option<String>,
     pub youtube_resolution_state: Option<MusicYouTubeResolutionState>,
     pub title: String,
+    pub original_artwork_identity: Option<String>,
+    pub artwork_override: Option<String>,
     pub availability: MusicItemAvailability,
     pub root_id: Option<String>,
     pub relative_path: Option<String>,

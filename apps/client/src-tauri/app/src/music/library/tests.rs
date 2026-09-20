@@ -1135,6 +1135,22 @@ fn playlist_reorder_and_playback_projection_share_canonical_memberships() {
         .execute(&pool)
         .await
         .unwrap();
+        sqlx::query(
+            "UPDATE music_library_items
+             SET original_artwork_identity = 'sidecar:album/cover.jpg'
+             WHERE id = 'item-1'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "UPDATE music_library_items
+             SET artwork_override = '/custom/artwork.png'
+             WHERE id = 'item-2'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
 
         let entries =
             super::queries::playlist_playback_entries(&pool, "playlist-1", 1_700_000_000_200)
@@ -1155,6 +1171,14 @@ fn playlist_reorder_and_playback_projection_share_canonical_memberships() {
         );
         assert_eq!(entries[1].skip_ranges.len(), 1);
         assert_eq!(entries[1].skip_ranges[0].end_ms, 2_000);
+        assert_eq!(
+            entries[1].original_artwork_identity.as_deref(),
+            Some("sidecar:album/cover.jpg")
+        );
+        assert_eq!(
+            entries[2].artwork_override.as_deref(),
+            Some("/custom/artwork.png")
+        );
         assert!(entries[2].snoozed);
         assert_eq!(entries[2].snoozed_until, Some(1_700_000_001_000));
     });

@@ -47,6 +47,8 @@ const playbackEntry: MusicPlaylistPlaybackEntry = {
   youtubeVideoId: null,
   youtubeResolutionState: null,
   title: "Track",
+  originalArtworkIdentity: null,
+  artworkOverride: null,
   availability: "available",
   rootId: "root-1",
   relativePath: "track.flac",
