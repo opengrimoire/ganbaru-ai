@@ -28,6 +28,8 @@ use tokio::net::TcpListener;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 const COORDINATOR_PORT: u16 = 43_821;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+const DEVELOPMENT_COORDINATOR_PORT: u16 = 43_822;
 
 pub(crate) use transport::sha256_file;
 
@@ -101,6 +103,7 @@ impl CoordinatorLifecycle {
         app: tauri::AppHandle<R>,
         manager: PairingManager,
         address: IpAddr,
+        port: u16,
     ) -> Result<SocketAddr, String> {
         {
             let runtime = self
@@ -114,7 +117,7 @@ impl CoordinatorLifecycle {
         if !is_lan_address(address) {
             return Err("vault handoff coordinator requires a private LAN address".to_string());
         }
-        let listener = TcpListener::bind(SocketAddr::new(address, COORDINATOR_PORT))
+        let listener = TcpListener::bind(SocketAddr::new(address, port))
             .await
             .map_err(|error| format!("bind vault handoff coordinator: {error}"))?;
         let endpoint = listener
@@ -271,9 +274,10 @@ pub(crate) fn start_desktop(app: &tauri::AppHandle) -> Result<(), String> {
         return Ok(());
     }
     let address = discover_private_lan_address()?;
+    let port = coordinator_port(&app.config().identifier);
     let manager = app.state::<PairingManager>().inner().clone();
     let lifecycle = app.state::<CoordinatorLifecycle>();
-    tauri::async_runtime::block_on(lifecycle.start_on(app.clone(), manager, address))?;
+    tauri::async_runtime::block_on(lifecycle.start_on(app.clone(), manager, address, port))?;
     Ok(())
 }
 
@@ -291,8 +295,9 @@ pub(crate) async fn handoff_create_pairing_invitation<R: Runtime>(
         Some(endpoint) => endpoint,
         None => {
             let address = discover_private_lan_address()?;
+            let port = coordinator_port(&app.config().identifier);
             lifecycle
-                .start_on(app.clone(), manager.clone(), address)
+                .start_on(app.clone(), manager.clone(), address, port)
                 .await?
         }
     };
@@ -321,6 +326,7 @@ pub(crate) async fn handoff_create_pairing_invitation<R: Runtime>(
                     return Err("Linux firewall access requires an IPv4 LAN address".to_string());
                 }
             },
+            endpoint.port(),
         ),
     })
 }
@@ -341,7 +347,8 @@ pub(crate) async fn handoff_grant_network_access<R: Runtime>(
         .path()
         .app_config_dir()
         .map_err(|error| format!("find app config directory: {error}"))?;
-    tauri::async_runtime::spawn_blocking(move || network_access::grant(&config_dir, address))
+    let port = endpoint.port();
+    tauri::async_runtime::spawn_blocking(move || network_access::grant(&config_dir, address, port))
         .await
         .map_err(|error| format!("authorize Linux network access: {error}"))?
 }
@@ -552,7 +559,20 @@ fn desktop_network_access_status<R: Runtime>(
         .path()
         .app_config_dir()
         .map_err(|error| format!("find app config directory: {error}"))?;
-    Ok(network_access::status(&config_dir, address))
+    Ok(network_access::status(
+        &config_dir,
+        address,
+        endpoint.port(),
+    ))
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn coordinator_port(identifier: &str) -> u16 {
+    if identifier.ends_with(".dev") {
+        DEVELOPMENT_COORDINATOR_PORT
+    } else {
+        COORDINATOR_PORT
+    }
 }
 
 #[tauri::command]
@@ -672,5 +692,11 @@ mod tests {
         assert!(!is_lan_address("8.8.8.8".parse().expect("address")));
         assert!(is_lan_address("192.168.10.4".parse().expect("address")));
         assert!(is_lan_address("fd00::1".parse().expect("address")));
+    }
+
+    #[test]
+    fn development_and_production_coordinators_use_distinct_ports() {
+        assert_eq!(coordinator_port("org.opengrimoire.ganbaruai"), 43_821);
+        assert_eq!(coordinator_port("org.opengrimoire.ganbaruai.dev"), 43_822);
     }
 }
