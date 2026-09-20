@@ -100,16 +100,18 @@ describe("Music playlist launcher", () => {
     });
 
     target.querySelector<HTMLButtonElement>("[data-music-playlist-launcher]")?.click();
-    await vi.waitFor(() => expect(target?.textContent).toContain("Deep focus"));
-    expect(target.textContent).toContain("♪");
-    expect(target.textContent).not.toContain("playable of");
-    const search = target.querySelector<HTMLInputElement>('input[placeholder="Search playlists"]');
+    await vi.waitFor(() => expect(document.body.textContent).toContain("Deep focus"));
+    const popover = document.body.querySelector<HTMLElement>(".playlist-launcher-popover");
+    expect(popover?.parentElement).toBe(document.body);
+    expect(popover?.textContent).toContain("♪");
+    expect(popover?.textContent).not.toContain("playable of");
+    const search = popover?.querySelector<HTMLInputElement>('input[placeholder="Search playlists"]');
     if (!search) throw new Error("Expected playlist search input");
     search.value = "Morning";
     search.dispatchEvent(new InputEvent("input", { bubbles: true }));
     await tick();
-    expect(target.textContent).not.toContain("Deep focus");
-    const morning = [...target.querySelectorAll<HTMLButtonElement>("button")]
+    expect(popover.textContent).not.toContain("Deep focus");
+    const morning = [...popover.querySelectorAll<HTMLButtonElement>("button")]
       .find((button) => button.textContent?.includes("Morning start"));
     morning?.click();
     await vi.waitFor(() => expect(load).toHaveBeenCalledWith(
@@ -140,11 +142,11 @@ describe("Music playlist launcher", () => {
     });
 
     target.querySelector<HTMLButtonElement>("[data-music-playlist-launcher]")?.click();
-    await vi.waitFor(() => expect(target?.textContent).toContain("Deep focus"));
-    [...target.querySelectorAll<HTMLButtonElement>("button")]
+    await vi.waitFor(() => expect(document.body.textContent).toContain("Deep focus"));
+    [...document.body.querySelectorAll<HTMLButtonElement>("button")]
       .find((button) => button.textContent?.includes("Deep focus"))?.click();
-    await vi.waitFor(() => expect(target?.textContent).toContain("Open issues"));
-    [...target.querySelectorAll<HTMLButtonElement>("button")]
+    await vi.waitFor(() => expect(document.body.textContent).toContain("Open issues"));
+    [...document.body.querySelectorAll<HTMLButtonElement>("button")]
       .find((button) => button.textContent?.trim() === "Open issues")?.click();
 
     expect(onOpenIssues).toHaveBeenCalledOnce();

@@ -19,7 +19,15 @@
   import { getMusicPlayer } from "$lib/stores/music-player.svelte";
   import { requireActiveVaultIdentity } from "$lib/vault/active-vault";
   import { cn } from "$lib/utils";
+  import { portal } from "$lib/utils/portal";
+  import {
+    pickSelectPopoverGeometry,
+    type SelectPopoverGeometry,
+  } from "$lib/components/settings/customSelectPosition";
   import MusicPlaylistIcon from "$lib/components/music/builder/MusicPlaylistIcon.svelte";
+
+  const PLAYLIST_POPOVER_WIDTH_PX = 368;
+  const PLAYLIST_POPOVER_MAX_HEIGHT_PX = 480;
 
   let {
     onOpenBuilder,
@@ -38,7 +46,9 @@
   const playlistCache = getMusicPlaylistSummaryCache();
   let root = $state<HTMLElement | null>(null);
   let trigger = $state<HTMLButtonElement | null>(null);
+  let popover = $state<HTMLDivElement | null>(null);
   let searchInput = $state<HTMLInputElement | null>(null);
+  let geometry = $state<SelectPopoverGeometry | null>(null);
   let open = $state(false);
   let search = $state("");
   let opening = $state(false);
@@ -61,7 +71,12 @@
       // The active vault can publish after this panel mounts; startup preload will connect it.
     }
     const handlePointer = (event: PointerEvent) => {
-      if (open && event.target instanceof Node && root && !root.contains(event.target)) close();
+      if (
+        open
+        && event.target instanceof Node
+        && !root?.contains(event.target)
+        && !popover?.contains(event.target)
+      ) close();
     };
     const handleKey = (event: KeyboardEvent) => {
       if (open && event.key === "Escape") {
@@ -71,11 +86,14 @@
         trigger?.focus();
       }
     };
+    const handleResize = () => positionPopover();
     window.addEventListener("pointerdown", handlePointer);
     window.addEventListener("keydown", handleKey, true);
+    window.addEventListener("resize", handleResize);
     return () => {
       window.removeEventListener("pointerdown", handlePointer);
       window.removeEventListener("keydown", handleKey, true);
+      window.removeEventListener("resize", handleResize);
     };
   });
 
@@ -91,7 +109,9 @@
     try {
       if (!playlistCache.loaded && !await playlistCache.load()) error = playlistCache.error;
       open = true;
+      geometry = null;
       await tick();
+      positionPopover();
       searchInput?.focus();
     } finally {
       opening = false;
@@ -104,8 +124,38 @@
   }
 
   function handleFocusOut(event: FocusEvent): void {
-    if (!open || !(event.relatedTarget instanceof Node) || root?.contains(event.relatedTarget)) return;
+    if (
+      !open
+      || !(event.relatedTarget instanceof Node)
+      || root?.contains(event.relatedTarget)
+      || popover?.contains(event.relatedTarget)
+    ) return;
     close();
+  }
+
+  function positionPopover(): void {
+    if (!open || !trigger) return;
+    const triggerRect = trigger.getBoundingClientRect();
+    geometry = pickSelectPopoverGeometry({
+      triggerRect,
+      boundaryRect: {
+        top: 0,
+        left: 0,
+        right: window.innerWidth,
+        bottom: window.innerHeight,
+        width: window.innerWidth,
+        height: window.innerHeight,
+      },
+      contentHeight: Math.min(popover?.scrollHeight ?? PLAYLIST_POPOVER_MAX_HEIGHT_PX, PLAYLIST_POPOVER_MAX_HEIGHT_PX),
+      contentWidth: PLAYLIST_POPOVER_WIDTH_PX,
+      horizontalAlign: "start",
+    });
+  }
+
+  function popoverStyle(): string {
+    if (!geometry) return "visibility:hidden;top:0;left:0";
+    const maxHeight = Math.min(geometry.maxHeight, PLAYLIST_POPOVER_MAX_HEIGHT_PX);
+    return `top:${geometry.top}px;left:${geometry.left}px;width:${geometry.width ?? PLAYLIST_POPOVER_WIDTH_PX}px;max-width:${geometry.maxWidth}px;max-height:${maxHeight}px`;
   }
 
   async function refresh(): Promise<void> {
@@ -184,10 +234,15 @@
 
   {#if open}
     <div
+      use:portal
+      bind:this={popover}
       role="dialog"
       aria-label={t("music.launcher.choosePlaylist")}
       tabindex="-1"
-      class="playlist-launcher-popover absolute left-0 top-[calc(100%+0.4rem)] flex max-h-[min(30rem,calc(100vh-5rem))] w-[min(23rem,calc(100vw-1rem))] flex-col overflow-hidden rounded-xl border border-border/80 bg-popover text-popover-foreground shadow-2xl"
+      onfocusout={handleFocusOut}
+      data-app-floating-surface
+      style={popoverStyle()}
+      class="playlist-launcher-popover fixed z-80 flex flex-col overflow-hidden rounded-xl border border-border/80 bg-popover text-popover-foreground shadow-2xl"
     >
       <div class="border-b border-border/60 p-2.5">
         <div class="flex items-center gap-2 rounded-lg bg-secondary/65 px-2.5">
@@ -225,9 +280,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  @media (max-height: 260px) {
-    .playlist-launcher-popover { position: fixed; inset: 0.5rem; width: auto; max-height: none; }
-  }
-</style>
