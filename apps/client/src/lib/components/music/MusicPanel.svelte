@@ -103,6 +103,9 @@
   const seekSliderProgress = $derived(player.progressMax > 0
     ? `${Math.min(100, Math.max(0, (player.progressValue / player.progressMax) * 100))}%`
     : "0%");
+  const playerPlaylistLayoutVisible = $derived(
+    musicPage === "player" && playlistVisible,
+  );
   const activeSpeedIsPreset = $derived(isSpeedPreset(player.snapshot.rate));
   const topBarMediaTitleMaxLength = 42;
   const volumeShortcutStep = 0.05;
@@ -120,7 +123,9 @@
   const musicIconSize = 14;
   const musicIconStrokeWidth = 1.4;
   const panelMaximumHeight = $derived(
-    playlistVisible && fittedPanelHeightPx !== null ? `${fittedPanelHeightPx}px` : "680px",
+    playerPlaylistLayoutVisible && fittedPanelHeightPx !== null
+      ? `${fittedPanelHeightPx}px`
+      : "680px",
   );
   const mobilePresentation = $derived(presentation === "mobile");
   const mobileBuilderPresentation = $derived(
@@ -232,15 +237,17 @@
   });
 
   $effect(() => {
+    const page = musicPage;
     const visible = playlistVisible;
     const header = musicHeader;
     const media = mediaCell;
     const playlist = playlistPanel;
     const controls = playbackControls;
-    if (!visible || !header || !media || !playlist || !controls) {
+    if (!visible) {
       fittedPanelHeightPx = null;
       return;
     }
+    if (page !== "player" || !header || !media || !playlist || !controls) return;
 
     let animationFrameId: number | null = null;
     const updateHeight = () => {

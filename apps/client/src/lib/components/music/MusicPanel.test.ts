@@ -35,6 +35,7 @@ describe("MusicPanel", () => {
     target = undefined;
     vi.unstubAllGlobals();
     getMusicSourcesController().firstUseSession = false;
+    getMusicPlayer().setPlaylistVisible(false);
   });
 
   it("mounts an interactive dialog above its persistent media layer and closes with Escape", async () => {
@@ -203,6 +204,51 @@ describe("MusicPanel", () => {
     await tick();
     expect(target.querySelector(".builder-root")).not.toBeNull();
     expect(target.querySelector("[data-music-player-page]")).toBe(playerPage);
+  });
+
+  it("applies builder and expanded playlist heights in the same view transition", async () => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    vi.stubGlobal("matchMedia", matchMediaStub);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.matches("[data-music-player-header]")) return new DOMRect(0, 0, 1_000, 40);
+      if (this.matches(".music-media-cell")) return new DOMRect(0, 40, 680, 383);
+      if (this.matches("#music-playlist")) return new DOMRect(680, 40, 320, 383);
+      return new DOMRect(0, 0, 1_000, 80);
+    });
+    target = document.createElement("div");
+    document.body.append(target);
+    const player = getMusicPlayer();
+    player.setPlaylistVisible(true);
+    const { default: MusicPanel } = await import("./MusicPanel.svelte");
+
+    component = mount(MusicPanel, { target, props: { onclose: vi.fn() } });
+    await tick();
+    const dialog = target.querySelector<HTMLElement>("[role='dialog']");
+    expect(dialog?.style.height).toContain("503px");
+
+    target.querySelector<HTMLButtonElement>("[data-music-playlist-launcher]")?.click();
+    await vi.waitFor(() => {
+      expect([...document.body.querySelectorAll<HTMLButtonElement>("button")]
+        .some((button) => button.textContent?.includes("Open builder"))).toBe(true);
+    });
+    const openBuilder = [...document.body.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.includes("Open builder"));
+    openBuilder?.click();
+    await tick();
+
+    expect(dialog?.style.height).toContain("680px");
+    await vi.waitFor(() => {
+      expect(target?.querySelector(".builder-root"), target?.textContent ?? "").not.toBeNull();
+    }, { timeout: 5_000 });
+
+    window.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    }));
+    await tick();
+
+    expect(dialog?.style.height).toContain("503px");
   });
 
   it("keeps first-use preparation pending when the panel closes before completion", async () => {
