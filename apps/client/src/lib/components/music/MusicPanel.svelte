@@ -238,16 +238,17 @@
 
   $effect(() => {
     const page = musicPage;
-    const visible = playlistVisible;
+    const panelIsVisible = visible;
+    const playlistIsVisible = playlistVisible;
     const header = musicHeader;
     const media = mediaCell;
     const playlist = playlistPanel;
     const controls = playbackControls;
-    if (!visible) {
+    if (!playlistIsVisible) {
       fittedPanelHeightPx = null;
       return;
     }
-    if (page !== "player" || !header || !media || !playlist || !controls) return;
+    if (!panelIsVisible || page !== "player" || !header || !media || !playlist || !controls) return;
 
     let animationFrameId: number | null = null;
     const updateHeight = () => {
@@ -809,48 +810,61 @@
     bind:this={musicHeader}
     data-music-player-header
     class={cn(
-      "relative flex shrink-0 items-center gap-3 px-2",
+      "relative flex shrink-0 items-stretch",
       mobilePresentation ? "py-2" : "h-(--cal-header-row-h)",
     )}
     style="background-color: var(--cal-bg);"
   >
-    <div class="relative z-10 flex min-w-0 shrink-0 items-center gap-2">
-      <MusicPlaylistLauncher
-        active={visible}
-        onOpenBuilder={() => openPlaylistBuilder()}
-        onOpenIssues={() => openPlaylistBuilder({ kind: "open-issues" })}
-        onNewPlaylist={() => openPlaylistBuilder("new-playlist")}
-        mobile={mobilePresentation}
-      />
-    </div>
-    <div
-      class="music-header-title absolute top-1/2 z-0 min-w-0 -translate-x-1/2 -translate-y-1/2 text-center text-[0.8rem] font-medium text-foreground"
-      style={`left: ${mediaTitleLeft};`}
-    >
-      {#if topBarMediaTitle}
-        {#if player.currentSource?.kind === "local-file" && supportsLocalFileReveal}
-          <button
-            type="button"
-            onclick={() => { void openCurrentLocalFileLocation(); }}
-            class="block w-full truncate text-center transition-colors hover:text-accent-foreground"
-            title={t("music.showFileLocation", player.loadedTitle)}
-            aria-label={t("music.showCurrentFileLocation")}
-          >
-            {topBarMediaTitle}
-          </button>
-        {:else}
-          <span class="block w-full truncate text-center" title={player.currentSource ? player.loadedTitle : undefined}>
-            {topBarMediaTitle}
-          </span>
+    <div class="relative flex min-w-0 flex-1 items-center gap-3 px-2">
+      <div class="relative z-10 flex min-w-0 shrink-0 items-center gap-2">
+        <MusicPlaylistLauncher
+          active={visible}
+          onOpenBuilder={() => openPlaylistBuilder()}
+          onOpenIssues={() => openPlaylistBuilder({ kind: "open-issues" })}
+          onNewPlaylist={() => openPlaylistBuilder("new-playlist")}
+          mobile={mobilePresentation}
+        />
+      </div>
+      <div
+        class="music-header-title absolute top-1/2 z-0 min-w-0 -translate-x-1/2 -translate-y-1/2 text-center text-[0.8rem] font-medium text-foreground"
+        style={`left: ${mediaTitleLeft};`}
+      >
+        {#if topBarMediaTitle}
+          {#if player.currentSource?.kind === "local-file" && supportsLocalFileReveal}
+            <button
+              type="button"
+              onclick={() => { void openCurrentLocalFileLocation(); }}
+              class="block w-full truncate text-center transition-colors hover:text-accent-foreground"
+              title={t("music.showFileLocation", player.loadedTitle)}
+              aria-label={t("music.showCurrentFileLocation")}
+            >
+              {topBarMediaTitle}
+            </button>
+          {:else}
+            <span class="block w-full truncate text-center" title={player.currentSource ? player.loadedTitle : undefined}>
+              {topBarMediaTitle}
+            </span>
+          {/if}
         {/if}
+      </div>
+      {#if player.parseError || player.playerError}
+        <div class="relative z-10 ml-auto flex min-w-0 items-center gap-2">
+          <div class="hidden min-w-0 max-w-56 items-center gap-1.5 text-[0.733333rem] text-destructive min-[720px]:flex" role="alert">
+            <AlertCircle class="shrink-0" size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
+            <span class="truncate">{player.parseError ?? player.playerError}</span>
+          </div>
+        </div>
       {/if}
     </div>
-    {#if player.parseError || player.playerError}
-      <div class="relative z-10 ml-auto flex min-w-0 items-center gap-2">
-        <div class="hidden min-w-0 max-w-56 items-center gap-1.5 text-[0.733333rem] text-destructive min-[720px]:flex" role="alert">
-          <AlertCircle class="shrink-0" size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-          <span class="truncate">{player.parseError ?? player.playerError}</span>
+    {#if playlistVisible && !mobilePresentation}
+      <div data-music-desktop-playlist-header class="hidden shrink-0 items-center justify-between gap-2 px-4 min-[861px]:flex min-[861px]:w-80">
+        <div class="flex items-center gap-2 text-[0.8rem] font-medium text-muted-foreground">
+          <ListMusic size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
+          {t("music.playlist")}
         </div>
+        {#if player.queue.length > 0}
+          <div class="text-[0.733333rem] text-muted-foreground">{t("music.tracks", player.queue.length)}</div>
+        {/if}
       </div>
     {/if}
   </div>
@@ -953,7 +967,13 @@
     {#if playlistVisible}
       <aside bind:this={playlistPanel} id="music-playlist" class="min-h-0" style="background-color: var(--cal-bg);">
         <div class="flex h-full min-h-0 flex-col">
-          <div class="flex items-center justify-between gap-2 px-4 py-3">
+          <div
+            data-music-stacked-playlist-header
+            class={cn(
+              "flex items-center justify-between gap-2 px-4 py-3",
+              !mobilePresentation && "min-[861px]:hidden",
+            )}
+          >
             <div class="flex items-center gap-2 text-[0.8rem] font-medium text-muted-foreground">
               <ListMusic size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
               {t("music.playlist")}

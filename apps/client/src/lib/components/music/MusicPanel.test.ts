@@ -35,7 +35,9 @@ describe("MusicPanel", () => {
     target = undefined;
     vi.unstubAllGlobals();
     getMusicSourcesController().firstUseSession = false;
-    getMusicPlayer().setPlaylistVisible(false);
+    const player = getMusicPlayer();
+    player.setPlaylistVisible(false);
+    player.queue = [];
   });
 
   it("mounts an interactive dialog above its persistent media layer and closes with Escape", async () => {
@@ -74,6 +76,29 @@ describe("MusicPanel", () => {
     expect(launcher?.classList.contains("w-9")).toBe(true);
     expect(header?.classList.contains("py-2")).toBe(true);
     expect(target.querySelector("button[aria-label='Close']")).toBeNull();
+  });
+
+  it("places the side playlist summary in the desktop player header", async () => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    target = document.createElement("div");
+    document.body.append(target);
+    const player = getMusicPlayer();
+    player.queue = [
+      localFileSourceFromPath("/music/first.flac", "First"),
+      localFileSourceFromPath("/music/second.flac", "Second"),
+    ];
+    player.setPlaylistVisible(true);
+    const { default: MusicPanel } = await import("./MusicPanel.svelte");
+
+    component = mount(MusicPanel, { target, props: { onclose: vi.fn() } });
+    await tick();
+
+    const desktopHeader = target.querySelector<HTMLElement>("[data-music-desktop-playlist-header]");
+    const stackedHeader = target.querySelector<HTMLElement>("[data-music-stacked-playlist-header]");
+    expect(desktopHeader?.textContent).toContain("Playlist");
+    expect(desktopHeader?.textContent).toContain("2 tracks");
+    expect(desktopHeader?.classList.contains("min-[861px]:w-80")).toBe(true);
+    expect(stackedHeader?.classList.contains("min-[861px]:hidden")).toBe(true);
   });
 
   it("does not reset persistent playback state when the panel closes", async () => {
