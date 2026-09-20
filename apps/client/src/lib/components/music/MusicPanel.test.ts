@@ -83,14 +83,21 @@ describe("MusicPanel", () => {
     target = document.createElement("div");
     document.body.append(target);
     const player = getMusicPlayer();
-    player.queue = [
-      localFileSourceFromPath("/music/first.flac", "First"),
-      localFileSourceFromPath("/music/second.flac", "Second"),
-    ];
     player.setPlaylistVisible(true);
     const { default: MusicPanel } = await import("./MusicPanel.svelte");
 
     component = mount(MusicPanel, { target, props: { onclose: vi.fn() } });
+    await tick();
+    const emptyDesktopHeader = target.querySelector<HTMLElement>("[data-music-desktop-playlist-header]");
+    expect(emptyDesktopHeader).not.toBeNull();
+    expect(emptyDesktopHeader?.textContent?.trim()).toBe("");
+    expect(target.querySelector("#music-playlist")).not.toBeNull();
+    expect(target.querySelector("[data-music-stacked-playlist-header]")).toBeNull();
+
+    player.queue = [
+      localFileSourceFromPath("/music/first.flac", "First"),
+      localFileSourceFromPath("/music/second.flac", "Second"),
+    ];
     await tick();
 
     const desktopHeader = target.querySelector<HTMLElement>("[data-music-desktop-playlist-header]");
@@ -243,6 +250,7 @@ describe("MusicPanel", () => {
     target = document.createElement("div");
     document.body.append(target);
     const player = getMusicPlayer();
+    player.queue = [localFileSourceFromPath("/music/track.flac", "Track")];
     player.setPlaylistVisible(true);
     const { default: MusicPanel } = await import("./MusicPanel.svelte");
 

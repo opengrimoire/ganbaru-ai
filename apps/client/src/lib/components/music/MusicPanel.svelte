@@ -71,6 +71,7 @@
   let customSpeedOpen = $state(false);
   let customRateDraft = $state("1");
   const playlistVisible = $derived(player.playlistVisible);
+  const playlistHasContent = $derived(player.queue.length > 0);
   let musicPage = $state<MusicPage>(sources.firstUseSession ? "playlist-builder" : "player");
   let firstUseRedirectHandled = $state(sources.firstUseSession);
   let playlistBuilderComponent = $state<MusicBuilderComponent | null>(musicBuilderLoader.peek());
@@ -858,11 +859,11 @@
     </div>
     {#if playlistVisible && !mobilePresentation}
       <div data-music-desktop-playlist-header class="hidden shrink-0 items-center justify-between gap-2 px-4 min-[861px]:flex min-[861px]:w-80">
-        <div class="flex items-center gap-2 text-[0.8rem] font-medium text-muted-foreground">
-          <ListMusic size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-          {t("music.playlist")}
-        </div>
-        {#if player.queue.length > 0}
+        {#if playlistHasContent}
+          <div class="flex items-center gap-2 text-[0.8rem] font-medium text-muted-foreground">
+            <ListMusic size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
+            {t("music.playlist")}
+          </div>
           <div class="text-[0.733333rem] text-muted-foreground">{t("music.tracks", player.queue.length)}</div>
         {/if}
       </div>
@@ -967,40 +968,34 @@
     {#if playlistVisible}
       <aside bind:this={playlistPanel} id="music-playlist" class="min-h-0" style="background-color: var(--cal-bg);">
         <div class="flex h-full min-h-0 flex-col">
-          <div
-            data-music-stacked-playlist-header
-            class={cn(
-              "flex items-center justify-between gap-2 px-4 py-3",
-              !mobilePresentation && "min-[861px]:hidden",
-            )}
-          >
-            <div class="flex items-center gap-2 text-[0.8rem] font-medium text-muted-foreground">
-              <ListMusic size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-              {t("music.playlist")}
-            </div>
-            {#if player.queue.length > 0}
-              <div class="text-[0.733333rem] text-muted-foreground">{t("music.tracks", player.queue.length)}</div>
-            {/if}
-          </div>
-
-          {#if player.folderScanTruncated}
-            <div class="mx-4 mt-3 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5 text-[0.733333rem] text-warning">
-              {t("music.scanTruncated")}
-            </div>
-          {/if}
-
-          <div class="relative min-h-0 flex-1">
+          {#if playlistHasContent}
             <div
-              bind:this={playlistScrollContainer}
-              use:playlistViewportAction
-              class="hide-scrollbar h-full min-h-0 overflow-y-auto overflow-x-hidden px-3 pb-3 pt-0"
-              data-music-scrollable="true"
+              data-music-stacked-playlist-header
+              class={cn(
+                "flex items-center justify-between gap-2 px-4 py-3",
+                !mobilePresentation && "min-[861px]:hidden",
+              )}
             >
-              {#if player.queue.length === 0}
-                <div class="p-3 text-[0.8rem] text-muted-foreground">
-                  {t("music.emptyPlaylist")}
-                </div>
-              {:else}
+              <div class="flex items-center gap-2 text-[0.8rem] font-medium text-muted-foreground">
+                <ListMusic size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
+                {t("music.playlist")}
+              </div>
+              <div class="text-[0.733333rem] text-muted-foreground">{t("music.tracks", player.queue.length)}</div>
+            </div>
+
+            {#if player.folderScanTruncated}
+              <div class="mx-4 mt-3 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5 text-[0.733333rem] text-warning">
+                {t("music.scanTruncated")}
+              </div>
+            {/if}
+
+            <div class="relative min-h-0 flex-1">
+              <div
+                bind:this={playlistScrollContainer}
+                use:playlistViewportAction
+                class="hide-scrollbar h-full min-h-0 overflow-y-auto overflow-x-hidden px-3 pb-3 pt-0"
+                data-music-scrollable="true"
+              >
                 <div class="flex flex-col">
                   <div class="shrink-0" aria-hidden="true" style={`height: ${renderedPlaylistWindow.topSpacerHeight}px;`}></div>
                   {#each renderedPlaylistItems as item, offset}
@@ -1021,10 +1016,10 @@
                   {/each}
                   <div class="shrink-0" aria-hidden="true" style={`height: ${renderedPlaylistWindow.bottomSpacerHeight}px;`}></div>
                 </div>
-              {/if}
+              </div>
+              <CalendarScrollbar scrollContainer={playlistScrollContainer} wheelPassthrough />
             </div>
-            <CalendarScrollbar scrollContainer={playlistScrollContainer} wheelPassthrough />
-          </div>
+          {/if}
         </div>
       </aside>
     {/if}

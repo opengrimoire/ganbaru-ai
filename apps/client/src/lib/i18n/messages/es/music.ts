@@ -658,7 +658,6 @@ export const music = {
   playlist: "Playlist",
   tracks: (count: number) => `${count} ${count === 1 ? "pista" : "pistas"}`,
   scanTruncated: "Mostrando los primeros 5000 archivos multimedia.",
-  emptyPlaylist: "Agrega una fuente o elige una carpeta para iniciar una playlist.",
   seek: "Buscar posición",
   lastTrack: "Pista anterior",
   lastTrackTitle: (shortcut: string) => `Pista anterior (${shortcut})`,
