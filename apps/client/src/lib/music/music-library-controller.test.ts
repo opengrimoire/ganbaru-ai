@@ -224,4 +224,38 @@ describe("Music library controller", () => {
     expect(controller.currentWindow.items.map((item) => item.id)).toEqual(["first", "second"]);
     expect(itemWindow).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 1, limit: 200 }));
   });
+
+  it("loads every remaining page before a first-use projection is presented", async () => {
+    const itemWindow = vi.fn(async (request) => ({
+      ...window(request.offset === 0 ? "first" : request.offset === 1 ? "second" : "third"),
+      totalCount: 3,
+      offset: request.offset,
+      limit: request.limit,
+    }));
+    const controller = createMusicLibraryController(api(itemWindow));
+    controller.setVault("vault-1");
+    controller.navigate({ kind: "review" });
+    await controller.refresh();
+
+    expect(await controller.loadAllCurrentItems()).toBe(true);
+
+    expect(controller.currentWindow.items.map((item) => item.id)).toEqual(["first", "second", "third"]);
+    expect(itemWindow).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 2, limit: 200 }));
+  });
+
+  it("stops full projection loading when a page makes no progress", async () => {
+    const itemWindow = vi.fn(async (request) => ({
+      ...window("first"),
+      totalCount: 2,
+      offset: request.offset,
+      limit: request.limit,
+    }));
+    const controller = createMusicLibraryController(api(itemWindow));
+    controller.setVault("vault-1");
+    controller.navigate({ kind: "review" });
+    await controller.refresh();
+
+    expect(await controller.loadAllCurrentItems()).toBe(false);
+    expect(itemWindow).toHaveBeenCalledTimes(2);
+  });
 });

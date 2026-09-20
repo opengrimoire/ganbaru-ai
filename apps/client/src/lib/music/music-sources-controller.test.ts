@@ -225,6 +225,30 @@ describe("MusicSourcesController", () => {
     expect(plan.targets.map((target) => target.collectionId)).toEqual(["recover"]);
   });
 
+  it("does not finish loading sources before first-use folder detection finishes", async () => {
+    let releaseDetection!: () => void;
+    const detectDefaultFolder = vi.fn(() => new Promise<null>((resolve) => {
+      releaseDetection = () => resolve(null);
+    }));
+    const controller = createMusicSourcesController(api({ detectDefaultFolder }), () => 10, () => "id", refreshStub());
+    controller.setVault("vault-1");
+    let settled = false;
+
+    const loading = controller.load().then((result) => {
+      settled = true;
+      return result;
+    });
+    const concurrentLoad = controller.load();
+    await vi.waitFor(() => expect(controller.preparingDefaultFolder).toBe(true));
+
+    expect(settled).toBe(false);
+    releaseDetection();
+    expect(await loading).toBe(true);
+    expect(await concurrentLoad).toBe(true);
+    expect(controller.preparingDefaultFolder).toBe(false);
+    expect(detectDefaultFolder).toHaveBeenCalledOnce();
+  });
+
   it("automatically adopts and scans the system Music folder once when no local root exists", async () => {
     const detectDefaultFolder = vi.fn(async () => ({
       folderPath: "/home/user/Music",
@@ -249,6 +273,10 @@ describe("MusicSourcesController", () => {
     expect(controller.preparingDefaultFolder).toBe(false);
     expect(controller.preparingDefaultFolderPath).toBe("/home/user/Music");
     expect(controller.firstUseSession).toBe(true);
+
+    controller.completeFirstUseSession();
+
+    expect(controller.firstUseSession).toBe(false);
   });
 
   it("does not detect a default folder when a local root already exists", async () => {

@@ -130,6 +130,7 @@ export class MusicSourcesController {
   private readonly refresh: MusicSourceRefreshController;
   private resolutionController: AbortController | null = null;
   private loadGeneration = 0;
+  private pendingLoad: Promise<boolean> | null = null;
   private defaultFolderChecked = false;
   private defaultFolderDismissed = false;
   private lastNotifiedProcessed: Record<string, number> = {};
@@ -184,6 +185,7 @@ export class MusicSourcesController {
     if (normalized === this.vaultId) return;
     this.vaultId = normalized;
     this.loadGeneration += 1;
+    this.pendingLoad = null;
     this.cancelResolution();
     this.roots = [];
     this.collections = [];
@@ -203,7 +205,19 @@ export class MusicSourcesController {
     this.lastNotifiedProcessed = {};
   }
 
-  async load(): Promise<boolean> {
+  load(): Promise<boolean> {
+    if (this.pendingLoad) return this.pendingLoad;
+    const task = this.loadProjection();
+    this.pendingLoad = task;
+    void task.then(() => {
+      if (this.pendingLoad === task) this.pendingLoad = null;
+    }, () => {
+      if (this.pendingLoad === task) this.pendingLoad = null;
+    });
+    return task;
+  }
+
+  private async loadProjection(): Promise<boolean> {
     if (!this.vaultId) return false;
     const generation = ++this.loadGeneration;
     const vaultId = this.vaultId;
@@ -221,7 +235,7 @@ export class MusicSourcesController {
       this.bindings = bindings;
       if (roots.length === 0 && !this.defaultFolderChecked && !this.defaultFolderDismissed) {
         this.firstUseSession = true;
-        void this.detectSystemMusicFolder();
+        await this.detectSystemMusicFolder();
       } else if (roots.length > 0) {
         this.detectedDefaultFolder = null;
       }
@@ -271,6 +285,11 @@ export class MusicSourcesController {
     this.detectedDefaultFolder = null;
   }
 
+  /** Ends the one-time Builder-first presentation after its library is fully ready. */
+  completeFirstUseSession(): void {
+    this.firstUseSession = false;
+  }
+
   async addDetectedDefaultFolder(waitForRefresh = false): Promise<string | null> {
     const selection = this.detectedDefaultFolder;
     if (!selection || this.addingDefaultFolder) return null;
@@ -315,7 +334,7 @@ export class MusicSourcesController {
       createdAt,
     });
     await this.api.bindRoot(this.vaultId, rootId, selection.folderPath);
-    await this.load();
+    await this.loadProjection();
     const target = this.localTarget(collectionId, rootId, trimmedName, selection.folderPath, createdAt);
     const plan = this.refresh.prepare([target]);
     if (waitForRefresh) {
@@ -442,7 +461,7 @@ export class MusicSourcesController {
   async runRefresh(plan: MusicSourceRefreshPlan, allowNetwork: boolean): Promise<MusicSourceRefreshStatus[]> {
     const statuses = await this.refresh.run(plan, { allowNetwork });
     const failure = refreshFailure(statuses);
-    await this.load();
+    await this.loadProjection();
     if (failure) this.error = failure;
     return statuses;
   }

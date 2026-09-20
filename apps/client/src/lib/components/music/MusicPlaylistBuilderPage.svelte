@@ -81,11 +81,13 @@
   let {
     onOpenPlayer,
     presentation = "desktop",
+    active = true,
     initialAction = null,
     onInitialActionHandled = () => undefined,
   }: {
     onOpenPlayer: () => void;
     presentation?: "desktop" | "mobile";
+    active?: boolean;
     initialAction?: MusicBuilderInitialAction | null;
     onInitialActionHandled?: () => void;
   } = $props();
@@ -120,8 +122,9 @@
   let reviewAutoplay = $state(parseMusicReviewAutoplay(getConfigKey<unknown>("music.review.autoplay", undefined)));
   let choosingFirstUseFolder = $state(false);
   let firstUseFolderError = $state<string | null>(null);
+  let builderInitializing = $state(true);
   let firstUsePreparationActive = $state(false);
-  let firstUseFinalizing = false;
+  let firstUseFinalizing = $state(false);
   let firstUseFinalizationGeneration = 0;
   let playlistManagementOpen = $state(false);
   let soundscapeAddRequest = $state(0);
@@ -147,8 +150,14 @@
   const activePlaylistSummary = $derived(destination.kind === "playlist" ? library.playlistSummaries.find((entry) => entry.id === destination.playlistId) ?? null : null);
   const activePlaylistInPlayer = $derived(Boolean(activePlaylistSummary && audition.musicPlayer.activePlaylistId === activePlaylistSummary.id && audition.musicPlayer.currentSource));
   const activePlaylistPlaying = $derived(activePlaylistInPlayer && audition.musicPlayer.isPlaying);
-  const firstUsePreparation = $derived(
-    sources.preparingDefaultFolder || firstUsePreparationActive,
+  const firstUseProjectionPending = $derived(
+    sources.firstUseSession && sources.roots.length > 0,
+  );
+  const builderPreparation = $derived(
+    builderInitializing
+      || sources.preparingDefaultFolder
+      || firstUsePreparationActive
+      || firstUseProjectionPending,
   );
   const firstUseNeedsFolder = $derived(
     destination.kind === "review"
@@ -164,12 +173,15 @@
   const localSourceRefreshActive = $derived(Object.values(sources.refreshStatuses).some((status) => status.kind === "local-root" && (status.state === "queued" || status.state === "running")));
 
   $effect(() => {
-    if (sources.preparingDefaultFolder) {
-      firstUsePreparationActive = true;
-      firstUseFinalizationGeneration += 1;
-      return;
-    }
-    if (firstUsePreparationActive && !firstUseFinalizing) void finalizeFirstUsePreparation();
+    if (!firstUseProjectionPending
+      || sources.preparingDefaultFolder
+      || !sources.loaded
+      || firstUseFinalizing
+      || library.busy
+      || library.loadingMore
+      || !library.vaultId) return;
+    beginFirstUsePreparation();
+    void finalizeFirstUsePreparation();
   });
 
   $effect(() => {
@@ -188,6 +200,13 @@
     if (selectedGroup && !library.issues.some((issue) => musicIssueGroup(issue) === selectedGroup)) contextViewState.reviewIssueGroup = null;
   });
 
+  function beginFirstUsePreparation(): void {
+    builderInitializing = true;
+    if (firstUsePreparationActive) return;
+    firstUsePreparationActive = true;
+    firstUseFinalizationGeneration += 1;
+  }
+
   async function finalizeFirstUsePreparation(): Promise<void> {
     if (!firstUsePreparationActive || sources.preparingDefaultFolder || firstUseFinalizing) return;
     const generation = firstUseFinalizationGeneration;
@@ -197,11 +216,9 @@
       const refreshed = await library.refreshAfterMutation();
       if (generation !== firstUseFinalizationGeneration || vaultId !== library.vaultId) return;
       if (!refreshed) throw library.error ?? new Error("The prepared music library could not be loaded.");
-      while (library.currentWindow.items.length < library.currentWindow.totalCount) {
-        const loaded = await library.loadMore();
-        if (generation !== firstUseFinalizationGeneration || vaultId !== library.vaultId) return;
-        if (!loaded) throw library.loadMoreError ?? new Error("The prepared review list could not be completed.");
-      }
+      const fullyLoaded = await library.loadAllCurrentItems();
+      if (generation !== firstUseFinalizationGeneration || vaultId !== library.vaultId) return;
+      if (!fullyLoaded) throw library.loadMoreError ?? new Error("The prepared review list could not be completed.");
       const itemId = firstMusicReviewTreeItemId(library.currentWindow.items);
       if (itemId) {
         library.selectItem(itemId);
@@ -219,15 +236,18 @@
           await image.decode().catch(() => undefined);
         }));
         const detail = inspector.detail;
-        if (detail?.item.id === itemId) {
+        if (active && detail?.item.id === itemId) {
           await audition.preview(detail, sources.bindings, reviewAutoplay);
         }
       }
       if (generation !== firstUseFinalizationGeneration || vaultId !== library.vaultId) return;
+      sources.completeFirstUseSession();
+      builderInitializing = false;
       firstUsePreparationActive = false;
     } catch (error) {
       if (generation === firstUseFinalizationGeneration && vaultId === library.vaultId) {
         library.error = error instanceof Error ? error : new Error(String(error));
+        builderInitializing = false;
         firstUsePreparationActive = false;
       }
     } finally {
@@ -237,7 +257,7 @@
 
   $effect(() => {
     const action = initialAction;
-    if (!action || !library.vaultId) return;
+    if (!action || !library.vaultId || builderInitializing) return;
     if (action === "new-playlist") playlistSurface = "create";
     else if (action === "open-playlists") void navigateNow({ kind: "playlists" });
     else if (action.kind === "open-issues") void openReviewIssues();
@@ -258,6 +278,9 @@
   }
 
   async function loadVault(vaultId: string): Promise<void> {
+    const generation = ++firstUseFinalizationGeneration;
+    builderInitializing = true;
+    firstUsePreparationActive = false;
     Object.assign(contextViewState, createMusicBuilderContextViewState());
     Object.assign(reviewTreeViewState, createMusicReviewTreeViewState());
     Object.assign(reviewWorkspaceViewState, createMusicReviewWorkspaceViewState());
@@ -267,17 +290,43 @@
     inspector.reset();
     library.setVault(vaultId);
     sources.setVault(vaultId);
-    await Promise.all([library.preloadCoreDestinations(), sources.load()]);
-    const recoveryPlan = sources.prepareUninitializedLocalRefresh();
-    if (recoveryPlan.targets.length > 0) {
-      await sources.runRefresh(recoveryPlan, false);
-      await library.refreshAfterMutation();
+    try {
+      const [libraryLoaded, sourcesLoaded] = await Promise.all([
+        library.preloadCoreDestinations(),
+        sources.load(),
+      ]);
+      if (generation !== firstUseFinalizationGeneration
+        || vaultId !== library.vaultId || vaultId !== sources.vaultId) return;
+      if (!libraryLoaded) throw library.error ?? new Error("The music library could not be loaded.");
+      if (!sourcesLoaded) throw new Error(sources.error ?? "The music sources could not be loaded.");
+      const recoveryPlan = sources.prepareUninitializedLocalRefresh();
+      if (recoveryPlan.targets.length > 0) {
+        await sources.runRefresh(recoveryPlan, false);
+        if (!await library.refreshAfterMutation()) {
+          throw library.error ?? new Error("The refreshed music library could not be loaded.");
+        }
+      }
+      const remembered = history.current.destination;
+      history = initialMusicBuilderRoute(reviewCount, remembered, routeContext);
+      library.navigate(history.current.destination);
+      if (!await library.ensureCurrentDestination()) {
+        throw library.error ?? new Error("The music workspace could not be loaded.");
+      }
+      if (history.current.destination.kind === "playlist") {
+        await playlist.load(history.current.destination.playlistId);
+      }
+      if (sources.firstUseSession && sources.roots.length > 0) {
+        beginFirstUsePreparation();
+        await finalizeFirstUsePreparation();
+      } else {
+        builderInitializing = false;
+      }
+    } catch (error) {
+      if (generation !== firstUseFinalizationGeneration || vaultId !== library.vaultId) return;
+      library.error = error instanceof Error ? error : new Error(String(error));
+      builderInitializing = false;
+      firstUsePreparationActive = false;
     }
-    const remembered = history.current.destination;
-    history = initialMusicBuilderRoute(reviewCount, remembered, routeContext);
-    library.navigate(history.current.destination);
-    await library.ensureCurrentDestination();
-    if (history.current.destination.kind === "playlist") await playlist.load(history.current.destination.playlistId);
   }
 
   function primaryAction(): void {
@@ -535,13 +584,20 @@
     if (choosingFirstUseFolder) return;
     choosingFirstUseFolder = true;
     firstUseFolderError = null;
+    beginFirstUsePreparation();
     try {
       const draft = await sources.chooseLocalFolder();
-      if (!draft) return;
+      if (!draft) {
+        builderInitializing = false;
+        firstUsePreparationActive = false;
+        return;
+      }
       await sources.addLocalFolder(draft.selection, draft.name, true);
-      await library.refreshAfterMutation();
+      await finalizeFirstUsePreparation();
     } catch (error) {
       firstUseFolderError = error instanceof Error ? error.message : String(error);
+      builderInitializing = false;
+      firstUsePreparationActive = false;
     } finally {
       choosingFirstUseFolder = false;
     }
@@ -610,6 +666,7 @@
   }
 
   function handleWindowKeydown(event: KeyboardEvent): void {
+    if (!active) return;
     if (event.key === "Escape") {
       if (contextViewState.contextPanelOpen) { event.preventDefault(); event.stopPropagation(); contextViewState.contextPanelOpen = false; return; }
       if (toolbarMenuOpen) { event.preventDefault(); event.stopPropagation(); toolbarMenuOpen = false; return; }
@@ -639,6 +696,7 @@
   }
 
   function handleWindowPointerDown(event: PointerEvent): void {
+    if (!active) return;
     if (!toolbarMenuOpen || !(event.target instanceof Element)) return;
     if (event.target.closest(".toolbar-menu, .toolbar-icon")) return;
     toolbarMenuOpen = false;
@@ -662,6 +720,7 @@
   });
 
   onDestroy(() => {
+    firstUseFinalizationGeneration += 1;
     unsubscribeVault?.();
     unsubscribeLibraryChanges?.();
     if (audition.active) audition.keep();
@@ -671,8 +730,8 @@
 <svelte:window onkeydown={handleWindowKeydown} onpointerdown={handleWindowPointerDown} />
 
 <section bind:this={root} use:observeRoot class="builder-root flex h-full min-h-0 select-none flex-col overflow-hidden text-foreground" style="background-color: var(--cal-bg);">
-  <div class="builder-shell relative grid min-h-0 flex-1" class:builder-wide={layout.mode === "wide"} class:builder-medium={layout.mode === "medium"} class:builder-narrow={layout.mode === "narrow"} class:builder-contextless={firstUsePreparation || firstUseNeedsFolder}>
-    {#if !firstUsePreparation && !firstUseNeedsFolder}
+  <div class="builder-shell relative grid min-h-0 flex-1" class:builder-wide={layout.mode === "wide"} class:builder-medium={layout.mode === "medium"} class:builder-narrow={layout.mode === "narrow"} class:builder-contextless={builderPreparation || firstUseNeedsFolder}>
+    {#if !builderPreparation && !firstUseNeedsFolder}
       <aside class:context-open={contextViewState.contextPanelOpen} class="builder-context-panel relative z-20 flex min-h-0 flex-col overflow-hidden bg-background/20">
         {#if layout.contextPanelPresentation === "sheet"}
           <div class="flex h-11 shrink-0 items-center px-2">
@@ -760,11 +819,15 @@
         </MusicBuilderToolbar>
       {/if}
       {#if destination.kind === "review"}
-        {#if firstUsePreparation}
+        {#if builderPreparation}
           <div class="relative grid h-full min-h-40 place-items-center overflow-hidden p-5">
             <div class="w-full max-w-lg text-center">
               <MusicPreparationActivity />
-              <h1 class="mt-3 text-lg font-semibold tracking-tight">{t("music.builder.preparingMusicFolder")}</h1>
+              <h1 class="mt-3 text-lg font-semibold tracking-tight">
+                {sources.firstUseSession || sources.preparingDefaultFolder
+                  ? t("music.builder.preparingMusicFolder")
+                  : t("music.builder.loading")}
+              </h1>
               {#if sources.preparingDefaultFolderPath}<p class="mx-auto mt-2 max-w-md truncate text-xs text-muted-foreground" title={sources.preparingDefaultFolderPath}>{sources.preparingDefaultFolderPath}</p>{/if}
               {#if firstUseRefreshProgress}
                 <div class="mx-auto mt-5 max-w-sm">
@@ -891,7 +954,7 @@
       {/if}
     </main>
 
-    {#if layout.dockPresentation === "bottom" && !firstUsePreparation && !firstUseNeedsFolder}
+    {#if layout.dockPresentation === "bottom" && !builderPreparation && !firstUseNeedsFolder}
       <div class="builder-mobile-dock"><MusicBuilderDock {destination} {reviewCount} compact showAllLabels={mobilePresentation} includeSoundscapes={supportsSoundscapes} onNavigate={navigate} /></div>
     {/if}
 

@@ -5,6 +5,7 @@ export type MusicBuilderInitialAction = "new-playlist" | "open-playlists" | { ki
 export interface MusicBuilderComponentProps {
   onOpenPlayer: () => void;
   presentation?: "desktop" | "mobile";
+  active?: boolean;
   initialAction?: MusicBuilderInitialAction | null;
   onInitialActionHandled?: () => void;
 }

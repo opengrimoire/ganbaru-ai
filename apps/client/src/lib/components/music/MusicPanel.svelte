@@ -403,8 +403,8 @@
   function handleKeydown(event: KeyboardEvent): void {
     if (event.key === "Escape" && !mediaSurfaceFullscreen) {
       if (musicPage === "playlist-builder") return;
-      event.preventDefault();
-      event.stopPropagation();
+      if (typeof document !== "undefined" && document.querySelector("[data-app-floating-surface]")) return;
+      claimKeyboardShortcut(event);
       onclose();
       return;
     }
@@ -419,88 +419,94 @@
     if ((event.ctrlKey || event.metaKey) && !shortcutModifier) return;
     if (shortcutModifier) {
       if (event.key === "ArrowLeft") {
-        event.preventDefault();
+        claimKeyboardShortcut(event);
         void player.playPreviousTrack();
         return;
       }
       if (event.key === "ArrowRight") {
-        event.preventDefault();
+        claimKeyboardShortcut(event);
         void player.playNextTrack();
         return;
       }
       if (!event.shiftKey && (event.key.toLowerCase() === "l" || event.key.toLowerCase() === "p")) {
-        event.preventDefault();
+        claimKeyboardShortcut(event);
         togglePlaylist();
       }
       return;
     }
     if (event.code === "Space") {
-      event.preventDefault();
+      claimKeyboardShortcut(event);
       void player.togglePlay();
       return;
     }
     const seekDigit = digitSeekShortcut(event);
     if (seekDigit !== null) {
-      event.preventDefault();
+      claimKeyboardShortcut(event);
       seekToDigitPosition(seekDigit);
       return;
     }
     if (event.key.toLowerCase() === "p" || event.key.toLowerCase() === "l") {
-      event.preventDefault();
+      claimKeyboardShortcut(event);
       togglePlaylist();
       return;
     }
     if (event.key.toLowerCase() === "m") {
-      event.preventDefault();
+      claimKeyboardShortcut(event);
       void player.toggleMute();
       return;
     }
     if (event.shiftKey && event.key === "ArrowLeft") {
-      event.preventDefault();
+      claimKeyboardShortcut(event);
       void player.playPreviousTrack();
       return;
     }
     if (event.shiftKey && event.key === "ArrowRight") {
-      event.preventDefault();
+      claimKeyboardShortcut(event);
       void player.playNextTrack();
       return;
     }
     if (event.key === "ArrowLeft") {
-      event.preventDefault();
+      claimKeyboardShortcut(event);
       void player.seekByMs(-10_000);
       return;
     }
     if (event.key === "ArrowRight") {
-      event.preventDefault();
+      claimKeyboardShortcut(event);
       void player.seekByMs(10_000);
       return;
     }
     if (event.key === "ArrowUp") {
-      event.preventDefault();
+      claimKeyboardShortcut(event);
       void player.adjustVolume(volumeShortcutStep);
       return;
     }
     if (event.key === "ArrowDown") {
-      event.preventDefault();
+      claimKeyboardShortcut(event);
       void player.adjustVolume(-volumeShortcutStep);
       return;
     }
     if (event.key.toLowerCase() === "s" || event.key.toLowerCase() === "r") {
-      event.preventDefault();
+      claimKeyboardShortcut(event);
       if (player.queue.length >= 2) {
         player.toggleShuffle();
       }
       return;
     }
     if (event.key === "+" || event.key === "=" || event.code === "NumpadAdd") {
-      event.preventDefault();
+      claimKeyboardShortcut(event);
       void player.setRate(clampRate(player.snapshot.rate + speedShortcutStep));
       return;
     }
     if (event.key === "-" || event.code === "NumpadSubtract") {
-      event.preventDefault();
+      claimKeyboardShortcut(event);
       void player.setRate(clampRate(player.snapshot.rate - speedShortcutStep));
     }
+  }
+
+  function claimKeyboardShortcut(event: KeyboardEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
   }
 
   function trapPanelFocus(event: KeyboardEvent): void {
@@ -691,7 +697,7 @@
   }
 </script>
 
-<svelte:window onkeydown={handleKeydown} onpointerdown={handleWindowPointerDown} />
+<svelte:window onkeydowncapture={handleKeydown} onpointerdown={handleWindowPointerDown} />
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -736,6 +742,7 @@
       <PlaylistBuilder
         onOpenPlayer={closePlaylistBuilder}
         presentation={mobilePresentation ? "mobile" : "desktop"}
+        active={musicPage === "playlist-builder"}
         initialAction={playlistBuilderInitialAction}
         onInitialActionHandled={() => { playlistBuilderInitialAction = null; }}
       />

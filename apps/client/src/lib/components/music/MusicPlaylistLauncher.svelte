@@ -107,7 +107,10 @@
     error = null;
     noEligiblePlaylist = null;
     try {
-      if (!playlistCache.loaded && !await playlistCache.load()) error = playlistCache.error;
+      const loaded = playlistCache.loaded
+        ? await playlistCache.refresh()
+        : await playlistCache.load();
+      if (!loaded) error = playlistCache.error;
       open = true;
       geometry = null;
       await tick();

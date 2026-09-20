@@ -400,6 +400,15 @@ export class MusicLibraryController {
     }
   }
 
+  /** Loads every remaining page for the active destination before it is presented. */
+  async loadAllCurrentItems(): Promise<boolean> {
+    while (this.currentWindow.items.length < this.currentWindow.totalCount) {
+      const previousCount = this.currentWindow.items.length;
+      if (!await this.loadMore() || this.currentWindow.items.length <= previousCount) return false;
+    }
+    return true;
+  }
+
   async runOptimistic<T>(mutation: OptimisticMutation<T>): Promise<T> {
     const revision = (this.mutationRevisions[mutation.key] ?? 0) + 1;
     this.mutationRevisions[mutation.key] = revision;

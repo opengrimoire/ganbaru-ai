@@ -98,6 +98,57 @@ describe("MusicPanel", () => {
     player.queue = [];
   });
 
+  it("owns playback arrow shortcuts before the underlying tab can handle them", async () => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    target = document.createElement("div");
+    document.body.append(target);
+    const player = getMusicPlayer();
+    const adjustVolume = vi.spyOn(player, "adjustVolume").mockResolvedValue();
+    const underlyingKeydown = vi.fn();
+    const { default: MusicPanel } = await import("./MusicPanel.svelte");
+
+    component = mount(MusicPanel, { target, props: { onclose: vi.fn() } });
+    await tick();
+    window.addEventListener("keydown", underlyingKeydown);
+    const event = new KeyboardEvent("keydown", {
+      key: "ArrowUp",
+      bubbles: true,
+      cancelable: true,
+    });
+
+    window.dispatchEvent(event);
+    window.removeEventListener("keydown", underlyingKeydown);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(adjustVolume).toHaveBeenCalledWith(0.05);
+    expect(underlyingKeydown).not.toHaveBeenCalled();
+  });
+
+  it("lets the playlist chooser close with Escape without closing Music", async () => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    target = document.createElement("div");
+    document.body.append(target);
+    const onclose = vi.fn();
+    const { default: MusicPanel } = await import("./MusicPanel.svelte");
+
+    component = mount(MusicPanel, { target, props: { onclose } });
+    await tick();
+    target.querySelector<HTMLButtonElement>("[data-music-playlist-launcher]")?.click();
+    await vi.waitFor(() => {
+      expect(document.body.querySelector(".playlist-launcher-popover")).not.toBeNull();
+    });
+
+    window.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    }));
+    await tick();
+
+    expect(document.body.querySelector(".playlist-launcher-popover")).toBeNull();
+    expect(onclose).not.toHaveBeenCalled();
+  });
+
   it("keeps the player DOM mounted while opening and reopening the lazy builder", async () => {
     vi.stubGlobal("ResizeObserver", ResizeObserverStub);
     vi.stubGlobal("matchMedia", matchMediaStub);
@@ -116,10 +167,10 @@ describe("MusicPanel", () => {
 
     target.querySelector<HTMLButtonElement>("[data-music-playlist-launcher]")?.click();
     await vi.waitFor(() => {
-      expect([...target!.querySelectorAll<HTMLButtonElement>("button")]
+      expect([...document.body.querySelectorAll<HTMLButtonElement>("button")]
         .some((button) => button.textContent?.includes("Open builder"))).toBe(true);
     });
-    const firstOpenBuilder = [...target.querySelectorAll<HTMLButtonElement>("button")]
+    const firstOpenBuilder = [...document.body.querySelectorAll<HTMLButtonElement>("button")]
       .find((button) => button.textContent?.includes("Open builder"));
     firstOpenBuilder?.click();
     await vi.waitFor(() => {
@@ -127,31 +178,24 @@ describe("MusicPanel", () => {
     }, { timeout: 5_000 });
     expect(target.querySelector("[data-music-player-page]")).toBe(playerPage);
     expect(playerPage?.classList.contains("hidden")).toBe(true);
+    expect(target.textContent).not.toContain("Everything is reviewed");
+    expect(target.textContent).toMatch(/Opening your music library|Preparing your Music folder/);
 
-    const navigationItems = target.querySelectorAll<HTMLButtonElement>("[data-builder-dock-item]");
-    const playlistsNavigation = navigationItems.item(1);
-    expect(playlistsNavigation.getAttribute("aria-label")).toContain("Playlists");
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "2", bubbles: true, cancelable: true }));
-    await vi.waitFor(() => {
-      expect(playlistsNavigation.getAttribute("aria-current")).toBe("page");
-    });
-
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "3", bubbles: true, cancelable: true }));
-    await vi.waitFor(() => {
-      expect(navigationItems.item(2).getAttribute("aria-current")).toBe("page");
-    });
-
-    target.querySelector<HTMLButtonElement>(`[data-music-focus-key="builder:back-to-player"]`)?.click();
+    window.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    }));
     await tick();
     expect(target.querySelector("[data-music-player-page]")).toBe(playerPage);
     expect(playerPage?.classList.contains("hidden")).toBe(false);
 
     target.querySelector<HTMLButtonElement>("[data-music-playlist-launcher]")?.click();
     await vi.waitFor(() => {
-      expect([...target!.querySelectorAll<HTMLButtonElement>("button")]
+      expect([...document.body.querySelectorAll<HTMLButtonElement>("button")]
         .some((button) => button.textContent?.includes("Open builder"))).toBe(true);
     });
-    const openBuilder = [...target.querySelectorAll<HTMLButtonElement>("button")]
+    const openBuilder = [...document.body.querySelectorAll<HTMLButtonElement>("button")]
       .find((button) => button.textContent?.includes("Open builder"));
     openBuilder?.click();
     await tick();
@@ -159,7 +203,7 @@ describe("MusicPanel", () => {
     expect(target.querySelector("[data-music-player-page]")).toBe(playerPage);
   });
 
-  it("opens the preloaded builder directly during the first-use music session", async () => {
+  it("keeps first-use preparation pending when the panel closes before completion", async () => {
     vi.stubGlobal("ResizeObserver", ResizeObserverStub);
     vi.stubGlobal("matchMedia", matchMediaStub);
     getMusicSourcesController().firstUseSession = true;
@@ -173,5 +217,10 @@ describe("MusicPanel", () => {
       expect(target?.querySelector(".builder-root"), target?.textContent ?? "").not.toBeNull();
     }, { timeout: 5_000 });
     expect(target.querySelector("[data-music-player-page]")?.classList.contains("hidden")).toBe(true);
+
+    await unmount(component);
+    component = undefined;
+
+    expect(getMusicSourcesController().firstUseSession).toBe(true);
   });
 });
