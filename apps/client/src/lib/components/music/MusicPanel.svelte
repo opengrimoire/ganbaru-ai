@@ -737,12 +737,12 @@
   aria-label={t("music.title")}
   tabindex="-1"
 >
-  {#if PlaylistBuilder}
-    <div class:hidden={musicPage !== "playlist-builder"} class="h-full min-h-0" aria-hidden={musicPage !== "playlist-builder"}>
+  {#if PlaylistBuilder && musicPage === "playlist-builder"}
+    <div class="h-full min-h-0">
       <PlaylistBuilder
         onOpenPlayer={closePlaylistBuilder}
         presentation={mobilePresentation ? "mobile" : "desktop"}
-        active={musicPage === "playlist-builder"}
+        active={true}
         initialAction={playlistBuilderInitialAction}
         onInitialActionHandled={() => { playlistBuilderInitialAction = null; }}
       />

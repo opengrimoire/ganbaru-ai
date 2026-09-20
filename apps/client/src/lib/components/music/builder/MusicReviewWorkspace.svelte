@@ -50,6 +50,7 @@
     audition,
     review,
     bulk,
+    active = true,
     selectedItemIds,
     selectedFolderIds,
     onClearSelection,
@@ -73,6 +74,7 @@
     audition: MusicReviewAuditionController;
     review: MusicReviewController;
     bulk: MusicBulkEditController;
+    active?: boolean;
     selectedItemIds: string[];
     selectedFolderIds: string[];
     onClearSelection: () => void;
@@ -164,7 +166,7 @@
   const previewArtist = $derived(detail
     ? (detail.item.artistOverride ?? detail.item.originalArtist) || t("music.builder.noArtist")
     : item?.artist || t("music.builder.noArtist"));
-  const reviewPlayerReady = $derived(audition.reviewItemId === item?.id);
+  const reviewPlayerReady = $derived(audition.ownsPlayback && audition.reviewItemId === item?.id);
   const prefetchedArtworkUrl = $derived(item ? prefetchedArtworkUrls[item.id] ?? null : null);
   const previewDurationMs = $derived(reviewPlayerReady
     ? player.snapshot.durationMs
@@ -193,7 +195,7 @@
     }
     if (selectionPlaybackHandled) return;
     selectionPlaybackHandled = true;
-    if (audition.active && player.isPlaying) void player.pausePlayback();
+    if (active && audition.ownsPlayback && player.isPlaying) void player.pausePlayback();
   });
 
   $effect(() => {
@@ -216,7 +218,7 @@
   }
 
   $effect(() => {
-    if (!surface) return;
+    if (!active || !surface) return;
     return player.claimSurface("playlist-builder-review", surface, 100);
   });
 
@@ -246,7 +248,7 @@
   });
 
   $effect(() => {
-    if (selectionMode || !detail || lastAutoplayedId === detail.item.id) return;
+    if (!active || selectionMode || !detail || lastAutoplayedId === detail.item.id) return;
     lastAutoplayedId = detail.item.id;
     void audition.preview(detail, sources.bindings, autoplay);
   });

@@ -488,7 +488,7 @@
   }
 
   function takePlaybackOwnership(): void {
-    if (musicBuilderPlaybackDecision(audition.active, "explicit-playback") === "release-review") audition.keep();
+    if (musicBuilderPlaybackDecision(audition.ownsPlayback, "explicit-playback") === "release-review") audition.keep();
   }
 
   function setReviewAutoplay(value: boolean): void {
@@ -549,6 +549,12 @@
   async function playCurrentPlaylist(itemId?: string): Promise<void> {
     takePlaybackOwnership();
     await playlist.play(sources.bindings, itemId);
+  }
+
+  async function playReplacementPlaylist(playlistId: string, navigateToPlaylist: boolean): Promise<void> {
+    if (navigateToPlaylist) await navigateNow({ kind: "playlist", playlistId });
+    else await playlist.load(playlistId);
+    await playCurrentPlaylist();
   }
 
   async function toggleCurrentPlaylist(): Promise<void> {
@@ -706,7 +712,7 @@
     const handleBoundary = (event: Event) => {
       if (!(event instanceof CustomEvent)) return;
       const owner = event.detail?.owner;
-      if ((owner === "calendar-event" || owner === "pomodoro") && musicBuilderPlaybackDecision(audition.active, "automation-boundary") === "supersede-review") audition.supersedeForBoundary(owner);
+      if ((owner === "calendar-event" || owner === "pomodoro") && musicBuilderPlaybackDecision(audition.ownsPlayback, "automation-boundary") === "supersede-review") audition.supersedeForBoundary(owner);
     };
     window.addEventListener(MUSIC_CONTEXT_BOUNDARY_EVENT, handleBoundary);
     try { void loadVault(requireActiveVaultIdentity()); }
@@ -871,7 +877,7 @@
             {/if}
           </div>
         {:else}
-          <MusicReviewWorkspace {library} {inspector} {sources} {audition} {review} {bulk} selectedItemIds={reviewTreeViewState.selectedItemIds} selectedFolderIds={reviewTreeViewState.selectedFolderIds} onClearSelection={clearReviewSelection} autoplay={reviewAutoplay} onAutoplayChange={setReviewAutoplay} onOpenPlayer={openPlayerFromBuilder} compactPlayerLabel={mobilePresentation} showPanelButton={layout.contextPanelPresentation === "sheet"} onOpenPanel={() => contextViewState.contextPanelOpen = true} onEditPlaylist={(playlistId) => { void openPlaylistManagementSurface(playlistId, "edit"); }} onDeletePlaylist={(playlistId) => { void openPlaylistManagementSurface(playlistId, "delete"); }} onReorderPlaylists={reorderPlaylistSummaries} issue={activeReviewIssue} repairAvailable={activeReviewIssue ? canRepairIssue(activeReviewIssue) : false} onRepairIssue={repairIssue} viewState={reviewWorkspaceViewState} />
+          <MusicReviewWorkspace {library} {inspector} {sources} {audition} {review} {bulk} {active} selectedItemIds={reviewTreeViewState.selectedItemIds} selectedFolderIds={reviewTreeViewState.selectedFolderIds} onClearSelection={clearReviewSelection} autoplay={reviewAutoplay} onAutoplayChange={setReviewAutoplay} onOpenPlayer={openPlayerFromBuilder} compactPlayerLabel={mobilePresentation} showPanelButton={layout.contextPanelPresentation === "sheet"} onOpenPanel={() => contextViewState.contextPanelOpen = true} onEditPlaylist={(playlistId) => { void openPlaylistManagementSurface(playlistId, "edit"); }} onDeletePlaylist={(playlistId) => { void openPlaylistManagementSurface(playlistId, "delete"); }} onReorderPlaylists={reorderPlaylistSummaries} issue={activeReviewIssue} repairAvailable={activeReviewIssue ? canRepairIssue(activeReviewIssue) : false} onRepairIssue={repairIssue} viewState={reviewWorkspaceViewState} />
         {/if}
       {:else if playlistManagementOpen && (destination.kind === "playlists" || destination.kind === "playlist")}
         <div class="min-h-0 flex-1 overflow-y-auto p-3" data-music-scrollable="true"><MusicPlaylistManager playlists={library.playlistSummaries} onEdit={(playlistId) => { void openPlaylistManagementSurface(playlistId, "edit"); }} onDelete={(playlistId) => { void openPlaylistManagementSurface(playlistId, "delete"); }} onReorder={reorderPlaylistSummaries} onDone={() => playlistManagementOpen = false} /></div>
@@ -993,8 +999,7 @@
           if (deletedPlaylistId && audition.musicPlayer.activePlaylistId === deletedPlaylistId) {
             audition.musicPlayer.detachDeletedPlaylist(deletedPlaylistId);
             if (replacementPlaylistId) {
-              if (returnToCurrentView) void playlist.load(replacementPlaylistId).then(() => playlist.play(sources.bindings));
-              else void navigateNow({ kind: "playlist", playlistId: replacementPlaylistId }).then(() => playlist.play(sources.bindings));
+              void playReplacementPlaylist(replacementPlaylistId, !returnToCurrentView);
               return;
             }
           }

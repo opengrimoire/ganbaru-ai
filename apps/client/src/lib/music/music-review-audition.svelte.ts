@@ -15,6 +15,10 @@ export class MusicReviewAuditionController {
     return this.player;
   }
 
+  get ownsPlayback(): boolean {
+    return this.active && this.player.contextOwner === "review";
+  }
+
   enter(): void {
     if (this.active) return;
     this.active = true;
@@ -25,7 +29,7 @@ export class MusicReviewAuditionController {
     bindings: readonly LocalRootBinding[],
     autoplay: boolean,
   ): Promise<boolean> {
-    if (this.active && this.reviewItemId === detail.item.id) return true;
+    if (this.ownsPlayback && this.reviewItemId === detail.item.id) return true;
     this.enter();
     const source = musicReviewSource(detail, bindings);
     if (!source) {
@@ -52,18 +56,22 @@ export class MusicReviewAuditionController {
   }
 
   keep(): void {
-    this.player.contextOwner = "manual";
-    this.player.activePlaylistId = null;
-    this.player.activePlaylistName = null;
-    this.player.activePlaylistRepeatMode = "off";
-    this.player.activeQueueItemIds = [];
-    this.player.savedQueueEntries = [];
+    if (this.ownsPlayback) {
+      this.player.contextOwner = "manual";
+      this.player.activePlaylistId = null;
+      this.player.activePlaylistName = null;
+      this.player.activePlaylistRepeatMode = "off";
+      this.player.activeQueueItemIds = [];
+      this.player.savedQueueEntries = [];
+    }
     this.clearOwnership();
   }
 
   supersedeForBoundary(owner: "calendar-event" | "pomodoro"): void {
-    if (this.reviewItemId) this.reviewPositions[this.reviewItemId] = this.player.snapshot.positionMs;
-    this.player.contextOwner = owner;
+    if (this.ownsPlayback) {
+      if (this.reviewItemId) this.reviewPositions[this.reviewItemId] = this.player.snapshot.positionMs;
+      this.player.contextOwner = owner;
+    }
     this.clearOwnership();
   }
 
