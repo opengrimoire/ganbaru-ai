@@ -60,6 +60,7 @@
   let managerRoot = $state<HTMLDivElement | null>(null);
   let managerWidth = $state(0);
   let visualPlaylists = $state<MusicPlaylistSummary[]>(untrack(() => orderMusicPlaylists(playlists)));
+  let initialIds = $state<string[]>(untrack(() => orderMusicPlaylists(playlists).map((playlist) => playlist.id)));
   let positions = $state<Record<string, MusicPlaylistGridPosition>>({});
   let layoutHeight = $state(0);
   let drag = $state.raw<ActiveDrag | null>(null);
@@ -143,6 +144,16 @@
       keyboardOriginIds = [];
       if (!await saveOrder(origin)) return;
     }
+    onDone();
+  }
+
+  async function cancelManaging(): Promise<void> {
+    if (saving || drag || pendingPointer) return;
+    keyboardPlaylistId = null;
+    keyboardOriginIds = [];
+    const currentIds = ids();
+    restoreOrder(initialIds);
+    if (!await saveOrder(currentIds)) return;
     onDone();
   }
 
@@ -421,6 +432,18 @@
   });
 
   $effect(() => {
+    const sourceIds = orderMusicPlaylists(playlists).map((playlist) => playlist.id);
+    const sourceIdSet = new Set(sourceIds);
+    const initialIdSet = new Set(initialIds);
+    if (sourceIds.length !== initialIds.length || sourceIds.some((id) => !initialIdSet.has(id))) {
+      initialIds = [
+        ...initialIds.filter((id) => sourceIdSet.has(id)),
+        ...sourceIds.filter((id) => !initialIdSet.has(id)),
+      ];
+    }
+  });
+
+  $effect(() => {
     void visualPlaylists.map((playlist) => playlist.id).join("|");
     void managerWidth;
     applyLayout();
@@ -436,7 +459,10 @@
 
 <div class="sticky top-0 z-20 -mx-1 mb-3 flex min-w-0 items-start justify-between gap-3 px-1 pb-2" style="background-color: var(--cal-bg);">
   <div class="min-w-0"><h2 class="text-sm font-semibold">{t("music.builder.managePlaylists")}</h2><p class="mt-0.5 text-[0.68rem] leading-relaxed text-muted-foreground">{t("music.builder.managePlaylistsHint")}</p></div>
-  <button type="button" onclick={() => { void finishManaging(); }} disabled={saving || Boolean(drag)} class="h-8 shrink-0 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-50">{t("music.builder.doneManaging")}</button>
+  <div class="flex shrink-0 items-center gap-2">
+    <button type="button" onclick={() => { void cancelManaging(); }} disabled={saving || Boolean(drag)} class="h-8 rounded-lg px-3 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-50">{t("music.builder.cancel")}</button>
+    <button type="button" onclick={() => { void finishManaging(); }} disabled={saving || Boolean(drag)} class="h-8 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-50">{t("music.builder.doneManaging")}</button>
+  </div>
 </div>
 <div bind:this={managerRoot} class="relative w-full" style={`height: ${layoutHeight}px;`} aria-busy={saving} role="list">
   {#each renderedPlaylists as playlist (playlist.id)}
@@ -456,6 +482,7 @@
           class={`grid h-9 w-7 shrink-0 touch-none place-items-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 ${drag?.playlistId === playlist.id ? "cursor-grabbing" : "cursor-grab"}`}
           aria-label={t("music.builder.reorderPlaylist", playlistName, visualIndex + 1, visualPlaylists.length)}
           aria-pressed={keyboardPlaylistId === playlist.id}
+          data-app-tooltip-disabled="true"
           disabled={saving}
           onpointerdown={(event) => startPointerDrag(event, playlist.id)}
           onkeydown={(event) => handleKeyboard(event, playlist)}
