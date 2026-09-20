@@ -2,11 +2,16 @@
   import GripVertical from "@lucide/svelte/icons/grip-vertical";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { flip } from "svelte/animate";
-  import { onDestroy, untrack } from "svelte";
+  import { onDestroy, onMount, tick, untrack } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type { MusicPlaylistSummary } from "$lib/music/library-contracts";
-  import { moveMusicPlaylistOrder } from "$lib/music/music-playlist-order";
+  import {
+    moveMusicPlaylistOrder,
+    musicPlaylistGridInsertion,
+    musicPlaylistGridLayout,
+    MUSIC_PLAYLIST_GRID_CARD_HEIGHT,
+    type MusicPlaylistGridPosition,
+  } from "$lib/music/music-playlist-order";
   import { isSystemMusicPlaylistId, orderMusicPlaylists, systemMusicPlaylistName } from "$lib/music/music-system-playlists";
   import MusicPlaylistIcon from "./MusicPlaylistIcon.svelte";
 
@@ -24,36 +29,74 @@
     onDone: () => void;
   } = $props();
 
-  type PointerDrag = {
+  interface PendingPointer {
     playlistId: string;
     pointerId: number;
+    captureNode: HTMLElement;
+    node: HTMLDivElement;
     startX: number;
     startY: number;
+    grabX: number;
+    grabY: number;
+    width: number;
+    height: number;
+  }
+
+  interface ActiveDrag extends PendingPointer {
+    clientX: number;
+    clientY: number;
     originIds: string[];
-    moved: boolean;
-  };
+  }
+
+  interface DropSettle {
+    playlistId: string;
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  }
 
   const { t } = getLocalization();
+  let managerRoot = $state<HTMLDivElement | null>(null);
+  let managerWidth = $state(0);
   let visualPlaylists = $state<MusicPlaylistSummary[]>(untrack(() => orderMusicPlaylists(playlists)));
-  let pointerDrag = $state<PointerDrag | null>(null);
+  let positions = $state<Record<string, MusicPlaylistGridPosition>>({});
+  let layoutHeight = $state(0);
+  let drag = $state.raw<ActiveDrag | null>(null);
+  let dragRenderIds = $state<string[] | null>(null);
+  let settling = $state<DropSettle | null>(null);
+  let handoffId = $state<string | null>(null);
   let keyboardPlaylistId = $state<string | null>(null);
   let keyboardOriginIds = $state<string[]>([]);
   let saving = $state(false);
   let reorderError = $state(false);
   let announcement = $state("");
-  let scrollFrame: number | null = null;
-  let scrollVelocity = 0;
-  let managerRoot = $state<HTMLElement | null>(null);
+  let pendingPointer: PendingPointer | null = null;
+  let dragFrame: number | null = null;
+  let settleTimer: ReturnType<typeof setTimeout> | null = null;
+  let handoffFrame: number | null = null;
   let previousBodyUserSelect = "";
-  let bodySelectionLocked = false;
-
-  $effect(() => {
-    const ordered = orderMusicPlaylists(playlists);
-    if (!pointerDrag && !keyboardPlaylistId && !saving) visualPlaylists = ordered;
+  let previousDocumentCursor = "";
+  const renderedPlaylists = $derived.by(() => {
+    if (!dragRenderIds) return visualPlaylists;
+    const byId = new Map(visualPlaylists.map((playlist) => [playlist.id, playlist]));
+    return dragRenderIds.flatMap((id) => {
+      const playlist = byId.get(id);
+      return playlist ? [playlist] : [];
+    });
   });
 
   function ids(): string[] {
     return visualPlaylists.map((playlist) => playlist.id);
+  }
+
+  function applyLayout(): void {
+    const layout = musicPlaylistGridLayout(
+      managerWidth || managerRoot?.clientWidth || 272,
+      visualPlaylists.map(() => MUSIC_PLAYLIST_GRID_CARD_HEIGHT),
+    );
+    positions = Object.fromEntries(visualPlaylists.map((playlist, index) => [playlist.id, layout.positions[index]]));
+    layoutHeight = layout.height;
   }
 
   function movePlaylist(playlistId: string, targetIndex: number): void {
@@ -63,9 +106,9 @@
     if (sourceIndex === boundedTarget) return;
     const moved = visualPlaylists[sourceIndex];
     if (!moved) return;
-    const next = moveMusicPlaylistOrder(visualPlaylists, playlistId, boundedTarget);
-    visualPlaylists = next;
-    announcement = t("music.builder.playlistMoved", systemMusicPlaylistName(moved.id, moved.name, t), boundedTarget + 1, next.length);
+    visualPlaylists = moveMusicPlaylistOrder(visualPlaylists, playlistId, boundedTarget);
+    applyLayout();
+    announcement = t("music.builder.playlistMoved", systemMusicPlaylistName(moved.id, moved.name, t), boundedTarget + 1, visualPlaylists.length);
   }
 
   function restoreOrder(originIds: readonly string[]): void {
@@ -74,6 +117,7 @@
       const playlist = byId.get(id);
       return playlist ? [playlist] : [];
     });
+    applyLayout();
   }
 
   async function saveOrder(originIds: string[]): Promise<boolean> {
@@ -92,7 +136,7 @@
   }
 
   async function finishManaging(): Promise<void> {
-    if (saving || pointerDrag) return;
+    if (saving || drag || pendingPointer) return;
     if (keyboardPlaylistId) {
       const origin = keyboardOriginIds;
       keyboardPlaylistId = null;
@@ -102,86 +146,193 @@
     onDone();
   }
 
-  function stopAutoScroll(): void {
-    scrollVelocity = 0;
-    if (scrollFrame !== null) cancelAnimationFrame(scrollFrame);
-    scrollFrame = null;
-  }
-
-  function runAutoScroll(): void {
-    const drag = pointerDrag;
-    if (!drag || scrollVelocity === 0) {
-      scrollFrame = null;
-      return;
-    }
+  function dragScrollVelocity(clientY: number): number {
     const scrollable = managerRoot?.closest<HTMLElement>("[data-music-scrollable='true']");
-    if (scrollable) scrollable.scrollTop += scrollVelocity;
-    scrollFrame = requestAnimationFrame(runAutoScroll);
-  }
-
-  function updateAutoScroll(clientY: number): void {
-    const scrollable = managerRoot?.closest<HTMLElement>("[data-music-scrollable='true']");
-    if (!scrollable) return;
+    if (!scrollable) return 0;
     const rect = scrollable.getBoundingClientRect();
-    const edge = Math.min(64, rect.height * 0.2);
-    if (clientY < rect.top + edge) scrollVelocity = -Math.max(2, (rect.top + edge - clientY) / 5);
-    else if (clientY > rect.bottom - edge) scrollVelocity = Math.max(2, (clientY - (rect.bottom - edge)) / 5);
-    else scrollVelocity = 0;
-    if (scrollVelocity !== 0 && scrollFrame === null) scrollFrame = requestAnimationFrame(runAutoScroll);
-    if (scrollVelocity === 0) stopAutoScroll();
+    const edge = Math.min(72, rect.height * 0.22);
+    if (clientY < rect.top + edge) return -16 * (1 - Math.max(0, clientY - rect.top) / edge);
+    if (clientY > rect.bottom - edge) return 16 * (1 - Math.max(0, rect.bottom - clientY) / edge);
+    return 0;
+  }
+
+  function updateDragOrder(active: ActiveDrag): void {
+    if (!managerRoot) return;
+    const draggedIndex = visualPlaylists.findIndex((playlist) => playlist.id === active.playlistId);
+    if (draggedIndex < 0) return;
+    const rect = managerRoot.getBoundingClientRect();
+    const targetLeft = active.clientX - active.grabX - rect.left;
+    const targetTop = active.clientY - active.grabY - rect.top;
+    const slots = visualPlaylists.flatMap((playlist, index) => {
+      const position = positions[playlist.id];
+      return position ? [{ index, left: position.left, top: position.top }] : [];
+    });
+    const insertion = musicPlaylistGridInsertion(slots, targetLeft, targetTop, draggedIndex);
+    const current = positions[active.playlistId];
+    if (!current || insertion.index === draggedIndex) return;
+    const currentDistance = (current.left - targetLeft) ** 2 + (current.top - targetTop) ** 2;
+    if (insertion.distanceSquared + 100 < currentDistance) movePlaylist(active.playlistId, insertion.index);
+  }
+
+  function runDragFrame(): void {
+    dragFrame = null;
+    const active = drag;
+    if (!active) return;
+    active.node.style.left = `${active.clientX - active.grabX}px`;
+    active.node.style.top = `${active.clientY - active.grabY}px`;
+    const scrollable = managerRoot?.closest<HTMLElement>("[data-music-scrollable='true']");
+    const velocity = dragScrollVelocity(active.clientY);
+    if (scrollable && velocity !== 0) scrollable.scrollTop += velocity;
+    updateDragOrder(active);
+    if (velocity !== 0) scheduleDragFrame();
+  }
+
+  function scheduleDragFrame(): void {
+    if (dragFrame === null) dragFrame = requestAnimationFrame(runDragFrame);
+  }
+
+  function activateDrag(event: PointerEvent, pending: PendingPointer): void {
+    previousBodyUserSelect = document.body.style.userSelect;
+    previousDocumentCursor = document.documentElement.style.cursor;
+    document.body.style.userSelect = "none";
+    document.documentElement.style.cursor = "grabbing";
+    const originIds = ids();
+    dragRenderIds = originIds;
+    drag = { ...pending, clientX: event.clientX, clientY: event.clientY, originIds };
+    scheduleDragFrame();
   }
 
   function startPointerDrag(event: PointerEvent, playlistId: string): void {
-    if (saving || event.button !== 0 || !event.isPrimary) return;
-    event.preventDefault();
-    event.currentTarget instanceof HTMLElement && event.currentTarget.setPointerCapture(event.pointerId);
-    pointerDrag = {
+    if (saving || pendingPointer || event.button !== 0 || !event.isPrimary) return;
+    if (!(event.currentTarget instanceof HTMLElement)) return;
+    const node = event.currentTarget.closest<HTMLDivElement>("[data-playlist-manager-id]");
+    if (!node) return;
+    completeDropSettle();
+    const rect = node.getBoundingClientRect();
+    pendingPointer = {
       playlistId,
       pointerId: event.pointerId,
+      captureNode: event.currentTarget,
+      node,
       startX: event.clientX,
       startY: event.clientY,
-      originIds: ids(),
-      moved: false,
+      grabX: event.clientX - rect.left,
+      grabY: event.clientY - rect.top,
+      width: rect.width,
+      height: rect.height,
     };
-    previousBodyUserSelect = document.body.style.userSelect;
-    document.body.style.userSelect = "none";
-    bodySelectionLocked = true;
+    event.currentTarget.setPointerCapture(event.pointerId);
   }
 
   function movePointerDrag(event: PointerEvent): void {
-    const drag = pointerDrag;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    const moved = drag.moved || Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) >= 4;
-    pointerDrag = { ...drag, moved };
-    if (!moved) return;
+    const pending = pendingPointer;
+    if (!pending || pending.pointerId !== event.pointerId) return;
+    if (!drag) {
+      if (Math.hypot(event.clientX - pending.startX, event.clientY - pending.startY) < 4) return;
+      activateDrag(event, pending);
+    } else {
+      drag.clientX = event.clientX;
+      drag.clientY = event.clientY;
+    }
     event.preventDefault();
-    updateAutoScroll(event.clientY);
-    const target = document.elementsFromPoint(event.clientX, event.clientY)
-      .map((element) => element.closest<HTMLElement>("[data-playlist-manager-id]"))
-      .find((element): element is HTMLElement => Boolean(element));
-    const targetId = target?.dataset.playlistManagerId;
-    if (!targetId || targetId === drag.playlistId) return;
-    const targetIndex = visualPlaylists.findIndex((playlist) => playlist.id === targetId);
-    if (targetIndex >= 0) movePlaylist(drag.playlistId, targetIndex);
+    scheduleDragFrame();
   }
 
-  function finishPointerDrag(event: PointerEvent): void {
-    const drag = pointerDrag;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    pointerDrag = null;
+  function restoreDocumentDragState(): void {
     document.body.style.userSelect = previousBodyUserSelect;
-    bodySelectionLocked = false;
-    stopAutoScroll();
-    if (drag.moved) void saveOrder(drag.originIds);
+    document.documentElement.style.cursor = previousDocumentCursor;
+  }
+
+  function releasePendingPointer(): PendingPointer | null {
+    const pending = pendingPointer;
+    pendingPointer = null;
+    if (pending?.captureNode.hasPointerCapture(pending.pointerId)) pending.captureNode.releasePointerCapture(pending.pointerId);
+    return pending;
+  }
+
+  function finishPointerDrag(event: PointerEvent, cancelled: boolean): void {
+    const pending = pendingPointer;
+    if (!pending || pending.pointerId !== event.pointerId) return;
+    if (drag) {
+      drag.clientX = event.clientX;
+      drag.clientY = event.clientY;
+      drag.node.style.left = `${drag.clientX - drag.grabX}px`;
+      drag.node.style.top = `${drag.clientY - drag.grabY}px`;
+    }
+    const active = drag;
+    if (active) updateDragOrder(active);
+    releasePendingPointer();
+    if (!active) return;
+    event.preventDefault();
+    if (dragFrame !== null) cancelAnimationFrame(dragFrame);
+    dragFrame = null;
+    restoreDocumentDragState();
+    if (cancelled) {
+      drag = null;
+      restoreOrder(active.originIds);
+      dragRenderIds = null;
+      suppressLayoutTransition(active.playlistId);
+      return;
+    }
+    void saveOrder(active.originIds);
+    void settleDrop(active);
+  }
+
+  async function settleDrop(active: ActiveDrag): Promise<void> {
+    const position = positions[active.playlistId];
+    const rect = managerRoot?.getBoundingClientRect();
+    if (!position || !rect) {
+      drag = null;
+      dragRenderIds = null;
+      suppressLayoutTransition(active.playlistId);
+      return;
+    }
+    settling = {
+      playlistId: active.playlistId,
+      left: active.clientX - active.grabX,
+      top: active.clientY - active.grabY,
+      width: active.width,
+      height: active.height,
+    };
+    drag = null;
+    await tick();
+    if (settling?.playlistId !== active.playlistId) return;
+    active.node.getBoundingClientRect();
+    settling = { ...settling, left: rect.left + position.left, top: rect.top + position.top, width: position.width };
+    if (settleTimer) clearTimeout(settleTimer);
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    settleTimer = setTimeout(completeDropSettle, reducedMotion ? 0 : 160);
+  }
+
+  function suppressLayoutTransition(playlistId: string): void {
+    handoffId = playlistId;
+    if (handoffFrame !== null) cancelAnimationFrame(handoffFrame);
+    handoffFrame = requestAnimationFrame(() => {
+      handoffFrame = null;
+      if (handoffId === playlistId) handoffId = null;
+    });
+  }
+
+  function completeDropSettle(): void {
+    const playlistId = settling?.playlistId;
+    if (settleTimer) clearTimeout(settleTimer);
+    settleTimer = null;
+    settling = null;
+    dragRenderIds = null;
+    if (playlistId) suppressLayoutTransition(playlistId);
   }
 
   function cancelActiveReorder(): void {
-    if (pointerDrag) {
-      restoreOrder(pointerDrag.originIds);
-      pointerDrag = null;
-      document.body.style.userSelect = previousBodyUserSelect;
-      bodySelectionLocked = false;
-      stopAutoScroll();
+    const active = drag;
+    releasePendingPointer();
+    if (dragFrame !== null) cancelAnimationFrame(dragFrame);
+    dragFrame = null;
+    if (active) {
+      drag = null;
+      restoreDocumentDragState();
+      restoreOrder(active.originIds);
+      dragRenderIds = null;
+      suppressLayoutTransition(active.playlistId);
       announcement = t("music.builder.playlistReorderCancelled");
     }
     if (keyboardPlaylistId) {
@@ -229,52 +380,99 @@
     }
   }
 
+  function wrapperStyle(playlistId: string, position: MusicPlaylistGridPosition | undefined): string {
+    if (drag?.playlistId === playlistId) {
+      return `position: fixed; left: ${drag.clientX - drag.grabX}px; top: ${drag.clientY - drag.grabY}px; width: ${drag.width}px; height: ${drag.height}px; transform: none; z-index: 70;`;
+    }
+    if (settling?.playlistId === playlistId) {
+      return `position: fixed; left: ${settling.left}px; top: ${settling.top}px; width: ${settling.width}px; height: ${settling.height}px; transform: none; z-index: 70;`;
+    }
+    return position ? `width: ${position.width}px; transform: translate(${position.left}px, ${position.top}px);` : "width: 272px;";
+  }
+
+  onMount(() => {
+    if (!managerRoot) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const nextWidth = entry?.contentRect.width ?? managerRoot?.clientWidth ?? 0;
+      if (Math.abs(nextWidth - managerWidth) < 1) return;
+      managerWidth = nextWidth;
+      applyLayout();
+    });
+    observer.observe(managerRoot);
+    managerWidth = managerRoot.clientWidth;
+    applyLayout();
+    return () => observer.disconnect();
+  });
+
   onDestroy(() => {
-    stopAutoScroll();
-    if (bodySelectionLocked) document.body.style.userSelect = previousBodyUserSelect;
+    releasePendingPointer();
+    if (dragFrame !== null) cancelAnimationFrame(dragFrame);
+    if (settleTimer) clearTimeout(settleTimer);
+    if (handoffFrame !== null) cancelAnimationFrame(handoffFrame);
+    if (drag) restoreDocumentDragState();
+  });
+
+  $effect(() => {
+    const ordered = orderMusicPlaylists(playlists);
+    if (!drag && !settling && !keyboardPlaylistId && !saving
+      && ordered.map((playlist) => playlist.id).join("|") !== ids().join("|")) {
+      visualPlaylists = ordered;
+    }
+  });
+
+  $effect(() => {
+    void visualPlaylists.map((playlist) => playlist.id).join("|");
+    void managerWidth;
+    applyLayout();
   });
 </script>
 
-<svelte:window onkeydown={(event) => { if (event.key === "Escape") cancelActiveReorder(); }} />
+<svelte:window
+  onkeydown={(event) => { if (event.key === "Escape") cancelActiveReorder(); }}
+  onpointermove={movePointerDrag}
+  onpointerup={(event) => finishPointerDrag(event, false)}
+  onpointercancel={(event) => finishPointerDrag(event, true)}
+/>
 
 <div class="sticky top-0 z-20 -mx-1 mb-3 flex min-w-0 items-start justify-between gap-3 px-1 pb-2" style="background-color: var(--cal-bg);">
   <div class="min-w-0"><h2 class="text-sm font-semibold">{t("music.builder.managePlaylists")}</h2><p class="mt-0.5 text-[0.68rem] leading-relaxed text-muted-foreground">{t("music.builder.managePlaylistsHint")}</p></div>
-  <button type="button" onclick={() => { void finishManaging(); }} disabled={saving || Boolean(pointerDrag)} class="h-8 shrink-0 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-50">{t("music.builder.doneManaging")}</button>
+  <button type="button" onclick={() => { void finishManaging(); }} disabled={saving || Boolean(drag)} class="h-8 shrink-0 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-50">{t("music.builder.doneManaging")}</button>
 </div>
-<div bind:this={managerRoot} class="grid grid-cols-[repeat(auto-fill,minmax(min(17rem,100%),1fr))] gap-2" aria-busy={saving}>
-  {#each visualPlaylists as playlist, index (playlist.id)}
+<div bind:this={managerRoot} class="relative w-full" style={`height: ${layoutHeight}px;`} aria-busy={saving} role="list">
+  {#each renderedPlaylists as playlist (playlist.id)}
     {@const protectedPlaylist = isSystemMusicPlaylistId(playlist.id)}
     {@const playlistName = systemMusicPlaylistName(playlist.id, playlist.name, t)}
+    {@const visualIndex = visualPlaylists.findIndex((entry) => entry.id === playlist.id)}
+    {@const position = positions[playlist.id]}
     <div
-      class={`playlist-manager-row flex min-w-0 items-center gap-2 rounded-xl px-2 py-2 ${pointerDrag?.playlistId === playlist.id || keyboardPlaylistId === playlist.id ? "is-reordering" : ""}`}
+      class={`absolute left-0 top-0 min-w-0 will-change-transform ${drag?.playlistId === playlist.id ? "cursor-grabbing opacity-95 shadow-2xl" : settling?.playlistId === playlist.id ? "playlist-drop-settling opacity-95 shadow-2xl" : ""} ${(drag || keyboardPlaylistId) && drag?.playlistId !== playlist.id && settling?.playlistId !== playlist.id && handoffId !== playlist.id ? "motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-out" : ""}`}
+      style={wrapperStyle(playlist.id, position)}
       data-playlist-manager-id={playlist.id}
-      animate:flip={{ duration: 160 }}
+      role="listitem"
     >
-      <button
-        type="button"
-        class={`grid h-9 w-7 shrink-0 touch-none place-items-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 ${pointerDrag?.playlistId === playlist.id ? "cursor-grabbing" : "cursor-grab"}`}
-        aria-label={t("music.builder.reorderPlaylist", playlistName, index + 1, visualPlaylists.length)}
-        aria-pressed={keyboardPlaylistId === playlist.id}
-        title={t("music.builder.reorderPlaylist", playlistName, index + 1, visualPlaylists.length)}
-        disabled={saving}
-        onpointerdown={(event) => startPointerDrag(event, playlist.id)}
-        onpointermove={movePointerDrag}
-        onpointerup={finishPointerDrag}
-        onpointercancel={cancelActiveReorder}
-        onkeydown={(event) => handleKeyboard(event, playlist)}
-      ><GripVertical size={16} /></button>
-      <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-secondary text-foreground"><MusicPlaylistIcon icon={playlist.icon} size={17} /></span>
-      <span class="min-w-0 flex-1">
-        <strong class="block truncate text-xs font-semibold">{playlistName}</strong>
-        <span class="mt-0.5 block text-[0.64rem] tabular-nums text-muted-foreground">{t("music.tracks", playlist.totalCount)}</span>
-      </span>
-      {#if protectedPlaylist}
-        <button type="button" class="grid h-8 w-8 shrink-0 cursor-not-allowed place-items-center rounded-lg text-muted-foreground opacity-35" aria-disabled="true" aria-label={t("music.builder.defaultPlaylistEditProtected")} title={t("music.builder.defaultPlaylistEditProtected")}><Pencil size={14} /></button>
-        <button type="button" class="grid h-8 w-8 shrink-0 cursor-not-allowed place-items-center rounded-lg text-muted-foreground opacity-35" aria-disabled="true" aria-label={t("music.builder.defaultPlaylistDeleteProtected")} title={t("music.builder.defaultPlaylistDeleteProtected")}><Trash2 size={14} /></button>
-      {:else}
-        <button type="button" class="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground" onclick={() => onEdit(playlist.id)} aria-label={t("music.builder.editNamedPlaylist", playlistName)} title={t("music.builder.editNamedPlaylist", playlistName)} disabled={saving}><Pencil size={14} /></button>
-        <button type="button" class="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive" onclick={() => onDelete(playlist.id)} aria-label={t("music.builder.deleteNamedPlaylist", playlistName)} title={t("music.builder.deleteNamedPlaylist", playlistName)} disabled={saving}><Trash2 size={14} /></button>
-      {/if}
+      <div class={`playlist-manager-row flex h-13.5 w-full min-w-0 items-center gap-2 rounded-xl px-2 py-2 ${drag?.playlistId === playlist.id || keyboardPlaylistId === playlist.id ? "is-reordering" : ""}`}>
+        <button
+          type="button"
+          class={`grid h-9 w-7 shrink-0 touch-none place-items-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 ${drag?.playlistId === playlist.id ? "cursor-grabbing" : "cursor-grab"}`}
+          aria-label={t("music.builder.reorderPlaylist", playlistName, visualIndex + 1, visualPlaylists.length)}
+          aria-pressed={keyboardPlaylistId === playlist.id}
+          disabled={saving}
+          onpointerdown={(event) => startPointerDrag(event, playlist.id)}
+          onkeydown={(event) => handleKeyboard(event, playlist)}
+        ><GripVertical size={16} /></button>
+        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-secondary text-foreground"><MusicPlaylistIcon icon={playlist.icon} size={17} /></span>
+        <span class="min-w-0 flex-1">
+          <strong class="block truncate text-xs font-semibold">{playlistName}</strong>
+          <span class="mt-0.5 block text-[0.64rem] tabular-nums text-muted-foreground">{t("music.tracks", playlist.totalCount)}</span>
+        </span>
+        {#if protectedPlaylist}
+          <button type="button" class="grid h-8 w-8 shrink-0 cursor-not-allowed place-items-center rounded-lg text-muted-foreground opacity-35" aria-disabled="true" aria-label={t("music.builder.defaultPlaylistEditProtected")} title={t("music.builder.defaultPlaylistEditProtected")}><Pencil size={14} /></button>
+          <button type="button" class="grid h-8 w-8 shrink-0 cursor-not-allowed place-items-center rounded-lg text-muted-foreground opacity-35" aria-disabled="true" aria-label={t("music.builder.defaultPlaylistDeleteProtected")} title={t("music.builder.defaultPlaylistDeleteProtected")}><Trash2 size={14} /></button>
+        {:else}
+          <button type="button" class="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground" onclick={() => onEdit(playlist.id)} aria-label={t("music.builder.editNamedPlaylist", playlistName)} title={t("music.builder.editNamedPlaylist", playlistName)} disabled={saving}><Pencil size={14} /></button>
+          <button type="button" class="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive" onclick={() => onDelete(playlist.id)} aria-label={t("music.builder.deleteNamedPlaylist", playlistName)} title={t("music.builder.deleteNamedPlaylist", playlistName)} disabled={saving}><Trash2 size={14} /></button>
+        {/if}
+      </div>
     </div>
   {/each}
 </div>
@@ -284,5 +482,6 @@
 <style>
   .playlist-manager-row { border: 1px solid color-mix(in srgb, var(--border) 58%, transparent); background: color-mix(in srgb, var(--card) 68%, transparent); transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease; }
   .playlist-manager-row.is-reordering { border-color: color-mix(in srgb, var(--primary) 42%, var(--border)); background: color-mix(in srgb, var(--primary) 9%, var(--card)); box-shadow: 0 8px 24px color-mix(in srgb, black 12%, transparent); }
-  @media (prefers-reduced-motion: reduce) { .playlist-manager-row { transition: none; } }
+  .playlist-drop-settling { transition-property: left, top, width; transition-duration: 160ms; transition-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  @media (prefers-reduced-motion: reduce) { .playlist-manager-row { transition: none; } .playlist-drop-settling { transition-duration: 0ms; } }
 </style>
