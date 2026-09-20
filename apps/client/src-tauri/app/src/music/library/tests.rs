@@ -111,6 +111,13 @@ fn built_in_music_playlists_are_protected_localizable_and_repaired() {
                 .count(),
             defaults::BUILT_IN_MUSIC_PLAYLISTS.len(),
         );
+        assert_eq!(
+            summaries
+                .iter()
+                .find(|playlist| playlist.id == "playlist-default-break-calm")
+                .map(|playlist| playlist.icon.as_str()),
+            Some("lucide:armchair"),
+        );
 
         let detail = queries::playlist_detail(&pool, "playlist-default-work-focus")
             .await

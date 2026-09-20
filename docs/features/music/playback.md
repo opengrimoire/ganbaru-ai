@@ -52,7 +52,7 @@ This gap does not authorize scraping, proxying, downloading, or bypassing embedd
 
 Errors distinguish invalid input, missing local permission, missing or ambiguous file, unsupported format, media decode failure, network failure, embedding restriction, and unavailable source. Retry never duplicates queue items or revives a stale source generation.
 
-When part of a saved playlist is unavailable, the player can continue with the eligible subset and explains what was skipped. If nothing is playable, it offers refresh, repair, or another playlist rather than looping failures.
+When part of a saved playlist is unavailable, the player continues with the eligible subset and quietly identifies offline omissions. If a non-empty playlist has no playable tracks, the player links to its review workspace without replacing the playlist chooser with an error card. Selecting an empty playlist does not interrupt or replace the current playback state.
 
 ## Accessibility
 

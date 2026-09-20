@@ -92,13 +92,12 @@ describe("Music playlist launcher", () => {
     const player = getMusicPlayer();
     const load = vi.spyOn(player, "loadSavedPlaylist").mockResolvedValue(true);
     const openBuilder = vi.fn();
-    const newPlaylist = vi.fn();
     const { default: MusicPlaylistLauncher } = await import("./MusicPlaylistLauncher.svelte");
     target = document.createElement("div");
     document.body.append(target);
     component = mount(MusicPlaylistLauncher, {
       target,
-      props: { onOpenBuilder: openBuilder, onOpenIssues: vi.fn(), onNewPlaylist: newPlaylist },
+      props: { onOpenBuilder: openBuilder, onOpenIssues: vi.fn() },
     });
 
     target.querySelector<HTMLButtonElement>("[data-music-playlist-launcher]")?.click();
@@ -106,6 +105,13 @@ describe("Music playlist launcher", () => {
     const popover = document.body.querySelector<HTMLElement>(".playlist-launcher-popover");
     if (!popover) throw new Error("Expected playlist chooser");
     expect(popover.parentElement).toBe(document.body);
+    expect(popover.style.width).toBe("248px");
+    expect(popover.style.maxHeight).toBe("520px");
+    expect(popover.classList.contains("shadow-lg")).toBe(true);
+    expect(popover.classList.contains("shadow-2xl")).toBe(false);
+    const searchRow = popover.querySelector<HTMLElement>("[data-music-playlist-search]");
+    expect(searchRow?.classList.contains("sticky")).toBe(true);
+    expect(searchRow?.querySelector("div")?.classList.contains("bg-muted/20")).toBe(true);
     expect(popover.textContent).toContain("♪");
     expect(popover.textContent).not.toContain("playable of");
     const search = popover.querySelector<HTMLInputElement>('input[placeholder="Search playlists"]');
@@ -126,10 +132,9 @@ describe("Music playlist launcher", () => {
       { structuralSkipped: expect.any(Object) },
     ));
     expect(openBuilder).not.toHaveBeenCalled();
-    expect(newPlaylist).not.toHaveBeenCalled();
   });
 
-  it("opens Review attention when a playlist has nothing playable", async () => {
+  it("keeps the chooser open and offers Review for an unavailable non-empty playlist", async () => {
     vi.mocked(getMusicPlaylistSummaries).mockResolvedValue([summary("focus", "Deep focus")]);
     vi.mocked(getMusicPlaylistPlaybackEntries).mockResolvedValue([playbackEntry]);
     vi.mocked(getLocalRootBindings).mockResolvedValue([]);
@@ -141,18 +146,52 @@ describe("Music playlist launcher", () => {
     document.body.append(target);
     component = mount(MusicPlaylistLauncher, {
       target,
-      props: { onOpenBuilder: vi.fn(), onOpenIssues, onNewPlaylist: vi.fn() },
+      props: { onOpenBuilder: vi.fn(), onOpenIssues },
     });
 
     target.querySelector<HTMLButtonElement>("[data-music-playlist-launcher]")?.click();
     await vi.waitFor(() => expect(document.body.textContent).toContain("Deep focus"));
     [...document.body.querySelectorAll<HTMLButtonElement>("button")]
       .find((button) => button.textContent?.includes("Deep focus"))?.click();
-    await vi.waitFor(() => expect(document.body.textContent).toContain("Open issues"));
+    await vi.waitFor(() => expect(document.body.textContent).toContain("Deep focus is unavailable right now"));
+    expect(document.body.textContent).toContain("Deep focus");
+    expect(document.body.textContent).not.toContain("Choose another");
     [...document.body.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent?.trim() === "Open issues")?.click();
+      .find((button) => button.textContent?.trim() === "Review")?.click();
 
     expect(onOpenIssues).toHaveBeenCalledOnce();
+  });
+
+  it("does nothing when an empty playlist is selected", async () => {
+    vi.mocked(getMusicPlaylistSummaries).mockResolvedValue([{
+      ...summary("empty", "Empty playlist"),
+      totalCount: 0,
+      eligibleCount: 0,
+      localCount: 0,
+    }]);
+    setActiveVaultIdentity("vault-1");
+    const load = vi.spyOn(getMusicPlayer(), "loadSavedPlaylist").mockResolvedValue(false);
+    const { default: MusicPlaylistLauncher } = await import("./MusicPlaylistLauncher.svelte");
+    target = document.createElement("div");
+    document.body.append(target);
+    component = mount(MusicPlaylistLauncher, {
+      target,
+      props: { onOpenBuilder: vi.fn(), onOpenIssues: vi.fn() },
+    });
+
+    target.querySelector<HTMLButtonElement>("[data-music-playlist-launcher]")?.click();
+    await vi.waitFor(() => expect(document.body.textContent).toContain("Empty playlist"));
+    const emptyPlaylist = [...document.body.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.includes("Empty playlist"));
+    expect(emptyPlaylist?.disabled).toBe(false);
+    expect(emptyPlaylist?.getAttribute("aria-disabled")).toBe("true");
+    const playbackEntryCalls = vi.mocked(getMusicPlaylistPlaybackEntries).mock.calls.length;
+    emptyPlaylist?.click();
+    await tick();
+
+    expect(getMusicPlaylistPlaybackEntries).toHaveBeenCalledTimes(playbackEntryCalls);
+    expect(load).not.toHaveBeenCalled();
+    expect(document.body.querySelector("[data-music-playlist-unavailable]")).toBeNull();
   });
 
   it("refreshes retained playlist counts before showing the chooser", async () => {
@@ -171,7 +210,7 @@ describe("Music playlist launcher", () => {
     document.body.append(target);
     component = mount(MusicPlaylistLauncher, {
       target,
-      props: { onOpenBuilder: vi.fn(), onOpenIssues: vi.fn(), onNewPlaylist: vi.fn() },
+      props: { onOpenBuilder: vi.fn(), onOpenIssues: vi.fn() },
     });
 
     target.querySelector<HTMLButtonElement>("[data-music-playlist-launcher]")?.click();

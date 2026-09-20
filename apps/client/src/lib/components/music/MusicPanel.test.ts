@@ -3,6 +3,7 @@
 import { mount, tick, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { localFileSourceFromPath } from "$lib/music/sources";
+import { emptyMusicSkipBreakdown } from "$lib/music/music-playlist-playback";
 import { getMusicPlayer } from "$lib/stores/music-player.svelte";
 import { getMusicSourcesController } from "$lib/music/music-sources-controller.svelte";
 
@@ -37,7 +38,11 @@ describe("MusicPanel", () => {
     getMusicSourcesController().firstUseSession = false;
     const player = getMusicPlayer();
     player.setPlaylistVisible(false);
+    player.currentSource = null;
     player.queue = [];
+    player.activePlaylistId = null;
+    player.activePlaylistName = null;
+    player.savedQueueSkipBreakdown = emptyMusicSkipBreakdown();
   });
 
   it("mounts an interactive dialog above its persistent media layer and closes with Escape", async () => {
@@ -106,6 +111,30 @@ describe("MusicPanel", () => {
     expect(desktopHeader?.textContent).toContain("2 tracks");
     expect(desktopHeader?.classList.contains("min-[861px]:w-80")).toBe(true);
     expect(stackedHeader?.classList.contains("min-[861px]:hidden")).toBe(true);
+  });
+
+  it("shows unavailable playlist recovery inside the media area without chooser actions", async () => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    target = document.createElement("div");
+    document.body.append(target);
+    const player = getMusicPlayer();
+    player.activePlaylistId = "focus";
+    player.activePlaylistName = "Deep focus";
+    player.savedQueueSkipBreakdown = {
+      ...emptyMusicSkipBreakdown(),
+      unavailable: 2,
+    };
+    const { default: MusicPanel } = await import("./MusicPanel.svelte");
+
+    component = mount(MusicPanel, { target, props: { onclose: vi.fn() } });
+    await tick();
+
+    const unavailable = target.querySelector<HTMLElement>("[data-music-playlist-unavailable]");
+    expect(unavailable?.closest(".music-media-cell")).not.toBeNull();
+    expect(unavailable?.textContent).toContain("Nothing available to play");
+    expect(unavailable?.textContent).toContain("Review playlist");
+    expect(target.textContent).not.toContain("Choose another playlist");
+    expect(target.textContent).not.toContain("Retry");
   });
 
   it("does not reset persistent playback state when the panel closes", async () => {
@@ -201,10 +230,10 @@ describe("MusicPanel", () => {
     target.querySelector<HTMLButtonElement>("[data-music-playlist-launcher]")?.click();
     await vi.waitFor(() => {
       expect([...document.body.querySelectorAll<HTMLButtonElement>("button")]
-        .some((button) => button.textContent?.includes("Open builder"))).toBe(true);
+        .some((button) => button.textContent?.includes("Open playlist builder"))).toBe(true);
     });
     const firstOpenBuilder = [...document.body.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent?.includes("Open builder"));
+      .find((button) => button.textContent?.includes("Open playlist builder"));
     firstOpenBuilder?.click();
     await vi.waitFor(() => {
       expect(target?.querySelector(".builder-root"), target?.textContent ?? "").not.toBeNull();
@@ -228,10 +257,10 @@ describe("MusicPanel", () => {
     target.querySelector<HTMLButtonElement>("[data-music-playlist-launcher]")?.click();
     await vi.waitFor(() => {
       expect([...document.body.querySelectorAll<HTMLButtonElement>("button")]
-        .some((button) => button.textContent?.includes("Open builder"))).toBe(true);
+        .some((button) => button.textContent?.includes("Open playlist builder"))).toBe(true);
     });
     const openBuilder = [...document.body.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent?.includes("Open builder"));
+      .find((button) => button.textContent?.includes("Open playlist builder"));
     openBuilder?.click();
     await tick();
     expect(target.querySelector(".builder-root")).not.toBeNull();
@@ -262,10 +291,10 @@ describe("MusicPanel", () => {
     target.querySelector<HTMLButtonElement>("[data-music-playlist-launcher]")?.click();
     await vi.waitFor(() => {
       expect([...document.body.querySelectorAll<HTMLButtonElement>("button")]
-        .some((button) => button.textContent?.includes("Open builder"))).toBe(true);
+        .some((button) => button.textContent?.includes("Open playlist builder"))).toBe(true);
     });
     const openBuilder = [...document.body.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent?.includes("Open builder"));
+      .find((button) => button.textContent?.includes("Open playlist builder"));
     openBuilder?.click();
     await tick();
 

@@ -147,19 +147,10 @@
   const savedQueueUnavailable = $derived(Boolean(
     player.activePlaylistId
     && !player.currentSource
+    && savedQueueSkippedCount > 0
     && player.contextPlayback?.state !== "unavailable",
   ));
   const savedQueueOfflineSubset = $derived(Boolean(player.activePlaylistId && !player.online && player.savedQueueSkipBreakdown.offline > 0 && player.currentSource));
-  const savedQueueSkipDetails = $derived([
-    { label: t("music.queueState.disabled"), count: player.savedQueueSkipBreakdown.disabled },
-    { label: t("music.queueState.snoozed"), count: player.savedQueueSkipBreakdown.snoozed },
-    { label: t("music.queueState.offline"), count: player.savedQueueSkipBreakdown.offline },
-    { label: t("music.queueState.unavailable"), count: player.savedQueueSkipBreakdown.unavailable },
-    { label: t("music.queueState.embeddingBlocked"), count: player.savedQueueSkipBreakdown["embedding-blocked"] },
-    { label: t("music.queueState.phaseConstraint"), count: player.savedQueueSkipBreakdown["phase-constraint"] },
-    { label: t("music.queueState.unboundRoot"), count: player.savedQueueSkipBreakdown["unbound-root"] },
-    { label: t("music.queueState.invalidSource"), count: player.savedQueueSkipBreakdown["invalid-source"] },
-  ].filter((entry) => entry.count > 0));
   const visibleContext = $derived(player.contextPlayback?.state === "overridden" ? null : player.contextPlayback);
   const contextPhaseLabel = $derived(visibleContext ? t(`music.assignment.phase.${visibleContext.phase}`) : "");
   const contextSummary = $derived(visibleContext
@@ -391,10 +382,6 @@
 
   function closePlaylistBuilder(): void {
     musicPage = "player";
-  }
-
-  function openPlaylistChooser(): void {
-    panel?.querySelector<HTMLButtonElement>("[data-music-playlist-launcher]")?.click();
   }
 
   async function openCurrentLocalFileLocation(): Promise<void> {
@@ -822,7 +809,6 @@
           active={visible}
           onOpenBuilder={() => openPlaylistBuilder()}
           onOpenIssues={() => openPlaylistBuilder({ kind: "open-issues" })}
-          onNewPlaylist={() => openPlaylistBuilder("new-playlist")}
           mobile={mobilePresentation}
         />
       </div>
@@ -870,21 +856,10 @@
     {/if}
   </div>
 
-  {#if savedQueueUnavailable || savedQueueOfflineSubset}
-    <div class="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-y border-border/60 bg-secondary/45 px-3 py-2 text-[0.68rem]" role="status">
-      <AlertCircle size={14} class="shrink-0 text-warning" />
-      <span class="min-w-40 flex-1 leading-relaxed">{savedQueueUnavailable ? t("music.queueState.nothingPlayable", player.activePlaylistName ?? "") : t("music.queueState.offlineSubset", player.savedQueueSkipBreakdown.offline)}</span>
-      {#if savedQueueSkippedCount > 0}
-        <span class="text-muted-foreground">{t("music.queueState.skippedTotal", savedQueueSkippedCount)}</span>
-        <span class="flex flex-wrap gap-1" aria-label={t("music.queueState.reasonBreakdown")}>
-          {#each savedQueueSkipDetails as detail (detail.label)}<span class="rounded-full bg-background/70 px-2 py-0.5 text-[0.62rem] text-muted-foreground">{detail.count} {detail.label}</span>{/each}
-        </span>
-      {/if}
-      {#if savedQueueUnavailable}
-        <button type="button" onclick={() => { void player.retrySavedPlaylist(); }} class="rounded-md bg-secondary px-2 py-1 font-medium hover:bg-accent">{t("music.queueState.retry")}</button>
-        <button type="button" onclick={() => openPlaylistBuilder({ kind: "open-issues" })} class="rounded-md px-2 py-1 font-medium text-primary hover:bg-primary/10">{t("music.queueState.openIssues")}</button>
-        <button type="button" onclick={openPlaylistChooser} class="rounded-md px-2 py-1 font-medium text-primary hover:bg-primary/10">{t("music.queueState.chooseAnother")}</button>
-      {/if}
+  {#if savedQueueOfflineSubset}
+    <div class="flex shrink-0 items-center gap-2 px-3 py-1.5 text-[0.68rem] text-muted-foreground" role="status">
+      <AlertCircle size={13} class="shrink-0" />
+      <span class="min-w-0 truncate">{t("music.queueState.offlineSubset", player.savedQueueSkipBreakdown.offline)}</span>
     </div>
   {/if}
 
@@ -923,7 +898,14 @@
         : "grid-cols-1 grid-rows-[minmax(0,1fr)_auto]",
     )}
   >
-    <div bind:this={mediaCell} class="music-media-cell flex min-h-0 items-center justify-center overflow-hidden">
+    <div bind:this={mediaCell} class="music-media-cell relative flex min-h-0 items-center justify-center overflow-hidden">
+      {#if savedQueueUnavailable}
+        <div class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 px-6 text-center" role="status" data-music-playlist-unavailable>
+          <AlertCircle size={18} strokeWidth={1.4} class="text-muted-foreground" />
+          <p class="text-[0.8rem] font-medium">{t("music.queueState.unavailable")}</p>
+          <button type="button" onclick={() => openPlaylistBuilder({ kind: "open-issues" })} class="text-[0.68rem] font-medium text-primary hover:underline">{t("music.queueState.review")}</button>
+        </div>
+      {/if}
       <div
         bind:this={mediaSurface}
         class="music-media-surface relative cursor-default overflow-hidden"

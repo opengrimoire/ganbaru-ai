@@ -6584,7 +6584,7 @@ VALUES
     ('playlist-default-start-of-day', 'Start of the day!', 'lucide:sunrise', 1, 'all', 0, 1, 1, 1),
     ('playlist-default-work-focus', 'Work (focus)', 'lucide:laptop', 1, 'all', 1, 1, 1, 1),
     ('playlist-default-work-ganbare', 'Work (ganbare!)', 'lucide:coffee', 1, 'all', 2, 1, 1, 1),
-    ('playlist-default-break-calm', 'Break (calm)', 'lucide:tree-pine', 1, 'all', 3, 1, 1, 1),
+    ('playlist-default-break-calm', 'Break (calm)', 'lucide:armchair', 1, 'all', 3, 1, 1, 1),
     ('playlist-default-break-active', 'Break (active)', 'lucide:footprints', 1, 'all', 4, 1, 1, 1),
     ('playlist-default-meditate', 'Meditate', 'lucide:smile', 1, 'all', 5, 1, 1, 1),
     ('playlist-default-exercise', 'Exercise', 'lucide:sport-shoe', 1, 'all', 6, 1, 1, 1),
