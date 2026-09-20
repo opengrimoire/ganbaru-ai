@@ -34,7 +34,10 @@ import { onActiveVaultIdentityChange } from "$lib/vault/active-vault";
 import { planMusicQueueMutation } from "$lib/music/music-queue-mutation";
 import { musicContextStateAfterAction } from "$lib/music/music-automation-ownership";
 import { focusMusicWindow, publishMusicTray } from "$lib/music/music-platform-controls";
-import { MusicSavedPlaylistRuntime } from "./music-saved-playlist-runtime";
+import {
+  MusicSavedPlaylistRuntime,
+  type MusicSavedPlaylistRuntimeCheckpoint,
+} from "./music-saved-playlist-runtime";
 import { MusicSurfaceClaims } from "./music-surface-claims";
 import {
   initialMusicSnapshot,
@@ -89,6 +92,30 @@ export interface MusicSavedPlaylistLoadOptions {
   autoRecovery?: boolean;
   avoidItemId?: string | null;
   context?: MusicContextPlayback | null;
+}
+
+export interface MusicReviewPlaybackCheckpoint {
+  source: MusicSource | null;
+  snapshot: PlaybackSnapshot;
+  queue: MusicSource[];
+  shuffleEnabled: boolean;
+  shuffleOrder: number[];
+  queueHistory: number[];
+  pendingQueueIndex: number | null;
+  contextOwner: MusicPlaybackContextOwner;
+  contextPlayback: MusicContextPlayback | null;
+  activePlaylistId: string | null;
+  activePlaylistName: string | null;
+  activeQueueItemIds: string[];
+  activePlaylistRepeatMode: MusicRepeatMode;
+  savedQueueEntries: MusicSavedQueueEntry[];
+  savedQueueRecentItemIds: string[];
+  savedQueueSkipBreakdown: Record<MusicPlaylistSkipReason, number>;
+  playlistVolumeIntent: number;
+  playlistRateIntent: number;
+  savedQueueAutoplay: boolean;
+  savedQueueAutoRecoveryEnabled: boolean;
+  savedPlaylistRuntime: MusicSavedPlaylistRuntimeCheckpoint;
 }
 
 const progressMaxFallback = 1;
@@ -411,6 +438,106 @@ class MusicPlayerStore {
   ): Promise<void> {
     if (!options.preserveQueue) this.prepareTemporaryQueue();
     await this.sourceController.loadSource(source, options);
+  }
+
+  async suspendForReview(): Promise<MusicReviewPlaybackCheckpoint> {
+    const originalStatus = this.snapshot.status;
+    if (this.currentSource && originalStatus === "playing") {
+      await this.pausePlayback("system");
+    }
+    const checkpoint: MusicReviewPlaybackCheckpoint = {
+      source: this.currentSource ? { ...this.currentSource } : null,
+      snapshot: { ...this.snapshot, status: originalStatus },
+      queue: this.queue.map((source) => ({ ...source })),
+      shuffleEnabled: this.shuffleEnabled,
+      shuffleOrder: [...this.shuffleOrder],
+      queueHistory: [...this.queueHistory],
+      pendingQueueIndex: this.pendingQueueIndex,
+      contextOwner: this.contextOwner,
+      contextPlayback: this.contextPlayback ? { ...this.contextPlayback } : null,
+      activePlaylistId: this.activePlaylistId,
+      activePlaylistName: this.activePlaylistName,
+      activeQueueItemIds: [...this.activeQueueItemIds],
+      activePlaylistRepeatMode: this.activePlaylistRepeatMode,
+      savedQueueEntries: this.savedQueueEntries.map((entry) => ({
+        ...entry,
+        source: { ...entry.source },
+        skipRanges: entry.skipRanges.map((range) => ({ ...range })),
+      })),
+      savedQueueRecentItemIds: [...this.savedQueueRecentItemIds],
+      savedQueueSkipBreakdown: { ...this.savedQueueSkipBreakdown },
+      playlistVolumeIntent: this.playlistVolumeIntent,
+      playlistRateIntent: this.playlistRateIntent,
+      savedQueueAutoplay: this.savedQueueAutoplay,
+      savedQueueAutoRecoveryEnabled: this.savedQueueAutoRecoveryEnabled,
+      savedPlaylistRuntime: this.savedPlaylistRuntime.checkpoint(),
+    };
+    this.queue = [];
+    this.shuffleOrder = [];
+    this.queueHistory = [];
+    this.pendingQueueIndex = null;
+    this.activePlaylistId = null;
+    this.activePlaylistName = null;
+    this.activeQueueItemIds = [];
+    this.activePlaylistRepeatMode = "off";
+    this.savedQueueEntries = [];
+    this.savedQueueRecentItemIds = [];
+    this.savedQueueSkipBreakdown = emptyMusicSkipBreakdown();
+    this.savedPlaylistRuntime.reset();
+    this.contextPlayback = null;
+    this.contextOwner = "review";
+    this.updateSystemMediaControls();
+    this.updateMusicTray();
+    return checkpoint;
+  }
+
+  async restoreAfterReview(checkpoint: MusicReviewPlaybackCheckpoint): Promise<void> {
+    if (!checkpoint.source) await this.sourceController.resetPlayer();
+    this.queue = checkpoint.queue.map((source) => ({ ...source }));
+    this.shuffleEnabled = checkpoint.shuffleEnabled;
+    this.shuffleOrder = [...checkpoint.shuffleOrder];
+    this.queueHistory = [...checkpoint.queueHistory];
+    this.pendingQueueIndex = checkpoint.pendingQueueIndex;
+    this.activePlaylistId = checkpoint.activePlaylistId;
+    this.activePlaylistName = checkpoint.activePlaylistName;
+    this.activeQueueItemIds = [...checkpoint.activeQueueItemIds];
+    this.activePlaylistRepeatMode = checkpoint.activePlaylistRepeatMode;
+    this.savedQueueEntries = checkpoint.savedQueueEntries.map((entry) => ({
+      ...entry,
+      source: { ...entry.source },
+      skipRanges: entry.skipRanges.map((range) => ({ ...range })),
+    }));
+    this.savedQueueRecentItemIds = [...checkpoint.savedQueueRecentItemIds];
+    this.savedQueueSkipBreakdown = { ...checkpoint.savedQueueSkipBreakdown };
+    this.playlistVolumeIntent = checkpoint.playlistVolumeIntent;
+    this.playlistRateIntent = checkpoint.playlistRateIntent;
+    this.savedQueueAutoplay = checkpoint.savedQueueAutoplay;
+    this.savedQueueAutoRecoveryEnabled = checkpoint.savedQueueAutoRecoveryEnabled;
+    this.contextPlayback = checkpoint.contextPlayback ? { ...checkpoint.contextPlayback } : null;
+    this.contextOwner = checkpoint.contextOwner;
+    this.savedPlaylistRuntime.restore(checkpoint.savedPlaylistRuntime, this.savedQueueEntries);
+    this.snapshot = { ...checkpoint.snapshot };
+    if (!checkpoint.source) {
+      this.updateSystemMediaControls();
+      this.updateMusicTray();
+      return;
+    }
+    const source = { ...checkpoint.source, startMs: checkpoint.snapshot.positionMs };
+    await this.sourceController.loadSource(source, {
+      autoplay: checkpoint.snapshot.status === "playing",
+      resume: false,
+      preserveQueue: true,
+    });
+    this.currentSource = { ...checkpoint.source };
+    this.pendingQueueIndex = checkpoint.pendingQueueIndex;
+    this.contextPlayback = checkpoint.contextPlayback ? { ...checkpoint.contextPlayback } : null;
+    this.contextOwner = checkpoint.contextOwner;
+    if (checkpoint.snapshot.status !== "playing") {
+      this.snapshot = { ...this.snapshot, status: checkpoint.snapshot.status };
+    }
+    this.updateSystemMediaControls();
+    await this.persistCurrentPlaybackState(true);
+    this.updateMusicTray();
   }
   async loadSavedPlaylist(
     playlistId: string,

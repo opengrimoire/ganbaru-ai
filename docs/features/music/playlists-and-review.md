@@ -25,7 +25,9 @@ Newly discovered items enter an explicit review state. Review presents source hi
 
 Review state distinguishes unreviewed, reviewed, deferred, and ignored. Deferring or ignoring does not delete the item or its source. A playlist can remain usable while review is incomplete.
 
-The current preview continues when the user visits another builder destination unless explicit playback elsewhere takes ownership. Returning to Review restores the active item and durable draft state.
+Opening the builder does not replace or restart current playlist playback when Review autoplay is off. Review autoplay or an explicit Review play action temporarily suspends the prior player source, queue, position, and play or pause state. The preview continues when the user visits another builder destination. Returning to the player restores that suspended state, even if the preview was paused. Explicit playback of another playlist and Calendar or Pomodoro automation supersede the suspended state instead of restoring it.
+
+After its first opening, the builder keeps its initialized workspace while the app shell remains active, including when the user moves between the builder and player or hides and reopens the Music panel. Its initial loading cover remains until the complete current item list is ready, so the visible list does not progressively fill after the workspace appears. Returning to Review restores the active item and durable draft state.
 
 ## Playlist management
 

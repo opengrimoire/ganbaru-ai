@@ -33,11 +33,13 @@
     onOpenBuilder,
     onOpenIssues,
     onNewPlaylist,
+    active = true,
     mobile = false,
   }: {
     onOpenBuilder: () => void;
     onOpenIssues: () => void;
     onNewPlaylist: () => void;
+    active?: boolean;
     mobile?: boolean;
   } = $props();
 
@@ -63,6 +65,10 @@
       || systemMusicPlaylistName(playlist.id, playlist.name, t).toLocaleLowerCase().includes(query));
   });
 
+  $effect(() => {
+    if (!active && open) close();
+  });
+
   onMount(() => {
     try {
       playlistCache.setVault(requireActiveVaultIdentity());
@@ -72,14 +78,14 @@
     }
     const handlePointer = (event: PointerEvent) => {
       if (
-        open
+        active && open
         && event.target instanceof Node
         && !root?.contains(event.target)
         && !popover?.contains(event.target)
       ) close();
     };
     const handleKey = (event: KeyboardEvent) => {
-      if (open && event.key === "Escape") {
+      if (active && open && event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
         close();

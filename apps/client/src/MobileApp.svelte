@@ -108,6 +108,7 @@
   let SettingsSurface = $state<SettingsComponent | null>(null);
   let MusicSurface = $state<MusicComponent | null>(null);
   let MusicPlaybackHostSurface = $state<MusicPlaybackHostComponent | null>(null);
+  let musicPanelMounted = $state(false);
   let PomodoroMenuSurface = $state<PomodoroMenuComponent | null>(null);
   let LinkedDeviceControlSurface = $state<LinkedDeviceControlComponent | null>(null);
   let notesStore = $state.raw<NotesStore | null>(null);
@@ -326,6 +327,10 @@
     if (surface === "quickNotes") return QuickNotesSurface !== null;
     return MusicSurface !== null && MusicPlaybackHostSurface !== null;
   }
+
+  $effect(() => {
+    if (showMusic && MusicSurface) musicPanelMounted = true;
+  });
 
   async function prepareDeferredSurfaceNow(surface: DeferredSurface): Promise<void> {
     if (surface === "projects") {
@@ -939,9 +944,10 @@
     <MusicPlaybackHostSurface />
   {/if}
 
-  {#if showMusic && MusicSurface}
-    <div inert={suspendDecisionOpen} aria-hidden={suspendDecisionOpen ? "true" : undefined}>
+  {#if musicPanelMounted && MusicSurface}
+    <div hidden={!showMusic} inert={!showMusic || suspendDecisionOpen} aria-hidden={!showMusic || suspendDecisionOpen ? "true" : undefined}>
       <MusicSurface
+        visible={showMusic}
         presentation="mobile"
         mobilePlayerPanelStyle={musicPanelStyle}
         mobilePlaylistPanelStyle={musicPlaylistPanelStyle}

@@ -149,7 +149,7 @@ describe("MusicPanel", () => {
     expect(onclose).not.toHaveBeenCalled();
   });
 
-  it("keeps the player DOM mounted without leaving a hidden builder active", async () => {
+  it("keeps the initialized builder mounted but inactive while returning to the player", async () => {
     vi.stubGlobal("ResizeObserver", ResizeObserverStub);
     vi.stubGlobal("matchMedia", matchMediaStub);
     target = document.createElement("div");
@@ -189,7 +189,8 @@ describe("MusicPanel", () => {
     await tick();
     expect(target.querySelector("[data-music-player-page]")).toBe(playerPage);
     expect(playerPage?.classList.contains("hidden")).toBe(false);
-    expect(target.querySelector(".builder-root")).toBeNull();
+    expect(target.querySelector(".builder-root")).not.toBeNull();
+    expect(target.querySelector(".builder-root")?.closest("[aria-hidden='true']")).not.toBeNull();
 
     target.querySelector<HTMLButtonElement>("[data-music-playlist-launcher]")?.click();
     await vi.waitFor(() => {

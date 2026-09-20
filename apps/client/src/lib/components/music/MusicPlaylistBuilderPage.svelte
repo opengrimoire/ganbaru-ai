@@ -130,6 +130,7 @@
   let soundscapeAddRequest = $state(0);
   let toolbarMenuOpen = $state(false);
   let reviewSelectionClearRequest = $state(0);
+  let previouslyActive = false;
   const contextViewState = $state(createMusicBuilderContextViewState());
   const reviewTreeViewState = $state(createMusicReviewTreeViewState());
   const reviewWorkspaceViewState = $state(createMusicReviewWorkspaceViewState());
@@ -236,8 +237,8 @@
           await image.decode().catch(() => undefined);
         }));
         const detail = inspector.detail;
-        if (active && detail?.item.id === itemId) {
-          await audition.preview(detail, sources.bindings, reviewAutoplay);
+        if (active && reviewAutoplay && detail?.item.id === itemId) {
+          await audition.preview(detail, sources.bindings, true);
         }
       }
       if (generation !== firstUseFinalizationGeneration || vaultId !== library.vaultId) return;
@@ -266,6 +267,11 @@
     }
     else void openInitialItem(action.itemId);
     onInitialActionHandled();
+  });
+
+  $effect(() => {
+    if (!active && previouslyActive && audition.active) void audition.restore();
+    previouslyActive = active;
   });
 
   function observeRoot(node: HTMLElement): { destroy: () => void } {
@@ -319,6 +325,11 @@
         beginFirstUsePreparation();
         await finalizeFirstUsePreparation();
       } else {
+        const fullyLoaded = await library.loadAllCurrentItems();
+        if (generation !== firstUseFinalizationGeneration || vaultId !== library.vaultId) return;
+        if (!fullyLoaded) {
+          throw library.loadMoreError ?? new Error("The music workspace could not be completed.");
+        }
         builderInitializing = false;
       }
     } catch (error) {
@@ -482,13 +493,13 @@
     }
   }
 
-  function openPlayerFromBuilder(): void {
-    if (audition.active) audition.keep();
+  async function openPlayerFromBuilder(): Promise<void> {
+    if (audition.active) await audition.restore();
     onOpenPlayer();
   }
 
   function takePlaybackOwnership(): void {
-    if (musicBuilderPlaybackDecision(audition.ownsPlayback, "explicit-playback") === "release-review") audition.keep();
+    if (musicBuilderPlaybackDecision(audition.ownsPlayback, "explicit-playback") === "release-review") audition.discard();
   }
 
   function setReviewAutoplay(value: boolean): void {
@@ -498,7 +509,7 @@
 
   async function handleBack(): Promise<void> {
     const previous = backMusicBuilderRoute(history, routeContext);
-    if (!previous) { openPlayerFromBuilder(); return; }
+    if (!previous) { void openPlayerFromBuilder(); return; }
     history = previous;
     library.navigate(history.current.destination);
     await library.ensureCurrentDestination();
@@ -718,6 +729,7 @@
     try { void loadVault(requireActiveVaultIdentity()); }
     catch (error) { library.error = error instanceof Error ? error : new Error(String(error)); }
     unsubscribeVault = onActiveVaultIdentityChange((_previous, next) => {
+      if (audition.active) audition.discard();
       if (next) void loadVault(next);
       else { library.setVault(null); sources.setVault(null); }
     });
@@ -729,7 +741,7 @@
     firstUseFinalizationGeneration += 1;
     unsubscribeVault?.();
     unsubscribeLibraryChanges?.();
-    if (audition.active) audition.keep();
+    if (audition.active) void audition.restore();
   });
 </script>
 

@@ -1,13 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { MusicInspectorDetail } from "./library-contracts";
+import type { MusicReviewPlaybackCheckpoint } from "$lib/stores/music-player.svelte";
 
+const checkpoint = vi.hoisted(() => ({ id: "playlist-checkpoint" }) as unknown as MusicReviewPlaybackCheckpoint);
 const player = vi.hoisted(() => ({
   contextOwner: "manual" as "manual" | "review" | "calendar-event" | "pomodoro",
-  activePlaylistId: "playlist-1" as string | null,
-  activePlaylistName: "Focus" as string | null,
-  activePlaylistRepeatMode: "all" as "off" | "all" | "one",
-  activeQueueItemIds: ["item-1", "item-2"],
-  savedQueueEntries: [{ itemId: "item-1" }, { itemId: "item-2" }],
-  snapshot: { positionMs: 42_000 },
+  snapshot: { positionMs: 0 },
+  suspendForReview: vi.fn(async () => checkpoint),
+  restoreAfterReview: vi.fn(async (_checkpoint: MusicReviewPlaybackCheckpoint): Promise<void> => undefined),
+  loadSource: vi.fn(async () => undefined),
+  seekToMs: vi.fn(async () => undefined),
 }));
 
 vi.mock("$lib/stores/music-player.svelte", () => ({
@@ -16,43 +18,77 @@ vi.mock("$lib/stores/music-player.svelte", () => ({
 
 import { MusicReviewAuditionController } from "./music-review-audition.svelte";
 
+function detail(): MusicInspectorDetail {
+  return {
+    item: {
+      id: "review-item", identityKey: "review-item", sourceKind: "local-file", mediaKind: "audio",
+      youtubeVideoId: null, originalTitle: "Review track", originalArtist: "Artist", originalAlbum: "Album",
+      originalTrackNumber: null, originalArtworkIdentity: null, youtubeResolutionState: null,
+      titleOverride: null, artistOverride: null, albumOverride: null, artworkOverride: null,
+      durationMs: 1000, availability: "available", reviewState: "unreviewed",
+      reviewChangedAt: null, reviewDeferredUntil: null, discoveredAt: 1, updatedAt: 1, version: 1,
+    },
+    locations: [{
+      id: "location", itemId: "review-item", rootId: "root", relativePath: "review.flac",
+      fileSizeBytes: 1, modifiedAtMs: 1, lightweightFingerprint: "a", strongFingerprint: "b",
+      availability: "available", lastSeenGeneration: 1, firstSeenAt: 1, updatedAt: 1,
+    }],
+    memberships: [], membershipSkipRanges: [], snoozes: [], signals: [], statistics: null, sourceCollectionIds: [],
+  };
+}
+
 describe("MusicReviewAuditionController", () => {
   beforeEach(() => {
     player.contextOwner = "manual";
-    player.activePlaylistId = "playlist-1";
-    player.activePlaylistName = "Focus";
-    player.activePlaylistRepeatMode = "all";
-    player.activeQueueItemIds = ["item-1", "item-2"];
-    player.savedQueueEntries = [{ itemId: "item-1" }, { itemId: "item-2" }];
+    player.snapshot.positionMs = 0;
+    vi.clearAllMocks();
   });
 
-  it("does not clear a playlist that superseded a stale review audition", () => {
+  it("suspends current playback once and restores it when Review closes", async () => {
     const audition = new MusicReviewAuditionController();
-    audition.active = true;
-    audition.reviewItemId = "review-item";
+    const bindings = [{ rootId: "root", folderPath: "/Music", status: "available" as const }];
 
-    audition.keep();
+    expect(await audition.preview(detail(), bindings, true)).toBe(true);
+    expect(player.suspendForReview).toHaveBeenCalledOnce();
+    expect(player.loadSource).toHaveBeenCalledWith(
+      expect.objectContaining({ path: "/Music/review.flac" }),
+      { autoplay: true, resume: false, preserveQueue: true },
+    );
 
-    expect(player.activePlaylistId).toBe("playlist-1");
-    expect(player.activePlaylistName).toBe("Focus");
-    expect(player.activeQueueItemIds).toEqual(["item-1", "item-2"]);
-    expect(player.savedQueueEntries).toEqual([{ itemId: "item-1" }, { itemId: "item-2" }]);
+    await audition.restore();
+
+    expect(player.restoreAfterReview).toHaveBeenCalledWith(checkpoint);
     expect(audition.active).toBe(false);
   });
 
-  it("clears queue ownership when the review audition still owns playback", () => {
+  it("discards suspended playback when another playlist takes ownership", async () => {
     const audition = new MusicReviewAuditionController();
-    audition.active = true;
-    audition.reviewItemId = "review-item";
-    player.contextOwner = "review";
+    await audition.preview(detail(), [{ rootId: "root", folderPath: "/Music", status: "available" }], true);
 
-    audition.keep();
+    audition.discard();
 
-    expect(player.contextOwner).toBe("manual");
-    expect(player.activePlaylistId).toBeNull();
-    expect(player.activePlaylistName).toBeNull();
-    expect(player.activeQueueItemIds).toEqual([]);
-    expect(player.savedQueueEntries).toEqual([]);
+    expect(player.restoreAfterReview).not.toHaveBeenCalled();
     expect(audition.active).toBe(false);
+  });
+
+  it("waits for restoration before starting another temporary preview", async () => {
+    let finishRestore!: () => void;
+    player.restoreAfterReview.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      finishRestore = resolve;
+    }));
+    const audition = new MusicReviewAuditionController();
+    const bindings = [{ rootId: "root", folderPath: "/Music", status: "available" as const }];
+    await audition.preview(detail(), bindings, true);
+
+    const restoring = audition.restore();
+    const reopening = audition.preview(detail(), bindings, true);
+    await Promise.resolve();
+    expect(player.suspendForReview).toHaveBeenCalledOnce();
+
+    finishRestore();
+    await restoring;
+    await reopening;
+
+    expect(player.suspendForReview).toHaveBeenCalledTimes(2);
   });
 });

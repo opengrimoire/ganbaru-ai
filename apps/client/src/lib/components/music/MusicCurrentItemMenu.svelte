@@ -27,9 +27,11 @@
   let {
     onOpenItem,
     onOpenPlaylists,
+    active = true,
   }: {
     onOpenItem: (itemId: string) => void;
     onOpenPlaylists: () => void;
+    active?: boolean;
   } = $props();
   const { t } = getLocalization();
   const player = getMusicPlayer();
@@ -55,12 +57,16 @@
     error = null;
   });
 
+  $effect(() => {
+    if (!active) close();
+  });
+
   onMount(() => {
     const pointer = (event: PointerEvent) => {
-      if (open && event.target instanceof Node && root && !root.contains(event.target)) close();
+      if (active && open && event.target instanceof Node && root && !root.contains(event.target)) close();
     };
     const key = (event: KeyboardEvent) => {
-      if (open && event.key === "Escape") {
+      if (active && open && event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
         close();

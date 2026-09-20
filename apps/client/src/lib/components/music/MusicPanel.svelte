@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount, tick } from "svelte";
+  import { onDestroy, tick } from "svelte";
   import AlertCircle from "@lucide/svelte/icons/alert-circle";
   import Check from "@lucide/svelte/icons/check";
   import Gauge from "@lucide/svelte/icons/gauge";
@@ -38,11 +38,13 @@
 
   let {
     onclose,
+    visible = true,
     presentation = "desktop",
     mobilePlayerPanelStyle = "",
     mobilePlaylistPanelStyle = "",
   }: {
     onclose: () => void;
+    visible?: boolean;
     presentation?: "desktop" | "mobile";
     mobilePlayerPanelStyle?: string;
     mobilePlaylistPanelStyle?: string;
@@ -74,6 +76,7 @@
   let playlistBuilderComponent = $state<MusicBuilderComponent | null>(musicBuilderLoader.peek());
   let playlistBuilderLoading = $state(false);
   let playlistBuilderLoadError = $state<string | null>(null);
+  let playlistBuilderMounted = $state(sources.firstUseSession);
   let playlistBuilderInitialAction = $state<MusicBuilderInitialAction | null>(null);
   const PlaylistBuilder = $derived(playlistBuilderComponent);
   let mediaSurfaceFullscreen = $state(false);
@@ -89,6 +92,8 @@
   let mediaTitleMeasuredCenterPx = $state<number | null>(null);
   let panel = $state<HTMLElement | null>(null);
   let fittedPanelHeightPx = $state<number | null>(null);
+  let returnFocus = $state<HTMLElement | null>(null);
+  let previouslyVisible = false;
 
   const mediaSurfaceFullscreenEvent = "ganbaru-ai-music-media-surface-fullscreen";
   const volumeMax = $derived(player.volumeMax);
@@ -158,6 +163,7 @@
   $effect(() => {
     if (!sources.firstUseSession || firstUseRedirectHandled) return;
     firstUseRedirectHandled = true;
+    playlistBuilderMounted = true;
     musicPage = "playlist-builder";
     void loadPlaylistBuilder();
   });
@@ -168,7 +174,7 @@
 
   $effect(() => {
     const surface = mediaSurface;
-    if (!surface) return;
+    if (!visible || !surface) return;
     return player.claimSurface("music-panel", surface);
   });
 
@@ -275,12 +281,25 @@
     clearVolumeFeedbackTimeout();
   });
 
-  onMount(() => {
-    const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    void tick().then(() => panel?.focus());
-    return () => {
-      queueMicrotask(() => returnFocus?.focus());
-    };
+  $effect(() => {
+    if (visible && !previouslyVisible) {
+      returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      void tick().then(() => {
+        if (visible) panel?.focus();
+      });
+    } else if (!visible && previouslyVisible) {
+      const target = returnFocus;
+      returnFocus = null;
+      queueMicrotask(() => target?.focus());
+    }
+    previouslyVisible = visible;
+  });
+
+  $effect(() => {
+    if (visible) return;
+    speedMenuOpen = false;
+    volumeMenuOpen = false;
+    customSpeedOpen = false;
   });
 
   $effect(() => {
@@ -356,6 +375,7 @@
     closeSpeedMenu();
     closeVolumeMenu();
     playlistBuilderInitialAction = initialAction;
+    playlistBuilderMounted = true;
     musicPage = "playlist-builder";
     void loadPlaylistBuilder();
   }
@@ -401,6 +421,7 @@
   }
 
   function handleKeydown(event: KeyboardEvent): void {
+    if (!visible) return;
     if (event.key === "Escape" && !mediaSurfaceFullscreen) {
       if (musicPage === "playlist-builder") return;
       if (typeof document !== "undefined" && document.querySelector("[data-app-floating-surface]")) return;
@@ -532,6 +553,7 @@
   }
 
   function handleWindowPointerDown(event: PointerEvent): void {
+    if (!visible) return;
     if (!(event.target instanceof Node)) return;
     if (speedMenuOpen && speedMenuRoot && !speedMenuRoot.contains(event.target)) {
       closeSpeedMenu();
@@ -702,12 +724,14 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
+  hidden={!visible}
   class={cn("fixed z-40", mobileBuilderPresentation ? "bg-background" : !mobilePresentation && "inset-0")}
   style={mobilePresentation ? "left: var(--visual-viewport-offset-left); top: var(--visual-viewport-offset-top); width: var(--visual-viewport-width); height: var(--visual-viewport-height);" : undefined}
   onclick={(event) => { if (!mobileBuilderPresentation && event.target === event.currentTarget) onclose(); }}
 ></div>
 {#if !mobilePresentation}
   <div
+    hidden={!visible}
     class="pointer-events-none fixed right-2 z-50 w-[min(1000px,calc(100vw-1rem))] overflow-hidden rounded-xl shadow-lg"
     style={desktopPanelStyle}
     aria-hidden="true"
@@ -717,6 +741,7 @@
 {/if}
 <div
   bind:this={panel}
+  hidden={!visible}
   class={cn(
     "music-panel-root fixed z-70 flex flex-col overflow-hidden outline-none",
     mobileBuilderPresentation
@@ -737,12 +762,12 @@
   aria-label={t("music.title")}
   tabindex="-1"
 >
-  {#if PlaylistBuilder && musicPage === "playlist-builder"}
-    <div class="h-full min-h-0">
+  {#if PlaylistBuilder && playlistBuilderMounted}
+    <div class:hidden={musicPage !== "playlist-builder"} class="h-full min-h-0" aria-hidden={musicPage !== "playlist-builder"}>
       <PlaylistBuilder
         onOpenPlayer={closePlaylistBuilder}
         presentation={mobilePresentation ? "mobile" : "desktop"}
-        active={true}
+        active={visible && musicPage === "playlist-builder"}
         initialAction={playlistBuilderInitialAction}
         onInitialActionHandled={() => { playlistBuilderInitialAction = null; }}
       />
@@ -784,6 +809,7 @@
   >
     <div class="relative z-10 flex min-w-0 shrink-0 items-center gap-2">
       <MusicPlaylistLauncher
+        active={visible}
         onOpenBuilder={() => openPlaylistBuilder()}
         onOpenIssues={() => openPlaylistBuilder({ kind: "open-issues" })}
         onNewPlaylist={() => openPlaylistBuilder("new-playlist")}
@@ -1101,7 +1127,7 @@
               {player.volumePercentLabel}
             </button>
           </div>
-          <MusicCurrentItemMenu onOpenItem={(itemId) => openPlaylistBuilder({ kind: "open-item", itemId })} onOpenPlaylists={() => openPlaylistBuilder("open-playlists")} />
+          <MusicCurrentItemMenu active={visible} onOpenItem={(itemId) => openPlaylistBuilder({ kind: "open-item", itemId })} onOpenPlaylists={() => openPlaylistBuilder("open-playlists")} />
           {#if supportsSoundscapes}
             <MusicSoundscapeControl onOpenSoundscapes={() => openPlaylistBuilder({ kind: "open-soundscapes" })} />
           {/if}

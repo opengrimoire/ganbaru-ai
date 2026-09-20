@@ -248,9 +248,13 @@
   });
 
   $effect(() => {
-    if (!active || selectionMode || !detail || lastAutoplayedId === detail.item.id) return;
+    if (!active) {
+      lastAutoplayedId = null;
+      return;
+    }
+    if (!autoplay || selectionMode || !detail || lastAutoplayedId === detail.item.id) return;
     lastAutoplayedId = detail.item.id;
-    void audition.preview(detail, sources.bindings, autoplay);
+    void audition.preview(detail, sources.bindings, true);
   });
 
   $effect(() => {
