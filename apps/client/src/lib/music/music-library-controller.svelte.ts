@@ -276,6 +276,21 @@ export class MusicLibraryController {
         this.api.issues(0, 500),
       ]);
       if (!this.isCurrent(generation, vaultId)) return false;
+      while (reviewWindow.items.length < reviewWindow.totalCount) {
+        const next = await this.api.itemWindow(itemWindowRequest(reviewLocation, {
+          ...reviewState,
+          offset: reviewWindow.items.length,
+        }, nowMs));
+        if (!this.isCurrent(generation, vaultId)) return false;
+        const knownIds = new Set(reviewWindow.items.map((item) => item.id));
+        const nextItems = next.items.filter((item) => !knownIds.has(item.id));
+        if (nextItems.length === 0) {
+          throw new Error("The complete Review list could not be loaded.");
+        }
+        reviewWindow.items = [...reviewWindow.items, ...nextItems];
+        reviewWindow.totalCount = next.totalCount;
+        reviewWindow.groups = next.groups;
+      }
       this.windows.review = reviewWindow;
       this.windows.library = libraryWindow;
       this.staleWindowKeys.delete("review");

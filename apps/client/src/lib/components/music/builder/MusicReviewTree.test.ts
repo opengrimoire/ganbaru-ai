@@ -52,6 +52,36 @@ describe("MusicReviewTree", () => {
     expect(target.textContent).not.toContain("Add 2 selected to playlists");
   });
 
+  it("toggles ignored tracks beside refresh and marks ignored rows with an eye", async () => {
+    const onShowIgnoredChange = vi.fn();
+    const ignored = item("ignored", "Ignored", "Album/ignored.flac");
+    ignored.reviewState = "ignored";
+    target = document.createElement("div");
+    document.body.append(target);
+    component = mount(MusicReviewTree, {
+      target,
+      props: {
+        items: [ignored],
+        totalCount: 1,
+        activeItemId: null,
+        onActivate: vi.fn(),
+        showIgnored: true,
+        onShowIgnoredChange,
+      },
+    });
+    await tick();
+
+    const ignoredToggle = target.querySelector<HTMLButtonElement>('button[aria-label="Hide ignored tracks"]');
+    const refresh = target.querySelector<HTMLButtonElement>('button[aria-label="Refresh local folders"]');
+    expect(ignoredToggle?.nextElementSibling).toBe(refresh);
+    expect(ignoredToggle?.getAttribute("aria-pressed")).toBe("true");
+    expect(ignoredToggle?.querySelector(".lucide-eye-off")).not.toBeNull();
+    expect(target.querySelector('[data-review-state="ignored"]')).not.toBeNull();
+    ignoredToggle?.click();
+
+    expect(onShowIgnoredChange).toHaveBeenCalledWith(false);
+  });
+
   it("propagates folder selection downward without marking ancestors", async () => {
     target = document.createElement("div");
     document.body.append(target);

@@ -130,6 +130,7 @@
   let soundscapeAddRequest = $state(0);
   let toolbarMenuOpen = $state(false);
   let reviewSelectionClearRequest = $state(0);
+  let showIgnoredReviewItems = $state(false);
   let previouslyActive = false;
   const contextViewState = $state(createMusicBuilderContextViewState());
   const reviewTreeViewState = $state(createMusicReviewTreeViewState());
@@ -137,10 +138,12 @@
   const layout = $derived(projectMusicBuilderLayout({ width, height }));
   const destination = $derived(history.current.destination);
   const hasList = $derived(destination.kind === "playlist");
+  const reviewItems = $derived(library.currentWindow.items.filter((item) =>
+    showIgnoredReviewItems || item.reviewState !== "ignored"));
   const issueCount = $derived(library.issues.length);
   const reviewCount = $derived(library.sourceSummaries.reduce((total, source) => total + source.unreviewedCount, 0));
   const reviewIssueItemIds = $derived(new Set(library.issues.flatMap((issue) => issue.itemId ? [issue.itemId] : [])));
-  const activeReviewItemId = $derived(library.selectedItem?.id ?? firstMusicReviewTreeItemId(library.currentWindow.items));
+  const activeReviewItemId = $derived(library.selectedItem?.id ?? firstMusicReviewTreeItemId(reviewItems));
   const activeReviewIssue = $derived(activeReviewItemId
     ? library.issues.find((issue) => issue.itemId === activeReviewItemId && issue.actionRequired)
       ?? library.issues.find((issue) => issue.itemId === activeReviewItemId)
@@ -220,12 +223,12 @@
       const fullyLoaded = await library.loadAllCurrentItems();
       if (generation !== firstUseFinalizationGeneration || vaultId !== library.vaultId) return;
       if (!fullyLoaded) throw library.loadMoreError ?? new Error("The prepared review list could not be completed.");
-      const itemId = firstMusicReviewTreeItemId(library.currentWindow.items);
+      const itemId = firstMusicReviewTreeItemId(reviewItems);
       if (itemId) {
         library.selectItem(itemId);
         const selected = await inspector.select(itemId);
         if (!selected || generation !== firstUseFinalizationGeneration || vaultId !== library.vaultId) return;
-        const orderedIds = musicReviewTreeItemIds(library.currentWindow.items);
+        const orderedIds = musicReviewTreeItemIds(reviewItems);
         const itemIndex = orderedIds.indexOf(itemId);
         const nearbyIds = orderedIds.slice(Math.max(0, itemIndex - 1), itemIndex + 4);
         const details = await inspector.prefetch(nearbyIds);
@@ -290,6 +293,7 @@
     Object.assign(contextViewState, createMusicBuilderContextViewState());
     Object.assign(reviewTreeViewState, createMusicReviewTreeViewState());
     Object.assign(reviewWorkspaceViewState, createMusicReviewWorkspaceViewState());
+    showIgnoredReviewItems = false;
     bulk.clear();
     reviewSelectionClearRequest += 1;
     playlistManagementOpen = false;
@@ -381,6 +385,10 @@
 
   function refreshReviewFolders(): void {
     requestSourceRefresh(localSourceCollectionIds);
+  }
+
+  function setIgnoredTracksVisible(showIgnored: boolean): void {
+    showIgnoredReviewItems = showIgnored;
   }
 
   async function runSourceRefresh(plan: MusicSourceRefreshPlan, allowNetwork: boolean): Promise<void> {
@@ -779,8 +787,8 @@
             />
           {:else}
             <MusicReviewTree
-              items={library.currentWindow.items}
-              totalCount={library.currentWindow.totalCount}
+              items={reviewItems}
+              totalCount={reviewItems.length}
               activeItemId={reviewTreeViewState.selectedItemIds.length > 0 ? null : library.selectedItem?.id ?? null}
               onActivate={activateReviewItem}
               issueCount={issueCount}
@@ -791,6 +799,8 @@
               canRefresh={localSourceCollectionIds.length > 0}
               refreshing={localSourceRefreshActive}
               onRefresh={refreshReviewFolders}
+              showIgnored={showIgnoredReviewItems}
+              onShowIgnoredChange={setIgnoredTracksVisible}
               viewState={reviewTreeViewState}
               onViewStateChange={(state) => Object.assign(reviewTreeViewState, state)}
             />
@@ -889,7 +899,7 @@
             {/if}
           </div>
         {:else}
-          <MusicReviewWorkspace {library} {inspector} {sources} {audition} {review} {bulk} {active} selectedItemIds={reviewTreeViewState.selectedItemIds} selectedFolderIds={reviewTreeViewState.selectedFolderIds} onClearSelection={clearReviewSelection} autoplay={reviewAutoplay} onAutoplayChange={setReviewAutoplay} onOpenPlayer={openPlayerFromBuilder} compactPlayerLabel={mobilePresentation} showPanelButton={layout.contextPanelPresentation === "sheet"} onOpenPanel={() => contextViewState.contextPanelOpen = true} onEditPlaylist={(playlistId) => { void openPlaylistManagementSurface(playlistId, "edit"); }} onDeletePlaylist={(playlistId) => { void openPlaylistManagementSurface(playlistId, "delete"); }} onReorderPlaylists={reorderPlaylistSummaries} issue={activeReviewIssue} repairAvailable={activeReviewIssue ? canRepairIssue(activeReviewIssue) : false} onRepairIssue={repairIssue} viewState={reviewWorkspaceViewState} />
+          <MusicReviewWorkspace items={reviewItems} totalCount={reviewItems.length} {library} {inspector} {sources} {audition} {review} {bulk} {active} selectedItemIds={reviewTreeViewState.selectedItemIds} selectedFolderIds={reviewTreeViewState.selectedFolderIds} onClearSelection={clearReviewSelection} autoplay={reviewAutoplay} onAutoplayChange={setReviewAutoplay} onOpenPlayer={openPlayerFromBuilder} compactPlayerLabel={mobilePresentation} showPanelButton={layout.contextPanelPresentation === "sheet"} onOpenPanel={() => contextViewState.contextPanelOpen = true} onEditPlaylist={(playlistId) => { void openPlaylistManagementSurface(playlistId, "edit"); }} onDeletePlaylist={(playlistId) => { void openPlaylistManagementSurface(playlistId, "delete"); }} onReorderPlaylists={reorderPlaylistSummaries} issue={activeReviewIssue} repairAvailable={activeReviewIssue ? canRepairIssue(activeReviewIssue) : false} onRepairIssue={repairIssue} viewState={reviewWorkspaceViewState} />
         {/if}
       {:else if playlistManagementOpen && (destination.kind === "playlists" || destination.kind === "playlist")}
         <div class="min-h-0 flex-1 overflow-y-auto p-3" data-music-scrollable="true"><MusicPlaylistManager playlists={library.playlistSummaries} onEdit={(playlistId) => { void openPlaylistManagementSurface(playlistId, "edit"); }} onDelete={(playlistId) => { void openPlaylistManagementSurface(playlistId, "delete"); }} onReorder={reorderPlaylistSummaries} onDone={() => playlistManagementOpen = false} /></div>

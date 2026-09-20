@@ -69,6 +69,31 @@ describe("Music library controller", () => {
     expect(itemWindow).toHaveBeenCalledTimes(2);
   });
 
+  it("loads the complete Review window before exposing the preloaded workspace", async () => {
+    const first = window("review-1");
+    first.totalCount = 3;
+    const itemWindow = vi.fn(async (request) => {
+      if (request.destination !== "review") return window("library");
+      if (request.offset === 0) return first;
+      return {
+        ...window("review-2"),
+        items: [window("review-2").items[0]!, window("review-3").items[0]!],
+        totalCount: 3,
+        offset: request.offset,
+      };
+    });
+    const controller = createMusicLibraryController(api(itemWindow));
+    controller.setVault("vault-1");
+
+    expect(await controller.preloadCoreDestinations()).toBe(true);
+    expect(controller.windows.review?.items.map((item) => item.id)).toEqual([
+      "review-1",
+      "review-2",
+      "review-3",
+    ]);
+    expect(itemWindow).toHaveBeenCalledTimes(3);
+  });
+
   it("keeps stale windows visible while refreshing them after a mutation", async () => {
     const itemWindow = vi.fn(async (request) => window(`${request.destination}-${itemWindow.mock.calls.length}`));
     const controller = createMusicLibraryController(api(itemWindow));

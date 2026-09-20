@@ -159,9 +159,6 @@ fn push_item_from(builder: &mut QueryBuilder<'_, Sqlite>, request: &MusicItemWin
 
 fn push_item_filters(builder: &mut QueryBuilder<'_, Sqlite>, request: &MusicItemWindowRequest) {
     builder.push(" WHERE 1 = 1 ");
-    if request.destination == MusicListDestination::Review {
-        builder.push("AND item.review_state IN ('unreviewed', 'reviewed', 'deferred') ");
-    }
     if let Some(source_kind) = request.source_kind {
         builder.push("AND item.source_kind = ");
         builder.push_bind(source_kind.as_ref().to_string());

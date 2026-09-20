@@ -4,7 +4,7 @@
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Disc3 from "@lucide/svelte/icons/disc-3";
-  import Files from "@lucide/svelte/icons/files";
+  import Eye from "@lucide/svelte/icons/eye";
   import ListPlus from "@lucide/svelte/icons/list-plus";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import Pencil from "@lucide/svelte/icons/pencil";
@@ -25,7 +25,7 @@
   import type { MusicReviewController } from "$lib/music/music-review-controller.svelte";
   import type { MusicReviewWorkspaceViewState } from "$lib/music/music-builder-view-state";
   import type { MusicSourcesController } from "$lib/music/music-sources-controller.svelte";
-  import type { MusicIssue } from "$lib/music/library-contracts";
+  import type { MusicIssue, MusicItemListEntry } from "$lib/music/library-contracts";
   import {
     isMusicReviewEditableTarget,
     musicReviewArtworkDataUrl,
@@ -44,6 +44,8 @@
   import MusicPlaylistPicker from "./MusicPlaylistPicker.svelte";
 
   let {
+    items,
+    totalCount,
     library,
     inspector,
     sources,
@@ -68,6 +70,8 @@
     onRepairIssue = () => undefined,
     viewState,
   }: {
+    items: MusicItemListEntry[];
+    totalCount: number;
     library: MusicLibraryController;
     inspector: MusicBuilderInspectorController;
     sources: MusicSourcesController;
@@ -108,10 +112,10 @@
   const selectedIdSet = $derived(new Set(selectedItemIds));
   const selectedFolderIdSet = $derived(new Set(selectedFolderIds));
   const selectionMode = $derived(selectedItemIds.length > 0);
-  const reviewTree = $derived(buildMusicReviewTree(library.currentWindow.items));
+  const reviewTree = $derived(buildMusicReviewTree(items));
   const selectionSummary = $derived(summarizeMusicReviewTreeSelection(
     reviewTree,
-    library.currentWindow.items,
+    items,
     selectedIdSet,
     selectedFolderIdSet,
   ));
@@ -125,30 +129,27 @@
   const selectionNeedsSave = $derived(bulk.membershipsChanged);
   const selectionMatchesBulk = $derived(selectedItemIds.length === bulk.itemIds.length
     && selectedItemIds.every((itemId, index) => bulk.itemIds[index] === itemId));
+  const selectionAllIgnored = $derived(selectionMode && selectedItemIds.every((itemId) =>
+    items.find((item) => item.id === itemId)?.reviewState === "ignored"));
   const selectionProjectionReady = $derived(Object.keys(bulk.states).length > 0
     || (selectionMatchesBulk && !bulk.loading));
   const selectionReady = $derived(selectionMode && selectionMatchesBulk
     && !bulk.loading && !bulk.error && !bulk.selectionStale);
-  const selectionIgnoreDisabledReason = $derived.by(() => {
-    if (!selectionMatchesBulk || bulk.loading) return t("music.builder.ignoreSelectionChecking");
-    if (bulk.error || bulk.selectionStale) return t("music.builder.ignoreSelectionUnavailable");
-    if (bulk.hasExistingMemberships) return t("music.builder.ignoreSelectionHasPlaylists");
-    if (selectionNeedsSave) return t("music.builder.ignoreSelectionHasChanges");
-    return null;
-  });
-  const selectionCanIgnore = $derived(selectionMode && selectionIgnoreDisabledReason === null);
+  const selectionCanIgnore = $derived(selectionMode && selectionMatchesBulk);
   const sessionSkippedIds = $derived(new Set(viewState.sessionSkippedIds));
   const reviewItemsFullyLoaded = $derived(
     library.currentWindow.items.length >= library.currentWindow.totalCount,
   );
   const reviewItemIds = $derived(reviewTree.flatMap((node) => node.itemIds));
   const initialReviewItemId = $derived(reviewItemsFullyLoaded
-    ? firstMusicReviewTreeItemId(library.currentWindow.items)
+    ? firstMusicReviewTreeItemId(items)
     : null);
   const initialReviewItem = $derived(initialReviewItemId
-    ? library.currentWindow.items.find((entry) => entry.id === initialReviewItemId) ?? null
+    ? items.find((entry) => entry.id === initialReviewItemId) ?? null
     : null);
   const item = $derived(library.selectedItem ?? initialReviewItem);
+  const ignoreActive = $derived(selectionMode ? selectionAllIgnored : item?.reviewState === "ignored");
+  const ignoreActionLabel = $derived(ignoreActive ? t("music.builder.stopIgnoring") : t("music.builder.ignore"));
   const detail = $derived(inspector.detail?.item.id === item?.id ? inspector.detail : null);
   const checkedIds = $derived(new Set(detail?.memberships.map((membership) => membership.playlistId) ?? []));
   const membershipSignature = $derived([...checkedIds].sort().join("\n"));
@@ -158,7 +159,7 @@
   const needsSave = $derived(Boolean(item) && membershipsChanged);
   const membershipSaving = $derived(review.membershipBusy.size > 0);
   const reviewTreeIndex = $derived(item ? reviewItemIds.indexOf(item.id) : -1);
-  const reviewedCount = $derived(library.currentWindow.items.filter((entry) => entry.reviewState === "reviewed").length);
+  const reviewedCount = $derived(items.filter((entry) => entry.reviewState === "reviewed").length);
   const player = $derived(audition.musicPlayer);
   const previewTitle = $derived(detail
     ? detail.item.titleOverride ?? detail.item.originalTitle
@@ -176,7 +177,7 @@
     : "0%");
 
   $effect(() => {
-    const validItemIds = new Set(library.currentWindow.items.map((item) => item.id));
+    const validItemIds = new Set(items.map((item) => item.id));
     const nextIds = selectedItemIds.filter((itemId) => validItemIds.has(itemId));
     const matchesCurrent = nextIds.length === bulk.itemIds.length
       && nextIds.every((itemId, index) => bulk.itemIds[index] === itemId);
@@ -315,13 +316,14 @@
     prefetchedArtworkReadyIds = new Set([...prefetchedArtworkReadyIds, itemId]);
   }
 
-  async function finishReviewState(reviewState: "reviewed" | "ignored"): Promise<void> {
+  async function finishReviewState(reviewState: "unreviewed" | "reviewed" | "ignored"): Promise<void> {
     if (preparingNext || review.actionBusy) return;
     const nextItemId = reviewTreeIndex >= 0 ? reviewItemIds[reviewTreeIndex + 1] ?? null : null;
     preparingNext = true;
     try {
-      await ensureReviewArtwork(nextItemId);
+      const artworkReady = ensureReviewArtwork(nextItemId);
       await review.changeReviewState(reviewState, null, nextItemId);
+      await artworkReady;
     } finally {
       preparingNext = false;
     }
@@ -333,15 +335,40 @@
     else void finishReviewState("ignored");
   }
 
+  async function restoreSelectionToReview(): Promise<void> {
+    if (!selectionCanIgnore || bulk.saving || preparingNext) return;
+    const restoredItemIds = [...selectedItemIds];
+    const restoredItemId = restoredItemIds[0] ?? null;
+    preparingNext = true;
+    try {
+      if (!await bulk.setReviewState("unreviewed")) return;
+      for (const itemId of restoredItemIds) inspector.invalidate(itemId);
+      onClearSelection();
+      lastSelectedId = null;
+      library.selectItem(restoredItemId);
+    } finally {
+      preparingNext = false;
+    }
+  }
+
+  function toggleIgnore(): void {
+    if (ignoreActive) {
+      if (selectionMode) void restoreSelectionToReview();
+      else void finishReviewState("unreviewed");
+      return;
+    }
+    ignoreConfirmOpen = true;
+  }
+
   async function skipCurrentItem(): Promise<void> {
     if (!item || preparingNext || review.actionBusy) return;
     preparingNext = true;
     try {
       const skipped = new Set(sessionSkippedIds).add(item.id);
-      let nextItemId = nextPendingMusicReviewTreeItemId(library.currentWindow.items, item.id, skipped);
+      let nextItemId = nextPendingMusicReviewTreeItemId(items, item.id, skipped);
       if (!nextItemId) {
         viewState.sessionSkippedIds = [];
-        nextItemId = nextPendingMusicReviewTreeItemId(library.currentWindow.items, item.id, new Set());
+        nextItemId = nextPendingMusicReviewTreeItemId(items, item.id, new Set());
       } else {
         viewState.sessionSkippedIds = [...skipped];
       }
@@ -380,14 +407,14 @@
   async function saveSelectionAndContinue(): Promise<void> {
     if (!selectionReady || !selectionNeedsSave || bulk.saving || preparingNext) return;
     const savedItemIds = new Set(selectedIdSet);
-    const nextItemId = nextPendingMusicReviewSelectionItemId(library.currentWindow.items, savedItemIds);
+    const nextItemId = nextPendingMusicReviewSelectionItemId(items, savedItemIds);
     preparingNext = true;
     try {
       if (!await bulk.saveReviewSelection()) return;
       await ensureReviewArtwork(nextItemId);
       for (const itemId of savedItemIds) inspector.invalidate(itemId);
       onClearSelection();
-      const targetItemId = nextItemId ?? firstMusicReviewTreeItemId(library.currentWindow.items);
+      const targetItemId = nextItemId ?? firstMusicReviewTreeItemId(items);
       if (targetItemId) inspector.selectCached(targetItemId);
       lastSelectedId = null;
       library.selectItem(targetItemId);
@@ -399,14 +426,14 @@
   async function ignoreSelection(): Promise<void> {
     if (!selectionCanIgnore || bulk.saving || preparingNext) return;
     const ignoredItemIds = new Set(selectedIdSet);
-    const nextItemId = nextPendingMusicReviewSelectionItemId(library.currentWindow.items, ignoredItemIds);
+    const nextItemId = nextPendingMusicReviewSelectionItemId(items, ignoredItemIds);
     preparingNext = true;
     try {
       if (!await bulk.ignoreReviewSelection()) return;
       await ensureReviewArtwork(nextItemId);
       for (const itemId of ignoredItemIds) inspector.invalidate(itemId);
       onClearSelection();
-      const targetItemId = nextItemId ?? firstMusicReviewTreeItemId(library.currentWindow.items);
+      const targetItemId = nextItemId ?? firstMusicReviewTreeItemId(items);
       if (targetItemId) inspector.selectCached(targetItemId);
       lastSelectedId = null;
       library.selectItem(targetItemId);
@@ -473,18 +500,24 @@
     <div class="review-toolbar flex items-center justify-between gap-3">
       {#if showPanelButton}<button type="button" onclick={onOpenPanel} class="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-foreground hover:bg-secondary" aria-label={t("music.builder.openContextPanel")} title={t("music.builder.openContextPanel")}><PanelLeft size={14} /></button>{/if}
       <button type="button" onclick={onOpenPlayer} class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-secondary px-2.5 text-[0.7rem]" aria-label={t("music.backToPlayer")} data-music-focus-key="builder:back-to-player"><ChevronLeft size={14} />{compactPlayerLabel ? t("music.returnToPlayerShort") : t("music.backToPlayer")}</button>
-      <p class="min-w-0 flex-1 truncate text-center text-[0.68rem] font-medium text-muted-foreground" role="status" aria-live="polite">{t("music.builder.reviewProgress", reviewedCount, library.currentWindow.totalCount)}</p>
+      <p class="min-w-0 flex-1 truncate text-center text-[0.68rem] font-medium text-muted-foreground" role="status" aria-live="polite">{t("music.builder.reviewProgress", reviewedCount, totalCount)}</p>
       <div class="review-toolbar-actions flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
         {#if selectionMode}
-          <span class="inline-flex h-8 items-center gap-1.5 px-2 text-[0.65rem] font-medium text-foreground" aria-live="polite"><Files size={13} />{t("music.builder.reviewSelectionTracks", selectionSummary.itemCount)}</span>
+          <button type="button" onclick={() => onAutoplayChange(!autoplay)} aria-pressed={autoplay} class="review-toolbar-action inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[0.65rem] text-foreground transition-colors hover:bg-secondary">
+            {#if autoplay}
+              <Play size={13} />
+            {:else}
+              <span class="relative size-3.25 shrink-0" aria-hidden="true"><Play class="absolute inset-0" size={13} /><Slash class="absolute inset-0" size={13} /></span>
+            {/if}
+            {autoplay ? t("music.builder.reviewAutoplayOn") : t("music.builder.reviewAutoplayOff")}
+          </button>
           <button
             type="button"
-            onclick={() => ignoreConfirmOpen = true}
+            onclick={toggleIgnore}
             disabled={!selectionCanIgnore || bulk.saving || preparingNext}
             class="review-toolbar-action inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[0.65rem] text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:text-muted-foreground disabled:hover:bg-transparent"
-            title={selectionIgnoreDisabledReason ?? undefined}
-            aria-label={selectionIgnoreDisabledReason ? `${t("music.builder.ignore")}. ${selectionIgnoreDisabledReason}` : t("music.builder.ignore")}
-          ><X size={13} />{t("music.builder.ignore")}</button>
+            aria-label={ignoreActionLabel}
+          >{#if ignoreActive}<Eye size={13} />{:else}<X size={13} />{/if}{ignoreActionLabel}</button>
         {:else}
           <button type="button" onclick={() => onAutoplayChange(!autoplay)} aria-pressed={autoplay} class="review-toolbar-action inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[0.65rem] text-foreground transition-colors hover:bg-secondary">
             {#if autoplay}
@@ -494,7 +527,7 @@
             {/if}
             {autoplay ? t("music.builder.reviewAutoplayOn") : t("music.builder.reviewAutoplayOff")}
           </button>
-          <button type="button" onclick={() => ignoreConfirmOpen = true} disabled={!detail || review.actionBusy || preparingNext} class="review-toolbar-action inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[0.65rem] text-foreground hover:bg-secondary"><X size={13} />{t("music.builder.ignore")}</button>
+          <button type="button" onclick={toggleIgnore} disabled={!detail || review.actionBusy || preparingNext} class="review-toolbar-action inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[0.65rem] text-foreground hover:bg-secondary">{#if ignoreActive}<Eye size={13} />{:else}<X size={13} />{/if}{ignoreActionLabel}</button>
         {/if}
       </div>
     </div>

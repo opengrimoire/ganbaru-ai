@@ -80,7 +80,7 @@ fn review_snooze_and_statistics_commands_preserve_independent_scopes() {
 }
 
 #[test]
-fn review_window_retains_reviewed_and_deferred_items_but_excludes_ignored_items() {
+fn review_window_includes_ignored_items_for_local_visibility_filtering() {
     tauri::async_runtime::block_on(async {
         let pool = pool().await;
         for id in ["unreviewed", "reviewed", "ignored", "due", "future"] {
@@ -112,8 +112,10 @@ fn review_window_retains_reviewed_and_deferred_items_but_excludes_ignored_items(
             .iter()
             .map(|item| item.id.as_str())
             .collect::<Vec<_>>();
-
-        assert_eq!(ids, vec!["due", "future", "reviewed", "unreviewed"]);
+        assert_eq!(
+            ids,
+            vec!["due", "future", "ignored", "reviewed", "unreviewed"]
+        );
     });
 }
 

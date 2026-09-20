@@ -17,7 +17,7 @@ vi.mock("$lib/api/music-library", () => api);
 import { MusicBuilderInspectorController } from "./music-builder-inspector.svelte";
 import { MusicLibraryController, type MusicLibraryControllerApi } from "./music-library-controller.svelte";
 import { MusicReviewController } from "./music-review-controller.svelte";
-import type { MusicInspectorDetail, MusicPlaylistSummary } from "./library-contracts";
+import type { MusicInspectorDetail, MusicItemListEntry, MusicPlaylistSummary } from "./library-contracts";
 
 const emptyLibraryApi: MusicLibraryControllerApi = {
   itemWindow: vi.fn(async () => ({ items: [], groups: [], totalCount: 0, offset: 0, limit: 50 })),
@@ -42,6 +42,16 @@ const detail = (): MusicInspectorDetail => ({
     reviewChangedAt: null, reviewDeferredUntil: null, discoveredAt: 1, updatedAt: 1, version: 1,
   },
   locations: [], memberships: [], membershipSkipRanges: [], snoozes: [], signals: [], statistics: null, sourceCollectionIds: [],
+});
+
+const listItem = (): MusicItemListEntry => ({
+  id: "item", identityKey: "local:item", sourceKind: "local-file", mediaKind: "audio",
+  title: "Track", artist: "Artist", album: "Album", localRootId: "root",
+  relativePath: "Track.flac", originalArtworkIdentity: null, artworkOverride: null, durationMs: 1_000,
+  availability: "available", reviewState: "unreviewed", discoveredAt: 1, updatedAt: 1, version: 1,
+  playlistCount: 0, activeSnoozeCount: 0, lastPlayedAt: null, playCount: 0,
+  membershipId: null, membershipPosition: null, membershipWeight: null,
+  membershipEnabled: null, membershipVersion: null,
 });
 
 describe("MusicReviewController", () => {
@@ -99,6 +109,31 @@ describe("MusicReviewController", () => {
 
     expect(library.currentState.selectedItemId).toBe("literal-next");
     expect(api.setMusicReviewState).toHaveBeenCalledWith(expect.objectContaining({ itemId: "item" }));
+    expect(emptyLibraryApi.itemWindow).not.toHaveBeenCalled();
+  });
+
+  it("hides an ignored item optimistically without refreshing the Review window", async () => {
+    let resolveReview!: (value: { id: string; version: number }) => void;
+    api.setMusicReviewState.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveReview = resolve;
+    }));
+    const library = new MusicLibraryController(emptyLibraryApi, () => 2);
+    library.setVault("vault-1");
+    const item = listItem();
+    library.windows.review = { items: [item], groups: [], totalCount: 1, offset: 0, limit: 50 };
+    library.selectItem("item");
+    const inspector = new MusicBuilderInspectorController();
+    inspector.detail = detail();
+    const review = new MusicReviewController(library, inspector, () => 2);
+
+    const pending = review.changeReviewState("ignored", null, "next");
+
+    expect(item.reviewState).toBe("ignored");
+    expect(library.currentState.selectedItemId).toBe("next");
+    expect(emptyLibraryApi.itemWindow).not.toHaveBeenCalled();
+    resolveReview({ id: "item", version: 2 });
+    expect(await pending).toBe(true);
+    expect(item.version).toBe(2);
     expect(emptyLibraryApi.itemWindow).not.toHaveBeenCalled();
   });
 });
