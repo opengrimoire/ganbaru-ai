@@ -49,7 +49,7 @@
     createMusicReviewTreeViewState,
     createMusicReviewWorkspaceViewState,
   } from "$lib/music/music-builder-view-state";
-  import { onMusicLibraryChanged } from "$lib/music/music-library-events";
+  import { notifyMusicLibraryChanged, onMusicLibraryChanged } from "$lib/music/music-library-events";
   import { onActiveVaultIdentityChange, requireActiveVaultIdentity } from "$lib/vault/active-vault";
   import { getConfigKey, setConfigKey } from "$lib/vault/config";
   import MusicBuilderAsyncState from "./builder/MusicBuilderAsyncState.svelte";
@@ -112,6 +112,7 @@
   let history = $state<MusicBuilderHistory>(initialMusicBuilderRoute(1, null, { playlistIds: new Set() }));
   let unsubscribeVault: (() => void) | null = null;
   let unsubscribeLibraryChanges: (() => void) | null = null;
+  let localRefreshBroadcastSuppression = 0;
   let sourceSurface = $state<"add" | "relink" | "remove" | "item-repair" | null>(null);
   let sourceSurfaceCollection = $state<MusicSourceCollection | null>(null);
   let repairItemId = $state<string | null>(null);
@@ -402,8 +403,14 @@
 
   async function runSourceRefresh(plan: MusicSourceRefreshPlan, allowNetwork: boolean): Promise<void> {
     pendingRefreshPlan = null;
-    await sources.runRefresh(plan, allowNetwork);
-    await library.refreshAfterMutation();
+    localRefreshBroadcastSuppression += 1;
+    try {
+      await sources.runRefresh(plan, allowNetwork);
+      await library.refreshAfterMutation();
+      notifyMusicLibraryChanged();
+    } finally {
+      localRefreshBroadcastSuppression -= 1;
+    }
   }
 
   function detectedFolderAdded(): void {
@@ -751,7 +758,10 @@
       if (next) void loadVault(next);
       else { library.setVault(null); sources.setVault(null); }
     });
-    unsubscribeLibraryChanges = onMusicLibraryChanged(() => { void library.refreshAfterMutation(); });
+    unsubscribeLibraryChanges = onMusicLibraryChanged(() => {
+      if (localRefreshBroadcastSuppression > 0) return;
+      void library.refreshAfterMutation();
+    });
     return () => window.removeEventListener(MUSIC_CONTEXT_BOUNDARY_EVENT, handleBoundary);
   });
 

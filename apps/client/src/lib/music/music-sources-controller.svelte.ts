@@ -133,7 +133,6 @@ export class MusicSourcesController {
   private pendingLoad: Promise<boolean> | null = null;
   private defaultFolderChecked = false;
   private defaultFolderDismissed = false;
-  private lastNotifiedProcessed: Record<string, number> = {};
 
   constructor(
     api: MusicSourcesControllerApi = defaultApi,
@@ -170,11 +169,6 @@ export class MusicSourcesController {
       {
         onStatus: (status) => {
           this.refreshStatuses[status.collectionId] = status;
-          const processed = status.progress?.processedCount ?? 0;
-          if (processed > (this.lastNotifiedProcessed[status.collectionId] ?? 0)) {
-            this.lastNotifiedProcessed[status.collectionId] = processed;
-            notifyMusicLibraryChanged();
-          }
         },
       },
     );
@@ -202,7 +196,6 @@ export class MusicSourcesController {
     this.firstUseSession = false;
     this.defaultFolderChecked = false;
     this.defaultFolderDismissed = false;
-    this.lastNotifiedProcessed = {};
   }
 
   load(): Promise<boolean> {

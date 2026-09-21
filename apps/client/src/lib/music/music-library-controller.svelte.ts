@@ -255,6 +255,30 @@ export class MusicLibraryController {
     this.patchCurrentState({ scrollTop: Math.max(0, scrollTop) });
   }
 
+  private async completeReviewWindow(
+    window: MusicItemWindow,
+    state: MusicDestinationState,
+    nowMs: number,
+    generation: number,
+    vaultId: string,
+  ): Promise<boolean> {
+    const reviewLocation = { kind: "review" } as const;
+    while (window.items.length < window.totalCount) {
+      const next = await this.api.itemWindow(itemWindowRequest(reviewLocation, {
+        ...state,
+        offset: window.items.length,
+      }, nowMs));
+      if (!this.isCurrent(generation, vaultId)) return false;
+      const knownIds = new Set(window.items.map((item) => item.id));
+      const nextItems = next.items.filter((item) => !knownIds.has(item.id));
+      if (nextItems.length === 0) throw new Error("The complete Review list could not be loaded.");
+      window.items = [...window.items, ...nextItems];
+      window.totalCount = next.totalCount;
+      window.groups = next.groups;
+    }
+    return true;
+  }
+
   /** Loads shared builder summaries plus the Review and Library windows in one initialization pass. */
   async preloadCoreDestinations(): Promise<boolean> {
     if (!this.vaultId) return false;
@@ -276,21 +300,7 @@ export class MusicLibraryController {
         this.api.issues(0, 500),
       ]);
       if (!this.isCurrent(generation, vaultId)) return false;
-      while (reviewWindow.items.length < reviewWindow.totalCount) {
-        const next = await this.api.itemWindow(itemWindowRequest(reviewLocation, {
-          ...reviewState,
-          offset: reviewWindow.items.length,
-        }, nowMs));
-        if (!this.isCurrent(generation, vaultId)) return false;
-        const knownIds = new Set(reviewWindow.items.map((item) => item.id));
-        const nextItems = next.items.filter((item) => !knownIds.has(item.id));
-        if (nextItems.length === 0) {
-          throw new Error("The complete Review list could not be loaded.");
-        }
-        reviewWindow.items = [...reviewWindow.items, ...nextItems];
-        reviewWindow.totalCount = next.totalCount;
-        reviewWindow.groups = next.groups;
-      }
+      if (!await this.completeReviewWindow(reviewWindow, reviewState, nowMs, generation, vaultId)) return false;
       this.windows.review = reviewWindow;
       this.windows.library = libraryWindow;
       this.staleWindowKeys.delete("review");
@@ -371,6 +381,8 @@ export class MusicLibraryController {
         this.api.issues(0, 500),
       ]);
       if (!this.isCurrent(generation, vaultId)) return false;
+      if (window && location.kind === "review"
+        && !await this.completeReviewWindow(window, state, nowMs, generation, vaultId)) return false;
       if (window) {
         this.windows[key] = window;
         this.staleWindowKeys.delete(key);

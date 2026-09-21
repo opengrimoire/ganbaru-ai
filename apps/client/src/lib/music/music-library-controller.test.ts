@@ -94,6 +94,44 @@ describe("Music library controller", () => {
     expect(itemWindow).toHaveBeenCalledTimes(3);
   });
 
+  it("keeps the retained Review window visible until a refreshed projection is complete", async () => {
+    let refreshing = false;
+    let releaseFinalPage!: () => void;
+    const itemWindow = vi.fn(async (request) => {
+      if (request.destination === "library") return window("library");
+      if (!refreshing) return window("review-old");
+      if (request.offset === 0) {
+        const first = window("review-new-1");
+        first.totalCount = 3;
+        return first;
+      }
+      await new Promise<void>((resolve) => { releaseFinalPage = resolve; });
+      return {
+        ...window("review-new-2"),
+        items: [window("review-new-2").items[0]!, window("review-new-3").items[0]!],
+        totalCount: 3,
+        offset: request.offset,
+      };
+    });
+    const controller = createMusicLibraryController(api(itemWindow));
+    controller.setVault("vault-1");
+    expect(await controller.preloadCoreDestinations()).toBe(true);
+
+    refreshing = true;
+    const refresh = controller.refreshAfterMutation();
+    await vi.waitFor(() => expect(itemWindow).toHaveBeenCalledTimes(4));
+
+    expect(controller.currentWindow.items.map((item) => item.id)).toEqual(["review-old"]);
+
+    releaseFinalPage();
+    expect(await refresh).toBe(true);
+    expect(controller.currentWindow.items.map((item) => item.id)).toEqual([
+      "review-new-1",
+      "review-new-2",
+      "review-new-3",
+    ]);
+  });
+
   it("keeps stale windows visible while refreshing them after a mutation", async () => {
     const itemWindow = vi.fn(async (request) => window(`${request.destination}-${itemWindow.mock.calls.length}`));
     const controller = createMusicLibraryController(api(itemWindow));
@@ -278,9 +316,9 @@ describe("Music library controller", () => {
     const controller = createMusicLibraryController(api(itemWindow));
     controller.setVault("vault-1");
     controller.navigate({ kind: "review" });
-    await controller.refresh();
 
-    expect(await controller.loadAllCurrentItems()).toBe(false);
+    expect(await controller.refresh()).toBe(false);
+    expect(controller.error?.message).toBe("The complete Review list could not be loaded.");
     expect(itemWindow).toHaveBeenCalledTimes(2);
   });
 });
