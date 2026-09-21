@@ -4,13 +4,25 @@ import type {
   MusicPlaylistSummary,
   MusicWeight,
 } from "$lib/music/library-contracts";
-import { musicArtworkDataUrl, musicEmbeddedArtworkDataUrl } from "$lib/music/music-artwork-cache";
+import { musicArtworkDataUrl, musicEmbeddedArtworkDataUrl, musicYouTubeThumbnailDataUrl } from "$lib/music/music-artwork-cache";
 import { orderMusicPlaylists } from "$lib/music/music-system-playlists";
 import { resolveLocalMusicPath } from "$lib/music/platform-paths";
 import { localFileSourceFromPath, parseMusicSourceInput, type MusicSource } from "$lib/music/sources";
 
 export function parseMusicReviewAutoplay(value: unknown): boolean {
   return value === true;
+}
+
+/** Uses newly learned playback metadata while a retained Review item is still stale. */
+export function musicReviewDurationMs(
+  liveDurationMs: number | null,
+  learnedDurationMs: number | null,
+  savedDurationMs: number | null,
+): number {
+  for (const durationMs of [liveDurationMs, learnedDurationMs, savedDurationMs]) {
+    if (durationMs !== null && Number.isFinite(durationMs) && durationMs > 0) return durationMs;
+  }
+  return 0;
 }
 
 export function musicReviewSource(
@@ -42,6 +54,10 @@ export function musicReviewArtworkDataUrl(
   detail: MusicInspectorDetail,
   bindings: readonly LocalRootBinding[],
 ): Promise<string | null> {
+  if (detail.item.artworkOverride) return musicArtworkDataUrl(detail.item.artworkOverride);
+  if (detail.item.sourceKind === "youtube-video" && detail.item.youtubeVideoId) {
+    return musicYouTubeThumbnailDataUrl(detail.item.youtubeVideoId);
+  }
   const source = musicReviewSource(detail, bindings);
   if (!source || source.kind !== "local-file") return Promise.resolve(null);
   if (source.artworkPath) return musicArtworkDataUrl(source.artworkPath);

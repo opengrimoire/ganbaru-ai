@@ -17,6 +17,7 @@ import {
   previewMusicItemRepair,
   setLocalRootBinding,
   upsertMusicYouTubeVideo,
+  upsertMusicSourceCollection,
   undoMusicItemRepair,
 } from "$lib/api/music-library";
 import {
@@ -29,7 +30,11 @@ import {
   type MusicSourceCollection,
   type MusicSourceRemovalImpact,
 } from "$lib/music/library-contracts";
-import { musicFolderDisplayName, musicFolderRelationship } from "$lib/music/music-source-drafts";
+import {
+  musicFolderDisplayName,
+  musicFolderRelationship,
+  type MusicLocalSourceSelection,
+} from "$lib/music/music-source-drafts";
 import {
   createMusicSourceRefreshController,
   type MusicSourceRefreshPlan,
@@ -63,6 +68,7 @@ export interface MusicSourcesControllerApi {
   saveYouTubePlaylist(request: Parameters<typeof applyMusicYouTubePlaylistSnapshot>[0]): ReturnType<typeof applyMusicYouTubePlaylistSnapshot>;
   removalImpact(collectionId: string): Promise<MusicSourceRemovalImpact>;
   removeSource(request: Parameters<typeof removeMusicSource>[0]): ReturnType<typeof removeMusicSource>;
+  saveCollection(request: Parameters<typeof upsertMusicSourceCollection>[0]): ReturnType<typeof upsertMusicSourceCollection>;
   createRelink(request: Parameters<typeof createMusicRelinkPlan>[0]): Promise<MusicRelinkPlanSummary>;
   relinkEntries(planId: string, offset: number, limit: number): Promise<{ entries: MusicRelinkPlanEntry[]; totalCount: number; offset: number; limit: number }>;
   applyRelink(request: Parameters<typeof applyMusicRelinkPlan>[0]): Promise<MusicRelinkPlanSummary>;
@@ -88,6 +94,7 @@ const defaultApi: MusicSourcesControllerApi = {
   saveYouTubePlaylist: applyMusicYouTubePlaylistSnapshot,
   removalImpact: getMusicSourceRemovalImpact,
   removeSource: removeMusicSource,
+  saveCollection: upsertMusicSourceCollection,
   createRelink: createMusicRelinkPlan,
   relinkEntries: getMusicRelinkPlanEntries,
   applyRelink: applyMusicRelinkPlan,
@@ -163,6 +170,9 @@ export class MusicSourcesController {
           playlistId: collection.youtubePlaylistId,
           name: collection.name,
           videoIds: preview.videoIds,
+          videos: preview.videos
+            .filter((video) => video.metadataResolved)
+            .map(({ videoId, title, channel }) => ({ videoId, title, channel })),
           resolvedAt: this.now(),
         });
       },
@@ -301,7 +311,7 @@ export class MusicSourcesController {
     }
   }
 
-  async chooseLocalFolder(): Promise<{ selection: MediaFolderSelection; name: string; relationship: ReturnType<typeof musicFolderRelationship> } | null> {
+  async chooseLocalFolder(): Promise<MusicLocalSourceSelection | null> {
     const selection = await this.api.pickFolder();
     if (!selection) return null;
     const existingPaths = this.bindings.flatMap((binding) => binding.folderPath ? [binding.folderPath] : []);
@@ -349,17 +359,33 @@ export class MusicSourcesController {
     return collectionId;
   }
 
-  parseYouTubeInput(input: string, expected: "youtube-video" | "youtube-playlist"):
+  parseYouTubeInput(input: string):
     | { source: YouTubeVideoSource | YouTubePlaylistSource; error: null }
     | { source: null; error: string } {
     const parsed = parseMusicSourceInput(input);
     if (!parsed.source || parsed.error) return { source: null, error: parsed.error ?? "Enter a YouTube link." };
-    if (parsed.source.kind !== expected) {
-      return { source: null, error: expected === "youtube-video"
-        ? "This link is a playlist. Choose YouTube playlist instead."
-        : "This link is a single video. Choose YouTube video instead." };
+    if (parsed.source.kind !== "youtube-video" && parsed.source.kind !== "youtube-playlist") {
+      return { source: null, error: "Enter a YouTube video or playlist link." };
     }
     return { source: parsed.source, error: null };
+  }
+
+  async renameCollection(collectionId: string, name: string): Promise<void> {
+    const collection = this.collections.find((entry) => entry.id === collectionId);
+    const trimmedName = name.trim();
+    if (!collection) throw new Error("The music source is unavailable.");
+    if (!trimmedName) throw new Error("Enter a source name.");
+    await this.api.saveCollection({
+      id: collection.id,
+      kind: collection.kind,
+      identityKey: collection.identityKey,
+      name: trimmedName,
+      localRootId: collection.localRootId,
+      youtubePlaylistId: collection.youtubePlaylistId,
+      updatedAt: this.now(),
+    });
+    await this.loadProjection();
+    notifyMusicLibraryChanged();
   }
 
   async resolveYouTube(source: YouTubeVideoSource | YouTubePlaylistSource): Promise<MusicYouTubeSourcePreview | null> {
@@ -415,6 +441,9 @@ export class MusicSourcesController {
       playlistId: preview.playlistId,
       name: name.trim() || preview.title || preview.playlistId,
       videoIds: preview.videoIds,
+      videos: preview.videos
+        .filter((video) => video.metadataResolved)
+        .map(({ videoId, title, channel }) => ({ videoId, title, channel })),
       resolvedAt,
     });
     await this.load();

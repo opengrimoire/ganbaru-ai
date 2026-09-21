@@ -259,6 +259,7 @@ pub(crate) struct MusicItemListRow {
     pub album: String,
     pub local_root_id: Option<String>,
     pub relative_path: Option<String>,
+    pub source_collection_ids_json: String,
     pub original_artwork_identity: Option<String>,
     pub artwork_override: Option<String>,
     pub duration_ms: Option<i64>,
@@ -306,6 +307,14 @@ impl TryFrom<MusicItemListRow> for MusicItemListEntry {
             album: row.album,
             local_root_id: row.local_root_id,
             relative_path: row.relative_path,
+            source_collection_ids: serde_json::from_str(&row.source_collection_ids_json).map_err(
+                |error| {
+                    MusicLibraryError::runtime(
+                        "decode item source collection ids",
+                        error.to_string(),
+                    )
+                },
+            )?,
             original_artwork_identity: row.original_artwork_identity,
             artwork_override: row.artwork_override,
             duration_ms: row.duration_ms,

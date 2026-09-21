@@ -355,6 +355,12 @@ fn source_order_and_artwork_overrides_are_projected_in_library_rows() {
                 .collect::<Vec<_>>(),
             vec!["item-1", "item-2", "item-0"]
         );
+        assert!(
+            result
+                .items
+                .iter()
+                .all(|item| item.source_collection_ids == ["source-1"])
+        );
         assert_eq!(
             result.items[1].artwork_override.as_deref(),
             Some("/art/cover.png")

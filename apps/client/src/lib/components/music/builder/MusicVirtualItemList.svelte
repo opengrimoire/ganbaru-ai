@@ -9,6 +9,7 @@
     items,
     initialScrollTop = 0,
     playingItemId = null,
+    startingItemId = null,
     playbackActive = false,
     bindings,
     playlistName,
@@ -26,6 +27,7 @@
     items: MusicItemListEntry[];
     initialScrollTop?: number;
     playingItemId?: string | null;
+    startingItemId?: string | null;
     playbackActive?: boolean;
     bindings: readonly LocalRootBinding[];
     playlistName: string;
@@ -92,6 +94,7 @@
       position={windowed.startIndex + visibleIndex + 1}
       setSize={items.length}
       playing={playbackActive && item.id === playingItemId}
+      starting={item.sourceKind === "youtube-video" && item.id === startingItemId}
       {onTogglePlayback}
       {onShowLocation}
       {onSnooze}

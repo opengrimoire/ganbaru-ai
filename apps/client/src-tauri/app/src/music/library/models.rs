@@ -393,7 +393,17 @@ pub struct MusicYouTubePlaylistSnapshotWrite {
     pub playlist_id: String,
     pub name: String,
     pub video_ids: Vec<String>,
+    #[serde(default)]
+    pub videos: Vec<MusicYouTubePlaylistVideoWrite>,
     pub resolved_at: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicYouTubePlaylistVideoWrite {
+    pub video_id: String,
+    pub title: String,
+    pub channel: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -927,6 +937,7 @@ pub struct MusicItemListEntry {
     pub album: String,
     pub local_root_id: Option<String>,
     pub relative_path: Option<String>,
+    pub source_collection_ids: Vec<String>,
     pub original_artwork_identity: Option<String>,
     pub artwork_override: Option<String>,
     pub duration_ms: Option<i64>,

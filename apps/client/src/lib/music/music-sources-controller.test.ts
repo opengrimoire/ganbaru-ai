@@ -46,10 +46,19 @@ function api(overrides: Partial<MusicSourcesControllerApi> = {}): MusicSourcesCo
       channel: "Channel",
       durationMs: 120_000,
       videoIds: source.kind === "youtube-video" ? [source.videoId] : ["video-1", "video-2"],
+      videos: (source.kind === "youtube-video" ? [source.videoId] : ["video-1", "video-2"]).map((videoId) => ({
+        videoId,
+        title: videoId,
+        channel: "Channel",
+        durationMs: source.kind === "youtube-video" ? 120_000 : null,
+        metadataResolved: true,
+      })),
+      metadataTruncated: false,
       duplicateCount: 0,
     })),
     youtubeDuplicateCount: vi.fn(async () => 0),
     saveYouTubeVideo: vi.fn(async (request) => ({ id: request.videoId, version: 1 })),
+    saveCollection: vi.fn(async (request) => ({ id: request.id, version: 1 })),
     saveYouTubePlaylist: vi.fn(async (request) => ({
       collectionId: request.collectionId,
       canonicalItemCount: request.videoIds.length,
@@ -93,6 +102,31 @@ describe("MusicSourcesController", () => {
     expect(controller.loaded).toBe(true);
     expect(controller.roots[0]?.name).toBe("OST");
     expect(controller.bindings[0]?.folderPath).toBe("/music/ost");
+  });
+
+  it("renames an existing collection without changing its source identity", async () => {
+    const collection = {
+      id: "collection-1", kind: "local-root" as const, identityKey: "local-root:root-1",
+      name: "Music", localRootId: "root-1", youtubePlaylistId: null, refreshState: "idle" as const,
+      lastSuccessfulRefreshAt: null, previousSuccessfulRefreshAt: null, lastRefreshErrorCode: null,
+      snapshotGeneration: 1, createdAt: 1, updatedAt: 1, version: 1, discoveryEnabled: true, removedAt: null,
+    };
+    const saveCollection = vi.fn(async (request: Parameters<MusicSourcesControllerApi["saveCollection"]>[0]) => ({ id: request.id, version: 2 }));
+    const controller = createMusicSourcesController(api({
+      collections: vi.fn(async () => [collection]),
+      saveCollection,
+    }), () => 20, () => "id", refreshStub());
+    controller.setVault("vault-1");
+    await controller.load();
+
+    await controller.renameCollection("collection-1", "Soundtracks");
+
+    expect(saveCollection).toHaveBeenCalledWith(expect.objectContaining({
+      id: "collection-1",
+      identityKey: "local-root:root-1",
+      name: "Soundtracks",
+      localRootId: "root-1",
+    }));
   });
 
   it("preserves folder preview and reports duplicate relationships before writing", async () => {
@@ -318,14 +352,37 @@ describe("MusicSourcesController", () => {
   it("distinguishes videos from playlists and saves a resolved video", async () => {
     const saveYouTubeVideo = vi.fn(async (request: Parameters<MusicSourcesControllerApi["saveYouTubeVideo"]>[0]) => ({ id: request.videoId, version: 1 }));
     const controller = createMusicSourcesController(api({ saveYouTubeVideo }), () => 20, () => "id", refreshStub());
-    expect(controller.parseYouTubeInput("https://youtu.be/abcDEF_1234", "youtube-playlist")).toMatchObject({ source: null });
-    const parsed = controller.parseYouTubeInput("https://youtu.be/abcDEF_1234", "youtube-video");
+    const parsed = controller.parseYouTubeInput("https://youtu.be/abcDEF_1234");
     expect(parsed.source?.kind).toBe("youtube-video");
     const preview = await controller.resolveYouTube(parsed.source!);
     await controller.addYouTube(preview!, "");
     expect(saveYouTubeVideo).toHaveBeenCalledWith(expect.objectContaining({
       videoId: "abcDEF_1234",
       resolutionState: "ready",
+    }));
+  });
+
+  it("saves resolved playlist metadata with the playlist snapshot", async () => {
+    const saveYouTubePlaylist = vi.fn(async (request: Parameters<MusicSourcesControllerApi["saveYouTubePlaylist"]>[0]) => ({
+      collectionId: request.collectionId,
+      canonicalItemCount: request.videoIds.length,
+      newlyDiscoveredCount: request.videoIds.length,
+      repeatedVideoCount: 0,
+      generation: 1,
+    }));
+    const controller = createMusicSourcesController(api({ saveYouTubePlaylist }), () => 20, () => "collection-1", refreshStub());
+    const parsed = controller.parseYouTubeInput("https://youtube.com/playlist?list=PLabcdef12345");
+    const preview = await controller.resolveYouTube(parsed.source!);
+    await controller.addYouTube(preview!, "Focus soundtrack");
+
+    expect(saveYouTubePlaylist).toHaveBeenCalledWith(expect.objectContaining({
+      collectionId: "collection-1",
+      name: "Focus soundtrack",
+      videoIds: ["video-1", "video-2"],
+      videos: [
+        { videoId: "video-1", title: "video-1", channel: "Channel" },
+        { videoId: "video-2", title: "video-2", channel: "Channel" },
+      ],
     }));
   });
 
@@ -336,10 +393,21 @@ describe("MusicSourcesController", () => {
         release = resolve;
         signal.addEventListener("abort", () => reject(new DOMException("cancelled", "AbortError")), { once: true });
       });
-      return { kind: source.kind, videoId: null, playlistId: null, title: "Late", channel: "", durationMs: null, videoIds: [], duplicateCount: 0 };
+      return {
+        kind: source.kind,
+        videoId: null,
+        playlistId: null,
+        title: "Late",
+        channel: "",
+        durationMs: null,
+        videoIds: [],
+        videos: [],
+        metadataTruncated: false,
+        duplicateCount: 0,
+      };
     });
     const controller = createMusicSourcesController(api({ resolveYouTube }), () => 20, () => "id", refreshStub());
-    const parsed = controller.parseYouTubeInput("https://youtu.be/abcDEF_1234", "youtube-video");
+    const parsed = controller.parseYouTubeInput("https://youtu.be/abcDEF_1234");
     const pending = controller.resolveYouTube(parsed.source!);
     controller.cancelResolution();
     release();

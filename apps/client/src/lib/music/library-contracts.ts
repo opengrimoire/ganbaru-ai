@@ -280,6 +280,7 @@ export interface MusicItemListEntry {
   album: string;
   localRootId: string | null;
   relativePath: string | null;
+  sourceCollectionIds: string[];
   originalArtworkIdentity: string | null;
   artworkOverride: string | null;
   durationMs: number | null;
@@ -400,7 +401,13 @@ export interface MusicYouTubePlaylistSnapshotWrite {
   playlistId: string;
   name: string;
   videoIds: string[];
+  videos?: MusicYouTubePlaylistVideoWrite[];
   resolvedAt: number;
+}
+export interface MusicYouTubePlaylistVideoWrite {
+  videoId: string;
+  title: string;
+  channel: string;
 }
 export interface MusicYouTubeSourceFailureWrite {
   collectionId: string;
@@ -673,6 +680,7 @@ function parseItemEntry(value: unknown, label: string): MusicItemListEntry {
     sourceKind: enumeration(row.sourceKind, sourceKinds, `${label}.sourceKind`), mediaKind: enumeration(row.mediaKind, mediaKinds, `${label}.mediaKind`),
     title: string(row.title, `${label}.title`), artist: string(row.artist, `${label}.artist`), album: string(row.album, `${label}.album`),
     localRootId: nullable(row.localRootId, string, `${label}.localRootId`), relativePath: nullable(row.relativePath, string, `${label}.relativePath`),
+    sourceCollectionIds: array(row.sourceCollectionIds, string, `${label}.sourceCollectionIds`),
     originalArtworkIdentity: nullable(row.originalArtworkIdentity, string, `${label}.originalArtworkIdentity`), artworkOverride: nullable(row.artworkOverride, string, `${label}.artworkOverride`),
     durationMs: nullable(row.durationMs, number, `${label}.durationMs`), availability: enumeration(row.availability, itemAvailability, `${label}.availability`),
     reviewState: enumeration(row.reviewState, reviewStates, `${label}.reviewState`), discoveredAt: number(row.discoveredAt, `${label}.discoveredAt`),

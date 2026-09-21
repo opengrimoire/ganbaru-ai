@@ -1,5 +1,20 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+const { musicArtworkDataUrl, musicEmbeddedArtworkDataUrl, musicYouTubeThumbnailDataUrl } = vi.hoisted(() => ({
+  musicArtworkDataUrl: vi.fn(async (path: string) => `file:${path}`),
+  musicEmbeddedArtworkDataUrl: vi.fn(async (path: string) => `embedded:${path}`),
+  musicYouTubeThumbnailDataUrl: vi.fn(async (videoId: string) => `youtube:${videoId}`),
+}));
+
+vi.mock("$lib/music/music-artwork-cache", () => ({
+  musicArtworkDataUrl,
+  musicEmbeddedArtworkDataUrl,
+  musicYouTubeThumbnailDataUrl,
+}));
+
 import {
+  musicReviewArtworkDataUrl,
+  musicReviewDurationMs,
   musicReviewSource,
   nextMusicWeight,
   parseMusicReviewAutoplay,
@@ -33,6 +48,14 @@ function detail(sourceKind: "local-file" | "youtube-video"): MusicInspectorDetai
 }
 
 describe("music review helpers", () => {
+  it("uses the duration learned on first playback before a stale Review item refreshes", () => {
+    expect(musicReviewDurationMs(null, 96_000, null)).toBe(96_000);
+    expect(musicReviewDurationMs(null, 96_000, 94_000)).toBe(96_000);
+    expect(musicReviewDurationMs(97_000, 96_000, 94_000)).toBe(97_000);
+    expect(musicReviewDurationMs(null, null, 94_000)).toBe(94_000);
+    expect(musicReviewDurationMs(null, null, null)).toBe(0);
+  });
+
   it("defaults unsafe stored autoplay values", () => {
     expect(parseMusicReviewAutoplay("true")).toBe(false);
   });
@@ -54,6 +77,18 @@ describe("music review helpers", () => {
         path: "/Music/album/song.flac",
         artworkPath: "/Music/album/cover.jpg",
       });
+  });
+
+  it("shows cached YouTube artwork in Review while respecting a chosen override", async () => {
+    const youtubeDetail = detail("youtube-video");
+    youtubeDetail.item.youtubeVideoId = "abcDEF_1234";
+
+    expect(await musicReviewArtworkDataUrl(youtubeDetail, [])).toBe("youtube:abcDEF_1234");
+    expect(musicYouTubeThumbnailDataUrl).toHaveBeenCalledWith("abcDEF_1234");
+
+    youtubeDetail.item.artworkOverride = "/Music/custom.jpg";
+    expect(await musicReviewArtworkDataUrl(youtubeDetail, [])).toBe("file:/Music/custom.jpg");
+    expect(musicArtworkDataUrl).toHaveBeenCalledWith("/Music/custom.jpg");
   });
 
   it("keeps playlist ordering independent from selection while filtering", () => {

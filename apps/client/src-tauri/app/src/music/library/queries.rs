@@ -319,6 +319,14 @@ pub(crate) async fn item_window(
              WHERE location.item_id = item.id
              ORDER BY location.availability = 'available' DESC, location.updated_at DESC, location.id
              LIMIT 1) AS relative_path,
+            COALESCE((
+                SELECT json_group_array(collection_id) FROM (
+                    SELECT source_item.collection_id AS collection_id
+                    FROM music_source_collection_items AS source_item
+                    WHERE source_item.item_id = item.id
+                    ORDER BY source_item.collection_id
+                )
+            ), '[]') AS source_collection_ids_json,
             item.original_artwork_identity,
             item.artwork_override,
             item.duration_ms, item.availability, item.review_state,

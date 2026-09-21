@@ -25,6 +25,7 @@ const item = {
   album: "Soundtrack",
   localRootId: "root-1",
   relativePath: "Games/Nier/Focus.flac",
+  sourceCollectionIds: ["source-1"],
   originalArtworkIdentity: "sidecar:Games/Nier/cover.jpg",
   artworkOverride: null,
   durationMs: 120_000,

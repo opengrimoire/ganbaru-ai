@@ -29,6 +29,7 @@
   import {
     isMusicReviewEditableTarget,
     musicReviewArtworkDataUrl,
+    musicReviewDurationMs,
   } from "$lib/music/music-review";
   import {
     buildMusicReviewTree,
@@ -109,6 +110,7 @@
   let preparingNext = $state(false);
   let ignoreConfirmOpen = $state(false);
   let selectionPlaybackHandled = $state(false);
+  let reviewStartItemId = $state<string | null>(null);
   interface PlaylistManagerHandle {
     cancelManaging: () => Promise<void>;
     finishManaging: () => Promise<void>;
@@ -174,10 +176,16 @@
     ? (detail.item.artistOverride ?? detail.item.originalArtist) || t("music.builder.noArtist")
     : item?.artist || t("music.builder.noArtist"));
   const reviewPlayerReady = $derived(audition.ownsPlayback && audition.reviewItemId === item?.id);
+  const reviewPlaybackStarting = $derived(Boolean(item && (
+    (reviewStartItemId === item.id && !reviewPlayerReady)
+    || (reviewPlayerReady && player.youtubePlaybackStarting)
+  )));
   const prefetchedArtworkUrl = $derived(item ? prefetchedArtworkUrls[item.id] ?? null : null);
-  const previewDurationMs = $derived(reviewPlayerReady
-    ? player.snapshot.durationMs
-    : detail?.item.durationMs ?? item?.durationMs ?? 0);
+  const previewDurationMs = $derived(musicReviewDurationMs(
+    reviewPlayerReady ? player.snapshot.durationMs : null,
+    detail?.item.youtubeVideoId ? player.youtubeKnownDurations[detail.item.youtubeVideoId] ?? null : null,
+    detail?.item.durationMs ?? item?.durationMs ?? null,
+  ));
   const seekSliderProgress = $derived(reviewPlayerReady && player.progressMax > 0
     ? `${Math.min(100, Math.max(0, (player.progressValue / player.progressMax) * 100))}%`
     : "0%");
@@ -455,6 +463,22 @@
     lastSelectedId = null;
   }
 
+  /** Gives YouTube previews immediate feedback while the review queue is prepared. */
+  async function toggleReviewPlayback(): Promise<void> {
+    if (!detail || reviewStartItemId === detail.item.id || (reviewPlayerReady && player.youtubePlaybackStarting)) return;
+    if (reviewPlayerReady) {
+      await player.togglePlay();
+      return;
+    }
+    const itemId = detail.item.id;
+    if (detail.item.sourceKind === "youtube-video") reviewStartItemId = itemId;
+    try {
+      await audition.preview(detail, sources.bindings, true);
+    } finally {
+      if (reviewStartItemId === itemId) reviewStartItemId = null;
+    }
+  }
+
   function handleKeydown(event: KeyboardEvent): void {
     if (viewState.managingPlaylists) return;
     if (event.isComposing || event.altKey || isMusicReviewEditableTarget(event.target)) return;
@@ -468,8 +492,7 @@
     }
     if (event.code === "Space" && !modified) {
       event.preventDefault();
-      if (detail && audition.reviewItemId !== detail.item.id) void audition.preview(detail, sources.bindings, true);
-      else void player.togglePlay();
+      void toggleReviewPlayback();
     } else if (event.key === "ArrowLeft" && modified) {
       event.preventDefault(); void selectRelative(-1);
     } else if (event.key === "ArrowRight" && modified) {
@@ -560,8 +583,16 @@
       </div>
     {:else if item}
       <div class="review-player mt-4 flex min-w-0 items-center gap-4">
-        <div bind:this={surface} class="review-media relative grid h-28 w-28 shrink-0 place-items-center overflow-hidden rounded-xl">
-          {#if item.sourceKind === "local-file" && !player.localHasVideo}
+        <div bind:this={surface} class:review-media-youtube={item.sourceKind === "youtube-video"} class="review-media relative grid h-28 w-28 shrink-0 place-items-center overflow-hidden rounded-xl">
+          {#if item.sourceKind === "youtube-video"}
+            {#if prefetchedArtworkUrl}
+              <img src={prefetchedArtworkUrl} alt="" class="absolute inset-0 h-full w-full object-contain" draggable="false" />
+            {:else if !player.currentSource || !reviewPlayerReady}
+              <div class="grid h-full w-full place-items-center rounded-xl bg-primary/10 text-primary">
+                <Disc3 size={38} strokeWidth={1.3} />
+              </div>
+            {/if}
+          {:else if item.sourceKind === "local-file" && !player.localHasVideo}
             {#if prefetchedArtworkUrl}
               <img src={prefetchedArtworkUrl} alt="" class="absolute inset-0 h-full w-full object-contain" draggable="false" onload={() => player.handleArtworkLoaded()} />
             {:else if reviewPlayerReady && player.currentArtworkUrl}
@@ -599,8 +630,8 @@
                 <span>{formatPlaybackTime(previewDurationMs)}</span>
               </div>
             </div>
-            <button type="button" onclick={() => { if (detail && !reviewPlayerReady) void audition.preview(detail, sources.bindings, true); else void player.togglePlay(); }} disabled={!detail || item.availability !== "available"} class="review-play shrink-0" aria-label={reviewPlayerReady && player.isPlaying ? t("music.pause") : t("music.play")} title={t("music.builder.reviewPlayTitle", formatShortcut("Space"))}>
-              {#if reviewPlayerReady && player.isPlaying}<Pause size={18} fill="currentColor" />{:else}<Play size={18} fill="currentColor" />{/if}
+            <button type="button" onclick={() => { void toggleReviewPlayback(); }} disabled={!detail || item.availability !== "available" || reviewPlaybackStarting} class="review-play shrink-0" aria-label={reviewPlaybackStarting ? t("music.builder.loading") : reviewPlayerReady && player.isPlaying ? t("music.pause") : t("music.play")} title={t("music.builder.reviewPlayTitle", formatShortcut("Space"))}>
+              {#if reviewPlaybackStarting}<LoaderCircle size={20} strokeWidth={3} class="animate-spin motion-reduce:animate-none" />{:else if reviewPlayerReady && player.isPlaying}<Pause size={18} fill="currentColor" />{:else}<Play size={18} fill="currentColor" />{/if}
             </button>
           </div>
         </div>
@@ -726,6 +757,7 @@
   .review-action { display: inline-flex; min-height: 2.25rem; align-items: center; justify-content: center; gap: 0.375rem; border-radius: 0.5rem; padding: 0 0.5rem; font-size: calc(0.72rem * var(--type-scale)); font-weight: 600; }
   .review-action:disabled { cursor: not-allowed; }
   .review-action:disabled:not(.review-save) { opacity: 0.4; }
+  .review-media-youtube { width: 9.3333rem; }
   .review-controls-locked :global(button),
   .review-controls-locked :global(input),
   .review-controls-locked :global([role="button"]) { cursor: not-allowed !important; opacity: 0.38; }
@@ -743,6 +775,7 @@
   @container (width < 380px) {
     .review-player { align-items: flex-start; }
     .review-media { height: 5rem; width: 5rem; }
+    .review-media-youtube { width: 6.6667rem; }
     .review-play { height: 2rem; width: 2rem; }
   }
   @container (width >= 620px) and (width < 860px) {

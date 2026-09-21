@@ -4,6 +4,7 @@
   import Check from "@lucide/svelte/icons/check";
   import Gauge from "@lucide/svelte/icons/gauge";
   import ListMusic from "@lucide/svelte/icons/list-music";
+  import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import CalendarClock from "@lucide/svelte/icons/calendar-clock";
   import Pause from "@lucide/svelte/icons/pause";
   import Play from "@lucide/svelte/icons/play";
@@ -1046,12 +1047,14 @@
           <button
             type="button"
             onclick={() => { void player.togglePlay(); }}
-            disabled={!player.currentSource}
+            disabled={!player.currentSource || player.youtubePlaybackStarting}
             class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
-            title={player.isPlaying ? t("music.pauseShortcut") : t("music.playShortcut")}
-            aria-label={player.isPlaying ? t("music.pause") : t("music.play")}
+            title={player.youtubePlaybackStarting ? t("music.builder.loading") : player.isPlaying ? t("music.pauseShortcut") : t("music.playShortcut")}
+            aria-label={player.youtubePlaybackStarting ? t("music.builder.loading") : player.isPlaying ? t("music.pause") : t("music.play")}
           >
-            {#if player.isPlaying}
+            {#if player.youtubePlaybackStarting}
+              <LoaderCircle size={musicIconSize} strokeWidth={3} class="animate-spin motion-reduce:animate-none" />
+            {:else if player.isPlaying}
               <Pause size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
             {:else}
               <Play size={musicIconSize} strokeWidth={musicIconStrokeWidth} />

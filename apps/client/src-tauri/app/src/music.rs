@@ -26,6 +26,8 @@ pub(crate) mod host;
 pub(crate) mod library;
 pub(crate) mod root_bindings;
 mod youtube_host;
+pub(crate) mod youtube_metadata;
+pub(crate) mod youtube_thumbnail;
 
 pub(crate) use host::setup_youtube_host;
 

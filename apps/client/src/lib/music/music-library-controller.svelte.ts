@@ -368,13 +368,18 @@ export class MusicLibraryController {
     const location = this.location;
     const key = locationKey(location);
     const state = { ...(this.destinationStates[key] ?? defaultDestinationState(location)) };
+    const reviewLocation = { kind: "review" } as const;
+    const reviewState = { ...(this.destinationStates.review ?? defaultDestinationState(reviewLocation)) };
     const nowMs = this.now();
     this.busy = true;
     this.error = null;
     try {
-      const [window, playlists, sources, issues] = await Promise.all([
+      const [window, sourceReviewWindow, playlists, sources, issues] = await Promise.all([
         hasItemWindow(location)
           ? this.api.itemWindow(itemWindowRequest(location, state, nowMs))
+          : Promise.resolve(null),
+        location.kind === "sources"
+          ? this.api.itemWindow(itemWindowRequest(reviewLocation, reviewState, nowMs))
           : Promise.resolve(null),
         this.api.playlistSummaries(nowMs, 0, 500),
         this.api.sourceSummaries(nowMs, 0, 500),
@@ -383,9 +388,15 @@ export class MusicLibraryController {
       if (!this.isCurrent(generation, vaultId)) return false;
       if (window && location.kind === "review"
         && !await this.completeReviewWindow(window, state, nowMs, generation, vaultId)) return false;
+      if (sourceReviewWindow
+        && !await this.completeReviewWindow(sourceReviewWindow, reviewState, nowMs, generation, vaultId)) return false;
       if (window) {
         this.windows[key] = window;
         this.staleWindowKeys.delete(key);
+      }
+      if (sourceReviewWindow) {
+        this.windows.review = sourceReviewWindow;
+        this.staleWindowKeys.delete("review");
       }
       this.playlistSummaries = playlists;
       this.sourceSummaries = sources;

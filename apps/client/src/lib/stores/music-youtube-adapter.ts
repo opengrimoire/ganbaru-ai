@@ -61,6 +61,8 @@ interface MusicYouTubeAdapterContext {
   canPlayNext(): boolean;
   playNext(): Promise<void>;
   handlePosition(positionMs: number): void;
+  onDurationKnown(videoId: string, durationMs: number): void;
+  setPlaybackStarting(starting: boolean): void;
   getHostUrl?: typeof getYouTubeHostUrl;
   persistYouTubeVideo?: (request: MusicYouTubeVideoWrite) => Promise<unknown>;
   persistYouTubePlaylist?: (request: MusicYouTubePlaylistSnapshotWrite) => Promise<unknown>;
@@ -215,6 +217,7 @@ export function createMusicYouTubeAdapter(
     generation: number,
     autoplay: boolean,
   ): Promise<void> {
+    context.setPlaybackStarting(autoplay);
     lastMetadataSignature = "";
     resolvingPlaylist = source.kind === "youtube-playlist"
       ? {
@@ -242,6 +245,7 @@ export function createMusicYouTubeAdapter(
       await ensureHostFrame(generation, source, persisted, autoplay);
     } catch (error) {
       if (!context.loadRuntime.isCurrent(generation)) return;
+      context.setPlaybackStarting(false);
       clearPlaylistResolution();
       state.playerError = error instanceof Error ? error.message : String(error);
       state.snapshot = {
@@ -349,6 +353,7 @@ export function createMusicYouTubeAdapter(
       return;
     }
     if (message.type === "ganbaru-ai-youtube-error") {
+      context.setPlaybackStarting(false);
       const failedPlaylist = resolvingPlaylist;
       clearPlaylistResolution();
       const resolutionState = message.code === 101 || message.code === 150
@@ -389,6 +394,9 @@ export function createMusicYouTubeAdapter(
     }
     if (state.currentSource?.kind === "youtube-playlist" && !resolvingPlaylist) return;
     applyMetadataTitle(message.videoId, message.title);
+    if (message.videoId && message.durationMs !== null && Number.isFinite(message.durationMs) && message.durationMs > 0) {
+      context.onDurationKnown(message.videoId, message.durationMs);
+    }
     if (message.videoId) {
       const signature = [message.videoId, message.title ?? "", message.channel ?? "", message.durationMs ?? ""].join("\u0000");
       if (signature !== lastMetadataSignature) {
@@ -404,6 +412,9 @@ export function createMusicYouTubeAdapter(
       }
     }
     if (message.status === "playing" && currentTime() < optimisticPauseUntil) return;
+    if (message.status !== "ready" && message.status !== "loading") {
+      context.setPlaybackStarting(false);
+    }
     if (message.status !== "playing") optimisticPauseUntil = 0;
     const wasEnded = state.snapshot.status === "ended";
     const status = stableStatusDuringYouTubeBuffering(
@@ -433,6 +444,7 @@ export function createMusicYouTubeAdapter(
   }
 
   function destroy(): void {
+    context.setPlaybackStarting(false);
     clearPlaylistResolution();
     if (state.currentSource && isYouTubeSource(state.currentSource)) {
       post({ action: "stop" });

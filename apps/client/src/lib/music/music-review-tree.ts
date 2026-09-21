@@ -97,6 +97,11 @@ export function firstMusicReviewTreeItemId(items: readonly MusicItemListEntry[])
     ?? null;
 }
 
+/** Counts unique canonical items that still require review. */
+export function musicUnreviewedItemCount(items: readonly MusicItemListEntry[]): number {
+  return new Set(items.filter((item) => item.reviewState === "unreviewed").map((item) => item.id)).size;
+}
+
 /** Finds the next unreviewed track in tree order, wrapping once and honoring session skips. */
 export function nextPendingMusicReviewTreeItemId(
   items: readonly MusicItemListEntry[],

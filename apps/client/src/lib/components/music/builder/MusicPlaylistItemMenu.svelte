@@ -21,7 +21,8 @@
 
   let {
     item,
-    playlistName,
+    playlistName = "",
+    context = "playlist",
     showLocationAction = true,
     onShowLocation,
     onSnooze,
@@ -29,12 +30,13 @@
     onRemove,
   }: {
     item: MusicItemListEntry;
-    playlistName: string;
+    playlistName?: string;
+    context?: "playlist" | "source";
     showLocationAction?: boolean;
     onShowLocation: (item: MusicItemListEntry) => Promise<void>;
     onSnooze: (item: MusicItemListEntry, duration: MusicSnoozeDuration, everywhere: boolean) => Promise<void>;
-    onWeight: (item: MusicItemListEntry, weight: MusicWeight) => Promise<void>;
-    onRemove: (item: MusicItemListEntry) => Promise<void>;
+    onWeight?: (item: MusicItemListEntry, weight: MusicWeight) => Promise<void>;
+    onRemove?: (item: MusicItemListEntry) => Promise<void>;
   } = $props();
 
   const { t } = getLocalization();
@@ -167,23 +169,25 @@
             {@render metadataRow(t("music.builder.sources"), item.sourceKind === "local-file" ? t("music.builder.local") : t("music.builder.youtube"))}
           </dl>
         {:else if subpanel === "snooze"}
-          <button type="button" class="option-row" onclick={() => { void run(() => onSnooze(item, "today", false)); }}>{t("music.itemMenu.notToday")}</button>
-          <button type="button" class="option-row" onclick={() => { void run(() => onSnooze(item, "week", false)); }}>{t("music.itemMenu.snoozeWeek")}</button>
+          <button type="button" class="option-row" onclick={() => { void run(() => onSnooze(item, "today", context === "source")); }}>{t("music.itemMenu.notToday")}</button>
+          <button type="button" class="option-row" onclick={() => { void run(() => onSnooze(item, "week", context === "source")); }}>{t("music.itemMenu.snoozeWeek")}</button>
           <button type="button" class="option-row" onclick={() => { void run(() => onSnooze(item, "until-resumed", true)); }}>{t("music.itemMenu.snoozeEverywhere")}</button>
         {:else if subpanel === "weight"}
           {#each ["rarely", "less-often", "normal", "more-often", "much-more-often"] as weight (weight)}
             {@const typedWeight = weight as MusicWeight}
-            <button type="button" class="option-row" onclick={() => { void run(() => onWeight(item, typedWeight)); }}><span>{weightLabel(typedWeight)}</span>{#if item.membershipWeight === typedWeight}<Check size={12} />{/if}</button>
+            <button type="button" class="option-row" onclick={() => { if (onWeight) void run(() => onWeight(item, typedWeight)); }}><span>{weightLabel(typedWeight)}</span>{#if item.membershipWeight === typedWeight}<Check size={12} />{/if}</button>
           {/each}
         {:else}
           {@render panelRow(t("music.builder.details"), item.album || t("music.builder.noAlbum"), Info, "details")}
           {@render panelRow(t("music.builder.snoozeTrack"), item.activeSnoozeCount > 0 ? t("music.builder.snoozed") : "", Clock3, "snooze")}
-          {@render panelRow(t("music.builder.frequency"), weightLabel(item.membershipWeight), SlidersHorizontal, "weight")}
+          {#if context === "playlist"}{@render panelRow(t("music.builder.frequency"), weightLabel(item.membershipWeight), SlidersHorizontal, "weight")}{/if}
           {#if item.sourceKind === "local-file" && showLocationAction}
             <button type="button" class="action-row" disabled={busy} onclick={() => { void run(() => onShowLocation(item)); }}><FolderSearch size={14} />{t("music.itemMenu.showLocation")}</button>
           {/if}
-          <div class="my-1 border-t border-border/60"></div>
-          <button type="button" class="action-row text-destructive" disabled={busy} onclick={() => { void run(() => onRemove(item)); }}><Trash2 size={14} />{t("music.builder.removeFromPlaylist", playlistName)}</button>
+          {#if context === "playlist" && onRemove}
+            <div class="my-1 border-t border-border/60"></div>
+            <button type="button" class="action-row text-destructive" disabled={busy} onclick={() => { void run(() => onRemove(item)); }}><Trash2 size={14} />{t("music.builder.removeFromPlaylist", playlistName)}</button>
+          {/if}
         {/if}
       </div>
 

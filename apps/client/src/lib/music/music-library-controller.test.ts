@@ -9,7 +9,7 @@ function window(id: string, title = id): MusicItemWindow {
   return {
     items: [{
       id, identityKey: `local:${id}`, sourceKind: "local-file", mediaKind: "audio",
-      title, artist: "", album: "", localRootId: "root-1", relativePath: `${title}.flac`, originalArtworkIdentity: null, artworkOverride: null, durationMs: null, availability: "available",
+      title, artist: "", album: "", localRootId: "root-1", relativePath: `${title}.flac`, sourceCollectionIds: ["source-1"], originalArtworkIdentity: null, artworkOverride: null, durationMs: null, availability: "available",
       reviewState: "unreviewed", discoveredAt: 1, updatedAt: 1, version: 1,
       playlistCount: 0, activeSnoozeCount: 0, lastPlayedAt: null, playCount: 0,
       membershipId: null, membershipPosition: null, membershipWeight: null,
@@ -67,6 +67,21 @@ describe("Music library controller", () => {
     controller.navigate({ kind: "review" });
     expect(await controller.ensureCurrentDestination()).toBe(true);
     expect(itemWindow).toHaveBeenCalledTimes(2);
+  });
+
+  it("refreshes the retained Review projection while Sources is open", async () => {
+    let reviewId = "review-old";
+    const itemWindow = vi.fn(async (request) => window(
+      request.destination === "review" ? reviewId : request.destination,
+    ));
+    const controller = createMusicLibraryController(api(itemWindow));
+    controller.setVault("vault-1");
+    await controller.preloadCoreDestinations();
+    controller.navigate({ kind: "sources" });
+    reviewId = "review-new";
+
+    expect(await controller.refreshAfterMutation()).toBe(true);
+    expect(controller.windows.review?.items[0]?.id).toBe("review-new");
   });
 
   it("loads the complete Review window before exposing the preloaded workspace", async () => {

@@ -4,12 +4,11 @@
   import ListMusic from "@lucide/svelte/icons/list-music";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Plus from "@lucide/svelte/icons/plus";
-  import RadioTower from "@lucide/svelte/icons/radio-tower";
   import Search from "@lucide/svelte/icons/search";
   import X from "@lucide/svelte/icons/x";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type { MusicDestinationState } from "$lib/music/music-library-controller.svelte";
-  import type { MusicPlaylistSummary, MusicSourceSummary } from "$lib/music/library-contracts";
+  import type { MusicPlaylistSummary } from "$lib/music/library-contracts";
   import type { MusicBuilderDestination } from "$lib/music/music-builder-routing";
   import { orderMusicPlaylists, systemMusicPlaylistName } from "$lib/music/music-system-playlists";
   import { getSoundscapeStore } from "$lib/stores/soundscape.svelte";
@@ -21,27 +20,21 @@
     destination,
     state,
     playlists,
-    sources,
-    selectedSourceId,
     soundscapeFilter,
     onSearch,
     onNavigate,
     onCreatePlaylist,
     onManagePlaylists,
-    onSelectSource,
     onSoundscapeFilter,
   }: {
     destination: MusicBuilderDestination;
     state: MusicDestinationState;
     playlists: MusicPlaylistSummary[];
-    sources: MusicSourceSummary[];
-    selectedSourceId: string | null;
     soundscapeFilter: SoundscapeFilter;
     onSearch: (search: string) => void;
     onNavigate: (destination: MusicBuilderDestination) => void;
     onCreatePlaylist: () => void;
     onManagePlaylists: () => void;
-    onSelectSource: (sourceId: string | null) => void;
     onSoundscapeFilter: (filter: SoundscapeFilter) => void;
   } = $props();
 
@@ -73,12 +66,6 @@
       {/each}
     </div>
     <div class="shrink-0 p-2 pt-0"><button type="button" onclick={onManagePlaylists} class="flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-secondary text-[0.68rem] font-medium hover:bg-accent"><Pencil size={12} />{t("music.builder.managePlaylists")}</button></div>
-  {:else if destination.kind === "sources"}
-    <div class="shrink-0 p-2"><h2 class="px-1 text-[0.68rem] font-semibold text-muted-foreground">{t("music.builder.sources")}</h2></div>
-    <div class="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
-      <button type="button" class:active-row={selectedSourceId === null} class="context-row" onclick={() => onSelectSource(null)}><span class="context-icon"><RadioTower size={14} /></span><span class="min-w-0 flex-1 truncate">{t("music.builder.allSources")}</span><span class="context-count">{sources.length}</span></button>
-      {#each sources as source (source.id)}<button type="button" class:active-row={selectedSourceId === source.id} class="context-row" onclick={() => onSelectSource(source.id)}><span class="relative context-icon"><RadioTower size={13} /><i class:warning-dot={source.health === "issues"} class="health-dot"></i></span><span class="min-w-0 flex-1 truncate">{source.name}</span><span class="context-count">{source.openIssueCount}</span></button>{/each}
-    </div>
   {:else if destination.kind === "soundscapes"}
     <div class="shrink-0 p-2"><h2 class="px-1 text-[0.68rem] font-semibold text-muted-foreground">{t("music.builder.soundscapes")}</h2></div>
     <div class="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
@@ -96,6 +83,4 @@
   .active-row { background: color-mix(in srgb, var(--primary) 10%, transparent); }
   .context-icon { display: grid; height: 1.5rem; width: 1.5rem; flex: none; place-items: center; color: var(--muted-foreground); }
   .context-count { flex: none; color: var(--muted-foreground); font-size: calc(0.58rem * var(--type-scale)); font-variant-numeric: tabular-nums; }
-  .health-dot { position: absolute; right: 0.05rem; top: 0.05rem; height: 0.35rem; width: 0.35rem; border-radius: 999px; background: var(--primary); }
-  .warning-dot { background: var(--destructive); }
 </style>

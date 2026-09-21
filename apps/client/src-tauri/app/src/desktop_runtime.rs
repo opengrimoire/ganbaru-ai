@@ -1096,6 +1096,8 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             music::music_reveal_local_file,
             music::music_save_playback_state,
             music::host::music_youtube_host_url,
+            music::youtube_metadata::music_youtube_metadata,
+            music::youtube_thumbnail::music_youtube_thumbnail,
             media_controls::update_media_controls,
             media_player::media_player_probe,
             media_player::media_player_load,

@@ -8,7 +8,7 @@ import MusicReviewTree from "./MusicReviewTree.svelte";
 function item(id: string, title: string, relativePath: string): MusicItemListEntry {
   return {
     id, identityKey: id, sourceKind: "local-file", mediaKind: "audio", title, artist: "", album: "",
-    localRootId: "root-1", relativePath, originalArtworkIdentity: null, artworkOverride: null, durationMs: null, availability: "available", reviewState: "unreviewed",
+    localRootId: "root-1", relativePath, sourceCollectionIds: ["source-1"], originalArtworkIdentity: null, artworkOverride: null, durationMs: null, availability: "available", reviewState: "unreviewed",
     discoveredAt: 1, updatedAt: 1, version: 1, playlistCount: 0, activeSnoozeCount: 0,
     lastPlayedAt: null, playCount: 0, membershipId: null, membershipPosition: null,
     membershipWeight: null, membershipEnabled: null, membershipVersion: null,

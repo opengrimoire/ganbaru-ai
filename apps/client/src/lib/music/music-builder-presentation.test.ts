@@ -17,6 +17,7 @@ const item: MusicItemListEntry = {
   album: "",
   localRootId: "root-1",
   relativePath: "Track.flac",
+  sourceCollectionIds: ["source-1"],
   originalArtworkIdentity: null,
   artworkOverride: null,
   durationMs: 65_000,
@@ -54,6 +55,7 @@ describe("music builder presentation", () => {
   it("maps issue and review states to semantic tones", () => {
     expect(musicAvailabilityTone("missing")).toBe("danger");
     expect(musicAvailabilityTone("ambiguous")).toBe("warning");
+    expect(musicAvailabilityTone("unknown")).toBe("neutral");
     expect(musicAvailabilityTone("available")).toBe("neutral");
     expect(musicReviewTone("unreviewed")).toBe("accent");
     expect(musicReviewTone("ignored")).toBe("muted");

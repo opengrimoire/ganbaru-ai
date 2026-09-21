@@ -15,6 +15,7 @@ const item: MusicItemListEntry = {
   album: "Soundtrack",
   localRootId: "root-1",
   relativePath: "Soundtrack/Quiet morning.flac",
+  sourceCollectionIds: ["source-1"],
   originalArtworkIdentity: null,
   artworkOverride: null,
   durationMs: 120_000,
