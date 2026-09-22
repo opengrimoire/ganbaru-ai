@@ -12,12 +12,13 @@
   const { t } = getLocalization();
 </script>
 
-<label class="grid gap-1 text-[0.733333rem] font-medium text-muted-foreground">
+<label class="grid gap-2 text-[0.866667rem] font-semibold text-foreground">
   <span>{t("projects.detail.description")}</span>
   <textarea
     {value}
-    rows="5"
-    class="min-h-28 resize-none rounded-md border border-border bg-card px-3 py-2 text-[0.833333rem] text-foreground outline-none focus:ring-2 focus:ring-ring/30"
+    rows="3"
+    placeholder={t("projects.detail.descriptionPlaceholder")}
+    class="min-h-24 resize-y rounded-md bg-transparent px-2 py-2 text-[0.866667rem] font-normal leading-relaxed text-foreground placeholder:text-muted-foreground/70 hover:bg-muted/30"
     oninput={(event) => onChange(event.currentTarget.value)}
   ></textarea>
 </label>
