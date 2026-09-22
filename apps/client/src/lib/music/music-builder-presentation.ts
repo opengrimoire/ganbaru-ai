@@ -36,7 +36,7 @@ export function musicAvailabilityTone(
   availability: MusicItemAvailability,
 ): "neutral" | "warning" | "danger" {
   if (availability === "missing" || availability === "unavailable") return "danger";
-  if (availability === "ambiguous" || availability === "unknown") return "warning";
+  if (availability === "ambiguous") return "warning";
   return "neutral";
 }
 

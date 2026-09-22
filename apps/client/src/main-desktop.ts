@@ -1,6 +1,6 @@
 import { Temporal } from "@js-temporal/polyfill";
 (globalThis as unknown as { Temporal: typeof Temporal }).Temporal = Temporal;
-import { mount, unmount } from "svelte";
+import { mount, tick, unmount } from "svelte";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ensureConfigLoaded, flushConfig } from "./lib/vault/config";
@@ -23,6 +23,7 @@ import {
 } from "./lib/components/pomodoro/blocked-screen";
 import { applyPlatformProfileToDocument } from "./lib/platform";
 import { installModalKeyboardRouter } from "./lib/modal-focus";
+import { finishDesktopReadiness } from "./lib/windows/desktop-readiness";
 
 applyPlatformProfileToDocument();
 installModalKeyboardRouter();
@@ -85,21 +86,6 @@ function safeStorage(): Storage | undefined {
     return window.localStorage;
   } catch {
     return undefined;
-  }
-}
-
-async function finishVaultOwnershipTransition(): Promise<void> {
-  const cover = document.getElementById("vault-ownership-transition-cover");
-  const storageKey = cover?.dataset.storageKey;
-  await document.fonts.ready;
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-  cover?.remove();
-  if (!storageKey) return;
-  try {
-    window.sessionStorage.removeItem(storageKey);
-  } catch {
-    // The cover can still be removed when session storage is unavailable.
   }
 }
 
@@ -250,16 +236,17 @@ const appPromise = (async () => {
   });
 })();
 
-void appPromise
-  .then(async () => {
-    await finishVaultOwnershipTransition();
-    if (getCurrentWindow().label !== "main") return;
-    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
-    await invoke("reveal_main_window");
-  })
-  .catch(async (error: unknown) => {
-    await finishVaultOwnershipTransition();
+void finishDesktopReadiness({
+  mounted: appPromise,
+  flushUpdates: tick,
+  document,
+  clearTransitionMarker: (key) => window.sessionStorage.removeItem(key),
+  revealMainWindow: getCurrentWindow().label === "main"
+    ? () => invoke<void>("reveal_main_window")
+    : null,
+  onError: (error) => {
     console.error("Failed to reveal the initialized main window:", error);
-  });
+  },
+});
 
 export default appPromise;

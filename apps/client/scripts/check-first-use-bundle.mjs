@@ -76,6 +76,31 @@ function readBaseline(value) {
   });
   return {
     routes,
+    noVaultStartup: (() => {
+      const contract = requireObject(root.noVaultStartup, "baseline noVaultStartup");
+      if (!Array.isArray(contract.roots) || contract.roots.length === 0) {
+        throw new Error("baseline noVaultStartup roots must be a non-empty array");
+      }
+      return {
+        roots: contract.roots.map((value, index) => {
+          const label = `baseline noVaultStartup root ${index}`;
+          const root = requireObject(value, label);
+          const loadedModules = requireStringArray(root.loadedModules, `${label} loadedModules`);
+          if (loadedModules.length === 0) {
+            throw new Error(`${label} loadedModules must not be empty`);
+          }
+          return { name: requireString(root.name, `${label} name`), loadedModules };
+        }),
+        forbiddenModules: requireStringArray(
+          contract.forbiddenModules,
+          "baseline noVaultStartup forbiddenModules",
+        ),
+        forbiddenModuleSubstrings: requireStringArray(
+          contract.forbiddenModuleSubstrings,
+          "baseline noVaultStartup forbiddenModuleSubstrings",
+        ),
+      };
+    })(),
     shell: (() => {
       const shell = requireObject(root.shell, "baseline shell");
       return {
@@ -343,6 +368,15 @@ function evaluateStaticModuleContract(contract, label) {
 
 const shellContract = evaluateStaticModuleContract(baseline.shell, "initial shell");
 
+const noVaultStartupContracts = baseline.noVaultStartup.roots.map((root) => {
+  const contract = evaluateStaticModuleContract({
+    ...root,
+    forbiddenModules: baseline.noVaultStartup.forbiddenModules,
+    forbiddenModuleSubstrings: baseline.noVaultStartup.forbiddenModuleSubstrings,
+  }, root.name);
+  return { name: root.name, chunks: contract.closure.map((chunk) => chunk.fileName) };
+});
+
 const chatShellContract = evaluateStaticModuleContract(baseline.chatShell, "Chat shell");
 
 const editorRuntimeChunk = chunks.find((chunk) => (
@@ -519,6 +553,7 @@ if (failures.length > 0) {
 
 console.log(JSON.stringify({
   routes,
+  noVaultStartup: noVaultStartupContracts,
   shell: {
     chunks: shellContract.closure.map((chunk) => chunk.fileName),
     requiredModules: baseline.shell.requiredModules,

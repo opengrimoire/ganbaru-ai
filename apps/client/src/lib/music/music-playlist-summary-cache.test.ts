@@ -8,6 +8,7 @@ const playlist = (id: string): MusicPlaylistSummary => ({
   name: id,
   icon: "lucide:list-music",
   shuffleEnabled: false,
+  mixEnabled: false,
   repeatMode: "all",
   intendedUses: [],
   totalCount: 1,

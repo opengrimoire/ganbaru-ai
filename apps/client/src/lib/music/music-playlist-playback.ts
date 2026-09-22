@@ -63,13 +63,16 @@ export interface MusicInitialQueueSelection {
   remainingShuffleOrder: number[];
 }
 
-const weightValues: Record<MusicWeight, number> = {
-  rarely: 1,
-  "less-often": 2,
-  normal: 4,
-  "more-often": 7,
-  "much-more-often": 11,
+/** Relative selection weights shown by the five Mix dice. */
+export const MUSIC_MIX_WEIGHT_VALUES: Readonly<Record<MusicWeight, number>> = {
+  rarely: 0.5,
+  "less-often": 0.75,
+  normal: 1,
+  "more-often": 1.5,
+  "much-more-often": 2,
 };
+
+const mixRecentMultipliers = [0.05, 0.2, 0.4, 0.65, 0.85] as const;
 
 export const emptyMusicSkipBreakdown = (): Record<MusicPlaylistSkipReason, number> => ({
   disabled: 0,
@@ -164,28 +167,62 @@ export function eligibleMusicQueueIndices(
   return entries.flatMap((entry, index) => evaluateMusicQueueEntry(entry, context).eligible ? [index] : []);
 }
 
-export function buildWeightedShuffleCycle(
-  entries: readonly MusicSavedQueueEntry[],
+/** Creates a uniform pass through eligible tracks, excluding the current track. */
+export function buildMusicShuffleCycle(
   eligibleIndices: readonly number[],
   currentIndex: number,
-  recentItemIds: readonly string[],
   random: () => number = Math.random,
 ): number[] {
-  const recentRanks = new Map<string, number>();
-  recentItemIds.forEach((itemId, index) => {
-    if (!recentRanks.has(itemId)) recentRanks.set(itemId, index);
-  });
-  const candidates = eligibleIndices.filter((index) => index !== currentIndex || eligibleIndices.length === 1);
-  const scored = candidates.map((index) => {
+  const candidates = eligibleIndices.filter((index) => index !== currentIndex);
+  for (let index = candidates.length - 1; index > 0; index -= 1) {
+    const target = Math.floor(Math.min(1 - Number.EPSILON, Math.max(0, random())) * (index + 1));
+    [candidates[index], candidates[target]] = [candidates[target], candidates[index]];
+  }
+  return candidates;
+}
+
+/** Draws a mix track with replacement while softly reducing recent repeats. */
+export function selectMusicMixIndex(
+  entries: readonly MusicSavedQueueEntry[],
+  eligibleIndices: readonly number[],
+  recentItemIds: readonly string[],
+  random: () => number = Math.random,
+): number | null {
+  const candidates = eligibleIndices.flatMap((index) => {
     const entry = entries[index];
-    const rank = entry ? recentRanks.get(entry.itemId) : undefined;
-    const recencyPenalty = rank === undefined ? 1 : Math.max(1.25, 7 - Math.min(5, rank));
-    const weight = entry ? weightValues[entry.weight] / recencyPenalty : 1;
-    const sample = Math.min(1 - Number.EPSILON, Math.max(Number.EPSILON, random()));
-    return { index, score: -Math.log(sample) / Math.max(Number.EPSILON, weight) };
+    if (!entry) return [];
+    const recentRank = recentItemIds.indexOf(entry.itemId);
+    const freshness = recentRank < 0 ? 1 : mixRecentMultipliers[recentRank] ?? 1;
+    return [{ index, weight: MUSIC_MIX_WEIGHT_VALUES[entry.weight] * freshness }];
   });
-  scored.sort((left, right) => left.score - right.score || left.index - right.index);
-  return scored.map(({ index }) => index);
+  const totalWeight = candidates.reduce((total, candidate) => total + candidate.weight, 0);
+  if (totalWeight <= 0) return null;
+  let draw = Math.min(1 - Number.EPSILON, Math.max(0, random())) * totalWeight;
+  for (const candidate of candidates) {
+    if (draw < candidate.weight) return candidate.index;
+    draw -= candidate.weight;
+  }
+  return candidates.at(-1)?.index ?? null;
+}
+
+/** Draws a source-queue track without preferences, with the same soft repeat guard. */
+export function selectUniformMusicMixIndex(
+  length: number,
+  recentIndices: readonly number[],
+  random: () => number = Math.random,
+): number | null {
+  if (length <= 0) return null;
+  const weights = Array.from({ length }, (_, index) => {
+    const rank = recentIndices.indexOf(index);
+    return rank < 0 ? 1 : mixRecentMultipliers[rank] ?? 1;
+  });
+  let draw = Math.min(1 - Number.EPSILON, Math.max(0, random()))
+    * weights.reduce((sum, weight) => sum + weight, 0);
+  for (const [index, weight] of weights.entries()) {
+    if (draw < weight) return index;
+    draw -= weight;
+  }
+  return length - 1;
 }
 
 /** Selects a boundary track, avoiding the interrupted item whenever another item is eligible. */
@@ -196,7 +233,6 @@ export function selectFreshMusicQueueItem(
     shuffle: boolean;
     explicitItemId?: string | null;
     avoidItemId?: string | null;
-    recentItemIds?: readonly string[];
     random?: () => number;
   },
 ): MusicInitialQueueSelection {
@@ -210,19 +246,17 @@ export function selectFreshMusicQueueItem(
     return {
       index: explicitIndex,
       remainingShuffleOrder: options.shuffle
-        ? buildWeightedShuffleCycle(entries, eligibleIndices, explicitIndex, options.recentItemIds ?? [], options.random)
+        ? buildMusicShuffleCycle(eligibleIndices, explicitIndex, options.random)
         : [],
     };
   }
   if (options.shuffle) {
-    const cycle = buildWeightedShuffleCycle(
-      entries,
+    const cycle = buildMusicShuffleCycle(
       eligibleIndices,
       avoidedIndex,
-      options.recentItemIds ?? [],
       options.random,
     );
-    return { index: cycle.shift() ?? null, remainingShuffleOrder: cycle };
+    return { index: cycle.shift() ?? eligibleIndices[0] ?? null, remainingShuffleOrder: cycle };
   }
   return {
     index: eligibleIndices.find((index) => index > avoidedIndex)
@@ -283,9 +317,14 @@ function playbackSource(
   const folder = bindingPaths.get(entry.rootId);
   if (!folder) return { source: null, reason: "unbound-root" };
   const path = resolveLocalMusicPath(folder, entry.relativePath);
+  const originalSidecar = entry.originalArtworkIdentity?.startsWith("sidecar:")
+    ? entry.originalArtworkIdentity.slice("sidecar:".length)
+    : null;
+  const artworkPath = entry.artworkOverride
+    ?? (originalSidecar ? resolveLocalMusicPath(folder, originalSidecar) : null);
   return {
     source: {
-      ...localFileSourceFromPath(path, entry.title),
+      ...localFileSourceFromPath(path, entry.title, artworkPath),
       startMs: entry.startMs,
       endMs: entry.endMs,
     },

@@ -8,6 +8,7 @@
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type { ProjectChecklistItem, ProjectTask } from "$lib/projects/types";
   import { cn } from "$lib/utils";
+  import ProjectSettingsSectionHeading from "./ProjectSettingsSectionHeading.svelte";
 
   type ActionResult = void | Promise<void>;
   type SortDirection = -1 | 1;
@@ -58,107 +59,103 @@
   }
 </script>
 
-<div class="flex items-center justify-between gap-2">
-  <h2 class="text-[0.8rem] font-semibold tracking-normal">{t("projects.detail.checklist")}</h2>
-  <span class="text-[0.733333rem] text-muted-foreground">{items.length}</span>
-</div>
-<div class="grid gap-1">
-  {#each items as item (item.id)}
-    {@const previousChecklistItem = adjacentChecklistItem(item, -1)}
-    {@const nextChecklistItem = adjacentChecklistItem(item, 1)}
-    <div class="grid min-h-8 grid-cols-[auto_minmax(0,1fr)_auto_auto_auto_auto] items-center gap-1 rounded-md border border-border bg-background px-2">
-      <button
-        type="button"
-        class={cn(
-          "flex h-5 w-5 shrink-0 items-center justify-center rounded border",
-          item.completedAt ? "border-emerald-500 bg-emerald-500 text-white" : "border-border hover:bg-accent",
-        )}
-        aria-label={t("projects.actions.toggleChecklistItem")}
-        onclick={() => { void onToggleCompleted(item, !item.completedAt); }}
-      >
-        {#if item.completedAt}
-          <Check size={13} strokeWidth={2} />
-        {/if}
-      </button>
-      <input
-        value={checklistItemDraftTitle(item)}
-        class={cn(
-          "min-h-7 min-w-0 bg-transparent px-1 text-[0.8rem]",
-          item.completedAt ? "text-muted-foreground line-through" : "text-foreground",
-        )}
-        aria-label={t("projects.detail.checklistItemTitle")}
-        oninput={(event) => onTitleDraftChange(item.id, event.currentTarget.value)}
-        onkeydown={(event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            void onSaveItem(item);
-          }
-        }}
-      />
-      <button
-        type="button"
-        class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-        disabled={!previousChecklistItem}
-        aria-label={previousChecklistItem ? t("projects.actions.moveChecklistItemUp", item.title) : t("projects.actions.noPreviousChecklistItem")}
-        title={previousChecklistItem ? t("projects.actions.moveChecklistItemUp", item.title) : t("projects.actions.noPreviousChecklistItem")}
-        onclick={() => { void onMoveItem(item, -1); }}
-      >
-        <ArrowUp size={13} strokeWidth={1.75} />
-      </button>
-      <button
-        type="button"
-        class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-        disabled={!nextChecklistItem}
-        aria-label={nextChecklistItem ? t("projects.actions.moveChecklistItemDown", item.title) : t("projects.actions.noNextChecklistItem")}
-        title={nextChecklistItem ? t("projects.actions.moveChecklistItemDown", item.title) : t("projects.actions.noNextChecklistItem")}
-        onclick={() => { void onMoveItem(item, 1); }}
-      >
-        <ArrowDown size={13} strokeWidth={1.75} />
-      </button>
-      <button
-        type="button"
-        class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-        disabled={!checklistItemDirty(item)}
-        aria-label={t("projects.actions.saveChecklistItem", item.title)}
-        title={t("projects.actions.saveChecklistItem", item.title)}
-        onclick={() => { void onSaveItem(item); }}
-      >
-        <Save size={13} strokeWidth={1.75} />
-      </button>
-      <button
-        type="button"
-        class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-        aria-label={t("projects.actions.deleteChecklistItem", item.title)}
-        onclick={() => { void onDeleteItem(item); }}
-      >
-        <Trash2 size={13} strokeWidth={1.75} />
-      </button>
-    </div>
-  {:else}
-    <div class="rounded-md border border-dashed border-border px-2 py-2 text-[0.8rem] text-muted-foreground">
-      {t("projects.detail.noChecklistItems")}
-    </div>
-  {/each}
-</div>
-<div class="flex gap-1">
-  <input
-    value={draft}
-    placeholder={t("projects.detail.addChecklistItemPlaceholder")}
-    class="min-h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-[0.8rem]"
-    oninput={(event) => onDraftChange(event.currentTarget.value)}
-    onkeydown={(event) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        void onSubmitItem(task);
-      }
-    }}
-  />
-  <button
-    type="button"
-    class="flex min-h-8 items-center justify-center rounded-md border border-border bg-background px-2 text-[0.8rem] hover:bg-accent"
-    aria-label={t("projects.detail.addChecklistItem")}
-    onclick={() => { void onSubmitItem(task); }}
-  >
-    <Plus size={14} strokeWidth={1.75} />
-  </button>
-</div>
+<section class="task-detail-section grid min-w-0 content-start gap-3">
+  <ProjectSettingsSectionHeading label={t("projects.detail.checklist")} count={items.length} inlineCount />
+  <div class="grid gap-1">
+    {#each items as item (item.id)}
+      {@const previousChecklistItem = adjacentChecklistItem(item, -1)}
+      {@const nextChecklistItem = adjacentChecklistItem(item, 1)}
+      <div class="grid min-h-8 grid-cols-[auto_minmax(0,1fr)_auto_auto_auto_auto] items-center gap-1 rounded-md bg-transparent px-2 hover:bg-muted/40">
+        <button
+          type="button"
+          class={cn(
+            "flex h-5 w-5 shrink-0 items-center justify-center rounded border",
+            item.completedAt ? "border-emerald-500 bg-emerald-500 text-white" : "border-border hover:bg-accent",
+          )}
+          aria-label={t("projects.actions.toggleChecklistItem")}
+          onclick={() => { void onToggleCompleted(item, !item.completedAt); }}
+        >
+          {#if item.completedAt}
+            <Check size={13} strokeWidth={2} />
+          {/if}
+        </button>
+        <input
+          value={checklistItemDraftTitle(item)}
+          class={cn(
+            "min-h-7 min-w-0 bg-transparent px-1 text-[0.8rem]",
+            item.completedAt ? "text-muted-foreground line-through" : "text-foreground",
+          )}
+          aria-label={t("projects.detail.checklistItemTitle")}
+          oninput={(event) => onTitleDraftChange(item.id, event.currentTarget.value)}
+          onkeydown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void onSaveItem(item);
+            }
+          }}
+        />
+        <button
+          type="button"
+          class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={!previousChecklistItem}
+          aria-label={previousChecklistItem ? t("projects.actions.moveChecklistItemUp", item.title) : t("projects.actions.noPreviousChecklistItem")}
+          title={previousChecklistItem ? t("projects.actions.moveChecklistItemUp", item.title) : t("projects.actions.noPreviousChecklistItem")}
+          onclick={() => { void onMoveItem(item, -1); }}
+        >
+          <ArrowUp size={13} strokeWidth={1.75} />
+        </button>
+        <button
+          type="button"
+          class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={!nextChecklistItem}
+          aria-label={nextChecklistItem ? t("projects.actions.moveChecklistItemDown", item.title) : t("projects.actions.noNextChecklistItem")}
+          title={nextChecklistItem ? t("projects.actions.moveChecklistItemDown", item.title) : t("projects.actions.noNextChecklistItem")}
+          onclick={() => { void onMoveItem(item, 1); }}
+        >
+          <ArrowDown size={13} strokeWidth={1.75} />
+        </button>
+        <button
+          type="button"
+          class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={!checklistItemDirty(item)}
+          aria-label={t("projects.actions.saveChecklistItem", item.title)}
+          title={t("projects.actions.saveChecklistItem", item.title)}
+          onclick={() => { void onSaveItem(item); }}
+        >
+          <Save size={13} strokeWidth={1.75} />
+        </button>
+        <button
+          type="button"
+          class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          aria-label={t("projects.actions.deleteChecklistItem", item.title)}
+          onclick={() => { void onDeleteItem(item); }}
+        >
+          <Trash2 size={13} strokeWidth={1.75} />
+        </button>
+      </div>
+    {/each}
+  </div>
+  <div class="flex gap-1">
+    <input
+      value={draft}
+      aria-label={t("projects.detail.addChecklistItem")}
+      placeholder={t("projects.detail.addChecklistItemPlaceholder")}
+      class="min-h-8 min-w-0 flex-1 rounded-md bg-transparent px-2 hover:bg-muted/40 text-[0.8rem]"
+      oninput={(event) => onDraftChange(event.currentTarget.value)}
+      onkeydown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          void onSubmitItem(task);
+        }
+      }}
+    />
+    <button
+      type="button"
+      class="flex min-h-8 items-center justify-center rounded-md bg-transparent px-2 text-[0.8rem] hover:bg-accent"
+      aria-label={t("projects.detail.addChecklistItem")}
+      onclick={() => { void onSubmitItem(task); }}
+    >
+      <Plus size={14} strokeWidth={1.75} />
+    </button>
+  </div>
+</section>

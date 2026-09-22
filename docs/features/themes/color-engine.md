@@ -55,6 +55,8 @@ The engine evaluates text, controls, focus rings, semantic actions, event labels
 
 Warnings do not silently change authored colors. The editor can offer a derived repair suggestion, but applying it is an explicit edit. Decorative surfaces are not presented as if they satisfy text contrast requirements.
 
+Shared tooltips contrast with the stable containing surface, not a hovered control's temporary fill or a translucent highlight. A tooltip keeps the same palette while that control changes hover or selection state; a change to the actual containing surface or theme can update it.
+
 ## Engine versions and rebaking
 
 Each user theme records the engine version that produced its snapshot. When the current engine is newer, the theme continues painting from its stored snapshot and the editor offers a rebake.

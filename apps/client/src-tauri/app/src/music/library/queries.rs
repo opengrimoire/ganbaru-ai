@@ -51,6 +51,8 @@ pub(crate) async fn playlist_playback_entries(
             item.youtube_video_id,
             item.youtube_resolution_state,
             COALESCE(NULLIF(item.title_override, ''), item.original_title) AS title,
+            item.original_artwork_identity,
+            item.artwork_override,
             item.availability,
             (SELECT location.root_id FROM music_local_locations AS location
              WHERE location.item_id = item.id AND location.availability = 'available'
@@ -157,9 +159,6 @@ fn push_item_from(builder: &mut QueryBuilder<'_, Sqlite>, request: &MusicItemWin
 
 fn push_item_filters(builder: &mut QueryBuilder<'_, Sqlite>, request: &MusicItemWindowRequest) {
     builder.push(" WHERE 1 = 1 ");
-    if request.destination == MusicListDestination::Review {
-        builder.push("AND item.review_state IN ('unreviewed', 'reviewed', 'deferred') ");
-    }
     if let Some(source_kind) = request.source_kind {
         builder.push("AND item.source_kind = ");
         builder.push_bind(source_kind.as_ref().to_string());
@@ -320,6 +319,14 @@ pub(crate) async fn item_window(
              WHERE location.item_id = item.id
              ORDER BY location.availability = 'available' DESC, location.updated_at DESC, location.id
              LIMIT 1) AS relative_path,
+            COALESCE((
+                SELECT json_group_array(collection_id) FROM (
+                    SELECT source_item.collection_id AS collection_id
+                    FROM music_source_collection_items AS source_item
+                    WHERE source_item.item_id = item.id
+                    ORDER BY source_item.collection_id
+                )
+            ), '[]') AS source_collection_ids_json,
             item.original_artwork_identity,
             item.artwork_override,
             item.duration_ms, item.availability, item.review_state,
@@ -333,6 +340,12 @@ pub(crate) async fn item_window(
     item_query.push_bind(request.now_ms);
     item_query.push(" AND (active_snooze.ends_at IS NULL OR active_snooze.ends_at > ");
     item_query.push_bind(request.now_ms);
+    if request.destination == MusicListDestination::Playlist {
+        item_query
+            .push(" AND (active_snooze.scope = 'all-playlists' OR active_snooze.playlist_id = ");
+        item_query.push_bind(request.playlist_id.clone().unwrap_or_default());
+        item_query.push(")");
+    }
     item_query.push(
         ")) AS active_snooze_count,
             stats.last_played_at, COALESCE(stats.play_count, 0) AS play_count,
@@ -393,6 +406,7 @@ struct PlaylistSummaryRow {
     name: String,
     icon: String,
     shuffle_enabled: i64,
+    mix_enabled: i64,
     repeat_mode: String,
     intended_uses: String,
     sort_order: i64,
@@ -417,7 +431,7 @@ pub(crate) async fn playlist_summaries(
     }
     super::defaults::ensure_built_in_music_playlists(pool).await?;
     let rows = sqlx::query_as::<_, PlaylistSummaryRow>(
-        "SELECT playlist.id, playlist.name, playlist.icon, playlist.shuffle_enabled,
+        "SELECT playlist.id, playlist.name, playlist.icon, playlist.shuffle_enabled, playlist.mix_enabled,
                 playlist.repeat_mode, playlist.sort_order,
                 COALESCE((
                     SELECT group_concat(intended.intended_use, ',')
@@ -472,6 +486,16 @@ pub(crate) async fn playlist_summaries(
                     value => {
                         return Err(MusicLibraryError::validation(
                             "shuffleEnabled",
+                            format!("expected 0 or 1, received {value}"),
+                        ));
+                    }
+                },
+                mix_enabled: match row.mix_enabled {
+                    0 => false,
+                    1 => true,
+                    value => {
+                        return Err(MusicLibraryError::validation(
+                            "mixEnabled",
                             format!("expected 0 or 1, received {value}"),
                         ));
                     }
@@ -951,7 +975,7 @@ pub(crate) async fn playlist_detail(
     playlist_id: &str,
 ) -> MusicLibraryResult<MusicPlaylist> {
     let row = sqlx::query_as::<_, MusicPlaylistRow>(
-        "SELECT id, name, icon, shuffle_enabled, repeat_mode, sort_order,
+        "SELECT id, name, icon, shuffle_enabled, mix_enabled, repeat_mode, sort_order,
                 created_at, updated_at, version
          FROM music_playlists WHERE id = ?",
     )

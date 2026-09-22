@@ -7,11 +7,13 @@
 
   let {
     task,
+    projectName,
     title,
     onTitleChange,
     onClose,
   }: {
     task: ProjectTask;
+    projectName: string;
     title: string;
     onTitleChange: (value: string) => void;
     onClose: () => void;
@@ -20,13 +22,14 @@
   const { t } = getLocalization();
 </script>
 
-<header class="flex shrink-0 items-center gap-2 border-b border-border bg-card px-4 py-3">
+<header class="flex shrink-0 items-start gap-4 border-b border-border bg-card px-8 py-5">
   <div class="min-w-0 flex-1">
+    <div class="mb-1 px-1 text-[0.733333rem] text-muted-foreground">{projectName}</div>
     <div class="flex min-w-0 items-center gap-2">
       <input
         value={title}
         aria-label={t("projects.detail.titleLabel")}
-        class="min-h-8 min-w-0 flex-1 rounded-md bg-transparent px-1 text-[1.1rem] font-semibold text-foreground outline-none focus:bg-background focus:ring-2 focus:ring-ring/30"
+        class="min-h-10 min-w-0 flex-1 rounded-md bg-transparent px-1 text-xl font-semibold tracking-tight text-foreground"
         oninput={(event) => onTitleChange(event.currentTarget.value)}
       />
       {#if task.archivedAt}
@@ -38,7 +41,7 @@
   </div>
   <button
     type="button"
-    class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+    class="flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
     aria-label={t("projects.detail.close")}
     title={t("projects.detail.close")}
     onclick={onClose}

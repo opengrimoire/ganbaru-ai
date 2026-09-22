@@ -278,7 +278,7 @@ export class MusicInterchangeController {
     return {
       format: MUSIC_INTERCHANGE_FORMAT, version: MUSIC_INTERCHANGE_VERSION, exportedAt: this.now(),
       roots: [...usedRootIds].map((id) => ({ id, name: rootNames.get(id) ?? id })),
-      playlists: [{ id: crypto.randomUUID(), name: this.importPlaylistName.trim(), icon: "lucide:list-music", shuffleEnabled: false, repeatMode: "all", intendedUses: [], memberships }],
+      playlists: [{ id: crypto.randomUUID(), name: this.importPlaylistName.trim(), icon: "lucide:list-music", shuffleEnabled: false, mixEnabled: false, repeatMode: "all", intendedUses: [], memberships }],
       contextAssignments: [], warnings: ["M3U8 does not preserve weights, snoozes, assignments, logical-root identity, signals, or focus guidance."],
     };
   }

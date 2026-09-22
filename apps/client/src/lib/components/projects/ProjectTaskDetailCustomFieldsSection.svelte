@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import Check from "@lucide/svelte/icons/check";
   import Save from "@lucide/svelte/icons/save";
   import {
@@ -16,6 +17,7 @@
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { cn } from "$lib/utils";
   import ProjectTaskDetailDateField from "./ProjectTaskDetailDateField.svelte";
+  import ProjectSettingsSectionHeading from "./ProjectSettingsSectionHeading.svelte";
 
   type ActionResult = void | Promise<void>;
 
@@ -70,142 +72,119 @@
   const { t } = getLocalization();
 </script>
 
-<div class="flex items-center justify-between gap-2">
-  <h2 class="text-[0.8rem] font-semibold tracking-normal">{t("projects.customFields.taskValues")}</h2>
-  <span class="text-[0.733333rem] text-muted-foreground">{fields.length}</span>
-</div>
-<div class="grid gap-2">
-  {#each fields as field (field.id)}
-    <div class="grid gap-1 rounded-md border border-border bg-background p-2">
-      <div class="flex min-w-0 items-center justify-between gap-2">
-        <div class="min-w-0">
-          <div class="truncate text-[0.8rem] font-medium">{field.name}</div>
-          <div class="truncate text-[0.733333rem] text-muted-foreground">
-            {projectCustomFieldTypeLabel(field.fieldType, t)}
+<section class="task-detail-section grid min-w-0 content-start gap-3">
+  <ProjectSettingsSectionHeading label={t("projects.customFields.taskValues")} count={fields.length} inlineCount />
+  <div class="grid gap-2">
+    {#each fields as field (field.id)}
+      <div class="grid gap-1 border-b border-border/50 py-2 last:border-b-0">
+        <div class="flex min-w-0 items-center justify-between gap-2">
+          <div class="min-w-0">
+            <div class="truncate text-[0.8rem] font-medium">{field.name}</div>
+            <div class="truncate text-[0.733333rem] text-muted-foreground">
+              {projectCustomFieldTypeLabel(field.fieldType, t)}
+            </div>
           </div>
-        </div>
-        <button
-          type="button"
-          class="flex min-h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-card px-2 text-[0.733333rem] hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={!customFieldValueDirty(task, field)}
-          onclick={() => { void onSaveField(task, field); }}
-        >
-          <Save size={13} strokeWidth={1.75} />
-          <span>{t("projects.customFields.saveValue")}</span>
-        </button>
-      </div>
-
-      {#if projectCustomFieldUsesTextValue(field.fieldType)}
-        <input
-          type={projectCustomFieldInputType(field.fieldType)}
-          value={textDrafts[field.id] ?? ""}
-          inputmode={projectCustomFieldTextInputMode(field.fieldType)}
-          class="min-h-8 rounded-md border border-border bg-card px-2 text-[0.8rem] text-foreground"
-          placeholder={t("projects.customFields.emptyValue")}
-          oninput={(event) => onTextDraftChange(field.id, event.currentTarget.value)}
-          onkeydown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              void onSaveField(task, field);
-            }
-          }}
-        />
-      {:else if field.fieldType === "number"}
-        <input
-          value={numberDrafts[field.id] ?? ""}
-          inputmode="decimal"
-          class="min-h-8 rounded-md border border-border bg-card px-2 text-[0.8rem] text-foreground"
-          placeholder={t("projects.customFields.emptyValue")}
-          oninput={(event) => onNumberDraftChange(field.id, event.currentTarget.value)}
-          onkeydown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              void onSaveField(task, field);
-            }
-          }}
-        />
-      {:else if field.fieldType === "date"}
-        <ProjectTaskDetailDateField
-          value={dateDrafts[field.id] ?? ""}
-          noDateLabel={t("projects.detail.noDate")}
-          clearLabel={t("projects.detail.clearDate", field.name)}
-          pickerOpen={datePickerTarget === field.id}
-          selectedDate={dateDrafts[field.id] || todayDate}
-          highlightMode="none"
-          onToggle={() => onToggleDatePicker(field.id)}
-          onClear={() => onClearDate(field.id)}
-          onSelect={onSelectDate}
-          onCancel={onCancelDatePicker}
-        />
-      {:else if field.fieldType === "checkbox"}
-        <label class="flex min-h-8 items-center gap-2 rounded-md border border-border bg-card px-2 text-[0.8rem]">
-          <input
-            type="checkbox"
-            checked={checkboxDrafts[field.id] ?? false}
-            class="h-4 w-4 accent-primary"
-            onchange={(event) => onCheckboxDraftChange(field.id, event.currentTarget.checked)}
-          />
-          <span>{field.name}</span>
-        </label>
-      {:else if field.fieldType === "select" || field.fieldType === "status"}
-        <div class="flex flex-wrap gap-1">
           <button
             type="button"
-            class={cn(
-              "rounded-md border px-2 py-1 text-[0.733333rem]",
-              (selectDrafts[field.id] ?? "none") === "none"
-                ? "border-primary/50 bg-primary/10 text-primary"
-                : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground",
-            )}
-            onclick={() => onSelectDraftChange(field.id, "none")}
+            class="flex min-h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-card px-2 text-[0.733333rem] hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!customFieldValueDirty(task, field)}
+            onclick={() => { void onSaveField(task, field); }}
           >
-            {t("projects.customFields.selectNone")}
+            <Save size={13} strokeWidth={1.75} />
+            <span>{t("projects.customFields.saveValue")}</span>
           </button>
-          {#each customFieldOptions(field) as option (option.id)}
-            <button
-              type="button"
-              class={cn(
-                "rounded-md border px-2 py-1 text-[0.733333rem]",
-                selectDrafts[field.id] === option.id
-                  ? "border-primary/50 bg-primary/10 text-primary"
-                  : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground",
-              )}
-              onclick={() => onSelectDraftChange(field.id, option.id)}
-            >
-              {option.name}
-            </button>
-          {:else}
-            <div class="rounded-md border border-dashed border-border px-2 py-2 text-[0.8rem] text-muted-foreground">
-              {t("projects.customFields.noOptions")}
-            </div>
-          {/each}
         </div>
-      {:else if projectCustomFieldUsesOptions(field.fieldType)}
-        <div class="flex flex-wrap gap-1">
-          {#each customFieldOptions(field) as option (option.id)}
-            {@const optionSelected = (multiDrafts[field.id] ?? []).includes(option.id)}
-            <button
-              type="button"
-              class={cn(
-                "flex min-h-7 items-center gap-1 rounded-md border px-2 text-[0.733333rem]",
-                optionSelected
-                  ? "border-primary/50 bg-primary/10 text-primary"
-                  : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground",
-              )}
-              onclick={() => onToggleMultiOption(field, option)}
-            >
-              {#if optionSelected}
-                <Check size={12} strokeWidth={1.75} />
-              {/if}
-              <span>{option.name}</span>
-            </button>
-          {:else}
-            <div class="rounded-md border border-dashed border-border px-2 py-2 text-[0.8rem] text-muted-foreground">
-              {t("projects.customFields.noOptions")}
-            </div>
-          {/each}
-        </div>
-      {/if}
-    </div>
-  {/each}
-</div>
+
+        {#if projectCustomFieldUsesTextValue(field.fieldType)}
+          <input
+            type={projectCustomFieldInputType(field.fieldType)}
+            value={textDrafts[field.id] ?? ""}
+            inputmode={projectCustomFieldTextInputMode(field.fieldType)}
+            class="min-h-8 min-w-0 rounded-md bg-transparent px-2 hover:bg-muted/40 text-[0.8rem] text-foreground"
+            aria-label={field.name}
+            placeholder={t("projects.customFields.emptyValue")}
+            oninput={(event) => onTextDraftChange(field.id, event.currentTarget.value)}
+            onkeydown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void onSaveField(task, field);
+              }
+            }}
+          />
+        {:else if field.fieldType === "number"}
+          <input
+            value={numberDrafts[field.id] ?? ""}
+            inputmode="decimal"
+            class="min-h-8 min-w-0 rounded-md bg-transparent px-2 hover:bg-muted/40 text-[0.8rem] text-foreground"
+            aria-label={field.name}
+            placeholder={t("projects.customFields.emptyValue")}
+            oninput={(event) => onNumberDraftChange(field.id, event.currentTarget.value)}
+            onkeydown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void onSaveField(task, field);
+              }
+            }}
+          />
+        {:else if field.fieldType === "date"}
+          <ProjectTaskDetailDateField
+            label={field.name}
+            value={dateDrafts[field.id] ?? ""}
+            noDateLabel={t("projects.detail.noDate")}
+            clearLabel={t("projects.detail.clearDate", field.name)}
+            pickerOpen={datePickerTarget === field.id}
+            selectedDate={dateDrafts[field.id] || todayDate}
+            highlightMode="none"
+            onToggle={() => onToggleDatePicker(field.id)}
+            onClear={() => onClearDate(field.id)}
+            onSelect={onSelectDate}
+            onCancel={onCancelDatePicker}
+          />
+        {:else if field.fieldType === "checkbox"}
+          <label class="flex min-h-8 items-center gap-2 rounded-md border border-border bg-card px-2 text-[0.8rem]">
+            <input
+              type="checkbox"
+              checked={checkboxDrafts[field.id] ?? false}
+              class="h-4 w-4 accent-primary"
+              onchange={(event) => onCheckboxDraftChange(field.id, event.currentTarget.checked)}
+            />
+            <span>{field.name}</span>
+          </label>
+        {:else if field.fieldType === "select" || field.fieldType === "status"}
+          <CustomSelect inline appearance="quiet" contentAlign="start" class="w-full"
+            value={selectDrafts[field.id] ?? "none"} ariaLabel={field.name}
+            options={[
+              { value: "none", label: t("projects.customFields.selectNone") },
+              ...customFieldOptions(field).map((option) => ({ value: option.id, label: option.name })),
+            ]}
+            onChange={(value) => onSelectDraftChange(field.id, value)} />
+        {:else if projectCustomFieldUsesOptions(field.fieldType)}
+          <div class="flex flex-wrap gap-1">
+            {#each customFieldOptions(field) as option (option.id)}
+              {@const optionSelected = (multiDrafts[field.id] ?? []).includes(option.id)}
+              <button
+                type="button"
+                class={cn(
+                  "flex min-h-7 items-center gap-1 rounded-md border px-2 text-[0.733333rem]",
+                  optionSelected
+                    ? "border-primary/50 bg-primary/10 text-primary"
+                    : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground",
+                )}
+                onclick={() => onToggleMultiOption(field, option)}
+              >
+                {#if optionSelected}
+                  <Check size={12} strokeWidth={1.75} />
+                {/if}
+                <span>{option.name}</span>
+              </button>
+            {:else}
+              <div class="rounded-md border border-dashed border-border px-2 py-2 text-[0.8rem] text-muted-foreground">
+                {t("projects.customFields.noOptions")}
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/each}
+  </div>
+</section>

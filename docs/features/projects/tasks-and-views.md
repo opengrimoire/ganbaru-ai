@@ -64,6 +64,10 @@ Applying a saved view changes presentation and query state. Deleting a saved vie
 
 Task detail is a focused editing surface available from every view. It keeps a local draft, groups fields into understandable sections, and adapts between modal, sheet, and full-screen presentation.
 
+The implemented editor uses one open workspace with a content column for description, checklists, subtasks, dependencies, scheduled blocks, and activity, alongside an always-visible property column. Narrow panels stack the columns. Sections never collapse, and opening a control does not insert content into the scroll layout. Selected tags and relationships remain visible; candidate searches use floating menus.
+
+Task properties and single-choice custom fields reuse the settings dropdown. Date fields open the shared calendar in an anchored floating surface that fits above or below the field. Menus stay within the task dialog's focus boundary and dismiss with Escape or an outside click. Keyboard dismissal and selection return focus without scrolling. Focus uses a background change rather than an outline around inputs. Save stays in the footer, with errors immediately above it and archive presented as a secondary action.
+
 Unsaved closure uses the shared discard flow. Date fields use the shared date picker. Links to Calendar, Notes, Chat, files, and dependencies remain explicit and navigable.
 
 ## Accessibility and touch

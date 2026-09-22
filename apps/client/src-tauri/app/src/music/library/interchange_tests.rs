@@ -33,6 +33,7 @@ fn request(conflict: MusicImportPlaylistConflict) -> MusicInterchangeImportReque
                 name: "Focus".to_string(),
                 icon: "lucide:laptop".to_string(),
                 shuffle_enabled: true,
+                mix_enabled: true,
                 repeat_mode: MusicRepeatMode::All,
                 intended_uses: vec![MusicIntendedUse::Focus],
                 memberships: vec![MusicInterchangeMembership {
@@ -77,6 +78,12 @@ fn interchange_import_commits_full_playlist_state_transactionally() {
         assert_eq!(result.playlist_count, 1);
         assert_eq!(result.item_count, 1);
         assert_eq!(result.membership_count, 1);
+        assert!(
+            super::queries::playlist_detail(&pool, "playlist-1")
+                .await
+                .unwrap()
+                .mix_enabled
+        );
 
         let row: (String, String, Option<i64>, Option<i64>, f64) = sqlx::query_as(
             "SELECT weight, p.name, start_ms, end_ms, volume

@@ -41,6 +41,7 @@ export async function loadContextMusicPlaylist(
     projection.entries,
     playlist.shuffleEnabled,
     playlist.repeatMode,
+    playlist.mixEnabled,
     {
       structuralSkipped: projection.structuralSkipped,
       autoplay: false,

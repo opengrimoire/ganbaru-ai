@@ -157,7 +157,7 @@ export class MusicReviewController {
     const playlistId = this.id();
     try {
       await createMusicPlaylist({
-        id: playlistId, name, icon: iconInput.trim(), shuffleEnabled: true,
+        id: playlistId, name, icon: iconInput.trim(), shuffleEnabled: true, mixEnabled: false,
         repeatMode: "all", intendedUses: [], createdAt: this.now(),
       });
       await this.library.refreshAfterMutation();
@@ -181,24 +181,33 @@ export class MusicReviewController {
     const detail = this.inspector.detail;
     if (!detail || this.actionBusy) return false;
     const previousReviewState = detail.item.reviewState;
+    const previousDeferredUntil = detail.item.reviewDeferredUntil;
+    const previousChangedAt = detail.item.reviewChangedAt;
+    const previousUpdatedAt = detail.item.updatedAt;
+    const previousSelectedItemId = this.library.currentState.selectedItemId;
+    const listItem = this.library.currentWindow.items.find((item) => item.id === detail.item.id);
+    const previousListState = listItem
+      ? { reviewState: listItem.reviewState, updatedAt: listItem.updatedAt }
+      : null;
+    const updatedAt = this.now();
     this.actionBusy = true;
+    detail.item.reviewState = reviewState;
+    detail.item.reviewDeferredUntil = deferredUntil;
+    detail.item.reviewChangedAt = updatedAt;
+    detail.item.updatedAt = updatedAt;
+    if (listItem) {
+      listItem.reviewState = reviewState;
+      listItem.updatedAt = updatedAt;
+    }
+    if (nextItemId) this.inspector.selectCached(nextItemId);
+    this.library.selectItem(nextItemId);
     try {
-      const updatedAt = this.now();
       const receipt = await setMusicReviewState({
         itemId: detail.item.id, reviewState, deferredUntil,
         expectedVersion: detail.item.version, updatedAt,
       });
-      detail.item.reviewState = reviewState;
-      detail.item.reviewDeferredUntil = deferredUntil;
-      detail.item.reviewChangedAt = updatedAt;
-      detail.item.updatedAt = updatedAt;
       detail.item.version = receipt.version;
-      const listItem = this.library.currentWindow.items.find((item) => item.id === detail.item.id);
-      if (listItem) {
-        listItem.reviewState = reviewState;
-        listItem.updatedAt = updatedAt;
-        listItem.version = receipt.version;
-      }
+      if (listItem) listItem.version = receipt.version;
       if (reviewState === "reviewed") {
         if (previousReviewState !== "reviewed") {
           for (const sourceId of detail.sourceCollectionIds) {
@@ -206,16 +215,25 @@ export class MusicReviewController {
             if (source) source.unreviewedCount = Math.max(0, source.unreviewedCount - 1);
           }
         }
-        if (nextItemId) this.inspector.selectCached(nextItemId);
-        this.library.selectItem(nextItemId);
         return true;
       }
       this.inspector.invalidate(detail.item.id);
-      this.inspector.clear();
-      this.library.selectItem(nextItemId);
-      await this.library.refreshAfterMutation();
+      if (this.inspector.itemId === detail.item.id) this.inspector.clear();
+      await this.library.refreshSummariesAfterMutation();
       return true;
     } catch (error) {
+      detail.item.reviewState = previousReviewState;
+      detail.item.reviewDeferredUntil = previousDeferredUntil;
+      detail.item.reviewChangedAt = previousChangedAt;
+      detail.item.updatedAt = previousUpdatedAt;
+      if (listItem && previousListState) {
+        listItem.reviewState = previousListState.reviewState;
+        listItem.updatedAt = previousListState.updatedAt;
+      }
+      this.inspector.clear();
+      this.inspector.itemId = detail.item.id;
+      this.inspector.detail = detail;
+      this.library.selectItem(previousSelectedItemId);
       this.library.error = error instanceof Error ? error : new Error(String(error));
       return false;
     } finally {

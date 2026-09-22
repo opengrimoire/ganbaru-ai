@@ -15,12 +15,14 @@ export interface MusicReviewWorkspaceViewState {
   sessionSkippedIds: string[];
 }
 
+export type SoundscapeFilter = "all" | "generated" | "local" | `group:${string}`;
+
 export interface MusicBuilderContextViewState {
   contextPanelOpen: boolean;
   selectedSourceId: string | null;
   reviewPanel: "folders" | "issues";
   reviewIssueGroup: import("$lib/music/music-issue-presentation").MusicIssueGroup | null;
-  soundscapeFilter: "all" | "generated" | "local";
+  soundscapeFilter: SoundscapeFilter;
 }
 
 export function createMusicReviewTreeViewState(): MusicReviewTreeViewState {

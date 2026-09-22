@@ -9,7 +9,7 @@ function window(id: string, title = id): MusicItemWindow {
   return {
     items: [{
       id, identityKey: `local:${id}`, sourceKind: "local-file", mediaKind: "audio",
-      title, artist: "", album: "", localRootId: "root-1", relativePath: `${title}.flac`, originalArtworkIdentity: null, artworkOverride: null, durationMs: null, availability: "available",
+      title, artist: "", album: "", localRootId: "root-1", relativePath: `${title}.flac`, sourceCollectionIds: ["source-1"], originalArtworkIdentity: null, artworkOverride: null, durationMs: null, availability: "available",
       reviewState: "unreviewed", discoveredAt: 1, updatedAt: 1, version: 1,
       playlistCount: 0, activeSnoozeCount: 0, lastPlayedAt: null, playCount: 0,
       membershipId: null, membershipPosition: null, membershipWeight: null,
@@ -67,6 +67,84 @@ describe("Music library controller", () => {
     controller.navigate({ kind: "review" });
     expect(await controller.ensureCurrentDestination()).toBe(true);
     expect(itemWindow).toHaveBeenCalledTimes(2);
+  });
+
+  it("refreshes the retained Review projection while Sources is open", async () => {
+    let reviewId = "review-old";
+    const itemWindow = vi.fn(async (request) => window(
+      request.destination === "review" ? reviewId : request.destination,
+    ));
+    const controller = createMusicLibraryController(api(itemWindow));
+    controller.setVault("vault-1");
+    await controller.preloadCoreDestinations();
+    controller.navigate({ kind: "sources" });
+    reviewId = "review-new";
+
+    expect(await controller.refreshAfterMutation()).toBe(true);
+    expect(controller.windows.review?.items[0]?.id).toBe("review-new");
+  });
+
+  it("loads the complete Review window before exposing the preloaded workspace", async () => {
+    const first = window("review-1");
+    first.totalCount = 3;
+    const itemWindow = vi.fn(async (request) => {
+      if (request.destination !== "review") return window("library");
+      if (request.offset === 0) return first;
+      return {
+        ...window("review-2"),
+        items: [window("review-2").items[0]!, window("review-3").items[0]!],
+        totalCount: 3,
+        offset: request.offset,
+      };
+    });
+    const controller = createMusicLibraryController(api(itemWindow));
+    controller.setVault("vault-1");
+
+    expect(await controller.preloadCoreDestinations()).toBe(true);
+    expect(controller.windows.review?.items.map((item) => item.id)).toEqual([
+      "review-1",
+      "review-2",
+      "review-3",
+    ]);
+    expect(itemWindow).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps the retained Review window visible until a refreshed projection is complete", async () => {
+    let refreshing = false;
+    let releaseFinalPage!: () => void;
+    const itemWindow = vi.fn(async (request) => {
+      if (request.destination === "library") return window("library");
+      if (!refreshing) return window("review-old");
+      if (request.offset === 0) {
+        const first = window("review-new-1");
+        first.totalCount = 3;
+        return first;
+      }
+      await new Promise<void>((resolve) => { releaseFinalPage = resolve; });
+      return {
+        ...window("review-new-2"),
+        items: [window("review-new-2").items[0]!, window("review-new-3").items[0]!],
+        totalCount: 3,
+        offset: request.offset,
+      };
+    });
+    const controller = createMusicLibraryController(api(itemWindow));
+    controller.setVault("vault-1");
+    expect(await controller.preloadCoreDestinations()).toBe(true);
+
+    refreshing = true;
+    const refresh = controller.refreshAfterMutation();
+    await vi.waitFor(() => expect(itemWindow).toHaveBeenCalledTimes(4));
+
+    expect(controller.currentWindow.items.map((item) => item.id)).toEqual(["review-old"]);
+
+    releaseFinalPage();
+    expect(await refresh).toBe(true);
+    expect(controller.currentWindow.items.map((item) => item.id)).toEqual([
+      "review-new-1",
+      "review-new-2",
+      "review-new-3",
+    ]);
   });
 
   it("keeps stale windows visible while refreshing them after a mutation", async () => {
@@ -223,5 +301,39 @@ describe("Music library controller", () => {
 
     expect(controller.currentWindow.items.map((item) => item.id)).toEqual(["first", "second"]);
     expect(itemWindow).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 1, limit: 200 }));
+  });
+
+  it("loads every remaining page before a first-use projection is presented", async () => {
+    const itemWindow = vi.fn(async (request) => ({
+      ...window(request.offset === 0 ? "first" : request.offset === 1 ? "second" : "third"),
+      totalCount: 3,
+      offset: request.offset,
+      limit: request.limit,
+    }));
+    const controller = createMusicLibraryController(api(itemWindow));
+    controller.setVault("vault-1");
+    controller.navigate({ kind: "review" });
+    await controller.refresh();
+
+    expect(await controller.loadAllCurrentItems()).toBe(true);
+
+    expect(controller.currentWindow.items.map((item) => item.id)).toEqual(["first", "second", "third"]);
+    expect(itemWindow).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 2, limit: 200 }));
+  });
+
+  it("stops full projection loading when a page makes no progress", async () => {
+    const itemWindow = vi.fn(async (request) => ({
+      ...window("first"),
+      totalCount: 2,
+      offset: request.offset,
+      limit: request.limit,
+    }));
+    const controller = createMusicLibraryController(api(itemWindow));
+    controller.setVault("vault-1");
+    controller.navigate({ kind: "review" });
+
+    expect(await controller.refresh()).toBe(false);
+    expect(controller.error?.message).toBe("The complete Review list could not be loaded.");
+    expect(itemWindow).toHaveBeenCalledTimes(2);
   });
 });

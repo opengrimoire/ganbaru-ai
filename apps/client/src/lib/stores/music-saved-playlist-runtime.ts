@@ -10,6 +10,12 @@ import {
 
 type SkipBreakdown = Record<MusicPlaylistSkipReason, number>;
 
+export interface MusicSavedPlaylistRuntimeCheckpoint {
+  selectionStartedAt: number;
+  lastSkipRangeTarget: number | null;
+  structuralSkipped: SkipBreakdown;
+}
+
 /** Owns bounded listening writes, eligibility projection, and timed Snooze recovery. */
 export class MusicSavedPlaylistRuntime {
   private writeTail: Promise<void> = Promise.resolve();
@@ -102,6 +108,24 @@ export class MusicSavedPlaylistRuntime {
 
   resetSkipRange(): void {
     this.lastSkipRangeTarget = null;
+  }
+
+  checkpoint(): MusicSavedPlaylistRuntimeCheckpoint {
+    return {
+      selectionStartedAt: this.selectionStartedAt,
+      lastSkipRangeTarget: this.lastSkipRangeTarget,
+      structuralSkipped: { ...this.structuralSkipped },
+    };
+  }
+
+  restore(
+    checkpoint: MusicSavedPlaylistRuntimeCheckpoint,
+    entries: readonly MusicSavedQueueEntry[],
+  ): void {
+    this.selectionStartedAt = checkpoint.selectionStartedAt;
+    this.lastSkipRangeTarget = checkpoint.lastSkipRangeTarget;
+    this.structuralSkipped = { ...checkpoint.structuralSkipped };
+    this.scheduleSnoozeExpiry(entries);
   }
 
   reset(): void {

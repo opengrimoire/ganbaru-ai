@@ -2,9 +2,8 @@
   import Plus from "@lucide/svelte/icons/plus";
   import Download from "@lucide/svelte/icons/download";
   import Upload from "@lucide/svelte/icons/upload";
-  import RadioTower from "@lucide/svelte/icons/radio-tower";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import type { MusicPlaylistSummary, MusicSourceSummary } from "$lib/music/library-contracts";
+  import type { MusicPlaylistSummary } from "$lib/music/library-contracts";
   import type { MusicBuilderDestination } from "$lib/music/music-builder-routing";
   import { orderMusicPlaylists, systemMusicPlaylistName } from "$lib/music/music-system-playlists";
   import MusicBuilderAsyncState from "./MusicBuilderAsyncState.svelte";
@@ -15,7 +14,6 @@
     destination,
     search = "",
     playlists,
-    sources,
     onNavigate,
     onPrimary = () => undefined,
     onImport = () => undefined,
@@ -25,7 +23,6 @@
     destination: MusicBuilderDestination;
     search?: string;
     playlists: MusicPlaylistSummary[];
-    sources: MusicSourceSummary[];
     onNavigate: (destination: MusicBuilderDestination) => void;
     onPrimary?: () => void;
     onImport?: () => void;
@@ -62,23 +59,6 @@
       </div>
       {#if !compact}<button type="button" class="overview-card overview-add mt-2.5 w-full" onclick={onPrimary}><span class="overview-icon"><Plus size={18} /></span><span class="text-xs font-semibold">{t("music.builder.newPlaylist")}</span></button>{/if}
     {/if}
-  {:else if destination.kind === "sources"}
-    {#if sources.length === 0}
-      <MusicBuilderAsyncState kind="empty" title={t("music.builder.emptySourcesTitle")} description={t("music.builder.emptySourcesDescription")} actionLabel={t("music.builder.addMusic")} onAction={onPrimary} />
-    {:else}
-      <div class="grid grid-cols-[repeat(auto-fill,minmax(min(15rem,100%),1fr))] gap-2.5">
-        {#each sources as source (source.id)}
-          <article class="overview-card">
-            <span class="overview-icon"><RadioTower size={18} strokeWidth={1.45} /></span>
-            <span class="min-w-0 flex-1">
-              <span class="flex items-center gap-2"><strong class="min-w-0 flex-1 truncate text-xs font-semibold">{source.name}</strong><i class:source-warning={source.health === "issues"} class="source-health" title={source.health}></i></span>
-              <span class="mt-1.5 block text-[0.68rem] text-muted-foreground">{t("music.tracks", source.itemCount)}</span>
-              <span class="mt-2 flex flex-wrap gap-1.5 text-[0.62rem] text-muted-foreground"><span>{source.newCount} {t("music.builder.unreviewed")}</span>{#if source.openIssueCount > 0}<span>·</span><span class="text-destructive">{t("music.builder.issueCount", source.openIssueCount)}</span>{/if}</span>
-            </span>
-          </article>
-        {/each}
-      </div>
-    {/if}
   {:else if destination.kind === "soundscapes"}
     <MusicSoundscapeBuilder />
   {:else}
@@ -92,7 +72,5 @@
   button.overview-card:hover { background: var(--accent); }
   .overview-icon { display: grid; height: 2.35rem; width: 2rem; flex: none; place-items: center; color: var(--foreground); }
   .overview-add { min-height: 5.5rem; align-items: center; justify-content: center; border-style: dashed; color: var(--muted-foreground); }
-  .source-health { height: 0.45rem; width: 0.45rem; flex: none; border-radius: 999px; background: color-mix(in srgb, var(--primary) 70%, var(--muted)); }
-  .source-warning { background: var(--destructive); }
   @media (prefers-reduced-motion: reduce) { .overview-card { transition: none; } }
 </style>

@@ -94,7 +94,7 @@
 
   function soundscapeName(soundscape: MusicSoundscapeOption | MusicSoundscapeDefinition): string {
     return "generatedKind" in soundscape && soundscape.generatedKind
-      ? t(`music.soundscape.generatedName.${soundscape.generatedKind}`)
+      ? t(`music.soundscape.rainName.${soundscape.generatedKind}`)
       : soundscape.name;
   }
 

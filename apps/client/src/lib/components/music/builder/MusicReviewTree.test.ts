@@ -8,7 +8,7 @@ import MusicReviewTree from "./MusicReviewTree.svelte";
 function item(id: string, title: string, relativePath: string): MusicItemListEntry {
   return {
     id, identityKey: id, sourceKind: "local-file", mediaKind: "audio", title, artist: "", album: "",
-    localRootId: "root-1", relativePath, originalArtworkIdentity: null, artworkOverride: null, durationMs: null, availability: "available", reviewState: "unreviewed",
+    localRootId: "root-1", relativePath, sourceCollectionIds: ["source-1"], originalArtworkIdentity: null, artworkOverride: null, durationMs: null, availability: "available", reviewState: "unreviewed",
     discoveredAt: 1, updatedAt: 1, version: 1, playlistCount: 0, activeSnoozeCount: 0,
     lastPlayedAt: null, playCount: 0, membershipId: null, membershipPosition: null,
     membershipWeight: null, membershipEnabled: null, membershipVersion: null,
@@ -50,6 +50,36 @@ describe("MusicReviewTree", () => {
       selectedItemIds: ["one", "two"],
     }));
     expect(target.textContent).not.toContain("Add 2 selected to playlists");
+  });
+
+  it("toggles ignored tracks beside refresh and marks ignored rows with an eye", async () => {
+    const onShowIgnoredChange = vi.fn();
+    const ignored = item("ignored", "Ignored", "Album/ignored.flac");
+    ignored.reviewState = "ignored";
+    target = document.createElement("div");
+    document.body.append(target);
+    component = mount(MusicReviewTree, {
+      target,
+      props: {
+        items: [ignored],
+        totalCount: 1,
+        activeItemId: null,
+        onActivate: vi.fn(),
+        showIgnored: true,
+        onShowIgnoredChange,
+      },
+    });
+    await tick();
+
+    const ignoredToggle = target.querySelector<HTMLButtonElement>('button[aria-label="Hide ignored tracks"]');
+    const refresh = target.querySelector<HTMLButtonElement>('button[aria-label="Refresh local folders"]');
+    expect(ignoredToggle?.nextElementSibling).toBe(refresh);
+    expect(ignoredToggle?.getAttribute("aria-pressed")).toBe("true");
+    expect(ignoredToggle?.querySelector(".lucide-eye-off")).not.toBeNull();
+    expect(target.querySelector('[data-review-state="ignored"]')).not.toBeNull();
+    ignoredToggle?.click();
+
+    expect(onShowIgnoredChange).toHaveBeenCalledWith(false);
   });
 
   it("propagates folder selection downward without marking ancestors", async () => {

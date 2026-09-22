@@ -4,7 +4,7 @@ use sqlx::Row;
 
 const BASELINE_SCHEMA: &str =
     include_str!("../../../../apps/client/src-tauri/migrations/20260830173211_baseline_schema.sql");
-const EXPECTED_MIGRATION_COUNT: i64 = 1;
+const EXPECTED_MIGRATION_COUNT: i64 = 2;
 
 #[test]
 fn fresh_database_applies_clean_baseline() {
@@ -71,6 +71,7 @@ fn fresh_database_applies_clean_baseline() {
             "music_soundscapes",
             "music_soundscape_locations",
             "music_soundscape_state",
+            "music_soundscape_active_selections",
             "music_search_fts",
             "notes_pages",
             "notes_blocks",

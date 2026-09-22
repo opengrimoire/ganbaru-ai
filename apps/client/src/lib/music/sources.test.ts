@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseMusicSourceInput,
   parseTimestampMs,
+  youtubeVideoIdFromIdentity,
   youtubeVideoSourceFromId,
 } from "./sources";
 
@@ -93,6 +94,14 @@ describe("parseMusicSourceInput", () => {
 
     expect(result.source).toBeNull();
     expect(result.error).toBe("Only local files and YouTube links are supported.");
+  });
+});
+
+describe("youtubeVideoIdFromIdentity", () => {
+  it("extracts standalone video IDs without treating playlists or malformed identities as videos", () => {
+    expect(youtubeVideoIdFromIdentity("youtube:video:dQw4w9WgXcQ")).toBe("dQw4w9WgXcQ");
+    expect(youtubeVideoIdFromIdentity("youtube:playlist:PLabcdef:item:0:video:dQw4w9WgXcQ")).toBeNull();
+    expect(youtubeVideoIdFromIdentity("youtube:video:bad!")).toBeNull();
   });
 });
 

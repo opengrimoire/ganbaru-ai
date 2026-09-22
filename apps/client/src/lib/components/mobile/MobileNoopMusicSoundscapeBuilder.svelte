@@ -1,5 +1,5 @@
 <script lang="ts">
-  type SoundscapeFilter = "all" | "generated" | "local";
+  import type { SoundscapeFilter } from "$lib/music/music-builder-view-state";
 
   let {
     filter = "all",
@@ -11,5 +11,6 @@
     compact?: boolean;
     addRequest?: number;
     onPlaybackStart?: () => void;
+    onGroupRemoved?: () => void;
   } = $props();
 </script>

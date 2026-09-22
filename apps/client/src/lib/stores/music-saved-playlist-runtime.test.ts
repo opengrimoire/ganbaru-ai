@@ -76,6 +76,21 @@ describe("saved playlist runtime", () => {
     expect(runtime.skipTarget(15, ranged)).toBe(20);
   });
 
+  it("restores playlist eligibility state after a temporary playback session", () => {
+    const runtime = new MusicSavedPlaylistRuntime(vi.fn(), () => 100);
+    const structural = emptyMusicSkipBreakdown();
+    structural["unbound-root"] = 1;
+    runtime.setStructuralSkipped(structural);
+    const checkpoint = runtime.checkpoint();
+    runtime.reset();
+
+    runtime.restore(checkpoint, [entry({ snoozedUntil: 200 })]);
+
+    expect(runtime.breakdown([entry({ snoozedUntil: 200 })], true))
+      .toMatchObject({ snoozed: 1, "unbound-root": 1 });
+    runtime.destroy();
+  });
+
   it("refreshes eligibility when the nearest Snooze expires", () => {
     vi.useFakeTimers();
     vi.setSystemTime(100);

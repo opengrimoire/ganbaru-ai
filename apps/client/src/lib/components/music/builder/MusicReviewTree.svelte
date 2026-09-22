@@ -1,6 +1,8 @@
 <script lang="ts">
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Check from "@lucide/svelte/icons/check";
+  import Eye from "@lucide/svelte/icons/eye";
+  import EyeOff from "@lucide/svelte/icons/eye-off";
   import Search from "@lucide/svelte/icons/search";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
@@ -33,6 +35,8 @@
     canRefresh = true,
     refreshing = false,
     onRefresh = () => undefined,
+    showIgnored = false,
+    onShowIgnoredChange = () => undefined,
     viewState = createMusicReviewTreeViewState(),
     onViewStateChange = () => undefined,
   }: {
@@ -48,6 +52,8 @@
     canRefresh?: boolean;
     refreshing?: boolean;
     onRefresh?: () => void;
+    showIgnored?: boolean;
+    onShowIgnoredChange?: (showIgnored: boolean) => void;
     viewState?: MusicReviewTreeViewState;
     onViewStateChange?: (state: MusicReviewTreeViewState) => void;
   } = $props();
@@ -201,6 +207,7 @@
         <span class="shrink-0 text-[0.6rem] tabular-nums text-muted-foreground" aria-live="polite" aria-label={t("music.builder.reviewSearchMatchCount", searchResult.matchCount)} title={t("music.builder.reviewSearchMatchCount", searchResult.matchCount)}>{searchResult.matchCount}</span>
         <button type="button" onclick={() => search = ""} class="grid h-6 w-6 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-background/60 hover:text-foreground" aria-label={t("music.builder.clearReviewSearch")}><X size={12} /></button>
       {/if}
+      <button type="button" onclick={() => onShowIgnoredChange(!showIgnored)} class={cn("grid h-6 w-6 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-background/60 hover:text-foreground", showIgnored && "bg-background/60 text-foreground")} aria-label={showIgnored ? t("music.builder.hideIgnored") : t("music.builder.showIgnored")} title={showIgnored ? t("music.builder.hideIgnored") : t("music.builder.showIgnored")} aria-pressed={showIgnored}>{#if showIgnored}<EyeOff size={12} />{:else}<Eye size={12} />{/if}</button>
       <button type="button" onclick={onRefresh} disabled={!canRefresh || refreshing} class="grid h-6 w-6 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-background/60 hover:text-foreground disabled:opacity-40" aria-label={refreshing ? t("music.builder.refreshing") : t("music.builder.refreshLocalFolders")} title={refreshing ? t("music.builder.refreshing") : t("music.builder.refreshLocalFolders")}><RefreshCw class={cn(refreshing && "animate-spin motion-reduce:animate-none")} size={12} /></button>
     </div>
   </div>
@@ -239,7 +246,7 @@
         </div>
       {:else}
         <div data-review-item-id={row.item.id} class={cn("relative flex h-8 min-w-0 items-center rounded-lg", selectedIds.has(row.item.id) || activeItemId === row.item.id ? "bg-primary/10 text-foreground" : "hover:bg-accent/50")} style={`padding-left: ${row.depth * 0.75 + 1.75}rem`}>
-          <button type="button" onclick={() => onActivate(row.item.id)} class="absolute inset-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring" aria-label={row.item.reviewState === "reviewed" ? `${row.item.title}, ${t("music.builder.markReviewed")}` : row.item.title} aria-current={activeItemId === row.item.id ? "true" : undefined}></button>
+          <button type="button" onclick={() => onActivate(row.item.id)} class="absolute inset-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring" aria-label={row.item.reviewState === "reviewed" ? `${row.item.title}, ${t("music.builder.markReviewed")}` : row.item.reviewState === "ignored" ? `${row.item.title}, ${t("music.builder.ignored")}` : row.item.title} aria-current={activeItemId === row.item.id ? "true" : undefined}></button>
           <label class="relative z-10 grid h-full w-7 shrink-0 cursor-pointer place-items-center">
             <input type="checkbox" checked={selectedIds.has(row.item.id)} disabled={selectionDisabled} onchange={() => toggleItem(row.item.id)} class="peer absolute h-4 w-4 opacity-0" aria-label={t("music.builder.selectTrack", row.item.title)} />
             <span class={cn("pointer-events-none grid h-4 w-4 place-items-center rounded border peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ring", selectedIds.has(row.item.id) ? "border-primary bg-primary text-primary-foreground" : "border-border/80 bg-background/70", selectionDisabled && "opacity-35")}>
@@ -248,7 +255,9 @@
           </label>
           <span class="pointer-events-none flex min-w-0 flex-1 items-center pr-2 text-left">
             <span class="min-w-0 flex-1 truncate text-[0.68rem]">{row.item.title}</span>
-            {#if issueItemIds.has(row.item.id)}
+            {#if row.item.reviewState === "ignored"}
+              <span class="ml-2 grid h-5 w-5 shrink-0 place-items-center text-muted-foreground" data-review-state="ignored" aria-hidden="true"><Eye size={12} /></span>
+            {:else if issueItemIds.has(row.item.id)}
               <span class="ml-2 grid h-5 w-5 shrink-0 place-items-center text-destructive" aria-label={t("music.builder.trackNeedsAttention", row.item.title)}><TriangleAlert size={12} /></span>
             {:else if row.item.reviewState === "reviewed"}
               <span class="ml-2 grid h-5 w-5 shrink-0 place-items-center text-primary" aria-hidden="true"><Check size={12} strokeWidth={2.5} /></span>

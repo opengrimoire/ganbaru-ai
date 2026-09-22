@@ -22,6 +22,7 @@ export interface MusicPlaylistDraft {
   name: string;
   icon: string;
   shuffleEnabled: boolean;
+  mixEnabled: boolean;
   repeatMode: MusicRepeatMode;
   intendedUses: MusicIntendedUse[];
 }
@@ -112,7 +113,7 @@ export class MusicPlaylistController {
         undo: async () => {
           const receipt = await updateMusicPlaylist({
             id: previous.id, name: previous.name, icon: previous.icon,
-            shuffleEnabled: previous.shuffleEnabled, repeatMode: previous.repeatMode,
+            shuffleEnabled: previous.shuffleEnabled, mixEnabled: previous.mixEnabled, repeatMode: previous.repeatMode,
             intendedUses: previous.intendedUses, expectedVersion: detail.version, updatedAt: this.now(),
           });
           Object.assign(detail, previous, { version: receipt.version });
@@ -186,6 +187,7 @@ export class MusicPlaylistController {
         projection.entries,
         detail.shuffleEnabled,
         detail.repeatMode,
+        detail.mixEnabled,
         {
           explicitItemId,
           structuralSkipped: projection.structuralSkipped,
@@ -238,6 +240,7 @@ export class MusicPlaylistController {
     summary.name = draft.name;
     summary.icon = draft.icon;
     summary.shuffleEnabled = draft.shuffleEnabled;
+    summary.mixEnabled = draft.mixEnabled;
     summary.repeatMode = draft.repeatMode;
     summary.intendedUses = [...draft.intendedUses];
   }
@@ -248,6 +251,7 @@ function normalizedDraft(draft: MusicPlaylistDraft): MusicPlaylistDraft {
     name: draft.name.trim(),
     icon: draft.icon.trim(),
     shuffleEnabled: draft.shuffleEnabled,
+    mixEnabled: draft.mixEnabled,
     repeatMode: draft.repeatMode,
     intendedUses: [...new Set(draft.intendedUses)],
   };

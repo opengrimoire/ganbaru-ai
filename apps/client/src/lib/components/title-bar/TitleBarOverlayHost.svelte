@@ -45,6 +45,11 @@
   let performanceLoad: Promise<void> | null = null;
   let editorLoad: Promise<void> | null = null;
   let switcherLoad: Promise<void> | null = null;
+  let musicMounted = $state(false);
+
+  $effect(() => {
+    if (showMusic) musicMounted = true;
+  });
 
   function loadPerformance(): Promise<void> {
     if (PerformancePopover) return Promise.resolve();
@@ -120,8 +125,8 @@
   <QuickNotesPanel onclose={() => { showQuickNotes = false; }} />
 {/if}
 
-{#if showMusic}
-  <MusicPanel onclose={() => { showMusic = false; }} />
+{#if musicMounted}
+  <MusicPanel visible={showMusic} onclose={() => { showMusic = false; }} />
 {/if}
 
 {#if showThemeQuickSwitcher && ThemeQuickSwitcher}

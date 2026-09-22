@@ -35,6 +35,7 @@ Ganbaru AI does not infer whether a track is distracting. The user chooses playl
 
 - [Library and sources](library-and-sources.md)
 - [Playback](playback.md)
+- [Background sounds](soundscapes.md)
 - [Playlists and review](playlists-and-review.md)
 - [Automation](automation.md)
 - [Android native services](../../platforms/android/native-services-and-data.md)

@@ -2376,11 +2376,23 @@ CREATE TABLE music_soundscape_locations (
     PRIMARY KEY (soundscape_id, device_id)
 );
 
+CREATE TABLE music_soundscape_groups (
+    id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+    name TEXT NOT NULL CHECK (trim(name) <> ''),
+    icon TEXT NOT NULL CHECK (trim(icon) <> ''),
+    created_at INTEGER NOT NULL CHECK (created_at > 0),
+    updated_at INTEGER NOT NULL CHECK (updated_at > 0),
+    version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0)
+);
+
 CREATE TABLE music_soundscape_state (
     singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
     active_soundscape_id TEXT REFERENCES music_soundscapes(id) ON DELETE SET NULL,
+    multiple_enabled INTEGER NOT NULL DEFAULT 0 CHECK (multiple_enabled IN (0, 1)),
+    generated_level REAL CHECK (generated_level IS NULL OR (generated_level >= 0.0 AND generated_level <= 2.0)),
+    local_level REAL CHECK (local_level IS NULL OR (local_level >= 0.0 AND local_level <= 2.0)),
     desired_playing INTEGER NOT NULL DEFAULT 0 CHECK (desired_playing IN (0, 1)),
-    volume REAL NOT NULL DEFAULT 0.35 CHECK (volume >= 0.0 AND volume <= 1.0),
+    volume REAL NOT NULL DEFAULT 0.1 CHECK (volume >= 0.0 AND volume <= 1.0),
     updated_at INTEGER NOT NULL CHECK (updated_at > 0),
     version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0)
 );
@@ -2395,6 +2407,8 @@ CREATE TABLE music_soundscapes (
     generated_kind TEXT CHECK (generated_kind IN ('white', 'pink', 'brown')),
     bundled_identity TEXT,
     name TEXT NOT NULL CHECK (trim(name) <> ''),
+    icon TEXT NOT NULL DEFAULT 'lucide:audio-lines' CHECK (trim(icon) <> ''),
+    group_id TEXT REFERENCES music_soundscape_groups(id) ON DELETE SET NULL,
     availability TEXT NOT NULL CHECK (availability IN ('available', 'missing', 'unsupported')),
     created_at INTEGER NOT NULL CHECK (created_at > 0),
     updated_at INTEGER NOT NULL CHECK (updated_at > 0),
@@ -2404,6 +2418,11 @@ CREATE TABLE music_soundscapes (
         OR (source_kind = 'local-loop' AND generated_kind IS NULL AND bundled_identity IS NULL)
         OR (source_kind = 'bundled-loop' AND generated_kind IS NULL AND trim(bundled_identity) <> '')
     )
+);
+
+CREATE TABLE music_soundscape_active_selections (
+    position INTEGER PRIMARY KEY CHECK (position >= 0),
+    soundscape_id TEXT NOT NULL UNIQUE REFERENCES music_soundscapes(id) ON DELETE CASCADE
 );
 
 CREATE TABLE music_source_collection_items (
@@ -6574,7 +6593,7 @@ INSERT INTO music_soundscapes (
 
 INSERT INTO music_soundscape_state (
     singleton_id, active_soundscape_id, desired_playing, volume, updated_at, version
-) VALUES (1, NULL, 0, 0.35, CAST(strftime('%s', 'now') AS INTEGER) * 1000, 1);
+) VALUES (1, NULL, 0, 0.1, CAST(strftime('%s', 'now') AS INTEGER) * 1000, 1);
 
 INSERT INTO music_playlists (
     id, name, icon, shuffle_enabled, repeat_mode, sort_order,
@@ -6584,7 +6603,7 @@ VALUES
     ('playlist-default-start-of-day', 'Start of the day!', 'lucide:sunrise', 1, 'all', 0, 1, 1, 1),
     ('playlist-default-work-focus', 'Work (focus)', 'lucide:laptop', 1, 'all', 1, 1, 1, 1),
     ('playlist-default-work-ganbare', 'Work (ganbare!)', 'lucide:coffee', 1, 'all', 2, 1, 1, 1),
-    ('playlist-default-break-calm', 'Break (calm)', 'lucide:tree-pine', 1, 'all', 3, 1, 1, 1),
+    ('playlist-default-break-calm', 'Break (calm)', 'lucide:armchair', 1, 'all', 3, 1, 1, 1),
     ('playlist-default-break-active', 'Break (active)', 'lucide:footprints', 1, 'all', 4, 1, 1, 1),
     ('playlist-default-meditate', 'Meditate', 'lucide:smile', 1, 'all', 5, 1, 1, 1),
     ('playlist-default-exercise', 'Exercise', 'lucide:sport-shoe', 1, 'all', 6, 1, 1, 1),

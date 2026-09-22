@@ -2,13 +2,14 @@
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type { LocalRootBinding, MusicItemListEntry, MusicWeight } from "$lib/music/library-contracts";
   import { musicVirtualWindow, revealMusicVirtualIndex } from "$lib/music/music-virtual-window";
-  import type { MusicSnoozeDuration } from "$lib/music/music-snooze";
+  import type { MusicSnoozePreset } from "$lib/music/music-snooze";
   import MusicBuilderItemRow from "./MusicBuilderItemRow.svelte";
 
   let {
     items,
     initialScrollTop = 0,
     playingItemId = null,
+    startingItemId = null,
     playbackActive = false,
     bindings,
     playlistName,
@@ -16,6 +17,7 @@
     onTogglePlayback,
     onShowLocation,
     onSnooze,
+    onRemoveSnooze,
     onWeight,
     onRemove,
     onScrollTop = () => undefined,
@@ -26,13 +28,15 @@
     items: MusicItemListEntry[];
     initialScrollTop?: number;
     playingItemId?: string | null;
+    startingItemId?: string | null;
     playbackActive?: boolean;
     bindings: readonly LocalRootBinding[];
     playlistName: string;
     showLocationAction?: boolean;
     onTogglePlayback: (item: MusicItemListEntry) => void;
     onShowLocation: (item: MusicItemListEntry) => Promise<void>;
-    onSnooze: (item: MusicItemListEntry, duration: MusicSnoozeDuration, everywhere: boolean) => Promise<void>;
+    onSnooze: (item: MusicItemListEntry, duration: MusicSnoozePreset, everywhere: boolean) => Promise<void>;
+    onRemoveSnooze: (item: MusicItemListEntry) => Promise<void>;
     onWeight: (item: MusicItemListEntry, weight: MusicWeight) => Promise<void>;
     onRemove: (item: MusicItemListEntry) => Promise<void>;
     onScrollTop?: (scrollTop: number) => void;
@@ -92,9 +96,11 @@
       position={windowed.startIndex + visibleIndex + 1}
       setSize={items.length}
       playing={playbackActive && item.id === playingItemId}
+      starting={item.sourceKind === "youtube-video" && item.id === startingItemId}
       {onTogglePlayback}
       {onShowLocation}
       {onSnooze}
+      {onRemoveSnooze}
       {onWeight}
       {onRemove}
     />
