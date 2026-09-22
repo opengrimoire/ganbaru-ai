@@ -41,11 +41,12 @@ Always use the workspace flag for root scripts.
 | `pnpm -w run bundle-contracts` | Desktop and Android production-build contracts |
 | `pnpm -w run audit` | pnpm and Rust dependency audits |
 | `pnpm -w run validate` | Complete normal code gate |
+| `pnpm -w run validate:ci` | The same gate with two Cargo build jobs for the hosted Linux runner |
 | `pnpm -w run validate:full` | Dependency audits followed by the normal code gate |
 
 `validate` is the normal comprehensive gate. `validate:full` is required for dependency or lockfile changes, security-sensitive dependency work, releases, and explicit full-security requests.
 
-The hosted `linux validation` pull request workflow runs `validate`, including static checks, tests, editor diagnostics, and bundle contracts with the same bounded execution as local validation. The independent Android job builds an ARM64 debug APK, while the Windows job checks Rust composition without producing an installer.
+The hosted `linux validation` pull request workflow runs `validate:ci`, including the same static checks, tests, editor diagnostics, and bundle contracts as local `validate`. Only Cargo compilation uses two jobs instead of one. Rust tests still use one test thread, and the frontend shards remain sequential and single-worker. The independent Android job builds an ARM64 debug APK, while the Windows job checks Rust composition without producing an installer.
 
 ## Choosing a gate
 

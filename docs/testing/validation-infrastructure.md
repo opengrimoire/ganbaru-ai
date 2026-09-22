@@ -16,8 +16,8 @@ The shared Clippy policy allows `collapsible_if`: nested guards and edition-2024
 
 The complete normal gate runs in this order:
 
-1. Rust formatting and Clippy with one Cargo build job.
-2. Rust workspace tests with one Cargo build job and one runtime test thread.
+1. Rust formatting and Clippy with one Cargo build job locally, or two in Linux CI.
+2. Rust workspace tests with the same Cargo build limit and one runtime test thread.
 3. Svelte Check with a 1,792 MiB Node old-space limit, then TypeScript checking.
 4. Four sequential one-worker Vitest shards, excluding benchmark-harness tests.
 5. Tailwind diagnostics through Turbo.
@@ -25,7 +25,7 @@ The complete normal gate runs in this order:
 
 Rust runs first because compiler and linker peaks are less predictable. Rust and frontend tools do not overlap. Sequential Vitest shards release transformed module graphs between groups.
 
-The hosted Linux pull request and merge-queue job runs this same complete gate. It does not substitute static checks for regression tests or bundle contracts.
+The hosted Linux pull request and merge-queue job runs `validate:ci` with the same complete gate and order. The CI-only Rust scripts allow two Cargo build jobs on its 16 GiB runner. Local `validate` retains explicit `-j 1` limits for machines with less memory. CI does not substitute static checks for regression tests or bundle contracts.
 
 Benchmark fixture and harness contracts are deliberately outside `validate`. Run `pnpm -w run test:benchmark-contracts` when changing the harness. Performance measurement remains manual release-build work.
 

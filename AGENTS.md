@@ -272,7 +272,7 @@ Read `docs/testing/README.md` when changing tests, validation scripts, task orde
 
 **Validation policy for agent work:**
 - The root `check`, `test`, and `validate` scripts intentionally cap tool concurrency. Use those scripts for broad local verification instead of direct full-suite `turbo`, `vitest`, or `cargo` commands.
-- The broad root scripts intentionally run Rust work before frontend work, use one Cargo build job and Rust test thread, and split Vitest into sequential one-worker shards. Do not increase their concurrency, combine Rust and frontend stages, or remove the sharding without measuring peak memory and confirming that coverage is preserved.
+- Local broad root scripts intentionally run Rust work before frontend work, use one Cargo build job and Rust test thread, and split Vitest into sequential one-worker shards. The hosted Linux `validate:ci` variant uses two Cargo build jobs while keeping one Rust test thread and the same frontend limits. Do not increase concurrency further, combine Rust and frontend stages, or remove the sharding without measuring peak memory and confirming that coverage is preserved.
 - Run frontend and Rust validation sequentially. Do not run Cargo compilation or tests concurrently with Vitest, Svelte checks, Turbo, or another Node-based validation command.
 - Do not run additional validation commands while a root `check`, `test`, `validate`, or `validate:full` command is active.
 - For direct focused checks, use one Vitest worker and one Cargo build job and test thread unless the user explicitly requests higher concurrency. Add `--lib` when the filtered Rust test is in the library so Cargo does not build unrelated binary test targets. Use an explicit `--bin <name>` only when testing that binary.
@@ -303,6 +303,7 @@ Read `docs/testing/README.md` when changing tests, validation scripts, task orde
 - `pnpm -w run audit:rust`: RustSec audit for cargo dependencies. Run for dependency or lockfile changes, before PRs, before releases, and when investigating security alerts. Reviewed ignores live in `.cargo/audit.toml` and must be documented in `docs/data/security/dependency-audits.md`.
 - `pnpm -w run audit`: both dependency audits (`audit:deps` + `audit:rust`).
 - `pnpm -w run validate`: full normal gate (check + test + editor-check + bundle contracts). Run before PRs, releases, risk-sensitive completion gates, and explicit full-validation requests. Do not treat ordinary task completion or a commit alone as requiring this gate. All errors must be fixed before treating that gate as passed.
+- `pnpm -w run validate:ci`: the same gate with two Cargo build jobs, reserved for hosted Linux CI. Do not use it for local validation on memory-limited machines.
 - `pnpm -w run validate:full`: security and code gate (audit + validate). Run for dependency or lockfile changes, before PRs, before releases, and when explicitly requested.
 - `pnpm --dir apps/client run test:coverage`: frontend coverage report to see what is tested.
 
