@@ -10,6 +10,7 @@
   import { onMount, tick } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { orderedGeneratedSounds } from "$lib/music/soundscape-presentation";
+  import { centeredSoundscapePanelLeft } from "$lib/music/soundscape-popover-position";
   import { getSoundscapeStore } from "$lib/stores/soundscape.svelte";
   import MusicSoundscapeGroupIcon from "./MusicSoundscapeGroupIcon.svelte";
   import MusicSoundscapeSectionControls from "./MusicSoundscapeSectionControls.svelte";
@@ -20,6 +21,7 @@
   let root = $state<HTMLElement | null>(null);
   let trigger = $state<HTMLButtonElement | null>(null);
   let popover = $state<HTMLElement | null>(null);
+  let popoverLeft = $state<number | null>(null);
   let open = $state(false);
   const active = $derived(soundscape.activeDefinition);
   const selectedIds = $derived(soundscape.persisted?.activeIds ?? []);
@@ -45,12 +47,22 @@
     };
     window.addEventListener("pointerdown", close, true);
     window.addEventListener("keydown", closeWithKeyboard, true);
-    return () => { window.removeEventListener("pointerdown", close, true); window.removeEventListener("keydown", closeWithKeyboard, true); };
+    window.addEventListener("resize", positionPopover);
+    return () => { window.removeEventListener("pointerdown", close, true); window.removeEventListener("keydown", closeWithKeyboard, true); window.removeEventListener("resize", positionPopover); };
   });
+
+  function positionPopover(): void {
+    if (!root || !trigger || !popover) return;
+    const triggerRect = trigger.getBoundingClientRect();
+    popoverLeft = centeredSoundscapePanelLeft(triggerRect.left, triggerRect.width, popover.offsetWidth, window.innerWidth) - root.getBoundingClientRect().left;
+  }
 
   async function toggle(): Promise<void> {
     open = !open;
     if (!open) return;
+    popoverLeft = null;
+    await tick();
+    positionPopover();
     await tick();
     (popover?.querySelector<HTMLElement>("button:not(:disabled), input:not(:disabled)") ?? popover)?.focus();
   }
@@ -73,7 +85,7 @@
     {#if playing}<span class="absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true"></span>{/if}
   </button>
   {#if open}
-    <div bind:this={popover} tabindex="-1" class="soundscape-popover absolute bottom-full right-0 z-40 mb-2 w-[min(19rem,calc(100vw-1rem))] max-h-[calc(100vh-1rem)] overflow-y-auto rounded-xl border border-border/75 bg-popover p-3 text-popover-foreground shadow-md" role="dialog" aria-label={t("music.soundscape.controls")}>
+    <div bind:this={popover} tabindex="-1" class="soundscape-popover absolute bottom-full z-40 mb-2 w-[min(19rem,calc(100vw-1rem))] max-h-[calc(100vh-1rem)] overflow-y-auto rounded-xl border border-border/75 bg-popover p-3 text-popover-foreground shadow-md" style={popoverLeft === null ? "visibility:hidden" : `--soundscape-popover-left:${popoverLeft}px`} role="dialog" aria-label={t("music.soundscape.controls")}>
       <div class="flex min-h-9 items-center gap-2 px-1">
         <Volume2 size={15} class="shrink-0 text-muted-foreground" />
         <input id="soundscape-volume" class="min-w-0 flex-1 accent-primary disabled:opacity-40" type="range" min="0" max="1" step="0.01" value={volume} aria-label={t("music.soundscape.volume")} disabled={!soundscape.persisted || soundscape.loading} oninput={(event) => { void soundscape.setVolume(Number(event.currentTarget.value)); }} />
@@ -114,6 +126,8 @@
 </div>
 
 <style>
+  .soundscape-popover { left: var(--soundscape-popover-left, 0px); }
+
   @media (max-height: 260px) {
     .soundscape-popover { position: fixed; inset: 0.5rem; width: auto; max-height: none; margin: 0; }
   }

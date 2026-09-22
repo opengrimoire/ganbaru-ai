@@ -7,6 +7,7 @@
   import { portal } from "$lib/utils/portal";
   import type { SelectPopoverGeometry } from "$lib/components/settings/customSelectPosition";
   import { pickSoundscapePopoverGeometry, SOUNDSCAPE_POPOVER_WIDTH } from "$lib/music/soundscape-popover-position";
+  import { soundscapeLevelFromAdjustment, soundscapeVolumeAdjustment } from "$lib/music/soundscape-volume-adjustment";
 
   let { title, section, idPrefix, compact = false }: { title: string; section: "generated" | "local"; idPrefix: string; compact?: boolean } = $props();
   const { t } = getLocalization();
@@ -17,6 +18,7 @@
   let popover = $state<HTMLDivElement | null>(null);
   let geometry = $state<SelectPopoverGeometry | null>(null);
   const level = $derived(soundscape.sectionLevels[section]);
+  const adjustment = $derived(soundscapeVolumeAdjustment(level));
   const layered = $derived(soundscape.persisted?.multipleEnabled ?? false);
 
   function activeTrigger(): HTMLButtonElement | null {
@@ -84,14 +86,17 @@
 <div class="min-w-0 flex-1">
   <div class={compact ? "flex h-7 items-center gap-0.5" : "flex h-8 items-center gap-0.5"}>
     <h2 class="min-w-0 flex-1 truncate text-xs font-semibold">{title}</h2>
-    <button bind:this={modeTrigger} type="button" aria-label={t("music.soundscape.sectionMode")} aria-haspopup="dialog" aria-expanded={panel === "mode"} disabled={!soundscape.persisted || soundscape.saving} class={panel === "mode" ? "grid h-6 w-6 shrink-0 place-items-center rounded-md bg-accent text-foreground" : "grid h-6 w-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"} onclick={() => { void toggle("mode"); }}><Layers2 size={13} strokeWidth={1.5} /></button>
-    <button bind:this={balanceTrigger} type="button" aria-label={t("music.soundscape.sectionLevel")} aria-haspopup="dialog" aria-expanded={panel === "balance"} disabled={!soundscape.persisted} class={panel === "balance" || level !== null ? "grid h-6 w-6 shrink-0 place-items-center rounded-md bg-accent text-foreground" : "grid h-6 w-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"} onclick={() => { void toggle("balance"); }}><Volume2 size={13} strokeWidth={1.5} /></button>
+    <button bind:this={modeTrigger} type="button" aria-label={t("music.soundscape.sectionMode")} aria-haspopup="dialog" aria-expanded={panel === "mode"} disabled={!soundscape.persisted || soundscape.saving} class={panel === "mode" ? "grid h-6 w-6 shrink-0 place-items-center rounded-md bg-accent text-foreground" : "grid h-6 w-6 shrink-0 place-items-center rounded-md text-foreground hover:bg-accent disabled:opacity-40"} onclick={() => { void toggle("mode"); }}><Layers2 size={13} strokeWidth={1.5} /></button>
+    <button bind:this={balanceTrigger} type="button" aria-label={t("music.soundscape.sectionLevel")} aria-haspopup="dialog" aria-expanded={panel === "balance"} disabled={!soundscape.persisted} class={panel === "balance" || adjustment !== 0 ? "grid h-6 w-6 shrink-0 place-items-center rounded-md bg-accent text-foreground" : "grid h-6 w-6 shrink-0 place-items-center rounded-md text-foreground hover:bg-accent disabled:opacity-40"} onclick={() => { void toggle("balance"); }}><Volume2 size={13} strokeWidth={1.5} /></button>
   </div>
 </div>
 
 {#if panel}
   <div use:portal bind:this={popover} data-soundscape-subpanel={idPrefix} role="dialog" aria-label={panel === "mode" ? t("music.soundscape.sectionMode") : t("music.soundscape.sectionLevel")} style={popoverStyle()} class="fixed z-120 flex h-20 select-none flex-col justify-between overflow-y-auto rounded-xl border border-border/80 bg-popover p-3 text-popover-foreground shadow-md" onfocusout={(event) => { if (event.relatedTarget instanceof Node && (popover?.contains(event.relatedTarget) || activeTrigger()?.contains(event.relatedTarget))) return; panel = null; }}>
-  <p class={panel === "balance" ? "translate-y-0.5 truncate text-xs font-semibold" : "truncate text-xs font-semibold"}>{panel === "mode" ? t("music.soundscape.sectionMode") : t("music.soundscape.sectionLevel")}</p>
+  <div class="flex min-w-0 items-center justify-between gap-2">
+    <p class={panel === "balance" ? "translate-y-0.5 truncate text-xs font-semibold" : "truncate text-xs font-semibold"}>{panel === "mode" ? t("music.soundscape.sectionMode") : t("music.soundscape.sectionLevel")}</p>
+    {#if panel === "balance"}<span class="shrink-0 translate-y-0.5 text-xs tabular-nums text-muted-foreground">{adjustment > 0 ? "+" : ""}{adjustment}%</span>{/if}
+  </div>
   {#if panel === "mode"}
     <div class="flex h-8 items-center gap-1">
       <button type="button" aria-pressed={!layered} class={!layered ? "h-8 min-w-0 flex-1 rounded-md bg-secondary text-xs font-medium" : "h-8 min-w-0 flex-1 rounded-md text-xs text-muted-foreground hover:bg-accent/60 hover:text-foreground"} onclick={() => { void soundscape.setMultipleEnabled(false); }}>{t("music.soundscape.singleMode")}</button>
@@ -99,12 +104,67 @@
     </div>
   {:else if panel === "balance"}
     <div class="flex h-8 translate-y-0.5 items-center gap-2">
-      <button type="button" role="switch" aria-checked={level !== null} aria-label={t("music.soundscape.useBalance")} class="grid h-8 w-8 shrink-0 place-items-center" onclick={() => { void soundscape.setSectionLevel(section, level === null ? 1 : null); }}><span class={level !== null ? "block h-4 w-7 rounded-full bg-primary p-0.5" : "block h-4 w-7 rounded-full bg-muted-foreground/35 p-0.5"}><span class={level !== null ? "block h-3 w-3 translate-x-3 rounded-full bg-primary-foreground transition-transform" : "block h-3 w-3 rounded-full bg-background transition-transform"}></span></span></button>
+      <span class="shrink-0 text-[0.68rem] tabular-nums text-muted-foreground">-100%</span>
       <label class="sr-only" for={`${idPrefix}-${section}-balance`}>{t("music.soundscape.sectionLevel")}</label>
-      <input id={`${idPrefix}-${section}-balance`} type="range" min="0" max="2" step="0.05" value={level ?? 1} disabled={level === null} class="min-w-8 flex-1 accent-primary disabled:opacity-40" aria-describedby={`${idPrefix}-${section}-balance-hint`} oninput={(event) => { void soundscape.setSectionLevel(section, Number(event.currentTarget.value)); }} />
+      <input id={`${idPrefix}-${section}-balance`} type="range" min="-100" max="100" step="5" value={adjustment} disabled={!soundscape.persisted} class="soundscape-adjustment-slider min-w-8 flex-1 disabled:opacity-40" style={`--soundscape-adjustment-start: ${Math.min(50, (adjustment + 100) / 2)}%; --soundscape-adjustment-end: ${Math.max(50, (adjustment + 100) / 2)}%;`} aria-valuetext={`${adjustment > 0 ? "+" : ""}${adjustment}%`} aria-describedby={`${idPrefix}-${section}-balance-hint`} oninput={(event) => { void soundscape.setSectionLevel(section, soundscapeLevelFromAdjustment(Number(event.currentTarget.value))); }} />
       <span id={`${idPrefix}-${section}-balance-hint`} class="sr-only">{t("music.soundscape.balanceHint")}</span>
-      <span class="w-9 shrink-0 text-right text-[0.68rem] tabular-nums text-muted-foreground">{Math.round((level ?? 1) * 100)}%</span>
+      <span class="shrink-0 text-[0.68rem] tabular-nums text-muted-foreground">100%</span>
     </div>
   {/if}
   </div>
 {/if}
+
+<style>
+  .soundscape-adjustment-slider {
+    --soundscape-adjustment-thumb-size: 0.875rem;
+    --soundscape-adjustment-track-height: 0.25rem;
+    --soundscape-adjustment-track-color: color-mix(in srgb, var(--foreground) 22%, transparent);
+    --soundscape-adjustment-thumb-border: color-mix(in srgb, var(--foreground) 18%, transparent);
+
+    height: var(--soundscape-adjustment-thumb-size);
+    appearance: none;
+    cursor: pointer;
+    background: linear-gradient(
+      to right,
+      var(--soundscape-adjustment-track-color) 0%,
+      var(--soundscape-adjustment-track-color) var(--soundscape-adjustment-start),
+      var(--primary) var(--soundscape-adjustment-start),
+      var(--primary) var(--soundscape-adjustment-end),
+      var(--soundscape-adjustment-track-color) var(--soundscape-adjustment-end),
+      var(--soundscape-adjustment-track-color) 100%
+    ) center / calc(100% - var(--soundscape-adjustment-thumb-size)) var(--soundscape-adjustment-track-height) no-repeat;
+  }
+
+  .soundscape-adjustment-slider:disabled { cursor: default; }
+
+  .soundscape-adjustment-slider::-webkit-slider-runnable-track {
+    height: var(--soundscape-adjustment-track-height);
+    border-radius: 999px;
+    background: transparent;
+  }
+
+  .soundscape-adjustment-slider::-webkit-slider-thumb {
+    width: var(--soundscape-adjustment-thumb-size);
+    height: var(--soundscape-adjustment-thumb-size);
+    margin-top: calc((var(--soundscape-adjustment-track-height) - var(--soundscape-adjustment-thumb-size)) / 2);
+    appearance: none;
+    border: 1px solid var(--soundscape-adjustment-thumb-border);
+    border-radius: 999px;
+    background: var(--card);
+  }
+
+  .soundscape-adjustment-slider::-moz-range-track,
+  .soundscape-adjustment-slider::-moz-range-progress {
+    height: var(--soundscape-adjustment-track-height);
+    border-radius: 999px;
+    background: transparent;
+  }
+
+  .soundscape-adjustment-slider::-moz-range-thumb {
+    width: var(--soundscape-adjustment-thumb-size);
+    height: var(--soundscape-adjustment-thumb-size);
+    border: 1px solid var(--soundscape-adjustment-thumb-border);
+    border-radius: 999px;
+    background: var(--card);
+  }
+</style>
