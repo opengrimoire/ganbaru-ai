@@ -10,6 +10,7 @@ type DefinitionRow = (
     Option<String>,
     Option<String>,
     String,
+    String,
     Option<String>,
     String,
     Option<String>,
@@ -24,7 +25,7 @@ pub(crate) async fn definitions(
 ) -> MusicLibraryResult<Vec<MusicSoundscapeDefinition>> {
     validate_id(device_id, "deviceId")?;
     let rows = sqlx::query_as::<_, DefinitionRow>(
-        "SELECT s.id, s.source_kind, s.generated_kind, s.bundled_identity, s.name, s.group_id,
+        "SELECT s.id, s.source_kind, s.generated_kind, s.bundled_identity, s.name, s.icon, s.group_id,
                 CASE WHEN s.source_kind = 'local-loop'
                      THEN COALESCE(l.availability, 'missing') ELSE s.availability END,
                 l.absolute_path, s.created_at, s.updated_at, s.version
@@ -142,14 +143,15 @@ pub(crate) async fn upsert(
     let version = existing.as_ref().map(|row| row.1 + 1).unwrap_or(1);
     sqlx::query(
         "INSERT INTO music_soundscapes
-            (id, source_kind, generated_kind, bundled_identity, name, group_id, availability,
+            (id, source_kind, generated_kind, bundled_identity, name, icon, group_id, availability,
              created_at, updated_at, version)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
             source_kind = excluded.source_kind,
             generated_kind = excluded.generated_kind,
             bundled_identity = excluded.bundled_identity,
             name = excluded.name,
+            icon = excluded.icon,
             group_id = excluded.group_id,
             availability = excluded.availability,
             updated_at = excluded.updated_at,
@@ -164,6 +166,7 @@ pub(crate) async fn upsert(
     )
     .bind(&request.bundled_identity)
     .bind(request.name.trim())
+    .bind(&request.icon)
     .bind(&request.group_id)
     .bind(MusicSoundscapeAvailability::Available.as_ref())
     .bind(created_at)
@@ -220,6 +223,12 @@ pub(crate) async fn remove(
         .begin()
         .await
         .map_err(|error| MusicLibraryError::database("begin soundscape removal", error))?;
+    let active_ids: Vec<String> = sqlx::query_scalar(
+        "SELECT soundscape_id FROM music_soundscape_active_selections ORDER BY position",
+    )
+    .fetch_all(&mut *transaction)
+    .await
+    .map_err(|error| MusicLibraryError::database("load selected background sounds", error))?;
     let result = sqlx::query(
         "DELETE FROM music_soundscapes
          WHERE id = ? AND source_kind = 'local-loop' AND version = ?",
@@ -234,29 +243,18 @@ pub(crate) async fn remove(
             "the soundscape changed or cannot be removed",
         ));
     }
-    let active_json: String = sqlx::query_scalar(
-        "SELECT active_ids_json FROM music_soundscape_state WHERE singleton_id = 1",
-    )
-    .fetch_one(&mut *transaction)
-    .await
-    .map_err(|error| MusicLibraryError::database("load selected background sounds", error))?;
-    let mut active_ids: Vec<String> = serde_json::from_str(&active_json)
-        .map_err(|error| MusicLibraryError::runtime("decode selected background sounds", error))?;
     if active_ids.iter().any(|id| id == soundscape_id) {
-        active_ids.retain(|id| id != soundscape_id);
-        let remaining_json = serde_json::to_string(&active_ids).map_err(|error| {
-            MusicLibraryError::runtime("encode selected background sounds", error)
-        })?;
+        let first_remaining = active_ids.iter().find(|id| id.as_str() != soundscape_id);
+        let remaining_count = active_ids.len() - 1;
         sqlx::query(
             "UPDATE music_soundscape_state
-             SET active_soundscape_id = ?, active_ids_json = ?,
+             SET active_soundscape_id = ?,
                  desired_playing = CASE WHEN ? = 0 THEN 0 ELSE desired_playing END,
                  updated_at = updated_at + 1, version = version + 1
              WHERE singleton_id = 1",
         )
-        .bind(active_ids.first())
-        .bind(remaining_json)
-        .bind(active_ids.len() as i64)
+        .bind(first_remaining)
+        .bind(remaining_count as i64)
         .execute(&mut *transaction)
         .await
         .map_err(|error| MusicLibraryError::database("update selected background sounds", error))?;
@@ -265,25 +263,29 @@ pub(crate) async fn remove(
 }
 
 pub(crate) async fn state(pool: &SqlitePool) -> MusicLibraryResult<MusicSoundscapeState> {
-    let row = sqlx::query_as::<_, (Option<String>, String, bool, Option<f64>, Option<f64>, bool, f64, i64, i64)>(
-        "SELECT active_soundscape_id, active_ids_json, multiple_enabled, generated_level, local_level, desired_playing, volume, updated_at, version
+    let row = sqlx::query_as::<_, (Option<String>, bool, Option<f64>, Option<f64>, bool, f64, i64, i64)>(
+        "SELECT active_soundscape_id, multiple_enabled, generated_level, local_level, desired_playing, volume, updated_at, version
          FROM music_soundscape_state WHERE singleton_id = 1",
     )
     .fetch_one(pool)
     .await
     .map_err(|error| MusicLibraryError::database("load soundscape state", error))?;
+    let active_ids = sqlx::query_scalar(
+        "SELECT soundscape_id FROM music_soundscape_active_selections ORDER BY position",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|error| MusicLibraryError::database("load selected background sounds", error))?;
     Ok(MusicSoundscapeState {
         active_soundscape_id: row.0,
-        active_ids: serde_json::from_str(&row.1).map_err(|error| {
-            MusicLibraryError::runtime("decode active background sounds", error)
-        })?,
-        multiple_enabled: row.2,
-        generated_level: row.3,
-        local_level: row.4,
-        desired_playing: row.5,
-        volume: row.6,
-        updated_at: row.7,
-        version: row.8,
+        active_ids,
+        multiple_enabled: row.1,
+        generated_level: row.2,
+        local_level: row.3,
+        desired_playing: row.4,
+        volume: row.5,
+        updated_at: row.6,
+        version: row.7,
     })
 }
 
@@ -359,14 +361,17 @@ pub(crate) async fn update_state(
             "cannot be enabled without an active soundscape",
         ));
     }
+    let mut transaction = pool
+        .begin()
+        .await
+        .map_err(|error| MusicLibraryError::database("begin soundscape state update", error))?;
     let result = sqlx::query(
         "UPDATE music_soundscape_state
-         SET active_soundscape_id = ?, active_ids_json = ?, multiple_enabled = ?, generated_level = ?, local_level = ?, desired_playing = ?, volume = ?,
+         SET active_soundscape_id = ?, multiple_enabled = ?, generated_level = ?, local_level = ?, desired_playing = ?, volume = ?,
              updated_at = ?, version = version + 1
          WHERE singleton_id = 1 AND version = ?",
     )
     .bind(request.active_soundscape_id)
-    .bind(serde_json::to_string(&request.active_ids).map_err(|error| MusicLibraryError::runtime("encode active background sounds", error))?)
     .bind(request.multiple_enabled)
     .bind(request.generated_level)
     .bind(request.local_level)
@@ -374,7 +379,7 @@ pub(crate) async fn update_state(
     .bind(request.volume)
     .bind(request.updated_at)
     .bind(request.expected_version)
-    .execute(pool)
+    .execute(&mut *transaction)
     .await
     .map_err(|error| MusicLibraryError::database("update soundscape state", error))?;
     if result.rows_affected() == 0 {
@@ -382,6 +387,21 @@ pub(crate) async fn update_state(
             "the soundscape state changed before this update",
         ));
     }
+    sqlx::query("DELETE FROM music_soundscape_active_selections")
+        .execute(&mut *transaction)
+        .await
+        .map_err(|error| MusicLibraryError::database("clear selected background sounds", error))?;
+    for (position, id) in request.active_ids.iter().enumerate() {
+        sqlx::query(
+            "INSERT INTO music_soundscape_active_selections (position, soundscape_id) VALUES (?, ?)",
+        )
+        .bind(position as i64)
+        .bind(id)
+        .execute(&mut *transaction)
+        .await
+        .map_err(|error| MusicLibraryError::database("save selected background sound", error))?;
+    }
+    super::writes::commit(transaction, "commit soundscape state update").await?;
     state(pool).await
 }
 
@@ -406,6 +426,7 @@ fn validate_write(request: &MusicSoundscapeWrite) -> MusicLibraryResult<()> {
             "must contain between one and 200 characters",
         ));
     }
+    super::validate_icon(&request.icon)?;
     if let Some(group_id) = &request.group_id {
         validate_id(group_id, "groupId")?;
         if request.source_kind != MusicSoundscapeSourceKind::LocalLoop {
@@ -523,14 +544,15 @@ fn decode_definition(row: DefinitionRow) -> MusicLibraryResult<MusicSoundscapeDe
             .map_err(|message| MusicLibraryError::runtime("decode generated noise", message))?,
         bundled_identity: row.3,
         name: row.4,
-        group_id: row.5,
-        availability: MusicSoundscapeAvailability::try_from(row.6.as_str()).map_err(|message| {
+        icon: row.5,
+        group_id: row.6,
+        availability: MusicSoundscapeAvailability::try_from(row.7.as_str()).map_err(|message| {
             MusicLibraryError::runtime("decode soundscape availability", message)
         })?,
-        local_path: row.7,
-        created_at: row.8,
-        updated_at: row.9,
-        version: row.10,
+        local_path: row.8,
+        created_at: row.9,
+        updated_at: row.10,
+        version: row.11,
     })
 }
 
@@ -555,6 +577,11 @@ mod tests {
             assert!(
                 generated
                     .iter()
+                    .all(|entry| entry.icon == "lucide:audio-lines")
+            );
+            assert!(
+                generated
+                    .iter()
                     .all(|entry| entry.availability == MusicSoundscapeAvailability::Available)
             );
 
@@ -576,6 +603,7 @@ mod tests {
                     generated_kind: None,
                     bundled_identity: None,
                     name: "Rain".into(),
+                    icon: "lucide:cloud-rain".into(),
                     group_id: None,
                     device_id: "device-a".into(),
                     local_path: Some(path.to_string_lossy().into_owned()),
@@ -586,6 +614,21 @@ mod tests {
             .await
             .unwrap();
             assert_eq!(saved.local_path.as_deref(), path.to_str());
+            assert_eq!(saved.icon, "lucide:cloud-rain");
+            let invalid_icon = MusicSoundscapeWrite {
+                id: saved.id.clone(),
+                source_kind: MusicSoundscapeSourceKind::LocalLoop,
+                generated_kind: None,
+                bundled_identity: None,
+                name: saved.name.clone(),
+                icon: "unknown".into(),
+                group_id: None,
+                device_id: "device-a".into(),
+                local_path: saved.local_path.clone(),
+                expected_version: Some(saved.version),
+                updated_at: 1_700_000_000_001,
+            };
+            assert!(validate_write(&invalid_icon).is_err());
 
             let copied_device = definitions(&pool, "device-b")
                 .await
@@ -594,6 +637,7 @@ mod tests {
                 .find(|entry| entry.id == saved.id)
                 .unwrap();
             assert_eq!(copied_device.name, "Rain");
+            assert_eq!(copied_device.icon, "lucide:cloud-rain");
             assert_eq!(copied_device.local_path, None);
             assert_eq!(
                 copied_device.availability,
@@ -694,6 +738,7 @@ mod tests {
                     generated_kind: None,
                     bundled_identity: None,
                     name: "Rain at night".into(),
+                    icon: "emoji:🌧️".into(),
                     group_id: None,
                     device_id: "device-a".into(),
                     local_path: Some(path.to_string_lossy().into_owned()),
@@ -704,6 +749,7 @@ mod tests {
             .await
             .unwrap();
             assert_eq!(renamed.availability, MusicSoundscapeAvailability::Missing);
+            assert_eq!(renamed.icon, "emoji:🌧️");
             let remote_rename = upsert(
                 &pool,
                 MusicSoundscapeWrite {
@@ -712,6 +758,7 @@ mod tests {
                     generated_kind: None,
                     bundled_identity: None,
                     name: "Rain overnight".into(),
+                    icon: renamed.icon.clone(),
                     group_id: None,
                     device_id: "device-b".into(),
                     local_path: None,

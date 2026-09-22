@@ -2379,7 +2379,7 @@ CREATE TABLE music_soundscape_locations (
 CREATE TABLE music_soundscape_groups (
     id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
     name TEXT NOT NULL CHECK (trim(name) <> ''),
-    icon TEXT NOT NULL CHECK (icon IN ('cloud-rain', 'waves', 'wind', 'trees', 'coffee', 'audio-lines')),
+    icon TEXT NOT NULL CHECK (trim(icon) <> ''),
     created_at INTEGER NOT NULL CHECK (created_at > 0),
     updated_at INTEGER NOT NULL CHECK (updated_at > 0),
     version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0)
@@ -2388,7 +2388,6 @@ CREATE TABLE music_soundscape_groups (
 CREATE TABLE music_soundscape_state (
     singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
     active_soundscape_id TEXT REFERENCES music_soundscapes(id) ON DELETE SET NULL,
-    active_ids_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(active_ids_json)),
     multiple_enabled INTEGER NOT NULL DEFAULT 0 CHECK (multiple_enabled IN (0, 1)),
     generated_level REAL CHECK (generated_level IS NULL OR (generated_level >= 0.0 AND generated_level <= 2.0)),
     local_level REAL CHECK (local_level IS NULL OR (local_level >= 0.0 AND local_level <= 2.0)),
@@ -2408,6 +2407,7 @@ CREATE TABLE music_soundscapes (
     generated_kind TEXT CHECK (generated_kind IN ('white', 'pink', 'brown')),
     bundled_identity TEXT,
     name TEXT NOT NULL CHECK (trim(name) <> ''),
+    icon TEXT NOT NULL DEFAULT 'lucide:audio-lines' CHECK (trim(icon) <> ''),
     group_id TEXT REFERENCES music_soundscape_groups(id) ON DELETE SET NULL,
     availability TEXT NOT NULL CHECK (availability IN ('available', 'missing', 'unsupported')),
     created_at INTEGER NOT NULL CHECK (created_at > 0),
@@ -2418,6 +2418,11 @@ CREATE TABLE music_soundscapes (
         OR (source_kind = 'local-loop' AND generated_kind IS NULL AND bundled_identity IS NULL)
         OR (source_kind = 'bundled-loop' AND generated_kind IS NULL AND trim(bundled_identity) <> '')
     )
+);
+
+CREATE TABLE music_soundscape_active_selections (
+    position INTEGER PRIMARY KEY CHECK (position >= 0),
+    soundscape_id TEXT NOT NULL UNIQUE REFERENCES music_soundscapes(id) ON DELETE CASCADE
 );
 
 CREATE TABLE music_source_collection_items (

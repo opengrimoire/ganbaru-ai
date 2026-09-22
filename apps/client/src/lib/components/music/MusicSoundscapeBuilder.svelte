@@ -7,9 +7,10 @@
   import Play from "@lucide/svelte/icons/play";
   import Plus from "@lucide/svelte/icons/plus";
   import Volume2 from "@lucide/svelte/icons/volume-2";
+  import IconPicker from "$lib/components/icon-picker/IconPicker.svelte";
   import { pickSoundscapeFile } from "$lib/api/music";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import type { MusicSoundscapeDefinition, MusicSoundscapeGroup, MusicSoundscapeGroupIcon as GroupIconName } from "$lib/music/soundscape-contracts";
+  import type { MusicSoundscapeDefinition, MusicSoundscapeGroup } from "$lib/music/soundscape-contracts";
   import { orderedGeneratedSounds } from "$lib/music/soundscape-presentation";
   import type { SoundscapeFilter } from "$lib/music/music-builder-view-state";
   import { getSoundscapeStore } from "$lib/stores/soundscape.svelte";
@@ -20,12 +21,14 @@
 
   const { t } = getLocalization();
   const soundscape = getSoundscapeStore();
-  const groupIcons: readonly GroupIconName[] = ["cloud-rain", "waves", "wind", "trees", "coffee", "audio-lines"];
   let pendingDelete = $state<MusicSoundscapeDefinition | null>(null);
   let pendingGroupDelete = $state<MusicSoundscapeGroup | null>(null);
   let editingGroupId = $state<string | null>(null);
   let groupNameDraft = $state("");
-  let groupIconDraft = $state<GroupIconName>("cloud-rain");
+  let groupIconDraft = $state("lucide:cloud-rain");
+  let pendingSound = $state<{ path: string; groupId: string | null } | null>(null);
+  let soundNameDraft = $state("");
+  let soundIconDraft = $state("lucide:audio-lines");
   let {
     filter = "all",
     compact = false,
@@ -50,20 +53,49 @@
     try {
       const path = await pickSoundscapeFile();
       if (!path || !soundscape.deviceId) return;
-      const filename = path.split(/[\\/]/).pop() ?? t("music.soundscape.localLoop");
+      if (!replace) {
+        pendingSound = { path, groupId };
+        soundNameDraft = (path.split(/[\\/]/).pop() ?? t("music.soundscape.localLoop")).replace(/\.[^.]+$/, "");
+        soundIconDraft = soundscape.groups.find((group) => group.id === groupId)?.icon ?? "lucide:audio-lines";
+        return;
+      }
       await soundscape.saveDefinition({
-        id: replace?.id ?? crypto.randomUUID(),
+        id: replace.id,
         sourceKind: "local-loop",
         generatedKind: null,
         bundledIdentity: null,
-        name: replace?.name ?? filename.replace(/\.[^.]+$/, ""),
-        groupId: replace?.groupId ?? groupId,
+        name: replace.name,
+        icon: replace.icon,
+        groupId: replace.groupId,
         localPath: path,
-        expectedVersion: replace?.version ?? null,
+        expectedVersion: replace.version,
         updatedAt: Date.now(),
       });
     } catch (error) {
       console.error("Could not add background sound", error);
+    }
+  }
+
+  async function saveSound(): Promise<void> {
+    const pending = pendingSound;
+    const name = soundNameDraft.trim();
+    if (!pending || !name) return;
+    try {
+      await soundscape.saveDefinition({
+        id: crypto.randomUUID(),
+        sourceKind: "local-loop",
+        generatedKind: null,
+        bundledIdentity: null,
+        name,
+        icon: soundIconDraft,
+        groupId: pending.groupId,
+        localPath: pending.path,
+        expectedVersion: null,
+        updatedAt: Date.now(),
+      });
+      pendingSound = null;
+    } catch (error) {
+      console.error("Could not save background sound", error);
     }
   }
 
@@ -77,7 +109,7 @@
   function editGroup(group?: MusicSoundscapeGroup): void {
     editingGroupId = group?.id ?? "new";
     groupNameDraft = group?.name ?? "";
-    groupIconDraft = group?.icon ?? "cloud-rain";
+    groupIconDraft = group?.icon ?? "lucide:cloud-rain";
   }
 
   async function saveGroup(): Promise<void> {
@@ -137,11 +169,25 @@
         {#if !compact}<button type="button" class="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground" onclick={() => { void addLoop(filter.startsWith("group:") ? filter.slice(6) : null); }}><Plus size={14} />{t("music.soundscape.addLoop")}</button>{/if}
       </div>
 
+      {#if pendingSound}
+        <form class="mb-4 max-w-2xl rounded-xl bg-secondary/35 p-3" onsubmit={(event) => { event.preventDefault(); void saveSound(); }}>
+          <div class="flex items-center gap-2">
+            <IconPicker value={soundIconDraft} onChange={(value) => soundIconDraft = value} ariaLabel={t("music.soundscape.soundIcon")} showUpload={false} showRemove={false}>
+              {#snippet trigger({ open, toggle, panelId })}<button type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-background text-foreground hover:bg-accent" aria-label={t("music.soundscape.soundIcon")} aria-haspopup="dialog" aria-expanded={open} aria-controls={panelId} onclick={toggle}><MusicSoundscapeGroupIcon icon={soundIconDraft} /></button>{/snippet}
+            </IconPicker>
+            <input class="h-9 min-w-0 flex-1 rounded-lg border border-input bg-background px-3 text-xs outline-none" bind:value={soundNameDraft} aria-label={t("music.soundscape.name")} placeholder={t("music.soundscape.name")} maxlength="200" />
+          </div>
+          <div class="mt-2 flex justify-end gap-2"><button type="button" class="h-8 rounded-lg px-3 text-xs hover:bg-accent" onclick={() => pendingSound = null}>{t("common.cancel")}</button><button type="submit" disabled={!soundNameDraft.trim() || soundscape.saving} class="h-8 rounded-lg bg-primary px-3 text-xs text-primary-foreground disabled:opacity-40">{t("music.soundscape.addLoop")}</button></div>
+        </form>
+      {/if}
+
       {#if editingGroupId === "new"}
         <form class="mb-4 rounded-xl bg-secondary/35 p-3" onsubmit={(event) => { event.preventDefault(); void saveGroup(); }}>
-          <input class="h-9 w-full rounded-lg border border-input bg-background px-3 text-xs outline-none" bind:value={groupNameDraft} aria-label={t("music.soundscape.groupName")} placeholder={t("music.soundscape.groupName")} maxlength="80" />
-          <div class="mt-2 flex flex-wrap gap-1">
-            {#each groupIcons as icon}<button type="button" aria-label={t(`music.soundscape.groupIcon.${icon}`)} aria-pressed={groupIconDraft === icon} class={groupIconDraft === icon ? "grid h-8 w-8 place-items-center rounded-lg bg-primary/15" : "grid h-8 w-8 place-items-center rounded-lg hover:bg-accent"} onclick={() => groupIconDraft = icon}><MusicSoundscapeGroupIcon {icon} /></button>{/each}
+          <div class="flex items-center gap-2">
+            <IconPicker value={groupIconDraft} onChange={(value) => groupIconDraft = value} ariaLabel={t("music.soundscape.groupIconLabel")} showUpload={false} showRemove={false}>
+              {#snippet trigger({ open, toggle, panelId })}<button type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-background text-foreground hover:bg-accent" aria-label={t("music.soundscape.groupIconLabel")} aria-haspopup="dialog" aria-expanded={open} aria-controls={panelId} onclick={toggle}><MusicSoundscapeGroupIcon icon={groupIconDraft} /></button>{/snippet}
+            </IconPicker>
+            <input class="h-9 min-w-0 flex-1 rounded-lg border border-input bg-background px-3 text-xs outline-none" bind:value={groupNameDraft} aria-label={t("music.soundscape.groupName")} placeholder={t("music.soundscape.groupName")} maxlength="80" />
           </div>
           <div class="mt-2 flex justify-end gap-2"><button type="button" class="h-8 rounded-lg px-3 text-xs hover:bg-accent" onclick={() => editingGroupId = null}>{t("common.cancel")}</button><button type="submit" disabled={!groupNameDraft.trim() || soundscape.saving} class="h-8 rounded-lg bg-primary px-3 text-xs text-primary-foreground disabled:opacity-40">{t("music.soundscape.saveName")}</button></div>
         </form>
@@ -151,22 +197,28 @@
         <div class="mb-4">
           {#if editingGroupId === group.id}
             <form class="rounded-xl bg-secondary/35 p-3" onsubmit={(event) => { event.preventDefault(); void saveGroup(); }}>
-              <input class="h-9 w-full rounded-lg border border-input bg-background px-3 text-xs outline-none" bind:value={groupNameDraft} aria-label={t("music.soundscape.groupName")} maxlength="80" />
-              <div class="mt-2 flex flex-wrap gap-1">{#each groupIcons as icon}<button type="button" aria-label={t(`music.soundscape.groupIcon.${icon}`)} aria-pressed={groupIconDraft === icon} class={groupIconDraft === icon ? "grid h-8 w-8 place-items-center rounded-lg bg-primary/15" : "grid h-8 w-8 place-items-center rounded-lg hover:bg-accent"} onclick={() => groupIconDraft = icon}><MusicSoundscapeGroupIcon {icon} /></button>{/each}</div>
+              <div class="flex items-center gap-2">
+                <IconPicker value={groupIconDraft} onChange={(value) => groupIconDraft = value} ariaLabel={t("music.soundscape.groupIconLabel")} showUpload={false} showRemove={false}>
+                  {#snippet trigger({ open, toggle, panelId })}<button type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-background text-foreground hover:bg-accent" aria-label={t("music.soundscape.groupIconLabel")} aria-haspopup="dialog" aria-expanded={open} aria-controls={panelId} onclick={toggle}><MusicSoundscapeGroupIcon icon={groupIconDraft} /></button>{/snippet}
+                </IconPicker>
+                <input class="h-9 min-w-0 flex-1 rounded-lg border border-input bg-background px-3 text-xs outline-none" bind:value={groupNameDraft} aria-label={t("music.soundscape.groupName")} maxlength="80" />
+              </div>
               <div class="mt-2 flex items-center gap-2"><button type="button" class="h-8 rounded-lg px-2 text-xs text-destructive hover:bg-accent" onclick={() => pendingGroupDelete = group}>{t("music.soundscape.removeGroup")}</button><span class="flex-1"></span><button type="button" class="h-8 rounded-lg px-3 text-xs hover:bg-accent" onclick={() => editingGroupId = null}>{t("common.cancel")}</button><button type="submit" disabled={!groupNameDraft.trim() || soundscape.saving} class="h-8 rounded-lg bg-primary px-3 text-xs text-primary-foreground disabled:opacity-40">{t("music.soundscape.saveName")}</button></div>
             </form>
           {:else}
             <div class="flex h-9 items-center gap-2 px-2"><MusicSoundscapeGroupIcon icon={group.icon} size={16} /><h3 class="min-w-0 flex-1 truncate text-xs font-medium">{group.name}</h3><button type="button" class="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground hover:bg-accent" aria-label={t("music.soundscape.addToGroup", group.name)} onclick={() => { void addLoop(group.id); }}><Plus size={14} /></button><button type="button" class="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground hover:bg-accent" aria-label={t("music.soundscape.editGroup")} onclick={() => editGroup(group)}><Pencil size={13} /></button></div>
-            {#each local.filter((entry) => entry.groupId === group.id) as definition (definition.id)}
-              <MusicSoundscapeLocalRow {definition} onRepair={(entry) => { void addLoop(entry.groupId, entry); }} onRemove={(entry) => pendingDelete = entry} {onPlaybackStart} />
-            {/each}
+            <div class="grid max-w-2xl grid-cols-3 gap-2">
+              {#each local.filter((entry) => entry.groupId === group.id) as definition (definition.id)}
+                <MusicSoundscapeLocalRow {definition} onRepair={(entry) => { void addLoop(entry.groupId, entry); }} onRemove={(entry) => pendingDelete = entry} {onPlaybackStart} />
+              {/each}
+            </div>
           {/if}
         </div>
       {/each}
 
       {#if ungrouped.length > 0 && (filter === "all" || filter === "local")}
         <h3 class="mb-1 px-2 text-[0.68rem] font-medium text-muted-foreground">{t("music.soundscape.ungrouped")}</h3>
-        {#each ungrouped as definition (definition.id)}<MusicSoundscapeLocalRow {definition} onRepair={(entry) => { void addLoop(null, entry); }} onRemove={(entry) => pendingDelete = entry} {onPlaybackStart} />{/each}
+        <div class="grid max-w-2xl grid-cols-3 gap-2">{#each ungrouped as definition (definition.id)}<MusicSoundscapeLocalRow {definition} onRepair={(entry) => { void addLoop(null, entry); }} onRemove={(entry) => pendingDelete = entry} {onPlaybackStart} />{/each}</div>
       {:else if soundscape.groups.length === 0 && editingGroupId !== "new"}
         <button type="button" class="flex h-16 w-full items-center justify-center gap-2 rounded-lg text-xs text-muted-foreground hover:bg-accent/40" onclick={() => { void addLoop(); }}><Plus size={16} />{t("music.soundscape.addFirstLoop")}</button>
       {/if}

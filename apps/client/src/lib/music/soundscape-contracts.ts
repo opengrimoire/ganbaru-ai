@@ -1,3 +1,5 @@
+import { parseProjectIcon, serializeProjectIcon } from "$lib/projects/project-icons";
+
 export type MusicSoundscapeSourceKind = "generated-noise" | "local-loop" | "bundled-loop";
 export type MusicGeneratedNoiseKind = "white" | "pink" | "brown";
 export type MusicSoundscapeAvailability = "available" | "missing" | "unsupported";
@@ -10,6 +12,7 @@ export interface MusicSoundscapeDefinition {
   generatedKind: MusicGeneratedNoiseKind | null;
   bundledIdentity: string | null;
   name: string;
+  icon: string;
   groupId: string | null;
   availability: MusicSoundscapeAvailability;
   localPath: string | null;
@@ -24,6 +27,7 @@ export interface MusicSoundscapeWrite {
   generatedKind: MusicGeneratedNoiseKind | null;
   bundledIdentity: string | null;
   name: string;
+  icon: string;
   groupId: string | null;
   deviceId: string;
   localPath: string | null;
@@ -43,12 +47,10 @@ export interface MusicSoundscapeState {
   version: number;
 }
 
-export type MusicSoundscapeGroupIcon = "cloud-rain" | "waves" | "wind" | "trees" | "coffee" | "audio-lines";
-
 export interface MusicSoundscapeGroup {
   id: string;
   name: string;
-  icon: MusicSoundscapeGroupIcon;
+  icon: string;
   createdAt: number;
   updatedAt: number;
   version: number;
@@ -57,7 +59,7 @@ export interface MusicSoundscapeGroup {
 export interface MusicSoundscapeGroupWrite {
   id: string;
   name: string;
-  icon: MusicSoundscapeGroupIcon;
+  icon: string;
   expectedVersion: number | null;
   updatedAt: number;
 }
@@ -94,13 +96,17 @@ const sourceKinds = new Set<MusicSoundscapeSourceKind>(["generated-noise", "loca
 const generatedKinds = new Set<MusicGeneratedNoiseKind>(["white", "pink", "brown"]);
 const availability = new Set<MusicSoundscapeAvailability>(["available", "missing", "unsupported"]);
 const statuses = new Set<MusicSoundscapeStatus>(["idle", "playing", "paused", "error"]);
-const groupIcons = new Set<MusicSoundscapeGroupIcon>(["cloud-rain", "waves", "wind", "trees", "coffee", "audio-lines"]);
 
 function record(value: unknown, label: string): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`${label} must be an object`);
   return value as Record<string, unknown>;
 }
 function text(value: unknown, label: string): string { if (typeof value !== "string") throw new Error(`${label} must be a string`); return value; }
+function iconText(value: unknown, label: string): string {
+  const icon = text(value, label);
+  if (icon.length > 500 || serializeProjectIcon(parseProjectIcon(icon)) !== icon) throw new Error(`${label} is invalid`);
+  return icon;
+}
 function optionalText(value: unknown, label: string): string | null { return value === null ? null : text(value, label); }
 function number(value: unknown, label: string): number { if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`${label} must be finite`); return value; }
 function integer(value: unknown, label: string): number { const result = number(value, label); if (!Number.isSafeInteger(result)) throw new Error(`${label} must be an integer`); return result; }
@@ -119,6 +125,7 @@ export function parseMusicSoundscape(value: unknown, label = "soundscape"): Musi
     generatedKind: row.generatedKind === null ? null : enumeration(row.generatedKind, generatedKinds, `${label}.generatedKind`),
     bundledIdentity: optionalText(row.bundledIdentity, `${label}.bundledIdentity`),
     name: text(row.name, `${label}.name`),
+    icon: iconText(row.icon, `${label}.icon`),
     groupId: optionalText(row.groupId, `${label}.groupId`),
     availability: enumeration(row.availability, availability, `${label}.availability`),
     localPath: optionalText(row.localPath, `${label}.localPath`),
@@ -132,7 +139,7 @@ export function parseMusicSoundscapeGroup(value: unknown, label = "sound group")
   return {
     id: text(row.id, `${label}.id`),
     name: text(row.name, `${label}.name`),
-    icon: enumeration(row.icon, groupIcons, `${label}.icon`),
+    icon: iconText(row.icon, `${label}.icon`),
     createdAt: integer(row.createdAt, `${label}.createdAt`),
     updatedAt: integer(row.updatedAt, `${label}.updatedAt`),
     version: integer(row.version, `${label}.version`),

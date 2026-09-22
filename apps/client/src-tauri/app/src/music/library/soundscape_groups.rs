@@ -1,15 +1,6 @@
 use super::*;
 use sqlx::SqlitePool;
 
-const ICONS: &[&str] = &[
-    "cloud-rain",
-    "waves",
-    "wind",
-    "trees",
-    "coffee",
-    "audio-lines",
-];
-
 pub(crate) async fn groups(pool: &SqlitePool) -> MusicLibraryResult<Vec<MusicSoundscapeGroup>> {
     let rows = sqlx::query_as::<_, (String, String, String, i64, i64, i64)>(
         "SELECT id, name, icon, created_at, updated_at, version
@@ -42,12 +33,7 @@ pub(crate) async fn upsert(
             "must contain between one and 80 characters",
         ));
     }
-    if !ICONS.contains(&request.icon.as_str()) {
-        return Err(MusicLibraryError::validation(
-            "icon",
-            "must be a supported sound group icon",
-        ));
-    }
+    super::validate_icon(&request.icon)?;
     if request.updated_at <= 0 {
         return Err(MusicLibraryError::validation(
             "updatedAt",
@@ -136,7 +122,7 @@ mod tests {
                 MusicSoundscapeGroupWrite {
                     id: "rain-group".into(),
                     name: "Rain".into(),
-                    icon: "cloud-rain".into(),
+                    icon: "lucide:cloud-rain".into(),
                     expected_version: None,
                     updated_at: 1_700_000_000_000,
                 },
@@ -151,7 +137,7 @@ mod tests {
                     MusicSoundscapeGroupWrite {
                         id: created.id.clone(),
                         name: "Storm".into(),
-                        icon: "wind".into(),
+                        icon: "lucide:wind".into(),
                         expected_version: None,
                         updated_at: 1_700_000_000_001,
                     }
