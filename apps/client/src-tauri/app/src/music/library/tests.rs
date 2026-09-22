@@ -798,6 +798,67 @@ fn deferred_review_items_remain_visible_before_and_after_their_optional_date() {
 }
 
 #[test]
+fn playlist_item_window_counts_only_snoozes_effective_in_that_playlist() {
+    tauri::async_runtime::block_on(async {
+        let pool = pool().await;
+        for id in ["playlist-1", "playlist-2"] {
+            super::writes::create_playlist(&pool, playlist(id))
+                .await
+                .unwrap();
+        }
+        seed_item(&pool, "item-1", "local:item-1").await;
+        let first = membership(1);
+        let mut second = membership(2);
+        second.item_id = "item-1".to_string();
+        second.playlist_id = "playlist-2".to_string();
+        super::writes::upsert_memberships(
+            &pool,
+            MusicBulkMembershipWrite {
+                memberships: vec![first, second],
+            },
+        )
+        .await
+        .unwrap();
+        super::playlist_edits::bulk_snooze(
+            &pool,
+            MusicBulkSnoozeWrite {
+                action_id: "playlist-snooze".to_string(),
+                item_ids: vec!["item-1".to_string()],
+                scope: MusicSnoozeScope::Playlist,
+                playlist_id: Some("playlist-2".to_string()),
+                starts_at: 1_700_000_000_000,
+                ends_at: Some(1_700_000_200_000),
+                reason: String::new(),
+                created_at: 1_700_000_000_000,
+            },
+        )
+        .await
+        .unwrap();
+
+        let mut request = library_window();
+        request.destination = MusicListDestination::Playlist;
+        request.playlist_id = Some("playlist-1".to_string());
+        assert_eq!(
+            super::queries::item_window(&pool, request.clone())
+                .await
+                .unwrap()
+                .items[0]
+                .active_snooze_count,
+            0
+        );
+        request.playlist_id = Some("playlist-2".to_string());
+        assert_eq!(
+            super::queries::item_window(&pool, request)
+                .await
+                .unwrap()
+                .items[0]
+                .active_snooze_count,
+            1
+        );
+    });
+}
+
+#[test]
 fn metadata_overrides_preserve_original_values_and_refresh_search() {
     tauri::async_runtime::block_on(async {
         let pool = pool().await;

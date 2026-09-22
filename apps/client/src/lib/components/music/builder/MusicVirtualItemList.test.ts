@@ -72,6 +72,7 @@ describe("MusicVirtualItemList", () => {
         onTogglePlayback,
         onShowLocation: vi.fn(async () => undefined),
         onSnooze: vi.fn(async () => undefined),
+        onRemoveSnooze: vi.fn(async () => undefined),
         onWeight: vi.fn(async () => undefined),
         onRemove: vi.fn(async () => undefined),
       },
@@ -104,5 +105,26 @@ describe("MusicVirtualItemList", () => {
     expect(document.body.querySelectorAll('[role="dialog"]')).toHaveLength(1);
     expect(document.body.textContent).toContain("Soundtrack");
     expect(target.textContent).not.toContain("Reviewed");
+  });
+
+  it("removes a Snooze beside the title without playing the row", async () => {
+    const onTogglePlayback = vi.fn();
+    const onRemoveSnooze = vi.fn(async () => undefined);
+    target = document.createElement("div");
+    document.body.append(target);
+    component = mount(MusicVirtualItemList, { target, props: {
+      items: [{ ...item, activeSnoozeCount: 1 }],
+      bindings: [{ rootId: "root-1", folderPath: "/Music", status: "available" }],
+      playlistName: "Work (focus)", onTogglePlayback,
+      onShowLocation: vi.fn(async () => undefined), onSnooze: vi.fn(async () => undefined),
+      onRemoveSnooze, onWeight: vi.fn(async () => undefined), onRemove: vi.fn(async () => undefined),
+    } });
+    await tick();
+
+    const button = target.querySelector<HTMLButtonElement>('button[aria-label="Remove snooze"]');
+    expect(button?.parentElement?.textContent).toContain("Quiet morning");
+    button?.click();
+    await vi.waitFor(() => expect(onRemoveSnooze).toHaveBeenCalledWith(expect.objectContaining({ id: "item-1" })));
+    expect(onTogglePlayback).not.toHaveBeenCalled();
   });
 });

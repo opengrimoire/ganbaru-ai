@@ -17,6 +17,7 @@ export function projectMusicSourceQueue(
       return [{
         itemId: item.id,
         source: { ...youtubeVideoSourceFromId(videoId), title: item.title },
+        snoozed: item.activeSnoozeCount > 0,
       }];
     }
     if (item.availability !== "available") return [];
@@ -30,6 +31,7 @@ export function projectMusicSourceQueue(
     return [{
       itemId: item.id,
       source: localFileSourceFromPath(path, item.title, item.artworkOverride ?? sidecarPath),
+      snoozed: item.activeSnoozeCount > 0,
     }];
   });
 }

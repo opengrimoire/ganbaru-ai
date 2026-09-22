@@ -10,11 +10,12 @@
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import type { Component } from "svelte";
+  import { getMusicInspectorDetail } from "$lib/api/music-library";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import type { MusicItemListEntry, MusicWeight } from "$lib/music/library-contracts";
+  import type { MusicItemListEntry, MusicSnooze, MusicWeight } from "$lib/music/library-contracts";
   import { formatMusicDuration } from "$lib/music/music-builder-presentation";
   import { projectMusicItemMenuLayout } from "$lib/music/music-item-menu-layout";
-  import type { MusicSnoozeDuration } from "$lib/music/music-snooze";
+  import { musicSnoozePreset, type MusicSnoozePreset } from "$lib/music/music-snooze";
   import { portal } from "$lib/utils/portal";
 
   type Subpanel = "details" | "snooze" | "weight";
@@ -34,21 +35,33 @@
     context?: "playlist" | "source";
     showLocationAction?: boolean;
     onShowLocation: (item: MusicItemListEntry) => Promise<void>;
-    onSnooze: (item: MusicItemListEntry, duration: MusicSnoozeDuration, everywhere: boolean) => Promise<void>;
+    onSnooze: (item: MusicItemListEntry, duration: MusicSnoozePreset, everywhere: boolean) => Promise<void>;
     onWeight?: (item: MusicItemListEntry, weight: MusicWeight) => Promise<void>;
     onRemove?: (item: MusicItemListEntry) => Promise<void>;
   } = $props();
 
   const { t } = getLocalization();
+  const snoozePresets = ["day", "week", "month"] as const;
   let trigger = $state<HTMLButtonElement | null>(null);
   let panel = $state<HTMLElement | null>(null);
   let open = $state(false);
   let subpanel = $state<Subpanel | null>(null);
   let busy = $state(false);
   let error = $state<string | null>(null);
+  let snoozes = $state<MusicSnooze[]>([]);
+  let snoozePlaylistId = $state<string | null>(null);
+  let snoozesLoading = $state(false);
   let panelLeft = $state(0);
   let panelTop = $state(0);
   const duration = $derived(formatMusicDuration(item.durationMs));
+  const selectedSnooze = $derived.by(() => {
+    const now = Date.now();
+    const scoped = snoozes.filter((entry) => entry.startsAt <= now && (entry.endsAt === null || entry.endsAt > now)
+      && (context === "source" ? entry.scope === "all-playlists" : entry.scope === "playlist" && entry.playlistId === snoozePlaylistId));
+    return scoped.length === 1
+      ? musicSnoozePreset(scoped[0].startsAt, scoped[0].endsAt, Intl.DateTimeFormat().resolvedOptions().timeZone)
+      : null;
+  });
 
   $effect(() => {
     if (!open) return;
@@ -90,7 +103,23 @@
   function showSubpanel(next: Subpanel): void {
     subpanel = next;
     error = null;
+    if (next === "snooze") void loadSnoozes();
     queueMicrotask(() => panel?.focus());
+  }
+
+  async function loadSnoozes(): Promise<void> {
+    snoozesLoading = true;
+    try {
+      const detail = await getMusicInspectorDetail(item.id);
+      if (open && subpanel === "snooze") {
+        snoozes = detail.snoozes;
+        snoozePlaylistId = detail.memberships.find((entry) => entry.id === item.membershipId)?.playlistId ?? null;
+      }
+    } catch (cause) {
+      if (open && subpanel === "snooze") error = cause instanceof Error ? cause.message : String(cause);
+    } finally {
+      snoozesLoading = false;
+    }
   }
 
   function handleKeydown(event: KeyboardEvent): void {
@@ -169,9 +198,9 @@
             {@render metadataRow(t("music.builder.sources"), item.sourceKind === "local-file" ? t("music.builder.local") : t("music.builder.youtube"))}
           </dl>
         {:else if subpanel === "snooze"}
-          <button type="button" class="option-row" onclick={() => { void run(() => onSnooze(item, "today", context === "source")); }}>{t("music.itemMenu.notToday")}</button>
-          <button type="button" class="option-row" onclick={() => { void run(() => onSnooze(item, "week", context === "source")); }}>{t("music.itemMenu.snoozeWeek")}</button>
-          <button type="button" class="option-row" onclick={() => { void run(() => onSnooze(item, "until-resumed", true)); }}>{t("music.itemMenu.snoozeEverywhere")}</button>
+          {#each snoozePresets as snoozeDuration (snoozeDuration)}
+            <button type="button" class="option-row" disabled={snoozesLoading} aria-pressed={selectedSnooze === snoozeDuration} onclick={() => { void run(() => onSnooze(item, snoozeDuration, context === "source")); }}>{t(`music.preferences.${snoozeDuration}`)}</button>
+          {/each}
         {:else if subpanel === "weight"}
           {#each ["rarely", "less-often", "normal", "more-often", "much-more-often"] as weight (weight)}
             {@const typedWeight = weight as MusicWeight}
@@ -223,4 +252,6 @@
   .action-row:disabled { opacity: 0.5; }
   .option-row { display: flex; min-height: 2rem; width: 100%; align-items: center; justify-content: space-between; gap: 0.5rem; border-radius: 0.375rem; padding-inline: 0.5rem; text-align: left; font-size: calc(0.68rem * var(--type-scale)); }
   .option-row:hover, .option-row:focus-visible { background: var(--accent); outline: none; }
+  .option-row[aria-pressed="true"] { background: color-mix(in srgb, var(--primary) 15%, var(--accent)); }
+  .option-row:disabled { opacity: 0.5; }
 </style>

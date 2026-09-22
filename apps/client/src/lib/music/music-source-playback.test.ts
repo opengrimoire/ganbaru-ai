@@ -52,6 +52,14 @@ describe("music source playback", () => {
     expect(queue).toHaveLength(2);
     expect(queue[0]?.source).toMatchObject({ kind: "local-file", path: "/Music/Album/Track.flac", artworkPath: "/Music/Album/cover.jpg" });
     expect(queue[1]?.source).toMatchObject({ kind: "youtube-video", videoId: "abc12345678", title: "Video" });
+    expect(queue[0]?.snoozed).toBe(false);
+  });
+
+  it("keeps source queue Snooze indicators for playable rows", () => {
+    const queue = projectMusicSourceQueue([item({ activeSnoozeCount: 1 })], [
+      { rootId: "root", folderPath: "/Music", status: "available" },
+    ]);
+    expect(queue[0]?.snoozed).toBe(true);
   });
 
   it("omits unavailable, unbound, and malformed source rows", () => {

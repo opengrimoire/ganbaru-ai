@@ -340,6 +340,12 @@ pub(crate) async fn item_window(
     item_query.push_bind(request.now_ms);
     item_query.push(" AND (active_snooze.ends_at IS NULL OR active_snooze.ends_at > ");
     item_query.push_bind(request.now_ms);
+    if request.destination == MusicListDestination::Playlist {
+        item_query
+            .push(" AND (active_snooze.scope = 'all-playlists' OR active_snooze.playlist_id = ");
+        item_query.push_bind(request.playlist_id.clone().unwrap_or_default());
+        item_query.push(")");
+    }
     item_query.push(
         ")) AS active_snooze_count,
             stats.last_played_at, COALESCE(stats.play_count, 0) AS play_count,

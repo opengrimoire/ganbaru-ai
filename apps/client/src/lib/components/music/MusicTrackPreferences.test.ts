@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
 import { mount, tick, unmount } from "svelte";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { localFileSourceFromPath } from "$lib/music/sources";
+import { musicSnoozeEndsAt } from "$lib/music/music-snooze";
 import { getMusicPlayer } from "$lib/stores/music-player.svelte";
 
 const api = vi.hoisted(() => ({
@@ -23,6 +24,12 @@ describe("MusicTrackPreferences", () => {
   let target: HTMLDivElement | undefined;
   let component: ReturnType<typeof mount> | undefined;
 
+  beforeEach(() => {
+    const player = getMusicPlayer();
+    vi.spyOn(player, "playNextTrack").mockResolvedValue(undefined);
+    vi.spyOn(player, "pausePlayback").mockResolvedValue(undefined);
+  });
+
   afterEach(async () => {
     if (component) await unmount(component);
     target?.remove();
@@ -34,6 +41,7 @@ describe("MusicTrackPreferences", () => {
     player.activeQueueItemIds = [];
     player.activePlaylistId = null;
     player.setPlaybackMode("shuffle");
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -128,9 +136,9 @@ describe("MusicTrackPreferences", () => {
     });
 
     await vi.waitFor(() => expect(target?.querySelector<HTMLButtonElement>("[data-music-weight='rarely']")?.getAttribute("aria-disabled")).toBe("false"));
-    const today = [...target.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent?.trim() === "Today");
-    today?.click();
+    const day = [...target.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.trim() === "1 day");
+    day?.click();
     await vi.waitFor(() => expect(api.bulkSnoozeMusicItems).toHaveBeenCalledOnce());
     expect(api.bulkSnoozeMusicItems.mock.calls[0][0]).toMatchObject({
       itemIds: ["song"], scope: "playlist", playlistId: "a",
@@ -153,14 +161,65 @@ describe("MusicTrackPreferences", () => {
     await vi.waitFor(() => expect(target?.querySelector("[data-music-weight='rarely']")).not.toBeNull());
     expect(target.querySelector<HTMLButtonElement>("button[aria-label='Apply to']")?.disabled).toBe(true);
     expect(target.querySelectorAll("[role='group'][aria-label='Mix frequency'] button:disabled")).toHaveLength(5);
-    const today = [...target.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent?.trim() === "Today");
-    expect(today?.disabled).toBe(false);
-    today?.click();
+    const day = [...target.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.trim() === "1 day");
+    expect(day?.disabled).toBe(false);
+    day?.click();
     await vi.waitFor(() => expect(api.bulkSnoozeMusicItems).toHaveBeenCalledOnce());
     expect(api.bulkSnoozeMusicItems.mock.calls[0][0]).toMatchObject({
       itemIds: ["unassigned"], scope: "all-playlists", playlistId: null,
     });
+  });
+
+  it("advances after snoozing the playing track, or pauses if there is no next track", async () => {
+    const player = getMusicPlayer();
+    const source = localFileSourceFromPath("/music/only.flac", "Only");
+    player.currentSource = source;
+    player.queue = [source];
+    player.activeQueueItemIds = ["only"];
+    const next = vi.spyOn(player, "playNextTrack").mockResolvedValue(undefined);
+    const pause = vi.spyOn(player, "pausePlayback").mockResolvedValue(undefined);
+    target = document.createElement("div");
+    document.body.append(target);
+    const { default: MusicTrackPreferences } = await import("./MusicTrackPreferences.svelte");
+    component = mount(MusicTrackPreferences, { target, props: { onOpen: vi.fn() } });
+    await tick();
+
+    target.querySelector<HTMLButtonElement>("button[aria-label='Mix and snooze']")?.click();
+    await vi.waitFor(() => expect(target?.querySelector("[data-music-weight='normal']")).not.toBeNull());
+    target.querySelector<HTMLButtonElement>(".snooze-choice")?.click();
+    await vi.waitFor(() => expect(next).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(pause).toHaveBeenCalledOnce());
+    expect(api.bulkSnoozeMusicItems.mock.calls[0][0]).toMatchObject({ itemIds: ["only"], scope: "all-playlists" });
+    next.mockRestore();
+    pause.mockRestore();
+  });
+
+  it("shows the saved duration and removes it when selected again", async () => {
+    const player = getMusicPlayer();
+    const source = localFileSourceFromPath("/music/snoozed.flac", "Snoozed");
+    player.currentSource = source;
+    player.queue = [source];
+    player.activeQueueItemIds = ["snoozed"];
+    const startsAt = Date.now() - 1_000;
+    api.getMusicInspectorDetail.mockResolvedValueOnce({ snoozes: [{
+      id: "snooze-1", itemId: "snoozed", scope: "all-playlists", playlistId: null,
+      startsAt, endsAt: musicSnoozeEndsAt("week", startsAt, Intl.DateTimeFormat().resolvedOptions().timeZone),
+      reason: "", createdAt: startsAt,
+    }] });
+    target = document.createElement("div");
+    document.body.append(target);
+    const { default: MusicTrackPreferences } = await import("./MusicTrackPreferences.svelte");
+    component = mount(MusicTrackPreferences, { target, props: { onOpen: vi.fn() } });
+    await tick();
+
+    target.querySelector<HTMLButtonElement>("button[aria-label='Mix and snooze']")?.click();
+    await vi.waitFor(() => expect(target?.querySelector(".snooze-choice[aria-pressed='true']")?.textContent).toBe("1 week"));
+    expect(target.textContent).not.toContain("Resume");
+    target.querySelector<HTMLButtonElement>(".snooze-choice[aria-pressed='true']")?.click();
+    await vi.waitFor(() => expect(api.removeMusicSnooze).toHaveBeenCalledWith("snooze-1"));
+    expect(api.bulkSnoozeMusicItems).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(target?.querySelector(".snooze-choice[aria-pressed='true']")).toBeNull());
   });
 
   it("keeps controls visually steady while saving a new Mix frequency", async () => {

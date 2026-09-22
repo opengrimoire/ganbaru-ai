@@ -13,7 +13,7 @@
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { BUILD_PLATFORM_PROFILE, platformHasCapability } from "$lib/platform";
   import { revealLocalFile } from "$lib/api/music";
-  import { bulkEditMusicMemberships, bulkSnoozeMusicItems, reorderMusicPlaylists } from "$lib/api/music-library";
+  import { bulkEditMusicMemberships, bulkSnoozeMusicItems, getMusicInspectorDetail, removeMusicSnooze, reorderMusicPlaylists } from "$lib/api/music-library";
   import { createMusicBuilderInspectorController } from "$lib/music/music-builder-inspector.svelte";
   import { projectMusicBuilderLayout } from "$lib/music/music-builder-layout";
   import {
@@ -45,7 +45,7 @@
   import type { MusicSourceRefreshPlan } from "$lib/music/music-source-refresh";
   import { musicBuilderPlaybackDecision } from "$lib/music/music-builder-playback-transition";
   import type { MusicAddSourceKind, MusicLocalSourceSelection } from "$lib/music/music-source-drafts";
-  import { musicSnoozeEndsAt, type MusicSnoozeDuration } from "$lib/music/music-snooze";
+  import { musicSnoozeEndsAt, musicSnoozePreset, type MusicSnoozePreset } from "$lib/music/music-snooze";
   import {
     createMusicBuilderContextViewState,
     createMusicReviewTreeViewState,
@@ -837,40 +837,72 @@
     await playlist.refreshActivePlayback(sources.bindings);
   }
 
-  async function snoozePlaylistItem(item: MusicItemListEntry, duration: MusicSnoozeDuration, everywhere: boolean): Promise<void> {
-    if (destination.kind !== "playlist") return;
+  async function snoozeItem(item: MusicItemListEntry, duration: MusicSnoozePreset, playlistId: string | null): Promise<void> {
     const now = Date.now();
-    const endsAt = musicSnoozeEndsAt(duration, now, Intl.DateTimeFormat().resolvedOptions().timeZone);
-    await bulkSnoozeMusicItems({
-      actionId: crypto.randomUUID(),
-      itemIds: [item.id],
-      scope: everywhere ? "all-playlists" : "playlist",
-      playlistId: everywhere ? null : destination.playlistId,
-      startsAt: now,
-      endsAt,
-      reason: "",
-      createdAt: now,
-    });
-    const currentItemId = audition.musicPlayer.activeQueueItemIds[audition.musicPlayer.currentQueueIndex] ?? null;
-    if (currentItemId === item.id) audition.musicPlayer.applyCurrentQueueSnooze(endsAt);
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const existing = (await getMusicInspectorDetail(item.id)).snoozes;
+    const scoped = existing.filter((entry) => entry.startsAt <= now && (entry.endsAt === null || entry.endsAt > now)
+      && (playlistId === null ? entry.scope === "all-playlists" : entry.scope === "playlist" && entry.playlistId === playlistId));
+    const turningOff = scoped.length === 1 && musicSnoozePreset(scoped[0].startsAt, scoped[0].endsAt, timeZone) === duration;
+    await Promise.all(scoped.map((entry) => removeMusicSnooze(entry.id)));
+    const endsAt = musicSnoozeEndsAt(duration, now, timeZone);
+    if (!turningOff) {
+      await bulkSnoozeMusicItems({
+        actionId: crypto.randomUUID(),
+        itemIds: [item.id],
+        scope: playlistId === null ? "all-playlists" : "playlist",
+        playlistId,
+        startsAt: now,
+        endsAt,
+        reason: "",
+        createdAt: now,
+      });
+    }
+    const queueIndex = audition.musicPlayer.activeQueueItemIds.indexOf(item.id);
+    if (queueIndex >= 0 && (playlistId === null || playlistId === audition.musicPlayer.activePlaylistId)) {
+      if (turningOff) {
+        const remaining = existing.filter((entry) => !scoped.some((removed) => removed.id === entry.id)
+          && entry.startsAt <= now && (entry.endsAt === null || entry.endsAt > now)
+          && (audition.musicPlayer.activeSourceQueueId !== null
+            || entry.scope === "all-playlists" || entry.playlistId === audition.musicPlayer.activePlaylistId));
+        if (remaining.length === 0) audition.musicPlayer.clearQueueItemSnooze(queueIndex);
+        else audition.musicPlayer.applyQueueItemSnooze(queueIndex, remaining.some((entry) => entry.endsAt === null)
+          ? null : Math.max(...remaining.map((entry) => entry.endsAt ?? 0)));
+      } else {
+        audition.musicPlayer.applyQueueItemSnooze(queueIndex, endsAt);
+        if (queueIndex === audition.musicPlayer.currentQueueIndex) {
+          await audition.musicPlayer.playNextTrack();
+          if (audition.musicPlayer.activeQueueItemIds[audition.musicPlayer.currentQueueIndex] === item.id) {
+            await audition.musicPlayer.pausePlayback();
+          }
+        }
+      }
+    }
     await library.refreshAfterMutation();
     await playlist.refreshActivePlayback(sources.bindings);
   }
 
-  async function snoozeSourceItem(item: MusicItemListEntry, duration: MusicSnoozeDuration): Promise<void> {
+  async function snoozePlaylistItem(item: MusicItemListEntry, duration: MusicSnoozePreset, everywhere: boolean): Promise<void> {
+    if (destination.kind !== "playlist") return;
+    await snoozeItem(item, duration, everywhere ? null : destination.playlistId);
+  }
+
+  async function snoozeSourceItem(item: MusicItemListEntry, duration: MusicSnoozePreset): Promise<void> {
+    await snoozeItem(item, duration, null);
+  }
+
+  async function removeItemSnoozes(item: MusicItemListEntry, playlistId: string | null): Promise<void> {
     const now = Date.now();
-    const endsAt = musicSnoozeEndsAt(duration, now, Intl.DateTimeFormat().resolvedOptions().timeZone);
-    await bulkSnoozeMusicItems({
-      actionId: crypto.randomUUID(),
-      itemIds: [item.id],
-      scope: "all-playlists",
-      playlistId: null,
-      startsAt: now,
-      endsAt,
-      reason: "",
-      createdAt: now,
-    });
+    const active = (await getMusicInspectorDetail(item.id)).snoozes.filter((entry) =>
+      entry.startsAt <= now && (entry.endsAt === null || entry.endsAt > now)
+      && (playlistId === null || entry.scope === "all-playlists" || entry.playlistId === playlistId));
+    await Promise.all(active.map((entry) => removeMusicSnooze(entry.id)));
+    const queueIndex = audition.musicPlayer.activeQueueItemIds.indexOf(item.id);
+    if (queueIndex >= 0 && (playlistId === null || playlistId === audition.musicPlayer.activePlaylistId)) {
+      audition.musicPlayer.clearQueueItemSnooze(queueIndex);
+    }
     await library.refreshAfterMutation();
+    await playlist.refreshActivePlayback(sources.bindings);
   }
 
   async function showItemLocation(item: MusicItemListEntry): Promise<void> {
@@ -1186,6 +1218,7 @@
             onShowLocation={showItemLocation}
             showLocationAction={supportsLocalFileReveal}
             onSnooze={snoozePlaylistItem}
+            onRemoveSnooze={(item) => removeItemSnoozes(item, destination.kind === "playlist" ? destination.playlistId : null)}
             onWeight={setPlaylistItemWeight}
             onRemove={removePlaylistItem}
             hasMore={library.currentWindow.items.length < library.currentWindow.totalCount}
@@ -1207,6 +1240,7 @@
           onTogglePlayback={(item) => { void toggleSourceItem(item); }}
           onShowLocation={showItemLocation}
           onSnooze={async (item, duration) => snoozeSourceItem(item, duration)}
+          onRemoveSnooze={(item) => removeItemSnoozes(item, null)}
         />
       {:else if destination.kind === "soundscapes"}
         <MusicSoundscapeBuilder filter={contextViewState.soundscapeFilter} compact addRequest={soundscapeAddRequest} onPlaybackStart={takePlaybackOwnership} />

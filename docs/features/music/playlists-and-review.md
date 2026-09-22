@@ -41,7 +41,7 @@ Built-in edit and delete actions remain visibly unavailable with an explanation.
 
 ## Playlist item lists
 
-Lists support bounded loading, search, sort, source and availability filters, snooze state, playback, concise metadata, membership settings, file location where supported, and removal from the current playlist.
+Lists support bounded loading, search, sort, source and availability filters, snooze state, playback, concise metadata, membership settings, file location where supported, and removal from the current playlist. A snoozed track shows a small clock beside its title in Playlists and Sources; clicking it removes the active Snooze without playing the row. Playlist rows mark only Snoozes effective in that playlist.
 
 Stored playlist order and selected sort are distinct. Sorting the view does not silently rewrite membership order.
 
@@ -65,7 +65,7 @@ Refresh, rename, repair, and removal actions are contextual to the selected root
 
 ## Snooze
 
-Snooze temporarily excludes an item from one playlist or all playlists until a specified boundary. The UI explains the scope and end. Snooze is reversible and does not alter review state or source availability.
+Snooze temporarily excludes an item from one playlist or all playlists until a specified boundary. The main player offers 1 day, 1 week, and 1 month; the selected duration can be clicked again to remove it. The UI explains the scope and end. Snooze is reversible and does not alter review state or source availability.
 
 The main player puts snooze and Mix frequency in one compact track-preferences popover with a shared scope selector. Everywhere frequency updates every current playlist membership for the track; a selected playlist updates only that membership. Changing frequency does not interrupt the current track. The former speed control and its keyboard shortcuts are not shown in the main player.
 

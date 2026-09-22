@@ -7,9 +7,24 @@ import { emptyMusicSkipBreakdown } from "$lib/music/music-playlist-playback";
 import { getMusicPlayer } from "$lib/stores/music-player.svelte";
 import { getMusicSourcesController } from "$lib/music/music-sources-controller.svelte";
 
+const snoozeApi = vi.hoisted(() => ({
+  getMusicInspectorDetail: vi.fn(),
+  removeMusicSnooze: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("$lib/api/music-library", async (importOriginal) => ({
+  ...await importOriginal<typeof import("$lib/api/music-library")>(),
+  ...snoozeApi,
+}));
+
+const resizeObserverCallbacks = new Set<() => void>();
+
 class ResizeObserverStub {
+  constructor(private readonly callback: () => void) {
+    resizeObserverCallbacks.add(callback);
+  }
   observe(): void {}
-  disconnect(): void {}
+  disconnect(): void { resizeObserverCallbacks.delete(this.callback); }
 }
 
 function matchMediaStub(query: string): MediaQueryList {
@@ -35,15 +50,22 @@ describe("MusicPanel", () => {
     component = undefined;
     target = undefined;
     vi.unstubAllGlobals();
+    resizeObserverCallbacks.clear();
     getMusicSourcesController().firstUseSession = false;
     const player = getMusicPlayer();
     player.setPlaylistVisible(false);
     player.currentSource = null;
     player.queue = [];
+    player.activeQueueItemIds = [];
+    player.sourceQueueSnoozedItemIds = [];
+    player.savedQueueEntries = [];
     player.activePlaylistId = null;
     player.activePlaylistName = null;
+    player.activeSourceQueueId = null;
     player.savedQueueSkipBreakdown = emptyMusicSkipBreakdown();
     player.setPlaybackMode("shuffle");
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   it("mounts an interactive dialog above its persistent media layer and closes with Escape", async () => {
@@ -154,6 +176,66 @@ describe("MusicPanel", () => {
     expect(desktopHeader?.textContent).toContain("2 tracks");
     expect(desktopHeader?.classList.contains("min-[861px]:w-80")).toBe(true);
     expect(stackedHeader?.classList.contains("min-[861px]:hidden")).toBe(true);
+  });
+
+  it("removes a source queue Snooze without playing its row", async () => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    const player = getMusicPlayer();
+    player.setPlaylistVisible(true);
+    player.queue = [localFileSourceFromPath("/music/snoozed.flac", "Snoozed")];
+    player.activeQueueItemIds = ["snoozed"];
+    player.activeSourceQueueId = "source:music";
+    player.sourceQueueSnoozedItemIds = ["snoozed"];
+    const play = vi.spyOn(player, "playQueueItem").mockResolvedValue(undefined);
+    const now = Date.now();
+    snoozeApi.getMusicInspectorDetail.mockResolvedValue({ snoozes: [{
+      id: "active-snooze", itemId: "snoozed", scope: "all-playlists", playlistId: null,
+      startsAt: now - 1_000, endsAt: now + 86_400_000, reason: "", createdAt: now - 1_000,
+    }] });
+    target = document.createElement("div");
+    document.body.append(target);
+    const { default: MusicPanel } = await import("./MusicPanel.svelte");
+    component = mount(MusicPanel, { target, props: { onclose: vi.fn() } });
+    await tick();
+
+    const button = target.querySelector<HTMLButtonElement>("#music-playlist button[aria-label='Remove snooze']");
+    expect(button).not.toBeNull();
+    button?.click();
+    await vi.waitFor(() => expect(snoozeApi.removeMusicSnooze).toHaveBeenCalledWith("active-snooze"));
+    await vi.waitFor(() => expect(player.sourceQueueSnoozedItemIds).toEqual([]));
+    expect(play).not.toHaveBeenCalled();
+  });
+
+  it("shows queue title tooltips only when the visible title is cut off", async () => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    const player = getMusicPlayer();
+    player.setPlaylistVisible(true);
+    player.queue = [
+      localFileSourceFromPath("/music/short.flac", "Short"),
+      localFileSourceFromPath("/music/long.flac", "A very long song title"),
+    ];
+    target = document.createElement("div");
+    document.body.append(target);
+    const { default: MusicPanel } = await import("./MusicPanel.svelte");
+    component = mount(MusicPanel, { target, props: { onclose: vi.fn() } });
+    await tick();
+
+    const rows = [...target.querySelectorAll<HTMLElement>("#music-playlist [data-music-queue-title]")];
+    const buttons = [...target.querySelectorAll<HTMLButtonElement>("#music-playlist button[data-playlist-index]")];
+    expect(rows).toHaveLength(2);
+    expect(buttons).toHaveLength(2);
+    Object.defineProperties(rows[0]!, { scrollWidth: { value: 45 }, clientWidth: { value: 50 } });
+    Object.defineProperties(rows[1]!, { scrollWidth: { value: 160 }, clientWidth: { value: 100, configurable: true } });
+
+    for (const callback of resizeObserverCallbacks) callback();
+    expect(buttons[0]?.dataset.appTooltipDisabled).toBe("true");
+    expect(buttons[1]?.dataset.appTooltipDisabled).toBe("false");
+    expect(buttons[0]?.getAttribute("aria-label")).toBe("Short");
+    expect(buttons[1]?.getAttribute("aria-label")).toBe("A very long song title");
+
+    Object.defineProperty(rows[1]!, "clientWidth", { value: 200, configurable: true });
+    for (const callback of resizeObserverCallbacks) callback();
+    expect(buttons[1]?.dataset.appTooltipDisabled).toBe("true");
   });
 
   it("shows unavailable playlist recovery inside the media area without chooser actions", async () => {

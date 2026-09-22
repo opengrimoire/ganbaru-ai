@@ -14,10 +14,13 @@
   import MusicPlaylistLauncher from "$lib/components/music/MusicPlaylistLauncher.svelte";
   import MusicCurrentItemMenu from "$lib/components/music/MusicCurrentItemMenu.svelte";
   import MusicTrackPreferences from "$lib/components/music/MusicTrackPreferences.svelte";
+  import MusicSnoozeButton from "$lib/components/music/MusicSnoozeButton.svelte";
   import MusicPlaybackModeControl from "$lib/components/music/MusicPlaybackModeControl.svelte";
   import MusicSoundscapeControl from "$lib/components/music/MusicSoundscapeControl.svelte";
   import MusicPreparationActivity from "$lib/components/music/builder/MusicPreparationActivity.svelte";
   import { revealLocalFile } from "$lib/api/music";
+  import { getMusicInspectorDetail, removeMusicSnooze } from "$lib/api/music-library";
+  import { notifyMusicLibraryChanged } from "$lib/music/music-library-events";
   import { formatPlaybackTime } from "$lib/music/playback";
   import { fittedSidePlaylistPanelHeight } from "$lib/music/panel-layout";
   import {
@@ -348,6 +351,39 @@
 
   function togglePlaylist(): void {
     player.setPlaylistVisible(!playlistVisible);
+  }
+
+  function queueTitleTooltip(node: HTMLElement, _title: string): {
+    update: (title: string) => void;
+    destroy: () => void;
+  } {
+    const button = node.parentElement?.previousElementSibling;
+    const measure = () => {
+      if (!(button instanceof HTMLButtonElement) || !node.isConnected) return;
+      button.dataset.appTooltipDisabled = String(node.scrollWidth <= node.clientWidth + 1);
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    queueMicrotask(measure);
+    return {
+      update: () => queueMicrotask(measure),
+      destroy: () => observer.disconnect(),
+    };
+  }
+
+  async function removeQueueSnooze(index: number): Promise<void> {
+    const itemId = player.activeQueueItemIds[index];
+    if (!itemId) return;
+    const playlistId = player.activePlaylistId;
+    const now = Date.now();
+    const active = (await getMusicInspectorDetail(itemId)).snoozes.filter((entry) =>
+      entry.startsAt <= now && (entry.endsAt === null || entry.endsAt > now)
+      && (playlistId === null || entry.scope === "all-playlists" || entry.playlistId === playlistId));
+    await Promise.all(active.map((entry) => removeMusicSnooze(entry.id)));
+    if (player.activeQueueItemIds[index] === itemId && player.activePlaylistId === playlistId) {
+      player.clearQueueItemSnooze(index);
+    }
+    notifyMusicLibraryChanged();
   }
 
   async function loadPlaylistBuilder(): Promise<void> {
@@ -934,19 +970,31 @@
                   <div class="shrink-0" aria-hidden="true" style={`height: ${renderedPlaylistWindow.topSpacerHeight}px;`}></div>
                   {#each renderedPlaylistItems as item, offset}
                     {@const index = renderedPlaylistWindow.startIndex + offset}
-                    <button
-                      type="button"
-                      data-playlist-index={index}
-                      onclick={() => { void player.playQueueItem(index); }}
+                    {@const queueEntry = player.savedQueueEntries[index]}
+                    {@const snoozed = queueEntry
+                      ? queueEntry.snoozedIndefinitely || (queueEntry.snoozedUntil !== null && queueEntry.snoozedUntil > Date.now())
+                      : player.sourceQueueSnoozedItemIds.includes(player.activeQueueItemIds[index] ?? "")}
+                    <div
                       class={cn(
-                        "flex h-9 w-full min-w-0 shrink-0 items-center px-2 text-left text-[0.8rem]",
+                        "relative flex h-9 w-full min-w-0 shrink-0 items-center px-2 text-left text-[0.8rem]",
                         index === 0 && "rounded-t-md",
                         index === player.queue.length - 1 && "rounded-b-md",
                         player.highlightedQueueIndex === index && "bg-accent text-accent-foreground",
                       )}
                     >
-                      <span class="min-w-0 truncate">{item.title}</span>
-                    </button>
+                      <button
+                        type="button"
+                        data-playlist-index={index}
+                        data-app-tooltip-disabled="true"
+                        onclick={() => { void player.playQueueItem(index); }}
+                        class="absolute inset-0 rounded-md focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+                        aria-label={item.title}
+                      ></button>
+                      <span class="pointer-events-none relative z-1 flex max-w-full min-w-0 items-center gap-1.5">
+                        <span data-music-queue-title use:queueTitleTooltip={item.title} class="min-w-0 truncate">{item.title}</span>
+                        {#if snoozed}<MusicSnoozeButton onRemove={() => removeQueueSnooze(index)} />{/if}
+                      </span>
+                    </div>
                   {/each}
                   <div class="shrink-0" aria-hidden="true" style={`height: ${renderedPlaylistWindow.bottomSpacerHeight}px;`}></div>
                 </div>

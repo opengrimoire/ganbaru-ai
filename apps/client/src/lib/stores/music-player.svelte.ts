@@ -97,6 +97,7 @@ export interface MusicSavedPlaylistLoadOptions {
 export interface MusicSourceQueueEntry {
   itemId: string;
   source: MusicSource;
+  snoozed: boolean;
 }
 
 export interface MusicReviewPlaybackCheckpoint {
@@ -114,6 +115,7 @@ export interface MusicReviewPlaybackCheckpoint {
   activePlaylistName: string | null;
   activeSourceQueueId: string | null;
   activeQueueItemIds: string[];
+  sourceQueueSnoozedItemIds: string[];
   activePlaylistRepeatMode: MusicRepeatMode;
   savedQueueEntries: MusicSavedQueueEntry[];
   savedQueueRecentItemIds: string[];
@@ -172,6 +174,7 @@ class MusicPlayerStore {
   activePlaylistName = $state<string | null>(null);
   activeSourceQueueId = $state<string | null>(null);
   activeQueueItemIds = $state<string[]>([]);
+  sourceQueueSnoozedItemIds = $state<string[]>([]);
   activePlaylistRepeatMode = $state<MusicRepeatMode>("off");
   savedQueueEntries = $state<MusicSavedQueueEntry[]>([]);
   savedQueueRecentItemIds = $state<string[]>([]);
@@ -497,6 +500,7 @@ class MusicPlayerStore {
       activePlaylistName: this.activePlaylistName,
       activeSourceQueueId: this.activeSourceQueueId,
       activeQueueItemIds: [...this.activeQueueItemIds],
+      sourceQueueSnoozedItemIds: [...this.sourceQueueSnoozedItemIds],
       activePlaylistRepeatMode: this.activePlaylistRepeatMode,
       savedQueueEntries: this.savedQueueEntries.map((entry) => ({
         ...entry,
@@ -519,6 +523,7 @@ class MusicPlayerStore {
     this.activePlaylistName = null;
     this.activeSourceQueueId = null;
     this.activeQueueItemIds = [];
+    this.sourceQueueSnoozedItemIds = [];
     this.activePlaylistRepeatMode = "off";
     this.savedQueueEntries = [];
     this.savedQueueRecentItemIds = [];
@@ -543,6 +548,7 @@ class MusicPlayerStore {
     this.activePlaylistName = checkpoint.activePlaylistName;
     this.activeSourceQueueId = checkpoint.activeSourceQueueId;
     this.activeQueueItemIds = [...checkpoint.activeQueueItemIds];
+    this.sourceQueueSnoozedItemIds = [...checkpoint.sourceQueueSnoozedItemIds];
     this.activePlaylistRepeatMode = checkpoint.activePlaylistRepeatMode;
     this.savedQueueEntries = checkpoint.savedQueueEntries.map((entry) => ({
       ...entry,
@@ -600,6 +606,7 @@ class MusicPlayerStore {
     this.savedQueueEntries = [...entries];
     this.queue = entries.map((entry) => entry.source);
     this.activeQueueItemIds = entries.map((entry) => entry.itemId);
+    this.sourceQueueSnoozedItemIds = [];
     this.activePlaylistId = playlistId;
     this.activePlaylistName = playlistName;
     this.activeSourceQueueId = null;
@@ -668,6 +675,7 @@ class MusicPlayerStore {
     if (entries.length === 0) return false;
     this.queue = entries.map((entry) => entry.source);
     this.activeQueueItemIds = entries.map((entry) => entry.itemId);
+    this.sourceQueueSnoozedItemIds = entries.filter((entry) => entry.snoozed).map((entry) => entry.itemId);
     this.activeSourceQueueId = queueId;
     this.activePlaylistName = queueName;
     this.queueHistory = [];
@@ -750,6 +758,7 @@ class MusicPlayerStore {
     this.savedQueueEntries = [...entries];
     this.queue = entries.map((entry) => entry.source);
     this.activeQueueItemIds = entries.map((entry) => entry.itemId);
+    this.sourceQueueSnoozedItemIds = [];
     this.savedPlaylistRuntime.setStructuralSkipped(structuralSkipped);
     const activeIndex = this.currentQueueIndex;
     this.shuffleOrder = this.shuffleEnabled && !this.mixEnabled
@@ -791,6 +800,7 @@ class MusicPlayerStore {
     this.activeSourceQueueId = null;
     this.activePlaylistRepeatMode = "off";
     this.activeQueueItemIds = [];
+    this.sourceQueueSnoozedItemIds = [];
     this.savedQueueEntries = [];
     this.savedQueueRecentItemIds = [];
     this.savedQueueSkipBreakdown = emptyMusicSkipBreakdown();
@@ -1137,6 +1147,7 @@ class MusicPlayerStore {
     this.savedQueueSkipBreakdown = emptyMusicSkipBreakdown();
     this.savedPlaylistRuntime.reset();
     this.activeQueueItemIds = [];
+    this.sourceQueueSnoozedItemIds = [];
     this.clearContextPlayback();
   }
 
@@ -1182,9 +1193,19 @@ class MusicPlayerStore {
   }
 
   applyCurrentQueueSnooze(endsAt: number | null): void {
-    const index = this.currentQueueIndex;
+    this.applyQueueItemSnooze(this.currentQueueIndex, endsAt);
+  }
+
+  /** Updates the active queue after a persisted Snooze changes. */
+  applyQueueItemSnooze(index: number, endsAt: number | null): void {
     const entry = this.currentSavedQueueEntry(index);
-    if (!entry) return;
+    if (!entry) {
+      const itemId = this.activeQueueItemIds[index];
+      if (itemId && this.activeSourceQueueId && !this.sourceQueueSnoozedItemIds.includes(itemId)) {
+        this.sourceQueueSnoozedItemIds = [...this.sourceQueueSnoozedItemIds, itemId];
+      }
+      return;
+    }
     this.savedQueueEntries[index] = {
       ...entry,
       snoozedUntil: endsAt,
@@ -1205,7 +1226,15 @@ class MusicPlayerStore {
   }
 
   clearCurrentQueueSnooze(): void {
-    const index = this.currentQueueIndex;
+    this.clearQueueItemSnooze(this.currentQueueIndex);
+  }
+
+  /** Removes a queue row's Snooze indicator after the persisted Snooze is removed. */
+  clearQueueItemSnooze(index: number): void {
+    const itemId = this.activeQueueItemIds[index];
+    if (itemId && this.activeSourceQueueId) {
+      this.sourceQueueSnoozedItemIds = this.sourceQueueSnoozedItemIds.filter((id) => id !== itemId);
+    }
     const entry = this.currentSavedQueueEntry(index);
     if (!entry) return;
     this.savedQueueEntries[index] = {

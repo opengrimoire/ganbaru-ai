@@ -4,7 +4,7 @@
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type { LocalRootBinding, MusicItemListEntry } from "$lib/music/library-contracts";
   import type { MusicSourceBrowserNode } from "$lib/music/music-source-browser";
-  import type { MusicSnoozeDuration } from "$lib/music/music-snooze";
+  import type { MusicSnoozePreset } from "$lib/music/music-snooze";
   import { musicVirtualWindow, revealMusicVirtualIndex } from "$lib/music/music-virtual-window";
   import MusicBuilderItemRow from "./MusicBuilderItemRow.svelte";
 
@@ -24,6 +24,7 @@
     onTogglePlayback,
     onShowLocation,
     onSnooze,
+    onRemoveSnooze,
   }: {
     folders: MusicSourceBrowserNode[];
     items: MusicItemListEntry[];
@@ -35,7 +36,8 @@
     onOpenFolder: (nodeId: string) => void;
     onTogglePlayback: (item: MusicItemListEntry) => void;
     onShowLocation: (item: MusicItemListEntry) => Promise<void>;
-    onSnooze: (item: MusicItemListEntry, duration: MusicSnoozeDuration, everywhere: boolean) => Promise<void>;
+    onSnooze: (item: MusicItemListEntry, duration: MusicSnoozePreset, everywhere: boolean) => Promise<void>;
+    onRemoveSnooze: (item: MusicItemListEntry) => Promise<void>;
   } = $props();
 
   const { t } = getLocalization();
@@ -100,6 +102,7 @@
         {onTogglePlayback}
         {onShowLocation}
         {onSnooze}
+        {onRemoveSnooze}
       />
     {/if}
   {/each}

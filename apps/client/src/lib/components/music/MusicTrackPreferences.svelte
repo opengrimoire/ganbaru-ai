@@ -22,7 +22,7 @@
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type { MusicMembershipMatrixEntry, MusicPlaylistSummary, MusicSnooze, MusicWeight } from "$lib/music/library-contracts";
   import { notifyMusicLibraryChanged } from "$lib/music/music-library-events";
-  import { musicSnoozeEndsAt, type MusicSnoozeDuration } from "$lib/music/music-snooze";
+  import { musicSnoozeEndsAt, musicSnoozePreset, type MusicSnoozePreset } from "$lib/music/music-snooze";
   import { MUSIC_WEIGHT_ORDER, musicMembershipsForScope, musicSnoozesForScope, musicWeightForScope } from "$lib/music/music-track-preferences";
   import { MUSIC_MIX_WEIGHT_VALUES } from "$lib/music/music-playlist-playback";
   import { pickMusicFrequencyTooltipPosition, type MusicFrequencyTooltipPosition } from "$lib/music/music-frequency-tooltip-position";
@@ -40,6 +40,7 @@
   const { t } = localization;
   const player = getMusicPlayer();
   const diceIcons = [Dice1, Dice2, Dice3, Dice4, Dice5] as const;
+  const snoozePresets = ["day", "week", "month"] as const;
   let root = $state<HTMLElement | null>(null);
   let trigger = $state<HTMLButtonElement | null>(null);
   let panel = $state<HTMLElement | null>(null);
@@ -62,7 +63,13 @@
   const itemId = $derived(queueIndex >= 0 ? player.activeQueueItemIds[queueIndex] ?? null : null);
   const targetMemberships = $derived(musicMembershipsForScope(memberships, scopePlaylistId));
   const currentWeight = $derived(musicWeightForScope(targetMemberships));
-  const scopeSnoozes = $derived(musicSnoozesForScope(snoozes, scopePlaylistId, Date.now()));
+  const scopeSnoozes = $derived(snoozes.filter((entry) => entry.startsAt <= Date.now()
+    && (entry.endsAt === null || entry.endsAt > Date.now())
+    && (scopePlaylistId === null ? entry.scope === "all-playlists"
+      : entry.scope === "playlist" && entry.playlistId === scopePlaylistId)));
+  const selectedSnooze = $derived(scopeSnoozes.length === 1
+    ? musicSnoozePreset(scopeSnoozes[0].startsAt, scopeSnoozes[0].endsAt, Intl.DateTimeFormat().resolvedOptions().timeZone)
+    : null);
   const scopeOptions = $derived([
     { value: "", label: t("music.preferences.everywhere") },
     ...memberships.map((entry) => ({ value: entry.playlistId, label: playlistName(entry.playlistId) })),
@@ -219,7 +226,7 @@
     }
   }
 
-  async function snooze(duration: MusicSnoozeDuration): Promise<void> {
+  async function snooze(duration: MusicSnoozePreset): Promise<void> {
     const targetItemId = itemId;
     if (!targetItemId || busy) return;
     const now = Date.now();
@@ -227,9 +234,18 @@
     const selectedPlaylistId = scopePlaylistId;
     const scope = selectedPlaylistId ? "playlist" : "all-playlists";
     const endsAt = musicSnoozeEndsAt(duration, now, Intl.DateTimeFormat().resolvedOptions().timeZone);
+    const previousSnoozes = scopeSnoozes;
+    const isTurningOff = selectedSnooze === duration;
     busy = true;
     error = null;
     try {
+      await Promise.all(previousSnoozes.map((entry) => removeMusicSnooze(entry.id)));
+      snoozes = snoozes.filter((entry) => !previousSnoozes.some((previous) => previous.id === entry.id));
+      if (isTurningOff) {
+        refreshCurrentQueueSnooze(targetItemId);
+        notifyMusicLibraryChanged();
+        return;
+      }
       await bulkSnoozeMusicItems({
         actionId: crypto.randomUUID(),
         itemIds: [targetItemId],
@@ -241,42 +257,30 @@
         createdAt: now,
       });
       if (itemId === targetItemId && player.activePlaylistId === activePlaylistId
-        && (selectedPlaylistId === null || selectedPlaylistId === activePlaylistId)) player.applyCurrentQueueSnooze(endsAt);
+        && (selectedPlaylistId === null || selectedPlaylistId === activePlaylistId)) {
+        player.applyCurrentQueueSnooze(endsAt);
+        await player.playNextTrack();
+        if (itemId === targetItemId) await player.pausePlayback();
+      }
       notifyMusicLibraryChanged();
       close(false);
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
+      try { snoozes = (await getMusicInspectorDetail(targetItemId)).snoozes; }
+      catch (refreshCause) { error += ` ${refreshCause instanceof Error ? refreshCause.message : String(refreshCause)}`; }
     } finally {
       busy = false;
     }
   }
 
-  async function resume(): Promise<void> {
-    if (busy || scopeSnoozes.length === 0) return;
-    const targetItemId = itemId;
-    const snoozeIds = scopeSnoozes.map((entry) => entry.id);
-    busy = true;
-    error = null;
-    try {
-      await Promise.all(snoozeIds.map(removeMusicSnooze));
-      snoozes = snoozes.filter((entry) => !snoozeIds.includes(entry.id));
-      if (itemId === targetItemId) {
-        const remaining = musicSnoozesForScope(snoozes, null, Date.now())
-          .filter((entry) => entry.scope === "all-playlists" || entry.playlistId === player.activePlaylistId);
-        if (remaining.length === 0) player.clearCurrentQueueSnooze();
-        else player.applyCurrentQueueSnooze(remaining.some((entry) => entry.endsAt === null)
-          ? null : Math.max(...remaining.map((entry) => entry.endsAt ?? 0)));
-      }
-      notifyMusicLibraryChanged();
-    } catch (cause) {
-      error = cause instanceof Error ? cause.message : String(cause);
-      if (targetItemId) {
-        try { snoozes = (await getMusicInspectorDetail(targetItemId)).snoozes; }
-        catch (refreshCause) { error += ` ${refreshCause instanceof Error ? refreshCause.message : String(refreshCause)}`; }
-      }
-    } finally {
-      busy = false;
-    }
+  function refreshCurrentQueueSnooze(targetItemId: string): void {
+    if (itemId !== targetItemId) return;
+    const remaining = musicSnoozesForScope(snoozes, null, Date.now())
+      .filter((entry) => player.activeSourceQueueId !== null
+        || entry.scope === "all-playlists" || entry.playlistId === player.activePlaylistId);
+    if (remaining.length === 0) player.clearCurrentQueueSnooze();
+    else player.applyCurrentQueueSnooze(remaining.some((entry) => entry.endsAt === null)
+      ? null : Math.max(...remaining.map((entry) => entry.endsAt ?? 0)));
   }
 </script>
 
@@ -337,14 +341,11 @@
         </div>
 
         <div class="mt-4 border-t border-border/60 pt-4">
-          <div class="flex items-center justify-between gap-2">
-            <span class="text-xs font-semibold">{t("music.preferences.snooze")}</span>
-            {#if scopeSnoozes.length > 0}<button type="button" onclick={() => { void resume(); }} aria-disabled={busy} class="text-[0.7rem] font-medium text-primary hover:underline">{t("music.preferences.resume")}</button>{/if}
-          </div>
+          <span class="text-xs font-semibold">{t("music.preferences.snooze")}</span>
           <div class="mt-2 grid grid-cols-3 gap-1">
-            <button type="button" onclick={() => { void snooze("today"); }} aria-disabled={busy} class="snooze-choice">{t("music.preferences.today")}</button>
-            <button type="button" onclick={() => { void snooze("week"); }} aria-disabled={busy} class="snooze-choice">{t("music.preferences.week")}</button>
-            <button type="button" onclick={() => { void snooze("until-resumed"); }} aria-disabled={busy} class="snooze-choice">{t("music.preferences.untilResumed")}</button>
+            {#each snoozePresets as duration (duration)}
+              <button type="button" onclick={() => { void snooze(duration); }} aria-disabled={busy} aria-pressed={selectedSnooze === duration} class="snooze-choice">{t(`music.preferences.${duration}`)}</button>
+            {/each}
           </div>
         </div>
       {/if}
@@ -370,8 +371,9 @@
 {/if}
 
 <style>
-  .snooze-choice { min-height: 2rem; border-radius: 0.45rem; padding-inline: 0.15rem; font-size: calc(0.7rem * var(--type-scale)); color: var(--muted-foreground); }
+  .snooze-choice { min-height: 2rem; border-radius: 0.45rem; background: color-mix(in srgb, var(--accent) 45%, transparent); padding-inline: 0.15rem; font-size: calc(0.7rem * var(--type-scale)); color: var(--foreground); }
   .snooze-choice:hover { background: var(--accent); color: var(--foreground); }
+  .snooze-choice[aria-pressed="true"] { background: color-mix(in srgb, var(--primary) 15%, var(--accent)); color: var(--foreground); }
   .die-choice { display: inline-flex; height: 2.5rem; width: 2.5rem; align-items: center; justify-content: center; border-radius: 0.6rem; color: var(--muted-foreground); }
   .die-choice:hover { background: var(--accent); color: var(--foreground); }
   .die-choice.active-die { background: color-mix(in srgb, var(--primary) 12%, transparent); color: var(--primary); }

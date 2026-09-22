@@ -1,6 +1,5 @@
 <script lang="ts">
   import CircleAlert from "@lucide/svelte/icons/circle-alert";
-  import Clock3 from "@lucide/svelte/icons/clock-3";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import Pause from "@lucide/svelte/icons/pause";
   import Play from "@lucide/svelte/icons/play";
@@ -11,8 +10,9 @@
     musicAvailabilityTone,
     musicItemSecondaryText,
   } from "$lib/music/music-builder-presentation";
-  import type { MusicSnoozeDuration } from "$lib/music/music-snooze";
+  import type { MusicSnoozePreset } from "$lib/music/music-snooze";
   import { cn } from "$lib/utils";
+  import MusicSnoozeButton from "../MusicSnoozeButton.svelte";
   import MusicArtworkThumbnail from "./MusicArtworkThumbnail.svelte";
   import MusicPlaylistItemMenu from "./MusicPlaylistItemMenu.svelte";
 
@@ -29,6 +29,7 @@
     onTogglePlayback,
     onShowLocation,
     onSnooze,
+    onRemoveSnooze,
     onWeight,
     onRemove,
   }: {
@@ -43,7 +44,8 @@
     showLocationAction?: boolean;
     onTogglePlayback: (item: MusicItemListEntry) => void;
     onShowLocation: (item: MusicItemListEntry) => Promise<void>;
-    onSnooze: (item: MusicItemListEntry, duration: MusicSnoozeDuration, everywhere: boolean) => Promise<void>;
+    onSnooze: (item: MusicItemListEntry, duration: MusicSnoozePreset, everywhere: boolean) => Promise<void>;
+    onRemoveSnooze: (item: MusicItemListEntry) => Promise<void>;
     onWeight?: (item: MusicItemListEntry, weight: MusicWeight) => Promise<void>;
     onRemove?: (item: MusicItemListEntry) => Promise<void>;
   } = $props();
@@ -87,7 +89,8 @@
   <div class="pointer-events-none relative z-1 grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(5rem,0.65fr)] items-center gap-3 text-left max-[470px]:grid-cols-1 max-[470px]:gap-0.5">
     <span class="min-w-0">
       <span class="flex min-w-0 items-center gap-1.5">
-        <span class="block truncate text-xs font-semibold text-foreground">{item.title}</span>
+        <span class="block min-w-0 truncate text-xs font-semibold text-foreground">{item.title}</span>
+        {#if item.activeSnoozeCount > 0}<MusicSnoozeButton onRemove={() => onRemoveSnooze(item)} />{/if}
       </span>
       <span class="mt-0.5 block truncate text-[0.68rem] text-muted-foreground">{secondary.primary}</span>
     </span>
@@ -111,9 +114,6 @@
         class={cn("row-status", availabilityTone === "danger" ? "row-status-danger" : "row-status-warning")}
         title={availabilityLabel()}
       ><CircleAlert size={12} strokeWidth={1.8} /><span class="sr-only">{availabilityLabel()}</span></span>
-    {/if}
-    {#if item.activeSnoozeCount > 0}
-      <span class="row-status" title={t("music.builder.snoozed")}><Clock3 size={12} strokeWidth={1.7} /><span class="sr-only">{t("music.builder.snoozed")}</span></span>
     {/if}
     {#if duration}<span class="w-10 text-right text-[0.65rem] tabular-nums text-muted-foreground">{duration}</span>{/if}
     <MusicPlaylistItemMenu {item} {playlistName} {context} {showLocationAction} {onShowLocation} {onSnooze} {onWeight} {onRemove} />
