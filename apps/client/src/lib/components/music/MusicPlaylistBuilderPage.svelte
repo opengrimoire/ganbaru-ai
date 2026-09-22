@@ -345,6 +345,8 @@
     if (!action || !library.vaultId || builderInitializing) return;
     if (action === "new-playlist") playlistSurface = "create";
     else if (action === "open-playlists") void navigateNow({ kind: "playlists" });
+    else if (action === "open-review") void navigateNow({ kind: "review" });
+    else if (action.kind === "open-review-item") void openReviewItem(action.itemId);
     else if (action.kind === "open-issues") void openReviewIssues();
     else if (action.kind === "open-soundscapes") {
       if (supportsSoundscapes) void navigateNow({ kind: "soundscapes" });
@@ -615,6 +617,30 @@
       ? { kind: "playlist", playlistId: activePlaylistId }
       : { kind: "playlists" };
     await navigateNow(next);
+  }
+
+  async function openReviewItem(itemId: string): Promise<void> {
+    await navigateNow({ kind: "review" });
+    if (destination.kind !== "review") return;
+    if (!library.currentWindow.items.some((item) => item.id === itemId)) {
+      library.patchCurrentState({
+        search: "",
+        sourceKind: null,
+        availability: null,
+        reviewState: null,
+        sourceCollectionId: null,
+        membershipPlaylistId: null,
+        snoozed: null,
+      });
+      if (!await library.refresh()) return;
+    }
+    if (destination.kind !== "review") return;
+    const item = library.currentWindow.items.find((entry) => entry.id === itemId);
+    if (!item) return;
+    clearReviewSelection();
+    reviewTreeViewState.search = "";
+    if (item.reviewState === "ignored") showIgnoredReviewItems = true;
+    library.selectItem(itemId);
   }
 
   function navigate(next: MusicBuilderDestination): void {

@@ -14,6 +14,8 @@ One compact track-preferences button replaces the speed control. The panel prese
 
 The player queue also marks snoozed tracks with a small clock beside the title. Clicking the clock removes the active Snooze without starting that track. A row shows its full-title tooltip only when the visible title is truncated; its accessible name remains the full title.
 
+The current-track playlist button opens a compact list of the track's playlist memberships. Selecting rows only changes a draft. Save applies all additions and removals together, while closing the panel discards unsaved choices. Open in playlist builder goes to Review with the current track selected, clearing filters that hide it when needed. The panel does not offer playlist creation or file-location actions.
+
 Clicking an inactive queue item starts it from the configured membership start. Clicking the active item toggles play and pause only where the surface communicates that behavior.
 
 Shuffle ignores Mix frequency and never mutates stored playlist order. Mix uses relative weights of 0.5, 0.75, 1, 1.5, and 2, with Normal at 1. Recent tracks receive a soft penalty for the next five distinct selections; even an immediate repeat remains possible, but uncommon. Mix never learns from skips or silently changes a track's preference. It continues while eligible tracks remain, so playlist repeat settings do not apply while Mix is selected. Source queues use the same recent-repeat guard with equal track weights. Snoozed, disabled, missing, or unavailable items are skipped with an explainable reason.

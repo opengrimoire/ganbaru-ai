@@ -1,53 +1,50 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import Check from "@lucide/svelte/icons/check";
-  import ExternalLink from "@lucide/svelte/icons/external-link";
-  import FolderSearch from "@lucide/svelte/icons/folder-search";
-  import ListPlus from "@lucide/svelte/icons/list-plus";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import ListTodo from "@lucide/svelte/icons/list-todo";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
-  import MoreHorizontal from "@lucide/svelte/icons/ellipsis";
+  import MusicPlaylistIcon from "./builder/MusicPlaylistIcon.svelte";
   import {
     bulkEditMusicMemberships,
     getMusicMembershipMatrix,
     getMusicPlaylistSummaries,
   } from "$lib/api/music-library";
-  import { revealLocalFile } from "$lib/api/music";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { notifyMusicLibraryChanged } from "$lib/music/music-library-events";
   import type { MusicPlaylistSummary } from "$lib/music/library-contracts";
+  import { sortReviewPlaylists } from "$lib/music/music-review";
   import { systemMusicPlaylistName } from "$lib/music/music-system-playlists";
   import { getMusicPlayer } from "$lib/stores/music-player.svelte";
 
-  let {
-    onOpenItem,
-    onOpenPlaylists,
-    active = true,
-  }: {
-    onOpenItem: (itemId: string) => void;
-    onOpenPlaylists: () => void;
+  let { onOpenBuilder, active = true }: {
+    onOpenBuilder: (itemId: string | null) => void;
     active?: boolean;
   } = $props();
+
   const { t } = getLocalization();
   const player = getMusicPlayer();
+  const playlistPageSize = 500;
   let root = $state<HTMLElement | null>(null);
   let trigger = $state<HTMLButtonElement | null>(null);
   let open = $state(false);
-  let addOpen = $state(false);
-  let busy = $state(false);
+  let loading = $state(false);
+  let saving = $state(false);
   let error = $state<string | null>(null);
   let playlists = $state<MusicPlaylistSummary[]>([]);
-  let membershipPlaylistIds = $state<Set<string>>(new Set());
+  let savedIds = $state<Set<string>>(new Set());
+  let draftIds = $state<Set<string>>(new Set());
+  let generation = 0;
 
   const queueIndex = $derived(player.currentQueueIndex);
   const itemId = $derived(queueIndex >= 0 ? player.activeQueueItemIds[queueIndex] ?? null : null);
-  const source = $derived(player.currentSource);
-  const available = $derived(Boolean(source));
+  const available = $derived(Boolean(player.currentSource && itemId));
+  const sortedPlaylists = $derived(sortReviewPlaylists(playlists, ""));
+  const changed = $derived(savedIds.size !== draftIds.size || [...savedIds].some((id) => !draftIds.has(id)));
 
   $effect(() => {
     itemId;
-    open = false;
-    addOpen = false;
-    error = null;
+    close();
   });
 
   $effect(() => {
@@ -59,12 +56,11 @@
       if (active && open && event.target instanceof Node && root && !root.contains(event.target)) close();
     };
     const key = (event: KeyboardEvent) => {
-      if (active && open && event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        close();
-        trigger?.focus();
-      }
+      if (!active || !open || event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+      trigger?.focus();
     };
     window.addEventListener("pointerdown", pointer);
     window.addEventListener("keydown", key, true);
@@ -74,102 +70,126 @@
     };
   });
 
-  async function toggle(): Promise<void> {
-    open = !open;
-    if (!open || !itemId) return;
-    busy = true;
+  function close(): void {
+    generation += 1;
+    open = false;
+  }
+
+  async function loadPlaylists(targetItemId: string): Promise<void> {
+    const request = ++generation;
+    loading = true;
     error = null;
+    playlists = [];
     try {
-      const [summaries, matrix] = await Promise.all([
-        getMusicPlaylistSummaries(Date.now(), 0, 500),
-        getMusicMembershipMatrix([itemId]),
-      ]);
+      const now = Date.now();
+      const summaries: MusicPlaylistSummary[] = [];
+      const matrix = await getMusicMembershipMatrix([targetItemId]);
+      for (let offset = 0; ; offset += playlistPageSize) {
+        const page = await getMusicPlaylistSummaries(now, offset, playlistPageSize);
+        summaries.push(...page);
+        if (page.length < playlistPageSize) break;
+      }
+      if (!open || request !== generation || itemId !== targetItemId) return;
       playlists = summaries;
-      membershipPlaylistIds = new Set(matrix.map((entry) => entry.playlistId));
+      savedIds = new Set(matrix.map((entry) => entry.playlistId));
+      draftIds = new Set(savedIds);
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : String(cause);
+      if (open && request === generation && itemId === targetItemId) error = cause instanceof Error ? cause.message : String(cause);
     } finally {
-      busy = false;
+      if (request === generation) loading = false;
     }
   }
 
   function activate(): void {
-    if (!available) {
-      onOpenPlaylists();
+    if (!available || !itemId) {
+      onOpenBuilder(null);
       return;
     }
-    void toggle();
+    if (open) {
+      close();
+      return;
+    }
+    open = true;
+    void loadPlaylists(itemId);
   }
 
-  function close(): void {
-    open = false;
-    addOpen = false;
+  function togglePlaylist(playlistId: string): void {
+    if (loading || saving) return;
+    const next = new Set(draftIds);
+    if (next.has(playlistId)) next.delete(playlistId);
+    else next.add(playlistId);
+    draftIds = next;
   }
 
-  async function addToPlaylist(playlistId: string): Promise<void> {
-    if (!itemId || membershipPlaylistIds.has(playlistId)) return;
-    await run(async () => {
+  async function save(): Promise<void> {
+    const targetItemId = itemId;
+    if (!targetItemId || !changed || loading || saving) return;
+    const addPlaylistIds = [...draftIds].filter((id) => !savedIds.has(id));
+    const removePlaylistIds = [...savedIds].filter((id) => !draftIds.has(id));
+    const request = generation;
+    saving = true;
+    error = null;
+    try {
       await bulkEditMusicMemberships({
         actionId: crypto.randomUUID(),
-        itemIds: [itemId],
-        addPlaylistIds: [playlistId],
-        removePlaylistIds: [],
+        itemIds: [targetItemId],
+        addPlaylistIds,
+        removePlaylistIds,
         weightPlaylistIds: [],
         weight: null,
         updatedAt: Date.now(),
       });
-      membershipPlaylistIds = new Set([...membershipPlaylistIds, playlistId]);
       notifyMusicLibraryChanged();
-    });
-  }
-
-  async function showLocation(): Promise<void> {
-    if (source?.kind !== "local-file") return;
-    await run(() => revealLocalFile(source.path));
-  }
-
-  function openItem(): void {
-    if (!itemId) return;
-    close();
-    onOpenItem(itemId);
-  }
-
-  async function run(action: () => Promise<void>): Promise<void> {
-    if (busy) return;
-    busy = true;
-    error = null;
-    try {
-      await action();
+      if (open && request === generation && itemId === targetItemId) {
+        savedIds = new Set(draftIds);
+        close();
+        trigger?.focus();
+      }
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : String(cause);
+      if (open && request === generation && itemId === targetItemId) error = cause instanceof Error ? cause.message : String(cause);
+      else console.error("Could not save playlists for the previous track", cause);
     } finally {
-      busy = false;
+      saving = false;
     }
+  }
+
+  function openBuilder(): void {
+    const targetItemId = itemId;
+    close();
+    onOpenBuilder(targetItemId);
   }
 </script>
 
 <div bind:this={root} class="relative">
-  <button bind:this={trigger} type="button" onclick={activate} class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors hover:bg-accent" aria-label={available ? t("music.itemMenu.actions") : t("music.launcher.playlists")} aria-expanded={open} aria-haspopup={available ? "menu" : undefined}><MoreHorizontal size={15} /></button>
+  <button bind:this={trigger} type="button" onclick={activate} class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors hover:bg-accent" aria-label={available ? t("music.itemMenu.actions") : t("music.playlistBuilder")} aria-expanded={open} aria-haspopup={available ? "dialog" : undefined}><ListTodo size={15} /></button>
   {#if open}
-    <div role="menu" aria-label={t("music.itemMenu.actions")} class="absolute bottom-[calc(100%+0.45rem)] right-0 z-40 max-h-[calc(100vh-1rem)] w-[min(20rem,calc(100vw-1rem))] overflow-y-auto rounded-xl border border-border/80 bg-popover p-1.5 text-popover-foreground shadow-md">
-      {#if busy && playlists.length === 0}<div class="flex items-center gap-2 px-3 py-4 text-xs text-muted-foreground"><LoaderCircle class="animate-spin motion-reduce:animate-none" size={14} />{t("music.itemMenu.loading")}</div>{/if}
-      {#if error}<p class="m-1 rounded-md bg-destructive/10 px-2.5 py-2 text-[0.68rem] text-destructive" role="alert">{error}</p>{/if}
-      {#if itemId}
-        <button type="button" role="menuitem" onclick={() => addOpen = !addOpen} aria-expanded={addOpen} class="menu-action"><ListPlus size={14} />{t("music.itemMenu.addToPlaylist")}</button>
-        {#if addOpen}
-          <div class="mx-1 mb-1 max-h-40 overflow-y-auto rounded-lg bg-secondary/55 p-1">
-            {#if playlists.length === 0}<p class="px-2 py-2 text-[0.68rem] text-muted-foreground">{t("music.itemMenu.noPlaylists")}</p>{/if}
-            {#each playlists as playlist (playlist.id)}<button type="button" onclick={() => { void addToPlaylist(playlist.id); }} disabled={membershipPlaylistIds.has(playlist.id) || busy} class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[0.68rem] hover:bg-accent disabled:opacity-60"><span class="min-w-0 flex-1 truncate">{systemMusicPlaylistName(playlist.id, playlist.name, t)}</span>{#if membershipPlaylistIds.has(playlist.id)}<Check size={12} />{/if}</button>{/each}
+    <div role="dialog" aria-label={t("music.itemMenu.actions")} class="absolute bottom-[calc(100%+0.45rem)] right-0 z-40 flex max-h-[calc(100vh-1rem)] w-[min(19rem,calc(100vw-1rem))] flex-col rounded-xl border border-border/75 bg-popover p-3 text-popover-foreground shadow-md">
+      <h2 class="px-1 text-xs font-semibold">{t("music.launcher.playlists")}</h2>
+      {#if error}<p class="mt-2 px-1 text-xs text-destructive" role="alert">{error}</p>{/if}
+      <div class="mt-2 h-56 min-h-0 shrink overflow-y-auto" data-music-scrollable="true">
+        {#if loading}
+          <div class="flex h-full items-center justify-center" aria-label={t("music.itemMenu.loading")}><LoaderCircle class="animate-spin motion-reduce:animate-none" size={17} strokeWidth={2.6} /></div>
+        {:else if error && playlists.length === 0}
+          <button type="button" onclick={() => { if (itemId) void loadPlaylists(itemId); }} class="mx-1 my-4 rounded-md px-2 py-1 text-xs font-medium text-foreground hover:bg-accent/60">{t("common.retry")}</button>
+        {:else if playlists.length === 0}
+          <p class="px-1 py-5 text-xs text-muted-foreground">{t("music.itemMenu.noPlaylists")}</p>
+        {:else}
+          <div class="space-y-0.5">
+            {#each sortedPlaylists as playlist (playlist.id)}
+              {@const selected = draftIds.has(playlist.id)}
+              <button type="button" onclick={() => togglePlaylist(playlist.id)} disabled={saving} aria-pressed={selected} aria-label={selected ? t("music.builder.removeFromPlaylist", playlist.name) : t("music.builder.addToPlaylist", playlist.name)} class="flex min-h-9 w-full items-center gap-2 rounded-lg px-1.5 text-left text-xs transition-colors hover:bg-accent/60 disabled:cursor-wait aria-pressed:bg-primary/10">
+                <span class="grid h-6 w-6 shrink-0 place-items-center"><MusicPlaylistIcon icon={playlist.icon} size={15} /></span>
+                <span class="min-w-0 flex-1 truncate">{systemMusicPlaylistName(playlist.id, playlist.name, t)}</span>
+                <span class={selected ? "grid h-4 w-4 shrink-0 place-items-center rounded border border-primary bg-primary text-primary-foreground" : "grid h-4 w-4 shrink-0 place-items-center rounded border border-border"}>{#if selected}<Check size={11} strokeWidth={2.5} />{/if}</span>
+              </button>
+            {/each}
           </div>
         {/if}
-        <button type="button" role="menuitem" onclick={openItem} class="menu-action"><ExternalLink size={14} />{t("music.itemMenu.openInBuilder")}</button>
-      {/if}
-      {#if source?.kind === "local-file"}<button type="button" role="menuitem" onclick={() => { void showLocation(); }} class="menu-action"><FolderSearch size={14} />{t("music.itemMenu.showLocation")}</button>{/if}
+      </div>
+      <div class="mt-3 flex items-center justify-between gap-2">
+        <button type="button" onclick={openBuilder} class="inline-flex h-8 items-center gap-0.5 rounded-md px-1.5 text-xs font-medium text-muted-foreground hover:bg-accent/60 hover:text-foreground">{t("music.itemMenu.openInBuilder")}<ChevronRight size={13} /></button>
+        <button type="button" onclick={() => { void save(); }} disabled={!changed || loading || saving} class="inline-flex h-8 min-w-16 items-center justify-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground">{#if saving}<LoaderCircle class="animate-spin motion-reduce:animate-none" size={14} strokeWidth={2.5} />{:else}{t("common.save")}{/if}</button>
+      </div>
     </div>
   {/if}
 </div>
-
-<style>
-  .menu-action { display: flex; min-height: 2.25rem; width: 100%; align-items: center; gap: 0.6rem; border-radius: 0.45rem; padding-inline: 0.65rem; text-align: left; font-size: calc(0.72rem * var(--type-scale)); font-weight: 500; }
-  .menu-action:hover { background: var(--accent); color: var(--accent-foreground); }
-</style>

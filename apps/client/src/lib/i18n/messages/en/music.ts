@@ -20,11 +20,10 @@ export const music = {
     openBuilder: "Open playlist builder",
   },
   itemMenu: {
-    actions: "Current track actions",
-    loading: "Loading track actions",
-    addToPlaylist: "Add to playlist",
+    actions: "Current track playlists",
+    loading: "Loading playlists",
     noPlaylists: "Create a playlist first.",
-    openInBuilder: "Open in builder",
+    openInBuilder: "Open in playlist builder",
     showLocation: "Show file location",
   },
   preferences: {

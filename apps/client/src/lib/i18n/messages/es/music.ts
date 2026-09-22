@@ -23,11 +23,10 @@ export const music = {
     openBuilder: "Abrir editor de playlists",
   },
   itemMenu: {
-    actions: "Acciones de la pista actual",
-    loading: "Cargando acciones de la pista",
-    addToPlaylist: "Agregar a playlist",
+    actions: "Playlists de la pista actual",
+    loading: "Cargando playlists",
     noPlaylists: "Primero crea una playlist.",
-    openInBuilder: "Abrir en el constructor",
+    openInBuilder: "Abrir en el editor de playlists",
     showLocation: "Mostrar ubicación del archivo",
   },
   preferences: {

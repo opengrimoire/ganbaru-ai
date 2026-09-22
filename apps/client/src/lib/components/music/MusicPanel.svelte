@@ -1107,7 +1107,6 @@
               {player.volumePercentLabel}
             </button>
           </div>
-          <MusicCurrentItemMenu active={visible} onOpenItem={(itemId) => openPlaylistBuilder({ kind: "open-item", itemId })} onOpenPlaylists={() => openPlaylistBuilder("open-playlists")} />
           {#if supportsSoundscapes}
             <MusicSoundscapeControl onOpenSoundscapes={() => openPlaylistBuilder({ kind: "open-soundscapes" })} />
           {/if}
@@ -1176,6 +1175,7 @@
             {volumeMenuOpen}
             onOpen={closeVolumeMenu}
           />
+          <MusicCurrentItemMenu active={visible} onOpenBuilder={(itemId) => openPlaylistBuilder(itemId ? { kind: "open-review-item", itemId } : "open-review")} />
           <button
             type="button"
             onclick={togglePlaylist}
