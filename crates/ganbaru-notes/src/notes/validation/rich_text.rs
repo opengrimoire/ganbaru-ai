@@ -44,7 +44,7 @@ pub fn validate_rich_text_item(value: &Value) -> Result<(), String> {
             validate_equation_rich_text_item(object)?;
         }
         Some(Value::String(_)) => {
-            return Err("rich text item type must be text, mention, or equation".to_string())
+            return Err("rich text item type must be text, mention, or equation".to_string());
         }
         _ => return Err("rich text item type must be a string".to_string()),
     }

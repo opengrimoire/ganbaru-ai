@@ -117,22 +117,28 @@ fn json_graph_export_includes_canonical_tables_counts_schema_and_warnings() {
             graph["graph"]["files"]["notes_assets"][0]["asset_path"],
             "notes/files/graph.png"
         );
-        assert!(graph["graph"]["indexes"]["notes_search_index"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|row| row["page_id"] == PAGE_A));
+        assert!(
+            graph["graph"]["indexes"]["notes_search_index"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|row| row["page_id"] == PAGE_A)
+        );
         assert!(graph["graph"]["indexes"].get("notes_search_fts").is_none());
-        assert!(result_json["diagnostics"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|diagnostic| diagnostic["code"] == "json_graph_rebuildable_fts_omitted"));
-        assert!(result_json["diagnostics"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|diagnostic| diagnostic["code"] == "json_graph_asset_bytes_not_embedded"));
+        assert!(
+            result_json["diagnostics"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|diagnostic| diagnostic["code"] == "json_graph_rebuildable_fts_omitted")
+        );
+        assert!(
+            result_json["diagnostics"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|diagnostic| diagnostic["code"] == "json_graph_asset_bytes_not_embedded")
+        );
     });
 }
 
@@ -161,10 +167,12 @@ fn json_graph_export_can_exclude_rebuildable_indexes() {
 
         assert!(graph["graph"].get("indexes").is_none());
         assert_eq!(result_json["exported_index_record_count"], 0);
-        assert!(result_json["diagnostics"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|diagnostic| diagnostic["code"] == "json_graph_indexes_excluded"));
+        assert!(
+            result_json["diagnostics"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|diagnostic| diagnostic["code"] == "json_graph_indexes_excluded")
+        );
     });
 }

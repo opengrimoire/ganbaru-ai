@@ -4,8 +4,8 @@ use super::config::{
     ChatBehaviorPreferences, ChatPanelPreferences, ChatVaultConfig, RememberedComposerSelection,
 };
 use super::credentials::{
-    materialize_provider_environment, CredentialStore, CredentialStoreAvailability,
-    PlatformCredentialStore, SecretValue,
+    CredentialStore, CredentialStoreAvailability, PlatformCredentialStore, SecretValue,
+    materialize_provider_environment,
 };
 #[cfg(test)]
 use super::device_state::ChatProviderDeviceState;

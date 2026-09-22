@@ -1,16 +1,16 @@
 //! Runtime-only pseudoterminal sessions with bounded replay.
 
 use super::models::{ChatError, ChatErrorCode, ChatResult, ChatThreadId, ProjectWorkingFolderId};
-use base64::{engine::general_purpose, Engine as _};
-use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
+use base64::{Engine as _, engine::general_purpose};
+use portable_pty::{ChildKiller, CommandBuilder, MasterPty, PtySize, native_pty_system};
 use serde::Serialize;
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{
+    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
     mpsc::sync_channel,
-    Arc, Mutex,
 };
 use tauri::Emitter;
 
@@ -742,10 +742,12 @@ mod tests {
     #[test]
     fn replay_is_sequenced_generation_scoped_and_byte_bounded() {
         let session = session(true);
-        assert!(session
-            .record_output(0, b"stale".to_vec())
-            .expect("stale output should be handled")
-            .is_none());
+        assert!(
+            session
+                .record_output(0, b"stale".to_vec())
+                .expect("stale output should be handled")
+                .is_none()
+        );
         for byte in [1_u8, 2, 3] {
             session
                 .record_output(1, vec![byte; MAX_REPLAY_BYTES / 2])

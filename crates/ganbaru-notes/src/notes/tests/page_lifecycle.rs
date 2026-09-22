@@ -565,10 +565,12 @@ fn purge_expired_trashed_pages_deletes_after_retention_window() {
         .execute(&pool)
         .await
         .unwrap();
-        assert!(writes::purge_expired_trashed_pages(&pool)
-            .await
-            .unwrap()
-            .is_empty());
+        assert!(
+            writes::purge_expired_trashed_pages(&pool)
+                .await
+                .unwrap()
+                .is_empty()
+        );
         assert_eq!(reads::list_trashed_pages(&pool).await.unwrap().len(), 2);
 
         sqlx::query(

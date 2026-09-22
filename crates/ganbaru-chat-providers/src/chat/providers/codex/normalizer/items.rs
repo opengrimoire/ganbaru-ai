@@ -266,21 +266,23 @@ impl CodexEventNormalizer {
     ) -> ChatResult<Vec<CanonicalRuntimeEvent>> {
         let object = required_object(&params, "item/mcpToolCall/progress")?;
         let item_id = required_text(object, "itemId")?;
-        Ok(vec![self.event(
-            state,
-            "item/mcpToolCall/progress",
-            route_turn(state, Some(object)),
-            provider_turn_from(object),
-            provider_identifier::<ProviderItemId>(item_id),
-            CanonicalEvent::ToolProgress(ToolProgressEvent {
-                tool_id: item_id.to_string(),
-                status: ActivityStatus::Active,
-                title: "MCP tool".to_string(),
-                progress: None,
-                summary: text(object, "message")
-                    .map(|value| bounded_text(value, MAX_PROVIDER_TEXT_BYTES)),
-            }),
-        )?])
+        Ok(vec![
+            self.event(
+                state,
+                "item/mcpToolCall/progress",
+                route_turn(state, Some(object)),
+                provider_turn_from(object),
+                provider_identifier::<ProviderItemId>(item_id),
+                CanonicalEvent::ToolProgress(ToolProgressEvent {
+                    tool_id: item_id.to_string(),
+                    status: ActivityStatus::Active,
+                    title: "MCP tool".to_string(),
+                    progress: None,
+                    summary: text(object, "message")
+                        .map(|value| bounded_text(value, MAX_PROVIDER_TEXT_BYTES)),
+                }),
+            )?,
+        ])
     }
 
     pub(super) fn hook_lifecycle(
@@ -295,30 +297,32 @@ impl CodexEventNormalizer {
             .and_then(Value::as_object)
             .ok_or_else(|| protocol_error("hook lifecycle run"))?;
         let id = required_text(run, "id")?;
-        Ok(vec![self.event(
-            state,
-            if completed {
-                "hook/completed"
-            } else {
-                "hook/started"
-            },
-            route_turn(state, Some(object)),
-            provider_turn_from(object),
-            None,
-            CanonicalEvent::HookLifecycle(HookLifecycleEvent {
-                hook_id: id.to_string(),
-                status: if completed {
-                    status_text(run.get("status").unwrap_or(&Value::Null))
-                        .map(activity_status)
-                        .unwrap_or(ActivityStatus::Completed)
+        Ok(vec![
+            self.event(
+                state,
+                if completed {
+                    "hook/completed"
                 } else {
-                    ActivityStatus::Active
+                    "hook/started"
                 },
-                title: text(run, "eventName").unwrap_or("Codex hook").to_string(),
-                detail: text(run, "statusMessage")
-                    .map(|value| bounded_text(value, MAX_PROVIDER_TEXT_BYTES)),
-            }),
-        )?])
+                route_turn(state, Some(object)),
+                provider_turn_from(object),
+                None,
+                CanonicalEvent::HookLifecycle(HookLifecycleEvent {
+                    hook_id: id.to_string(),
+                    status: if completed {
+                        status_text(run.get("status").unwrap_or(&Value::Null))
+                            .map(activity_status)
+                            .unwrap_or(ActivityStatus::Completed)
+                    } else {
+                        ActivityStatus::Active
+                    },
+                    title: text(run, "eventName").unwrap_or("Codex hook").to_string(),
+                    detail: text(run, "statusMessage")
+                        .map(|value| bounded_text(value, MAX_PROVIDER_TEXT_BYTES)),
+                }),
+            )?,
+        ])
     }
 
     pub(super) fn context_compacted(

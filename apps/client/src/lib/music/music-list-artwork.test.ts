@@ -11,6 +11,7 @@ function item(patch: Partial<MusicItemListEntry> = {}): MusicItemListEntry {
     activeSnoozeCount: 0, lastPlayedAt: null, playCount: 0, membershipId: "membership-1",
     membershipPosition: 0, membershipWeight: "normal", membershipEnabled: true, membershipVersion: 1,
     ...patch,
+    sourceCollectionIds: patch.sourceCollectionIds ?? [],
   };
 }
 

@@ -29,10 +29,12 @@ fn backlinks_include_visible_child_page_blocks() {
         assert_eq!(backlinks_json[0]["reference_type"], "child_page");
 
         writes::archive_page(&pool, PAGE_A, true).await.unwrap();
-        assert!(backlinks::list_backlinks(&pool, PAGE_B)
-            .await
-            .unwrap()
-            .is_empty());
+        assert!(
+            backlinks::list_backlinks(&pool, PAGE_B)
+                .await
+                .unwrap()
+                .is_empty()
+        );
     });
 }
 
@@ -105,10 +107,12 @@ fn backlinks_refresh_when_local_notes_rich_text_links_are_edited() {
         )
         .await
         .unwrap();
-        assert!(backlinks::list_backlinks(&pool, PAGE_B)
-            .await
-            .unwrap()
-            .is_empty());
+        assert!(
+            backlinks::list_backlinks(&pool, PAGE_B)
+                .await
+                .unwrap()
+                .is_empty()
+        );
 
         let target_url =
             format!("http://localhost:1420/?view=notes#notes?page={PAGE_B}&block={BLOCK_B}");
@@ -145,10 +149,12 @@ fn backlinks_refresh_when_local_notes_rich_text_links_are_edited() {
         )
         .await
         .unwrap();
-        assert!(backlinks::list_backlinks(&pool, PAGE_B)
-            .await
-            .unwrap()
-            .is_empty());
+        assert!(
+            backlinks::list_backlinks(&pool, PAGE_B)
+                .await
+                .unwrap()
+                .is_empty()
+        );
     });
 }
 
@@ -286,14 +292,16 @@ fn backlinks_index_rebuilds_comments_and_local_object_mentions() {
         comments::delete_comment(&pool, COMMENT_A).await.unwrap();
         let after_delete = backlinks::list_backlinks(&pool, PAGE_B).await.unwrap();
         let after_delete_json = serde_json::to_value(after_delete).unwrap();
-        assert!(!after_delete_json
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|backlink| {
-                backlink["source_block_type"] == "comment"
-                    && backlink["reference_type"] == "comment_mention"
-            }));
+        assert!(
+            !after_delete_json
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|backlink| {
+                    backlink["source_block_type"] == "comment"
+                        && backlink["reference_type"] == "comment_mention"
+                })
+        );
     });
 }
 
@@ -387,10 +395,12 @@ fn backlinks_hide_trashed_blocks_and_source_pages() {
         );
 
         writes::trash_block(&pool, BLOCK_C, true).await.unwrap();
-        assert!(backlinks::list_backlinks(&pool, PAGE_B)
-            .await
-            .unwrap()
-            .is_empty());
+        assert!(
+            backlinks::list_backlinks(&pool, PAGE_B)
+                .await
+                .unwrap()
+                .is_empty()
+        );
 
         writes::trash_block(&pool, BLOCK_C, false).await.unwrap();
         assert_eq!(
@@ -402,9 +412,11 @@ fn backlinks_hide_trashed_blocks_and_source_pages() {
         );
 
         writes::trash_page(&pool, PAGE_A, true).await.unwrap();
-        assert!(backlinks::list_backlinks(&pool, PAGE_B)
-            .await
-            .unwrap()
-            .is_empty());
+        assert!(
+            backlinks::list_backlinks(&pool, PAGE_B)
+                .await
+                .unwrap()
+                .is_empty()
+        );
     });
 }

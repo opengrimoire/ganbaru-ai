@@ -393,13 +393,16 @@ class ChatStore {
       this.archivedTeammates = archivedTeammates;
       this.channelNavigationController.hydrateNavigation(navigationChannels);
       this.threadCollectionController.resetWindow();
-      try {
-        await this.configurationController.discoverProviders();
-      } catch (error: unknown) {
+      const isCurrentLoad = () => request === this.loadRequest && vaultGeneration === this.vaultGeneration;
+      void this.configurationController.discoverProviders(isCurrentLoad).catch(async (error: unknown) => {
+        if (!isCurrentLoad()) return;
         console.error("Automatic Chat provider discovery failed", error);
-        await this.configurationController.refreshSettings();
-      }
-      if (request !== this.loadRequest || vaultGeneration !== this.vaultGeneration) return;
+        try {
+          await this.configurationController.refreshSettings(isCurrentLoad);
+        } catch (refreshError: unknown) {
+          if (isCurrentLoad()) console.error("Chat settings refresh after discovery failed", refreshError);
+        }
+      });
       if (localExecutionAvailable) {
         void chatApi.recoverChatAssignmentDispatchJobs().catch((error: unknown) => {
           console.error("Chat assignment recovery failed", error);

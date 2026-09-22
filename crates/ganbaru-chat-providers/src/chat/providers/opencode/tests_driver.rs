@@ -1,9 +1,9 @@
 //! OpenCode driver lifecycle tests over a deterministic HTTP server.
 
-use super::config::{continuation_group, OpenCodeProviderSettings};
+use super::config::{OpenCodeProviderSettings, continuation_group};
 use super::driver::OpenCodeProviderDriver;
 use super::http_client::OpenCodeHttpClient;
-use super::tests::{configuration, TestDirectory};
+use super::tests::{TestDirectory, configuration};
 use crate::chat::events::{CanonicalEvent, CanonicalRuntimeEvent};
 use crate::chat::models::*;
 use crate::chat::providers::{
@@ -11,8 +11,8 @@ use crate::chat::providers::{
 };
 use serde_json::json;
 use std::sync::{
-    atomic::{AtomicBool, AtomicUsize, Ordering},
     Arc, Mutex,
+    atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -304,10 +304,11 @@ fn external_session_lifecycle_never_stops_the_external_server() {
                 .map(ProviderThreadId::as_str),
             Some("ses_new")
         );
-        assert!(sink
-            .events()
-            .iter()
-            .any(|event| { matches!(&event.event, CanonicalEvent::SessionStarted(_)) }));
+        assert!(
+            sink.events()
+                .iter()
+                .any(|event| { matches!(&event.event, CanonicalEvent::SessionStarted(_)) })
+        );
         let turn_id = ChatTurnId::new("turn-opencode").unwrap();
         driver
             .send_turn(
@@ -409,10 +410,12 @@ fn external_session_lifecycle_never_stops_the_external_server() {
             health.get("healthy").and_then(serde_json::Value::as_bool),
             Some(true)
         );
-        assert!(server
-            .requests()
-            .iter()
-            .any(|request| request.starts_with("POST /session/ses_new/abort?")));
+        assert!(
+            server
+                .requests()
+                .iter()
+                .any(|request| request.starts_with("POST /session/ses_new/abort?"))
+        );
         let requests = server.requests();
         assert!(requests.iter().any(|request| {
             request.starts_with("POST /session/ses_new/prompt_async?")
@@ -502,9 +505,11 @@ fn resume_forks_changed_directory_reasserts_permissions_and_reconciles_reconnect
             .await;
         server.wait_for_request("GET /event?").await;
         let requests = server.requests();
-        assert!(requests
-            .iter()
-            .any(|request| request.starts_with("POST /session/ses_resume/fork?")));
+        assert!(
+            requests
+                .iter()
+                .any(|request| request.starts_with("POST /session/ses_resume/fork?"))
+        );
         assert!(requests.iter().any(|request| {
             request.starts_with("PATCH /session/ses_fork?")
                 && request.contains("\"permission\"")
@@ -559,12 +564,16 @@ fn resume_creates_a_fresh_session_only_after_confirmed_not_found() {
             Some("ses_new")
         );
         let requests = server.requests();
-        assert!(requests
-            .iter()
-            .any(|request| request.starts_with("GET /session/ses_missing?")));
-        assert!(requests
-            .iter()
-            .any(|request| request.starts_with("POST /session?")));
+        assert!(
+            requests
+                .iter()
+                .any(|request| request.starts_with("GET /session/ses_missing?"))
+        );
+        assert!(
+            requests
+                .iter()
+                .any(|request| request.starts_with("POST /session?"))
+        );
         driver
             .stop_session(
                 StopSessionRequest {

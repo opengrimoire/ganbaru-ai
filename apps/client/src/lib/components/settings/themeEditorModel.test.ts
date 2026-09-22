@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  CALENDAR_GROUPS,
   SOURCE_GROUPS,
-  TEXT_ACTION_GROUPS,
-  THEME_NAV_ITEMS,
+  localizedThemeNavItems,
   isCalendarGroup,
   isTextActionGroup,
   tokenInfo,
@@ -23,12 +21,14 @@ describe("theme editor model", () => {
   });
 
   it("keeps section partitions keyed by stable ids", () => {
-    expect(groupIds(CALENDAR_GROUPS)).toEqual([
+    const calendarGroups = SOURCE_GROUPS.filter(isCalendarGroup);
+    const textActionGroups = SOURCE_GROUPS.filter(isTextActionGroup);
+    expect(groupIds(calendarGroups)).toEqual([
       "calendar-surface",
       "calendar-details",
       "event-panel",
     ]);
-    expect(groupIds(TEXT_ACTION_GROUPS)).toEqual([
+    expect(groupIds(textActionGroups)).toEqual([
       "ink",
       "primary-action",
       "destructive",
@@ -36,11 +36,11 @@ describe("theme editor model", () => {
       "warning",
     ]);
 
-    for (const group of CALENDAR_GROUPS) {
+    for (const group of calendarGroups) {
       expect(isCalendarGroup(group)).toBe(true);
       expect(isTextActionGroup(group)).toBe(false);
     }
-    for (const group of TEXT_ACTION_GROUPS) {
+    for (const group of textActionGroups) {
       expect(isTextActionGroup(group)).toBe(true);
       expect(isCalendarGroup(group)).toBe(false);
     }
@@ -48,7 +48,8 @@ describe("theme editor model", () => {
 
   it("keeps navigation targets backed by model entry points", () => {
     const navTargets = new Set<ThemeNavTarget>(
-      THEME_NAV_ITEMS.map((item) => item.target),
+      localizedThemeNavItems((key: string, ..._args: unknown[]) => key)
+        .map((item) => item.target),
     );
     expect(navTargets).toEqual(
       new Set<ThemeNavTarget>([
@@ -66,7 +67,7 @@ describe("theme editor model", () => {
     );
     expect(groupTargets.has("general")).toBe(true);
     expect(groupTargets.has("signals")).toBe(true);
-    expect(CALENDAR_GROUPS.length).toBeGreaterThan(0);
+    expect(SOURCE_GROUPS.some(isCalendarGroup)).toBe(true);
   });
 
   it("places the empty rail picker before the break marker picker", () => {

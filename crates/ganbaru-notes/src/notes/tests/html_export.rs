@@ -127,12 +127,16 @@ fn html_export_writes_page_tree_assets_comments_and_database_metadata() {
         assert!(index.contains("Local file"));
         assert!(index.contains("Database manifest"));
         assert!(index.contains("Archive note"));
-        assert!(files
-            .iter()
-            .any(|file| file["path"] == "databases/tasks-80808080.json"));
-        assert!(files
-            .iter()
-            .any(|file| file["path"] == "assets/ganbaru-notes-export.css"));
+        assert!(
+            files
+                .iter()
+                .any(|file| file["path"] == "databases/tasks-80808080.json")
+        );
+        assert!(
+            files
+                .iter()
+                .any(|file| file["path"] == "assets/ganbaru-notes-export.css")
+        );
         assert_eq!(
             result_json["assets"][0]["archive_path"],
             "assets/notes/files/local.txt"
@@ -199,13 +203,15 @@ fn html_export_is_deterministic_and_warns_when_assets_are_excluded() {
 
         assert_eq!(first["manifest_json"], second["manifest_json"]);
         assert_eq!(first["exported_asset_count"], 0);
-        assert!(first["diagnostics"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|diagnostic| {
-                diagnostic["code"] == "html_export_local_asset_not_included"
-                    && diagnostic["block_id"] == BLOCK_C
-            }));
+        assert!(
+            first["diagnostics"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|diagnostic| {
+                    diagnostic["code"] == "html_export_local_asset_not_included"
+                        && diagnostic["block_id"] == BLOCK_C
+                })
+        );
     });
 }

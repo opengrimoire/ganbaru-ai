@@ -1,5 +1,5 @@
 use super::data_source_table::{
-    row_property_checked, row_property_number, row_property_plain_text, TableProperty,
+    TableProperty, row_property_checked, row_property_number, row_property_plain_text,
 };
 use super::data_source_views::ViewProperty as BoardProperty;
 use super::models::{

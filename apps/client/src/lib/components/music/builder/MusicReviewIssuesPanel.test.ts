@@ -8,7 +8,7 @@ import MusicReviewIssuesPanel from "./MusicReviewIssuesPanel.svelte";
 function item(): MusicItemListEntry {
   return {
     id: "track-1", identityKey: "track-1", sourceKind: "local-file", mediaKind: "audio",
-    title: "Missing song", artist: "", album: "", localRootId: "root-1", relativePath: "Album/song.flac",
+    title: "Missing song", artist: "", album: "", localRootId: "root-1", relativePath: "Album/song.flac", sourceCollectionIds: ["source-1"],
     originalArtworkIdentity: null, artworkOverride: null, durationMs: null, availability: "missing",
     reviewState: "unreviewed", discoveredAt: 1, updatedAt: 1, version: 1, playlistCount: 0,
     activeSnoozeCount: 0, lastPlayedAt: null, playCount: 0, membershipId: null,

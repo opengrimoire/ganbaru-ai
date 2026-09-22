@@ -98,8 +98,7 @@ fn create_child_page_from_block_moves_nested_children_and_syncs_page_state() {
         assert!(reads::get_block(&pool, BLOCK_B, false).await.is_err());
         writes::trash_page(&pool, BLOCK_B, false).await.unwrap();
         assert_eq!(
-            serde_json::to_value(reads::get_block(&pool, BLOCK_B, false).await.unwrap()).unwrap()
-                ["type"],
+            serde_json::to_value(reads::get_block(&pool, BLOCK_B, false).await.unwrap()).unwrap()["type"],
             "child_page"
         );
     });
@@ -318,11 +317,13 @@ fn move_blocks_moves_subtrees_updates_comment_pages_and_rejects_cycles() {
         assert_eq!(moved_nested_json["parent"]["block_id"], BLOCK_B);
 
         let source_threads = comments::list_comments(&pool, PAGE_A, false).await.unwrap();
-        assert!(serde_json::to_value(source_threads)
-            .unwrap()
-            .as_array()
-            .unwrap()
-            .is_empty());
+        assert!(
+            serde_json::to_value(source_threads)
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
         let destination_threads = comments::list_comments(&pool, PAGE_B, false).await.unwrap();
         let destination_threads_json = serde_json::to_value(destination_threads).unwrap();
         assert_eq!(destination_threads_json[0]["parent"]["block_id"], BLOCK_C);

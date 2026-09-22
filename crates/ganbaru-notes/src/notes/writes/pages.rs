@@ -6,8 +6,8 @@ use super::payloads::{
 };
 use super::sort::next_sort_orders;
 use crate::notes::models::{
-    page_parent_columns, parent_columns, NoteChildPageFromBlockCreate, NoteLoadedPage,
-    NotePageCreate, NotePageDto, NotePageRow, NotePageUpdate, NoteParent, OptionalJsonValue,
+    NoteChildPageFromBlockCreate, NoteLoadedPage, NotePageCreate, NotePageDto, NotePageRow,
+    NotePageUpdate, NoteParent, OptionalJsonValue, page_parent_columns, parent_columns,
 };
 use crate::notes::validation::{
     plain_text_from_payload, require_uuid, validate_page_create, validate_page_update,

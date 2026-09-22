@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { isPomodoroWindowCommand } from "../stores/pomodoro-window-sync";
 import {
   breakAfterFocusPosition,
   configEquals,
@@ -15,6 +16,38 @@ import {
 } from "./rhythm";
 
 describe("pomodoro rhythm engine", () => {
+  it.each([
+    null, undefined, [], {},
+    { rhythmSource: "custom", presetKey: null, idleTimeoutMinutes: null },
+    { ...createPresetPomodoroConfig("adaptive"), presetKey: "toString" },
+    { ...createPresetPomodoroConfig("adaptive"), presetKey: "__proto__" },
+    { ...createPresetPomodoroConfig("adaptive"), rhythm: null },
+    { ...createPresetPomodoroConfig("adaptive"), rhythm: { kind: "sequence" } },
+    { ...createPresetPomodoroConfig("adaptive"), rhythm: { kind: "sequence", steps: [null] } },
+    { ...createPresetPomodoroConfig("adaptive"), rhythm: { kind: "sequence", steps: Array(1) } },
+    { ...createPresetPomodoroConfig("adaptive"), rhythm: {
+      kind: "unknown",
+      steps: [{ focusDurationMinutes: 25, breakPhase: "short_break", breakDurationMinutes: 5 }],
+    } },
+    { ...createPresetPomodoroConfig("adaptive"), idleTimeoutMinutes: "5" },
+    { ...createPresetPomodoroConfig("adaptive"), idleTimeoutMinutes: Infinity },
+  ])("rejects malformed configuration without throwing: %j", (value) => {
+    expect(isValidPomodoroConfig(value)).toBe(false);
+    expect(isPomodoroWindowCommand({ kind: "start-from-block", blockId: "block", blockConfig: value })).toBe(false);
+  });
+
+  it("accepts complete count and sequence configurations through window commands", () => {
+    for (const blockConfig of [
+      createPresetPomodoroConfig("adaptive"),
+      createCustomSequencePomodoroConfig([
+        { focusDurationMinutes: 25, breakPhase: "short_break", breakDurationMinutes: 5 },
+      ]),
+    ]) {
+      expect(isValidPomodoroConfig(blockConfig)).toBe(true);
+      expect(isPomodoroWindowCommand({ kind: "start-from-block", blockId: "block", blockConfig })).toBe(true);
+    }
+  });
+
   it("summarizes every step in a sequence cycle", () => {
     expect(summarizeSequencePomodoroRhythm([
       { focusDurationMinutes: 20, breakPhase: "short_break", breakDurationMinutes: 4 },

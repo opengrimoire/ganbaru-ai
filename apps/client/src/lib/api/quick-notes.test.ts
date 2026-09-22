@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { mapQuickNote, mapQuickNoteTag } from "./quick-notes";
+import { describe, expect, it, vi } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
+import { mapQuickNote, mapQuickNoteTag, updateQuickNote, QuickNoteWriteError } from "./quick-notes";
+
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+vi.mock("$lib/api/db", () => ({ ensureDbUrl: async () => "sqlite:test" }));
 
 function validQuickNote(): Record<string, unknown> {
   return {
@@ -27,6 +31,15 @@ function validQuickNote(): Record<string, unknown> {
 }
 
 describe("Quick notes API boundary", () => {
+  it.each(["revision_conflict", "failed"] as const)("preserves the native %s code independently of wording", async (code) => {
+    const message = code === "revision_conflict" ? "The note changed elsewhere" : "Unable to inspect revision conflict state";
+    vi.mocked(invoke).mockRejectedValueOnce({ code, message });
+    const note = mapQuickNote(validQuickNote());
+    const result = updateQuickNote({ ...note, expectedRevision: note.revision });
+    await expect(result).rejects.toBeInstanceOf(QuickNoteWriteError);
+    await expect(result).rejects.toMatchObject({ code, message });
+  });
+
   it("maps a valid canonical row", () => {
     expect(mapQuickNote(validQuickNote())).toMatchObject({
       id: "note-1",

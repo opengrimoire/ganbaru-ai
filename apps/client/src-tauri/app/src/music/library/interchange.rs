@@ -129,6 +129,10 @@ fn validate_import(request: &MusicInterchangeImportRequest) -> MusicLibraryResul
             ));
         }
         validate_icon(&playlist.icon)?;
+        super::validation::validate_playlist_playback_mode(
+            playlist.shuffle_enabled,
+            playlist.mix_enabled,
+        )?;
         for membership in &playlist.memberships {
             validate_item(&membership.item, &root_ids)?;
             if membership.position < 0
@@ -262,11 +266,12 @@ async fn import_playlist(
             .map(|playlist| playlist.icon)
             .unwrap_or(playlist.icon.trim());
         sqlx::query(
-            "UPDATE music_playlists SET name = ?, icon = ?, shuffle_enabled = ?, repeat_mode = ?, updated_at = ?, version = version + 1 WHERE id = ?",
+            "UPDATE music_playlists SET name = ?, icon = ?, shuffle_enabled = ?, mix_enabled = ?, repeat_mode = ?, updated_at = ?, version = version + 1 WHERE id = ?",
         )
         .bind(protected_name)
         .bind(protected_icon)
         .bind(i64::from(playlist.shuffle_enabled))
+        .bind(i64::from(playlist.mix_enabled))
         .bind(playlist.repeat_mode.as_ref())
         .bind(request.imported_at)
         .bind(&target_id)
@@ -287,13 +292,14 @@ async fn import_playlist(
             })?;
     } else {
         sqlx::query(
-            "INSERT INTO music_playlists (id, name, icon, shuffle_enabled, repeat_mode, sort_order, created_at, updated_at, version)
-             VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM music_playlists), ?, ?, 1)",
+            "INSERT INTO music_playlists (id, name, icon, shuffle_enabled, mix_enabled, repeat_mode, sort_order, created_at, updated_at, version)
+             VALUES (?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM music_playlists), ?, ?, 1)",
         )
         .bind(&target_id)
         .bind(playlist.name.trim())
         .bind(playlist.icon.trim())
         .bind(i64::from(playlist.shuffle_enabled))
+        .bind(i64::from(playlist.mix_enabled))
         .bind(playlist.repeat_mode.as_ref())
         .bind(request.imported_at)
         .bind(request.imported_at)

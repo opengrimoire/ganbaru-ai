@@ -1,14 +1,12 @@
 <script lang="ts">
-  import Copy from "@lucide/svelte/icons/copy";
-  import ListMusic from "@lucide/svelte/icons/list-music";
-  import Trash2 from "@lucide/svelte/icons/trash-2";
   import { onMount } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import IconPicker from "$lib/components/icon-picker/IconPicker.svelte";
+  import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import MusicPlaylistIcon from "./MusicPlaylistIcon.svelte";
-  import { containMusicDialogFocus } from "$lib/music/music-dialog-focus";
+  import MusicBuilderDialog from "./MusicBuilderDialog.svelte";
   import type { MusicPlaylistController, MusicPlaylistDraft } from "$lib/music/music-playlist-controller.svelte";
-  import type { MusicIntendedUse, MusicRepeatMode } from "$lib/music/library-contracts";
+  import type { MusicIntendedUse, MusicPlaybackMode, MusicRepeatMode } from "$lib/music/library-contracts";
   import { isSystemMusicPlaylistId, systemMusicPlaylistName } from "$lib/music/music-system-playlists";
 
   let {
@@ -32,7 +30,7 @@
   const { t } = getLocalization();
   let name = $state("");
   let icon = $state("lucide:list-music");
-  let shuffleEnabled = $state(true);
+  let playbackMode = $state<MusicPlaybackMode>("shuffle");
   let repeatMode = $state<MusicRepeatMode>("all");
   let intendedUses = $state<MusicIntendedUse[]>([]);
   let replacementPlaylistId = $state("");
@@ -45,7 +43,7 @@
       const displayName = systemMusicPlaylistName(detail.id, detail.name, t);
       name = mode === "duplicate" ? t("music.builder.playlistCopyName", displayName) : displayName;
       icon = detail.icon;
-      shuffleEnabled = detail.shuffleEnabled;
+      playbackMode = detail.mixEnabled ? "mix" : detail.shuffleEnabled ? "shuffle" : "in-order";
       repeatMode = detail.repeatMode;
       intendedUses = [...detail.intendedUses];
       if (mode === "delete" && !controller.deleteImpact) void controller.inspectDelete();
@@ -69,13 +67,27 @@
     return t(`music.builder.intendedUse.${use}`);
   }
 
+  function setPlaybackMode(value: string): void {
+    if (value === "in-order" || value === "shuffle" || value === "mix") playbackMode = value;
+  }
+
+  function setRepeatMode(value: string): void {
+    if (value === "off" || value === "all" || value === "one") repeatMode = value;
+  }
+
   async function save(): Promise<void> {
     if (mode === "delete") {
       const replacement = replacementPlaylistId || null;
       if (await controller.remove(replacement)) onDeleted(replacement);
       return;
     }
-    const draft: MusicPlaylistDraft = { name, icon, shuffleEnabled, repeatMode, intendedUses };
+    const draft: MusicPlaylistDraft = {
+      name, icon,
+      shuffleEnabled: playbackMode !== "in-order",
+      mixEnabled: playbackMode === "mix",
+      repeatMode: playbackMode === "mix" ? "all" : repeatMode,
+      intendedUses,
+    };
     if (mode === "create") {
       const playlistId = await controller.create(draft);
       if (playlistId) onSaved(playlistId);
@@ -90,32 +102,31 @@
   }
 </script>
 
-<div class="absolute inset-0 z-60 grid place-items-center bg-background/65 p-3 backdrop-blur-sm">
-  <div use:containMusicDialogFocus={{ onEscape: onClose, escapeDisabled: controller.saving }} role="dialog" aria-modal="true" aria-labelledby="music-playlist-dialog-title" class="flex max-h-full w-full max-w-md flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-2xl" tabindex="-1">
-    <header class="flex shrink-0 items-center gap-3 border-b border-border/60 p-4">
-      <div class="grid h-9 w-9 place-items-center rounded-lg bg-secondary text-muted-foreground">
-        {#if mode === "delete"}<Trash2 size={17} />{:else if mode === "duplicate"}<Copy size={17} />{:else}<ListMusic size={17} />{/if}
-      </div>
-      <div class="min-w-0"><h2 id="music-playlist-dialog-title" class="text-sm font-semibold">{title()}</h2><p class="mt-0.5 text-[0.68rem] text-muted-foreground">{t("music.builder.playlistDialogDescription")}</p></div>
-    </header>
-
-    <div class="min-h-0 overflow-y-auto p-4">
+<MusicBuilderDialog
+  title={title()}
+  titleId="music-playlist-dialog-title"
+  size="small"
+  role={mode === "delete" ? "alertdialog" : "dialog"}
+  dismissDisabled={controller.saving}
+  onDismiss={onClose}
+>
+    <div>
       {#if mode === "delete"}
         {#if controller.deleteImpact}
           <p class="text-xs leading-relaxed">{t("music.builder.deletePlaylistWarning", controller.detail?.name ?? "")}</p>
-          <div class="mt-3 grid grid-cols-2 gap-2 text-[0.68rem] sm:grid-cols-3">
-            <div class="rounded-lg bg-secondary/65 p-2"><strong class="block text-sm">{controller.deleteImpact.membershipCount}</strong><span class="text-muted-foreground">{t("music.builder.memberships")}</span></div>
-            <div class="rounded-lg bg-secondary/65 p-2"><strong class="block text-sm">{controller.deleteImpact.projectFocusAssignmentCount + controller.deleteImpact.projectBreakAssignmentCount}</strong><span class="text-muted-foreground">{t("music.builder.projectAssignments")}</span></div>
-            <div class="rounded-lg bg-secondary/65 p-2"><strong class="block text-sm">{controller.deleteImpact.calendarAssignmentCount}</strong><span class="text-muted-foreground">{t("music.builder.eventAssignments")}</span></div>
-            <div class="rounded-lg bg-secondary/65 p-2"><strong class="block text-sm">{controller.deleteImpact.contextAssignmentCount}</strong><span class="text-muted-foreground">{t("music.builder.contextAssignments")}</span></div>
-            <div class="rounded-lg bg-secondary/65 p-2"><strong class="block text-sm">0</strong><span class="text-muted-foreground">{t("music.builder.mediaFilesDeleted")}</span></div>
-          </div>
-          <p class="mt-3 rounded-lg bg-warning/10 p-2.5 text-[0.68rem] leading-relaxed text-warning">{t("music.builder.deleteAssignmentFallback")}</p>
-          {#if activeInPlayer}<p class="mt-2 rounded-lg border border-primary/25 bg-primary/8 p-2.5 text-[0.68rem] leading-relaxed">{t("music.builder.activePlaylistDeleteBehavior")}</p>{/if}
+          <dl class="mt-3 grid grid-cols-2 border-y border-border py-2 text-xs sm:grid-cols-3">
+            <div class="py-1"><dt class="text-muted-foreground">{t("music.builder.memberships")}</dt><dd class="font-semibold">{controller.deleteImpact.membershipCount}</dd></div>
+            <div class="py-1"><dt class="text-muted-foreground">{t("music.builder.projectAssignments")}</dt><dd class="font-semibold">{controller.deleteImpact.projectFocusAssignmentCount + controller.deleteImpact.projectBreakAssignmentCount}</dd></div>
+            <div class="py-1"><dt class="text-muted-foreground">{t("music.builder.eventAssignments")}</dt><dd class="font-semibold">{controller.deleteImpact.calendarAssignmentCount}</dd></div>
+            <div class="py-1"><dt class="text-muted-foreground">{t("music.builder.contextAssignments")}</dt><dd class="font-semibold">{controller.deleteImpact.contextAssignmentCount}</dd></div>
+            <div class="py-1"><dt class="text-muted-foreground">{t("music.builder.mediaFilesDeleted")}</dt><dd class="font-semibold">0</dd></div>
+          </dl>
+          <p class="mt-3 text-xs leading-relaxed text-warning">{t("music.builder.deleteAssignmentFallback")}</p>
+          {#if activeInPlayer}<p class="mt-2 text-xs leading-relaxed text-muted-foreground">{t("music.builder.activePlaylistDeleteBehavior")}</p>{/if}
           {#if controller.deleteImpact.assignments.length > 0}
-            <div class="mt-3 max-h-32 space-y-1 overflow-y-auto rounded-lg border border-border/60 bg-background p-1.5" data-music-scrollable="true">
+            <div class="mt-3 max-h-32 divide-y divide-border overflow-y-auto border-y border-border" data-music-scrollable="true">
               {#each controller.deleteImpact.assignments as assignment (`${assignment.kind}:${assignment.id}`)}
-                <div class="flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-[0.67rem]"><span class="shrink-0 rounded bg-secondary px-1.5 py-0.5 text-[0.58rem] text-muted-foreground">{t(`music.builder.assignmentKind.${assignment.kind}`)}</span><span class="min-w-0 flex-1 truncate" title={assignment.label}>{assignment.label || assignment.id}</span></div>
+                <div class="flex min-w-0 items-center gap-2 py-2 text-xs"><span class="shrink-0 text-muted-foreground">{t(`music.builder.assignmentKind.${assignment.kind}`)}</span><span class="min-w-0 flex-1 truncate" title={assignment.label}>{assignment.label || assignment.id}</span></div>
               {/each}
             </div>
           {/if}
@@ -142,7 +153,6 @@
                   aria-haspopup="dialog"
                   aria-expanded={open}
                   aria-controls={panelId}
-                  title={t("music.builder.selectPlaylistIcon")}
                   onclick={toggle}
                 >
                   <MusicPlaylistIcon {icon} size={18} strokeWidth={1.6} />
@@ -153,19 +163,18 @@
           <input data-dialog-autofocus id="music-playlist-name" bind:value={name} disabled={protectedIdentity && mode === "edit"} class="h-9 min-w-0 flex-1 rounded-md border border-border/70 bg-background px-3 text-xs outline-none focus:border-primary disabled:opacity-60" />
         </div>
         {#if mode !== "duplicate"}
-          <fieldset class="mt-3"><legend class="text-[0.7rem] font-medium">{t("music.builder.intendedUses")}</legend><div class="mt-1.5 flex flex-wrap gap-1.5">{#each useOptions as use}<button type="button" aria-pressed={intendedUses.includes(use)} onclick={() => toggleUse(use)} title={t(`music.builder.intendedUseDescription.${use}`)} class="rounded-full border border-border/70 px-2.5 py-1 text-[0.68rem] aria-pressed:border-primary aria-pressed:bg-primary/10">{useLabel(use)}</button>{/each}</div>{#if intendedUses.length > 0}<div class="mt-2 space-y-1 rounded-lg bg-secondary/45 p-2">{#each intendedUses as use}<p class="text-[0.62rem] leading-relaxed text-muted-foreground"><strong class="text-foreground">{useLabel(use)}:</strong> {t(`music.builder.intendedUseDescription.${use}`)}</p>{/each}</div>{/if}</fieldset>
-          <div class="mt-3 grid grid-cols-2 gap-3">
-            <label class="flex items-center gap-2 rounded-lg bg-secondary/55 p-2 text-[0.68rem]"><input type="checkbox" bind:checked={shuffleEnabled} class="accent-primary" />{t("music.builder.shuffleDefault")}</label>
-            <label class="text-[0.68rem]"><span class="block font-medium">{t("music.builder.repeatDefault")}</span><select bind:value={repeatMode} class="mt-1 h-8 w-full rounded-md border border-border/70 bg-background px-2"><option value="off">{t("music.builder.repeatOff")}</option><option value="all">{t("music.builder.repeatAll")}</option><option value="one">{t("music.builder.repeatOne")}</option></select></label>
+          <fieldset class="mt-4"><legend class="text-xs font-medium">{t("music.builder.intendedUses")}</legend><div class="mt-2 flex flex-wrap gap-x-4 gap-y-2">{#each useOptions as use}<label class="flex items-center gap-2 text-xs"><input type="checkbox" checked={intendedUses.includes(use)} onchange={() => toggleUse(use)} class="accent-primary" />{useLabel(use)}</label>{/each}</div></fieldset>
+          <div class={playbackMode === "mix" ? "mt-3" : "mt-3 grid grid-cols-2 gap-3"}>
+            <CustomSelect value={playbackMode} options={[{ value: "in-order", label: t("music.playbackMode.in-order") }, { value: "shuffle", label: t("music.playbackMode.shuffle") }, { value: "mix", label: t("music.playbackMode.mix") }]} onChange={setPlaybackMode} label={t("music.playbackMode.label")} />
+            {#if playbackMode !== "mix"}<CustomSelect value={repeatMode} options={[{ value: "off", label: t("music.builder.repeatOff") }, { value: "all", label: t("music.builder.repeatAll") }, { value: "one", label: t("music.builder.repeatOne") }]} onChange={setRepeatMode} label={t("music.builder.repeatDefault")} />{/if}
           </div>
         {/if}
       {/if}
       {#if controller.error}<p class="mt-3 text-[0.68rem] text-destructive" role="alert">{controller.error}</p>{/if}
     </div>
 
-    <footer class="flex shrink-0 flex-wrap justify-end gap-2 border-t border-border/60 p-3">
-      <button type="button" onclick={onClose} disabled={controller.saving} class="h-8 rounded-md bg-secondary px-3 text-xs font-medium disabled:opacity-50">{t("music.builder.cancel")}</button>
-      <button type="button" onclick={() => { void save(); }} disabled={controller.saving || (mode !== "delete" && !name.trim()) || (mode === "delete" && !controller.deleteImpact)} class={mode === "delete" ? "h-8 rounded-md bg-destructive px-3 text-xs font-semibold text-destructive-foreground disabled:opacity-40" : "h-8 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-40"}>{mode === "delete" ? t("music.builder.deletePlaylist") : t("music.builder.savePlaylist")}</button>
-    </footer>
-  </div>
-</div>
+    {#snippet footer()}
+      <button type="button" onclick={onClose} disabled={controller.saving} class="min-h-10 rounded-md border border-border bg-card px-3.5 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50">{t("music.builder.cancel")}</button>
+      <button type="button" onclick={() => { void save(); }} disabled={controller.saving || (mode !== "delete" && !name.trim()) || (mode === "delete" && !controller.deleteImpact)} class={mode === "delete" ? "min-h-10 rounded-md border border-destructive bg-destructive px-3.5 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50" : "min-h-10 rounded-md border border-border bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"}>{mode === "delete" ? t("music.builder.deletePlaylist") : t("music.builder.savePlaylist")}</button>
+    {/snippet}
+</MusicBuilderDialog>

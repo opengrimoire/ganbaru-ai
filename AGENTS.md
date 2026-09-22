@@ -97,6 +97,7 @@ apps/
           validation/: bounded parsers for untrusted Chat responses and events
           composer-controller.ts, composer-model.ts, inspector-model.ts, review-model.ts, terminal-model.ts, timeline-model.ts: split interaction and presentation models and controllers
           file-editor-session.svelte.ts, review-session.svelte.ts, workspace-panel-tabs.svelte.ts: stateful editor, review, and workspace controllers
+          teammate-editor-controller.svelte.ts: component-scoped teammate drafts, revision checks, and save/conflict recovery
         data/: shared static/domain data helpers
         doomscrolling/: shared browser and desktop blocking rules
         hooks/: reusable Svelte hooks
@@ -104,6 +105,7 @@ apps/
           messages/: split locale catalog entry points, domain modules, and shape tests
         music/: frontend music source and playback helpers
         notes/: Notes contracts, validation, editor operations, databases, and tree helpers
+          block-factory.ts, block-payloads.ts, block-queries.ts, block-updates.ts: stable block API and separate payload creation, inspection, and edit operations
           contracts/: typed Notes DTO families and view models
           validation/: split validation helpers
         pomodoro/: adaptive rhythm and Pomodoro domain logic
@@ -112,6 +114,7 @@ apps/
         quick-notes/: Quick notes contracts, rich-text operations, masonry, persistence, and window sync
         scheduling/: lifecycle and notification schedulers
         stores/: Svelte rune stores and domain controllers for active runtime state
+          themes.ts, themes/: stable theme API, definitions, color derivation, and JSON transfer
           chat.svelte.ts, chat-communication-controller.svelte.ts, chat-organizational-controller.svelte.ts, chat-timeline-controller.svelte.ts: root Chat state and split communication, organization, and timeline controllers
         types/: frontend-specific TypeScript types
         utils/: shared helpers, formatters
@@ -130,10 +133,18 @@ apps/
         src/: Tauri commands, managed state, setup and exit hooks, and platform integrations
           desktop_runtime.rs, mobile_runtime.rs: platform-specific Tauri composition roots
           db.rs, db_path.rs, vault.rs, vault/: active-folder authorization, SQLite adapter boundary, and portable Android backup and restore
+            config.rs, documents.rs: bounded vault config mutations and native Calendar/theme document transfer behind the vault command facade
+            handoff/: local single-writer linking, ownership transfer, refresh, and recovery
+              state/, state.rs: one pairing-state owner with split transfer operations, persistence validation, and restart tests
+              coordinator/, coordinator.rs: serialized coordinator dispatch with separate outgoing and incoming transfer workflows
+              transport/, transport.rs: pinned client and shared streaming transport, desktop server adapter, and transport tests
           calendar_events/, calendar_import/, calendar_reads/: split calendar persistence, import, and query services
           calendar_description.rs, calendar_import.rs, calendar_reads.rs, calendars.rs, recurrence.rs: calendar command roots and shared logic
           chat.rs, chat/: desktop Tauri Chat adapters, application command flows, and platform integrations
             coordination_commands/, send/, interaction/: messages, scheduling, turn orchestration, attachments, drafts, and follow-ups
+            coordination_commands/access/: access-profile lifecycle, assignment targets, channel access resolution, and retained-reference disclosure checks
+            internal_mcp_tools/: live authorization, invocation audits, bounded channel reads, and workspace operations behind the internal host-tool dispatcher
+            scratch_commands/: scratch inspection, explicit artifact promotion, and confirmed cleanup behind the public command facade
             checkpoints/, restore_commands/: authorization cleanup and restoration workflows over the core Chat service
             preview/, workspace_observer/: browser previews, webviews, and workspace change observation
             settings/: provider discovery, native credentials, preferences, model mapping, and pickers
@@ -146,7 +157,7 @@ apps/
           notification.rs, notification/: notification commands, scheduling, and platform delivery
           pomodoro_enforcement.rs, tray.rs: timer overlays and tray integration
           doomscrolling.rs, doomscrolling/: browser and desktop blocking commands, runtime helpers, and tests
-          media_player.rs, media_controls.rs, music.rs, music/: local playback, media controls, metadata, and music commands
+          media_player.rs, media_controls.rs, media_controls/, music.rs, music/: local playback, platform media-control adapters, metadata, and music commands
           project_icons.rs: managed project icon assets
           themes.rs, updates.rs: theme validation and application updates
           benchmark_seed.rs, first_use_contracts.rs: benchmark data and first-use query contracts
@@ -174,12 +185,15 @@ crates/
   ganbaru-chat/: Chat persistence, runtime, Git workspaces, checkpoints, review, source control, and application services
   ganbaru-notes/: Notes domain, persistence, transfers, history, assets, validation, and bounded filesystem operations
   ganbaru-native-messaging/: independent ganbaru-ai-native-messaging binary and tests
+    src/config.rs, rules.rs, snapshot.rs, events.rs: configuration validation, typed browser decisions, device snapshot freshness, and event persistence
 packages/
   shared-types/: TypeScript types shared across workspaces
 extensions/
   chrome/: Chrome extension (manifest v3)
   chrome-dev/: generated dev extension copy (ignored)
 Cargo.toml: cargo workspace root
+rust-toolchain.toml: pinned Rust compiler and validation components
+rustfmt.toml: formatting style independent of the language edition
 turbo.json: Turborepo task config
 pnpm-workspace.yaml: workspace definition
 package.json: root scripts, shared dev dependencies
@@ -228,6 +242,7 @@ Tauri's platform app config directory stores device-local bootstrap and runtime 
 - **Monorepo orchestration:** Turborepo on top of pnpm workspaces
 - **Frontend:** plain Svelte 5 with runes (not SvelteKit)
 - **Desktop/mobile shell:** Tauri v2
+- **Rust:** edition 2024, resolver 3, rustfmt style 2024
 - **License:** AGPL 3.0
 - **Data architecture:** two categories of data with different storage. Documents (diary entries, project docs, reports, and attachments) are files on disk; SQLite can index them for fast queries but the file is the source of truth where the document format is canonical. Structured data and document graphs (Notes pages and blocks, calendar events, project tasks, workspace configs, pomodoro configs, runs, segments, pauses, and run events) live in SQLite as the source of truth. Markdown for Notes is derivative import, export, or bridge output only.
 - **AI integration:** the architecture has three opt-in paths. (1) The local coding-agent Chat uses project channels above Rust-owned native harness sessions, durable SQLite history, project-owned working folders, device-local folder bindings, operating-system credential references, and a Svelte shell. Project `#general`, channel navigation and archive, hidden session handoffs, Codex app-server, Claude native streaming, Cursor and Grok ACP, OpenCode HTTP and event streams, the combined timeline, composer, interactive requests, inspector, bounded file browsing, thread terminals, and Git checkpoints are implemented. Coding-agent runs receive an ephemeral loopback MCP endpoint for narrowly scoped application-owned host tools. This internal MCP endpoint is infrastructure, not a participant or teammate identity. (2) A BYOK chat widget supporting hosted and local user-configured providers is planned. (3) A separately authorized MCP service for external AI clients is planned.
@@ -238,7 +253,7 @@ Tauri's platform app config directory stores device-local bootstrap and runtime 
 - **Branching and releases:** normal work uses topic branches from `dev` and PRs back to `dev`. Direct pushes to `dev` or `main` are not normal workflow. `main`, `app-v*` tags, release environment approval, published GitHub Releases, package repositories, and AUR publication are controlled by organization admins for supply-chain safety. Releases are promoted through a PR from `dev` to `main`, merged through `main` merge queue, then published from explicit `app-v*` tags that build draft GitHub Releases. Publishing the GitHub Release updates the apt, RPM, and AUR package paths. See `CONTRIBUTING.md`, `docs/operations/release/README.md`, and `docs/operations/repository-policy.md`.
 - **Pull request workflow:** for review work, create a neutral topic branch from current `dev` before committing. Branch names describe the work, such as `docs/github-templates` or `fix/calendar-import`; never use tool names, assistant names, or vanity prefixes in branches, commits, or PR titles. Open PRs into `dev` unless the user explicitly asks for a release PR. Creating a PR does not imply merging it. Merge only when the user explicitly asks to merge, or explicitly asks to complete the whole PR flow after checks pass. Before merging, confirm the PR is mergeable, required checks passed, and the branch is up to date with its base. For release PRs from `dev` to `main`, do not update `dev` with `main`; add the PR to `main` merge queue after pull request checks pass. If `gh pr merge` attempts auto-merge instead of queueing a `main` PR, use GitHub's queue action or the GraphQL `enqueuePullRequest` mutation; do not enable auto-merge. If a non-release PR branch is out of date, update it once, then merge if merging was already authorized after checks pass. After opening a PR, do not wait or poll repeatedly for GitHub Actions. Check status once immediately when useful, or when the user reports checks are complete. When a PR into `dev` is merged, fetch `origin/dev`, switch back to `dev`, sync local `dev` to `origin/dev`, and delete merged topic branches locally and remotely. When a PR into `main` is merged, fetch `origin/main`, switch back to `main`, and sync local `main` to `origin/main`. Do not keep backup branches unless the user explicitly asks.
 - **Commit signing:** commits should be signed with the configured SSH signing key. If signing fails, stop and report it instead of creating an unsigned commit.
-- **Sync:** planned typed domain operations with SQLite-persisted Yrs/Yjs text, local device enrollment, end-to-end encryption, and an optional user-hosted Rust relay for opaque encrypted records. Sync and device linking are not implemented yet. See `docs/data/sync.md`.
+- **Sync:** secure LAN device linking and single-writer whole-vault handoff are implemented in source, with physical multi-device acceptance pending. Concurrent typed operation replication, SQLite-persisted Yrs/Yjs text, end-to-end encrypted relay, and conflict convergence remain planned. See `docs/data/sync.md`.
 - **Focus evidence:** Android Calendar alarms are reminders and cannot start runs or record later phases. Recovery uses only committed SQLite execution. Desktop automatic admission requires fresh local activity; explicit starts remain available. Device controller ownership and live companion status are planned separately from window coordination.
 - **Build tool:** Vite (default with Tauri + Svelte scaffold)
 
@@ -257,7 +272,7 @@ Read `docs/testing/README.md` when changing tests, validation scripts, task orde
 
 **Validation policy for agent work:**
 - The root `check`, `test`, and `validate` scripts intentionally cap tool concurrency. Use those scripts for broad local verification instead of direct full-suite `turbo`, `vitest`, or `cargo` commands.
-- The broad root scripts intentionally run Rust work before frontend work, use one Cargo build job and Rust test thread, and split Vitest into sequential one-worker shards. Do not increase their concurrency, combine Rust and frontend stages, or remove the sharding without measuring peak memory and confirming that coverage is preserved.
+- Local broad root scripts intentionally run Rust work before frontend work, use one Cargo build job and Rust test thread, and split Vitest into sequential one-worker shards. The hosted Linux `validate:ci` variant uses two Cargo build jobs while keeping one Rust test thread and the same frontend limits. Do not increase concurrency further, combine Rust and frontend stages, or remove the sharding without measuring peak memory and confirming that coverage is preserved.
 - Run frontend and Rust validation sequentially. Do not run Cargo compilation or tests concurrently with Vitest, Svelte checks, Turbo, or another Node-based validation command.
 - Do not run additional validation commands while a root `check`, `test`, `validate`, or `validate:full` command is active.
 - For direct focused checks, use one Vitest worker and one Cargo build job and test thread unless the user explicitly requests higher concurrency. Add `--lib` when the filtered Rust test is in the library so Cargo does not build unrelated binary test targets. Use an explicit `--bin <name>` only when testing that binary.
@@ -288,6 +303,7 @@ Read `docs/testing/README.md` when changing tests, validation scripts, task orde
 - `pnpm -w run audit:rust`: RustSec audit for cargo dependencies. Run for dependency or lockfile changes, before PRs, before releases, and when investigating security alerts. Reviewed ignores live in `.cargo/audit.toml` and must be documented in `docs/data/security/dependency-audits.md`.
 - `pnpm -w run audit`: both dependency audits (`audit:deps` + `audit:rust`).
 - `pnpm -w run validate`: full normal gate (check + test + editor-check + bundle contracts). Run before PRs, releases, risk-sensitive completion gates, and explicit full-validation requests. Do not treat ordinary task completion or a commit alone as requiring this gate. All errors must be fixed before treating that gate as passed.
+- `pnpm -w run validate:ci`: the same gate with two Cargo build jobs, reserved for hosted Linux CI. Do not use it for local validation on memory-limited machines.
 - `pnpm -w run validate:full`: security and code gate (audit + validate). Run for dependency or lockfile changes, before PRs, before releases, and when explicitly requested.
 - `pnpm --dir apps/client run test:coverage`: frontend coverage report to see what is tested.
 

@@ -6,10 +6,10 @@ use super::validation::require_uuid;
 mod resolver;
 
 pub use self::resolver::{
-    block_id_from_local_notes_url, canonical_notes_id, local_link_resolver,
-    page_ids_from_local_notes_url, LocalLinkResolver,
+    LocalLinkResolver, block_id_from_local_notes_url, canonical_notes_id, local_link_resolver,
+    page_ids_from_local_notes_url,
 };
-use self::resolver::{normalize_alias, unresolved_candidates, UnresolvedCandidate};
+use self::resolver::{UnresolvedCandidate, normalize_alias, unresolved_candidates};
 
 use super::history;
 use serde_json::Value;

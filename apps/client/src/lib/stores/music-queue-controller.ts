@@ -1,10 +1,12 @@
 import { nextShuffleIndex } from "$lib/music/playback";
 import type { MusicRepeatMode } from "$lib/music/library-contracts";
 import {
-  buildWeightedShuffleCycle,
+  buildMusicShuffleCycle,
   eligibleMusicQueueIndices,
   nextSequentialQueueIndex,
   previousSequentialQueueIndex,
+  selectMusicMixIndex,
+  selectUniformMusicMixIndex,
   type MusicSavedQueueEntry,
 } from "$lib/music/music-playlist-playback";
 import type { MusicSource } from "$lib/music/sources";
@@ -13,6 +15,7 @@ export interface MusicQueueState {
   currentSource: MusicSource | null;
   queue: MusicSource[];
   shuffleEnabled: boolean;
+  mixEnabled: boolean;
   shuffleOrder: number[];
   queueHistory: number[];
   pendingQueueIndex: number | null;
@@ -86,6 +89,7 @@ export function createMusicQueueController(
   function canPlayPrevious(): boolean {
     if (!state.currentSource) return false;
     if (state.queueHistory.length > 0) return true;
+    if (state.shuffleEnabled) return false;
     if (!hasSavedQueue()) return currentIndex() > 0;
     return previousSequentialQueueIndex(eligibleIndices(), currentIndex(), state.activePlaylistRepeatMode) !== null;
   }
@@ -93,10 +97,12 @@ export function createMusicQueueController(
   function canPlayNext(): boolean {
     if (!state.currentSource) return false;
     if (hasSavedQueue()) {
-      if (state.shuffleEnabled) return eligibleIndices().some((index) => index !== currentIndex())
+      if (state.mixEnabled) return eligibleIndices().length > 0;
+      if (state.shuffleEnabled) return state.shuffleOrder.some((index) => eligibleIndices().includes(index))
         || (state.activePlaylistRepeatMode !== "off" && eligibleIndices().length > 0);
       return nextSequentialQueueIndex(eligibleIndices(), currentIndex(), state.activePlaylistRepeatMode) !== null;
     }
+    if (state.mixEnabled) return state.queue.length > 0;
     if (state.shuffleEnabled) return state.queue.length > 1;
     const index = currentIndex();
     return index >= 0 && index < state.queue.length - 1;
@@ -114,19 +120,19 @@ export function createMusicQueueController(
 
   function toggleShuffle(): void {
     state.shuffleEnabled = !state.shuffleEnabled;
-    state.shuffleOrder = [];
-    state.queueHistory = [];
+    state.mixEnabled = false;
+    state.shuffleOrder = state.shuffleEnabled && hasSavedQueue()
+      ? rebuildSavedShuffle(currentIndex())
+      : [];
     context.persistSettings();
     context.updateExternalControls();
     context.updateTray();
   }
 
   function rebuildSavedShuffle(activeIndex: number): number[] {
-    return buildWeightedShuffleCycle(
-      state.savedQueueEntries,
+    return buildMusicShuffleCycle(
       eligibleIndices(),
       activeIndex,
-      state.savedQueueRecentItemIds,
       random,
     );
   }
@@ -155,8 +161,10 @@ export function createMusicQueueController(
     if (context.isBusy() || state.queue.length === 0) return;
     const activeIndex = currentIndex();
     let nextIndex: number | null = null;
-    if (hasSavedQueue() && state.activePlaylistRepeatMode === "one" && automatic && activeIndex >= 0) {
+    if (hasSavedQueue() && state.activePlaylistRepeatMode === "one" && automatic && activeIndex >= 0 && !state.mixEnabled) {
       nextIndex = activeIndex;
+    } else if (hasSavedQueue() && state.mixEnabled) {
+      nextIndex = selectMusicMixIndex(state.savedQueueEntries, eligibleIndices(), state.savedQueueRecentItemIds, random);
     } else if (hasSavedQueue() && state.shuffleEnabled) {
       state.shuffleOrder = state.shuffleOrder.filter((index) => eligibleIndices().includes(index) && index !== activeIndex);
       if (
@@ -165,12 +173,19 @@ export function createMusicQueueController(
       ) {
         state.shuffleOrder = rebuildSavedShuffle(activeIndex);
       }
-      nextIndex = state.shuffleOrder[0] ?? null;
+      nextIndex = state.shuffleOrder[0]
+        ?? (state.activePlaylistRepeatMode !== "off" && eligibleIndices().includes(activeIndex) ? activeIndex : null);
     } else if (hasSavedQueue()) {
       const repeatMode = automatic
         ? state.activePlaylistRepeatMode
         : state.activePlaylistRepeatMode === "off" ? "off" : "all";
       nextIndex = nextSequentialQueueIndex(eligibleIndices(), activeIndex, repeatMode);
+    } else if (state.mixEnabled) {
+      nextIndex = selectUniformMusicMixIndex(
+        state.queue.length,
+        [activeIndex, ...state.queueHistory.slice(-5).reverse()],
+        random,
+      );
     } else if (state.shuffleEnabled) {
       const selection = nextShuffleIndex(
         state.queue.length,

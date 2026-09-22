@@ -287,6 +287,7 @@ pub struct MusicPlaylist {
     pub name: String,
     pub icon: String,
     pub shuffle_enabled: bool,
+    pub mix_enabled: bool,
     pub repeat_mode: MusicRepeatMode,
     pub intended_uses: Vec<MusicIntendedUse>,
     pub sort_order: i64,
@@ -393,7 +394,17 @@ pub struct MusicYouTubePlaylistSnapshotWrite {
     pub playlist_id: String,
     pub name: String,
     pub video_ids: Vec<String>,
+    #[serde(default)]
+    pub videos: Vec<MusicYouTubePlaylistVideoWrite>,
     pub resolved_at: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicYouTubePlaylistVideoWrite {
+    pub video_id: String,
+    pub title: String,
+    pub channel: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -518,6 +529,8 @@ pub struct MusicPlaylistCreate {
     pub name: String,
     pub icon: String,
     pub shuffle_enabled: bool,
+    #[serde(default)]
+    pub mix_enabled: bool,
     pub repeat_mode: MusicRepeatMode,
     pub intended_uses: Vec<MusicIntendedUse>,
     pub created_at: i64,
@@ -530,6 +543,8 @@ pub struct MusicPlaylistUpdate {
     pub name: String,
     pub icon: String,
     pub shuffle_enabled: bool,
+    #[serde(default)]
+    pub mix_enabled: bool,
     pub repeat_mode: MusicRepeatMode,
     pub intended_uses: Vec<MusicIntendedUse>,
     pub expected_version: i64,
@@ -624,6 +639,8 @@ pub struct MusicPlaylistPlaybackEntry {
     pub youtube_video_id: Option<String>,
     pub youtube_resolution_state: Option<MusicYouTubeResolutionState>,
     pub title: String,
+    pub original_artwork_identity: Option<String>,
+    pub artwork_override: Option<String>,
     pub availability: MusicItemAvailability,
     pub root_id: Option<String>,
     pub relative_path: Option<String>,
@@ -677,6 +694,8 @@ pub struct MusicSoundscapeDefinition {
     pub generated_kind: Option<MusicGeneratedNoiseKind>,
     pub bundled_identity: Option<String>,
     pub name: String,
+    pub icon: String,
+    pub group_id: Option<String>,
     pub availability: MusicSoundscapeAvailability,
     pub local_path: Option<String>,
     pub created_at: i64,
@@ -693,8 +712,33 @@ pub struct MusicSoundscapeWrite {
     pub generated_kind: Option<MusicGeneratedNoiseKind>,
     pub bundled_identity: Option<String>,
     pub name: String,
+    pub icon: String,
+    pub group_id: Option<String>,
     pub device_id: String,
     pub local_path: Option<String>,
+    pub expected_version: Option<i64>,
+    pub updated_at: i64,
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicSoundscapeGroup {
+    pub id: String,
+    pub name: String,
+    pub icon: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub version: i64,
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicSoundscapeGroupWrite {
+    pub id: String,
+    pub name: String,
+    pub icon: String,
     pub expected_version: Option<i64>,
     pub updated_at: i64,
 }
@@ -704,6 +748,10 @@ pub struct MusicSoundscapeWrite {
 #[serde(rename_all = "camelCase")]
 pub struct MusicSoundscapeState {
     pub active_soundscape_id: Option<String>,
+    pub active_ids: Vec<String>,
+    pub multiple_enabled: bool,
+    pub generated_level: Option<f64>,
+    pub local_level: Option<f64>,
     pub desired_playing: bool,
     pub volume: f64,
     pub updated_at: i64,
@@ -715,6 +763,10 @@ pub struct MusicSoundscapeState {
 #[serde(rename_all = "camelCase")]
 pub struct MusicSoundscapeStateWrite {
     pub active_soundscape_id: Option<String>,
+    pub active_ids: Vec<String>,
+    pub multiple_enabled: bool,
+    pub generated_level: Option<f64>,
+    pub local_level: Option<f64>,
     pub desired_playing: bool,
     pub volume: f64,
     pub expected_version: i64,
@@ -925,6 +977,7 @@ pub struct MusicItemListEntry {
     pub album: String,
     pub local_root_id: Option<String>,
     pub relative_path: Option<String>,
+    pub source_collection_ids: Vec<String>,
     pub original_artwork_identity: Option<String>,
     pub artwork_override: Option<String>,
     pub duration_ms: Option<i64>,
@@ -968,6 +1021,7 @@ pub struct MusicPlaylistSummary {
     pub name: String,
     pub icon: String,
     pub shuffle_enabled: bool,
+    pub mix_enabled: bool,
     pub repeat_mode: MusicRepeatMode,
     pub intended_uses: Vec<MusicIntendedUse>,
     pub sort_order: i64,
@@ -1188,6 +1242,8 @@ pub struct MusicInterchangePlaylist {
     pub name: String,
     pub icon: String,
     pub shuffle_enabled: bool,
+    #[serde(default)]
+    pub mix_enabled: bool,
     pub repeat_mode: MusicRepeatMode,
     pub intended_uses: Vec<MusicIntendedUse>,
     pub memberships: Vec<MusicInterchangeMembership>,

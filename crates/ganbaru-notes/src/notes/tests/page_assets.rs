@@ -366,8 +366,7 @@ fn page_media_asset_references_follow_local_file_payloads() {
         create_page(&pool, PAGE_A, BLOCK_A).await;
         let icon_path =
             "notes/page-icons/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png";
-        let cover_path =
-            "notes/page-covers/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png";
+        let cover_path = "notes/page-covers/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png";
 
         writes::update_page(
             &pool,

@@ -119,6 +119,7 @@ export class MusicBulkEditController {
         name,
         icon: iconInput.trim(),
         shuffleEnabled: true,
+        mixEnabled: false,
         repeatMode: "all",
         intendedUses: [],
         createdAt: this.now(),
@@ -172,7 +173,7 @@ export class MusicBulkEditController {
   }
 
   async ignoreReviewSelection(): Promise<boolean> {
-    if (this.saving || this.itemIds.length === 0 || this.hasExistingMemberships || this.membershipsChanged) return false;
+    if (this.saving || this.itemIds.length === 0) return false;
     return this.applyReviewSelection("ignored", [], []);
   }
 
@@ -194,9 +195,19 @@ export class MusicBulkEditController {
     }
 
     const updatedAt = this.now();
+    const ignoredSnapshots = reviewState === "ignored"
+      ? itemIds.flatMap((itemId) => {
+          const item = itemsById.get(itemId);
+          return item ? [{ item, reviewState: item.reviewState, updatedAt: item.updatedAt }] : [];
+        })
+      : [];
     this.saving = true;
     this.error = null;
     try {
+      for (const snapshot of ignoredSnapshots) {
+        snapshot.item.reviewState = "ignored";
+        snapshot.item.updatedAt = updatedAt;
+      }
       const result = await applyMusicReviewSelection({
         actionId: this.id(),
         items,
@@ -220,9 +231,11 @@ export class MusicBulkEditController {
           item.version = version;
         }
       } else {
-        const ignoredIds = new Set(itemIds);
-        window.items = window.items.filter((item) => !ignoredIds.has(item.id));
-        window.totalCount = Math.max(0, window.totalCount - itemIds.length);
+        for (const { itemId, version } of versionedItemIds) {
+          const item = itemsById.get(itemId);
+          if (!item) throw new Error(`The review window omitted item '${itemId}'.`);
+          item.version = version;
+        }
       }
       const nextCounts = { ...this.initialCounts };
       for (const playlistId of addPlaylistIds) nextCounts[playlistId] = items.length;
@@ -232,6 +245,10 @@ export class MusicBulkEditController {
       await this.library.refreshSummariesAfterMutation();
       return true;
     } catch (error) {
+      for (const snapshot of ignoredSnapshots) {
+        snapshot.item.reviewState = snapshot.reviewState;
+        snapshot.item.updatedAt = snapshot.updatedAt;
+      }
       this.error = error instanceof Error ? error.message : String(error);
       return false;
     } finally {

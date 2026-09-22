@@ -2,7 +2,7 @@
 
 use super::diff::changed_file_summaries;
 use super::{
-    checkpoint_error, CapturedCheckpoint, CurrentGitSnapshot, CurrentGitTrees, StoredCheckpoint,
+    CapturedCheckpoint, CurrentGitSnapshot, CurrentGitTrees, StoredCheckpoint, checkpoint_error,
 };
 use crate::chat::models::{ChatCheckpointId, ChatError, ChatErrorCode, ChatResult, ChatThreadId};
 use crate::chat::workspace::AuthorizedWorkingFolder;

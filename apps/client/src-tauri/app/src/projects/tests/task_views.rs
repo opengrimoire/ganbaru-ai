@@ -103,10 +103,12 @@ fn task_view_list_is_keyset_paginated_and_body_bounded() {
         next_request.cursor = first.next_cursor.clone();
         let second = load_task_view(&pool, next_request).await.unwrap();
         assert_eq!(second.tasks.len(), 100);
-        assert!(second
-            .tasks
-            .iter()
-            .all(|task| !first_ids.contains(task.id.as_str())));
+        assert!(
+            second
+                .tasks
+                .iter()
+                .all(|task| !first_ids.contains(task.id.as_str()))
+        );
 
         let mut stale_request = list_task_view_request(100);
         stale_request.cursor = Some("removed-task".to_string());

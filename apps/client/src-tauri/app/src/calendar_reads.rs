@@ -925,7 +925,7 @@ fn sanitize_full_override_rows(rows: &mut [DbFullOverrideRow]) {
 mod tests {
     use super::icalendar::{calendar_icalendar_export_metadata, load_component_value};
     use super::{
-        sanitize_full_event_row, sanitize_full_override_rows, DbFullEventRow, DbFullOverrideRow,
+        DbFullEventRow, DbFullOverrideRow, sanitize_full_event_row, sanitize_full_override_rows,
     };
     use serde_json::json;
 
@@ -1056,7 +1056,9 @@ mod tests {
                 ("calendar_event_exdates", "idx_event_exdates_event_date"),
                 ("calendar_event_rdates", "idx_event_rdates_event_start"),
             ] {
-                let sql = format!("EXPLAIN QUERY PLAN SELECT event_id FROM {table} WHERE event_id IN ('event-a', 'event-b') ORDER BY event_id, sort_order");
+                let sql = format!(
+                    "EXPLAIN QUERY PLAN SELECT event_id FROM {table} WHERE event_id IN ('event-a', 'event-b') ORDER BY event_id, sort_order"
+                );
                 let rows = sqlx::query(&sql).fetch_all(&pool).await.unwrap();
                 let details = rows
                     .iter()

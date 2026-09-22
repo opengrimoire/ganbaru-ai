@@ -302,11 +302,13 @@ fn archive_summary_window_filters_and_pages_without_hidden_page_json() {
         assert_eq!(first["total_count"], 60);
         assert_eq!(first_ids.len(), 25);
         assert_eq!(second["pages"].as_array().unwrap().len(), 25);
-        assert!(second["pages"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|page| !first_ids.contains(page["id"].as_str().unwrap())));
+        assert!(
+            second["pages"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|page| !first_ids.contains(page["id"].as_str().unwrap()))
+        );
         assert!(first["pages"][0].get("properties").is_none());
         assert!(first["pages"][0].get("cover").is_none());
     });

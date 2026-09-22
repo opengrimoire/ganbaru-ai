@@ -1,7 +1,7 @@
 mod scanner;
 
 use self::scanner::{
-    collect_json_references, external_url_reference, ScannedReference, ScannedTarget,
+    ScannedReference, ScannedTarget, collect_json_references, external_url_reference,
 };
 use super::links::LocalLinkResolver;
 use serde_json::Value;

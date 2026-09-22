@@ -66,10 +66,12 @@ fn comments_create_reply_resolve_reopen_and_delete() {
         assert_eq!(resolved_value["status"], "resolved");
         assert!(resolved_value["resolved_at"].is_string());
 
-        assert!(comments::list_comments(&pool, PAGE_A, false)
-            .await
-            .unwrap()
-            .is_empty());
+        assert!(
+            comments::list_comments(&pool, PAGE_A, false)
+                .await
+                .unwrap()
+                .is_empty()
+        );
         assert_eq!(
             comments::list_comments(&pool, PAGE_A, true)
                 .await
@@ -237,10 +239,12 @@ fn block_comments_attach_to_visible_blocks() {
         assert_eq!(threads.len(), 1);
 
         writes::trash_block(&pool, BLOCK_B, true).await.unwrap();
-        assert!(comments::list_comments(&pool, PAGE_A, false)
-            .await
-            .unwrap()
-            .is_empty());
+        assert!(
+            comments::list_comments(&pool, PAGE_A, false)
+                .await
+                .unwrap()
+                .is_empty()
+        );
     });
 }
 

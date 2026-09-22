@@ -12,8 +12,8 @@ use std::path::PathBuf;
 use std::path::{Component, Path};
 use std::process::{Command, Stdio};
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
     Mutex,
+    atomic::{AtomicU64, Ordering},
 };
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::{

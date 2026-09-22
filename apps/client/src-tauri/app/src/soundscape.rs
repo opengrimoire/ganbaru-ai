@@ -2,7 +2,7 @@ use std::{
     fs::File,
     io::BufReader,
     path::Path,
-    sync::{mpsc, Mutex},
+    sync::{Mutex, mpsc},
     thread::{self, JoinHandle},
     time::Duration,
 };
@@ -18,6 +18,7 @@ const OUTPUT_CHANNELS: u16 = 2;
 const RAMP_MILLIS: u64 = 40;
 const RAMP_STEPS: u64 = 8;
 const NOISE_AMPLITUDE: f32 = 0.22;
+pub(crate) const MAX_SOUNDSCAPE_LAYERS: usize = 16;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -33,7 +34,19 @@ pub(crate) struct SoundscapeStartRequest {
     pub source_id: String,
     pub generated_kind: Option<GeneratedNoiseKind>,
     pub local_path: Option<String>,
+    pub level: f64,
+    #[serde(default)]
+    pub extra_sources: Vec<SoundscapeLayer>,
     pub volume: f64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SoundscapeLayer {
+    pub source_id: String,
+    pub generated_kind: Option<GeneratedNoiseKind>,
+    pub local_path: Option<String>,
+    pub level: f64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -59,7 +72,7 @@ impl Default for SoundscapeSnapshot {
         Self {
             status: SoundscapeStatus::Idle,
             source_id: None,
-            volume: 0.35,
+            volume: 0.1,
             error_code: None,
         }
     }
@@ -251,7 +264,7 @@ fn open_decoder(path: &str) -> Result<Decoder<BufReader<File>>, SoundscapeError>
 
 struct ActiveOutput {
     _sink: MixerDeviceSink,
-    player: Player,
+    players: Vec<Player>,
     request: SoundscapeStartRequest,
 }
 
@@ -267,31 +280,44 @@ impl ActiveOutput {
             .and_then(|builder| builder.open_sink_or_fallback())
             .map_err(|_| SoundscapeError::audio_device())?;
         sink.log_on_drop(false);
-        let player = Player::connect_new(sink.mixer());
-        player.set_volume(0.0);
-        match (request.generated_kind, request.local_path.as_deref()) {
-            (Some(kind), None) => {
-                player.append(NoiseSource::new(kind, seed_from_id(&request.source_id)))
+        let mut players = Vec::with_capacity(1 + request.extra_sources.len());
+        for layer in std::iter::once(SoundscapeLayer {
+            source_id: request.source_id.clone(),
+            generated_kind: request.generated_kind,
+            local_path: request.local_path.clone(),
+            level: request.level,
+        })
+        .chain(request.extra_sources.iter().cloned())
+        {
+            let player = Player::connect_new(sink.mixer());
+            player.set_volume(0.0);
+            match (layer.generated_kind, layer.local_path.as_deref()) {
+                (Some(kind), None) => {
+                    player.append(NoiseSource::new(kind, seed_from_id(&layer.source_id)))
+                }
+                (None, Some(path)) => player.append(StreamingLoopSource::open(path)?),
+                _ => {
+                    return Err(SoundscapeError::validation(
+                        "Choose a generated noise or local loop source.",
+                    ));
+                }
             }
-            (None, Some(path)) => player.append(StreamingLoopSource::open(path)?),
-            _ => {
-                return Err(SoundscapeError::validation(
-                    "Choose one generated noise or local loop source.",
-                ))
-            }
+            players.push(player);
         }
-        ramp_volume(&player, 0.0, clamp_volume(request.volume));
+        ramp_players(&players, &layer_targets(&request));
         Ok(Self {
             _sink: sink,
-            player,
+            players,
             request,
         })
     }
 
     fn stop(mut self) {
-        ramp_volume(&self.player, self.player.volume(), 0.0);
-        self.player.stop();
-        self.request.volume = f64::from(self.player.volume());
+        ramp_players(&self.players, &vec![0.0; self.players.len()]);
+        for player in &self.players {
+            player.stop();
+        }
+        self.request.volume = 0.0;
     }
 }
 
@@ -310,6 +336,7 @@ impl EngineCore {
             EngineCommand::Resume => self.resume(),
             EngineCommand::Stop => Ok(self.stop()),
             EngineCommand::SetVolume(volume) => self.set_volume(volume),
+            EngineCommand::SetLevels(levels) => self.set_levels(levels),
             EngineCommand::Recover => self.recover(),
             EngineCommand::Snapshot => Ok(self.snapshot.clone()),
         }
@@ -321,6 +348,17 @@ impl EngineCore {
     ) -> Result<SoundscapeSnapshot, SoundscapeError> {
         validate_request(&request)?;
         request.volume = clamp_volume(request.volume);
+        for path in std::iter::once(request.local_path.as_deref())
+            .chain(
+                request
+                    .extra_sources
+                    .iter()
+                    .map(|layer| layer.local_path.as_deref()),
+            )
+            .flatten()
+        {
+            StreamingLoopSource::open(path)?;
+        }
         self.stop_output();
         match ActiveOutput::open(request.clone()) {
             Ok(output) => {
@@ -345,8 +383,10 @@ impl EngineCore {
 
     fn pause(&mut self) -> SoundscapeSnapshot {
         if let Some(output) = self.output.as_ref() {
-            ramp_volume(&output.player, output.player.volume(), 0.0);
-            output.player.pause();
+            ramp_players(&output.players, &vec![0.0; output.players.len()]);
+            for player in &output.players {
+                player.pause();
+            }
             self.snapshot.status = SoundscapeStatus::Paused;
         }
         self.snapshot.clone()
@@ -354,8 +394,12 @@ impl EngineCore {
 
     fn resume(&mut self) -> Result<SoundscapeSnapshot, SoundscapeError> {
         if let Some(output) = self.output.as_ref() {
-            output.player.play();
-            ramp_volume(&output.player, 0.0, self.snapshot.volume);
+            for player in &output.players {
+                player.play();
+            }
+            if let Some(request) = self.last_request.as_ref() {
+                ramp_players(&output.players, &layer_targets(request));
+            }
             self.snapshot.status = SoundscapeStatus::Playing;
             self.snapshot.error_code = None;
             return Ok(self.snapshot.clone());
@@ -386,7 +430,39 @@ impl EngineCore {
         }
         if self.snapshot.status == SoundscapeStatus::Playing {
             if let Some(output) = self.output.as_ref() {
-                output.player.set_volume(volume as f32);
+                if let Some(request) = self.last_request.as_ref() {
+                    set_player_levels(&output.players, &layer_targets(request));
+                }
+            }
+        }
+        Ok(self.snapshot.clone())
+    }
+
+    fn set_levels(&mut self, levels: Vec<f64>) -> Result<SoundscapeSnapshot, SoundscapeError> {
+        if levels.is_empty()
+            || levels.len() > MAX_SOUNDSCAPE_LAYERS
+            || levels
+                .iter()
+                .any(|level| !level.is_finite() || !(0.0..=2.0).contains(level))
+        {
+            return Err(SoundscapeError::validation(
+                "Invalid background sound levels.",
+            ));
+        }
+        if let Some(request) = self.last_request.as_mut() {
+            if levels.len() != 1 + request.extra_sources.len() {
+                return Err(SoundscapeError::validation(
+                    "Background sound selection changed.",
+                ));
+            }
+            request.level = levels[0];
+            for (layer, level) in request.extra_sources.iter_mut().zip(levels.iter().skip(1)) {
+                layer.level = *level;
+            }
+            if self.snapshot.status == SoundscapeStatus::Playing {
+                if let Some(output) = self.output.as_ref() {
+                    set_player_levels(&output.players, &layer_targets(request));
+                }
             }
         }
         Ok(self.snapshot.clone())
@@ -413,6 +489,7 @@ enum EngineCommand {
     Resume,
     Stop,
     SetVolume(f64),
+    SetLevels(Vec<f64>),
     Recover,
     Snapshot,
 }
@@ -525,6 +602,14 @@ pub(crate) fn soundscape_set_volume(
 }
 
 #[tauri::command]
+pub(crate) fn soundscape_set_levels(
+    state: State<'_, SoundscapeEngineState>,
+    levels: Vec<f64>,
+) -> Result<SoundscapeSnapshot, SoundscapeError> {
+    state.controller.dispatch(EngineCommand::SetLevels(levels))
+}
+
+#[tauri::command]
 pub(crate) fn soundscape_recover(
     state: State<'_, SoundscapeEngineState>,
 ) -> Result<SoundscapeSnapshot, SoundscapeError> {
@@ -549,35 +634,80 @@ fn validate_request(request: &SoundscapeStartRequest) -> Result<(), SoundscapeEr
             "Volume must be between zero and one.",
         ));
     }
-    match (request.generated_kind, request.local_path.as_deref()) {
-        (Some(_), None) => Ok(()),
-        (None, Some(path)) if Path::new(path).is_absolute() => Ok(()),
-        _ => Err(SoundscapeError::validation(
-            "Choose one generated noise or local loop source.",
-        )),
+    if request.extra_sources.len() >= MAX_SOUNDSCAPE_LAYERS {
+        return Err(SoundscapeError::validation("Too many background sounds."));
     }
+    let mut ids = std::collections::HashSet::new();
+    for layer in std::iter::once(SoundscapeLayer {
+        source_id: request.source_id.clone(),
+        generated_kind: request.generated_kind,
+        local_path: request.local_path.clone(),
+        level: request.level,
+    })
+    .chain(request.extra_sources.iter().cloned())
+    {
+        if layer.source_id.trim().is_empty() || !ids.insert(layer.source_id) {
+            return Err(SoundscapeError::validation(
+                "Background sounds need distinct source ids.",
+            ));
+        }
+        if !layer.level.is_finite() || !(0.0..=2.0).contains(&layer.level) {
+            return Err(SoundscapeError::validation(
+                "Sound levels must be between zero and two.",
+            ));
+        }
+        match (layer.generated_kind, layer.local_path.as_deref()) {
+            (Some(_), None) => {}
+            (None, Some(path)) if Path::new(path).is_absolute() => {}
+            _ => {
+                return Err(SoundscapeError::validation(
+                    "Choose a generated noise or local loop source.",
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn clamp_volume(value: f64) -> f64 {
     if value.is_finite() {
         value.clamp(0.0, 1.0)
     } else {
-        0.35
+        0.1
     }
 }
 
-fn ramp_volume(player: &Player, from: f32, to: f64) {
-    for volume in ramp_values(from, to as f32) {
-        player.set_volume(volume);
+fn layer_volume(volume: f64, count: usize) -> f64 {
+    volume / count.max(1) as f64
+}
+
+fn layer_targets(request: &SoundscapeStartRequest) -> Vec<f32> {
+    let base = layer_volume(request.volume, 1 + request.extra_sources.len());
+    std::iter::once(request.level)
+        .chain(request.extra_sources.iter().map(|layer| layer.level))
+        .map(|level| (base * level).clamp(0.0, 1.0) as f32)
+        .collect()
+}
+
+fn set_player_levels(players: &[Player], levels: &[f32]) {
+    for (player, level) in players.iter().zip(levels) {
+        player.set_volume(*level);
+    }
+}
+
+fn ramp_players(players: &[Player], targets: &[f32]) {
+    let starts: Vec<f32> = players.iter().map(Player::volume).collect();
+    for step in 1..=RAMP_STEPS {
+        for ((player, start), target) in players.iter().zip(&starts).zip(targets) {
+            player.set_volume(ramp_value(*start, *target, step));
+        }
         thread::sleep(Duration::from_millis(RAMP_MILLIS / RAMP_STEPS));
     }
 }
 
-fn ramp_values(from: f32, to: f32) -> impl Iterator<Item = f32> {
-    (1..=RAMP_STEPS).map(move |step| {
-        let progress = step as f32 / RAMP_STEPS as f32;
-        from + (to - from) * progress
-    })
+fn ramp_value(from: f32, to: f32, step: u64) -> f32 {
+    let progress = step as f32 / RAMP_STEPS as f32;
+    from + (to - from) * progress
 }
 
 fn seed_from_id(value: &str) -> u64 {
@@ -656,20 +786,62 @@ mod tests {
             source_id: "rain".into(),
             generated_kind: Some(GeneratedNoiseKind::White),
             local_path: Some("/tmp/rain.wav".into()),
+            level: 1.0,
+            extra_sources: Vec::new(),
             volume: 0.4,
         };
         assert!(validate_request(&request).is_err());
     }
 
     #[test]
+    fn layered_requests_require_distinct_sources_and_reduce_each_layer_level() {
+        let request = SoundscapeStartRequest {
+            source_id: "brown".into(),
+            generated_kind: Some(GeneratedNoiseKind::Brown),
+            local_path: None,
+            level: 1.0,
+            extra_sources: vec![SoundscapeLayer {
+                source_id: "pink".into(),
+                generated_kind: Some(GeneratedNoiseKind::Pink),
+                local_path: None,
+                level: 0.5,
+            }],
+            volume: 0.1,
+        };
+        assert!(validate_request(&request).is_ok());
+        assert!((layer_volume(0.1, 2) - 0.05).abs() < f64::EPSILON);
+        assert_eq!(layer_targets(&request), vec![0.05, 0.025]);
+        let excessive = SoundscapeStartRequest {
+            level: 2.1,
+            ..request.clone()
+        };
+        assert!(validate_request(&excessive).is_err());
+        let duplicate = SoundscapeStartRequest {
+            extra_sources: vec![SoundscapeLayer {
+                source_id: "brown".into(),
+                generated_kind: Some(GeneratedNoiseKind::Pink),
+                local_path: None,
+                level: 1.0,
+            }],
+            ..request
+        };
+        assert!(validate_request(&duplicate).is_err());
+    }
+
+    #[test]
     fn volume_ramps_end_at_target_without_an_abrupt_step() {
-        let down = ramp_values(0.8, 0.0).collect::<Vec<_>>();
+        let down = (1..=RAMP_STEPS)
+            .map(|step| ramp_value(0.8, 0.0, step))
+            .collect::<Vec<_>>();
         assert_eq!(down.last().copied(), Some(0.0));
         assert!(down.windows(2).all(|pair| pair[1] <= pair[0]));
-        assert!(down
-            .windows(2)
-            .all(|pair| (pair[1] - pair[0]).abs() <= 0.11));
-        let up = ramp_values(0.0, 0.8).collect::<Vec<_>>();
+        assert!(
+            down.windows(2)
+                .all(|pair| (pair[1] - pair[0]).abs() <= 0.11)
+        );
+        let up = (1..=RAMP_STEPS)
+            .map(|step| ramp_value(0.0, 0.8, step))
+            .collect::<Vec<_>>();
         assert_eq!(up.last().copied(), Some(0.8));
         assert!(up.windows(2).all(|pair| pair[1] >= pair[0]));
     }

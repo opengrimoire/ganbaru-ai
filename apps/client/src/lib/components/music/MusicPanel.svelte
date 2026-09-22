@@ -1,13 +1,11 @@
 <script lang="ts">
-  import { onDestroy, onMount, tick } from "svelte";
+  import { onDestroy, tick } from "svelte";
   import AlertCircle from "@lucide/svelte/icons/alert-circle";
-  import Check from "@lucide/svelte/icons/check";
-  import Gauge from "@lucide/svelte/icons/gauge";
   import ListMusic from "@lucide/svelte/icons/list-music";
+  import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import CalendarClock from "@lucide/svelte/icons/calendar-clock";
   import Pause from "@lucide/svelte/icons/pause";
   import Play from "@lucide/svelte/icons/play";
-  import Shuffle from "@lucide/svelte/icons/shuffle";
   import SkipBack from "@lucide/svelte/icons/skip-back";
   import SkipForward from "@lucide/svelte/icons/skip-forward";
   import Volume2 from "@lucide/svelte/icons/volume-2";
@@ -15,10 +13,15 @@
   import CalendarScrollbar from "$lib/components/calendar/CalendarScrollbar.svelte";
   import MusicPlaylistLauncher from "$lib/components/music/MusicPlaylistLauncher.svelte";
   import MusicCurrentItemMenu from "$lib/components/music/MusicCurrentItemMenu.svelte";
+  import MusicTrackPreferences from "$lib/components/music/MusicTrackPreferences.svelte";
+  import MusicSnoozeButton from "$lib/components/music/MusicSnoozeButton.svelte";
+  import MusicPlaybackModeControl from "$lib/components/music/MusicPlaybackModeControl.svelte";
   import MusicSoundscapeControl from "$lib/components/music/MusicSoundscapeControl.svelte";
   import MusicPreparationActivity from "$lib/components/music/builder/MusicPreparationActivity.svelte";
   import { revealLocalFile } from "$lib/api/music";
-  import { SPEED_PRESETS, clampRate, formatPlaybackTime, isSpeedPreset } from "$lib/music/playback";
+  import { getMusicInspectorDetail, removeMusicSnooze } from "$lib/api/music-library";
+  import { notifyMusicLibraryChanged } from "$lib/music/music-library-events";
+  import { formatPlaybackTime } from "$lib/music/playback";
   import { fittedSidePlaylistPanelHeight } from "$lib/music/panel-layout";
   import {
     MUSIC_PLAYLIST_ROW_HEIGHT_PX,
@@ -38,11 +41,13 @@
 
   let {
     onclose,
+    visible = true,
     presentation = "desktop",
     mobilePlayerPanelStyle = "",
     mobilePlaylistPanelStyle = "",
   }: {
     onclose: () => void;
+    visible?: boolean;
     presentation?: "desktop" | "mobile";
     mobilePlayerPanelStyle?: string;
     mobilePlaylistPanelStyle?: string;
@@ -62,18 +67,16 @@
   let playlistPanel = $state<HTMLElement | null>(null);
   let playbackControls = $state<HTMLElement | null>(null);
   let playlistScrollContainer = $state<HTMLElement | undefined>();
-  let speedMenuRoot = $state<HTMLElement | null>(null);
   let volumeMenuRoot = $state<HTMLElement | null>(null);
-  let speedMenuOpen = $state(false);
   let volumeMenuOpen = $state(false);
-  let customSpeedOpen = $state(false);
-  let customRateDraft = $state("1");
   const playlistVisible = $derived(player.playlistVisible);
+  const playlistHasContent = $derived(player.queue.length > 0);
   let musicPage = $state<MusicPage>(sources.firstUseSession ? "playlist-builder" : "player");
   let firstUseRedirectHandled = $state(sources.firstUseSession);
   let playlistBuilderComponent = $state<MusicBuilderComponent | null>(musicBuilderLoader.peek());
   let playlistBuilderLoading = $state(false);
   let playlistBuilderLoadError = $state<string | null>(null);
+  let playlistBuilderMounted = $state(sources.firstUseSession);
   let playlistBuilderInitialAction = $state<MusicBuilderInitialAction | null>(null);
   const PlaylistBuilder = $derived(playlistBuilderComponent);
   let mediaSurfaceFullscreen = $state(false);
@@ -89,6 +92,8 @@
   let mediaTitleMeasuredCenterPx = $state<number | null>(null);
   let panel = $state<HTMLElement | null>(null);
   let fittedPanelHeightPx = $state<number | null>(null);
+  let returnFocus = $state<HTMLElement | null>(null);
+  let previouslyVisible = false;
 
   const mediaSurfaceFullscreenEvent = "ganbaru-ai-music-media-surface-fullscreen";
   const volumeMax = $derived(player.volumeMax);
@@ -98,7 +103,9 @@
   const seekSliderProgress = $derived(player.progressMax > 0
     ? `${Math.min(100, Math.max(0, (player.progressValue / player.progressMax) * 100))}%`
     : "0%");
-  const activeSpeedIsPreset = $derived(isSpeedPreset(player.snapshot.rate));
+  const playerPlaylistLayoutVisible = $derived(
+    musicPage === "player" && playlistVisible,
+  );
   const topBarMediaTitleMaxLength = 42;
   const volumeShortcutStep = 0.05;
   const topBarMediaTitle = $derived(
@@ -111,11 +118,12 @@
   const mediaTitleLeft = $derived(
     playlistVisible && mediaTitleMeasuredCenterPx !== null ? `${mediaTitleMeasuredCenterPx}px` : "50%",
   );
-  const speedShortcutStep = 0.25;
   const musicIconSize = 14;
   const musicIconStrokeWidth = 1.4;
   const panelMaximumHeight = $derived(
-    playlistVisible && fittedPanelHeightPx !== null ? `${fittedPanelHeightPx}px` : "680px",
+    playerPlaylistLayoutVisible && fittedPanelHeightPx !== null
+      ? `${fittedPanelHeightPx}px`
+      : "680px",
   );
   const mobilePresentation = $derived(presentation === "mobile");
   const mobileBuilderPresentation = $derived(
@@ -136,19 +144,10 @@
   const savedQueueUnavailable = $derived(Boolean(
     player.activePlaylistId
     && !player.currentSource
+    && savedQueueSkippedCount > 0
     && player.contextPlayback?.state !== "unavailable",
   ));
   const savedQueueOfflineSubset = $derived(Boolean(player.activePlaylistId && !player.online && player.savedQueueSkipBreakdown.offline > 0 && player.currentSource));
-  const savedQueueSkipDetails = $derived([
-    { label: t("music.queueState.disabled"), count: player.savedQueueSkipBreakdown.disabled },
-    { label: t("music.queueState.snoozed"), count: player.savedQueueSkipBreakdown.snoozed },
-    { label: t("music.queueState.offline"), count: player.savedQueueSkipBreakdown.offline },
-    { label: t("music.queueState.unavailable"), count: player.savedQueueSkipBreakdown.unavailable },
-    { label: t("music.queueState.embeddingBlocked"), count: player.savedQueueSkipBreakdown["embedding-blocked"] },
-    { label: t("music.queueState.phaseConstraint"), count: player.savedQueueSkipBreakdown["phase-constraint"] },
-    { label: t("music.queueState.unboundRoot"), count: player.savedQueueSkipBreakdown["unbound-root"] },
-    { label: t("music.queueState.invalidSource"), count: player.savedQueueSkipBreakdown["invalid-source"] },
-  ].filter((entry) => entry.count > 0));
   const visibleContext = $derived(player.contextPlayback?.state === "overridden" ? null : player.contextPlayback);
   const contextPhaseLabel = $derived(visibleContext ? t(`music.assignment.phase.${visibleContext.phase}`) : "");
   const contextSummary = $derived(visibleContext
@@ -158,6 +157,7 @@
   $effect(() => {
     if (!sources.firstUseSession || firstUseRedirectHandled) return;
     firstUseRedirectHandled = true;
+    playlistBuilderMounted = true;
     musicPage = "playlist-builder";
     void loadPlaylistBuilder();
   });
@@ -168,7 +168,7 @@
 
   $effect(() => {
     const surface = mediaSurface;
-    if (!surface) return;
+    if (!visible || !surface) return;
     return player.claimSurface("music-panel", surface);
   });
 
@@ -226,15 +226,18 @@
   });
 
   $effect(() => {
-    const visible = playlistVisible;
+    const page = musicPage;
+    const panelIsVisible = visible;
+    const playlistIsVisible = playlistVisible;
     const header = musicHeader;
     const media = mediaCell;
     const playlist = playlistPanel;
     const controls = playbackControls;
-    if (!visible || !header || !media || !playlist || !controls) {
+    if (!playlistIsVisible) {
       fittedPanelHeightPx = null;
       return;
     }
+    if (!panelIsVisible || page !== "player" || !header || !media || !playlist || !controls) return;
 
     let animationFrameId: number | null = null;
     const updateHeight = () => {
@@ -275,12 +278,23 @@
     clearVolumeFeedbackTimeout();
   });
 
-  onMount(() => {
-    const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    void tick().then(() => panel?.focus());
-    return () => {
-      queueMicrotask(() => returnFocus?.focus());
-    };
+  $effect(() => {
+    if (visible && !previouslyVisible) {
+      returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      void tick().then(() => {
+        if (visible) panel?.focus();
+      });
+    } else if (!visible && previouslyVisible) {
+      const target = returnFocus;
+      returnFocus = null;
+      queueMicrotask(() => target?.focus());
+    }
+    previouslyVisible = visible;
+  });
+
+  $effect(() => {
+    if (visible) return;
+    volumeMenuOpen = false;
   });
 
   $effect(() => {
@@ -339,6 +353,39 @@
     player.setPlaylistVisible(!playlistVisible);
   }
 
+  function queueTitleTooltip(node: HTMLElement, _title: string): {
+    update: (title: string) => void;
+    destroy: () => void;
+  } {
+    const button = node.parentElement?.previousElementSibling;
+    const measure = () => {
+      if (!(button instanceof HTMLButtonElement) || !node.isConnected) return;
+      button.dataset.appTooltipDisabled = String(node.scrollWidth <= node.clientWidth + 1);
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    queueMicrotask(measure);
+    return {
+      update: () => queueMicrotask(measure),
+      destroy: () => observer.disconnect(),
+    };
+  }
+
+  async function removeQueueSnooze(index: number): Promise<void> {
+    const itemId = player.activeQueueItemIds[index];
+    if (!itemId) return;
+    const playlistId = player.activePlaylistId;
+    const now = Date.now();
+    const active = (await getMusicInspectorDetail(itemId)).snoozes.filter((entry) =>
+      entry.startsAt <= now && (entry.endsAt === null || entry.endsAt > now)
+      && (playlistId === null || entry.scope === "all-playlists" || entry.playlistId === playlistId));
+    await Promise.all(active.map((entry) => removeMusicSnooze(entry.id)));
+    if (player.activeQueueItemIds[index] === itemId && player.activePlaylistId === playlistId) {
+      player.clearQueueItemSnooze(index);
+    }
+    notifyMusicLibraryChanged();
+  }
+
   async function loadPlaylistBuilder(): Promise<void> {
     if (playlistBuilderComponent || playlistBuilderLoading) return;
     playlistBuilderLoading = true;
@@ -353,19 +400,15 @@
   }
 
   function openPlaylistBuilder(initialAction: MusicBuilderInitialAction | null = null): void {
-    closeSpeedMenu();
     closeVolumeMenu();
     playlistBuilderInitialAction = initialAction;
+    playlistBuilderMounted = true;
     musicPage = "playlist-builder";
     void loadPlaylistBuilder();
   }
 
   function closePlaylistBuilder(): void {
     musicPage = "player";
-  }
-
-  function openPlaylistChooser(): void {
-    panel?.querySelector<HTMLButtonElement>("[data-music-playlist-launcher]")?.click();
   }
 
   async function openCurrentLocalFileLocation(): Promise<void> {
@@ -401,10 +444,12 @@
   }
 
   function handleKeydown(event: KeyboardEvent): void {
+    if (!visible) return;
+    if (event.target instanceof HTMLElement && event.target.closest("[data-music-track-preferences-open]")) return;
     if (event.key === "Escape" && !mediaSurfaceFullscreen) {
       if (musicPage === "playlist-builder") return;
-      event.preventDefault();
-      event.stopPropagation();
+      if (typeof document !== "undefined" && document.querySelector("[data-app-floating-surface], [data-music-track-preferences-open]")) return;
+      claimKeyboardShortcut(event);
       onclose();
       return;
     }
@@ -419,88 +464,83 @@
     if ((event.ctrlKey || event.metaKey) && !shortcutModifier) return;
     if (shortcutModifier) {
       if (event.key === "ArrowLeft") {
-        event.preventDefault();
+        claimKeyboardShortcut(event);
         void player.playPreviousTrack();
         return;
       }
       if (event.key === "ArrowRight") {
-        event.preventDefault();
+        claimKeyboardShortcut(event);
         void player.playNextTrack();
         return;
       }
       if (!event.shiftKey && (event.key.toLowerCase() === "l" || event.key.toLowerCase() === "p")) {
-        event.preventDefault();
+        claimKeyboardShortcut(event);
         togglePlaylist();
       }
       return;
     }
     if (event.code === "Space") {
-      event.preventDefault();
+      claimKeyboardShortcut(event);
       void player.togglePlay();
       return;
     }
     const seekDigit = digitSeekShortcut(event);
     if (seekDigit !== null) {
-      event.preventDefault();
+      claimKeyboardShortcut(event);
       seekToDigitPosition(seekDigit);
       return;
     }
     if (event.key.toLowerCase() === "p" || event.key.toLowerCase() === "l") {
-      event.preventDefault();
+      claimKeyboardShortcut(event);
       togglePlaylist();
       return;
     }
     if (event.key.toLowerCase() === "m") {
-      event.preventDefault();
+      claimKeyboardShortcut(event);
       void player.toggleMute();
       return;
     }
     if (event.shiftKey && event.key === "ArrowLeft") {
-      event.preventDefault();
+      claimKeyboardShortcut(event);
       void player.playPreviousTrack();
       return;
     }
     if (event.shiftKey && event.key === "ArrowRight") {
-      event.preventDefault();
+      claimKeyboardShortcut(event);
       void player.playNextTrack();
       return;
     }
     if (event.key === "ArrowLeft") {
-      event.preventDefault();
+      claimKeyboardShortcut(event);
       void player.seekByMs(-10_000);
       return;
     }
     if (event.key === "ArrowRight") {
-      event.preventDefault();
+      claimKeyboardShortcut(event);
       void player.seekByMs(10_000);
       return;
     }
     if (event.key === "ArrowUp") {
-      event.preventDefault();
+      claimKeyboardShortcut(event);
       void player.adjustVolume(volumeShortcutStep);
       return;
     }
     if (event.key === "ArrowDown") {
-      event.preventDefault();
+      claimKeyboardShortcut(event);
       void player.adjustVolume(-volumeShortcutStep);
       return;
     }
     if (event.key.toLowerCase() === "s" || event.key.toLowerCase() === "r") {
-      event.preventDefault();
-      if (player.queue.length >= 2) {
-        player.toggleShuffle();
-      }
+      claimKeyboardShortcut(event);
+      if (player.queue.length > 0) player.setPlaybackMode(player.playbackMode === "shuffle" ? "in-order" : "shuffle");
       return;
     }
-    if (event.key === "+" || event.key === "=" || event.code === "NumpadAdd") {
-      event.preventDefault();
-      void player.setRate(clampRate(player.snapshot.rate + speedShortcutStep));
-      return;
-    }
-    if (event.key === "-" || event.code === "NumpadSubtract") {
-      event.preventDefault();
-      void player.setRate(clampRate(player.snapshot.rate - speedShortcutStep));
-    }
+  }
+
+  function claimKeyboardShortcut(event: KeyboardEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
   }
 
   function trapPanelFocus(event: KeyboardEvent): void {
@@ -526,49 +566,21 @@
   }
 
   function handleWindowPointerDown(event: PointerEvent): void {
+    if (!visible) return;
     if (!(event.target instanceof Node)) return;
-    if (speedMenuOpen && speedMenuRoot && !speedMenuRoot.contains(event.target)) {
-      closeSpeedMenu();
-    }
     if (volumeMenuOpen && volumeMenuRoot && !volumeMenuRoot.contains(event.target)) {
       closeVolumeMenu();
     }
   }
 
-  function openSpeedMenu(): void {
-    closeVolumeMenu();
-    customSpeedOpen = false;
-    speedMenuOpen = !speedMenuOpen;
-  }
-
   function toggleVolumeMenu(): void {
-    closeSpeedMenu();
     volumeMenuOpen = !volumeMenuOpen;
-  }
-
-  function openCustomSpeed(): void {
-    customRateDraft = String(player.snapshot.rate);
-    customSpeedOpen = true;
-  }
-
-  function closeSpeedMenu(): void {
-    speedMenuOpen = false;
-    customSpeedOpen = false;
   }
 
   function closeVolumeMenu(): void {
     volumeMenuOpen = false;
   }
 
-  async function applySpeed(rate: number): Promise<void> {
-    await player.setRate(rate);
-    closeSpeedMenu();
-  }
-
-  async function applyCustomSpeed(): Promise<void> {
-    await player.setRate(clampRate(Number(customRateDraft)));
-    closeSpeedMenu();
-  }
 
   function handleMediaSurfaceClick(event: MouseEvent): void {
     event.preventDefault();
@@ -691,17 +703,19 @@
   }
 </script>
 
-<svelte:window onkeydown={handleKeydown} onpointerdown={handleWindowPointerDown} />
+<svelte:window onkeydowncapture={handleKeydown} onpointerdown={handleWindowPointerDown} />
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
+  hidden={!visible}
   class={cn("fixed z-40", mobileBuilderPresentation ? "bg-background" : !mobilePresentation && "inset-0")}
   style={mobilePresentation ? "left: var(--visual-viewport-offset-left); top: var(--visual-viewport-offset-top); width: var(--visual-viewport-width); height: var(--visual-viewport-height);" : undefined}
   onclick={(event) => { if (!mobileBuilderPresentation && event.target === event.currentTarget) onclose(); }}
 ></div>
 {#if !mobilePresentation}
   <div
+    hidden={!visible}
     class="pointer-events-none fixed right-2 z-50 w-[min(1000px,calc(100vw-1rem))] overflow-hidden rounded-xl shadow-lg"
     style={desktopPanelStyle}
     aria-hidden="true"
@@ -711,6 +725,7 @@
 {/if}
 <div
   bind:this={panel}
+  hidden={!visible}
   class={cn(
     "music-panel-root fixed z-70 flex flex-col overflow-hidden outline-none",
     mobileBuilderPresentation
@@ -731,11 +746,12 @@
   aria-label={t("music.title")}
   tabindex="-1"
 >
-  {#if PlaylistBuilder}
+  {#if PlaylistBuilder && playlistBuilderMounted}
     <div class:hidden={musicPage !== "playlist-builder"} class="h-full min-h-0" aria-hidden={musicPage !== "playlist-builder"}>
       <PlaylistBuilder
         onOpenPlayer={closePlaylistBuilder}
         presentation={mobilePresentation ? "mobile" : "desktop"}
+        active={visible && musicPage === "playlist-builder"}
         initialAction={playlistBuilderInitialAction}
         onInitialActionHandled={() => { playlistBuilderInitialAction = null; }}
       />
@@ -770,66 +786,68 @@
     bind:this={musicHeader}
     data-music-player-header
     class={cn(
-      "relative flex shrink-0 items-center gap-3 px-2",
+      "relative flex shrink-0 items-stretch",
       mobilePresentation ? "py-2" : "h-(--cal-header-row-h)",
     )}
     style="background-color: var(--cal-bg);"
   >
-    <div class="relative z-10 flex min-w-0 shrink-0 items-center gap-2">
-      <MusicPlaylistLauncher
-        onOpenBuilder={() => openPlaylistBuilder()}
-        onOpenIssues={() => openPlaylistBuilder({ kind: "open-issues" })}
-        onNewPlaylist={() => openPlaylistBuilder("new-playlist")}
-        mobile={mobilePresentation}
-      />
-    </div>
-    <div
-      class="music-header-title absolute top-1/2 z-0 min-w-0 -translate-x-1/2 -translate-y-1/2 text-center text-[0.8rem] font-medium text-foreground"
-      style={`left: ${mediaTitleLeft};`}
-    >
-      {#if topBarMediaTitle}
-        {#if player.currentSource?.kind === "local-file" && supportsLocalFileReveal}
-          <button
-            type="button"
-            onclick={() => { void openCurrentLocalFileLocation(); }}
-            class="block w-full truncate text-center transition-colors hover:text-accent-foreground"
-            title={t("music.showFileLocation", player.loadedTitle)}
-            aria-label={t("music.showCurrentFileLocation")}
-          >
-            {topBarMediaTitle}
-          </button>
-        {:else}
-          <span class="block w-full truncate text-center" title={player.currentSource ? player.loadedTitle : undefined}>
-            {topBarMediaTitle}
-          </span>
+    <div class="relative flex min-w-0 flex-1 items-center gap-3 px-2">
+      <div class="relative z-10 flex min-w-0 shrink-0 items-center gap-2">
+        <MusicPlaylistLauncher
+          active={visible}
+          onOpenBuilder={() => openPlaylistBuilder()}
+          onOpenIssues={() => openPlaylistBuilder({ kind: "open-issues" })}
+          mobile={mobilePresentation}
+        />
+      </div>
+      <div
+        class="music-header-title absolute top-1/2 z-0 min-w-0 -translate-x-1/2 -translate-y-1/2 text-center text-[0.8rem] font-medium text-foreground"
+        style={`left: ${mediaTitleLeft};`}
+      >
+        {#if topBarMediaTitle}
+          {#if player.currentSource?.kind === "local-file" && supportsLocalFileReveal}
+            <button
+              type="button"
+              onclick={() => { void openCurrentLocalFileLocation(); }}
+              class="block w-full truncate text-center transition-colors hover:text-accent-foreground"
+              title={t("music.showFileLocation", player.loadedTitle)}
+              aria-label={t("music.showCurrentFileLocation")}
+            >
+              {topBarMediaTitle}
+            </button>
+          {:else}
+            <span class="block w-full truncate text-center" title={player.currentSource ? player.loadedTitle : undefined}>
+              {topBarMediaTitle}
+            </span>
+          {/if}
         {/if}
+      </div>
+      {#if player.parseError || player.playerError}
+        <div class="relative z-10 ml-auto flex min-w-0 items-center gap-2">
+          <div class="hidden min-w-0 max-w-56 items-center gap-1.5 text-[0.733333rem] text-destructive min-[720px]:flex" role="alert">
+            <AlertCircle class="shrink-0" size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
+            <span class="truncate">{player.parseError ?? player.playerError}</span>
+          </div>
+        </div>
       {/if}
     </div>
-    {#if player.parseError || player.playerError}
-      <div class="relative z-10 ml-auto flex min-w-0 items-center gap-2">
-        <div class="hidden min-w-0 max-w-56 items-center gap-1.5 text-[0.733333rem] text-destructive min-[720px]:flex" role="alert">
-          <AlertCircle class="shrink-0" size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-          <span class="truncate">{player.parseError ?? player.playerError}</span>
-        </div>
+    {#if playlistVisible && !mobilePresentation}
+      <div data-music-desktop-playlist-header class="hidden shrink-0 items-center justify-between gap-2 px-4 min-[861px]:flex min-[861px]:w-80">
+        {#if playlistHasContent}
+          <div class="flex items-center gap-2 text-[0.8rem] font-medium text-muted-foreground">
+            <ListMusic size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
+            {t("music.playlist")}
+          </div>
+          <div class="text-[0.733333rem] text-muted-foreground">{t("music.tracks", player.queue.length)}</div>
+        {/if}
       </div>
     {/if}
   </div>
 
-  {#if savedQueueUnavailable || savedQueueOfflineSubset}
-    <div class="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-y border-border/60 bg-secondary/45 px-3 py-2 text-[0.68rem]" role="status">
-      <AlertCircle size={14} class="shrink-0 text-warning" />
-      <span class="min-w-40 flex-1 leading-relaxed">{savedQueueUnavailable ? t("music.queueState.nothingPlayable", player.activePlaylistName ?? "") : t("music.queueState.offlineSubset", player.savedQueueSkipBreakdown.offline)}</span>
-      {#if savedQueueSkippedCount > 0}
-        <span class="text-muted-foreground">{t("music.queueState.skippedTotal", savedQueueSkippedCount)}</span>
-        <span class="flex flex-wrap gap-1" aria-label={t("music.queueState.reasonBreakdown")}>
-          {#each savedQueueSkipDetails as detail (detail.label)}<span class="rounded-full bg-background/70 px-2 py-0.5 text-[0.62rem] text-muted-foreground">{detail.count} {detail.label}</span>{/each}
-        </span>
-      {/if}
-      {#if savedQueueUnavailable}
-        <button type="button" onclick={() => { void player.retrySavedPlaylist(); }} class="rounded-md bg-secondary px-2 py-1 font-medium hover:bg-accent">{t("music.queueState.retry")}</button>
-        <button type="button" onclick={() => openPlaylistBuilder({ kind: "open-issues" })} class="rounded-md px-2 py-1 font-medium text-primary hover:bg-primary/10">{t("music.queueState.openIssues")}</button>
-        <button type="button" onclick={openPlaylistChooser} class="rounded-md px-2 py-1 font-medium text-primary hover:bg-primary/10">{t("music.queueState.chooseAnother")}</button>
-      {/if}
+  {#if savedQueueOfflineSubset}
+    <div class="flex shrink-0 items-center gap-2 px-3 py-1.5 text-[0.68rem] text-muted-foreground" role="status">
+      <AlertCircle size={13} class="shrink-0" />
+      <span class="min-w-0 truncate">{t("music.queueState.offlineSubset", player.savedQueueSkipBreakdown.offline)}</span>
     </div>
   {/if}
 
@@ -868,7 +886,14 @@
         : "grid-cols-1 grid-rows-[minmax(0,1fr)_auto]",
     )}
   >
-    <div bind:this={mediaCell} class="music-media-cell flex min-h-0 items-center justify-center overflow-hidden">
+    <div bind:this={mediaCell} class="music-media-cell relative flex min-h-0 items-center justify-center overflow-hidden">
+      {#if savedQueueUnavailable}
+        <div class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 px-6 text-center" role="status" data-music-playlist-unavailable>
+          <AlertCircle size={18} strokeWidth={1.4} class="text-muted-foreground" />
+          <p class="text-[0.8rem] font-medium">{t("music.queueState.unavailable")}</p>
+          <button type="button" onclick={() => openPlaylistBuilder({ kind: "open-issues" })} class="text-[0.68rem] font-medium text-primary hover:underline">{t("music.queueState.review")}</button>
+        </div>
+      {/if}
       <div
         bind:this={mediaSurface}
         class="music-media-surface relative cursor-default overflow-hidden"
@@ -913,58 +938,70 @@
     {#if playlistVisible}
       <aside bind:this={playlistPanel} id="music-playlist" class="min-h-0" style="background-color: var(--cal-bg);">
         <div class="flex h-full min-h-0 flex-col">
-          <div class="flex items-center justify-between gap-2 px-4 py-3">
-            <div class="flex items-center gap-2 text-[0.8rem] font-medium text-muted-foreground">
-              <ListMusic size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-              {t("music.playlist")}
-            </div>
-            {#if player.queue.length > 0}
-              <div class="text-[0.733333rem] text-muted-foreground">{t("music.tracks", player.queue.length)}</div>
-            {/if}
-          </div>
-
-          {#if player.folderScanTruncated}
-            <div class="mx-4 mt-3 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5 text-[0.733333rem] text-warning">
-              {t("music.scanTruncated")}
-            </div>
-          {/if}
-
-          <div class="relative min-h-0 flex-1">
+          {#if playlistHasContent}
             <div
-              bind:this={playlistScrollContainer}
-              use:playlistViewportAction
-              class="hide-scrollbar h-full min-h-0 overflow-y-auto overflow-x-hidden px-3 pb-3 pt-0"
-              data-music-scrollable="true"
+              data-music-stacked-playlist-header
+              class={cn(
+                "flex items-center justify-between gap-2 px-4 py-3",
+                !mobilePresentation && "min-[861px]:hidden",
+              )}
             >
-              {#if player.queue.length === 0}
-                <div class="p-3 text-[0.8rem] text-muted-foreground">
-                  {t("music.emptyPlaylist")}
-                </div>
-              {:else}
+              <div class="flex items-center gap-2 text-[0.8rem] font-medium text-muted-foreground">
+                <ListMusic size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
+                {t("music.playlist")}
+              </div>
+              <div class="text-[0.733333rem] text-muted-foreground">{t("music.tracks", player.queue.length)}</div>
+            </div>
+
+            {#if player.folderScanTruncated}
+              <div class="mx-4 mt-3 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5 text-[0.733333rem] text-warning">
+                {t("music.scanTruncated")}
+              </div>
+            {/if}
+
+            <div class="relative min-h-0 flex-1">
+              <div
+                bind:this={playlistScrollContainer}
+                use:playlistViewportAction
+                class="hide-scrollbar h-full min-h-0 overflow-y-auto overflow-x-hidden px-3 pb-3 pt-0"
+                data-music-scrollable="true"
+              >
                 <div class="flex flex-col">
                   <div class="shrink-0" aria-hidden="true" style={`height: ${renderedPlaylistWindow.topSpacerHeight}px;`}></div>
                   {#each renderedPlaylistItems as item, offset}
                     {@const index = renderedPlaylistWindow.startIndex + offset}
-                    <button
-                      type="button"
-                      data-playlist-index={index}
-                      onclick={() => { void player.playQueueItem(index); }}
+                    {@const queueEntry = player.savedQueueEntries[index]}
+                    {@const snoozed = queueEntry
+                      ? queueEntry.snoozedIndefinitely || (queueEntry.snoozedUntil !== null && queueEntry.snoozedUntil > Date.now())
+                      : player.sourceQueueSnoozedItemIds.includes(player.activeQueueItemIds[index] ?? "")}
+                    <div
                       class={cn(
-                        "flex h-9 w-full min-w-0 shrink-0 items-center px-2 text-left text-[0.8rem]",
+                        "relative flex h-9 w-full min-w-0 shrink-0 items-center px-2 text-left text-[0.8rem]",
                         index === 0 && "rounded-t-md",
                         index === player.queue.length - 1 && "rounded-b-md",
                         player.highlightedQueueIndex === index && "bg-accent text-accent-foreground",
                       )}
                     >
-                      <span class="min-w-0 truncate">{item.title}</span>
-                    </button>
+                      <button
+                        type="button"
+                        data-playlist-index={index}
+                        data-app-tooltip-disabled="true"
+                        onclick={() => { void player.playQueueItem(index); }}
+                        class="absolute inset-0 rounded-md focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+                        aria-label={item.title}
+                      ></button>
+                      <span class="pointer-events-none relative z-1 flex max-w-full min-w-0 items-center gap-1.5">
+                        <span data-music-queue-title use:queueTitleTooltip={item.title} class="min-w-0 truncate">{item.title}</span>
+                        {#if snoozed}<MusicSnoozeButton onRemove={() => removeQueueSnooze(index)} />{/if}
+                      </span>
+                    </div>
                   {/each}
                   <div class="shrink-0" aria-hidden="true" style={`height: ${renderedPlaylistWindow.bottomSpacerHeight}px;`}></div>
                 </div>
-              {/if}
+              </div>
+              <CalendarScrollbar scrollContainer={playlistScrollContainer} wheelPassthrough />
             </div>
-            <CalendarScrollbar scrollContainer={playlistScrollContainer} wheelPassthrough />
-          </div>
+          {/if}
         </div>
       </aside>
     {/if}
@@ -1009,12 +1046,14 @@
           <button
             type="button"
             onclick={() => { void player.togglePlay(); }}
-            disabled={!player.currentSource}
+            disabled={!player.currentSource || player.youtubePlaybackStarting}
             class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
-            title={player.isPlaying ? t("music.pauseShortcut") : t("music.playShortcut")}
-            aria-label={player.isPlaying ? t("music.pause") : t("music.play")}
+            title={player.youtubePlaybackStarting ? t("music.builder.loading") : player.isPlaying ? t("music.pauseShortcut") : t("music.playShortcut")}
+            aria-label={player.youtubePlaybackStarting ? t("music.builder.loading") : player.isPlaying ? t("music.pause") : t("music.play")}
           >
-            {#if player.isPlaying}
+            {#if player.youtubePlaybackStarting}
+              <LoaderCircle size={musicIconSize} strokeWidth={3} class="animate-spin motion-reduce:animate-none" />
+            {:else if player.isPlaying}
               <Pause size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
             {:else}
               <Play size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
@@ -1030,37 +1069,11 @@
           >
             <SkipForward size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
           </button>
-          <button
-            type="button"
-            onclick={() => player.toggleShuffle()}
-            disabled={player.queue.length < 2}
-            class={cn(
-              "music-transport-shuffle inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50",
-              !player.shuffleEnabled && "text-muted-foreground opacity-70",
-            )}
-            title={player.shuffleEnabled ? t("music.shuffleOnTitle") : t("music.shuffleOffTitle")}
-            aria-label={player.shuffleEnabled ? t("music.shuffleOn") : t("music.shuffleOff")}
-            aria-pressed={player.shuffleEnabled}
-          >
-            <Shuffle size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-          </button>
+          <MusicPlaybackModeControl className="music-transport-shuffle" />
         </div>
 
         <div class="music-control-group flex items-center gap-2">
-          <button
-            type="button"
-            onclick={() => player.toggleShuffle()}
-            disabled={player.queue.length < 2}
-            class={cn(
-              "music-utility-shuffle inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50",
-              !player.shuffleEnabled && "text-muted-foreground opacity-70",
-            )}
-            title={player.shuffleEnabled ? t("music.shuffleOnTitle") : t("music.shuffleOffTitle")}
-            aria-label={player.shuffleEnabled ? t("music.shuffleOn") : t("music.shuffleOff")}
-            aria-pressed={player.shuffleEnabled}
-          >
-            <Shuffle size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-          </button>
+          <MusicPlaybackModeControl className="music-utility-shuffle" align="end" />
           <div
             class="music-expanded-volume-control flex items-center gap-2 text-[0.8rem] text-muted-foreground"
             data-music-volume-control="true"
@@ -1094,7 +1107,6 @@
               {player.volumePercentLabel}
             </button>
           </div>
-          <MusicCurrentItemMenu onOpenItem={(itemId) => openPlaylistBuilder({ kind: "open-item", itemId })} onOpenPlaylists={() => openPlaylistBuilder("open-playlists")} />
           {#if supportsSoundscapes}
             <MusicSoundscapeControl onOpenSoundscapes={() => openPlaylistBuilder({ kind: "open-soundscapes" })} />
           {/if}
@@ -1158,69 +1170,12 @@
             {/if}
           </div>
 
-          <div bind:this={speedMenuRoot} class="relative">
-            <button
-              type="button"
-              onclick={openSpeedMenu}
-              class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-              title={t("music.speedTitle")}
-              aria-label={t("music.speed")}
-              aria-haspopup="menu"
-              aria-expanded={speedMenuOpen}
-            >
-              <Gauge size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-            </button>
-            {#if speedMenuOpen}
-              <div
-                class="absolute bottom-full right-0 z-30 mb-2 w-36 overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
-                style="max-height: min(14rem, calc(100vh - 2rem));"
-              >
-                {#if !customSpeedOpen}
-                  {#each SPEED_PRESETS as preset}
-                    <button
-                      type="button"
-                      onclick={() => { void applySpeed(preset); }}
-                      class="flex h-8 w-full items-center justify-between rounded-sm px-2 text-left text-[0.8rem] hover:bg-accent hover:text-accent-foreground"
-                    >
-                      <span>{preset}x</span>
-                      {#if Math.abs(player.snapshot.rate - preset) < 0.001}
-                        <Check size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-                      {/if}
-                    </button>
-                  {/each}
-                  <button
-                    type="button"
-                    onclick={openCustomSpeed}
-                    class="flex h-8 w-full items-center justify-between rounded-sm px-2 text-left text-[0.8rem] hover:bg-accent hover:text-accent-foreground"
-                  >
-                    <span>{t("music.custom")}</span>
-                    {#if !activeSpeedIsPreset}
-                      <Check size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-                    {/if}
-                  </button>
-                {:else}
-                  <form class="flex items-center gap-2 p-1" onsubmit={(event) => { event.preventDefault(); void applyCustomSpeed(); }}>
-                    <input
-                      bind:value={customRateDraft}
-                      type="number"
-                      min="0.25"
-                      max="2"
-                      step="0.05"
-                      class="h-8 min-w-0 flex-1 select-text rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                      aria-label={t("music.customPlaybackSpeed")}
-                    />
-                    <button
-                      type="submit"
-                      class="inline-flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
-                      aria-label={t("music.applyCustomSpeed")}
-                    >
-                      <Check size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-                    </button>
-                  </form>
-                {/if}
-              </div>
-            {/if}
-          </div>
+          <MusicTrackPreferences
+            active={visible && musicPage === "player"}
+            {volumeMenuOpen}
+            onOpen={closeVolumeMenu}
+          />
+          <MusicCurrentItemMenu active={visible} onOpenBuilder={(itemId) => openPlaylistBuilder(itemId ? { kind: "open-review-item", itemId } : "open-review")} />
           <button
             type="button"
             onclick={togglePlaylist}
@@ -1262,7 +1217,7 @@
     background-color: var(--cal-bg);
   }
 
-  .music-utility-shuffle {
+  :global(.music-utility-shuffle) {
     display: none;
   }
 
@@ -1277,11 +1232,11 @@
       justify-content: center;
     }
 
-    .music-transport-shuffle {
+    :global(.music-transport-shuffle) {
       display: none;
     }
 
-    .music-utility-shuffle {
+    :global(.music-utility-shuffle) {
       display: inline-flex;
     }
 

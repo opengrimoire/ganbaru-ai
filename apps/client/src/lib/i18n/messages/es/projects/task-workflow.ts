@@ -9,6 +9,7 @@ export const taskWorkflow = {
     discard: "Descartar cambios",
     titleLabel: "Título",
     description: "Descripción",
+    descriptionPlaceholder: "Añade una descripción…",
     properties: "Propiedades",
     status: "Estado",
     section: "Sección",

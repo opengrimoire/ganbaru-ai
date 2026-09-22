@@ -14,11 +14,13 @@ fn notes_validation_rejects_bad_ids_and_payloads() {
         validation::validate_block_payload("paragraph", &json!({ "rich_text": [{}] })),
         Err("rich text item type must be a string".to_string())
     );
-    assert!(validation::validate_block_payload(
-        "paragraph",
-        &json!({ "rich_text": [page_mention(PAGE_B, "Target page")], "color": "default" }),
-    )
-    .is_ok());
+    assert!(
+        validation::validate_block_payload(
+            "paragraph",
+            &json!({ "rich_text": [page_mention(PAGE_B, "Target page")], "color": "default" }),
+        )
+        .is_ok()
+    );
     assert!(
         validation::validate_block_payload("paragraph", &paragraph_icon_payload("Overview"),)
             .is_ok()
@@ -50,16 +52,20 @@ fn notes_validation_rejects_bad_ids_and_payloads() {
         &json!({ "rich_text": [inline_equation_rich_text("\\frac{a}{b}")], "color": "default" }),
     )
     .is_ok());
-    assert!(validation::validate_block_payload(
-        "heading_1",
-        &heading_payload("Toggle heading", true, Some(false)),
-    )
-    .is_ok());
-    assert!(validation::validate_block_payload(
-        "heading_4",
-        &heading_payload("Small toggle heading", true, Some(false)),
-    )
-    .is_ok());
+    assert!(
+        validation::validate_block_payload(
+            "heading_1",
+            &heading_payload("Toggle heading", true, Some(false)),
+        )
+        .is_ok()
+    );
+    assert!(
+        validation::validate_block_payload(
+            "heading_4",
+            &heading_payload("Small toggle heading", true, Some(false)),
+        )
+        .is_ok()
+    );
     assert_eq!(
         validation::validate_block_payload(
             "heading_1",
@@ -250,16 +256,18 @@ fn notes_validation_rejects_bad_ids_and_payloads() {
         validation::validate_block_payload("child_page", &json!({ "title": "bad\u{0008}" })),
         Err("child_page.title must not contain control characters".to_string())
     );
-    assert!(validation::validate_block_payload(
-        "child_database",
-        &json!({
-            "title": "Tasks",
-            "database_id": DATABASE_A,
-            "data_source_id": DATA_SOURCE_A,
-            "view_id": DATABASE_VIEW_A
-        }),
-    )
-    .is_ok());
+    assert!(
+        validation::validate_block_payload(
+            "child_database",
+            &json!({
+                "title": "Tasks",
+                "database_id": DATABASE_A,
+                "data_source_id": DATA_SOURCE_A,
+                "view_id": DATABASE_VIEW_A
+            }),
+        )
+        .is_ok()
+    );
     assert_eq!(
         validation::validate_block_payload(
             "child_database",
@@ -293,19 +301,21 @@ fn notes_validation_rejects_bad_ids_and_payloads() {
         "top_of_page",
         "bottom_of_page",
     ] {
-        assert!(validation::validate_block_payload(
-            "button",
-            &json!({
-                "rich_text": [rich_text("Add agenda")],
-                "icon": null,
-                "actions": [{
-                    "type": "insert_blocks",
-                    "source": "children",
-                    "position": position
-                }]
-            }),
-        )
-        .is_ok());
+        assert!(
+            validation::validate_block_payload(
+                "button",
+                &json!({
+                    "rich_text": [rich_text("Add agenda")],
+                    "icon": null,
+                    "actions": [{
+                        "type": "insert_blocks",
+                        "source": "children",
+                        "position": position
+                    }]
+                }),
+            )
+            .is_ok()
+        );
     }
     assert_eq!(
         validation::validate_block_payload(
@@ -459,11 +469,13 @@ fn notes_validation_rejects_bad_ids_and_payloads() {
         validation::validate_block_payload("synced_block", &synced_block_payload_original())
             .is_ok()
     );
-    assert!(validation::validate_block_payload(
-        "synced_block",
-        &synced_block_payload_duplicate(BLOCK_A),
-    )
-    .is_ok());
+    assert!(
+        validation::validate_block_payload(
+            "synced_block",
+            &synced_block_payload_duplicate(BLOCK_A),
+        )
+        .is_ok()
+    );
     assert_eq!(
         validation::validate_block_payload("synced_block", &json!({})),
         Err("synced_block.synced_from is required".to_string())
@@ -511,18 +523,20 @@ fn notes_validation_rejects_bad_ids_and_payloads() {
         ),
         Err("file.file_upload.id must be a UUID".to_string())
     );
-    assert!(validation::validate_block_payload(
-        "image",
-        &local_media_payload(
-            "notes/files/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png",
-            "image/png",
-            42,
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "",
-            Some("image.png"),
-        ),
-    )
-    .is_ok());
+    assert!(
+        validation::validate_block_payload(
+            "image",
+            &local_media_payload(
+                "notes/files/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png",
+                "image/png",
+                42,
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "",
+                Some("image.png"),
+            ),
+        )
+        .is_ok()
+    );
     assert_eq!(
         validation::validate_block_payload(
             "image",
@@ -535,8 +549,10 @@ fn notes_validation_rejects_bad_ids_and_payloads() {
                 Some("image.png"),
             ),
         ),
-        Err("image.file.ganbaru_asset_path must stay under the managed Notes file directory"
-            .to_string())
+        Err(
+            "image.file.ganbaru_asset_path must stay under the managed Notes file directory"
+                .to_string()
+        )
     );
     assert_eq!(
         validation::validate_block_payload(

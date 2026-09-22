@@ -27,23 +27,25 @@ fn csv_import_previews_mapping_and_row_errors() {
         assert_eq!(value["valid_row_count"], 1);
         assert_eq!(value["skipped_row_count"], 1);
         assert_eq!(value["imported_row_count"], 0);
-        assert!(value["columns"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|column| column["source_name"] == "Ticket" && column["read_only"] == true));
-        assert!(value["columns"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|column| column["source_name"] == "Unknown" && column["mapped"] == false));
-        assert!(value["diagnostics"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|diagnostic| diagnostic["code"] == "invalid_cell"
+        assert!(
+            value["columns"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|column| column["source_name"] == "Ticket" && column["read_only"] == true)
+        );
+        assert!(
+            value["columns"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|column| column["source_name"] == "Unknown" && column["mapped"] == false)
+        );
+        assert!(value["diagnostics"].as_array().unwrap().iter().any(
+            |diagnostic| diagnostic["code"] == "invalid_cell"
                 && diagnostic["row_number"] == 3
-                && diagnostic["property_id"] == "estimate"));
+                && diagnostic["property_id"] == "estimate"
+        ));
         let row_count: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM notes_pages WHERE parent_data_source_id = ?")
                 .bind(DATA_SOURCE_A)
@@ -138,11 +140,11 @@ fn csv_import_skips_invalid_rows_while_importing_valid_rows() {
         assert_eq!(value["imported_row_count"], 1);
         assert_eq!(value["valid_row_count"], 1);
         assert_eq!(value["skipped_row_count"], 1);
-        assert!(value["diagnostics"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|diagnostic| diagnostic["row_number"] == 3 && diagnostic["severity"] == "error"));
+        assert!(
+            value["diagnostics"].as_array().unwrap().iter().any(
+                |diagnostic| diagnostic["row_number"] == 3 && diagnostic["severity"] == "error"
+            )
+        );
         let row_titles: Vec<String> = sqlx::query_scalar(
             "SELECT title FROM notes_pages WHERE parent_data_source_id = ? ORDER BY title ASC",
         )

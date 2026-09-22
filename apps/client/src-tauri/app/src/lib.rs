@@ -12,7 +12,6 @@ mod calendar_import;
 mod calendar_reads;
 mod calendars;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-#[allow(dead_code)]
 mod chat;
 #[cfg(any(target_os = "android", target_os = "ios"))]
 #[path = "chat_mobile.rs"]
@@ -161,6 +160,9 @@ mod composition_tests {
             "music::library::commands::music_library_create_relink_plan",
             "music::library::commands::music_library_preview_item_repair",
             "music::library::commands::music_library_soundscapes",
+            "music::library::commands::music_library_soundscape_groups",
+            "music::library::commands::music_library_upsert_soundscape_group",
+            "music::library::commands::music_library_remove_soundscape_group",
         ] {
             assert!(
                 !MOBILE_RUNTIME.contains(command),

@@ -4,7 +4,7 @@ use std::collections::{HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::local_refresh::{inspect_for_relink, RelinkArtworkCache, RelinkMediaEvidence};
+use super::local_refresh::{RelinkArtworkCache, RelinkMediaEvidence, inspect_for_relink};
 use super::*;
 
 const MAX_RELINK_DECISIONS: usize = 10_000;

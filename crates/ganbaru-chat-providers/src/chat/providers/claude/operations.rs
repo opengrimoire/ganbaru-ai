@@ -11,8 +11,8 @@ use crate::chat::providers::{
     DriverFuture, DriverOperationContext, ProviderAuthoritySupport, ProviderDriver,
     ProviderEventSink,
 };
-use serde_json::{json, Value};
-use std::sync::{atomic::Ordering, Arc};
+use serde_json::{Value, json};
+use std::sync::{Arc, atomic::Ordering};
 use std::time::Duration;
 
 impl ProviderDriver for ClaudeProviderDriver {

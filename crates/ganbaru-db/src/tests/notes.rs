@@ -98,8 +98,9 @@ fn schema_creates_normalized_notes_database_tables() {
         .await
         .unwrap();
 
-        assert!(sqlx::query(
-            "INSERT INTO notes_database_views (
+        assert!(
+            sqlx::query(
+                "INSERT INTO notes_database_views (
                 id,
                 database_id,
                 data_source_id,
@@ -108,10 +109,11 @@ fn schema_creates_normalized_notes_database_tables() {
                 sorts
              )
              VALUES ('view-b', 'database-a', 'source-a', 'Bad', 'kanbanish', '[]')",
-        )
-        .execute(&pool)
-        .await
-        .is_err());
+            )
+            .execute(&pool)
+            .await
+            .is_err()
+        );
     });
 }
 
@@ -154,13 +156,15 @@ fn schema_enforces_notes_folder_placement_invariants() {
         .execute(&pool)
         .await
         .unwrap();
-        assert!(sqlx::query(
-            "INSERT INTO notes_folders (id, project_id, parent_folder_id, name)
+        assert!(
+            sqlx::query(
+                "INSERT INTO notes_folders (id, project_id, parent_folder_id, name)
              VALUES ('folder-cross', 'folder-project-a', 'folder-b', 'Cross project')",
-        )
-        .execute(&pool)
-        .await
-        .is_err());
+            )
+            .execute(&pool)
+            .await
+            .is_err()
+        );
 
         sqlx::query(
             "INSERT INTO notes_folders (id, project_id, parent_folder_id, name)
@@ -169,12 +173,14 @@ fn schema_enforces_notes_folder_placement_invariants() {
         .execute(&pool)
         .await
         .unwrap();
-        assert!(sqlx::query(
-            "UPDATE notes_folders SET parent_folder_id = 'folder-child' WHERE id = 'folder-a'",
-        )
-        .execute(&pool)
-        .await
-        .is_err());
+        assert!(
+            sqlx::query(
+                "UPDATE notes_folders SET parent_folder_id = 'folder-child' WHERE id = 'folder-a'",
+            )
+            .execute(&pool)
+            .await
+            .is_err()
+        );
 
         sqlx::query(
             "INSERT INTO notes_pages (id, parent_type, folder_id, title, properties)
@@ -189,8 +195,9 @@ fn schema_enforces_notes_folder_placement_invariants() {
         .execute(&pool)
         .await
         .unwrap();
-        assert!(sqlx::query(
-            "INSERT INTO notes_pages (id, parent_type, folder_id, title, properties)
+        assert!(
+            sqlx::query(
+                "INSERT INTO notes_pages (id, parent_type, folder_id, title, properties)
              VALUES (
                  'wrong-project-page',
                  'workspace',
@@ -198,12 +205,14 @@ fn schema_enforces_notes_folder_placement_invariants() {
                  'Wrong project',
                  json_object('__ganbaru_project_id', 'folder-project-b')
              )",
-        )
-        .execute(&pool)
-        .await
-        .is_err());
-        assert!(sqlx::query(
-            "INSERT INTO notes_pages (
+            )
+            .execute(&pool)
+            .await
+            .is_err()
+        );
+        assert!(
+            sqlx::query(
+                "INSERT INTO notes_pages (
                 id, parent_type, parent_page_id, folder_id, title, properties
              ) VALUES (
                  'nested-folder-page',
@@ -213,18 +222,21 @@ fn schema_enforces_notes_folder_placement_invariants() {
                  'Invalid nested folder page',
                  json_object('__ganbaru_project_id', 'folder-project-a')
              )",
-        )
-        .execute(&pool)
-        .await
-        .is_err());
-        assert!(sqlx::query(
-            "UPDATE notes_pages
+            )
+            .execute(&pool)
+            .await
+            .is_err()
+        );
+        assert!(
+            sqlx::query(
+                "UPDATE notes_pages
              SET properties = json_object('__ganbaru_project_id', 'folder-project-b')
              WHERE id = 'folder-page'",
-        )
-        .execute(&pool)
-        .await
-        .is_err());
+            )
+            .execute(&pool)
+            .await
+            .is_err()
+        );
     });
 }
 
@@ -357,8 +369,9 @@ fn schema_creates_notes_mention_notifications() {
         .execute(&pool)
         .await
         .unwrap();
-        assert!(sqlx::query(
-            "INSERT INTO notes_mention_notifications (
+        assert!(
+            sqlx::query(
+                "INSERT INTO notes_mention_notifications (
                 id,
                 source_type,
                 source_id,
@@ -378,10 +391,11 @@ fn schema_creates_notes_mention_notifications() {
                 'stale',
                 'fingerprint-a'
              )",
-        )
-        .execute(&pool)
-        .await
-        .is_err());
+            )
+            .execute(&pool)
+            .await
+            .is_err()
+        );
     });
 }
 
@@ -453,8 +467,9 @@ fn schema_creates_notes_suggestions() {
         .fetch_one(&pool)
         .await
         .unwrap();
-        assert!(sqlx::query(
-            "INSERT INTO notes_suggestions (
+        assert!(
+            sqlx::query(
+                "INSERT INTO notes_suggestions (
                 id,
                 page_id,
                 block_id,
@@ -480,12 +495,13 @@ fn schema_creates_notes_suggestions() {
                 strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
                 ?
              )",
-        )
-        .bind(&user_id)
-        .bind(&user_id)
-        .execute(&pool)
-        .await
-        .is_err());
+            )
+            .bind(&user_id)
+            .bind(&user_id)
+            .execute(&pool)
+            .await
+            .is_err()
+        );
     });
 }
 
@@ -599,8 +615,9 @@ fn schema_creates_notes_collaboration_operations() {
         .await
         .unwrap();
 
-        assert!(sqlx::query(
-            "INSERT INTO notes_collaboration_operations (
+        assert!(
+            sqlx::query(
+                "INSERT INTO notes_collaboration_operations (
                 id,
                 entity_type,
                 entity_id,
@@ -626,11 +643,12 @@ fn schema_creates_notes_collaboration_operations() {
                 'append_only',
                 json_object('schema_version', 1)
              )",
-        )
-        .bind(&user_id)
-        .execute(&pool)
-        .await
-        .is_err());
+            )
+            .bind(&user_id)
+            .execute(&pool)
+            .await
+            .is_err()
+        );
 
         sqlx::query("DELETE FROM notes_pages WHERE id = 'page-a'")
             .execute(&pool)
@@ -1513,18 +1531,22 @@ fn schema_creates_strict_project_notes_history_storage() {
                 .await
                 .unwrap();
         }
-        assert!(sqlx::query(
-            "UPDATE projects SET notes_history_retention_days = 14 WHERE id = 'project-1'",
-        )
-        .execute(&pool)
-        .await
-        .is_err());
-        assert!(sqlx::query(
-            "UPDATE notes_page_history_settings SET retention_days = NULL WHERE id = 1",
-        )
-        .execute(&pool)
-        .await
-        .is_err());
+        assert!(
+            sqlx::query(
+                "UPDATE projects SET notes_history_retention_days = 14 WHERE id = 'project-1'",
+            )
+            .execute(&pool)
+            .await
+            .is_err()
+        );
+        assert!(
+            sqlx::query(
+                "UPDATE notes_page_history_settings SET retention_days = NULL WHERE id = 1",
+            )
+            .execute(&pool)
+            .await
+            .is_err()
+        );
         assert!(sqlx::query(
             "UPDATE notes_page_history_settings SET retention_days = 366 WHERE id = 1",
         )
@@ -1567,11 +1589,15 @@ fn schema_creates_strict_project_notes_history_storage() {
         .fetch_all(&pool)
         .await
         .unwrap();
-        assert!(!operation_foreign_keys
-            .iter()
-            .any(|table| table == "notes_pages"));
-        assert!(!operation_foreign_keys
-            .iter()
-            .any(|table| table == "notes_blocks"));
+        assert!(
+            !operation_foreign_keys
+                .iter()
+                .any(|table| table == "notes_pages")
+        );
+        assert!(
+            !operation_foreign_keys
+                .iter()
+                .any(|table| table == "notes_blocks")
+        );
     });
 }

@@ -10,8 +10,8 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
     Mutex,
+    atomic::{AtomicU64, Ordering},
 };
 
 const MAX_PROVIDER_FILE_BYTES: u64 = 1024 * 1024;
@@ -132,7 +132,7 @@ fn provider_file_specs(
         _ => {
             return Err(ChatError::unsupported(
                 "This provider does not expose documented editable files",
-            ))
+            ));
         }
     };
     specs.sort_by(|left, right| left.file_id.cmp(&right.file_id));
@@ -539,9 +539,11 @@ mod tests {
         for (family, config_name, instruction_name) in cases {
             let specs = provider_file_specs(&configuration(family, &root)).unwrap();
             assert!(specs.iter().any(|spec| spec.path == root.join(config_name)));
-            assert!(specs
-                .iter()
-                .any(|spec| spec.path == root.join(instruction_name.unwrap())));
+            assert!(
+                specs
+                    .iter()
+                    .any(|spec| spec.path == root.join(instruction_name.unwrap()))
+            );
         }
     }
 
@@ -558,12 +560,16 @@ mod tests {
         let root = TestDirectory::new("opencode");
         let mut configured_home = configuration("opencode", root.path());
         let specs = provider_file_specs(&configured_home).unwrap();
-        assert!(specs
-            .iter()
-            .any(|spec| spec.path == root.path().join("opencode.json")));
-        assert!(specs
-            .iter()
-            .any(|spec| spec.path == root.path().join("AGENTS.md")));
+        assert!(
+            specs
+                .iter()
+                .any(|spec| spec.path == root.path().join("opencode.json"))
+        );
+        assert!(
+            specs
+                .iter()
+                .any(|spec| spec.path == root.path().join("AGENTS.md"))
+        );
 
         let custom = root.path().join("custom.jsonc");
         configured_home.environment.insert(

@@ -103,9 +103,11 @@ fn search_keyset_pages_equal_titles_without_full_page_payloads() {
 
         assert_eq!(first_ids.len(), 20);
         assert_eq!(second_results.len(), 20);
-        assert!(second_results
-            .iter()
-            .all(|result| !first_ids.contains(result["id"].as_str().unwrap())));
+        assert!(
+            second_results
+                .iter()
+                .all(|result| !first_ids.contains(result["id"].as_str().unwrap()))
+        );
         let page = &first["results"][0]["page"];
         assert!(page.get("properties").is_none());
         assert!(page.get("cover").is_none());
@@ -226,11 +228,13 @@ fn search_indexes_comment_targets_authors_anchors_and_resolved_filter() {
         let hidden_resolved = search::search(&pool, "inline needle", Some(10), false)
             .await
             .unwrap();
-        assert!(serde_json::to_value(hidden_resolved)
-            .unwrap()
-            .as_array()
-            .unwrap()
-            .is_empty());
+        assert!(
+            serde_json::to_value(hidden_resolved)
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
 
         let included_resolved = search::search(&pool, "inline needle", Some(10), true)
             .await
@@ -337,41 +341,49 @@ fn search_fts_rebuilds_and_indexes_properties_files_and_metadata() {
             .await
             .unwrap();
         let property_json = serde_json::to_value(property_results).unwrap();
-        assert!(property_json
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|result| { result["type"] == "page" && result["page"]["id"] == PAGE_A }));
+        assert!(
+            property_json
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|result| { result["type"] == "page" && result["page"]["id"] == PAGE_A })
+        );
 
         let caption_results = search::search(&pool, "Quarterly", Some(10), false)
             .await
             .unwrap();
         let caption_json = serde_json::to_value(caption_results).unwrap();
-        assert!(caption_json
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|result| { result["type"] == "block" && result["block_id"] == BLOCK_C }));
+        assert!(
+            caption_json
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|result| { result["type"] == "block" && result["block_id"] == BLOCK_C })
+        );
 
         let file_results = search::search(&pool, "roadmap", Some(10), false)
             .await
             .unwrap();
         let file_json = serde_json::to_value(file_results).unwrap();
-        assert!(file_json
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|result| { result["type"] == "block" && result["block_id"] == BLOCK_C }));
+        assert!(
+            file_json
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|result| { result["type"] == "block" && result["block_id"] == BLOCK_C })
+        );
 
         let comment_file_results = search::search(&pool, "meeting notes", Some(10), false)
             .await
             .unwrap();
         let comment_file_json = serde_json::to_value(comment_file_results).unwrap();
-        assert!(comment_file_json
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|result| { result["type"] == "comment" && result["comment_id"] == COMMENT_A }));
+        assert!(
+            comment_file_json
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|result| { result["type"] == "comment" && result["comment_id"] == COMMENT_A })
+        );
 
         sqlx::query("DELETE FROM notes_search_fts")
             .execute(&pool)
@@ -385,11 +397,13 @@ fn search_fts_rebuilds_and_indexes_properties_files_and_metadata() {
             .await
             .unwrap();
         let rebuilt_json = serde_json::to_value(rebuilt_results).unwrap();
-        assert!(rebuilt_json
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|result| { result["type"] == "block" && result["block_id"] == BLOCK_C }));
+        assert!(
+            rebuilt_json
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|result| { result["type"] == "block" && result["block_id"] == BLOCK_C })
+        );
 
         sqlx::query(
             "UPDATE notes_pages
@@ -426,11 +440,13 @@ fn search_fts_rebuilds_and_indexes_properties_files_and_metadata() {
             .await
             .unwrap();
         let stale_guard_json = serde_json::to_value(stale_guard_results).unwrap();
-        assert!(stale_guard_json
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|result| { result["type"] == "page" && result["page"]["id"] == PAGE_A }));
+        assert!(
+            stale_guard_json
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|result| { result["type"] == "page" && result["page"]["id"] == PAGE_A })
+        );
 
         let rebuilt_count = search::rebuild_index(&pool).await.unwrap();
         let index_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM notes_search_index")
@@ -708,21 +724,25 @@ fn property_search_indexes_database_values_cached_rollups_and_formulas() {
 async fn assert_search_finds_page(pool: &SqlitePool, query: &str, page_id: &str) {
     let results = search::search(pool, query, Some(10), false).await.unwrap();
     let results_json = serde_json::to_value(results).unwrap();
-    assert!(results_json
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|result| { result["type"] == "page" && result["page"]["id"] == page_id }));
+    assert!(
+        results_json
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|result| { result["type"] == "page" && result["page"]["id"] == page_id })
+    );
 }
 
 async fn assert_search_does_not_find_page(pool: &SqlitePool, query: &str, page_id: &str) {
     let results = search::search(pool, query, Some(10), false).await.unwrap();
     let results_json = serde_json::to_value(results).unwrap();
-    assert!(!results_json
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|result| { result["type"] == "page" && result["page"]["id"] == page_id }));
+    assert!(
+        !results_json
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|result| { result["type"] == "page" && result["page"]["id"] == page_id })
+    );
 }
 
 #[test]

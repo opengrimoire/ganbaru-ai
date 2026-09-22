@@ -20,6 +20,8 @@ mod relink;
 mod rows;
 mod search;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub(crate) mod soundscape_groups;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) mod soundscapes;
 mod source_lifecycle;
 mod validation;

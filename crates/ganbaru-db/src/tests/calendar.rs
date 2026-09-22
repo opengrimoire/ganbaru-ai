@@ -37,63 +37,75 @@ fn schema_rejects_invalid_calendar_values() {
     super::block_on(async {
         let pool = migrated_memory_pool().await;
 
-        assert!(sqlx::query(
-            "INSERT INTO calendars (id, name, source, created_at, updated_at)
+        assert!(
+            sqlx::query(
+                "INSERT INTO calendars (id, name, source, created_at, updated_at)
              VALUES ('bad-source', 'Bad', 'web', '2026-05-23T00:00:00Z', '2026-05-23T00:00:00Z')",
-        )
-        .execute(&pool)
-        .await
-        .is_err());
+            )
+            .execute(&pool)
+            .await
+            .is_err()
+        );
 
-        assert!(sqlx::query(
-            "INSERT INTO calendar_events
+        assert!(
+            sqlx::query(
+                "INSERT INTO calendar_events
                 (id, title, start_time, end_time, timezone, calendar_id, all_day)
              VALUES ('bad-bool', 'Bad', '2026-05-23T09:00:00Z',
                      '2026-05-23T10:00:00Z', 'UTC', 'local', 2)",
-        )
-        .execute(&pool)
-        .await
-        .is_err());
+            )
+            .execute(&pool)
+            .await
+            .is_err()
+        );
 
-        assert!(sqlx::query(
-            "INSERT INTO calendar_events
+        assert!(
+            sqlx::query(
+                "INSERT INTO calendar_events
                 (id, title, start_time, end_time, timezone, calendar_id, color)
              VALUES ('bad-color', 'Bad', '2026-05-23T09:00:00Z',
                      '2026-05-23T10:00:00Z', 'UTC', 'local', 32)",
-        )
-        .execute(&pool)
-        .await
-        .is_err());
+            )
+            .execute(&pool)
+            .await
+            .is_err()
+        );
 
-        assert!(sqlx::query(
-            "INSERT INTO calendar_events
+        assert!(
+            sqlx::query(
+                "INSERT INTO calendar_events
                 (id, title, start_time, end_time, timezone, calendar_id, priority)
              VALUES ('bad-priority', 'Bad', '2026-05-23T09:00:00Z',
                      '2026-05-23T10:00:00Z', 'UTC', 'local', 10)",
-        )
-        .execute(&pool)
-        .await
-        .is_err());
+            )
+            .execute(&pool)
+            .await
+            .is_err()
+        );
 
-        assert!(sqlx::query(
-            "INSERT INTO calendar_events
+        assert!(
+            sqlx::query(
+                "INSERT INTO calendar_events
                 (id, title, start_time, end_time, timezone, calendar_id, geo_lat)
              VALUES ('bad-geo', 'Bad', '2026-05-23T09:00:00Z',
                      '2026-05-23T10:00:00Z', 'UTC', 'local', 25.0)",
-        )
-        .execute(&pool)
-        .await
-        .is_err());
+            )
+            .execute(&pool)
+            .await
+            .is_err()
+        );
 
-        assert!(sqlx::query(
-            "INSERT INTO calendar_events
+        assert!(
+            sqlx::query(
+                "INSERT INTO calendar_events
                 (id, title, start_time, end_time, timezone, calendar_id)
              VALUES ('bad-fk', 'Bad', '2026-05-23T09:00:00Z',
                      '2026-05-23T10:00:00Z', 'UTC', 'missing')",
-        )
-        .execute(&pool)
-        .await
-        .is_err());
+            )
+            .execute(&pool)
+            .await
+            .is_err()
+        );
     });
 }
 

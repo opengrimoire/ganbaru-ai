@@ -2,10 +2,10 @@
 
 use super::checkpoints::ensure_post_turn_checkpoint;
 use super::persistence::ThreadRuntimeData;
-use super::support::{now_timestamp, operation_context, PROVIDER_START_TIMEOUT};
+use super::support::{PROVIDER_START_TIMEOUT, now_timestamp, operation_context};
 use super::validation::validate_modes;
 use crate::chat::agent_runs::AgentRunBinding;
-use crate::chat::credentials::{materialize_provider_environment, PlatformCredentialStore};
+use crate::chat::credentials::{PlatformCredentialStore, materialize_provider_environment};
 use crate::chat::events::{CanonicalEvent, CanonicalRuntimeEvent, ChangedFileSummary};
 use crate::chat::ingestion::{ChatEventIngestor, TauriChatChangeEmitter};
 use crate::chat::models::{

@@ -1,18 +1,18 @@
 //! Shared Cursor ACP fixture support.
 
-use super::executable::{parse_version, CursorAbout};
+use super::executable::{CursorAbout, parse_version};
 use super::transport::AcpRpcConnection;
 use crate::chat::events::CanonicalRuntimeEvent;
 use crate::chat::models::*;
 use crate::chat::providers::{
     DriverCancellation, DriverFuture, DriverOperationContext, ProviderEventSink,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{
-    atomic::{AtomicBool, AtomicU64, Ordering},
     Arc, Mutex,
+    atomic::{AtomicBool, AtomicU64, Ordering},
 };
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};

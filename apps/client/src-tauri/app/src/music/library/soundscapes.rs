@@ -12,6 +12,8 @@ type DefinitionRow = (
     String,
     String,
     Option<String>,
+    String,
+    Option<String>,
     i64,
     i64,
     i64,
@@ -23,7 +25,7 @@ pub(crate) async fn definitions(
 ) -> MusicLibraryResult<Vec<MusicSoundscapeDefinition>> {
     validate_id(device_id, "deviceId")?;
     let rows = sqlx::query_as::<_, DefinitionRow>(
-        "SELECT s.id, s.source_kind, s.generated_kind, s.bundled_identity, s.name,
+        "SELECT s.id, s.source_kind, s.generated_kind, s.bundled_identity, s.name, s.icon, s.group_id,
                 CASE WHEN s.source_kind = 'local-loop'
                      THEN COALESCE(l.availability, 'missing') ELSE s.availability END,
                 l.absolute_path, s.created_at, s.updated_at, s.version
@@ -31,7 +33,7 @@ pub(crate) async fn definitions(
          LEFT JOIN music_soundscape_locations l
            ON l.soundscape_id = s.id AND l.device_id = ?
          ORDER BY CASE s.generated_kind
-                    WHEN 'white' THEN 0 WHEN 'pink' THEN 1 WHEN 'brown' THEN 2 ELSE 3 END,
+                    WHEN 'brown' THEN 0 WHEN 'pink' THEN 1 WHEN 'white' THEN 2 ELSE 3 END,
                   lower(s.name), s.id",
     )
     .bind(device_id)
@@ -73,49 +75,84 @@ pub(crate) async fn upsert(
     request: MusicSoundscapeWrite,
 ) -> MusicLibraryResult<MusicSoundscapeDefinition> {
     validate_write(&request)?;
-    let availability = if request.source_kind == MusicSoundscapeSourceKind::LocalLoop {
-        validate_local_audio_path(
-            request
-                .local_path
-                .as_deref()
-                .expect("validated local soundscape path should exist"),
-        )?;
-        MusicSoundscapeAvailability::Available
-    } else {
-        MusicSoundscapeAvailability::Available
-    };
     let mut transaction = pool
         .begin()
         .await
         .map_err(|error| MusicLibraryError::database("begin soundscape update", error))?;
-    let existing = sqlx::query_as::<_, (i64, i64)>(
-        "SELECT created_at, version FROM music_soundscapes WHERE id = ?",
+    let existing = sqlx::query_as::<_, (i64, i64, String)>(
+        "SELECT created_at, version, source_kind FROM music_soundscapes WHERE id = ?",
     )
     .bind(&request.id)
     .fetch_optional(&mut *transaction)
     .await
     .map_err(|error| MusicLibraryError::database("load soundscape version", error))?;
-    if let Some((_, version)) = existing {
-        if request.expected_version != Some(version) {
+    if let Some((_, version, source_kind)) = &existing {
+        if request.expected_version != Some(*version) {
             return Err(MusicLibraryError::conflict(
                 "the soundscape changed before this update",
+            ));
+        }
+        if source_kind != request.source_kind.as_ref() {
+            return Err(MusicLibraryError::validation(
+                "sourceKind",
+                "cannot change a sound's source kind",
             ));
         }
     } else if request.expected_version.is_some() {
         return Err(MusicLibraryError::not_found("soundscape", &request.id));
     }
-    let created_at = existing.map(|row| row.0).unwrap_or(request.updated_at);
-    let version = existing.map(|row| row.1 + 1).unwrap_or(1);
+    let previous_path = if request.source_kind == MusicSoundscapeSourceKind::LocalLoop {
+        sqlx::query_scalar::<_, String>(
+            "SELECT absolute_path FROM music_soundscape_locations
+             WHERE soundscape_id = ? AND device_id = ?",
+        )
+        .bind(&request.id)
+        .bind(&request.device_id)
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(|error| MusicLibraryError::database("load soundscape location", error))?
+    } else {
+        None
+    };
+    let new_location = request.source_kind == MusicSoundscapeSourceKind::LocalLoop
+        && request
+            .local_path
+            .as_deref()
+            .is_some_and(|path| previous_path.as_deref() != Some(path));
+    if request.source_kind == MusicSoundscapeSourceKind::LocalLoop
+        && existing.is_none()
+        && !new_location
+    {
+        return Err(MusicLibraryError::validation(
+            "localPath",
+            "a new local sound requires an audio file",
+        ));
+    }
+    if new_location {
+        validate_local_audio_path(
+            request
+                .local_path
+                .as_deref()
+                .expect("new location requires a path"),
+        )?;
+    }
+    let created_at = existing
+        .as_ref()
+        .map(|row| row.0)
+        .unwrap_or(request.updated_at);
+    let version = existing.as_ref().map(|row| row.1 + 1).unwrap_or(1);
     sqlx::query(
         "INSERT INTO music_soundscapes
-            (id, source_kind, generated_kind, bundled_identity, name, availability,
+            (id, source_kind, generated_kind, bundled_identity, name, icon, group_id, availability,
              created_at, updated_at, version)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
             source_kind = excluded.source_kind,
             generated_kind = excluded.generated_kind,
             bundled_identity = excluded.bundled_identity,
             name = excluded.name,
+            icon = excluded.icon,
+            group_id = excluded.group_id,
             availability = excluded.availability,
             updated_at = excluded.updated_at,
             version = excluded.version",
@@ -129,14 +166,16 @@ pub(crate) async fn upsert(
     )
     .bind(&request.bundled_identity)
     .bind(request.name.trim())
-    .bind(availability.as_ref())
+    .bind(&request.icon)
+    .bind(&request.group_id)
+    .bind(MusicSoundscapeAvailability::Available.as_ref())
     .bind(created_at)
     .bind(request.updated_at)
     .bind(version)
     .execute(&mut *transaction)
     .await
     .map_err(|error| MusicLibraryError::database("save soundscape", error))?;
-    if request.source_kind == MusicSoundscapeSourceKind::LocalLoop {
+    if new_location {
         let path = request
             .local_path
             .as_deref()
@@ -184,15 +223,12 @@ pub(crate) async fn remove(
         .begin()
         .await
         .map_err(|error| MusicLibraryError::database("begin soundscape removal", error))?;
-    sqlx::query(
-        "UPDATE music_soundscape_state
-         SET desired_playing = 0, updated_at = updated_at + 1, version = version + 1
-         WHERE singleton_id = 1 AND active_soundscape_id = ?",
+    let active_ids: Vec<String> = sqlx::query_scalar(
+        "SELECT soundscape_id FROM music_soundscape_active_selections ORDER BY position",
     )
-    .bind(soundscape_id)
-    .execute(&mut *transaction)
+    .fetch_all(&mut *transaction)
     .await
-    .map_err(|error| MusicLibraryError::database("stop removed soundscape", error))?;
+    .map_err(|error| MusicLibraryError::database("load selected background sounds", error))?;
     let result = sqlx::query(
         "DELETE FROM music_soundscapes
          WHERE id = ? AND source_kind = 'local-loop' AND version = ?",
@@ -207,23 +243,49 @@ pub(crate) async fn remove(
             "the soundscape changed or cannot be removed",
         ));
     }
+    if active_ids.iter().any(|id| id == soundscape_id) {
+        let first_remaining = active_ids.iter().find(|id| id.as_str() != soundscape_id);
+        let remaining_count = active_ids.len() - 1;
+        sqlx::query(
+            "UPDATE music_soundscape_state
+             SET active_soundscape_id = ?,
+                 desired_playing = CASE WHEN ? = 0 THEN 0 ELSE desired_playing END,
+                 updated_at = updated_at + 1, version = version + 1
+             WHERE singleton_id = 1",
+        )
+        .bind(first_remaining)
+        .bind(remaining_count as i64)
+        .execute(&mut *transaction)
+        .await
+        .map_err(|error| MusicLibraryError::database("update selected background sounds", error))?;
+    }
     super::writes::commit(transaction, "commit soundscape removal").await
 }
 
 pub(crate) async fn state(pool: &SqlitePool) -> MusicLibraryResult<MusicSoundscapeState> {
-    let row = sqlx::query_as::<_, (Option<String>, bool, f64, i64, i64)>(
-        "SELECT active_soundscape_id, desired_playing, volume, updated_at, version
+    let row = sqlx::query_as::<_, (Option<String>, bool, Option<f64>, Option<f64>, bool, f64, i64, i64)>(
+        "SELECT active_soundscape_id, multiple_enabled, generated_level, local_level, desired_playing, volume, updated_at, version
          FROM music_soundscape_state WHERE singleton_id = 1",
     )
     .fetch_one(pool)
     .await
     .map_err(|error| MusicLibraryError::database("load soundscape state", error))?;
+    let active_ids = sqlx::query_scalar(
+        "SELECT soundscape_id FROM music_soundscape_active_selections ORDER BY position",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|error| MusicLibraryError::database("load selected background sounds", error))?;
     Ok(MusicSoundscapeState {
         active_soundscape_id: row.0,
-        desired_playing: row.1,
-        volume: row.2,
-        updated_at: row.3,
-        version: row.4,
+        active_ids,
+        multiple_enabled: row.1,
+        generated_level: row.2,
+        local_level: row.3,
+        desired_playing: row.4,
+        volume: row.5,
+        updated_at: row.6,
+        version: row.7,
     })
 }
 
@@ -237,14 +299,50 @@ pub(crate) async fn update_state(
             "must be a finite value between zero and one",
         ));
     }
+    for (name, level) in [
+        ("generatedLevel", request.generated_level),
+        ("localLevel", request.local_level),
+    ] {
+        if level.is_some_and(|value| !value.is_finite() || !(0.0..=2.0).contains(&value)) {
+            return Err(MusicLibraryError::validation(
+                name,
+                "must be between zero and two",
+            ));
+        }
+    }
     if request.updated_at <= 0 {
         return Err(MusicLibraryError::validation(
             "updatedAt",
             "must be positive",
         ));
     }
-    if let Some(id) = &request.active_soundscape_id {
+    if request.active_ids.len() > crate::soundscape::MAX_SOUNDSCAPE_LAYERS {
+        return Err(MusicLibraryError::validation(
+            "activeIds",
+            "cannot play more than 16 background sounds",
+        ));
+    }
+    if !request.multiple_enabled && request.active_ids.len() > 1 {
+        return Err(MusicLibraryError::validation(
+            "activeIds",
+            "multiple sounds are disabled",
+        ));
+    }
+    if request.active_soundscape_id.as_ref() != request.active_ids.first() {
+        return Err(MusicLibraryError::validation(
+            "activeIds",
+            "the first sound must be active",
+        ));
+    }
+    let mut unique = std::collections::HashSet::new();
+    for id in &request.active_ids {
         validate_id(id, "activeSoundscapeId")?;
+        if !unique.insert(id) {
+            return Err(MusicLibraryError::validation(
+                "activeIds",
+                "duplicate background sound",
+            ));
+        }
         let exists: Option<i64> =
             sqlx::query_scalar("SELECT 1 FROM music_soundscapes WHERE id = ?")
                 .bind(id)
@@ -256,24 +354,32 @@ pub(crate) async fn update_state(
         if exists.is_none() {
             return Err(MusicLibraryError::not_found("soundscape", id));
         }
-    } else if request.desired_playing {
+    }
+    if request.active_ids.is_empty() && request.desired_playing {
         return Err(MusicLibraryError::validation(
             "desiredPlaying",
             "cannot be enabled without an active soundscape",
         ));
     }
+    let mut transaction = pool
+        .begin()
+        .await
+        .map_err(|error| MusicLibraryError::database("begin soundscape state update", error))?;
     let result = sqlx::query(
         "UPDATE music_soundscape_state
-         SET active_soundscape_id = ?, desired_playing = ?, volume = ?,
+         SET active_soundscape_id = ?, multiple_enabled = ?, generated_level = ?, local_level = ?, desired_playing = ?, volume = ?,
              updated_at = ?, version = version + 1
          WHERE singleton_id = 1 AND version = ?",
     )
     .bind(request.active_soundscape_id)
+    .bind(request.multiple_enabled)
+    .bind(request.generated_level)
+    .bind(request.local_level)
     .bind(request.desired_playing)
     .bind(request.volume)
     .bind(request.updated_at)
     .bind(request.expected_version)
-    .execute(pool)
+    .execute(&mut *transaction)
     .await
     .map_err(|error| MusicLibraryError::database("update soundscape state", error))?;
     if result.rows_affected() == 0 {
@@ -281,6 +387,21 @@ pub(crate) async fn update_state(
             "the soundscape state changed before this update",
         ));
     }
+    sqlx::query("DELETE FROM music_soundscape_active_selections")
+        .execute(&mut *transaction)
+        .await
+        .map_err(|error| MusicLibraryError::database("clear selected background sounds", error))?;
+    for (position, id) in request.active_ids.iter().enumerate() {
+        sqlx::query(
+            "INSERT INTO music_soundscape_active_selections (position, soundscape_id) VALUES (?, ?)",
+        )
+        .bind(position as i64)
+        .bind(id)
+        .execute(&mut *transaction)
+        .await
+        .map_err(|error| MusicLibraryError::database("save selected background sound", error))?;
+    }
+    super::writes::commit(transaction, "commit soundscape state update").await?;
     state(pool).await
 }
 
@@ -305,6 +426,16 @@ fn validate_write(request: &MusicSoundscapeWrite) -> MusicLibraryResult<()> {
             "must contain between one and 200 characters",
         ));
     }
+    super::validate_icon(&request.icon)?;
+    if let Some(group_id) = &request.group_id {
+        validate_id(group_id, "groupId")?;
+        if request.source_kind != MusicSoundscapeSourceKind::LocalLoop {
+            return Err(MusicLibraryError::validation(
+                "groupId",
+                "only local sounds can belong to a group",
+            ));
+        }
+    }
     if request.updated_at <= 0 {
         return Err(MusicLibraryError::validation(
             "updatedAt",
@@ -323,13 +454,11 @@ fn validate_write(request: &MusicSoundscapeWrite) -> MusicLibraryResult<()> {
             ))
         }
         MusicSoundscapeSourceKind::LocalLoop
-            if request.generated_kind.is_some()
-                || request.bundled_identity.is_some()
-                || request.local_path.as_deref().is_none_or(str::is_empty) =>
+            if request.generated_kind.is_some() || request.bundled_identity.is_some() =>
         {
             Err(MusicLibraryError::validation(
                 "localPath",
-                "a local loop requires only an absolute audio path",
+                "a local loop cannot have generated or bundled media",
             ))
         }
         MusicSoundscapeSourceKind::BundledLoop
@@ -415,13 +544,15 @@ fn decode_definition(row: DefinitionRow) -> MusicLibraryResult<MusicSoundscapeDe
             .map_err(|message| MusicLibraryError::runtime("decode generated noise", message))?,
         bundled_identity: row.3,
         name: row.4,
-        availability: MusicSoundscapeAvailability::try_from(row.5.as_str()).map_err(|message| {
+        icon: row.5,
+        group_id: row.6,
+        availability: MusicSoundscapeAvailability::try_from(row.7.as_str()).map_err(|message| {
             MusicLibraryError::runtime("decode soundscape availability", message)
         })?,
-        local_path: row.6,
-        created_at: row.7,
-        updated_at: row.8,
-        version: row.9,
+        local_path: row.8,
+        created_at: row.9,
+        updated_at: row.10,
+        version: row.11,
     })
 }
 
@@ -443,9 +574,16 @@ mod tests {
             let pool = pool().await;
             let generated = definitions(&pool, "device-a").await.unwrap();
             assert_eq!(generated.len(), 3);
-            assert!(generated
-                .iter()
-                .all(|entry| entry.availability == MusicSoundscapeAvailability::Available));
+            assert!(
+                generated
+                    .iter()
+                    .all(|entry| entry.icon == "lucide:audio-lines")
+            );
+            assert!(
+                generated
+                    .iter()
+                    .all(|entry| entry.availability == MusicSoundscapeAvailability::Available)
+            );
 
             let path = std::env::temp_dir().join(format!(
                 "ganbaru-soundscape-{}-{}.wav",
@@ -465,6 +603,8 @@ mod tests {
                     generated_kind: None,
                     bundled_identity: None,
                     name: "Rain".into(),
+                    icon: "lucide:cloud-rain".into(),
+                    group_id: None,
                     device_id: "device-a".into(),
                     local_path: Some(path.to_string_lossy().into_owned()),
                     expected_version: None,
@@ -474,6 +614,21 @@ mod tests {
             .await
             .unwrap();
             assert_eq!(saved.local_path.as_deref(), path.to_str());
+            assert_eq!(saved.icon, "lucide:cloud-rain");
+            let invalid_icon = MusicSoundscapeWrite {
+                id: saved.id.clone(),
+                source_kind: MusicSoundscapeSourceKind::LocalLoop,
+                generated_kind: None,
+                bundled_identity: None,
+                name: saved.name.clone(),
+                icon: "unknown".into(),
+                group_id: None,
+                device_id: "device-a".into(),
+                local_path: saved.local_path.clone(),
+                expected_version: Some(saved.version),
+                updated_at: 1_700_000_000_001,
+            };
+            assert!(validate_write(&invalid_icon).is_err());
 
             let copied_device = definitions(&pool, "device-b")
                 .await
@@ -482,6 +637,7 @@ mod tests {
                 .find(|entry| entry.id == saved.id)
                 .unwrap();
             assert_eq!(copied_device.name, "Rain");
+            assert_eq!(copied_device.icon, "lucide:cloud-rain");
             assert_eq!(copied_device.local_path, None);
             assert_eq!(
                 copied_device.availability,
@@ -493,6 +649,10 @@ mod tests {
                 &pool,
                 MusicSoundscapeStateWrite {
                     active_soundscape_id: Some(saved.id.clone()),
+                    active_ids: vec![saved.id.clone()],
+                    multiple_enabled: false,
+                    generated_level: None,
+                    local_level: None,
                     desired_playing: true,
                     volume: 0.42,
                     expected_version: initial.version,
@@ -502,19 +662,65 @@ mod tests {
             .await
             .unwrap();
             assert_eq!(playing.active_soundscape_id.as_deref(), Some("local-rain"));
+            assert_eq!(playing.active_ids, vec!["local-rain"]);
+            assert!(!playing.multiple_enabled);
             assert_eq!(playing.volume, 0.42);
-            assert!(update_state(
+            assert!(
+                update_state(
+                    &pool,
+                    MusicSoundscapeStateWrite {
+                        active_soundscape_id: Some("local-rain".into()),
+                        active_ids: vec!["local-rain".into(), "generated-brown-noise".into()],
+                        multiple_enabled: false,
+                        generated_level: None,
+                        local_level: None,
+                        desired_playing: true,
+                        volume: 0.42,
+                        expected_version: playing.version,
+                        updated_at: 1_700_000_000_002,
+                    }
+                )
+                .await
+                .is_err()
+            );
+            assert!(
+                update_state(
+                    &pool,
+                    MusicSoundscapeStateWrite {
+                        active_soundscape_id: None,
+                        active_ids: Vec::new(),
+                        multiple_enabled: false,
+                        generated_level: None,
+                        local_level: None,
+                        desired_playing: true,
+                        volume: 0.5,
+                        expected_version: playing.version,
+                        updated_at: 1_700_000_000_002,
+                    }
+                )
+                .await
+                .is_err()
+            );
+
+            let layered = update_state(
                 &pool,
                 MusicSoundscapeStateWrite {
-                    active_soundscape_id: None,
+                    active_soundscape_id: Some(saved.id.clone()),
+                    active_ids: vec![saved.id.clone(), "generated-brown-noise".into()],
+                    multiple_enabled: true,
+                    generated_level: Some(1.25),
+                    local_level: None,
                     desired_playing: true,
-                    volume: 0.5,
+                    volume: 0.42,
                     expected_version: playing.version,
-                    updated_at: 1_700_000_000_002,
-                }
+                    updated_at: 1_700_000_000_003,
+                },
             )
             .await
-            .is_err());
+            .unwrap();
+            assert_eq!(layered.active_ids.len(), 2);
+            assert!(layered.multiple_enabled);
+            assert_eq!(layered.generated_level, Some(1.25));
 
             std::fs::remove_file(&path).unwrap();
             let missing = definitions(&pool, "device-a")
@@ -524,12 +730,58 @@ mod tests {
                 .find(|entry| entry.id == saved.id)
                 .unwrap();
             assert_eq!(missing.availability, MusicSoundscapeAvailability::Missing);
-            remove(&pool, &saved.id, saved.version).await.unwrap();
-            assert!(definitions(&pool, "device-a")
+            let renamed = upsert(
+                &pool,
+                MusicSoundscapeWrite {
+                    id: saved.id.clone(),
+                    source_kind: MusicSoundscapeSourceKind::LocalLoop,
+                    generated_kind: None,
+                    bundled_identity: None,
+                    name: "Rain at night".into(),
+                    icon: "emoji:🌧️".into(),
+                    group_id: None,
+                    device_id: "device-a".into(),
+                    local_path: Some(path.to_string_lossy().into_owned()),
+                    expected_version: Some(saved.version),
+                    updated_at: 1_700_000_000_004,
+                },
+            )
+            .await
+            .unwrap();
+            assert_eq!(renamed.availability, MusicSoundscapeAvailability::Missing);
+            assert_eq!(renamed.icon, "emoji:🌧️");
+            let remote_rename = upsert(
+                &pool,
+                MusicSoundscapeWrite {
+                    id: saved.id.clone(),
+                    source_kind: MusicSoundscapeSourceKind::LocalLoop,
+                    generated_kind: None,
+                    bundled_identity: None,
+                    name: "Rain overnight".into(),
+                    icon: renamed.icon.clone(),
+                    group_id: None,
+                    device_id: "device-b".into(),
+                    local_path: None,
+                    expected_version: Some(renamed.version),
+                    updated_at: 1_700_000_000_005,
+                },
+            )
+            .await
+            .unwrap();
+            assert_eq!(remote_rename.local_path, None);
+            remove(&pool, &saved.id, remote_rename.version)
                 .await
-                .unwrap()
-                .iter()
-                .all(|entry| entry.id != saved.id));
+                .unwrap();
+            let after_removal = state(&pool).await.unwrap();
+            assert_eq!(after_removal.active_ids, vec!["generated-brown-noise"]);
+            assert!(after_removal.desired_playing);
+            assert!(
+                definitions(&pool, "device-a")
+                    .await
+                    .unwrap()
+                    .iter()
+                    .all(|entry| entry.id != saved.id)
+            );
         });
     }
 }

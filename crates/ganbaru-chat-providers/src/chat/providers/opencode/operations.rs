@@ -10,7 +10,7 @@ use crate::chat::providers::{
     DriverFuture, DriverOperationContext, ProviderAuthoritySupport, ProviderDriver,
     ProviderEventSink,
 };
-use std::sync::{atomic::Ordering, Arc};
+use std::sync::{Arc, atomic::Ordering};
 
 impl ProviderDriver for OpenCodeProviderDriver {
     fn metadata(&self) -> ProviderFamilyMetadataRead {

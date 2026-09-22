@@ -106,10 +106,12 @@ fn atomic_state_write_does_not_follow_predictable_temp_symlinks() {
 
     assert_eq!(std::fs::read_to_string(&target).unwrap(), "protected");
     assert_eq!(std::fs::read_to_string(&path).unwrap(), "new state");
-    assert!(std::fs::symlink_metadata(&predictable_temp)
-        .unwrap()
-        .file_type()
-        .is_symlink());
+    assert!(
+        std::fs::symlink_metadata(&predictable_temp)
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
     std::fs::remove_dir_all(dir).unwrap();
 }
 

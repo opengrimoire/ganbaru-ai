@@ -2,18 +2,30 @@
 
 This document explains the resource, ordering, caching, and production-build constraints behind the commands in [Testing](README.md).
 
+## Rust baseline
+
+The workspace uses Rust edition 2024 and Cargo resolver 3. `Cargo.toml` declares Rust 1.98 as the supported minimum; `rust-toolchain.toml` pins compiler 1.98.0 with Clippy and rustfmt for local, pull request, and release validation. Shared package metadata is inherited from the workspace, while package versions remain independent. `rustfmt.toml` explicitly selects the 2024 formatting style for consistent CLI and editor output. Format the entire Rust workspace with `cargo fmt --all`.
+
+Run commands through rustup without a conflicting toolchain override. CI installs the repository-selected toolchain with `rustup show`, then adds the targets required by each job. A Linux gate does not replace the independent Windows composition check or Android APK build. macOS and iOS are future platforms and are not validated by these jobs.
+
+Toolchain or edition changes require `validate:full` and the platform checks. Compatibility diagnostics must be reviewed for temporary lifetimes, lock and resource cleanup, and native unsafe boundaries rather than fixed mechanically to suppress warnings.
+
+The shared Clippy policy allows `collapsible_if`: nested guards and edition-2024 let-chains are both valid styles. Choose the form that makes control flow and resource scope clearest. This avoids a mandatory rewrite of existing guards merely because the edition now permits let-chains. Other compiler and Clippy warnings remain errors in the normal gate; dependency audit policy is unchanged.
+
 ## Root execution order
 
 The complete normal gate runs in this order:
 
-1. Rust formatting and Clippy with one Cargo build job.
-2. Rust workspace tests with one Cargo build job and one runtime test thread.
+1. Rust formatting and Clippy with one Cargo build job locally, or two in Linux CI.
+2. Rust workspace tests with the same Cargo build limit and one runtime test thread.
 3. Svelte Check with a 1,792 MiB Node old-space limit, then TypeScript checking.
 4. Four sequential one-worker Vitest shards, excluding benchmark-harness tests.
 5. Tailwind diagnostics through Turbo.
 6. Desktop and Android production builds and bundle contracts through Turbo.
 
 Rust runs first because compiler and linker peaks are less predictable. Rust and frontend tools do not overlap. Sequential Vitest shards release transformed module graphs between groups.
+
+The hosted Linux pull request and merge-queue job runs `validate:ci` with the same complete gate and order. The CI-only Rust scripts allow two Cargo build jobs on its 16 GiB runner. Local `validate` retains explicit `-j 1` limits for machines with less memory. CI does not substitute static checks for regression tests or bundle contracts.
 
 Benchmark fixture and harness contracts are deliberately outside `validate`. Run `pnpm -w run test:benchmark-contracts` when changing the harness. Performance measurement remains manual release-build work.
 
@@ -43,6 +55,8 @@ When changing validation topology, measure at least one affected cache-miss run 
 
 Unit tests cannot prove the final production import graph. The bundle contract performs real Vite builds and inspects emitted module metadata.
 
+Desktop contracts inspect the transitive static imports of the entry, vault setup, and setup-time onboarding prewarm roots. These paths must keep the full App surfaces, terminal packages, Markdown rendering and sanitization, editor packages, and review runtime and helper dependencies out of their closures. Chat may load Markdown for messages, but terminal and review dependencies remain behind their existing dynamic imports. Checks identify emitted source modules and dependency package paths, so renaming or regrouping chunks cannot bypass these boundaries. Common App surfaces remain resident after vault activation.
+
 Desktop and Android builds use different platform entries. The Android wrapper sets the platform before Vite configuration loads and writes to the isolated `.bundle-contracts/android/` directory. Contracts verify required roots and platform adapters, follow static imports transitively, enforce source-module ceilings, and reject desktop-only authority from the mobile artifact.
 
 The Android artifact intentionally includes mobile Doomscrolling, notification, document, and media adapters. It rejects desktop Doomscrolling process control, the desktop App shell, PTYs, Git and provider execution, Rodio, desktop media controls, tray and title bar code, benchmark surfaces, desktop working-folder tools, and heavy editor graphs that are not part of the mobile route.
@@ -52,7 +66,9 @@ The machine-readable ceilings and required or forbidden module sets are authorit
 - `apps/client/scripts/first-use-bundle-baseline.json`
 - `apps/client/scripts/android-bundle-baseline.json`
 
-The current Projects, Notes, and Chat desktop route ceiling is 360 source modules. The shared route graph includes the vault ownership store and read-only ownership banner so every primary surface immediately reflects a handoff. Changes to a ceiling require a concrete user-visible rationale and should remove obsolete narrative rather than accumulating a chronology in documentation.
+The current Projects, Notes, and Chat desktop route ceiling is 365 source modules. Their shared chunk includes the persistent music player, whose new playback-order control, track-preferences panel, and two focused helpers account for the four-module increase. Keeping the music player resident preserves playback controls across route changes. The ceiling has no extra headroom, and required and forbidden loading boundaries remain unchanged. Changes to a ceiling require a concrete user-visible rationale and should remove obsolete narrative rather than accumulating a chronology in documentation.
+
+Android ceilings include the three theme modules and three Notes block modules behind their existing public APIs. These splits preserve theme editing, import/export, and the supported Notes block operations while separating their maintenance boundaries. The Music route allows 169 source modules for the playlist chooser, playback-order control, track preferences, and the shared project icon renderer used by editable soundscape icons. The Android build allows 1,022 source modules overall. Route and total limits match the measured graph without extra headroom. Required mobile modules and forbidden platform imports remain enforced unchanged.
 
 ## Android project and pull request build
 

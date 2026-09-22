@@ -16,8 +16,8 @@ use super::reads::{
     read_active_or_latest_assignment, read_assignment, read_message, read_participant,
 };
 use super::{
-    i64_value, identifier_error, persistence_error, u64_value, StoredPostMessageReceipt,
-    LOCAL_PARTICIPANT_ID,
+    LOCAL_PARTICIPANT_ID, StoredPostMessageReceipt, i64_value, identifier_error, persistence_error,
+    u64_value,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::{Row, Sqlite, SqlitePool, Transaction};

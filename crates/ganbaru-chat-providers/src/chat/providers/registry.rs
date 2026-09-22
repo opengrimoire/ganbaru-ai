@@ -1,7 +1,6 @@
 use super::{
-    claude::ClaudeProviderDriver, codex::CodexProviderDriver, cursor::CursorProviderDriver,
-    opencode::OpenCodeProviderDriver, ProviderDriver, ProviderDriverFactory,
-    UnsupportedProviderDriver,
+    ProviderDriver, ProviderDriverFactory, UnsupportedProviderDriver, claude::ClaudeProviderDriver,
+    codex::CodexProviderDriver, cursor::CursorProviderDriver, opencode::OpenCodeProviderDriver,
 };
 use crate::chat::models::{
     ChatResult, ProviderCapability, ProviderFamilyId, ProviderFamilyMetadataRead,

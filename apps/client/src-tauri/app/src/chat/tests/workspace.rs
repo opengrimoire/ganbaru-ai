@@ -1,9 +1,8 @@
 use super::super::models::{ProjectWorkingFolderId, RepositoryKind, UtcTimestamp};
 use super::super::workspace::{
-    authorize_workspace, filesystem_identity, initialized_repository_identity,
-    prepare_workspace_binding, probe_repository, resolve_workspace_relative_path, workspace_read,
     ProjectWorkingFolder, WorkingFolderAuthorizationOperation, WorkingFolderBindingStatus,
-    WorkingFolderKind,
+    WorkingFolderKind, authorize_workspace, filesystem_identity, initialized_repository_identity,
+    prepare_workspace_binding, probe_repository, resolve_workspace_relative_path, workspace_read,
 };
 use crate::projects::working_folders::{
     ProjectWorkingFolderBindingState, WorkingFolderDeviceScope,
@@ -133,12 +132,14 @@ fn missing_and_stale_bindings_are_rejected() {
         binding(directory.path(), RepositoryKind::None, None)
     };
     scope.bindings.insert(workspace.id.clone(), missing_binding);
-    assert!(authorize_workspace(
-        &workspace,
-        &scope,
-        WorkingFolderAuthorizationOperation::ProviderStart
-    )
-    .is_err());
+    assert!(
+        authorize_workspace(
+            &workspace,
+            &scope,
+            WorkingFolderAuthorizationOperation::ProviderStart
+        )
+        .is_err()
+    );
 
     let directory = TestDirectory::new("stale");
     let noncanonical = directory.path().join(".");
@@ -146,12 +147,14 @@ fn missing_and_stale_bindings_are_rejected() {
         workspace.id.clone(),
         binding(&noncanonical, RepositoryKind::None, None),
     );
-    assert!(authorize_workspace(
-        &workspace,
-        &scope,
-        WorkingFolderAuthorizationOperation::ProviderStart
-    )
-    .is_err());
+    assert!(
+        authorize_workspace(
+            &workspace,
+            &scope,
+            WorkingFolderAuthorizationOperation::ProviderStart
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -167,12 +170,14 @@ fn replaced_folder_is_rejected_even_when_its_canonical_path_is_unchanged() {
         .bindings
         .insert(workspace.id.clone(), replaced_binding);
 
-    assert!(authorize_workspace(
-        &workspace,
-        &scope,
-        WorkingFolderAuthorizationOperation::FileRead,
-    )
-    .is_err());
+    assert!(
+        authorize_workspace(
+            &workspace,
+            &scope,
+            WorkingFolderAuthorizationOperation::FileRead,
+        )
+        .is_err()
+    );
 }
 
 #[test]

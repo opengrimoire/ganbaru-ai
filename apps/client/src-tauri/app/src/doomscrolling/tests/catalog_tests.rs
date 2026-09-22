@@ -32,41 +32,47 @@ fn extracts_linux_process_name_from_exec() {
 #[cfg(target_os = "linux")]
 #[test]
 fn skips_hidden_linux_desktop_entries() {
-    assert!(super::parse_desktop_entry(
-        r#"
+    assert!(
+        super::parse_desktop_entry(
+            r#"
 [Desktop Entry]
 Type=Application
 Name=Hidden app
 NoDisplay=true
 "#,
-        "hidden.desktop".to_string(),
-    )
-    .is_none());
+            "hidden.desktop".to_string(),
+        )
+        .is_none()
+    );
 }
 
 #[cfg(target_os = "linux")]
 #[test]
 fn skips_linux_system_utility_desktop_entries() {
-    assert!(super::parse_desktop_entry(
-        r#"
+    assert!(
+        super::parse_desktop_entry(
+            r#"
 [Desktop Entry]
 Type=Application
 Name=Settings
 Categories=GNOME;GTK;Settings;
 Exec=gnome-control-center
 "#,
-        "org.gnome.Settings.desktop".to_string(),
-    )
-    .is_none());
-    assert!(super::parse_desktop_entry(
-        r#"
+            "org.gnome.Settings.desktop".to_string(),
+        )
+        .is_none()
+    );
+    assert!(
+        super::parse_desktop_entry(
+            r#"
 [Desktop Entry]
 Type=Application
 Name=System Monitor
 Categories=GNOME;GTK;System;Monitor;
 Exec=gnome-system-monitor
 "#,
-        "org.gnome.SystemMonitor.desktop".to_string(),
-    )
-    .is_none());
+            "org.gnome.SystemMonitor.desktop".to_string(),
+        )
+        .is_none()
+    );
 }

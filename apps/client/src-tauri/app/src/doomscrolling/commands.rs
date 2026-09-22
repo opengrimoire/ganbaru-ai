@@ -85,8 +85,8 @@ pub async fn doomscrolling_close_current_foreground_desktop_app<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn doomscrolling_get_foreground_desktop_app(
-) -> Result<DoomscrollingForegroundDesktopAppStatus, String> {
+pub async fn doomscrolling_get_foreground_desktop_app()
+-> Result<DoomscrollingForegroundDesktopAppStatus, String> {
     let generation = FOREGROUND_OBSERVATION_GENERATION.fetch_add(1, Ordering::AcqRel) + 1;
     tauri::async_runtime::spawn_blocking(move || {
         let status = foreground_desktop_app_status();

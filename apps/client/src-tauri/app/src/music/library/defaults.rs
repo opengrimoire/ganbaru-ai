@@ -30,7 +30,7 @@ pub(super) const BUILT_IN_MUSIC_PLAYLISTS: &[BuiltInMusicPlaylist] = &[
     BuiltInMusicPlaylist {
         id: "playlist-default-break-calm",
         name: "Break (calm)",
-        icon: "lucide:tree-pine",
+        icon: "lucide:armchair",
     },
     BuiltInMusicPlaylist {
         id: "playlist-default-break-active",

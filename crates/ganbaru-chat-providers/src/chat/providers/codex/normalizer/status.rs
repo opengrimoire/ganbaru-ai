@@ -40,22 +40,24 @@ impl CodexEventNormalizer {
     ) -> ChatResult<Vec<CanonicalRuntimeEvent>> {
         let object = required_object(&params, "account/rateLimits/updated")?;
         let limits = object.get("rateLimits").unwrap_or(&Value::Null);
-        Ok(vec![self.event(
-            state,
-            "account/rateLimits/updated",
-            None,
-            None,
-            None,
-            CanonicalEvent::RateLimitStatus(RateLimitStatusEvent {
-                limited: limits
-                    .get("limitReached")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false),
-                resets_at: None,
-                detail: None,
-                provider_data: bounded_shape(limits),
-            }),
-        )?])
+        Ok(vec![
+            self.event(
+                state,
+                "account/rateLimits/updated",
+                None,
+                None,
+                None,
+                CanonicalEvent::RateLimitStatus(RateLimitStatusEvent {
+                    limited: limits
+                        .get("limitReached")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
+                    resets_at: None,
+                    detail: None,
+                    provider_data: bounded_shape(limits),
+                }),
+            )?,
+        ])
     }
 
     pub(super) fn mcp_status(
@@ -70,19 +72,21 @@ impl CodexEventNormalizer {
         let status = text(object, "status")
             .map(activity_status)
             .unwrap_or(ActivityStatus::Unknown);
-        Ok(vec![self.event(
-            state,
-            "mcpServer/startupStatus/updated",
-            None,
-            None,
-            None,
-            CanonicalEvent::McpStatus(McpStatusEvent {
-                server_id: server_id.to_string(),
-                status,
-                detail: text(object, "message")
-                    .map(|value| bounded_text(value, MAX_PROVIDER_TEXT_BYTES)),
-            }),
-        )?])
+        Ok(vec![
+            self.event(
+                state,
+                "mcpServer/startupStatus/updated",
+                None,
+                None,
+                None,
+                CanonicalEvent::McpStatus(McpStatusEvent {
+                    server_id: server_id.to_string(),
+                    status,
+                    detail: text(object, "message")
+                        .map(|value| bounded_text(value, MAX_PROVIDER_TEXT_BYTES)),
+                }),
+            )?,
+        ])
     }
 
     pub(super) fn mcp_oauth(
@@ -91,22 +95,24 @@ impl CodexEventNormalizer {
         params: Value,
     ) -> ChatResult<Vec<CanonicalRuntimeEvent>> {
         let object = required_object(&params, "mcpServer/oauthLogin/completed")?;
-        Ok(vec![self.event(
-            state,
-            "mcpServer/oauthLogin/completed",
-            None,
-            None,
-            None,
-            CanonicalEvent::McpOauthCompleted(McpOauthCompletedEvent {
-                server_id: text(object, "serverName").unwrap_or("unknown").to_string(),
-                successful: object
-                    .get("success")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false),
-                detail: text(object, "error")
-                    .map(|value| bounded_text(value, MAX_PROVIDER_TEXT_BYTES)),
-            }),
-        )?])
+        Ok(vec![
+            self.event(
+                state,
+                "mcpServer/oauthLogin/completed",
+                None,
+                None,
+                None,
+                CanonicalEvent::McpOauthCompleted(McpOauthCompletedEvent {
+                    server_id: text(object, "serverName").unwrap_or("unknown").to_string(),
+                    successful: object
+                        .get("success")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
+                    detail: text(object, "error")
+                        .map(|value| bounded_text(value, MAX_PROVIDER_TEXT_BYTES)),
+                }),
+            )?,
+        ])
     }
 
     pub(super) fn model_rerouted(
@@ -174,25 +180,27 @@ impl CodexEventNormalizer {
         let message = error
             .and_then(|value| text(value, "message"))
             .unwrap_or("Codex turn failed");
-        Ok(vec![self.event(
-            state,
-            "error",
-            route_turn(state, Some(object)),
-            provider_turn_from(object),
-            None,
-            CanonicalEvent::RuntimeError(RuntimeErrorEvent {
-                code: "codex_runtime_error".to_string(),
-                message: bounded_text(message, MAX_PROVIDER_TEXT_BYTES),
-                recoverable: object
-                    .get("willRetry")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false),
-                safe_details: error.map(|value| VersionedJson {
-                    schema_version: 1,
-                    value: json!({ "keys": bounded_keys(value) }),
+        Ok(vec![
+            self.event(
+                state,
+                "error",
+                route_turn(state, Some(object)),
+                provider_turn_from(object),
+                None,
+                CanonicalEvent::RuntimeError(RuntimeErrorEvent {
+                    code: "codex_runtime_error".to_string(),
+                    message: bounded_text(message, MAX_PROVIDER_TEXT_BYTES),
+                    recoverable: object
+                        .get("willRetry")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
+                    safe_details: error.map(|value| VersionedJson {
+                        schema_version: 1,
+                        value: json!({ "keys": bounded_keys(value) }),
+                    }),
                 }),
-            }),
-        )?])
+            )?,
+        ])
     }
 
     pub(super) fn session_closed(

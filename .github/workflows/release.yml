@@ -65,10 +65,8 @@ jobs:
           corepack enable
           corepack prepare pnpm@11.1.1 --activate
 
-      - name: install Rust stable
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup default stable
+      - name: install pinned Rust toolchain
+        run: rustup show
 
       - name: install Linux dependencies
         if: matrix.runner == 'ubuntu-22.04'
@@ -137,10 +135,9 @@ jobs:
           corepack enable
           corepack prepare pnpm@11.1.1 --activate
 
-      - name: install Rust stable and Android targets
+      - name: install pinned Rust toolchain and Android targets
         run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup default stable
+          rustup show
           rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
 
       - name: install Android command line tools

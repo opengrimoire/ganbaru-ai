@@ -90,7 +90,7 @@
 
   let blockEl: HTMLDivElement | undefined = $state();
 
-  function handleClick(e: MouseEvent) {
+  function handleClick(e: MouseEvent | KeyboardEvent) {
     e.stopPropagation();
     const eventRect = blockEl?.getBoundingClientRect();
     const colRect = blockEl?.closest("[data-day-column]")?.getBoundingClientRect();
@@ -101,16 +101,24 @@
     onclick(rect);
   }
 
+  function handleKeydown(e: KeyboardEvent): void {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (!e.repeat) handleClick(e);
+  }
+
   // Cursor is controlled by parent (DayColumn) via inResizeZone prop
   const effectiveCursor = $derived(
     !canDrag ? 'pointer' : inResizeZone ? 'ns-resize' : 'default'
   );
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
   bind:this={blockEl}
+  role="button"
+  tabindex="0"
+  aria-label={`${eventTitle} ${timeRange}`}
   data-event-id={positioned.event.id}
   data-clipped-top={positioned.isClippedTop || undefined}
   data-clipped-bottom={positioned.isClippedBottom || undefined}
@@ -130,6 +138,8 @@
     filter: none;
   "
   onclick={handleClick}
+  onkeydown={handleKeydown}
+  onfocus={onprefetch}
   onpointerenter={onprefetch}
   onpointerdown={handlePointerDown}
 >
@@ -137,7 +147,6 @@
   {#if !positioned.isClippedTop}
     <div
       class="resize-handle-top"
-      onpointerdown={handlePointerDown}
     ></div>
   {/if}
 
@@ -177,12 +186,16 @@
   {#if !positioned.isClippedBottom}
     <div
       class="resize-handle-bottom"
-      onpointerdown={handlePointerDown}
     ></div>
   {/if}
 </div>
 
 <style>
+  .event-block-wrapper:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+  }
+
   .resize-handle-top,
   .resize-handle-bottom {
     position: absolute;

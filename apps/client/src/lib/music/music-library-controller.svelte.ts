@@ -255,6 +255,30 @@ export class MusicLibraryController {
     this.patchCurrentState({ scrollTop: Math.max(0, scrollTop) });
   }
 
+  private async completeReviewWindow(
+    window: MusicItemWindow,
+    state: MusicDestinationState,
+    nowMs: number,
+    generation: number,
+    vaultId: string,
+  ): Promise<boolean> {
+    const reviewLocation = { kind: "review" } as const;
+    while (window.items.length < window.totalCount) {
+      const next = await this.api.itemWindow(itemWindowRequest(reviewLocation, {
+        ...state,
+        offset: window.items.length,
+      }, nowMs));
+      if (!this.isCurrent(generation, vaultId)) return false;
+      const knownIds = new Set(window.items.map((item) => item.id));
+      const nextItems = next.items.filter((item) => !knownIds.has(item.id));
+      if (nextItems.length === 0) throw new Error("The complete Review list could not be loaded.");
+      window.items = [...window.items, ...nextItems];
+      window.totalCount = next.totalCount;
+      window.groups = next.groups;
+    }
+    return true;
+  }
+
   /** Loads shared builder summaries plus the Review and Library windows in one initialization pass. */
   async preloadCoreDestinations(): Promise<boolean> {
     if (!this.vaultId) return false;
@@ -276,6 +300,7 @@ export class MusicLibraryController {
         this.api.issues(0, 500),
       ]);
       if (!this.isCurrent(generation, vaultId)) return false;
+      if (!await this.completeReviewWindow(reviewWindow, reviewState, nowMs, generation, vaultId)) return false;
       this.windows.review = reviewWindow;
       this.windows.library = libraryWindow;
       this.staleWindowKeys.delete("review");
@@ -343,22 +368,35 @@ export class MusicLibraryController {
     const location = this.location;
     const key = locationKey(location);
     const state = { ...(this.destinationStates[key] ?? defaultDestinationState(location)) };
+    const reviewLocation = { kind: "review" } as const;
+    const reviewState = { ...(this.destinationStates.review ?? defaultDestinationState(reviewLocation)) };
     const nowMs = this.now();
     this.busy = true;
     this.error = null;
     try {
-      const [window, playlists, sources, issues] = await Promise.all([
+      const [window, sourceReviewWindow, playlists, sources, issues] = await Promise.all([
         hasItemWindow(location)
           ? this.api.itemWindow(itemWindowRequest(location, state, nowMs))
+          : Promise.resolve(null),
+        location.kind === "sources"
+          ? this.api.itemWindow(itemWindowRequest(reviewLocation, reviewState, nowMs))
           : Promise.resolve(null),
         this.api.playlistSummaries(nowMs, 0, 500),
         this.api.sourceSummaries(nowMs, 0, 500),
         this.api.issues(0, 500),
       ]);
       if (!this.isCurrent(generation, vaultId)) return false;
+      if (window && location.kind === "review"
+        && !await this.completeReviewWindow(window, state, nowMs, generation, vaultId)) return false;
+      if (sourceReviewWindow
+        && !await this.completeReviewWindow(sourceReviewWindow, reviewState, nowMs, generation, vaultId)) return false;
       if (window) {
         this.windows[key] = window;
         this.staleWindowKeys.delete(key);
+      }
+      if (sourceReviewWindow) {
+        this.windows.review = sourceReviewWindow;
+        this.staleWindowKeys.delete("review");
       }
       this.playlistSummaries = playlists;
       this.sourceSummaries = sources;
@@ -398,6 +436,15 @@ export class MusicLibraryController {
     } finally {
       if (this.vaultId === vaultId && this.currentKey === key) this.loadingMore = false;
     }
+  }
+
+  /** Loads every remaining page for the active destination before it is presented. */
+  async loadAllCurrentItems(): Promise<boolean> {
+    while (this.currentWindow.items.length < this.currentWindow.totalCount) {
+      const previousCount = this.currentWindow.items.length;
+      if (!await this.loadMore() || this.currentWindow.items.length <= previousCount) return false;
+    }
+    return true;
   }
 
   async runOptimistic<T>(mutation: OptimisticMutation<T>): Promise<T> {

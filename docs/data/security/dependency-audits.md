@@ -2,11 +2,12 @@
 
 This file records reviewed Rust advisory exceptions and the most recent known audit snapshot. Lockfiles and current command output are authoritative. Re-run the audits before relying on this snapshot.
 
-Snapshot checked on 2026-09-14:
+Snapshot checked on 2026-09-18:
 
 - pnpm -w run audit:deps reports no known npm vulnerabilities at the low advisory level after updating Vitest and its coverage integration to 4.1.11 for GHSA-82fw-gwwq-j7x9.
-- pnpm -w run audit:rust exits successfully with three configured vulnerability ignores and 10 allowed warnings.
+- pnpm -w run audit:rust exits successfully with three configured vulnerability ignores and seven allowed warnings: one unsoundness warning and six unmaintained-dependency warnings.
 - rustls 0.23.45 resolves RUSTSEC-2026-0285, a TLS 1.3 encryption-level boundary vulnerability reported against the previously locked 0.23.40 release.
+- Compatible lockfile updates to event-listener 5.4.2, chacha20 0.10.2, and spin 0.9.9 remove RUSTSEC-2026-0221 and the two yanked-version warnings. No direct dependency overrides or audit-policy changes were needed.
 
 GitHub Dependabot also reported GHSA-7gcf-g7xr-8hxj for serde_with 3.20.0. Cargo audit did not include that advisory in its RustSec database at the time of review. The lockfile now resolves serde_with and serde_with_macros 3.21.0, which contains the upstream fix.
 
@@ -46,9 +47,8 @@ The ignored parsing behavior is not reachable from user-controlled runtime XML i
 
 ### GTK3 and GLib
 
-The audit reports the GTK3 family as unmaintained:
+The current Linux-stack findings are:
 
-- RUSTSEC-2024-0411 through RUSTSEC-2024-0420 for the affected atk, gdk, gtk, and related sys or macro crates;
 - RUSTSEC-2024-0429 for unsound iteration in glib 0.18.5;
 - RUSTSEC-2024-0370 for unmaintained proc-macro-error.
 
@@ -57,20 +57,6 @@ These remain through the Linux Tauri and Wry WebKit stack and current native Lin
 ### UNIC crates
 
 The audit reports RUSTSEC-2025-0075, RUSTSEC-2025-0080, RUSTSEC-2025-0081, RUSTSEC-2025-0098, and RUSTSEC-2025-0100 for unmaintained unic crates. They remain through Tauri's URL pattern dependency path. Remove them when the upstream dependency graph no longer requires those crates.
-
-### RUSTSEC-2026-0221, event-listener unsoundness
-
-event-listener 5.4.1 is present through several active paths, including zbus, async-process, SQLx core, opener and single-instance integrations, native notifications, credential storage, and the agent client protocol. The advisory concerns a Send-boundary unsoundness in StackSlot.
-
-This is a current unresolved warning, not a reviewed ignore. Before a release or dependency update, check the advisory's fixed versions and the reachable APIs in each active path, update compatible parents where possible, and record any temporary residual risk. Do not describe the Rust audit as having only unmaintained warnings while this finding remains.
-
-### Yanked chacha20 0.10.1
-
-The yanked version is present through rand 0.10.2 and rmcp 3.0.0 in the internal MCP dependency path. A yanked release is not automatically a known vulnerability, but it requires review of the yank reason and compatible parent updates. Prefer an upstream rmcp or rand resolution rather than forcing an incompatible transitive version.
-
-### Yanked spin 0.9.8
-
-The yanked version is present through flume 0.11.1 and SQLx SQLite. Review compatible SQLx or flume updates and the yank reason. Do not add a direct dependency override without verifying feature and platform behavior.
 
 ## Review procedure
 

@@ -5,12 +5,12 @@ use super::transport::{CodexInboundMessage, CodexRpcClient};
 use crate::chat::events::*;
 use crate::chat::models::*;
 use crate::chat::providers::{DriverOperationContext, ProviderEventSink};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeSet, HashMap};
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
 };
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;

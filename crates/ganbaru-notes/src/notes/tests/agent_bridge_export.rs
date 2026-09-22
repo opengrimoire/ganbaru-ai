@@ -120,12 +120,16 @@ fn agent_bridge_export_renders_deterministic_derivative_context() {
         assert_eq!(export.exported_task_count, 1);
         assert_eq!(export.exported_database_view_count, 1);
         assert_eq!(export.exported_backlink_count, 1);
-        assert!(export
-            .markdown
-            .contains("Derivative markdown view generated from Ganbaru AI SQLite"));
-        assert!(export
-            .markdown
-            .contains("Bridge page id: `11111111-1111-4111-8111-111111111111`"));
+        assert!(
+            export
+                .markdown
+                .contains("Derivative markdown view generated from Ganbaru AI SQLite")
+        );
+        assert!(
+            export
+                .markdown
+                .contains("Bridge page id: `11111111-1111-4111-8111-111111111111`")
+        );
         assert!(export.markdown.contains("## Project knowledge base pages"));
         assert!(export.markdown.contains("Knowledge for"));
         assert!(export.markdown.contains("## Database views"));

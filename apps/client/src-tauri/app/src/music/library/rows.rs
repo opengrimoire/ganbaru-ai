@@ -91,6 +91,7 @@ pub(crate) struct MusicPlaylistRow {
     pub name: String,
     pub icon: String,
     pub shuffle_enabled: i64,
+    pub mix_enabled: i64,
     pub repeat_mode: String,
     pub sort_order: i64,
     pub created_at: i64,
@@ -108,6 +109,7 @@ impl MusicPlaylistRow {
             name: self.name,
             icon: self.icon,
             shuffle_enabled: parse_bool(self.shuffle_enabled, "shuffleEnabled")?,
+            mix_enabled: parse_bool(self.mix_enabled, "mixEnabled")?,
             repeat_mode: parse_enum(&self.repeat_mode, "repeatMode")?,
             intended_uses,
             sort_order: self.sort_order,
@@ -166,6 +168,8 @@ pub(crate) struct MusicPlaylistPlaybackRow {
     pub youtube_video_id: Option<String>,
     pub youtube_resolution_state: Option<String>,
     pub title: String,
+    pub original_artwork_identity: Option<String>,
+    pub artwork_override: Option<String>,
     pub availability: String,
     pub root_id: Option<String>,
     pub relative_path: Option<String>,
@@ -197,6 +201,8 @@ impl TryFrom<MusicPlaylistPlaybackRow> for MusicPlaylistPlaybackEntry {
                 .map(|value| parse_enum(value, "youtubeResolutionState"))
                 .transpose()?,
             title: row.title,
+            original_artwork_identity: row.original_artwork_identity,
+            artwork_override: row.artwork_override,
             availability: parse_enum(&row.availability, "availability")?,
             root_id: row.root_id,
             relative_path: row.relative_path,
@@ -255,6 +261,7 @@ pub(crate) struct MusicItemListRow {
     pub album: String,
     pub local_root_id: Option<String>,
     pub relative_path: Option<String>,
+    pub source_collection_ids_json: String,
     pub original_artwork_identity: Option<String>,
     pub artwork_override: Option<String>,
     pub duration_ms: Option<i64>,
@@ -302,6 +309,14 @@ impl TryFrom<MusicItemListRow> for MusicItemListEntry {
             album: row.album,
             local_root_id: row.local_root_id,
             relative_path: row.relative_path,
+            source_collection_ids: serde_json::from_str(&row.source_collection_ids_json).map_err(
+                |error| {
+                    MusicLibraryError::runtime(
+                        "decode item source collection ids",
+                        error.to_string(),
+                    )
+                },
+            )?,
             original_artwork_identity: row.original_artwork_identity,
             artwork_override: row.artwork_override,
             duration_ms: row.duration_ms,

@@ -1,13 +1,13 @@
 //! Claude system and terminal result normalization.
 
 use super::normalizer::{
-    bounded_shape, bounded_text, normalize_usage, text, ClaudeEventNormalizer, ClaudeItemEvent,
-    ClaudeRouteState, MAX_TEXT_BYTES,
+    ClaudeEventNormalizer, ClaudeItemEvent, ClaudeRouteState, MAX_TEXT_BYTES, bounded_shape,
+    bounded_text, normalize_usage, text,
 };
 use super::protocol::{protocol_error, resume_cursor};
 use crate::chat::events::*;
 use crate::chat::models::*;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 impl ClaudeEventNormalizer {
     pub(super) fn system_message(
@@ -108,25 +108,27 @@ impl ClaudeEventNormalizer {
                     "task_progress" => ActivityStatus::Active,
                     _ => ActivityStatus::Completed,
                 };
-                Ok(vec![self.event(
-                    state,
-                    subtype,
-                    None,
-                    None,
-                    None,
-                    CanonicalEvent::TaskLifecycle(TaskLifecycleEvent {
-                        task_id: task_id.to_string(),
-                        parent_task_id: text(object, "parent_task_id").map(str::to_string),
-                        status,
-                        title: text(object, "subject")
-                            .or_else(|| text(object, "description"))
-                            .unwrap_or("Claude task")
-                            .to_string(),
-                        detail: text(object, "summary")
-                            .map(|value| bounded_text(value, MAX_TEXT_BYTES)),
-                        safe_metadata: bounded_shape(raw),
-                    }),
-                )?])
+                Ok(vec![
+                    self.event(
+                        state,
+                        subtype,
+                        None,
+                        None,
+                        None,
+                        CanonicalEvent::TaskLifecycle(TaskLifecycleEvent {
+                            task_id: task_id.to_string(),
+                            parent_task_id: text(object, "parent_task_id").map(str::to_string),
+                            status,
+                            title: text(object, "subject")
+                                .or_else(|| text(object, "description"))
+                                .unwrap_or("Claude task")
+                                .to_string(),
+                            detail: text(object, "summary")
+                                .map(|value| bounded_text(value, MAX_TEXT_BYTES)),
+                            safe_metadata: bounded_shape(raw),
+                        }),
+                    )?,
+                ])
             }
             "compact_boundary" => {
                 let mut event = self.item_event(
@@ -143,59 +145,67 @@ impl ClaudeEventNormalizer {
                 event.turn_id = None;
                 Ok(vec![event])
             }
-            "status" => Ok(vec![self.event(
-                state,
-                "system/status",
-                None,
-                None,
-                None,
-                CanonicalEvent::RuntimeWarning(NotificationEvent {
-                    code: "claude_status".to_string(),
-                    title: text(object, "status")
-                        .unwrap_or("Claude status changed")
-                        .to_string(),
-                    detail: text(object, "message")
-                        .map(|value| bounded_text(value, MAX_TEXT_BYTES)),
-                }),
-            )?]),
-            "permission_denied" => Ok(vec![self.event(
-                state,
-                "system/permission_denied",
-                None,
-                None,
-                None,
-                CanonicalEvent::RuntimeWarning(NotificationEvent {
-                    code: "claude_permission_denied".to_string(),
-                    title: "Claude denied a tool request".to_string(),
-                    detail: text(object, "message")
-                        .map(|value| bounded_text(value, MAX_TEXT_BYTES)),
-                }),
-            )?]),
+            "status" => Ok(vec![
+                self.event(
+                    state,
+                    "system/status",
+                    None,
+                    None,
+                    None,
+                    CanonicalEvent::RuntimeWarning(NotificationEvent {
+                        code: "claude_status".to_string(),
+                        title: text(object, "status")
+                            .unwrap_or("Claude status changed")
+                            .to_string(),
+                        detail: text(object, "message")
+                            .map(|value| bounded_text(value, MAX_TEXT_BYTES)),
+                    }),
+                )?,
+            ]),
+            "permission_denied" => {
+                Ok(vec![
+                    self.event(
+                        state,
+                        "system/permission_denied",
+                        None,
+                        None,
+                        None,
+                        CanonicalEvent::RuntimeWarning(NotificationEvent {
+                            code: "claude_permission_denied".to_string(),
+                            title: "Claude denied a tool request".to_string(),
+                            detail: text(object, "message")
+                                .map(|value| bounded_text(value, MAX_TEXT_BYTES)),
+                        }),
+                    )?,
+                ])
+            }
             "hook_started" | "hook_progress" | "hook_response" => {
                 let status = if subtype == "hook_response" {
                     ActivityStatus::Completed
                 } else {
                     ActivityStatus::Active
                 };
-                Ok(vec![self.event(
-                    state,
-                    subtype,
-                    None,
-                    None,
-                    None,
-                    CanonicalEvent::HookLifecycle(HookLifecycleEvent {
-                        hook_id: text(object, "hook_id")
-                            .or_else(|| text(object, "hook_name"))
-                            .unwrap_or("claude-hook")
-                            .to_string(),
-                        status,
-                        title: text(object, "hook_name")
-                            .unwrap_or("Claude hook")
-                            .to_string(),
-                        detail: text(object, "message")
-                            .map(|value| bounded_text(value, MAX_TEXT_BYTES)),
-                    }),
-                )?])
+                Ok(vec![
+                    self.event(
+                        state,
+                        subtype,
+                        None,
+                        None,
+                        None,
+                        CanonicalEvent::HookLifecycle(HookLifecycleEvent {
+                            hook_id: text(object, "hook_id")
+                                .or_else(|| text(object, "hook_name"))
+                                .unwrap_or("claude-hook")
+                                .to_string(),
+                            status,
+                            title: text(object, "hook_name")
+                                .unwrap_or("Claude hook")
+                                .to_string(),
+                            detail: text(object, "message")
+                                .map(|value| bounded_text(value, MAX_TEXT_BYTES)),
+                        }),
+                    )?,
+                ])
             }
             _ => Ok(vec![self.event(
                 state,

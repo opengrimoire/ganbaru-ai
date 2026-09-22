@@ -124,11 +124,13 @@ fn database_relations_persist_links_backlinks_and_search() {
             .await
             .unwrap();
         let search_json = serde_json::to_value(search_results).unwrap();
-        assert!(search_json
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|result| { result["page"]["id"] == PAGE_B }));
+        assert!(
+            search_json
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|result| { result["page"]["id"] == PAGE_B })
+        );
 
         let invalid = data_source_table::update_data_source_row_property(
             &pool,

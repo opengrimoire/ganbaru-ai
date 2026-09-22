@@ -1,8 +1,9 @@
 use super::{
-    block_event_decision, block_event_phase, block_event_rule_kind, decide_url, host_from_url,
-    host_matches_rule, record_block_event_in_database, runtime_status_at, should_enforce,
-    DoomscrollingConfig, DoomscrollingMode, NativeResponse, RuntimeState, StateSnapshot,
-    UsageLimitsConfig,
+    NativeResponse,
+    config::{DoomscrollingConfig, DoomscrollingMode, UsageLimitsConfig},
+    events::{block_event_phase, record_block_event_in_database},
+    rules::{HostDecision, decide_url, host_from_url, host_matches_rule},
+    snapshot::{RuntimeState, StateSnapshot, runtime_status_at, should_enforce},
 };
 use chrono::{DateTime, SecondsFormat, Utc};
 use sqlx::Row;
@@ -84,17 +85,103 @@ fn maps_block_event_metadata() {
         Some("idle_pause")
     );
     assert_eq!(
-        block_event_decision(Some("daily limit: YouTube")),
+        HostDecision::DailyLimit("YouTube".into()).event_decision(),
         "limit_exhausted"
     );
     assert_eq!(
-        block_event_rule_kind(Some("custom stack: Research traps")),
+        HostDecision::CustomCategory("Research traps".into()).rule_kind(),
         Some("custom_category")
     );
     assert_eq!(
-        block_event_rule_kind(Some("blocked host: youtube.com")),
+        HostDecision::BlockedHost("youtube.com".into()).rule_kind(),
         Some("domain")
     );
+}
+
+#[test]
+fn decision_reasons_preserve_wire_labels_and_typed_event_metadata() {
+    let cases = [
+        (HostDecision::Allowed, false, None, None),
+        (
+            HostDecision::SafetyAllowlist,
+            false,
+            Some("browser safety allowlist"),
+            None,
+        ),
+        (
+            HostDecision::WhitelistedHost("example.com".into()),
+            false,
+            Some("whitelist: example.com"),
+            None,
+        ),
+        (
+            HostDecision::ExceptionHost("example.com".into()),
+            false,
+            Some("exception: example.com"),
+            None,
+        ),
+        (
+            HostDecision::OutsideWhitelist,
+            true,
+            Some("not in whitelist"),
+            Some("domain"),
+        ),
+        (
+            HostDecision::BlockedHost("example.com".into()),
+            true,
+            Some("blocked host: example.com"),
+            Some("domain"),
+        ),
+        (
+            HostDecision::CustomCategory("daily limit: Research".into()),
+            true,
+            Some("custom stack: daily limit: Research"),
+            Some("custom_category"),
+        ),
+        (
+            HostDecision::BuiltInCategory("Social media".into()),
+            true,
+            Some("category: Social media"),
+            Some("category"),
+        ),
+        (
+            HostDecision::DailyLimit("category: Videos".into()),
+            true,
+            Some("daily limit: category: Videos"),
+            Some("usage_limit"),
+        ),
+        (
+            HostDecision::WeeklyLimit("Videos".into()),
+            true,
+            Some("weekly limit: Videos"),
+            Some("usage_limit"),
+        ),
+    ];
+    for (decision, blocked, label, kind) in cases {
+        assert_eq!(decision.blocked(), blocked);
+        assert_eq!(decision.matched_rule_name().as_deref(), label);
+        assert_eq!(decision.rule_kind(), kind);
+        let is_limit = matches!(
+            decision,
+            HostDecision::DailyLimit(_) | HostDecision::WeeklyLimit(_)
+        );
+        assert_eq!(
+            decision.event_decision(),
+            if is_limit {
+                "limit_exhausted"
+            } else {
+                "blocked"
+            }
+        );
+        assert_eq!(
+            decision.blocker_mode(&DoomscrollingMode::Blacklist),
+            if is_limit { "limit" } else { "blacklist" }
+        );
+        assert_eq!(
+            decision.blocker_mode(&DoomscrollingMode::Whitelist),
+            if is_limit { "limit" } else { "whitelist" }
+        );
+    }
 }
 
 #[test]
@@ -108,12 +195,12 @@ fn runtime_state_requires_current_nullable_fields() {
         "remainingSeconds": 60,
         "updatedAt": "2026-05-28T12:00:00Z"
     });
-    assert!(serde_json::from_value::<super::RuntimeState>(current.clone()).is_ok());
+    assert!(serde_json::from_value::<super::snapshot::RuntimeState>(current.clone()).is_ok());
 
     for field in ["pauseReason", "activeRunId", "remainingSeconds"] {
         let mut missing = current.clone();
         missing.as_object_mut().unwrap().remove(field);
-        assert!(serde_json::from_value::<super::RuntimeState>(missing).is_err());
+        assert!(serde_json::from_value::<super::snapshot::RuntimeState>(missing).is_err());
     }
 }
 
@@ -144,7 +231,7 @@ fn records_block_event_to_sqlite_without_full_url() {
         &snapshot,
         "2026-06-10T10:00:00.000Z",
         "youtube.com",
-        Some("blocked host: youtube.com"),
+        &HostDecision::BlockedHost("youtube.com".into()),
     );
     assert!(rejected.is_err());
 
@@ -170,7 +257,7 @@ fn records_block_event_to_sqlite_without_full_url() {
         &snapshot,
         "2026-06-10T10:00:00.000Z",
         "https://youtube.com/watch",
-        Some("blocked host: youtube.com"),
+        &HostDecision::BlockedHost("youtube.com".into()),
     );
     assert!(rejected.is_err());
 
@@ -178,7 +265,7 @@ fn records_block_event_to_sqlite_without_full_url() {
         &snapshot,
         "2026-06-10T10:00:00.000Z",
         "youtube.com",
-        Some("blocked host: youtube.com"),
+        &HostDecision::BlockedHost("youtube.com".into()),
     )
     .unwrap();
 
@@ -316,9 +403,15 @@ fn native_vault_writes_require_stable_local_ownership() {
         )
     };
     std::fs::write(config.join("vault-ownership.json"), ownership("desktop")).unwrap();
-    assert!(super::native_vault_is_writable(&config, Some(&vault)));
+    assert!(super::linked_usage::native_vault_is_writable(
+        &config,
+        Some(&vault)
+    ));
     std::fs::write(config.join("vault-ownership.json"), ownership("phone")).unwrap();
-    assert!(!super::native_vault_is_writable(&config, Some(&vault)));
+    assert!(!super::linked_usage::native_vault_is_writable(
+        &config,
+        Some(&vault)
+    ));
     std::fs::remove_dir_all(root).unwrap();
 }
 
@@ -395,7 +488,7 @@ fn reads_enabled_host_rules() {
         { "host": "reddit.com", "enabled": true }
     ]);
     assert_eq!(
-        super::read_host_array(Some(&value)),
+        super::config::read_host_array(Some(&value)),
         vec!["reddit.com".to_string(), "docs.github.com".to_string()]
     );
 }
@@ -409,14 +502,14 @@ fn reads_only_enabled_built_in_categories() {
         { "id": "unknown", "enabled": true }
     ]);
     assert_eq!(
-        super::read_category_array(Some(&value)),
+        super::config::read_category_array(Some(&value)),
         vec!["social-media".to_string(), "news".to_string()]
     );
 }
 
 #[test]
 fn reads_default_built_in_categories_without_news() {
-    let categories = super::read_category_array(None);
+    let categories = super::config::read_category_array(None);
     assert!(!categories.contains(&"news".to_string()));
     assert!(categories.contains(&"social-media".to_string()));
     assert!(categories.contains(&"streaming".to_string()));
@@ -441,7 +534,7 @@ fn reads_enabled_custom_category_stacks() {
             "hosts": [{ "host": "example.com", "enabled": true }]
         }
     ]);
-    let stacks = super::read_custom_category_stacks(Some(&value));
+    let stacks = super::config::read_custom_category_stacks(Some(&value));
     assert_eq!(stacks.len(), 1);
     assert_eq!(stacks[0].id, "research-traps");
     assert_eq!(stacks[0].name, "Research traps");
@@ -458,29 +551,31 @@ fn predecessor_string_rule_entries_are_not_loaded() {
         "hosts": ["example.com"]
     });
 
-    assert!(super::read_host_array(Some(&hosts)).is_empty());
-    assert!(super::read_category_array(Some(&categories)).is_empty());
-    assert!(super::read_custom_category_stack(&stack).is_none());
+    assert!(super::config::read_host_array(Some(&hosts)).is_empty());
+    assert!(super::config::read_category_array(Some(&categories)).is_empty());
+    assert!(super::config::read_custom_category_stack(&stack).is_none());
 }
 
 #[test]
 fn doomscrolling_mode_and_rule_enabled_flags_are_explicit() {
-    assert!(super::read_mode(&serde_json::json!({})).is_none());
-    assert!(super::read_host_rule(&serde_json::json!({ "host": "example.com" })).is_none());
-    assert!(super::read_custom_category_stack(&serde_json::json!({
-        "id": "stack",
-        "name": "Stack",
-        "hosts": [{ "host": "example.com", "enabled": true }]
-    }))
-    .is_none());
+    assert!(super::config::read_mode(&serde_json::json!({})).is_none());
+    assert!(super::config::read_host_rule(&serde_json::json!({ "host": "example.com" })).is_none());
+    assert!(
+        super::config::read_custom_category_stack(&serde_json::json!({
+            "id": "stack",
+            "name": "Stack",
+            "hosts": [{ "host": "example.com", "enabled": true }]
+        }))
+        .is_none()
+    );
 }
 
 #[test]
 fn lets_exceptions_override_blocked_parent_domains() {
     let decision = decide_url("music.youtube.com", None, &config());
-    assert!(!decision.blocked);
+    assert!(!decision.blocked());
     assert_eq!(
-        decision.matched_rule_name.as_deref(),
+        decision.matched_rule_name().as_deref(),
         Some("exception: music.youtube.com")
     );
 }
@@ -488,9 +583,9 @@ fn lets_exceptions_override_blocked_parent_domains() {
 #[test]
 fn blocks_matching_parent_domain() {
     let decision = decide_url("old.reddit.com", None, &config());
-    assert!(decision.blocked);
+    assert!(decision.blocked());
     assert_eq!(
-        decision.matched_rule_name.as_deref(),
+        decision.matched_rule_name().as_deref(),
         Some("blocked host: reddit.com")
     );
 }
@@ -499,13 +594,13 @@ fn blocks_matching_parent_domain() {
 fn blocks_exhausted_daily_website_limits_without_active_pomodoro_rules() {
     let mut config = config();
     config.blocked_hosts.clear();
-    config.limits.items = vec![super::UsageLimit {
+    config.limits.items = vec![super::config::UsageLimit {
         id: "youtube".to_string(),
         name: "YouTube".to_string(),
         enabled: true,
         minutes_per_day: Some(10),
         minutes_per_week: None,
-        entries: vec![super::UsageLimitEntry {
+        entries: vec![super::config::UsageLimitEntry {
             id: "youtube-website".to_string(),
             name: None,
             website_host: Some("youtube.com".to_string()),
@@ -513,12 +608,12 @@ fn blocks_exhausted_daily_website_limits_without_active_pomodoro_rules() {
             desktop_app_name: None,
         }],
     }];
-    let limit_state = super::LimitState {
+    let limit_state = super::snapshot::LimitState {
         local_date: "2026-05-28".to_string(),
         week_start_local_date: "2026-05-25".to_string(),
         updated_at: super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
         database_path: "/tmp/ganbaru-ai-vault/ganbaru-ai.sqlite".to_string(),
-        limits: vec![super::LimitStateItem {
+        limits: vec![super::snapshot::LimitStateItem {
             id: "youtube".to_string(),
             period: "day".to_string(),
             window_start_local_date: "2026-05-28".to_string(),
@@ -530,7 +625,7 @@ fn blocks_exhausted_daily_website_limits_without_active_pomodoro_rules() {
         }],
     };
 
-    let decision = super::decide_url_with_limits(
+    let decision = super::rules::decide_url_with_limits(
         "music.youtube.com",
         None,
         &config,
@@ -538,9 +633,9 @@ fn blocks_exhausted_daily_website_limits_without_active_pomodoro_rules() {
         false,
     );
 
-    assert!(decision.blocked);
+    assert!(decision.blocked());
     assert_eq!(
-        decision.matched_rule_name.as_deref(),
+        decision.matched_rule_name().as_deref(),
         Some("daily limit: YouTube")
     );
 }
@@ -548,13 +643,13 @@ fn blocks_exhausted_daily_website_limits_without_active_pomodoro_rules() {
 #[test]
 fn active_focus_rules_win_over_limit_blocks() {
     let mut config = config();
-    config.limits.items = vec![super::UsageLimit {
+    config.limits.items = vec![super::config::UsageLimit {
         id: "reddit".to_string(),
         name: "Reddit limit".to_string(),
         enabled: true,
         minutes_per_day: Some(10),
         minutes_per_week: None,
-        entries: vec![super::UsageLimitEntry {
+        entries: vec![super::config::UsageLimitEntry {
             id: "reddit-website".to_string(),
             name: None,
             website_host: Some("reddit.com".to_string()),
@@ -562,12 +657,12 @@ fn active_focus_rules_win_over_limit_blocks() {
             desktop_app_name: None,
         }],
     }];
-    let limit_state = super::LimitState {
+    let limit_state = super::snapshot::LimitState {
         local_date: "2026-05-28".to_string(),
         week_start_local_date: "2026-05-25".to_string(),
         updated_at: super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
         database_path: "/tmp/ganbaru-ai-vault/ganbaru-ai.sqlite".to_string(),
-        limits: vec![super::LimitStateItem {
+        limits: vec![super::snapshot::LimitStateItem {
             id: "reddit".to_string(),
             period: "day".to_string(),
             window_start_local_date: "2026-05-28".to_string(),
@@ -579,12 +674,17 @@ fn active_focus_rules_win_over_limit_blocks() {
         }],
     };
 
-    let decision =
-        super::decide_url_with_limits("old.reddit.com", None, &config, Some(&limit_state), true);
+    let decision = super::rules::decide_url_with_limits(
+        "old.reddit.com",
+        None,
+        &config,
+        Some(&limit_state),
+        true,
+    );
 
-    assert!(decision.blocked);
+    assert!(decision.blocked());
     assert_eq!(
-        decision.matched_rule_name.as_deref(),
+        decision.matched_rule_name().as_deref(),
         Some("blocked host: reddit.com")
     );
 }
@@ -592,7 +692,7 @@ fn active_focus_rules_win_over_limit_blocks() {
 #[test]
 fn uses_limit_state_database_path_for_usage_samples() {
     let vault_path = std::path::Path::new("/tmp/ganbaru-ai-vault");
-    let limit_state = super::LimitState {
+    let limit_state = super::snapshot::LimitState {
         local_date: "2026-05-28".to_string(),
         week_start_local_date: "2026-05-25".to_string(),
         updated_at: super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
@@ -601,7 +701,7 @@ fn uses_limit_state_database_path_for_usage_samples() {
     };
 
     assert_eq!(
-        super::usage_db_path(vault_path, Some(&limit_state)),
+        super::snapshot::usage_db_path(vault_path, Some(&limit_state)),
         vault_path.join("ganbaru-ai.sqlite")
     );
 }
@@ -611,7 +711,7 @@ fn uses_vault_database_path_without_limit_state() {
     let vault_path = std::path::Path::new("/tmp/ganbaru-ai-vault");
 
     assert_eq!(
-        super::usage_db_path(vault_path, None),
+        super::snapshot::usage_db_path(vault_path, None),
         vault_path.join("ganbaru-ai.sqlite")
     );
 }
@@ -634,17 +734,17 @@ fn limit_state_requires_the_current_on_disk_shape() {
             "exhausted": false
         }]
     });
-    assert!(serde_json::from_value::<super::LimitState>(current.clone()).is_ok());
+    assert!(serde_json::from_value::<super::snapshot::LimitState>(current.clone()).is_ok());
 
     for field in ["weekStartLocalDate", "databasePath"] {
         let mut missing = current.clone();
         missing.as_object_mut().unwrap().remove(field);
-        assert!(serde_json::from_value::<super::LimitState>(missing).is_err());
+        assert!(serde_json::from_value::<super::snapshot::LimitState>(missing).is_err());
     }
     for field in ["period", "windowStartLocalDate", "windowEndLocalDate"] {
         let mut missing = current.clone();
         missing["limits"][0].as_object_mut().unwrap().remove(field);
-        assert!(serde_json::from_value::<super::LimitState>(missing).is_err());
+        assert!(serde_json::from_value::<super::snapshot::LimitState>(missing).is_err());
     }
 }
 
@@ -654,9 +754,9 @@ fn blocks_enabled_built_in_categories() {
     config.blocked_hosts.clear();
     config.blocked_category_ids = vec!["social-media".to_string()];
     let decision = decide_url("old.reddit.com", None, &config);
-    assert!(decision.blocked);
+    assert!(decision.blocked());
     assert_eq!(
-        decision.matched_rule_name.as_deref(),
+        decision.matched_rule_name().as_deref(),
         Some("category: Social media")
     );
 }
@@ -671,9 +771,9 @@ fn blocks_streaming_category_keyword_matches_in_domains() {
         Some("https://watch-anime.example/episode/1"),
         &config,
     );
-    assert!(decision.blocked);
+    assert!(decision.blocked());
     assert_eq!(
-        decision.matched_rule_name.as_deref(),
+        decision.matched_rule_name().as_deref(),
         Some("category: Streaming")
     );
 }
@@ -729,9 +829,9 @@ fn blocks_built_in_category_keyword_matches_in_domains() {
         config.blocked_hosts.clear();
         config.blocked_category_ids = vec![category_id.to_string()];
         let decision = decide_url(host, Some(url), &config);
-        assert!(decision.blocked);
+        assert!(decision.blocked());
         assert_eq!(
-            decision.matched_rule_name.as_deref(),
+            decision.matched_rule_name().as_deref(),
             Some(matched_rule_name)
         );
     }
@@ -747,9 +847,9 @@ fn blocks_porn_category_keyword_matches_in_domains() {
         Some("https://example-porn-site.test/watch"),
         &config,
     );
-    assert!(decision.blocked);
+    assert!(decision.blocked());
     assert_eq!(
-        decision.matched_rule_name.as_deref(),
+        decision.matched_rule_name().as_deref(),
         Some("category: Porn")
     );
 }
@@ -764,9 +864,9 @@ fn blocks_porn_category_keyword_matches_in_reddit_subreddits() {
         Some("https://old.reddit.com/r/gwstories/comments/123/title"),
         &config,
     );
-    assert!(decision.blocked);
+    assert!(decision.blocked());
     assert_eq!(
-        decision.matched_rule_name.as_deref(),
+        decision.matched_rule_name().as_deref(),
         Some("category: Porn")
     );
 }
@@ -781,23 +881,23 @@ fn ignores_reddit_post_titles_for_porn_category_keyword_matching() {
         Some("https://reddit.com/r/productivity/comments/123/nsfw_post_title"),
         &config,
     );
-    assert!(!decision.blocked);
-    assert_eq!(decision.matched_rule_name, None);
+    assert!(!decision.blocked());
+    assert_eq!(decision.matched_rule_name(), None);
 }
 
 #[test]
 fn blocks_enabled_custom_category_stacks() {
     let mut config = config();
     config.blocked_hosts.clear();
-    config.custom_category_stacks = vec![super::CustomCategoryStack {
+    config.custom_category_stacks = vec![super::config::CustomCategoryStack {
         id: "research-traps".to_string(),
         name: "Research traps".to_string(),
         hosts: vec!["news.ycombinator.com".to_string()],
     }];
     let decision = decide_url("news.ycombinator.com", None, &config);
-    assert!(decision.blocked);
+    assert!(decision.blocked());
     assert_eq!(
-        decision.matched_rule_name.as_deref(),
+        decision.matched_rule_name().as_deref(),
         Some("custom stack: Research traps")
     );
 }
@@ -923,9 +1023,9 @@ fn blocks_hosts_outside_whitelist_mode() {
     let mut config = config();
     config.mode = DoomscrollingMode::Whitelist;
     let decision = decide_url("reddit.com", None, &config);
-    assert!(decision.blocked);
+    assert!(decision.blocked());
     assert_eq!(
-        decision.matched_rule_name.as_deref(),
+        decision.matched_rule_name().as_deref(),
         Some("not in whitelist")
     );
 }
@@ -935,9 +1035,9 @@ fn allows_hosts_inside_whitelist_mode() {
     let mut config = config();
     config.mode = DoomscrollingMode::Whitelist;
     let decision = decide_url("docs.github.com", None, &config);
-    assert!(!decision.blocked);
+    assert!(!decision.blocked());
     assert_eq!(
-        decision.matched_rule_name.as_deref(),
+        decision.matched_rule_name().as_deref(),
         Some("whitelist: github.com")
     );
 }
@@ -945,20 +1045,23 @@ fn allows_hosts_inside_whitelist_mode() {
 #[test]
 fn rules_fingerprint_changes_when_mode_or_rules_change() {
     let mut changed_config = config();
-    let base = super::rules_fingerprint(&changed_config, None);
+    let base = super::rules::rules_fingerprint(&changed_config, None);
 
     changed_config.mode = DoomscrollingMode::Whitelist;
-    assert_ne!(super::rules_fingerprint(&changed_config, None), base);
+    assert_ne!(super::rules::rules_fingerprint(&changed_config, None), base);
 
     changed_config.mode = DoomscrollingMode::Blacklist;
     changed_config
         .blocked_hosts
         .push("news.ycombinator.com".to_string());
-    assert_ne!(super::rules_fingerprint(&changed_config, None), base);
+    assert_ne!(super::rules::rules_fingerprint(&changed_config, None), base);
 
     let mut category_config = config();
     category_config
         .blocked_category_ids
         .push("news".to_string());
-    assert_ne!(super::rules_fingerprint(&category_config, None), base);
+    assert_ne!(
+        super::rules::rules_fingerprint(&category_config, None),
+        base
+    );
 }

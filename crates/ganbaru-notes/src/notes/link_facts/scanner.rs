@@ -1,5 +1,5 @@
 use super::super::links::{
-    block_id_from_local_notes_url, page_ids_from_local_notes_url, LocalLinkResolver,
+    LocalLinkResolver, block_id_from_local_notes_url, page_ids_from_local_notes_url,
 };
 use serde_json::Value;
 

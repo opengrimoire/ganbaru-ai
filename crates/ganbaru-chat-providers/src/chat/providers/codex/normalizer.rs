@@ -2,7 +2,7 @@
 
 use crate::chat::events::*;
 use crate::chat::models::*;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 

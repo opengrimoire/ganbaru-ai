@@ -8,7 +8,7 @@ use super::repository::resources::{
 };
 use crate::db_path;
 use crate::vault;
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -760,7 +760,14 @@ pub async fn chat_preview_type(
 ) -> ChatResult<()> {
     let selector = js_string(&selector, "selector")?;
     let text = js_string(&text, "text")?;
-    eval_fixed(&app, &thread_id, &tab_id, &format!("(()=>{{const e=document.querySelector({selector});if(e){{e.focus();e.value={text};e.dispatchEvent(new Event('input',{{bubbles:true}}));}}}})()"))
+    eval_fixed(
+        &app,
+        &thread_id,
+        &tab_id,
+        &format!(
+            "(()=>{{const e=document.querySelector({selector});if(e){{e.focus();e.value={text};e.dispatchEvent(new Event('input',{{bubbles:true}}));}}}})()"
+        ),
+    )
 }
 
 #[tauri::command]
@@ -771,7 +778,14 @@ pub async fn chat_preview_press(
     key: String,
 ) -> ChatResult<()> {
     let key = js_string(&key, "key")?;
-    eval_fixed(&app, &thread_id, &tab_id, &format!("document.activeElement?.dispatchEvent(new KeyboardEvent('keydown',{{key:{key},bubbles:true}}))"))
+    eval_fixed(
+        &app,
+        &thread_id,
+        &tab_id,
+        &format!(
+            "document.activeElement?.dispatchEvent(new KeyboardEvent('keydown',{{key:{key},bubbles:true}}))"
+        ),
+    )
 }
 
 #[tauri::command]

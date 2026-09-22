@@ -80,7 +80,7 @@ fn review_snooze_and_statistics_commands_preserve_independent_scopes() {
 }
 
 #[test]
-fn review_window_retains_reviewed_and_deferred_items_but_excludes_ignored_items() {
+fn review_window_includes_ignored_items_for_local_visibility_filtering() {
     tauri::async_runtime::block_on(async {
         let pool = pool().await;
         for id in ["unreviewed", "reviewed", "ignored", "due", "future"] {
@@ -112,8 +112,10 @@ fn review_window_retains_reviewed_and_deferred_items_but_excludes_ignored_items(
             .iter()
             .map(|item| item.id.as_str())
             .collect::<Vec<_>>();
-
-        assert_eq!(ids, vec!["due", "future", "reviewed", "unreviewed"]);
+        assert_eq!(
+            ids,
+            vec!["due", "future", "ignored", "reviewed", "unreviewed"]
+        );
     });
 }
 
@@ -220,11 +222,13 @@ fn item_windows_are_bounded_stable_filterable_and_grouped() {
             result.groups.iter().map(|group| group.count).sum::<i64>(),
             result.total_count,
         );
-        assert!(result
-            .items
-            .iter()
-            .all(|item| item.artist == "Alpha Composer"
-                && item.availability == MusicItemAvailability::Available));
+        assert!(
+            result
+                .items
+                .iter()
+                .all(|item| item.artist == "Alpha Composer"
+                    && item.availability == MusicItemAvailability::Available)
+        );
     });
 }
 
@@ -350,6 +354,12 @@ fn source_order_and_artwork_overrides_are_projected_in_library_rows() {
                 .map(|item| item.id.as_str())
                 .collect::<Vec<_>>(),
             vec!["item-1", "item-2", "item-0"]
+        );
+        assert!(
+            result
+                .items
+                .iter()
+                .all(|item| item.source_collection_ids == ["source-1"])
         );
         assert_eq!(
             result.items[1].artwork_override.as_deref(),
@@ -603,6 +613,7 @@ fn search_rebuild_repairs_stale_rows_and_incremental_membership_metadata() {
                 name: "Dawn routine".to_string(),
                 icon: "lucide:sunrise".to_string(),
                 shuffle_enabled: true,
+                mix_enabled: false,
                 repeat_mode: MusicRepeatMode::All,
                 intended_uses: vec![MusicIntendedUse::General],
                 expected_version: 1,

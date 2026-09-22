@@ -92,9 +92,11 @@ mod tests {
     fn builtins_are_recipes_without_a_principal() {
         let profiles = builtin_access_profiles();
         assert_eq!(profiles.len(), 5);
-        assert!(profiles
-            .iter()
-            .all(|profile| profile.id.starts_with("access-profile:")));
+        assert!(
+            profiles
+                .iter()
+                .all(|profile| profile.id.starts_with("access-profile:"))
+        );
         assert_eq!(
             profiles[0].maximum_folder_capability,
             ChatFolderCapability::None

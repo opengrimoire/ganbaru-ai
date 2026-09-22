@@ -8,7 +8,7 @@ use super::validation::{plain_text_from_payload, require_uuid, validate_block_pa
 use super::{
     data_source_relations, data_source_rollups, data_source_rows, data_source_views, reads, writes,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sqlx::{Sqlite, SqlitePool, Transaction};
 use std::collections::{HashMap, HashSet};
 

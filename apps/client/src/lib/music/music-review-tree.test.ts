@@ -8,6 +8,7 @@ import {
   musicReviewTreeItemIds,
   musicReviewTreeFolderIds,
   musicReviewTreeRevealScrollTop,
+  musicUnreviewedItemCount,
   nextPendingMusicReviewSelectionItemId,
   nextPendingMusicReviewTreeItemId,
   searchMusicReviewTree,
@@ -18,7 +19,7 @@ import {
 function item(id: string, relativePath: string | null, sourceKind: "local-file" | "youtube-video" = "local-file"): MusicItemListEntry {
   return {
     id, identityKey: id, sourceKind, mediaKind: "audio", title: id, artist: "", album: "",
-    localRootId: sourceKind === "local-file" ? "root-1" : null, relativePath, originalArtworkIdentity: null, artworkOverride: null, durationMs: null, availability: "available", reviewState: "unreviewed",
+    localRootId: sourceKind === "local-file" ? "root-1" : null, relativePath, sourceCollectionIds: [], originalArtworkIdentity: null, artworkOverride: null, durationMs: null, availability: "available", reviewState: "unreviewed",
     discoveredAt: 1, updatedAt: 1, version: 1, playlistCount: 0, activeSnoozeCount: 0,
     lastPlayedAt: null, playCount: 0, membershipId: null, membershipPosition: null,
     membershipWeight: null, membershipEnabled: null, membershipVersion: null,
@@ -26,6 +27,13 @@ function item(id: string, relativePath: string | null, sourceKind: "local-file" 
 }
 
 describe("music review tree", () => {
+  it("counts canonical unreviewed items without relying on source summaries", () => {
+    const pending = item("pending", "pending.flac");
+    const reviewed = { ...item("reviewed", "reviewed.flac"), reviewState: "reviewed" as const };
+
+    expect(musicUnreviewedItemCount([pending, pending, reviewed])).toBe(1);
+  });
+
   it("preserves nested folders and keeps online items visible", () => {
     const tree = buildMusicReviewTree([
       item("theme", "Games/Nier/Disc 1/theme.flac"),

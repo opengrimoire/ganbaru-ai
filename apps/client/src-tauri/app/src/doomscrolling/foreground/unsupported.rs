@@ -1,8 +1,8 @@
 use super::*;
 
 #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
-pub(in crate::doomscrolling) fn foreground_desktop_app_status(
-) -> DoomscrollingForegroundDesktopAppStatus {
+pub(in crate::doomscrolling) fn foreground_desktop_app_status()
+-> DoomscrollingForegroundDesktopAppStatus {
     unavailable_foreground_desktop_app_status(
         "foreground desktop app detection is not supported on this platform",
     )

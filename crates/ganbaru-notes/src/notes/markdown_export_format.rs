@@ -73,11 +73,7 @@ pub(super) fn inline_code(text: &str) -> String {
 }
 
 pub(super) fn code_fence(code: &str) -> &'static str {
-    if code.contains("```") {
-        "````"
-    } else {
-        "```"
-    }
+    if code.contains("```") { "````" } else { "```" }
 }
 
 pub(super) fn table_cells(payload: &Value) -> Vec<Vec<Value>> {

@@ -7,10 +7,10 @@ use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use super::COORDINATOR_PORT;
+use super::{COORDINATOR_PORT, DEVELOPMENT_COORDINATOR_PORT};
 
 const STATE_FILE: &str = "vault-handoff-network-access.json";
-const STATE_SCHEMA_VERSION: u32 = 1;
+const STATE_SCHEMA_VERSION: u32 = 2;
 const RULE_COMMENT: &str = "Ganbaru AI device linking";
 const MAX_AUTHORIZED_SCOPES: usize = 32;
 const PACKAGED_HELPER_PATH: &str = "/usr/bin/ganbaru-ai";
@@ -30,6 +30,7 @@ struct AuthorizedScope {
     interface: String,
     local_address: Ipv4Addr,
     source_network: String,
+    port: u16,
     #[serde(default)]
     zone: Option<String>,
 }
@@ -69,13 +70,13 @@ struct LanScope {
     source_network: String,
 }
 
-pub(crate) fn status(config_dir: &Path, local_address: Ipv4Addr) -> NetworkAccessStatus {
+pub(crate) fn status(config_dir: &Path, local_address: Ipv4Addr, port: u16) -> NetworkAccessStatus {
     let Ok(scope) = current_lan_scope(local_address) else {
         return NetworkAccessStatus {
             state: NetworkAccessState::ManualActionRequired,
         };
     };
-    let firewalls = active_firewalls(&scope);
+    let firewalls = active_firewalls(&scope, port);
     if firewalls.is_empty() {
         return NetworkAccessStatus {
             state: NetworkAccessState::NotRequired,
@@ -106,9 +107,10 @@ pub(crate) fn status(config_dir: &Path, local_address: Ipv4Addr) -> NetworkAcces
 pub(crate) fn grant(
     config_dir: &Path,
     local_address: Ipv4Addr,
+    port: u16,
 ) -> Result<NetworkAccessStatus, String> {
     let scope = current_lan_scope(local_address)?;
-    let firewalls = active_firewalls(&scope);
+    let firewalls = active_firewalls(&scope, port);
     if firewalls.is_empty() {
         return Ok(NetworkAccessStatus {
             state: NetworkAccessState::NotRequired,
@@ -234,7 +236,7 @@ fn ipv4_prefix(mask: Ipv4Addr) -> Result<u32, String> {
     Ok(prefix)
 }
 
-fn active_firewalls(scope: &LanScope) -> Vec<AuthorizedScope> {
+fn active_firewalls(scope: &LanScope, port: u16) -> Vec<AuthorizedScope> {
     let mut result = Vec::new();
     if ufw_enabled() {
         result.push(AuthorizedScope {
@@ -242,6 +244,7 @@ fn active_firewalls(scope: &LanScope) -> Vec<AuthorizedScope> {
             interface: scope.interface.clone(),
             local_address: scope.local_address,
             source_network: scope.source_network.clone(),
+            port,
             zone: None,
         });
     }
@@ -252,6 +255,7 @@ fn active_firewalls(scope: &LanScope) -> Vec<AuthorizedScope> {
             interface: scope.interface.clone(),
             local_address: scope.local_address,
             source_network: scope.source_network.clone(),
+            port,
             zone,
         });
     }
@@ -335,6 +339,12 @@ fn apply_with_packaged_helper(
     scope: &AuthorizedScope,
     grant: bool,
 ) -> Result<(), String> {
+    if scope.port != COORDINATOR_PORT {
+        return Err(
+            "the packaged Linux network helper supports only the production coordinator port"
+                .to_string(),
+        );
+    }
     let pkexec = required_command(&["/usr/bin/pkexec", "/usr/local/bin/pkexec"], "pkexec")?;
     let mut command = Command::new(pkexec);
     command
@@ -416,6 +426,7 @@ fn parse_privileged_helper_scope(
         interface,
         local_address,
         source_network,
+        port: COORDINATOR_PORT,
         zone,
     };
     validate_authorized_scope(&scope)?;
@@ -451,6 +462,7 @@ fn apply_scope_privileged(scope: &AuthorizedScope, grant: bool) -> Result<(), St
 fn validate_authorized_scope(scope: &AuthorizedScope) -> Result<(), String> {
     if !valid_interface(&scope.interface)
         || !(scope.local_address.is_private() || scope.local_address.is_link_local())
+        || !matches!(scope.port, COORDINATOR_PORT | DEVELOPMENT_COORDINATOR_PORT)
     {
         return Err("saved Linux network access scope is invalid".to_string());
     }
@@ -509,7 +521,7 @@ fn ufw_arguments(scope: &AuthorizedScope, grant: bool) -> Vec<String> {
         "to".to_string(),
         scope.local_address.to_string(),
         "port".to_string(),
-        COORDINATOR_PORT.to_string(),
+        scope.port.to_string(),
         "comment".to_string(),
         RULE_COMMENT.to_string(),
     ]);
@@ -550,7 +562,7 @@ fn apply_firewalld_commands(
     };
     let rule = format!(
         "rule family=\"ipv4\" source address=\"{}\" destination address=\"{}/32\" port port=\"{}\" protocol=\"tcp\" accept",
-        scope.source_network, scope.local_address, COORDINATOR_PORT
+        scope.source_network, scope.local_address, scope.port
     );
     for permanent in [false, true] {
         let mut command = command_for(&firewall_cmd);
@@ -675,6 +687,7 @@ bad/interface 0001A8C0 00000000 0001 0 0 600 00FFFFFF 0 0 0\n";
             interface: "wlp2s0".to_string(),
             local_address: Ipv4Addr::new(192, 168, 1, 66),
             source_network: "192.168.1.0/24".to_string(),
+            port: COORDINATOR_PORT,
             zone: None,
         };
         assert!(validate_authorized_scope(&valid).is_ok());
@@ -686,6 +699,11 @@ bad/interface 0001A8C0 00000000 0001 0 0 600 00FFFFFF 0 0 0\n";
         let mut unrelated = valid;
         unrelated.source_network = "192.168.2.0/24".to_string();
         assert!(validate_authorized_scope(&unrelated).is_err());
+
+        let mut unsupported_port = unrelated;
+        unsupported_port.source_network = "192.168.1.0/24".to_string();
+        unsupported_port.port = 44_000;
+        assert!(validate_authorized_scope(&unsupported_port).is_err());
     }
 
     #[test]
@@ -695,6 +713,7 @@ bad/interface 0001A8C0 00000000 0001 0 0 600 00FFFFFF 0 0 0\n";
             interface: "wlp2s0".to_string(),
             local_address: Ipv4Addr::new(192, 168, 1, 66),
             source_network: "192.168.1.0/24".to_string(),
+            port: DEVELOPMENT_COORDINATOR_PORT,
             zone: None,
         };
         assert_eq!(
@@ -711,7 +730,7 @@ bad/interface 0001A8C0 00000000 0001 0 0 600 00FFFFFF 0 0 0\n";
                 "to",
                 "192.168.1.66",
                 "port",
-                "43821",
+                "43822",
                 "comment",
                 "Ganbaru AI device linking",
             ]

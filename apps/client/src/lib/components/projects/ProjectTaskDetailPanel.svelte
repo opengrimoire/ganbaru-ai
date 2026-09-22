@@ -387,7 +387,8 @@
   }
 
   function handleTaskDetailKeydown(event: KeyboardEvent): void {
-    if (event.key !== "Escape" || discardCloseConfirmOpen) return;
+    if (event.key !== "Escape" || event.defaultPrevented || discardCloseConfirmOpen) return;
+    if (detailDialog?.querySelector("[data-app-floating-surface]")) return;
     event.preventDefault();
     event.stopPropagation();
     requestTaskDetailClose();
@@ -759,7 +760,7 @@
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="fixed inset-0 z-70 flex items-center justify-center bg-black/30 p-3"
+      class="fixed inset-0 z-70 flex items-center justify-center bg-black/35 p-3"
       style={androidSystemBackAvailable
         ? "padding: calc(var(--safe-area-top) + 0.75rem) calc(var(--safe-area-right) + 0.75rem) calc(var(--safe-area-bottom) + 0.75rem) calc(var(--safe-area-left) + 0.75rem)"
         : undefined}
@@ -769,12 +770,13 @@
       bind:this={detailDialog}
       class={cn(
         "task-detail-dialog",
-        "flex max-h-full max-w-full min-h-0 flex-col overflow-hidden border border-border bg-card text-card-foreground",
+        "flex max-h-full max-w-full min-h-0 flex-col overflow-hidden border border-border bg-card text-card-foreground shadow-2xl",
         layout === "fullscreen" && androidSystemBackAvailable && "h-full w-full rounded-md",
         layout === "fullscreen" && !androidSystemBackAvailable && "h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] rounded-md",
-        layout === "sheet" && "h-[min(88dvh,48rem)] w-[calc(100vw-1rem)] max-w-3xl rounded-md",
-        layout === "modal" && "h-[min(86dvh,54rem)] w-[min(56rem,calc(100vw-2rem))] rounded-md",
+        layout === "sheet" && "h-[min(88dvh,48rem)] w-[calc(100vw-1rem)] max-w-6xl rounded-xl",
+        layout === "modal" && "h-[min(92dvh,62rem)] w-[min(78rem,calc(100vw-2rem))] rounded-xl",
       )}
+      data-floating-root
       role="dialog"
       data-mobile={androidSystemBackAvailable || undefined}
       aria-modal="true"
@@ -784,226 +786,214 @@
     >
       <ProjectTaskDetailHeader
         task={selectedTask}
+        projectName={projects.projectById(selectedTask.projectId)?.name ?? ""}
         title={detailTitle}
         onTitleChange={(value) => { detailTitle = value; }}
         onClose={requestTaskDetailClose}
       />
 
       <form class="flex min-h-0 flex-1 flex-col" onsubmit={(event) => { event.preventDefault(); void saveTaskDetail(); }}>
-        <div class="relative min-h-0 flex-1 bg-background/50">
-          <div bind:this={detailScrollContainer} class="hide-scrollbar h-full overflow-y-auto px-4 py-4">
-          <div class="mx-auto grid max-w-5xl gap-5">
-            <section class="task-detail-section task-detail-section-first">
-              <ProjectTaskDetailDescriptionSection
-                value={detailDescription}
-                onChange={(value) => { detailDescription = value; }}
-              />
-            </section>
+        <div class="relative min-h-0 flex-1">
+          <div bind:this={detailScrollContainer} class="task-detail-scroll hide-scrollbar h-full overflow-y-auto overscroll-contain">
+            {#key selectedTask.id}
+              <div class="task-detail-workspace">
+                <div class="task-detail-content">
+                  <ProjectTaskDetailDescriptionSection
+                    value={detailDescription}
+                    onChange={(value) => { detailDescription = value; }}
+                  />
 
-            <section class="task-detail-section">
-              <ProjectTaskDetailPropertiesSection
-                {statuses}
-                {sections}
-                {priorities}
-                theme={theme.current}
-                statusId={detailStatusId}
-                sectionId={detailSectionId}
-                priority={detailPriority}
-                taskType={detailTaskType}
-                milestone={detailMilestone}
-                onStatusChange={(value) => { detailStatusId = value; }}
-                onSectionChange={(value) => { detailSectionId = value; }}
-                onPriorityChange={(value) => { detailPriority = value; }}
-                onTaskTypeChange={(value) => { detailTaskType = value; }}
-                onMilestoneChange={(value) => { detailMilestone = value; }}
-              />
-            </section>
+                  <ProjectTaskDetailChecklistSection
+                    task={selectedTask}
+                    items={selectedTaskChecklist}
+                    titleDrafts={checklistTitleDrafts}
+                    draft={checklistDraft}
+                    onTitleDraftChange={(itemId, value) => {
+                      checklistTitleDrafts = {
+                        ...checklistTitleDrafts,
+                        [itemId]: value,
+                      };
+                    }}
+                    onDraftChange={(value) => { checklistDraft = value; }}
+                    onToggleCompleted={(item, completed) => projects.setChecklistItemCompleted(item, completed)}
+                    onSaveItem={saveChecklistItem}
+                    onMoveItem={moveChecklistItemInDetail}
+                    onDeleteItem={(item) => projects.removeChecklistItem(item.id)}
+                    onSubmitItem={submitChecklistItem}
+                  />
 
-            <section class="task-detail-section">
-              <ProjectTaskDetailPlanningSection
-                estimateMinutes={detailEstimateMinutes}
-                startDate={detailStartDate}
-                dueDate={detailDueDate}
-                targetEndDate={detailTargetEndDate}
-                blockerReason={detailBlockerReason}
-                changeReason={detailChangeReason}
-                {todayDate}
-                startPickerOpen={datePickerTarget === "start"}
-                duePickerOpen={datePickerTarget === "due"}
-                targetPickerOpen={datePickerTarget === "target"}
-                onEstimateMinutesChange={(value) => { detailEstimateMinutes = value; }}
-                onBlockerReasonChange={(value) => { detailBlockerReason = value; }}
-                onChangeReasonChange={(value) => { detailChangeReason = value; }}
-                onToggleStartPicker={() => toggleDetailDatePicker("start")}
-                onToggleDuePicker={() => toggleDetailDatePicker("due")}
-                onToggleTargetPicker={() => toggleDetailDatePicker("target")}
-                onClearStartDate={() => clearDetailDate("start")}
-                onClearDueDate={() => clearDetailDate("due")}
-                onClearTargetEndDate={() => clearDetailDate("target")}
-                onSelectDate={selectDetailDate}
-                onCancelDatePicker={() => { datePickerTarget = null; }}
-              />
-            </section>
+                  <ProjectTaskDetailSubtasksSection
+                    task={selectedTask}
+                    subtasks={selectedTaskSubtasks}
+                    theme={theme.current}
+                    draft={subtaskDraft}
+                    {statusForTask}
+                    onDraftChange={(value) => { subtaskDraft = value; }}
+                    onSubmitSubtask={submitSubtask}
+                    onToggleComplete={(subtask) => projects.toggleTaskDone(subtask)}
+                    onOpenTask={openTaskDetail}
+                    onPromoteSubtask={promoteSubtaskFromDetail}
+                    onMoveSubtask={moveSubtaskInDetail}
+                  />
 
-            <section class="task-detail-section">
-              <ProjectTaskDetailTagsSection
-                task={selectedTask}
-                tags={selectedTaskTags}
-                candidates={selectedTaskTagCandidates}
-                draft={tagDraft}
-                canCreate={canCreateTag(selectedTask)}
-                theme={theme.current}
-                onDraftChange={(value) => { tagDraft = value; }}
-                onAttachTag={attachExistingTag}
-                onSubmitTag={submitTaskTag}
-                onDetachTag={detachTaskTag}
-              />
-            </section>
+                  <ProjectTaskDetailDependenciesSection
+                    task={selectedTask}
+                    blockedByDependencies={selectedTaskBlockedBy}
+                    blocksDependencies={selectedTaskBlocks}
+                    dependencyCandidates={selectedTaskDependencyCandidates}
+                    dependencySearch={dependencySearch}
+                    {taskById}
+                    onDependencySearchChange={(value) => { dependencySearch = value; }}
+                    onAddBlockingDependency={addBlockingDependency}
+                    onRemoveDependency={removeDependency}
+                  />
 
-            {#if projectCustomFields.length > 0}
-              <section class="task-detail-section">
-                <ProjectTaskDetailCustomFieldsSection
-                  task={selectedTask}
-                  fields={projectCustomFields}
-                  textDrafts={customFieldTextDrafts}
-                  numberDrafts={customFieldNumberDrafts}
-                  dateDrafts={customFieldDateDrafts}
-                  checkboxDrafts={customFieldCheckboxDrafts}
-                  selectDrafts={customFieldSelectDrafts}
-                  multiDrafts={customFieldMultiDrafts}
-                  datePickerTarget={customFieldDatePickerTarget}
-                  {todayDate}
-                  {customFieldOptions}
-                  {customFieldValueDirty}
-                  onTextDraftChange={(fieldId, value) => {
-                    customFieldTextDrafts = {
-                      ...customFieldTextDrafts,
-                      [fieldId]: value,
-                    };
-                  }}
-                  onNumberDraftChange={(fieldId, value) => {
-                    customFieldNumberDrafts = {
-                      ...customFieldNumberDrafts,
-                      [fieldId]: value,
-                    };
-                  }}
-                  onCheckboxDraftChange={(fieldId, value) => {
-                    customFieldCheckboxDrafts = {
-                      ...customFieldCheckboxDrafts,
-                      [fieldId]: value,
-                    };
-                  }}
-                  onSelectDraftChange={(fieldId, value) => {
-                    customFieldSelectDrafts = {
-                      ...customFieldSelectDrafts,
-                      [fieldId]: value,
-                    };
-                  }}
-                  onToggleMultiOption={toggleCustomFieldMultiOption}
-                  onSaveField={saveTaskCustomField}
-                  onToggleDatePicker={(fieldId) => {
-                    customFieldDatePickerTarget = customFieldDatePickerTarget === fieldId ? null : fieldId;
-                    datePickerTarget = null;
-                  }}
-                  onClearDate={clearCustomFieldDate}
-                  onSelectDate={selectCustomFieldDate}
-                  onCancelDatePicker={() => { customFieldDatePickerTarget = null; }}
-                />
-              </section>
-            {/if}
+                  <ProjectTaskDetailScheduledBlocksController
+                    task={selectedTask}
+                    taskEventIds={selectedTaskEventIds}
+                    {allProjectEvents}
+                    {todayDate}
+                    searchLinkableEvents={projects.searchLinkableEvents}
+                    onLinkEvent={linkExistingEvent}
+                    onUnlinkEvent={unlinkExistingEvent}
+                  />
 
-            <section class="task-detail-section">
-              <ProjectTaskDetailParentSection
-                task={selectedTask}
-                parentTask={selectedTaskParent}
-                parentCandidates={parentTaskCandidateTasks(selectedTask)}
-                parentSearch={parentTaskSearch}
-                hasSubtasks={taskHasAnySubtasks(selectedTask)}
-                onParentSearchChange={(value) => { parentTaskSearch = value; }}
-                onPromoteSubtask={promoteSubtaskFromDetail}
-                onDemoteTask={demoteTaskFromDetail}
-              />
-            </section>
+                  <ProjectTaskDetailHistorySection events={selectedTaskHistory} />
 
-            <section class="task-detail-section">
-              <ProjectTaskDetailDependenciesSection
-                task={selectedTask}
-                blockedByDependencies={selectedTaskBlockedBy}
-                blocksDependencies={selectedTaskBlocks}
-                dependencyCandidates={selectedTaskDependencyCandidates}
-                dependencySearch={dependencySearch}
-                {taskById}
-                onDependencySearchChange={(value) => { dependencySearch = value; }}
-                onAddBlockingDependency={addBlockingDependency}
-                onRemoveDependency={removeDependency}
-              />
-            </section>
+                </div>
+                <aside class="task-detail-properties" aria-label={t("projects.detail.properties")}>
+                  <h2 class="text-[0.866667rem] font-semibold">{t("projects.detail.properties")}</h2>
+                  <ProjectTaskDetailPropertiesSection
+                    {statuses}
+                    {sections}
+                    {priorities}
+                    theme={theme.current}
+                    statusId={detailStatusId}
+                    sectionId={detailSectionId}
+                    priority={detailPriority}
+                    taskType={detailTaskType}
+                    onStatusChange={(value) => { detailStatusId = value; }}
+                    onSectionChange={(value) => { detailSectionId = value; }}
+                    onPriorityChange={(value) => { detailPriority = value; }}
+                    onTaskTypeChange={(value) => { detailTaskType = value; }}
+                  />
 
-            <section class="task-detail-section">
-              <ProjectTaskDetailChecklistSection
-                task={selectedTask}
-                items={selectedTaskChecklist}
-                titleDrafts={checklistTitleDrafts}
-                draft={checklistDraft}
-                onTitleDraftChange={(itemId, value) => {
-                  checklistTitleDrafts = {
-                    ...checklistTitleDrafts,
-                    [itemId]: value,
-                  };
-                }}
-                onDraftChange={(value) => { checklistDraft = value; }}
-                onToggleCompleted={(item, completed) => projects.setChecklistItemCompleted(item, completed)}
-                onSaveItem={saveChecklistItem}
-                onMoveItem={moveChecklistItemInDetail}
-                onDeleteItem={(item) => projects.removeChecklistItem(item.id)}
-                onSubmitItem={submitChecklistItem}
-              />
-            </section>
+                  <ProjectTaskDetailPlanningSection
+                    milestone={detailMilestone}
+                    onMilestoneChange={(value) => { detailMilestone = value; }}
+                    estimateMinutes={detailEstimateMinutes}
+                    startDate={detailStartDate}
+                    dueDate={detailDueDate}
+                    targetEndDate={detailTargetEndDate}
+                    blockerReason={detailBlockerReason}
+                    changeReason={detailChangeReason}
+                    {todayDate}
+                    startPickerOpen={datePickerTarget === "start"}
+                    duePickerOpen={datePickerTarget === "due"}
+                    targetPickerOpen={datePickerTarget === "target"}
+                    onEstimateMinutesChange={(value) => { detailEstimateMinutes = value; }}
+                    onBlockerReasonChange={(value) => { detailBlockerReason = value; }}
+                    onChangeReasonChange={(value) => { detailChangeReason = value; }}
+                    onToggleStartPicker={() => toggleDetailDatePicker("start")}
+                    onToggleDuePicker={() => toggleDetailDatePicker("due")}
+                    onToggleTargetPicker={() => toggleDetailDatePicker("target")}
+                    onClearStartDate={() => clearDetailDate("start")}
+                    onClearDueDate={() => clearDetailDate("due")}
+                    onClearTargetEndDate={() => clearDetailDate("target")}
+                    onSelectDate={selectDetailDate}
+                    onCancelDatePicker={() => { datePickerTarget = null; }}
+                  />
 
-            <section class="task-detail-section">
-              <ProjectTaskDetailSubtasksSection
-                task={selectedTask}
-                subtasks={selectedTaskSubtasks}
-                theme={theme.current}
-                draft={subtaskDraft}
-                {statusForTask}
-                onDraftChange={(value) => { subtaskDraft = value; }}
-                onSubmitSubtask={submitSubtask}
-                onToggleComplete={(subtask) => projects.toggleTaskDone(subtask)}
-                onOpenTask={openTaskDetail}
-                onPromoteSubtask={promoteSubtaskFromDetail}
-                onMoveSubtask={moveSubtaskInDetail}
-              />
-            </section>
+                  <ProjectTaskDetailParentSection
+                    task={selectedTask}
+                    parentTask={selectedTaskParent}
+                    parentCandidates={parentTaskCandidateTasks(selectedTask)}
+                    parentSearch={parentTaskSearch}
+                    hasSubtasks={taskHasAnySubtasks(selectedTask)}
+                    onParentSearchChange={(value) => { parentTaskSearch = value; }}
+                    onPromoteSubtask={promoteSubtaskFromDetail}
+                    onDemoteTask={demoteTaskFromDetail}
+                  />
 
-            <section class="task-detail-section">
-              <ProjectTaskDetailScheduledBlocksController
-                task={selectedTask}
-                taskEventIds={selectedTaskEventIds}
-                {allProjectEvents}
-                {todayDate}
-                searchLinkableEvents={projects.searchLinkableEvents}
-                onLinkEvent={linkExistingEvent}
-                onUnlinkEvent={unlinkExistingEvent}
-              />
-            </section>
+                  <ProjectTaskDetailTagsSection
+                    task={selectedTask}
+                    tags={selectedTaskTags}
+                    candidates={selectedTaskTagCandidates}
+                    draft={tagDraft}
+                    canCreate={canCreateTag(selectedTask)}
+                    theme={theme.current}
+                    onDraftChange={(value) => { tagDraft = value; }}
+                    onAttachTag={attachExistingTag}
+                    onSubmitTag={submitTaskTag}
+                    onDetachTag={detachTaskTag}
+                  />
 
-            <ProjectTaskDetailHistorySection events={selectedTaskHistory} />
-
-            {#if detailError}
-              <div class="rounded-md border border-destructive/30 bg-destructive/10 px-2 py-2 text-[0.8rem] text-destructive">
-                {detailError}
+                  {#if projectCustomFields.length > 0}
+                    <ProjectTaskDetailCustomFieldsSection
+                      task={selectedTask}
+                      fields={projectCustomFields}
+                      textDrafts={customFieldTextDrafts}
+                      numberDrafts={customFieldNumberDrafts}
+                      dateDrafts={customFieldDateDrafts}
+                      checkboxDrafts={customFieldCheckboxDrafts}
+                      selectDrafts={customFieldSelectDrafts}
+                      multiDrafts={customFieldMultiDrafts}
+                      datePickerTarget={customFieldDatePickerTarget}
+                      {todayDate}
+                      {customFieldOptions}
+                      {customFieldValueDirty}
+                      onTextDraftChange={(fieldId, value) => {
+                        customFieldTextDrafts = {
+                          ...customFieldTextDrafts,
+                          [fieldId]: value,
+                        };
+                      }}
+                      onNumberDraftChange={(fieldId, value) => {
+                        customFieldNumberDrafts = {
+                          ...customFieldNumberDrafts,
+                          [fieldId]: value,
+                        };
+                      }}
+                      onCheckboxDraftChange={(fieldId, value) => {
+                        customFieldCheckboxDrafts = {
+                          ...customFieldCheckboxDrafts,
+                          [fieldId]: value,
+                        };
+                      }}
+                      onSelectDraftChange={(fieldId, value) => {
+                        customFieldSelectDrafts = {
+                          ...customFieldSelectDrafts,
+                          [fieldId]: value,
+                        };
+                      }}
+                      onToggleMultiOption={toggleCustomFieldMultiOption}
+                      onSaveField={saveTaskCustomField}
+                      onToggleDatePicker={(fieldId) => {
+                        customFieldDatePickerTarget = customFieldDatePickerTarget === fieldId ? null : fieldId;
+                        datePickerTarget = null;
+                      }}
+                      onClearDate={clearCustomFieldDate}
+                      onSelectDate={selectCustomFieldDate}
+                      onCancelDatePicker={() => { customFieldDatePickerTarget = null; }}
+                    />
+                  {/if}
+                </aside>
               </div>
-            {/if}
+            {/key}
           </div>
+          <CalendarScrollbar
+            scrollContainer={detailScrollContainer}
+            stickyTop={8}
+            stickyBottom={8}
+            wheelPassthrough
+          />
         </div>
-        <CalendarScrollbar
-          scrollContainer={detailScrollContainer}
-          stickyTop={8}
-          stickyBottom={8}
-          wheelPassthrough
-        />
-        </div>
+
+        {#if detailError}
+          <div role="alert" class="shrink-0 border-t border-destructive/20 bg-destructive/10 px-5 py-2 text-[0.8rem] text-destructive">
+            {detailError}
+          </div>
+        {/if}
 
         <ProjectTaskDetailFooter
           task={selectedTask}
@@ -1028,22 +1018,90 @@
 {/if}
 
 <style>
-  .task-detail-section {
+  .task-detail-scroll {
+    container: task-detail / inline-size;
+  }
+
+  .task-detail-workspace {
     display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(20rem, 0.65fr);
+    min-height: 100%;
+    align-items: start;
+  }
+
+  .task-detail-content {
+    display: grid;
+    min-width: 0;
+    align-content: start;
+    gap: 1.75rem;
+    padding: 1.5rem 2rem 2rem;
+  }
+
+  .task-detail-properties {
+    display: grid;
+    min-width: 0;
+    align-content: start;
+    gap: 1rem;
+    align-self: stretch;
+    padding: 1.5rem;
+    border-left: 1px solid var(--border);
+    background: color-mix(in oklab, var(--muted) 20%, var(--card));
+  }
+
+  .task-detail-dialog :global(.task-property-row) {
+    display: grid;
+    grid-template-columns: minmax(6.5rem, 0.85fr) minmax(0, 1.15fr);
     gap: 0.75rem;
-    padding-top: 1.1rem;
+    align-items: center;
+    min-height: 2rem;
+    font-size: calc(0.8rem * var(--type-scale, 1));
+    color: var(--muted-foreground);
   }
 
-  .task-detail-section + .task-detail-section {
-    border-top: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+  .task-detail-dialog :global(:is(input, textarea, button, select):focus) {
+    outline: none !important;
+    box-shadow: none !important;
   }
 
-  .task-detail-section-first {
-    padding-top: 0;
+  .task-detail-dialog :global(:is(input, textarea):focus),
+  .task-detail-dialog :global(button:focus-visible) {
+    background-color: var(--accent);
+  }
+
+  .task-detail-dialog :global(button:focus-visible) {
+    color: var(--accent-foreground);
+  }
+
+  .task-detail-dialog :global(label:has(> input[type="checkbox"]:focus-visible)) {
+    background-color: var(--accent);
+    border-radius: 0.375rem;
+  }
+
+  .task-detail-content :global(.task-detail-section + .task-detail-section) {
+    border-top: 1px solid color-mix(in oklab, var(--border) 65%, transparent);
+    padding-top: 1.25rem;
+  }
+
+  @container task-detail (max-width: 54rem) {
+    .task-detail-workspace {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .task-detail-content {
+      display: contents;
+    }
+    .task-detail-workspace {
+      gap: 1.5rem;
+      padding: 1.25rem;
+    }
+    .task-detail-properties {
+      grid-row: 2;
+      border-left: 0;
+      border-bottom: 1px solid var(--border);
+    }
   }
 
   .task-detail-dialog[data-mobile="true"] :global(button),
-  .task-detail-dialog[data-mobile="true"] :global(input),
+  .task-detail-dialog[data-mobile="true"] :global(input:not([type="checkbox"])),
   .task-detail-dialog[data-mobile="true"] :global(select),
   .task-detail-dialog[data-mobile="true"] :global(textarea) {
     min-height: 3rem;

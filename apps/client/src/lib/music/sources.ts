@@ -57,6 +57,14 @@ const PLAYLIST_ID_PATTERN = /^[a-zA-Z0-9_-]{2,}$/;
 const WINDOWS_ABSOLUTE_PATH_PATTERN = /^[a-zA-Z]:[\\/]/;
 const URL_LIKE_PATTERN = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
 
+/** Extracts the video ID from a standalone library identity. */
+export function youtubeVideoIdFromIdentity(identityKey: string): string | null {
+  const prefix = "youtube:video:";
+  if (!identityKey.startsWith(prefix)) return null;
+  const videoId = identityKey.slice(prefix.length);
+  return VIDEO_ID_PATTERN.test(videoId) ? videoId : null;
+}
+
 export function parseMusicSourceInput(input: string): SourceParseResult {
   const trimmed = input.trim();
   if (!trimmed) {

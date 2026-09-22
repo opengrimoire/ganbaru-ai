@@ -114,14 +114,12 @@ fn context_assignments_enforce_owner_provenance_and_unique_phases() {
         .await
         .unwrap_err();
         assert_eq!(duplicate.field.as_deref(), Some("assignments"));
-        assert!(contexts::assignments(
-            &pool,
-            MusicAssignmentOwnerKind::ProjectDefault,
-            "project-1",
-        )
-        .await
-        .unwrap()
-        .is_empty());
+        assert!(
+            contexts::assignments(&pool, MusicAssignmentOwnerKind::ProjectDefault, "project-1",)
+                .await
+                .unwrap()
+                .is_empty()
+        );
     });
 }
 

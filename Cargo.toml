@@ -1,5 +1,5 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = [
   "apps/client/src-tauri",
   "apps/client/src-tauri/app",
@@ -16,6 +16,16 @@ members = [
   "crates/ganbaru-notes",
   "crates/ganbaru-working-folders",
 ]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.98"
+authors = ["Ganbaru AI"]
+license = "AGPL-3.0-only"
+
+[workspace.lints.clippy]
+# Nested guards and let-chains are both valid; choose by readability and scope.
+collapsible_if = "allow"
 
 [workspace.dependencies]
 agent-client-protocol = "2.0.0"

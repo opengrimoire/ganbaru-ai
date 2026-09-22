@@ -3,11 +3,11 @@
 use crate::chat::models::{ChatError, ChatErrorCode, ChatResult};
 use crate::chat::process::ProviderProcessHandle;
 use crate::chat::providers::DriverOperationContext;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
     Arc, Mutex,
+    atomic::{AtomicU64, Ordering},
 };
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};

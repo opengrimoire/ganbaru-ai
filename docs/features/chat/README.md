@@ -36,6 +36,8 @@ Opening Chat for the first time creates or resolves the selected project's durab
 
 Provider setup is explicit. Ganbaru AI discovers supported provider families, explains missing or invalid installations, stores only approved device-local configuration, and never claims a provider is ready before its probe succeeds.
 
+Automatic provider discovery starts during workspace preparation but does not delay restoring local channels or reading saved history. Discovery results update provider settings without resetting the user's current conversation or draft. A failed probe leaves local history usable; provider execution still requires its normal readiness and authorization checks. Late discovery and fallback settings responses cannot replace settings from another vault or a newer load.
+
 ## Data ownership
 
 The active vault owns organizational communication, canonical provider events, projections, drafts, attachment metadata, checkpoints, and authorization records. Managed attachment bytes live under the vault. Device-local state owns external paths, executable discovery, provider homes, native credentials, process state, and presentation preferences that should not travel.

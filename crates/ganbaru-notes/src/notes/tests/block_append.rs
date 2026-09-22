@@ -22,9 +22,11 @@ fn append_children_paginates_and_preserves_payloads() {
         let page_one = reads::get_block_children(&pool, PAGE_A, None, Some(2))
             .await
             .unwrap();
-        assert!(serde_json::to_value(&page_one).unwrap()["has_more"]
-            .as_bool()
-            .unwrap());
+        assert!(
+            serde_json::to_value(&page_one).unwrap()["has_more"]
+                .as_bool()
+                .unwrap()
+        );
         let next_cursor = serde_json::to_value(&page_one).unwrap()["next_cursor"]
             .as_str()
             .unwrap()

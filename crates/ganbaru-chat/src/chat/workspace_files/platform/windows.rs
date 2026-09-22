@@ -15,7 +15,7 @@ fn windows_file_identity(file: &File) -> std::io::Result<WindowsFileIdentity> {
     use std::os::windows::io::AsRawHandle;
     use windows_crate::Win32::Foundation::HANDLE;
     use windows_crate::Win32::Storage::FileSystem::{
-        FileIdInfo, GetFileInformationByHandleEx, FILE_ID_INFO,
+        FILE_ID_INFO, FileIdInfo, GetFileInformationByHandleEx,
     };
 
     let mut info = FILE_ID_INFO::default();
@@ -419,7 +419,7 @@ fn windows_temporary_path(parent: &Path) -> PathBuf {
 #[cfg(windows)]
 fn windows_private_artifact_path(parent: &Path, kind: &str) -> std::io::Result<PathBuf> {
     use windows_crate::Win32::Security::Cryptography::{
-        BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG,
+        BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom,
     };
 
     windows_private_artifact_path_with(parent, kind, |random| {
@@ -485,8 +485,8 @@ fn windows_wide_path(path: &Path) -> std::io::Result<Vec<u16>> {
 
 #[cfg(windows)]
 fn windows_move_file_no_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
+    use windows_crate::Win32::Storage::FileSystem::{MOVE_FILE_FLAGS, MoveFileExW};
     use windows_crate::core::PCWSTR;
-    use windows_crate::Win32::Storage::FileSystem::{MoveFileExW, MOVE_FILE_FLAGS};
 
     let source = windows_wide_path(source)?;
     let destination = windows_wide_path(destination)?;
@@ -505,8 +505,8 @@ fn windows_move_file_no_replace(source: &Path, destination: &Path) -> std::io::R
 
 #[cfg(windows)]
 fn windows_replace_file(target: &Path, replacement: &Path, backup: &Path) -> std::io::Result<()> {
+    use windows_crate::Win32::Storage::FileSystem::{REPLACE_FILE_FLAGS, ReplaceFileW};
     use windows_crate::core::PCWSTR;
-    use windows_crate::Win32::Storage::FileSystem::{ReplaceFileW, REPLACE_FILE_FLAGS};
 
     let target = windows_wide_path(target)?;
     let replacement = windows_wide_path(replacement)?;

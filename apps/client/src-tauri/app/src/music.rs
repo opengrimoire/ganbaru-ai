@@ -1,5 +1,5 @@
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use serde::{Deserialize, Serialize};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::{
@@ -26,6 +26,8 @@ pub(crate) mod host;
 pub(crate) mod library;
 pub(crate) mod root_bindings;
 mod youtube_host;
+pub(crate) mod youtube_metadata;
+pub(crate) mod youtube_thumbnail;
 
 pub(crate) use host::setup_youtube_host;
 
@@ -862,7 +864,7 @@ mod tests {
         artwork_rank_for_track, find_track_artwork, parse_apic_frame, parse_flac_picture_block,
         remove_id3_unsynchronization,
     };
-    use super::host::{media_content_type, parse_byte_range, ByteRange};
+    use super::host::{ByteRange, media_content_type, parse_byte_range};
     use super::youtube_host::youtube_host_html;
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};

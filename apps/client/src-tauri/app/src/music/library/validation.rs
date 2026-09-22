@@ -219,6 +219,7 @@ pub(crate) fn validate_playlist_create(playlist: &MusicPlaylistCreate) -> MusicL
     validate_id(&playlist.id, "id")?;
     validate_name(&playlist.name)?;
     validate_icon(&playlist.icon)?;
+    validate_playlist_playback_mode(playlist.shuffle_enabled, playlist.mix_enabled)?;
     validate_timestamp(playlist.created_at, "createdAt")?;
     validate_unique_intended_uses(&playlist.intended_uses)
 }
@@ -227,6 +228,7 @@ pub(crate) fn validate_playlist_update(playlist: &MusicPlaylistUpdate) -> MusicL
     validate_id(&playlist.id, "id")?;
     validate_name(&playlist.name)?;
     validate_icon(&playlist.icon)?;
+    validate_playlist_playback_mode(playlist.shuffle_enabled, playlist.mix_enabled)?;
     if playlist.expected_version <= 0 {
         return Err(MusicLibraryError::validation(
             "expectedVersion",
@@ -235,6 +237,19 @@ pub(crate) fn validate_playlist_update(playlist: &MusicPlaylistUpdate) -> MusicL
     }
     validate_timestamp(playlist.updated_at, "updatedAt")?;
     validate_unique_intended_uses(&playlist.intended_uses)
+}
+
+pub(crate) fn validate_playlist_playback_mode(
+    shuffle_enabled: bool,
+    mix_enabled: bool,
+) -> MusicLibraryResult<()> {
+    if mix_enabled && !shuffle_enabled {
+        return Err(MusicLibraryError::validation(
+            "mixEnabled",
+            "Mix requires randomized playback",
+        ));
+    }
+    Ok(())
 }
 
 pub(crate) fn validate_icon(icon: &str) -> MusicLibraryResult<()> {
@@ -379,13 +394,13 @@ pub(crate) fn validate_bulk_membership_edit(
             return Err(MusicLibraryError::validation(
                 "weight",
                 "is required when setting weight",
-            ))
+            ));
         }
         (true, true) => {
             return Err(MusicLibraryError::validation(
                 "weight",
                 "must be empty when no playlist weight is changing",
-            ))
+            ));
         }
         _ => {}
     }

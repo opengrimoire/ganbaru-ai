@@ -16,7 +16,6 @@ export type MusicQueueMutationAction =
   | "none"
   | "remove-membership"
   | "reorder"
-  | "rebuild-shuffle"
   | "refresh-source-after-current"
   | "detach-playlist"
   | "switch-playlist"
@@ -44,7 +43,7 @@ export function planMusicQueueMutation(
     return plan(mutation.replacementPlaylistId ? "switch-playlist" : "detach-playlist", true);
   }
   if (mutation.kind === "playlist-reordered") return plan("reorder", true);
-  if (mutation.kind === "weight-changed") return plan("rebuild-shuffle", true);
+  if (mutation.kind === "weight-changed") return plan("none", true);
   if (mutation.kind === "source-repaired") {
     return mutation.itemId === active.itemId
       ? plan("refresh-source-after-current", true)

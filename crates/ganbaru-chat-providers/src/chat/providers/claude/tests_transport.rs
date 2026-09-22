@@ -4,16 +4,16 @@ use super::driver::ClaudeProviderDriver;
 use super::home::ClaudeHome;
 use super::protocol::{ClaudeVersion, MINIMUM_CLAUDE_VERSION};
 use super::session::{
-    resolve_approval, resolve_user_input, PendingClaudeRequest, PendingClaudeRequestKind,
-    PendingClaudeRequests,
+    PendingClaudeRequest, PendingClaudeRequestKind, PendingClaudeRequests, resolve_approval,
+    resolve_user_input,
 };
-use super::tests::{configuration, context, modes, RecordingSink, TestDirectory};
+use super::tests::{RecordingSink, TestDirectory, configuration, context, modes};
 use super::transport::read_bounded_line;
 use super::transport::{ClaudeInboundMessage, ClaudeJsonlConnection, ClaudeTransportFailure};
 use crate::chat::events::CanonicalEvent;
 use crate::chat::models::*;
 use crate::chat::providers::{DriverCancellation, DriverOperationContext, ProviderDriver};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -339,10 +339,11 @@ fn driver_starts_dispatches_and_stops_a_native_session() {
             .unwrap();
         assert_eq!(receipt.state, ChatTurnState::Active);
         tokio::time::sleep(Duration::from_millis(20)).await;
-        assert!(sink
-            .events()
-            .iter()
-            .any(|event| matches!(event.event, CanonicalEvent::TurnCompleted(_))));
+        assert!(
+            sink.events()
+                .iter()
+                .any(|event| matches!(event.event, CanonicalEvent::TurnCompleted(_)))
+        );
         driver
             .stop_session(
                 StopSessionRequest {
@@ -353,10 +354,11 @@ fn driver_starts_dispatches_and_stops_a_native_session() {
             )
             .await
             .unwrap();
-        assert!(sink
-            .events()
-            .iter()
-            .any(|event| matches!(event.event, CanonicalEvent::SessionExited(_))));
+        assert!(
+            sink.events()
+                .iter()
+                .any(|event| matches!(event.event, CanonicalEvent::SessionExited(_)))
+        );
     });
 }
 

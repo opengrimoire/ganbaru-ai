@@ -2,14 +2,18 @@
 name = "ganbaru-native-messaging"
 version = "0.1.5"
 description = "Ganbaru AI Chromium native messaging host"
-authors = ["Ganbaru AI"]
-license = "AGPL-3.0-only"
-edition = "2021"
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 default-run = "ganbaru-ai-native-messaging"
 
 [[bin]]
 name = "ganbaru-ai-native-messaging"
 path = "src/main.rs"
+
+[lints]
+workspace = true
 
 [dependencies]
 chrono = { workspace = true }

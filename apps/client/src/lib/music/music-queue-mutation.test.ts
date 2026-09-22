@@ -34,7 +34,7 @@ describe("music queue mutation planning", () => {
       kind: "weight-changed",
       playlistId: "playlist-1",
       membershipId: "membership-1",
-    })).toMatchObject({ action: "rebuild-shuffle", preserveCurrentMedia: true });
+    })).toMatchObject({ action: "none", preserveCurrentMedia: true });
   });
 
   it("detaches a deleted playlist or switches to its chosen replacement", () => {

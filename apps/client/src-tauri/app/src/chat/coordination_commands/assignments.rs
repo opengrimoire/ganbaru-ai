@@ -4,7 +4,7 @@ use super::super::models::*;
 use super::common::new_id;
 use super::dispatch::{deliver_pending_assignment_inputs, dispatch_assignment_job};
 use super::reads::read_assignment;
-use super::workflow::{persist_assignment_routing, set_assignment_state, ResolvedInvocation};
+use super::workflow::{ResolvedInvocation, persist_assignment_routing, set_assignment_state};
 use super::{chat_pool, i64_value, identifier_error, now_timestamp, persistence_error};
 use sqlx::{Row, SqlitePool};
 

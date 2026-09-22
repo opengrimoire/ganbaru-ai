@@ -805,11 +805,7 @@ fn chrono_to_temporal_weekday(day: ChronoWeekday) -> i64 {
 }
 
 fn div_ceil(a: i64, b: i64) -> i64 {
-    if a <= 0 {
-        0
-    } else {
-        (a + b - 1) / b
-    }
+    if a <= 0 { 0 } else { (a + b - 1) / b }
 }
 
 #[cfg(test)]

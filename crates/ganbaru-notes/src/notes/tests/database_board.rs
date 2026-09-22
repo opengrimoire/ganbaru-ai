@@ -180,21 +180,27 @@ fn board_database_view_groups_filters_sorts_and_moves_rows() {
             default_json["view"]["configuration"]["board"]["group_property_id"],
             "status"
         );
-        assert!(default_json["groups"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|group| group["id"] == "todo" && group["rows"].as_array().unwrap().is_empty()));
-        assert!(default_json["groups"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|group| group["id"] == "doing" && group["rows"][0]["id"] == PAGE_B));
-        assert!(default_json["groups"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|group| group["id"] == "__empty__" && group["rows"][0]["id"] == PAGE_C));
+        assert!(
+            default_json["groups"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|group| group["id"] == "todo" && group["rows"].as_array().unwrap().is_empty())
+        );
+        assert!(
+            default_json["groups"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|group| group["id"] == "doing" && group["rows"][0]["id"] == PAGE_B)
+        );
+        assert!(
+            default_json["groups"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|group| group["id"] == "__empty__" && group["rows"][0]["id"] == PAGE_C)
+        );
 
         let priority_board = data_source_board::update_data_source_board_view(
             &pool,
@@ -239,16 +245,20 @@ fn board_database_view_groups_filters_sorts_and_moves_rows() {
             priority_json["view"]["configuration"]["board"]["visible_property_ids"],
             json!(["status", "done_checkbox", "due"])
         );
-        assert!(priority_json["groups"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|group| group["id"] == "low" && group["rows"][0]["id"] == PAGE_C));
-        assert!(priority_json["groups"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|group| group["id"] == "__empty__" && group["hidden"] == true));
+        assert!(
+            priority_json["groups"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|group| group["id"] == "low" && group["rows"][0]["id"] == PAGE_C)
+        );
+        assert!(
+            priority_json["groups"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|group| group["id"] == "__empty__" && group["hidden"] == true)
+        );
 
         let moved = data_source_board::move_data_source_board_row(
             &pool,
@@ -270,16 +280,20 @@ fn board_database_view_groups_filters_sorts_and_moves_rows() {
             .find(|group| group["id"] == "high")
             .unwrap();
         assert_eq!(high_group["rows"].as_array().unwrap().len(), 2);
-        assert!(high_group["rows"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|row| row["id"] == PAGE_C
-                && row["properties"]["Priority"]["select"]["name"] == "High"));
-        assert!(moved_json["groups"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|group| group["id"] == "low" && group["rows"].as_array().unwrap().is_empty()));
+        assert!(
+            high_group["rows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|row| row["id"] == PAGE_C
+                    && row["properties"]["Priority"]["select"]["name"] == "High")
+        );
+        assert!(
+            moved_json["groups"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|group| group["id"] == "low" && group["rows"].as_array().unwrap().is_empty())
+        );
     });
 }

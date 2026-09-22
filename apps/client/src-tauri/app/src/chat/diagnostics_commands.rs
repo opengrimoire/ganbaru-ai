@@ -2,8 +2,8 @@
 
 use super::credentials::{CredentialStore, PlatformCredentialStore};
 use super::device_state::{
-    read_active_device_scope, update_active_device_scope, ChatDiagnosticPreferences,
-    MAX_DIAGNOSTIC_RETENTION_DAYS,
+    ChatDiagnosticPreferences, MAX_DIAGNOSTIC_RETENTION_DAYS, read_active_device_scope,
+    update_active_device_scope,
 };
 use super::models::{
     ChatError, ChatErrorCode, ChatResult, ChatThreadId, ProbeState, VersionedJson,
@@ -13,7 +13,7 @@ use super::runtime::ChatRuntimeRegistry;
 use super::terminal::ChatTerminalRegistry;
 use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sqlx::{Row, SqlitePool};
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -556,16 +556,20 @@ mod tests {
     fn maintenance_confirmations_and_retention_are_exact() {
         assert!(require_confirmation(STOP_CONFIRMATION, STOP_CONFIRMATION).is_ok());
         assert!(require_confirmation("stop all chat processes", STOP_CONFIRMATION).is_err());
-        assert!(validate_preferences(&ChatDiagnosticPreferences {
-            capture_enabled: true,
-            retention_days: 1
-        })
-        .is_ok());
-        assert!(validate_preferences(&ChatDiagnosticPreferences {
-            capture_enabled: true,
-            retention_days: 31
-        })
-        .is_err());
+        assert!(
+            validate_preferences(&ChatDiagnosticPreferences {
+                capture_enabled: true,
+                retention_days: 1
+            })
+            .is_ok()
+        );
+        assert!(
+            validate_preferences(&ChatDiagnosticPreferences {
+                capture_enabled: true,
+                retention_days: 31
+            })
+            .is_err()
+        );
     }
 
     #[test]

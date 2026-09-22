@@ -8,9 +8,9 @@ use super::validation::{
     validate_segment_update, validate_segment_write,
 };
 use super::writes::{
-    close_run_tx, insert_adaptive_decision_envelope_tx, insert_run_event_tx, insert_run_tx,
-    insert_segment_tx, load_existing_pauses, load_segment_event_context, log_new_pause_events,
-    log_segment_update_events, replace_segment_pauses, RunEventInsert,
+    RunEventInsert, close_run_tx, insert_adaptive_decision_envelope_tx, insert_run_event_tx,
+    insert_run_tx, insert_segment_tx, load_existing_pauses, load_segment_event_context,
+    log_new_pause_events, log_segment_update_events, replace_segment_pauses,
 };
 use super::*;
 

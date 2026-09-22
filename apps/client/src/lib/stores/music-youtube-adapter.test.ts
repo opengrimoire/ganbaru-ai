@@ -11,6 +11,82 @@ import {
 } from "./music-youtube-adapter";
 
 describe("Music YouTube adapter", () => {
+  it("keeps autoplay feedback until the host plays and clears it on failure", async () => {
+    const source = youtubeVideoSourceFromId("video-1");
+    const contentWindow = { postMessage: vi.fn() };
+    const state: MusicYouTubeState = {
+      currentSource: source,
+      snapshot: { ...DEFAULT_PLAYBACK_SNAPSHOT, status: "loading" },
+      playerError: null,
+      queue: [source],
+      queueHistory: [],
+      shuffleEnabled: false,
+      shuffleOrder: [],
+      pendingQueueIndex: null,
+      youtubeHostUrl: null,
+      youtubeFrame: { contentWindow } as unknown as HTMLIFrameElement,
+      youtubeHostToken: null,
+      youtubeHostReady: false,
+    };
+    const loadRuntime = new MusicLoadRuntime();
+    const generation = loadRuntime.begin();
+    const setPlaybackStarting = vi.fn();
+    const onDurationKnown = vi.fn();
+    const adapter = createMusicYouTubeAdapter({
+      state,
+      loadRuntime,
+      effectiveVolume: () => 1,
+      loadSource: vi.fn(async () => undefined),
+      persist: vi.fn(async () => undefined),
+      updateExternalControls: vi.fn(),
+      updateTray: vi.fn(),
+      canPlayNext: () => false,
+      playNext: vi.fn(async () => undefined),
+      handlePosition: vi.fn(),
+      onDurationKnown,
+      setPlaybackStarting,
+      getHostUrl: vi.fn(async () => "http://127.0.0.1:1234/player?token=test-token"),
+      persistYouTubeVideo: vi.fn(async () => undefined),
+      persistYouTubePlaylist: vi.fn(async () => undefined),
+      reportYouTubeFailure: vi.fn(async () => undefined),
+    });
+    await adapter.load(source, null, generation, true);
+    expect(setPlaybackStarting).toHaveBeenLastCalledWith(true);
+
+    const sendState = (status: "ready" | "playing", durationMs: number | null) => adapter.handleMessage({
+      source: contentWindow,
+      data: {
+        token: "test-token",
+        load: String(generation),
+        type: "ganbaru-ai-youtube-state",
+        status,
+        positionMs: 0,
+        durationMs,
+        videoId: "video-1",
+        title: null,
+        channel: null,
+      },
+    } as unknown as MessageEvent<unknown>);
+    sendState("ready", null);
+    expect(setPlaybackStarting).toHaveBeenLastCalledWith(true);
+    expect(onDurationKnown).not.toHaveBeenCalled();
+    sendState("playing", 10_000);
+    expect(setPlaybackStarting).toHaveBeenLastCalledWith(false);
+    expect(onDurationKnown).toHaveBeenCalledWith("video-1", 10_000);
+
+    await adapter.load(source, null, generation, true);
+    adapter.handleMessage({
+      source: contentWindow,
+      data: {
+        token: "test-token",
+        load: String(generation),
+        type: "ganbaru-ai-youtube-error",
+        code: 150,
+      },
+    } as unknown as MessageEvent<unknown>);
+    expect(setPlaybackStarting).toHaveBeenLastCalledWith(false);
+  });
+
   it("expands a current YouTube playlist and loads its first video", async () => {
     const parsed = parseMusicSourceInput(
       "https://www.youtube.com/playlist?list=PL1234567890",
@@ -48,6 +124,8 @@ describe("Music YouTube adapter", () => {
       canPlayNext: () => false,
       playNext: vi.fn(async () => undefined),
       handlePosition: vi.fn(),
+      onDurationKnown: vi.fn(),
+      setPlaybackStarting: vi.fn(),
       getHostUrl: vi.fn(async () => "http://127.0.0.1:1234/player?token=test-token"),
       persistYouTubeVideo: vi.fn(async () => undefined),
       persistYouTubePlaylist,
@@ -114,6 +192,8 @@ describe("Music YouTube adapter", () => {
       canPlayNext: () => false,
       playNext: vi.fn(async () => undefined),
       handlePosition: vi.fn(),
+      onDurationKnown: vi.fn(),
+      setPlaybackStarting: vi.fn(),
       getHostUrl: vi.fn(async () => "http://127.0.0.1:1234/player?token=test-token"),
       persistYouTubeVideo,
       persistYouTubePlaylist: vi.fn(async () => undefined),
@@ -190,6 +270,8 @@ describe("Music YouTube adapter", () => {
       canPlayNext: () => false,
       playNext: vi.fn(async () => undefined),
       handlePosition: vi.fn(),
+      onDurationKnown: vi.fn(),
+      setPlaybackStarting: vi.fn(),
       getHostUrl: vi.fn(async () => "http://127.0.0.1:1234/player?token=test-token"),
       persistYouTubeVideo: vi.fn(async () => undefined),
       persistYouTubePlaylist: vi.fn(async () => undefined),
@@ -246,6 +328,8 @@ describe("Music YouTube adapter", () => {
       canPlayNext: () => false,
       playNext: vi.fn(async () => undefined),
       handlePosition: vi.fn(),
+      onDurationKnown: vi.fn(),
+      setPlaybackStarting: vi.fn(),
       getHostUrl: vi.fn(async () => "http://127.0.0.1:1234/player?token=test-token"),
       persistYouTubeVideo,
       persistYouTubePlaylist: vi.fn(async () => undefined),
@@ -301,6 +385,8 @@ describe("Music YouTube adapter", () => {
       canPlayNext: () => false,
       playNext: vi.fn(async () => undefined),
       handlePosition: vi.fn(),
+      onDurationKnown: vi.fn(),
+      setPlaybackStarting: vi.fn(),
       getHostUrl: vi.fn(async () => "http://127.0.0.1:1234/player?token=test-token"),
       persistYouTubeVideo: vi.fn(async () => undefined),
       persistYouTubePlaylist: vi.fn(async () => undefined),

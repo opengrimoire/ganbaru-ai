@@ -100,7 +100,7 @@ pub fn validate_child_database_payload(payload: &Value) -> Result<(), String> {
     match payload.get("title") {
         Some(Value::String(title)) if !contains_control_characters(title) => {}
         Some(Value::String(_)) => {
-            return Err("child_database.title must not contain control characters".to_string())
+            return Err("child_database.title must not contain control characters".to_string());
         }
         _ => return Err("child_database.title must be a string".to_string()),
     }
@@ -155,7 +155,7 @@ pub fn validate_table_row_payload(payload: &Value) -> Result<(), String> {
     let cells = match payload.get("cells") {
         Some(Value::Array(cells)) if (1..=100).contains(&cells.len()) => cells,
         Some(Value::Array(_)) => {
-            return Err("table_row.cells must include between 1 and 100 cells".to_string())
+            return Err("table_row.cells must include between 1 and 100 cells".to_string());
         }
         _ => return Err("table_row.cells must be an array".to_string()),
     };
@@ -177,7 +177,7 @@ pub fn validate_synced_block_payload(payload: &Value) -> Result<(), String> {
             match synced_from.get("type") {
                 Some(Value::String(source_type)) if source_type == "block_id" => {}
                 Some(Value::String(_)) => {
-                    return Err("synced_block.synced_from.type must be block_id".to_string())
+                    return Err("synced_block.synced_from.type must be block_id".to_string());
                 }
                 _ => return Err("synced_block.synced_from.type must be a string".to_string()),
             }
@@ -328,7 +328,7 @@ pub fn validate_button_action(action: &Value, index: usize) -> Result<(), String
         _ => {
             return Err(format!(
                 "button.actions[{index}].type must be insert_blocks"
-            ))
+            ));
         }
     }
     match action.get("source") {

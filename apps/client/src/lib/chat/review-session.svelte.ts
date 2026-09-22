@@ -115,14 +115,9 @@ export class ChatReviewSession {
       this.applySnapshot(next);
     } catch (reason: unknown) {
       if (sequence !== this.requestSequence || !this.scopeMatches(scopeToken)) return;
-      if (isMissingCheckpointPair(reason, scope.source)) {
-        this.options.onSourceFallback(scope.source.kind === "checkpoint" && scope.source.turnId
-          ? { kind: "provider_turn", turnId: scope.source.turnId }
-          : { kind: "working_tree", mode: "all" });
-        return;
-      }
-      if (isMissingProviderTurn(reason, scope.source)) {
-        this.options.onSourceFallback({ kind: "working_tree", mode: "all" });
+      const fallback = reviewSourceFallback(reason, scope.source);
+      if (fallback) {
+        this.options.onSourceFallback(fallback);
         return;
       }
       this.options.onError(reason);
@@ -267,30 +262,19 @@ export function reviewSessionScopeToken(scope: ReviewSessionScope): string {
   ].join("\u0000");
 }
 
-function isMissingCheckpointPair(reason: unknown, source: ReviewDiffSource): boolean {
-  if (source.kind !== "checkpoint") return false;
-  const code = errorCode(reason);
-  return (code === null || code === "not_found")
-    && errorDetail(reason).includes("A settled checkpoint pair is not available for this review");
-}
-
-function isMissingProviderTurn(reason: unknown, source: ReviewDiffSource): boolean {
-  if (source.kind !== "provider_turn") return false;
-  const code = errorCode(reason);
-  return code === "not_found" || errorDetail(reason).includes("Provider-reported");
-}
-
-function errorCode(reason: unknown): string | null {
-  if (typeof reason !== "object" || reason === null || Array.isArray(reason)) return null;
-  const code = (reason as Record<string, unknown>).code;
-  return typeof code === "string" ? code : null;
-}
-
-function errorDetail(reason: unknown): string {
-  if (reason instanceof Error) return reason.message;
-  if (typeof reason !== "object" || reason === null || Array.isArray(reason)) return String(reason);
-  const message = (reason as Record<string, unknown>).message;
-  return typeof message === "string" ? message : String(reason);
+/** Select a fallback only for a missing review source, never for unrelated failures. */
+export function reviewSourceFallback(error: unknown, source: ReviewDiffSource): ReviewDiffSource | null {
+  if (typeof error !== "object" || error === null || !("code" in error) || error.code !== "not_found"
+    || !("details" in error) || typeof error.details !== "object" || error.details === null
+    || !("reason" in error.details)) return null;
+  if (source.kind === "checkpoint" && error.details.reason === "checkpoint_pair") {
+    return source.turnId
+      ? { kind: "provider_turn", turnId: source.turnId }
+      : { kind: "working_tree", mode: "all" };
+  }
+  return source.kind === "provider_turn" && error.details.reason === "provider_turn"
+    ? { kind: "working_tree", mode: "all" }
+    : null;
 }
 
 function yieldForReviewRender(): Promise<void> {

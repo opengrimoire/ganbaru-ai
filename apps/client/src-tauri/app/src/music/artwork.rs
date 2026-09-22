@@ -1,5 +1,5 @@
 use std::{
-    collections::{hash_map::DefaultHasher, HashMap},
+    collections::{HashMap, hash_map::DefaultHasher},
     fs::{self, File},
     hash::{Hash, Hasher},
     io::{Read, Seek, SeekFrom},

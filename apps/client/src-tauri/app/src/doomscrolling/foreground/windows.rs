@@ -13,11 +13,7 @@ fn windows_foreground_window() -> Option<::windows::Win32::Foundation::HWND> {
     // SAFETY: This getter accepts no pointers and returns a borrowed window
     // identifier. A null result is rejected before the identifier is used.
     let hwnd = unsafe { GetForegroundWindow() };
-    if hwnd.0.is_null() {
-        None
-    } else {
-        Some(hwnd)
-    }
+    if hwnd.0.is_null() { None } else { Some(hwnd) }
 }
 
 #[cfg(windows)]
@@ -45,11 +41,11 @@ mod tests {
 
 #[cfg(windows)]
 fn windows_process_image_path(process_id: u32) -> Option<String> {
-    use ::windows::core::{Owned, PWSTR};
     use ::windows::Win32::System::Threading::{
-        OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
-        PROCESS_QUERY_LIMITED_INFORMATION,
+        OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+        QueryFullProcessImageNameW,
     };
+    use ::windows::core::{Owned, PWSTR};
 
     // SAFETY: No pointers are passed, inheritance is disabled, and Windows
     // returns a fresh owning process handle on success.
@@ -106,8 +102,8 @@ fn windows_status_for_window(
 }
 
 #[cfg(windows)]
-pub(in crate::doomscrolling) fn foreground_desktop_app_status(
-) -> DoomscrollingForegroundDesktopAppStatus {
+pub(in crate::doomscrolling) fn foreground_desktop_app_status()
+-> DoomscrollingForegroundDesktopAppStatus {
     let Some(hwnd) = windows_foreground_window() else {
         return unavailable_foreground_desktop_app_status("no foreground window is active");
     };

@@ -2,12 +2,16 @@
 name = "ganbaru-chat-providers"
 version = "0.1.5"
 description = "Ganbaru AI Chat provider drivers and transports"
-authors = ["Ganbaru AI"]
-license = "AGPL-3.0-only"
-edition = "2021"
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 
 [lib]
 doctest = false
+
+[lints]
+workspace = true
 
 [dependencies]
 agent-client-protocol = { workspace = true }

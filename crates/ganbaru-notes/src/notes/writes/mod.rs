@@ -21,8 +21,8 @@ pub use page_lifecycle::{
 };
 pub use pages::{create_child_page_from_block, create_page, update_page};
 pub use parents::{
-    parent_target_from_block_row, refresh_parent_has_children, resolve_block_parent, touch_page,
-    validate_page_parent_exists, ParentTarget,
+    ParentTarget, parent_target_from_block_row, refresh_parent_has_children, resolve_block_parent,
+    touch_page, validate_page_parent_exists,
 };
 pub use payloads::{default_text_payload, page_title_properties, rich_text};
 pub use sort::next_sort_orders;

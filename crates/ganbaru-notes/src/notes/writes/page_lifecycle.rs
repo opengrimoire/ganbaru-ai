@@ -1,12 +1,12 @@
 use super::block_tree::load_child_page_block_row_any;
 use super::pages::load_page_row;
 use super::parents::{
-    parent_target_from_block_row, refresh_parent_has_children, touch_page, ParentTarget,
+    ParentTarget, parent_target_from_block_row, refresh_parent_has_children, touch_page,
 };
 use super::payloads::child_page_payload;
 use super::sort::next_sort_orders;
 use crate::notes::models::{
-    page_parent_columns, NoteBlockRow, NoteLoadedPage, NoteMovePage, NotePageDto, NoteParent,
+    NoteBlockRow, NoteLoadedPage, NoteMovePage, NotePageDto, NoteParent, page_parent_columns,
 };
 use crate::notes::validation::{
     plain_text_from_payload, require_uuid, validate_parent, validate_sort_order,

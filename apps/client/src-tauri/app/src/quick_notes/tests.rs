@@ -93,12 +93,16 @@ fn crud_search_lifecycle_and_revision_conflicts_are_consistent() {
             "archive",
         ).await.unwrap();
         assert!(archived.archived);
-        assert!(revision_mutation(
+        let conflict = revision_mutation(
             &pool,
             &QuickNoteRevisionRequest { id: "one".into(), expected_revision: 1 },
             "UPDATE quick_notes SET archived = 0, revision = revision + 1 WHERE id = ? AND revision = ?",
             "conflict",
-        ).await.is_err());
+        ).await.unwrap_err();
+        assert_eq!(
+            serde_json::to_value(conflict).unwrap()["code"],
+            "revision_conflict"
+        );
 
         let trashed = revision_mutation(
             &pool,

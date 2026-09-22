@@ -1212,8 +1212,9 @@ fn now_ms() -> Result<i64, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        is_hex_color, validate_display_name, validate_palette_rows, validate_theme_id,
-        validate_token_identity, validate_token_value_map, ThemePaletteWrite, PALETTE_SIZE,
+        PALETTE_SIZE, ThemePaletteWrite, is_hex_color, validate_display_name,
+        validate_palette_rows, validate_theme_id, validate_token_identity,
+        validate_token_value_map,
     };
     use std::collections::HashMap;
 

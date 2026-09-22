@@ -95,8 +95,24 @@ export async function listQuickNotes(
   };
 }
 
+/** A native note write failure with a stable recovery code. */
+export class QuickNoteWriteError extends Error {
+  constructor(readonly code: "revision_conflict" | "failed", message: string) {
+    super(message);
+    this.name = "QuickNoteWriteError";
+  }
+}
+
 async function invokeNote(command: string, args: Record<string, unknown>): Promise<QuickNote> {
-  return mapQuickNote(await invoke<unknown>(command, { dbUrl: await ensureDbUrl(), ...args }));
+  try {
+    return mapQuickNote(await invoke<unknown>(command, { dbUrl: await ensureDbUrl(), ...args }));
+  } catch (error: unknown) {
+    if (typeof error === "object" && error !== null && "code" in error && "message" in error
+      && (error.code === "revision_conflict" || error.code === "failed") && typeof error.message === "string") {
+      throw new QuickNoteWriteError(error.code, error.message);
+    }
+    throw error;
+  }
 }
 
 export function getQuickNote(id: string): Promise<QuickNote> {

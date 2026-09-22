@@ -2,8 +2,8 @@
 
 use super::models::{ChatError, ChatErrorCode, ChatResult, ProjectWorkingFolderId};
 use crate::projects::working_folders::{
-    read_active_working_folder_scope, update_active_working_folder_scope,
-    ProjectWorkingFolderBindingState,
+    ProjectWorkingFolderBindingState, read_active_working_folder_scope,
+    update_active_working_folder_scope,
 };
 use crate::vault;
 use std::fs;

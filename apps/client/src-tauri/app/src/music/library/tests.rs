@@ -37,6 +37,7 @@ pub(super) fn playlist(id: &str) -> MusicPlaylistCreate {
         name: "Focus".to_string(),
         icon: "lucide:laptop".to_string(),
         shuffle_enabled: true,
+        mix_enabled: false,
         repeat_mode: MusicRepeatMode::All,
         intended_uses: vec![MusicIntendedUse::Focus],
         created_at: 1_700_000_000_000,
@@ -81,6 +82,72 @@ pub(super) fn membership(index: usize) -> MusicMembershipWrite {
 }
 
 #[test]
+fn soundscape_selection_preserves_order_and_removal_updates_state() {
+    tauri::async_runtime::block_on(async {
+        let pool = pool().await;
+        let initial = super::soundscapes::state(&pool).await.unwrap();
+        let selected = super::soundscapes::update_state(
+            &pool,
+            MusicSoundscapeStateWrite {
+                active_soundscape_id: Some("generated-pink-noise".to_string()),
+                active_ids: vec![
+                    "generated-pink-noise".to_string(),
+                    "generated-brown-noise".to_string(),
+                ],
+                multiple_enabled: true,
+                generated_level: None,
+                local_level: None,
+                desired_playing: true,
+                volume: 0.1,
+                expected_version: initial.version,
+                updated_at: initial.updated_at + 1,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            selected.active_ids,
+            ["generated-pink-noise", "generated-brown-noise"]
+        );
+        assert!(selected.desired_playing);
+
+        sqlx::query(
+            "INSERT INTO music_soundscapes
+                (id, source_kind, name, availability, created_at, updated_at, version)
+             VALUES ('local-test', 'local-loop', 'Test', 'missing', 1, 1, 1)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let with_local = super::soundscapes::update_state(
+            &pool,
+            MusicSoundscapeStateWrite {
+                active_soundscape_id: Some("local-test".to_string()),
+                active_ids: vec!["local-test".to_string()],
+                multiple_enabled: false,
+                generated_level: None,
+                local_level: None,
+                desired_playing: true,
+                volume: 0.1,
+                expected_version: selected.version,
+                updated_at: selected.updated_at + 1,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(with_local.active_ids, ["local-test"]);
+        super::soundscapes::remove(&pool, "local-test", 1)
+            .await
+            .unwrap();
+        let after_removal = super::soundscapes::state(&pool).await.unwrap();
+        assert!(after_removal.active_ids.is_empty());
+        assert_eq!(after_removal.active_soundscape_id, None);
+        assert!(!after_removal.desired_playing);
+        assert_eq!(after_removal.version, with_local.version + 1);
+    });
+}
+
+#[test]
 fn typed_enums_reject_unknown_external_values() {
     let error = serde_json::from_str::<MusicWeight>(r#""always""#).unwrap_err();
     assert!(error.to_string().contains("unknown variant"));
@@ -111,6 +178,13 @@ fn built_in_music_playlists_are_protected_localizable_and_repaired() {
                 .count(),
             defaults::BUILT_IN_MUSIC_PLAYLISTS.len(),
         );
+        assert_eq!(
+            summaries
+                .iter()
+                .find(|playlist| playlist.id == "playlist-default-break-calm")
+                .map(|playlist| playlist.icon.as_str()),
+            Some("lucide:armchair"),
+        );
 
         let detail = queries::playlist_detail(&pool, "playlist-default-work-focus")
             .await
@@ -122,6 +196,7 @@ fn built_in_music_playlists_are_protected_localizable_and_repaired() {
                 name: "Renamed".to_string(),
                 icon: "lucide:rocket".to_string(),
                 shuffle_enabled: detail.shuffle_enabled,
+                mix_enabled: detail.mix_enabled,
                 repeat_mode: detail.repeat_mode,
                 intended_uses: detail.intended_uses,
                 expected_version: detail.version,
@@ -153,9 +228,11 @@ fn built_in_music_playlists_are_protected_localizable_and_repaired() {
         let repaired = queries::playlist_summaries(&pool, 1_700_000_000_000, 0, 50)
             .await
             .unwrap();
-        assert!(repaired
-            .iter()
-            .any(|playlist| playlist.id == "playlist-default-work-focus"));
+        assert!(
+            repaired
+                .iter()
+                .any(|playlist| playlist.id == "playlist-default-work-focus")
+        );
     });
 }
 
@@ -465,6 +542,7 @@ fn playlist_create_update_and_stale_detection_are_transactional() {
                 name: "Deep focus".to_string(),
                 icon: "emoji:🎧".to_string(),
                 shuffle_enabled: false,
+                mix_enabled: false,
                 repeat_mode: MusicRepeatMode::Off,
                 intended_uses: vec![MusicIntendedUse::Focus, MusicIntendedUse::Reading],
                 expected_version: 1,
@@ -482,6 +560,7 @@ fn playlist_create_update_and_stale_detection_are_transactional() {
                 name: "Stale edit".to_string(),
                 icon: "lucide:list-music".to_string(),
                 shuffle_enabled: false,
+                mix_enabled: false,
                 repeat_mode: MusicRepeatMode::All,
                 intended_uses: Vec::new(),
                 expected_version: 1,
@@ -507,6 +586,32 @@ fn playlist_create_update_and_stale_detection_are_transactional() {
                 .icon,
             "emoji:🎧",
         );
+    });
+}
+
+#[test]
+fn mix_mode_round_trips_and_requires_shuffle() {
+    tauri::async_runtime::block_on(async {
+        let pool = pool().await;
+        let mut request = playlist("playlist-mix");
+        request.mix_enabled = true;
+        writes::create_playlist(&pool, request).await.unwrap();
+        let detail = queries::playlist_detail(&pool, "playlist-mix")
+            .await
+            .unwrap();
+        assert!(detail.shuffle_enabled && detail.mix_enabled);
+        let summary = queries::playlist_summaries(&pool, 1_700_000_000_000, 0, 50)
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|entry| entry.id == "playlist-mix")
+            .unwrap();
+        assert!(summary.mix_enabled);
+
+        let mut invalid = playlist("playlist-invalid-mix");
+        invalid.shuffle_enabled = false;
+        invalid.mix_enabled = true;
+        assert!(writes::create_playlist(&pool, invalid).await.is_err());
     });
 }
 
@@ -544,9 +649,9 @@ fn bulk_membership_failure_rolls_back_earlier_rows() {
 fn duplicate_playlist_preserves_membership_details_and_ranges() {
     tauri::async_runtime::block_on(async {
         let pool = pool().await;
-        super::writes::create_playlist(&pool, playlist("playlist-1"))
-            .await
-            .unwrap();
+        let mut source = playlist("playlist-1");
+        source.mix_enabled = true;
+        super::writes::create_playlist(&pool, source).await.unwrap();
         seed_item(&pool, "item-1", "local:item-1").await;
         let mut source_membership = membership(1);
         source_membership.item_id = "item-1".to_string();
@@ -583,6 +688,12 @@ fn duplicate_playlist_preserves_membership_details_and_ranges() {
         )
         .await
         .unwrap();
+        assert!(
+            queries::playlist_detail(&pool, "playlist-2")
+                .await
+                .unwrap()
+                .mix_enabled
+        );
 
         let copied: (String, Option<i64>, Option<i64>) = sqlx::query_as(
             "SELECT weight, start_ms, end_ms FROM music_playlist_memberships
@@ -747,6 +858,67 @@ fn deferred_review_items_remain_visible_before_and_after_their_optional_date() {
                 .await
                 .unwrap()
                 .total_count,
+            1
+        );
+    });
+}
+
+#[test]
+fn playlist_item_window_counts_only_snoozes_effective_in_that_playlist() {
+    tauri::async_runtime::block_on(async {
+        let pool = pool().await;
+        for id in ["playlist-1", "playlist-2"] {
+            super::writes::create_playlist(&pool, playlist(id))
+                .await
+                .unwrap();
+        }
+        seed_item(&pool, "item-1", "local:item-1").await;
+        let first = membership(1);
+        let mut second = membership(2);
+        second.item_id = "item-1".to_string();
+        second.playlist_id = "playlist-2".to_string();
+        super::writes::upsert_memberships(
+            &pool,
+            MusicBulkMembershipWrite {
+                memberships: vec![first, second],
+            },
+        )
+        .await
+        .unwrap();
+        super::playlist_edits::bulk_snooze(
+            &pool,
+            MusicBulkSnoozeWrite {
+                action_id: "playlist-snooze".to_string(),
+                item_ids: vec!["item-1".to_string()],
+                scope: MusicSnoozeScope::Playlist,
+                playlist_id: Some("playlist-2".to_string()),
+                starts_at: 1_700_000_000_000,
+                ends_at: Some(1_700_000_200_000),
+                reason: String::new(),
+                created_at: 1_700_000_000_000,
+            },
+        )
+        .await
+        .unwrap();
+
+        let mut request = library_window();
+        request.destination = MusicListDestination::Playlist;
+        request.playlist_id = Some("playlist-1".to_string());
+        assert_eq!(
+            super::queries::item_window(&pool, request.clone())
+                .await
+                .unwrap()
+                .items[0]
+                .active_snooze_count,
+            0
+        );
+        request.playlist_id = Some("playlist-2".to_string());
+        assert_eq!(
+            super::queries::item_window(&pool, request)
+                .await
+                .unwrap()
+                .items[0]
+                .active_snooze_count,
             1
         );
     });
@@ -1133,6 +1305,22 @@ fn playlist_reorder_and_playback_projection_share_canonical_memberships() {
         .execute(&pool)
         .await
         .unwrap();
+        sqlx::query(
+            "UPDATE music_library_items
+             SET original_artwork_identity = 'sidecar:album/cover.jpg'
+             WHERE id = 'item-1'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "UPDATE music_library_items
+             SET artwork_override = '/custom/artwork.png'
+             WHERE id = 'item-2'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
 
         let entries =
             super::queries::playlist_playback_entries(&pool, "playlist-1", 1_700_000_000_200)
@@ -1153,6 +1341,14 @@ fn playlist_reorder_and_playback_projection_share_canonical_memberships() {
         );
         assert_eq!(entries[1].skip_ranges.len(), 1);
         assert_eq!(entries[1].skip_ranges[0].end_ms, 2_000);
+        assert_eq!(
+            entries[1].original_artwork_identity.as_deref(),
+            Some("sidecar:album/cover.jpg")
+        );
+        assert_eq!(
+            entries[2].artwork_override.as_deref(),
+            Some("/custom/artwork.png")
+        );
         assert!(entries[2].snoozed);
         assert_eq!(entries[2].snoozed_until, Some(1_700_000_001_000));
     });

@@ -32,6 +32,7 @@ describe("Music player settings", () => {
       volume: 0.8,
       rate: 1,
       shuffleEnabled: true,
+      mixEnabled: false,
       muted: false,
       playlistVisible: true,
     });
@@ -44,5 +45,12 @@ describe("Music player settings", () => {
     expect(loadMusicPlayerSettings().shuffleEnabled).toBe(true);
     localStorage.setItem(settingsKey, JSON.stringify({ shuffleEnabled: false }));
     expect(loadMusicPlayerSettings().shuffleEnabled).toBe(false);
+  });
+
+  it("loads Mix only when shuffle is enabled", () => {
+    localStorage.setItem(settingsKey, JSON.stringify({ shuffleEnabled: true, mixEnabled: true }));
+    expect(loadMusicPlayerSettings().mixEnabled).toBe(true);
+    localStorage.setItem(settingsKey, JSON.stringify({ shuffleEnabled: false, mixEnabled: true }));
+    expect(loadMusicPlayerSettings().mixEnabled).toBe(false);
   });
 });

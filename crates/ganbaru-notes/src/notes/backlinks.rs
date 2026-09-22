@@ -1,4 +1,4 @@
-use super::links::{canonical_notes_id, LocalLinkResolver};
+use super::links::{LocalLinkResolver, canonical_notes_id};
 use super::models::{NoteBacklinkDto, NoteBacklinkIndexedInput, NoteBlockRow};
 use super::reads;
 use super::validation::require_uuid;

@@ -102,6 +102,8 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             music::host::music_retain_hosted_media,
             music::host::music_unregister_hosted_media,
             music::host::music_youtube_host_url,
+            music::youtube_metadata::music_youtube_metadata,
+            music::youtube_thumbnail::music_youtube_thumbnail,
             music::root_bindings::music_get_local_root_bindings,
             music::root_bindings::music_set_local_root_binding,
             music::root_bindings::music_clear_local_root_binding,

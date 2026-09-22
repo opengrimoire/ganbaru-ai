@@ -3,12 +3,28 @@
 import { mount, tick, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { localFileSourceFromPath } from "$lib/music/sources";
+import { emptyMusicSkipBreakdown } from "$lib/music/music-playlist-playback";
 import { getMusicPlayer } from "$lib/stores/music-player.svelte";
 import { getMusicSourcesController } from "$lib/music/music-sources-controller.svelte";
 
+const snoozeApi = vi.hoisted(() => ({
+  getMusicInspectorDetail: vi.fn(),
+  removeMusicSnooze: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("$lib/api/music-library", async (importOriginal) => ({
+  ...await importOriginal<typeof import("$lib/api/music-library")>(),
+  ...snoozeApi,
+}));
+
+const resizeObserverCallbacks = new Set<() => void>();
+
 class ResizeObserverStub {
+  constructor(private readonly callback: () => void) {
+    resizeObserverCallbacks.add(callback);
+  }
   observe(): void {}
-  disconnect(): void {}
+  disconnect(): void { resizeObserverCallbacks.delete(this.callback); }
 }
 
 function matchMediaStub(query: string): MediaQueryList {
@@ -34,7 +50,22 @@ describe("MusicPanel", () => {
     component = undefined;
     target = undefined;
     vi.unstubAllGlobals();
+    resizeObserverCallbacks.clear();
     getMusicSourcesController().firstUseSession = false;
+    const player = getMusicPlayer();
+    player.setPlaylistVisible(false);
+    player.currentSource = null;
+    player.queue = [];
+    player.activeQueueItemIds = [];
+    player.sourceQueueSnoozedItemIds = [];
+    player.savedQueueEntries = [];
+    player.activePlaylistId = null;
+    player.activePlaylistName = null;
+    player.activeSourceQueueId = null;
+    player.savedQueueSkipBreakdown = emptyMusicSkipBreakdown();
+    player.setPlaybackMode("shuffle");
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   it("mounts an interactive dialog above its persistent media layer and closes with Escape", async () => {
@@ -75,6 +106,162 @@ describe("MusicPanel", () => {
     expect(target.querySelector("button[aria-label='Close']")).toBeNull();
   });
 
+  it("replaces the speed control with a disabled track-preferences button until a library track plays", async () => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    target = document.createElement("div");
+    document.body.append(target);
+    const { default: MusicPanel } = await import("./MusicPanel.svelte");
+
+    component = mount(MusicPanel, { target, props: { onclose: vi.fn() } });
+    await tick();
+
+    const preferences = target.querySelector<HTMLButtonElement>("button[aria-label='Mix and snooze']");
+    expect(preferences?.disabled).toBe(true);
+    expect(target.querySelector("button[aria-label='Speed']")).toBeNull();
+  });
+
+  it("offers one playback-order choice with In order, Shuffle, and Mix", async () => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    const player = getMusicPlayer();
+    player.queue = [
+      localFileSourceFromPath("/music/a.flac", "A"),
+      localFileSourceFromPath("/music/b.flac", "B"),
+    ];
+    target = document.createElement("div");
+    document.body.append(target);
+    const { default: MusicPanel } = await import("./MusicPanel.svelte");
+    component = mount(MusicPanel, { target, props: { onclose: vi.fn() } });
+    await tick();
+
+    target.querySelector<HTMLButtonElement>(".music-transport-shuffle button")?.click();
+    await tick();
+    expect([...target.querySelectorAll("[role='menuitemradio']")].map((option) => option.textContent?.trim())).toEqual([
+      "In order", "Shuffle", "Mix",
+    ]);
+    const mixHelp = target.querySelector<HTMLButtonElement>("button[aria-label='Favors your preferred tracks. Recent tracks are less likely, but repeats are possible.']");
+    expect(mixHelp).not.toBeNull();
+    expect(target.querySelector("button[aria-label='Plays each track once in random order. No repeats until the list ends.']")).not.toBeNull();
+    mixHelp?.click();
+    expect(player.playbackMode).toBe("shuffle");
+    [...target.querySelectorAll<HTMLButtonElement>("[role='menuitemradio']")]
+      .find((option) => option.textContent?.includes("Mix"))?.click();
+    expect(player.playbackMode).toBe("mix");
+  });
+
+  it("places the side playlist summary in the desktop player header", async () => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    target = document.createElement("div");
+    document.body.append(target);
+    const player = getMusicPlayer();
+    player.setPlaylistVisible(true);
+    const { default: MusicPanel } = await import("./MusicPanel.svelte");
+
+    component = mount(MusicPanel, { target, props: { onclose: vi.fn() } });
+    await tick();
+    const emptyDesktopHeader = target.querySelector<HTMLElement>("[data-music-desktop-playlist-header]");
+    expect(emptyDesktopHeader).not.toBeNull();
+    expect(emptyDesktopHeader?.textContent?.trim()).toBe("");
+    expect(target.querySelector("#music-playlist")).not.toBeNull();
+    expect(target.querySelector("[data-music-stacked-playlist-header]")).toBeNull();
+
+    player.queue = [
+      localFileSourceFromPath("/music/first.flac", "First"),
+      localFileSourceFromPath("/music/second.flac", "Second"),
+    ];
+    await tick();
+
+    const desktopHeader = target.querySelector<HTMLElement>("[data-music-desktop-playlist-header]");
+    const stackedHeader = target.querySelector<HTMLElement>("[data-music-stacked-playlist-header]");
+    expect(desktopHeader?.textContent).toContain("Playlist");
+    expect(desktopHeader?.textContent).toContain("2 tracks");
+    expect(desktopHeader?.classList.contains("min-[861px]:w-80")).toBe(true);
+    expect(stackedHeader?.classList.contains("min-[861px]:hidden")).toBe(true);
+  });
+
+  it("removes a source queue Snooze without playing its row", async () => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    const player = getMusicPlayer();
+    player.setPlaylistVisible(true);
+    player.queue = [localFileSourceFromPath("/music/snoozed.flac", "Snoozed")];
+    player.activeQueueItemIds = ["snoozed"];
+    player.activeSourceQueueId = "source:music";
+    player.sourceQueueSnoozedItemIds = ["snoozed"];
+    const play = vi.spyOn(player, "playQueueItem").mockResolvedValue(undefined);
+    const now = Date.now();
+    snoozeApi.getMusicInspectorDetail.mockResolvedValue({ snoozes: [{
+      id: "active-snooze", itemId: "snoozed", scope: "all-playlists", playlistId: null,
+      startsAt: now - 1_000, endsAt: now + 86_400_000, reason: "", createdAt: now - 1_000,
+    }] });
+    target = document.createElement("div");
+    document.body.append(target);
+    const { default: MusicPanel } = await import("./MusicPanel.svelte");
+    component = mount(MusicPanel, { target, props: { onclose: vi.fn() } });
+    await tick();
+
+    const button = target.querySelector<HTMLButtonElement>("#music-playlist button[aria-label='Remove snooze']");
+    expect(button).not.toBeNull();
+    button?.click();
+    await vi.waitFor(() => expect(snoozeApi.removeMusicSnooze).toHaveBeenCalledWith("active-snooze"));
+    await vi.waitFor(() => expect(player.sourceQueueSnoozedItemIds).toEqual([]));
+    expect(play).not.toHaveBeenCalled();
+  });
+
+  it("shows queue title tooltips only when the visible title is cut off", async () => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    const player = getMusicPlayer();
+    player.setPlaylistVisible(true);
+    player.queue = [
+      localFileSourceFromPath("/music/short.flac", "Short"),
+      localFileSourceFromPath("/music/long.flac", "A very long song title"),
+    ];
+    target = document.createElement("div");
+    document.body.append(target);
+    const { default: MusicPanel } = await import("./MusicPanel.svelte");
+    component = mount(MusicPanel, { target, props: { onclose: vi.fn() } });
+    await tick();
+
+    const rows = [...target.querySelectorAll<HTMLElement>("#music-playlist [data-music-queue-title]")];
+    const buttons = [...target.querySelectorAll<HTMLButtonElement>("#music-playlist button[data-playlist-index]")];
+    expect(rows).toHaveLength(2);
+    expect(buttons).toHaveLength(2);
+    Object.defineProperties(rows[0]!, { scrollWidth: { value: 45 }, clientWidth: { value: 50 } });
+    Object.defineProperties(rows[1]!, { scrollWidth: { value: 160 }, clientWidth: { value: 100, configurable: true } });
+
+    for (const callback of resizeObserverCallbacks) callback();
+    expect(buttons[0]?.dataset.appTooltipDisabled).toBe("true");
+    expect(buttons[1]?.dataset.appTooltipDisabled).toBe("false");
+    expect(buttons[0]?.getAttribute("aria-label")).toBe("Short");
+    expect(buttons[1]?.getAttribute("aria-label")).toBe("A very long song title");
+
+    Object.defineProperty(rows[1]!, "clientWidth", { value: 200, configurable: true });
+    for (const callback of resizeObserverCallbacks) callback();
+    expect(buttons[1]?.dataset.appTooltipDisabled).toBe("true");
+  });
+
+  it("shows unavailable playlist recovery inside the media area without chooser actions", async () => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    target = document.createElement("div");
+    document.body.append(target);
+    const player = getMusicPlayer();
+    player.activePlaylistId = "focus";
+    player.activePlaylistName = "Deep focus";
+    player.savedQueueSkipBreakdown = {
+      ...emptyMusicSkipBreakdown(),
+      unavailable: 2,
+    };
+    const { default: MusicPanel } = await import("./MusicPanel.svelte");
+
+    component = mount(MusicPanel, { target, props: { onclose: vi.fn() } });
+    await tick();
+
+    const unavailable = target.querySelector<HTMLElement>("[data-music-playlist-unavailable]");
+    expect(unavailable?.closest(".music-media-cell")).not.toBeNull();
+    expect(unavailable?.textContent).toContain("Nothing available to play");
+    expect(unavailable?.textContent).toContain("Review playlist");
+    expect(target.textContent).not.toContain("Choose another playlist");
+    expect(target.textContent).not.toContain("Retry");
+  });
+
   it("does not reset persistent playback state when the panel closes", async () => {
     vi.stubGlobal("ResizeObserver", ResizeObserverStub);
     target = document.createElement("div");
@@ -98,7 +285,58 @@ describe("MusicPanel", () => {
     player.queue = [];
   });
 
-  it("keeps the player DOM mounted while opening and reopening the lazy builder", async () => {
+  it("owns playback arrow shortcuts before the underlying tab can handle them", async () => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    target = document.createElement("div");
+    document.body.append(target);
+    const player = getMusicPlayer();
+    const adjustVolume = vi.spyOn(player, "adjustVolume").mockResolvedValue();
+    const underlyingKeydown = vi.fn();
+    const { default: MusicPanel } = await import("./MusicPanel.svelte");
+
+    component = mount(MusicPanel, { target, props: { onclose: vi.fn() } });
+    await tick();
+    window.addEventListener("keydown", underlyingKeydown);
+    const event = new KeyboardEvent("keydown", {
+      key: "ArrowUp",
+      bubbles: true,
+      cancelable: true,
+    });
+
+    window.dispatchEvent(event);
+    window.removeEventListener("keydown", underlyingKeydown);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(adjustVolume).toHaveBeenCalledWith(0.05);
+    expect(underlyingKeydown).not.toHaveBeenCalled();
+  });
+
+  it("lets the playlist chooser close with Escape without closing Music", async () => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    target = document.createElement("div");
+    document.body.append(target);
+    const onclose = vi.fn();
+    const { default: MusicPanel } = await import("./MusicPanel.svelte");
+
+    component = mount(MusicPanel, { target, props: { onclose } });
+    await tick();
+    target.querySelector<HTMLButtonElement>("[data-music-playlist-launcher]")?.click();
+    await vi.waitFor(() => {
+      expect(document.body.querySelector(".playlist-launcher-popover")).not.toBeNull();
+    });
+
+    window.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    }));
+    await tick();
+
+    expect(document.body.querySelector(".playlist-launcher-popover")).toBeNull();
+    expect(onclose).not.toHaveBeenCalled();
+  });
+
+  it("keeps the initialized builder mounted but inactive while returning to the player", async () => {
     vi.stubGlobal("ResizeObserver", ResizeObserverStub);
     vi.stubGlobal("matchMedia", matchMediaStub);
     target = document.createElement("div");
@@ -116,50 +354,91 @@ describe("MusicPanel", () => {
 
     target.querySelector<HTMLButtonElement>("[data-music-playlist-launcher]")?.click();
     await vi.waitFor(() => {
-      expect([...target!.querySelectorAll<HTMLButtonElement>("button")]
-        .some((button) => button.textContent?.includes("Open builder"))).toBe(true);
+      expect([...document.body.querySelectorAll<HTMLButtonElement>("button")]
+        .some((button) => button.textContent?.includes("Open playlist builder"))).toBe(true);
     });
-    const firstOpenBuilder = [...target.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent?.includes("Open builder"));
+    const firstOpenBuilder = [...document.body.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.includes("Open playlist builder"));
     firstOpenBuilder?.click();
     await vi.waitFor(() => {
       expect(target?.querySelector(".builder-root"), target?.textContent ?? "").not.toBeNull();
     }, { timeout: 5_000 });
     expect(target.querySelector("[data-music-player-page]")).toBe(playerPage);
     expect(playerPage?.classList.contains("hidden")).toBe(true);
+    expect(target.textContent).not.toContain("Everything is reviewed");
+    expect(target.textContent).toMatch(/Opening your music library|Preparing your Music folder/);
 
-    const navigationItems = target.querySelectorAll<HTMLButtonElement>("[data-builder-dock-item]");
-    const playlistsNavigation = navigationItems.item(1);
-    expect(playlistsNavigation.getAttribute("aria-label")).toContain("Playlists");
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "2", bubbles: true, cancelable: true }));
-    await vi.waitFor(() => {
-      expect(playlistsNavigation.getAttribute("aria-current")).toBe("page");
-    });
-
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "3", bubbles: true, cancelable: true }));
-    await vi.waitFor(() => {
-      expect(navigationItems.item(2).getAttribute("aria-current")).toBe("page");
-    });
-
-    target.querySelector<HTMLButtonElement>(`[data-music-focus-key="builder:back-to-player"]`)?.click();
+    window.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    }));
     await tick();
     expect(target.querySelector("[data-music-player-page]")).toBe(playerPage);
     expect(playerPage?.classList.contains("hidden")).toBe(false);
+    expect(target.querySelector(".builder-root")).not.toBeNull();
+    expect(target.querySelector(".builder-root")?.closest("[aria-hidden='true']")).not.toBeNull();
 
     target.querySelector<HTMLButtonElement>("[data-music-playlist-launcher]")?.click();
     await vi.waitFor(() => {
-      expect([...target!.querySelectorAll<HTMLButtonElement>("button")]
-        .some((button) => button.textContent?.includes("Open builder"))).toBe(true);
+      expect([...document.body.querySelectorAll<HTMLButtonElement>("button")]
+        .some((button) => button.textContent?.includes("Open playlist builder"))).toBe(true);
     });
-    const openBuilder = [...target.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent?.includes("Open builder"));
+    const openBuilder = [...document.body.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.includes("Open playlist builder"));
     openBuilder?.click();
     await tick();
     expect(target.querySelector(".builder-root")).not.toBeNull();
     expect(target.querySelector("[data-music-player-page]")).toBe(playerPage);
   });
 
-  it("opens the preloaded builder directly during the first-use music session", async () => {
+  it("applies builder and expanded playlist heights in the same view transition", async () => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    vi.stubGlobal("matchMedia", matchMediaStub);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.matches("[data-music-player-header]")) return new DOMRect(0, 0, 1_000, 40);
+      if (this.matches(".music-media-cell")) return new DOMRect(0, 40, 680, 383);
+      if (this.matches("#music-playlist")) return new DOMRect(680, 40, 320, 383);
+      return new DOMRect(0, 0, 1_000, 80);
+    });
+    target = document.createElement("div");
+    document.body.append(target);
+    const player = getMusicPlayer();
+    player.queue = [localFileSourceFromPath("/music/track.flac", "Track")];
+    player.setPlaylistVisible(true);
+    const { default: MusicPanel } = await import("./MusicPanel.svelte");
+
+    component = mount(MusicPanel, { target, props: { onclose: vi.fn() } });
+    await tick();
+    const dialog = target.querySelector<HTMLElement>("[role='dialog']");
+    expect(dialog?.style.height).toContain("503px");
+
+    target.querySelector<HTMLButtonElement>("[data-music-playlist-launcher]")?.click();
+    await vi.waitFor(() => {
+      expect([...document.body.querySelectorAll<HTMLButtonElement>("button")]
+        .some((button) => button.textContent?.includes("Open playlist builder"))).toBe(true);
+    });
+    const openBuilder = [...document.body.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.includes("Open playlist builder"));
+    openBuilder?.click();
+    await tick();
+
+    expect(dialog?.style.height).toContain("680px");
+    await vi.waitFor(() => {
+      expect(target?.querySelector(".builder-root"), target?.textContent ?? "").not.toBeNull();
+    }, { timeout: 5_000 });
+
+    window.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    }));
+    await tick();
+
+    expect(dialog?.style.height).toContain("503px");
+  });
+
+  it("keeps first-use preparation pending when the panel closes before completion", async () => {
     vi.stubGlobal("ResizeObserver", ResizeObserverStub);
     vi.stubGlobal("matchMedia", matchMediaStub);
     getMusicSourcesController().firstUseSession = true;
@@ -173,5 +452,10 @@ describe("MusicPanel", () => {
       expect(target?.querySelector(".builder-root"), target?.textContent ?? "").not.toBeNull();
     }, { timeout: 5_000 });
     expect(target.querySelector("[data-music-player-page]")?.classList.contains("hidden")).toBe(true);
+
+    await unmount(component);
+    component = undefined;
+
+    expect(getMusicSourcesController().firstUseSession).toBe(true);
   });
 });

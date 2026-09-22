@@ -24,11 +24,13 @@ fn page_open_returns_visible_chrome_and_top_level_blocks_only() {
         assert_eq!(opened["blocks"]["results"][0]["id"], BLOCK_A);
         assert_eq!(opened["outlines"][0]["id"], BLOCK_A);
         assert_eq!(opened["outlines"][0]["retained_height"], 36);
-        assert!(opened["blocks"]["results"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|block| block["id"] != BLOCK_B));
+        assert!(
+            opened["blocks"]["results"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|block| block["id"] != BLOCK_B)
+        );
     });
 }
 

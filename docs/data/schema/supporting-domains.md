@@ -35,7 +35,7 @@ The domain also records:
 - item signals, snoozes, statistics, and recent selections;
 - refresh issues and user-required actions;
 - bounded refresh and relink jobs;
-- context assignments and soundscape definitions.
+- context assignments, background-sound definitions, custom groups, and selected layers.
 
 These are related table families, not one denormalized playlist document. Refresh and relink use staged generations so a failed scan leaves the previous successful library usable. Relative local identities and platform document handles are revalidated before playback. Music bytes stay in the user's library and are never copied into the vault merely because an item was indexed.
 

@@ -142,8 +142,10 @@ fn secret_structured_answers_are_sent_to_codex_but_not_canonicalized() {
         let mut line = String::new();
         reader.read_line(&mut line).await.unwrap();
         assert!(line.contains("ganbaru-sensitive-answer"));
-        assert!(!serde_json::to_string(&sink.events())
-            .unwrap()
-            .contains("ganbaru-sensitive-answer"));
+        assert!(
+            !serde_json::to_string(&sink.events())
+                .unwrap()
+                .contains("ganbaru-sensitive-answer")
+        );
     });
 }

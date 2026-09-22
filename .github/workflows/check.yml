@@ -45,10 +45,8 @@ jobs:
           corepack enable
           corepack prepare pnpm@11.1.1 --activate
 
-      - name: install Rust stable
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup default stable
+      - name: install pinned Rust toolchain
+        run: rustup show
 
       - name: install Linux dependencies
         run: |
@@ -61,8 +59,15 @@ jobs:
       - name: fetch Rust dependencies
         run: cargo fetch --locked
 
-      - name: check workspace
-        run: pnpm -w run check
+      - name: validate workspace
+        run: |
+          report_memory_peak() {
+            if [ -r /sys/fs/cgroup/memory.peak ]; then
+              awk '{ printf "Runner memory peak: %.2f GiB\n", $1 / 1073741824 }' /sys/fs/cgroup/memory.peak
+            fi
+          }
+          trap report_memory_peak EXIT
+          pnpm -w run validate:ci
 
   windows-rust:
     name: windows Rust check
@@ -78,10 +83,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: install Rust stable
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup default stable
+      - name: install pinned Rust toolchain
+        run: rustup show
 
       - name: fetch Rust dependencies
         run: cargo fetch --locked
@@ -122,10 +125,9 @@ jobs:
           corepack enable
           corepack prepare pnpm@11.1.1 --activate
 
-      - name: install Rust stable and Android target
+      - name: install pinned Rust toolchain and Android target
         run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup default stable
+          rustup show
           rustup target add aarch64-linux-android
 
       - name: install Android command line tools

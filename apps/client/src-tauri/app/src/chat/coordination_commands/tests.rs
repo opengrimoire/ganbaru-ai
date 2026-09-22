@@ -416,11 +416,13 @@ fn durable_history_blocks_permanent_teammate_deletion() {
 fn scheduled_delivery_requires_a_near_future_time_within_one_year() {
     let now = UtcTimestamp::new("2026-08-03T00:00:00.000Z").unwrap();
 
-    assert!(validate_scheduled_for(
-        &UtcTimestamp::new("2026-08-03T00:00:30.000Z").unwrap(),
-        &now,
-    )
-    .is_ok());
+    assert!(
+        validate_scheduled_for(
+            &UtcTimestamp::new("2026-08-03T00:00:30.000Z").unwrap(),
+            &now,
+        )
+        .is_ok()
+    );
     assert_eq!(
         validate_scheduled_for(
             &UtcTimestamp::new("2026-08-03T00:00:29.999Z").unwrap(),
@@ -581,9 +583,11 @@ fn restart_rehomes_review_replies_into_one_ordered_follow_up_assignment() {
             inputs[1].get::<String, _>("routing_kind"),
             "queued_continuation"
         );
-        assert!(inputs
-            .iter()
-            .all(|input| input.get::<String, _>("delivery_state") == "pending"));
+        assert!(
+            inputs
+                .iter()
+                .all(|input| input.get::<String, _>("delivery_state") == "pending")
+        );
         let queued_job: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM chat_assignment_dispatch_jobs
              WHERE assignment_id = ? AND state = 'queued'",

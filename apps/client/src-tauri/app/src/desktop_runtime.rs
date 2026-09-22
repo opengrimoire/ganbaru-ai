@@ -541,10 +541,9 @@ fn get_memory_report() -> MemoryReport {
     #[cfg(target_os = "windows")]
     {
         use std::mem::size_of;
-        use windows::core::{Owned, HRESULT};
         use windows::Win32::Foundation::ERROR_NO_MORE_FILES;
         use windows::Win32::System::Diagnostics::ToolHelp::{
-            CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+            CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW,
             TH32CS_SNAPPROCESS,
         };
         use windows::Win32::System::ProcessStatus::{
@@ -553,6 +552,7 @@ fn get_memory_report() -> MemoryReport {
         use windows::Win32::System::Threading::{
             OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
         };
+        use windows::core::{HRESULT, Owned};
 
         let my_pid = std::process::id();
 
@@ -1077,6 +1077,9 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             music::library::commands::music_library_playlist_detail,
             music::library::commands::music_library_upsert_source_collection,
             music::library::commands::music_library_soundscapes,
+            music::library::commands::music_library_soundscape_groups,
+            music::library::commands::music_library_upsert_soundscape_group,
+            music::library::commands::music_library_remove_soundscape_group,
             music::library::commands::music_library_upsert_soundscape,
             music::library::commands::music_library_remove_soundscape,
             music::library::commands::music_library_soundscape_state,
@@ -1096,6 +1099,8 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             music::music_reveal_local_file,
             music::music_save_playback_state,
             music::host::music_youtube_host_url,
+            music::youtube_metadata::music_youtube_metadata,
+            music::youtube_thumbnail::music_youtube_thumbnail,
             media_controls::update_media_controls,
             media_player::media_player_probe,
             media_player::media_player_load,
@@ -1112,6 +1117,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             soundscape::soundscape_resume,
             soundscape::soundscape_stop,
             soundscape::soundscape_set_volume,
+            soundscape::soundscape_set_levels,
             soundscape::soundscape_recover,
             soundscape::soundscape_snapshot,
             tray::update_music_tray,

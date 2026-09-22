@@ -1,4 +1,4 @@
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -8,8 +8,8 @@ use std::{
 };
 
 use super::assets::{
-    self, NotesManagedAssetWrite, NOTES_ASSET_SOURCE_IMPORTED, NOTES_ASSET_SOURCE_LOCAL_UPLOAD,
-    NOTES_ASSET_STATE_AVAILABLE,
+    self, NOTES_ASSET_SOURCE_IMPORTED, NOTES_ASSET_SOURCE_LOCAL_UPLOAD,
+    NOTES_ASSET_STATE_AVAILABLE, NotesManagedAssetWrite,
 };
 
 const NOTES_FILE_MAX_DISPLAY_MEGABYTES: usize = 50;

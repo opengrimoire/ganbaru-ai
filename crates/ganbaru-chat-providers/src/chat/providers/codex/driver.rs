@@ -12,16 +12,16 @@ use crate::chat::events::{
     TurnStartedEvent,
 };
 use crate::chat::models::*;
-use crate::chat::process::{spawn_provider_process, ProviderProcessConfig};
+use crate::chat::process::{ProviderProcessConfig, spawn_provider_process};
 use crate::chat::providers::{
     DriverFuture, DriverOperationContext, ProviderDriver, ProviderEventSink,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::{
-    atomic::{AtomicBool, AtomicU64, Ordering},
     Arc, Mutex,
+    atomic::{AtomicBool, AtomicU64, Ordering},
 };
 use std::time::{Duration, Instant};
 use tokio::sync::watch;
@@ -33,9 +33,9 @@ mod session_open;
 mod support;
 
 pub(super) use commands::codex_native_command;
-use commands::{clear_codex_command_route, dispatch_codex_command};
 #[cfg(test)]
-pub(super) use commands::{goal_request, parse_mcp_status_page, CodexNativeCommand};
+pub(super) use commands::{CodexNativeCommand, goal_request, parse_mcp_status_page};
+use commands::{clear_codex_command_route, dispatch_codex_command};
 use session_open::SessionOpenInput;
 use support::*;
 #[cfg(test)]

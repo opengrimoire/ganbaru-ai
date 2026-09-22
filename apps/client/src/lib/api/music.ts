@@ -25,6 +25,18 @@ export interface MediaFolderSelection {
   truncated: boolean;
 }
 
+export interface MusicYouTubeMetadataItem {
+  videoId: string | null;
+  title: string;
+  channel: string;
+}
+
+export interface MusicYouTubeMetadataResponse {
+  playlist: MusicYouTubeMetadataItem | null;
+  videos: MusicYouTubeMetadataItem[];
+  truncated: boolean;
+}
+
 export async function getPlaybackState(sourceIdentity: string): Promise<PlaybackStateRow | null> {
   return invoke("music_get_playback_state", {
     dbUrl: dbUrl(),
@@ -106,6 +118,20 @@ export async function revealLocalFile(path: string): Promise<void> {
 
 export async function getYouTubeHostUrl(): Promise<string> {
   return invoke("music_youtube_host_url");
+}
+
+export async function getYouTubeMetadata(
+  playlistId: string | null,
+  videoIds: string[],
+): Promise<MusicYouTubeMetadataResponse> {
+  return invoke("music_youtube_metadata", {
+    request: { playlistId, videoIds },
+  });
+}
+
+/** Loads a validated YouTube thumbnail from the device-local image cache. */
+export async function getYouTubeThumbnail(videoId: string): Promise<string | null> {
+  return invoke("music_youtube_thumbnail", { videoId });
 }
 
 export async function savePlaybackState(state: PlaybackStateRow): Promise<void> {

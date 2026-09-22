@@ -1,6 +1,6 @@
 use super::{
-    append_terminal_bytes, atomic_write_text, verified_existing_file, verified_write_path,
-    AcpTerminalCallbacks, AcpTerminalState,
+    AcpTerminalCallbacks, AcpTerminalState, append_terminal_bytes, atomic_write_text,
+    verified_existing_file, verified_write_path,
 };
 use std::fs;
 use std::path::PathBuf;

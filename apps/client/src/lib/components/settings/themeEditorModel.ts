@@ -363,33 +363,6 @@ export const SOURCE_GROUPS: SourceGroup[] = [
   },
 ];
 
-export const THEME_NAV_ITEMS: ReadonlyArray<{
-  label: string;
-  target: ThemeNavTarget;
-}> = [
-  { label: "General", target: "general" },
-  { label: "Calendar", target: "calendar" },
-  { label: "Text and actions", target: "signals" },
-  { label: "JSON", target: "json" },
-];
-
-export const THEME_SECTION_LABELS: Record<ThemeNavTarget, string> = {
-  general: "General",
-  calendar: "Calendar",
-  signals: "Text and actions",
-  json: "JSON",
-};
-
-export const CALENDAR_DEFAULT_OPTIONS: ReadonlyArray<{
-  mode: CalendarColorDefaultMode;
-  label: string;
-}> = [
-  { mode: "light", label: "Light-based" },
-  { mode: "dark", label: "Dark-based" },
-  { mode: "app-canvas", label: "App canvas-based" },
-  { mode: "custom", label: "Custom-based" },
-];
-
 const TEXT_ACTION_GROUP_IDS = new Set<SourceGroupId>([
   "ink",
   "primary-action",
@@ -398,19 +371,11 @@ const TEXT_ACTION_GROUP_IDS = new Set<SourceGroupId>([
   "warning",
 ]);
 
-export const TEXT_ACTION_GROUPS = SOURCE_GROUPS.filter((group) =>
-  TEXT_ACTION_GROUP_IDS.has(group.id),
-);
-
 const CALENDAR_GROUP_IDS = new Set<SourceGroupId>([
   "calendar-surface",
   "calendar-details",
   "event-panel",
 ]);
-
-export const CALENDAR_GROUPS = SOURCE_GROUPS.filter((group) =>
-  CALENDAR_GROUP_IDS.has(group.id),
-);
 
 export function isTextActionGroup(group: SourceGroup): boolean {
   return TEXT_ACTION_GROUP_IDS.has(group.id);

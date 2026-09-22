@@ -4,7 +4,7 @@ use super::protocol::{BundleMetadata, BundlePurpose, PROTOCOL_VERSION};
 use super::state::{PairingManager, PendingAcknowledgement, StoredOutgoingTransfer};
 use crate::vault::ownership::{TransferPhase, VaultOwnershipManager};
 use crate::vault::quiescence::{
-    begin_snapshot_quiescence, begin_source_quiescence, SnapshotQuiescence, SourceQuiescence,
+    SnapshotQuiescence, SourceQuiescence, begin_snapshot_quiescence, begin_source_quiescence,
 };
 use std::fs;
 use std::sync::Arc;

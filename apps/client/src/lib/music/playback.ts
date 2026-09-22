@@ -51,7 +51,6 @@ export const MAX_VOLUME = 1;
 export const MIN_RATE = 0.25;
 export const MAX_RATE = 2;
 export const PREVIOUS_RESTART_THRESHOLD_MS = 3_000;
-export const SPEED_PRESETS: readonly number[] = Object.freeze([0.5, 1, 1.25, 1.5, 2]);
 
 export interface ShuffleSelection {
   index: number | null;
@@ -123,16 +122,6 @@ export function localMediaSeekTargetMs(positionMs: number, playableStartMs: numb
 
 export function formatVolumePercent(value: number): string {
   return `${Math.round(clampVolume(value) * 100)}%`;
-}
-
-export function formatRateLabel(value: number): string {
-  const rate = clampRate(value);
-  return `${Number.isInteger(rate) ? rate.toFixed(0) : rate.toString()}x`;
-}
-
-export function isSpeedPreset(value: number): boolean {
-  const rate = clampRate(value);
-  return SPEED_PRESETS.some((preset) => Math.abs(preset - rate) < 0.001);
 }
 
 export function shuffledQueueOrder(

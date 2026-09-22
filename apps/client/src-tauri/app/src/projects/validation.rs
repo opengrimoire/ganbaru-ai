@@ -748,7 +748,10 @@ mod icon_tests {
             "custom-emoji:focus",
             "asset:project-icons/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.webp",
         ] {
-            assert!(validate_project_icon(value).is_ok(), "{value} should be valid");
+            assert!(
+                validate_project_icon(value).is_ok(),
+                "{value} should be valid"
+            );
         }
         for value in [
             "folder",

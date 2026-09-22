@@ -2,6 +2,7 @@ use super::*;
 use crate::vault::handoff::protocol::{DeviceKind, MAX_ARCHIVE_BYTES, PROTOCOL_VERSION};
 use crate::vault::handoff::state::random_token;
 use std::fs;
+use tokio::net::TcpListener;
 
 struct TestDirectory(PathBuf);
 
@@ -169,13 +170,14 @@ impl Drop for LocalPair {
 async fn fresh_phone_enrolls_and_stages_authenticated_bundle() {
     let pair = LocalPair::start().await;
     pair.enroll().await;
-    assert!(pair
-        .phone
-        .coordinator_pin()
-        .expect("coordinator pin")
-        .expect("coordinator")
-        .device_label
-        .is_some());
+    assert!(
+        pair.phone
+            .coordinator_pin()
+            .expect("coordinator pin")
+            .expect("coordinator")
+            .device_label
+            .is_some()
+    );
     let bytes = b"authenticated whole-vault test bundle";
     let metadata = pair.register_bundle(bytes, "transfer-fresh");
 
@@ -199,20 +201,23 @@ async fn revoked_phone_clears_its_stale_link_after_authenticated_reconnect() {
         .expect_err("revoked phone must be rejected");
 
     assert!(error.contains("unlinked by the coordinator"));
-    assert!(pair
-        .phone
-        .coordinator_pin()
-        .expect("coordinator pin")
-        .is_none());
-    assert!(pair
-        .phone
-        .revoked_by_coordinator()
-        .expect("revocation status"));
-    assert!(pair
-        .desktop
-        .linked_peers()
-        .expect("linked peers")
-        .is_empty());
+    assert!(
+        pair.phone
+            .coordinator_pin()
+            .expect("coordinator pin")
+            .is_none()
+    );
+    assert!(
+        pair.phone
+            .revoked_by_coordinator()
+            .expect("revocation status")
+    );
+    assert!(
+        pair.desktop
+            .linked_peers()
+            .expect("linked peers")
+            .is_empty()
+    );
 }
 
 #[tokio::test]

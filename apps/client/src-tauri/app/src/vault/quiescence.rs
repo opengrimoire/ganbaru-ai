@@ -21,14 +21,6 @@ pub(crate) struct SnapshotQuiescence {
 }
 
 impl SourceQuiescence {
-    pub(crate) fn vault_id(&self) -> &str {
-        &self.vault_id
-    }
-
-    pub(crate) fn transfer_id(&self) -> &str {
-        &self.transfer_id
-    }
-
     /// Resume an unchanged source after failure before generation commit.
     pub(crate) fn abort<R: Runtime>(self, app: &tauri::AppHandle<R>) -> Result<(), String> {
         app.state::<VaultOwnershipManager>()

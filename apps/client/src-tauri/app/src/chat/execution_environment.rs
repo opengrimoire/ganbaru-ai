@@ -746,7 +746,7 @@ fn managed_worktree_identity(local_data_root: &Path, candidate: &Path) -> ChatRe
     use std::os::windows::io::AsRawHandle;
     use windows::Win32::Foundation::HANDLE;
     use windows::Win32::Storage::FileSystem::{
-        GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+        BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle,
     };
 
     let expected_parent = local_data_root.join(WORKTREE_DIRECTORY);

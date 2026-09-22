@@ -1,4 +1,4 @@
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::{
@@ -8,12 +8,12 @@ use std::{
 };
 
 use crate::image_metadata::{
-    parse_managed_image_metadata, validate_managed_image_dimensions, ManagedImageDimensionError,
-    ManagedImageKind, ManagedImageMetadata, ManagedImageMetadataError,
+    ManagedImageDimensionError, ManagedImageKind, ManagedImageMetadata, ManagedImageMetadataError,
+    parse_managed_image_metadata, validate_managed_image_dimensions,
 };
 
 use super::assets::{
-    self, NotesManagedAssetWrite, NOTES_ASSET_SOURCE_LOCAL_UPLOAD, NOTES_ASSET_STATE_AVAILABLE,
+    self, NOTES_ASSET_SOURCE_LOCAL_UPLOAD, NOTES_ASSET_STATE_AVAILABLE, NotesManagedAssetWrite,
 };
 
 const PAGE_COVER_MAX_DISPLAY_MEGABYTES: usize = 8;

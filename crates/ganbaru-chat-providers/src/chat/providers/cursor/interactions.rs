@@ -1,11 +1,11 @@
 //! Cursor ACP permission and structured-question validation.
 
 use super::protocol::{
-    bounded_text, object, protocol_error, safe_shape, valid_identifier, MAX_PROTOCOL_TEXT_BYTES,
+    MAX_PROTOCOL_TEXT_BYTES, bounded_text, object, protocol_error, safe_shape, valid_identifier,
 };
 use crate::chat::events::*;
 use crate::chat::models::*;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Component, Path};
 use std::sync::{Arc, Mutex};

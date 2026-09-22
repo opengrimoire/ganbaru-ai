@@ -72,7 +72,6 @@ function gitOutput(args: string[]): string | undefined {
 
 function chunkNameForModule(id: string): string | undefined {
   const moduleId = id.replaceAll("\\", "/");
-  if (moduleId.includes("vite/preload-helper")) return "vendor";
   if (moduleId.endsWith("/src/lib/chat/code-editor-runtime.ts")) return "chat-editor-runtime";
   if (!moduleId.includes("node_modules")) return undefined;
 
@@ -84,18 +83,6 @@ function chunkNameForModule(id: string): string | undefined {
 
   if (isCodeEditorCoreModule(moduleId)) return "chat-editor-runtime";
 
-  if (
-    moduleId.includes("/node_modules/@pierre/diffs/") ||
-    moduleId.includes("/node_modules/@pierre/theme/") ||
-    moduleId.includes("/node_modules/@pierre/theming/") ||
-    moduleId.includes("/node_modules/@shikijs/") ||
-    moduleId.includes("/node_modules/shiki/") ||
-    moduleId.includes("/node_modules/hast-util-to-html/") ||
-    moduleId.includes("/node_modules/lru_map/") ||
-    moduleId.includes("/node_modules/diff/")
-  ) {
-    return undefined;
-  }
   if (moduleId.includes("/node_modules/svelte/") || moduleId.includes("/node_modules/esm-env/")) {
     return "vendor-svelte";
   }
@@ -115,7 +102,9 @@ function chunkNameForModule(id: string): string | undefined {
     return "vendor-icons";
   }
 
-  return "vendor";
+  // Keep other dependencies with their import owners so shared boot helpers
+  // cannot pull terminal, Markdown, or review code into vault setup.
+  return undefined;
 }
 
 function codeEditorCatalogChunkName(moduleId: string): string | undefined {

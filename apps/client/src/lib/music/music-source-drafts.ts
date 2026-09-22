@@ -3,6 +3,14 @@ import type { MusicSource } from "$lib/music/sources";
 
 export type MusicAddSourceStep = "choose" | "local-preview" | "youtube-input" | "youtube-preview";
 
+export type MusicAddSourceKind = "local-root" | "youtube";
+
+export interface MusicLocalSourceSelection {
+  selection: MediaFolderSelection;
+  name: string;
+  relationship: ReturnType<typeof musicFolderRelationship>;
+}
+
 export interface MusicLocalSourceDraft {
   kind: "local-root";
   selection: MediaFolderSelection;

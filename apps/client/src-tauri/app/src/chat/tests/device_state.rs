@@ -1,6 +1,6 @@
 use crate::chat::{
     device_state::{
-        full_access_is_trusted, set_full_access_trust, ChatDeviceScope, ChatDeviceState,
+        ChatDeviceScope, ChatDeviceState, full_access_is_trusted, set_full_access_trust,
     },
     models::{ProjectWorkingFolderId, ProviderInstanceId, RepositoryKind, UtcTimestamp},
 };

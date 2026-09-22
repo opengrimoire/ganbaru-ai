@@ -1,8 +1,20 @@
-import { getYouTubeHostUrl } from "$lib/api/music";
+import {
+  getYouTubeHostUrl,
+  getYouTubeMetadata,
+  type MusicYouTubeMetadataResponse,
+} from "$lib/api/music";
 import { buildYouTubeHostUrl, parseYouTubeHostMessage } from "$lib/stores/music-player-youtube-host";
 import type { YouTubePlaylistSource, YouTubeVideoSource } from "$lib/music/sources";
 
 export type MusicYouTubeResolutionSource = YouTubeVideoSource | YouTubePlaylistSource;
+
+export interface MusicYouTubePreviewVideo {
+  videoId: string;
+  title: string;
+  channel: string;
+  durationMs: number | null;
+  metadataResolved: boolean;
+}
 
 export interface MusicYouTubeSourcePreview {
   kind: "youtube-video" | "youtube-playlist";
@@ -12,6 +24,8 @@ export interface MusicYouTubeSourcePreview {
   channel: string;
   durationMs: number | null;
   videoIds: string[];
+  videos: MusicYouTubePreviewVideo[];
+  metadataTruncated: boolean;
   duplicateCount: number;
 }
 
@@ -25,6 +39,7 @@ export interface MusicYouTubeResolverDependencies {
   setTimer(callback: () => void, timeoutMs: number): number;
   clearTimer(id: number): void;
   token(): string;
+  metadata(playlistId: string | null, videoIds: string[]): Promise<MusicYouTubeMetadataResponse>;
 }
 
 const defaultDependencies: MusicYouTubeResolverDependencies = {
@@ -37,7 +52,65 @@ const defaultDependencies: MusicYouTubeResolverDependencies = {
   setTimer: (callback, timeoutMs) => window.setTimeout(callback, timeoutMs),
   clearTimer: (id) => window.clearTimeout(id),
   token: () => crypto.randomUUID(),
+  metadata: getYouTubeMetadata,
 };
+
+function fallbackPlaylistVideos(videoIds: readonly string[]): MusicYouTubePreviewVideo[] {
+  return videoIds.map((videoId) => ({
+    videoId,
+    title: videoId,
+    channel: "",
+    durationMs: null,
+    metadataResolved: false,
+  }));
+}
+
+async function enrichPlaylistPreview(
+  source: YouTubePlaylistSource,
+  videoIds: string[],
+  dependencies: MusicYouTubeResolverDependencies,
+): Promise<MusicYouTubeSourcePreview> {
+  const fallbackVideos = fallbackPlaylistVideos(videoIds);
+  try {
+    const metadata = await dependencies.metadata(source.playlistId, videoIds);
+    const byId = new Map(
+      metadata.videos.flatMap((video) => video.videoId ? [[video.videoId, video] as const] : []),
+    );
+    return {
+      kind: "youtube-playlist",
+      videoId: source.videoId,
+      playlistId: source.playlistId,
+      title: metadata.playlist?.title.trim() || source.title,
+      channel: metadata.playlist?.channel.trim() || "",
+      durationMs: null,
+      videoIds,
+      videos: fallbackVideos.map((video) => {
+        const resolved = byId.get(video.videoId);
+        return resolved ? {
+          ...video,
+          title: resolved.title.trim() || video.title,
+          channel: resolved.channel.trim(),
+          metadataResolved: true,
+        } : video;
+      }),
+      metadataTruncated: metadata.truncated,
+      duplicateCount: 0,
+    };
+  } catch {
+    return {
+      kind: "youtube-playlist",
+      videoId: source.videoId,
+      playlistId: source.playlistId,
+      title: source.title,
+      channel: "",
+      durationMs: null,
+      videoIds,
+      videos: fallbackVideos,
+      metadataTruncated: false,
+      duplicateCount: 0,
+    };
+  }
+}
 
 /** Resolves one supported YouTube source through the same trusted IFrame host as playback. */
 export async function resolveMusicYouTubeSource(
@@ -79,6 +152,7 @@ export async function resolveMusicYouTubeSource(
 
   return new Promise<MusicYouTubeSourcePreview>((resolve, reject) => {
     let settled = false;
+    let resolvingMetadata = false;
     const finish = (result: MusicYouTubeSourcePreview | Error): void => {
       if (settled) return;
       settled = true;
@@ -106,15 +180,12 @@ export async function resolveMusicYouTubeSource(
         return;
       }
       if (source.kind === "youtube-playlist" && message.type === "ganbaru-ai-youtube-playlist") {
-        finish({
-          kind: "youtube-playlist",
-          videoId: source.videoId,
-          playlistId: source.playlistId,
-          title: source.title,
-          channel: "",
-          durationMs: null,
-          videoIds: message.videoIds,
-          duplicateCount: 0,
+        if (resolvingMetadata) return;
+        resolvingMetadata = true;
+        dependencies.clearTimer(timerId);
+        void enrichPlaylistPreview(source, message.videoIds, dependencies).then((preview) => {
+          if (signal.aborted) finish(new DOMException("Resolution cancelled", "AbortError"));
+          else finish(preview);
         });
         return;
       }
@@ -127,6 +198,14 @@ export async function resolveMusicYouTubeSource(
           channel: message.channel?.trim() || "",
           durationMs: message.durationMs,
           videoIds: [source.videoId],
+          videos: [{
+            videoId: source.videoId,
+            title: message.title?.trim() || source.title,
+            channel: message.channel?.trim() || "",
+            durationMs: message.durationMs,
+            metadataResolved: true,
+          }],
+          metadataTruncated: false,
           duplicateCount: 0,
         });
       }

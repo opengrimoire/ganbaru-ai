@@ -1,10 +1,11 @@
 import type { Component } from "svelte";
 
-export type MusicBuilderInitialAction = "new-playlist" | "open-playlists" | { kind: "open-item"; itemId: string } | { kind: "open-issues" } | { kind: "open-soundscapes" };
+export type MusicBuilderInitialAction = "new-playlist" | "open-playlists" | "open-review" | { kind: "open-review-item"; itemId: string } | { kind: "open-item"; itemId: string } | { kind: "open-issues" } | { kind: "open-soundscapes" };
 
 export interface MusicBuilderComponentProps {
   onOpenPlayer: () => void;
   presentation?: "desktop" | "mobile";
+  active?: boolean;
   initialAction?: MusicBuilderInitialAction | null;
   onInitialActionHandled?: () => void;
 }

@@ -485,8 +485,8 @@ fn persistence_error<T>(_error: T) -> ChatError {
 #[cfg(test)]
 mod tests {
     use super::{
-        retry_delay_seconds, REVOCATION_DRAIN_BATCH_SIZE, REVOCATION_RETRY_MAX_POLLS,
-        REVOCATION_RETRY_MAX_SECONDS,
+        REVOCATION_DRAIN_BATCH_SIZE, REVOCATION_RETRY_MAX_POLLS, REVOCATION_RETRY_MAX_SECONDS,
+        retry_delay_seconds,
     };
 
     #[test]

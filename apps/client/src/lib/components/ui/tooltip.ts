@@ -269,6 +269,24 @@ export function isVisibleCssColor(value: string | undefined): boolean {
   return color !== null && color.a > 0.02;
 }
 
+/** Finds the stable surface behind a tooltip target, ignoring interactive hover fills. */
+export function tooltipSurfaceColorFor(
+  element: HTMLElement,
+  fallbackColor: string | undefined,
+  maxDepth: number,
+): string | undefined {
+  let current: HTMLElement | null = element.parentElement;
+  for (let depth = 0; current && depth < maxDepth; depth += 1) {
+    if (!current.matches("button, a, [role='button'], [role='menuitem']")) {
+      const backgroundColor = getComputedStyle(current).backgroundColor;
+      const color = parseCssColor(backgroundColor);
+      if (color && color.a >= 0.95) return backgroundColor;
+    }
+    current = current.parentElement;
+  }
+  return fallbackColor;
+}
+
 function channelToLinear(value: number): number {
   const channel = clamp(value, 0, 255) / 255;
   return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;

@@ -6,7 +6,7 @@ use tauri::Runtime;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use ganbaru_working_folders::ProjectWorkingFolderBindingState;
 pub use ganbaru_working_folders::{
-    WorkingFolderDeviceScope, WORKING_FOLDER_DEVICE_STATE_SCHEMA_VERSION,
+    WORKING_FOLDER_DEVICE_STATE_SCHEMA_VERSION, WorkingFolderDeviceScope,
 };
 
 pub fn read_active_working_folder_scope<R: Runtime>(

@@ -1,14 +1,14 @@
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use ganbaru_notes::image_metadata::{
-    parse_managed_image_metadata, validate_managed_image_dimensions, ManagedImageDimensionError,
-    ManagedImageKind, ManagedImageMetadata, ManagedImageMetadataError,
+    ManagedImageDimensionError, ManagedImageKind, ManagedImageMetadata, ManagedImageMetadataError,
+    parse_managed_image_metadata, validate_managed_image_dimensions,
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use reqwest::{
+    Url,
     dns::{Addrs, Name, Resolve, Resolving},
     header::{CONTENT_TYPE, LOCATION},
     redirect::Policy,
-    Url,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -876,11 +876,13 @@ mod tests {
             "127.0.0.1:443".parse().unwrap(),
         ];
         assert!(validate_project_icon_resolved_addresses(addresses).is_err());
-        assert!(validate_project_icon_resolved_addresses(vec![
-            "93.184.216.34:443".parse().unwrap(),
-            "[2001:4860:4860::8888]:443".parse().unwrap(),
-        ])
-        .is_ok());
+        assert!(
+            validate_project_icon_resolved_addresses(vec![
+                "93.184.216.34:443".parse().unwrap(),
+                "[2001:4860:4860::8888]:443".parse().unwrap(),
+            ])
+            .is_ok()
+        );
     }
 
     #[test]
@@ -969,12 +971,14 @@ mod tests {
         .unwrap();
         assert_eq!(actual, expected);
         assert_eq!(transport.request_count(), 1);
-        assert!(transport
-            .timeouts
-            .lock()
-            .unwrap()
-            .iter()
-            .all(|timeout| *timeout <= PROJECT_ICON_DOWNLOAD_TIMEOUT));
+        assert!(
+            transport
+                .timeouts
+                .lock()
+                .unwrap()
+                .iter()
+                .all(|timeout| *timeout <= PROJECT_ICON_DOWNLOAD_TIMEOUT)
+        );
     }
 
     #[test]

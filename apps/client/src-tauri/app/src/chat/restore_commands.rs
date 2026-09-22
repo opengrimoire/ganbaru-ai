@@ -1,8 +1,8 @@
 //! Coordinated checkpoint restore preview and execution.
 
 use super::checkpoints::{
-    current_git_snapshot, diff_files, read_stored_checkpoint, restore_git_snapshot,
-    verify_checkpoint, ChatChangedFileRead, CurrentGitSnapshot, StoredCheckpoint,
+    ChatChangedFileRead, CurrentGitSnapshot, StoredCheckpoint, current_git_snapshot, diff_files,
+    read_stored_checkpoint, restore_git_snapshot, verify_checkpoint,
 };
 use super::events::{CanonicalEvent, ThreadRevertedEvent};
 use super::models::{
@@ -12,8 +12,8 @@ use super::models::{
 };
 use super::providers::{DriverCancellation, DriverOperationContext};
 use super::repository::receipts::{
-    claim_command_receipt, complete_command_receipt, CommandReceiptClaim, CommandReceiptRead,
-    CommandReceiptState,
+    CommandReceiptClaim, CommandReceiptRead, CommandReceiptState, claim_command_receipt,
+    complete_command_receipt,
 };
 use super::runtime::ChatRuntimeRegistry;
 use super::workspace::{AuthorizedWorkingFolder, WorkingFolderAuthorizationOperation};
@@ -36,10 +36,10 @@ use persistence::{
     settle_executing_preview_failure,
 };
 use preview::{
-    add_duration, preview_id, require_head_context, transient_checkpoint, StoredRestorePreview,
+    StoredRestorePreview, add_duration, preview_id, require_head_context, transient_checkpoint,
 };
 use provider_history::{stored_provider_rollback_cursor, target_turn_id};
-use saga::{execute_restore, RestoreFailurePhase};
+use saga::{RestoreFailurePhase, execute_restore};
 
 const RESTORE_PREVIEW_LIFETIME: chrono::Duration = chrono::Duration::minutes(15);
 

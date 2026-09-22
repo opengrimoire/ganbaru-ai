@@ -1,6 +1,6 @@
 use sha2::{Digest, Sha256};
 use sqlx::{Sqlite, SqlitePool, Transaction};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use super::*;
 
@@ -75,6 +75,11 @@ pub(crate) async fn apply_playlist_snapshot(
         .cloned()
         .collect::<Vec<_>>();
     let repeated_video_count = request.video_ids.len() - unique_video_ids.len();
+    let metadata = request
+        .videos
+        .iter()
+        .map(|video| (video.video_id.as_str(), video))
+        .collect::<HashMap<_, _>>();
     let mut transaction = pool
         .begin()
         .await
@@ -93,15 +98,20 @@ pub(crate) async fn apply_playlist_snapshot(
             newly_discovered_count += 1;
         }
         let item_id = canonical_youtube_item_id(&mut transaction, video_id).await?;
+        let video_metadata = metadata.get(video_id.as_str());
         upsert_video_row(
             &mut transaction,
             &item_id,
             &MusicYouTubeVideoWrite {
                 video_id: video_id.clone(),
-                title: String::new(),
-                channel: String::new(),
+                title: video_metadata.map_or_else(String::new, |video| video.title.clone()),
+                channel: video_metadata.map_or_else(String::new, |video| video.channel.clone()),
                 duration_ms: None,
-                resolution_state: MusicYouTubeResolutionState::Resolving,
+                resolution_state: if video_metadata.is_some() {
+                    MusicYouTubeResolutionState::Ready
+                } else {
+                    MusicYouTubeResolutionState::Resolving
+                },
                 resolved_at: request.resolved_at,
             },
         )
@@ -183,6 +193,7 @@ pub(crate) async fn report_source_failure(
         playlist_id: request.playlist_id.clone(),
         name: request.name.clone(),
         video_ids: Vec::new(),
+        videos: Vec::new(),
         resolved_at: request.occurred_at,
     };
     ensure_collection(&mut transaction, &collection_request).await?;
@@ -272,8 +283,16 @@ async fn upsert_video_row(
             original_artist = CASE WHEN trim(excluded.original_artist) <> ''
                                    THEN excluded.original_artist ELSE music_library_items.original_artist END,
             duration_ms = COALESCE(excluded.duration_ms, music_library_items.duration_ms),
-            availability = excluded.availability,
-            youtube_resolution_state = excluded.youtube_resolution_state,
+            availability = CASE
+                WHEN excluded.youtube_resolution_state = 'resolving'
+                 AND music_library_items.youtube_resolution_state = 'ready'
+                THEN music_library_items.availability
+                ELSE excluded.availability END,
+            youtube_resolution_state = CASE
+                WHEN excluded.youtube_resolution_state = 'resolving'
+                 AND music_library_items.youtube_resolution_state = 'ready'
+                THEN music_library_items.youtube_resolution_state
+                ELSE excluded.youtube_resolution_state END,
             updated_at = excluded.updated_at,
             version = music_library_items.version + 1",
     )
@@ -401,6 +420,33 @@ fn validate_playlist_snapshot(
     }
     for (index, video_id) in request.video_ids.iter().enumerate() {
         validate_video_id(video_id, &format!("videoIds[{index}]"))?;
+    }
+    if request.videos.len() > request.video_ids.len() {
+        return Err(MusicLibraryError::validation(
+            "videos",
+            "cannot contain more entries than videoIds",
+        ));
+    }
+    let video_ids = request.video_ids.iter().collect::<HashSet<_>>();
+    let mut metadata_ids = HashSet::new();
+    for (index, video) in request.videos.iter().enumerate() {
+        validate_video_id(&video.video_id, &format!("videos[{index}].videoId"))?;
+        validate_text(
+            &video.title,
+            &format!("videos[{index}].title"),
+            MAX_YOUTUBE_TITLE_CHARS,
+        )?;
+        validate_text(
+            &video.channel,
+            &format!("videos[{index}].channel"),
+            MAX_YOUTUBE_CHANNEL_CHARS,
+        )?;
+        if !video_ids.contains(&video.video_id) || !metadata_ids.insert(video.video_id.as_str()) {
+            return Err(MusicLibraryError::validation(
+                "videos",
+                "must contain unique metadata for videos in videoIds",
+            ));
+        }
     }
     Ok(())
 }
@@ -563,6 +609,7 @@ mod tests {
             playlist_id: "PLabcdef12345".to_string(),
             name: "Focus soundtrack".to_string(),
             video_ids: video_ids.into_iter().map(str::to_string).collect(),
+            videos: Vec::new(),
             resolved_at: 1_700_000_000_000,
         }
     }
@@ -718,6 +765,42 @@ mod tests {
             .await
             .unwrap();
             assert_eq!(preserved, 1);
+        });
+    }
+
+    #[test]
+    fn playlist_snapshot_saves_resolved_metadata_as_playable() {
+        tauri::async_runtime::block_on(async {
+            let pool = pool().await;
+            let mut request = snapshot(vec!["01L4CFQdrWA", "O4iot2Jy_D0"]);
+            request.videos.push(MusicYouTubePlaylistVideoWrite {
+                video_id: "01L4CFQdrWA".to_string(),
+                title: "Endless Embrace".to_string(),
+                channel: "MYTH & ROID - Topic".to_string(),
+            });
+            apply_playlist_snapshot(&pool, request).await.unwrap();
+
+            let resolved: (String, String, String, String) = sqlx::query_as(
+                "SELECT original_title, original_artist, availability, youtube_resolution_state
+                 FROM music_library_items WHERE youtube_video_id = '01L4CFQdrWA'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(resolved.0, "Endless Embrace");
+            assert_eq!(resolved.1, "MYTH & ROID - Topic");
+            assert_eq!(resolved.2, "available");
+            assert_eq!(resolved.3, "ready");
+
+            let unresolved: (String, String) = sqlx::query_as(
+                "SELECT availability, youtube_resolution_state
+                 FROM music_library_items WHERE youtube_video_id = 'O4iot2Jy_D0'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(unresolved.0, "unknown");
+            assert_eq!(unresolved.1, "resolving");
         });
     }
 

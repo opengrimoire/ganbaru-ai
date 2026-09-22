@@ -1,14 +1,14 @@
 use super::driver::{
-    codex_native_command, confirmed_resume_not_found, goal_request, parse_mcp_status_page,
-    validated_app_server_arguments, CodexNativeCommand, CodexProviderDriver,
+    CodexNativeCommand, CodexProviderDriver, codex_native_command, confirmed_resume_not_found,
+    goal_request, parse_mcp_status_page, validated_app_server_arguments,
 };
 use super::home::*;
 use super::normalizer::{CodexEventNormalizer, CodexRouteState};
 use super::organizational::*;
 use super::protocol::*;
 use super::session::{
-    resolve_codex_approval, resolve_codex_user_input, CodexApprovalResponse, PendingCodexRequest,
-    PendingCodexRequestKind, PendingCodexRequests,
+    CodexApprovalResponse, PendingCodexRequest, PendingCodexRequestKind, PendingCodexRequests,
+    resolve_codex_approval, resolve_codex_user_input,
 };
 use super::transport::{CodexInboundMessage, CodexRpcConnection, CodexRpcFailure};
 use crate::chat::events::{CanonicalEvent, CanonicalRuntimeEvent};
@@ -16,13 +16,13 @@ use crate::chat::models::*;
 use crate::chat::providers::{
     DriverCancellation, DriverFuture, DriverOperationContext, ProviderDriver, ProviderEventSink,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{
-    atomic::{AtomicBool, AtomicU64, Ordering},
     Arc, Mutex,
+    atomic::{AtomicBool, AtomicU64, Ordering},
 };
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};

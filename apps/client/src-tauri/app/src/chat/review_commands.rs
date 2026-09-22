@@ -199,7 +199,7 @@ pub async fn chat_create_review_comment(
             return Err(ChatError::validation(
                 "snapshotId",
                 "Snapshot review comments require snapshot, revision, file, and side",
-            ))
+            ));
         }
     };
     if let Some(resolved) = resolved.as_ref() {
@@ -721,7 +721,7 @@ fn validate_create_request(request: &CreateChatReviewCommentRequest) -> ChatResu
             return Err(ChatError::validation(
                 "sourceData",
                 "Review source metadata is inconsistent",
-            ))
+            ));
         }
     }
     Ok(())

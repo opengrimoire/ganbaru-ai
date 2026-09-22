@@ -27,7 +27,7 @@ vi.mock("$lib/api/music-library", () => ({
 }));
 
 const summary = (id: string): MusicPlaylistSummary => ({
-  id, sortOrder: 0, name: id, icon: "lucide:list-music", shuffleEnabled: true, repeatMode: "all", intendedUses: [],
+  id, sortOrder: 0, name: id, icon: "lucide:list-music", shuffleEnabled: true, mixEnabled: false, repeatMode: "all", intendedUses: [],
   totalCount: 0, eligibleCount: 0, unavailableCount: 0, snoozedCount: 0, localCount: 0,
   onlineCount: 0, version: 1,
 });
@@ -77,7 +77,7 @@ describe("MusicBulkEditController", () => {
     expect(library.refreshSummariesAfterMutation).toHaveBeenCalledOnce();
   });
 
-  it("ignores an unassigned selection and removes it from the visible Review window", async () => {
+  it("ignores an unassigned selection while retaining rows for local visibility filtering", async () => {
     getMusicMembershipMatrix.mockResolvedValueOnce([]);
     const library = {
       currentWindow: {
@@ -103,25 +103,99 @@ describe("MusicBulkEditController", () => {
       removePlaylistIds: [],
       updatedAt: 100,
     });
-    expect(library.currentWindow.items).toEqual([]);
-    expect(library.currentWindow.totalCount).toBe(2);
+    expect(library.currentWindow.items).toEqual([
+      { id: "item-1", reviewState: "ignored", updatedAt: 100, version: 2 },
+      { id: "item-2", reviewState: "ignored", updatedAt: 100, version: 3 },
+    ]);
+    expect(library.currentWindow.totalCount).toBe(4);
     expect(library.refreshAfterMutation).not.toHaveBeenCalled();
     expect(library.refreshSummariesAfterMutation).toHaveBeenCalledOnce();
   });
 
-  it("does not ignore a selection that already belongs to a playlist", async () => {
+  it("updates all selected rows together before persistence completes", async () => {
+    getMusicMembershipMatrix.mockResolvedValueOnce([]);
+    let resolveRequest!: (value: {
+      membershipChangedCount: number;
+      reviewChangedCount: number;
+      items: Array<{ id: string; version: number }>;
+    }) => void;
+    applyMusicReviewSelection.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveRequest = resolve;
+    }));
     const library = {
-      currentWindow: { items: [
-        { id: "item-1", reviewState: "unreviewed", updatedAt: 1, version: 1 },
-        { id: "item-2", reviewState: "unreviewed", updatedAt: 1, version: 1 },
-      ] },
+      currentWindow: {
+        items: [
+          { id: "item-1", reviewState: "unreviewed", updatedAt: 1, version: 1 },
+          { id: "item-2", reviewState: "deferred", updatedAt: 1, version: 2 },
+        ],
+        totalCount: 2,
+      },
+      refreshAfterMutation: vi.fn(async () => true),
+      refreshSummariesAfterMutation: vi.fn(async () => true),
+    } as unknown as MusicLibraryController;
+    const controller = new MusicBulkEditController(library, () => 100, () => "action");
+    await controller.open(["item-1", "item-2"], [summary("all")]);
+
+    const pending = controller.ignoreReviewSelection();
+    expect(library.currentWindow.items).toEqual([
+      { id: "item-1", reviewState: "ignored", updatedAt: 100, version: 1 },
+      { id: "item-2", reviewState: "ignored", updatedAt: 100, version: 2 },
+    ]);
+    resolveRequest({
+      membershipChangedCount: 0,
+      reviewChangedCount: 2,
+      items: [{ id: "item-1", version: 2 }, { id: "item-2", version: 3 }],
+    });
+    expect(await pending).toBe(true);
+    expect(library.currentWindow.totalCount).toBe(2);
+  });
+
+  it("returns an ignored selection to the unreviewed state", async () => {
+    const library = {
+      currentWindow: {
+        items: [
+          { id: "item-1", reviewState: "ignored", updatedAt: 1, version: 2 },
+          { id: "item-2", reviewState: "ignored", updatedAt: 1, version: 3 },
+        ],
+      },
+      refreshAfterMutation: vi.fn(async () => true),
+    } as unknown as MusicLibraryController;
+    const controller = new MusicBulkEditController(library, () => 100, () => "action");
+    controller.useSelection(["item-1", "item-2"]);
+
+    expect(await controller.setReviewState("unreviewed")).toBe(true);
+    expect(bulkSetMusicReviewState).toHaveBeenCalledWith({
+      items: [{ itemId: "item-1", expectedVersion: 2 }, { itemId: "item-2", expectedVersion: 3 }],
+      reviewState: "unreviewed",
+      deferredUntil: null,
+      updatedAt: 100,
+    });
+    expect(library.refreshAfterMutation).toHaveBeenCalledOnce();
+  });
+
+  it("ignores a selection without changing existing or pending playlist memberships", async () => {
+    const library = {
+      currentWindow: {
+        items: [
+          { id: "item-1", reviewState: "unreviewed", updatedAt: 1, version: 1 },
+          { id: "item-2", reviewState: "unreviewed", updatedAt: 1, version: 1 },
+        ],
+        totalCount: 2,
+      },
+      refreshSummariesAfterMutation: vi.fn(async () => true),
     } as unknown as MusicLibraryController;
     const controller = new MusicBulkEditController(library, () => 100, () => "action");
     await controller.open(["item-1", "item-2"], [summary("all"), summary("focus")]);
+    controller.toggle("focus");
     const callCount = applyMusicReviewSelection.mock.calls.length;
 
-    expect(await controller.ignoreReviewSelection()).toBe(false);
-    expect(applyMusicReviewSelection).toHaveBeenCalledTimes(callCount);
+    expect(await controller.ignoreReviewSelection()).toBe(true);
+    expect(applyMusicReviewSelection).toHaveBeenCalledTimes(callCount + 1);
+    expect(applyMusicReviewSelection).toHaveBeenLastCalledWith(expect.objectContaining({
+      reviewState: "ignored",
+      addPlaylistIds: [],
+      removePlaylistIds: [],
+    }));
   });
 
   it("keeps explicit playlist choices while the inline tree selection changes", async () => {

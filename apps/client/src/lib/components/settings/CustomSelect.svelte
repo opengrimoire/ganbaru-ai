@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import { flushSync, tick, type Snippet } from "svelte";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import Check from "@lucide/svelte/icons/check";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
@@ -39,7 +39,15 @@
     popoverAlign = "start",
     popoverBoundaryElement = null,
     disabled = false,
+    appearance = "default",
     class: className = "",
+    triggerLabel,
+    leading,
+    searchPlaceholder,
+    searchValue = "",
+    onSearchChange,
+    emptyLabel,
+    contentAlign = "end",
   }: {
     value: string;
     options: readonly Option[];
@@ -57,7 +65,19 @@
     popoverAlign?: SelectPopoverHorizontalAlign;
     popoverBoundaryElement?: HTMLElement | null;
     disabled?: boolean;
+    appearance?: "default" | "quiet";
     class?: string;
+    /** Label for an action picker that does not retain a selected value. */
+    triggerLabel?: string;
+    /** Optional visual shared by the selected value and each menu option. */
+    leading?: Snippet<[string]>;
+    /** Enables a search field inside the floating menu. */
+    searchPlaceholder?: string;
+    searchValue?: string;
+    /** Supply this for bounded or asynchronous searches owned by the caller. */
+    onSearchChange?: (query: string) => void;
+    emptyLabel?: string;
+    contentAlign?: "start" | "end";
   } = $props();
 
   const { t } = getLocalization();
@@ -79,6 +99,12 @@
   let popoverGeometry = $state<SelectPopoverGeometry>(DEFAULT_POPOVER_GEOMETRY);
   let popoverReady = $state(false);
 
+  const menuId = $props.id();
+  let localSearch = $state("");
+  const query = $derived(onSearchChange ? searchValue : localSearch);
+  const visibleOptions = $derived(onSearchChange || !searchPlaceholder
+    ? options
+    : options.filter((option) => option.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())));
   const current = $derived(options.find((o) => o.value === value));
 
   function toRect(rect: DOMRect): SelectPopoverRect {
@@ -150,7 +176,8 @@
     return `top: ${popoverGeometry.top}px; left: ${popoverGeometry.left}px;${width} min-width: ${popoverGeometry.minWidth}px; max-width: ${popoverGeometry.maxWidth}px; max-height: ${popoverGeometry.maxHeight}px; visibility: visible;`;
   }
 
-  async function toggle() {
+  /** Open the menu without moving the surrounding scroll position. */
+  async function toggle(): Promise<void> {
     if (disabled) return;
     if (open) {
       open = false;
@@ -160,26 +187,77 @@
     open = true;
     await tick();
     computePosition();
+    await tick();
+    if (!open) return;
+    const focusTarget = searchPlaceholder
+      ? popoverEl?.querySelector<HTMLInputElement>("input")
+      : popoverEl?.querySelector<HTMLButtonElement>('[aria-selected="true"]')
+        ?? popoverEl?.querySelector<HTMLButtonElement>('[role="option"]');
+    focusTarget?.focus({ preventScroll: true });
   }
 
-  function select(next: string) {
+  /** Select a value and return keyboard focus to its trigger. */
+  function select(next: string): void {
     onChange(next);
     open = false;
+    triggerEl?.focus({ preventScroll: true });
   }
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (!open) return;
-    if (e.key === "Escape") {
+  /** Keep menu navigation and dismissal local to the open control. */
+  function handleKeydown(e: KeyboardEvent): void {
+    if (!open || !(e.target instanceof Node)) return;
+    if (!popoverEl?.contains(e.target) && !triggerEl?.contains(e.target)) return;
+    if (e.key === "Escape" || e.key === "Tab") {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      flushSync(() => { open = false; });
+      triggerEl?.focus({ preventScroll: true });
+      return;
+    }
+    const buttons = [...(popoverEl?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? [])];
+    const index = buttons.findIndex((button) => button === document.activeElement);
+    const inSearch = e.target instanceof HTMLInputElement;
+    if (inSearch && (e.key === "Home" || e.key === "End")) return;
+    if (e.key === "Enter" && inSearch) {
       e.preventDefault();
       e.stopPropagation();
-      open = false;
+      buttons[0]?.click();
+      return;
+    }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (buttons.length === 0) return;
+    const next = e.key === "Home" ? 0
+      : e.key === "End" ? buttons.length - 1
+      : e.key === "ArrowDown" ? (index + 1) % buttons.length
+      : (index <= 0 ? buttons.length : index) - 1;
+    buttons[next]?.focus({ preventScroll: true });
+    const button = buttons[next];
+    if (button && popoverEl) {
+      const top = button.offsetTop;
+      const bottom = top + button.offsetHeight;
+      const searchHeight = popoverEl.querySelector("input")?.offsetHeight ?? 0;
+      if (top < popoverEl.scrollTop + searchHeight) popoverEl.scrollTop = Math.max(0, top - searchHeight);
+      else if (bottom > popoverEl.scrollTop + popoverEl.clientHeight) {
+        popoverEl.scrollTop = bottom - popoverEl.clientHeight;
+      }
     }
   }
 
   $effect(() => {
     if (!open) return;
+    visibleOptions;
+    void tick().then(() => { if (open) computePosition(); });
+  });
+
+  $effect(() => {
+    if (!open) return;
     function handleClickOutside(e: MouseEvent) {
-      const target = e.target as Node;
+      const target = e.target;
+      if (!(target instanceof Node)) return;
       if (triggerEl?.contains(target)) return;
       if (popoverEl?.contains(target)) return;
       open = false;
@@ -191,10 +269,12 @@
     function handleResize() {
       computePosition();
     }
+    window.addEventListener("keydown", handleKeydown, true);
     window.addEventListener("mousedown", handleClickOutside, true);
     window.addEventListener("scroll", handleScroll, true);
     window.addEventListener("resize", handleResize);
     return () => {
+      window.removeEventListener("keydown", handleKeydown, true);
       window.removeEventListener("mousedown", handleClickOutside, true);
       window.removeEventListener("scroll", handleScroll, true);
       window.removeEventListener("resize", handleResize);
@@ -202,7 +282,6 @@
   });
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
 
 {#snippet selectControl()}
   <div class={cn("relative min-w-0 w-44 max-[480px]:flex-1", className)}>
@@ -211,13 +290,26 @@
       type="button"
       {disabled}
       onclick={toggle}
-      aria-haspopup="listbox"
+      onkeydown={(event) => {
+        if (!open && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+          event.preventDefault();
+          void toggle();
+        }
+      }}
+      aria-haspopup={searchPlaceholder ? "dialog" : "listbox"}
       aria-expanded={open}
+      aria-controls={open ? menuId : undefined}
       aria-label={ariaLabel ?? label}
-      class="flex h-7 w-full max-w-full items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:text-foreground disabled:hover:bg-card max-[480px]:w-full dark:bg-transparent dark:disabled:hover:bg-transparent"
+      class={cn(
+        "flex h-7 w-full max-w-full items-center gap-2 rounded-md text-[0.8rem] font-medium text-foreground transition-colors disabled:cursor-not-allowed max-[480px]:w-full",
+        appearance === "quiet"
+          ? "justify-end px-1.5 hover:bg-accent/60 disabled:opacity-45 disabled:hover:bg-transparent"
+          : "justify-between border border-border bg-card px-2.5 hover:bg-accent disabled:hover:bg-card dark:bg-transparent dark:disabled:hover:bg-transparent",
+      )}
     >
-      <span class="flex min-w-0 flex-1 items-center gap-1.5">
-        <span class="truncate" style={current?.style}>{current?.label ?? value}</span>
+      <span class={cn("flex min-w-0 flex-1 items-center gap-1.5", appearance === "quiet" && contentAlign === "end" && "justify-end text-right")}>
+        {#if leading && current}{@render leading(current.value)}{/if}
+        <span class="truncate" style={current?.style}>{triggerLabel ?? current?.label ?? value}</span>
         {#if showSelectedSummary && current?.summary}
           <span class="shrink-0 text-[0.733333rem] text-muted-foreground">{current.summary}</span>
         {/if}
@@ -231,13 +323,28 @@
     {#if open}
       <div
         bind:this={popoverEl}
-        use:portal
-        role="listbox"
+        use:portal={triggerEl?.closest<HTMLElement>("[data-floating-root]") ?? "body"}
+        id={menuId}
+        role={searchPlaceholder ? "dialog" : "listbox"}
+        aria-label={ariaLabel ?? label}
         data-app-floating-surface
         class="fixed z-80 overflow-x-hidden overflow-y-auto rounded-md border border-border bg-popover py-1 shadow-lg"
         style={popoverStyle()}
       >
-        {#each options as option}
+        {#if searchPlaceholder}
+          <input
+            value={query}
+            aria-label={searchPlaceholder}
+            placeholder={searchPlaceholder}
+            class="sticky top-0 mb-1 min-h-9 w-full border-b border-border bg-popover px-3 text-[0.8rem] outline-none"
+            oninput={(event) => {
+              localSearch = event.currentTarget.value;
+              onSearchChange?.(event.currentTarget.value);
+            }}
+          />
+        {/if}
+        <div role={searchPlaceholder ? "listbox" : undefined} aria-label={ariaLabel ?? label}>
+        {#each visibleOptions as option (option.value)}
           {@const isActive = option.value === value}
           <button
             type="button"
@@ -259,16 +366,20 @@
                   : "flex items-center gap-1.5",
               )}
             >
+              {#if leading}{@render leading(option.value)}{/if}
               <span class="truncate" style={option.style}>{option.label}</span>
               {#if option.summary}
-                <span class="shrink-0 justify-self-end text-[0.733333rem] text-muted-foreground">{option.summary}</span>
+                <span class="max-w-72 truncate justify-self-end text-[0.733333rem] text-muted-foreground" title={option.summary}>{option.summary}</span>
               {/if}
             </span>
             {#if showActiveCheck && isActive}
               <Check size={12} strokeWidth={2.5} class="shrink-0" />
             {/if}
           </button>
+        {:else}
+          {#if emptyLabel}<p class="px-3 py-2 text-[0.8rem] text-muted-foreground">{emptyLabel}</p>{/if}
         {/each}
+        </div>
       </div>
     {/if}
   </div>

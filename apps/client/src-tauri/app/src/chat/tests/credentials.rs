@@ -1,7 +1,8 @@
 use crate::chat::{
     credentials::{
-        materialize_provider_environment, CredentialStore, CredentialStoreAvailability,
-        CredentialStoreError, CredentialStoreErrorCode, CredentialStoreOperation, SecretValue,
+        CredentialStore, CredentialStoreAvailability, CredentialStoreError,
+        CredentialStoreErrorCode, CredentialStoreOperation, SecretValue,
+        materialize_provider_environment,
     },
     models::{CredentialReferenceId, ProviderInstanceConfig},
 };

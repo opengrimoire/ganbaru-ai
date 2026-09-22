@@ -59,9 +59,11 @@ fn redacted_fixture_normalizes_lifecycle_content_plan_and_unknown_events() {
         events.last().unwrap().event,
         CanonicalEvent::TurnCompleted(_)
     ));
-    assert!(!serde_json::to_string(&events)
-        .unwrap()
-        .contains("ganbaru-codex-fixture-secret"));
+    assert!(
+        !serde_json::to_string(&events)
+            .unwrap()
+            .contains("ganbaru-codex-fixture-secret")
+    );
 }
 
 #[test]
