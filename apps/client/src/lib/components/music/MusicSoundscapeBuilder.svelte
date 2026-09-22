@@ -1,157 +1,182 @@
 <script lang="ts">
+  import CloudHail from "@lucide/svelte/icons/cloud-hail";
   import CloudRain from "@lucide/svelte/icons/cloud-rain";
-  import FolderOpen from "@lucide/svelte/icons/folder-open";
+  import CloudRainWind from "@lucide/svelte/icons/cloud-rain-wind";
   import Pause from "@lucide/svelte/icons/pause";
+  import Pencil from "@lucide/svelte/icons/pencil";
   import Play from "@lucide/svelte/icons/play";
   import Plus from "@lucide/svelte/icons/plus";
-  import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { pickSoundscapeFile, revealLocalFile } from "$lib/api/music";
+  import Volume2 from "@lucide/svelte/icons/volume-2";
+  import { pickSoundscapeFile } from "$lib/api/music";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import type { MusicSoundscapeDefinition } from "$lib/music/soundscape-contracts";
+  import type { MusicSoundscapeDefinition, MusicSoundscapeGroup, MusicSoundscapeGroupIcon as GroupIconName } from "$lib/music/soundscape-contracts";
+  import { orderedGeneratedSounds } from "$lib/music/soundscape-presentation";
+  import type { SoundscapeFilter } from "$lib/music/music-builder-view-state";
   import { getSoundscapeStore } from "$lib/stores/soundscape.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
+  import MusicSoundscapeGroupIcon from "./MusicSoundscapeGroupIcon.svelte";
+  import MusicSoundscapeLocalRow from "./MusicSoundscapeLocalRow.svelte";
+  import MusicSoundscapeSectionControls from "./MusicSoundscapeSectionControls.svelte";
 
   const { t } = getLocalization();
   const soundscape = getSoundscapeStore();
-  let editingId = $state<string | null>(null);
-  let nameDraft = $state("");
+  const groupIcons: readonly GroupIconName[] = ["cloud-rain", "waves", "wind", "trees", "coffee", "audio-lines"];
   let pendingDelete = $state<MusicSoundscapeDefinition | null>(null);
+  let pendingGroupDelete = $state<MusicSoundscapeGroup | null>(null);
+  let editingGroupId = $state<string | null>(null);
+  let groupNameDraft = $state("");
+  let groupIconDraft = $state<GroupIconName>("cloud-rain");
   let {
     filter = "all",
     compact = false,
     addRequest = 0,
     onPlaybackStart = () => undefined,
+    onGroupRemoved = () => undefined,
   }: {
-    filter?: "all" | "generated" | "local";
+    filter?: SoundscapeFilter;
     compact?: boolean;
     addRequest?: number;
     onPlaybackStart?: () => void;
+    onGroupRemoved?: () => void;
   } = $props();
   let handledAddRequest = $state(0);
 
-  const generated = $derived(soundscape.definitions.filter((entry) => entry.sourceKind === "generated-noise"));
+  const generated = $derived(orderedGeneratedSounds(soundscape.definitions));
   const local = $derived(soundscape.definitions.filter((entry) => entry.sourceKind === "local-loop"));
+  const ungrouped = $derived(local.filter((entry) => !entry.groupId || !soundscape.groups.some((group) => group.id === entry.groupId)));
+  const selectedIds = $derived(soundscape.persisted?.activeIds ?? []);
 
-  function isPlaying(definition: MusicSoundscapeDefinition): boolean {
-    return soundscape.snapshot.status === "playing" && soundscape.snapshot.sourceId === definition.id;
-  }
-
-  function displayName(definition: MusicSoundscapeDefinition): string {
-    return definition.generatedKind ? t(`music.soundscape.generatedName.${definition.generatedKind}`) : definition.name;
-  }
-
-  async function addLoop(replace?: MusicSoundscapeDefinition): Promise<void> {
-    const path = await pickSoundscapeFile();
-    if (!path || !soundscape.deviceId) return;
-    const filename = path.split(/[\\/]/).pop() ?? t("music.soundscape.localLoop");
-    const name = replace?.name ?? filename.replace(/\.[^.]+$/, "");
-    await soundscape.saveDefinition({
-      id: replace?.id ?? crypto.randomUUID(),
-      sourceKind: "local-loop",
-      generatedKind: null,
-      bundledIdentity: null,
-      name,
-      localPath: path,
-      expectedVersion: replace?.version ?? null,
-      updatedAt: Date.now(),
-    });
+  async function addLoop(groupId: string | null = null, replace?: MusicSoundscapeDefinition): Promise<void> {
+    try {
+      const path = await pickSoundscapeFile();
+      if (!path || !soundscape.deviceId) return;
+      const filename = path.split(/[\\/]/).pop() ?? t("music.soundscape.localLoop");
+      await soundscape.saveDefinition({
+        id: replace?.id ?? crypto.randomUUID(),
+        sourceKind: "local-loop",
+        generatedKind: null,
+        bundledIdentity: null,
+        name: replace?.name ?? filename.replace(/\.[^.]+$/, ""),
+        groupId: replace?.groupId ?? groupId,
+        localPath: path,
+        expectedVersion: replace?.version ?? null,
+        updatedAt: Date.now(),
+      });
+    } catch (error) {
+      console.error("Could not add background sound", error);
+    }
   }
 
   $effect(() => {
     if (addRequest <= handledAddRequest) return;
     handledAddRequest = addRequest;
-    void addLoop();
+    const groupId = filter.startsWith("group:") ? filter.slice(6) : null;
+    void addLoop(groupId);
   });
 
-  function beginRename(definition: MusicSoundscapeDefinition): void {
-    editingId = definition.id;
-    nameDraft = definition.name;
+  function editGroup(group?: MusicSoundscapeGroup): void {
+    editingGroupId = group?.id ?? "new";
+    groupNameDraft = group?.name ?? "";
+    groupIconDraft = group?.icon ?? "cloud-rain";
   }
 
-  async function saveRename(definition: MusicSoundscapeDefinition): Promise<void> {
-    const name = nameDraft.trim();
-    if (!name || !definition.localPath) return;
-    await soundscape.saveDefinition({
-      id: definition.id,
-      sourceKind: definition.sourceKind,
-      generatedKind: definition.generatedKind,
-      bundledIdentity: definition.bundledIdentity,
-      name,
-      localPath: definition.localPath,
-      expectedVersion: definition.version,
-      updatedAt: Date.now(),
-    });
-    editingId = null;
+  async function saveGroup(): Promise<void> {
+    const name = groupNameDraft.trim();
+    if (!name || !editingGroupId) return;
+    const current = soundscape.groups.find((entry) => entry.id === editingGroupId);
+    try {
+      await soundscape.saveGroup({
+        id: current?.id ?? crypto.randomUUID(),
+        name,
+        icon: groupIconDraft,
+        expectedVersion: current?.version ?? null,
+        updatedAt: Date.now(),
+      });
+      editingGroupId = null;
+    } catch (error) {
+      console.error("Could not save background sound group", error);
+    }
+  }
+
+  function toggleSound(id: string): void {
+    if (!selectedIds.includes(id) || soundscape.snapshot.status !== "playing") onPlaybackStart();
+    void soundscape.toggleSelection(id);
   }
 </script>
 
-<div class="h-full min-h-0 overflow-y-auto p-3" aria-busy={soundscape.loading || soundscape.saving}>
-  {#if !compact}<header class="mb-3 rounded-xl border border-border/60 bg-card/60 p-3">
-    <h2 class="text-sm font-semibold">{t("music.soundscape.title")}</h2>
-    <p class="mt-1 text-xs leading-relaxed text-muted-foreground">{t("music.soundscape.oneLayerExplanation")}</p>
-  </header>{/if}
-
+<div class="h-full min-h-0 overflow-y-auto px-4 py-4" aria-busy={soundscape.loading || soundscape.saving} data-music-scrollable="true">
+  <div class="mb-5 flex flex-wrap items-center gap-x-4 gap-y-2 px-1">
+    <div class="flex min-w-36 flex-1 items-center gap-2"><Volume2 size={15} class="shrink-0 text-muted-foreground" /><input type="range" min="0" max="1" step="0.01" value={soundscape.snapshot.volume} disabled={!soundscape.persisted || soundscape.loading} class="min-w-24 flex-1 accent-primary disabled:opacity-40" aria-label={t("music.soundscape.volume")} oninput={(event) => { void soundscape.setVolume(Number(event.currentTarget.value)); }} /><span class="w-9 text-right text-xs tabular-nums text-muted-foreground">{Math.round(soundscape.snapshot.volume * 100)}%</span></div>
+    <button type="button" disabled={selectedIds.length === 0 || soundscape.saving} aria-label={soundscape.snapshot.status === "playing" ? t("music.soundscape.pause") : t("music.soundscape.playSelected")} class="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground hover:bg-accent/60 hover:text-foreground disabled:opacity-40" onclick={() => { if (soundscape.snapshot.status !== "playing") onPlaybackStart(); void soundscape.togglePlayback(); }}>{#if soundscape.snapshot.status === "playing"}<Pause size={15} />{:else}<Play size={15} />{/if}</button>
+  </div>
   {#if soundscape.error}
-    <div class="mb-3 flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-2 text-xs" role="alert">
-      <span>{t("music.soundscape.genericError")}</span><button type="button" class="rounded-md px-2 py-1 font-medium hover:bg-accent" onclick={() => { void soundscape.recover(); }}>{t("music.soundscape.retry")}</button>
-    </div>
+    <p class="mb-3 rounded-lg bg-destructive/5 px-3 py-2 text-xs" role="alert">{t("music.soundscape.genericError")}</p>
   {/if}
 
-  {#if filter !== "local"}<section aria-labelledby="generated-soundscapes">
-    <h3 id="generated-soundscapes" class="mb-2 text-xs font-semibold text-muted-foreground">{t("music.soundscape.generated")}</h3>
-    <div class="grid grid-cols-[repeat(auto-fit,minmax(min(13rem,100%),1fr))] gap-2.5">
-      {#each generated as definition (definition.id)}
-        <article class:active-card={soundscape.snapshot.sourceId === definition.id} class="soundscape-card">
-          <span class="soundscape-icon"><CloudRain size={19} strokeWidth={1.45} /></span>
-          <span class="min-w-0 flex-1"><strong class="block text-xs font-semibold">{displayName(definition)}</strong><span class="mt-1 block text-[0.68rem] leading-relaxed text-muted-foreground">{t(`music.soundscape.description.${definition.generatedKind ?? "white"}`)}</span></span>
-          <button type="button" class="soundscape-action" aria-label={isPlaying(definition) ? t("music.soundscape.pause") : t("music.soundscape.play", displayName(definition))} onclick={() => { if (!isPlaying(definition)) onPlaybackStart(); void (isPlaying(definition) ? soundscape.pause() : soundscape.play(definition.id)); }}>
-            {#if isPlaying(definition)}<Pause size={15} />{:else}<Play size={15} />{/if}
+  {#if filter === "all" || filter === "generated"}
+    <section aria-labelledby="generated-soundscapes">
+      <div id="generated-soundscapes" class="mb-3 max-w-2xl"><MusicSoundscapeSectionControls title={t("music.soundscape.generated")} section="generated" idPrefix="builder-soundscape" /></div>
+      <div class="grid max-w-2xl grid-cols-3 gap-2">
+        {#each generated as definition (definition.id)}
+          {@const selected = selectedIds.includes(definition.id)}
+          <button type="button" aria-pressed={selected} aria-label={selected && soundscape.persisted?.multipleEnabled ? t("music.soundscape.stop", t(`music.soundscape.rainName.${definition.generatedKind ?? "brown"}`)) : selected && soundscape.snapshot.status === "playing" ? t("music.soundscape.pause") : t("music.soundscape.play", t(`music.soundscape.rainName.${definition.generatedKind ?? "brown"}`))} disabled={soundscape.saving} class={selected ? "flex min-h-28 flex-col items-center justify-center gap-2 rounded-xl bg-primary/10 px-2 text-center hover:bg-primary/15 disabled:opacity-50" : "flex min-h-28 flex-col items-center justify-center gap-2 rounded-xl bg-secondary/40 px-2 text-center hover:bg-secondary/70 disabled:opacity-50"} onclick={() => toggleSound(definition.id)}>
+            {#if definition.generatedKind === "brown"}<CloudHail size={27} strokeWidth={1.4} />{:else if definition.generatedKind === "pink"}<CloudRain size={27} strokeWidth={1.4} />{:else}<CloudRainWind size={27} strokeWidth={1.4} />{/if}
+            <span class="text-xs font-medium">{t(`music.soundscape.rainName.${definition.generatedKind ?? "brown"}`)}</span>
+            <span class="text-[0.68rem] text-muted-foreground">{t(`music.soundscape.generatedName.${definition.generatedKind ?? "brown"}`)}</span>
           </button>
-        </article>
-      {/each}
-    </div>
-  </section>{/if}
-
-  {#if filter !== "generated"}<section class:mt-5={filter === "all"} aria-labelledby="local-soundscapes">
-    <div class="mb-2 flex items-center justify-between gap-3"><h3 id="local-soundscapes" class="text-xs font-semibold text-muted-foreground">{t("music.soundscape.localLoops")}</h3>{#if !compact}<button type="button" class="inline-flex h-8 items-center gap-1.5 rounded-md bg-secondary px-2.5 text-xs font-medium hover:bg-accent" onclick={() => { void addLoop(); }}><Plus size={14} />{t("music.soundscape.addLoop")}</button>{/if}</div>
-    {#if local.length === 0}
-      <button type="button" class="flex w-full flex-col items-center justify-center rounded-xl border border-dashed border-border p-5 text-center hover:bg-accent/30" onclick={() => { void addLoop(); }}>
-        <FolderOpen size={22} class="text-muted-foreground" /><strong class="mt-2 text-xs">{t("music.soundscape.addFirstLoop")}</strong><span class="mt-1 max-w-md text-[0.68rem] leading-relaxed text-muted-foreground">{t("music.soundscape.filesStayInPlace")}</span>
-      </button>
-    {:else}
-      <div class="space-y-2">
-        {#each local as definition (definition.id)}
-          <article class:active-card={soundscape.snapshot.sourceId === definition.id} class="soundscape-card items-center">
-            <span class="soundscape-icon"><FolderOpen size={18} /></span>
-            <span class="min-w-0 flex-1">
-              {#if editingId === definition.id}
-                <form class="flex gap-1.5" onsubmit={(event) => { event.preventDefault(); void saveRename(definition); }}><input class="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-xs" bind:value={nameDraft} aria-label={t("music.soundscape.name")} /><button class="rounded-md bg-primary px-2 text-xs text-primary-foreground">{t("music.soundscape.saveName")}</button></form>
-              {:else}
-                <button type="button" class="block max-w-full truncate text-left text-xs font-semibold hover:underline" onclick={() => beginRename(definition)}>{definition.name}</button>
-                <span class="mt-1 block truncate text-[0.65rem] text-muted-foreground">{definition.availability === "available" ? t("music.soundscape.ready") : t("music.soundscape.needsRepair")}</span>
-              {/if}
-            </span>
-            {#if definition.availability === "available"}
-              <button type="button" class="soundscape-action" aria-label={isPlaying(definition) ? t("music.soundscape.pause") : t("music.soundscape.play", displayName(definition))} onclick={() => { if (!isPlaying(definition)) onPlaybackStart(); void (isPlaying(definition) ? soundscape.pause() : soundscape.play(definition.id)); }}>{#if isPlaying(definition)}<Pause size={15} />{:else}<Play size={15} />{/if}</button>
-              <button type="button" class="soundscape-action" aria-label={t("music.soundscape.showFile")} title={t("music.soundscape.showFile")} onclick={() => definition.localPath && void revealLocalFile(definition.localPath)}><FolderOpen size={15} /></button>
-            {:else}<button type="button" class="rounded-md bg-secondary px-2 py-1.5 text-xs" onclick={() => { void addLoop(definition); }}>{t("music.soundscape.repair")}</button>{/if}
-            <button type="button" class="soundscape-action text-destructive" aria-label={t("music.soundscape.remove")} title={t("music.soundscape.remove")} onclick={() => { pendingDelete = definition; }}><Trash2 size={15} /></button>
-          </article>
         {/each}
       </div>
-    {/if}
-  </section>{/if}
+    </section>
+  {/if}
+
+  {#if filter !== "generated"}
+    <section class:mt-7={filter === "all"} aria-labelledby="local-soundscapes">
+      <div class="mb-3 flex items-center gap-2">
+        <div id="local-soundscapes" class="min-w-0 flex-1"><MusicSoundscapeSectionControls title={t("music.soundscape.localLoops")} section="local" idPrefix="builder-soundscape" /></div>
+        <button type="button" class="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground" onclick={() => editGroup()}><Plus size={14} />{t("music.soundscape.newGroup")}</button>
+        {#if !compact}<button type="button" class="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground" onclick={() => { void addLoop(filter.startsWith("group:") ? filter.slice(6) : null); }}><Plus size={14} />{t("music.soundscape.addLoop")}</button>{/if}
+      </div>
+
+      {#if editingGroupId === "new"}
+        <form class="mb-4 rounded-xl bg-secondary/35 p-3" onsubmit={(event) => { event.preventDefault(); void saveGroup(); }}>
+          <input class="h-9 w-full rounded-lg border border-input bg-background px-3 text-xs outline-none" bind:value={groupNameDraft} aria-label={t("music.soundscape.groupName")} placeholder={t("music.soundscape.groupName")} maxlength="80" />
+          <div class="mt-2 flex flex-wrap gap-1">
+            {#each groupIcons as icon}<button type="button" aria-label={t(`music.soundscape.groupIcon.${icon}`)} aria-pressed={groupIconDraft === icon} class={groupIconDraft === icon ? "grid h-8 w-8 place-items-center rounded-lg bg-primary/15" : "grid h-8 w-8 place-items-center rounded-lg hover:bg-accent"} onclick={() => groupIconDraft = icon}><MusicSoundscapeGroupIcon {icon} /></button>{/each}
+          </div>
+          <div class="mt-2 flex justify-end gap-2"><button type="button" class="h-8 rounded-lg px-3 text-xs hover:bg-accent" onclick={() => editingGroupId = null}>{t("common.cancel")}</button><button type="submit" disabled={!groupNameDraft.trim() || soundscape.saving} class="h-8 rounded-lg bg-primary px-3 text-xs text-primary-foreground disabled:opacity-40">{t("music.soundscape.saveName")}</button></div>
+        </form>
+      {/if}
+
+      {#each soundscape.groups.filter((entry) => filter === "all" || filter === "local" || filter === `group:${entry.id}`) as group (group.id)}
+        <div class="mb-4">
+          {#if editingGroupId === group.id}
+            <form class="rounded-xl bg-secondary/35 p-3" onsubmit={(event) => { event.preventDefault(); void saveGroup(); }}>
+              <input class="h-9 w-full rounded-lg border border-input bg-background px-3 text-xs outline-none" bind:value={groupNameDraft} aria-label={t("music.soundscape.groupName")} maxlength="80" />
+              <div class="mt-2 flex flex-wrap gap-1">{#each groupIcons as icon}<button type="button" aria-label={t(`music.soundscape.groupIcon.${icon}`)} aria-pressed={groupIconDraft === icon} class={groupIconDraft === icon ? "grid h-8 w-8 place-items-center rounded-lg bg-primary/15" : "grid h-8 w-8 place-items-center rounded-lg hover:bg-accent"} onclick={() => groupIconDraft = icon}><MusicSoundscapeGroupIcon {icon} /></button>{/each}</div>
+              <div class="mt-2 flex items-center gap-2"><button type="button" class="h-8 rounded-lg px-2 text-xs text-destructive hover:bg-accent" onclick={() => pendingGroupDelete = group}>{t("music.soundscape.removeGroup")}</button><span class="flex-1"></span><button type="button" class="h-8 rounded-lg px-3 text-xs hover:bg-accent" onclick={() => editingGroupId = null}>{t("common.cancel")}</button><button type="submit" disabled={!groupNameDraft.trim() || soundscape.saving} class="h-8 rounded-lg bg-primary px-3 text-xs text-primary-foreground disabled:opacity-40">{t("music.soundscape.saveName")}</button></div>
+            </form>
+          {:else}
+            <div class="flex h-9 items-center gap-2 px-2"><MusicSoundscapeGroupIcon icon={group.icon} size={16} /><h3 class="min-w-0 flex-1 truncate text-xs font-medium">{group.name}</h3><button type="button" class="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground hover:bg-accent" aria-label={t("music.soundscape.addToGroup", group.name)} onclick={() => { void addLoop(group.id); }}><Plus size={14} /></button><button type="button" class="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground hover:bg-accent" aria-label={t("music.soundscape.editGroup")} onclick={() => editGroup(group)}><Pencil size={13} /></button></div>
+            {#each local.filter((entry) => entry.groupId === group.id) as definition (definition.id)}
+              <MusicSoundscapeLocalRow {definition} onRepair={(entry) => { void addLoop(entry.groupId, entry); }} onRemove={(entry) => pendingDelete = entry} {onPlaybackStart} />
+            {/each}
+          {/if}
+        </div>
+      {/each}
+
+      {#if ungrouped.length > 0 && (filter === "all" || filter === "local")}
+        <h3 class="mb-1 px-2 text-[0.68rem] font-medium text-muted-foreground">{t("music.soundscape.ungrouped")}</h3>
+        {#each ungrouped as definition (definition.id)}<MusicSoundscapeLocalRow {definition} onRepair={(entry) => { void addLoop(null, entry); }} onRemove={(entry) => pendingDelete = entry} {onPlaybackStart} />{/each}
+      {:else if soundscape.groups.length === 0 && editingGroupId !== "new"}
+        <button type="button" class="flex h-16 w-full items-center justify-center gap-2 rounded-lg text-xs text-muted-foreground hover:bg-accent/40" onclick={() => { void addLoop(); }}><Plus size={16} />{t("music.soundscape.addFirstLoop")}</button>
+      {/if}
+    </section>
+  {/if}
 </div>
 
 {#if pendingDelete}
-  <ConfirmDialog title={t("music.soundscape.removeTitle")} message={t("music.soundscape.removeMessage", pendingDelete.name)} confirmLabel={t("music.soundscape.remove")} cancelLabel={t("common.cancel")} onConfirm={() => { const definition = pendingDelete; pendingDelete = null; if (definition) void soundscape.removeDefinition(definition); }} onCancel={() => { pendingDelete = null; }} />
+  <ConfirmDialog title={t("music.soundscape.removeTitle")} message={t("music.soundscape.removeMessage", pendingDelete.name)} confirmLabel={t("music.soundscape.remove")} cancelLabel={t("common.cancel")} onConfirm={() => { const definition = pendingDelete; pendingDelete = null; if (definition) void soundscape.removeDefinition(definition).catch((error) => console.error("Could not remove background sound", error)); }} onCancel={() => pendingDelete = null} />
 {/if}
-
-<style>
-  .soundscape-card { display: flex; min-width: 0; align-items: flex-start; gap: 0.7rem; border: 1px solid color-mix(in srgb, var(--border) 65%, transparent); border-radius: 0.85rem; background: color-mix(in srgb, var(--card) 78%, transparent); padding: 0.75rem; transition: border-color 130ms ease, background-color 130ms ease; }
-  .active-card { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); background: color-mix(in srgb, var(--primary) 6%, var(--card)); }
-  .soundscape-icon { display: grid; height: 2.25rem; width: 2.25rem; flex: none; place-items: center; border-radius: 0.7rem; background: color-mix(in srgb, var(--primary) 10%, var(--secondary)); color: var(--muted-foreground); }
-  .soundscape-action { display: inline-grid; height: 2rem; width: 2rem; flex: none; place-items: center; border-radius: 0.45rem; background: var(--secondary); transition: background-color 120ms ease; }
-  .soundscape-action:hover { background: var(--accent); }
-  @media (prefers-reduced-motion: reduce) { .soundscape-card, .soundscape-action { transition: none; } }
-</style>
+{#if pendingGroupDelete}
+  <ConfirmDialog title={t("music.soundscape.removeGroup")} message={t("music.soundscape.removeGroupMessage", pendingGroupDelete.name)} confirmLabel={t("music.soundscape.removeGroup")} cancelLabel={t("common.cancel")} onConfirm={() => { const group = pendingGroupDelete; pendingGroupDelete = null; editingGroupId = null; if (group) void soundscape.removeGroup(group).then(() => { if (filter === `group:${group.id}`) onGroupRemoved(); }).catch((error) => console.error("Could not remove background sound group", error)); }} onCancel={() => pendingGroupDelete = null} />
+{/if}

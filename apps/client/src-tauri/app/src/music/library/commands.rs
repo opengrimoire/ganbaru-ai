@@ -761,6 +761,45 @@ pub async fn music_library_soundscapes(
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
+pub async fn music_library_soundscape_groups(
+    app: tauri::AppHandle,
+    db_url: String,
+) -> MusicLibraryResult<Vec<MusicSoundscapeGroup>> {
+    let pool = connect_sqlite(app, db_url)
+        .await
+        .map_err(connection_error)?;
+    super::soundscape_groups::groups(&pool).await
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[tauri::command]
+pub async fn music_library_upsert_soundscape_group(
+    app: tauri::AppHandle,
+    db_url: String,
+    request: MusicSoundscapeGroupWrite,
+) -> MusicLibraryResult<MusicSoundscapeGroup> {
+    let pool = connect_sqlite(app, db_url)
+        .await
+        .map_err(connection_error)?;
+    super::soundscape_groups::upsert(&pool, request).await
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[tauri::command]
+pub async fn music_library_remove_soundscape_group(
+    app: tauri::AppHandle,
+    db_url: String,
+    group_id: String,
+    expected_version: i64,
+) -> MusicLibraryResult<()> {
+    let pool = connect_sqlite(app, db_url)
+        .await
+        .map_err(connection_error)?;
+    super::soundscape_groups::remove(&pool, &group_id, expected_version).await
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[tauri::command]
 pub async fn music_library_upsert_soundscape(
     app: tauri::AppHandle,
     db_url: String,

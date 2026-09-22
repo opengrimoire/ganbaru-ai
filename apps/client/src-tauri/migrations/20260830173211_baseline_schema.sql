@@ -2376,11 +2376,24 @@ CREATE TABLE music_soundscape_locations (
     PRIMARY KEY (soundscape_id, device_id)
 );
 
+CREATE TABLE music_soundscape_groups (
+    id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
+    name TEXT NOT NULL CHECK (trim(name) <> ''),
+    icon TEXT NOT NULL CHECK (icon IN ('cloud-rain', 'waves', 'wind', 'trees', 'coffee', 'audio-lines')),
+    created_at INTEGER NOT NULL CHECK (created_at > 0),
+    updated_at INTEGER NOT NULL CHECK (updated_at > 0),
+    version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0)
+);
+
 CREATE TABLE music_soundscape_state (
     singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
     active_soundscape_id TEXT REFERENCES music_soundscapes(id) ON DELETE SET NULL,
+    active_ids_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(active_ids_json)),
+    multiple_enabled INTEGER NOT NULL DEFAULT 0 CHECK (multiple_enabled IN (0, 1)),
+    generated_level REAL CHECK (generated_level IS NULL OR (generated_level >= 0.0 AND generated_level <= 2.0)),
+    local_level REAL CHECK (local_level IS NULL OR (local_level >= 0.0 AND local_level <= 2.0)),
     desired_playing INTEGER NOT NULL DEFAULT 0 CHECK (desired_playing IN (0, 1)),
-    volume REAL NOT NULL DEFAULT 0.35 CHECK (volume >= 0.0 AND volume <= 1.0),
+    volume REAL NOT NULL DEFAULT 0.1 CHECK (volume >= 0.0 AND volume <= 1.0),
     updated_at INTEGER NOT NULL CHECK (updated_at > 0),
     version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0)
 );
@@ -2395,6 +2408,7 @@ CREATE TABLE music_soundscapes (
     generated_kind TEXT CHECK (generated_kind IN ('white', 'pink', 'brown')),
     bundled_identity TEXT,
     name TEXT NOT NULL CHECK (trim(name) <> ''),
+    group_id TEXT REFERENCES music_soundscape_groups(id) ON DELETE SET NULL,
     availability TEXT NOT NULL CHECK (availability IN ('available', 'missing', 'unsupported')),
     created_at INTEGER NOT NULL CHECK (created_at > 0),
     updated_at INTEGER NOT NULL CHECK (updated_at > 0),
@@ -6574,7 +6588,7 @@ INSERT INTO music_soundscapes (
 
 INSERT INTO music_soundscape_state (
     singleton_id, active_soundscape_id, desired_playing, volume, updated_at, version
-) VALUES (1, NULL, 0, 0.35, CAST(strftime('%s', 'now') AS INTEGER) * 1000, 1);
+) VALUES (1, NULL, 0, 0.1, CAST(strftime('%s', 'now') AS INTEGER) * 1000, 1);
 
 INSERT INTO music_playlists (
     id, name, icon, shuffle_enabled, repeat_mode, sort_order,

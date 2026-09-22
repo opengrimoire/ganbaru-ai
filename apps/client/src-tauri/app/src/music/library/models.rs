@@ -694,6 +694,7 @@ pub struct MusicSoundscapeDefinition {
     pub generated_kind: Option<MusicGeneratedNoiseKind>,
     pub bundled_identity: Option<String>,
     pub name: String,
+    pub group_id: Option<String>,
     pub availability: MusicSoundscapeAvailability,
     pub local_path: Option<String>,
     pub created_at: i64,
@@ -710,8 +711,32 @@ pub struct MusicSoundscapeWrite {
     pub generated_kind: Option<MusicGeneratedNoiseKind>,
     pub bundled_identity: Option<String>,
     pub name: String,
+    pub group_id: Option<String>,
     pub device_id: String,
     pub local_path: Option<String>,
+    pub expected_version: Option<i64>,
+    pub updated_at: i64,
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicSoundscapeGroup {
+    pub id: String,
+    pub name: String,
+    pub icon: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub version: i64,
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicSoundscapeGroupWrite {
+    pub id: String,
+    pub name: String,
+    pub icon: String,
     pub expected_version: Option<i64>,
     pub updated_at: i64,
 }
@@ -721,6 +746,10 @@ pub struct MusicSoundscapeWrite {
 #[serde(rename_all = "camelCase")]
 pub struct MusicSoundscapeState {
     pub active_soundscape_id: Option<String>,
+    pub active_ids: Vec<String>,
+    pub multiple_enabled: bool,
+    pub generated_level: Option<f64>,
+    pub local_level: Option<f64>,
     pub desired_playing: bool,
     pub volume: f64,
     pub updated_at: i64,
@@ -732,6 +761,10 @@ pub struct MusicSoundscapeState {
 #[serde(rename_all = "camelCase")]
 pub struct MusicSoundscapeStateWrite {
     pub active_soundscape_id: Option<String>,
+    pub active_ids: Vec<String>,
+    pub multiple_enabled: bool,
+    pub generated_level: Option<f64>,
+    pub local_level: Option<f64>,
     pub desired_playing: bool,
     pub volume: f64,
     pub expected_version: i64,

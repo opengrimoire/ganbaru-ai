@@ -1269,7 +1269,7 @@
           onRemoveSnooze={(item) => removeItemSnoozes(item, null)}
         />
       {:else if destination.kind === "soundscapes"}
-        <MusicSoundscapeBuilder filter={contextViewState.soundscapeFilter} compact addRequest={soundscapeAddRequest} onPlaybackStart={takePlaybackOwnership} />
+        <MusicSoundscapeBuilder filter={contextViewState.soundscapeFilter} compact addRequest={soundscapeAddRequest} onPlaybackStart={takePlaybackOwnership} onGroupRemoved={() => contextViewState.soundscapeFilter = "local"} />
       {:else}
         <MusicBuilderOverview {destination} search={library.currentState.search} playlists={library.playlistSummaries} onNavigate={(next) => { void navigate(next); }} onPrimary={primaryAction} onImport={() => interchange.show("import")} onExport={() => interchange.show("export", destination.kind === "playlist" ? destination.playlistId : null)} compact />
       {/if}

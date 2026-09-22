@@ -1,5 +1,4 @@
 <script lang="ts">
-  import Check from "@lucide/svelte/icons/check";
   import CloudRain from "@lucide/svelte/icons/cloud-rain";
   import ListMusic from "@lucide/svelte/icons/list-music";
   import Pencil from "@lucide/svelte/icons/pencil";
@@ -14,7 +13,8 @@
   import { getSoundscapeStore } from "$lib/stores/soundscape.svelte";
   import MusicPlaylistIcon from "./MusicPlaylistIcon.svelte";
 
-  type SoundscapeFilter = "all" | "generated" | "local";
+  import type { SoundscapeFilter } from "$lib/music/music-builder-view-state";
+  import MusicSoundscapeGroupIcon from "../MusicSoundscapeGroupIcon.svelte";
 
   let {
     destination,
@@ -72,7 +72,9 @@
       <button type="button" class:active-row={soundscapeFilter === "all"} class="context-row" onclick={() => onSoundscapeFilter("all")}><span class="context-icon"><CloudRain size={14} /></span><span class="min-w-0 flex-1 truncate">{t("music.soundscape.all")}</span><span class="context-count">{soundscape.definitions.length}</span></button>
       <button type="button" class:active-row={soundscapeFilter === "generated"} class="context-row" onclick={() => onSoundscapeFilter("generated")}><span class="context-icon"><CloudRain size={14} /></span><span class="min-w-0 flex-1 truncate">{t("music.soundscape.generated")}</span><span class="context-count">{soundscape.definitions.filter((entry) => entry.sourceKind === "generated-noise").length}</span></button>
       <button type="button" class:active-row={soundscapeFilter === "local"} class="context-row" onclick={() => onSoundscapeFilter("local")}><span class="context-icon"><ListMusic size={14} /></span><span class="min-w-0 flex-1 truncate">{t("music.soundscape.localLoops")}</span><span class="context-count">{soundscape.definitions.filter((entry) => entry.sourceKind === "local-loop").length}</span></button>
-      {#if soundscape.snapshot.sourceId}<p class="mx-2 mt-3 flex items-center gap-1.5 text-[0.62rem] text-muted-foreground"><Check size={11} class="text-primary" />{t("music.soundscape.playingInBackground")}</p>{/if}
+      {#each soundscape.groups as group (group.id)}
+        <button type="button" class:active-row={soundscapeFilter === `group:${group.id}`} class="context-row pl-5" onclick={() => onSoundscapeFilter(`group:${group.id}`)}><span class="context-icon"><MusicSoundscapeGroupIcon icon={group.icon} size={14} /></span><span class="min-w-0 flex-1 truncate">{group.name}</span><span class="context-count">{soundscape.definitions.filter((entry) => entry.groupId === group.id).length}</span></button>
+      {/each}
     </div>
   {/if}
 </div>
