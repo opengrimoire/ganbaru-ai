@@ -60,7 +60,14 @@ jobs:
         run: cargo fetch --locked
 
       - name: validate workspace
-        run: pnpm -w run validate
+        run: |
+          report_memory_peak() {
+            if [ -r /sys/fs/cgroup/memory.peak ]; then
+              awk '{ printf "Runner memory peak: %.2f GiB\n", $1 / 1073741824 }' /sys/fs/cgroup/memory.peak
+            fi
+          }
+          trap report_memory_peak EXIT
+          pnpm -w run validate:ci
 
   windows-rust:
     name: windows Rust check
