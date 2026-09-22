@@ -6,7 +6,11 @@ The frontend is a plain Svelte 5 application built with Vite. It is not SvelteKi
 
 `apps/client/src/main.ts` selects a virtual platform entry. Desktop uses `main-desktop.ts` and `App.svelte`; mobile uses `main-mobile.ts` and `MobileApp.svelte`. Build-time selection keeps desktop-only imports out of Android production assets instead of hiding unsupported controls at runtime.
 
-The shell owns cross-feature navigation and only mounts the selected primary surface. Desktop imports its top-level surfaces eagerly and hydrates non-Calendar stores asynchronously after mount. Android preserves separate production chunks: its critical readiness phase produces a usable Calendar, then it automatically resolves the other standard surfaces in prioritized background batches. An early navigation reuses the in-flight preparation instead of starting a separate interaction-triggered load. Heavy or uncommon detail workflows load on demand on both platforms. The benchmark bundle contracts protect intentional resident and lazy boundaries.
+The shell owns cross-feature navigation and only mounts the selected primary surface. Desktop imports its top-level surfaces eagerly and hydrates non-Calendar stores asynchronously after mount. Android preserves separate production chunks: its critical readiness phase produces a usable Calendar, then it automatically resolves the other standard surfaces in prioritized background batches. An early navigation reuses the in-flight preparation instead of starting a separate interaction-triggered load. Heavy or uncommon detail workflows load on demand on both platforms. Production bundle contracts protect intentional resident and lazy boundaries.
+
+The desktop main window starts hidden. Its normal reveal waits for the selected root to mount, Svelte updates to flush, layout to resolve required fonts, and those fonts to become ready. Initial theme and localization hydration precede the configured-vault root mount. Reveal must not depend on animation frames from a hidden WebView. An ownership transition cover remains until replacement content is ready, and the native reveal timeout remains failure recovery. Detached windows and Pomodoro overlays do not reveal the main window.
+
+Without an active vault, desktop boot loads setup and prewarms handoff onboarding without importing the App feature roots. Shared production chunks must preserve that boundary and the existing deferred terminal, editor, and review runtimes. Activating a vault retains eager common surfaces and existing workspace preparation.
 
 ## Source organization
 

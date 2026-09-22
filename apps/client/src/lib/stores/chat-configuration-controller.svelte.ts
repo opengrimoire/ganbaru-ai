@@ -35,7 +35,8 @@ export class ChatConfigurationController {
   providerDiscoveryLoading = $state(false);
 
   private generation = 0;
-  private providerDiscoveryPromise: Promise<void> | null = null;
+  private settingsRequest = 0;
+  private providerDiscoveryPromise: Promise<ChatSettingsRead> | null = null;
   private workingFolderRefreshPromise: Promise<void> | null = null;
 
   constructor(private readonly options: ChatConfigurationControllerOptions) {}
@@ -57,29 +58,38 @@ export class ChatConfigurationController {
   }
 
   setSettings(settings: ChatSettingsRead | null): void {
+    this.settingsRequest += 1;
     this.settings = settings;
     this.options.onSettingsChanged();
   }
 
-  async refreshSettings(): Promise<void> {
-    this.setSettings(await chatApi.readChatSettings());
+  /** Refreshes settings without applying a response after a vault or load change. */
+  async refreshSettings(isCurrent: () => boolean = () => true): Promise<void> {
+    const generation = this.generation;
+    const request = ++this.settingsRequest;
+    const settings = await chatApi.readChatSettings();
+    if (generation === this.generation && request === this.settingsRequest && isCurrent()) {
+      this.setSettings(settings);
+    }
   }
 
-  async discoverProviders(): Promise<void> {
-    if (this.providerDiscoveryPromise) return this.providerDiscoveryPromise;
+  /** Shares discovery work while only the current load may apply its settings. */
+  async discoverProviders(isCurrent: () => boolean = () => true): Promise<void> {
     const generation = this.generation;
-    this.providerDiscoveryLoading = true;
-    const discovery = chatApi.discoverDefaultChatProviders()
-      .then((settings) => {
-        if (generation === this.generation) this.setSettings(settings);
-      })
-      .finally(() => {
+    const request = ++this.settingsRequest;
+    if (!this.providerDiscoveryPromise) {
+      this.providerDiscoveryLoading = true;
+      const discovery = chatApi.discoverDefaultChatProviders().finally(() => {
         if (this.providerDiscoveryPromise !== discovery) return;
         this.providerDiscoveryLoading = false;
         this.providerDiscoveryPromise = null;
       });
-    this.providerDiscoveryPromise = discovery;
-    return discovery;
+      this.providerDiscoveryPromise = discovery;
+    }
+    const settings = await this.providerDiscoveryPromise;
+    if (generation === this.generation && request === this.settingsRequest && isCurrent()) {
+      this.setSettings(settings);
+    }
   }
 
   async refreshWorkingFolders(): Promise<void> {

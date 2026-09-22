@@ -17,6 +17,71 @@
       "maxSourceModules": 365
     }
   ],
+  "noVaultStartup": {
+    "roots": [
+      {
+        "name": "desktop entry",
+        "loadedModules": [
+          "src/main.ts",
+          "src/main-desktop.ts"
+        ]
+      },
+      {
+        "name": "vault setup",
+        "loadedModules": [
+          "src/lib/components/vault/VaultSetupView.svelte"
+        ]
+      },
+      {
+        "name": "setup onboarding prewarm",
+        "loadedModules": [
+          "src/lib/components/vault/VaultHandoffOnboardingView.svelte",
+          "src/lib/components/vault/PairingQrCode.svelte"
+        ]
+      }
+    ],
+    "forbiddenModules": [
+      "src/App.svelte",
+      "src/lib/components/calendar/CalendarView.svelte",
+      "src/lib/components/projects/ProjectsView.svelte",
+      "src/lib/components/notes/NotesView.svelte",
+      "src/lib/components/chat/ChatWorkspace.svelte",
+      "src/lib/components/music/MusicPanel.svelte",
+      "src/lib/components/quick-notes/QuickNotesPanel.svelte"
+    ],
+    "forbiddenModuleSubstrings": [
+      "/node_modules/@pierre/diffs/",
+      "/node_modules/@pierre/theme/",
+      "/node_modules/@pierre/theming/",
+      "/node_modules/@shikijs/",
+      "/node_modules/shiki/",
+      "/node_modules/codemirror/",
+      "/node_modules/@codemirror/",
+      "/node_modules/@lezer/",
+      "/node_modules/@replit/codemirror-lang-svelte/",
+      "/node_modules/@xterm/",
+      "/node_modules/hast-util-to-html/",
+      "/node_modules/lru_map/",
+      "/node_modules/diff/",
+      "/node_modules/oniguruma-parser/",
+      "/node_modules/oniguruma-to-es/",
+      "/node_modules/regex/",
+      "/node_modules/regex-recursion/",
+      "/node_modules/regex-utilities/",
+      "/node_modules/ccount/",
+      "/node_modules/character-entities-html4/",
+      "/node_modules/character-entities-legacy/",
+      "/node_modules/comma-separated-tokens/",
+      "/node_modules/hast-util-whitespace/",
+      "/node_modules/html-void-elements/",
+      "/node_modules/property-information/",
+      "/node_modules/space-separated-tokens/",
+      "/node_modules/stringify-entities/",
+      "/node_modules/zwitch/",
+      "/node_modules/marked/",
+      "/node_modules/dompurify/"
+    ]
+  },
   "shell": {
     "loadedModules": ["src/App.svelte"],
     "requiredModules": [
@@ -56,7 +121,27 @@
       "/node_modules/codemirror/",
       "/node_modules/@codemirror/",
       "/node_modules/@lezer/",
-      "/node_modules/@replit/codemirror-lang-svelte/"
+      "/node_modules/@replit/codemirror-lang-svelte/",
+      "/node_modules/@xterm/xterm/lib/",
+      "/node_modules/@xterm/addon-fit/",
+      "/node_modules/hast-util-to-html/",
+      "/node_modules/lru_map/",
+      "/node_modules/diff/",
+      "/node_modules/oniguruma-parser/",
+      "/node_modules/oniguruma-to-es/",
+      "/node_modules/regex/",
+      "/node_modules/regex-recursion/",
+      "/node_modules/regex-utilities/",
+      "/node_modules/ccount/",
+      "/node_modules/character-entities-html4/",
+      "/node_modules/character-entities-legacy/",
+      "/node_modules/comma-separated-tokens/",
+      "/node_modules/hast-util-whitespace/",
+      "/node_modules/html-void-elements/",
+      "/node_modules/property-information/",
+      "/node_modules/space-separated-tokens/",
+      "/node_modules/stringify-entities/",
+      "/node_modules/zwitch/"
     ]
   },
   "editorRuntime": {
