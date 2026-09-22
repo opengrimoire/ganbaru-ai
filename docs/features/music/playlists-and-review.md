@@ -2,7 +2,7 @@
 
 ## Playlist identity
 
-A playlist has a stable identity, localized or user-authored name, icon or emoji, order, shuffle setting, repeat mode, and ordered memberships. Built-in playlists have protected identity but user-controlled ordering and membership.
+A playlist has a stable identity, localized or user-authored name, icon or emoji, playback mode, repeat mode, and ordered memberships. Built-in playlists have protected identity but user-controlled ordering and membership.
 
 Fresh vaults provide practical starter playlists for common focus, break, meditation, exercise, hygiene, chores, cooking, and commute contexts. Built-in names and icons are localized and cannot be deleted or renamed. Custom playlists can be created, renamed, reordered, and deleted.
 
@@ -11,7 +11,7 @@ Fresh vaults provide practical starter playlists for common focus, break, medita
 A playlist membership connects one canonical media item to one playlist. It can define:
 
 - Enabled state and stored order.
-- Weighted selection frequency.
+- Mix selection frequency. In order and Shuffle ignore this preference.
 - Start and end positions.
 - Skip ranges.
 - Volume and playback rate overrides.
@@ -66,6 +66,8 @@ Refresh, rename, repair, and removal actions are contextual to the selected root
 ## Snooze
 
 Snooze temporarily excludes an item from one playlist or all playlists until a specified boundary. The UI explains the scope and end. Snooze is reversible and does not alter review state or source availability.
+
+The main player puts snooze and Mix frequency in one compact track-preferences popover with a shared scope selector. Everywhere frequency updates every current playlist membership for the track; a selected playlist updates only that membership. Changing frequency does not interrupt the current track. The former speed control and its keyboard shortcuts are not shown in the main player.
 
 ## Accessibility
 

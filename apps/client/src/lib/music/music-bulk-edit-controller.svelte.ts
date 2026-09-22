@@ -119,6 +119,7 @@ export class MusicBulkEditController {
         name,
         icon: iconInput.trim(),
         shuffleEnabled: true,
+        mixEnabled: false,
         repeatMode: "all",
         intendedUses: [],
         createdAt: this.now(),

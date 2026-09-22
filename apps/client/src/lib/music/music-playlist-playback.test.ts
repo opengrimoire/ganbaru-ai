@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { MusicPlaylistPlaybackEntry } from "$lib/music/library-contracts";
 import {
-  buildWeightedShuffleCycle,
+  buildMusicShuffleCycle,
   evaluateMusicQueueEntry,
   nextSequentialQueueIndex,
   projectMusicPlaylistPlayback,
   selectFreshMusicQueueItem,
+  selectMusicMixIndex,
   skipRangeTargetMs,
 } from "./music-playlist-playback";
 
@@ -86,7 +87,7 @@ describe("saved playlist playback policy", () => {
     expect(nextSequentialQueueIndex([0, 2, 4], 2, "one")).toBe(2);
   });
 
-  it("builds weighted non-starving cycles and avoids the active item", () => {
+  it("shuffles every eligible song once while avoiding the active item", () => {
     const projection = projectMusicPlaylistPlayback([
       entry({ itemId: "rare", membershipId: "rare", weight: "rarely" }),
       entry({ itemId: "normal", membershipId: "normal", position: 1 }),
@@ -94,10 +95,10 @@ describe("saved playlist playback policy", () => {
     ], [{ rootId: "root", folderPath: "/music", status: "available" }], context);
     let seed = 17;
     const random = () => ((seed = (seed * 48271) % 2147483647) / 2147483647);
-    const cycle = buildWeightedShuffleCycle(projection.entries, projection.eligibleIndices, 1, ["normal"], random);
+    const cycle = buildMusicShuffleCycle(projection.eligibleIndices, 1, random);
     expect(cycle).toHaveLength(2);
     expect(new Set(cycle)).toEqual(new Set([0, 2]));
-    expect(cycle[0]).toBe(2);
+    expect(cycle).not.toContain(1);
   });
 
   it("advances sequentially at a phase boundary and wraps without resuming the interrupted item", () => {
@@ -128,28 +129,36 @@ describe("saved playlist playback policy", () => {
     }).index).toBe(1);
   });
 
-  it("gives higher weights more first-selection opportunities without starving lower weights", () => {
+  it("can start the only eligible Shuffle track at a phase boundary", () => {
+    const projection = projectMusicPlaylistPlayback([
+      entry({ itemId: "only", membershipId: "only" }),
+    ], [{ rootId: "root", folderPath: "/music", status: "available" }], context);
+    expect(selectFreshMusicQueueItem(projection.entries, projection.eligibleIndices, {
+      shuffle: true,
+      avoidItemId: "only",
+    }).index).toBe(0);
+  });
+
+  it("lets every eligible song lead a uniform Shuffle pass", () => {
+    const first = (draws: readonly number[]) => {
+      let index = 0;
+      return buildMusicShuffleCycle([0, 1, 2], -1, () => draws[index++])[0];
+    };
+    expect(new Set([first([0, 0]), first([0, 0.9]), first([0.5, 0.9])])).toEqual(new Set([0, 1, 2]));
+  });
+
+  it("mixes by preference but keeps a small chance of replaying the most recent song", () => {
     const projection = projectMusicPlaylistPlayback([
       entry({ itemId: "rare", membershipId: "rare", weight: "rarely" }),
       entry({ itemId: "normal", membershipId: "normal", position: 1 }),
-      entry({ itemId: "frequent", membershipId: "frequent", position: 2, weight: "much-more-often" }),
+      entry({ itemId: "favorite", membershipId: "favorite", position: 2, weight: "much-more-often" }),
     ], [{ rootId: "root", folderPath: "/music", status: "available" }], context);
-    const firstCounts = [0, 0, 0];
-    for (let trial = 1; trial <= 2_000; trial += 1) {
-      let seed = trial * 104_729;
-      const random = () => ((seed = (seed * 48_271) % 2_147_483_647) / 2_147_483_647);
-      const first = buildWeightedShuffleCycle(
-        projection.entries,
-        projection.eligibleIndices,
-        -1,
-        [],
-        random,
-      )[0];
-      if (first !== undefined) firstCounts[first] += 1;
-    }
-    expect(firstCounts[2]).toBeGreaterThan(firstCounts[1]);
-    expect(firstCounts[1]).toBeGreaterThan(firstCounts[0]);
-    expect(firstCounts[0]).toBeGreaterThan(0);
+    expect(selectMusicMixIndex(projection.entries, projection.eligibleIndices, [], () => 0)).toBe(0);
+    expect(selectMusicMixIndex(projection.entries, projection.eligibleIndices, [], () => 0.2)).toBe(1);
+    expect(selectMusicMixIndex(projection.entries, projection.eligibleIndices, [], () => 0.9)).toBe(2);
+    expect(selectMusicMixIndex(projection.entries, projection.eligibleIndices, ["favorite"], () => 0.9)).toBe(1);
+    expect(selectMusicMixIndex(projection.entries, projection.eligibleIndices, ["favorite"], () => 0.99)).toBe(2);
+    expect(selectMusicMixIndex(projection.entries, [], [], () => 0.5)).toBeNull();
   });
 
   it("seeks to the end of the active ordered skip range", () => {

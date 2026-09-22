@@ -6,7 +6,7 @@
     calculateTooltipPosition,
     deriveTooltipPalette,
     isPointInHorizontalScrollbar,
-    isVisibleCssColor,
+    tooltipSurfaceColorFor,
     type TooltipPalette,
     type TooltipPaletteTokens,
     type TooltipPlacement,
@@ -165,17 +165,6 @@
     };
   }
 
-  function localSurfaceColorFor(element: HTMLElement): string | undefined {
-    let current: HTMLElement | null = element;
-    for (let depth = 0; current && depth < maxSurfaceLookupDepth; depth += 1) {
-      const backgroundColor = getComputedStyle(current).backgroundColor;
-      if (isVisibleCssColor(backgroundColor)) return backgroundColor;
-      current = current.parentElement;
-    }
-
-    return readTooltipPaletteTokens().background;
-  }
-
   function paletteStyle(palette: TooltipPalette): string {
     return [
       `--app-tooltip-bg: ${palette.background}`,
@@ -190,8 +179,12 @@
   }
 
   function refreshTooltipPalette(element: HTMLElement): void {
+    const tokens = readTooltipPaletteTokens();
     tooltipPaletteStyle = paletteStyle(
-      deriveTooltipPalette(localSurfaceColorFor(element), readTooltipPaletteTokens()),
+      deriveTooltipPalette(
+        tooltipSurfaceColorFor(element, tokens.background, maxSurfaceLookupDepth),
+        tokens,
+      ),
     );
   }
 

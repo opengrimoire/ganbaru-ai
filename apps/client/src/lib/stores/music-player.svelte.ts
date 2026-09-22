@@ -1,14 +1,15 @@
-import type { MusicRepeatMode, MusicSelectionKind } from "$lib/music/library-contracts";
+import type { MusicPlaybackMode, MusicRepeatMode, MusicSelectionKind, MusicWeight } from "$lib/music/library-contracts";
 import type {
   MusicActivityPhase,
   MusicAssignmentBehavior,
   MusicAssignmentSource,
 } from "$lib/music/music-context-assignment";
 import {
-  buildWeightedShuffleCycle,
+  buildMusicShuffleCycle,
   eligibleMusicQueueIndices,
   emptyMusicSkipBreakdown,
   selectFreshMusicQueueItem,
+  selectMusicMixIndex,
   type MusicPlaylistSkipReason,
   type MusicSavedQueueEntry,
 } from "$lib/music/music-playlist-playback";
@@ -18,7 +19,6 @@ import {
 import {
   clampRate,
   clampVolume,
-  formatRateLabel,
   formatVolumePercent,
   shouldUseWebviewLocalVideo,
   MAX_VOLUME,
@@ -104,6 +104,7 @@ export interface MusicReviewPlaybackCheckpoint {
   snapshot: PlaybackSnapshot;
   queue: MusicSource[];
   shuffleEnabled: boolean;
+  mixEnabled: boolean;
   shuffleOrder: number[];
   queueHistory: number[];
   pendingQueueIndex: number | null;
@@ -138,6 +139,10 @@ class MusicPlayerStore {
   queue = $state<MusicSource[]>([]);
   folderScanTruncated = $state(false);
   shuffleEnabled = $state(initialPlayerSettings.shuffleEnabled);
+  mixEnabled = $state(initialPlayerSettings.mixEnabled);
+  get playbackMode(): MusicPlaybackMode {
+    return this.shuffleEnabled ? this.mixEnabled ? "mix" : "shuffle" : "in-order";
+  }
   muted = $state(initialPlayerSettings.muted);
   playlistVisible = $state(initialPlayerSettings.playlistVisible);
   shuffleOrder = $state<number[]>([]);
@@ -397,10 +402,6 @@ class MusicPlayerStore {
     return `Sound ${formatVolumePercent(this.muted ? 0 : this.volumeControlValue)}`;
   }
 
-  get speedLabel(): string {
-    return formatRateLabel(this.snapshot.rate);
-  }
-
   get isYouTubeActive(): boolean {
     return this.currentSource ? isYouTubeSource(this.currentSource) : false;
   }
@@ -486,6 +487,7 @@ class MusicPlayerStore {
       snapshot: { ...this.snapshot, status: originalStatus },
       queue: this.queue.map((source) => ({ ...source })),
       shuffleEnabled: this.shuffleEnabled,
+      mixEnabled: this.mixEnabled,
       shuffleOrder: [...this.shuffleOrder],
       queueHistory: [...this.queueHistory],
       pendingQueueIndex: this.pendingQueueIndex,
@@ -533,6 +535,7 @@ class MusicPlayerStore {
     if (!checkpoint.source) await this.sourceController.resetPlayer();
     this.queue = checkpoint.queue.map((source) => ({ ...source }));
     this.shuffleEnabled = checkpoint.shuffleEnabled;
+    this.mixEnabled = checkpoint.mixEnabled;
     this.shuffleOrder = [...checkpoint.shuffleOrder];
     this.queueHistory = [...checkpoint.queueHistory];
     this.pendingQueueIndex = checkpoint.pendingQueueIndex;
@@ -584,6 +587,7 @@ class MusicPlayerStore {
     entries: MusicSavedQueueEntry[],
     shuffleEnabled: boolean,
     repeatMode: MusicRepeatMode,
+    mixEnabled = false,
     options: MusicSavedPlaylistLoadOptions = {},
   ): Promise<boolean> {
     const explicitItemId = options.explicitItemId ?? null;
@@ -605,6 +609,7 @@ class MusicPlayerStore {
     this.contextOwner = options.context?.owner ?? "manual";
     this.savedQueueAutoRecoveryEnabled = options.autoRecovery ?? options.autoplay ?? true;
     this.shuffleEnabled = shuffleEnabled;
+    this.mixEnabled = shuffleEnabled && mixEnabled;
     this.queueHistory = [];
     this.savedQueueRecentItemIds = await this.savedPlaylistRuntime.recentItemIds(playlistId);
     const eligibilityContext = {
@@ -627,11 +632,16 @@ class MusicPlayerStore {
       return false;
     }
     const selection = selectFreshMusicQueueItem(entries, eligibleIndices, {
-      shuffle: shuffleEnabled,
+      shuffle: shuffleEnabled && !mixEnabled,
       explicitItemId,
       avoidItemId: options.avoidItemId,
-      recentItemIds: this.savedQueueRecentItemIds,
     });
+    if (this.mixEnabled && !explicitItemId) {
+      const recentItemIds = options.avoidItemId
+        ? [options.avoidItemId, ...this.savedQueueRecentItemIds.filter((itemId) => itemId !== options.avoidItemId)]
+        : this.savedQueueRecentItemIds;
+      selection.index = selectMusicMixIndex(entries, eligibleIndices, recentItemIds);
+    }
     const initialIndex = selection.index ?? -1;
     this.shuffleOrder = selection.remainingShuffleOrder;
     const first = this.queue[initialIndex];
@@ -742,8 +752,8 @@ class MusicPlayerStore {
     this.activeQueueItemIds = entries.map((entry) => entry.itemId);
     this.savedPlaylistRuntime.setStructuralSkipped(structuralSkipped);
     const activeIndex = this.currentQueueIndex;
-    this.shuffleOrder = this.shuffleEnabled
-      ? buildWeightedShuffleCycle(entries, eligibleMusicQueueIndices(entries, { nowMs: Date.now(), online: this.online }), activeIndex, this.savedQueueRecentItemIds)
+    this.shuffleOrder = this.shuffleEnabled && !this.mixEnabled
+      ? buildMusicShuffleCycle(eligibleMusicQueueIndices(entries, { nowMs: Date.now(), online: this.online }), activeIndex)
       : [];
     this.queueHistory = historyMembershipIds.flatMap((membershipId) => {
       const index = entries.findIndex((entry) => entry.membershipId === membershipId);
@@ -1009,6 +1019,22 @@ class MusicPlayerStore {
     this.queueController.toggleShuffle();
   }
 
+  /** Switches between ordered, shuffled, and weighted Mix navigation. */
+  setPlaybackMode(mode: MusicPlaybackMode): void {
+    if (this.playbackMode === mode) return;
+    this.shuffleEnabled = mode !== "in-order";
+    this.mixEnabled = mode === "mix";
+    this.shuffleOrder = mode === "shuffle" && this.savedQueueEntries.length === this.queue.length
+      ? buildMusicShuffleCycle(
+        eligibleMusicQueueIndices(this.savedQueueEntries, { nowMs: Date.now(), online: this.online }),
+        this.currentQueueIndex,
+      )
+      : [];
+    this.persistPlayerSettings();
+    this.updateSystemMediaControls();
+    this.updateMusicTray();
+  }
+
   setPlaylistVisible(visible: boolean): void {
     if (this.playlistVisible === visible) return;
     this.playlistVisible = visible;
@@ -1168,6 +1194,16 @@ class MusicPlayerStore {
     this.savedPlaylistRuntime.scheduleSnoozeExpiry(this.savedQueueEntries);
   }
 
+  /** Applies a membership weight without interrupting the current playlist track. */
+  applyCurrentQueueWeight(weight: MusicWeight): void {
+    const index = this.currentQueueIndex;
+    const entry = this.currentSavedQueueEntry(index);
+    if (!entry || !this.activePlaylistId) return;
+    const entries = [...this.savedQueueEntries];
+    entries[index] = { ...entry, weight };
+    this.savedQueueEntries = entries;
+  }
+
   clearCurrentQueueSnooze(): void {
     const index = this.currentQueueIndex;
     const entry = this.currentSavedQueueEntry(index);
@@ -1229,6 +1265,7 @@ class MusicPlayerStore {
       volume: this.snapshot.volume,
       rate: this.snapshot.rate,
       shuffleEnabled: this.shuffleEnabled,
+      mixEnabled: this.mixEnabled,
       muted: this.muted,
       playlistVisible: this.playlistVisible,
     });

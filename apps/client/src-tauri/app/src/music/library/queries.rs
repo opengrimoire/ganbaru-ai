@@ -400,6 +400,7 @@ struct PlaylistSummaryRow {
     name: String,
     icon: String,
     shuffle_enabled: i64,
+    mix_enabled: i64,
     repeat_mode: String,
     intended_uses: String,
     sort_order: i64,
@@ -424,7 +425,7 @@ pub(crate) async fn playlist_summaries(
     }
     super::defaults::ensure_built_in_music_playlists(pool).await?;
     let rows = sqlx::query_as::<_, PlaylistSummaryRow>(
-        "SELECT playlist.id, playlist.name, playlist.icon, playlist.shuffle_enabled,
+        "SELECT playlist.id, playlist.name, playlist.icon, playlist.shuffle_enabled, playlist.mix_enabled,
                 playlist.repeat_mode, playlist.sort_order,
                 COALESCE((
                     SELECT group_concat(intended.intended_use, ',')
@@ -479,6 +480,16 @@ pub(crate) async fn playlist_summaries(
                     value => {
                         return Err(MusicLibraryError::validation(
                             "shuffleEnabled",
+                            format!("expected 0 or 1, received {value}"),
+                        ));
+                    }
+                },
+                mix_enabled: match row.mix_enabled {
+                    0 => false,
+                    1 => true,
+                    value => {
+                        return Err(MusicLibraryError::validation(
+                            "mixEnabled",
                             format!("expected 0 or 1, received {value}"),
                         ));
                     }
@@ -958,7 +969,7 @@ pub(crate) async fn playlist_detail(
     playlist_id: &str,
 ) -> MusicLibraryResult<MusicPlaylist> {
     let row = sqlx::query_as::<_, MusicPlaylistRow>(
-        "SELECT id, name, icon, shuffle_enabled, repeat_mode, sort_order,
+        "SELECT id, name, icon, shuffle_enabled, mix_enabled, repeat_mode, sort_order,
                 created_at, updated_at, version
          FROM music_playlists WHERE id = ?",
     )

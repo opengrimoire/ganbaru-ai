@@ -43,6 +43,7 @@ describe("MusicPanel", () => {
     player.activePlaylistId = null;
     player.activePlaylistName = null;
     player.savedQueueSkipBreakdown = emptyMusicSkipBreakdown();
+    player.setPlaybackMode("shuffle");
   });
 
   it("mounts an interactive dialog above its persistent media layer and closes with Escape", async () => {
@@ -81,6 +82,48 @@ describe("MusicPanel", () => {
     expect(launcher?.classList.contains("w-9")).toBe(true);
     expect(header?.classList.contains("py-2")).toBe(true);
     expect(target.querySelector("button[aria-label='Close']")).toBeNull();
+  });
+
+  it("replaces the speed control with a disabled track-preferences button until a library track plays", async () => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    target = document.createElement("div");
+    document.body.append(target);
+    const { default: MusicPanel } = await import("./MusicPanel.svelte");
+
+    component = mount(MusicPanel, { target, props: { onclose: vi.fn() } });
+    await tick();
+
+    const preferences = target.querySelector<HTMLButtonElement>("button[aria-label='Mix and snooze']");
+    expect(preferences?.disabled).toBe(true);
+    expect(target.querySelector("button[aria-label='Speed']")).toBeNull();
+  });
+
+  it("offers one playback-order choice with In order, Shuffle, and Mix", async () => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    const player = getMusicPlayer();
+    player.queue = [
+      localFileSourceFromPath("/music/a.flac", "A"),
+      localFileSourceFromPath("/music/b.flac", "B"),
+    ];
+    target = document.createElement("div");
+    document.body.append(target);
+    const { default: MusicPanel } = await import("./MusicPanel.svelte");
+    component = mount(MusicPanel, { target, props: { onclose: vi.fn() } });
+    await tick();
+
+    target.querySelector<HTMLButtonElement>(".music-transport-shuffle button")?.click();
+    await tick();
+    expect([...target.querySelectorAll("[role='menuitemradio']")].map((option) => option.textContent?.trim())).toEqual([
+      "In order", "Shuffle", "Mix",
+    ]);
+    const mixHelp = target.querySelector<HTMLButtonElement>("button[aria-label='Favors your preferred tracks. Recent tracks are less likely, but repeats are possible.']");
+    expect(mixHelp).not.toBeNull();
+    expect(target.querySelector("button[aria-label='Plays each track once in random order. No repeats until the list ends.']")).not.toBeNull();
+    mixHelp?.click();
+    expect(player.playbackMode).toBe("shuffle");
+    [...target.querySelectorAll<HTMLButtonElement>("[role='menuitemradio']")]
+      .find((option) => option.textContent?.includes("Mix"))?.click();
+    expect(player.playbackMode).toBe("mix");
   });
 
   it("places the side playlist summary in the desktop player header", async () => {

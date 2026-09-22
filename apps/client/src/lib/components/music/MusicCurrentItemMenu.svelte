@@ -1,26 +1,20 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import Check from "@lucide/svelte/icons/check";
-  import Clock3 from "@lucide/svelte/icons/clock-3";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import FolderSearch from "@lucide/svelte/icons/folder-search";
   import ListPlus from "@lucide/svelte/icons/list-plus";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import MoreHorizontal from "@lucide/svelte/icons/ellipsis";
-  import PlayCircle from "@lucide/svelte/icons/circle-play";
   import {
     bulkEditMusicMemberships,
-    bulkSnoozeMusicItems,
-    getMusicInspectorDetail,
     getMusicMembershipMatrix,
     getMusicPlaylistSummaries,
-    removeMusicSnooze,
   } from "$lib/api/music-library";
   import { revealLocalFile } from "$lib/api/music";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { notifyMusicLibraryChanged } from "$lib/music/music-library-events";
-  import type { MusicPlaylistSummary, MusicSnoozeScope } from "$lib/music/library-contracts";
-  import { musicSnoozeEndsAt } from "$lib/music/music-snooze";
+  import type { MusicPlaylistSummary } from "$lib/music/library-contracts";
   import { systemMusicPlaylistName } from "$lib/music/music-system-playlists";
   import { getMusicPlayer } from "$lib/stores/music-player.svelte";
 
@@ -43,7 +37,6 @@
   let error = $state<string | null>(null);
   let playlists = $state<MusicPlaylistSummary[]>([]);
   let membershipPlaylistIds = $state<Set<string>>(new Set());
-  let activeSnoozeIds = $state<string[]>([]);
 
   const queueIndex = $derived(player.currentQueueIndex);
   const itemId = $derived(queueIndex >= 0 ? player.activeQueueItemIds[queueIndex] ?? null : null);
@@ -87,18 +80,12 @@
     busy = true;
     error = null;
     try {
-      const [summaries, matrix, detail] = await Promise.all([
+      const [summaries, matrix] = await Promise.all([
         getMusicPlaylistSummaries(Date.now(), 0, 500),
         getMusicMembershipMatrix([itemId]),
-        getMusicInspectorDetail(itemId),
       ]);
       playlists = summaries;
       membershipPlaylistIds = new Set(matrix.map((entry) => entry.playlistId));
-      activeSnoozeIds = detail.snoozes
-        .filter((snooze) => snooze.startsAt <= Date.now()
-          && (snooze.endsAt === null || snooze.endsAt > Date.now())
-          && (snooze.scope === "all-playlists" || snooze.playlistId === player.activePlaylistId))
-        .map((snooze) => snooze.id);
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
     } finally {
@@ -132,42 +119,6 @@
         updatedAt: Date.now(),
       });
       membershipPlaylistIds = new Set([...membershipPlaylistIds, playlistId]);
-      notifyMusicLibraryChanged();
-    });
-  }
-
-  async function snooze(scope: MusicSnoozeScope, duration: "today" | "week" | "until-resumed"): Promise<void> {
-    if (!itemId) return;
-    const now = Date.now();
-    const effectiveScope = scope === "playlist" && player.activePlaylistId ? "playlist" : "all-playlists";
-    const endsAt = musicSnoozeEndsAt(duration, now, Intl.DateTimeFormat().resolvedOptions().timeZone);
-    await run(async () => {
-      await bulkSnoozeMusicItems({
-        actionId: crypto.randomUUID(),
-        itemIds: [itemId],
-        scope: effectiveScope,
-        playlistId: effectiveScope === "playlist" ? player.activePlaylistId : null,
-        startsAt: now,
-        endsAt,
-        reason: "",
-        createdAt: now,
-      });
-      player.applyCurrentQueueSnooze(endsAt);
-      notifyMusicLibraryChanged();
-      close();
-    });
-  }
-
-  async function resumeAutomaticPlay(): Promise<void> {
-    if (activeSnoozeIds.length === 0) return;
-    await run(async () => {
-      await Promise.all(activeSnoozeIds.map(removeMusicSnooze));
-      activeSnoozeIds = [];
-      const index = player.currentQueueIndex;
-      const entry = index >= 0 ? player.savedQueueEntries[index] : null;
-      if (entry) {
-        player.clearCurrentQueueSnooze();
-      }
       notifyMusicLibraryChanged();
     });
   }
@@ -211,10 +162,6 @@
             {#each playlists as playlist (playlist.id)}<button type="button" onclick={() => { void addToPlaylist(playlist.id); }} disabled={membershipPlaylistIds.has(playlist.id) || busy} class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[0.68rem] hover:bg-accent disabled:opacity-60"><span class="min-w-0 flex-1 truncate">{systemMusicPlaylistName(playlist.id, playlist.name, t)}</span>{#if membershipPlaylistIds.has(playlist.id)}<Check size={12} />{/if}</button>{/each}
           </div>
         {/if}
-        <button type="button" role="menuitem" onclick={() => { void snooze("playlist", "today"); }} class="menu-action"><Clock3 size={14} />{t("music.itemMenu.notToday")}</button>
-        <button type="button" role="menuitem" onclick={() => { void snooze("playlist", "week"); }} class="menu-action"><Clock3 size={14} />{t("music.itemMenu.snoozeWeek")}</button>
-        <button type="button" role="menuitem" onclick={() => { void snooze("all-playlists", "until-resumed"); }} class="menu-action"><Clock3 size={14} />{t("music.itemMenu.snoozeEverywhere")}</button>
-        {#if activeSnoozeIds.length > 0}<button type="button" role="menuitem" onclick={() => { void resumeAutomaticPlay(); }} class="menu-action"><PlayCircle size={14} />{t("music.itemMenu.resumeAutomatic")}</button>{/if}
         <button type="button" role="menuitem" onclick={openItem} class="menu-action"><ExternalLink size={14} />{t("music.itemMenu.openInBuilder")}</button>
       {/if}
       {#if source?.kind === "local-file"}<button type="button" role="menuitem" onclick={() => { void showLocation(); }} class="menu-action"><FolderSearch size={14} />{t("music.itemMenu.showLocation")}</button>{/if}

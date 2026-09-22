@@ -157,7 +157,7 @@ export class MusicReviewController {
     const playlistId = this.id();
     try {
       await createMusicPlaylist({
-        id: playlistId, name, icon: iconInput.trim(), shuffleEnabled: true,
+        id: playlistId, name, icon: iconInput.trim(), shuffleEnabled: true, mixEnabled: false,
         repeatMode: "all", intendedUses: [], createdAt: this.now(),
       });
       await this.library.refreshAfterMutation();

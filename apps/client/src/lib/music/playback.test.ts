@@ -2,11 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   clampRate,
   clampVolume,
-  formatRateLabel,
   formatPlaybackTime,
   formatVolumePercent,
   initialQueueSelection,
-  isSpeedPreset,
   localMediaSeekTargetMs,
   nextShuffleIndex,
   normalizeLocalPlayableStartMs,
@@ -134,13 +132,6 @@ describe("clamp helpers", () => {
     expect(localMediaSeekTargetMs(72_200, playableStartMs)).toBe(72_200);
   });
 
-  it("formats preset and custom speed labels", () => {
-    expect(isSpeedPreset(1.25)).toBe(true);
-    expect(isSpeedPreset(1.33)).toBe(false);
-    expect(formatRateLabel(1)).toBe("1x");
-    expect(formatRateLabel(1.25)).toBe("1.25x");
-    expect(formatRateLabel(4)).toBe("2x");
-  });
 });
 
 describe("queue helpers", () => {

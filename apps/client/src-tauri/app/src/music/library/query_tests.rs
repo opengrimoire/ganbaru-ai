@@ -613,6 +613,7 @@ fn search_rebuild_repairs_stale_rows_and_incremental_membership_metadata() {
                 name: "Dawn routine".to_string(),
                 icon: "lucide:sunrise".to_string(),
                 shuffle_enabled: true,
+                mix_enabled: false,
                 repeat_mode: MusicRepeatMode::All,
                 intended_uses: vec![MusicIntendedUse::General],
                 expected_version: 1,

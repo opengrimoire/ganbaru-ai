@@ -16,6 +16,7 @@ export type MusicIntendedUse = "general" | "focus" | "reading" | "relaxation" | 
 export type MusicItemSignal = "lyrics" | "sudden-changes" | "high-intensity" | "calm" | "repetitive" | "energizing";
 export type MusicSnoozeScope = "playlist" | "all-playlists";
 export type MusicRepeatMode = "off" | "all" | "one";
+export type MusicPlaybackMode = "in-order" | "shuffle" | "mix";
 export type MusicListDestination = "review" | "library" | "playlist";
 export type MusicItemSort = "title" | "artist" | "album" | "source-order" | "discovered-at" | "added-to-playlist" | "last-played-at" | "play-count" | "manual-position";
 export type MusicSortDirection = "ascending" | "descending";
@@ -38,6 +39,7 @@ export interface MusicPlaylistCreate {
   name: string;
   icon: string;
   shuffleEnabled: boolean;
+  mixEnabled: boolean;
   repeatMode: MusicRepeatMode;
   intendedUses: MusicIntendedUse[];
   createdAt: number;
@@ -312,6 +314,7 @@ export interface MusicPlaylistSummary {
   name: string;
   icon: string;
   shuffleEnabled: boolean;
+  mixEnabled: boolean;
   repeatMode: MusicRepeatMode;
   intendedUses: MusicIntendedUse[];
   sortOrder: number;
@@ -560,6 +563,7 @@ export interface MusicPlaylist {
   name: string;
   icon: string;
   shuffleEnabled: boolean;
+  mixEnabled: boolean;
   repeatMode: MusicRepeatMode;
   intendedUses: MusicIntendedUse[];
   sortOrder: number;
@@ -702,7 +706,7 @@ export function parseItemWindow(value: unknown, label = "music item window"): Mu
 function parsePlaylistSummary(value: unknown, label: string): MusicPlaylistSummary {
   const row = object(value, label); return {
     id: string(row.id, `${label}.id`), name: string(row.name, `${label}.name`), icon: string(row.icon, `${label}.icon`),
-    shuffleEnabled: boolean(row.shuffleEnabled, `${label}.shuffleEnabled`), repeatMode: enumeration(row.repeatMode, repeatModes, `${label}.repeatMode`),
+    shuffleEnabled: boolean(row.shuffleEnabled, `${label}.shuffleEnabled`), mixEnabled: boolean(row.mixEnabled, `${label}.mixEnabled`), repeatMode: enumeration(row.repeatMode, repeatModes, `${label}.repeatMode`),
     intendedUses: array(row.intendedUses, (entry, entryLabel) => enumeration(entry, intendedUses, entryLabel), `${label}.intendedUses`),
     sortOrder: number(row.sortOrder, `${label}.sortOrder`),
     totalCount: number(row.totalCount, `${label}.totalCount`), eligibleCount: number(row.eligibleCount, `${label}.eligibleCount`), unavailableCount: number(row.unavailableCount, `${label}.unavailableCount`),
@@ -753,7 +757,7 @@ function parseRoot(value: unknown, label: string): MusicLocalRoot { const row = 
 export const parseRoots = (value: unknown): MusicLocalRoot[] => array(value, parseRoot, "music roots");
 function parseCollection(value: unknown, label: string): MusicSourceCollection { const row = object(value, label); return { id: string(row.id, `${label}.id`), kind: enumeration(row.kind, collectionKinds, `${label}.kind`), identityKey: string(row.identityKey, `${label}.identityKey`), name: string(row.name, `${label}.name`), localRootId: nullable(row.localRootId, string, `${label}.localRootId`), youtubePlaylistId: nullable(row.youtubePlaylistId, string, `${label}.youtubePlaylistId`), refreshState: enumeration(row.refreshState, refreshStates, `${label}.refreshState`), lastSuccessfulRefreshAt: nullable(row.lastSuccessfulRefreshAt, number, `${label}.lastSuccessfulRefreshAt`), previousSuccessfulRefreshAt: nullable(row.previousSuccessfulRefreshAt, number, `${label}.previousSuccessfulRefreshAt`), lastRefreshErrorCode: nullable(row.lastRefreshErrorCode, string, `${label}.lastRefreshErrorCode`), snapshotGeneration: number(row.snapshotGeneration, `${label}.snapshotGeneration`), createdAt: number(row.createdAt, `${label}.createdAt`), updatedAt: number(row.updatedAt, `${label}.updatedAt`), version: number(row.version, `${label}.version`), discoveryEnabled: boolean(row.discoveryEnabled, `${label}.discoveryEnabled`), removedAt: nullable(row.removedAt, number, `${label}.removedAt`) }; }
 export const parseCollections = (value: unknown): MusicSourceCollection[] => array(value, parseCollection, "music collections");
-export function parsePlaylist(value: unknown): MusicPlaylist { const row = object(value, "music playlist"); return { id: string(row.id, "music playlist.id"), name: string(row.name, "music playlist.name"), icon: string(row.icon, "music playlist.icon"), shuffleEnabled: boolean(row.shuffleEnabled, "music playlist.shuffleEnabled"), repeatMode: enumeration(row.repeatMode, repeatModes, "music playlist.repeatMode"), intendedUses: array(row.intendedUses, (entry, label) => enumeration(entry, intendedUses, label), "music playlist.intendedUses"), sortOrder: number(row.sortOrder, "music playlist.sortOrder"), createdAt: number(row.createdAt, "music playlist.createdAt"), updatedAt: number(row.updatedAt, "music playlist.updatedAt"), version: number(row.version, "music playlist.version") }; }
+export function parsePlaylist(value: unknown): MusicPlaylist { const row = object(value, "music playlist"); return { id: string(row.id, "music playlist.id"), name: string(row.name, "music playlist.name"), icon: string(row.icon, "music playlist.icon"), shuffleEnabled: boolean(row.shuffleEnabled, "music playlist.shuffleEnabled"), mixEnabled: boolean(row.mixEnabled, "music playlist.mixEnabled"), repeatMode: enumeration(row.repeatMode, repeatModes, "music playlist.repeatMode"), intendedUses: array(row.intendedUses, (entry, label) => enumeration(entry, intendedUses, label), "music playlist.intendedUses"), sortOrder: number(row.sortOrder, "music playlist.sortOrder"), createdAt: number(row.createdAt, "music playlist.createdAt"), updatedAt: number(row.updatedAt, "music playlist.updatedAt"), version: number(row.version, "music playlist.version") }; }
 export function parseSearchRebuild(value: unknown): MusicSearchRebuildResult { const row = object(value, "music search rebuild"); return { indexedItemCount: number(row.indexedItemCount, "music search rebuild.indexedItemCount"), schemaVersion: number(row.schemaVersion, "music search rebuild.schemaVersion"), fingerprint: string(row.fingerprint, "music search rebuild.fingerprint"), rebuiltAt: number(row.rebuiltAt, "music search rebuild.rebuiltAt") }; }
 function parseBinding(value: unknown, label: string): LocalRootBinding { const row = object(value, label); return { rootId: string(row.rootId, `${label}.rootId`), folderPath: nullable(row.folderPath, string, `${label}.folderPath`), status: enumeration(row.status, rootStatuses, `${label}.status`) }; }
 export const parseBindings = (value: unknown): LocalRootBinding[] => array(value, parseBinding, "music root bindings");

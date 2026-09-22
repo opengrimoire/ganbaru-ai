@@ -287,6 +287,7 @@ pub struct MusicPlaylist {
     pub name: String,
     pub icon: String,
     pub shuffle_enabled: bool,
+    pub mix_enabled: bool,
     pub repeat_mode: MusicRepeatMode,
     pub intended_uses: Vec<MusicIntendedUse>,
     pub sort_order: i64,
@@ -528,6 +529,8 @@ pub struct MusicPlaylistCreate {
     pub name: String,
     pub icon: String,
     pub shuffle_enabled: bool,
+    #[serde(default)]
+    pub mix_enabled: bool,
     pub repeat_mode: MusicRepeatMode,
     pub intended_uses: Vec<MusicIntendedUse>,
     pub created_at: i64,
@@ -540,6 +543,8 @@ pub struct MusicPlaylistUpdate {
     pub name: String,
     pub icon: String,
     pub shuffle_enabled: bool,
+    #[serde(default)]
+    pub mix_enabled: bool,
     pub repeat_mode: MusicRepeatMode,
     pub intended_uses: Vec<MusicIntendedUse>,
     pub expected_version: i64,
@@ -981,6 +986,7 @@ pub struct MusicPlaylistSummary {
     pub name: String,
     pub icon: String,
     pub shuffle_enabled: bool,
+    pub mix_enabled: bool,
     pub repeat_mode: MusicRepeatMode,
     pub intended_uses: Vec<MusicIntendedUse>,
     pub sort_order: i64,
@@ -1201,6 +1207,8 @@ pub struct MusicInterchangePlaylist {
     pub name: String,
     pub icon: String,
     pub shuffle_enabled: bool,
+    #[serde(default)]
+    pub mix_enabled: bool,
     pub repeat_mode: MusicRepeatMode,
     pub intended_uses: Vec<MusicIntendedUse>,
     pub memberships: Vec<MusicInterchangeMembership>,

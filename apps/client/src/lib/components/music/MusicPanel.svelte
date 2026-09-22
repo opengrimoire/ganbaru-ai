@@ -1,14 +1,11 @@
 <script lang="ts">
   import { onDestroy, tick } from "svelte";
   import AlertCircle from "@lucide/svelte/icons/alert-circle";
-  import Check from "@lucide/svelte/icons/check";
-  import Gauge from "@lucide/svelte/icons/gauge";
   import ListMusic from "@lucide/svelte/icons/list-music";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import CalendarClock from "@lucide/svelte/icons/calendar-clock";
   import Pause from "@lucide/svelte/icons/pause";
   import Play from "@lucide/svelte/icons/play";
-  import Shuffle from "@lucide/svelte/icons/shuffle";
   import SkipBack from "@lucide/svelte/icons/skip-back";
   import SkipForward from "@lucide/svelte/icons/skip-forward";
   import Volume2 from "@lucide/svelte/icons/volume-2";
@@ -16,10 +13,12 @@
   import CalendarScrollbar from "$lib/components/calendar/CalendarScrollbar.svelte";
   import MusicPlaylistLauncher from "$lib/components/music/MusicPlaylistLauncher.svelte";
   import MusicCurrentItemMenu from "$lib/components/music/MusicCurrentItemMenu.svelte";
+  import MusicTrackPreferences from "$lib/components/music/MusicTrackPreferences.svelte";
+  import MusicPlaybackModeControl from "$lib/components/music/MusicPlaybackModeControl.svelte";
   import MusicSoundscapeControl from "$lib/components/music/MusicSoundscapeControl.svelte";
   import MusicPreparationActivity from "$lib/components/music/builder/MusicPreparationActivity.svelte";
   import { revealLocalFile } from "$lib/api/music";
-  import { SPEED_PRESETS, clampRate, formatPlaybackTime, isSpeedPreset } from "$lib/music/playback";
+  import { formatPlaybackTime } from "$lib/music/playback";
   import { fittedSidePlaylistPanelHeight } from "$lib/music/panel-layout";
   import {
     MUSIC_PLAYLIST_ROW_HEIGHT_PX,
@@ -65,12 +64,8 @@
   let playlistPanel = $state<HTMLElement | null>(null);
   let playbackControls = $state<HTMLElement | null>(null);
   let playlistScrollContainer = $state<HTMLElement | undefined>();
-  let speedMenuRoot = $state<HTMLElement | null>(null);
   let volumeMenuRoot = $state<HTMLElement | null>(null);
-  let speedMenuOpen = $state(false);
   let volumeMenuOpen = $state(false);
-  let customSpeedOpen = $state(false);
-  let customRateDraft = $state("1");
   const playlistVisible = $derived(player.playlistVisible);
   const playlistHasContent = $derived(player.queue.length > 0);
   let musicPage = $state<MusicPage>(sources.firstUseSession ? "playlist-builder" : "player");
@@ -108,7 +103,6 @@
   const playerPlaylistLayoutVisible = $derived(
     musicPage === "player" && playlistVisible,
   );
-  const activeSpeedIsPreset = $derived(isSpeedPreset(player.snapshot.rate));
   const topBarMediaTitleMaxLength = 42;
   const volumeShortcutStep = 0.05;
   const topBarMediaTitle = $derived(
@@ -121,7 +115,6 @@
   const mediaTitleLeft = $derived(
     playlistVisible && mediaTitleMeasuredCenterPx !== null ? `${mediaTitleMeasuredCenterPx}px` : "50%",
   );
-  const speedShortcutStep = 0.25;
   const musicIconSize = 14;
   const musicIconStrokeWidth = 1.4;
   const panelMaximumHeight = $derived(
@@ -298,9 +291,7 @@
 
   $effect(() => {
     if (visible) return;
-    speedMenuOpen = false;
     volumeMenuOpen = false;
-    customSpeedOpen = false;
   });
 
   $effect(() => {
@@ -373,7 +364,6 @@
   }
 
   function openPlaylistBuilder(initialAction: MusicBuilderInitialAction | null = null): void {
-    closeSpeedMenu();
     closeVolumeMenu();
     playlistBuilderInitialAction = initialAction;
     playlistBuilderMounted = true;
@@ -419,9 +409,10 @@
 
   function handleKeydown(event: KeyboardEvent): void {
     if (!visible) return;
+    if (event.target instanceof HTMLElement && event.target.closest("[data-music-track-preferences-open]")) return;
     if (event.key === "Escape" && !mediaSurfaceFullscreen) {
       if (musicPage === "playlist-builder") return;
-      if (typeof document !== "undefined" && document.querySelector("[data-app-floating-surface]")) return;
+      if (typeof document !== "undefined" && document.querySelector("[data-app-floating-surface], [data-music-track-preferences-open]")) return;
       claimKeyboardShortcut(event);
       onclose();
       return;
@@ -505,19 +496,8 @@
     }
     if (event.key.toLowerCase() === "s" || event.key.toLowerCase() === "r") {
       claimKeyboardShortcut(event);
-      if (player.queue.length >= 2) {
-        player.toggleShuffle();
-      }
+      if (player.queue.length > 0) player.setPlaybackMode(player.playbackMode === "shuffle" ? "in-order" : "shuffle");
       return;
-    }
-    if (event.key === "+" || event.key === "=" || event.code === "NumpadAdd") {
-      claimKeyboardShortcut(event);
-      void player.setRate(clampRate(player.snapshot.rate + speedShortcutStep));
-      return;
-    }
-    if (event.key === "-" || event.code === "NumpadSubtract") {
-      claimKeyboardShortcut(event);
-      void player.setRate(clampRate(player.snapshot.rate - speedShortcutStep));
     }
   }
 
@@ -552,48 +532,19 @@
   function handleWindowPointerDown(event: PointerEvent): void {
     if (!visible) return;
     if (!(event.target instanceof Node)) return;
-    if (speedMenuOpen && speedMenuRoot && !speedMenuRoot.contains(event.target)) {
-      closeSpeedMenu();
-    }
     if (volumeMenuOpen && volumeMenuRoot && !volumeMenuRoot.contains(event.target)) {
       closeVolumeMenu();
     }
   }
 
-  function openSpeedMenu(): void {
-    closeVolumeMenu();
-    customSpeedOpen = false;
-    speedMenuOpen = !speedMenuOpen;
-  }
-
   function toggleVolumeMenu(): void {
-    closeSpeedMenu();
     volumeMenuOpen = !volumeMenuOpen;
-  }
-
-  function openCustomSpeed(): void {
-    customRateDraft = String(player.snapshot.rate);
-    customSpeedOpen = true;
-  }
-
-  function closeSpeedMenu(): void {
-    speedMenuOpen = false;
-    customSpeedOpen = false;
   }
 
   function closeVolumeMenu(): void {
     volumeMenuOpen = false;
   }
 
-  async function applySpeed(rate: number): Promise<void> {
-    await player.setRate(rate);
-    closeSpeedMenu();
-  }
-
-  async function applyCustomSpeed(): Promise<void> {
-    await player.setRate(clampRate(Number(customRateDraft)));
-    closeSpeedMenu();
-  }
 
   function handleMediaSurfaceClick(event: MouseEvent): void {
     event.preventDefault();
@@ -1070,37 +1021,11 @@
           >
             <SkipForward size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
           </button>
-          <button
-            type="button"
-            onclick={() => player.toggleShuffle()}
-            disabled={player.queue.length < 2}
-            class={cn(
-              "music-transport-shuffle inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50",
-              !player.shuffleEnabled && "text-muted-foreground opacity-70",
-            )}
-            title={player.shuffleEnabled ? t("music.shuffleOnTitle") : t("music.shuffleOffTitle")}
-            aria-label={player.shuffleEnabled ? t("music.shuffleOn") : t("music.shuffleOff")}
-            aria-pressed={player.shuffleEnabled}
-          >
-            <Shuffle size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-          </button>
+          <MusicPlaybackModeControl className="music-transport-shuffle" />
         </div>
 
         <div class="music-control-group flex items-center gap-2">
-          <button
-            type="button"
-            onclick={() => player.toggleShuffle()}
-            disabled={player.queue.length < 2}
-            class={cn(
-              "music-utility-shuffle inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors disabled:pointer-events-none disabled:opacity-50",
-              !player.shuffleEnabled && "text-muted-foreground opacity-70",
-            )}
-            title={player.shuffleEnabled ? t("music.shuffleOnTitle") : t("music.shuffleOffTitle")}
-            aria-label={player.shuffleEnabled ? t("music.shuffleOn") : t("music.shuffleOff")}
-            aria-pressed={player.shuffleEnabled}
-          >
-            <Shuffle size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-          </button>
+          <MusicPlaybackModeControl className="music-utility-shuffle" align="end" />
           <div
             class="music-expanded-volume-control flex items-center gap-2 text-[0.8rem] text-muted-foreground"
             data-music-volume-control="true"
@@ -1198,69 +1123,11 @@
             {/if}
           </div>
 
-          <div bind:this={speedMenuRoot} class="relative">
-            <button
-              type="button"
-              onclick={openSpeedMenu}
-              class="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-              title={t("music.speedTitle")}
-              aria-label={t("music.speed")}
-              aria-haspopup="menu"
-              aria-expanded={speedMenuOpen}
-            >
-              <Gauge size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-            </button>
-            {#if speedMenuOpen}
-              <div
-                class="absolute bottom-full right-0 z-30 mb-2 w-36 overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
-                style="max-height: min(14rem, calc(100vh - 2rem));"
-              >
-                {#if !customSpeedOpen}
-                  {#each SPEED_PRESETS as preset}
-                    <button
-                      type="button"
-                      onclick={() => { void applySpeed(preset); }}
-                      class="flex h-8 w-full items-center justify-between rounded-sm px-2 text-left text-[0.8rem] hover:bg-accent hover:text-accent-foreground"
-                    >
-                      <span>{preset}x</span>
-                      {#if Math.abs(player.snapshot.rate - preset) < 0.001}
-                        <Check size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-                      {/if}
-                    </button>
-                  {/each}
-                  <button
-                    type="button"
-                    onclick={openCustomSpeed}
-                    class="flex h-8 w-full items-center justify-between rounded-sm px-2 text-left text-[0.8rem] hover:bg-accent hover:text-accent-foreground"
-                  >
-                    <span>{t("music.custom")}</span>
-                    {#if !activeSpeedIsPreset}
-                      <Check size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-                    {/if}
-                  </button>
-                {:else}
-                  <form class="flex items-center gap-2 p-1" onsubmit={(event) => { event.preventDefault(); void applyCustomSpeed(); }}>
-                    <input
-                      bind:value={customRateDraft}
-                      type="number"
-                      min="0.25"
-                      max="2"
-                      step="0.05"
-                      class="h-8 min-w-0 flex-1 select-text rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                      aria-label={t("music.customPlaybackSpeed")}
-                    />
-                    <button
-                      type="submit"
-                      class="inline-flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
-                      aria-label={t("music.applyCustomSpeed")}
-                    >
-                      <Check size={musicIconSize} strokeWidth={musicIconStrokeWidth} />
-                    </button>
-                  </form>
-                {/if}
-              </div>
-            {/if}
-          </div>
+          <MusicTrackPreferences
+            active={visible && musicPage === "player"}
+            {volumeMenuOpen}
+            onOpen={closeVolumeMenu}
+          />
           <button
             type="button"
             onclick={togglePlaylist}
@@ -1302,7 +1169,7 @@
     background-color: var(--cal-bg);
   }
 
-  .music-utility-shuffle {
+  :global(.music-utility-shuffle) {
     display: none;
   }
 
@@ -1317,11 +1184,11 @@
       justify-content: center;
     }
 
-    .music-transport-shuffle {
+    :global(.music-transport-shuffle) {
       display: none;
     }
 
-    .music-utility-shuffle {
+    :global(.music-utility-shuffle) {
       display: inline-flex;
     }
 

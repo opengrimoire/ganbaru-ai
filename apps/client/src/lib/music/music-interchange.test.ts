@@ -4,7 +4,7 @@ import { MUSIC_INTERCHANGE_FORMAT, MUSIC_INTERCHANGE_VERSION, musicImportedLocal
 const document: MusicInterchangeDocument = {
   format: MUSIC_INTERCHANGE_FORMAT, version: MUSIC_INTERCHANGE_VERSION, exportedAt: 1_700_000_000_000,
   roots: [{ id: "root-b", name: "Songs" }, { id: "root-a", name: "Soundtracks" }],
-  playlists: [{ id: "playlist-1", name: "Focus", icon: "lucide:laptop", shuffleEnabled: true, repeatMode: "all", intendedUses: ["focus"], memberships: [{ item: { identityKey: "youtube:abc123", sourceKind: "youtube-video", youtubeVideoId: "abc123", title: "Track", artist: "", album: "", durationMs: null, signals: ["lyrics"], locations: [] }, position: 0, weight: "normal", enabled: true, startMs: null, endMs: null, volume: null, rate: null, skipRanges: [], snoozes: [] }] }],
+  playlists: [{ id: "playlist-1", name: "Focus", icon: "lucide:laptop", shuffleEnabled: true, mixEnabled: false, repeatMode: "all", intendedUses: ["focus"], memberships: [{ item: { identityKey: "youtube:abc123", sourceKind: "youtube-video", youtubeVideoId: "abc123", title: "Track", artist: "", album: "", durationMs: null, signals: ["lyrics"], locations: [] }, position: 0, weight: "normal", enabled: true, startMs: null, endMs: null, volume: null, rate: null, skipRanges: [], snoozes: [] }] }],
   contextAssignments: [], warnings: ["One local root is not bound on this device."],
 };
 
@@ -14,6 +14,13 @@ describe("Ganbaru AI music interchange", () => {
     const second = serializeMusicInterchange({ ...document, roots: [...document.roots].reverse() });
     expect(first).toBe(second);
     expect(parseMusicInterchangeJson(first)).toEqual({ ...document, roots: [...document.roots].reverse() });
+  });
+
+  it("defaults older exports without Mix to Shuffle", () => {
+    const legacy = structuredClone(document) as unknown as Record<string, unknown>;
+    const playlists = legacy.playlists as Array<Record<string, unknown>>;
+    delete playlists[0]!.mixEnabled;
+    expect(parseMusicInterchangeJson(JSON.stringify(legacy)).playlists[0]?.mixEnabled).toBe(false);
   });
 
   it("rejects corrupt, oversized, stale, unsafe-path, and invalid-source payloads", () => {

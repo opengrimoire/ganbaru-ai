@@ -191,6 +191,7 @@
         projection.entries,
         playlist.shuffleEnabled,
         playlist.repeatMode,
+        playlist.mixEnabled,
         { structuralSkipped: projection.structuralSkipped },
       );
       if (loaded) close();

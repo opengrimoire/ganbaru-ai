@@ -12,6 +12,7 @@ export interface MusicPlayerSettings {
   volume: number;
   rate: number;
   shuffleEnabled: boolean;
+  mixEnabled: boolean;
   muted: boolean;
   playlistVisible: boolean;
 }
@@ -21,6 +22,7 @@ function defaultSettings(): MusicPlayerSettings {
     volume: DEFAULT_PLAYBACK_SNAPSHOT.volume,
     rate: DEFAULT_PLAYBACK_SNAPSHOT.rate,
     shuffleEnabled: true,
+    mixEnabled: false,
     muted: false,
     playlistVisible: false,
   };
@@ -49,6 +51,7 @@ export function loadMusicPlayerSettings(): MusicPlayerSettings {
       shuffleEnabled: typeof record.shuffleEnabled === "boolean"
         ? record.shuffleEnabled
         : true,
+      mixEnabled: record.shuffleEnabled !== false && record.mixEnabled === true,
       muted: record.muted === true,
       playlistVisible: record.playlistVisible === true,
     };

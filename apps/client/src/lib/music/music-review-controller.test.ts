@@ -27,7 +27,7 @@ const emptyLibraryApi: MusicLibraryControllerApi = {
 };
 
 const playlist = (): MusicPlaylistSummary => ({
-  id: "playlist", sortOrder: 0, name: "Focus", icon: "lucide:laptop", shuffleEnabled: true, repeatMode: "all",
+  id: "playlist", sortOrder: 0, name: "Focus", icon: "lucide:laptop", shuffleEnabled: true, mixEnabled: false, repeatMode: "all",
   intendedUses: ["focus"], totalCount: 0, eligibleCount: 0, unavailableCount: 0,
   snoozedCount: 0, localCount: 0, onlineCount: 0, version: 1,
 });

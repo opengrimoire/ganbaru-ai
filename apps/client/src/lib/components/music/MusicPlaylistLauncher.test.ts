@@ -28,6 +28,7 @@ const summary = (id: string, name: string): MusicPlaylistSummary => ({
   name,
   icon: "emoji:♪",
   shuffleEnabled: false,
+  mixEnabled: false,
   repeatMode: "all",
   intendedUses: [],
   totalCount: 2,
@@ -129,6 +130,7 @@ describe("Music playlist launcher", () => {
       expect.any(Array),
       false,
       "all",
+      false,
       { structuralSkipped: expect.any(Object) },
     ));
     expect(openBuilder).not.toHaveBeenCalled();

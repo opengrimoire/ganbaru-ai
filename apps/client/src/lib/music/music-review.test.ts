@@ -23,7 +23,7 @@ import {
 import type { MusicInspectorDetail, MusicPlaylistSummary } from "./library-contracts";
 
 const playlist = (id: string, name: string): MusicPlaylistSummary => ({
-  id, sortOrder: 0, name, icon: "lucide:list-music", shuffleEnabled: true, repeatMode: "all", intendedUses: [], totalCount: 0,
+  id, sortOrder: 0, name, icon: "lucide:list-music", shuffleEnabled: true, mixEnabled: false, repeatMode: "all", intendedUses: [], totalCount: 0,
   eligibleCount: 0, unavailableCount: 0, snoozedCount: 0, localCount: 0, onlineCount: 0, version: 1,
 });
 

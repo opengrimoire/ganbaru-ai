@@ -181,13 +181,14 @@ pub(crate) async fn create_playlist(
         .map_err(|error| MusicLibraryError::database("begin create music playlist", error))?;
     sqlx::query(
         "INSERT INTO music_playlists
-            (id, name, icon, shuffle_enabled, repeat_mode, sort_order, created_at, updated_at, version)
-         VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM music_playlists), ?, ?, 1)",
+            (id, name, icon, shuffle_enabled, mix_enabled, repeat_mode, sort_order, created_at, updated_at, version)
+         VALUES (?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM music_playlists), ?, ?, 1)",
     )
     .bind(&request.id)
     .bind(request.name.trim())
     .bind(request.icon.trim())
     .bind(request.shuffle_enabled)
+    .bind(request.mix_enabled)
     .bind(request.repeat_mode.as_ref())
     .bind(request.created_at)
     .bind(request.created_at)
@@ -229,13 +230,14 @@ pub(crate) async fn update_playlist(
         .map_err(|error| MusicLibraryError::database("begin update music playlist", error))?;
     let result = sqlx::query(
         "UPDATE music_playlists
-         SET name = ?, icon = ?, shuffle_enabled = ?, repeat_mode = ?,
+         SET name = ?, icon = ?, shuffle_enabled = ?, mix_enabled = ?, repeat_mode = ?,
              updated_at = ?, version = version + 1
          WHERE id = ? AND version = ?",
     )
     .bind(protected_name)
     .bind(protected_icon)
     .bind(request.shuffle_enabled)
+    .bind(request.mix_enabled)
     .bind(request.repeat_mode.as_ref())
     .bind(request.updated_at)
     .bind(&request.id)
@@ -282,14 +284,14 @@ pub(crate) async fn duplicate_playlist(
         .begin()
         .await
         .map_err(|error| MusicLibraryError::database("begin duplicate music playlist", error))?;
-    let source: Option<(String, i64, String)> = sqlx::query_as(
-        "SELECT icon, shuffle_enabled, repeat_mode FROM music_playlists WHERE id = ?",
+    let source: Option<(String, i64, i64, String)> = sqlx::query_as(
+        "SELECT icon, shuffle_enabled, mix_enabled, repeat_mode FROM music_playlists WHERE id = ?",
     )
     .bind(&request.source_playlist_id)
     .fetch_optional(&mut *transaction)
     .await
     .map_err(|error| MusicLibraryError::database("load source music playlist", error))?;
-    let Some((icon, shuffle_enabled, repeat_mode)) = source else {
+    let Some((icon, shuffle_enabled, mix_enabled, repeat_mode)) = source else {
         return Err(MusicLibraryError::not_found(
             "music playlist",
             &request.source_playlist_id,
@@ -297,13 +299,14 @@ pub(crate) async fn duplicate_playlist(
     };
     sqlx::query(
         "INSERT INTO music_playlists
-            (id, name, icon, shuffle_enabled, repeat_mode, sort_order, created_at, updated_at, version)
-         VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM music_playlists), ?, ?, 1)",
+            (id, name, icon, shuffle_enabled, mix_enabled, repeat_mode, sort_order, created_at, updated_at, version)
+         VALUES (?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM music_playlists), ?, ?, 1)",
     )
     .bind(&request.new_playlist_id)
     .bind(request.name.trim())
     .bind(icon)
     .bind(shuffle_enabled)
+    .bind(mix_enabled)
     .bind(repeat_mode)
     .bind(request.created_at)
     .bind(request.created_at)

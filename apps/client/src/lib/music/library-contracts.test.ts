@@ -70,6 +70,7 @@ describe("music library contracts", () => {
       name: "Focus",
       icon: "lucide:list-music",
       shuffleEnabled: false,
+      mixEnabled: false,
       repeatMode: "all",
       intendedUses: [],
       sortOrder: 0,

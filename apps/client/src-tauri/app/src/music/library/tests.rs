@@ -37,6 +37,7 @@ pub(super) fn playlist(id: &str) -> MusicPlaylistCreate {
         name: "Focus".to_string(),
         icon: "lucide:laptop".to_string(),
         shuffle_enabled: true,
+        mix_enabled: false,
         repeat_mode: MusicRepeatMode::All,
         intended_uses: vec![MusicIntendedUse::Focus],
         created_at: 1_700_000_000_000,
@@ -129,6 +130,7 @@ fn built_in_music_playlists_are_protected_localizable_and_repaired() {
                 name: "Renamed".to_string(),
                 icon: "lucide:rocket".to_string(),
                 shuffle_enabled: detail.shuffle_enabled,
+                mix_enabled: detail.mix_enabled,
                 repeat_mode: detail.repeat_mode,
                 intended_uses: detail.intended_uses,
                 expected_version: detail.version,
@@ -474,6 +476,7 @@ fn playlist_create_update_and_stale_detection_are_transactional() {
                 name: "Deep focus".to_string(),
                 icon: "emoji:🎧".to_string(),
                 shuffle_enabled: false,
+                mix_enabled: false,
                 repeat_mode: MusicRepeatMode::Off,
                 intended_uses: vec![MusicIntendedUse::Focus, MusicIntendedUse::Reading],
                 expected_version: 1,
@@ -491,6 +494,7 @@ fn playlist_create_update_and_stale_detection_are_transactional() {
                 name: "Stale edit".to_string(),
                 icon: "lucide:list-music".to_string(),
                 shuffle_enabled: false,
+                mix_enabled: false,
                 repeat_mode: MusicRepeatMode::All,
                 intended_uses: Vec::new(),
                 expected_version: 1,
@@ -516,6 +520,32 @@ fn playlist_create_update_and_stale_detection_are_transactional() {
                 .icon,
             "emoji:🎧",
         );
+    });
+}
+
+#[test]
+fn mix_mode_round_trips_and_requires_shuffle() {
+    tauri::async_runtime::block_on(async {
+        let pool = pool().await;
+        let mut request = playlist("playlist-mix");
+        request.mix_enabled = true;
+        writes::create_playlist(&pool, request).await.unwrap();
+        let detail = queries::playlist_detail(&pool, "playlist-mix")
+            .await
+            .unwrap();
+        assert!(detail.shuffle_enabled && detail.mix_enabled);
+        let summary = queries::playlist_summaries(&pool, 1_700_000_000_000, 0, 50)
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|entry| entry.id == "playlist-mix")
+            .unwrap();
+        assert!(summary.mix_enabled);
+
+        let mut invalid = playlist("playlist-invalid-mix");
+        invalid.shuffle_enabled = false;
+        invalid.mix_enabled = true;
+        assert!(writes::create_playlist(&pool, invalid).await.is_err());
     });
 }
 
@@ -553,9 +583,9 @@ fn bulk_membership_failure_rolls_back_earlier_rows() {
 fn duplicate_playlist_preserves_membership_details_and_ranges() {
     tauri::async_runtime::block_on(async {
         let pool = pool().await;
-        super::writes::create_playlist(&pool, playlist("playlist-1"))
-            .await
-            .unwrap();
+        let mut source = playlist("playlist-1");
+        source.mix_enabled = true;
+        super::writes::create_playlist(&pool, source).await.unwrap();
         seed_item(&pool, "item-1", "local:item-1").await;
         let mut source_membership = membership(1);
         source_membership.item_id = "item-1".to_string();
@@ -592,6 +622,12 @@ fn duplicate_playlist_preserves_membership_details_and_ranges() {
         )
         .await
         .unwrap();
+        assert!(
+            queries::playlist_detail(&pool, "playlist-2")
+                .await
+                .unwrap()
+                .mix_enabled
+        );
 
         let copied: (String, Option<i64>, Option<i64>) = sqlx::query_as(
             "SELECT weight, start_ms, end_ms FROM music_playlist_memberships
