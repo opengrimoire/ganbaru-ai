@@ -39,6 +39,7 @@
     popoverAlign = "start",
     popoverBoundaryElement = null,
     disabled = false,
+    appearance = "default",
     class: className = "",
   }: {
     value: string;
@@ -57,6 +58,7 @@
     popoverAlign?: SelectPopoverHorizontalAlign;
     popoverBoundaryElement?: HTMLElement | null;
     disabled?: boolean;
+    appearance?: "default" | "quiet";
     class?: string;
   } = $props();
 
@@ -214,9 +216,14 @@
       aria-haspopup="listbox"
       aria-expanded={open}
       aria-label={ariaLabel ?? label}
-      class="flex h-7 w-full max-w-full items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:text-foreground disabled:hover:bg-card max-[480px]:w-full dark:bg-transparent dark:disabled:hover:bg-transparent"
+      class={cn(
+        "flex h-7 w-full max-w-full items-center gap-2 rounded-md text-[0.8rem] font-medium text-foreground transition-colors disabled:cursor-not-allowed max-[480px]:w-full",
+        appearance === "quiet"
+          ? "justify-end px-1.5 hover:bg-accent/60 disabled:opacity-45 disabled:hover:bg-transparent"
+          : "justify-between border border-border bg-card px-2.5 hover:bg-accent disabled:hover:bg-card dark:bg-transparent dark:disabled:hover:bg-transparent",
+      )}
     >
-      <span class="flex min-w-0 flex-1 items-center gap-1.5">
+      <span class={cn("flex min-w-0 flex-1 items-center gap-1.5", appearance === "quiet" && "justify-end text-right")}>
         <span class="truncate" style={current?.style}>{current?.label ?? value}</span>
         {#if showSelectedSummary && current?.summary}
           <span class="shrink-0 text-[0.733333rem] text-muted-foreground">{current.summary}</span>

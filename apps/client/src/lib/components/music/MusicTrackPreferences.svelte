@@ -302,17 +302,20 @@
       {:else}
         {#if error}<p class="mb-2 text-xs text-destructive" role="alert">{error}</p>{/if}
         <div class="flex items-center justify-between gap-3">
-          <span class="shrink-0 text-xs font-medium text-muted-foreground">{t("music.preferences.applyTo")}</span>
+          <span class="shrink-0 text-xs font-semibold">{t("music.preferences.applyTo")}</span>
           <CustomSelect
             value={scopePlaylistId ?? ""}
             options={scopeOptions}
             onChange={(value) => scopePlaylistId = value || null}
             ariaLabel={t("music.preferences.applyTo")}
             disabled={memberships.length === 0}
+            appearance="quiet"
+            popoverAlign="end"
+            inline
             class="w-44"
           />
         </div>
-        <div class="mt-5">
+        <div class="mt-4">
           <div class="flex items-center justify-between gap-2">
             <div bind:this={frequencyHeader} class="relative flex min-w-0 items-center gap-1.5">
               <span class="text-xs font-semibold">{t("music.preferences.likelihood")}</span>
@@ -340,7 +343,7 @@
           </div>
         </div>
 
-        <div class="mt-4 border-t border-border/60 pt-4">
+        <div class="mt-3">
           <span class="text-xs font-semibold">{t("music.preferences.snooze")}</span>
           <div class="mt-2 grid grid-cols-3 gap-1">
             {#each snoozePresets as duration (duration)}
