@@ -48,6 +48,7 @@
     try {
       defaultLocation = await getDefaultDataFolderLocation();
     } catch (cause) {
+      console.warn("Could not load the default data folder:", cause);
       setupError = { raw: cause, action: "general" };
     }
   }
@@ -64,6 +65,7 @@
           : await importDataFolder();
       if (info) onReady(info);
     } catch (cause) {
+      console.warn(`Could not ${mode} the data folder:`, cause);
       setupError = { raw: cause, action: mode };
     } finally {
       busy = null;

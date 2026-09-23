@@ -228,6 +228,7 @@ const appPromise = (async () => {
       }
     }
   } catch (err) {
+    console.warn("Could not load the active data folder:", err);
     const vaultError = err instanceof Error ? err.message : String(err);
     return await mountVaultSetupView(vaultError);
   }

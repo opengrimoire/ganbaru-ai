@@ -109,6 +109,7 @@
     try {
       defaultLocation = await getDefaultDataFolderLocation();
     } catch (err) {
+      console.warn("Could not load the default data folder:", err);
       setupError = { raw: err, action: "general" };
     }
   }
@@ -144,6 +145,7 @@
         await onReady(info, preparation);
       }
     } catch (err) {
+      console.warn(`Could not ${mode} the data folder:`, err);
       setupError = { raw: err, action: mode };
     } finally {
       busy = null;

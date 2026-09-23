@@ -316,7 +316,7 @@ export function formatDataFolderError(
     return t("dataFolderError.notFound");
   }
 
-  return t("dataFolderError.withDetails", fallbackForAction(action, t), raw);
+  return fallbackForAction(action, t);
 }
 
 export async function readVaultAppState(): Promise<VaultAppState> {
