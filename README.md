@@ -281,8 +281,9 @@ Sound effects live in `apps/client/static/sfx/`. App assets are stored as 48 kHz
   </tbody>
 </table>
 
-### File icons
+### Icons
 
 | App use | Source | Author | License |
 |---|---|---|---|
-| Chat file icons | [vscode-icons](https://github.com/vscode-icons/vscode-icons) | Roberto Huertas | [MIT](apps/client/static/file-icons/vscode-icons-LICENSE.txt) |
+| Interface icons | [Lucide](https://github.com/lucide-icons/lucide) | [Lucide contributors](https://github.com/lucide-icons/lucide/graphs/contributors) | [ISC; Feather-derived icons are MIT](https://github.com/lucide-icons/lucide/blob/main/LICENSE) |
+| Chat file icons | [vscode-icons](https://github.com/vscode-icons/vscode-icons) | [vscode-icons contributors](https://github.com/vscode-icons/vscode-icons/graphs/contributors) | [CC BY-SA for icons; branded icons retain separate rights](https://github.com/vscode-icons/vscode-icons#license) |

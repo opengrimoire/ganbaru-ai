@@ -138,14 +138,14 @@
       class="absolute left-0 top-full z-20 mt-1 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-md border border-border bg-popover shadow-lg"
     >
       <div class="p-2">
-        <label class="flex h-8 items-center gap-2 rounded-md border border-input bg-background px-2 text-muted-foreground">
-          <Search size={14} strokeWidth={2} class="shrink-0" />
+        <label class="flex min-h-8 items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 pl-2 pr-1">
+          <Search size={13} strokeWidth={1.5} class="shrink-0 text-popover-foreground/60" />
           <input
             bind:this={searchInputEl}
             bind:value={query}
             type="search"
             placeholder={t("vaultSetup.languageSearchPlaceholder")}
-            class="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            class="min-w-0 flex-1 bg-transparent text-[0.8rem] text-popover-foreground outline-none placeholder:text-popover-foreground/45"
           />
         </label>
       </div>

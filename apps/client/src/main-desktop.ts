@@ -148,7 +148,7 @@ const appPromise = (async () => {
       target,
       props: {
         initialError,
-        onReady: async (_info, preferenceReady) => {
+        onReady: async (info, preferenceReady) => {
           const appRuntimeReady = preferenceReady.then(async () => {
             await ensureConfigLoaded();
             await initializeLocalizationFromConfig();
@@ -156,7 +156,7 @@ const appPromise = (async () => {
             await hydrateUserThemes();
           });
           void appRuntimeReady.catch(() => undefined);
-          await mountVaultHandoffOnboarding(setupView, appRuntimeReady);
+          await mountVaultHandoffOnboarding(info.vaultId, setupView, appRuntimeReady);
         },
       },
     });
@@ -164,6 +164,7 @@ const appPromise = (async () => {
   }
 
   async function mountVaultHandoffOnboarding(
+    vaultId: string,
     currentView?: MountedRoot,
     appRuntimeReady: Promise<void> = Promise.resolve(),
   ) {
@@ -199,6 +200,7 @@ const appPromise = (async () => {
     onboardingView = mount(VaultHandoffOnboardingView, {
       target,
       props: {
+        vaultId,
         initialInvitation,
         initialStatus,
         onComplete: openApp,
@@ -221,11 +223,12 @@ const appPromise = (async () => {
       const { vaultHandoffOnboardingCompleted } = await import(
         "./lib/vault/handoff-onboarding"
       );
-      if (!vaultHandoffOnboardingCompleted(safeStorage())) {
-        return await mountVaultHandoffOnboarding();
+      if (!vaultHandoffOnboardingCompleted(safeStorage(), activeVault.vaultId)) {
+        return await mountVaultHandoffOnboarding(activeVault.vaultId);
       }
     }
   } catch (err) {
+    console.warn("Could not load the active data folder:", err);
     const vaultError = err instanceof Error ? err.message : String(err);
     return await mountVaultSetupView(vaultError);
   }

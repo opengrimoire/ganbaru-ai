@@ -4,6 +4,7 @@
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import { onMount } from "svelte";
   import VaultSetupContent from "$lib/components/vault/VaultSetupContent.svelte";
+  import VaultWelcomeContent from "$lib/components/vault/VaultWelcomeContent.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
     formatDataFolderError,
@@ -33,6 +34,7 @@
   let defaultLocation = $state<DataFolderDefaultLocation | null>(null);
   let busy = $state<"default" | "restore" | "import" | null>(null);
   let setupError = $state<SetupError | null>(null);
+  let welcomeComplete = $state(false);
   const error = $derived(
     setupError ? formatDataFolderError(setupError.raw, setupError.action, t) : null,
   );
@@ -46,6 +48,7 @@
     try {
       defaultLocation = await getDefaultDataFolderLocation();
     } catch (cause) {
+      console.warn("Could not load the default data folder:", cause);
       setupError = { raw: cause, action: "general" };
     }
   }
@@ -62,6 +65,7 @@
           : await importDataFolder();
       if (info) onReady(info);
     } catch (cause) {
+      console.warn(`Could not ${mode} the data folder:`, cause);
       setupError = { raw: cause, action: mode };
     } finally {
       busy = null;
@@ -119,15 +123,19 @@
   class="mobile-viewport-height w-screen overflow-hidden bg-background pb-(--safe-area-bottom) pt-(--safe-area-top) text-foreground"
   style="padding-left: var(--safe-area-left); padding-right: var(--safe-area-right);"
 >
-  <VaultSetupContent
-    title={t("mobile.vaultSetup.title")}
-    intro={t("mobile.vaultSetup.intro")}
-    developmentWarning={defaultLocation?.developmentBuild
-      ? t("vaultSetup.developmentBuildWarning", defaultLocation.folderName)
-      : null}
-    location={defaultLocation?.path ?? fallbackDefaultPath}
-    locationLabel={t("mobile.vaultSetup.dataLocation")}
-    actions={setupActions}
-    {error}
-  />
+  {#if !welcomeComplete}
+    <VaultWelcomeContent onContinue={() => { welcomeComplete = true; }} />
+  {:else}
+    <VaultSetupContent
+      title={t("mobile.vaultSetup.title")}
+      intro={t("mobile.vaultSetup.intro")}
+      developmentWarning={defaultLocation?.developmentBuild
+        ? t("vaultSetup.developmentBuildWarning", defaultLocation.folderName)
+        : null}
+      location={defaultLocation?.path ?? fallbackDefaultPath}
+      locationLabel={t("mobile.vaultSetup.dataLocation")}
+      actions={setupActions}
+      {error}
+    />
+  {/if}
 </main>

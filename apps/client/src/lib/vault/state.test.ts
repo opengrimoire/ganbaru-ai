@@ -25,7 +25,7 @@ describe("data folder state api", () => {
         "default",
       ),
     ).toBe(
-      "The default Ganbaru AI folder already exists, but it is not a valid Ganbaru AI folder. Move those files somewhere else, choose another folder, or import an existing Ganbaru AI folder.",
+      "The default folder contains other files. Move them or choose another folder.",
     );
   });
 
@@ -33,7 +33,7 @@ describe("data folder state api", () => {
     const { formatDataFolderError } = await loadModule();
 
     expect(formatDataFolderError("selected folder is not a Ganbaru AI folder", "import")).toBe(
-      "This does not look like a Ganbaru AI folder. Select the folder from your previous installation.",
+      "Not a Ganbaru AI folder. Choose your previous app folder.",
     );
     expect(
       formatDataFolderError(
@@ -41,10 +41,10 @@ describe("data folder state api", () => {
         "import",
       ),
     ).toBe(
-      "This folder is missing the Ganbaru AI folder marker. Select the main Ganbaru AI folder, not one of its subfolders.",
+      "Can't identify this folder. Choose the main Ganbaru AI folder.",
     );
     expect(formatDataFolderError("parse Ganbaru AI folder marker: expected value", "import")).toBe(
-      "This Ganbaru AI folder marker is damaged. The app cannot import this folder automatically.",
+      "This folder's information is damaged. Restore a backup or choose another.",
     );
   });
 
@@ -52,12 +52,28 @@ describe("data folder state api", () => {
     const { formatDataFolderError } = await loadModule();
 
     expect(formatDataFolderError("read Ganbaru AI folder: Permission denied")).toBe(
-      "Ganbaru AI cannot access this folder. Check folder permissions or choose another location.",
+      "Can't access this folder. Check permissions or choose another.",
     );
     expect(
       formatDataFolderError("run database migrations: file is not a database", "startup"),
     ).toBe(
-      "The app found this Ganbaru AI folder, but its local data file could not be opened. Restore a backup or choose another folder.",
+      "Can't open this folder's data. Restore a backup or choose another.",
+    );
+  });
+
+  it("keeps unexpected backend details out of the setup message", async () => {
+    const { formatDataFolderError } = await loadModule();
+
+    expect(formatDataFolderError("unable to read /private/folder: internal error", "startup")).toBe(
+      "Can't open this folder. Choose another or import an existing one.",
+    );
+  });
+
+  it("gives a short recovery action for a missing folder", async () => {
+    const { formatDataFolderError } = await loadModule();
+
+    expect(formatDataFolderError("canonicalize Ganbaru AI folder path: No such file", "startup")).toBe(
+      "Folder not found. Choose another or import an existing one.",
     );
   });
 

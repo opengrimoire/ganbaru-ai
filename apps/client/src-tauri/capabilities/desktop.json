@@ -31,6 +31,21 @@
       "identifier": "opener:allow-open-url",
       "allow": [
         {
+          "url": "https://github.com/opengrimoire/ganbaru-ai"
+        },
+        {
+          "url": "https://github.com/lucide-icons/lucide"
+        },
+        {
+          "url": "https://github.com/lucide-icons/lucide/graphs/contributors"
+        },
+        {
+          "url": "https://github.com/vscode-icons/vscode-icons"
+        },
+        {
+          "url": "https://github.com/vscode-icons/vscode-icons/graphs/contributors"
+        },
+        {
           "url": "https://github.com/opengrimoire/ganbaru-ai/releases/tag/app-v*"
         },
         {

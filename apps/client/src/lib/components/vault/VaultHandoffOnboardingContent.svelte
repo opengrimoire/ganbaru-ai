@@ -11,12 +11,14 @@
 
   let {
     platform,
+    vaultId,
     initialInvitation = null,
     initialStatus = null,
     bootstrapReplicaOnLink = false,
     onComplete,
   }: {
     platform: "desktop" | "android";
+    vaultId: string;
     initialInvitation?: PairingInvitation | null;
     initialStatus?: PairingStatus | null;
     bootstrapReplicaOnLink?: boolean;
@@ -54,10 +56,8 @@
         if (storage) markIndependentVaultUsed(storage);
       }
       await onComplete();
-      if (persistCompletion) {
-        const storage = safeStorage();
-        if (storage) completeVaultHandoffOnboarding(storage);
-      }
+      const storage = safeStorage();
+      if (storage) completeVaultHandoffOnboarding(storage, vaultId);
     } catch (error) {
       completing = false;
       console.error("Failed to leave linking onboarding:", error);
@@ -96,18 +96,16 @@
   <div class={platform === "desktop"
     ? "mx-auto flex w-full max-w-4xl flex-col gap-6"
     : "mx-auto flex w-full max-w-md flex-col gap-6"}>
-    <div class="space-y-2 text-center">
-      <h1 class="text-2xl font-semibold leading-tight text-foreground min-[560px]:text-3xl">
-        {platform === "desktop"
-          ? t("vaultHandoff.desktopOnboardingTitle")
-          : t("vaultHandoff.androidOnboardingTitle")}
-      </h1>
-      {#if platform === "android"}
+    {#if platform === "android"}
+      <div class="space-y-2 text-center">
+        <h1 class="text-2xl font-semibold leading-tight text-foreground min-[560px]:text-3xl">
+          {t("vaultHandoff.androidOnboardingTitle")}
+        </h1>
         <p class="text-sm leading-6 text-muted-foreground">
           {t("vaultHandoff.androidOnboardingDescription")}
         </p>
-      {/if}
-    </div>
+      </div>
+    {/if}
 
     <VaultHandoffPanel
       {platform}

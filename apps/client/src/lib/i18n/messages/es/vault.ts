@@ -9,6 +9,11 @@ import type {
 import type { MessageShape } from "../types";
 
 export const vaultSetup = {
+  welcomeTitle: "Gratis y de código abierto",
+  licenseButton: "Licencia (AGPL 3.0)",
+  sourceCode: "Código fuente",
+  sourceOpenError: "No se pudo abrir el código fuente. Visita github.com/opengrimoire/ganbaru-ai en tu navegador.",
+  continue: "Continuar",
   title: "Elige dónde guardar tus datos",
   intro:
     "Si vienes de una instalación anterior, importa tu carpeta de Ganbaru AI existente.",
@@ -25,36 +30,35 @@ export const vaultSetup = {
 
 export const dataFolderError = {
   startup:
-    "Ganbaru AI no pudo abrir la carpeta de datos configurada. Elige otra carpeta o importa una carpeta de Ganbaru AI existente.",
+    "No se puede abrir esta carpeta. Elige otra o importa una existente.",
   default:
-    "Ganbaru AI no pudo usar la carpeta predeterminada. Elige otra carpeta o revisa los permisos.",
+    "No se puede usar la carpeta predeterminada. Revisa sus permisos o elige otra.",
   change:
-    "Ganbaru AI no pudo usar esta carpeta. Elige una carpeta vacía o una carpeta de Ganbaru AI existente.",
+    "No se puede usar esta carpeta. Elige una carpeta vacía o una de Ganbaru AI.",
   import:
-    "Ganbaru AI no pudo importar esta carpeta. Selecciona la carpeta de tu instalación anterior.",
-  backup: "Ganbaru AI no pudo crear la copia de seguridad.",
-  restore: "Ganbaru AI no pudo restaurar esta copia de seguridad.",
-  general: "Ganbaru AI no pudo usar esta carpeta.",
-  unknown: "Error desconocido",
+    "No se puede importar esta carpeta. Elige la de tu instalación anterior.",
+  backup: "No se pudo crear la copia de seguridad.",
+  restore: "No se pudo restaurar esta copia de seguridad.",
+  general: "No se puede usar esta carpeta.",
+  unknown: "Error de carpeta desconocido.",
   permission:
-    "Ganbaru AI no puede acceder a esta carpeta. Revisa los permisos o elige otra ubicación.",
+    "No se puede acceder a esta carpeta. Revisa los permisos o elige otra.",
   database:
-    "La app encontró esta carpeta de Ganbaru AI, pero no pudo abrir su archivo de datos local. Restaura una copia de seguridad o elige otra carpeta.",
+    "No se pueden abrir los datos de esta carpeta. Restaura una copia o elige otra.",
   defaultNotValid:
-    "La carpeta predeterminada de Ganbaru AI ya existe, pero no es una carpeta válida de Ganbaru AI. Mueve esos archivos a otro lugar, elige otra carpeta o importa una carpeta de Ganbaru AI existente.",
+    "La carpeta predeterminada contiene otros archivos. Muévelos o elige otra carpeta.",
   folderNotEmpty:
-    "Esta carpeta ya contiene otros archivos. Elige una carpeta vacía, una carpeta de Ganbaru AI existente o crea una carpeta nueva.",
+    "Esta carpeta no está vacía. Elige una carpeta vacía o una de Ganbaru AI.",
   missingMarker:
-    "A esta carpeta le falta el marcador de carpeta de Ganbaru AI. Selecciona la carpeta principal de Ganbaru AI, no una subcarpeta.",
+    "No se reconoce esta carpeta. Elige la carpeta principal de Ganbaru AI.",
   damagedMarker:
-    "El marcador de esta carpeta de Ganbaru AI está dañado. La app no puede importar esta carpeta automáticamente.",
+    "La información de esta carpeta está dañada. Restaura una copia o elige otra.",
   newerSchema:
-    "Esta carpeta de Ganbaru AI fue creada por una versión más nueva de la app. Actualiza Ganbaru AI antes de abrirla.",
+    "Esta carpeta necesita una versión más nueva. Actualiza Ganbaru AI.",
   notGanbaruFolder:
-    "Esto no parece una carpeta de Ganbaru AI. Selecciona la carpeta de tu instalación anterior.",
+    "No es una carpeta de Ganbaru AI. Elige la de tu instalación anterior.",
   notFound:
-    "Esta carpeta de Ganbaru AI no se pudo encontrar. Elige otra carpeta o importa una carpeta de Ganbaru AI existente.",
-  withDetails: (fallback: string, raw: string) => `${fallback} Detalles: ${raw}`,
+    "No se encontró la carpeta. Elige otra o importa una existente.",
 } as const satisfies MessageShape<typeof enDataFolderError>;
 
 export const language = {
@@ -110,6 +114,8 @@ export const vaultHandoff = {
   networkAccessRevoked: "Se quitó el acceso para conectar el teléfono.",
   networkAccessManual:
     "Ganbaru AI no puede solicitar acceso a la red automáticamente en este sistema Linux.",
+  networkAccessDevelopmentUnavailable:
+    "Esta versión de desarrollo para Linux no puede usar el asistente de firewall empaquetado. Usa una versión empaquetada o configura el firewall manualmente para vincular un teléfono.",
   notLinked: "No hay dispositivos vinculados",
   devicesHeading: "Dispositivos",
   linkedTo: (device: string) => `Vinculado con ${device}`,
@@ -122,10 +128,12 @@ export const vaultHandoff = {
   createQr: "Mostrar código QR de vinculación",
   linkAnotherDevice: "Vincular otro dispositivo",
   enterCode: "Introducir código de vinculación",
-  linkThisComputer: "Vincular esta computadora con otra",
+  linkThisComputer: "o vincula esta computadora con otra",
   codeDialogTitle: "Vincular esta computadora",
-  codeInstructions: "Pega el código mostrado en la computadora coordinadora.",
+  codeInstructions: "En la otra computadora, abre Ajustes > Datos y copia su código de vinculación. Pégalo aquí.",
   codePlaceholder: "Código de vinculación",
+  codeInvalid: "Ese código de vinculación no es válido. Copia uno nuevo de la otra computadora e inténtalo de nuevo.",
+  codeExpired: "Ese código de vinculación venció. Obtén uno nuevo de la otra computadora e inténtalo de nuevo.",
   linkDevice: "Vincular dispositivo",
   copyCode: "Copiar código de vinculación",
   codeCopied: "Código de vinculación copiado",
@@ -155,7 +163,6 @@ export const vaultHandoff = {
     "Usa esto solo si el dispositivo propietario ya no está disponible. Ambas copias se conservan, este dispositivo podrá escribir y los dispositivos se desvincularán. Los cambios posteriores no se combinarán automáticamente.",
   workingOwnership: "Preparando este dispositivo...",
   workingRefresh: "Obteniendo los últimos cambios...",
-  workingPairing: "Vinculando de forma segura...",
   workingRequest: "Esperando al otro dispositivo...",
   linked: "Dispositivo vinculado.",
   linkedSuccessfully: (device: string) => `${device} se vinculó correctamente.`,

@@ -107,7 +107,7 @@
         <time datetime={message.createdAt}>{formatDateTime(localization.locale, Date.parse(message.createdAt), { timeStyle: "short" })}</time>
       </header>
     {/if}
-    <div class="message-copy">{#each messageSegments as segment, index (`${segment.kind}:${index}`)}{#if segment.kind === "reference"}{#if segment.reference.kind === "participant"}<ChatIdentityButton participant={participantForReference(segment.reference)} presentation="mention" triggerLabel={segment.text} {currentResponseSettings} />{:else}<button type="button" class="inline-reference" onclick={() => openReference(segment.reference)}>{segment.text}</button>{/if}{:else}{segment.text}{/if}{/each}</div>
+    <div class="message-copy" data-selectable-content>{#each messageSegments as segment, index (`${segment.kind}:${index}`)}{#if segment.kind === "reference"}{#if segment.reference.kind === "participant"}<ChatIdentityButton participant={participantForReference(segment.reference)} presentation="mention" triggerLabel={segment.text} {currentResponseSettings} />{:else}<button type="button" class="inline-reference" onclick={() => openReference(segment.reference)}>{segment.text}</button>{/if}{:else}{segment.text}{/if}{/each}</div>
     {#if message.attachmentIds.length > 0}
       <div class="message-context">
         {#if message.attachmentIds.length > 0}<span>{t("chat.organization.images", message.attachmentIds.length)}</span>{/if}
