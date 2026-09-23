@@ -29,6 +29,7 @@
   import ToggleSetting from "$lib/components/settings/ToggleSetting.svelte";
   import {
     formatHandoffError,
+    formatPairingCodeError,
     formatOwnershipHandoffError,
     hasNewLinkedDevice,
   } from "$lib/vault/handoff-workflow";
@@ -58,6 +59,7 @@
 
   const { t } = getLocalization();
   const desktopQrAvailable = __GANBARU_AI_BUILD_PLATFORM__ !== "android";
+  const developmentLinuxBuild = import.meta.env.DEV && __GANBARU_AI_BUILD_PLATFORM__ === "linux";
   let status = $state<PairingStatus | null>(
     untrack(() => initialStatus ?? getCachedPairingStatus() ?? null),
   );
@@ -73,6 +75,7 @@
   let statusRefreshing = false;
   let notice = $state<string | null>(null);
   let error = $state<string | null>(null);
+  let codeError = $state<string | null>(null);
   let ownershipError = $state<string | null>(null);
   let networkError = $state<string | null>(null);
   let confirmation = $state<"network" | "networkRevoke" | "unlink" | "recover" | "replace" | null>(null);
@@ -210,14 +213,15 @@
   }
 
   async function acceptInvitation(encoded: string): Promise<void> {
+    const fromCodeDialog = platform === "desktop" && codeDialogVisible;
     busy = "pair";
     error = null;
+    codeError = null;
     notice = null;
     try {
       const deviceLabel = await readSuggestedDeviceLabel();
       await enrollWithDesktop(encoded, deviceLabel);
       scanning = false;
-      codeDialogVisible = false;
       const next = await loadStatus();
       if (
         platform === "android"
@@ -229,10 +233,18 @@
         if (outcome.inProgress) throw new Error("initial linked vault activation is already running");
         await loadStatus();
       }
+      codeDialogVisible = false;
+      codeError = null;
     } catch (cause) {
-      fail(cause);
-      scannerVersion += 1;
-      scanning = true;
+      if (fromCodeDialog) {
+        codeError = formatPairingCodeError(cause, t);
+      } else {
+        fail(cause);
+        if (platform === "android") {
+          scannerVersion += 1;
+          scanning = true;
+        }
+      }
     } finally {
       busy = null;
     }
@@ -397,6 +409,23 @@
 {/snippet}
 
 <section class={presentation === "control" ? "" : "flex flex-col gap-4"}>
+  {#if presentation === "onboarding" && platform === "desktop"}
+    <div class="space-y-2 text-center">
+      <h1 class="text-2xl font-semibold leading-tight text-foreground min-[560px]:text-3xl">
+        {t("vaultHandoff.desktopOnboardingTitle")}
+      </h1>
+      {#if status?.linked !== true}
+        <button
+          type="button"
+          class="text-sm text-muted-foreground hover:text-foreground disabled:opacity-55"
+          disabled={busy !== null}
+          onclick={() => { codeDialogVisible = true; error = null; codeError = null; }}
+        >
+          {t("vaultHandoff.linkThisComputer")}
+        </button>
+      {/if}
+    </div>
+  {/if}
   {#if presentation === "settings"}
     <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("vaultHandoff.heading")}</h2>
     {#if desktopNetworkAccessSetting}
@@ -441,7 +470,7 @@
         </p>
       {/if}
     {:else}
-      {#if status.devices.length > 0}
+      {#if status.devices.length > 0 && presentation !== "onboarding"}
         {#each status.devices as device (device.deviceId)}
           <div class={presentation === "control"
             ? `flex w-full min-w-0 items-center gap-2 px-3 ${platform === "android" ? "min-h-12" : "py-1.5"}`
@@ -455,9 +484,7 @@
               <div class={presentation === "control" ? "min-w-0 truncate text-sm text-foreground" : "min-w-0 truncate text-[0.866667rem] font-medium text-foreground"}>
                 {device.label ?? (device.kind === "computer" ? t("vaultHandoff.desktopDevice") : t("vaultHandoff.androidDevice"))}
               </div>
-              {#if presentation !== "onboarding"}
-                <span class={presentation === "control" ? "shrink-0 text-sm text-foreground" : "shrink-0 text-[0.866667rem] font-medium text-foreground"}>{t("vaultHandoff.linkedLabel")}</span>
-              {/if}
+              <span class={presentation === "control" ? "shrink-0 text-sm text-foreground" : "shrink-0 text-[0.866667rem] font-medium text-foreground"}>{t("vaultHandoff.linkedLabel")}</span>
             </div>
             {#if presentation === "settings"}
               <button
@@ -484,7 +511,7 @@
               <Settings size={14} strokeWidth={1.8} aria-hidden="true" />
             </button>
           </div>
-        {:else}
+        {:else if presentation !== "onboarding"}
           <p class="px-1 py-1 text-[0.866667rem] text-muted-foreground">{t("vaultHandoff.notLinked")}</p>
         {/if}
       {/if}
@@ -496,7 +523,7 @@
           {status.linked ? t("vaultHandoff.linkAnotherDevice") : t("vaultHandoff.createQr")}
         </button>
         {#if !status.linked}
-          <button type="button" class={buttonClass} disabled={busy !== null} onclick={() => { codeDialogVisible = true; error = null; }}>
+          <button type="button" class={buttonClass} disabled={busy !== null} onclick={() => { codeDialogVisible = true; error = null; codeError = null; }}>
             {t("vaultHandoff.enterCode")}
           </button>
         {/if}
@@ -546,12 +573,14 @@
                 {t("vaultHandoff.networkAccessDescription")}
               </p>
             </div>
-            {#if networkAccess?.state === "authorizationRequired"}
+            {#if networkAccess?.state === "authorizationRequired" || (developmentLinuxBuild && networkAccess?.state === "manualActionRequired")}
               <button
                 type="button"
-                class={`${buttonClass} bg-background`}
+                class={`${buttonClass} bg-background ${developmentLinuxBuild ? "cursor-not-allowed opacity-55" : ""}`}
+                data-app-tooltip={developmentLinuxBuild ? t("vaultHandoff.networkAccessDevelopmentUnavailable") : undefined}
+                aria-disabled={developmentLinuxBuild}
                 disabled={busy !== null}
-                onclick={() => { confirmation = "network"; }}
+                onclick={() => { if (!developmentLinuxBuild) confirmation = "network"; }}
               >
                 {#if busy === "network"}<LoaderCircle size={14} class="animate-spin" />{/if}
                 {t("vaultHandoff.allowNetworkAccess")}
@@ -566,7 +595,7 @@
               </p>
             {/if}
             {#if networkError}
-              <p role="alert" class="w-full max-w-88 text-[0.8rem] leading-5 text-destructive">
+              <p role="alert" class="w-full max-w-88 text-center text-[0.8rem] leading-5 text-destructive">
                 {networkError}
               </p>
             {/if}
@@ -588,14 +617,6 @@
             {@const PairingQrCode = module.default}
             <PairingQrCode {invitation} onExpired={() => void showInvitation()} />
           {/await}
-          <button
-            type="button"
-            class="text-sm text-muted-foreground hover:text-foreground"
-            disabled={busy !== null}
-            onclick={() => { codeDialogVisible = true; error = null; }}
-          >
-            {t("vaultHandoff.linkThisComputer")}
-          </button>
         </div>
       </div>
     {/if}
@@ -688,12 +709,10 @@
     </button>
   {/if}
 
-  {#if presentation !== "control" && (busy === "pair" || busy === "ownership" || busy === "refresh")}
+  {#if presentation !== "control" && (busy === "ownership" || busy === "refresh")}
     <p role="status" class="flex items-center gap-2 px-1 text-[0.8rem] text-muted-foreground">
       <LoaderCircle size={14} strokeWidth={2} class="animate-spin" aria-hidden="true" />
-      {busy === "pair"
-        ? t("vaultHandoff.workingPairing")
-        : busy === "ownership"
+      {busy === "ownership"
           ? t("vaultHandoff.workingOwnership")
           : t("vaultHandoff.workingRefresh")}
     </p>
@@ -704,7 +723,7 @@
     </p>
   {/if}
   {#if notice && presentation !== "control" && presentation !== "onboarding"}<p role="status" class="px-1 text-[0.8rem] leading-5 text-muted-foreground">{notice}</p>{/if}
-  {#if error}<p role="alert" class="px-1 text-[0.8rem] leading-5 text-destructive">{error}</p>{/if}
+  {#if error}<p role="alert" class={`px-1 text-[0.8rem] leading-5 text-destructive ${presentation === "onboarding" ? "text-center" : ""}`}>{error}</p>{/if}
 </section>
 
 {#if desktopQrAvailable && platform === "desktop" && qrDialogVisible && presentation === "settings"}
@@ -771,9 +790,10 @@
     {@const PairingCodeDialog = module.default}
     <PairingCodeDialog
       busy={busy === "pair"}
-      {error}
+      error={codeError}
       onSubmit={(code) => void acceptInvitation(code)}
-      onClose={() => { if (busy !== "pair") codeDialogVisible = false; }}
+      onEdit={() => { codeError = null; }}
+      onClose={() => { if (busy !== "pair") { codeDialogVisible = false; codeError = null; } }}
     />
   {/await}
 {/if}

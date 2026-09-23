@@ -7,14 +7,18 @@
   import { onMount } from "svelte";
   import type { PairingInvitation, PairingStatus } from "$lib/api/vault-handoff";
   import WindowResizeHandles from "$lib/components/WindowResizeHandles.svelte";
+  import { isCloseWindowShortcut } from "$lib/components/titlebar-shortcuts";
+  import TooltipHost from "$lib/components/ui/TooltipHost.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import VaultHandoffOnboardingContent from "./VaultHandoffOnboardingContent.svelte";
 
   let {
+    vaultId,
     initialInvitation,
     initialStatus,
     onComplete,
   }: {
+    vaultId: string;
     initialInvitation: PairingInvitation | null;
     initialStatus: PairingStatus;
     onComplete: () => void | Promise<void>;
@@ -27,6 +31,14 @@
   onMount(() => {
     let disposed = false;
     let cleanupResize: (() => void) | undefined;
+    function handleGlobalShortcut(event: KeyboardEvent): void {
+      if (!isCloseWindowShortcut(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      void invoke("force_quit");
+    }
+
     void appWindow.isMaximized().then((value) => {
       if (!disposed) isMaximized = value;
     });
@@ -39,9 +51,11 @@
       if (disposed) unlisten();
       else cleanupResize = unlisten;
     });
+    window.addEventListener("keydown", handleGlobalShortcut, { capture: true });
     return () => {
       disposed = true;
       cleanupResize?.();
+      window.removeEventListener("keydown", handleGlobalShortcut, { capture: true });
     };
   });
 </script>
@@ -65,11 +79,13 @@
     <div class="min-h-0 flex-1 overflow-y-auto">
       <VaultHandoffOnboardingContent
         platform="desktop"
+        {vaultId}
         {initialInvitation}
         {initialStatus}
         {onComplete}
       />
     </div>
   </div>
+  <TooltipHost />
   <WindowResizeHandles disabled={isMaximized} />
 </main>

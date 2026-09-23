@@ -55,7 +55,7 @@
   }
 </script>
 
-<div bind:this={root} class="chat-markdown">{@html safeHtml}</div>
+<div bind:this={root} class="chat-markdown" data-selectable-content>{@html safeHtml}</div>
 
 <style>
   .chat-markdown { overflow-wrap:anywhere; line-height:inherit; }

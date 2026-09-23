@@ -1,6 +1,5 @@
 <script lang="ts">
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
-  import X from "@lucide/svelte/icons/x";
   import { onMount, tick } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
@@ -13,11 +12,13 @@
     busy,
     error,
     onSubmit,
+    onEdit,
     onClose,
   }: {
     busy: boolean;
     error: string | null;
     onSubmit: (code: string) => void;
+    onEdit: () => void;
     onClose: () => void;
   } = $props();
 
@@ -43,7 +44,7 @@
       onClose();
       return;
     }
-    if (event.key === "Enter") {
+    if (event.key === "Enter" && event.target === input) {
       event.preventDefault();
       submit();
     }
@@ -79,23 +80,13 @@
     onclick={(event) => event.stopPropagation()}
     onkeydown={handleKeydown}
   >
-    <div class="flex items-start justify-between gap-3">
-      <div class="min-w-0">
-        <h2 id="pairing-code-title" class="text-base font-semibold text-foreground">
-          {t("vaultHandoff.codeDialogTitle")}
-        </h2>
-        <p class="mt-1 text-[0.866667rem] leading-5 text-muted-foreground">
-          {t("vaultHandoff.codeInstructions")}
-        </p>
-      </div>
-      <button
-        type="button"
-        class="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-        aria-label={t("common.close")}
-        onclick={onClose}
-      >
-        <X size={16} strokeWidth={2} aria-hidden="true" />
-      </button>
+    <div>
+      <h2 id="pairing-code-title" class="text-base font-semibold text-foreground">
+        {t("vaultHandoff.codeDialogTitle")}
+      </h2>
+      <p class="mt-1 text-[0.866667rem] leading-5 text-muted-foreground">
+        {t("vaultHandoff.codeInstructions")}
+      </p>
     </div>
 
     <input
@@ -104,12 +95,16 @@
       type="text"
       autocomplete="off"
       spellcheck="false"
-      class="mt-5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus:border-ring"
+      class="pairing-code-input mt-5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus:bg-accent/30"
       placeholder={t("vaultHandoff.codePlaceholder")}
+      aria-label={t("vaultHandoff.codePlaceholder")}
+      aria-invalid={error !== null}
+      aria-describedby={error ? "pairing-code-error" : undefined}
       disabled={busy}
+      oninput={onEdit}
     />
     {#if error}
-      <p role="alert" class="mt-2 text-[0.8rem] leading-5 text-destructive">{error}</p>
+      <p id="pairing-code-error" role="alert" class="mt-2 text-[0.8rem] leading-5 text-destructive">{error}</p>
     {/if}
     <div class="mt-5 flex justify-end gap-2">
       <button
@@ -118,7 +113,7 @@
         disabled={busy}
         onclick={onClose}
       >
-        {t("common.cancel")}
+        {t("common.close")}
       </button>
       <button
         type="button"
@@ -132,3 +127,9 @@
     </div>
   </div>
 </div>
+
+<style>
+  :global(html[data-focus-intent="keyboard"]) .pairing-code-input:focus {
+    outline: none;
+  }
+</style>

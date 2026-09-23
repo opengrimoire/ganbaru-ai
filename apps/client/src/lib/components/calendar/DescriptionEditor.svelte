@@ -365,6 +365,7 @@
           bind:this={editorEl}
           contenteditable={!readOnly}
           data-placeholder={t("calendar.description.placeholder")}
+          data-selectable-content
           class="desc-editor desc-content max-h-24 overflow-y-auto text-[0.8rem] leading-4 text-foreground outline-none"
           class:desc-editing={!readOnly}
           oninput={handleEditorInput}
@@ -384,6 +385,7 @@
         ></div>
       {:else if descPreview}
         <div
+          data-selectable-content
           class="desc-preview max-h-12 overflow-hidden text-[0.8rem] leading-4 text-foreground"
           title={descPreview}
         >{descPreview}</div>

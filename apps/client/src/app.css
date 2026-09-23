@@ -439,6 +439,15 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *) {
     line-height: 1.5;
     overscroll-behavior: none;
   }
+  body,
+  body * {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  body :where(input, textarea, [contenteditable], [contenteditable] *, pre, pre *, code, code *, [data-selectable-content], [data-selectable-content] *, .chat-markdown, .chat-markdown *, .xterm .xterm-screen, .xterm .xterm-screen *) {
+    user-select: text;
+    -webkit-user-select: text;
+  }
   html[data-shell="mobile"] body {
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;

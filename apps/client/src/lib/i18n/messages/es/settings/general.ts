@@ -212,8 +212,9 @@ export const general = {
     licenseDescription: "Ganbaru AI tiene licencia AGPL 3.0.",
     viewLicense: "Ver LICENSE",
     summaryHeading: "Resumen",
-    summary:
-      "Gratis y de código abierto. Puedes usar, modificar, compartir y vender Ganbaru AI. Si distribuyes u hospedas una versión modificada, debes proporcionar el código fuente y licenciar esa versión bajo AGPL 3.0. Se incluyen los derechos de patente de los contribuidores. La app se entrega sin garantía y los autores no son responsables por daños.",
+    summaryLead: "Gratis y de código abierto.",
+    summaryDetails:
+      "Puedes usar, modificar, compartir y vender Ganbaru AI. Si distribuyes u hospedas una versión modificada, debes proporcionar el código fuente y licenciar esa versión bajo AGPL 3.0. Se incluyen los derechos de patente de los contribuidores. La app se entrega sin garantía y los autores no son responsables por daños.",
     acknowledgmentsHeading: "Agradecimientos",
     soundEffects: "Efectos de sonido",
     soundEffectsDescriptionPrefix: "Los efectos de sonido provienen de",

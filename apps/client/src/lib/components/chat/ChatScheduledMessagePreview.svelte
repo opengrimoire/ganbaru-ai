@@ -42,7 +42,7 @@
       <strong>{userDisplayName}</strong>
       <time datetime={message.createdAt}>{formatDateTime(localization.locale, Date.parse(message.createdAt), { timeStyle: "short" })}</time>
     </header>
-    {#if message.normalizedMarkdown}<div class="message-copy">{#each messageSegments as segment, index (`${segment.kind}:${index}`)}{#if segment.kind === "reference"}<span class="inline-reference">{segment.text}</span>{:else}{segment.text}{/if}{/each}</div>{/if}
+    {#if message.normalizedMarkdown}<div class="message-copy" data-selectable-content>{#each messageSegments as segment, index (`${segment.kind}:${index}`)}{#if segment.kind === "reference"}<span class="inline-reference">{segment.text}</span>{:else}{segment.text}{/if}{/each}</div>{/if}
     {#if message.attachmentIds.length > 0 || message.alsoSendToChannel}
       <div class="message-context">
         {#if message.attachmentIds.length > 0}<span>{t("chat.organization.images", message.attachmentIds.length)}</span>{/if}

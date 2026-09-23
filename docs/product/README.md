@@ -34,6 +34,10 @@ Ganbaru AI does not depend on a subscription or a hosted service operated by the
 
 Linux and Windows are the primary desktop targets. Android is the first mobile implementation. macOS and iOS follow after their build, signing, and platform contracts are ready. Shared domain logic does not imply identical capabilities on every operating system.
 
+### Text selection
+
+Interface labels, controls, and explanatory dialog text do not support text selection. User-authored content in reading or editing surfaces, editable fields, code, and terminal output remain selectable so people can copy and work with their data.
+
 ## Product areas
 
 The [feature index](../features/README.md) is the current capability map. The main product areas are:

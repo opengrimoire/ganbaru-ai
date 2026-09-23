@@ -1,4 +1,9 @@
 export const vaultSetup = {
+  welcomeTitle: "Free and open source",
+  licenseButton: "License (AGPL 3.0)",
+  sourceCode: "Source code",
+  sourceOpenError: "Could not open the source code. Visit github.com/opengrimoire/ganbaru-ai in your browser.",
+  continue: "Continue",
   title: "Choose where to store your data",
   intro:
     "If you are coming from a previous installation, import your existing Ganbaru AI folder.",
@@ -100,6 +105,8 @@ export const vaultHandoff = {
   networkAccessRevoked: "Phone connection access was removed.",
   networkAccessManual:
     "Ganbaru AI cannot request network access automatically on this Linux system.",
+  networkAccessDevelopmentUnavailable:
+    "This Linux development build cannot use the packaged firewall helper. Use a packaged build or configure the firewall manually to link a phone.",
   notLinked: "No devices linked",
   devicesHeading: "Devices",
   linkedTo: (device: string) => `Linked to ${device}`,
@@ -112,10 +119,12 @@ export const vaultHandoff = {
   createQr: "Show pairing QR code",
   linkAnotherDevice: "Link another device",
   enterCode: "Enter pairing code",
-  linkThisComputer: "Link this computer to another",
+  linkThisComputer: "or link this computer to another",
   codeDialogTitle: "Link this computer",
-  codeInstructions: "Paste the pairing code shown on the coordinating computer.",
+  codeInstructions: "On the other computer, open Settings > Data and copy its pairing code. Paste it here.",
   codePlaceholder: "Pairing code",
+  codeInvalid: "That pairing code is not valid. Copy a new code from the other computer and try again.",
+  codeExpired: "That pairing code has expired. Get a new code from the other computer and try again.",
   linkDevice: "Link device",
   copyCode: "Copy pairing code",
   codeCopied: "Pairing code copied",
@@ -145,7 +154,6 @@ export const vaultHandoff = {
     "Use this only if the owning device is permanently unavailable. Both copies are preserved, this device becomes writable, and the devices are unlinked. Later changes will not merge automatically.",
   workingOwnership: "Preparing this device...",
   workingRefresh: "Getting the latest changes...",
-  workingPairing: "Linking securely...",
   workingRequest: "Waiting for the other device...",
   linked: "Device linked.",
   linkedSuccessfully: (device: string) => `${device} was successfully linked.`,

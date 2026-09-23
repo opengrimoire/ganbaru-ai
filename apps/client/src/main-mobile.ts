@@ -196,7 +196,7 @@ async function mountMobileFocusOnboarding() {
   });
 }
 
-async function mountMobileVaultHandoffOnboarding() {
+async function mountMobileVaultHandoffOnboarding(vaultId: string) {
   const target = document.getElementById("app")!;
   const mobileAppModulePromise = import("./MobileApp.svelte");
   void mobileAppModulePromise.catch(() => undefined);
@@ -221,6 +221,7 @@ async function mountMobileVaultHandoffOnboarding() {
   onboardingView = mount(MobileVaultHandoffOnboarding, {
     target,
     props: {
+      vaultId,
       bootstrapReplicaOnLink: true,
       onComplete: openApp,
     },
@@ -251,8 +252,8 @@ const appPromise = (async () => {
     const { vaultHandoffOnboardingCompleted } = await import(
       "$lib/vault/handoff-onboarding"
     );
-    if (!vaultHandoffOnboardingCompleted(safeStorage())) {
-      return mountMobileVaultHandoffOnboarding();
+    if (!vaultHandoffOnboardingCompleted(safeStorage(), activeVault.vaultId)) {
+      return mountMobileVaultHandoffOnboarding(activeVault.vaultId);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

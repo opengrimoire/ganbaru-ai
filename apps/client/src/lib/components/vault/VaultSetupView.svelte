@@ -28,6 +28,7 @@
     type DataFolderInfo,
   } from "$lib/vault/state";
   import VaultSetupContent from "./VaultSetupContent.svelte";
+  import VaultWelcomeContent from "./VaultWelcomeContent.svelte";
 
   let {
     initialError = null,
@@ -49,6 +50,7 @@
   let busy = $state<"default" | "change" | "import" | null>(null);
   let setupError = $state<SetupError | null>(null);
   let isMaximized = $state(true);
+  let welcomeComplete = $state(false);
   const error = $derived(
     setupError ? formatDataFolderError(setupError.raw, setupError.action, t) : null,
   );
@@ -235,15 +237,19 @@
     </header>
 
     <div class="min-h-0 flex-1 bg-background">
-      <VaultSetupContent
-        intro={t("vaultSetup.intro")}
-        developmentWarning={defaultLocation?.developmentBuild
-          ? t("vaultSetup.developmentBuildWarning", defaultLocation.folderName)
-          : null}
-        location={defaultLocation?.path ?? fallbackDefaultPath}
-        actions={setupActions}
-        {error}
-      />
+      {#if !welcomeComplete}
+        <VaultWelcomeContent onContinue={() => { welcomeComplete = true; }} />
+      {:else}
+        <VaultSetupContent
+          intro={t("vaultSetup.intro")}
+          developmentWarning={defaultLocation?.developmentBuild
+            ? t("vaultSetup.developmentBuildWarning", defaultLocation.folderName)
+            : null}
+          location={defaultLocation?.path ?? fallbackDefaultPath}
+          actions={setupActions}
+          {error}
+        />
+      {/if}
     </div>
   </div>
 

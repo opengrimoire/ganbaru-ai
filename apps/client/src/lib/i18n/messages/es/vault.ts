@@ -9,6 +9,11 @@ import type {
 import type { MessageShape } from "../types";
 
 export const vaultSetup = {
+  welcomeTitle: "Gratis y de código abierto",
+  licenseButton: "Licencia (AGPL 3.0)",
+  sourceCode: "Código fuente",
+  sourceOpenError: "No se pudo abrir el código fuente. Visita github.com/opengrimoire/ganbaru-ai en tu navegador.",
+  continue: "Continuar",
   title: "Elige dónde guardar tus datos",
   intro:
     "Si vienes de una instalación anterior, importa tu carpeta de Ganbaru AI existente.",
@@ -110,6 +115,8 @@ export const vaultHandoff = {
   networkAccessRevoked: "Se quitó el acceso para conectar el teléfono.",
   networkAccessManual:
     "Ganbaru AI no puede solicitar acceso a la red automáticamente en este sistema Linux.",
+  networkAccessDevelopmentUnavailable:
+    "Esta versión de desarrollo para Linux no puede usar el asistente de firewall empaquetado. Usa una versión empaquetada o configura el firewall manualmente para vincular un teléfono.",
   notLinked: "No hay dispositivos vinculados",
   devicesHeading: "Dispositivos",
   linkedTo: (device: string) => `Vinculado con ${device}`,
@@ -122,10 +129,12 @@ export const vaultHandoff = {
   createQr: "Mostrar código QR de vinculación",
   linkAnotherDevice: "Vincular otro dispositivo",
   enterCode: "Introducir código de vinculación",
-  linkThisComputer: "Vincular esta computadora con otra",
+  linkThisComputer: "o vincula esta computadora con otra",
   codeDialogTitle: "Vincular esta computadora",
-  codeInstructions: "Pega el código mostrado en la computadora coordinadora.",
+  codeInstructions: "En la otra computadora, abre Ajustes > Datos y copia su código de vinculación. Pégalo aquí.",
   codePlaceholder: "Código de vinculación",
+  codeInvalid: "Ese código de vinculación no es válido. Copia uno nuevo de la otra computadora e inténtalo de nuevo.",
+  codeExpired: "Ese código de vinculación venció. Obtén uno nuevo de la otra computadora e inténtalo de nuevo.",
   linkDevice: "Vincular dispositivo",
   copyCode: "Copiar código de vinculación",
   codeCopied: "Código de vinculación copiado",
@@ -155,7 +164,6 @@ export const vaultHandoff = {
     "Usa esto solo si el dispositivo propietario ya no está disponible. Ambas copias se conservan, este dispositivo podrá escribir y los dispositivos se desvincularán. Los cambios posteriores no se combinarán automáticamente.",
   workingOwnership: "Preparando este dispositivo...",
   workingRefresh: "Obteniendo los últimos cambios...",
-  workingPairing: "Vinculando de forma segura...",
   workingRequest: "Esperando al otro dispositivo...",
   linked: "Dispositivo vinculado.",
   linkedSuccessfully: (device: string) => `${device} se vinculó correctamente.`,

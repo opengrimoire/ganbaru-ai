@@ -208,8 +208,9 @@ export const general = {
     licenseDescription: "Ganbaru AI is licensed under AGPL 3.0.",
     viewLicense: "View LICENSE",
     summaryHeading: "TL;DR",
-    summary:
-      "Free and open source. You can use, modify, share, and sell Ganbaru AI. If you distribute or host a modified version, you must provide the source code and license that version under AGPL 3.0. Patent rights from contributors are included. The app is provided without warranty, and authors are not liable for damages.",
+    summaryLead: "Free and open source.",
+    summaryDetails:
+      "You can use, modify, share, and sell Ganbaru AI. If you distribute or host a modified version, you must provide the source code and license that version under AGPL 3.0. Patent rights from contributors are included. The app is provided without warranty, and authors are not liable for damages.",
     acknowledgmentsHeading: "Acknowledgments",
     soundEffects: "Sound effects",
     soundEffectsDescriptionPrefix: "Sound effects are sourced from",

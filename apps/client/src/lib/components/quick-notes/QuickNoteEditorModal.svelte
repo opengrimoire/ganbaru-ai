@@ -610,6 +610,7 @@
       </div>
       <div
         bind:this={editor}
+        data-selectable-content
         class="quick-note-content relative my-3 min-h-0 flex-1 overflow-y-auto rounded-md py-1 text-[0.92rem] leading-relaxed outline-none"
         class:cursor-default={readOnly}
         role="textbox"
