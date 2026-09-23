@@ -276,7 +276,7 @@
     onpointerdown={preserveTouchSelection}
     onclick={() => onToggleAnnotation("underline")}
   >
-    <Underline class="size-3.5" strokeWidth={toolbarIconStrokeWidth} aria-hidden="true" />
+    <Underline class="relative top-[0.3px] size-3.5" strokeWidth={toolbarIconStrokeWidth} aria-hidden="true" />
   </button>
   <button
     type="button"
@@ -289,7 +289,7 @@
     onpointerdown={preserveTouchSelection}
     onclick={() => onToggleAnnotation("strikethrough")}
   >
-    <Strikethrough class="size-3.5" strokeWidth={toolbarIconStrokeWidth} aria-hidden="true" />
+    <Strikethrough class="relative top-[0.3px] size-3.5" strokeWidth={toolbarIconStrokeWidth} aria-hidden="true" />
   </button>
   <button
     type="button"
