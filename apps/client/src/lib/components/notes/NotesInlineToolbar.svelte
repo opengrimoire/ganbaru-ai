@@ -18,8 +18,6 @@
   import MessageSquare from "@lucide/svelte/icons/message-square";
   import PencilLine from "@lucide/svelte/icons/pencil-line";
   import Sigma from "@lucide/svelte/icons/sigma";
-  import Strikethrough from "@lucide/svelte/icons/strikethrough";
-  import Underline from "@lucide/svelte/icons/underline";
   import { tick } from "svelte";
 
   let {
@@ -44,6 +42,7 @@
   const toolbarButtonBase =
     "flex size-8 items-center justify-center rounded outline-none focus-visible:ring-2 focus-visible:ring-ring";
   const toolbarIconStrokeWidth = 3;
+  const customFormattingIconStrokeWidth = 1.5;
   let toolbarElement: HTMLDivElement;
   let colorTriggerElement: HTMLButtonElement;
   let colorPanelElement = $state<HTMLDivElement | null>(null);
@@ -276,7 +275,20 @@
     onpointerdown={preserveTouchSelection}
     onclick={() => onToggleAnnotation("underline")}
   >
-    <Underline class="relative top-[0.3px] size-3.5" strokeWidth={toolbarIconStrokeWidth} aria-hidden="true" />
+    <svg
+      class="size-3.5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width={customFormattingIconStrokeWidth}
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M5.5 4.5v7.25c0 3.75 2.5 5.75 6.5 5.75s6.5-2 6.5-5.75V4.5" />
+      <path d="M4.5 20.5h15" />
+    </svg>
   </button>
   <button
     type="button"
@@ -289,7 +301,20 @@
     onpointerdown={preserveTouchSelection}
     onclick={() => onToggleAnnotation("strikethrough")}
   >
-    <Strikethrough class="relative top-[0.3px] size-3.5" strokeWidth={toolbarIconStrokeWidth} aria-hidden="true" />
+    <svg
+      class="size-3.5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width={customFormattingIconStrokeWidth}
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M18 5.5c-1.4-1.2-3.4-1.8-6-1.8-4 0-6.5 1.7-6.5 4.4 0 2.2 2.1 3.5 6.5 4.3 4.4.8 6.5 2 6.5 4.2 0 2.8-2.5 4.5-6.5 4.5-2.6 0-4.6-.6-6-1.8" />
+      <path d="M4 12h16" />
+    </svg>
   </button>
   <button
     type="button"
