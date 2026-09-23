@@ -43,6 +43,7 @@
     "flex size-8 items-center justify-center rounded outline-none focus-visible:ring-2 focus-visible:ring-ring";
   const toolbarIconStrokeWidth = 3;
   const customFormattingIconStrokeWidth = 1.5;
+  const strikeLineStrokeWidth = 1.2;
   let toolbarElement: HTMLDivElement;
   let colorTriggerElement: HTMLButtonElement;
   let colorPanelElement = $state<HTMLDivElement | null>(null);
@@ -312,8 +313,8 @@
       aria-hidden="true"
       focusable="false"
     >
-      <path d="M18 5.5c-1.4-1.2-3.4-1.8-6-1.8-4 0-6.5 1.7-6.5 4.4 0 2.2 2.1 3.5 6.5 4.3 4.4.8 6.5 2 6.5 4.2 0 2.8-2.5 4.5-6.5 4.5-2.6 0-4.6-.6-6-1.8" />
-      <path d="M4 12h16" />
+      <path d="M17.5 5.5c-1.3-1.2-3.1-1.8-5.5-1.8-3.6 0-5.9 1.7-5.9 4.4 0 2.2 1.9 3.5 5.9 4.3 4 .8 5.9 2 5.9 4.2 0 2.8-2.3 4.5-5.9 4.5-2.4 0-4.2-.6-5.5-1.8" />
+      <path d="M3 12.25h18" stroke-width={strikeLineStrokeWidth} />
     </svg>
   </button>
   <button
