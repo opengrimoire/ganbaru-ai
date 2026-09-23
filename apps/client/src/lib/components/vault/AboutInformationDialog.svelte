@@ -43,10 +43,10 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="fixed z-90 flex items-center justify-center" style="left: var(--visual-viewport-offset-left); top: var(--visual-viewport-offset-top); width: var(--visual-viewport-width); height: var(--visual-viewport-height); padding: calc(var(--safe-area-top) + 1rem) calc(var(--safe-area-right) + 1rem) calc(var(--safe-area-bottom) + 1rem) calc(var(--safe-area-left) + 1rem);" onclick={onClose}>
-  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
+  <div class="absolute inset-0 bg-black/25 backdrop-blur-sm"></div>
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div bind:this={dialog} role="dialog" aria-modal="true" aria-label={title} tabindex="-1" class="relative z-10 flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border/70 bg-card py-6 pr-2 pl-6 text-card-foreground shadow-2xl outline-none sm:py-8 sm:pr-3 sm:pl-8" style="max-height: min(80%, 48rem);" onclick={(event) => event.stopPropagation()} onkeydown={handleKeydown}>
+  <div bind:this={dialog} role="dialog" aria-modal="true" aria-label={title} tabindex="-1" class="relative z-10 flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border/70 bg-card py-6 pr-2 pl-6 text-card-foreground shadow-lg outline-none sm:py-8 sm:pr-3 sm:pl-8" style="max-height: min(80%, 48rem);" onclick={(event) => event.stopPropagation()} onkeydown={handleKeydown}>
     <button type="button" aria-label={t("common.close")} class="absolute top-5 right-5 z-10 flex size-10 items-center justify-center rounded-full bg-card/90 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:top-6" onclick={onClose}>
       <X size={18} strokeWidth={1.8} aria-hidden="true" />
     </button>
