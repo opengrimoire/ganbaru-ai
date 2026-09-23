@@ -64,6 +64,19 @@ describe("notes controlled text input", () => {
     });
   });
 
+  it("cuts only the selected text and keeps neighboring Unicode intact", () => {
+    expect(planNotesControlledTextEdit({
+      inputType: "deleteByCut",
+      data: null,
+      text: "A😀 selection B",
+      selectionStart: 4,
+      selectionEnd: 14,
+    })).toEqual({
+      text: "A😀 B",
+      selection: { start: 4, end: 4 },
+    });
+  });
+
   it("inserts controlled soft newlines", () => {
     expect(planNotesControlledTextEdit({
       inputType: "insertLineBreak",

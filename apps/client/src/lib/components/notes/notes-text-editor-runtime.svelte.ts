@@ -32,11 +32,8 @@ import {
   restoreNotesEditableSelection,
   type NotesTextSelection,
 } from "$lib/notes/editor-selection";
-import {
-  planNotesInlineToolbarPlacement,
-  type NotesInlineToolbarPlacement,
-} from "$lib/notes/inline-toolbar";
 import { shouldRestoreNotesEditorFocusAfterLazyLoad } from "$lib/notes/lazy-editor-focus";
+import { notesTextContextMenuSelectionAtPoint } from "$lib/notes/text-context-menu";
 import {
   buildDateMentionTargets,
   detectPageMentionQuery,
@@ -91,7 +88,7 @@ export interface NotesTextEditorRuntimeSource {
   focusBlockId: () => string | null;
   focusRequestId: () => number;
   focusSelection: () => NotesTextSelection | null;
-  canOpenInlineToolbar: () => boolean;
+  contextMenuOpen: () => boolean;
   linkEditorOpen: () => boolean;
   mentionOpen: () => boolean;
   slashOpen: () => boolean;
@@ -137,7 +134,7 @@ export interface NotesTextEditorControllerSource {
 }
 
 export interface NotesTextEditorVisibleControls {
-  inlineToolbar: boolean;
+  textContextMenu: boolean;
   linkEditor: boolean;
   mentionMenu: boolean;
   slashMenu: boolean;
@@ -171,7 +168,7 @@ export function requestedNotesTextControls(
   visible: NotesTextEditorVisibleControls,
 ): NotesTextControlKind[] {
   const controls: NotesTextControlKind[] = [];
-  if (visible.inlineToolbar) controls.push("inline-toolbar");
+  if (visible.textContextMenu) controls.push("text-context-menu");
   if (visible.linkEditor) controls.push("link-editor");
   if (visible.mentionMenu) controls.push("mention-menu");
   if (visible.slashMenu) controls.push("slash-menu");
@@ -190,8 +187,6 @@ export function requestedNotesTextControls(
  */
 export class NotesTextEditorRuntime {
   editor: HTMLDivElement | null = $state(null);
-  inlineToolbarElement: HTMLDivElement | null = $state(null);
-  inlineToolbarPlacement: NotesInlineToolbarPlacement | null = $state(null);
   textSelection = $state<NotesTextSelection>({ start: 0, end: 0 });
   compositionActive = $state(false);
   controlLoadStates = $state<Partial<Record<
@@ -205,7 +200,7 @@ export class NotesTextEditorRuntime {
   constructor(private readonly source: NotesTextEditorRuntimeSource) {
     $effect(() => {
       const requested = requestedNotesTextControls({
-        inlineToolbar: source.canOpenInlineToolbar(),
+        textContextMenu: source.contextMenuOpen(),
         linkEditor: source.linkEditorOpen(),
         mentionMenu: source.mentionOpen(),
         slashMenu: source.slashOpen(),
@@ -245,30 +240,6 @@ export class NotesTextEditorRuntime {
       });
     });
 
-    $effect(() => {
-      void this.textSelection.start;
-      void this.textSelection.end;
-      void source.block().id;
-      if (!source.canOpenInlineToolbar()) {
-        this.inlineToolbarPlacement = null;
-        return;
-      }
-      this.scheduleInlineToolbarPlacementRefresh();
-    });
-
-    $effect(() => {
-      if (!source.canOpenInlineToolbar()) return;
-      const refresh = () => this.refreshInlineToolbarPlacement();
-      const syncSelection = () => this.syncEditorSelectionFromDocument();
-      document.addEventListener("selectionchange", syncSelection);
-      window.addEventListener("resize", refresh);
-      window.addEventListener("scroll", refresh, true);
-      return () => {
-        document.removeEventListener("selectionchange", syncSelection);
-        window.removeEventListener("resize", refresh);
-        window.removeEventListener("scroll", refresh, true);
-      };
-    });
   }
 
   requestControl(kind: NotesTextControlKind, retry = false): void {
@@ -285,7 +256,7 @@ export class NotesTextEditorRuntime {
         ...this.controlLoadStates,
         [kind]: resolveLazyComponentLoad(latest, kind, loadingState.requestId, component),
       };
-      if (kind === "inline-toolbar" || kind === "link-editor") {
+      if (kind === "link-editor") {
         void tick().then(() => {
           if (shouldRestoreNotesEditorFocusAfterLazyLoad({
             requestedWhileFocused,
@@ -308,25 +279,6 @@ export class NotesTextEditorRuntime {
     });
   }
 
-  refreshInlineToolbarPlacement(): void {
-    if (!this.source.canOpenInlineToolbar() || !this.editor) {
-      this.inlineToolbarPlacement = null;
-      return;
-    }
-    const selectionRect = notesEditableSelectionViewportRect(this.editor);
-    if (!selectionRect) return;
-    this.inlineToolbarPlacement = planNotesInlineToolbarPlacement({
-      selectionRect,
-      toolbarWidth: this.inlineToolbarElement?.offsetWidth ?? 320,
-      toolbarHeight: this.inlineToolbarElement?.offsetHeight ?? 40,
-      viewport: { width: window.innerWidth, height: window.innerHeight },
-    });
-  }
-
-  scheduleInlineToolbarPlacementRefresh(): void {
-    void tick().then(() => this.refreshInlineToolbarPlacement());
-  }
-
   setTrackedSelection(selection: NotesTextSelection): void {
     this.textSelection = selection;
     this.#hasTextSelection = true;
@@ -340,15 +292,6 @@ export class NotesTextEditorRuntime {
     );
     restoreNotesEditableSelection(this.editor, safeSelection);
     this.setTrackedSelection(safeSelection);
-    this.refreshInlineToolbarPlacement();
-  }
-
-  syncEditorSelectionFromDocument(): void {
-    if (!this.editor) return;
-    const selection = notesTextSelectionFromEditableRoot(this.editor);
-    if (!selection) return;
-    this.setTrackedSelection(selection);
-    this.scheduleInlineToolbarPlacementRefresh();
   }
 
   async focusEditorWithSelection(start: number, end: number): Promise<void> {
@@ -371,6 +314,7 @@ export function createNotesTextEditorRuntime(
 /** Owns all stateful editing, command routing, and DOM reconciliation for one text block. */
 export class NotesTextEditorController {
   readonly runtime: NotesTextEditorRuntime;
+  #rightClickSelection: NotesTextSelection | null = null;
 
   slashOpen = $state(false);
   slashActiveIndex = $state(0);
@@ -382,6 +326,9 @@ export class NotesTextEditorController {
   linkRange = $state({ start: 0, end: 0, url: null as string | null });
   linkUrlInput = $state("");
   linkError = $state<string | null>(null);
+  contextMenuOpen = $state(false);
+  contextMenuPoint = $state<{ x: number; y: number } | null>(null);
+  contextMenuFocusOnOpen = $state(false);
   inlineEquationErrorReason = $state<NotesInlineEquationConversionError | null>(null);
   templateControlsOpen = $state(false);
   buttonControlsOpen = $state(false);
@@ -393,7 +340,7 @@ export class NotesTextEditorController {
       focusBlockId: source.focusBlockId,
       focusRequestId: source.focusRequestId,
       focusSelection: source.focusSelection,
-      canOpenInlineToolbar: () => this.canOpenInlineToolbar,
+      contextMenuOpen: () => this.contextMenuOpen,
       linkEditorOpen: () => this.linkEditorOpen,
       mentionOpen: () => this.mentionOpen,
       slashOpen: () => this.slashOpen,
@@ -425,9 +372,10 @@ export class NotesTextEditorController {
   get currentTextLinkRange() {
     return blockTextLinkRangeForSelection(this.block, this.textSelection.start, this.textSelection.end);
   }
-  get canOpenInlineToolbar(): boolean {
-    return this.canUseInlineFormatting && this.textSelection.start !== this.textSelection.end;
+  get hasTextSelection(): boolean {
+    return this.textSelection.start !== this.textSelection.end;
   }
+  get canFormatSelection(): boolean { return this.canUseInlineFormatting && this.hasTextSelection; }
   get canOpenLinkEditor(): boolean {
     return this.canUseLinks && (
       this.textSelection.start !== this.textSelection.end
@@ -583,7 +531,7 @@ export class NotesTextEditorController {
   }
 
   createInlineCommentFromSelection(): void {
-    if (!this.canOpenInlineToolbar) return;
+    if (!this.canFormatSelection) return;
     const { start, end } = this.textSelection;
     this.slashOpen = false;
     this.mentionQuery = null;
@@ -592,7 +540,7 @@ export class NotesTextEditorController {
   }
 
   createInlineSuggestionFromSelection(): void {
-    if (!this.canOpenInlineToolbar) return;
+    if (!this.canFormatSelection) return;
     const { start, end } = this.textSelection;
     this.slashOpen = false;
     this.mentionQuery = null;
@@ -826,7 +774,149 @@ export class NotesTextEditorController {
     const selection = notesTextSelectionFromEditableRoot(target);
     if (!selection) return;
     this.runtime.setTrackedSelection(selection);
-    this.runtime.scheduleInlineToolbarPlacementRefresh();
+  };
+
+  captureContextMenuSelection = (event: PointerEvent): void => {
+    if (event.button !== 2 || !(event.currentTarget instanceof HTMLElement)) return;
+    this.#rightClickSelection = null;
+    const editor = event.currentTarget;
+    const selection = editor.ownerDocument.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+    if (!selection.anchorNode || !selection.focusNode) return;
+    if (!editor.contains(selection.anchorNode) || !editor.contains(selection.focusNode)) return;
+    const rects = Array.from(selection.getRangeAt(0).getClientRects()).map((rect) => ({
+      left: rect.left,
+      right: rect.right,
+      top: rect.top,
+      bottom: rect.bottom,
+    }));
+    if (notesTextContextMenuSelectionAtPoint(rects, { x: event.clientX, y: event.clientY })) {
+      this.#rightClickSelection = notesTextSelectionFromEditableRoot(editor);
+    }
+  };
+
+  openContextMenu = (event: MouseEvent): void => {
+    if (!(event.currentTarget instanceof HTMLElement)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const preservedSelection = this.#rightClickSelection;
+    this.#rightClickSelection = null;
+    this.syncTextSelection(event.currentTarget);
+    if (preservedSelection) this.runtime.restoreTrackedSelection(preservedSelection);
+    const keyboardPosition = event.clientX === 0 && event.clientY === 0;
+    this.contextMenuFocusOnOpen = keyboardPosition;
+    if (keyboardPosition) {
+      const selection = event.currentTarget.ownerDocument.getSelection();
+      const caretRect = selection?.rangeCount && event.currentTarget.contains(selection.anchorNode)
+        ? selection.getRangeAt(0).getBoundingClientRect()
+        : null;
+      const anchor = notesEditableSelectionViewportRect(event.currentTarget)
+        ?? (caretRect && (caretRect.width > 0 || caretRect.height > 0)
+          ? caretRect
+          : event.currentTarget.getBoundingClientRect());
+      this.contextMenuPoint = { x: anchor.left, y: anchor.bottom };
+    } else {
+      this.contextMenuPoint = { x: event.clientX, y: event.clientY };
+    }
+    this.contextMenuOpen = true;
+    this.slashOpen = false;
+    this.mentionQuery = null;
+  };
+
+  closeContextMenu = (restoreFocus = false): void => {
+    this.contextMenuOpen = false;
+    if (restoreFocus) {
+      const { start, end } = this.textSelection;
+      void this.runtime.focusEditorWithSelection(start, end);
+    }
+  };
+
+  #selectedHtml(): string | null {
+    const editor = this.runtime.editor;
+    if (!editor) return null;
+    const selection = editor.ownerDocument.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null;
+    if (!selection.anchorNode || !selection.focusNode) return null;
+    if (!editor.contains(selection.anchorNode) || !editor.contains(selection.focusNode)) return null;
+    const container = editor.ownerDocument.createElement("div");
+    container.append(selection.getRangeAt(0).cloneContents());
+    return container.innerHTML || null;
+  }
+
+  copySelectedText = async (): Promise<void> => {
+    const { start, end } = this.textSelection;
+    if (start === end) return;
+    if (!navigator.clipboard) throw new Error("Notes text clipboard is unavailable");
+    const plainText = this.text.slice(start, end);
+    const html = this.#selectedHtml();
+    if (html && navigator.clipboard.write && typeof ClipboardItem !== "undefined") {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({
+          "text/plain": new Blob([plainText], { type: "text/plain" }),
+          "text/html": new Blob([html], { type: "text/html" }),
+        })]);
+        return;
+      } catch (error) {
+        console.warn("Notes rich clipboard write failed; trying plain text", error);
+      }
+    }
+    await navigator.clipboard.writeText(plainText);
+  };
+
+  cutSelectedText = async (): Promise<void> => {
+    const { start, end } = this.textSelection;
+    if (start === end) return;
+    await this.copySelectedText();
+    const edit = planNotesControlledTextEdit({
+      inputType: "deleteByCut",
+      data: null,
+      text: this.text,
+      selectionStart: start,
+      selectionEnd: end,
+    });
+    if (!edit) return;
+    this.source.onTextInput(this.block.id, edit.text, edit.selection);
+    await this.runtime.focusEditorWithSelection(edit.selection.start, edit.selection.end);
+  };
+
+  pasteFromClipboard = async (plainOnly = false): Promise<void> => {
+    if (!navigator.clipboard) throw new Error("Notes text clipboard is unavailable");
+    const { start, end } = this.textSelection;
+    if (!plainOnly && this.block.type !== "code" && navigator.clipboard.read) {
+      let html: string | null = null;
+      try {
+        const items = await navigator.clipboard.read();
+        const htmlItem = items.find((item) => item.types.includes("text/html"));
+        if (htmlItem) html = await (await htmlItem.getType("text/html")).text();
+      } catch (error) {
+        console.warn("Notes rich clipboard read failed; trying plain text", error);
+      }
+      if (html?.trim() && await Promise.resolve(this.source.onPasteRichHtml(
+        this.block.id,
+        start,
+        end,
+        html,
+      ))) return;
+    }
+    const plainText = normalizeNotesClipboardPlainText(await navigator.clipboard.readText());
+    if (!plainText) return;
+    const handled = await Promise.resolve(this.source.onPastePlainText(
+      this.block.id,
+      start,
+      end,
+      plainText,
+    ));
+    if (handled) return;
+    const edit = planNotesControlledTextEdit({
+      inputType: "insertText",
+      data: plainText,
+      text: this.text,
+      selectionStart: start,
+      selectionEnd: end,
+    });
+    if (!edit) return;
+    this.source.onTextInput(this.block.id, edit.text, edit.selection);
+    await this.runtime.focusEditorWithSelection(edit.selection.start, edit.selection.end);
   };
 
   openLinkEditorFromEditor(target: EventTarget | null): boolean {
@@ -986,6 +1076,7 @@ export class NotesTextEditorController {
 
   handleEditorFocus = (): void => {
     if (this.source.focusBlockId() !== this.block.id) this.source.onFocusBlock(this.block.id);
+    this.runtime.requestControl("text-context-menu");
   };
 
   selectMention = async (target: NotesMentionTarget): Promise<void> => {

@@ -120,7 +120,7 @@ export type LoadedNotesEditorPanel =
 
 export type NotesTextControlKind =
   | "block-insert-menu"
-  | "inline-toolbar"
+  | "text-context-menu"
   | "link-editor"
   | "mention-menu"
   | "slash-menu"
@@ -129,7 +129,7 @@ export type NotesTextControlKind =
 
 export type LoadedNotesTextControl =
   | { kind: "block-insert-menu"; component: typeof import("./NotesBlockInsertMenu.svelte").default }
-  | { kind: "inline-toolbar"; component: typeof import("./NotesInlineToolbar.svelte").default }
+  | { kind: "text-context-menu"; component: typeof import("./NotesTextContextMenu.svelte").default }
   | { kind: "link-editor"; component: typeof import("./NotesLinkEditor.svelte").default }
   | { kind: "mention-menu"; component: typeof import("./NotesMentionMenu.svelte").default }
   | { kind: "slash-menu"; component: typeof import("./NotesSlashMenu.svelte").default }
@@ -208,8 +208,8 @@ const EDITOR_PANEL_IMPORTERS = {
 const TEXT_CONTROL_IMPORTERS = {
   "block-insert-menu": () => import("./NotesBlockInsertMenu.svelte")
     .then((module) => ({ default: { kind: "block-insert-menu" as const, component: module.default } })),
-  "inline-toolbar": () => import("./NotesInlineToolbar.svelte")
-    .then((module) => ({ default: { kind: "inline-toolbar" as const, component: module.default } })),
+  "text-context-menu": () => import("./NotesTextContextMenu.svelte")
+    .then((module) => ({ default: { kind: "text-context-menu" as const, component: module.default } })),
   "link-editor": () => import("./NotesLinkEditor.svelte")
     .then((module) => ({ default: { kind: "link-editor" as const, component: module.default } })),
   "mention-menu": () => import("./NotesMentionMenu.svelte")

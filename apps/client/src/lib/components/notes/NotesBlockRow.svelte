@@ -932,6 +932,7 @@
           {onKeyboardAction}
           {onUndo}
           {onRedo}
+          {onAddBelow}
           {onConvert}
           {onConvertToToggleHeading}
           {onColorChange}

@@ -56,7 +56,7 @@ const EDITOR_PANELS = [
 
 const TEXT_CONTROLS = [
   "block-insert-menu",
-  "inline-toolbar",
+  "text-context-menu",
   "link-editor",
   "mention-menu",
   "slash-menu",

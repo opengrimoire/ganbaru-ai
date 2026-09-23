@@ -1,7 +1,7 @@
 <script lang="ts">
-  import LinkIcon from "@lucide/svelte/icons/link";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type { NotesHeadingBlockType } from "$lib/notes/block-factory";
+  import type { NotesBlockInsertRequest } from "$lib/notes/block-insertion";
   import {
     notesMentionMenuDomId,
     notesRichTextEditorActiveDescendant,
@@ -13,10 +13,6 @@
   import { notesRichTextEditorClass } from "$lib/notes/block-editor-ui";
   import type { NotesKeyboardAction } from "$lib/notes/block-keyboard";
   import type { NotesTextSelection } from "$lib/notes/editor-selection";
-  import {
-    notesInlineToolbarWrapperClass,
-    notesInlineToolbarWrapperStyle,
-  } from "$lib/notes/inline-toolbar";
   import {
     type NotesDateMentionTarget,
     type NotesNamedMentionTarget,
@@ -66,6 +62,7 @@
     onKeyboardAction,
     onUndo,
     onRedo,
+    onAddBelow,
     onConvert,
     onConvertToToggleHeading,
     onColorChange,
@@ -165,6 +162,7 @@
     onKeyboardAction: (blockId: string, action: NotesKeyboardAction) => void;
     onUndo: () => Promise<void> | void;
     onRedo: () => Promise<void> | void;
+    onAddBelow: (blockId: string, request?: NotesBlockInsertRequest) => void;
     onConvert: (blockId: string, type: NotesBlockType, clearText?: boolean) => void;
     onConvertToToggleHeading: (
       blockId: string,
@@ -232,10 +230,12 @@
   const runtime = controller.runtime;
   const text = $derived(controller.text);
   const editableRichText = $derived(controller.editableRichText);
-  const canOpenInlineToolbar = $derived(controller.canOpenInlineToolbar);
   const canOpenLinkEditor = $derived(controller.canOpenLinkEditor);
+  const contextMenuOpen = $derived(controller.contextMenuOpen);
+  const contextMenuPoint = $derived(controller.contextMenuPoint);
+  const hasTextSelection = $derived(controller.hasTextSelection);
+  const canFormatSelection = $derived(controller.canFormatSelection);
   const currentTextAnnotationRange = $derived(controller.currentTextAnnotationRange);
-  const inlineToolbarPlacement = $derived(runtime.inlineToolbarPlacement);
   const controlLoadStates = $derived(runtime.controlLoadStates);
   const mentionOpen = $derived(controller.mentionOpen);
   const mentionMatches = $derived(controller.mentionMatches);
@@ -318,41 +318,6 @@
     <button class="mb-1 min-h-8 rounded-md border border-border px-2 text-[0.8rem] text-foreground hover:bg-accent" type="button" onclick={controller.openButtonControls}>{controlLoadStates["button-controls"]?.status === "failed" ? t("common.retry") : text || t("notes.blockType.button")}</button>
   {/if}
 {/if}
-{#if canOpenInlineToolbar}
-  <div
-    bind:this={runtime.inlineToolbarElement}
-    class={notesInlineToolbarWrapperClass(inlineToolbarPlacement)}
-    style={notesInlineToolbarWrapperStyle(inlineToolbarPlacement)}
-    data-placement={inlineToolbarPlacement?.mode ?? "measuring"}
-  >
-    {#if controlLoadStates["inline-toolbar"]?.status === "ready" && controlLoadStates["inline-toolbar"].component.kind === "inline-toolbar"}
-      {@const NotesInlineToolbar = controlLoadStates["inline-toolbar"].component.component}
-      <NotesInlineToolbar
-      annotations={currentTextAnnotationRange.annotations}
-      onToggleAnnotation={toggleTextAnnotation}
-      onColorSelect={applyTextColor}
-      onCreateEquation={insertInlineEquationFromSelection}
-      onCreateComment={createInlineCommentFromSelection}
-      onCreateSuggestion={createInlineSuggestionFromSelection}
-      onOpenLink={openLinkEditorFromButton}
-      />
-    {:else if controlLoadStates["inline-toolbar"]?.status === "failed"}
-      <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem]" type="button" onclick={() => runtime.requestControl("inline-toolbar", true)}>{t("common.retry")}</button>
-    {/if}
-  </div>
-{:else if canOpenLinkEditor}
-  <div class="mb-1 flex justify-end">
-    <button
-      type="button"
-      class="flex size-7 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
-      aria-label={t("notes.openLinkEditor")}
-      title={t("notes.openLinkEditor")}
-      onclick={openLinkEditorFromButton}
-    >
-      <LinkIcon class="size-3.5" aria-hidden="true" />
-    </button>
-  </div>
-{/if}
 <div
   bind:this={runtime.editor}
   id={notesRichTextEditorDomId(block.id)}
@@ -384,6 +349,8 @@
   oncompositionstart={controller.handleCompositionStart}
   oncompositionend={handleCompositionEnd}
   onpaste={handlePaste}
+  onpointerdown={controller.captureContextMenuSelection}
+  oncontextmenu={controller.openContextMenu}
   onkeyup={(event) => syncTextSelection(event.currentTarget)}
   onclick={(event) => syncTextSelection(event.currentTarget)}
   onpointerup={(event) => syncTextSelection(event.currentTarget)}
@@ -391,6 +358,36 @@
   onfocus={handleEditorFocus}
   onblur={handleEditorBlur}
 ><NotesRichTextInline richText={editableRichText} {commentAnchors} {suggestionAnchors} /></div>
+{#if contextMenuOpen && contextMenuPoint}
+  {#if controlLoadStates["text-context-menu"]?.status === "ready" && controlLoadStates["text-context-menu"].component.kind === "text-context-menu"}
+    {@const NotesTextContextMenu = controlLoadStates["text-context-menu"].component.component}
+    <NotesTextContextMenu
+      position={contextMenuPoint}
+      focusOnOpen={controller.contextMenuFocusOnOpen}
+      annotations={currentTextAnnotationRange.annotations}
+      blockType={block.type}
+      hasSelection={hasTextSelection}
+      {canFormatSelection}
+      canOpenLink={canOpenLinkEditor}
+      onToggleAnnotation={toggleTextAnnotation}
+      onColorSelect={applyTextColor}
+      onCreateEquation={insertInlineEquationFromSelection}
+      onCreateComment={createInlineCommentFromSelection}
+      onCreateSuggestion={createInlineSuggestionFromSelection}
+      onOpenLink={openLinkEditorFromButton}
+      onCopyBlockLink={() => onCopyLink(block.id)}
+      onConvert={(type) => onConvert(block.id, type)}
+      onInsert={(type) => onAddBelow(block.id, { kind: "block", blockType: type })}
+      onCut={controller.cutSelectedText}
+      onCopy={controller.copySelectedText}
+      onPaste={() => controller.pasteFromClipboard()}
+      onPastePlainText={() => controller.pasteFromClipboard(true)}
+      onClose={controller.closeContextMenu}
+    />
+  {:else if controlLoadStates["text-context-menu"]?.status === "failed"}
+    <button class="fixed z-50 min-h-8 rounded-md border border-border bg-popover px-2 text-[0.8rem]" style:left={`${contextMenuPoint.x}px`} style:top={`${contextMenuPoint.y}px`} type="button" onclick={() => runtime.requestControl("text-context-menu", true)}>{t("common.retry")}</button>
+  {/if}
+{/if}
 {#if mentionOpen || slashOpen}
   <p id={notesRichTextEditorStatusDomId(block.id)} class="sr-only" role="status">
     {mentionOpen

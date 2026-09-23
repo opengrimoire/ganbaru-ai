@@ -7,6 +7,7 @@ Notes testing covers pure editing plans, canonical Rust commands, persistence or
 Using a scratch page with other pages and relevant project objects available, verify:
 
 - Typing, selection replacement, bold, italic, underline, strike, code, colors, links, mentions, and equations persist after reload.
+- Selecting text alone leaves the editor unobstructed. Right-click selected text and confirm its highlight stays visible while the menu and its submenus are open; format it without losing the range. Right-click at a caret to convert or insert a block. Check the Format, Paragraph, Insert, color, link, and clipboard actions near viewport edges and with Escape.
 - Enter splits at start, middle, end, and selected range while preserving rich annotations on the correct side.
 - Shift+Enter inserts a soft break, and code-block Enter behavior remains distinct.
 - Empty list, to-do, toggle, quote, and callout blocks return to paragraph appropriately.

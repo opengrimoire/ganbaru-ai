@@ -10,7 +10,7 @@ Block mutations use stable IDs and transactional commands. Multi-block move, dup
 
 Text-capable blocks store structured rich text with plain-text caches for search and summaries. Supported local formatting includes emphasis, underline, strike, code, colors, links, mentions, equations, and comments where the block type permits them.
 
-Selecting text opens a compact two-row formatting toolbar. Its color button opens a separate palette of labeled text and background swatches, and selecting a swatch applies that color to the selection.
+Right-clicking text opens a compact context menu with formatting, block type, insert, link, comment, suggestion, and clipboard actions. A selected range stays visibly highlighted while the pointer-operated menu is open, and formatting applies to that range. Block type and insert actions are available at a caret. Comment and suggestion are direct menu actions. The formatting submenu includes a palette of labeled text and background swatches.
 
 Paste converts supported rich text and block structure, sanitizes external markup, and preserves unsupported material visibly when practical. It never inserts executable HTML or unsafe URL schemes.
 

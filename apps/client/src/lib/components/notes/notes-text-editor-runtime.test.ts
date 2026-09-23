@@ -7,25 +7,25 @@ import {
 describe("Notes text editor runtime", () => {
   it("requests only controls made visible by the current editor state", () => {
     expect(requestedNotesTextControls({
-      inlineToolbar: true,
+      textContextMenu: true,
       linkEditor: false,
       mentionMenu: true,
       slashMenu: false,
       templateControls: false,
       buttonControls: true,
-    })).toEqual(["inline-toolbar", "mention-menu", "button-controls"]);
+    })).toEqual(["text-context-menu", "mention-menu", "button-controls"]);
   });
 
   it("keeps every optional control behind its own lazy request", () => {
     expect(requestedNotesTextControls({
-      inlineToolbar: true,
+      textContextMenu: true,
       linkEditor: true,
       mentionMenu: true,
       slashMenu: true,
       templateControls: true,
       buttonControls: true,
     })).toEqual([
-      "inline-toolbar",
+      "text-context-menu",
       "link-editor",
       "mention-menu",
       "slash-menu",
