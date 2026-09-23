@@ -13,6 +13,15 @@
     license: string;
   }
 
+  interface IconCredit {
+    appUse: () => string;
+    source: string;
+    sourceUrl: string;
+    author: () => string;
+    authorUrl: string;
+    license: () => string;
+  }
+
   const SOUND_FILE_BASE_URL = "https://github.com/opengrimoire/ganbaru-ai/blob/main/apps/client/static/sfx/";
   const FREESOUND_URL = "https://freesound.org/";
   const linkButtonClass =
@@ -112,6 +121,25 @@
     },
   ];
 
+  const iconCredits: readonly IconCredit[] = [
+    {
+      appUse: () => t("settings.about.iconUse.interface"),
+      source: "Lucide",
+      sourceUrl: "https://github.com/lucide-icons/lucide",
+      author: () => t("settings.about.lucideAuthor"),
+      authorUrl: "https://github.com/lucide-icons/lucide/graphs/contributors",
+      license: () => t("settings.about.lucideLicense"),
+    },
+    {
+      appUse: () => t("settings.about.iconUse.chatFiles"),
+      source: "vscode-icons",
+      sourceUrl: "https://github.com/vscode-icons/vscode-icons",
+      author: () => t("settings.about.vscodeIconsAuthor"),
+      authorUrl: "https://github.com/vscode-icons/vscode-icons/graphs/contributors",
+      license: () => t("settings.about.vscodeIconsLicense"),
+    },
+  ];
+
   async function openExternalUrl(url: string): Promise<void> {
     try {
       await openUrl(url);
@@ -139,13 +167,10 @@
       </div>
     </div>
 
-    <div class="flex min-w-0 flex-col gap-2 px-1">
+    <div class="flex min-w-0 flex-col gap-6 px-1">
       {#each soundCredits as credit}
-        <article class="flex min-w-0 flex-col gap-2.5 rounded-md border border-border bg-card/70 px-3 py-3 text-[0.8rem] dark:bg-transparent">
-          <div class="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1">
-            <h3 class="wrap-break-word min-w-0 text-[0.866667rem] font-medium text-foreground">{credit.appUse()}</h3>
-            <span class="shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-[0.733333rem] text-muted-foreground">{credit.license}</span>
-          </div>
+        <article class="flex min-w-0 flex-col gap-1.5 text-[0.8rem]">
+          <h3 class="wrap-break-word min-w-0 text-[0.733333rem] leading-5 text-foreground">{credit.appUse()}</h3>
           <div class="grid min-w-0 gap-1.5">
             <div class="grid min-w-0 grid-cols-[4rem_minmax(0,1fr)] items-start gap-2 max-[420px]:grid-cols-1 max-[420px]:gap-0.5">
               <span class="text-[0.733333rem] leading-5 text-muted-foreground">{t("settings.about.file")}</span>
@@ -158,6 +183,39 @@
             <div class="grid min-w-0 grid-cols-[4rem_minmax(0,1fr)] items-start gap-2 max-[420px]:grid-cols-1 max-[420px]:gap-0.5">
               <span class="text-[0.733333rem] leading-5 text-muted-foreground">{t("settings.about.author")}</span>
               <button type="button" class={linkButtonClass} onclick={() => { void openExternalUrl(credit.authorUrl); }}><span class="wrap-break-word">{credit.author}</span><ExternalLink size={11} strokeWidth={2.25} class="shrink-0" aria-hidden="true" /></button>
+            </div>
+            <div class="grid min-w-0 grid-cols-[4rem_minmax(0,1fr)] items-start gap-2 max-[420px]:grid-cols-1 max-[420px]:gap-0.5">
+              <span class="text-[0.733333rem] leading-5 text-muted-foreground">{t("settings.about.licenseHeading")}</span>
+              <span class="text-[0.8rem] leading-5 text-primary">{credit.license}</span>
+            </div>
+          </div>
+        </article>
+      {/each}
+    </div>
+  </div>
+
+  <div class="mt-4 flex flex-col gap-3">
+    <div class="px-1 py-1">
+      <div class="text-[0.866667rem] text-foreground">{t("settings.about.icons")}</div>
+      <div class="mt-0.5 text-[0.8rem] leading-5 text-muted-foreground">{t("settings.about.iconsDescription")}</div>
+    </div>
+
+    <div class="flex min-w-0 flex-col gap-6 px-1">
+      {#each iconCredits as credit}
+        <article class="flex min-w-0 flex-col gap-1.5 text-[0.8rem]">
+          <h3 class="wrap-break-word min-w-0 text-[0.733333rem] leading-5 text-foreground">{credit.appUse()}</h3>
+          <div class="grid min-w-0 gap-1.5">
+            <div class="grid min-w-0 grid-cols-[4rem_minmax(0,1fr)] items-start gap-2 max-[420px]:grid-cols-1 max-[420px]:gap-0.5">
+              <span class="text-[0.733333rem] leading-5 text-muted-foreground">{t("settings.about.source")}</span>
+              <button type="button" class={linkButtonClass} onclick={() => { void openExternalUrl(credit.sourceUrl); }}><span class="wrap-break-word">{credit.source}</span><ExternalLink size={11} strokeWidth={2.25} class="shrink-0" aria-hidden="true" /></button>
+            </div>
+            <div class="grid min-w-0 grid-cols-[4rem_minmax(0,1fr)] items-start gap-2 max-[420px]:grid-cols-1 max-[420px]:gap-0.5">
+              <span class="text-[0.733333rem] leading-5 text-muted-foreground">{t("settings.about.author")}</span>
+              <button type="button" class={linkButtonClass} onclick={() => { void openExternalUrl(credit.authorUrl); }}><span class="wrap-break-word">{credit.author()}</span><ExternalLink size={11} strokeWidth={2.25} class="shrink-0" aria-hidden="true" /></button>
+            </div>
+            <div class="grid min-w-0 grid-cols-[4rem_minmax(0,1fr)] items-start gap-2 max-[420px]:grid-cols-1 max-[420px]:gap-0.5">
+              <span class="text-[0.733333rem] leading-5 text-muted-foreground">{t("settings.about.licenseHeading")}</span>
+              <span class="text-[0.8rem] leading-5 text-primary">{credit.license()}</span>
             </div>
           </div>
         </article>

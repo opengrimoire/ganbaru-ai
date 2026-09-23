@@ -4,6 +4,8 @@ Ganbaru AI is an anti-procrastination and anti-burnout productivity app. It comb
 
 The product is free, local-first, privacy-first, and licensed under AGPL 3.0. AI is optional. The app must remain useful when no provider is installed, configured, or reachable.
 
+The About acknowledgments are also available during onboarding. They credit bundled sound effects and the Lucide and vscode-icons sources used for interface and Chat file icons.
+
 ## Product principles
 
 ### Local ownership
