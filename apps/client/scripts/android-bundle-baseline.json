@@ -55,7 +55,7 @@
       "maxSourceModules": 254
     }
   ],
-  "maxTotalSourceModules": 1022,
+  "maxTotalSourceModules": 1025,
   "requiredMobileModules": [
     "src/main.ts",
     "src/main-mobile.ts",
@@ -84,6 +84,9 @@
     "src/lib/components/mobile/MobileFocusOnboarding.svelte",
     "src/lib/components/mobile/MobileVaultHandoffOnboarding.svelte",
     "src/lib/components/vault/VaultHandoffOnboardingContent.svelte",
+    "src/lib/components/vault/VaultWelcomeContent.svelte",
+    "src/lib/components/vault/AboutInformationDialog.svelte",
+    "src/lib/components/settings/AboutAcknowledgments.svelte",
     "src/lib/vault/handoff-onboarding.ts",
     "src/lib/components/settings/SettingsModal.svelte",
     "src/lib/components/settings/SettingsSectionRenderer.mobile.svelte",
