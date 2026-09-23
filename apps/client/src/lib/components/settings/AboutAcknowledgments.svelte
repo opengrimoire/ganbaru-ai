@@ -3,6 +3,8 @@
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { getLocalization } from "$lib/i18n/translator.svelte";
 
+  let { showHeading = true }: { showHeading?: boolean } = $props();
+
   interface SoundCredit {
     appUse: () => string;
     filename: string;
@@ -154,7 +156,9 @@
 </script>
 
 <section class="flex flex-col gap-4">
-  <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("settings.about.acknowledgmentsHeading")}</h2>
+  {#if showHeading}
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("settings.about.acknowledgmentsHeading")}</h2>
+  {/if}
   <div class="flex flex-col gap-3">
     <div class="px-1 py-1">
       <div class="text-[0.866667rem] text-foreground">{t("settings.about.soundEffects")}</div>
