@@ -6,6 +6,7 @@
     notesBlockColorSwatchStyle,
   } from "$lib/notes/block-color";
   import { shouldPreventInlineToolbarPointerDefault } from "$lib/notes/inline-toolbar";
+  import { dismissOnOutside } from "$lib/utils/dismiss-on-outside";
   import type {
     NotesRichTextAnnotationName,
   } from "$lib/notes/rich-text";
@@ -15,11 +16,11 @@
   import Italic from "@lucide/svelte/icons/italic";
   import LinkIcon from "@lucide/svelte/icons/link";
   import MessageSquare from "@lucide/svelte/icons/message-square";
-  import Palette from "@lucide/svelte/icons/palette";
   import PencilLine from "@lucide/svelte/icons/pencil-line";
   import Sigma from "@lucide/svelte/icons/sigma";
   import Strikethrough from "@lucide/svelte/icons/strikethrough";
   import Underline from "@lucide/svelte/icons/underline";
+  import { tick } from "svelte";
 
   let {
     annotations,
@@ -41,7 +42,51 @@
 
   const { t } = getLocalization();
   const toolbarButtonBase =
-    "flex size-7 items-center justify-center rounded outline-none focus-visible:ring-2 focus-visible:ring-ring";
+    "flex size-8 items-center justify-center rounded outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  const toolbarIconStrokeWidth = 3;
+  let toolbarElement: HTMLDivElement;
+  let colorTriggerElement: HTMLButtonElement;
+  let colorPanelElement = $state<HTMLDivElement | null>(null);
+  let colorPanelOpen = $state(false);
+  let colorPanelPosition = $state<{ left: number; top: number } | null>(null);
+
+  $effect(() => {
+    if (!colorPanelOpen) return;
+    void tick().then(positionColorPanel);
+    window.addEventListener("resize", positionColorPanel);
+    window.addEventListener("scroll", positionColorPanel, true);
+    return () => {
+      window.removeEventListener("resize", positionColorPanel);
+      window.removeEventListener("scroll", positionColorPanel, true);
+    };
+  });
+
+  function positionColorPanel(): void {
+    if (!toolbarElement || !colorPanelElement) return;
+    const anchor = toolbarElement.getBoundingClientRect();
+    const { offsetWidth: width, offsetHeight: height } = colorPanelElement;
+    const margin = 8;
+    const gap = 4;
+    const roomBelow = window.innerHeight - anchor.bottom - margin;
+    const roomAbove = anchor.top - margin;
+    const top = roomBelow >= height || roomBelow >= roomAbove
+      ? anchor.bottom + gap
+      : anchor.top - height - gap;
+    colorPanelPosition = {
+      left: Math.max(margin, Math.min(anchor.right - width, window.innerWidth - width - margin)),
+      top: Math.max(margin, Math.min(top, window.innerHeight - height - margin)),
+    };
+  }
+
+  function toggleColorPanel(): void {
+    colorPanelOpen = !colorPanelOpen;
+    colorPanelPosition = null;
+  }
+
+  function selectColor(color: NotesColor): void {
+    colorPanelOpen = false;
+    onColorSelect(color);
+  }
 
   function annotationActive(name: NotesRichTextAnnotationName): boolean {
     switch (name) {
@@ -103,12 +148,12 @@
 
   function buttonClass(name: NotesRichTextAnnotationName): string {
     return annotationActive(name)
-      ? `${toolbarButtonBase} bg-accent text-accent-foreground`
-      : `${toolbarButtonBase} text-muted-foreground hover:bg-accent hover:text-accent-foreground`;
+      ? `${toolbarButtonBase} bg-accent text-foreground`
+      : `${toolbarButtonBase} text-foreground hover:bg-accent`;
   }
 
   function plainButtonClass(): string {
-    return `${toolbarButtonBase} text-muted-foreground hover:bg-accent hover:text-accent-foreground`;
+    return `${toolbarButtonBase} text-foreground hover:bg-accent`;
   }
 
   function preserveMouseSelection(event: MouseEvent): void {
@@ -121,11 +166,79 @@
 </script>
 
 <div
-  class="flex max-w-full flex-wrap items-center justify-end gap-1 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-sm"
+  bind:this={toolbarElement}
+  use:dismissOnOutside={{
+    enabled: colorPanelOpen,
+    onDismiss: (reason) => {
+      colorPanelOpen = false;
+      if (reason === "escape") colorTriggerElement.focus();
+    },
+  }}
+  class="grid max-w-full grid-cols-5 gap-0.5 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md"
   role="toolbar"
   aria-label={t("notes.inlineToolbar")}
-  aria-orientation="horizontal"
 >
+  <button
+    bind:this={colorTriggerElement}
+    type="button"
+    class={plainButtonClass()}
+    aria-label={t("notes.textColor")}
+    title={t("notes.textColor")}
+    aria-expanded={colorPanelOpen}
+    aria-controls="notes-inline-color-panel"
+    onmousedown={preserveMouseSelection}
+    onpointerdown={preserveTouchSelection}
+    onclick={toggleColorPanel}
+  >
+    <span class="notes-inline-color-trigger" style={notesBlockColorSwatchStyle(annotations.color)} aria-hidden="true">A</span>
+  </button>
+  {#if colorPanelOpen}
+    <div
+      bind:this={colorPanelElement}
+      id="notes-inline-color-panel"
+      class="fixed z-50 w-56 max-h-[min(19rem,calc(100vh-1rem))] overflow-y-auto rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-lg"
+      style:top={`${colorPanelPosition?.top ?? 0}px`}
+      style:left={`${colorPanelPosition?.left ?? 0}px`}
+      style:visibility={colorPanelPosition ? "visible" : "hidden"}
+      role="group"
+      aria-label={t("notes.textColor")}
+    >
+      <div class="px-1 pb-1 text-xs font-medium text-muted-foreground">{t("notes.textColors")}</div>
+      <div class="grid grid-cols-5 gap-1" role="group" aria-label={t("notes.textColors")}>
+        {#each NOTES_TEXT_COLORS as color}
+          <button
+            type="button"
+            class="flex size-9 items-center justify-center rounded-md hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={colorLabel(color)}
+            title={colorLabel(color)}
+            aria-pressed={annotations.color === color}
+            onmousedown={preserveMouseSelection}
+            onpointerdown={preserveTouchSelection}
+            onclick={() => selectColor(color)}
+          >
+            <span class:notes-inline-color-selected={annotations.color === color} class="notes-inline-color-swatch" style={notesBlockColorSwatchStyle(color)} aria-hidden="true">A</span>
+          </button>
+        {/each}
+      </div>
+      <div class="mt-2 border-t border-border px-1 pb-1 pt-2 text-xs font-medium text-muted-foreground">{t("notes.backgroundColors")}</div>
+      <div class="grid grid-cols-5 gap-1" role="group" aria-label={t("notes.backgroundColors")}>
+        {#each NOTES_BACKGROUND_COLORS as color}
+          <button
+            type="button"
+            class="flex size-9 items-center justify-center rounded-md hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={colorLabel(color)}
+            title={colorLabel(color)}
+            aria-pressed={annotations.color === color}
+            onmousedown={preserveMouseSelection}
+            onpointerdown={preserveTouchSelection}
+            onclick={() => selectColor(color)}
+          >
+            <span class:notes-inline-color-selected={annotations.color === color} class="notes-inline-color-swatch" style={notesBlockColorSwatchStyle(color)} aria-hidden="true">A</span>
+          </button>
+        {/each}
+      </div>
+    </div>
+  {/if}
   <button
     type="button"
     class={buttonClass("bold")}
@@ -137,7 +250,7 @@
     onpointerdown={preserveTouchSelection}
     onclick={() => onToggleAnnotation("bold")}
   >
-    <Bold class="size-3.5" aria-hidden="true" />
+    <Bold class="size-3.5" strokeWidth={toolbarIconStrokeWidth} aria-hidden="true" />
   </button>
   <button
     type="button"
@@ -150,7 +263,7 @@
     onpointerdown={preserveTouchSelection}
     onclick={() => onToggleAnnotation("italic")}
   >
-    <Italic class="size-3.5" aria-hidden="true" />
+    <Italic class="size-3.5" strokeWidth={toolbarIconStrokeWidth} aria-hidden="true" />
   </button>
   <button
     type="button"
@@ -163,7 +276,7 @@
     onpointerdown={preserveTouchSelection}
     onclick={() => onToggleAnnotation("underline")}
   >
-    <Underline class="size-3.5" aria-hidden="true" />
+    <Underline class="size-3.5" strokeWidth={toolbarIconStrokeWidth} aria-hidden="true" />
   </button>
   <button
     type="button"
@@ -176,7 +289,7 @@
     onpointerdown={preserveTouchSelection}
     onclick={() => onToggleAnnotation("strikethrough")}
   >
-    <Strikethrough class="size-3.5" aria-hidden="true" />
+    <Strikethrough class="size-3.5" strokeWidth={toolbarIconStrokeWidth} aria-hidden="true" />
   </button>
   <button
     type="button"
@@ -189,7 +302,7 @@
     onpointerdown={preserveTouchSelection}
     onclick={() => onToggleAnnotation("code")}
   >
-    <Code class="size-3.5" aria-hidden="true" />
+    <Code class="size-3.5" strokeWidth={toolbarIconStrokeWidth} aria-hidden="true" />
   </button>
   <button
     type="button"
@@ -200,7 +313,7 @@
     onpointerdown={preserveTouchSelection}
     onclick={onCreateEquation}
   >
-    <Sigma class="size-3.5" aria-hidden="true" />
+    <Sigma class="size-3.5" strokeWidth={toolbarIconStrokeWidth} aria-hidden="true" />
   </button>
   <button
     type="button"
@@ -211,7 +324,7 @@
     onpointerdown={preserveTouchSelection}
     onclick={onCreateComment}
   >
-    <MessageSquare class="size-3.5" aria-hidden="true" />
+    <MessageSquare class="size-3.5" strokeWidth={toolbarIconStrokeWidth} aria-hidden="true" />
   </button>
   <button
     type="button"
@@ -222,7 +335,7 @@
     onpointerdown={preserveTouchSelection}
     onclick={onCreateSuggestion}
   >
-    <PencilLine class="size-3.5" aria-hidden="true" />
+    <PencilLine class="size-3.5" strokeWidth={toolbarIconStrokeWidth} aria-hidden="true" />
   </button>
   <button
     type="button"
@@ -233,35 +346,39 @@
     onpointerdown={preserveTouchSelection}
     onclick={onOpenLink}
   >
-    <LinkIcon class="size-3.5" aria-hidden="true" />
+    <LinkIcon class="size-3.5" strokeWidth={toolbarIconStrokeWidth} aria-hidden="true" />
   </button>
-  <label
-    class="flex min-h-7 min-w-0 items-center gap-1 rounded px-1 text-[0.75rem] text-muted-foreground"
-  >
-    <Palette class="size-3.5 shrink-0" aria-hidden="true" />
-    <span class="sr-only">{t("notes.textColor")}</span>
-    <select
-      class="max-w-36 rounded bg-transparent text-[0.75rem] outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      aria-label={t("notes.textColor")}
-      value={annotations.color}
-      onchange={(event) => onColorSelect(event.currentTarget.value as NotesColor)}
-    >
-      <option value="default">{colorLabel("default")}</option>
-      <optgroup label={t("notes.textColors")}>
-        {#each NOTES_TEXT_COLORS.filter((color) => color !== "default") as color}
-          <option value={color}>{colorLabel(color)}</option>
-        {/each}
-      </optgroup>
-      <optgroup label={t("notes.backgroundColors")}>
-        {#each NOTES_BACKGROUND_COLORS as color}
-          <option value={color}>{colorLabel(color)}</option>
-        {/each}
-      </optgroup>
-    </select>
-  </label>
-  <span
-    class="size-4 rounded border"
-    aria-hidden="true"
-    style={notesBlockColorSwatchStyle(annotations.color)}
-  ></span>
 </div>
+
+<style>
+  .notes-inline-color-trigger,
+  .notes-inline-color-swatch {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--notes-color-swatch-border);
+    border-radius: 0.25rem;
+    background: var(--notes-color-swatch-bg);
+    color: var(--notes-color-swatch-fg);
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .notes-inline-color-trigger {
+    width: 1.25rem;
+    height: 1.25rem;
+    font-size: 0.75rem;
+  }
+
+  .notes-inline-color-swatch {
+    width: 1.75rem;
+    height: 1.75rem;
+    font-size: 0.95rem;
+  }
+
+  .notes-inline-color-selected {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+</style>
