@@ -60,7 +60,7 @@ export function createNotesBlockPersistence(
         const saved = await updateNotesBlock(blockId, update);
         if ((blockRevisions.get(blockId) ?? 0) === revision) {
           blockRevisions.delete(blockId);
-          context.replaceBlock(saved);
+          if (context.readBlock(blockId)) context.replaceBlock(saved);
         }
       });
     saveChains.set(blockId, save);

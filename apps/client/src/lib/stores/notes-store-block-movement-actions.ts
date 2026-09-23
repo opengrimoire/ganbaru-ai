@@ -148,6 +148,7 @@ export function createNotesBlockMovementActions(
       await prerequisite;
       await context.flushBlockSave(blockId);
       await trashNotesBlock(blockId, true);
+      context.applyPostMutation({ removedBlockIds: [blockId] });
     } catch (error) {
       console.warn("notes leaf block delete persistence failed", error);
       await context.loadPageTree(pageId);

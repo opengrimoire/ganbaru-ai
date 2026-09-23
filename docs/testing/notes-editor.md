@@ -13,7 +13,7 @@ Using a scratch page with other pages and relevant project objects available, ve
 - Empty list, to-do, toggle, quote, and callout blocks return to paragraph appropriately.
 - Backspace removes an empty block, protects the final block, and merges compatible text without losing children.
 - Tab and Shift+Tab accept valid nesting and reject invalid parent combinations.
-- Multi-block paste, rapid Enter, and immediate deletion persist in order without duplicate or missing rows.
+- Multi-block paste, rapid Enter, and immediate deletion of an empty to-do or paragraph while saving is pending persist in order. The deleted block stays removed after reopening the page, without duplicate rows or a block-not-found error.
 - Undo and redo restore text, structure, focus, selection, template use, and button actions at expected boundaries.
 - A failed or delayed save never overwrites a newer local revision.
 

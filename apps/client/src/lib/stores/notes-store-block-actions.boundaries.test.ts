@@ -2,16 +2,19 @@ import { describe, expect, it, vi } from "vitest";
 import { createBlockWrite } from "$lib/notes/block-factory";
 import { createManagedMediaPayload } from "$lib/notes/media";
 import { flattenNotesBlockTree, type NotesTreeState } from "$lib/notes/block-tree";
+import { applyNotesPostMutationToTree } from "$lib/notes/post-mutation";
 import type { NotesBlock, NotesBlockWrite, NotesParent } from "$lib/notes/types";
 import { createNotesBlockPasteActions } from "./notes-store-block-paste-actions";
 import { createNotesBlockDuplicationActions } from "./notes-store-block-duplication-actions";
 import { createNotesBlockMovementActions } from "./notes-store-block-movement-actions";
 import { createNotesMediaBlockActions } from "./notes-store-block-media-actions";
+import { notesTreeStateWithoutLeafBlock } from "./notes-store-block-tree";
 
 const assetCache = vi.hoisted(() => ({ invalidateAssetUrl: vi.fn() }));
+const notesApi = vi.hoisted(() => ({ trashNotesBlock: vi.fn() }));
 
 vi.mock("$lib/api/asset-url-cache", () => assetCache);
-vi.mock("$lib/api/notes", () => ({ trashNotesBlock: vi.fn() }));
+vi.mock("$lib/api/notes", () => notesApi);
 
 const pageId = "00000000-0000-4000-8000-000000000001";
 const parent: NotesParent = { type: "page_id", page_id: pageId };
@@ -37,6 +40,61 @@ function paragraph(id: string, text: string): NotesBlock {
 }
 
 describe("Notes block action boundaries", () => {
+  it("keeps a deleted leaf removed when its pending insert completes later", async () => {
+    notesApi.trashNotesBlock.mockReset().mockResolvedValue(undefined);
+    const first = paragraph("first-block", "A");
+    const deleted = paragraph("new-block", "");
+    let state: NotesTreeState = {
+      blocksById: { [first.id]: first, [deleted.id]: deleted },
+      childIdsByParentId: { [pageId]: [first.id, deleted.id] },
+    };
+    let finishInsert!: () => void;
+    const pendingInsert = new Promise<void>((resolve) => { finishInsert = resolve; });
+    let pendingDelete: Promise<void> | null = null;
+    const actions = createNotesBlockMovementActions({
+      readSelectedPageId: () => pageId,
+      treeState: () => state,
+      blockById: (id) => state.blocksById[id],
+      flatBlockItemsForBlockContext: () => flattenNotesBlockTree(state, pageId),
+      requestBlockFocus: () => undefined,
+      flushBlockSave: async () => undefined,
+      flushPendingBlockSaves: async () => undefined,
+      localRemoveLeafBlock: (id) => {
+        const next = notesTreeStateWithoutLeafBlock(state, id);
+        if (!next) return false;
+        state = next;
+        return true;
+      },
+      loadPageTree: async () => undefined,
+      applyPostMutation: (result) => { state = applyNotesPostMutationToTree(state, result); },
+      createUndoSnapshot: () => null,
+      replaceBlockWithUpdate: async () => undefined,
+      moveAndApply: async () => first,
+      moveManyAndApply: async () => [],
+      trashAndApply: async () => undefined,
+      pendingOptimisticWrite: (id) => id === deleted.id ? pendingInsert : null,
+      trackOptimisticBlockWrites: (_ids, persistence) => { pendingDelete = persistence; },
+      undoSnapshot: () => null,
+      recordUndo: () => undefined,
+      recordUndoAfter: () => undefined,
+    });
+
+    await actions.deleteBlock(deleted.id);
+    expect(state.blocksById[deleted.id]).toBeUndefined();
+    state = applyNotesPostMutationToTree(state, {
+      blocks: [deleted],
+      placements: [{ blockId: deleted.id, parent, after: first.id }],
+    });
+    expect(state.blocksById[deleted.id]).toBeDefined();
+    finishInsert();
+    if (!pendingDelete) throw new Error("delete persistence was not tracked");
+    await pendingDelete;
+
+    expect(notesApi.trashNotesBlock).toHaveBeenCalledWith(deleted.id, true);
+    expect(state.blocksById[deleted.id]).toBeUndefined();
+    expect(state.childIdsByParentId[pageId]).toEqual([first.id]);
+  });
+
   it("recovers a failed optimistic paste only after the append attempt", async () => {
     const block = paragraph("block-a", "Before");
     const events: string[] = [];

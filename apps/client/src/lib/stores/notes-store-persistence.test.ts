@@ -37,7 +37,36 @@ function paragraph(text: string): NotesBlock {
 }
 
 describe("notes block persistence", () => {
+  it("does not restore a locally deleted block when an earlier save finishes", async () => {
+    let current: NotesBlock | undefined = paragraph("");
+    let finishSave!: (block: NotesBlock) => void;
+    updateNotesBlock.mockReset().mockImplementation(() => new Promise<NotesBlock>((resolve) => {
+      finishSave = resolve;
+    }));
+    const replaceBlock = vi.fn((block: NotesBlock) => { current = block; });
+    const persistence = createNotesBlockPersistence({
+      beforeSave: async () => undefined,
+      readBlock: () => current,
+      replaceBlock,
+      setLoadError: () => undefined,
+      debounceMs: 250,
+    });
+
+    const update = blockWithText(current, "Draft");
+    persistence.localApplyBlockUpdate(blockId, update);
+    const save = persistence.saveBlockNow(blockId, update);
+    await vi.waitFor(() => expect(updateNotesBlock).toHaveBeenCalledOnce());
+    current = undefined;
+    finishSave(applyBlockUpdate(paragraph(""), update));
+    await save;
+
+    expect(current).toBeUndefined();
+    expect(replaceBlock).toHaveBeenCalledOnce();
+    expect(persistence.hasLocalChanges(blockId)).toBe(false);
+  });
+
   it("serializes saves and ignores acknowledgements older than local text", async () => {
+    updateNotesBlock.mockReset();
     let current = paragraph("");
     const requests: Array<{
       update: NotesBlockUpdate;
