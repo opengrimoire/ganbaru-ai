@@ -19,6 +19,7 @@ Using a scratch page with other pages and relevant project objects available, ve
 
 ## Block acceptance
 
+- Check that the title action row sits evenly between the top edge of the note content and the title, with and without a cover, in full and side views.
 - Confirm the page title and the first plain text block start at the same left edge in full and side page views, without shifting the title right.
 - Confirm block rows have no left-side add or drag buttons. Right-click a non-text block surface to open block actions, while right-clicking editable text opens the text menu. Existing comment counts remain visible without shifting block content.
 - Insert, convert, duplicate, move, nest, Trash, restore, and delete each supported block family.
@@ -38,6 +39,7 @@ Using a scratch page with other pages and relevant project objects available, ve
 
 ## Page and navigation acceptance
 
+- Open a page in full, side, and center modes. Confirm the editor has no separate header row, last edited, favorite, and page actions appear before project Notes settings in the workspace header, and preview close/view-mode controls stay reachable without covering title actions.
 - Create root, folder, nested, and database-row pages with empty and authored titles.
 - Move pages among project root, folders, and parent pages while preserving paired child blocks.
 - Reject self, descendant, cross-project, inactive, and block-parent destinations where invalid.

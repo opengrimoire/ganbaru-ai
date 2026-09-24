@@ -89,6 +89,7 @@
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
   import { cn } from "$lib/utils";
   import { dismissOnOutside } from "$lib/utils/dismiss-on-outside";
+  import { portal } from "$lib/utils/portal";
   import NotesBlockList from "./NotesBlockList.svelte";
   import NotesPageIcon from "./NotesPageIcon.svelte";
   import NotesPeekModeIcon from "./NotesPeekModeIcon.svelte";
@@ -106,18 +107,27 @@
   type NotesEditorPanel = "links" | "comments" | "suggestions";
 
   const FOCUSED_BLOCK_SCROLL_PADDING_PX = 16;
+  const PAGE_PANEL_VIEWPORT_MARGIN_PX = 8;
+  const PAGE_PANEL_TRIGGER_GAP_PX = 4;
+  const PAGE_MENU_WIDTH_PX = 240;
+  const PAGE_MENU_MAX_HEIGHT_PX = 640;
+  const ACTIVITY_PANEL_WIDTH_PX = 320;
+  const PAGE_DETAILS_PANEL_WIDTH_PX = 704;
+  const PAGE_DETAILS_PANEL_MAX_HEIGHT_PX = 512;
 
   let {
     projectId = null,
     openMode = "full",
     onClose,
     onOpenModeChange,
+    pageActionsTarget = null,
     musicMentionContext = EMPTY_NOTES_MUSIC_MENTION_CONTEXT,
   }: {
     projectId?: string | null;
     openMode?: NotesPageOpenMode;
     onClose?: () => void;
     onOpenModeChange?: (mode: NotesPageOpenMode) => void;
+    pageActionsTarget?: HTMLElement | null;
     musicMentionContext?: NotesMusicMentionContext;
   } = $props();
 
@@ -141,6 +151,9 @@
   let moveMenuOpen = $state(false);
   let folderMoveMenuOpen = $state(false);
   let activityPanelOpen = $state(false);
+  let activityButton: HTMLButtonElement | null = $state(null);
+  let pageMenuButton: HTMLButtonElement | null = $state(null);
+  let floatingLayoutVersion = $state(0);
   let activePanel = $state<NotesEditorPanel | null>(null);
   let htmlExportOpen = $state(false);
   let agentBridgeExportOpen = $state(false);
@@ -235,6 +248,63 @@
     linksBadgeCount > 0 || openCommentCount > 0 || openSuggestionCount > 0,
   );
   const peekMode = $derived(openMode !== "full");
+  const activityPanelStyle = $derived.by(() => {
+    void floatingLayoutVersion;
+    return floatingPagePanelStyle(activityButton, ACTIVITY_PANEL_WIDTH_PX);
+  });
+  const pageMenuStyle = $derived.by(() => {
+    void floatingLayoutVersion;
+    return floatingPagePanelStyle(pageMenuButton, PAGE_MENU_WIDTH_PX);
+  });
+  const pageDetailsPanelStyle = $derived.by(() => {
+    void floatingLayoutVersion;
+    return floatingPagePanelStyle(
+      pageMenuButton,
+      PAGE_DETAILS_PANEL_WIDTH_PX,
+      PAGE_DETAILS_PANEL_MAX_HEIGHT_PX,
+    );
+  });
+
+  /** Place a page popover below its toolbar trigger without clipping at viewport edges. */
+  function floatingPagePanelStyle(
+    anchor: HTMLElement | null,
+    preferredWidth: number,
+    preferredMaxHeight = PAGE_MENU_MAX_HEIGHT_PX,
+  ): string {
+    if (!anchor || typeof window === "undefined") return "visibility:hidden";
+    const rect = anchor.getBoundingClientRect();
+    const width = Math.max(0, Math.min(
+      preferredWidth,
+      window.innerWidth - PAGE_PANEL_VIEWPORT_MARGIN_PX * 2,
+    ));
+    const maxLeft = Math.max(
+      PAGE_PANEL_VIEWPORT_MARGIN_PX,
+      window.innerWidth - width - PAGE_PANEL_VIEWPORT_MARGIN_PX,
+    );
+    const left = Math.max(PAGE_PANEL_VIEWPORT_MARGIN_PX, Math.min(rect.right - width, maxLeft));
+    const top = Math.min(
+      rect.bottom + PAGE_PANEL_TRIGGER_GAP_PX,
+      window.innerHeight - PAGE_PANEL_VIEWPORT_MARGIN_PX,
+    );
+    const maxHeight = Math.max(0, Math.min(
+      preferredMaxHeight,
+      window.innerHeight - top - PAGE_PANEL_VIEWPORT_MARGIN_PX,
+    ));
+    return `left:${Math.round(left)}px;top:${Math.round(top)}px;width:${Math.round(width)}px;max-height:${Math.round(maxHeight)}px`;
+  }
+
+  $effect(() => {
+    if (!activityPanelOpen && !pageMenuOpen && !activePanel) return;
+    const update = () => {
+      floatingLayoutVersion += 1;
+    };
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  });
 
   function requestEditorPanel(kind: NotesEditorPanelKind, retry = false): void {
     const current = panelLoadStates[kind] ?? null;
@@ -768,63 +838,61 @@
 
 {#if page}
   <section
-    class="notes-editor-root flex h-full w-full min-w-0 flex-1 flex-col overflow-hidden"
+    class="notes-editor-root relative flex h-full w-full min-w-0 flex-1 flex-col overflow-hidden"
     data-mobile={mobileLayout || undefined}
   >
-    <div
-      class="relative z-40 shrink-0"
-      style="background-color: var(--cal-bg);"
-      use:dismissOnOutside={{ enabled: !!activePanel, onDismiss: closeActionPanel }}
-    >
-      <div class="flex items-center gap-1 px-3" style="height: var(--cal-header-row-h);">
-        <div class="group/open-mode flex shrink-0 items-center gap-0.5">
-          {#if mobileLayout && openMode === "full"}
-            <button
-              type="button"
-              class={actionButtonClass()}
-              aria-label={t("notes.showProjectHome")}
-              onclick={() => onClose?.()}
-            >
-              <ChevronLeft class="size-5" strokeWidth={noteActionIconStrokeWidth} />
-            </button>
-          {/if}
+    {#if peekMode}
+      <div class="absolute right-3 top-2 z-40 flex items-center gap-0.5 rounded-md border border-border bg-popover/95 p-0.5 shadow-sm" data-notes-peek-controls>
+        <button
+          type="button"
+          class={actionButtonClass()}
+          aria-label={t("notes.closePeek")}
+          data-app-tooltip={t("notes.closePeek")}
+          onclick={() => onClose?.()}
+        >
+          <X class="size-4" strokeWidth={noteActionIconStrokeWidth} />
+        </button>
+        <button
+          type="button"
+          class={actionButtonClass()}
+          aria-label={t("notes.expandNote")}
+          data-app-tooltip={t("notes.expandNote")}
+          onclick={openAsFullPage}
+        >
+          <NotesPeekModeIcon mode="full" class="size-4" strokeWidth={noteActionIconStrokeWidth} />
+        </button>
+        <button
+          type="button"
+          class={actionButtonClass()}
+          aria-label={openMode === "side" ? t("notes.centerPeek") : t("notes.sidePeek")}
+          data-app-tooltip={openMode === "side" ? t("notes.centerPeek") : t("notes.sidePeek")}
+          onclick={() => selectOpenMode(openMode === "side" ? "center" : "side")}
+        >
           {#if openMode === "side"}
-            <button
-              type="button"
-              class={actionButtonClass()}
-              aria-label={t("notes.closePeek")}
-              data-app-tooltip={t("notes.closePeek")}
-              onclick={() => onClose?.()}
-            >
-              <X class="size-4" strokeWidth={noteActionIconStrokeWidth} />
-            </button>
+            <NotesPeekModeIcon mode="center" class="size-4" strokeWidth={noteActionIconStrokeWidth} />
+          {:else}
+            <NotesPeekModeIcon mode="side" class="size-4" strokeWidth={noteActionIconStrokeWidth} />
           {/if}
-          {#if peekMode}
-            <button
-              type="button"
-              class={actionButtonClass()}
-              aria-label={t("notes.expandNote")}
-              data-app-tooltip={t("notes.expandNote")}
-              onclick={openAsFullPage}
-            >
-              <NotesPeekModeIcon mode="full" class="size-4" strokeWidth={noteActionIconStrokeWidth} />
-            </button>
-            <button
-              type="button"
-              class={actionButtonClass()}
-              aria-label={openMode === "side" ? t("notes.centerPeek") : t("notes.sidePeek")}
-              data-app-tooltip={openMode === "side" ? t("notes.centerPeek") : t("notes.sidePeek")}
-              onclick={() => selectOpenMode(openMode === "side" ? "center" : "side")}
-            >
-              {#if openMode === "side"}
-                <NotesPeekModeIcon mode="center" class="size-4" strokeWidth={noteActionIconStrokeWidth} />
-              {:else}
-                <NotesPeekModeIcon mode="side" class="size-4" strokeWidth={noteActionIconStrokeWidth} />
-              {/if}
-            </button>
-          {/if}
-        </div>
-        <div class="min-w-0 flex-1"></div>
+        </button>
+      </div>
+    {/if}
+    {#if pageActionsTarget}
+      <div
+        class="relative z-70 flex shrink-0 items-center gap-1"
+        data-notes-page-actions
+        use:portal={pageActionsTarget}
+        use:dismissOnOutside={{ enabled: !!activePanel, onDismiss: closeActionPanel }}
+      >
+        {#if mobileLayout && openMode === "full"}
+          <button
+            type="button"
+            class={actionButtonClass()}
+            aria-label={t("notes.showProjectHome")}
+            onclick={() => onClose?.()}
+          >
+            <ChevronLeft class="size-5" strokeWidth={noteActionIconStrokeWidth} />
+          </button>
+        {/if}
         <div
           class="relative hidden shrink-0 min-[560px]:block"
           role="group"
@@ -835,6 +903,7 @@
           onfocusout={handleActivityFocusOut}
         >
           <button
+            bind:this={activityButton}
             type="button"
             class="flex h-7 max-w-40 items-center rounded-md px-2 text-[0.8rem] text-foreground transition-colors hover:bg-accent focus:bg-accent"
             aria-label={activityPanelLabel}
@@ -844,10 +913,10 @@
             <span class="truncate">{editedMetadataLabel}</span>
           </button>
           {#if activityPanelOpen}
-            <div class="absolute right-0 top-7 h-1 w-80" aria-hidden="true"></div>
             <div
               id={activityPanelId}
-              class="absolute right-0 top-8 z-50 w-80 overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-md"
+              class="fixed z-80 overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-md"
+              style={activityPanelStyle}
               role="dialog"
               aria-label={t("notes.activity")}
               data-app-floating-surface
@@ -884,6 +953,7 @@
           use:dismissOnOutside={{ enabled: pageMenuOpen, onDismiss: closePageMenu }}
         >
           <button
+            bind:this={pageMenuButton}
             type="button"
             class={actionButtonClass(pageMenuOpen)}
             aria-label={t("notes.pageActions")}
@@ -902,7 +972,8 @@
           </button>
           {#if pageMenuOpen}
             <div
-              class="absolute right-0 z-50 w-60 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg {mobileLayout ? 'top-12' : 'top-8'}"
+              class="fixed z-80 overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+              style={pageMenuStyle}
               role="menu"
               data-app-floating-surface
             >
@@ -1067,46 +1138,46 @@
             </div>
           {/if}
         </div>
-      </div>
 
-      {#if activePanel}
-        <div
-          class="absolute right-3 top-full z-50 w-[min(44rem,calc(100vw-1.5rem))] overflow-auto rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-lg"
-          style="max-height: min(32rem, calc(100dvh - 7rem));"
-          data-app-floating-surface
-        >
-          {#if activePanel === "links"}
-            <div class="flex min-w-0 flex-col gap-2">
-              {#if panelLoadStates.backlinks?.status === "ready" && panelLoadStates.backlinks.component.kind === "backlinks"}
-                {@const NotesBacklinks = panelLoadStates.backlinks.component.component}
-                <NotesBacklinks embedded />
+        {#if activePanel}
+          <div
+            class="fixed z-80 overflow-auto rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-lg"
+            style={pageDetailsPanelStyle}
+            data-app-floating-surface
+          >
+            {#if activePanel === "links"}
+              <div class="flex min-w-0 flex-col gap-2">
+                {#if panelLoadStates.backlinks?.status === "ready" && panelLoadStates.backlinks.component.kind === "backlinks"}
+                  {@const NotesBacklinks = panelLoadStates.backlinks.component.component}
+                  <NotesBacklinks embedded />
+                {/if}
+                {#if panelLoadStates["page-links"]?.status === "ready" && panelLoadStates["page-links"].component.kind === "page-links"}
+                  {@const NotesPageLinks = panelLoadStates["page-links"].component.component}
+                  <NotesPageLinks embedded />
+                {/if}
+                {#if panelLoadStates.backlinks?.status === "failed" || panelLoadStates["page-links"]?.status === "failed"}
+                  <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={() => { if (panelLoadStates.backlinks?.status === "failed") requestEditorPanel("backlinks", true); if (panelLoadStates["page-links"]?.status === "failed") requestEditorPanel("page-links", true); }}>{t("common.retry")}</button>
+                {/if}
+              </div>
+            {:else if activePanel === "comments"}
+              {#if panelLoadStates.comments?.status === "ready" && panelLoadStates.comments.component.kind === "comments"}
+                {@const NotesComments = panelLoadStates.comments.component.component}
+                <NotesComments embedded />
+              {:else if panelLoadStates.comments?.status === "failed"}
+                <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={() => requestEditorPanel("comments", true)}>{t("common.retry")}</button>
               {/if}
-              {#if panelLoadStates["page-links"]?.status === "ready" && panelLoadStates["page-links"].component.kind === "page-links"}
-                {@const NotesPageLinks = panelLoadStates["page-links"].component.component}
-                <NotesPageLinks embedded />
+            {:else if activePanel === "suggestions"}
+              {#if panelLoadStates.suggestions?.status === "ready" && panelLoadStates.suggestions.component.kind === "suggestions"}
+                {@const NotesSuggestions = panelLoadStates.suggestions.component.component}
+                <NotesSuggestions embedded />
+              {:else if panelLoadStates.suggestions?.status === "failed"}
+                <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={() => requestEditorPanel("suggestions", true)}>{t("common.retry")}</button>
               {/if}
-              {#if panelLoadStates.backlinks?.status === "failed" || panelLoadStates["page-links"]?.status === "failed"}
-                <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={() => { if (panelLoadStates.backlinks?.status === "failed") requestEditorPanel("backlinks", true); if (panelLoadStates["page-links"]?.status === "failed") requestEditorPanel("page-links", true); }}>{t("common.retry")}</button>
-              {/if}
-            </div>
-          {:else if activePanel === "comments"}
-            {#if panelLoadStates.comments?.status === "ready" && panelLoadStates.comments.component.kind === "comments"}
-              {@const NotesComments = panelLoadStates.comments.component.component}
-              <NotesComments embedded />
-            {:else if panelLoadStates.comments?.status === "failed"}
-              <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={() => requestEditorPanel("comments", true)}>{t("common.retry")}</button>
             {/if}
-          {:else if activePanel === "suggestions"}
-            {#if panelLoadStates.suggestions?.status === "ready" && panelLoadStates.suggestions.component.kind === "suggestions"}
-              {@const NotesSuggestions = panelLoadStates.suggestions.component.component}
-              <NotesSuggestions embedded />
-            {:else if panelLoadStates.suggestions?.status === "failed"}
-              <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={() => requestEditorPanel("suggestions", true)}>{t("common.retry")}</button>
-            {/if}
-          {/if}
-        </div>
-      {/if}
-    </div>
+          </div>
+        {/if}
+      </div>
+    {/if}
 
     {#if notes.pageCreationError}
       <div class="flex shrink-0 items-center justify-between gap-3 border-b border-destructive/30 bg-destructive/10 px-3 py-2 text-[0.8rem] text-destructive" role="alert">
@@ -1136,12 +1207,15 @@
 
       <div
         class={cn(
-          "mx-auto flex w-full max-w-208 flex-col pb-12 pt-8",
+          "mx-auto flex w-full max-w-208 flex-col pb-12 pt-3",
           openMode === "side" ? "pl-16 pr-4 sm:pr-8" : "px-4 sm:px-8",
         )}
       >
         <div class="notes-page-title-surface group/title min-w-0 pb-5">
-          <div class="notes-page-title-actions -ml-1.5 mb-2 flex min-h-8 flex-wrap items-center gap-1.5 opacity-0 transition-opacity group-hover/title:opacity-100 group-focus-within/title:opacity-100">
+          <div class={cn(
+            "notes-page-title-actions -ml-1.5 flex min-h-8 flex-wrap items-center gap-1.5 opacity-0 transition-opacity group-hover/title:opacity-100 group-focus-within/title:opacity-100",
+            peekMode && !page.cover && "pr-28",
+          )}>
             {#if panelLoadStates["icon-picker"]?.status === "ready" && panelLoadStates["icon-picker"].component.kind === "icon-picker"}
               {@const IconPicker = panelLoadStates["icon-picker"].component.component}
               <IconPicker

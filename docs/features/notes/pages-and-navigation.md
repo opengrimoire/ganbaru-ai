@@ -34,6 +34,8 @@ Favorites and recents are implemented device-local navigation metadata outside t
 
 Favoriting pins the page in Notes navigation and shows a star in the page action surface and navigation row. Opening or creating a page updates recents. Neither behavior changes parent, project, sort order, content, or collaboration history.
 
+When a page is open, its last-edited detail, favorite control, and page actions share the workspace header immediately before project Notes settings. The editor has no separate page header. Side and center previews keep close and view-mode controls as compact overlays so the page content does not lose another row of height.
+
 ## Archive
 
 Archive hides a page from active navigation, favorites, recents, active search, and active parent selection without placing it in Trash. The Archive view supports search and restore.

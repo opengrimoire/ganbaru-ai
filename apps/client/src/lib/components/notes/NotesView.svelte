@@ -62,6 +62,7 @@
   let creationContextProjectId = $state<string | null>(null);
   let creationContextPageId = $state<string | null>(null);
   let notesRootElement = $state<HTMLDivElement | null>(null);
+  let pageActionsTarget = $state<HTMLElement | null>(null);
   let projectSettingsOpen = $state(false);
   let projectSettingsDirty = $state(false);
   let projectSettingsDiscardConfirmOpen = $state(false);
@@ -521,6 +522,7 @@
     onShowHome={showProjectHome}
     {projectSettingsOpen}
     onToggleProjectSettings={toggleProjectSettings}
+    bind:pageActionsTarget
   />
   {#if !mobileLayout && projectSettingsOpen && selectedProjectId}
     <NotesProjectSettingsPanel
@@ -645,6 +647,7 @@
           <NotesEditor
             projectId={selectedProjectId}
             openMode="full"
+            {pageActionsTarget}
             onClose={closePagePeek}
             onOpenModeChange={showSelectedPageAs}
             {musicMentionContext}
@@ -669,6 +672,7 @@
         <NotesEditor
           projectId={selectedProjectId}
           openMode="side"
+          {pageActionsTarget}
           onClose={closePagePeek}
           onOpenModeChange={showSelectedPageAs}
           {musicMentionContext}
@@ -693,6 +697,7 @@
           <NotesEditor
             projectId={selectedProjectId}
             openMode="center"
+            {pageActionsTarget}
             onClose={closePagePeek}
             onOpenModeChange={showSelectedPageAs}
             {musicMentionContext}

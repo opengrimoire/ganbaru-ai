@@ -66,6 +66,7 @@
     onShowHome,
     projectSettingsOpen,
     onToggleProjectSettings,
+    pageActionsTarget = $bindable<HTMLElement | null>(null),
   }: {
     mobileLayout?: boolean;
     selectedProject: Project | undefined;
@@ -80,6 +81,7 @@
     onShowHome: () => void;
     projectSettingsOpen: boolean;
     onToggleProjectSettings: () => void;
+    pageActionsTarget?: HTMLElement | null;
   } = $props();
 
   const notes = getNotes();
@@ -413,7 +415,7 @@
       "relative",
       mobileLayout
         ? "min-w-0 flex-1 overflow-hidden"
-        : "min-w-36 shrink-0 min-[760px]:max-w-xl",
+        : "min-w-36 min-[760px]:max-w-xl",
     )}
   >
     <div class={cn(
@@ -676,6 +678,7 @@
   </div>
   {#if !mobileLayout}<div class="flex-1"></div>{/if}
   <div class="flex shrink-0 items-center gap-1">
+    <div bind:this={pageActionsTarget} class="flex shrink-0 items-center gap-1" data-notes-page-actions-slot></div>
     {#if selectedProject && !mobileLayout}
       <button
         type="button"
