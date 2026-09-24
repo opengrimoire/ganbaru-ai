@@ -1,7 +1,6 @@
 import { notesBlockInsertMenuStyle } from "./block-insertion";
 import type { NotesBlockInsertMenuPlacementInput } from "./block-insertion";
 
-export type NotesBlockHandleMenuToggle = "actions" | "insert" | "move";
 export type NotesBlockHandleAction =
   | "turn_into"
   | "color"
@@ -15,45 +14,39 @@ export type NotesBlockHandleAction =
 
 export interface NotesBlockHandleMenuState {
   menuOpen: boolean;
-  insertMenuOpen: boolean;
   moveMenuOpen: boolean;
 }
 
 export const CLOSED_NOTES_BLOCK_HANDLE_MENUS: NotesBlockHandleMenuState = {
   menuOpen: false,
-  insertMenuOpen: false,
   moveMenuOpen: false,
 };
 
+/** Open block actions only for the current row's non-editable surface. */
+export function notesBlockContextMenuPoint(event: MouseEvent): { x: number; y: number } | null {
+  if (event.defaultPrevented || !(event.currentTarget instanceof HTMLElement)) return null;
+  const target = event.target;
+  if (target instanceof Element && (
+    target.closest("[data-notes-selectable-block-id]") !== event.currentTarget
+    || target.closest('input, textarea, [contenteditable="true"], [data-app-floating-surface]')
+  )) return null;
+  event.preventDefault();
+  event.stopPropagation();
+  const rect = event.currentTarget.getBoundingClientRect();
+  const keyboardRequest = event.clientX === 0 && event.clientY === 0;
+  return {
+    x: keyboardRequest ? rect.left : event.clientX,
+    y: keyboardRequest ? rect.bottom : event.clientY,
+  };
+}
+
 /**
- * Plans visible block-handle menus from a trigger toggle.
+ * Plans the nested move menu from a trigger toggle.
  */
-export function notesBlockHandleMenuStateAfterToggle(
+export function notesBlockHandleMenuStateAfterMoveToggle(
   current: NotesBlockHandleMenuState,
-  toggle: NotesBlockHandleMenuToggle,
 ): NotesBlockHandleMenuState {
-  switch (toggle) {
-    case "actions": {
-      const menuOpen = !current.menuOpen;
-      return {
-        menuOpen,
-        insertMenuOpen: false,
-        moveMenuOpen: false,
-      };
-    }
-    case "insert":
-      return {
-        menuOpen: false,
-        insertMenuOpen: !current.insertMenuOpen,
-        moveMenuOpen: false,
-      };
-    case "move":
-      return {
-        menuOpen: true,
-        insertMenuOpen: false,
-        moveMenuOpen: !current.moveMenuOpen,
-      };
-  }
+  return { menuOpen: true, moveMenuOpen: !current.moveMenuOpen };
 }
 
 /**
@@ -68,7 +61,6 @@ export function notesBlockHandleMenuStateAfterAction(
     case "copy_link":
       return {
         menuOpen: current.menuOpen,
-        insertMenuOpen: false,
         moveMenuOpen: false,
       };
     case "move_to_page":
@@ -83,7 +75,7 @@ export function notesBlockHandleMenuStateAfterAction(
 }
 
 /**
- * Places the block action menu with the same viewport clamp as the plus menu.
+ * Places the block action menu inside the viewport.
  */
 export function notesBlockHandleActionMenuStyle(
   input: Omit<NotesBlockInsertMenuPlacementInput, "preferredWidth">,

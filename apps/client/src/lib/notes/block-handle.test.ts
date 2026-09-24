@@ -1,51 +1,73 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from "vitest";
 import {
   CLOSED_NOTES_BLOCK_HANDLE_MENUS,
   notesBlockHandleActionMenuStyle,
+  notesBlockContextMenuPoint,
   notesBlockHandleMenuStateAfterAction,
-  notesBlockHandleMenuStateAfterToggle,
+  notesBlockHandleMenuStateAfterMoveToggle,
 } from "./block-handle";
 import type { NotesBlockHandleAction } from "./block-handle";
 
-describe("notes block handle menu routing", () => {
-  it("opens one top-level handle menu at a time", () => {
-    const insertOpen = notesBlockHandleMenuStateAfterToggle(
-      {
-        menuOpen: true,
-        insertMenuOpen: false,
-        moveMenuOpen: true,
-      },
-      "insert",
-    );
-
-    expect(insertOpen).toEqual({
-      menuOpen: false,
-      insertMenuOpen: true,
-      moveMenuOpen: false,
+describe("notes block context menu routing", () => {
+  it("opens block actions from the current row surface", () => {
+    const row = document.createElement("div");
+    row.dataset.notesSelectableBlockId = "parent";
+    const surface = document.createElement("div");
+    row.append(surface);
+    let point: { x: number; y: number } | null = null;
+    row.addEventListener("contextmenu", (event) => {
+      point = notesBlockContextMenuPoint(event);
     });
 
-    expect(notesBlockHandleMenuStateAfterToggle(insertOpen, "actions")).toEqual({
-      menuOpen: true,
-      insertMenuOpen: false,
-      moveMenuOpen: false,
+    const event = new MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 120,
+      clientY: 90,
     });
+    surface.dispatchEvent(event);
+
+    expect(point).toEqual({ x: 120, y: 90 });
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("leaves nested rows and editable text to their own menus", () => {
+    const row = document.createElement("div");
+    row.dataset.notesSelectableBlockId = "parent";
+    const nested = document.createElement("div");
+    nested.dataset.notesSelectableBlockId = "child";
+    const editor = document.createElement("div");
+    editor.setAttribute("contenteditable", "true");
+    row.append(nested, editor);
+    const points: ({ x: number; y: number } | null)[] = [];
+    row.addEventListener("contextmenu", (event) => {
+      points.push(notesBlockContextMenuPoint(event));
+    });
+
+    const nestedEvent = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+    const editorEvent = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+    nested.dispatchEvent(nestedEvent);
+    editor.dispatchEvent(editorEvent);
+
+    expect(points).toEqual([null, null]);
+    expect(nestedEvent.defaultPrevented).toBe(false);
+    expect(editorEvent.defaultPrevented).toBe(false);
   });
 
   it("keeps copy and color actions visible while closing nested move state", () => {
     const state = {
       menuOpen: true,
-      insertMenuOpen: false,
       moveMenuOpen: true,
     };
 
     expect(notesBlockHandleMenuStateAfterAction(state, "copy_link")).toEqual({
       menuOpen: true,
-      insertMenuOpen: false,
       moveMenuOpen: false,
     });
     expect(notesBlockHandleMenuStateAfterAction(state, "color")).toEqual({
       menuOpen: true,
-      insertMenuOpen: false,
       moveMenuOpen: false,
     });
   });
@@ -53,7 +75,6 @@ describe("notes block handle menu routing", () => {
   it("closes all handle menus for actions that hand focus back to the editor", () => {
     const state = {
       menuOpen: true,
-      insertMenuOpen: false,
       moveMenuOpen: true,
     };
     const closingActions: NotesBlockHandleAction[] = [
@@ -76,22 +97,19 @@ describe("notes block handle menu routing", () => {
   it("toggles the move target panel inside the action menu", () => {
     const actionMenuOpen = {
       menuOpen: true,
-      insertMenuOpen: false,
       moveMenuOpen: false,
     };
 
-    expect(notesBlockHandleMenuStateAfterToggle(actionMenuOpen, "move")).toEqual({
+    expect(notesBlockHandleMenuStateAfterMoveToggle(actionMenuOpen)).toEqual({
       menuOpen: true,
-      insertMenuOpen: false,
       moveMenuOpen: true,
     });
     expect(
-      notesBlockHandleMenuStateAfterToggle(
+      notesBlockHandleMenuStateAfterMoveToggle(
         {
           ...actionMenuOpen,
           moveMenuOpen: true,
         },
-        "move",
       ),
     ).toEqual(actionMenuOpen);
   });

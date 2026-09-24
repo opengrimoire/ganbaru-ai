@@ -119,7 +119,6 @@ export type LoadedNotesEditorPanel =
   | { kind: "confirm-dialog"; component: typeof import("$lib/components/ui/ConfirmDialog.svelte").default };
 
 export type NotesTextControlKind =
-  | "block-insert-menu"
   | "text-context-menu"
   | "link-editor"
   | "mention-menu"
@@ -128,7 +127,6 @@ export type NotesTextControlKind =
   | "button-controls";
 
 export type LoadedNotesTextControl =
-  | { kind: "block-insert-menu"; component: typeof import("./NotesBlockInsertMenu.svelte").default }
   | { kind: "text-context-menu"; component: typeof import("./NotesTextContextMenu.svelte").default }
   | { kind: "link-editor"; component: typeof import("./NotesLinkEditor.svelte").default }
   | { kind: "mention-menu"; component: typeof import("./NotesMentionMenu.svelte").default }
@@ -206,8 +204,6 @@ const EDITOR_PANEL_IMPORTERS = {
 } satisfies Readonly<Record<NotesEditorPanelKind, LazyComponentImporter<LoadedNotesEditorPanel>>>;
 
 const TEXT_CONTROL_IMPORTERS = {
-  "block-insert-menu": () => import("./NotesBlockInsertMenu.svelte")
-    .then((module) => ({ default: { kind: "block-insert-menu" as const, component: module.default } })),
   "text-context-menu": () => import("./NotesTextContextMenu.svelte")
     .then((module) => ({ default: { kind: "text-context-menu" as const, component: module.default } })),
   "link-editor": () => import("./NotesLinkEditor.svelte")

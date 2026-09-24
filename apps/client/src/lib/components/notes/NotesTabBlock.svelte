@@ -2,6 +2,7 @@
   import { tick } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { notesBlockAnchorId } from "$lib/notes/block-link";
+  import { notesBlockContextMenuPoint } from "$lib/notes/block-handle";
   import { blockPlainText, type NotesHeadingBlockType } from "$lib/notes/block-factory";
   import type { NotesBlockInsertRequest } from "$lib/notes/block-insertion";
   import type { NotesMoveToPageTarget } from "$lib/notes/block-move";
@@ -65,7 +66,6 @@
     focusBlockId,
     focusRequestId,
     focusSelection,
-    handleVisibleBlockId,
     mentionTargets,
     templateStatusForBlock,
     buttonStatusForBlock,
@@ -135,8 +135,6 @@
     onMoveBlockToTab,
     onSelectPage,
     onFocusBlock,
-    onHandlePointerMove,
-    onHandlePointerLeave,
     onHandleMenuOpenChange,
   }: {
     item: NotesBlockTreeItem;
@@ -151,7 +149,6 @@
     focusBlockId: string | null;
     focusRequestId: number;
     focusSelection: NotesTextSelection | null;
-    handleVisibleBlockId: string | null;
     mentionTargets: NotesNamedMentionTarget[];
     templateStatusForBlock: (blockId: string) => NotesTemplateBlockStatus;
     buttonStatusForBlock: (blockId: string) => NotesButtonBlockStatus;
@@ -300,8 +297,6 @@
     onMoveBlockToTab: (blockId: string, labelBlockId: string) => Promise<void> | void;
     onSelectPage: (pageId: string) => void;
     onFocusBlock: (blockId: string) => void;
-    onHandlePointerMove: (blockId: string) => void;
-    onHandlePointerLeave: (blockId: string) => void;
     onHandleMenuOpenChange: (blockId: string, open: boolean) => void;
   } = $props();
 
@@ -488,14 +483,12 @@
     slashOpen = true;
   }
 
-  function pointerTargetIsCurrentBlock(target: EventTarget | null): boolean {
-    if (!(target instanceof Element)) return false;
-    const row = target.closest<HTMLElement>("[data-notes-selectable-block-id]");
-    return row?.dataset.notesSelectableBlockId === block.id;
-  }
+  let contextMenuRequest = $state<{ x: number; y: number; id: number } | null>(null);
+  let contextMenuRequestId = 0;
 
-  function handlePointerMove(event: PointerEvent): void {
-    if (pointerTargetIsCurrentBlock(event.target)) onHandlePointerMove(block.id);
+  function openBlockContextMenu(event: MouseEvent): void {
+    const point = notesBlockContextMenuPoint(event);
+    if (point) contextMenuRequest = { ...point, id: ++contextMenuRequestId };
   }
 </script>
 
@@ -515,8 +508,7 @@
   ondragover={(event) => onDragOver(block.id, event)}
   ondragleave={(event) => onDragLeave(block.id, event)}
   ondrop={(event) => onDrop(block.id, event)}
-  onpointermove={handlePointerMove}
-  onpointerleave={() => onHandlePointerLeave(block.id)}
+  oncontextmenu={openBlockContextMenu}
 >
   <div
     class="notes-block-surface flex min-w-0 items-start gap-1 rounded-md py-0.5 pr-2 hover:bg-accent/50"
@@ -526,8 +518,7 @@
       <div class="notes-block-indent shrink-0"></div>
     {/if}
     <NotesBlockHandle
-      visible={handleVisibleBlockId === block.id}
-      onAddBelow={(type) => onAddBelow(block.id, type)}
+      {contextMenuRequest}
       onTurnInto={openTurnIntoMenu}
       canSetColor={false}
       currentColor="default"
@@ -540,8 +531,6 @@
       {moveTargets}
       onMoveToPage={(pageId) => onMoveToPage(block.id, pageId)}
       onDelete={() => onDelete(block.id)}
-      onDragStart={(event) => onDragStart(block.id, event)}
-      onDragEnd={onDragEnd}
       onMenuOpenChange={(open) => onHandleMenuOpenChange(block.id, open)}
     />
 
@@ -673,7 +662,6 @@
                       {focusBlockId}
                       {focusRequestId}
                       {focusSelection}
-                      {handleVisibleBlockId}
                       {mentionTargets}
                       templateStatus={templateStatusForBlock(tabBlockItem.block.id)}
                       buttonStatus={buttonStatusForBlock(tabBlockItem.block.id)}
@@ -734,8 +722,6 @@
                       {onRemoveTableColumn}
                       {onSelectPage}
                       {onFocusBlock}
-                      {onHandlePointerMove}
-                      {onHandlePointerLeave}
                       {onHandleMenuOpenChange}
                     />
                   {/each}
@@ -754,16 +740,8 @@
 </div>
 
 <style>
-  .notes-block-row {
-    --notes-block-handle-offset: 2.75rem;
-  }
-
   .notes-block-indent {
     width: calc(var(--notes-depth) * 1.25rem);
-  }
-
-  .notes-block-surface {
-    margin-inline-start: calc(var(--notes-block-handle-offset) * -1);
   }
 
   .notes-tab-layout {
@@ -943,12 +921,6 @@
     .notes-tab-icon-select {
       grid-column: 1 / -1;
       width: 100%;
-    }
-  }
-
-  @media (any-pointer: coarse), (max-width: 420px) {
-    .notes-block-row {
-      --notes-block-handle-offset: 3.5rem;
     }
   }
 </style>

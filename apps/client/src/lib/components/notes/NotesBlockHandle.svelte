@@ -16,16 +16,13 @@
     CLOSED_NOTES_BLOCK_HANDLE_MENUS,
     notesBlockHandleActionMenuStyle,
     notesBlockHandleMenuStateAfterAction,
-    notesBlockHandleMenuStateAfterToggle,
+    notesBlockHandleMenuStateAfterMoveToggle,
   } from "$lib/notes/block-handle";
   import type {
     NotesBlockHandleAction,
     NotesBlockHandleMenuState,
   } from "$lib/notes/block-handle";
-  import type {
-    NotesBlockInsertCommand,
-    NotesBlockInsertMenuRect,
-  } from "$lib/notes/block-insertion";
+  import type { NotesBlockInsertMenuRect } from "$lib/notes/block-insertion";
   import type { NotesMoveToPageTarget } from "$lib/notes/block-move";
   import type { NotesColor } from "$lib/notes/types";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
@@ -33,24 +30,18 @@
   import Check from "@lucide/svelte/icons/check";
   import Copy from "@lucide/svelte/icons/copy";
   import FolderInput from "@lucide/svelte/icons/folder-input";
-  import GripVertical from "@lucide/svelte/icons/grip-vertical";
   import LinkIcon from "@lucide/svelte/icons/link";
   import MessageSquare from "@lucide/svelte/icons/message-square";
   import Pilcrow from "@lucide/svelte/icons/pilcrow";
-  import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import { onDestroy } from "svelte";
   import {
     loadNotesEditorPanel,
-    loadNotesTextControl,
     retryNotesEditorPanel,
-    retryNotesTextControl,
     type LoadedNotesEditorPanel,
-    type LoadedNotesTextControl,
   } from "./notes-editor-component-registry";
 
   let {
-    onAddBelow,
     onTurnInto,
     canSetColor,
     currentColor,
@@ -65,12 +56,9 @@
     moveTargets,
     onMoveToPage,
     onDelete,
-    onDragStart,
-    onDragEnd,
-    visible = false,
+    contextMenuRequest = null,
     onMenuOpenChange,
   }: {
-    onAddBelow: (command?: NotesBlockInsertCommand) => void;
     onTurnInto: () => void;
     canSetColor: boolean;
     currentColor: NotesColor;
@@ -85,29 +73,19 @@
     moveTargets: NotesMoveToPageTarget[];
     onMoveToPage: (pageId: string) => void;
     onDelete: () => void;
-    onDragStart: (event: DragEvent) => void;
-    onDragEnd: () => void;
-    visible?: boolean;
+    contextMenuRequest?: { x: number; y: number; id: number } | null;
     onMenuOpenChange?: (open: boolean) => void;
   } = $props();
 
   const { t } = getLocalization();
   let menuOpen = $state(false);
-  let insertMenuOpen = $state(false);
   let moveMenuOpen = $state(false);
-  let addButton: HTMLButtonElement | null = $state(null);
-  let actionButton: HTMLButtonElement | null = $state(null);
-  let insertMenuTriggerRect = $state<NotesBlockInsertMenuRect | null>(null);
   let actionMenuTriggerRect = $state<NotesBlockInsertMenuRect | null>(null);
   let copyLinkStatus = $state<"idle" | "copied" | "failed">("idle");
   let copyLinkTimer: ReturnType<typeof setTimeout> | null = null;
   let destinationPickerLoadState = $state<LazyComponentLoadState<
     "destination-picker",
     LoadedNotesEditorPanel
-  > | null>(null);
-  let insertMenuLoadState = $state<LazyComponentLoadState<
-    "block-insert-menu",
-    LoadedNotesTextControl
   > | null>(null);
   const visibleCommentCount = $derived(unreadCommentCount > 0 ? unreadCommentCount : commentCount);
   const visibleCommentLabel = $derived(
@@ -124,7 +102,7 @@
       })
       : "",
   );
-  const anyMenuOpen = $derived(menuOpen || insertMenuOpen || moveMenuOpen);
+  const anyMenuOpen = $derived(menuOpen || moveMenuOpen);
 
   onDestroy(() => {
     if (copyLinkTimer) clearTimeout(copyLinkTimer);
@@ -135,42 +113,22 @@
   });
 
   $effect(() => {
-    if (!insertMenuOpen || typeof window === "undefined") return;
-    const update = () => {
-      updateInsertMenuTriggerRect();
-    };
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    return () => {
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-    };
-  });
-
-  $effect(() => {
-    if (!menuOpen || typeof window === "undefined") return;
-    const update = () => {
-      updateActionMenuTriggerRect();
-    };
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    return () => {
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-    };
+    if (!contextMenuRequest) return;
+    const { x, y } = contextMenuRequest;
+    actionMenuTriggerRect = { top: y, right: x, bottom: y, left: x };
+    menuOpen = true;
+    moveMenuOpen = false;
   });
 
   function currentMenuState(): NotesBlockHandleMenuState {
     return {
       menuOpen,
-      insertMenuOpen,
       moveMenuOpen,
     };
   }
 
   function applyMenuState(state: NotesBlockHandleMenuState): void {
     menuOpen = state.menuOpen;
-    insertMenuOpen = state.insertMenuOpen;
     moveMenuOpen = state.moveMenuOpen;
   }
 
@@ -183,49 +141,8 @@
     action();
   }
 
-  function insertBlock(command: NotesBlockInsertCommand): void {
-    applyMenuState(CLOSED_NOTES_BLOCK_HANDLE_MENUS);
-    onAddBelow(command);
-  }
-
-  function updateInsertMenuTriggerRect(): void {
-    const rect = addButton?.getBoundingClientRect();
-    insertMenuTriggerRect = rect
-      ? {
-        top: rect.top,
-        right: rect.right,
-        bottom: rect.bottom,
-        left: rect.left,
-      }
-      : null;
-  }
-
-  function updateActionMenuTriggerRect(): void {
-    const rect = actionButton?.getBoundingClientRect();
-    actionMenuTriggerRect = rect
-      ? {
-        top: rect.top,
-        right: rect.right,
-        bottom: rect.bottom,
-        left: rect.left,
-      }
-      : null;
-  }
-
-  function toggleInsertMenu(): void {
-    const state = notesBlockHandleMenuStateAfterToggle(currentMenuState(), "insert");
-    applyMenuState(state);
-    if (state.insertMenuOpen) updateInsertMenuTriggerRect();
-  }
-
-  function toggleActionMenu(): void {
-    const state = notesBlockHandleMenuStateAfterToggle(currentMenuState(), "actions");
-    applyMenuState(state);
-    if (state.menuOpen) updateActionMenuTriggerRect();
-  }
-
   function toggleMoveMenu(): void {
-    applyMenuState(notesBlockHandleMenuStateAfterToggle(currentMenuState(), "move"));
+    applyMenuState(notesBlockHandleMenuStateAfterMoveToggle(currentMenuState()));
   }
 
   function moveToPage(pageId: string): void {
@@ -332,77 +249,16 @@
     });
   }
 
-  function requestInsertMenu(retry = false): void {
-    if (!retry && insertMenuLoadState) return;
-    const loadingState = beginLazyComponentLoad(insertMenuLoadState, "block-insert-menu");
-    insertMenuLoadState = loadingState;
-    const request = retry
-      ? retryNotesTextControl("block-insert-menu")
-      : loadNotesTextControl("block-insert-menu");
-    void request.then((component) => {
-      if (!insertMenuLoadState) return;
-      insertMenuLoadState = resolveLazyComponentLoad(
-        insertMenuLoadState,
-        "block-insert-menu",
-        loadingState.requestId,
-        component,
-      );
-    }).catch((error: unknown) => {
-      if (!insertMenuLoadState) return;
-      insertMenuLoadState = rejectLazyComponentLoad(
-        insertMenuLoadState,
-        "block-insert-menu",
-        loadingState.requestId,
-        error,
-      );
-      console.error("load Notes block insert menu failed", error);
-    });
-  }
-
   $effect(() => {
     if (moveMenuOpen) requestDestinationPicker();
-    if (insertMenuOpen) requestInsertMenu();
   });
 </script>
 
 <div
-  class="notes-block-handle relative mt-1.5 flex shrink-0 items-center justify-end gap-0.5"
-  class:notes-block-handle-visible={visible}
-  class:notes-block-handle-has-comments={commentCount > 0}
-  class:notes-block-handle-menu-open={anyMenuOpen}
-  role="toolbar"
-  aria-label={t("notes.blockActions")}
+  class="notes-block-handle absolute z-10"
   data-notes-block-selection-zone
   use:dismissOnOutside={{ enabled: anyMenuOpen, onDismiss: closeMenus }}
 >
-  <button
-    bind:this={addButton}
-    class="notes-block-handle-button flex items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-    type="button"
-    aria-label={t("notes.addBlockBelow")}
-    data-app-tooltip={t("notes.addBlockBelow")}
-    aria-expanded={insertMenuOpen}
-    onclick={toggleInsertMenu}
-  >
-    <Plus class="size-3.5" />
-  </button>
-  <button
-    bind:this={actionButton}
-    class="notes-block-handle-button flex items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-    type="button"
-    aria-label={t("notes.blockActions")}
-    data-app-tooltip={t("notes.blockActions")}
-    draggable="true"
-    ondragstart={(event) => {
-      applyMenuState(CLOSED_NOTES_BLOCK_HANDLE_MENUS);
-      onDragStart(event);
-    }}
-    ondragend={onDragEnd}
-    aria-expanded={menuOpen}
-    onclick={toggleActionMenu}
-  >
-    <GripVertical class="size-3.5" />
-  </button>
   {#if commentCount > 0}
     <button
       class={`notes-block-handle-comment-button flex items-center justify-center gap-0.5 rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
@@ -416,15 +272,6 @@
       <MessageSquare class="size-3.5 shrink-0" />
       <span class="min-w-0 text-[0.65rem] font-medium leading-none">{visibleCommentCount}</span>
     </button>
-  {/if}
-
-  {#if insertMenuOpen}
-    {#if insertMenuLoadState?.status === "ready" && insertMenuLoadState.component.kind === "block-insert-menu"}
-      {@const NotesBlockInsertMenu = insertMenuLoadState.component.component}
-      <NotesBlockInsertMenu triggerRect={insertMenuTriggerRect} onSelect={insertBlock} />
-    {:else if insertMenuLoadState?.status === "failed"}
-      <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={() => requestInsertMenu(true)}>{t("common.retry")}</button>
-    {/if}
   {/if}
 
   {#if menuOpen}
@@ -617,31 +464,8 @@
 
 <style>
   .notes-block-handle {
-    inline-size: 2.5rem;
-    z-index: 10;
-  }
-
-  .notes-block-handle-menu-open {
-    z-index: 50;
-  }
-
-  .notes-block-handle-has-comments {
-    inline-size: 4.5rem;
-  }
-
-  .notes-block-handle-button {
-    block-size: 1.25rem;
-    inline-size: 1.25rem;
-    opacity: 0;
-    pointer-events: none;
-    visibility: hidden;
-  }
-
-  .notes-block-handle-visible .notes-block-handle-button,
-  .notes-block-handle-menu-open .notes-block-handle-button {
-    opacity: 1;
-    pointer-events: auto;
-    visibility: visible;
+    inset-inline-start: calc(var(--notes-depth) * 1.25rem - 2.25rem);
+    top: 0.625rem;
   }
 
   .notes-block-handle-comment-button {
@@ -667,19 +491,6 @@
   }
 
   @media (any-pointer: coarse), (max-width: 420px) {
-    .notes-block-handle {
-      inline-size: 3.25rem;
-    }
-
-    .notes-block-handle-has-comments {
-      inline-size: 5.25rem;
-    }
-
-    .notes-block-handle-button {
-      block-size: 1.5rem;
-      inline-size: 1.5rem;
-    }
-
     .notes-block-handle-comment-button {
       block-size: 1.5rem;
       min-inline-size: 2rem;

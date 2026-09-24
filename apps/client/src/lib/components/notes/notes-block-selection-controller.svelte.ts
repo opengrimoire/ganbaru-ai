@@ -40,7 +40,6 @@ export interface NotesBlockSelectionControllerOptions {
   focusTextEditorAtEnd: (blockId: string) => boolean;
   focusRow: (blockId: string, preventScroll?: boolean) => void;
   handleNavigationKeydown: (event: KeyboardEvent, blockId: string) => boolean;
-  onKeydown: (event: KeyboardEvent) => void;
   pasteBlocks: (rootIds: readonly string[], subtreeIds: readonly string[], targetId: string, includeTrashed: boolean) => Promise<string | null>;
   duplicateBlocks: (ids: readonly string[]) => Promise<string | null>;
   moveBlocks: (ids: readonly string[], direction: "up" | "down") => Promise<void>;
@@ -181,7 +180,7 @@ export function createNotesBlockSelectionController(options: NotesBlockSelection
   async function remove(): Promise<void> { if (selection) { await options.deleteBlocks(selection.selectedBlockIds); setSelection(null); } }
 
   function keydown(event: KeyboardEvent): void {
-    options.onKeydown(event); if (event.defaultPrevented) return;
+    if (event.defaultPrevented) return;
     const id = options.blockIdFromEvent(event); if (!id) return;
     if (options.handleNavigationKeydown(event, id)) return;
     const modifier = event.ctrlKey || event.metaKey; const key = event.key.toLowerCase();

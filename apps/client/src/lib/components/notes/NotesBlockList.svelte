@@ -125,7 +125,6 @@
     focusTextEditorAtEnd: (id) => navigation.focusTextEditorAtEnd(id),
     focusRow: (id, preventScroll) => navigation.focusRow(id, preventScroll),
     handleNavigationKeydown: (event, id) => navigation.handleKeydown(event, id),
-    onKeydown: (event) => blockHandle.keydown(event),
     pasteBlocks: notes.pasteBlockSelection,
     duplicateBlocks: notes.duplicateBlockSelection,
     moveBlocks: notes.moveBlockSelection,
@@ -148,7 +147,6 @@
     focusBlockId: notes.focusBlockId,
     focusRequestId: notes.focusRequestId,
     focusSelection: notes.focusSelection,
-    handleVisibleBlockId: blockHandle.visibleBlockId,
     mentionTargets,
   });
   const structuralBlockLoader = createNotesStructuralBlockLoader();
@@ -274,18 +272,6 @@
   const focusSelectedBlockRow = navigation.focusRow;
   const focusTextEditorForBlock = navigation.focusTextEditorAtEnd;
   const handleDocumentNavigationKeydown = navigation.handleKeydown;
-
-  function showBlockHandleFromPointer(blockId: string): void {
-    blockHandle.pointerMove(blockId);
-  }
-
-  function hideBlockHandleAfterPointerLeave(blockId: string): void {
-    blockHandle.pointerLeave(blockId);
-  }
-
-  function hideBlockHandleAfterKeyboard(event: KeyboardEvent): void {
-    blockHandle.keydown(event);
-  }
 
   function updateBlockHandleMenuOpen(blockId: string, open: boolean): void {
     blockHandle.setMenuOpen(blockId, open);
@@ -601,7 +587,6 @@
     onAddTableRow: addTableRow, onRemoveTableRow: removeTableRow,
     onAddTableColumn: addTableColumn, onRemoveTableColumn: removeTableColumn,
     onSelectPage: (id) => onSelectPage(id), onFocusBlock: (id) => onFocusBlock(id),
-    onHandlePointerMove: showBlockHandleFromPointer, onHandlePointerLeave: hideBlockHandleAfterPointerLeave,
     onHandleMenuOpenChange: updateBlockHandleMenuOpen,
   };
   const renderLookups: NotesBlockRenderLookups = {

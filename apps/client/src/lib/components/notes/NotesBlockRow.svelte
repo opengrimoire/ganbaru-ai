@@ -25,6 +25,7 @@
     type NotesHeadingBlockType,
   } from "$lib/notes/block-factory";
   import { notesBlockAnchorId } from "$lib/notes/block-link";
+  import { notesBlockContextMenuPoint } from "$lib/notes/block-handle";
   import { notesSyncedBlockStatus } from "$lib/notes/synced-block";
   import type { NotesTemplateBlockStatus } from "$lib/notes/template-block";
   import type { NotesButtonBlockStatus } from "$lib/notes/button-block";
@@ -91,7 +92,6 @@
     focusBlockId,
     focusRequestId,
     focusSelection,
-    handleVisibleBlockId,
     mentionTargets,
     templateStatus,
     buttonStatus,
@@ -152,8 +152,6 @@
     onRemoveTableColumn,
     onSelectPage,
     onFocusBlock,
-    onHandlePointerMove,
-    onHandlePointerLeave,
     onHandleMenuOpenChange,
   }: {
     item: NotesBlockTreeItem;
@@ -165,7 +163,6 @@
     focusBlockId: string | null;
     focusRequestId: number;
     focusSelection: NotesTextSelection | null;
-    handleVisibleBlockId: string | null;
     mentionTargets: NotesNamedMentionTarget[];
     templateStatus: NotesTemplateBlockStatus;
     buttonStatus: NotesButtonBlockStatus;
@@ -301,8 +298,6 @@
     onRemoveTableColumn: (tableBlockId: string, columnIndex: number) => Promise<void> | void;
     onSelectPage: (pageId: string) => void;
     onFocusBlock: (blockId: string) => void;
-    onHandlePointerMove: (blockId: string) => void;
-    onHandlePointerLeave: (blockId: string) => void;
     onHandleMenuOpenChange: (blockId: string, open: boolean) => void;
   } = $props();
 
@@ -490,16 +485,6 @@
     onKeyboardAction(block.id, action);
   }
 
-  function pointerTargetIsCurrentBlock(target: EventTarget | null): boolean {
-    if (!(target instanceof Element)) return false;
-    const row = target.closest<HTMLElement>("[data-notes-selectable-block-id]");
-    return row?.dataset.notesSelectableBlockId === block.id;
-  }
-
-  function handlePointerMove(event: PointerEvent): void {
-    if (pointerTargetIsCurrentBlock(event.target)) onHandlePointerMove(block.id);
-  }
-
   function handleUndoRedoKeydown(event: KeyboardEvent): boolean {
     const undoAction = notesUndoShortcutAction(event);
     if (!undoAction) return false;
@@ -563,6 +548,14 @@
   function openTurnIntoMenu(): void {
     slashOpen = true;
   }
+
+  let contextMenuRequest = $state<{ x: number; y: number; id: number } | null>(null);
+  let contextMenuRequestId = 0;
+
+  function openBlockContextMenu(event: MouseEvent): void {
+    const point = notesBlockContextMenuPoint(event);
+    if (point) contextMenuRequest = { ...point, id: ++contextMenuRequestId };
+  }
 </script>
 
 <div
@@ -581,8 +574,7 @@
   ondragover={(event) => onDragOver(block.id, event)}
   ondragleave={(event) => onDragLeave(block.id, event)}
   ondrop={(event) => onDrop(block.id, event)}
-  onpointermove={handlePointerMove}
-  onpointerleave={() => onHandlePointerLeave(block.id)}
+  oncontextmenu={openBlockContextMenu}
 >
   <div
     class="notes-block-surface flex min-w-0 items-start gap-1 rounded-md py-0.5 pr-2 hover:bg-accent/50"
@@ -594,8 +586,7 @@
       <div class="notes-block-indent shrink-0"></div>
     {/if}
     <NotesBlockHandle
-      visible={handleVisibleBlockId === block.id}
-      onAddBelow={(type) => onAddBelow(block.id, type)}
+      {contextMenuRequest}
       onTurnInto={openTurnIntoMenu}
       canSetColor={blockSupportsColor}
       currentColor={currentColor}
@@ -610,8 +601,6 @@
       {moveTargets}
       onMoveToPage={(pageId) => onMoveToPage(block.id, pageId)}
       onDelete={() => onDelete(block.id)}
-      onDragStart={(event) => onDragStart(block.id, event)}
-      onDragEnd={onDragEnd}
       onMenuOpenChange={(open) => onHandleMenuOpenChange(block.id, open)}
     />
     {#if block.type === "to_do"}
@@ -980,16 +969,11 @@
 </div>
 
 <style>
-  .notes-block-row {
-    --notes-block-handle-offset: 2.75rem;
-  }
-
   .notes-block-indent {
     width: calc(var(--notes-depth) * 1.25rem);
   }
 
   .notes-block-surface {
-    margin-inline-start: calc(var(--notes-block-handle-offset) * -1);
     color: var(--notes-block-color, var(--foreground));
     background: var(--notes-block-bg, transparent);
     box-shadow: inset 0 0 0 1px var(--notes-block-border, transparent);
@@ -1045,11 +1029,5 @@
 
   .notes-toc-item {
     padding-left: calc((var(--notes-toc-level) - 1) * 1rem);
-  }
-
-  @media (any-pointer: coarse), (max-width: 420px) {
-    .notes-block-row {
-      --notes-block-handle-offset: 3.5rem;
-    }
   }
 </style>

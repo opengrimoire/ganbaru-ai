@@ -30,6 +30,8 @@ Blocks are ordered children of a page or another compatible block. Their canonic
 
 Text blocks share the rich-text editor and support conversion when the source and destination payloads are compatible. Color, annotations, links, mentions, comments, and child subtrees survive compatible conversions and duplication.
 
+The editor shows block actions from a block surface's context menu. Text selection has its own context menu. Blocks can be inserted through the text context menu or keyboard editing commands; moving blocks remains available through block actions and multi-block selection. The editor does not show add or drag handles beside each block.
+
 List numbering and bullet presentation derive from sibling structure. To-do checked state is canonical block payload. Toggle open state can be local presentation metadata while toggle children remain canonical content.
 
 ## Child pages and navigation blocks

@@ -13,7 +13,6 @@ export type NotesBlockRenderState = Pick<RowProps,
   | "focusBlockId"
   | "focusRequestId"
   | "focusSelection"
-  | "handleVisibleBlockId"
   | "mentionTargets"
 >;
 
@@ -32,7 +31,7 @@ export type NotesBlockRenderActions = Pick<RowProps,
   | "onEmbedUrlChange" | "onEquationExpressionChange" | "onMediaChange"
   | "onTableCellRichTextChange" | "onAddTableRow" | "onRemoveTableRow"
   | "onAddTableColumn" | "onRemoveTableColumn" | "onSelectPage" | "onFocusBlock"
-  | "onHandlePointerMove" | "onHandlePointerLeave" | "onHandleMenuOpenChange"
+  | "onHandleMenuOpenChange"
 >;
 
 export type NotesBlockDragBindings = Pick<ColumnProps,

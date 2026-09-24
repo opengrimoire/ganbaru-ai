@@ -19,6 +19,7 @@ Using a scratch page with other pages and relevant project objects available, ve
 
 ## Block acceptance
 
+- Confirm block rows have no left-side add or drag buttons. Right-click a non-text block surface to open block actions, while right-clicking editable text opens the text menu. Existing comment counts remain visible without shifting block content.
 - Insert, convert, duplicate, move, nest, Trash, restore, and delete each supported block family.
 - Verify internal table rows, columns, and tab labels never appear as stray document rows.
 - Remove columns and tabs and confirm their child content relocates safely.

@@ -55,7 +55,6 @@ const EDITOR_PANELS = [
 ] as const satisfies readonly NotesEditorPanelKind[];
 
 const TEXT_CONTROLS = [
-  "block-insert-menu",
   "text-context-menu",
   "link-editor",
   "mention-menu",
