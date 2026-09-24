@@ -30,6 +30,12 @@ describe("notes block editor UI helpers", () => {
     expect(notesRichTextEditorClass("code")).toContain("font-mono");
   });
 
+  it("keeps ordinary text flush with the page title while padding code backgrounds", () => {
+    expect(notesTextareaClass("paragraph")).not.toContain("pl-1");
+    expect(notesTextareaClass("paragraph")).not.toContain("px-1");
+    expect(notesTextareaClass("code")).toContain("pl-1");
+  });
+
   it("returns stable visible markers for list-like blocks", () => {
     expect(notesBlockMarker("bulleted_list_item")).toBe("•");
     expect(notesBlockMarker("numbered_list_item")).toBe("1.");
