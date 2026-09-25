@@ -25,7 +25,7 @@ import {
   planNotesPageLoadFocus,
   type NotesFocusRequest,
 } from "$lib/notes/editor-focus";
-import type { NotesTextSelection } from "$lib/notes/editor-selection";
+import type { NotesDocumentSelection, NotesTextSelection } from "$lib/notes/editor-selection";
 import type { NotesUndoSnapshot } from "$lib/notes/undo-history";
 import {
   type NotesPostMutationResult,
@@ -106,6 +106,7 @@ let pages = $state<NotesPage[]>([]);
 let allPages = $state<NotesPage[]>([]);
 let viewMode = $state<NotesViewMode>("pages");
 let contextualReturnPageId: string | null = null;
+let documentSelectionRestore = $state<{ pageId: string; selection: NotesDocumentSelection | null } | null>(null);
 let focusRequest = $state<NotesFocusRequest>({
   blockId: null,
   requestId: 0,
@@ -759,6 +760,7 @@ const {
 treeProjection.setLocalChangeMarker(markBlockLocallyChanged);
 
 const undoController = createNotesUndoController({
+  restoreDocumentSelection: (pageId, selection) => { documentSelectionRestore = { pageId, selection }; },
   enqueueEditorMutation,
   readSelectedPageId: () => pageSession.selectedPageId,
   readTreeState: treeState,
@@ -894,6 +896,17 @@ const blockActions = createNotesBlockActions({
   createUndoSnapshotForBlocks: undoController.snapshotBlocks,
   recordUndo: undoController.record,
 });
+
+/** Load affected descendants before a document edit so unselected children survive. */
+async function replaceDocumentRange(ids: readonly string[], start: number, end: number, text: string, html?: string, documentSelection?: NotesDocumentSelection): Promise<void> {
+  const pageId = pageSession.selectedPageId;
+  const generation = pageSession.generation;
+  const required = [...new Set([...ids, ...outlineSubtreeIds(ids.slice(1))])];
+  if (required.some((id) => !blockById(id))) await hydrateBlockRange(required);
+  if (pageId !== pageSession.selectedPageId || generation !== pageSession.generation) return;
+  if (required.some((id) => !blockById(id))) throw new Error("Notes selection content could not be loaded");
+  await blockActions.replaceDocumentRange(ids, start, end, text, html, documentSelection);
+}
 
 const collaborationController = createNotesCollaborationController({
   readSelectedPageId: () => pageSession.selectedPageId,
@@ -1303,6 +1316,7 @@ export function getNotes() {
     get focusBlockId(): string | null {
       return focusRequest.blockId;
     },
+    get documentSelectionRestore() { return documentSelectionRestore; },
     get focusRequestId(): number {
       return focusRequest.requestId;
     },
@@ -1453,6 +1467,8 @@ export function getNotes() {
     pasteRichHtmlIntoBlock,
     pasteBlockSelection,
     deleteBlock,
+    formatDocumentRange: blockActions.formatDocumentRange,
+    replaceDocumentRange,
     deleteBlockSelection,
     mergeBlockWithPrevious,
     nestBlock,

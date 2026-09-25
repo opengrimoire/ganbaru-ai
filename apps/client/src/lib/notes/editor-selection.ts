@@ -298,7 +298,8 @@ interface EditableDomPoint {
   offset: number;
 }
 
-function findEditableDomPoint(root: HTMLElement, textOffset: number): EditableDomPoint {
+/** Resolve a UTF-16 text offset to a DOM point, including soft line breaks. */
+export function findEditableDomPoint(root: HTMLElement, textOffset: number): EditableDomPoint {
   let remaining = Math.max(0, textOffset);
   let fallback: EditableDomPoint = { node: root, offset: 0 };
 
@@ -370,4 +371,106 @@ export function restoreNotesEditableSelection(
   windowSelection.removeAllRanges();
   windowSelection.addRange(range);
   return true;
+}
+
+/** A stable UTF-16 position in the page's ordered block document. */
+export interface NotesDocumentPoint {
+  blockId: string;
+  offset: number;
+}
+
+/** Directional selection, independent of which editors are mounted. */
+export interface NotesDocumentSelection {
+  anchor: NotesDocumentPoint;
+  focus: NotesDocumentPoint;
+}
+
+/** Normalize a directional range without discarding its partial endpoints. */
+export function notesDocumentRange(ids: readonly string[], selection: NotesDocumentSelection) {
+  const anchorIndex = ids.indexOf(selection.anchor.blockId);
+  const focusIndex = ids.indexOf(selection.focus.blockId);
+  if (anchorIndex < 0 || focusIndex < 0) return null;
+  const forward = anchorIndex < focusIndex
+    || (anchorIndex === focusIndex && selection.anchor.offset <= selection.focus.offset);
+  return {
+    start: forward ? selection.anchor : selection.focus,
+    end: forward ? selection.focus : selection.anchor,
+    blockIds: ids.slice(Math.min(anchorIndex, focusIndex), Math.max(anchorIndex, focusIndex) + 1),
+  };
+}
+
+let documentHighlightSequence = 0;
+
+/** Paint document selection independently of the active contenteditable host. */
+export function createNotesDocumentSelectionPainter(list: HTMLElement) {
+  const document = list.ownerDocument;
+  const name = `ganbaru-notes-selection-${++documentHighlightSequence}`;
+  const view = document.defaultView as (Window & {
+    Highlight?: new (...ranges: Range[]) => unknown;
+    CSS?: { highlights?: { set: (key: string, value: unknown) => void; delete: (key: string) => boolean } };
+  }) | null;
+  const registry = view?.CSS?.highlights;
+  const HighlightConstructor = view?.Highlight;
+  const style = document.createElement("style");
+  const paintedScope = `[data-notes-painted-selection="${name}"]`;
+  style.textContent = `
+    ::highlight(${name}) { background-color: var(--selection-background, Highlight); }
+    ${paintedScope}::selection, ${paintedScope} *::selection { background-color: transparent; }
+  `;
+  let overlay: HTMLDivElement | null = null;
+
+  function clear(): void {
+    registry?.delete(name);
+    style.remove();
+    overlay?.remove();
+    overlay = null;
+    list.removeAttribute("data-notes-painted-selection");
+  }
+
+  function paint(ranges: readonly Range[]): void {
+    clear();
+    if (!ranges.length) return;
+    if (registry && typeof HighlightConstructor === "function") {
+      document.head.append(style);
+      registry.set(name, new HighlightConstructor(...ranges));
+      list.setAttribute("data-notes-painted-selection", name);
+      return;
+    }
+
+    // Older webviews need an inert overlay; never wrap or mutate editable text.
+    const bounds = list.getBoundingClientRect();
+    const scaleX = list.offsetWidth ? bounds.width / list.offsetWidth : 1;
+    const scaleY = list.offsetHeight ? bounds.height / list.offsetHeight : 1;
+    const rectangles = ranges.flatMap((range) => Array.from(range.getClientRects?.() ?? []))
+      .filter((rect) => rect.width > 0 && rect.height > 0)
+      .map((rect) => ({ left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom }))
+      .sort((left, right) => left.top - right.top || left.left - right.left);
+    const merged: typeof rectangles = [];
+    for (const rect of rectangles) {
+      const previous = merged.at(-1);
+      if (previous && Math.abs(previous.top - rect.top) < 0.5 && Math.abs(previous.bottom - rect.bottom) < 0.5
+        && rect.left <= previous.right) previous.right = Math.max(previous.right, rect.right);
+      else merged.push({ ...rect });
+    }
+    // Keep native highlighting when there are no visible rectangles to replace it.
+    if (!merged.length) return;
+    overlay = document.createElement("div");
+    overlay.dataset.notesSelectionOverlay = "";
+    overlay.setAttribute("aria-hidden", "true");
+    overlay.style.cssText = "position:absolute;inset:0;pointer-events:none;user-select:none;overflow:hidden;z-index:1";
+    for (const rect of merged) {
+      const highlight = document.createElement("span");
+      highlight.style.cssText = "position:absolute;background-color:var(--selection-background, Highlight);pointer-events:none";
+      highlight.style.left = `${(rect.left - bounds.left) / scaleX + list.scrollLeft}px`;
+      highlight.style.top = `${(rect.top - bounds.top) / scaleY + list.scrollTop}px`;
+      highlight.style.width = `${(rect.right - rect.left) / scaleX}px`;
+      highlight.style.height = `${(rect.bottom - rect.top) / scaleY}px`;
+      overlay.append(highlight);
+    }
+    list.append(overlay);
+    document.head.append(style);
+    list.setAttribute("data-notes-painted-selection", name);
+  }
+
+  return { paint, clear };
 }

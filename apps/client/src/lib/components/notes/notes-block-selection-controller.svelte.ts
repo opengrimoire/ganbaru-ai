@@ -122,7 +122,8 @@ export function createNotesBlockSelectionController(options: NotesBlockSelection
   }
 
   function pointerDown(event: PointerEvent): void {
-    if (event.button !== 0) return;
+    if (event.defaultPrevented || event.button !== 0) return;
+    if (event.target instanceof Element && event.target.closest("[data-notes-selection-menu]")) return;
     const id = options.blockIdFromEvent(event);
     if (!id) { if (selection) setSelection(null); return; }
     if (event.shiftKey && selection) {
@@ -132,9 +133,6 @@ export function createNotesBlockSelectionController(options: NotesBlockSelection
     }
     if (options.targetIsEditable(event.target)) {
       if (selection) setSelection(null);
-      if (event.target instanceof Element && event.target.closest("[contenteditable='true'], textarea")) {
-        dragAnchorBlockId = id; dragPointerId = event.pointerId;
-      }
       return;
     }
     if (!options.targetIsSelectionZone(event.target)) { if (selection) setSelection(null); return; }
@@ -155,14 +153,16 @@ export function createNotesBlockSelectionController(options: NotesBlockSelection
 
   async function copy(mode: "copy" | "cut"): Promise<void> {
     if (!selection) return;
+    const selectedIds = [...selection.selectedBlockIds];
     const tree = options.readTreeState();
-    const roots = notesSelectionRootBlockIds(tree, selection.selectedBlockIds);
+    const roots = notesSelectionRootBlockIds(tree, selectedIds);
     const subtree = notesSelectionSubtreeIds(tree, roots);
     if (!roots.length || !subtree.length) return;
     const plainText = notesSelectionPlainText(tree, roots);
     clipboard = { mode, pageId: options.readPageId(), rootBlockIds: roots, subtreeBlockIds: subtree, plainText };
-    if (plainText && typeof navigator !== "undefined" && navigator.clipboard) await navigator.clipboard.writeText(plainText).catch(() => undefined);
-    if (mode === "cut") { await options.deleteBlocks(selection.selectedBlockIds); setSelection(null); }
+    if (!navigator.clipboard) throw new Error("Notes clipboard is unavailable");
+    await navigator.clipboard.writeText(plainText);
+    if (mode === "cut") { await options.deleteBlocks(selectedIds); setSelection(null); }
   }
 
   async function paste(targetId: string | null): Promise<void> {

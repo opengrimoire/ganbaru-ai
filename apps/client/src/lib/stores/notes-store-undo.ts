@@ -8,7 +8,7 @@ import {
 } from "$lib/api/notes";
 import { blockUpdateFromBlock } from "$lib/notes/block-factory";
 import { parentIdForBlock, type NotesTreeState } from "$lib/notes/block-tree";
-import type { NotesTextSelection } from "$lib/notes/editor-selection";
+import type { NotesDocumentSelection, NotesTextSelection } from "$lib/notes/editor-selection";
 import {
   createNotesUndoSnapshot,
   createNotesUndoSnapshotForBlocks,
@@ -35,6 +35,7 @@ export interface NotesUndoControllerContext {
     blockId: string | null,
     selection?: NotesTextSelection | null,
   ) => void;
+  restoreDocumentSelection?: (pageId: string, selection: NotesDocumentSelection | null) => void;
   flushPendingMutations: () => Promise<void>;
   applyLocalSnapshot: (target: NotesUndoSnapshot, source: NotesUndoSnapshot) => void;
 }
@@ -241,6 +242,7 @@ export function createNotesUndoController(
     const source = direction === "undo" ? entry.after : entry.before;
     context.applyLocalSnapshot(target, source);
     context.requestBlockFocus(target.focusBlockId, target.focusSelection);
+    context.restoreDocumentSelection?.(target.pageId, target.documentSelection ?? null);
     const persistence = context.enqueueEditorMutation(() => applyUndoSnapshot(target, source));
     mutationChain = persistence;
     void persistence

@@ -221,6 +221,10 @@ export class NotesTextEditorRuntime {
       let cancelled = false;
       void tick().then(() => {
         if (cancelled || !this.editor || this.compositionActive || requestedFocusId !== source.focusRequestId()) return;
+        if (this.editor.closest("[data-notes-document-selection]")) {
+          this.#appliedFocusRequestId = requestedFocusId;
+          return;
+        }
         const length = notesPlainTextFromEditableRoot(this.editor).length;
         const plan = planNotesSelectionReconciliation({
           focusRequestIsNew: requestedFocusId !== this.#appliedFocusRequestId,
@@ -1012,7 +1016,9 @@ export class NotesTextEditorController {
 
   handleCompositionEnd = (event: CompositionEvent): void => {
     this.runtime.compositionActive = false;
-    if (event.currentTarget instanceof HTMLElement) this.commitRichTextInput(event.currentTarget);
+    if (event.currentTarget instanceof HTMLElement && !event.currentTarget.closest("[data-notes-document-selection]")) {
+      this.commitRichTextInput(event.currentTarget);
+    }
   };
 
   handlePaste = async (event: ClipboardEvent): Promise<void> => {

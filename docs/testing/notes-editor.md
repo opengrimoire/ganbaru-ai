@@ -18,9 +18,15 @@ Using a scratch page with other pages and relevant project objects available, ve
 - A failed or delayed save never overwrites a newer local revision. Verify the save error is visible, the draft remains editable, and Retry persists retained writes before newer dependent edits.
 - Merge two paragraphs, immediately press Enter at the join, type, undo several times, and redo. Confirm there are no temporary duplicate rows and the caret stays at the intended boundary.
 - Split a middle paragraph repeatedly before storage responds, then undo and redo. Confirm following paragraphs and unloaded outline entries retain their positions.
-- Drag across paragraph editors, select from a row margin, extend with Shift-click or Shift+Arrow, and press Escape then Ctrl/Cmd+A. Confirm block deletion and Ctrl/Cmd+Z work with row focus.
+- Press Ctrl/Cmd+A directly in a paragraph on pages shorter and longer than 200 blocks. Confirm the complete body is selected on the first press; copy includes the final offscreen block, and selecting alone does not render the entire long page.
+- With Ctrl/Cmd+A active, confirm every visible text block is highlighted even when focus stays in the middle block. Scroll through a long page, resize the window, dismiss the range, and check that highlights follow the text and disappear. Confirm that the active block has the same highlight intensity as the other selected blocks in both light and dark themes. Clear the document range, then select within one block and confirm native highlighting returns. Repeat on a webview without CSS custom highlights.
+- Extend selection in both directions with Shift+Arrow, Ctrl/Cmd+Shift+Home/End, Shift-click, and dragging. Start and end in the middle of words across wrapped lines, empty paragraphs, headings, and lists. Confirm endpoint offsets remain precise and reversing direction shrinks the selection.
+- Replace a cross-block selection by typing, Enter, multiline paste, and rich HTML paste. Check retained prefix/suffix formatting, descendants outside the range, one-step undo, redo, and reopen after persistence.
+- Repeat full-page replacement with delayed hydration while typing several characters. Confirm none are dropped. Navigate away before loading completes and confirm the old action cannot modify the new page.
+- Select text and whole blocks without opening any toolbar. Right-click to copy, cut, paste, delete, or format a text range; check duplicate and movement for margin selections. Confirm menu dismissal, keyboard navigation, and focus restoration.
+- Check Ctrl/Cmd+A in the title, database fields, table cells, and dialogs remains scoped to those controls. Verify IME composition, emoji, and soft line breaks at cross-block selection boundaries on each supported webview.
 
-Automated delayed-storage coverage connects the actual action, persistence, tree projection, and undo controllers in `notes-editor-transactions.test.ts`. It checks local results before storage is released and persisted results afterward. These checks do not measure real Tauri input latency or replace the manual acceptance above.
+Automated delayed-storage coverage connects the actual action, persistence, tree projection, and undo controllers in `notes-editor-transactions.test.ts`. It checks local results before storage is released and persisted results afterward, including range replacement, formatting, surviving descendants, and undo. Document-selection DOM tests cover independent editing hosts and keyboard/clipboard routing; hydration tests cover selections spanning multiple backend batches. These checks do not measure real Tauri input latency or replace the manual acceptance above.
 
 ## Block acceptance
 
@@ -44,7 +50,7 @@ Automated delayed-storage coverage connects the actual action, persistence, tree
 
 ## Page and navigation acceptance
 
-- Use Up and Down through wrapped text and adjacent blocks. Confirm the caret moves one visual line at a time and the viewport does not jump a visible block to the top; then jump to an unloaded block and confirm it scrolls into view.
+- Use Left and Right at text boundaries, and Up and Down through wrapped text and adjacent blocks. Confirm the caret moves one visual line at a time and the viewport does not jump a visible block to the top; then jump to an unloaded block and confirm it scrolls into view.
 - Open a page in full, side, and center modes. Confirm the editor has no separate header row, last edited, favorite, and page actions appear before project Notes settings in the workspace header, and preview close/view-mode controls stay reachable without covering title actions.
 - Create root, folder, nested, and database-row pages with empty and authored titles.
 - Move pages among project root, folders, and parent pages while preserving paired child blocks.
@@ -84,3 +90,9 @@ For table, board, gallery, list, calendar, and timeline:
 - Complete primary editing, navigation, comments, movement, block insertion, database interaction, history, and recovery with keyboard only.
 - Verify focus returns predictably after menus, dialogs, deletion, movement, and responsive presentation changes.
 - Confirm narrow layouts keep Archive, Trash, restore, and permanent-delete actions reachable.
+
+### Document selection undo restoration
+
+- Select the complete body with Ctrl+A, delete or type replacement text, then undo. All original text must return highlighted across blocks, and typing again must replace that complete range.
+- Redo must restore the replacement and its collapsed caret; another undo must restore the complete range again.
+- Repeat with a backward partial selection and with formatting. Both endpoints and the selection direction must survive undo and redo.

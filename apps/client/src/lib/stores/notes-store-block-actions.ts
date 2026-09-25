@@ -1,3 +1,5 @@
+import type { NotesRichTextAnnotationName } from "$lib/notes/rich-text";
+import { createNotesDocumentEdit, createNotesDocumentFormatting } from "./notes-store-document-edit";
 import {
   appendNotesBlockChildren,
   duplicateNotesBlocks,
@@ -10,7 +12,7 @@ import {
   collectLoadedBlockSubtreeIds,
 } from "$lib/notes/block-duplicate";
 import { cloneNotesJson } from "$lib/notes/json-clone";
-import type { NotesTextSelection } from "$lib/notes/editor-selection";
+import type { NotesDocumentSelection, NotesTextSelection } from "$lib/notes/editor-selection";
 import type { NotesTreeState } from "$lib/notes/block-tree";
 import {
   type NotesUndoKind,
@@ -151,6 +153,8 @@ export interface NotesBlockActions
     NotesBlockMovementActions,
     NotesBlockPasteActions,
     NotesStructuralBlockActions {
+  formatDocumentRange: (ids: readonly string[], start: number, end: number, annotation: NotesRichTextAnnotationName, documentSelection?: NotesDocumentSelection) => Promise<void>;
+  replaceDocumentRange: (ids: readonly string[], start: number, end: number, text: string, html?: string, documentSelection?: NotesDocumentSelection) => Promise<void>;
   flushOptimisticBlockWrites: () => Promise<void>;
 }
 
@@ -377,6 +381,8 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
   }
 
   return {
+    formatDocumentRange: createNotesDocumentFormatting(context),
+    replaceDocumentRange: createNotesDocumentEdit(context, optimisticBlockFromWrite),
     flushOptimisticBlockWrites,
     ...richTextActions,
     ...mediaActions,

@@ -1,27 +1,12 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import { tick, untrack } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getCalendar } from "$lib/stores/calendar.svelte";
   import { getNotes } from "$lib/stores/notes.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { getProjects } from "$lib/stores/projects.svelte";
   import { buildNotesBlockLink, buildNotesPageLink } from "$lib/notes/block-link";
-  import {
-    notesBlockSelectionAfterClick,
-    notesBlockSelectionAfterKeyboard,
-    notesBlockSelectionContains,
-    notesBlockSelectionForBlock,
-    notesBlockSelectionPrunedToVisible,
-    notesBlockSelectionRange,
-    normalizeNotesSelectableBlockIds,
-  } from "$lib/notes/block-selection";
-  import type { NotesBlockSelectionState } from "$lib/notes/block-selection";
-  import {
-    notesSelectionPlainText,
-    notesSelectionRootBlockIds,
-    notesSelectionSubtreeIds,
-    planNotesSelectionMoveWithinSiblings,
-  } from "$lib/notes/block-selection-operations";
+  import { normalizeNotesSelectableBlockIds } from "$lib/notes/block-selection";
   import { notesTemplateBlockStatus } from "$lib/notes/template-block";
   import { notesButtonBlockStatus } from "$lib/notes/button-block";
   import type { NotesUnsupportedConversionTarget } from "$lib/notes/unsupported";
@@ -57,7 +42,8 @@
     NotesTableOfContentsItem,
   } from "$lib/notes/types";
   import NotesBlockRow from "./NotesBlockRow.svelte";
-  import NotesBlockSelectionToolbar from "./NotesBlockSelectionToolbar.svelte";
+  import type NotesSelectionContextMenu from "./NotesSelectionContextMenu.svelte";
+  import { createNotesDocumentSelectionController } from "./notes-document-selection-controller.svelte";
   import NotesVirtualBlock from "./NotesVirtualBlock.svelte";
   import NotesVisibleBlockRenderer from "./NotesVisibleBlockRenderer.svelte";
   import { createNotesBlockDragController } from "./notes-block-drag-controller.svelte";
@@ -66,7 +52,6 @@
   import { createNotesBlockNavigationController } from "./notes-block-navigation-controller";
   import {
     createNotesBlockSelectionController,
-    type NotesBlockSelectionDelegates,
   } from "./notes-block-selection-controller.svelte";
   import type {
     NotesBlockDragBindings,
@@ -132,14 +117,61 @@
     moveBlocks: notes.moveBlockSelection,
     deleteBlocks: notes.deleteBlockSelection,
   });
+  const documentSelection = createNotesDocumentSelectionController({
+    readIds: () => notes.flatBlockOutlines.map((item) => item.outline.id),
+    readPageId: () => pageId,
+    readBlock: notes.blockById,
+    hydrate: notes.hydrateBlockRange,
+    replace: notes.replaceDocumentRange,
+    format: notes.formatDocumentRange,
+    focus: (point) => notes.focusBlock(point.blockId, { start: point.offset, end: point.offset }),
+    restoreFocusAfterEdit: () => { if (notes.focusBlockId) notes.focusBlock(notes.focusBlockId, notes.focusSelection); },
+    clearBlockSelection: () => blockSelectionController.setSelection(null),
+    undo: notes.undoNotesEdit,
+    redo: notes.redoNotesEdit,
+  });
+  const documentSelectionDelegation = documentSelection.delegation;
+  let appliedSelectionRestore = untrack(() => notes.documentSelectionRestore);
+  // Set selection ownership before child editors reconcile their focus requests.
+  $effect.pre(() => {
+    const restore = notes.documentSelectionRestore;
+    const currentPageId = pageId;
+    if (!restore || restore === appliedSelectionRestore) return;
+    appliedSelectionRestore = restore;
+    if (restore.pageId !== currentPageId) return;
+    untrack(() => {
+      const selection = restore.selection;
+      if (selection) void documentSelection.run(() => documentSelection.select(selection));
+      else documentSelection.clear();
+    });
+  });
+
+  let blockSelectionMenu = $state<{ x: number; y: number } | null>(null);
+  let SelectionContextMenu = $state<typeof NotesSelectionContextMenu | null>(null);
+  let selectionMenuLoading = $state(false);
+  let selectionMenuError = $state<string | null>(null);
+  $effect(() => {
+    if (!documentSelection.menu && !blockSelectionMenu) { selectionMenuError = null; return; }
+    if (SelectionContextMenu || selectionMenuLoading || selectionMenuError) return;
+    selectionMenuLoading = true;
+    void import("./NotesSelectionContextMenu.svelte")
+      .then((module) => { SelectionContextMenu = module.default; })
+      .catch((reason: unknown) => { selectionMenuError = reason instanceof Error ? reason.message : String(reason); })
+      .finally(() => { selectionMenuLoading = false; });
+  });
+  function selectionContextMenu(node: HTMLDivElement) {
+    const open = (event: MouseEvent) => {
+      if (!blockSelectionController.selection || event.defaultPrevented) return;
+      event.preventDefault(); event.stopPropagation();
+      blockSelectionMenu = { x: event.clientX, y: event.clientY };
+    };
+    node.addEventListener("contextmenu", open, true);
+    return { destroy: () => node.removeEventListener("contextmenu", open, true) };
+  }
+  $effect(() => { void pageId; documentSelection.clear(); blockSelectionMenu = null; });
   const blockSelection = $derived(blockSelectionController.selection);
-  const selectionDragAnchorBlockId = $derived(blockSelectionController.dragAnchorBlockId);
-  const selectionDragPointerId = $derived(blockSelectionController.dragPointerId);
   const selectionClipboard = $derived(blockSelectionController.clipboard);
-  const selectionBusy = $derived(blockSelectionController.busy);
   const selectionActionError = $derived(blockSelectionController.error);
-  const selectedBlockCount = $derived(blockSelection?.selectedBlockIds.length ?? 0);
-  const selectedRootBlockIds = $derived(blockSelectionController.selectedRootBlockIds);
   const canMoveSelectionUp = $derived(blockSelectionController.canMoveUp);
   const canMoveSelectionDown = $derived(blockSelectionController.canMoveDown);
   const mentionTargets: NotesNamedMentionTarget[] = $derived(buildMentionTargets());
@@ -165,7 +197,9 @@
     readListElement: () => blockListElement,
     readOutlines: () => notes.flatBlockOutlines,
     readItems: () => items,
+    readSelectionBlockIds: () => documentSelection.renderIds,
     readPinnedBlockIds: () => [
+      ...documentSelection.pinnedIds,
       blockDrag.draggingBlockId,
       blockHandle.openMenuBlockId,
       notes.focusBlockId,
@@ -181,6 +215,12 @@
   const visibleOutlines = $derived(virtualizer.visibleOutlines);
   const hydratedItemsById = $derived(virtualizer.hydratedItemsById);
   const measureVirtualBlock = virtualizer.measureBlock;
+  $effect(() => {
+    void visibleOutlines;
+    void hydratedItemsById;
+    void documentSelection.selection;
+    void tick().then(documentSelection.repaint);
+  });
 
   $effect(() => {
     if (items.some((item) => item.block.type === "column_list")) {
@@ -602,29 +642,39 @@
 </script>
 
 <div
+  use:documentSelectionDelegation
+  use:selectionContextMenu
   use:blockSelectionDelegation
   bind:this={blockListElement}
-  class="notes-block-list flex min-w-0 flex-col gap-0.5 pb-8"
+  class="notes-block-list relative flex min-w-0 flex-col gap-0.5 pb-8"
   role="group"
   aria-label={t("notes.blockList")}
 >
-  {#if blockSelection}
-    <NotesBlockSelectionToolbar
-      selectedCount={selectedBlockCount}
-      hasSelectedRoots={selectedRootBlockIds.length > 0}
-      clipboardAvailable={selectionClipboard !== null}
-      canMoveUp={canMoveSelectionUp}
-      canMoveDown={canMoveSelectionDown}
-      busy={selectionBusy}
-      error={selectionActionError}
-      onCopy={() => void blockSelectionController.run(() => blockSelectionController.copy("copy"))}
-      onCut={() => void blockSelectionController.run(() => blockSelectionController.copy("cut"))}
-      onPaste={() => void blockSelectionController.run(() => blockSelectionController.paste(blockSelection?.focusBlockId ?? notes.focusBlockId))}
-      onDuplicate={() => void blockSelectionController.run(blockSelectionController.duplicate)}
-      onMoveUp={() => void blockSelectionController.run(() => blockSelectionController.move("up"))}
-      onMoveDown={() => void blockSelectionController.run(() => blockSelectionController.move("down"))}
-      onDelete={() => void blockSelectionController.run(blockSelectionController.remove)}
-    />
+  {#if documentSelection.menu && SelectionContextMenu}
+    <SelectionContextMenu position={documentSelection.menu} onClose={() => documentSelection.closeMenu()}
+      actions={[
+        { label: t("notes.copySelection"), run: () => void documentSelection.run(() => documentSelection.copy()) },
+        { label: t("notes.cutSelection"), run: () => void documentSelection.run(() => documentSelection.copy(true)) },
+        { label: t("notes.pasteSelection"), run: () => void documentSelection.run(documentSelection.paste) },
+        { label: t("notes.deleteSelection"), run: () => void documentSelection.run(() => documentSelection.replace("")) },
+        { label: t("notes.bold"), run: () => void documentSelection.run(() => documentSelection.format("bold")) },
+        { label: t("notes.italic"), run: () => void documentSelection.run(() => documentSelection.format("italic")) },
+        { label: t("notes.underline"), run: () => void documentSelection.run(() => documentSelection.format("underline")) },
+      ]} />
+  {:else if blockSelection && blockSelectionMenu && SelectionContextMenu}
+    <SelectionContextMenu position={blockSelectionMenu} onClose={() => { blockSelectionMenu = null; if (blockSelection) navigation.focusRow(blockSelection.focusBlockId); }}
+      actions={[
+        { label: t("notes.copySelection"), run: () => void blockSelectionController.run(() => blockSelectionController.copy("copy")) },
+        { label: t("notes.cutSelection"), run: () => void blockSelectionController.run(() => blockSelectionController.copy("cut")) },
+        { label: t("notes.pasteSelection"), disabled: !selectionClipboard, run: () => void blockSelectionController.run(() => blockSelectionController.paste(blockSelection?.focusBlockId ?? notes.focusBlockId)) },
+        { label: t("notes.duplicateSelection"), run: () => void blockSelectionController.run(blockSelectionController.duplicate) },
+        { label: t("notes.moveSelectionUp"), disabled: !canMoveSelectionUp, run: () => void blockSelectionController.run(() => blockSelectionController.move("up")) },
+        { label: t("notes.moveSelectionDown"), disabled: !canMoveSelectionDown, run: () => void blockSelectionController.run(() => blockSelectionController.move("down")) },
+        { label: t("notes.deleteSelection"), run: () => void blockSelectionController.run(blockSelectionController.remove) },
+      ]} />
+  {/if}
+  {#if documentSelection.error || selectionActionError || selectionMenuError}
+    <p role="status" class="text-sm text-destructive">{t("notes.selectionActionFailed")} {documentSelection.error ?? selectionActionError ?? selectionMenuError}</p>
   {/if}
   {#if visibleRange.topHeight > 0}
     <div aria-hidden="true" style:height={`${visibleRange.topHeight}px`}></div>
@@ -671,12 +721,12 @@
 <style>
   :global(.notes-block-row[data-notes-block-selected] > .notes-block-surface) {
     user-select: none;
-    background: hsl(var(--primary) / 0.12);
-    box-shadow: inset 0 0 0 1px hsl(var(--primary) / 0.42);
+    background: var(--selection-background);
+    box-shadow: inset 0 0 0 1px var(--primary);
   }
 
   :global(.notes-block-row[data-notes-block-selected]:focus-visible > .notes-block-surface) {
-    outline: 2px solid hsl(var(--ring));
+    outline: 2px solid var(--ring);
     outline-offset: 1px;
   }
 

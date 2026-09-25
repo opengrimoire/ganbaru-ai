@@ -62,7 +62,7 @@ export const editor = {
   removeLink: "Quitar",
   addBlockBelow: "Agregar bloque debajo",
   blockActions: "Acciones de bloque",
-  selectionActions: "Acciones de bloques seleccionados",
+  selectionActions: "Acciones de selección",
   selectedBlocks: (count: number) => `${count} seleccionados`,
   copySelection: "Copiar",
   cutSelection: "Cortar",

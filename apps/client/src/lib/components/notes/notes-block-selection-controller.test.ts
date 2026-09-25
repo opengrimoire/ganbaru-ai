@@ -66,13 +66,13 @@ describe("Notes block selection gestures", () => {
     h.destroy();
   });
 
-  it("keeps text selection within one editor and selects blocks when dragging across editors", () => {
+  it("leaves text drags to the document selection controller", () => {
     const h = selectionHarness();
     h.pointer(h.row("first").firstElementChild as HTMLElement, "pointerdown");
     h.pointer(h.row("first"), "pointerover");
     expect(h.controller.selection).toBeNull();
     h.pointer(h.row("second"), "pointerover");
-    expect(h.controller.selection?.selectedBlockIds).toEqual(["first", "second"]);
+    expect(h.controller.selection).toBeNull();
     h.destroy();
   });
 });

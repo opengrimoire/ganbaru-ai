@@ -4,7 +4,7 @@
 
 ## Editing model
 
-The editor renders one canonical page block tree through bounded outlines and retained content windows. It can load long pages incrementally without treating the current rendered range as the complete document.
+The editor presents a continuous document backed by a canonical page block tree. Blocks carry rich content and structure; they must not impose text selection boundaries. Lightweight outlines and retained content windows support incremental loading without treating the rendered window as the complete document.
 
 Block mutations use stable IDs and transactional commands. Multi-block move, duplicate, and Trash operations include unloaded descendants through canonical tree reads so hidden content cannot be lost.
 
@@ -30,7 +30,19 @@ Backspace in an empty block removes it unless it is the only visible editable bl
 
 Tab nests under a previous sibling only when that parent accepts the source type. Shift+Tab outdents only to a valid destination. Page roots, database surfaces, table internals, columns, and tab-label layers reject structurally invalid moves before persistence.
 
-Block selection starts from a row margin, Escape in an editor, or a drag that crosses from one text editor into another. Shift-click and Shift+Arrow extend the range. Ctrl/Cmd+A from a selected block selects the rendered block range. Text selection within one block stays native. Selected blocks support copy, cut, deletion, and undo from the focused row. Selection currently covers rendered blocks rather than every unloaded block in a long page.
+## Document selection
+
+Ctrl/Cmd+A in the page body selects the complete body on the first press, including offscreen blocks. The title and embedded form controls retain their own selection behavior. Selecting the body does not mount or load every block first; clipboard and editing operations hydrate the required content in bounded requests.
+
+Shift+Arrow, Ctrl/Cmd+Shift+Home/End, Shift-click, and pointer dragging extend text ranges across ordinary block editors. Ranges retain the anchor, direction, and UTF-16 offsets of both endpoints. Crossing a block boundary must not round partial text selections to whole blocks. Each rendered text segment receives an explicit highlight independently of the native editing-host selection. Both explicit and native highlights use the shared selection-background theme token. While explicit painting is active, the native selection background is transparent within that editor so translucent highlights do not stack and darken the active block. Native highlighting returns when explicit painting clears or has no visible geometry. Webviews without CSS custom highlights use an inert rectangle overlay. Highlight ranges refresh when the rendered window or layout changes and clear when selection ends. A selection within one editing host continues to use that editor's normal rich-text commands.
+
+Cross-block ranges support copy, cut, deletion, replacement typing, multiline and sanitized rich-HTML paste, and basic annotation shortcuts. Replacement preserves the unselected prefix, suffix, and rich-text annotations. Unselected descendants survive removal of a selected parent. A range replacement or formatting change records one undo entry and uses the ordered persistence queue.
+
+Selection alone displays no action bar or selected-block counter. Right-click opens selection actions. Cross-block text ranges offer clipboard, deletion, bold, italic, and underline actions; per-block text menus retain their richer link, comment, suggestion, and conversion controls.
+
+Explicit whole-block selection remains available from row margins and Escape in an editor. Its duplicate, movement, clipboard, and deletion actions live in the right-click menu and keyboard shortcuts. Pointer drags originating in text belong to document text selection.
+
+**Partial:** highlight rendering and vertical caret movement depend on the platform webview and still require desktop and Android acceptance. Partial ranges retain their mounted span while extending; very large partial ranges can increase rendering cost. Embedded database fields, table-cell editors, and other form controls retain their own editing domains. Cross-block clipboard copy currently emits plain text, while paste accepts sanitized rich HTML.
 
 Pointer block movement and destination pickers preserve full subtrees. Moving a block across pages validates access, active state, ancestry, and target type.
 
@@ -38,7 +50,7 @@ Pointer block movement and destination pickers preserve full subtrees. Moving a 
 
 Undo and redo record page-local snapshot pairs at the same semantic mutation boundaries as normal commands. Text bursts and consecutive Enter actions can group; formatting, links, mentions, paste, template use, buttons, and structural edits remain discrete.
 
-Snapshots preserve focus and selection. Undo updates the local tree immediately and persists ordered canonical mutations. The recovery stack is bounded by count and serialized size and is derived state, not a second content source.
+Snapshots preserve focus and selection, including both block IDs, UTF-16 offsets, and direction for document ranges. Undoing range deletion or replacement restores the complete active highlight; redo restores the resulting caret. Formatting history preserves the range in both directions. Older recovery entries without document ranges retain their recorded block-local selection. Undo updates the local tree immediately and persists ordered canonical mutations. The recovery stack is bounded by count and serialized size and is derived state, not a second content source.
 
 An undo failure never prevents the canonical page from loading. See [Notes editor testing](../../testing/notes-editor.md).
 

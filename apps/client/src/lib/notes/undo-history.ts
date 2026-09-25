@@ -5,7 +5,7 @@ import {
   type NotesTreeState,
 } from "./block-tree";
 import { cloneNotesJson } from "./json-clone";
-import type { NotesTextSelection } from "./editor-selection";
+import type { NotesDocumentSelection, NotesTextSelection } from "./editor-selection";
 import type { NotesBlock } from "./types";
 
 export type NotesUndoKind =
@@ -47,6 +47,7 @@ export interface NotesUndoSnapshot {
   childIdsByParentId: Record<string, string[]>;
   focusBlockId: string | null;
   focusSelection: NotesTextSelection | null;
+  documentSelection?: NotesDocumentSelection | null;
 }
 
 export interface NotesUndoEntry {
@@ -146,6 +147,12 @@ function cloneSnapshot(snapshot: NotesUndoSnapshot): NotesUndoSnapshot {
     ),
     focusBlockId: snapshot.focusBlockId,
     focusSelection: snapshot.focusSelection ? { ...snapshot.focusSelection } : null,
+    ...(snapshot.documentSelection ? {
+      documentSelection: {
+        anchor: { ...snapshot.documentSelection.anchor },
+        focus: { ...snapshot.documentSelection.focus },
+      },
+    } : {}),
   };
 }
 
@@ -182,6 +189,7 @@ function mergeSnapshotChanges(
     },
     focusBlockId: next.focusBlockId,
     focusSelection: next.focusSelection,
+    documentSelection: next.documentSelection,
   });
 }
 
@@ -386,6 +394,20 @@ export function notesUndoShortcutAction(
   return null;
 }
 
+/** Read an optional document range from persisted history, including older histories without it. */
+function parseDocumentSelection(value: unknown): NotesDocumentSelection | null {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) throw new Error("documentSelection must be an object");
+  const point = (value: unknown): NotesDocumentSelection["anchor"] => {
+    if (!isRecord(value)) throw new Error("documentSelection point must be an object");
+    const blockId = readString(value.blockId, "documentSelection.blockId");
+    const offset = readNumber(value.offset, "documentSelection.offset");
+    if (!Number.isSafeInteger(offset) || offset < 0) throw new Error("documentSelection offset must be a nonnegative safe integer");
+    return { blockId, offset };
+  };
+  return { anchor: point(value.anchor), focus: point(value.focus) };
+}
+
 function parseSnapshot(value: unknown, label: string): NotesUndoSnapshot {
   if (!isRecord(value)) throw new Error(`${label} must be an object`);
   const blocksValue = value.blocks;
@@ -394,6 +416,7 @@ function parseSnapshot(value: unknown, label: string): NotesUndoSnapshot {
   if (!isRecord(childIdsValue)) {
     throw new Error(`${label}.childIdsByParentId must be an object`);
   }
+  const documentSelection = parseDocumentSelection(value.documentSelection);
   const focusSelectionValue = value.focusSelection;
   let focusSelection: NotesTextSelection | null = null;
   if (focusSelectionValue !== undefined && focusSelectionValue !== null) {
@@ -427,6 +450,7 @@ function parseSnapshot(value: unknown, label: string): NotesUndoSnapshot {
     ),
     focusBlockId: readNullableString(value.focusBlockId, `${label}.focusBlockId`),
     focusSelection,
+    ...(documentSelection ? { documentSelection } : {}),
   };
 }
 

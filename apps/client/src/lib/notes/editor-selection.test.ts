@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   clampNotesTextSelection,
+  createNotesDocumentSelectionPainter,
   notesEditableOffsetFromDomPoint,
   notesEditableSelectionViewportRect,
   notesPlainTextFromEditableRoot,
@@ -12,6 +13,16 @@ import {
   planNotesSelectionReconciliation,
   restoreNotesEditableSelection,
 } from "./editor-selection";
+
+// Load test-only Node APIs without introducing Node timer globals into the browser type environment.
+const { readFileSync } = await vi.importActual<{
+  readFileSync: (path: string, encoding: "utf8") => string;
+}>("node:fs");
+const { fileURLToPath, URL: NodeUrl } = await vi.importActual<{
+  URL: typeof URL;
+  fileURLToPath: (url: string) => string;
+}>("node:url");
+const appStyles = readFileSync(fileURLToPath(new NodeUrl("../../app.css", import.meta.url).href), "utf8");
 
 describe("notes editor selection helpers", () => {
   it("lets a new explicit caret request replace the previous selected range", () => {
@@ -364,5 +375,136 @@ describe("notes editor selection helpers", () => {
       height: 20,
     });
     root.remove();
+  });
+});
+
+
+describe("Notes selection overlay fallback", () => {
+  it("paints text rectangles without modifying editor content and merges overlapping inline boxes", () => {
+    const list = document.createElement("div");
+    list.innerHTML = '<div contenteditable="true"><strong>First</strong> second</div>';
+    document.body.append(list);
+    const root = list.firstElementChild!;
+    const original = root.innerHTML;
+    const range = document.createRange();
+    range.selectNodeContents(root);
+    Object.defineProperty(range, "getClientRects", { value: () => [
+      new DOMRect(10, 20, 40, 16), new DOMRect(10, 20, 40, 16),
+      new DOMRect(50, 20, 30, 16), new DOMRect(10, 40, 20, 16),
+    ] });
+    const painter = createNotesDocumentSelectionPainter(list);
+    painter.paint([range]);
+    const overlay = list.querySelector<HTMLElement>("[data-notes-selection-overlay]")!;
+    expect(overlay.getAttribute("aria-hidden")).toBe("true");
+    expect(overlay.style.pointerEvents).toBe("none");
+    expect(overlay.children).toHaveLength(2);
+    expect((overlay.firstElementChild as HTMLElement).style.width).toBe("70px");
+    expect(root.innerHTML).toBe(original);
+    painter.paint([]);
+    expect(list.querySelector("[data-notes-selection-overlay]")).toBeNull();
+    expect(list.hasAttribute("data-notes-painted-selection")).toBe(false);
+    list.remove();
+  });
+});
+
+
+describe("Notes selection highlight ownership", () => {
+  it.each(["custom", "overlay"])("avoids stacking native and %s highlights and restores native selection on cleanup", (mode) => {
+    vi.stubGlobal("CSS", { highlights: new Map<string, object>() });
+    vi.stubGlobal("Highlight", mode === "custom" ? class {} : undefined);
+    const list = document.createElement("div");
+    list.innerHTML = '<div contenteditable="true"><strong>First</strong></div><div contenteditable="true">Second</div>';
+    document.body.append(list);
+    const range = document.createRange();
+    range.selectNodeContents(list.firstElementChild!);
+    Object.defineProperty(range, "getClientRects", { value: () => [new DOMRect(0, 0, 40, 20)] });
+    const native = window.getSelection()!;
+    native.removeAllRanges();
+    native.addRange(range);
+    const painter = createNotesDocumentSelectionPainter(list);
+    try {
+      painter.paint([range]);
+      const name = list.getAttribute("data-notes-painted-selection");
+      expect(name).toBeTruthy();
+      const scope = `[data-notes-painted-selection="${name}"]`;
+      const rule = [...document.styleSheets].flatMap((sheet) => [...sheet.cssRules])
+        .find((rule) => rule instanceof CSSStyleRule && rule.selectorText === `${scope}::selection, ${scope} *::selection`);
+      expect(rule).toBeInstanceOf(CSSStyleRule);
+      expect((rule as CSSStyleRule).style.getPropertyValue("background-color")).toBe("transparent");
+      expect(native.toString()).toBe("First");
+      painter.paint([]);
+      expect(list.hasAttribute("data-notes-painted-selection")).toBe(false);
+      expect([...document.styleSheets].flatMap((sheet) => [...sheet.cssRules])).not.toContain(rule);
+      expect(native.toString()).toBe("First");
+    } finally {
+      painter.clear();
+      list.remove();
+      native.removeAllRanges();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("retains native highlighting when the overlay has no visible text rectangles", () => {
+    vi.stubGlobal("Highlight", undefined);
+    const list = document.createElement("div");
+    list.textContent = "Hidden text";
+    const range = document.createRange();
+    range.selectNodeContents(list);
+    Object.defineProperty(range, "getClientRects", { value: () => [] });
+    const painter = createNotesDocumentSelectionPainter(list);
+    try {
+      painter.paint([range]);
+      expect(list.hasAttribute("data-notes-painted-selection")).toBe(false);
+      expect(list.querySelector("[data-notes-selection-overlay]")).toBeNull();
+    } finally {
+      painter.clear();
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+
+describe("Notes highlight theme colors", () => {
+  it.each(["custom", "overlay"])("uses a valid visible theme color in the %s painter", (mode) => {
+    const selectionColors = [...appStyles.matchAll(/--selection-background:\s*([^;]+);/gu)].map((match) => match[1]);
+    const primaryColors = [...appStyles.matchAll(/--primary:\s*([^;]+);/gu)].map((match) => match[1]);
+    expect(selectionColors.length).toBeGreaterThanOrEqual(2);
+    const registry = new Map<string, object>();
+    vi.stubGlobal("CSS", { highlights: registry });
+    vi.stubGlobal("Highlight", mode === "custom" ? class {} : undefined);
+    const list = document.createElement("div");
+    list.textContent = "Selected text";
+    document.body.append(list);
+    const painter = createNotesDocumentSelectionPainter(list);
+    try {
+      for (const [index, color] of selectionColors.entries()) {
+        list.style.setProperty("--primary", primaryColors[index]);
+        list.style.setProperty("--selection-background", color);
+        const range = document.createRange();
+        range.selectNodeContents(list.firstChild!);
+        Object.defineProperty(range, "getClientRects", { value: () => [new DOMRect(0, 0, 100, 20)] });
+        painter.paint([range]);
+        const name = [...registry.keys()][0];
+        const rule = [...document.styleSheets].flatMap((sheet) => [...sheet.cssRules])
+          .find((candidate) => candidate instanceof CSSStyleRule && candidate.selectorText === `::highlight(${name})`);
+        const declaration = mode === "custom" && rule instanceof CSSStyleRule
+          ? rule.style.getPropertyValue("background-color")
+          : list.querySelector<HTMLElement>("[data-notes-selection-overlay] span")?.style.backgroundColor ?? "";
+        // Resolve the declaration against real light/dark theme values before CSS parsing.
+        const resolved = declaration.replace(/var\((--[\w-]+)(?:,\s*([^)]*))?\)/gu,
+          (_match: string, token: string, fallback: string | undefined) => list.style.getPropertyValue(token) || fallback || "");
+        const actual = document.createElement("span");
+        const expected = document.createElement("span");
+        actual.style.backgroundColor = resolved;
+        expected.style.backgroundColor = color;
+        expect(actual.style.backgroundColor).not.toBe("");
+        expect(actual.style.backgroundColor).toBe(expected.style.backgroundColor);
+        painter.clear();
+      }
+    } finally {
+      painter.clear();
+      list.remove();
+      vi.unstubAllGlobals();
+    }
   });
 });

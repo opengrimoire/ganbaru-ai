@@ -1,9 +1,11 @@
+import { untrack } from "svelte";
 import { notesHydratedItemsByOutline, type NotesBlockOutlineItem } from "$lib/notes/block-outline";
 import type { NotesBlockTreeItem } from "$lib/notes/types";
 import {
   notesScrollAnchor,
   notesScrollOffsetForAnchor,
   notesVisibleRange,
+  notesRetainedItemHeight,
 } from "$lib/notes/visible-range";
 
 export interface NotesBlockVirtualizerOptions {
@@ -12,6 +14,7 @@ export interface NotesBlockVirtualizerOptions {
   readOutlines: () => readonly NotesBlockOutlineItem[];
   readItems: () => readonly NotesBlockTreeItem[];
   readPinnedBlockIds: () => readonly string[];
+  readSelectionBlockIds?: () => readonly string[];
   readFocusRequest: () => { blockId: string | null; requestId: number };
   hydrateBlockRange: (blockIds: readonly string[]) => Promise<void>;
 }
@@ -41,12 +44,22 @@ export function createNotesBlockVirtualizer(options: NotesBlockVirtualizerOption
     id: item.outline.id,
     estimatedHeight: item.outline.retained_height,
   })));
-  const visibleRange = $derived(notesVisibleRange(rangeItems, measuredBlockHeights, {
+  const viewportRange = $derived(notesVisibleRange(rangeItems, measuredBlockHeights, {
     viewportStart,
     viewportEnd: viewportStart + viewportHeight,
     overscanPx: 480,
     minimumVirtualizedCount: 120,
   }));
+  const visibleRange = $derived.by(() => {
+    const selected = new Set(options.readSelectionBlockIds?.() ?? []);
+    const indices = rangeItems.flatMap((item, index) => selected.has(item.id) ? [index] : []);
+    if (!indices.length) return viewportRange;
+    const start = Math.min(viewportRange.start, indices[0]);
+    const end = Math.max(viewportRange.end, indices[indices.length - 1] + 1);
+    const height = (from: number, to: number) => rangeItems.slice(from, to)
+      .reduce((total, item) => total + notesRetainedItemHeight(item, measuredBlockHeights), 0);
+    return { ...viewportRange, start, end, topHeight: height(0, start), bottomHeight: height(end, rangeItems.length) };
+  });
   const visibleOutlines = $derived(options.readOutlines().slice(visibleRange.start, visibleRange.end));
   const hydratedItemsById = $derived(notesHydratedItemsByOutline(options.readOutlines(), options.readItems()));
 
@@ -77,7 +90,7 @@ export function createNotesBlockVirtualizer(options: NotesBlockVirtualizerOption
   $effect(() => {
     const retainedIds = visibleOutlines.map((item) => item.outline.id);
     retainedIds.push(...options.readPinnedBlockIds());
-    void options.hydrateBlockRange(retainedIds);
+    untrack(() => { void options.hydrateBlockRange(retainedIds); });
   });
 
   $effect(() => {

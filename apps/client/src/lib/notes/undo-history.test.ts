@@ -81,6 +81,23 @@ function entry(
 }
 
 describe("notes undo history", () => {
+  it("clones and persists directional document selection without changing legacy history", () => {
+    const before = pageSnapshot("before");
+    const selection = { anchor: { blockId: blockB, offset: Number.MAX_SAFE_INTEGER }, focus: { blockId: blockA, offset: 2 } };
+    before.documentSelection = selection;
+    const history = recordNotesUndoEntry({ undo: [], redo: [] }, { id: "range", kind: "delete", before, after: pageSnapshot("after") });
+    selection.focus.offset = 3;
+    const restored = parseNotesUndoStateJson(serializeNotesUndoState(history));
+    expect(restored.undo[0].before.documentSelection).toEqual({ anchor: selection.anchor, focus: { blockId: blockA, offset: 2 } });
+    expect(restored.undo[0].after.documentSelection).toBeUndefined();
+  });
+
+  it.each([-1, 0.5, Number.MAX_SAFE_INTEGER + 1])("rejects an invalid persisted document offset %s", (offset) => {
+    const before = pageSnapshot("before");
+    before.documentSelection = { anchor: { blockId: blockA, offset }, focus: { blockId: blockB, offset: 0 } };
+    expect(() => parseNotesUndoStateJson(serializeNotesUndoState({ undo: [entry(before, pageSnapshot("after"))], redo: [] }))).toThrow("offset");
+  });
+
   it("tracks the caret before and after controlled text changes", () => {
     expect(
       notesTextChangeUndoSelections(

@@ -1,5 +1,6 @@
+// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { applyBlockUpdate, blockPlainText, createBlockWrite } from "$lib/notes/block-factory";
+import { applyBlockUpdate, blockEditableRichText, blockPlainText, createBlockWrite } from "$lib/notes/block-factory";
 import { flattenNotesBlockTree } from "$lib/notes/block-tree";
 import { notesBlockOutlineFromBlock } from "$lib/notes/block-outline";
 import type { NotesAppendBlockChildrenRequest, NotesBlock, NotesBlockUpdate, NotesBlockWrite, NotesParent } from "$lib/notes/types";
@@ -60,6 +61,7 @@ function editor() {
   projection.childIdsByParentId = { [pageId]: [firstId, lastId] };
   projection.syncHydratedOutlines(pageId);
   const focus = vi.fn();
+  const restoreSelection = vi.fn();
   const error = vi.fn();
   const persistence = createNotesBlockPersistence({
     readBlock: (id) => projection.blocksById[id], beforeSave: async () => undefined,
@@ -69,6 +71,7 @@ function editor() {
   const undo = createNotesUndoController({
     readSelectedPageId: () => pageId, readTreeState: () => projection.treeState(),
     loadPageTreeForUndo: async () => undefined, requestBlockFocus: focus,
+    restoreDocumentSelection: restoreSelection,
     flushPendingMutations: persistence.flushPendingBlockSaves, enqueueEditorMutation: persistence.enqueueEditorMutation,
     applyLocalSnapshot: (target, source) => projection.applyLocalUndoSnapshot(target, source),
   });
@@ -91,12 +94,107 @@ function editor() {
     localRemoveLeafBlock: (id) => projection.removeLeafBlock(id), awaitSelectedPageReady: async () => undefined,
     createUndoSnapshot: undo.snapshot, createUndoSnapshotForBlocks: undo.snapshotBlocks, recordUndo: undo.record,
   });
-  return { actions, undo, projection, persistence, stored, release, focus, error };
+  return { actions, undo, projection, persistence, stored, release, focus, error, restoreSelection };
 }
 
 afterEach(() => { vi.clearAllMocks(); });
 
 describe("Notes editing with delayed persistence", () => {
+  it.each(["", "Replacement"])("restores select-all after replacing it with %j and clears the range on redo", async (text) => {
+    const h = editor();
+    const selection = { anchor: { blockId: firstId, offset: 0 }, focus: { blockId: lastId, offset: Number.MAX_SAFE_INTEGER } };
+    await h.actions.replaceDocumentRange([firstId, lastId], 0, Number.MAX_SAFE_INTEGER, text, undefined, selection);
+    await h.undo.undo();
+    expect(h.projection.childIdsByParentId[pageId]).toEqual([firstId, lastId]);
+    expect(h.restoreSelection).toHaveBeenLastCalledWith(pageId, selection);
+    await h.undo.redo();
+    expect(h.restoreSelection).toHaveBeenLastCalledWith(pageId, null);
+    expect(blockPlainText(h.projection.blocksById[firstId])).toBe(text);
+    await h.undo.undo();
+    expect(h.restoreSelection).toHaveBeenLastCalledWith(pageId, selection);
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+  });
+
+  it("preserves a backward partial selection through replacement and formatting history", async () => {
+    const h = editor();
+    const selection = { anchor: { blockId: lastId, offset: 2 }, focus: { blockId: firstId, offset: 5 } };
+    await h.actions.replaceDocumentRange([firstId, lastId], 5, 2, "X", undefined, selection);
+    await h.undo.undo();
+    expect(h.restoreSelection).toHaveBeenLastCalledWith(pageId, selection);
+    await h.actions.formatDocumentRange([firstId, lastId], 5, 2, "bold", selection);
+    await h.undo.undo();
+    expect(h.restoreSelection).toHaveBeenLastCalledWith(pageId, selection);
+    await h.undo.redo();
+    expect(h.restoreSelection).toHaveBeenLastCalledWith(pageId, selection);
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+  });
+
+  it("preserves the unselected children of a removed boundary block", async () => {
+    const h = editor();
+    const child = { ...fromWrite(createBlockWrite("child", "paragraph", "Keep me")), parent: { type: "block_id" as const, block_id: lastId } };
+    h.projection.insertBlockAfter(child, null);
+    h.stored.set(child.id, child);
+    await h.actions.replaceDocumentRange([firstId, lastId], 5, 2, "");
+    expect(blockPlainText(h.projection.blocksById[child.id])).toBe("Keep me");
+    expect(h.projection.blocksById[child.id].parent).toEqual(parent);
+    expect(h.projection.childIdsByParentId[pageId]).toEqual([firstId, child.id]);
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(api.moveNotesBlock).toHaveBeenCalledWith(child.id, { parent, after: firstId, before: null });
+    expect(api.moveNotesBlock.mock.invocationCallOrder[0]).toBeLessThan(api.trashNotesBlock.mock.invocationCallOrder[0]);
+  });
+
+  it("formats a partial document range as one undo step", async () => {
+    const h = editor();
+    await h.actions.formatDocumentRange([firstId, lastId], 5, 2, "bold");
+    expect(blockEditableRichText(h.projection.blocksById[firstId]).map((run) => [run.plain_text, run.annotations.bold]))
+      .toEqual([["First", false], ["Second", true]]);
+    expect(blockEditableRichText(h.projection.blocksById[lastId]).map((run) => [run.plain_text, run.annotations.bold]))
+      .toEqual([["La", true], ["st", false]]);
+    await h.undo.undo();
+    expect(blockEditableRichText(h.projection.blocksById[firstId]).every((run) => !run.annotations.bold)).toBe(true);
+    expect(blockEditableRichText(h.projection.blocksById[lastId]).every((run) => !run.annotations.bold)).toBe(true);
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+  });
+
+  it("pastes sanitized rich text over a cross-block range without losing the suffix", async () => {
+    const h = editor();
+    await h.actions.replaceDocumentRange([firstId, lastId], 5, 2, "Bold", "<p><strong>Bold</strong></p>");
+    expect(blockPlainText(h.projection.blocksById[firstId])).toBe("FirstBoldst");
+    expect(blockEditableRichText(h.projection.blocksById[firstId]).find((run) => run.plain_text === "Bold")?.annotations.bold).toBe(true);
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+  });
+
+  it("replaces partial text across blocks immediately and restores both blocks with one undo", async () => {
+    const h = editor();
+    await h.actions.replaceDocumentRange([firstId, lastId], 5, 2, "X");
+    expect(blockPlainText(h.projection.blocksById[firstId])).toBe("FirstXst");
+    expect(h.projection.blocksById[lastId]).toBeUndefined();
+    await h.undo.undo();
+    expect(blockPlainText(h.projection.blocksById[firstId])).toBe("FirstSecond");
+    expect(blockPlainText(h.projection.blocksById[lastId])).toBe("Last");
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(blockPlainText(h.stored.get(firstId)!)).toBe("FirstSecond");
+    expect(h.stored.get(lastId)?.in_trash).toBe(false);
+  });
+
+  it("replaces a document range with multiple lines and preserves the trailing text", async () => {
+    const h = editor();
+    await h.actions.replaceDocumentRange([firstId, lastId], 5, 2, "A\nB");
+    const ids = h.projection.childIdsByParentId[pageId];
+    expect(ids).toHaveLength(2);
+    expect(ids.map((id) => blockPlainText(h.projection.blocksById[id]))).toEqual(["FirstA", "Bst"]);
+    await h.actions.updateBlockText(ids[1], "B typed st");
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(blockPlainText(h.stored.get(ids[1])!)).toBe("B typed st");
+  });
+
   it("renders Enter in place immediately and retains subsequent typing after the append response", async () => {
     const e = editor();
     await e.actions.splitTextBlockAtSelection(firstId, 5, 5);

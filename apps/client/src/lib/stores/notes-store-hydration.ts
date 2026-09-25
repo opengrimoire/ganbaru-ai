@@ -38,12 +38,24 @@ function errorMessage(error: unknown): string {
 /** Coordinate Notes outline expansion and bounded block hydration. */
 export function createNotesHydrationController(context: NotesHydrationControllerContext) {
   let hydrationRequestId = 0;
+  let pendingHydration: { key: string; promise: Promise<void> } | null = null;
 
   function invalidate(): void {
     hydrationRequestId += 1;
+    pendingHydration = null;
   }
 
-  async function hydrateBlockRange(
+  function hydrateBlockRange(blockIds: readonly string[], generation = context.readPageGeneration()): Promise<void> {
+    const key = JSON.stringify([context.readSelectedPageId(), generation, context.readFocusRequest().blockId, blockIds]);
+    if (pendingHydration?.key === key) return pendingHydration.promise;
+    const promise = performHydration(blockIds, generation);
+    pendingHydration = { key, promise };
+    const clear = () => { if (pendingHydration?.promise === promise) pendingHydration = null; };
+    void promise.then(clear, clear);
+    return promise;
+  }
+
+  async function performHydration(
     blockIds: readonly string[],
     generation = context.readPageGeneration(),
   ): Promise<void> {
@@ -62,7 +74,7 @@ export function createNotesHydrationController(context: NotesHydrationController
         parent = outlinesById.get(parent.block_id)?.parent;
       }
     }
-    const boundedIds = [...retained].slice(0, BLOCK_HYDRATION_LIMIT);
+    const boundedIds = [...retained];
     const currentBlocks = context.readBlocksById();
     const missingIds = boundedIds.filter((id) => !currentBlocks[id]);
     const retainedIds = new Set(boundedIds);
@@ -70,9 +82,13 @@ export function createNotesHydrationController(context: NotesHydrationController
       && Object.keys(currentBlocks).some((id) => !retainedIds.has(id) && !context.hasLocalChanges(id));
     if (missingIds.length === 0 && !shouldPrune) return;
     const requestId = ++hydrationRequestId;
-    const hydrated = missingIds.length > 0
-      ? await hydrateNotesBlocks({ page_id: pageId, block_ids: missingIds })
-      : [];
+    const hydrated: NotesBlock[] = [];
+    for (let offset = 0; offset < missingIds.length; offset += BLOCK_HYDRATION_LIMIT) {
+      hydrated.push(...await hydrateNotesBlocks({
+        page_id: pageId, block_ids: missingIds.slice(offset, offset + BLOCK_HYDRATION_LIMIT),
+      }));
+      if (requestId !== hydrationRequestId || generation !== context.readPageGeneration()) return;
+    }
     if (
       requestId !== hydrationRequestId
       || generation !== context.readPageGeneration()

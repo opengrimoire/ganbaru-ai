@@ -107,6 +107,27 @@ describe("Notes hydration controller", () => {
 
     expect(replaceHydratedBlocks).not.toHaveBeenCalled();
   });
+  it("hydrates a selection longer than one backend batch without dropping its tail", async () => {
+    const { createNotesHydrationController } = await import("./notes-store-hydration");
+    const blocks = Array.from({ length: 225 }, (_, index) => ({
+      object: "block", parent: { type: "page_id", page_id: "page-a" }, created_time: "", last_edited_time: "",
+      has_children: false, in_trash: false, source_provider: null, source_object_id: null, source_last_edited_time: null,
+      ...createBlockWrite(`batch-${index}`, "paragraph", `Text ${index}`),
+    } as NotesBlock));
+    const outlines = blocks.map((block, index) => notesBlockOutlineFromBlock(block, "page-a", index));
+    const replaceHydratedBlocks = vi.fn();
+    backend.hydrateNotesBlocks.mockResolvedValueOnce(blocks.slice(0, 200)).mockResolvedValueOnce(blocks.slice(200));
+    const controller = createNotesHydrationController({
+      readPageGeneration: () => 1, readSelectedPageId: () => "page-a", readBlockOutlines: () => outlines,
+      readFlatBlockOutlines: () => outlines.map((outline) => ({ outline, depth: 0 })), readBlocksById: () => ({}),
+      hasLocalChanges: () => false, readFocusRequest: () => ({ blockId: null, requestId: 0, selection: null }),
+      mergeBlockOutlines: vi.fn(), replaceHydratedBlocks, setLoadError: vi.fn(), reloadOpenComments: vi.fn(),
+    });
+    await controller.hydrateBlockRange(blocks.map((block) => block.id));
+    expect(replaceHydratedBlocks.mock.calls[0][1]["page-a"]).toEqual(blocks.map((block) => block.id));
+    expect(Object.keys(replaceHydratedBlocks.mock.calls[0][0])).toHaveLength(225);
+  });
+
   it("retains unsaved blocks outside the viewport and uses outline order for hydrated siblings", async () => {
     const { createNotesHydrationController } = await import("./notes-store-hydration");
     const blocks = Array.from({ length: 125 }, (_, index): NotesBlock => ({
