@@ -1,4 +1,4 @@
-import { trashNotesBlock } from "$lib/api/notes";
+import { moveNotesBlock, trashNotesBlock, updateNotesBlock } from "$lib/api/notes";
 import { collectLoadedBlockSubtreeIds } from "$lib/notes/block-duplicate";
 import { blockPlainText, blockWithRichText, createBlockUpdate, isTextEditableBlock } from "$lib/notes/block-factory";
 import { planNotesBlockDrop, type NotesBlockDropIntent } from "$lib/notes/block-drag";
@@ -36,6 +36,8 @@ import type {
 import type { NotesPostMutationResult } from "$lib/notes/post-mutation";
 
 interface NotesBlockMovementActionsContext {
+  enqueueEditorMutation: (mutation: () => Promise<void>) => Promise<void>;
+  localApplyBlockUpdate: (blockId: string, update: NotesBlockUpdate) => void;
   readSelectedPageId: () => string | null;
   treeState: () => NotesTreeState;
   blockById: (blockId: string) => NotesBlock | undefined;
@@ -139,22 +141,6 @@ export function createNotesBlockMovementActions(
     return true;
   }
 
-  async function persistOptimisticLeafDelete(
-    pageId: string,
-    blockId: string,
-    prerequisite: Promise<void> | null,
-  ): Promise<void> {
-    try {
-      await prerequisite;
-      await context.flushBlockSave(blockId);
-      await trashNotesBlock(blockId, true);
-      context.applyPostMutation({ removedBlockIds: [blockId] });
-    } catch (error) {
-      console.warn("notes leaf block delete persistence failed", error);
-      await context.loadPageTree(pageId);
-    }
-  }
-
   async function deleteBlock(blockId: string): Promise<void> {
     const pageId = context.readSelectedPageId();
     if (!pageId) return;
@@ -177,7 +163,6 @@ export function createNotesBlockMovementActions(
         && isTextEditableBlock(deletedBlock.type)
         && blockPlainText(deletedBlock).length === 0;
       if (optimistic) {
-        const prerequisite = context.pendingOptimisticWrite(plan.deleteBlockId);
         const focusSelection = selectionAtBlockEnd(plan.focusBlockId);
         if (!context.localRemoveLeafBlock(plan.deleteBlockId)) return;
         context.requestBlockFocus(plan.focusBlockId, focusSelection);
@@ -186,7 +171,8 @@ export function createNotesBlockMovementActions(
           before,
           context.createUndoSnapshot(plan.focusBlockId, [], focusSelection),
         );
-        const persistence = persistOptimisticLeafDelete(pageId, plan.deleteBlockId, prerequisite);
+        const deletedId = plan.deleteBlockId;
+        const persistence = context.enqueueEditorMutation(async () => { await trashNotesBlock(deletedId, true); });
         context.trackOptimisticBlockWrites([plan.deleteBlockId], persistence);
         void persistence;
         return;
@@ -203,36 +189,52 @@ export function createNotesBlockMovementActions(
     if (!context.readSelectedPageId()) return;
     const roots = notesSelectionRootBlockIds(context.treeState(), blockIds);
     if (roots.length === 0) return;
-    await context.flushPendingBlockSaves();
     const before = context.undoSnapshot(roots[0] ?? null);
     const focus = focusAfterDeletingSelection(roots);
-    await context.trashAndApply(roots);
+    const removed = notesSelectionSubtreeIds(context.treeState(), roots);
+    context.applyPostMutation({ removedBlockIds: removed });
     context.requestBlockFocus(focus);
     context.recordUndoAfter("delete", before, focus);
+    const persistence = context.enqueueEditorMutation(async () => {
+      for (const root of roots) await trashNotesBlock(root, true);
+    });
+    context.trackOptimisticBlockWrites(removed, persistence);
   }
 
   async function mergeBlockWithPrevious(blockId: string): Promise<void> {
     if (!context.readSelectedPageId()) return;
-    await context.flushBlockSave(blockId);
-    let plan = planMergeWithPrevious(context.flatBlockItemsForBlockContext(blockId), blockId);
-    if (!plan) return;
-    await context.flushBlockSave(plan.targetBlockId);
-    plan = planMergeWithPrevious(context.flatBlockItemsForBlockContext(blockId), blockId);
+    const plan = planMergeWithPrevious(context.flatBlockItemsForBlockContext(blockId), blockId);
     if (!plan) return;
     const target = context.blockById(plan.targetBlockId);
     if (!target) return;
-    const childPlan = planReparentChildrenAfterMerge(
-      context.treeState(),
-      plan.sourceBlockId,
-      plan.targetBlockId,
-    );
+    const childPlan = planReparentChildrenAfterMerge(context.treeState(), blockId, target.id);
     if (!childPlan) return;
-    const before = context.undoSnapshot(blockId);
-    await context.replaceBlockWithUpdate(target.id, blockWithRichText(target, plan.mergedRichText));
-    if (!(await moveReparentedChildren(childPlan))) return;
-    await context.trashAndApply([plan.sourceBlockId]);
-    context.requestBlockFocus(target.id);
-    context.recordUndoAfter("delete", before, target.id);
+    const parent = parentFromMoveParentId(childPlan.parentId);
+    if (!parent) return;
+    const before = context.createUndoSnapshot(blockId, [], { start: 0, end: 0 });
+    const update = blockWithRichText(target, plan.mergedRichText);
+    const children = childPlan.childIds.map((id) => context.blockById(id))
+      .filter((block): block is NotesBlock => block !== undefined)
+      .map((block) => ({ ...block, parent }));
+    let after = childPlan.after;
+    const placements = children.map((block) => {
+      const placement = { blockId: block.id, parent, after };
+      after = block.id;
+      return placement;
+    });
+    context.localApplyBlockUpdate(target.id, update);
+    context.applyPostMutation({ blocks: children, placements, removedBlockIds: [blockId] });
+    const selection = { start: plan.targetCursorOffset, end: plan.targetCursorOffset };
+    context.requestBlockFocus(target.id, selection);
+    context.recordUndo("delete", before, context.createUndoSnapshot(target.id, [], selection));
+    const persistence = context.enqueueEditorMutation(async () => {
+      await updateNotesBlock(target.id, update);
+      for (const placement of placements) {
+        await moveNotesBlock(placement.blockId, { parent, after: placement.after, before: null });
+      }
+      await trashNotesBlock(blockId, true);
+    });
+    context.trackOptimisticBlockWrites([blockId, target.id, ...childPlan.childIds], persistence);
   }
 
   async function nestBlock(blockId: string): Promise<void> {

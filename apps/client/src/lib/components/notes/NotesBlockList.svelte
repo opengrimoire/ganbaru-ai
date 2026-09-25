@@ -115,6 +115,8 @@
   const mentionDataSourceRowPages = $derived(mentionDataController.rowPages);
   const blockHandle = createNotesBlockHandleController();
   const blockSelectionController = createNotesBlockSelectionController({
+    undo: notes.undoNotesEdit,
+    redo: notes.redoNotesEdit,
     readPageId: () => pageId,
     readListElement: () => blockListElement,
     readRenderedBlockIds: renderedSelectableBlockIds,
@@ -667,12 +669,13 @@
 </div>
 
 <style>
-  :global(.notes-block-row[data-notes-block-selected="true"] > .notes-block-surface) {
+  :global(.notes-block-row[data-notes-block-selected] > .notes-block-surface) {
+    user-select: none;
     background: hsl(var(--primary) / 0.12);
     box-shadow: inset 0 0 0 1px hsl(var(--primary) / 0.42);
   }
 
-  :global(.notes-block-row[data-notes-block-selected="true"]:focus-visible > .notes-block-surface) {
+  :global(.notes-block-row[data-notes-block-selected]:focus-visible > .notes-block-surface) {
     outline: 2px solid hsl(var(--ring));
     outline-offset: 1px;
   }

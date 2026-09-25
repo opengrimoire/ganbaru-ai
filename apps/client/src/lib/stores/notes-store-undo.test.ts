@@ -69,6 +69,7 @@ describe("notes undo controller", () => {
     let requestedSelection: NotesTextSelection | null = null;
     const loadPageTreeForUndo = vi.fn(async () => undefined);
     const controller = createNotesUndoController({
+      enqueueEditorMutation: async (mutation) => { await Promise.resolve(); await mutation(); },
       readSelectedPageId: () => pageId,
       readTreeState: () => currentTree,
       loadPageTreeForUndo,
@@ -134,6 +135,7 @@ describe("notes undo controller", () => {
       currentTree = treeFromBlocks(Object.values(nextBlocks));
     };
     const controller = createNotesUndoController({
+      enqueueEditorMutation: async (mutation) => { await Promise.resolve(); await mutation(); },
       readSelectedPageId: () => pageId,
       readTreeState: () => currentTree,
       loadPageTreeForUndo: async () => undefined,
@@ -166,6 +168,7 @@ describe("notes undo controller", () => {
   it("reserves repeated undo and redo entries before background writes finish", async () => {
     let currentTree = tree(paragraph("abc"));
     const controller = createNotesUndoController({
+      enqueueEditorMutation: async (mutation) => { await Promise.resolve(); await mutation(); },
       readSelectedPageId: () => pageId,
       readTreeState: () => currentTree,
       loadPageTreeForUndo: async () => undefined,
@@ -202,4 +205,34 @@ describe("notes undo controller", () => {
     expect(blockPlainText(currentTree.blocksById[blockId])).toBe("abc");
     await expect(Promise.all([firstRedo, secondRedo])).resolves.toEqual([true, true]);
   });
+  it("moves surviving children before trashing their previous parent during history replay", async () => {
+    const childId = "00000000-0000-4000-8000-000000000004";
+    const child = { ...paragraph("Child", childId), parent: { type: "block_id" as const, block_id: secondBlockId } };
+    const restored: NotesUndoSnapshot = {
+      pageId, blocks: [paragraph("First"), paragraph("Second", secondBlockId), child],
+      childIdsByParentId: { [pageId]: [blockId, secondBlockId], [secondBlockId]: [childId] },
+      focusBlockId: secondBlockId, focusSelection: null,
+    };
+    const merged: NotesUndoSnapshot = {
+      pageId, blocks: [paragraph("FirstSecond"), { ...child, parent: { type: "block_id", block_id: blockId } }],
+      childIdsByParentId: { [pageId]: [blockId], [blockId]: [childId] },
+      focusBlockId: blockId, focusSelection: null,
+    };
+    const events: string[] = [];
+    notesApi.moveNotesBlock.mockImplementation(async (...args: unknown[]) => { events.push(`move:${args[0]}`); });
+    notesApi.trashNotesBlock.mockImplementation(async (...args: unknown[]) => { events.push(`trash:${args[0]}`); });
+    let persisted = Promise.resolve();
+    const controller = createNotesUndoController({
+      enqueueEditorMutation: (mutation) => { persisted = mutation(); return persisted; },
+      readSelectedPageId: () => pageId, readTreeState: () => treeFromBlocks(restored.blocks),
+      loadPageTreeForUndo: async () => undefined, requestBlockFocus: () => undefined,
+      flushPendingMutations: async () => undefined, applyLocalSnapshot: () => undefined,
+    });
+    controller.record({ kind: "update", before: merged, after: restored });
+    await controller.undo();
+    await persisted;
+    expect(events.indexOf(`move:${childId}`)).toBeGreaterThanOrEqual(0);
+    expect(events.indexOf(`move:${childId}`)).toBeLessThan(events.indexOf(`trash:${secondBlockId}`));
+  });
+
 });

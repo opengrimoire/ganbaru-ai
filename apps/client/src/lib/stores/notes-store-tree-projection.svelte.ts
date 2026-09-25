@@ -53,7 +53,34 @@ export class NotesTreeProjectionController {
     for (const block of target.blocks) nextBlocksById[block.id] = block;
     for (const blockId of affectedIds) this.markLocallyChanged(blockId);
     this.blocksById = nextBlocksById;
-    this.childIdsByParentId = buildNotesChildIdsByParent(Object.values(nextBlocksById));
+    const targetById = new Map(target.blocks.map((block) => [block.id, block]));
+    const children = Object.fromEntries(Object.entries(this.childIdsByParentId)
+      .map(([parentId, ids]) => [parentId, ids.filter((id) => {
+        if (!affectedIds.has(id)) return true;
+        const targetBlock = targetById.get(id);
+        return !target.childIdsByParentId[parentId] && targetBlock !== undefined
+          && parentIdForBlock(targetBlock) === parentId;
+      })]));
+    for (const [parentId, ids] of Object.entries(target.childIdsByParentId)) {
+      const siblings = children[parentId] ?? [];
+      for (let index = ids.length - 1; index >= 0; index -= 1) {
+        const id = ids[index];
+        if (!targetIds.has(id)) continue;
+        const nextIndex = siblings.indexOf(ids[index + 1]);
+        siblings.splice(nextIndex < 0 ? siblings.length : nextIndex, 0, id);
+      }
+      children[parentId] = siblings;
+    }
+    // Older recovery snapshots may not carry sibling order.
+    for (const block of target.blocks) {
+      const parentId = parentIdForBlock(block);
+      const siblings = children[parentId] ?? [];
+      if (!siblings.includes(block.id)) siblings.push(block.id);
+      children[parentId] = siblings;
+    }
+    this.childIdsByParentId = children;
+    this.blockOutlines = this.blockOutlines.filter((outline) => !sourceIds.has(outline.id) || targetIds.has(outline.id));
+    this.syncLocalOutlines();
   }
 
   insertBlockAfter(block: NotesBlock, afterBlockId: string | null): void {
@@ -66,6 +93,8 @@ export class NotesTreeProjectionController {
       [parentId]: [...current.slice(0, insertIndex), block.id, ...current.slice(insertIndex)],
     };
     this.replaceBlock(block);
+    this.markLocallyChanged(block.id);
+    this.syncLocalOutlines();
   }
 
   removeLeafBlock(blockId: string): boolean {
@@ -74,7 +103,14 @@ export class NotesTreeProjectionController {
     this.markLocallyChanged(blockId);
     this.blocksById = next.blocksById;
     this.childIdsByParentId = next.childIdsByParentId;
+    this.blockOutlines = this.blockOutlines.filter((outline) => outline.id !== blockId);
+    this.syncLocalOutlines();
     return true;
+  }
+
+  private syncLocalOutlines(): void {
+    const pageId = this.options.readSelectedPageId();
+    if (pageId) this.syncHydratedOutlines(pageId);
   }
 
   setLoadedPage(loaded: NotesLoadedPage): void {
@@ -99,12 +135,26 @@ export class NotesTreeProjectionController {
   syncHydratedOutlines(pageId: string): void {
     const next = new Map(this.blockOutlines.map((outline) => [outline.id, outline]));
     for (const [parentId, childIds] of Object.entries(this.childIdsByParentId)) {
-      childIds.forEach((blockId, index) => {
+      const loadedIds = new Set(childIds);
+      const previous = [...next.values()].filter((outline) => (
+        (outline.parent.type === "page_id" ? outline.parent.page_id : outline.parent.block_id) === parentId
+      )).sort((left, right) => left.sort_order - right.sort_order);
+      const ordered = [...childIds];
+      // Retained, unloaded siblings stay ahead of their next known sibling.
+      for (let index = previous.length - 1; index >= 0; index -= 1) {
+        const outline = previous[index];
+        if (loadedIds.has(outline.id)) continue;
+        const following = ordered.indexOf(previous[index + 1]?.id);
+        ordered.splice(following < 0 ? ordered.length : following, 0, outline.id);
+      }
+      ordered.forEach((blockId, index) => {
         const block = this.blocksById[blockId];
-        if (!block) return;
-        const outline = notesBlockOutlineFromBlock(block, pageId, (index + 1) * 1_000);
+        const existing = next.get(blockId);
+        const outline = block ? notesBlockOutlineFromBlock(block, pageId, index) : existing;
+        if (!outline) return;
         next.set(blockId, {
           ...outline,
+          sort_order: index,
           parent: parentId === pageId
             ? { type: "page_id", page_id: pageId }
             : { type: "block_id", block_id: parentId },

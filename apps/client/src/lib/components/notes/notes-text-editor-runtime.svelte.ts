@@ -1,5 +1,5 @@
 import { Temporal } from "@js-temporal/polyfill";
-import { tick, untrack } from "svelte";
+import { tick } from "svelte";
 import type { Translate } from "$lib/i18n/translator.svelte";
 import { blockColor, canBlockHaveColor } from "$lib/notes/block-color";
 import {
@@ -218,18 +218,15 @@ export class NotesTextEditorRuntime {
       void block.type;
       void block.last_edited_time;
       void source.editableRichText();
-      const { selection, selectionIsKnown } = untrack(() => ({
-        selection: this.textSelection,
-        selectionIsKnown: this.#hasTextSelection,
-      }));
+      let cancelled = false;
       void tick().then(() => {
-        if (!this.editor) return;
+        if (cancelled || !this.editor || this.compositionActive || requestedFocusId !== source.focusRequestId()) return;
         const length = notesPlainTextFromEditableRoot(this.editor).length;
         const plan = planNotesSelectionReconciliation({
           focusRequestIsNew: requestedFocusId !== this.#appliedFocusRequestId,
           focusRequestedForEditor,
           requestedSelection,
-          currentSelection: selectionIsKnown ? selection : null,
+          currentSelection: this.#hasTextSelection ? this.textSelection : null,
           textLength: length,
           editorActive: document.activeElement === this.editor,
         });
@@ -238,6 +235,7 @@ export class NotesTextEditorRuntime {
         if (plan.focusEditor) this.editor.focus({ preventScroll: true });
         this.restoreTrackedSelection(plan.selection);
       });
+      return () => { cancelled = true; };
     });
 
   }

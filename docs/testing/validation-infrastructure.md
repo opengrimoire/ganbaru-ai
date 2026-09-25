@@ -53,7 +53,7 @@ When changing validation topology, measure at least one affected cache-miss run 
 
 ## Production bundle contracts
 
-Unit tests cannot prove the final production import graph. The bundle contract performs real Vite builds and inspects emitted module metadata.
+Unit tests cannot prove the final production import graph. The bundle contract performs real Vite builds and inspects emitted module metadata. Notes shell contracts keep the current slash menu behind its lazy boundary; deleted components are not required to emit chunks.
 
 Desktop contracts inspect the transitive static imports of the entry, vault setup, and setup-time onboarding prewarm roots. These paths must keep the full App surfaces, terminal packages, Markdown rendering and sanitization, editor packages, and review runtime and helper dependencies out of their closures. Chat may load Markdown for messages, but terminal and review dependencies remain behind their existing dynamic imports. Checks identify emitted source modules and dependency package paths, so renaming or regrouping chunks cannot bypass these boundaries. Common App surfaces remain resident after vault activation.
 

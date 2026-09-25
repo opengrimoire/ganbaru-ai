@@ -1,3 +1,4 @@
+import { appendNotesBlockChildren, updateNotesBlock } from "$lib/api/notes";
 import { cloneNotesJson } from "$lib/notes/json-clone";
 import { planNotesPlainTextPaste } from "$lib/notes/block-clipboard";
 import { planNotesRichHtmlPaste } from "$lib/notes/rich-text-paste";
@@ -8,7 +9,6 @@ import {
   blockEditableRichText,
   blockPlainText,
   blockWithRichText,
-  blockUpdateFromBlock,
 } from "$lib/notes/block-factory";
 import { createBlockWriteFromRichText } from "$lib/notes/block-rich-text-write";
 import {
@@ -40,6 +40,7 @@ interface OptimisticPastePlan {
 }
 
 interface NotesBlockPasteActionsContext {
+  enqueueEditorMutation: (mutation: () => Promise<void>) => Promise<void>;
   readSelectedPageId: () => string | null;
   blockById: (blockId: string) => NotesBlock | undefined;
   localApplyBlockUpdate: (blockId: string, update: NotesBlockUpdate) => void;
@@ -90,42 +91,11 @@ export interface NotesBlockPasteActions {
 export function createNotesBlockPasteActions(
   context: NotesBlockPasteActionsContext,
 ): NotesBlockPasteActions {
-  async function persistSplitTextBlock(
-    pageId: string,
-    blockId: string,
-    currentUpdate: NotesBlockUpdate,
-    parent: NotesParent,
-    nextWrite: NotesBlockWrite,
-    prerequisite: Promise<void> | null,
-  ): Promise<void> {
-    try {
-      await prerequisite;
-      if (prerequisite) await context.saveBlockNow(blockId, cloneNotesJson(currentUpdate));
-      else await context.flushBlockSave(blockId);
-      await context.appendAndApply({
-        parent: cloneNotesJson(parent),
-        after: blockId,
-        children: [cloneNotesJson(nextWrite)],
-      });
-      const nextBlock = context.blockById(nextWrite.id);
-      if (nextBlock) {
-        await context.saveBlockNow(
-          nextWrite.id,
-          cloneNotesJson(blockWithRichText(nextBlock, blockEditableRichText(nextBlock))),
-        );
-      }
-    } catch (error) {
-      console.warn("notes split block persistence failed", error);
-      await context.loadPageTree(pageId);
-    }
-  }
-
   async function splitTextBlockAtSelection(
     blockId: string,
     selectionStart: number,
     selectionEnd: number,
   ): Promise<void> {
-    const prerequisite = context.pendingOptimisticWrite(blockId);
     const block = context.blockById(blockId);
     const pageId = context.readSelectedPageId();
     if (!block || !notesEnterSplitsRichTextBlock(block.type) || !pageId) return;
@@ -148,7 +118,6 @@ export function createNotesBlockPasteActions(
     const focusBlockId = planNotesInsertedBlockFocus([newBlockId], blockId) ?? newBlockId;
 
     context.localApplyBlockUpdate(blockId, currentUpdate);
-    if (!prerequisite) context.scheduleBlockSave(blockId, currentUpdate);
     context.localInsertBlockAfter(nextBlock, blockId);
     context.requestBlockFocus(focusBlockId, START_OF_BLOCK_SELECTION);
     context.recordUndo(
@@ -161,42 +130,11 @@ export function createNotesBlockPasteActions(
       ),
       `create:enter:${parentIdForBlock(block)}`,
     );
-    const persistence = persistSplitTextBlock(
-      pageId,
-      blockId,
-      currentUpdate,
-      parent,
-      nextWrite,
-      prerequisite,
-    );
-    context.trackOptimisticBlockWrites(
-      prerequisite ? [blockId, newBlockId] : [newBlockId],
-      persistence,
-    );
-    void persistence;
-  }
-
-  async function persistOptimisticPaste(
-    pageId: string,
-    currentBlockId: string,
-    parent: NotesParent,
-    appendedWrites: readonly NotesBlockWrite[],
-  ): Promise<void> {
-    try {
-      await context.flushBlockSave(currentBlockId);
-      await context.appendAndApply({
-        parent: cloneNotesJson(parent),
-        after: currentBlockId,
-        children: cloneNotesJson([...appendedWrites]),
-      });
-      for (const write of appendedWrites) {
-        const latestBlock = context.blockById(write.id);
-        if (latestBlock) await context.saveBlockNow(write.id, blockUpdateFromBlock(latestBlock));
-      }
-    } catch (error) {
-      console.warn("notes paste persistence failed", error);
-      await context.loadPageTree(pageId);
-    }
+    const persistence = context.enqueueEditorMutation(async () => {
+      await updateNotesBlock(blockId, currentUpdate);
+      await appendNotesBlockChildren({ parent, after: blockId, children: [nextWrite] });
+    });
+    context.trackOptimisticBlockWrites([blockId, newBlockId], persistence);
   }
 
   function applyOptimisticPaste(
@@ -216,7 +154,6 @@ export function createNotesBlockPasteActions(
     const parent = cloneNotesJson(currentBlock.parent);
     const focusSelection = { start: plan.focusOffset, end: plan.focusOffset };
     context.localApplyBlockUpdate(currentBlock.id, currentUpdate);
-    context.scheduleBlockSave(currentBlock.id, currentUpdate);
     let after = currentBlock.id;
     for (const write of writes) {
       context.localInsertBlockAfter(context.optimisticBlockFromWrite(write, parent), after);
@@ -228,9 +165,11 @@ export function createNotesBlockPasteActions(
       before,
       context.undoSnapshotForBlocks(affectedIds, plan.focusBlockId, focusSelection),
     );
-    if (writes.length === 0) return;
-    const persistence = persistOptimisticPaste(pageId, currentBlock.id, parent, writes);
-    context.trackOptimisticBlockWrites(writes.map((write) => write.id), persistence);
+    const persistence = context.enqueueEditorMutation(async () => {
+      await updateNotesBlock(currentBlock.id, currentUpdate);
+      if (writes.length) await appendNotesBlockChildren({ parent, after: currentBlock.id, children: writes });
+    });
+    context.trackOptimisticBlockWrites(affectedIds, persistence);
     void persistence;
   }
 

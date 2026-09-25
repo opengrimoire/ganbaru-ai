@@ -27,6 +27,7 @@ import type { NotesBlock } from "$lib/notes/types";
 const EMPTY_UNDO_STATE: NotesUndoState = { undo: [], redo: [] };
 
 export interface NotesUndoControllerContext {
+  enqueueEditorMutation: (mutation: () => Promise<void>) => Promise<void>;
   readSelectedPageId: () => string | null;
   readTreeState: () => NotesTreeState;
   loadPageTreeForUndo: (pageId: string) => Promise<void>;
@@ -39,6 +40,7 @@ export interface NotesUndoControllerContext {
 }
 
 export interface NotesUndoController {
+  persist: () => Promise<void>;
   reset: (pageId: string | null) => void;
   hydrate: (pageId: string | null) => Promise<void>;
   snapshot: (
@@ -92,9 +94,6 @@ async function applyUndoSnapshot(
   source: NotesUndoSnapshot,
 ): Promise<void> {
   const { targetOnlyRoots, sourceOnlyRoots } = entryIdsByPresence(target, source);
-  for (const block of sourceOnlyRoots) {
-    await trashNotesBlock(block.id, true);
-  }
   for (const block of targetOnlyRoots) {
     await trashNotesBlock(block.id, false);
   }
@@ -105,13 +104,13 @@ async function applyUndoSnapshot(
 
   const targetById = snapshotBlocksById(target);
   for (const parentId of parentIdsByDepth(target)) {
+    if (JSON.stringify(target.childIdsByParentId[parentId]) === JSON.stringify(source.childIdsByParentId[parentId])) continue;
     let before: string | null = null;
     const childIds = [...(target.childIdsByParentId[parentId] ?? [])]
-      .filter((childId) => targetById.has(childId))
       .reverse();
     for (const childId of childIds) {
       const block = targetById.get(childId);
-      if (!block) continue;
+      if (!block) { before = childId; continue; }
       await moveNotesBlock(childId, {
         parent: block.parent,
         after: null,
@@ -119,6 +118,10 @@ async function applyUndoSnapshot(
       });
       before = childId;
     }
+  }
+  // Move surviving descendants before trashing a removed parent.
+  for (const block of sourceOnlyRoots) {
+    await trashNotesBlock(block.id, true);
   }
 }
 
@@ -162,7 +165,8 @@ export function createNotesUndoController(
   function schedulePersist(): void {
     if (persistTimer) clearTimeout(persistTimer);
     persistTimer = setTimeout(() => {
-      void persistNow();
+      void context.flushPendingMutations().then(persistNow)
+        .catch((error: unknown) => console.warn("Notes history is waiting for unsaved edits", error));
     }, 250);
   }
 
@@ -224,6 +228,7 @@ export function createNotesUndoController(
   }
 
   function record(options: Omit<NotesUndoRecordOptions, "id">): void {
+    hydrateRequestId += 1;
     state = recordNotesUndoEntry(state, {
       ...options,
       id: crypto.randomUUID(),
@@ -234,21 +239,14 @@ export function createNotesUndoController(
   function applyEntry(entry: NotesUndoEntry, direction: "undo" | "redo"): void {
     const target = direction === "undo" ? entry.before : entry.after;
     const source = direction === "undo" ? entry.after : entry.before;
-    const pendingMutations = context.flushPendingMutations();
     context.applyLocalSnapshot(target, source);
     context.requestBlockFocus(target.focusBlockId, target.focusSelection);
-    const persistence = mutationChain
-      .catch(() => undefined)
-      .then(async () => {
-        await pendingMutations;
-        await applyUndoSnapshot(target, source);
-      });
+    const persistence = context.enqueueEditorMutation(() => applyUndoSnapshot(target, source));
     mutationChain = persistence;
     void persistence
       .then(() => mutationChain === persistence ? persistNow() : undefined)
-      .catch(async (error) => {
+      .catch((error: unknown) => {
         console.warn(`notes ${direction} persistence failed`, error);
-        await context.loadPageTreeForUndo(target.pageId);
       });
   }
 
@@ -275,6 +273,7 @@ export function createNotesUndoController(
   }
 
   return {
+    persist: persistNow,
     reset,
     hydrate,
     snapshot,

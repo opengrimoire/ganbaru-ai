@@ -231,7 +231,7 @@
       "src/lib/components/notes/NotesArchiveView.svelte",
       "src/lib/components/notes/NotesTrashView.svelte",
       "src/lib/components/notes/NotesDestinationPickerList.svelte",
-      "src/lib/components/notes/NotesBlockInsertMenu.svelte"
+      "src/lib/components/notes/NotesSlashMenu.svelte"
     ]
   },
   "notesParagraphEditor": {

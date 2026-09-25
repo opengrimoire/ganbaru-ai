@@ -127,7 +127,7 @@ describe("notes undo history", () => {
     );
 
     expect(snapshot?.blocks.map((block) => block.id)).toEqual([blockA]);
-    expect(snapshot?.childIdsByParentId).toEqual({});
+    expect(snapshot?.childIdsByParentId).toEqual({ [pageId]: [blockA, blockB] });
   });
 
   it("groups typing by block within the typing window", () => {

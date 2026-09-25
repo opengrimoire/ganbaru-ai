@@ -106,4 +106,27 @@ describe("notes block persistence", () => {
     expect(blockPlainText(current)).toBe("ab");
     expect(persistence.hasLocalChanges(blockId)).toBe(false);
   });
+  it("retains failed writes and retries them before dependent operations", async () => {
+    let current = paragraph("Draft");
+    const error = vi.fn();
+    const persistence = createNotesBlockPersistence({
+      readBlock: () => current, beforeSave: async () => undefined,
+      replaceBlock: (block) => { current = block; }, setLoadError: error, debounceMs: 250,
+    });
+    updateNotesBlock.mockReset().mockRejectedValueOnce(new Error("Disk unavailable"))
+      .mockImplementation(async (_id: string, update: NotesBlockUpdate) => applyBlockUpdate(current, update));
+    persistence.localApplyBlockUpdate(blockId, blockWithText(current, "Unsaved"));
+    const first = persistence.saveBlockNow(blockId, blockWithText(current, "Unsaved"));
+    const dependent = vi.fn(async () => undefined);
+    const second = persistence.enqueueEditorMutation(dependent);
+    await expect(first).rejects.toThrow("Disk unavailable");
+    await expect(second).rejects.toThrow("Disk unavailable");
+    expect(dependent).not.toHaveBeenCalled();
+    expect(blockPlainText(current)).toBe("Unsaved");
+    await persistence.retryEditorMutations();
+    expect(updateNotesBlock).toHaveBeenCalledTimes(2);
+    expect(dependent).toHaveBeenCalledOnce();
+    expect(error).toHaveBeenLastCalledWith(null);
+  });
+
 });

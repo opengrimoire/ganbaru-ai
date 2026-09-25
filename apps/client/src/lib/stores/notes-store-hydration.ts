@@ -20,6 +20,7 @@ interface NotesHydrationControllerContext {
   readBlockOutlines: () => NotesBlockOutline[];
   readFlatBlockOutlines: () => NotesBlockOutlineItem[];
   readBlocksById: () => Record<string, NotesBlock>;
+  hasLocalChanges: (blockId: string) => boolean;
   readFocusRequest: () => NotesFocusRequest;
   mergeBlockOutlines: (outlines: readonly NotesBlockOutline[], pageId: string) => void;
   replaceHydratedBlocks: (
@@ -66,7 +67,7 @@ export function createNotesHydrationController(context: NotesHydrationController
     const missingIds = boundedIds.filter((id) => !currentBlocks[id]);
     const retainedIds = new Set(boundedIds);
     const shouldPrune = context.readFlatBlockOutlines().length >= BLOCK_VIRTUALIZATION_THRESHOLD
-      && Object.keys(currentBlocks).some((id) => !retainedIds.has(id));
+      && Object.keys(currentBlocks).some((id) => !retainedIds.has(id) && !context.hasLocalChanges(id));
     if (missingIds.length === 0 && !shouldPrune) return;
     const requestId = ++hydrationRequestId;
     const hydrated = missingIds.length > 0
@@ -79,10 +80,17 @@ export function createNotesHydrationController(context: NotesHydrationController
     ) return;
     if (hydrated.length === 0 && !shouldPrune) return;
     const nextBlocks = context.readFlatBlockOutlines().length >= BLOCK_VIRTUALIZATION_THRESHOLD
-      ? Object.fromEntries(Object.entries(context.readBlocksById()).filter(([id]) => retainedIds.has(id)))
+      ? Object.fromEntries(Object.entries(context.readBlocksById()).filter(([id]) => retainedIds.has(id) || context.hasLocalChanges(id)))
       : { ...context.readBlocksById() };
-    for (const block of hydrated) nextBlocks[block.id] = block;
-    context.replaceHydratedBlocks(nextBlocks, buildNotesChildIdsByParent(Object.values(nextBlocks)));
+    for (const block of hydrated) {
+      if (!context.hasLocalChanges(block.id)) nextBlocks[block.id] = block;
+    }
+    const ordered = context.readFlatBlockOutlines()
+      .map((item) => nextBlocks[item.outline.id])
+      .filter((block): block is NotesBlock => block !== undefined);
+    const orderedIds = new Set(ordered.map((block) => block.id));
+    ordered.push(...Object.values(nextBlocks).filter((block) => !orderedIds.has(block.id)));
+    context.replaceHydratedBlocks(nextBlocks, buildNotesChildIdsByParent(ordered));
     context.reloadOpenComments(pageId);
   }
 

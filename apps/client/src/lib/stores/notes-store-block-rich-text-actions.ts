@@ -1,3 +1,4 @@
+import { updateNotesBlock } from "$lib/api/notes";
 import {
   blockPlainText,
   blockWithDateMention,
@@ -28,6 +29,7 @@ import type {
 } from "$lib/notes/undo-history";
 
 interface NotesRichTextBlockActionsContext {
+  enqueueEditorMutation: (mutation: () => Promise<void>) => Promise<void>;
   blockById: (blockId: string) => NotesBlock | undefined;
   localApplyBlockUpdate: (blockId: string, update: NotesBlockUpdate) => void;
   scheduleBlockSave: (blockId: string, update: NotesBlockUpdate) => void;
@@ -131,9 +133,7 @@ export function createNotesRichTextBlockActions(
     const before = snapshot(blockId, undoSelections.before);
     const update = blockWithText(block, text);
     context.localApplyBlockUpdate(blockId, update);
-    if (!context.hasPendingOptimisticWrite(blockId)) {
-      context.scheduleBlockSave(blockId, update);
-    }
+    context.scheduleBlockSave(blockId, update);
     record("typing", before, blockId, `typing:${blockId}`, undoSelections.after);
   }
 
@@ -146,9 +146,7 @@ export function createNotesRichTextBlockActions(
     const before = snapshot(blockId);
     const update = blockWithRichText(block, richText);
     context.localApplyBlockUpdate(blockId, update);
-    if (!context.hasPendingOptimisticWrite(blockId)) {
-      context.scheduleBlockSave(blockId, update);
-    }
+    context.scheduleBlockSave(blockId, update);
     record("typing", before, blockId, `typing:${blockId}`);
   }
 
@@ -160,17 +158,17 @@ export function createNotesRichTextBlockActions(
   ): Promise<void> {
     const block = context.blockById(blockId);
     if (!block) return;
-    await context.flushBlockSave(blockId);
-    const current = context.blockById(blockId) ?? block;
-    const before = context.createUndoSnapshot(blockId);
-    const update = build(current);
+    const before = snapshot(blockId);
+    const update = build(block);
     context.localApplyBlockUpdate(blockId, update);
-    await context.saveBlockNow(blockId, update);
-    if (refreshLinks) await context.refreshOpenLinks();
+    void context.enqueueEditorMutation(async () => {
+      await updateNotesBlock(blockId, update);
+      if (refreshLinks) await context.refreshOpenLinks();
+    }).catch((error: unknown) => console.warn("Notes formatting persistence failed", error));
     context.recordUndo({
       kind,
       before,
-      after: context.createUndoSnapshot(blockId),
+      after: snapshot(blockId),
       groupKey: null,
     });
   }

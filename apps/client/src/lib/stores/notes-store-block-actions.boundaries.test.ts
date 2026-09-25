@@ -11,7 +11,7 @@ import { createNotesMediaBlockActions } from "./notes-store-block-media-actions"
 import { notesTreeStateWithoutLeafBlock } from "./notes-store-block-tree";
 
 const assetCache = vi.hoisted(() => ({ invalidateAssetUrl: vi.fn() }));
-const notesApi = vi.hoisted(() => ({ trashNotesBlock: vi.fn() }));
+const notesApi = vi.hoisted(() => ({ trashNotesBlock: vi.fn(), updateNotesBlock: vi.fn(), appendNotesBlockChildren: vi.fn() }));
 
 vi.mock("$lib/api/asset-url-cache", () => assetCache);
 vi.mock("$lib/api/notes", () => notesApi);
@@ -52,6 +52,8 @@ describe("Notes block action boundaries", () => {
     const pendingInsert = new Promise<void>((resolve) => { finishInsert = resolve; });
     let pendingDelete: Promise<void> | null = null;
     const actions = createNotesBlockMovementActions({
+      enqueueEditorMutation: async (mutation) => { await pendingInsert; await mutation(); },
+      localApplyBlockUpdate: () => undefined,
       readSelectedPageId: () => pageId,
       treeState: () => state,
       blockById: (id) => state.blocksById[id],
@@ -81,11 +83,6 @@ describe("Notes block action boundaries", () => {
 
     await actions.deleteBlock(deleted.id);
     expect(state.blocksById[deleted.id]).toBeUndefined();
-    state = applyNotesPostMutationToTree(state, {
-      blocks: [deleted],
-      placements: [{ blockId: deleted.id, parent, after: first.id }],
-    });
-    expect(state.blocksById[deleted.id]).toBeDefined();
     finishInsert();
     if (!pendingDelete) throw new Error("delete persistence was not tracked");
     await pendingDelete;
@@ -95,11 +92,14 @@ describe("Notes block action boundaries", () => {
     expect(state.childIdsByParentId[pageId]).toEqual([first.id]);
   });
 
-  it("recovers a failed optimistic paste only after the append attempt", async () => {
+  it("reports failed paste persistence without reloading away the local draft", async () => {
     const block = paragraph("block-a", "Before");
     const events: string[] = [];
     let persistence: Promise<void> | null = null;
+    notesApi.updateNotesBlock.mockImplementation(async () => { events.push("update"); });
+    notesApi.appendNotesBlockChildren.mockImplementation(async () => { events.push("append"); throw new Error("append failed"); });
     const actions = createNotesBlockPasteActions({
+      enqueueEditorMutation: (mutation) => mutation(),
       readSelectedPageId: () => pageId,
       blockById: (id) => id === block.id ? block : undefined,
       localApplyBlockUpdate: () => undefined,
@@ -125,9 +125,9 @@ describe("Notes block action boundaries", () => {
 
     expect(await actions.pastePlainTextIntoBlock(block.id, 6, 6, "\nAfter")).toBe(true);
     if (!persistence) throw new Error("paste persistence was not tracked");
-    await persistence;
+    await expect(persistence).rejects.toThrow("append failed");
 
-    expect(events).toEqual(["flush", "append", "reload"]);
+    expect(events).toEqual(["update", "append"]);
   });
 
   it("does not focus or record duplication after the backend fails", async () => {
@@ -169,6 +169,8 @@ describe("Notes block action boundaries", () => {
     };
     const trashAndApply = vi.fn();
     const actions = createNotesBlockMovementActions({
+      enqueueEditorMutation: (mutation) => mutation(),
+      localApplyBlockUpdate: () => undefined,
       readSelectedPageId: () => pageId,
       treeState: () => state,
       blockById: (id) => state.blocksById[id],
@@ -205,6 +207,8 @@ describe("Notes block action boundaries", () => {
     const requestBlockFocus = vi.fn();
     const recordUndoAfter = vi.fn();
     const actions = createNotesBlockMovementActions({
+      enqueueEditorMutation: (mutation) => mutation(),
+      localApplyBlockUpdate: () => undefined,
       readSelectedPageId: () => pageId,
       treeState: () => state,
       blockById: (id) => state.blocksById[id],

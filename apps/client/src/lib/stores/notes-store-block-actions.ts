@@ -110,6 +110,7 @@ export interface NotesBlockLocalMutationCapabilities {
 }
 
 export interface NotesBlockPersistenceCapabilities {
+  enqueueEditorMutation: (mutation: () => Promise<void>) => Promise<void>;
   awaitSelectedPageReady: () => Promise<void>;
   saveBlockNow: (blockId: string, update: NotesBlockUpdate) => Promise<void>;
   scheduleBlockSave: (blockId: string, update: NotesBlockUpdate) => void;
@@ -159,6 +160,10 @@ export interface NotesBlockActions
 export function createNotesBlockActions(context: NotesBlockActionsContext): NotesBlockActions {
   const optimisticWrites = createNotesOptimisticWriteTracker();
   const trackOptimisticBlockWrites = optimisticWrites.track;
+  const enqueueEditorMutation = (mutation: () => Promise<void>) => context.enqueueEditorMutation(async () => {
+    await context.awaitSelectedPageReady();
+    await mutation();
+  });
 
   async function flushOptimisticBlockWrites(): Promise<void> {
     await optimisticWrites.flush();
@@ -227,6 +232,7 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
   const mediaActions = createNotesMediaBlockActions(context);
   const richTextActions = createNotesRichTextBlockActions({
     ...context,
+    enqueueEditorMutation,
     hasPendingOptimisticWrite: optimisticWrites.has,
   });
   const tableActions = createNotesTableBlockActions({
@@ -252,6 +258,7 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
   });
   const movementActions = createNotesBlockMovementActions({
     ...context,
+    enqueueEditorMutation,
     replaceBlockWithUpdate,
     moveAndApply,
     moveManyAndApply,
@@ -264,6 +271,7 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
   });
   const pasteActions = createNotesBlockPasteActions({
     ...context,
+    enqueueEditorMutation,
     appendAndApply,
     pendingOptimisticWrite: optimisticWrites.pending,
     trackOptimisticBlockWrites,
@@ -273,6 +281,7 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
   });
   const structuralActions = createNotesStructuralBlockActions({
     ...context,
+    enqueueEditorMutation,
     replaceBlockWithUpdate,
     appendAndApply,
     undoSnapshot,

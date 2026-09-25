@@ -841,6 +841,12 @@
     class="notes-editor-root relative flex h-full w-full min-w-0 flex-1 flex-col overflow-hidden"
     data-mobile={mobileLayout || undefined}
   >
+    {#if notes.editorSaveError}
+      <div role="alert" class="flex items-center gap-2 border-b border-destructive/30 px-4 py-2 text-sm text-destructive">
+        <span>{t("notes.editorSaveFailed", notes.editorSaveError)}</span>
+        <button type="button" class="shrink-0 rounded-md border px-2 py-1" onclick={() => void notes.retryEditorMutations().catch(() => undefined)}>{t("common.retry")}</button>
+      </div>
+    {/if}
     {#if peekMode}
       <div class="absolute right-3 top-2 z-40 flex items-center gap-0.5 rounded-md border border-border bg-popover/95 p-0.5 shadow-sm" data-notes-peek-controls>
         <button

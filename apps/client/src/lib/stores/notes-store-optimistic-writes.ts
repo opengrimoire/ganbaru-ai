@@ -11,11 +11,12 @@ export function createNotesOptimisticWriteTracker(): NotesOptimisticWriteTracker
 
   function track(blockIds: readonly string[], persistence: Promise<void>): void {
     for (const blockId of blockIds) pendingWrites.set(blockId, persistence);
-    void persistence.finally(() => {
+    const cleanup = () => {
       for (const blockId of blockIds) {
         if (pendingWrites.get(blockId) === persistence) pendingWrites.delete(blockId);
       }
-    });
+    };
+    void persistence.then(cleanup, cleanup);
   }
 
   return {

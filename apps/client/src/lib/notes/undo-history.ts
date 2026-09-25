@@ -1,6 +1,5 @@
 import { parseNotesBlock } from "./block-validation";
 import {
-  buildNotesChildIdsByParent,
   childIdsForParent,
   parentIdForBlock,
   type NotesTreeState,
@@ -258,12 +257,20 @@ export function createNotesUndoSnapshot(
 ): NotesUndoSnapshot | null {
   if (!pageId) return null;
   const extraBlocksById = Object.fromEntries(extraBlocks.map((block) => [block.id, block]));
+  const childIdsByParentId = Object.fromEntries(Object.entries(state.childIdsByParentId)
+    .map(([parentId, ids]) => [parentId, [...ids]]));
+  for (const block of extraBlocks) {
+    const parentId = parentIdForBlock(block);
+    for (const [key, ids] of Object.entries(childIdsByParentId)) {
+      if (key !== parentId) childIdsByParentId[key] = ids.filter((id) => id !== block.id);
+    }
+    const siblings = childIdsByParentId[parentId] ?? [];
+    if (!siblings.includes(block.id)) siblings.push(block.id);
+    childIdsByParentId[parentId] = siblings;
+  }
   const mergedState: NotesTreeState = {
     blocksById: { ...state.blocksById, ...extraBlocksById },
-    childIdsByParentId: buildNotesChildIdsByParent([
-      ...Object.values(state.blocksById),
-      ...extraBlocks,
-    ]),
+    childIdsByParentId,
   };
   const blockIds = collectSnapshotBlockIds(mergedState, pageId, extraBlocks);
   return {
@@ -309,7 +316,11 @@ export function createNotesUndoSnapshotForBlocks(
       .map((blockId) => extraBlocksById.get(blockId) ?? state.blocksById[blockId])
       .filter((block): block is NotesBlock => block !== undefined)
       .map(cloneBlock),
-    childIdsByParentId: {},
+    childIdsByParentId: Object.fromEntries(
+      Object.entries(state.childIdsByParentId)
+        .filter(([, ids]) => ids.some((id) => uniqueBlockIds.includes(id)))
+        .map(([parentId, ids]) => [parentId, [...ids]]),
+    ),
     focusBlockId,
     focusSelection: focusSelection ? { ...focusSelection } : null,
   };
@@ -336,6 +347,10 @@ export function recordNotesUndoEntry(
         ...state.undo.slice(0, -1),
         {
           ...latest,
+          before: mergeSnapshotChanges({
+            ...before,
+            blocks: before.blocks.filter((block) => !latest.after.blocks.some((existing) => existing.id === block.id)),
+          }, latest.before),
           after: mergeSnapshotChanges(latest.after, after),
           updatedAt: now,
         },

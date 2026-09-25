@@ -1,4 +1,6 @@
+import { invalidateReplacedNotesMediaAsset } from "./notes-store-block-media-actions";
 import {
+  updateNotesBlock,
   createNotesDatabase,
   createNotesLinkedDatabaseView,
 } from "$lib/api/notes";
@@ -50,6 +52,8 @@ const DEFAULT_DATABASE_TITLE = "Untitled database";
 const START_OF_BLOCK_SELECTION: NotesTextSelection = { start: 0, end: 0 };
 
 interface NotesStructuralBlockActionsContext {
+  enqueueEditorMutation: (mutation: () => Promise<void>) => Promise<void>;
+  localApplyBlockUpdate: (blockId: string, update: NotesBlockUpdate) => void;
   readSelectedPageId: () => string | null;
   readChildIdsByParentId: () => Record<string, string[]>;
   blockById: (blockId: string) => NotesBlock | undefined;
@@ -102,6 +106,16 @@ export function createNotesStructuralBlockActions(
     undoSnapshot,
   } = context;
 
+  function applyEditorUpdate(blockId: string, update: NotesBlockUpdate): void {
+    const previous = context.blockById(blockId);
+    context.localApplyBlockUpdate(blockId, update);
+    void context.enqueueEditorMutation(async () => {
+      await updateNotesBlock(blockId, update);
+      invalidateReplacedNotesMediaAsset(previous, update);
+    })
+      .catch((error: unknown) => console.warn("Notes block update persistence failed", error));
+  }
+
   async function convertBlock(blockId: string, type: NotesBlockType, clearText = false): Promise<void> {
     const block = context.blockById(blockId);
     if (!block) return;
@@ -134,7 +148,7 @@ export function createNotesStructuralBlockActions(
     if (block.type === "column_list" || block.type === "column") return;
     if (block.type === "tab") return;
     const update = clearText ? createBlockUpdate(type, "") : blockConvertedToType(block, type);
-    await replaceBlockWithUpdate(blockId, update);
+    applyEditorUpdate(blockId, update);
     context.requestBlockFocus(blockId);
     recordUndoAfter("convert", before, blockId);
   }
@@ -312,7 +326,7 @@ export function createNotesStructuralBlockActions(
     const block = context.blockById(blockId);
     if (!block) return;
     const before = undoSnapshot(blockId);
-    await replaceBlockWithUpdate(blockId, blockWithTodoChecked(block, checked));
+    applyEditorUpdate(blockId, blockWithTodoChecked(block, checked));
     recordUndoAfter("update", before, blockId);
   }
 
@@ -320,7 +334,7 @@ export function createNotesStructuralBlockActions(
     const block = context.blockById(blockId);
     if (!block) return;
     const before = undoSnapshot(blockId);
-    await replaceBlockWithUpdate(blockId, blockWithCodeLanguage(block, language));
+    applyEditorUpdate(blockId, blockWithCodeLanguage(block, language));
     recordUndoAfter("update", before, blockId);
   }
 
@@ -328,7 +342,7 @@ export function createNotesStructuralBlockActions(
     const block = context.blockById(blockId);
     if (!block) return;
     const before = undoSnapshot(blockId);
-    await replaceBlockWithUpdate(blockId, blockWithColor(block, color));
+    applyEditorUpdate(blockId, blockWithColor(block, color));
     recordUndoAfter("formatting", before, blockId);
   }
 
@@ -337,7 +351,7 @@ export function createNotesStructuralBlockActions(
     if (!block) return;
     const before = undoSnapshot(blockId);
     if (block.type === "toggle") {
-      await replaceBlockWithUpdate(blockId, blockWithToggleOpen(block, open));
+      applyEditorUpdate(blockId, blockWithToggleOpen(block, open));
       recordUndoAfter("update", before, blockId);
       return;
     }
@@ -347,7 +361,7 @@ export function createNotesStructuralBlockActions(
       || (block.type === "heading_3" && block.heading_3.is_toggleable === true)
       || (block.type === "heading_4" && block.heading_4.is_toggleable === true)
     ) {
-      await replaceBlockWithUpdate(blockId, blockWithHeadingToggleOpen(block, open));
+      applyEditorUpdate(blockId, blockWithHeadingToggleOpen(block, open));
       recordUndoAfter("update", before, blockId);
     }
   }
@@ -374,7 +388,7 @@ export function createNotesStructuralBlockActions(
         },
       )
       : blockWithHeadingToggleable(block, headingType, true);
-    await replaceBlockWithUpdate(blockId, update);
+    applyEditorUpdate(blockId, update);
     context.requestBlockFocus(blockId);
     recordUndoAfter("convert", before, blockId);
   }

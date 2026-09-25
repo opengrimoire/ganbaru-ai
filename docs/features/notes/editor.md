@@ -1,5 +1,7 @@
 # Notes editor
 
+**Status: Implemented editing core, with manual desktop and Android interaction acceptance still required.**
+
 ## Editing model
 
 The editor renders one canonical page block tree through bounded outlines and retained content windows. It can load long pages incrementally without treating the current rendered range as the complete document.
@@ -28,6 +30,8 @@ Backspace in an empty block removes it unless it is the only visible editable bl
 
 Tab nests under a previous sibling only when that parent accepts the source type. Shift+Tab outdents only to a valid destination. Page roots, database surfaces, table internals, columns, and tab-label layers reject structurally invalid moves before persistence.
 
+Block selection starts from a row margin, Escape in an editor, or a drag that crosses from one text editor into another. Shift-click and Shift+Arrow extend the range. Ctrl/Cmd+A from a selected block selects the rendered block range. Text selection within one block stays native. Selected blocks support copy, cut, deletion, and undo from the focused row. Selection currently covers rendered blocks rather than every unloaded block in a long page.
+
 Pointer block movement and destination pickers preserve full subtrees. Moving a block across pages validates access, active state, ancestry, and target type.
 
 ## Undo and redo
@@ -40,11 +44,11 @@ An undo failure never prevents the canonical page from loading. See [Notes edito
 
 ## Optimistic persistence
 
-Typing and common structural edits update local state immediately. Per-block saves remain ordered. A save acknowledgement replaces local state only when no newer local revision exists.
+Typing, Enter, merge, formatting, and common block updates change local content immediately. Structural edits update the visible outline in the same turn, including insertions in the middle of a page. Merge places the caret at the join. Typing saves, optimistic structural edits, and undo/redo share an ordered persistence queue. A save acknowledgement replaces local state only when no newer local revision exists.
 
 **Planned for device synchronization:** text fields will use SQLite-persisted Yrs state and incremental Yjs-compatible editor operations. Current full-block payload writes are not a merge protocol. The adapter must preserve relative selections and comment anchors, composition and Unicode using UTF-16 offsets, local undo, and pending input after persistence failures. Canonical binary updates and deterministic rendering projections must commit together before acknowledging a save. See [Device linking and synchronization](../../data/sync.md).
 
-Dependent operations such as rapid row creation, paste, and deletion preserve ordering without reloading the complete page after every write. A failed write leaves a visible recoverable state and never silently discards the local draft.
+Dependent operations such as rapid row creation, paste, and deletion preserve ordering without reloading the complete page after every write. A failed write pauses dependent queued writes, retains the local draft, and displays a save error with Retry. Retry resumes retained operations in order. Draft recovery is in memory: keep the window open until saving succeeds. Structural writes currently use ordered canonical commands, rather than a single SQLite transaction spanning the entire edit; a process interruption between those commands can leave a partially persisted edit.
 
 ## Comments and suggestions
 

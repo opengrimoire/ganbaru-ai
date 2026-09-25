@@ -498,6 +498,14 @@ async function selectPage(
   options: NotesSelectPageOptions = {},
 ): Promise<void> {
   const alreadyLoaded = pageSession.selectedPageId === pageId && (!pageId || treeProjection.loadedPage?.id === pageId);
+  if (!alreadyLoaded) {
+    try {
+      await flushPendingWrites();
+    } catch {
+      // The persistence queue displays the save error and retains the open draft.
+      return;
+    }
+  }
   const openMode = notesPageOpenModeForSelection({
     requestedOpenMode: options.openMode,
     currentOpenMode: pageSession.pageOpenMode,
@@ -603,19 +611,11 @@ function activateProvisionalPage(
 async function reconcileCreatedPage(loaded: NotesLoadedPage): Promise<void> {
   const remainsSelected = pageSession.selectedPageId === loaded.page.id
     && treeProjection.loadedPage?.id === loaded.page.id;
-  const reconciled = remainsSelected
-    ? {
-        ...loaded,
-        blocks: {
-          ...loaded.blocks,
-          results: loaded.blocks.results.map((block) => (
-            hasLocalChanges(block.id) ? treeProjection.blocksById[block.id] ?? block : block
-          )),
-        },
-      }
-    : loaded;
+  if (remainsSelected) treeProjection.loadedPage = loaded.page;
   applyPostMutation({
-    ...(remainsSelected ? { loadedPage: reconciled } : {}),
+    ...(remainsSelected ? {
+      blocks: loaded.blocks.results.filter((block) => !hasLocalChanges(block.id)),
+    } : {}),
     pages: [loaded.page],
     sidebarImpact: "hierarchy",
   });
@@ -735,7 +735,11 @@ const pageCreationController = createNotesPageCreationController({
   },
 });
 
+let editorSaveError = $state<string | null>(null);
+
 const {
+  retryEditorMutations,
+  enqueueEditorMutation,
   hasLocalChanges,
   localApplyBlockUpdate,
   markBlockLocallyChanged,
@@ -748,13 +752,14 @@ const {
   beforeSave: () => pageCreationController.awaitReady(pageSession.selectedPageId),
   replaceBlock,
   setLoadError: (message) => {
-    workspaceController.setError(message);
+    editorSaveError = message;
   },
   debounceMs: BLOCK_SAVE_DEBOUNCE_MS,
 });
 treeProjection.setLocalChangeMarker(markBlockLocallyChanged);
 
 const undoController = createNotesUndoController({
+  enqueueEditorMutation,
   readSelectedPageId: () => pageSession.selectedPageId,
   readTreeState: treeState,
   loadPageTreeForUndo,
@@ -857,6 +862,7 @@ const pageActions = createNotesPageActions({
 });
 
 const blockActions = createNotesBlockActions({
+  enqueueEditorMutation,
   readSelectedPageId: () => pageSession.selectedPageId,
   readBlocksById: () => treeProjection.blocksById,
   readChildIdsByParentId: () => treeProjection.childIdsByParentId,
@@ -899,6 +905,7 @@ const collaborationController = createNotesCollaborationController({
 });
 
 const hydrationController = createNotesHydrationController({
+  hasLocalChanges,
   readPageGeneration: () => pageSession.generation,
   readSelectedPageId: () => pageSession.selectedPageId,
   readBlockOutlines: () => treeProjection.blockOutlines,
@@ -1048,6 +1055,11 @@ async function flushPendingWrites(): Promise<void> {
 
 export function getNotes() {
   return {
+    get editorSaveError() { return editorSaveError; },
+    retryEditorMutations: async () => {
+      await retryEditorMutations();
+      await undoController.persist();
+    },
     get pages(): NotesPage[] {
       return pages;
     },

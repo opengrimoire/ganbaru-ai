@@ -2,6 +2,7 @@ import type { editor as enEditor } from "../../en/notes/editor";
 import type { MessageShape } from "../../types";
 
 export const editor = {
+  editorSaveFailed: (message: string) => `No se pudieron guardar los cambios. El borrador sigue abierto. Mantén esta ventana abierta e inténtalo de nuevo: ${message}`,
   blockList: "Bloques de la nota",
   blockPlaceholder: "Escribe / para bloques",
   richTextEditorLabel: "Editor de bloque con texto enriquecido",

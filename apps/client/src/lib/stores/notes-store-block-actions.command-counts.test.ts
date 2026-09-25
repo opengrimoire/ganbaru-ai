@@ -23,6 +23,7 @@ import { applyNotesPostMutationToTree } from "$lib/notes/post-mutation";
 import { collectLoadedBlockSubtreeIds } from "$lib/notes/block-duplicate";
 
 const notesApi = vi.hoisted(() => ({
+  updateNotesBlock: vi.fn(),
   appendNotesBlockChildren: vi.fn(),
   moveNotesBlock: vi.fn(),
   trashNotesBlock: vi.fn(),
@@ -108,6 +109,7 @@ describe("notes store block actions", () => {
       has_more: false,
     });
     const context: NotesBlockActionsContext = {
+      enqueueEditorMutation: (mutation) => mutation(),
       awaitSelectedPageReady: () => Promise.resolve(),
       readSelectedPageId: () => pageId,
       readBlocksById: () => state.blocksById,
@@ -171,7 +173,8 @@ describe("notes store block actions", () => {
 
     expect(loadPageTree).toHaveBeenCalledTimes(0);
     expect(scheduleBlockSave).toHaveBeenCalledTimes(1);
-    expect(saveBlockNow).toHaveBeenCalledTimes(1);
+    expect(saveBlockNow).toHaveBeenCalledTimes(0);
+    expect(notesApi.updateNotesBlock).toHaveBeenCalledTimes(1);
     expect(notesApi.appendNotesBlockChildren).toHaveBeenCalledTimes(1);
     expect(notesApi.moveNotesBlock).toHaveBeenCalledTimes(1);
     expect(notesApi.trashNotesBlock).toHaveBeenCalledTimes(1);

@@ -15,7 +15,12 @@ Using a scratch page with other pages and relevant project objects available, ve
 - Tab and Shift+Tab accept valid nesting and reject invalid parent combinations.
 - Multi-block paste, rapid Enter, and immediate deletion of an empty to-do or paragraph while saving is pending persist in order. The deleted block stays removed after reopening the page, without duplicate rows or a block-not-found error.
 - Undo and redo restore text, structure, focus, selection, template use, and button actions at expected boundaries.
-- A failed or delayed save never overwrites a newer local revision.
+- A failed or delayed save never overwrites a newer local revision. Verify the save error is visible, the draft remains editable, and Retry persists retained writes before newer dependent edits.
+- Merge two paragraphs, immediately press Enter at the join, type, undo several times, and redo. Confirm there are no temporary duplicate rows and the caret stays at the intended boundary.
+- Split a middle paragraph repeatedly before storage responds, then undo and redo. Confirm following paragraphs and unloaded outline entries retain their positions.
+- Drag across paragraph editors, select from a row margin, extend with Shift-click or Shift+Arrow, and press Escape then Ctrl/Cmd+A. Confirm block deletion and Ctrl/Cmd+Z work with row focus.
+
+Automated delayed-storage coverage connects the actual action, persistence, tree projection, and undo controllers in `notes-editor-transactions.test.ts`. It checks local results before storage is released and persisted results afterward. These checks do not measure real Tauri input latency or replace the manual acceptance above.
 
 ## Block acceptance
 

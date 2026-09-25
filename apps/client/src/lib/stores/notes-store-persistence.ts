@@ -5,17 +5,19 @@ import type { NotesBlock, NotesBlockUpdate } from "$lib/notes/types";
 interface PendingBlockSave {
   timer: ReturnType<typeof setTimeout>;
   update: NotesBlockUpdate;
+  revision: number;
 }
 
 export interface NotesBlockPersistenceContext {
   readBlock: (blockId: string) => NotesBlock | undefined;
   beforeSave: (blockId: string) => Promise<void>;
   replaceBlock: (block: NotesBlock) => void;
-  setLoadError: (message: string) => void;
+  setLoadError: (message: string | null) => void;
   debounceMs: number;
 }
 
 export interface NotesBlockPersistence {
+  retryEditorMutations: () => Promise<void>;
   hasLocalChanges: (blockId: string) => boolean;
   localApplyBlockUpdate: (blockId: string, update: NotesBlockUpdate) => void;
   markBlockLocallyChanged: (blockId: string) => void;
@@ -23,6 +25,7 @@ export interface NotesBlockPersistence {
   scheduleBlockSave: (blockId: string, update: NotesBlockUpdate) => void;
   flushBlockSave: (blockId: string) => Promise<void>;
   flushPendingBlockSaves: () => Promise<void>;
+  enqueueEditorMutation: (mutation: () => Promise<void>) => Promise<void>;
 }
 
 /**
@@ -33,14 +36,19 @@ export function createNotesBlockPersistence(
 ): NotesBlockPersistence {
   const pendingBlockSaves = new Map<string, PendingBlockSave>();
   const blockRevisions = new Map<string, number>();
+  let mutationChain = Promise.resolve();
+  let failed = false;
+  const queuedMutations: Array<() => Promise<void>> = [];
+  const dirtyBlocks = new Set<string>();
   const saveChains = new Map<string, Promise<void>>();
 
   function markBlockLocallyChanged(blockId: string): void {
+    dirtyBlocks.add(blockId);
     blockRevisions.set(blockId, (blockRevisions.get(blockId) ?? 0) + 1);
   }
 
   function hasLocalChanges(blockId: string): boolean {
-    return blockRevisions.has(blockId);
+    return dirtyBlocks.has(blockId);
   }
 
   function localApplyBlockUpdate(blockId: string, update: NotesBlockUpdate): void {
@@ -50,19 +58,15 @@ export function createNotesBlockPersistence(
     context.replaceBlock(applyBlockUpdate(block, update));
   }
 
-  async function saveBlockNow(blockId: string, update: NotesBlockUpdate): Promise<void> {
-    const revision = blockRevisions.get(blockId) ?? 0;
-    const previous = saveChains.get(blockId) ?? Promise.resolve();
-    const save = previous
-      .catch(() => undefined)
-      .then(async () => {
-        await context.beforeSave(blockId);
-        const saved = await updateNotesBlock(blockId, update);
-        if ((blockRevisions.get(blockId) ?? 0) === revision) {
-          blockRevisions.delete(blockId);
-          if (context.readBlock(blockId)) context.replaceBlock(saved);
-        }
-      });
+  async function saveBlockNow(blockId: string, update: NotesBlockUpdate, revision = blockRevisions.get(blockId) ?? 0): Promise<void> {
+    const save = enqueue(async () => {
+      await context.beforeSave(blockId);
+      const saved = await updateNotesBlock(blockId, update);
+      if ((blockRevisions.get(blockId) ?? 0) === revision) {
+        dirtyBlocks.delete(blockId);
+        if (context.readBlock(blockId)) context.replaceBlock(saved);
+      }
+    });
     saveChains.set(blockId, save);
     try {
       await save;
@@ -74,18 +78,14 @@ export function createNotesBlockPersistence(
   function scheduleBlockSave(blockId: string, update: NotesBlockUpdate): void {
     const pending = pendingBlockSaves.get(blockId);
     if (pending) clearTimeout(pending.timer);
+    const revision = blockRevisions.get(blockId) ?? 0;
     const timer = setTimeout(() => {
-      void saveBlockNow(blockId, update)
-        .then(() => {
-          if (pendingBlockSaves.get(blockId)?.update === update) {
-            pendingBlockSaves.delete(blockId);
-          }
-        })
-        .catch((error) => {
-          context.setLoadError(error instanceof Error ? error.message : String(error));
-        });
+      pendingBlockSaves.delete(blockId);
+      void saveBlockNow(blockId, update, revision).catch((error: unknown) => {
+        context.setLoadError(error instanceof Error ? error.message : String(error));
+      });
     }, context.debounceMs);
-    pendingBlockSaves.set(blockId, { timer, update });
+    pendingBlockSaves.set(blockId, { timer, update, revision });
   }
 
   async function flushBlockSave(blockId: string): Promise<void> {
@@ -93,18 +93,63 @@ export function createNotesBlockPersistence(
     if (pending) {
       clearTimeout(pending.timer);
       pendingBlockSaves.delete(blockId);
-      await saveBlockNow(blockId, pending.update);
+      await saveBlockNow(blockId, pending.update, pending.revision);
       return;
     }
     await saveChains.get(blockId);
   }
 
-  async function flushPendingBlockSaves(): Promise<void> {
-    const blockIds = [...pendingBlockSaves.keys()];
-    await Promise.all(blockIds.map((blockId) => flushBlockSave(blockId)));
+  /** Serializes content, structural edits, and history writes in input order. */
+  function enqueue(mutation: () => Promise<void>): Promise<void> {
+    queuedMutations.push(mutation);
+    return runQueued(mutation);
+  }
+
+  function runQueued(mutation: () => Promise<void>): Promise<void> {
+    const operation = mutationChain.then(async () => {
+      await mutation();
+      queuedMutations.splice(queuedMutations.indexOf(mutation), 1);
+    });
+    mutationChain = operation;
+    void operation.catch((error: unknown) => {
+      failed = true;
+      context.setLoadError(error instanceof Error ? error.message : String(error));
+    });
+    return operation;
+  }
+
+  /** Retries retained writes in order without replacing the user's local draft. */
+  function retryEditorMutations(): Promise<void> {
+    if (!failed) return flushPendingBlockSaves();
+    failed = false;
+    mutationChain = Promise.resolve();
+    context.setLoadError(null);
+    for (const mutation of [...queuedMutations]) void runQueued(mutation).catch(() => undefined);
+    return flushPendingBlockSaves();
+  }
+
+  function flushPendingBlockSaves(): Promise<void> {
+    for (const blockId of [...pendingBlockSaves.keys()]) {
+      void flushBlockSave(blockId).catch(() => undefined);
+    }
+    return mutationChain;
+  }
+
+  /** Captures pending typing before a structural edit enters the same write queue. */
+  function enqueueEditorMutation(mutation: () => Promise<void>): Promise<void> {
+    void flushPendingBlockSaves().catch(() => undefined);
+    const revisions = [...dirtyBlocks].map((id) => [id, blockRevisions.get(id)] as const);
+    return enqueue(async () => {
+      await mutation();
+      for (const [id, revision] of revisions) {
+        if (context.readBlock(id) && blockRevisions.get(id) === revision) dirtyBlocks.delete(id);
+      }
+    });
   }
 
   return {
+    retryEditorMutations,
+    enqueueEditorMutation,
     hasLocalChanges,
     localApplyBlockUpdate,
     markBlockLocallyChanged,

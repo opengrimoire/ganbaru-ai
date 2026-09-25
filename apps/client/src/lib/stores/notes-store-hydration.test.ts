@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createBlockWrite } from "$lib/notes/block-factory";
+import { notesBlockOutlineFromBlock } from "$lib/notes/block-outline";
 import type { NotesBlock } from "$lib/notes/types";
 
 const backend = vi.hoisted(() => {
@@ -43,6 +44,7 @@ describe("Notes hydration controller", () => {
     const replaceHydratedBlocks = vi.fn();
     const reloadOpenComments = vi.fn();
     const controller = createNotesHydrationController({
+      hasLocalChanges: () => false,
       readPageGeneration: () => 1,
       readSelectedPageId: () => "page-a",
       readBlockOutlines: () => [{
@@ -76,6 +78,7 @@ describe("Notes hydration controller", () => {
     let pageId: string | null = "page-a";
     const replaceHydratedBlocks = vi.fn();
     const controller = createNotesHydrationController({
+      hasLocalChanges: () => false,
       readPageGeneration: () => generation,
       readSelectedPageId: () => pageId,
       readBlockOutlines: () => [{
@@ -104,4 +107,29 @@ describe("Notes hydration controller", () => {
 
     expect(replaceHydratedBlocks).not.toHaveBeenCalled();
   });
+  it("retains unsaved blocks outside the viewport and uses outline order for hydrated siblings", async () => {
+    const { createNotesHydrationController } = await import("./notes-store-hydration");
+    const blocks = Array.from({ length: 125 }, (_, index): NotesBlock => ({
+      object: "block", parent: { type: "page_id", page_id: "page-a" },
+      created_time: "2026-09-24T00:00:00Z", last_edited_time: "2026-09-24T00:00:00Z",
+      has_children: false, in_trash: false, source_provider: null, source_object_id: null, source_last_edited_time: null,
+      ...createBlockWrite(`block-${index}`, "paragraph", `Text ${index}`),
+    } as NotesBlock));
+    const outlines = blocks.map((block, index) => notesBlockOutlineFromBlock(block, "page-a", index));
+    const replaceHydratedBlocks = vi.fn();
+    const controller = createNotesHydrationController({
+      readPageGeneration: () => 1, readSelectedPageId: () => "page-a",
+      readBlockOutlines: () => outlines, readFlatBlockOutlines: () => outlines.map((outline) => ({ outline, depth: 0 })),
+      readBlocksById: () => ({ [blocks[124].id]: blocks[124], [blocks[0].id]: blocks[0], [blocks[1].id]: blocks[1] }),
+      hasLocalChanges: (id) => id === blocks[0].id,
+      readFocusRequest: () => ({ blockId: null, requestId: 0, selection: null }),
+      mergeBlockOutlines: vi.fn(), replaceHydratedBlocks, setLoadError: vi.fn(), reloadOpenComments: vi.fn(),
+    });
+    await controller.hydrateBlockRange([blocks[124].id]);
+    expect(replaceHydratedBlocks).toHaveBeenCalledWith(
+      { [blocks[0].id]: blocks[0], [blocks[124].id]: blocks[124] },
+      { "page-a": [blocks[0].id, blocks[124].id] },
+    );
+  });
+
 });

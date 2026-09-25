@@ -1,3 +1,4 @@
+import { notesUndoShortcutAction } from "$lib/notes/undo-history";
 import type { NotesBlockSelectionState } from "$lib/notes/block-selection";
 import {
   notesBlockSelectionAfterClick,
@@ -30,6 +31,8 @@ export interface NotesBlockSelectionDelegates {
 }
 
 export interface NotesBlockSelectionControllerOptions {
+  undo: () => Promise<boolean>;
+  redo: () => Promise<boolean>;
   readPageId: () => string;
   readListElement: () => HTMLDivElement | null;
   readRenderedBlockIds: () => readonly string[];
@@ -71,20 +74,6 @@ export function createNotesBlockSelectionController(options: NotesBlockSelection
   let clipboard = $state<NotesBlockSelectionClipboard | null>(null);
   let busy = $state(false);
   let error = $state<string | null>(null);
-
-  $effect(() => {
-    if (typeof window === "undefined" || dragPointerId === null) return;
-    const stop = () => {
-      dragAnchorBlockId = null;
-      dragPointerId = null;
-    };
-    window.addEventListener("pointerup", stop);
-    window.addEventListener("pointercancel", stop);
-    return () => {
-      window.removeEventListener("pointerup", stop);
-      window.removeEventListener("pointercancel", stop);
-    };
-  });
 
   async function run(action: () => Promise<void> | void): Promise<void> {
     if (busy) return;
@@ -141,9 +130,14 @@ export function createNotesBlockSelectionController(options: NotesBlockSelection
       const next = notesBlockSelectionAfterClick({ blockIds: options.readRenderedBlockIds(), current: selection, blockId: id, extend: true });
       setSelection(next); if (next) options.focusRow(next.focusBlockId); return;
     }
+    if (options.targetIsEditable(event.target)) {
+      if (selection) setSelection(null);
+      if (event.target instanceof Element && event.target.closest("[contenteditable='true'], textarea")) {
+        dragAnchorBlockId = id; dragPointerId = event.pointerId;
+      }
+      return;
+    }
     if (!options.targetIsSelectionZone(event.target)) { if (selection) setSelection(null); return; }
-    if (options.targetIsEditable(event.target)) return;
-    if (options.focusTextEditorAtEnd(id)) { event.preventDefault(); setSelection(null); return; }
     event.preventDefault(); clearNativeSelection();
     dragAnchorBlockId = id; dragPointerId = event.pointerId;
     setSelection(notesBlockSelectionForBlock(options.readRenderedBlockIds(), id));
@@ -153,7 +147,10 @@ export function createNotesBlockSelectionController(options: NotesBlockSelection
   function pointerOver(event: PointerEvent): void {
     if (dragPointerId === null || event.pointerId !== dragPointerId || !dragAnchorBlockId) return;
     const id = options.blockIdFromEvent(event); if (!id) return;
+    if (id === dragAnchorBlockId && !selection) return;
+    clearNativeSelection();
     setSelection(notesBlockSelectionRange(options.readRenderedBlockIds(), dragAnchorBlockId, id));
+    options.focusRow(id);
   }
 
   async function copy(mode: "copy" | "cut"): Promise<void> {
@@ -182,8 +179,22 @@ export function createNotesBlockSelectionController(options: NotesBlockSelection
   function keydown(event: KeyboardEvent): void {
     if (event.defaultPrevented) return;
     const id = options.blockIdFromEvent(event); if (!id) return;
-    if (options.handleNavigationKeydown(event, id)) return;
+    const historyAction = notesUndoShortcutAction(event);
+    if (historyAction && !options.targetIsEditable(event.target)) {
+      event.preventDefault(); setSelection(null);
+      void run(historyAction === "undo" ? async () => { await options.undo(); } : async () => { await options.redo(); });
+      return;
+    }
+    if (!selection && !event.shiftKey && options.handleNavigationKeydown(event, id)) return;
     const modifier = event.ctrlKey || event.metaKey; const key = event.key.toLowerCase();
+    if (modifier && !event.shiftKey && !event.altKey && key === "a" && (!options.targetIsEditable(event.target) || selection)) {
+      const ids = options.readRenderedBlockIds();
+      if (ids.length) {
+        event.preventDefault(); clearNativeSelection();
+        setSelection(notesBlockSelectionRange(ids, ids[0], ids[ids.length - 1]));
+      }
+      return;
+    }
     if (clipboard && modifier && !event.shiftKey && !event.altKey && key === "v" && !options.targetIsEditable(event.target)) { event.preventDefault(); void run(() => paste(selection?.focusBlockId ?? id)); return; }
     if (selection && !event.altKey && (event.key === "Backspace" || event.key === "Delete")) { event.preventDefault(); void run(remove); return; }
     if (selection && modifier && event.shiftKey && !event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) { event.preventDefault(); void run(() => move(event.key === "ArrowUp" ? "up" : "down")); return; }
@@ -198,7 +209,19 @@ export function createNotesBlockSelectionController(options: NotesBlockSelection
   }
 
   function delegation(node: HTMLDivElement, delegates: NotesBlockSelectionDelegates) {
-    return attachNotesBlockSelectionDelegates(node, delegates);
+    const attached = attachNotesBlockSelectionDelegates(node, delegates);
+    const stop = () => { dragAnchorBlockId = null; dragPointerId = null; };
+    const view = node.ownerDocument.defaultView;
+    view?.addEventListener("pointerup", stop);
+    view?.addEventListener("pointercancel", stop);
+    return {
+      destroy() {
+        attached.destroy();
+        view?.removeEventListener("pointerup", stop);
+        view?.removeEventListener("pointercancel", stop);
+        stop();
+      },
+    };
   }
 
   return {
