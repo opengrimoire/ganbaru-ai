@@ -235,7 +235,7 @@ export class NotesTextEditorRuntime {
         });
         this.#appliedFocusRequestId = requestedFocusId;
         if (!plan) return;
-        if (plan.focusEditor) this.editor.focus();
+        if (plan.focusEditor) this.editor.focus({ preventScroll: true });
         this.restoreTrackedSelection(plan.selection);
       });
     });

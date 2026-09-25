@@ -39,6 +39,7 @@ Using a scratch page with other pages and relevant project objects available, ve
 
 ## Page and navigation acceptance
 
+- Use Up and Down through wrapped text and adjacent blocks. Confirm the caret moves one visual line at a time and the viewport does not jump a visible block to the top; then jump to an unloaded block and confirm it scrolls into view.
 - Open a page in full, side, and center modes. Confirm the editor has no separate header row, last edited, favorite, and page actions appear before project Notes settings in the workspace header, and preview close/view-mode controls stay reachable without covering title actions.
 - Create root, folder, nested, and database-row pages with empty and authored titles.
 - Move pages among project root, folders, and parent pages while preserving paired child blocks.

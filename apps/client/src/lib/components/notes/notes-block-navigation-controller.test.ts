@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NotesBlock } from "$lib/notes/types";
 import { createNotesBlockNavigationController } from "./notes-block-navigation-controller";
 
@@ -21,13 +21,30 @@ function paragraph(id: string): NotesBlock {
   };
 }
 
+function mockRangeGeometry(rect: DOMRect, rects: DOMRectList): void {
+  Object.defineProperty(Range.prototype, "getBoundingClientRect", {
+    configurable: true,
+    value: () => rect,
+  });
+  Object.defineProperty(Range.prototype, "getClientRects", {
+    configurable: true,
+    value: () => rects,
+  });
+}
+
 describe("Notes block navigation controller", () => {
+  afterEach(() => {
+    Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
+    Reflect.deleteProperty(Range.prototype, "getClientRects");
+    document.getSelection()?.removeAllRanges();
+    document.body.replaceChildren();
+  });
+
   it("moves from the last visual position of one editor to the next rendered block", () => {
-    Range.prototype.getBoundingClientRect = () => ({
+    mockRangeGeometry({
       width: 0,
       height: 0,
-    } as DOMRect);
-    Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
+    } as DOMRect, [] as unknown as DOMRectList);
     const list = document.createElement("div");
     list.innerHTML = `
       <div data-notes-selectable-block-id="first"><div contenteditable="true" role="textbox" data-notes-block-id="first">a</div></div>
@@ -57,5 +74,40 @@ describe("Notes block navigation controller", () => {
     Object.defineProperty(event, "target", { value: editor });
     expect(controller.handleKeydown(event, "first")).toBe(true);
     expect(requestFocus).toHaveBeenCalledWith("second", { start: 0, end: 0 });
+  });
+
+  it("keeps an arrow key within a wrapped block before the last visual line", () => {
+    mockRangeGeometry({
+      top: 100,
+      left: 40,
+      width: 0,
+      height: 18,
+    } as DOMRect, [
+      { top: 100, bottom: 118, left: 40, right: 160, width: 120, height: 18 },
+      { top: 120, bottom: 138, left: 40, right: 100, width: 60, height: 18 },
+    ] as unknown as DOMRectList);
+    const list = document.createElement("div");
+    list.innerHTML = `
+      <div data-notes-selectable-block-id="first"><div contenteditable="true" role="textbox" data-notes-block-id="first">ab</div></div>
+      <div data-notes-selectable-block-id="second"><div contenteditable="true" role="textbox" data-notes-block-id="second"></div></div>
+    `;
+    document.body.append(list);
+    const editor = list.querySelector<HTMLElement>("[data-notes-block-id='first']")!;
+    const range = document.createRange();
+    range.setStart(editor.firstChild!, 1);
+    range.collapse(true);
+    document.getSelection()?.addRange(range);
+    const requestFocus = vi.fn();
+    const controller = createNotesBlockNavigationController({
+      readListElement: () => list,
+      readRenderedBlockIds: () => ["first", "second"],
+      readBlock: (id) => id === "first" || id === "second" ? paragraph(id) : undefined,
+      requestFocus,
+    });
+    const event = new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true });
+    Object.defineProperty(event, "target", { value: editor });
+    expect(controller.handleKeydown(event, "first")).toBe(false);
+    expect(event.defaultPrevented).toBe(false);
+    expect(requestFocus).not.toHaveBeenCalled();
   });
 });

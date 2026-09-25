@@ -16,12 +16,14 @@ export interface NotesBlockVirtualizerOptions {
   hydrateBlockRange: (blockIds: readonly string[]) => Promise<void>;
 }
 
-/** Calculate the estimated top offset used to reveal an unrendered focus target. */
+/** Calculate the estimated top offset only when a focused block is not rendered. */
 export function notesFocusedBlockEstimatedOffset(
   rangeItems: readonly { id: string; estimatedHeight: number }[],
   measuredHeights: ReadonlyMap<string, number>,
   blockId: string,
+  targetRendered: boolean,
 ): number | null {
+  if (targetRendered) return null;
   const index = rangeItems.findIndex((item) => item.id === blockId);
   if (index < 0) return null;
   return rangeItems
@@ -82,8 +84,19 @@ export function createNotesBlockVirtualizer(options: NotesBlockVirtualizerOption
     const { blockId, requestId } = options.readFocusRequest();
     const scrollViewport = options.readScrollViewport();
     if (!blockId || requestId === handledFocusRequestId || !scrollViewport) return;
-    const targetOffset = notesFocusedBlockEstimatedOffset(rangeItems, measuredBlockHeights, blockId);
-    if (targetOffset === null) return;
+    const renderedTarget = Array.from(
+      options.readListElement()?.querySelectorAll<HTMLElement>("[data-notes-virtual-block]") ?? [],
+    ).some((element) => element.dataset.notesVirtualBlock === blockId);
+    const targetOffset = notesFocusedBlockEstimatedOffset(
+      rangeItems,
+      measuredBlockHeights,
+      blockId,
+      renderedTarget,
+    );
+    if (targetOffset === null) {
+      if (renderedTarget) handledFocusRequestId = requestId;
+      return;
+    }
     handledFocusRequestId = requestId;
     scrollViewport.scrollTop += targetOffset - viewportStart;
     updateViewportRange();

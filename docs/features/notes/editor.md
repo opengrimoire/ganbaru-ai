@@ -60,7 +60,7 @@ Missing managed files show a recoverable unavailable state. Replacing or removin
 
 ## Loading and focus
 
-One internal page viewport owns long-content scrolling. Focus recovery scrolls that viewport and rejects stale focus requests from earlier rapid edits. Loading placeholders preserve approximate document position without becoming editable phantom blocks.
+One internal page viewport owns long-content scrolling. Arrow-key movement within text and between rendered blocks leaves the viewport stable until the caret needs to be revealed. Focus recovery estimates a scroll position for unloaded blocks and rejects stale focus requests from earlier rapid edits. Loading placeholders preserve approximate document position without becoming editable phantom blocks.
 
 ## Accessibility
 
