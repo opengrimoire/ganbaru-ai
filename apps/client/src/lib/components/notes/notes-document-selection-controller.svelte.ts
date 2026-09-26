@@ -1,3 +1,5 @@
+import { notesClipboardPasteHtml, readNotesClipboard } from "$lib/notes/clipboard-paste";
+import { notesClipboardContent, setNotesClipboardData, writeNotesClipboard } from "$lib/notes/clipboard-export";
 import { notesRichTextFormattingShortcutAnnotationName } from "$lib/notes/rich-text-shortcuts";
 import type { NotesRichTextAnnotationName } from "$lib/notes/rich-text";
 import { tick } from "svelte";
@@ -164,16 +166,15 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
 
   function range() { return selection ? notesDocumentRange(options.readIds(), selection) : null; }
 
-  function text(): string {
+  function clipboardContent() {
     const selected = range();
-    if (!selected) return "";
-    return selected.blockIds.map((id, index) => {
+    if (!selected) return notesClipboardContent([]);
+    return notesClipboardContent(selected.blockIds.map((id, index) => {
       const block = options.readBlock(id);
       if (!block) throw new Error("Notes selection content is still loading");
-      const value = blockPlainText(block);
-      return value.slice(index === 0 ? selected.start.offset : 0,
-        index === selected.blockIds.length - 1 ? selected.end.offset : value.length);
-    }).join("\n");
+      return { block, start: index === 0 ? selected.start.offset : 0,
+        end: index === selected.blockIds.length - 1 ? selected.end.offset : undefined };
+    }));
   }
 
   async function replace(value: string, html?: string): Promise<void> {
@@ -200,7 +201,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     const token = request;
     if (selected.blockIds.some((id) => !options.readBlock(id))) await hydrateSelection(selected.blockIds);
     if (!alive || token !== request || page !== options.readPageId()) return;
-    await navigator.clipboard.writeText(text());
+    await writeNotesClipboard(clipboardContent());
     if (token !== request) return;
     if (cut) await replace("");
     menu = null;
@@ -444,7 +445,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     event.preventDefault(); event.stopPropagation();
     if (event.type === "paste") {
       const plainText = event.clipboardData?.getData("text/plain") ?? "";
-      const html = event.clipboardData?.getData("text/html") || undefined;
+      const html = notesClipboardPasteHtml(plainText, event.clipboardData?.getData("text/html") ?? "") || undefined;
       if (plainText || html) void run(() => replace(plainText, html));
       return;
     }
@@ -455,7 +456,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     }
     try {
       if (!event.clipboardData) throw new Error("Notes clipboard is unavailable");
-      event.clipboardData.setData("text/plain", text());
+      setNotesClipboardData(event.clipboardData, clipboardContent());
       if (event.type === "cut") void run(() => replace(""));
     } catch (reason) { error = reason instanceof Error ? reason.message : String(reason); }
   }
@@ -514,8 +515,8 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     },
     async paste() {
       const token = request;
-      const value = await navigator.clipboard.readText();
-      if (token === request && value) await replace(value);
+      const { plainText, html } = await readNotesClipboard();
+      if (token === request && (plainText || html)) await replace(plainText, notesClipboardPasteHtml(plainText, html) || undefined);
     },
     delegation(node: HTMLDivElement) {
       list = node; alive = true;

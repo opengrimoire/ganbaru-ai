@@ -1,3 +1,5 @@
+import { readNotesClipboard } from "$lib/notes/clipboard-paste";
+import { notesClipboardContent, writeNotesClipboard } from "$lib/notes/clipboard-export";
 import { notesUndoShortcutAction } from "$lib/notes/undo-history";
 import type { NotesBlockSelectionState } from "$lib/notes/block-selection";
 import {
@@ -9,9 +11,7 @@ import {
   notesBlockSelectionRange,
 } from "$lib/notes/block-selection";
 import {
-  notesSelectionPlainText,
   notesSelectionRootBlockIds,
-  notesSelectionSubtreeIds,
   planNotesSelectionMoveWithinSiblings,
 } from "$lib/notes/block-selection-operations";
 import type { NotesTreeState } from "$lib/notes/block-tree";
@@ -37,6 +37,7 @@ export interface NotesBlockSelectionControllerOptions {
   readListElement: () => HTMLDivElement | null;
   readRenderedBlockIds: () => readonly string[];
   readTreeState: () => NotesTreeState;
+  hydrateSubtrees: (rootIds: readonly string[]) => Promise<readonly string[]>;
   blockIdFromEvent: (event: Event) => string | null;
   targetIsEditable: (target: EventTarget | null) => boolean;
   targetIsSelectionZone: (target: EventTarget | null) => boolean;
@@ -155,21 +156,39 @@ export function createNotesBlockSelectionController(options: NotesBlockSelection
   async function copy(mode: "copy" | "cut"): Promise<void> {
     if (!selection) return;
     const selectedIds = [...selection.selectedBlockIds];
+    const pageId = options.readPageId();
+    const selected = selection;
+    const roots = notesSelectionRootBlockIds(options.readTreeState(), selectedIds);
+    if (!roots.length) return;
+    const subtree = [...await options.hydrateSubtrees(roots)];
+    if (!subtree.length || pageId !== options.readPageId() || !sameSelection(selected, selection)) return;
     const tree = options.readTreeState();
-    const roots = notesSelectionRootBlockIds(tree, selectedIds);
-    const subtree = notesSelectionSubtreeIds(tree, roots);
-    if (!roots.length || !subtree.length) return;
-    const plainText = notesSelectionPlainText(tree, roots);
-    clipboard = { mode, pageId: options.readPageId(), rootBlockIds: roots, subtreeBlockIds: subtree, plainText };
-    if (!navigator.clipboard) throw new Error("Notes clipboard is unavailable");
-    await navigator.clipboard.writeText(plainText);
+    const content = notesClipboardContent(subtree.map((id) => {
+      const block = tree.blocksById[id];
+      if (!block) throw new Error("Notes selection content is still loading");
+      return { block };
+    }));
+    await writeNotesClipboard(content);
+    if (pageId !== options.readPageId() || !sameSelection(selected, selection)) return;
+    const plainText = content.plainText;
+    clipboard = { mode, pageId, rootBlockIds: roots, subtreeBlockIds: subtree, plainText };
     if (mode === "cut") { await options.deleteBlocks(selectedIds); setSelection(null); }
   }
 
   async function paste(targetId: string | null): Promise<void> {
     if (!clipboard || !targetId) return;
-    const focusId = await options.pasteBlocks(clipboard.rootBlockIds, clipboard.subtreeBlockIds, targetId, clipboard.mode === "cut");
-    if (clipboard.mode === "cut") clipboard = null;
+    const copied = clipboard;
+    const pageId = options.readPageId();
+    const current = await readNotesClipboard();
+    if (clipboard !== copied || pageId !== options.readPageId()) return;
+    if (current.plainText !== copied.plainText) {
+      clipboard = null;
+      setSelection(null);
+      options.focusTextEditorAtEnd(targetId);
+      return;
+    }
+    const focusId = await options.pasteBlocks(copied.rootBlockIds, copied.subtreeBlockIds, targetId, copied.mode === "cut");
+    if (copied.mode === "cut") clipboard = null;
     setSelection(null); if (focusId) options.focusRow(focusId, false);
   }
 

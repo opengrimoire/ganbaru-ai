@@ -402,6 +402,33 @@ describe("Notes editing with delayed persistence", () => {
     ]);
   });
 
+  it.each(["single", "selection"])("persists pasted table structure with undo and redo (%s)", async (mode) => {
+    const h = editor([fromWrite(createBlockWrite(firstId, "paragraph", "Before after"))]);
+    const html = "<table><tr><th>Name</th><th>Value</th></tr><tr><td><b>A</b></td><td>B</td></tr></table>";
+    if (mode === "single") await h.actions.pasteRichHtmlIntoBlock(firstId, 7, 7, html);
+    else await h.actions.replaceDocumentRange([firstId], 7, 7, "", html);
+    const visibleRows = flattenNotesBlockTree(h.projection.treeState(), pageId);
+    const tableId = visibleRows[1].block.id;
+    const rows = [visibleRows[0], visibleRows[1],
+      ...(h.projection.childIdsByParentId[tableId] ?? []).map((id) => ({ block: h.projection.blocksById[id], depth: 1 })),
+      visibleRows[2]];
+    expect(rows.map((row) => [row.block.type, row.depth])).toEqual([
+      ["paragraph", 0], ["table", 0], ["table_row", 1], ["table_row", 1], ["paragraph", 0],
+    ]);
+    expect(blockPlainText(rows[0].block)).toBe("Before ");
+    expect(blockPlainText(rows.at(-1)!.block)).toBe("after");
+    for (const row of rows) expect(parseNotesBlock(row.block)).toEqual(row.block);
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    for (const row of rows) expect(h.stored.get(row.block.id)?.parent).toEqual(row.block.parent);
+    await h.undo.undo();
+    expect(flattenNotesBlockTree(h.projection.treeState(), pageId).map((row) => blockPlainText(row.block))).toEqual(["Before after"]);
+    await h.undo.redo();
+    expect(flattenNotesBlockTree(h.projection.treeState(), pageId).map((row) => row.block.type))
+      .toEqual(visibleRows.map((row) => row.block.type));
+    expect(h.projection.childIdsByParentId[tableId]).toHaveLength(2);
+  });
+
   it("exits a list immediately while preserving rich text, descendants, numbering, and undo", async () => {
     const first = fromWrite(createBlockWrite(firstId, "numbered_list_item", "First"));
     const last = fromWrite(createBlockWrite(lastId, "numbered_list_item", "Second"));

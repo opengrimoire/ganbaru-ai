@@ -1,3 +1,5 @@
+import { notesClipboardPasteHtml, readNotesClipboard } from "$lib/notes/clipboard-paste";
+import { notesClipboardContent, setNotesClipboardData, writeNotesClipboard } from "$lib/notes/clipboard-export";
 import { Temporal } from "@js-temporal/polyfill";
 import { tick } from "svelte";
 import type { Translate } from "$lib/i18n/translator.svelte";
@@ -864,76 +866,69 @@ export class NotesTextEditorController {
     }
   };
 
-  #selectedHtml(): string | null {
-    const editor = this.runtime.editor;
-    if (!editor) return null;
-    const selection = editor.ownerDocument.getSelection();
-    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null;
-    if (!selection.anchorNode || !selection.focusNode) return null;
-    if (!editor.contains(selection.anchorNode) || !editor.contains(selection.focusNode)) return null;
-    const container = editor.ownerDocument.createElement("div");
-    container.append(selection.getRangeAt(0).cloneContents());
-    return container.innerHTML || null;
-  }
-
+  /** Copy model semantics even when the context menu has moved native focus. */
   copySelectedText = async (): Promise<void> => {
     const { start, end } = this.textSelection;
     if (start === end) return;
-    if (!navigator.clipboard) throw new Error("Notes text clipboard is unavailable");
-    const plainText = this.text.slice(start, end);
-    const html = this.#selectedHtml();
-    if (html && navigator.clipboard.write && typeof ClipboardItem !== "undefined") {
-      try {
-        await navigator.clipboard.write([new ClipboardItem({
-          "text/plain": new Blob([plainText], { type: "text/plain" }),
-          "text/html": new Blob([html], { type: "text/html" }),
-        })]);
-        return;
-      } catch (error) {
-        console.warn("Notes rich clipboard write failed; trying plain text", error);
-      }
-    }
-    await navigator.clipboard.writeText(plainText);
+    await writeNotesClipboard(notesClipboardContent([{ block: this.block, start, end }]));
   };
 
   cutSelectedText = async (): Promise<void> => {
     const { start, end } = this.textSelection;
     if (start === end) return;
+    const blockId = this.block.id;
+    const originalText = this.text;
     await this.copySelectedText();
+    if (this.block.id !== blockId || this.text !== originalText
+      || this.textSelection.start !== start || this.textSelection.end !== end) return;
+    await this.#deleteCopiedText(start, end);
+  };
+
+  /** Override native DOM copying, whose classes do not carry external semantics. */
+  handleCopy = (event: ClipboardEvent): void => {
+    const editor = this.runtime.editor;
+    const selection = editor ? notesTextSelectionFromEditableRoot(editor) : null;
+    if (!selection || selection.start === selection.end || event.defaultPrevented) return;
+    event.preventDefault();
+    try {
+      if (!event.clipboardData) throw new Error("Notes clipboard is unavailable");
+      setNotesClipboardData(event.clipboardData, notesClipboardContent([{
+        block: this.block, start: selection.start, end: selection.end,
+      }]));
+      if (event.type === "cut") {
+        void this.#deleteCopiedText(selection.start, selection.end)
+          .catch((error: unknown) => console.warn("Notes clipboard cut failed", error));
+      }
+    } catch (error) {
+      console.warn("Notes clipboard copy failed", error);
+    }
+  };
+
+  async #deleteCopiedText(start: number, end: number): Promise<void> {
     const edit = planNotesControlledTextEdit({
-      inputType: "deleteByCut",
-      data: null,
-      text: this.text,
-      selectionStart: start,
-      selectionEnd: end,
+      inputType: "deleteByCut", data: null, text: this.text,
+      selectionStart: start, selectionEnd: end,
     });
     if (!edit) return;
     this.source.onTextInput(this.block.id, edit.text, edit.selection);
     await this.runtime.focusEditorWithSelection(edit.selection.start, edit.selection.end);
-  };
+  }
 
   pasteFromClipboard = async (plainOnly = false): Promise<void> => {
     if (!navigator.clipboard) throw new Error("Notes text clipboard is unavailable");
     const { start, end } = this.textSelection;
-    if (!plainOnly && this.block.type !== "code" && navigator.clipboard.read) {
-      let html: string | null = null;
-      try {
-        const items = await navigator.clipboard.read();
-        const htmlItem = items.find((item) => item.types.includes("text/html"));
-        if (htmlItem) html = await (await htmlItem.getType("text/html")).text();
-      } catch (error) {
-        console.warn("Notes rich clipboard read failed; trying plain text", error);
-      }
-      if (html?.trim() && await Promise.resolve(this.source.onPasteRichHtml(
-        this.block.id,
-        start,
-        end,
-        html,
-      ))) return;
-    }
-    const plainText = normalizeNotesClipboardPlainText(await navigator.clipboard.readText());
+    const blockId = this.block.id;
+    const originalText = this.text;
+    const clipboard = plainOnly
+      ? { plainText: await navigator.clipboard.readText(), html: "" }
+      : await readNotesClipboard();
+    if (this.block.id !== blockId || this.text !== originalText
+      || this.textSelection.start !== start || this.textSelection.end !== end) return;
+    const html = plainOnly || this.block.type === "code" ? "" : notesClipboardPasteHtml(clipboard.plainText, clipboard.html);
+    if (html.trim() && await Promise.resolve(this.source.onPasteRichHtml(this.block.id, start, end, html))) return;
+    const plainText = normalizeNotesClipboardPlainText(clipboard.plainText);
     if (!plainText) return;
-    const handled = await Promise.resolve(this.source.onPastePlainText(
+    const handled = !plainOnly && await Promise.resolve(this.source.onPastePlainText(
       this.block.id,
       start,
       end,
@@ -1058,7 +1053,8 @@ export class NotesTextEditorController {
 
   handlePaste = async (event: ClipboardEvent): Promise<void> => {
     if (!(event.currentTarget instanceof HTMLElement)) return;
-    const html = event.clipboardData?.getData("text/html") ?? "";
+    const clipboardText = event.clipboardData?.getData("text/plain") ?? "";
+    const html = this.block.type === "code" ? "" : notesClipboardPasteHtml(clipboardText, event.clipboardData?.getData("text/html") ?? "");
     const selection = notesTextSelectionFromEditableRoot(event.currentTarget);
     if (!selection) return;
     if (html.trim() && this.block.type !== "code") {
@@ -1067,11 +1063,9 @@ export class NotesTextEditorController {
         this.source.onPasteRichHtml(this.block.id, selection.start, selection.end, html),
       );
       if (handled) return;
-      await this.runtime.focusEditorWithSelection(selection.start, selection.start);
-      return;
     }
     const plainText = normalizeNotesClipboardPlainText(
-      event.clipboardData?.getData("text/plain") ?? "",
+      clipboardText,
     );
     if (!plainText) {
       event.preventDefault();

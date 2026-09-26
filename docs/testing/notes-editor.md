@@ -164,3 +164,21 @@ Automated coverage exercises both clipboard parsers and the real editor projecti
 - Start with ABC at depth 0, DEF at depth 1, and GHI at depth 0. Indent ABC repeatedly and verify DEF remains at depth 1 and GHI at depth 0. Repeat with numbered lists, paragraphs, tasks, deeper descendants, and embedded blocks; verify numbering, undo/redo, and saved positions after reopening.
 - Outdent a parent that already has several indentation levels. Its children and following nested siblings must retain their original depths and document order. Repeat when affected neighbours are outside the rendered window.
 - Press Tab repeatedly immediately after opening a page while nested rows are still loading. Once loaded, only the requested row should change depth. Switching pages before loading finishes must cancel those pending indentation edits.
+
+### Clipboard export interoperability
+
+- Copy and cut a single text range, a cross-block range with partial endpoints, and a whole-block selection using keyboard shortcuts and context menus. Paste into Notion, Obsidian with HTML-to-Markdown conversion enabled, and a plain-text editor.
+- Verify headings, bold, italic, underline, strikethrough, links, nested mixed lists, quotes, code whitespace, and multiline text. Check tasks and tables where the receiving app supports their HTML representations. Confirm no block handles, comments, editor controls, or unselected endpoint text appear.
+- Copy an entire long page with offscreen content, then paste into another app. Confirm content is complete. Deny clipboard writes and verify a failed cut retains its source text.
+- Paste copied headings, formatted text, links, and nested lists back into Notes. App-specific objects, media bytes, and embedded databases are outside the portable text-copy contract.
+
+Automated coverage verifies model serialization, standard clipboard MIME types, semantic HTML paste, partial ranges, and native single-editor copy/cut events. Cross-application behavior still requires manual desktop acceptance.
+
+- In a plain-text editor, copied headings must contain the matching number of `#` markers. Check Markdown emphasis, links, quotes, task state, escaped literal syntax, variable-length code fences, and list indentation.
+- Copy the same H1/H2/H3 sequence from Notion into an empty paragraph and over a selected existing heading. Verify levels remain H1/H2/H3. Compare keyboard paste and context-menu paste, including a document range. Ordinary website H2 headings must remain H2 when no matching Markdown says otherwise.
+
+- Repeat table transfer through HTML and Markdown-only clipboard data. Check headered and headerless tables, merged cells, literal pipes, cell line breaks, surrounding paragraph text, undo/redo, and reopen.
+- Select formatted text inside a table cell and copy/cut/paste it in both directions. Pasting multiple blocks into one cell must retain readable text without creating unrelated table rows.
+- Verify repeated spaces, tabs, Unicode, empty paragraphs, empty code blocks, and quotes containing multiple paragraphs. Compare Markdown-only rendering separately from HTML.
+- Copy internal blocks, then copy different content in another app. Pasting on a block margin must not insert stale internal blocks; paste into the returned text editor to import the external content.
+- Record real application and OS versions and both clipboard representations. Synthetic regression fixtures do not count as confirmed Notion or Obsidian acceptance. See the [interoperability contract](../interop/notes-clipboard.md).

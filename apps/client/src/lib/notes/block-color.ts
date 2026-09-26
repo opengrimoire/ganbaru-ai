@@ -315,3 +315,12 @@ function calloutPayloadWithColor(
 ): NotesCalloutBlockPayload {
   return { ...payload, color };
 }
+
+/** Resolve explicit Notes colors to portable CSS for external clipboard consumers. */
+export function notesClipboardColorStyle(color: NotesColor): string {
+  if (color === "default") return "";
+  const tokens = COLOR_TOKENS[color];
+  return color.endsWith("_background")
+    ? `background-color: ${tokens.background}`
+    : `color: ${tokens.text}`;
+}

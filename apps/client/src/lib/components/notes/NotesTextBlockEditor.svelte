@@ -363,6 +363,8 @@
   oncompositionstart={controller.handleCompositionStart}
   oncompositionend={handleCompositionEnd}
   onpaste={handlePaste}
+  oncopy={controller.handleCopy}
+  oncut={controller.handleCopy}
   onpointerdown={controller.captureContextMenuSelection}
   oncontextmenu={controller.openContextMenu}
   onkeyup={(event) => syncTextSelection(event.currentTarget)}

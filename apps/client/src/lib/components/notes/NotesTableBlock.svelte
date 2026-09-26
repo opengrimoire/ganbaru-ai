@@ -1,5 +1,9 @@
 <script lang="ts">
   import { tick } from "svelte";
+  import { notesInlineClipboardContent, setNotesClipboardData } from "$lib/notes/clipboard-export";
+  import { notesClipboardPasteHtml } from "$lib/notes/clipboard-paste";
+  import { notesInlineClipboardRichText } from "$lib/notes/rich-text-paste";
+  import { createTextRichText, replaceRichTextRange, richTextPlainText, richTextRangeSlice } from "$lib/notes/rich-text";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import { getLocalization } from "$lib/i18n/translator.svelte";
@@ -182,6 +186,32 @@
     });
   }
 
+  /** Copy and cut cell selections from the model so external apps receive semantic formatting. */
+  function handleCellCopy(
+    event: ClipboardEvent,
+    row: NotesTableRowBlock,
+    coordinate: NotesTableCellCoordinate,
+    richText: readonly NotesRichText[],
+  ): void {
+    if (!(event.currentTarget instanceof HTMLElement) || !event.clipboardData) return;
+    const selection = notesTextSelectionFromEditableRoot(event.currentTarget);
+    if (!selection || selection.start === selection.end) return;
+    event.preventDefault();
+    try {
+      setNotesClipboardData(event.clipboardData, notesInlineClipboardContent(
+        richTextRangeSlice(richText, selection.start, selection.end),
+      ));
+      if (event.type === "cut") {
+        void Promise.resolve(onTableCellRichTextChange(row.id, coordinate.columnIndex,
+          replaceRichTextRange(richText, selection.start, selection.end, [])))
+          .then(() => focusTableCell(coordinate, { start: selection.start, end: selection.start }))
+          .catch((error: unknown) => console.warn("Notes table clipboard cut failed", error));
+      }
+    } catch (error) {
+      console.warn("Notes table clipboard copy failed", error);
+    }
+  }
+
   function handleCellPaste(
     event: ClipboardEvent,
     row: NotesTableRowBlock,
@@ -191,24 +221,16 @@
     const target = event.currentTarget;
     if (!(target instanceof HTMLElement)) return;
     const pastedText = event.clipboardData?.getData("text/plain") ?? "";
-    if (!pastedText) return;
+    const html = notesClipboardPasteHtml(pastedText, event.clipboardData?.getData("text/html") ?? "");
+    const inserted = notesInlineClipboardRichText(html) ?? (pastedText ? [createTextRichText(pastedText)] : []);
+    if (!inserted.length) return;
     event.preventDefault();
     const currentText = notesPlainTextFromEditableRoot(target);
     const selection = notesTextSelectionFromEditableRoot(target)
       ?? { start: currentText.length, end: currentText.length };
-    const nextText = [
-      currentText.slice(0, selection.start),
-      pastedText,
-      currentText.slice(selection.end),
-    ].join("");
-    const nextSelection = {
-      start: selection.start + pastedText.length,
-      end: selection.start + pastedText.length,
-    };
-    const nextRichText = notesTableCellRichTextFromPlainTextEdit(
-      existingRichText,
-      nextText,
-    );
+    const offset = selection.start + richTextPlainText(inserted).length;
+    const nextSelection = { start: offset, end: offset };
+    const nextRichText = replaceRichTextRange(existingRichText, selection.start, selection.end, inserted);
     void Promise.resolve(
       onTableCellRichTextChange(row.id, coordinate.columnIndex, nextRichText),
     ).then(() => {
@@ -422,6 +444,8 @@
                     oninput={(event) => {
                       handleCellInput(event, row, coordinate, cellRichText);
                     }}
+                    oncopy={(event) => handleCellCopy(event, row, coordinate, cellRichText)}
+                    oncut={(event) => handleCellCopy(event, row, coordinate, cellRichText)}
                     onpaste={(event) => {
                       handleCellPaste(event, row, coordinate, cellRichText);
                     }}

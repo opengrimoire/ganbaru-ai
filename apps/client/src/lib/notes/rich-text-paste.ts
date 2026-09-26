@@ -1,3 +1,5 @@
+import { readNotesClipboardTable, type NotesClipboardTable } from "./clipboard-html-table";
+import { notesClipboardLinkUrl } from "./clipboard-links";
 import DOMPurify, { type Config } from "dompurify";
 import {
   blockEditableRichText,
@@ -9,7 +11,6 @@ import {
   createLinkedTextRichText,
   createTextRichText,
   defaultRichTextAnnotations,
-  normalizeRichTextLinkUrl,
   replaceRichTextRange,
   richTextPlainText,
   richTextRangeSlice,
@@ -40,6 +41,10 @@ type NotesRichHtmlPasteBlockType =
   | "bulleted_list_item"
   | "numbered_list_item"
   | "quote"
+  | "to_do"
+  | "divider"
+  | "table"
+  | "table_row"
   | "code";
 
 interface NotesRichHtmlPasteSegment {
@@ -47,6 +52,9 @@ interface NotesRichHtmlPasteSegment {
   richText: NotesRichText[];
   depth?: number;
   language?: string;
+  checked?: boolean;
+  table?: NotesClipboardTable;
+  cells?: NotesRichText[][];
 }
 
 interface NotesRichHtmlInlineContext {
@@ -89,6 +97,16 @@ const SANITIZER_CONFIG = {
     "h4",
     "h5",
     "h6",
+    "hr",
+    "input",
+    "img",
+    "table",
+    "thead",
+    "tbody",
+    "tfoot",
+    "tr",
+    "th",
+    "td",
     "i",
     "li",
     "ol",
@@ -110,6 +128,13 @@ const SANITIZER_CONFIG = {
     "data-notes-strikethrough",
     "data-notes-underline",
     "href",
+    "type",
+    "checked",
+    "class",
+    "colspan",
+    "rowspan",
+    "src",
+    "alt",
     "style",
   ],
   ALLOW_ARIA_ATTR: false,
@@ -120,8 +145,6 @@ const SANITIZER_CONFIG = {
     "embed",
     "form",
     "iframe",
-    "img",
-    "input",
     "link",
     "math",
     "meta",
@@ -143,6 +166,7 @@ const BLOCK_TAGS = new Set([
   "h4",
   "h5",
   "h6",
+  "hr",
   "li",
   "p",
   "pre",
@@ -277,11 +301,12 @@ function contextForElement(
     ?? (tagName === "a" ? element.getAttribute("href") : null);
   const linkUrl = rawLink === null
     ? context.linkUrl
-    : normalizeRichTextLinkUrl(rawLink);
+    : notesClipboardLinkUrl(rawLink);
   return {
     annotations,
     linkUrl,
-    preformatted: context.preformatted || tagName === "pre",
+    preformatted: context.preformatted || tagName === "pre"
+      || (element instanceof HTMLElement && ["pre", "pre-wrap", "break-spaces"].includes(element.style.whiteSpace)),
   };
 }
 
@@ -302,7 +327,10 @@ function blockTypeForElement(
       return "heading_5";
     case "h6":
       return "heading_6";
+    case "hr":
+      return "divider";
     case "li":
+      if (Array.from(element.querySelectorAll('input[type="checkbox"]')).some((input) => input.closest("li") === element)) return "to_do";
       return listType ?? "bulleted_list_item";
     case "blockquote":
       return "quote";
@@ -316,7 +344,7 @@ function blockTypeForElement(
 function hasDirectBlockChildren(element: Element): boolean {
   return Array.from(element.children).some((child) => {
     const tagName = normalizedTagName(child);
-    return BLOCK_TAGS.has(tagName) || tagName === "ol" || tagName === "ul";
+    return BLOCK_TAGS.has(tagName) || ["ol", "ul", "table"].includes(tagName);
   });
 }
 
@@ -336,6 +364,18 @@ function collectInline(
     return;
   }
   if (tagName === "ul" || tagName === "ol") return;
+  if (tagName === "table") {
+    const text = Array.from(node.querySelectorAll("tr")).map((row) => Array.from(row.children)
+      .map((cell) => cell.textContent ?? "").join("\t")).join("\n");
+    appendText(output, text, context);
+    return;
+  }
+  if (tagName === "img") {
+    const source = node.getAttribute("src") ?? "";
+    const label = node.getAttribute("alt") ?? "";
+    appendText(output, [label, source].filter(Boolean).join(" (") + (label && source ? ")" : ""), context);
+    return;
+  }
   const separatesLines = tagName === "p" || tagName === "div";
   if (separatesLines && output.length && !richTextPlainText(output).endsWith("\n")) {
     appendText(output, "\n", context);
@@ -343,6 +383,12 @@ function collectInline(
   const childContext = contextForElement(node, context);
   for (const child of node.childNodes) {
     collectInline(child, childContext, output);
+  }
+  if (tagName === "a") {
+    const href = node.getAttribute("href");
+    if (href && !notesClipboardLinkUrl(href) && !/^[a-z][a-z0-9+.-]*:/iu.test(href)) {
+      appendText(output, ` (${href})`, context);
+    }
   }
   if (separatesLines) appendText(output, "\n", context);
 }
@@ -358,20 +404,24 @@ function segmentFromElement(
     return {
       type: "code",
       richText: content ? [createTextRichText(content)] : [],
-      language: "plain text",
+      language: element.querySelector("code")?.className.match(/(?:^|\s)language-(\S+)/u)?.[1] ?? "plain text",
     };
   }
   const richText: NotesRichText[] = [];
   const childContext = contextForElement(element, context);
+  const hasParagraphChildren = Array.from(element.children).some((child) => ["P", "DIV"].includes(child.tagName));
   for (const child of element.childNodes) {
+    if (hasParagraphChildren && child.nodeType === Node.TEXT_NODE && !child.textContent?.trim()) continue;
     collectInline(child, childContext, richText);
   }
   const text = richTextPlainText(richText);
+  const trimmed = hasParagraphChildren && text.endsWith("\n") ? richTextRangeSlice(richText, 0, text.length - 1) : richText;
   return {
     type: blockTypeForElement(element, listType),
+    checked: Array.from(element.querySelectorAll('input[type="checkbox"]')).some((input) => input.closest("li") === element && input.hasAttribute("checked")),
     richText: tagName === "li"
       ? richTextRangeSlice(richText, text.length - text.trimStart().length, text.trimEnd().length)
-      : richText,
+      : trimmed,
   };
 }
 
@@ -398,6 +448,25 @@ function collectSegments(
       continue;
     }
     const tagName = normalizedTagName(child);
+    if (tagName === "table") {
+      flushInline();
+      const table = readNotesClipboardTable(child, (cell) => {
+        const runs: NotesRichText[] = [];
+        const cellContext = contextForElement(cell, context);
+        for (const node of cell.childNodes) collectInline(node, cellContext, runs);
+        return runs;
+      });
+      if (table) {
+        segments.push({ type: "table", richText: [], table, depth });
+        for (const cells of table.rows) segments.push({ type: "table_row", cells, depth: depth + 1,
+          richText: [createTextRichText(cells.map(richTextPlainText).join("\t"))] });
+      } else {
+        const text = Array.from(child.querySelectorAll("tr")).map((row) => Array.from(row.children)
+          .map((cell) => cell.textContent ?? "").join("\t")).join("\n");
+        segments.push({ type: "paragraph", richText: [createTextRichText(text)], depth });
+      }
+      continue;
+    }
     if (tagName === "ol" || tagName === "ul") {
       flushInline();
       const childListType = tagName === "ol" ? "numbered_list_item" : "bulleted_list_item";
@@ -429,7 +498,8 @@ function collectSegments(
   return segments;
 }
 
-function sanitizeNotesRichHtml(html: string): DocumentFragment | null {
+/** Sanitize clipboard markup before reading semantic content or reconciling formats. */
+export function sanitizeNotesRichHtml(html: string): DocumentFragment | null {
   if (!html.trim() || html.length > NOTES_RICH_HTML_MAX_LENGTH) return null;
   if (typeof document === "undefined") return null;
   const sanitized = DOMPurify.sanitize(html, SANITIZER_CONFIG);
@@ -454,10 +524,7 @@ function parseNotesRichHtmlPaste(html: string): NotesRichHtmlPasteSegment[] | nu
     linkUrl: null,
     preformatted: false,
   };
-  const segments = collectSegments(fragment, context, null)
-    .filter((segment, index, all) => segment.type.endsWith("_list_item")
-      || (all[index + 1]?.depth ?? 0) > (segment.depth ?? 0)
-      || richTextPlainText(segment.richText).trim().length > 0);
+  const segments = collectSegments(fragment, context, null);
   if (segments.length === 0 || plainTextLength(segments) > NOTES_CLIPBOARD_MAX_TEXT_LENGTH) {
     return null;
   }
@@ -468,6 +535,19 @@ function capSegments(
   segments: readonly NotesRichHtmlPasteSegment[],
 ): NotesRichHtmlPasteSegment[] {
   if (segments.length <= NOTES_CLIPBOARD_MAX_BLOCKS) return [...segments];
+  if (segments.some((segment) => segment.type === "table")) {
+    const flattened: NotesRichHtmlPasteSegment[] = [];
+    for (let index = 0; index < segments.length; index += 1) {
+      const segment = segments[index];
+      if (segment.type !== "table") { flattened.push(segment); continue; }
+      const rows: string[] = [];
+      while (segments[index + 1]?.type === "table_row") {
+        rows.push(richTextPlainText(segments[++index].richText));
+      }
+      flattened.push({ type: "paragraph", depth: segment.depth, richText: [createTextRichText(rows.join("\n"))] });
+    }
+    return capSegments(flattened);
+  }
   const kept = segments.slice(0, NOTES_CLIPBOARD_MAX_BLOCKS - 1);
   const overflow = segments
     .slice(NOTES_CLIPBOARD_MAX_BLOCKS - 1)
@@ -488,6 +568,17 @@ function richTextOrEmptyText(richText: readonly NotesRichText[]): NotesRichText[
 
 function createUpdateForSegment(segment: NotesRichHtmlPasteSegment): NotesBlockUpdate {
   switch (segment.type) {
+    case "table": {
+      if (!segment.table) throw new Error("Clipboard table has no cell structure");
+      return { type: "table", table: { table_width: segment.table.width,
+        has_column_header: segment.table.hasColumnHeader, has_row_header: segment.table.hasRowHeader } };
+    }
+    case "table_row":
+      return { type: "table_row", table_row: { cells: segment.cells ?? [] } };
+    case "divider":
+      return { type: "divider", divider: {} };
+    case "to_do":
+      return { type: "to_do", to_do: { ...createTextPayloadFromRichText(richTextOrEmptyText(segment.richText)), checked: segment.checked ?? false } };
     case "heading_1":
       return {
         type: "heading_1",
@@ -588,11 +679,21 @@ export function planNotesRichHtmlPaste(
   );
   const prefix = richTextRangeSlice(currentRichText, 0, start);
   const suffix = richTextRangeSlice(currentRichText, end, currentPlainText.length);
+  if (["table", "divider"].includes(segments[0].type)
+    && (richTextPlainText(prefix).length > 0
+      || (input.currentBlock.type !== "paragraph" && end !== currentPlainText.length))) {
+    segments.unshift({ type: "paragraph", richText: [], depth: 0 });
+  }
+  if (segments.at(-1)?.type === "table_row" || segments.at(-1)?.type === "table"
+    || (segments.at(-1)?.type === "divider" && richTextPlainText(suffix))) {
+    segments.push({ type: "paragraph", richText: [], depth: 0 });
+  }
   const [firstSegment, ...remainingSegments] = segments;
   if (!firstSegment) return null;
 
-  const shouldConvertCurrentBlock = input.currentBlock.type === "paragraph"
-    && richTextPlainText(prefix).trim().length === 0;
+  const shouldConvertCurrentBlock = (input.currentBlock.type === "paragraph"
+    || (start === 0 && end === currentPlainText.length && firstSegment.type !== "paragraph"))
+    && richTextPlainText(prefix).length === 0;
   const currentSegment: NotesRichHtmlPasteSegment = {
     ...firstSegment,
     richText: shouldConvertCurrentBlock
@@ -637,4 +738,18 @@ export function planNotesRichHtmlPaste(
     focusBlockId: appendedBlocks.at(-1)?.id ?? input.currentBlock.id,
     focusOffset: lastSegment ? richTextPlainText(lastSegment.richText).length : 0,
   };
+}
+
+
+/** Flatten portable blocks into an inline field while retaining supported text annotations. */
+export function notesInlineClipboardRichText(html: string): NotesRichText[] | null {
+  const segments = parseNotesRichHtmlPaste(html);
+  if (!segments) return null;
+  const output: NotesRichText[] = [];
+  for (const segment of segments) {
+    if (segment.type === "table") continue;
+    if (output.length) appendRichTextItem(output, createTextRichText("\n"));
+    for (const item of segment.richText) appendRichTextItem(output, item);
+  }
+  return output;
 }

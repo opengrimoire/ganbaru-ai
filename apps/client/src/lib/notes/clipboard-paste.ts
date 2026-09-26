@@ -1,0 +1,83 @@
+import { notesClipboardLinkUrl } from "./clipboard-links";
+import { Marked } from "marked";
+import { normalizeNotesClipboardPlainText } from "./block-clipboard";
+import { sanitizeNotesRichHtml } from "./rich-text-paste";
+
+const markdown = new Marked({
+  gfm: true,
+  renderer: {
+    link({ href, tokens }) {
+      const text = this.parser.parseInline(tokens);
+      const url = notesClipboardLinkUrl(href);
+      const escaped = href.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;").replace(/"/gu, "&quot;");
+      return url ? `<a href="${escaped}">${text}</a>` : `${text} (${escaped})`;
+    },
+    image({ href, text }) {
+      return `${text} (${href})`.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
+    },
+    code({ text, lang }) {
+      const content = text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
+      const language = (lang?.split(/\s/u)[0] ?? "").replace(/[^a-zA-Z0-9_+.-]/gu, "");
+      return `<pre><code class="language-${language}">${content}</code></pre>`;
+    },
+    html({ text }) {
+      // Plain clipboard text is not an HTML execution or import channel.
+      if (/^<\/?(?:u|strong|em|s|code)>$/iu.test(text) || /^<br\s*\/?\s*>$/iu.test(text)) return text;
+      return text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
+    },
+  },
+});
+
+/** Compare semantic text without treating layout whitespace as content differences. */
+function comparableText(node: ParentNode): string {
+  return (node.textContent ?? "").replace(/\s+/gu, "");
+}
+
+/** Resolve clipboard representations, using matching Markdown headings as authorial levels. */
+export function notesClipboardPasteHtml(plainText: string, html = ""): string {
+  const text = normalizeNotesClipboardPlainText(plainText);
+  if (!text) return html;
+  const tokens = markdown.lexer(text);
+  let formatted = false;
+  markdown.walkTokens(tokens, (token) => {
+    if (token.type === "html" && /^<\/?(?:u|strong|em|s|code)>|^<br\s*\/?\s*>/iu.test(token.raw)) formatted = true;
+    if (["heading", "list", "blockquote", "code", "codespan", "strong", "em", "del", "link", "hr", "table", "image", "escape", "br"].includes(token.type)) formatted = true;
+  });
+  if (!formatted) return html;
+  const rendered = markdown.parser(tokens);
+  if (!html.trim()) return rendered;
+  const original = sanitizeNotesRichHtml(html);
+  const fromMarkdown = sanitizeNotesRichHtml(rendered);
+  if (!original || !fromMarkdown || comparableText(original) !== comparableText(fromMarkdown)) return html;
+  const headings = Array.from(original.querySelectorAll("h1,h2,h3,h4,h5,h6"));
+  const markdownHeadings = Array.from(fromMarkdown.querySelectorAll("h1,h2,h3,h4,h5,h6"));
+  if (!headings.length || headings.length !== markdownHeadings.length
+    || headings.some((heading, index) => comparableText(heading) !== comparableText(markdownHeadings[index]))) return html;
+  for (const [index, heading] of headings.entries()) {
+    const replacement = document.createElement(markdownHeadings[index].tagName.toLowerCase());
+    for (const attribute of heading.attributes) replacement.setAttribute(attribute.name, attribute.value);
+    replacement.append(...heading.childNodes);
+    heading.replaceWith(replacement);
+  }
+  const container = document.createElement("div");
+  container.append(original);
+  return container.innerHTML;
+}
+
+/** Read both representations from the same clipboard item for menu-based paste. */
+export async function readNotesClipboard(): Promise<{ plainText: string; html: string }> {
+  if (!navigator.clipboard) throw new Error("Notes clipboard is unavailable");
+  if (navigator.clipboard.read) {
+    try {
+      const items = await navigator.clipboard.read();
+      const item = items.find((candidate) => candidate.types.includes("text/html") || candidate.types.includes("text/plain"));
+      if (item) return {
+        plainText: item.types.includes("text/plain") ? await (await item.getType("text/plain")).text() : "",
+        html: item.types.includes("text/html") ? await (await item.getType("text/html")).text() : "",
+      };
+    } catch (error) {
+      console.warn("Notes rich clipboard read failed; trying text", error);
+    }
+  }
+  return { plainText: await navigator.clipboard.readText(), html: "" };
+}

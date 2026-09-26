@@ -33,8 +33,10 @@ function selectionHarness() {
   const row = (id: string) => list.querySelector<HTMLElement>(`[data-notes-selectable-block-id="${id}"]`)!;
   const undo = vi.fn(async () => true);
   const focusRow = vi.fn();
+  const pasteBlocks = vi.fn(async () => null);
   const focusTextEditorAtEnd = vi.fn(() => true);
   const controller = createNotesBlockSelectionController({
+    hydrateSubtrees: async (ids) => ids,
     undo, redo: vi.fn(async () => true), readPageId: () => "page", readListElement: () => list,
     readRenderedBlockIds: () => ["first", "second", "third"],
     readTreeState: () => ({ blocksById: {}, childIdsByParentId: {} }),
@@ -42,7 +44,7 @@ function selectionHarness() {
     targetIsEditable: (target) => target instanceof Element && target.closest("[contenteditable]") !== null,
     targetIsSelectionZone: () => true, focusTextEditorAtEnd,
     focusRow, handleNavigationKeydown: () => false,
-    pasteBlocks: async () => null, duplicateBlocks: async () => null,
+    pasteBlocks, duplicateBlocks: async () => null,
     moveBlocks: async () => undefined, deleteBlocks: async () => undefined,
   });
   const delegates = controller.delegation(list);
@@ -51,7 +53,7 @@ function selectionHarness() {
     Object.defineProperty(event, "pointerId", { value: 1 });
     target.dispatchEvent(event);
   };
-  return { controller, row, pointer, undo, focusRow, focusTextEditorAtEnd, destroy: delegates.destroy };
+  return { controller, row, pointer, undo, pasteBlocks, focusRow, focusTextEditorAtEnd, destroy: delegates.destroy };
 }
 
 describe("Notes block selection gestures", () => {
@@ -113,5 +115,28 @@ describe("Notes block selection gestures", () => {
     h.pointer(h.row("second"), "pointerover");
     expect(h.controller.selection).toBeNull();
     h.destroy();
+  });
+});
+
+
+describe("system clipboard ownership", () => {
+  it("does not paste stale internal blocks after another app replaces the clipboard", async () => {
+    const original = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: {
+      readText: async () => "External content",
+    } });
+    const h = selectionHarness();
+    try {
+      h.controller.setClipboard({ mode: "copy", pageId: "page", rootBlockIds: ["first"],
+        subtreeBlockIds: ["first"], plainText: "First" });
+      await h.controller.paste("second");
+      expect(h.pasteBlocks).not.toHaveBeenCalled();
+      expect(h.controller.clipboard).toBeNull();
+      expect(h.focusTextEditorAtEnd).toHaveBeenCalledWith("second");
+    } finally {
+      if (original) Object.defineProperty(navigator, "clipboard", original);
+      else Reflect.deleteProperty(navigator, "clipboard");
+      h.destroy();
+    }
   });
 });

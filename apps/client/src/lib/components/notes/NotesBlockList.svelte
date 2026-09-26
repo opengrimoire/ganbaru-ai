@@ -107,6 +107,11 @@
     readListElement: () => blockListElement,
     readRenderedBlockIds: renderedSelectableBlockIds,
     readTreeState: currentTreeState,
+    hydrateSubtrees: async (ids) => {
+      const subtree = notes.outlineSubtreeIds(ids);
+      await notes.hydrateBlockRange(subtree);
+      return subtree;
+    },
     blockIdFromEvent: (event) => navigation.blockIdFromEvent(event),
     targetIsEditable: (target) => navigation.targetIsEditable(target),
     targetIsSelectionZone: (target) => navigation.targetIsSelectionZone(target),

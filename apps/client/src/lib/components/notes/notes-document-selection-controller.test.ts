@@ -27,7 +27,9 @@ function harness(count = 3, type: NotesBlock["type"] = "paragraph") {
     readBlock: (id) => blocks.get(id), requestFocus: focus,
   });
   const focusRow = vi.fn();
+  const hydrateSubtrees = vi.fn(async (ids: readonly string[]) => ids);
   const blockSelection = createNotesBlockSelectionController({
+    hydrateSubtrees,
     undo: vi.fn(async () => true), redo: vi.fn(async () => true),
     readPageId: () => "page", readListElement: () => list, readRenderedBlockIds: () => ids,
     readTreeState: () => ({ blocksById: Object.fromEntries(blocks), childIdsByParentId: { page: ids } }),
@@ -50,7 +52,7 @@ function harness(count = 3, type: NotesBlock["type"] = "paragraph") {
     editor(index).dispatchEvent(event);
     return event;
   };
-  return { controller, blockSelection, focusRow, replace, indent, hydrate, focus, blocks, ids, editor, key,
+  return { controller, blockSelection, hydrateSubtrees, focusRow, replace, indent, hydrate, focus, blocks, ids, editor, key,
     destroy() { attached.destroy(); blockDelegates.destroy(); },
   };
 }
@@ -58,6 +60,49 @@ function harness(count = 3, type: NotesBlock["type"] = "paragraph") {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(document, "caretPositionFromPoint"); document.body.replaceChildren(); window.getSelection()?.removeAllRanges(); });
 
 describe("Notes document selection", () => {
+  it("hydrates unloaded descendants before exporting whole blocks", async () => {
+    const h = harness();
+    const child = h.blocks.get(h.ids[1])!;
+    child.parent = { type: "block_id", block_id: h.ids[0] };
+    h.blocks.delete(child.id);
+    h.hydrateSubtrees.mockImplementation(async () => {
+      h.blocks.set(child.id, child);
+      return [h.ids[0], child.id];
+    });
+    const writeText = vi.fn(async () => undefined);
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    h.blockSelection.setSelection({ anchorBlockId: h.ids[0], focusBlockId: h.ids[0], selectedBlockIds: [h.ids[0]] });
+    await h.blockSelection.copy("copy");
+    expect(h.hydrateSubtrees).toHaveBeenCalledExactlyOnceWith([h.ids[0]]);
+    expect(writeText).toHaveBeenCalledExactlyOnceWith("block-0\n\nblock-1");
+    expect(h.blockSelection.clipboard?.subtreeBlockIds).toEqual([h.ids[0], child.id]);
+    h.destroy();
+  });
+
+  it("writes rich document and whole-block copies, and retains document text after failed cuts", async () => {
+    const h = harness(3, "heading_2");
+    const contents: Record<string, Blob>[] = [];
+    class TestClipboardItem {
+      constructor(data: Record<string, Blob>) { contents.push(data); }
+    }
+    const write = vi.fn(async () => undefined);
+    vi.stubGlobal("ClipboardItem", TestClipboardItem);
+    vi.stubGlobal("navigator", { clipboard: { write } });
+    await h.controller.select({ anchor: { blockId: h.ids[0], offset: 2 }, focus: { blockId: h.ids[2], offset: 4 } });
+    await h.controller.copy();
+    expect(Object.keys(contents[0])).toEqual(["text/plain", "text/html"]);
+    expect(contents[0]["text/html"].size).toBeGreaterThan(contents[0]["text/plain"].size);
+    write.mockRejectedValueOnce(new Error("clipboard denied"));
+    await expect(h.controller.copy(true)).rejects.toThrow("clipboard denied");
+    expect(h.replace).not.toHaveBeenCalled();
+    h.controller.clear();
+    h.blockSelection.setSelection({ anchorBlockId: h.ids[0], focusBlockId: h.ids[2], selectedBlockIds: h.ids });
+    await h.blockSelection.copy("copy");
+    expect(Object.keys(contents.at(-1)!)).toEqual(["text/plain", "text/html"]);
+    expect(h.blockSelection.clipboard?.plainText).toBe("## block-0\n\n## block-1\n\n## block-2");
+    h.destroy();
+  });
+
   it.each(["paragraph", "numbered_list_item", "bulleted_list_item", "to_do"] as const)(
     "places a caret near a padding or marker click in a %s row without selecting the block",
     async (type) => {
@@ -179,7 +224,13 @@ describe("Notes document selection", () => {
         const copy = new Event("copy", { bubbles: true, cancelable: true });
         Object.defineProperty(copy, "clipboardData", { value: { setData } });
         h.editor(origin).dispatchEvent(copy);
-        expect(setData).toHaveBeenCalledWith("text/plain", "block-1\nblock-2\n");
+        const expected = {
+          paragraph: "block-1\n\nblock-2\n",
+          numbered_list_item: "1. block-1\n2. block-2\n",
+          bulleted_list_item: "- block-1\n- block-2\n",
+          to_do: "- [ ] block-1\n- [ ] block-2\n",
+        }[type];
+        expect(setData).toHaveBeenCalledWith("text/plain", expected);
       }
       h.destroy();
     },
@@ -204,7 +255,7 @@ describe("Notes document selection", () => {
       const cut = new Event("cut", { bubbles: true, cancelable: true });
       Object.defineProperty(cut, "clipboardData", { value: { setData } });
       h.editor(1).dispatchEvent(cut);
-      expect(setData).toHaveBeenCalledWith("text/plain", "block-1\nblock-");
+      expect(setData).toHaveBeenCalledWith("text/plain", "1. block-1\n2. block-");
       expect(h.replace).toHaveBeenCalledWith(h.ids.slice(1, 3), 0, 6, "", undefined, {
         anchor: { blockId: h.ids[1], offset: 0 }, focus: { blockId: h.ids[2], offset: 6 },
       });
@@ -409,7 +460,8 @@ describe("Notes document selection", () => {
     const event = new Event("copy", { bubbles: true, cancelable: true });
     Object.defineProperty(event, "clipboardData", { value: { setData } });
     h.editor(0).dispatchEvent(event);
-    expect(setData).toHaveBeenCalledWith("text/plain", "0\nblock-1\nblock");
+    expect(setData).toHaveBeenCalledWith("text/plain", "0\n\nblock-1\n\nblock");
+    expect(setData).toHaveBeenCalledWith("text/html", "<p>0</p><p>block-1</p><p>block</p>");
     h.destroy();
     expect(h.key(0, "a", { ctrlKey: true }).defaultPrevented).toBe(false);
   });

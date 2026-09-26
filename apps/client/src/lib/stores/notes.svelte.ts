@@ -711,6 +711,7 @@ function visibleBlockIds(): string[] {
   return flatBlockItems().map((item) => item.block.id);
 }
 
+/** Find complete subtree identities from outlines, including unhydrated block bodies. */
 function outlineSubtreeIds(rootBlockIds: readonly string[]): string[] {
   const roots = new Set(rootBlockIds);
   const outlinesById = new Map(treeProjection.blockOutlines.map((outline) => [outline.id, outline]));
@@ -1467,6 +1468,7 @@ export function getNotes() {
     isOnlyBlock,
     focusBlock,
     hydrateBlockRange,
+    outlineSubtreeIds,
     setPageFavorited,
     setFolderCollapsed,
     setSidebarPageCollapsed,

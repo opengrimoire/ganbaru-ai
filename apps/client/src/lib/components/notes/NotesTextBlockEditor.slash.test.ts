@@ -32,6 +32,7 @@ async function editor(blockType: NotesBlockType = "paragraph", text = "", indent
   const onConvert = vi.fn();
   const onKeyboardAction = vi.fn();
   const onFocusBlock = vi.fn();
+  const onPasteRichHtml = vi.fn((_id: string, _start: number, _end: number, _html: string) => false);
   const props: ComponentProps<typeof NotesTextBlockEditor> = {
     get block() { return current.current; }, previousBlockType: null, isOnlyBlock: true, indentationDepth,
     focusBlockId: initialFocusBlockId, focusRequestId: 1, focusSelection: { start: 0, end: 0 },
@@ -40,7 +41,7 @@ async function editor(blockType: NotesBlockType = "paragraph", text = "", indent
     onTextInput: (_id, value) => blocks.update((block) => applyBlockUpdate(block, createBlockUpdate(block.type, value))),
     onConvert, onReplaceRichText: vi.fn(), onInsertPageMention: vi.fn(), onInsertDateMention: vi.fn(),
     onInsertObjectMention: vi.fn(), onApplyTextLink: vi.fn(), onInsertInlineEquation: vi.fn(),
-    onPastePlainText: () => false, onPasteRichHtml: () => false, onApplyTextAnnotations: vi.fn(),
+    onPastePlainText: () => false, onPasteRichHtml, onApplyTextAnnotations: vi.fn(),
     onCreateInlineComment: vi.fn(), onCreateInlineSuggestion: vi.fn(), onKeyboardAction,
     onUndo: vi.fn(), onRedo: vi.fn(), onAddBelow: vi.fn(), onConvertToToggleHeading: vi.fn(),
     onColorChange: vi.fn(), onCopyLink: vi.fn(), onDuplicate: vi.fn(), onUseTemplate: vi.fn(),
@@ -56,6 +57,7 @@ async function editor(blockType: NotesBlockType = "paragraph", text = "", indent
   document.body.append(list);
   const focusRow = vi.fn(() => row.focus());
   const blockSelection = createNotesBlockSelectionController({
+    hydrateSubtrees: async (ids) => ids,
     readPageId: () => "page", readListElement: () => list, readRenderedBlockIds: () => ["block"],
     readTreeState: () => ({ blocksById: {}, childIdsByParentId: {} }),
     blockIdFromEvent: () => "block",
@@ -76,7 +78,7 @@ async function editor(blockType: NotesBlockType = "paragraph", text = "", indent
     await tick(); await tick();
     return event;
   };
-  return { host, input, onConvert, onKeyboardAction, onFocusBlock, row, blockSelection, focusRow };
+  return { host, input, onConvert, onKeyboardAction, onPasteRichHtml, onFocusBlock, row, blockSelection, focusRow };
 }
 
 describe("Notes typed slash commands", () => {
@@ -231,5 +233,53 @@ describe("Notes list input", () => {
     await h.input("", "deleteContentBackward");
     expect(h.onKeyboardAction).not.toHaveBeenCalled();
     expect(h.host.textContent).toBe("this text");
+  });
+});
+
+
+describe("Notes native clipboard events", () => {
+  it.each(["copy", "cut"])("exports a partial heading as semantic HTML on %s", async (type) => {
+    const h = await editor("heading_2", "before selected after");
+    restoreNotesEditableSelection(h.host, { start: 7, end: 15 });
+    const setData = vi.fn();
+    const event = new Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: { setData } });
+    h.host.dispatchEvent(event);
+    await tick();
+    expect(event.defaultPrevented).toBe(true);
+    expect(setData).toHaveBeenCalledWith("text/plain", "## selected");
+    expect(setData).toHaveBeenCalledWith("text/html", "<h2>selected</h2>");
+    expect(h.host.textContent).toBe(type === "cut" ? "before  after" : "before selected after");
+  });
+
+  it("retains text when a native cut cannot write the clipboard", async () => {
+    const h = await editor("paragraph", "keep this");
+    restoreNotesEditableSelection(h.host, { start: 0, end: 9 });
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const event = new Event("cut", { bubbles: true, cancelable: true });
+      h.host.dispatchEvent(event);
+      await tick();
+      expect(event.defaultPrevented).toBe(true);
+      expect(h.host.textContent).toBe("keep this");
+      expect(warning).toHaveBeenCalled();
+    } finally { warning.mockRestore(); }
+  });
+});
+
+
+describe("Notes clipboard format routing", () => {
+  it("reconciles paired Markdown and HTML headings before passing native paste to the store", async () => {
+    const h = await editor();
+    h.onPasteRichHtml.mockReturnValue(true);
+    restoreNotesEditableSelection(h.host, { start: 0, end: 0 });
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: {
+      getData: (type: string) => type === "text/plain" ? "# Title" : "<h2>Title</h2>",
+    } });
+    h.host.dispatchEvent(event);
+    await tick();
+    expect(event.defaultPrevented).toBe(true);
+    expect(h.onPasteRichHtml).toHaveBeenCalledExactlyOnceWith("block", 0, 0, "<h1>Title</h1>");
   });
 });

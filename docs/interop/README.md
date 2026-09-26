@@ -6,6 +6,8 @@ This section documents file formats and external-client behavior. Standards defi
 
 - [iCalendar](./icalendar/README.md): offline `.ics` import, structured preservation, app projection, export, recurrence, timezones, fixtures, and client observations.
 
+- [Notes clipboard](./notes-clipboard.md): Markdown and semantic HTML exchange, supported content, limitations, and verification evidence.
+
 Additional formats should receive their own folder only when they have a durable standards scope, implementation boundary, and conformance strategy.
 
 ## Document roles

@@ -212,7 +212,7 @@ describe("notes rich text HTML paste planning", () => {
 
     if (!plan) throw new Error("expected rich HTML paste plan");
     const richText = currentRichText(plan.currentUpdate);
-    expect(richTextPlainText(richText)).toBe("Safe bad linksafe link");
+    expect(richTextPlainText(richText)).toBe("Safe bad linkxsafe link");
     expect(richTextPlainText(richText)).not.toContain("alert");
     expect(
       richText.some((item) =>

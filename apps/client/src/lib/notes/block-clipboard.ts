@@ -90,22 +90,11 @@ function markdownPrefixSegment(line: string): NotesPastedBlockSegment | null {
   const bullet = /^[-*+]\s+(.*)$/u.exec(trimmedRight);
   if (bullet) return { type: "bulleted_list_item", content: bullet[1] ?? "" };
 
-  const numbered = /^(?:\d+|[aAiI])\.\s+(.*)$/u.exec(trimmedRight);
+  const numbered = /^\d+[.)]\s+(.*)$/u.exec(trimmedRight);
   if (numbered) return { type: "numbered_list_item", content: numbered[1] ?? "" };
 
-  const checkedTodo = /^(?:\[[xX]\]|☑)\s+(.*)$/u.exec(trimmedRight);
-  if (checkedTodo) {
-    return { type: "to_do", content: checkedTodo[1] ?? "", checked: true };
-  }
-
-  const todo = /^(?:\[\]|\[ \]|☐)\s+(.*)$/u.exec(trimmedRight);
-  if (todo) return { type: "to_do", content: todo[1] ?? "", checked: false };
-
-  const toggle = /^>\s+(.*)$/u.exec(trimmedRight);
-  if (toggle) return { type: "toggle", content: toggle[1] ?? "" };
-
-  const quote = /^"\s+(.*)$/u.exec(trimmedRight);
-  if (quote) return { type: "quote", content: quote[1] ?? "" };
+  const blockquote = /^>\s+(.*)$/u.exec(trimmedRight);
+  if (blockquote) return { type: "quote", content: blockquote[1] ?? "" };
 
   return null;
 }

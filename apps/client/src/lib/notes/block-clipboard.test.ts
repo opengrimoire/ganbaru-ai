@@ -132,9 +132,9 @@ describe("notes clipboard paste planning", () => {
         "#### Fine print",
         "- Bullet",
         "1. Number",
-        "[] Todo",
-        "[x] Done",
-        "> Toggle",
+        "- [ ] Todo",
+        "- [x] Done",
+        "> Quote",
         "\" Quote",
         "---",
       ].join("\n"),
@@ -146,8 +146,8 @@ describe("notes clipboard paste planning", () => {
       "numbered_list_item",
       "to_do",
       "to_do",
-      "toggle",
       "quote",
+      "paragraph",
       "divider",
     ]);
     const doneBlock = pastePlan?.appendedBlocks[4];
