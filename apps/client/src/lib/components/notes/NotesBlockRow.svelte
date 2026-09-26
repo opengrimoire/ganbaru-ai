@@ -92,6 +92,7 @@
     focusBlockId,
     focusRequestId,
     focusSelection,
+    listOrdinals = new Map<string, number>(),
     mentionTargets,
     templateStatus,
     buttonStatus,
@@ -163,6 +164,7 @@
     focusBlockId: string | null;
     focusRequestId: number;
     focusSelection: NotesTextSelection | null;
+    listOrdinals?: ReadonlyMap<string, number>;
     mentionTargets: NotesNamedMentionTarget[];
     templateStatus: NotesTemplateBlockStatus;
     buttonStatus: NotesButtonBlockStatus;
@@ -338,6 +340,11 @@
   > | null>(null);
   const block = $derived(item.block);
   const text = $derived(blockPlainText(block));
+  const marker = $derived(notesBlockMarker(
+    block.type,
+    listOrdinals.get(block.id) ?? 1,
+    localization.locale,
+  ));
   const blockCommentThreads = $derived(
     notes.commentThreads.filter(
       (thread) => thread.parent.type === "block_id" && thread.parent.block_id === block.id,
@@ -570,7 +577,7 @@
   class:notes-block-drop-after={dropPosition === "after"}
   class:notes-block-drop-inside={dropPosition === "inside"}
   class:notes-block-drop-outdent={dropPosition === "outdent"}
-  style={`--notes-depth: ${Math.min(item.depth, 8)}`}
+  style={`--notes-depth: ${item.depth}`}
   ondragover={(event) => onDragOver(block.id, event)}
   ondragleave={(event) => onDragLeave(block.id, event)}
   ondrop={(event) => onDrop(block.id, event)}
@@ -651,9 +658,11 @@
       >
         <Info class="size-4" />
       </div>
-    {:else if notesBlockMarker(block.type)}
-      <div class="mt-1.5 w-5 shrink-0 text-right text-[0.866667rem] text-muted-foreground">
-        {notesBlockMarker(block.type)}
+    {:else if marker}
+      <div
+        class="notes-editor-body-text min-w-5 shrink-0 select-none whitespace-nowrap py-1 text-right leading-normal text-muted-foreground"
+      >
+        {marker}
       </div>
     {/if}
 
@@ -895,6 +904,7 @@
         {/if}
       {:else if showTextEditor}
         <NotesTextBlockEditor
+          indentationDepth={item.depth}
           {block}
           {previousBlockType}
           {isOnlyBlock}
@@ -974,6 +984,7 @@
   }
 
   .notes-block-surface {
+    min-inline-size: calc(var(--notes-depth) * 1.25rem + 12rem);
     color: var(--notes-block-color, var(--foreground));
     background: var(--notes-block-bg, transparent);
     box-shadow: inset 0 0 0 1px var(--notes-block-border, transparent);

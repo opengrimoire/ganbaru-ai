@@ -383,17 +383,9 @@ impl MarkdownParser<'_> {
             1 => "heading_1",
             2 => "heading_2",
             3 => "heading_3",
-            _ => {
-                if depth > 4 {
-                    self.diagnostic(
-                        "markdown_heading_depth_approximated",
-                        "warning",
-                        Some(line.number),
-                        "Heading levels deeper than 4 are imported as heading 4.",
-                    );
-                }
-                "heading_4"
-            }
+            4 => "heading_4",
+            5 => "heading_5",
+            _ => "heading_6",
         };
         self.index += 1;
         Some(markdown_block(

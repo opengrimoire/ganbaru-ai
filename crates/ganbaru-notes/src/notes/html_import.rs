@@ -319,15 +319,8 @@ impl HtmlImportParser {
             "h2" => "heading_2",
             "h3" => "heading_3",
             "h4" => "heading_4",
-            _ => {
-                self.diagnostic(
-                    "html_heading_depth_approximated",
-                    "warning",
-                    Some(element.line),
-                    "Heading levels deeper than 4 are imported as heading 4.",
-                );
-                "heading_4"
-            }
+            "h5" => "heading_5",
+            _ => "heading_6",
         };
         let rich_text = self.rich_text_from_nodes(&element.children);
         let plain = rich_text_plain_text(&rich_text);

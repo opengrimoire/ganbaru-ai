@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { getLocalization } from "$lib/i18n/translator.svelte";
   import CheckSquare from "@lucide/svelte/icons/square-check-big";
   import Square from "@lucide/svelte/icons/square";
+  import { notesBlockMarker, notesHeadingTextClass } from "$lib/notes/block-editor-ui";
   import { parseNotesRichTextArray } from "$lib/notes/block-validation";
   import type { NotesRichText } from "$lib/notes/types";
   import NotesRichTextInline from "./NotesRichTextInline.svelte";
@@ -8,11 +10,14 @@
   let {
     block,
     depth = 0,
+    listOrdinal = 1,
   }: {
     block: Record<string, unknown>;
     depth?: number;
+    listOrdinal?: number;
   } = $props();
 
+  const localization = getLocalization();
   const type = $derived(typeof block.type === "string" ? block.type : "paragraph");
   const content = $derived(blockContent(block, type));
   const richText = $derived(parseRichText(content));
@@ -43,14 +48,9 @@
   }
 
   function contentClass(blockType: string): string {
+    const headingClass = notesHeadingTextClass(blockType);
+    if (headingClass) return `mt-3 ${headingClass}`;
     switch (blockType) {
-      case "heading_1":
-        return "mt-5 text-2xl font-semibold leading-tight";
-      case "heading_2":
-        return "mt-4 text-xl font-semibold leading-tight";
-      case "heading_3":
-      case "heading_4":
-        return "mt-3 text-base font-semibold leading-snug";
       case "quote":
         return "border-l-2 border-foreground/40 pl-3 italic";
       case "code":
@@ -64,16 +64,16 @@
 {#if plainText || richText.length > 0 || type === "divider"}
   <div
     class={`min-w-0 ${contentClass(type)}`}
-    style={`margin-left: ${Math.min(depth, 6) * 1.1}rem`}
+    style={`margin-left: ${depth * 1.25}rem`}
   >
     {#if type === "divider"}
       <div class="my-2 h-px bg-border"></div>
     {:else}
       <div class="flex min-w-0 items-start gap-2">
         {#if type === "bulleted_list_item"}
-          <span class="mt-0.5 shrink-0">•</span>
+          <span class="shrink-0">•</span>
         {:else if type === "numbered_list_item"}
-          <span class="mt-0.5 shrink-0">1.</span>
+          <span class="shrink-0">{notesBlockMarker("numbered_list_item", listOrdinal, localization.locale)}</span>
         {:else if type === "to_do"}
           {#if checked}
             <CheckSquare class="mt-1 size-4 shrink-0 text-muted-foreground" />

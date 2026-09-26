@@ -24,6 +24,10 @@ export function createBlockWriteFromRichText(
       return { id, type, heading_3: createTextPayloadFromRichText(richText, color) };
     case "heading_4":
       return { id, type, heading_4: createTextPayloadFromRichText(richText, color) };
+    case "heading_5":
+      return { id, type, heading_5: createTextPayloadFromRichText(richText, color) };
+    case "heading_6":
+      return { id, type, heading_6: createTextPayloadFromRichText(richText, color) };
     case "bulleted_list_item":
       return { id, type, bulleted_list_item: createTextPayloadFromRichText(richText, color) };
     case "numbered_list_item":

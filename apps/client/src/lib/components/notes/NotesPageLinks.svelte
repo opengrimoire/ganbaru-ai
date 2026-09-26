@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { notesPageTitle } from "$lib/notes/page-title";
   import type { NotesPage, NotesUnresolvedLink } from "$lib/notes/types";
@@ -190,22 +191,18 @@
               {link.link_text || link.snippet || link.raw_url}
             </div>
             <div class="mt-2 flex min-w-0 flex-wrap items-center gap-2">
-              <select
-                class="min-w-40 flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-[0.8rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label={t("notes.resolveUnresolvedLinkTarget", link.raw_target)}
-                value={selectedTarget(link)}
-                onchange={(event) => {
-                  resolveTargets = { ...resolveTargets, [link.id]: event.currentTarget.value };
+              <CustomSelect
+                inline
+                appearance="quiet"
+                contentAlign="start"
+                class="w-full min-w-0"
+                ariaLabel={t("notes.resolveUnresolvedLinkTarget", link.raw_target)}
+                value={String(selectedTarget(link) ?? "")}
+                options={[...(resolveTargetPages.length === 0 ? [{ value: "", label: t("notes.noResolveTargets") }] : [...(resolveTargetPages).map((page) => ({ value: String(page.id), label: String(targetOptionLabel(page)) }))])]}
+                onChange={(nextValue) => {
+                  resolveTargets = { ...resolveTargets, [link.id]: nextValue };
                 }}
-              >
-                {#if resolveTargetPages.length === 0}
-                  <option value="">{t("notes.noResolveTargets")}</option>
-                {:else}
-                  {#each resolveTargetPages as page (page.id)}
-                    <option value={page.id}>{targetOptionLabel(page)}</option>
-                  {/each}
-                {/if}
-              </select>
+              />
               <button
                 class="rounded-md bg-primary px-2 py-1.5 text-[0.8rem] font-medium text-primary-foreground disabled:opacity-50"
                 type="button"

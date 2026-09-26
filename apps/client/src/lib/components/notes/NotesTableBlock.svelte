@@ -233,6 +233,7 @@
       ?? { start: textLength, end: textLength };
     const plan = planNotesTableCellNavigation({
       key: event.key,
+      code: event.code,
       shiftKey: event.shiftKey,
       ctrlKey: event.ctrlKey,
       metaKey: event.metaKey,

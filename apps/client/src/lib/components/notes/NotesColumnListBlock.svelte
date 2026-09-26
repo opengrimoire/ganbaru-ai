@@ -67,6 +67,7 @@
     focusBlockId,
     focusRequestId,
     focusSelection,
+    listOrdinals = new Map<string, number>(),
     mentionTargets,
     templateStatusForBlock,
     buttonStatusForBlock,
@@ -149,6 +150,7 @@
     focusBlockId: string | null;
     focusRequestId: number;
     focusSelection: NotesTextSelection | null;
+    listOrdinals?: ReadonlyMap<string, number>;
     mentionTargets: NotesNamedMentionTarget[];
     templateStatusForBlock: (blockId: string) => NotesTemplateBlockStatus;
     buttonStatusForBlock: (blockId: string) => NotesButtonBlockStatus;
@@ -455,7 +457,7 @@
   class:notes-block-drop-after={dropPosition === "after"}
   class:notes-block-drop-inside={dropPosition === "inside"}
   class:notes-block-drop-outdent={dropPosition === "outdent"}
-  style={`--notes-depth: ${Math.min(item.depth, 8)}`}
+  style={`--notes-depth: ${item.depth}`}
   ondragover={(event) => onDragOver(block.id, event)}
   ondragleave={(event) => onDragLeave(block.id, event)}
   ondrop={(event) => onDrop(block.id, event)}
@@ -616,6 +618,7 @@
                         {focusBlockId}
                         {focusRequestId}
                         {focusSelection}
+                        {listOrdinals}
                         {mentionTargets}
                         templateStatus={templateStatusForBlock(columnBlockItem.block.id)}
                         buttonStatus={buttonStatusForBlock(columnBlockItem.block.id)}

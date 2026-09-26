@@ -69,6 +69,13 @@ Automated delayed-storage coverage connects the actual action, persistence, tree
 
 For table, board, gallery, list, calendar, and timeline:
 
+- Check the inline database title, view tabs, compact configuration panels, aligned table/list rows, and row overflow actions in light and dark themes and narrow page previews.
+- Open Layout, Properties, Filter, Sort, Templates, New, and table More actions. Change settings, create a row, and reopen the page to confirm existing behavior is retained.
+- Navigate custom dropdowns with arrows, Enter, Tab, and Escape. Opening a table status or relation cell must retain its grid position. Relation targets must remain selectable while options load.
+- Open a dropdown inside a settings panel. First Escape closes the dropdown; second closes the panel. Verify clicking an option keeps the settings panel open, clicking elsewhere dismisses it, and focus returns appropriately.
+- Open panels near viewport edges and inside horizontally scrolled tables. Add filters and sorts while open; confirm the panel resizes, scrolls, and never clips nested menus.
+- Check schema, button, rollup, export, page-link, code-language, and tab-icon selectors use the shared dropdown and remain labelled and keyboard accessible.
+
 - Create rows, edit supported properties, filter, sort, paginate, and open row pages.
 - Confirm linked views share rows and schema but retain independent view settings.
 - Exercise relation target validation and inverse links.
@@ -96,3 +103,57 @@ For table, board, gallery, list, calendar, and timeline:
 - Select the complete body with Ctrl+A, delete or type replacement text, then undo. All original text must return highlighted across blocks, and typing again must replace that complete range.
 - Redo must restore the replacement and its collapsed caret; another undo must restore the complete range again.
 - Repeat with a backward partial selection and with formatting. Both endpoints and the selection direction must survive undo and redo.
+
+## Slash menu acceptance
+
+- Focus an empty text row and confirm it has no placeholder. Type `/` using both an unshifted key and a keyboard layout that requires Shift. Repeat with a software keyboard and compose a query with an IME. The menu should pause during composition and resume after the query commits. The command panel must appear immediately, with a visible loading or retry state if its optional component is unavailable.
+- Type `/h2`, `/##`, a localized command label, and a query with no matches. Confirm the command list updates and clearing or extending the query stays responsive.
+- Navigate past the visible options using arrows. The active option must stay in view; Enter and Tab must apply that option and remove the command text. Pointer selection must retain editor focus.
+- Escape, Close menu, outside click, and blur dismiss the menu while retaining literal text. After Escape, verify the caret remains in the editor with no full-row fill or outline, and repeat Escape before continuing to type. Escape without a menu must preserve ordinary text selection. Continuing that dismissed query must not reopen it. Remove and retype the slash to reopen it. Slash input in code blocks must stay literal.
+- Open near each viewport edge, within narrow or nested Notes views, and with the software keyboard showing. Confirm the menu is not clipped, remains inside the viewport, and follows scrolling and resizing.
+- Confirm the insertion menu search accepts localized labels, preserves supported commands, and reports no matches clearly. Check both light and dark themes.
+
+Automated coverage includes shifted slash and input-driven opening, dismissed sessions, localized filtering, pointer focus preservation, portal cleanup, viewport placement, and scrolling the active command into view. Real webview layout and software-keyboard behavior still need manual acceptance.
+
+## Empty body recovery
+
+- Create a note, insert `/database`, delete its only block through selection and its block menu, and immediately type. A focused paragraph must replace the database without waiting for storage.
+- Delete all blocks, undo, redo, and type again. The replacement paragraph must participate in the same undo step, and the original database identity must survive undo.
+- Reopen a previously emptied note and enter body text. There must be one editable paragraph, with no duplicate after another reopen.
+- Press Enter in the title to enter the body. Confirm IME Enter still commits composition. Delete the first block of a multi-block note and confirm focus moves to a surviving block.
+- Repeat with delayed or failed persistence and with unloaded root outlines. New typing must survive delayed append responses, save failures must remain visible and retryable, and unloaded content must not be treated as an empty page.
+
+## List numbering and exit behavior
+
+- Create consecutive numbered items with Enter and verify 1, 2, 3, including sequences beyond 9 and 99. Scroll a long list so its beginning is unmounted and verify later numbers do not restart.
+- Nest a numbered or bulleted list inside an item. Verify nested numbering starts at 1 and the next outer sibling continues the outer count. Insert a paragraph between ordered siblings and verify the next sequence starts at 1. Repeat inside columns, tabs, and a historical page preview.
+- Insert, delete, reorder, indent, outdent, or convert an item, then undo and redo. Verify numbers update immediately in document order.
+- Compare number and bullet baselines with the first editable line, including wrapped text and different app font scales. Multi-digit markers must remain fully visible.
+- Backspace at the beginning of a populated or empty numbered item, bullet, to-do, toggle, quote, callout, and heading. Verify it becomes a paragraph, retains its rich text and children, and keeps the caret at offset zero. It must not merge with the previous item on that first press.
+- Undo and redo that conversion, then continue typing while saving is pending. Reopen the note and verify content is retained. Repeat Backspace with a software keyboard, a selected text range, and a caret inside the text. Ordinary character/range deletion must retain list formatting.
+
+## Six heading levels
+
+- Create H1 through H6 with slash search (`/h5`, `/h6`, `/#####`, `/######`), context-menu conversion, and hash-plus-Space shortcuts. Verify all six appear in the table of contents and focus the correct row.
+- Compare all six with the page title and body text. Sizes must decrease through H6 without going below body size; inspect wrapped headings and both app font-scale extremes. Check historical previews use the same hierarchy.
+- Exercise Enter, Backspace at offset zero, rich-text formatting, colors, toggle children, undo/redo, save/reopen, templates, duplication, Markdown paste, and rich HTML paste for H5 and H6.
+- Import and export all six levels as Markdown and HTML. Verify levels are retained, without depth-approximation warnings or invalid h7 output. Check an existing vault upgrades with content, descendants, and template blocks intact.
+
+### Nested clipboard lists
+
+- Copy a note from Obsidian containing bullets, nested numbered items, a third list level, and following paragraphs. Paste into an empty Notes row and across an existing selection. Verify separate item text, inline formatting, indentation, and sibling numbering.
+- Repeat with plain Markdown using spaces and tabs, blank lines, continuation text, and checked tasks. Verify dedentation returns to the intended parent.
+- Undo and redo the paste, then reopen the note. Verify the complete hierarchy and text survive each step.
+
+Automated coverage exercises both clipboard parsers and the real editor projection, delayed persistence, and undo controllers. Actual clipboard output and rendering require manual app acceptance.
+
+### Keyboard indentation
+
+- Use Tab and Shift+Tab on paragraphs and mixed lists, including items with descendants. Verify immediate indentation, stable caret/selection, and unchanged text.
+- Repeat while saves are delayed, then type and undo/redo. Verify ordered persistence and no focus jumps when saves finish.
+- Indent under a collapsed toggle or toggle heading. Verify it opens and the child remains focused; undo restores the original structure and open state.
+- Start with a new note and empty first body row. Press Tab more than eight times, type text, press Enter, and verify the new row keeps the same indentation. Repeat for bullets, numbers, and tasks.
+- Use Shift+Tab and Backspace at offset zero to return to the left margin one level at a time. At the left margin, Backspace removes a list marker while keeping text. Shift+Tab at the left margin is a no-op.
+- Select several rows, including nested descendants, and press Tab or Shift+Tab. Verify equal changes, retained selection, and one undo step.
+- Use Tab and Shift+Tab within code, including a multiline selection. Verify whitespace changes and no block movement.
+- Repeat Shift+Tab in the Linux Tauri app on both indented text and text at the left margin. Focus must remain in the same editor. Automated DOM regressions cover WebKitGTK events with `key: "Unidentified"` and `code: "Tab"`, including document selections and code whitespace; table navigation also recognizes that event format.

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import { listNotesDataSourceRowPages } from "$lib/api/notes";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
@@ -120,32 +121,26 @@
   </div>
 
   {#if targetDataSourceId}
-    <label class="flex min-w-0 items-center gap-1">
+    <div class="flex min-w-0 items-center gap-1">
       <Plus class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-      <select
-        data-table-cell="true"
-        data-row-index={rowIndex}
-        data-column-index={columnIndex}
-        class="h-7 min-w-0 flex-1 rounded-sm border border-input bg-background px-1 text-[0.733333rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-        value={selectedRowId}
-        disabled={mutating || loading}
-        aria-label={t("notes.databaseRelationAdd")}
-        onfocus={() => {
-          void loadTargets();
+      <CustomSelect
+        inline
+        appearance="quiet"
+        contentAlign="start"
+        class="w-full min-w-0"
+        ariaLabel={t("notes.databaseRelationAdd")}
+        value={String(selectedRowId ?? "")}
+        disabled={mutating}
+        options={[{ value: "", label: String(loading ? t("notes.databaseRelationLoading") : t("notes.databaseRelationAdd")) },
+          ...(availableRows).map((target) => ({ value: String(target.id), label: String(rowTitle(target)) }))]}
+        onChange={(nextValue) => {
+          addRelation(nextValue);
         }}
-        onchange={(event) => {
-          addRelation(event.currentTarget.value);
-        }}
-        onkeydown={(event) => onNavigate(event, rowIndex, columnIndex)}
-      >
-        <option value="">
-          {loading ? t("notes.databaseRelationLoading") : t("notes.databaseRelationAdd")}
-        </option>
-        {#each availableRows as target (target.id)}
-          <option value={target.id}>{rowTitle(target)}</option>
-        {/each}
-      </select>
-    </label>
+        triggerProps={{ "data-table-cell": "true", "data-row-index": rowIndex, "data-column-index": columnIndex, "onfocus": () => {
+              void loadTargets();
+          }, "onkeydown": (event) => onNavigate(event, rowIndex, columnIndex) }}
+      />
+    </div>
   {:else}
     <button
       data-table-cell="true"

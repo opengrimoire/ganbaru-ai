@@ -13,7 +13,7 @@ Blocks are ordered children of a page or another compatible block. Their canonic
 
 | Family | Block types | Status | Important limits |
 | --- | --- | --- | --- |
-| Text | `paragraph`, `heading_1` through `heading_4`, `quote`, `callout` | Implemented | Heading 4 is a local extension beyond the current Notion API shape. Custom callout icon editing remains polish. |
+| Text | `paragraph`, `heading_1` through `heading_6`, `quote`, `callout` | Implemented | Headings 4 through 6 are local extensions beyond the current Notion API shape. Custom callout icon editing remains polish. |
 | Lists | `bulleted_list_item`, `numbered_list_item`, `to_do`, `toggle` | Implemented | Nesting follows valid parent rules and hidden toggle children remain canonical. |
 | Code and structure | `code`, `divider`, `equation` | Implemented | Equation rendering uses a safe local formula surface until a vetted renderer is selected. |
 | Navigation | `child_page`, `breadcrumb`, `table_of_contents` | Implemented | Generated breadcrumb and heading text is derived rather than duplicated. |
@@ -32,7 +32,7 @@ Text blocks share the rich-text editor and support conversion when the source an
 
 The editor shows block actions from a block surface's context menu. Text selection has its own context menu. Blocks can be inserted through the text context menu or keyboard editing commands; moving blocks remains available through block actions and multi-block selection. The editor does not show add or drag handles beside each block.
 
-List numbering and bullet presentation derive from sibling structure. To-do checked state is canonical block payload. Toggle open state can be local presentation metadata while toggle children remain canonical content.
+Text payloads may carry a nonnegative `ganbaru_indent` level relative to their structural parent. This supports standalone row indentation without artificial parent blocks or a schema migration. Typing, conversion between text types, history, duplication, and ordinary Enter preserve it. List numbering and bullet presentation derive from sibling structure and relative indentation. To-do checked state is canonical block payload. Toggle open state can be local presentation metadata while toggle children remain canonical content.
 
 ## Child pages and navigation blocks
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   normalizeNotesClipboardPlainText,
+  notesPasteAppendRequests,
   planNotesPlainTextPaste,
 } from "./block-clipboard";
 
@@ -30,6 +31,31 @@ function plan(input: {
 }
 
 describe("notes clipboard paste planning", () => {
+  it("preserves child depth when the first pasted item joins existing text", () => {
+    const result = plan({ currentText: "Before ", plainText: "- Parent\n  - Child" });
+    expect(result?.blockDepths).toEqual([0, 1]);
+    expect(result?.currentUpdate).toMatchObject({ paragraph: { rich_text: [expect.objectContaining({ plain_text: "Before - Parent" })] } });
+  });
+
+  it("retains list ancestry across blank lines and indented continuation text", () => {
+    const result = plan({ plainText: "- Parent\n  continued\n\n  - Child\n\n- Sibling" });
+    expect(result?.blockDepths).toEqual([0, 1, 0]);
+    expect(result?.currentUpdate).toMatchObject({ bulleted_list_item: { rich_text: [expect.objectContaining({ plain_text: "Parent\ncontinued" })] } });
+  });
+
+  it("preserves mixed list nesting with spaces, tabs, dedentation, and task markers", () => {
+    const result = plan({ plainText: "- Parent\n  1. Child\n\t- [x] Task\n  2. Child two\n- Sibling\nAfter" });
+    if (!result) throw new Error("Expected plan");
+    expect(result.blockDepths).toEqual([0, 1, 2, 1, 0, 0]);
+    expect(result.appendedBlocks[1]).toMatchObject({ type: "to_do", to_do: { checked: true } });
+    const requests = notesPasteAppendRequests("current", { type: "page_id", page_id: "page" }, result.appendedBlocks, result.blockDepths);
+    expect(requests.map((request) => [request.parent, request.children.map((write) => write.id)])).toEqual([
+      [{ type: "block_id", block_id: "current" }, [result.appendedBlocks[0].id, result.appendedBlocks[2].id]],
+      [{ type: "block_id", block_id: result.appendedBlocks[0].id }, [result.appendedBlocks[1].id]],
+      [{ type: "page_id", page_id: "page" }, [result.appendedBlocks[3].id, result.appendedBlocks[4].id]],
+    ]);
+  });
+
   it("leaves normal single-line paste to the editor input handler", () => {
     expect(plan({ currentText: "Hello ", plainText: "world" })).toBeNull();
   });

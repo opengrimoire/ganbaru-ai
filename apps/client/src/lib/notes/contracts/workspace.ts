@@ -74,6 +74,7 @@ export interface NotesPageOpenResponse extends NotesLoadedPage {
 }
 
 export interface NotesBlockOutline {
+  ganbaru_indent?: number;
   id: string;
   page_id: string;
   parent: Extract<NotesParent, { type: "page_id" | "block_id" }>;

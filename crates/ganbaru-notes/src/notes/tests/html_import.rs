@@ -155,7 +155,7 @@ fn html_import_sanitizes_unsafe_markup_and_requires_media_policy() {
                 after_block_id: None,
                 keep_external_file_references: Some(false),
                 project_id: None,
-                html: r#"<h6>Too deep</h6>
+                html: r#"<h6>Small heading</h6>
 <p onclick="alert(1)">Text <a href="javascript:alert(1)">bad</a></p>
 <script>alert("x")</script>
 <iframe src="https://example.com/embed"></iframe>
@@ -171,7 +171,6 @@ fn html_import_sanitizes_unsafe_markup_and_requires_media_policy() {
         let result_json = serde_json::to_value(result).unwrap();
         let diagnostics = result_json["diagnostics"].as_array().unwrap();
         for code in [
-            "html_heading_depth_approximated",
             "html_unsafe_attribute_removed",
             "html_unsafe_markup_removed",
             "html_media_reference_skipped",

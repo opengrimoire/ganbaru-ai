@@ -1,3 +1,4 @@
+import { createBlockWrite } from "$lib/notes/block-factory";
 import type { NotesRichTextAnnotationName } from "$lib/notes/rich-text";
 import { createNotesDocumentEdit, createNotesDocumentFormatting } from "./notes-store-document-edit";
 import {
@@ -84,6 +85,8 @@ import { createNotesOptimisticWriteTracker } from "./notes-store-optimistic-writ
 
 export interface NotesBlockReadCapabilities {
   readSelectedPageId: () => string | null;
+  /** Includes unloaded root outlines, so partial hydration never looks like an empty page. */
+  readPageRootBlockIds: () => readonly string[];
   readBlocksById: () => Record<string, NotesBlock>;
   readChildIdsByParentId: () => Record<string, string[]>;
   treeState: () => NotesTreeState;
@@ -156,6 +159,7 @@ export interface NotesBlockActions
   formatDocumentRange: (ids: readonly string[], start: number, end: number, annotation: NotesRichTextAnnotationName, documentSelection?: NotesDocumentSelection) => Promise<void>;
   replaceDocumentRange: (ids: readonly string[], start: number, end: number, text: string, html?: string, documentSelection?: NotesDocumentSelection) => Promise<void>;
   flushOptimisticBlockWrites: () => Promise<void>;
+  ensurePageBody: (pageId: string) => string | null;
 }
 
 /**
@@ -189,6 +193,22 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
       source_last_edited_time: null,
       ...plainWrite,
     } as NotesBlock;
+  }
+
+  /** Keep an empty page writable immediately, without adding a separate undo step. */
+  function ensurePageBody(pageId: string): string | null {
+    if (context.readSelectedPageId() !== pageId) return null;
+    const existing = context.readPageRootBlockIds()[0];
+    if (existing) return existing;
+    const write = createBlockWrite(crypto.randomUUID(), "paragraph", "");
+    const parent: NotesParent = { type: "page_id", page_id: pageId };
+    context.localInsertBlockAfter(optimisticBlockFromWrite(write, parent), null);
+    const persistence = enqueueEditorMutation(async () => {
+      // The local draft may already contain typing. Do not apply the stale append response.
+      await appendNotesBlockChildren({ parent, after: null, children: [write] });
+    });
+    trackOptimisticBlockWrites([write.id], persistence);
+    return write.id;
   }
 
   function undoSnapshot(
@@ -262,6 +282,7 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
   });
   const movementActions = createNotesBlockMovementActions({
     ...context,
+    ensurePageBody,
     enqueueEditorMutation,
     replaceBlockWithUpdate,
     moveAndApply,
@@ -384,6 +405,7 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
     formatDocumentRange: createNotesDocumentFormatting(context),
     replaceDocumentRange: createNotesDocumentEdit(context, optimisticBlockFromWrite),
     flushOptimisticBlockWrites,
+    ensurePageBody,
     ...richTextActions,
     ...mediaActions,
     ...tableActions,

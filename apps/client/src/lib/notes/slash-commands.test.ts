@@ -154,6 +154,21 @@ describe("notes slash commands", () => {
     expect(nextNotesSlashActiveIndex(0, items.length, "previous")).toBe(items.length - 1);
   });
 
+  it("matches exact heading markers and accent-insensitive localized labels", () => {
+    const items = notesSlashCommandItems({ canSetColor: false });
+    expect(filterNotesSlashCommandItems(items, "##").map((item) => item.key)).toEqual(["block:heading_2"]);
+    const localized = [{ ...items[0], searchText: "parrafo texto" }];
+    expect(filterNotesSlashCommandItems(localized, "párrafo")).toHaveLength(1);
+  });
+
+  it("opens new input sessions but retains dismissal and rejects ordinary paths or multiline text", () => {
+    expect(notesSlashInputSessionFromText("/", false, "")).toEqual({ open: true, query: "" });
+    expect(notesSlashInputSessionFromText("/h2", false, "")).toEqual({ open: true, query: "h2" });
+    expect(notesSlashInputSessionFromText("/h2", false, "/h").open).toBe(false);
+    expect(notesSlashInputSessionFromText("", true, "/").open).toBe(false);
+    expect(notesSlashInputSessionFromText("path/to", false, "path").open).toBe(false);
+  });
+
   it("keeps typed slash sessions open only after an intentional slash trigger", () => {
     expect(notesSlashInputSessionFromText("/hea", true)).toEqual({
       open: true,

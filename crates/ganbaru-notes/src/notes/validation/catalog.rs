@@ -6,6 +6,8 @@ pub const NOTE_BLOCK_TYPES: &[&str] = &[
     "heading_2",
     "heading_3",
     "heading_4",
+    "heading_5",
+    "heading_6",
     "bulleted_list_item",
     "numbered_list_item",
     "to_do",
@@ -80,7 +82,7 @@ pub fn block_type_supports_children(block_type: &str) -> bool {
 pub fn block_payload_supports_children(block_type: &str, payload: &Value) -> bool {
     if matches!(
         block_type,
-        "heading_1" | "heading_2" | "heading_3" | "heading_4"
+        "heading_1" | "heading_2" | "heading_3" | "heading_4" | "heading_5" | "heading_6"
     ) {
         return payload
             .get("is_toggleable")

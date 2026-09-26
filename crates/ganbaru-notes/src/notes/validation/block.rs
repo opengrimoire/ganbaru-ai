@@ -6,6 +6,8 @@ const TEXT_BLOCK_TYPES: &[&str] = &[
     "heading_2",
     "heading_3",
     "heading_4",
+    "heading_5",
+    "heading_6",
     "bulleted_list_item",
     "numbered_list_item",
     "toggle",
@@ -14,6 +16,11 @@ const TEXT_BLOCK_TYPES: &[&str] = &[
 ];
 pub fn validate_block_payload(block_type: &str, payload: &Value) -> Result<(), String> {
     validate_json_object(payload, block_type)?;
+    if let Some(indent) = payload.get("ganbaru_indent") {
+        if !matches!(indent.as_u64(), Some(value) if value <= 9_007_199_254_740_991) {
+            return Err("ganbaru_indent must be a nonnegative safe integer".to_string());
+        }
+    }
     if TEXT_BLOCK_TYPES.contains(&block_type) {
         validate_rich_text_payload(payload, block_type)?;
         return Ok(());
@@ -372,7 +379,10 @@ pub fn validate_optional_toggle_open(payload: &Value, field: &str) -> Result<(),
 }
 
 pub fn validate_optional_heading_toggle_fields(payload: &Value, field: &str) -> Result<(), String> {
-    if !matches!(field, "heading_1" | "heading_2" | "heading_3" | "heading_4") {
+    if !matches!(
+        field,
+        "heading_1" | "heading_2" | "heading_3" | "heading_4" | "heading_5" | "heading_6"
+    ) {
         return Ok(());
     }
     match payload.get("is_toggleable") {

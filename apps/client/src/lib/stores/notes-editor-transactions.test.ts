@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { applyBlockUpdate, blockEditableRichText, blockPlainText, createBlockWrite } from "$lib/notes/block-factory";
+import { applyBlockUpdate, blockIndent, blockEditableRichText, blockPlainText, createBlockWrite } from "$lib/notes/block-factory";
 import { flattenNotesBlockTree } from "$lib/notes/block-tree";
+import { notesNumberedListOrdinals } from "$lib/notes/block-editor-ui";
 import { notesBlockOutlineFromBlock } from "$lib/notes/block-outline";
 import type { NotesAppendBlockChildrenRequest, NotesBlock, NotesBlockUpdate, NotesBlockWrite, NotesParent } from "$lib/notes/types";
 import { createNotesBlockActions } from "./notes-store-block-actions";
@@ -29,12 +30,13 @@ function fromWrite(write: NotesBlockWrite): NotesBlock {
 }
 
 /** Connects the real action, projection, persistence, and history controllers to delayed storage. */
-function editor() {
+function editor(initialBlocks?: NotesBlock[]) {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
   const first = fromWrite(createBlockWrite(firstId, "paragraph", "FirstSecond"));
   const last = fromWrite(createBlockWrite(lastId, "paragraph", "Last"));
-  const stored = new Map([first, last].map((block) => [block.id, block]));
+  const blocks = initialBlocks ?? [first, last];
+  const stored = new Map(blocks.map((block) => [block.id, block]));
   api.updateNotesBlock.mockImplementation(async (id: string, update: NotesBlockUpdate) => {
     await gate;
     const block = stored.get(id);
@@ -45,7 +47,7 @@ function editor() {
   });
   api.appendNotesBlockChildren.mockImplementation(async (request: NotesAppendBlockChildrenRequest) => {
     await gate;
-    const blocks = request.children.map(fromWrite);
+    const blocks = request.children.map((write) => ({ ...fromWrite(write), parent: request.parent }));
     for (const block of blocks) stored.set(block.id, block);
     return { results: blocks };
   });
@@ -55,10 +57,17 @@ function editor() {
     if (!block) throw new Error(`Missing block ${id}`);
     stored.set(id, { ...block, in_trash: inTrash });
   });
-  api.moveNotesBlock.mockResolvedValue(undefined);
+  api.moveNotesBlock.mockImplementation(async (id: string, request: { parent: NotesParent }) => {
+    await gate;
+    const block = stored.get(id);
+    if (!block) throw new Error(`Missing block ${id}`);
+    const moved = { ...block, parent: request.parent };
+    stored.set(id, moved);
+    return moved;
+  });
   const projection = new NotesTreeProjectionController({ readSelectedPageId: () => pageId });
-  projection.blocksById = { [firstId]: first, [lastId]: last };
-  projection.childIdsByParentId = { [pageId]: [firstId, lastId] };
+  projection.blocksById = Object.fromEntries(blocks.map((block) => [block.id, block]));
+  projection.childIdsByParentId = { [pageId]: blocks.map((block) => block.id) };
   projection.syncHydratedOutlines(pageId);
   const focus = vi.fn();
   const restoreSelection = vi.fn();
@@ -76,6 +85,7 @@ function editor() {
     applyLocalSnapshot: (target, source) => projection.applyLocalUndoSnapshot(target, source),
   });
   const actions = createNotesBlockActions({
+    readPageRootBlockIds: () => projection.blockOutlines.filter((outline) => outline.parent.type === "page_id" && outline.parent.page_id === pageId).map((outline) => outline.id),
     ...persistence, readSelectedPageId: () => pageId,
     readBlocksById: () => projection.blocksById, readChildIdsByParentId: () => projection.childIdsByParentId,
     treeState: () => projection.treeState(), outlineSubtreeIds: (ids) => [...ids],
@@ -100,6 +110,292 @@ function editor() {
 afterEach(() => { vi.clearAllMocks(); });
 
 describe("Notes editing with delayed persistence", () => {
+  it("keeps document order when outdenting an item before other nested siblings", async () => {
+    const h = editor([fromWrite(createBlockWrite(firstId, "paragraph", ""))]);
+    await h.actions.pastePlainTextIntoBlock(firstId, 0, 0, "- Parent\n  - First\n  - Second\n- Last");
+    const firstChild = h.projection.childIdsByParentId[firstId][0];
+    await h.actions.outdentBlock(firstChild, { start: 2, end: 2 });
+    expect(flattenNotesBlockTree(h.projection.treeState(), pageId).map((row) => [blockPlainText(row.block), row.depth])).toEqual([
+      ["Parent", 0], ["First", 0], ["Second", 1], ["Last", 0],
+    ]);
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    await h.undo.undo();
+    expect(flattenNotesBlockTree(h.projection.treeState(), pageId).map((row) => [blockPlainText(row.block), row.depth])).toEqual([
+      ["Parent", 0], ["First", 1], ["Second", 1], ["Last", 0],
+    ]);
+  });
+
+  it.each(["paragraph", "bulleted_list_item", "numbered_list_item", "to_do"] as const)("indents the first empty %s repeatedly and carries indentation through typing, Enter, and undo", async (type) => {
+    const h = editor([fromWrite(createBlockWrite(firstId, type, ""))]);
+    for (let level = 1; level <= 12; level += 1) {
+      await h.actions.nestBlock(firstId, { start: 0, end: 0 });
+      expect(blockIndent(h.projection.blocksById[firstId])).toBe(level);
+      expect(h.projection.flatBlockOutlines[0].depth).toBe(level);
+    }
+    await h.actions.updateBlockText(firstId, "Keep this");
+    expect(blockIndent(h.projection.blocksById[firstId])).toBe(12);
+    await h.actions.splitTextBlockAtSelection(firstId, 9, 9);
+    const second = h.projection.childIdsByParentId[pageId][1];
+    expect(blockIndent(h.projection.blocksById[second])).toBe(12);
+    for (let level = 11; level >= 0; level -= 1) {
+      await h.actions.outdentBlock(second, { start: 0, end: 0 });
+      expect(blockIndent(h.projection.blocksById[second])).toBe(level);
+      expect(h.projection.flatBlockOutlines.find((item) => item.outline.id === second)?.depth).toBe(level);
+    }
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(blockIndent(h.stored.get(firstId)!)).toBe(12);
+    expect(blockIndent(h.stored.get(second)!)).toBe(0);
+    await h.undo.undo();
+    expect(blockIndent(h.projection.blocksById[second])).toBe(1);
+    await h.undo.redo();
+    expect(blockIndent(h.projection.blocksById[second])).toBe(0);
+  });
+
+  it("indents selected rows equally and restores the group with one undo", async () => {
+    const h = editor();
+    const range = { anchor: { blockId: firstId, offset: 0 }, focus: { blockId: lastId, offset: 4 } };
+    await h.actions.indentBlockSelection([firstId, lastId], "nest", range);
+    expect(h.projection.flatBlockOutlines.map((item) => item.depth)).toEqual([1, 1]);
+    await h.actions.indentBlockSelection([firstId, lastId], "nest", range);
+    expect(h.projection.flatBlockOutlines.map((item) => item.depth)).toEqual([2, 2]);
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    await h.undo.undo();
+    expect(h.projection.flatBlockOutlines.map((item) => item.depth)).toEqual([1, 1]);
+    expect(h.restoreSelection).toHaveBeenLastCalledWith(pageId, range);
+    await h.actions.indentBlockSelection([firstId, lastId], "outdent", range);
+    expect(h.projection.flatBlockOutlines.map((item) => item.depth)).toEqual([0, 0]);
+    await h.persistence.flushPendingBlockSaves();
+  });
+
+  it("indents and outdents immediately, preserving the caret during rapid edits and undo", async () => {
+    const h = editor();
+    const caret = { start: 1, end: 3 };
+    const indent = h.actions.nestBlock(lastId, caret);
+    expect(h.projection.blocksById[lastId].parent).toEqual({ type: "block_id", block_id: firstId });
+    expect(h.focus).toHaveBeenLastCalledWith(lastId, caret);
+    await indent;
+    await h.actions.outdentBlock(lastId, caret);
+    expect(h.projection.childIdsByParentId[pageId]).toEqual([firstId, lastId]);
+    await h.actions.nestBlock(lastId, caret);
+    await h.actions.updateBlockText(lastId, "Latest draft");
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(api.moveNotesBlock.mock.calls.map((call) => call[1].parent)).toEqual([
+      { type: "block_id", block_id: firstId }, parent, { type: "block_id", block_id: firstId },
+    ]);
+    expect(blockPlainText(h.projection.blocksById[lastId])).toBe("Latest draft");
+    expect(blockPlainText(h.stored.get(lastId)!)).toBe("Latest draft");
+    await h.undo.undo();
+    await h.undo.undo();
+    expect(h.projection.blocksById[lastId].parent).toEqual(parent);
+    expect(h.focus).toHaveBeenLastCalledWith(lastId, caret);
+    await h.undo.redo();
+    expect(h.projection.blocksById[lastId].parent).toEqual({ type: "block_id", block_id: firstId });
+  });
+
+  it("opens a collapsed parent while indenting and restores its state on undo", async () => {
+    const toggle = fromWrite(createBlockWrite(firstId, "toggle", "Parent"));
+    if (toggle.type !== "toggle") throw new Error("Expected toggle");
+    toggle.toggle.ganbaru_open = false;
+    const h = editor([toggle, fromWrite(createBlockWrite(lastId, "paragraph", "Child"))]);
+    await h.actions.nestBlock(lastId, { start: 2, end: 2 });
+    expect(flattenNotesBlockTree(h.projection.treeState(), pageId).map((row) => row.block.id)).toEqual([firstId, lastId]);
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    await h.undo.undo();
+    expect(h.projection.blocksById[firstId]).toMatchObject({ toggle: { ganbaru_open: false } });
+    expect(h.projection.blocksById[lastId].parent).toEqual(parent);
+  });
+
+  it("retains a failed indentation locally and retries subsequent moves in order", async () => {
+    const h = editor();
+    api.moveNotesBlock.mockRejectedValueOnce(new Error("Storage unavailable"));
+    await h.actions.nestBlock(lastId);
+    await h.actions.outdentBlock(lastId);
+    h.release();
+    await expect(h.persistence.flushPendingBlockSaves()).rejects.toThrow("Storage unavailable");
+    expect(h.projection.blocksById[lastId].parent).toEqual(parent);
+    await h.persistence.retryEditorMutations();
+    expect(h.stored.get(lastId)?.parent).toEqual(parent);
+  });
+
+  it("leaves invalid indentation in place without moving focus or writing", async () => {
+    const h = editor();
+    await h.actions.outdentBlock(firstId);
+    await h.actions.outdentBlock(lastId);
+    expect(h.focus).not.toHaveBeenCalled();
+    expect(api.moveNotesBlock).not.toHaveBeenCalled();
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+  });
+
+  it("retains annotated boundaries when pasting nested Markdown over a partial range", async () => {
+    const first = fromWrite(createBlockWrite(firstId, "paragraph", "Before old"));
+    const last = fromWrite(createBlockWrite(lastId, "paragraph", "old after"));
+    if (first.type !== "paragraph" || last.type !== "paragraph") throw new Error("Expected paragraphs");
+    first.paragraph.rich_text[0].annotations.bold = true;
+    last.paragraph.rich_text[0].annotations.italic = true;
+    const h = editor([first, last]);
+    await h.actions.replaceDocumentRange([firstId, lastId], 7, 3, "Intro\n- Parent\n  - Child");
+    const rows = flattenNotesBlockTree(h.projection.treeState(), pageId);
+    expect(rows.map((row) => [blockPlainText(row.block), row.depth])).toEqual([
+      ["Before Intro", 0], ["Parent", 0], ["Child after", 1],
+    ]);
+    expect(blockEditableRichText(rows[0].block)[0].annotations.bold).toBe(true);
+    expect(blockEditableRichText(rows[2].block).at(-1)?.annotations.italic).toBe(true);
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+  });
+
+  it.each(["plain", "html", "selection", "plain selection"])("pastes nested lists with immediate structure and one undo entry (%s)", async (mode) => {
+    const h = editor([fromWrite(createBlockWrite(firstId, "paragraph", ""))]);
+    const html = "<ul><li>Parent<ol><li>Child<ul><li>Grandchild</li></ul></li></ol></li><li>Sibling</li></ul>";
+    const text = "- Parent\n  1. Child\n    - Grandchild\n- Sibling";
+    if (mode === "plain") await h.actions.pastePlainTextIntoBlock(firstId, 0, 0, text);
+    else if (mode === "html") await h.actions.pasteRichHtmlIntoBlock(firstId, 0, 0, html);
+    else await h.actions.replaceDocumentRange([firstId], 0, 0, text, mode === "selection" ? html : undefined);
+    const rows = flattenNotesBlockTree(h.projection.treeState(), pageId);
+    expect(rows.map((row) => [blockPlainText(row.block), row.depth])).toEqual([
+      ["Parent", 0], ["Child", 1], ["Grandchild", 2], ["Sibling", 0],
+    ]);
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    for (const row of rows) expect(h.stored.get(row.block.id)?.parent).toEqual(row.block.parent);
+    await h.undo.undo();
+    expect(flattenNotesBlockTree(h.projection.treeState(), pageId).map((row) => blockPlainText(row.block))).toEqual([""]);
+    await h.undo.redo();
+    expect(flattenNotesBlockTree(h.projection.treeState(), pageId).map((row) => [blockPlainText(row.block), row.depth])).toEqual([
+      ["Parent", 0], ["Child", 1], ["Grandchild", 2], ["Sibling", 0],
+    ]);
+  });
+
+  it("exits a list immediately while preserving rich text, descendants, numbering, and undo", async () => {
+    const first = fromWrite(createBlockWrite(firstId, "numbered_list_item", "First"));
+    const last = fromWrite(createBlockWrite(lastId, "numbered_list_item", "Second"));
+    if (last.type !== "numbered_list_item") throw new Error("Expected numbered item");
+    last.numbered_list_item.rich_text[0].annotations.bold = true;
+    const h = editor([first, last]);
+    const child = { ...fromWrite(createBlockWrite("child", "paragraph", "Nested")), parent: { type: "block_id" as const, block_id: lastId } };
+    h.projection.insertBlockAfter(child, null);
+    h.stored.set(child.id, child);
+    const ordinals = () => notesNumberedListOrdinals(h.projection.flatBlockOutlines.map(({ outline }) => ({
+      id: outline.id, type: outline.type,
+      parentId: outline.parent.type === "page_id" ? outline.parent.page_id : outline.parent.block_id,
+    })));
+    expect(ordinals().get(lastId)).toBe(2);
+    await h.actions.convertBlock(lastId, "paragraph", false, { start: 0, end: 0 });
+    expect(h.projection.blocksById[lastId].type).toBe("paragraph");
+    expect(blockEditableRichText(h.projection.blocksById[lastId])).toEqual(last.numbered_list_item.rich_text);
+    expect(h.projection.childIdsByParentId[lastId]).toEqual([child.id]);
+    expect(h.focus).toHaveBeenLastCalledWith(lastId, { start: 0, end: 0 });
+    expect(ordinals().has(lastId)).toBe(false);
+    await h.undo.undo();
+    expect(h.projection.blocksById[lastId].type).toBe("numbered_list_item");
+    expect(ordinals().get(lastId)).toBe(2);
+    await h.undo.redo();
+    expect(h.projection.blocksById[lastId].type).toBe("paragraph");
+    expect(h.projection.childIdsByParentId[lastId]).toEqual([child.id]);
+    await h.actions.updateBlockText(lastId, "Second edited");
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(blockPlainText(h.stored.get(lastId)!)).toBe("Second edited");
+    expect(h.stored.get(lastId)?.type).toBe("paragraph");
+    expect(h.stored.get(child.id)?.parent).toEqual(child.parent);
+  });
+
+  it.each(["selection", "single"])("keeps the body writable after deleting its only database through %s deletion", async (mode) => {
+    const database = fromWrite({ id: firstId, type: "child_database", child_database: { title: "Tasks", database_id: firstId } });
+    const h = editor([database]);
+    if (mode === "selection") await h.actions.deleteBlockSelection([firstId]);
+    else await h.actions.deleteBlock(firstId);
+    const [replacementId] = h.projection.childIdsByParentId[pageId];
+    expect(replacementId).not.toBe(firstId);
+    expect(h.projection.blocksById[replacementId].type).toBe("paragraph");
+    expect(h.focus).toHaveBeenLastCalledWith(replacementId, { start: 0, end: 0 });
+    expect(h.stored.has(replacementId)).toBe(false);
+    await h.actions.updateBlockText(replacementId, "Still writable");
+    expect(blockPlainText(h.projection.blocksById[replacementId])).toBe("Still writable");
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(h.stored.get(firstId)?.in_trash).toBe(true);
+    expect(blockPlainText(h.stored.get(replacementId)!)).toBe("Still writable");
+    expect(h.error).not.toHaveBeenCalled();
+  });
+
+  it("undoes and redoes complete block deletion together with its replacement paragraph", async () => {
+    const h = editor();
+    await h.actions.deleteBlockSelection([firstId, lastId]);
+    const [replacementId] = h.projection.childIdsByParentId[pageId];
+    expect(h.projection.childIdsByParentId[pageId]).toHaveLength(1);
+    await h.undo.undo();
+    expect(h.projection.childIdsByParentId[pageId]).toEqual([firstId, lastId]);
+    expect(h.projection.blocksById[replacementId]).toBeUndefined();
+    await h.undo.redo();
+    expect(h.projection.childIdsByParentId[pageId]).toEqual([replacementId]);
+    await h.actions.updateBlockText(replacementId, "After redo");
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(h.stored.get(firstId)?.in_trash).toBe(true);
+    expect(h.stored.get(lastId)?.in_trash).toBe(true);
+    expect(blockPlainText(h.stored.get(replacementId)!)).toBe("After redo");
+  });
+
+  it("repairs an empty body once without stealing title focus or overwriting immediate typing", async () => {
+    const h = editor([]);
+    expect(h.actions.ensurePageBody("another-page")).toBeNull();
+    const id = h.actions.ensurePageBody(pageId)!;
+    expect(h.actions.ensurePageBody(pageId)).toBe(id);
+    expect(h.focus).not.toHaveBeenCalled();
+    expect(h.projection.childIdsByParentId[pageId]).toEqual([id]);
+    await h.actions.updateBlockText(id, "Restored body");
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(api.appendNotesBlockChildren).toHaveBeenCalledOnce();
+    expect(blockPlainText(h.projection.blocksById[id])).toBe("Restored body");
+    expect(blockPlainText(h.stored.get(id)!)).toBe("Restored body");
+  });
+
+  it("keeps a replacement editable after an append failure and retries before deleting originals", async () => {
+    const h = editor();
+    api.appendNotesBlockChildren.mockRejectedValueOnce(new Error("Storage unavailable"));
+    await h.actions.deleteBlockSelection([firstId, lastId]);
+    const [id] = h.projection.childIdsByParentId[pageId];
+    await h.actions.updateBlockText(id, "Retained draft");
+    h.release();
+    await expect(h.persistence.flushPendingBlockSaves()).rejects.toThrow("Storage unavailable");
+    expect(h.error).toHaveBeenCalledWith("Storage unavailable");
+    expect(blockPlainText(h.projection.blocksById[id])).toBe("Retained draft");
+    expect(h.stored.get(firstId)?.in_trash).toBe(false);
+    await h.persistence.retryEditorMutations();
+    expect(h.stored.get(firstId)?.in_trash).toBe(true);
+    expect(blockPlainText(h.stored.get(id)!)).toBe("Retained draft");
+    expect(h.projection.childIdsByParentId[pageId]).toEqual([id]);
+  });
+
+  it("clears the final text block immediately and accepts typing while storage is pending", async () => {
+    const h = editor([fromWrite(createBlockWrite(firstId, "paragraph", "Before"))]);
+    await h.actions.deleteBlock(firstId);
+    expect(blockPlainText(h.projection.blocksById[firstId])).toBe("");
+    expect(h.focus).toHaveBeenLastCalledWith(firstId, { start: 0, end: 0 });
+    await h.actions.updateBlockText(firstId, "After");
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(blockPlainText(h.stored.get(firstId)!)).toBe("After");
+  });
+
+  it("does not add an empty paragraph when only unloaded root outlines remain", async () => {
+    const h = editor([]);
+    h.projection.blockOutlines = [notesBlockOutlineFromBlock(fromWrite(createBlockWrite(firstId, "paragraph", "Unloaded")), pageId, 0)];
+    expect(h.actions.ensurePageBody(pageId)).toBe(firstId);
+    expect(h.projection.childIdsByParentId[pageId]).toEqual([]);
+    expect(api.appendNotesBlockChildren).not.toHaveBeenCalled();
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+  });
+
   it.each(["", "Replacement"])("restores select-all after replacing it with %j and clears the range on redo", async (text) => {
     const h = editor();
     const selection = { anchor: { blockId: firstId, offset: 0 }, focus: { blockId: lastId, offset: Number.MAX_SAFE_INTEGER } };

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import CopyPlus from "@lucide/svelte/icons/copy-plus";
   import MousePointerClick from "@lucide/svelte/icons/mouse-pointer-click";
   import Plus from "@lucide/svelte/icons/plus";
@@ -154,26 +155,24 @@
     </span>
   </div>
   <div class="flex min-w-0 flex-wrap items-center gap-1.5">
-    <label
+    <div
       class="inline-flex min-h-7 max-w-full items-center gap-1.5 rounded border border-border bg-background px-2 text-muted-foreground"
     >
       <NotesPageIcon icon={button.icon} size={14} strokeWidth={1.8} />
       <span class="sr-only">{t("notes.buttonIcon")}</span>
-      <select
-        class="min-w-24 bg-transparent text-[0.8rem] text-foreground outline-none"
-        aria-label={t("notes.buttonIcon")}
-        value={iconChoice}
-        onchange={(event) => selectIcon(event.currentTarget.value)}
-      >
-        <option value="none">{t("notes.noButtonIcon")}</option>
-        {#if iconChoice === "custom"}
-          <option value="custom">{t("notes.buttonImportedIcon")}</option>
-        {/if}
-        {#each NOTES_BUTTON_NATIVE_ICON_CHOICES as choice}
-          <option value={choice}>{iconLabel(choice)}</option>
-        {/each}
-      </select>
-    </label>
+      <CustomSelect
+        inline
+        appearance="quiet"
+        contentAlign="start"
+        class="w-full min-w-0"
+        ariaLabel={t("notes.buttonIcon")}
+        value={String(iconChoice ?? "")}
+        options={[{ value: "none", label: t("notes.noButtonIcon") },
+          ...(iconChoice === "custom" ? [{ value: "custom", label: t("notes.buttonImportedIcon") }] : []),
+          ...(NOTES_BUTTON_NATIVE_ICON_CHOICES).map((choice) => ({ value: String(choice), label: String(iconLabel(choice)) }))]}
+        onChange={(nextValue) => selectIcon(nextValue)}
+      />
+    </div>
     {#if button.icon?.type === "icon"}
       <div class="flex min-h-7 items-center gap-1 rounded border border-border bg-background px-1.5">
         {#each NOTES_PAGE_ICON_COLOR_CHOICES as color}
@@ -191,26 +190,22 @@
         {/each}
       </div>
     {/if}
-    <label
+    <div
       class="inline-flex min-h-7 max-w-full items-center gap-1.5 rounded border border-border bg-background px-2 text-muted-foreground"
     >
       <CopyPlus class="size-3.5" aria-hidden="true" />
       <span class="sr-only">{t("notes.buttonActionPosition")}</span>
-      <select
-        class="min-w-32 bg-transparent text-[0.8rem] text-foreground outline-none"
-        aria-label={t("notes.buttonActionPosition")}
-        value={insertPosition}
-        onchange={(event) =>
-          onButtonInsertPositionChange(
-            blockId,
-            event.currentTarget.value as NotesButtonInsertPosition,
-          )}
-      >
-        {#each BUTTON_INSERT_POSITIONS as position}
-          <option value={position}>{positionLabel(position)}</option>
-        {/each}
-      </select>
-    </label>
+      <CustomSelect
+        inline
+        appearance="quiet"
+        contentAlign="start"
+        class="w-full min-w-0"
+        ariaLabel={t("notes.buttonActionPosition")}
+        value={String(insertPosition ?? "")}
+        options={[...(BUTTON_INSERT_POSITIONS).map((position) => ({ value: String(position), label: String(positionLabel(position)) }))]}
+        onChange={(nextValue) => onButtonInsertPositionChange(blockId, nextValue as NotesButtonInsertPosition)}
+      />
+    </div>
     <button
       type="button"
       class="inline-flex min-h-7 items-center gap-1.5 rounded border border-border bg-background px-2 font-medium text-foreground hover:bg-accent"

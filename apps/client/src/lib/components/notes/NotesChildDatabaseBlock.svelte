@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import { onMount, tick } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
@@ -24,7 +25,7 @@
     type NotesDataSourceSchemaOptionDraft,
     type NotesDataSourceSchemaPropertyDraft,
   } from "$lib/notes/data-source-schema";
-  import type { NotesDatabaseViewKind } from "$lib/notes/database-view-kind";
+  import type { NotesDatabaseViewKind } from "$lib/notes/contracts/database/base";
   import {
     NOTES_DATA_SOURCE_NUMBER_FORMATS,
     NOTES_DATA_SOURCE_PROPERTY_TYPES,
@@ -472,12 +473,12 @@
 </script>
 
 <section
-  class="my-1 min-w-0 rounded-md border border-border bg-background/70 p-2"
+  class="my-4 min-w-0 space-y-2"
   aria-label={t("notes.blockType.childDatabase")}
 >
-  <div class="flex min-w-0 items-start gap-2">
+  <div class="flex min-w-0 items-center gap-2 px-1">
     <div
-      class="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
+      class="flex size-7 shrink-0 items-center justify-center text-muted-foreground"
       aria-hidden="true"
     >
       <Database class="size-4" />
@@ -489,12 +490,10 @@
       onkeydown={onKeydown}
       onclick={() => onFocusBlock(block.id)}
     >
-      <span class="min-w-0 truncate text-[0.866667rem] font-medium text-foreground">
+      <span class="min-w-0 truncate text-base font-semibold text-foreground">
         {title || t("notes.untitled")}
       </span>
-      <span class="min-w-0 truncate text-[0.8rem] text-muted-foreground">
-        {localDatabase ? t("notes.childDatabaseLocal") : t("notes.childDatabasePreserved")}
-      </span>
+      {#if !localDatabase}<span class="min-w-0 truncate text-[0.8rem] text-muted-foreground">{t("notes.childDatabasePreserved")}</span>{/if}
     </button>
     {#if localDatabase}
       <button
@@ -580,23 +579,24 @@
                   }}
                 />
               </label>
-              <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+              <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
                 <span class="mb-1 block">{t("notes.databaseSchemaType")}</span>
-                <select
-                  class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-70"
-                  value={property.type}
+                <CustomSelect
+                  inline
+                  appearance="quiet"
+                  contentAlign="start"
+                  class="w-full min-w-0"
+                  ariaLabel={t("notes.databaseSchemaType")}
+                  value={String(property.type ?? "")}
                   disabled={saving || property.type === "title"}
-                  onchange={(event) => {
+                  options={[...(NOTES_DATA_SOURCE_PROPERTY_TYPES).map((type) => ({ value: String(type), label: String(propertyTypeLabel(type)) }))]}
+                  onChange={(nextValue) => {
                     updateProperty(property.id, {
-                      type: event.currentTarget.value as NotesDataSourcePropertyType,
+                        type: nextValue as NotesDataSourcePropertyType,
                     });
                   }}
-                >
-                  {#each NOTES_DATA_SOURCE_PROPERTY_TYPES as type}
-                    <option value={type}>{propertyTypeLabel(type)}</option>
-                  {/each}
-                </select>
-              </label>
+                />
+              </div>
               <div class="flex min-w-0 items-end justify-end gap-1">
                 <button
                   type="button"
@@ -661,22 +661,23 @@
             </label>
 
             {#if property.type === "number"}
-              <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+              <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
                 <span class="mb-1 block">{t("notes.databaseSchemaNumberFormat")}</span>
-                <select
-                  class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={property.numberFormat}
-                  onchange={(event) => {
+                <CustomSelect
+                  inline
+                  appearance="quiet"
+                  contentAlign="start"
+                  class="w-full min-w-0"
+                  ariaLabel={t("notes.databaseSchemaNumberFormat")}
+                  value={String(property.numberFormat ?? "")}
+                  options={[...(NOTES_DATA_SOURCE_NUMBER_FORMATS).map((format) => ({ value: String(format), label: String(format) }))]}
+                  onChange={(nextValue) => {
                     updateProperty(property.id, {
-                      numberFormat: event.currentTarget.value as NotesDataSourceNumberFormat,
+                        numberFormat: nextValue as NotesDataSourceNumberFormat,
                     });
                   }}
-                >
-                  {#each NOTES_DATA_SOURCE_NUMBER_FORMATS as format}
-                    <option value={format}>{format}</option>
-                  {/each}
-                </select>
-              </label>
+                />
+              </div>
             {:else if property.type === "unique_id"}
               <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
                 <span class="mb-1 block">{t("notes.databaseSchemaUniquePrefix")}</span>
@@ -693,25 +694,24 @@
               </label>
             {:else if property.type === "relation"}
               <div class="grid min-w-0 gap-2 @lg:grid-cols-3">
-                <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+                <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
                   <span class="mb-1 block">{t("notes.databaseSchemaRelationTarget")}</span>
-                  <select
-                    class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={property.relationDataSourceId}
-                    onchange={(event) => {
+                  <CustomSelect
+                    inline
+                    appearance="quiet"
+                    contentAlign="start"
+                    class="w-full min-w-0"
+                    ariaLabel={t("notes.databaseSchemaRelationTarget")}
+                    value={String(property.relationDataSourceId ?? "")}
+                    options={[...(property.relationDataSourceId && !availableDataSources.some((source) => source.id === property.relationDataSourceId) ? [{ value: String(property.relationDataSourceId), label: String(property.relationDataSourceId) }] : []),
+                      ...(availableDataSources).map((source) => ({ value: String(source.id), label: String(dataSourceTitle(source)) }))]}
+                    onChange={(nextValue) => {
                       updateProperty(property.id, {
-                        relationDataSourceId: event.currentTarget.value,
+                          relationDataSourceId: nextValue,
                       });
                     }}
-                  >
-                    {#if property.relationDataSourceId && !availableDataSources.some((source) => source.id === property.relationDataSourceId)}
-                      <option value={property.relationDataSourceId}>{property.relationDataSourceId}</option>
-                    {/if}
-                    {#each availableDataSources as source (source.id)}
-                      <option value={source.id}>{dataSourceTitle(source)}</option>
-                    {/each}
-                  </select>
-                </label>
+                  />
+                </div>
                 <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
                   <span class="mb-1 block">{t("notes.databaseSchemaRelationSyncedPropertyId")}</span>
                   <input
@@ -784,19 +784,20 @@
                     }}
                   />
                 </label>
-                <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+                <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
                   <span class="mb-1 block">{t("notes.databaseSchemaButtonTarget")}</span>
-                  <select
-                    class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={property.buttonActionPropertyId}
-                    onchange={(event) => updateButtonTarget(property, event.currentTarget.value)}
-                  >
-                    <option value="">{t("notes.databaseSchemaButtonNoAction")}</option>
-                    {#each notesDataSourceButtonTargetOptions(properties, property.id) as target (target.id)}
-                      <option value={target.id}>{target.name}</option>
-                    {/each}
-                  </select>
-                </label>
+                  <CustomSelect
+                    inline
+                    appearance="quiet"
+                    contentAlign="start"
+                    class="w-full min-w-0"
+                    ariaLabel={t("notes.databaseSchemaButtonTarget")}
+                    value={String(property.buttonActionPropertyId ?? "")}
+                    options={[{ value: "", label: t("notes.databaseSchemaButtonNoAction") },
+                      ...(notesDataSourceButtonTargetOptions(properties, property.id)).map((target) => ({ value: String(target.id), label: String(target.name) }))]}
+                    onChange={(nextValue) => updateButtonTarget(property, nextValue)}
+                  />
+                </div>
                 <label class="flex min-w-0 items-end gap-2 text-[0.733333rem] text-muted-foreground">
                   <input
                     class="mb-2"
@@ -812,20 +813,20 @@
                 </label>
                 {#if property.buttonActionPropertyId}
                   {#if property.buttonActionPropertyType === "checkbox"}
-                    <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+                    <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
                       <span class="mb-1 block">{t("notes.databaseSchemaButtonValue")}</span>
-                      <select
-                        class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        value={property.buttonActionValue === false ? "false" : "true"}
-                        onchange={(event) => updateButtonValue(
-                          property,
-                          event.currentTarget.value === "true",
-                        )}
-                      >
-                        <option value="true">{t("notes.databaseSchemaButtonValueChecked")}</option>
-                        <option value="false">{t("notes.databaseSchemaButtonValueUnchecked")}</option>
-                      </select>
-                    </label>
+                      <CustomSelect
+                        inline
+                        appearance="quiet"
+                        contentAlign="start"
+                        class="w-full min-w-0"
+                        ariaLabel={t("notes.databaseSchemaButtonValue")}
+                        value={String(property.buttonActionValue === false ? "false" : "true")}
+                        options={[{ value: "true", label: t("notes.databaseSchemaButtonValueChecked") },
+                          { value: "false", label: t("notes.databaseSchemaButtonValueUnchecked") }]}
+                        onChange={(nextValue) => updateButtonValue(property, nextValue === "true")}
+                      />
+                    </div>
                   {:else}
                     <label class="min-w-0 text-[0.733333rem] text-muted-foreground @lg:col-span-2">
                       <span class="mb-1 block">{t("notes.databaseSchemaButtonValue")}</span>
@@ -855,39 +856,41 @@
                         }}
                       />
                     </label>
-                    <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+                    <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
                       <span class="mb-1 block">{t("notes.databaseSchemaOptionColor")}</span>
-                      <select
-                        class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        value={option.color}
-                        onchange={(event) => {
+                      <CustomSelect
+                        inline
+                        appearance="quiet"
+                        contentAlign="start"
+                        class="w-full min-w-0"
+                        ariaLabel={t("notes.databaseSchemaOptionColor")}
+                        value={String(option.color ?? "")}
+                        options={[...(NOTES_DATA_SOURCE_SELECT_COLORS).map((color) => ({ value: String(color), label: String(color) }))]}
+                        onChange={(nextValue) => {
                           updateOption(property.id, option.id, {
-                            color: event.currentTarget.value as NotesDataSourceSelectColor,
+                              color: nextValue as NotesDataSourceSelectColor,
                           });
                         }}
-                      >
-                        {#each NOTES_DATA_SOURCE_SELECT_COLORS as color}
-                          <option value={color}>{color}</option>
-                        {/each}
-                      </select>
-                    </label>
+                      />
+                    </div>
                     {#if property.type === "status"}
-                      <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+                      <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
                         <span class="mb-1 block">{t("notes.databaseSchemaOptionGroup")}</span>
-                        <select
-                          class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          value={option.group}
-                          onchange={(event) => {
+                        <CustomSelect
+                          inline
+                          appearance="quiet"
+                          contentAlign="start"
+                          class="w-full min-w-0"
+                          ariaLabel={t("notes.databaseSchemaOptionGroup")}
+                          value={String(option.group ?? "")}
+                          options={[...(NOTES_DATA_SOURCE_STATUS_GROUPS).map((group) => ({ value: String(group), label: String(group) }))]}
+                          onChange={(nextValue) => {
                             updateOption(property.id, option.id, {
-                              group: event.currentTarget.value as NotesDataSourceStatusGroup,
+                                group: nextValue as NotesDataSourceStatusGroup,
                             });
                           }}
-                        >
-                          {#each NOTES_DATA_SOURCE_STATUS_GROUPS as group}
-                            <option value={group}>{group}</option>
-                          {/each}
-                        </select>
-                      </label>
+                        />
+                      </div>
                     {/if}
                     <div class="flex items-end justify-end">
                       <button
@@ -923,17 +926,18 @@
       </div>
 
       <div class="flex min-w-0 flex-wrap items-center gap-2 border-t border-border pt-3">
-        <select
-          class="h-8 min-w-36 rounded-md border border-input bg-background px-2 text-[0.866667rem] outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          value={newPropertyType}
-          onchange={(event) => {
-            newPropertyType = event.currentTarget.value as NotesDataSourcePropertyType;
+        <CustomSelect
+          inline
+          appearance="quiet"
+          contentAlign="start"
+          class="w-full min-w-0"
+          ariaLabel={t("notes.databaseSchemaType")}
+          value={String(newPropertyType ?? "")}
+          options={[...(NOTES_DATA_SOURCE_PROPERTY_TYPES.filter((type) => type !== "title")).map((type) => ({ value: String(type), label: String(propertyTypeLabel(type)) }))]}
+          onChange={(nextValue) => {
+            newPropertyType = nextValue as NotesDataSourcePropertyType;
           }}
-        >
-          {#each NOTES_DATA_SOURCE_PROPERTY_TYPES.filter((type) => type !== "title") as type}
-            <option value={type}>{propertyTypeLabel(type)}</option>
-          {/each}
-        </select>
+        />
         <button
           type="button"
           class="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[0.8rem] hover:bg-accent"

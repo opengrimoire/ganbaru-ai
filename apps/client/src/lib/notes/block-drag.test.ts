@@ -34,6 +34,10 @@ function blockFromWrite(write: NotesBlockWrite, parent: NotesParent): NotesBlock
       return { ...base, type: write.type, heading_3: write.heading_3 };
     case "heading_4":
       return { ...base, type: write.type, heading_4: write.heading_4 };
+    case "heading_5":
+      return { ...base, type: write.type, heading_5: write.heading_5 };
+    case "heading_6":
+      return { ...base, type: write.type, heading_6: write.heading_6 };
     case "bulleted_list_item":
       return { ...base, type: write.type, bulleted_list_item: write.bulleted_list_item };
     case "numbered_list_item":

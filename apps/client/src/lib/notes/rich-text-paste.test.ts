@@ -70,6 +70,31 @@ function nextId(): string {
 }
 
 describe("notes rich text HTML paste planning", () => {
+  it("preserves mixed nested lists without joining child text into its parent", () => {
+    const plan = planNotesRichHtmlPaste({
+      currentBlock: paragraphBlock(), selectionStart: 0, selectionEnd: 0,
+      html: '<ul><li><p>Parent <strong>bold</strong></p><ol><li>Child<ul><li>Grandchild</li></ul></li><li>Child two</li></ol></li><li>Sibling</li></ul><p>After</p>',
+      createId: nextId,
+    });
+    expect(plan?.blockDepths).toEqual([0, 1, 2, 1, 0, 0]);
+    expect(plan?.currentUpdate).toMatchObject({ type: "bulleted_list_item", bulleted_list_item: {
+      rich_text: [expect.objectContaining({ plain_text: "Parent " }), expect.objectContaining({ plain_text: "bold", annotations: expect.objectContaining({ bold: true }) })],
+    } });
+    expect(plan?.appendedBlocks.map((write) => write.type)).toEqual([
+      "numbered_list_item", "bulleted_list_item", "numbered_list_item", "bulleted_list_item", "paragraph",
+    ]);
+    expect(plan?.appendedBlocks[0]).toMatchObject({ numbered_list_item: { rich_text: [expect.objectContaining({ plain_text: "Child" })] } });
+  });
+
+  it("keeps empty list parents and separate paragraphs inside an item", () => {
+    const plan = planNotesRichHtmlPaste({
+      currentBlock: paragraphBlock(), selectionStart: 0, selectionEnd: 0,
+      html: '<ul><li><ul><li>Child</li></ul></li><li><p>First</p><p>Second</p></li></ul>', createId: nextId,
+    });
+    expect(plan?.blockDepths).toEqual([0, 1, 0]);
+    expect(plan?.appendedBlocks[1]).toMatchObject({ bulleted_list_item: { rich_text: [expect.objectContaining({ plain_text: "First\nSecond" })] } });
+  });
+
   it("preserves supported inline formatting and safe links", () => {
     const plan = planNotesRichHtmlPaste({
       currentBlock: paragraphBlock([createTextRichText("Start ")]),

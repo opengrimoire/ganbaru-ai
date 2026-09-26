@@ -297,7 +297,7 @@ pub(super) async fn validate_block_update_children(
     }
     if matches!(
         target_block_type,
-        "heading_1" | "heading_2" | "heading_3" | "heading_4"
+        "heading_1" | "heading_2" | "heading_3" | "heading_4" | "heading_5" | "heading_6"
     ) && !block_payload_supports_children(target_block_type, target_payload)
     {
         let child_count: i64 = sqlx::query_scalar(

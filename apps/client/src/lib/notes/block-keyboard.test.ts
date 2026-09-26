@@ -23,6 +23,19 @@ function plan(input: Partial<NotesKeyboardPlanInput>) {
 }
 
 describe("notes keyboard planning", () => {
+  it("reduces empty indentation before exiting the list, then removes the marker at the margin", () => {
+    expect(plan({ key: "Enter", blockType: "numbered_list_item", indentationDepth: 2 })).toMatchObject({ type: "outdent" });
+    expect(plan({ key: "Backspace", blockType: "numbered_list_item", text: "Keep", indentationDepth: 2 })).toMatchObject({ type: "outdent" });
+    expect(plan({ key: "Backspace", blockType: "numbered_list_item", text: "Keep", indentationDepth: 0 })).toMatchObject({ type: "remove_block_format" });
+    expect(plan({ key: "Backspace", blockType: "paragraph", text: "Keep", indentationDepth: 2, selectionStart: 1, selectionEnd: 2 })).toEqual({ type: "none" });
+  });
+
+  it("indents selected code lines and reverses both tabs and space indentation", () => {
+    expect(plan({ key: "Tab", blockType: "code", text: "a\nb\nc", selectionStart: 0, selectionEnd: 4 })).toMatchObject({ type: "replace_text", text: "\ta\n\tb\nc", selection: { start: 1, end: 6 } });
+    expect(plan({ key: "Tab", shiftKey: true, blockType: "code", text: "\ta\n    b", selectionStart: 0, selectionEnd: 8 })).toMatchObject({ type: "replace_text", text: "a\nb", selection: { start: 0, end: 3 } });
+    expect(plan({ key: "Tab", shiftKey: true, blockType: "code", text: "\nx", selectionStart: 0, selectionEnd: 0 })).toMatchObject({ type: "replace_text", text: "\nx", selection: { start: 0, end: 0 } });
+  });
+
   it("splits rich text blocks on Enter", () => {
     expect(plan({ key: "Enter", text: "Hello" })).toEqual({
       type: "split_text_block",
@@ -100,44 +113,33 @@ describe("notes keyboard planning", () => {
     });
   });
 
-  it("plans Backspace delete and merge for all text-editable block types", () => {
-    const textEditableTypes: readonly NotesBlockType[] = [
-      "paragraph",
-      "heading_1",
-      "heading_2",
-      "heading_3",
-      "heading_4",
-      "bulleted_list_item",
-      "numbered_list_item",
-      "to_do",
-      "toggle",
-      "callout",
-      "quote",
-      "template",
-      "button",
-      "code",
-    ];
-
-    for (const blockType of textEditableTypes) {
-      expect(plan({ key: "Backspace", blockType, text: "" })).toEqual({
-        type: "delete_block",
-        preventDefault: true,
-      });
-      expect(
-        plan({
-          key: "Backspace",
-          blockType,
-          text: "Text",
-          selectionStart: 0,
-          selectionEnd: 0,
-          previousBlockType: "paragraph",
-        }),
-      ).toEqual({
-        type: "merge_with_previous",
-        preventDefault: true,
-      });
+  it.each<NotesBlockType>([
+    "heading_1", "heading_2", "heading_3", "heading_4", "bulleted_list_item",
+    "numbered_list_item", "to_do", "toggle", "callout", "quote",
+  ])("removes %s formatting at the start before deleting or merging text", (blockType) => {
+    for (const text of ["", "Text"]) {
+      for (const previousBlockType of [null, "paragraph"] as const) {
+        expect(plan({ key: "Backspace", blockType, text, previousBlockType })).toEqual({
+          type: "remove_block_format", preventDefault: true,
+        });
+      }
     }
+    expect(plan({ key: "Backspace", blockType, text: "Text", selectionStart: 1, selectionEnd: 1 }))
+      .toEqual({ type: "none" });
+    expect(plan({ key: "Backspace", blockType, text: "Text", selectionEnd: 3 }))
+      .toEqual({ type: "none" });
+    expect(plan({ key: "Backspace", blockType, text: "Text", ctrlKey: true }))
+      .toEqual({ type: "none" });
+    expect(plan({ key: "Delete", blockType, text: "Text" })).toEqual({ type: "none" });
   });
+
+  it.each<NotesBlockType>(["paragraph", "code", "template", "button"])(
+    "retains deletion and merging for %s without an ordinary text prefix", (blockType) => {
+      expect(plan({ key: "Backspace", blockType })).toEqual({ type: "delete_block", preventDefault: true });
+      expect(plan({ key: "Backspace", blockType, text: "Text", previousBlockType: "paragraph" }))
+        .toEqual({ type: "merge_with_previous", preventDefault: true });
+    },
+  );
 
   it("plans Tab nesting and Shift+Tab outdent", () => {
     expect(plan({ key: "Tab" })).toEqual({ type: "nest", preventDefault: true });
@@ -145,6 +147,18 @@ describe("notes keyboard planning", () => {
       type: "outdent",
       preventDefault: true,
     });
+  });
+
+  it("recognizes physical Tab when the logical key is unidentified without overriding remapped keys", () => {
+    for (const key of ["Unidentified", ""]) {
+      expect(plan({ key, code: "Tab" })).toEqual({ type: "nest", preventDefault: true });
+      expect(plan({ key, code: "Tab", shiftKey: true })).toEqual({ type: "outdent", preventDefault: true });
+    }
+    expect(plan({ key: "Unidentified", code: "KeyA", shiftKey: true })).toEqual({ type: "none" });
+    expect(plan({ key: "x", code: "Tab", shiftKey: true })).toEqual({ type: "none" });
+    for (const modifier of ["altKey", "ctrlKey", "metaKey"] as const) {
+      expect(plan({ key: "Unidentified", code: "Tab", shiftKey: true, [modifier]: true })).toEqual({ type: "none" });
+    }
   });
 
   it("plans primary modifier movement shortcuts", () => {
@@ -156,6 +170,11 @@ describe("notes keyboard planning", () => {
       type: "move_down",
       preventDefault: true,
     });
+  });
+
+  it("accepts slash characters produced with Shift and leaves code input literal", () => {
+    expect(plan({ key: "/", shiftKey: true })).toEqual({ type: "open_slash_menu", preventDefault: false });
+    expect(plan({ key: "/", blockType: "code" })).toEqual({ type: "none" });
   });
 
   it("opens slash commands only at the start of an empty block", () => {

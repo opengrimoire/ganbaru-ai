@@ -13,6 +13,7 @@ export type NotesBlockRenderState = Pick<RowProps,
   | "focusBlockId"
   | "focusRequestId"
   | "focusSelection"
+  | "listOrdinals"
   | "mentionTargets"
 >;
 

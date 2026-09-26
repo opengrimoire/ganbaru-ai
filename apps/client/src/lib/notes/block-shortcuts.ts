@@ -5,6 +5,8 @@ const SHORTCUTS: Readonly<Record<string, NotesBlockType>> = Object.freeze({
   "##": "heading_2",
   "###": "heading_3",
   "####": "heading_4",
+  "#####": "heading_5",
+  "######": "heading_6",
   "-": "bulleted_list_item",
   "1.": "numbered_list_item",
   "[]": "to_do",

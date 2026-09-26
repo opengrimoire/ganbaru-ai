@@ -1,3 +1,4 @@
+import { blockIndent } from "$lib/notes/block-queries";
 import { flattenNotesBlockOutlines, notesBlockOutlineFromBlock, type NotesBlockOutlineItem } from "$lib/notes/block-outline";
 import { buildNotesChildIdsByParent, parentIdForBlock, type NotesTreeState } from "$lib/notes/block-tree";
 import type { NotesUndoSnapshot } from "$lib/notes/undo-history";
@@ -39,7 +40,10 @@ export class NotesTreeProjectionController {
   }
 
   replaceBlock(block: NotesBlock): void {
+    const previous = this.blocksById[block.id];
     this.blocksById = { ...this.blocksById, [block.id]: block };
+    // Conversions affect outline-based rendering even when sibling order is unchanged.
+    if (previous && (previous.type !== block.type || blockIndent(previous) !== blockIndent(block))) this.syncLocalOutlines();
   }
 
   applyLocalUndoSnapshot(target: NotesUndoSnapshot, source: NotesUndoSnapshot): void {

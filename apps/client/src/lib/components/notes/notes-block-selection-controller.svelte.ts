@@ -199,7 +199,16 @@ export function createNotesBlockSelectionController(options: NotesBlockSelection
     if (selection && !event.altKey && (event.key === "Backspace" || event.key === "Delete")) { event.preventDefault(); void run(remove); return; }
     if (selection && modifier && event.shiftKey && !event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) { event.preventDefault(); void run(() => move(event.key === "ArrowUp" ? "up" : "down")); return; }
     if (selection && modifier && !event.shiftKey && !event.altKey && ["c", "x", "d"].includes(key)) { event.preventDefault(); void run(key === "c" ? () => copy("copy") : key === "x" ? () => copy("cut") : duplicate); return; }
-    if (event.key === "Escape" && !modifier && !event.altKey) { event.preventDefault(); clearNativeSelection(); setSelection(notesBlockSelectionForBlock(options.readRenderedBlockIds(), id)); options.focusRow(id); return; }
+    if (event.key === "Escape" && !modifier && !event.altKey && !event.isComposing) {
+      // Editable controls own dismissal before Svelte's delegated handlers run.
+      // Escape never promotes a text caret or range into whole-block selection.
+      if (!selection || options.targetIsEditable(event.target)) return;
+      event.preventDefault();
+      const focusId = selection.focusBlockId;
+      setSelection(null);
+      options.focusTextEditorAtEnd(focusId);
+      return;
+    }
     if (event.shiftKey && !modifier && !event.altKey && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
       if (!selection && options.targetIsEditable(event.target)) return;
       event.preventDefault(); clearNativeSelection();

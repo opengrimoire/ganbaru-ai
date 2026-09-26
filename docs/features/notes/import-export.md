@@ -14,7 +14,7 @@ All transfers preserve the source-of-truth boundary. Imports create canonical SQ
 
 ## Markdown import
 
-Markdown import creates a new page and normal blocks. It supports headings, paragraphs, safe inline links, lists, to-dos, quotes, dividers, fenced code, supported images, and simple tables. Safe frontmatter can provide a title.
+Markdown import creates a new page and normal blocks. It preserves heading levels 1 through 6 and supports paragraphs, safe inline links, lists, to-dos, quotes, dividers, fenced code, supported images, and simple tables. Safe frontmatter can provide a title.
 
 Unknown frontmatter, unsafe or local file references, unsupported HTML, reference definitions, and syntax that cannot be represented return diagnostics. Unsupported source can become a visible preservation block when useful.
 
@@ -22,7 +22,7 @@ Imported Markdown records provenance, but the source text is not retained as edi
 
 ## HTML import
 
-HTML import sanitizes before conversion. It supports common text formatting, headings, links, lists, checkbox items, quotes, preformatted code, dividers, callouts, toggles, simple tables, and explicitly retained supported HTTPS media.
+HTML import sanitizes before conversion. It supports common text formatting, heading levels 1 through 6, links, lists, checkbox items, quotes, preformatted code, dividers, callouts, toggles, simple tables, and explicitly retained supported HTTPS media.
 
 Scripts, styles, event attributes, unsafe URLs, SVG, iframes, and unapproved embedded content are removed and reported. Local and relative media references require the managed import-file flow.
 
@@ -89,3 +89,9 @@ This bridge is the current agent-readable Notes export. It is not the planned ex
 Transfer surfaces report object counts and categorized outcomes such as preserved, approximated, skipped, unsupported, warning, and error. Diagnostics can point to safe source lines, object IDs, paths inside the selected root, CSV rows, or local Notes targets.
 
 Navigation links in diagnostics are convenience only. They do not make the source file, folder, archive, CSV, JSON, or derivative output authoritative.
+
+### Heading levels
+
+Markdown and HTML transfers preserve all six heading levels. Markdown emits the matching count of `#` characters. HTML body headings use matching `h1` through `h6` elements instead of shifting levels beneath the page title, which prevents level 6 from being flattened or emitted as an invalid `h7`. Exported HTML uses the editor's relative heading-size hierarchy. Older imports that already flattened deep headings to level 4 cannot recover their original level without reimporting the source.
+
+Explicit text indentation is preserved in JSON graph data and shown as relative margins in HTML export. Markdown export emits leading spaces for explicit indentation; Markdown readers may interpret deeply indented paragraphs as code according to their own syntax rules. Extremely large indentation values that exceed the bounded whitespace export budget produce a diagnostic while retaining the text.

@@ -35,6 +35,8 @@ type NotesRichHtmlPasteBlockType =
   | "heading_2"
   | "heading_3"
   | "heading_4"
+  | "heading_5"
+  | "heading_6"
   | "bulleted_list_item"
   | "numbered_list_item"
   | "quote"
@@ -43,6 +45,7 @@ type NotesRichHtmlPasteBlockType =
 interface NotesRichHtmlPasteSegment {
   type: NotesRichHtmlPasteBlockType;
   richText: NotesRichText[];
+  depth?: number;
   language?: string;
 }
 
@@ -55,6 +58,7 @@ interface NotesRichHtmlInlineContext {
 export interface NotesRichHtmlPastePlan {
   currentUpdate: NotesBlockUpdate;
   appendedBlocks: NotesBlockWrite[];
+  blockDepths: number[];
   focusBlockId: string;
   focusOffset: number;
 }
@@ -83,6 +87,8 @@ const SANITIZER_CONFIG = {
     "h2",
     "h3",
     "h4",
+    "h5",
+    "h6",
     "i",
     "li",
     "ol",
@@ -135,6 +141,8 @@ const BLOCK_TAGS = new Set([
   "h2",
   "h3",
   "h4",
+  "h5",
+  "h6",
   "li",
   "p",
   "pre",
@@ -290,6 +298,10 @@ function blockTypeForElement(
       return "heading_3";
     case "h4":
       return "heading_4";
+    case "h5":
+      return "heading_5";
+    case "h6":
+      return "heading_6";
     case "li":
       return listType ?? "bulleted_list_item";
     case "blockquote":
@@ -323,10 +335,16 @@ function collectInline(
     appendText(output, "\n", context);
     return;
   }
+  if (tagName === "ul" || tagName === "ol") return;
+  const separatesLines = tagName === "p" || tagName === "div";
+  if (separatesLines && output.length && !richTextPlainText(output).endsWith("\n")) {
+    appendText(output, "\n", context);
+  }
   const childContext = contextForElement(node, context);
   for (const child of node.childNodes) {
     collectInline(child, childContext, output);
   }
+  if (separatesLines) appendText(output, "\n", context);
 }
 
 function segmentFromElement(
@@ -348,9 +366,12 @@ function segmentFromElement(
   for (const child of element.childNodes) {
     collectInline(child, childContext, richText);
   }
+  const text = richTextPlainText(richText);
   return {
     type: blockTypeForElement(element, listType),
-    richText,
+    richText: tagName === "li"
+      ? richTextRangeSlice(richText, text.length - text.trimStart().length, text.trimEnd().length)
+      : richText,
   };
 }
 
@@ -358,6 +379,7 @@ function collectSegments(
   parent: ParentNode,
   context: NotesRichHtmlInlineContext,
   listType: "bulleted_list_item" | "numbered_list_item" | null,
+  depth = 0,
 ): NotesRichHtmlPasteSegment[] {
   const segments: NotesRichHtmlPasteSegment[] = [];
   const inlineRichText: NotesRichText[] = [];
@@ -366,7 +388,7 @@ function collectSegments(
       inlineRichText.length = 0;
       return;
     }
-    segments.push({ type: "paragraph", richText: [...inlineRichText] });
+    segments.push({ type: "paragraph", depth, richText: [...inlineRichText] });
     inlineRichText.length = 0;
   };
 
@@ -379,17 +401,26 @@ function collectSegments(
     if (tagName === "ol" || tagName === "ul") {
       flushInline();
       const childListType = tagName === "ol" ? "numbered_list_item" : "bulleted_list_item";
-      segments.push(...collectSegments(child, contextForElement(child, context), childListType));
+      segments.push(...collectSegments(child, contextForElement(child, context), childListType, depth));
       continue;
     }
     if (tagName === "div" && hasDirectBlockChildren(child)) {
       flushInline();
-      segments.push(...collectSegments(child, contextForElement(child, context), listType));
+      segments.push(...collectSegments(child, contextForElement(child, context), listType, depth));
       continue;
     }
     if (BLOCK_TAGS.has(tagName)) {
       flushInline();
-      segments.push(segmentFromElement(child, context, listType));
+      segments.push({ ...segmentFromElement(child, context, listType), depth });
+      if (tagName !== "pre") {
+        // Nested list containers are handled by their nearest list ancestor.
+        for (const list of child.querySelectorAll("ul, ol")) {
+          const ancestorList = list.parentElement?.closest("ul, ol");
+          if (ancestorList && child.contains(ancestorList)) continue;
+          segments.push(...collectSegments(list, contextForElement(child, context),
+            normalizedTagName(list) === "ol" ? "numbered_list_item" : "bulleted_list_item", depth + 1));
+        }
+      }
       continue;
     }
     collectInline(child, context, inlineRichText);
@@ -424,7 +455,9 @@ function parseNotesRichHtmlPaste(html: string): NotesRichHtmlPasteSegment[] | nu
     preformatted: false,
   };
   const segments = collectSegments(fragment, context, null)
-    .filter((segment) => richTextPlainText(segment.richText).trim().length > 0);
+    .filter((segment, index, all) => segment.type.endsWith("_list_item")
+      || (all[index + 1]?.depth ?? 0) > (segment.depth ?? 0)
+      || richTextPlainText(segment.richText).trim().length > 0);
   if (segments.length === 0 || plainTextLength(segments) > NOTES_CLIPBOARD_MAX_TEXT_LENGTH) {
     return null;
   }
@@ -474,6 +507,16 @@ function createUpdateForSegment(segment: NotesRichHtmlPasteSegment): NotesBlockU
       return {
         type: "heading_4",
         heading_4: createTextPayloadFromRichText(richTextOrEmptyText(segment.richText)),
+      };
+    case "heading_5":
+      return {
+        type: "heading_5",
+        heading_5: createTextPayloadFromRichText(richTextOrEmptyText(segment.richText)),
+      };
+    case "heading_6":
+      return {
+        type: "heading_6",
+        heading_6: createTextPayloadFromRichText(richTextOrEmptyText(segment.richText)),
       };
     case "bulleted_list_item":
       return {
@@ -566,6 +609,7 @@ export function planNotesRichHtmlPaste(
             replaceRichTextRange(currentRichText, start, end, firstSegment.richText),
           ),
       appendedBlocks: [],
+      blockDepths: [0],
       focusBlockId: input.currentBlock.id,
       focusOffset: shouldConvertCurrentBlock
         ? richTextPlainText(firstSegment.richText).length
@@ -589,6 +633,7 @@ export function planNotesRichHtmlPaste(
       ? createUpdateForSegment(currentSegment)
       : blockWithRichText(input.currentBlock, currentSegment.richText),
     appendedBlocks,
+    blockDepths: segments.map((segment) => segment.depth ?? 0),
     focusBlockId: appendedBlocks.at(-1)?.id ?? input.currentBlock.id,
     focusOffset: lastSegment ? richTextPlainText(lastSegment.richText).length : 0,
   };

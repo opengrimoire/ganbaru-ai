@@ -1,12 +1,14 @@
 import { appendNotesBlockChildren, updateNotesBlock } from "$lib/api/notes";
 import { cloneNotesJson } from "$lib/notes/json-clone";
-import { planNotesPlainTextPaste } from "$lib/notes/block-clipboard";
+import { notesPasteAppendRequests, planNotesPlainTextPaste } from "$lib/notes/block-clipboard";
 import { planNotesRichHtmlPaste } from "$lib/notes/rich-text-paste";
 import {
   blockColor,
 } from "$lib/notes/block-color";
 import {
   blockEditableRichText,
+  blockIndent,
+  blockUpdateWithIndent,
   blockPlainText,
   blockWithRichText,
 } from "$lib/notes/block-factory";
@@ -35,6 +37,7 @@ const START_OF_BLOCK_SELECTION: NotesTextSelection = { start: 0, end: 0 };
 interface OptimisticPastePlan {
   currentUpdate: NotesBlockUpdate;
   appendedBlocks: NotesBlockWrite[];
+  blockDepths: number[];
   focusBlockId: string;
   focusOffset: number;
 }
@@ -107,12 +110,13 @@ export function createNotesBlockPasteActions(
     const split = splitRichTextForBlock(blockEditableRichText(block), selectionStart, selectionEnd);
     const newBlockId = crypto.randomUUID();
     const currentUpdate = cloneNotesJson(blockWithRichText(block, split.before));
-    const nextWrite = cloneNotesJson(createBlockWriteFromRichText(
+    const nextPayload = createBlockWriteFromRichText(
       newBlockId,
       notesEnterSiblingBlockType(block.type),
       split.after,
       blockColor(block),
-    ));
+    );
+    const nextWrite = cloneNotesJson({ id: newBlockId, ...blockUpdateWithIndent(nextPayload, blockIndent(block)) });
     const parent = cloneNotesJson(block.parent);
     const nextBlock = context.optimisticBlockFromWrite(nextWrite, parent);
     const focusBlockId = planNotesInsertedBlockFocus([newBlockId], blockId) ?? newBlockId;
@@ -149,15 +153,21 @@ export function createNotesBlockPasteActions(
       currentBlock.id,
       beforeFocusSelection,
     );
-    const currentUpdate = cloneNotesJson(plan.currentUpdate);
-    const writes = plan.appendedBlocks.map((write) => cloneNotesJson(write));
+    const currentUpdate = cloneNotesJson(blockUpdateWithIndent(plan.currentUpdate, blockIndent(currentBlock)));
+    const writes = plan.appendedBlocks.map((write, index) => cloneNotesJson({
+      id: write.id,
+      ...blockUpdateWithIndent(write, plan.blockDepths[index + 1] === 0 ? blockIndent(currentBlock) : 0),
+    }));
     const parent = cloneNotesJson(currentBlock.parent);
     const focusSelection = { start: plan.focusOffset, end: plan.focusOffset };
     context.localApplyBlockUpdate(currentBlock.id, currentUpdate);
-    let after = currentBlock.id;
-    for (const write of writes) {
-      context.localInsertBlockAfter(context.optimisticBlockFromWrite(write, parent), after);
-      after = write.id;
+    const requests = notesPasteAppendRequests(currentBlock.id, parent, writes, plan.blockDepths);
+    for (const request of requests) {
+      let after = request.after ?? null;
+      for (const write of request.children) {
+        context.localInsertBlockAfter(context.optimisticBlockFromWrite(write, request.parent), after);
+        after = write.id;
+      }
     }
     context.requestBlockFocus(plan.focusBlockId, focusSelection);
     context.recordUndo(
@@ -167,7 +177,7 @@ export function createNotesBlockPasteActions(
     );
     const persistence = context.enqueueEditorMutation(async () => {
       await updateNotesBlock(currentBlock.id, currentUpdate);
-      if (writes.length) await appendNotesBlockChildren({ parent, after: currentBlock.id, children: writes });
+      for (const request of requests) await appendNotesBlockChildren(request);
     });
     context.trackOptimisticBlockWrites(affectedIds, persistence);
     void persistence;

@@ -2,6 +2,7 @@ import { notesRichTextFormattingShortcutAnnotationName } from "$lib/notes/rich-t
 import type { NotesRichTextAnnotationName } from "$lib/notes/rich-text";
 import { tick } from "svelte";
 import { blockPlainText, isTextEditableBlock } from "$lib/notes/block-factory";
+import { isNotesTabKey } from "$lib/notes/block-keyboard";
 import { createNotesDocumentSelectionPainter, findEditableDomPoint, notesEditableOffsetFromDomPoint } from "$lib/notes/editor-selection";
 import { notesDocumentRange, type NotesDocumentPoint, type NotesDocumentSelection } from "$lib/notes/editor-selection";
 import type { NotesBlock } from "$lib/notes/types";
@@ -13,6 +14,7 @@ interface DocumentSelectionOptions {
   readBlock: (id: string) => NotesBlock | undefined;
   hydrate: (ids: readonly string[]) => Promise<void>;
   replace: (ids: readonly string[], start: number, end: number, text: string, html?: string, documentSelection?: NotesDocumentSelection) => Promise<void>;
+  indent?: (ids: readonly string[], direction: "nest" | "outdent", selection?: NotesDocumentSelection) => Promise<void>;
   format: (ids: readonly string[], start: number, end: number, annotation: NotesRichTextAnnotationName, documentSelection?: NotesDocumentSelection) => Promise<void>;
   focus: (point: NotesDocumentPoint) => void;
   restoreFocusAfterEdit?: () => void;
@@ -358,6 +360,18 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
       return;
     }
     if (!selection) return;
+    if (isNotesTabKey(event) && !modifier && !event.altKey && options.indent) {
+      event.preventDefault(); event.stopPropagation();
+      const selected = range();
+      if (selected) void run(async () => {
+        const token = request;
+        await hydrateSelection(selected.blockIds);
+        if (!alive || token !== request) return;
+        await options.indent?.(selected.blockIds, event.shiftKey ? "outdent" : "nest", selection ?? undefined);
+        await tick(); paint();
+      });
+      return;
+    }
     const key = event.key.toLowerCase();
     const annotation = notesRichTextFormattingShortcutAnnotationName(event);
     if (annotation) {

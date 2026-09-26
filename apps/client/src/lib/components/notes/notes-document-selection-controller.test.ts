@@ -19,9 +19,10 @@ function harness(count = 3) {
   const replace = vi.fn(async () => undefined);
   const hydrate = vi.fn(async () => undefined);
   const focus = vi.fn();
+  const indent = vi.fn(async () => undefined);
   const controller = createNotesDocumentSelectionController({
     readIds: () => ids, readPageId: () => "page", readBlock: (id) => blocks.get(id),
-    hydrate, replace, format: vi.fn(async () => undefined), focus, clearBlockSelection: vi.fn(),
+    hydrate, replace, indent, format: vi.fn(async () => undefined), focus, clearBlockSelection: vi.fn(),
     undo: vi.fn(async () => true), redo: vi.fn(async () => true),
   });
   const attached = controller.delegation(list);
@@ -31,12 +32,26 @@ function harness(count = 3) {
     editor(index).dispatchEvent(event);
     return event;
   };
-  return { controller, replace, hydrate, focus, blocks, ids, editor, key, destroy: attached.destroy };
+  return { controller, replace, indent, hydrate, focus, blocks, ids, editor, key, destroy: attached.destroy };
 }
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(document, "caretPositionFromPoint"); document.body.replaceChildren(); window.getSelection()?.removeAllRanges(); });
 
 describe("Notes document selection", () => {
+  it.each(["Tab", "Unidentified"])("routes Tab and Shift+Tab over the full document selection without moving focus (key: %s)", async (key) => {
+    const h = harness();
+    window.getSelection()?.collapse(h.editor(1).firstChild, 2);
+    h.key(1, "a", { ctrlKey: true });
+    await tick();
+    const selected = h.controller.selection;
+    expect(h.key(1, "Tab").defaultPrevented).toBe(true);
+    await vi.waitFor(() => expect(h.indent).toHaveBeenLastCalledWith(h.ids, "nest", selected));
+    expect(h.key(1, key, { code: "Tab", shiftKey: true }).defaultPrevented).toBe(true);
+    await vi.waitFor(() => expect(h.indent).toHaveBeenLastCalledWith(h.ids, "outdent", selected));
+    expect(h.controller.selection).toEqual(selected);
+    h.destroy();
+  });
+
   it("selects the whole document from a text caret, including more than 200 blocks", async () => {
     const h = harness(220);
     window.getSelection()?.collapse(h.editor(1).firstChild, 2);

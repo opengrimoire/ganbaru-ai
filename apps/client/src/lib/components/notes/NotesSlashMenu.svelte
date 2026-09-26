@@ -6,7 +6,6 @@
   import { notesSlashMenuItemDomId } from "$lib/notes/editor-accessibility";
   import {
     clampNotesSlashActiveIndex,
-    flatNotesSlashCommandSectionItems,
     notesSlashCommandItems,
     notesRecentSlashCommandKeys,
     recordRecentNotesSlashCommandKey,
@@ -14,10 +13,13 @@
     type NotesSlashAction,
     type NotesSlashCommand,
     type NotesSlashCommandItem,
-    type NotesSlashCommandPanelSection,
   } from "$lib/notes/slash-commands";
   import type { NotesColor } from "$lib/notes/types";
-  import type { Component } from "svelte";
+  import { tick, type Component } from "svelte";
+  import { portal } from "$lib/utils/portal";
+  import { findEditableDomPoint } from "$lib/notes/editor-selection";
+  import { notesBlockInsertMenuStyle } from "$lib/notes/block-insertion";
+  import Search from "@lucide/svelte/icons/search";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import Bookmark from "@lucide/svelte/icons/bookmark";
@@ -33,6 +35,8 @@
   import Heading2 from "@lucide/svelte/icons/heading-2";
   import Heading3 from "@lucide/svelte/icons/heading-3";
   import Heading4 from "@lucide/svelte/icons/heading-4";
+  import Heading5 from "@lucide/svelte/icons/heading-5";
+  import Heading6 from "@lucide/svelte/icons/heading-6";
   import ImageIcon from "@lucide/svelte/icons/image";
   import LinkIcon from "@lucide/svelte/icons/link";
   import List from "@lucide/svelte/icons/list";
@@ -59,7 +63,9 @@
     menuId = undefined,
     menuClass = "absolute left-[calc(var(--notes-depth)*1.25rem+1.75rem)] top-full mt-1",
     blockId = undefined,
-    activeIndex = 0,
+    activeIndex = undefined,
+    anchor = null,
+    onClose = undefined,
     onSelect,
     onActiveIndexChange = undefined,
     onActiveCommandChange = undefined,
@@ -71,30 +77,158 @@
     menuClass?: string;
     blockId?: string;
     activeIndex?: number;
+    anchor?: HTMLElement | null;
+    onClose?: () => void;
     onSelect: (command: NotesSlashCommand) => void;
     onActiveIndexChange?: (index: number) => void;
     onActiveCommandChange?: (command: NotesSlashCommand | null, itemCount: number) => void;
   } = $props();
 
   const { t } = getLocalization();
-  const sectionOrder = [
-    "recent",
-    "blocks",
-    "actions",
-    "colors",
-  ] as const satisfies readonly NotesSlashCommandPanelSection[];
+  let scrollArea: HTMLDivElement | null = $state(null);
+  let localQuery = $state("");
+  let localActiveIndex = $state(0);
   let recentKeys = $state<readonly string[]>(notesRecentSlashCommandKeys());
-  const catalog = $derived(notesSlashCommandItems({ canSetColor }));
-  const sections = $derived(sectionNotesSlashCommandItems(catalog, query, recentKeys));
-  const hasResults = $derived(sectionOrder.some((section) => sections[section].length > 0));
-  const flatItems = $derived(flatNotesSlashCommandSectionItems(sections, sectionOrder));
+  const searchQuery = $derived(anchor ? query : localQuery || query);
+  const catalog = $derived(notesSlashCommandItems({ canSetColor }).map((item) => ({
+    ...item,
+    searchText: `${item.searchText} ${commandLabel(item.command).normalize("NFD").replace(/\p{M}/gu, "").toLowerCase()}`,
+  })));
+  const sections = $derived(sectionNotesSlashCommandItems(catalog, searchQuery, recentKeys));
+  const groups = $derived([
+    { label: t("notes.slashRecent"), items: sections.recent },
+    { label: t("notes.slashBlocks"), items: sections.blocks.filter((item) => blockGroup(item.command) === "basic") },
+    { label: t("notes.slashMedia"), items: sections.blocks.filter((item) => blockGroup(item.command) === "media") },
+    { label: t("notes.slashAdvanced"), items: sections.blocks.filter((item) => blockGroup(item.command) === "advanced") },
+    { label: t("notes.slashActions"), items: sections.actions },
+    { label: t("notes.slashColors"), items: sections.colors },
+  ]);
+  const flatItems = $derived(groups.flatMap((group) => group.items));
+  const hasResults = $derived(flatItems.length > 0);
   const flatIndexByKey = $derived(new Map(flatItems.map((item, index) => [item.key, index])));
-  const safeActiveIndex = $derived(clampNotesSlashActiveIndex(activeIndex, flatItems.length));
+  const safeActiveIndex = $derived(clampNotesSlashActiveIndex(activeIndex ?? localActiveIndex, flatItems.length));
 
   $effect(() => {
-    if (safeActiveIndex !== activeIndex) onActiveIndexChange?.(safeActiveIndex);
-    onActiveCommandChange?.(flatItems[safeActiveIndex]?.command ?? null, flatItems.length);
+    void searchQuery;
+    localActiveIndex = 0;
   });
+
+  $effect(() => {
+    const index = safeActiveIndex;
+    const command = flatItems[index]?.command ?? null;
+    if (activeIndex !== undefined && index !== activeIndex) onActiveIndexChange?.(index);
+    onActiveCommandChange?.(command, flatItems.length);
+    void tick().then(() => {
+      const active = scrollArea?.querySelector<HTMLElement>('[data-active="true"]');
+      if (!active || !scrollArea) return;
+      const item = active.getBoundingClientRect();
+      const viewport = scrollArea.getBoundingClientRect();
+      if (item.top < viewport.top) scrollArea.scrollTop -= viewport.top - item.top;
+      else if (item.bottom > viewport.bottom) scrollArea.scrollTop += item.bottom - viewport.bottom;
+    });
+  });
+
+  /** Group supported content types for menu browsing. */
+  function blockGroup(command: NotesSlashCommand): "basic" | "media" | "advanced" {
+    if (command.kind === "toggle_heading") return "advanced";
+    if (command.kind !== "block") return "basic";
+    switch (command.blockType) {
+      case "image": case "video": case "audio": case "file": case "pdf": case "bookmark": case "link_preview": case "embed":
+        return "media";
+      case "child_database": case "breadcrumb": case "table_of_contents": case "column_list": case "table": case "tab": case "template": case "button": case "equation": case "code":
+        return "advanced";
+      default: return "basic";
+    }
+  }
+
+  /** Show familiar Markdown cues beside basic content types. */
+  function commandHint(command: NotesSlashCommand): string {
+    if (command.kind !== "block") return "";
+    switch (command.blockType) {
+      case "heading_1": return "#";
+      case "heading_2": return "##";
+      case "heading_3": return "###";
+      case "heading_4": return "####";
+      case "heading_5": return "#####";
+      case "heading_6": return "######";
+      case "bulleted_list_item": return "-";
+      case "numbered_list_item": return "1.";
+      case "to_do": return "[]";
+      case "toggle": return ">";
+      default: return "";
+    }
+  }
+
+  /** Keep editing focus while the floating menu tracks the slash trigger and available viewport. */
+  function positionMenu(node: HTMLDivElement, editor: HTMLElement | null) {
+    if (!editor) return {};
+    const portaled = portal(node, editor.closest<HTMLElement>("[data-floating-root]") ?? document.body);
+    const viewport = window.visualViewport;
+    let disposed = false;
+    const update = () => {
+      if (disposed) return;
+      const start = findEditableDomPoint(editor, 0);
+      const range = editor.ownerDocument.createRange();
+      range.setStart(start.node, start.offset);
+      range.collapse(true);
+      const caret = range.getBoundingClientRect?.();
+      const rect = caret?.height ? caret : editor.getBoundingClientRect();
+      const offsetLeft = viewport?.offsetLeft ?? 0;
+      const offsetTop = viewport?.offsetTop ?? 0;
+      const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+      const chromeHeight = node.offsetHeight - (scrollArea?.clientHeight ?? 0);
+      node.style.cssText = notesBlockInsertMenuStyle({
+        triggerRect: { left: rect.left - offsetLeft, right: rect.right - offsetLeft, top: rect.top - offsetTop, bottom: rect.bottom - offsetTop },
+        viewportWidth: viewport?.width ?? window.innerWidth,
+        viewportHeight: viewport?.height ?? window.innerHeight,
+        preferredWidth: 20 * rem,
+        preferredMaxHeight: Math.min(22 * rem, (scrollArea?.scrollHeight ?? 22 * rem) + chromeHeight),
+      });
+      node.style.left = `${Number.parseFloat(node.style.left) + offsetLeft}px`;
+      node.style.top = `${Number.parseFloat(node.style.top) + offsetTop}px`;
+    };
+    const outside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !node.contains(event.target) && !editor.contains(event.target)) onClose?.();
+    };
+    const scroll = (event: Event) => { if (!(event.target instanceof Node) || !node.contains(event.target)) update(); };
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    observer?.observe(node);
+    observer?.observe(editor);
+    document.addEventListener("pointerdown", outside, true);
+    document.addEventListener("scroll", scroll, true);
+    window.addEventListener("resize", update);
+    viewport?.addEventListener("resize", update);
+    viewport?.addEventListener("scroll", update);
+    void tick().then(update);
+    return { destroy() {
+      disposed = true;
+      observer?.disconnect();
+      document.removeEventListener("pointerdown", outside, true);
+      document.removeEventListener("scroll", scroll, true);
+      window.removeEventListener("resize", update);
+      viewport?.removeEventListener("resize", update);
+      viewport?.removeEventListener("scroll", update);
+      portaled.destroy();
+    } };
+  }
+
+  /** Support keyboard search for insertion menus opened without an editing host. */
+  function handleMenuKey(event: KeyboardEvent): void {
+    if (event.isComposing) return;
+    if (event.key === "Escape" && onClose) { event.preventDefault(); event.stopPropagation(); onClose(); }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault(); event.stopPropagation();
+      activate((safeActiveIndex + (event.key === "ArrowDown" ? 1 : flatItems.length - 1)) % Math.max(1, flatItems.length));
+    }
+    if (event.key === "Enter" && !(event.target instanceof HTMLButtonElement) && flatItems[safeActiveIndex]) {
+      event.preventDefault(); event.stopPropagation(); selectCommand(flatItems[safeActiveIndex]);
+    }
+  }
+
+  function activate(index: number): void {
+    localActiveIndex = index;
+    onActiveIndexChange?.(index);
+  }
 
   function selectCommand(item: NotesSlashCommandItem): void {
     recentKeys = recordRecentNotesSlashCommandKey(item.key);
@@ -107,19 +241,6 @@
 
   function itemId(item: NotesSlashCommandItem): string | undefined {
     return blockId ? notesSlashMenuItemDomId(blockId, itemIndex(item)) : undefined;
-  }
-
-  function sectionLabel(section: NotesSlashCommandPanelSection): string {
-    switch (section) {
-      case "recent":
-        return t("notes.slashRecent");
-      case "blocks":
-        return t("notes.slashBlocks");
-      case "actions":
-        return t("notes.slashActions");
-      case "colors":
-        return t("notes.slashColors");
-    }
   }
 
   function commandLabel(command: NotesSlashCommand): string {
@@ -147,6 +268,10 @@
         return t("notes.blockType.heading3");
       case "heading_4":
         return t("notes.blockType.heading4");
+      case "heading_5":
+        return t("notes.blockType.heading5");
+      case "heading_6":
+        return t("notes.blockType.heading6");
       case "bulleted_list_item":
         return t("notes.blockType.bullet");
       case "numbered_list_item":
@@ -212,6 +337,10 @@
         return t("notes.blockType.toggleHeading3");
       case "heading_4":
         return t("notes.blockType.toggleHeading4");
+      case "heading_5":
+        return t("notes.blockType.toggleHeading5");
+      case "heading_6":
+        return t("notes.blockType.toggleHeading6");
     }
   }
 
@@ -298,6 +427,10 @@
         return Heading3;
       case "heading_4":
         return Heading4;
+      case "heading_5":
+        return Heading5;
+      case "heading_6":
+        return Heading6;
       case "bulleted_list_item":
         return List;
       case "numbered_list_item":
@@ -363,6 +496,10 @@
         return Heading3;
       case "heading_4":
         return Heading4;
+      case "heading_5":
+        return Heading5;
+      case "heading_6":
+        return Heading6;
     }
   }
 
@@ -383,21 +520,31 @@
 </script>
 
 <div
+  use:positionMenu={anchor}
   id={menuId}
-  class={`${menuClass} z-30 max-h-[min(28rem,70vh)] w-64 overflow-auto rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-lg`}
+  class={`${anchor ? "" : menuClass} z-50 flex max-h-[min(22rem,70vh)] w-80 flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg`}
   role="menu"
+  onkeydown={handleMenuKey}
   aria-label={t("notes.slashMenu")}
-  aria-live="polite"
   data-app-floating-surface
   tabindex="-1"
-  onmousedown={(event) => event.preventDefault()}
+  onmousedown={(event) => { if (!(event.target instanceof HTMLInputElement)) event.preventDefault(); }}
 >
+  <div class="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground">
+    <Search class="size-4 shrink-0" aria-hidden="true" />
+    {#if anchor}
+      <span class="truncate">{query || t("notes.slashSearch")}</span>
+    {:else}
+      <input class="min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground" aria-label={t("notes.slashSearch")} placeholder={t("notes.slashSearch")} bind:value={localQuery} />
+    {/if}
+  </div>
+  <div bind:this={scrollArea} class="min-h-0 overflow-y-auto overscroll-contain p-1">
   {#if hasResults}
-    {#each sectionOrder as section}
-      {@const items = sections[section]}
+    {#each groups as group}
+      {@const items = group.items}
       {#if items.length > 0}
         <div class="px-2.5 pb-1 pt-2 text-[0.7rem] font-medium text-muted-foreground">
-          {sectionLabel(section)}
+          {group.label}
         </div>
         {#each items as item (item.key)}
           {@const Icon = commandIcon(item.command)}
@@ -405,7 +552,7 @@
           {@const active = index === safeActiveIndex}
           <button
             id={itemId(item)}
-            class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            class="flex min-h-9 w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
             class:bg-accent={active}
             class:text-accent-foreground={active}
             type="button"
@@ -415,7 +562,8 @@
               : undefined}
             data-active={active ? "true" : undefined}
             onmousedown={(event) => event.preventDefault()}
-            onpointermove={() => onActiveIndexChange?.(index)}
+            onpointermove={() => activate(index)}
+            onfocus={() => activate(index)}
             onclick={() => selectCommand(item)}
           >
             {#if item.command.kind === "color"}
@@ -430,6 +578,7 @@
               <Icon class="size-4 shrink-0" aria-hidden="true" />
             {/if}
             <span class="min-w-0 flex-1 truncate">{commandLabel(item.command)}</span>
+            {#if commandHint(item.command)}<span class="text-xs text-muted-foreground" aria-hidden="true">{commandHint(item.command)}</span>{/if}
             {#if item.command.kind === "color" && currentColor === item.command.color}
               <Check class="size-3.5 shrink-0" aria-hidden="true" />
             {/if}
@@ -441,6 +590,12 @@
     <div class="px-2.5 py-2 text-[0.8rem] text-muted-foreground" role="status">
       {t("notes.slashNoResults")}
     </div>
+  {/if}
+  </div>
+  {#if onClose}
+    <button class="flex min-h-10 w-full shrink-0 items-center justify-between border-t border-border px-3 py-2 text-left text-sm hover:bg-accent" type="button" onclick={onClose}>
+      {t("notes.slashClose")}<kbd class="text-xs text-muted-foreground">Esc</kbd>
+    </button>
   {/if}
 </div>
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type {
     NotesDataSourceRollupTargetOption,
@@ -32,63 +33,56 @@
 
 <div class="space-y-2">
   <div class="grid min-w-0 gap-2 @lg:grid-cols-3">
-    <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+    <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
       <span class="mb-1 block">{t("notes.databaseSchemaRollupRelation")}</span>
-      <select
-        class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-70"
-        value={property.rollupRelationPropertyId}
+      <CustomSelect
+        inline
+        appearance="quiet"
+        contentAlign="start"
+        class="w-full min-w-0"
+        ariaLabel={t("notes.databaseSchemaRollupRelation")}
+        value={String(property.rollupRelationPropertyId ?? "")}
         disabled={saving || relations.length === 0}
-        onchange={(event) => {
-          onRelationChange(event.currentTarget.value);
+        options={[...(property.rollupRelationPropertyId && !relations.some((relation) => relation.id === property.rollupRelationPropertyId) ? [{ value: String(property.rollupRelationPropertyId), label: String(property.rollupRelationPropertyName || property.rollupRelationPropertyId) }] : []),
+          ...(relations).map((relation) => ({ value: String(relation.id), label: String(relation.name) }))]}
+        onChange={(nextValue) => {
+          onRelationChange(nextValue);
         }}
-      >
-        {#if property.rollupRelationPropertyId && !relations.some((relation) => relation.id === property.rollupRelationPropertyId)}
-          <option value={property.rollupRelationPropertyId}>
-            {property.rollupRelationPropertyName || property.rollupRelationPropertyId}
-          </option>
-        {/if}
-        {#each relations as relation (relation.id)}
-          <option value={relation.id}>{relation.name}</option>
-        {/each}
-      </select>
-    </label>
-    <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+      />
+    </div>
+    <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
       <span class="mb-1 block">{t("notes.databaseSchemaRollupTargetProperty")}</span>
-      <select
-        class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-70"
-        value={property.rollupPropertyId}
+      <CustomSelect
+        inline
+        appearance="quiet"
+        contentAlign="start"
+        class="w-full min-w-0"
+        ariaLabel={t("notes.databaseSchemaRollupTargetProperty")}
+        value={String(property.rollupPropertyId ?? "")}
         disabled={saving || targets.length === 0}
-        onchange={(event) => {
-          onTargetChange(event.currentTarget.value);
+        options={[...(property.rollupPropertyId && !targets.some((target) => target.id === property.rollupPropertyId) ? [{ value: String(property.rollupPropertyId), label: String(property.rollupPropertyName || property.rollupPropertyId) }] : []),
+          ...(targets).map((target) => ({ value: String(target.id), label: String(target.name) }))]}
+        onChange={(nextValue) => {
+          onTargetChange(nextValue);
         }}
-      >
-        {#if property.rollupPropertyId && !targets.some((target) => target.id === property.rollupPropertyId)}
-          <option value={property.rollupPropertyId}>
-            {property.rollupPropertyName || property.rollupPropertyId}
-          </option>
-        {/if}
-        {#each targets as target (target.id)}
-          <option value={target.id}>{target.name}</option>
-        {/each}
-      </select>
-    </label>
-    <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+      />
+    </div>
+    <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
       <span class="mb-1 block">{t("notes.databaseSchemaRollupFunction")}</span>
-      <select
-        class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        value={property.rollupFunction}
+      <CustomSelect
+        inline
+        appearance="quiet"
+        contentAlign="start"
+        class="w-full min-w-0"
+        ariaLabel={t("notes.databaseSchemaRollupFunction")}
+        value={String(property.rollupFunction ?? "")}
         disabled={saving}
-        onchange={(event) => {
-          onFunctionChange(event.currentTarget.value as NotesDataSourceRollupFunction);
+        options={[...(NOTES_DATA_SOURCE_ROLLUP_FUNCTIONS).map((rollupFunction) => ({ value: String(rollupFunction), label: t("notes.databaseSchemaRollupFunctionLabel", rollupFunction) }))]}
+        onChange={(nextValue) => {
+          onFunctionChange(nextValue as NotesDataSourceRollupFunction);
         }}
-      >
-        {#each NOTES_DATA_SOURCE_ROLLUP_FUNCTIONS as rollupFunction}
-          <option value={rollupFunction}>
-            {t("notes.databaseSchemaRollupFunctionLabel", rollupFunction)}
-          </option>
-        {/each}
-      </select>
-    </label>
+      />
+    </div>
   </div>
   {#if relations.length === 0}
     <p class="text-[0.8rem] text-muted-foreground">

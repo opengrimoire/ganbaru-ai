@@ -1,4 +1,6 @@
 <script lang="ts">
+  import NotesDatabaseMenu from "./NotesDatabaseMenu.svelte";
+  import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import {
     createNotesDataSourceRowPage,
     duplicateNotesPage,
@@ -358,7 +360,7 @@
   }
 </script>
 
-<section class="space-y-3 border-t border-border pt-3" aria-label={t("notes.databaseGalleryTitle")}>
+<section class="space-y-3 pt-2" aria-label={t("notes.databaseGalleryTitle")}>
   <div class="flex min-w-0 flex-wrap items-center gap-2 text-[0.8rem] text-muted-foreground">
     <span class="min-w-0 flex-1 truncate" role="status">
       {#if loading}
@@ -369,74 +371,119 @@
         {t("notes.databaseGalleryCardsCount", gallery?.rows.length ?? 0)}
       {/if}
     </span>
-    <label class="inline-flex min-w-0 items-center gap-1">
-      <span>{t("notes.databaseGalleryPreview")}</span>
-      <select
-        class="h-8 min-w-36 rounded-md border border-input bg-background px-2 text-[0.8rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-        value={configuration.cover_source}
-        disabled={loading || mutating || !gallery}
-        onchange={(event) => updateCoverSource(event.currentTarget.value as NotesDatabaseGalleryCoverSource)}
-        onkeydown={(event) => event.stopPropagation()}
-      >
-        <option value="page_cover">{t("notes.databaseGalleryPreviewPageCover")}</option>
-        <option value="files_property">{t("notes.databaseGalleryPreviewFilesProperty")}</option>
-        <option value="none">{t("notes.databaseGalleryPreviewNone")}</option>
-      </select>
-    </label>
-    {#if configuration.cover_source === "files_property"}
-      <label class="inline-flex min-w-0 items-center gap-1">
-        <span>{t("notes.databaseGalleryCoverProperty")}</span>
-        <select
-          class="h-8 min-w-32 rounded-md border border-input bg-background px-2 text-[0.8rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-          value={configuration.cover_property_id ?? ""}
-          disabled={loading || mutating || !gallery || coverColumns.length === 0}
-          onchange={(event) => updateCoverProperty(event.currentTarget.value)}
-          onkeydown={(event) => event.stopPropagation()}
+    <NotesDatabaseMenu label={t("notes.databaseLayout")}>
+      <div class="grid gap-3">
+        <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
+          <span>{t("notes.databaseGalleryPreview")}</span>
+          <CustomSelect
+            inline
+            appearance="quiet"
+            contentAlign="start"
+            class="w-full min-w-0"
+            ariaLabel={t("notes.databaseGalleryPreview")}
+            value={String(configuration.cover_source ?? "")}
+            disabled={loading || mutating || !gallery}
+            options={[{ value: "page_cover", label: t("notes.databaseGalleryPreviewPageCover") },
+              { value: "files_property", label: t("notes.databaseGalleryPreviewFilesProperty") },
+              { value: "none", label: t("notes.databaseGalleryPreviewNone") }]}
+            onChange={(nextValue) => updateCoverSource(nextValue as NotesDatabaseGalleryCoverSource)}
+            triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+          />
+        </div>
+        {#if configuration.cover_source === "files_property"}
+          <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
+            <span>{t("notes.databaseGalleryCoverProperty")}</span>
+            <CustomSelect
+              inline
+              appearance="quiet"
+              contentAlign="start"
+              class="w-full min-w-0"
+              ariaLabel={t("notes.databaseGalleryCoverProperty")}
+              value={String(configuration.cover_property_id ?? "")}
+              disabled={loading || mutating || !gallery || coverColumns.length === 0}
+              options={[{ value: "", label: t("notes.databaseTableEmptyCell") },
+                ...(coverColumns).map((column) => ({ value: String(column.id), label: String(column.name) }))]}
+              onChange={(nextValue) => updateCoverProperty(nextValue)}
+              triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+            />
+          </div>
+        {/if}
+        <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
+          <span>{t("notes.databaseGalleryCardSize")}</span>
+          <CustomSelect
+            inline
+            appearance="quiet"
+            contentAlign="start"
+            class="w-full min-w-0"
+            ariaLabel={t("notes.databaseGalleryCardSize")}
+            value={String(configuration.card_size ?? "")}
+            disabled={loading || mutating || !gallery}
+            options={[{ value: "small", label: t("notes.databaseGalleryCardSizeSmall") },
+              { value: "medium", label: t("notes.databaseGalleryCardSizeMedium") },
+              { value: "large", label: t("notes.databaseGalleryCardSizeLarge") }]}
+            onChange={(nextValue) => updateCardSize(nextValue as NotesDatabaseGalleryCardSize)}
+            triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+          />
+        </div>
+        <label class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
+          <input
+            type="checkbox"
+            checked={configuration.fit_image}
+            disabled={loading || mutating || !gallery || configuration.cover_source === "none"}
+            onchange={(event) => updateFitImage(event.currentTarget.checked)}
+            onkeydown={(event) => event.stopPropagation()}
+          />
+          <span>{t("notes.databaseGalleryFitImage")}</span>
+        </label>
+        <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
+          <span>{t("notes.databaseTableOpenMode")}</span>
+          <CustomSelect
+            inline
+            appearance="quiet"
+            contentAlign="start"
+            class="w-full min-w-0"
+            ariaLabel={t("notes.databaseTableOpenMode")}
+            value={String(configuration.row_open_mode ?? "")}
+            disabled={loading || mutating || !gallery}
+            options={[{ value: "full_page", label: t("notes.databaseTableOpenFullPage") },
+              { value: "side_panel", label: t("notes.databaseTableOpenSidePanel") }]}
+            onChange={(nextValue) => updateRowOpenMode(nextValue as NotesDatabaseGalleryRowOpenMode)}
+            triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+          />
+        </div>
+      </div>
+    </NotesDatabaseMenu>
+    <NotesDatabaseMenu label={t("notes.databaseNew")} kind="new">
+      <div class="flex min-w-0 flex-wrap items-center gap-2">
+        <input
+          class="h-8 min-w-40 flex-1 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+          value={draftTitle}
+          placeholder={t("notes.databaseRowsNewPlaceholder")}
+          disabled={loading || mutating}
+          oninput={(event) => {
+            draftTitle = event.currentTarget.value;
+          }}
+          onkeydown={(event) => {
+            event.stopPropagation();
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void createCard();
+            }
+          }}
+        />
+        <button
+          type="button"
+          class="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-2 text-[0.8rem] text-primary-foreground disabled:pointer-events-none disabled:opacity-50"
+          disabled={loading || mutating}
+          onclick={() => {
+            void createCard();
+          }}
         >
-          <option value="">{t("notes.databaseTableEmptyCell")}</option>
-          {#each coverColumns as column (column.id)}
-            <option value={column.id}>{column.name}</option>
-          {/each}
-        </select>
-      </label>
-    {/if}
-    <label class="inline-flex min-w-0 items-center gap-1">
-      <span>{t("notes.databaseGalleryCardSize")}</span>
-      <select
-        class="h-8 min-w-28 rounded-md border border-input bg-background px-2 text-[0.8rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-        value={configuration.card_size}
-        disabled={loading || mutating || !gallery}
-        onchange={(event) => updateCardSize(event.currentTarget.value as NotesDatabaseGalleryCardSize)}
-        onkeydown={(event) => event.stopPropagation()}
-      >
-        <option value="small">{t("notes.databaseGalleryCardSizeSmall")}</option>
-        <option value="medium">{t("notes.databaseGalleryCardSizeMedium")}</option>
-        <option value="large">{t("notes.databaseGalleryCardSizeLarge")}</option>
-      </select>
-    </label>
-    <label class="inline-flex min-w-0 items-center gap-1">
-      <input
-        type="checkbox"
-        checked={configuration.fit_image}
-        disabled={loading || mutating || !gallery || configuration.cover_source === "none"}
-        onchange={(event) => updateFitImage(event.currentTarget.checked)}
-        onkeydown={(event) => event.stopPropagation()}
-      />
-      <span>{t("notes.databaseGalleryFitImage")}</span>
-    </label>
-    <label class="inline-flex min-w-0 items-center gap-1">
-      <span>{t("notes.databaseTableOpenMode")}</span>
-      <select
-        class="h-8 min-w-32 rounded-md border border-input bg-background px-2 text-[0.8rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-        value={configuration.row_open_mode}
-        disabled={loading || mutating || !gallery}
-        onchange={(event) => updateRowOpenMode(event.currentTarget.value as NotesDatabaseGalleryRowOpenMode)}
-        onkeydown={(event) => event.stopPropagation()}
-      >
-        <option value="full_page">{t("notes.databaseTableOpenFullPage")}</option>
-        <option value="side_panel">{t("notes.databaseTableOpenSidePanel")}</option>
-      </select>
-    </label>
+          <Plus class="size-3.5" aria-hidden="true" />
+          <span>{t("notes.databaseGalleryAddCard")}</span>
+        </button>
+      </div>
+    </NotesDatabaseMenu>
     <button
       type="button"
       class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
@@ -451,41 +498,11 @@
     </button>
   </div>
 
-  <div class="flex min-w-0 flex-wrap items-center gap-2">
-    <input
-      class="h-8 min-w-40 flex-1 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-      value={draftTitle}
-      placeholder={t("notes.databaseRowsNewPlaceholder")}
-      disabled={loading || mutating}
-      oninput={(event) => {
-        draftTitle = event.currentTarget.value;
-      }}
-      onkeydown={(event) => {
-        event.stopPropagation();
-        if (event.key === "Enter") {
-          event.preventDefault();
-          void createCard();
-        }
-      }}
-    />
-    <button
-      type="button"
-      class="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-2 text-[0.8rem] text-primary-foreground disabled:pointer-events-none disabled:opacity-50"
-      disabled={loading || mutating}
-      onclick={() => {
-        void createCard();
-      }}
-    >
-      <Plus class="size-3.5" aria-hidden="true" />
-      <span>{t("notes.databaseGalleryAddCard")}</span>
-    </button>
-  </div>
-
   {#if gallery}
     <div class="grid gap-2 @container">
-      <div class="grid gap-2 @lg:grid-cols-3">
-        <details class="rounded-md border border-border p-2 text-[0.8rem]">
-          <summary class="cursor-pointer text-foreground">{t("notes.databaseGalleryCardProperties")}</summary>
+      <div class="flex flex-wrap items-center gap-1">
+        <NotesDatabaseMenu label={t("notes.databaseGalleryCardProperties")} kind="properties">
+
           <div class="mt-2 grid gap-1">
             {#each columns.filter((column) => column.type !== "title") as column (column.id)}
               <label class="flex min-w-0 items-center gap-2 rounded-sm px-1 py-0.5 hover:bg-accent/60">
@@ -500,39 +517,40 @@
               </label>
             {/each}
           </div>
-        </details>
+        </NotesDatabaseMenu>
 
-        <details class="rounded-md border border-border p-2 text-[0.8rem]">
-          <summary class="cursor-pointer text-foreground">{t("notes.databaseTableSorts")}</summary>
+        <NotesDatabaseMenu label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length}>
+
           <div class="mt-2 grid gap-2">
             {#each sorts as sort, index}
               <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1">
-                <select
-                  class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={sort.property_id}
+                <CustomSelect
+                  inline
+                  appearance="quiet"
+                  contentAlign="start"
+                  class="w-full min-w-0"
+                  ariaLabel={t("notes.databaseTableSortProperty")}
+                  value={String(sort.property_id ?? "")}
                   disabled={mutating}
-                  aria-label={t("notes.databaseTableSortProperty")}
-                  onchange={(event) => updateSort(index, { property_id: event.currentTarget.value })}
-                  onkeydown={(event) => event.stopPropagation()}
-                >
-                  {#each columns as column (column.id)}
-                    <option value={column.id}>{column.name}</option>
-                  {/each}
-                </select>
-                <select
-                  class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={sort.direction}
+                  options={[...(columns).map((column) => ({ value: String(column.id), label: String(column.name) }))]}
+                  onChange={(nextValue) => updateSort(index, { property_id: nextValue })}
+                  triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+                />
+                <CustomSelect
+                  inline
+                  appearance="quiet"
+                  contentAlign="start"
+                  class="w-full min-w-0"
+                  ariaLabel={t("notes.databaseTableSortDirection")}
+                  value={String(sort.direction ?? "")}
                   disabled={mutating}
-                  aria-label={t("notes.databaseTableSortDirection")}
-                  onchange={(event) =>
-                    updateSort(index, {
-                      direction: event.currentTarget.value === "descending" ? "descending" : "ascending",
-                    })}
-                  onkeydown={(event) => event.stopPropagation()}
-                >
-                  <option value="ascending">{t("notes.databaseTableSortAscending")}</option>
-                  <option value="descending">{t("notes.databaseTableSortDescending")}</option>
-                </select>
+                  options={[{ value: "ascending", label: t("notes.databaseTableSortAscending") },
+                    { value: "descending", label: t("notes.databaseTableSortDescending") }]}
+                  onChange={(nextValue) => updateSort(index, {
+                    direction: nextValue === "descending" ? "descending" : "ascending",
+                  })}
+                  triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+                />
                 <button
                   type="button"
                   class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
@@ -555,40 +573,39 @@
               <span>{t("notes.databaseTableAddSort")}</span>
             </button>
           </div>
-        </details>
+        </NotesDatabaseMenu>
 
-        <details class="rounded-md border border-border p-2 text-[0.8rem]">
-          <summary class="cursor-pointer text-foreground">{t("notes.databaseTableFilters")}</summary>
+        <NotesDatabaseMenu label={t("notes.databaseTableFilters")} kind="filter" activeCount={filters.length}>
+
           <div class="mt-2 grid gap-2">
             {#each filters as filter, index}
               <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-1">
-                <select
-                  class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={filter.property_id}
+                <CustomSelect
+                  inline
+                  appearance="quiet"
+                  contentAlign="start"
+                  class="w-full min-w-0"
+                  ariaLabel={t("notes.databaseTableFilterProperty")}
+                  value={String(filter.property_id ?? "")}
                   disabled={mutating}
-                  aria-label={t("notes.databaseTableFilterProperty")}
-                  onchange={(event) => updateFilter(index, { property_id: event.currentTarget.value })}
-                  onkeydown={(event) => event.stopPropagation()}
-                >
-                  {#each columns as column (column.id)}
-                    <option value={column.id}>{column.name}</option>
-                  {/each}
-                </select>
-                <select
-                  class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={filter.condition}
+                  options={[...(columns).map((column) => ({ value: String(column.id), label: String(column.name) }))]}
+                  onChange={(nextValue) => updateFilter(index, { property_id: nextValue })}
+                  triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+                />
+                <CustomSelect
+                  inline
+                  appearance="quiet"
+                  contentAlign="start"
+                  class="w-full min-w-0"
+                  ariaLabel={t("notes.databaseTableFilterConditionLabel")}
+                  value={String(filter.condition ?? "")}
                   disabled={mutating}
-                  aria-label={t("notes.databaseTableFilterConditionLabel")}
-                  onchange={(event) =>
-                    updateFilter(index, {
-                      condition: event.currentTarget.value as NotesDatabaseTableFilterCondition,
-                    })}
-                  onkeydown={(event) => event.stopPropagation()}
-                >
-                  {#each FILTER_CONDITIONS as condition}
-                    <option value={condition}>{filterConditionLabel(condition)}</option>
-                  {/each}
-                </select>
+                  options={[...(FILTER_CONDITIONS).map((condition) => ({ value: String(condition), label: String(filterConditionLabel(condition)) }))]}
+                  onChange={(nextValue) => updateFilter(index, {
+                    condition: nextValue as NotesDatabaseTableFilterCondition,
+                  })}
+                  triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+                />
                 <input
                   class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
                   value={String(filter.value ?? "")}
@@ -619,7 +636,7 @@
               <span>{t("notes.databaseTableAddFilter")}</span>
             </button>
           </div>
-        </details>
+        </NotesDatabaseMenu>
       </div>
 
       <div class="grid min-w-0 gap-3" style={gridStyle}>
@@ -720,7 +737,7 @@
         onLoad={loadMoreGallery}
       />
 
-      {#if configuration.row_open_mode === "side_panel"}
+      {#if configuration.row_open_mode === "side_panel" && selectedPanelRow}
         <aside class="rounded-md border border-border p-3" aria-label={t("notes.databaseTableSidePanelTitle")}>
           {#if selectedPanelRow}
             {@const title = rowTitle(selectedPanelRow)}

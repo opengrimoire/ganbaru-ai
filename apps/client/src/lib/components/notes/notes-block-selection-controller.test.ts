@@ -32,14 +32,16 @@ function selectionHarness() {
   list.innerHTML = ["first", "second", "third"].map((id) => `<div data-notes-selectable-block-id="${id}" data-notes-block-selection-zone><div contenteditable="true">${id}</div></div>`).join("");
   const row = (id: string) => list.querySelector<HTMLElement>(`[data-notes-selectable-block-id="${id}"]`)!;
   const undo = vi.fn(async () => true);
+  const focusRow = vi.fn();
+  const focusTextEditorAtEnd = vi.fn(() => true);
   const controller = createNotesBlockSelectionController({
     undo, redo: vi.fn(async () => true), readPageId: () => "page", readListElement: () => list,
     readRenderedBlockIds: () => ["first", "second", "third"],
     readTreeState: () => ({ blocksById: {}, childIdsByParentId: {} }),
     blockIdFromEvent: (event) => event.target instanceof Element ? event.target.closest<HTMLElement>("[data-notes-selectable-block-id]")?.dataset.notesSelectableBlockId ?? null : null,
     targetIsEditable: (target) => target instanceof Element && target.closest("[contenteditable]") !== null,
-    targetIsSelectionZone: () => true, focusTextEditorAtEnd: () => true,
-    focusRow: vi.fn(), handleNavigationKeydown: () => false,
+    targetIsSelectionZone: () => true, focusTextEditorAtEnd,
+    focusRow, handleNavigationKeydown: () => false,
     pasteBlocks: async () => null, duplicateBlocks: async () => null,
     moveBlocks: async () => undefined, deleteBlocks: async () => undefined,
   });
@@ -49,7 +51,7 @@ function selectionHarness() {
     Object.defineProperty(event, "pointerId", { value: 1 });
     target.dispatchEvent(event);
   };
-  return { controller, row, pointer, undo, destroy: delegates.destroy };
+  return { controller, row, pointer, undo, focusRow, focusTextEditorAtEnd, destroy: delegates.destroy };
 }
 
 describe("Notes block selection gestures", () => {
@@ -63,6 +65,43 @@ describe("Notes block selection gestures", () => {
     expect(h.controller.selection).toBeNull();
     h.row("first").dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "a", ctrlKey: true }));
     expect(h.controller.selection?.selectedBlockIds).toEqual(["first", "second", "third"]);
+    h.destroy();
+  });
+
+  it("leaves Escape in text to the editor without clearing its range or selecting its row", async () => {
+    const h = selectionHarness();
+    const editor = h.row("first").firstElementChild as HTMLElement;
+    document.body.append(h.row("first").parentElement!);
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    try {
+      const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Escape" });
+      editor.dispatchEvent(event);
+      await Promise.resolve();
+      expect(event.defaultPrevented).toBe(false);
+      expect(h.controller.selection).toBeNull();
+      expect(h.row("first").hasAttribute("data-notes-block-selected")).toBe(false);
+      expect(h.focusRow).not.toHaveBeenCalled();
+      expect(window.getSelection()?.toString()).toBe("first");
+    } finally {
+      window.getSelection()?.removeAllRanges();
+      h.row("first").parentElement?.remove();
+      h.destroy();
+    }
+  });
+
+  it("uses Escape to leave an intentional block selection and return to text editing", async () => {
+    const h = selectionHarness();
+    h.pointer(h.row("first"), "pointerdown");
+    await Promise.resolve();
+    expect(h.row("first").hasAttribute("data-notes-block-selected")).toBe(true);
+    h.row("first").dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Escape" }));
+    await Promise.resolve();
+    expect(h.controller.selection).toBeNull();
+    expect(h.row("first").hasAttribute("data-notes-block-selected")).toBe(false);
+    expect(h.focusTextEditorAtEnd).toHaveBeenCalledWith("first");
     h.destroy();
   });
 

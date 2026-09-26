@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import { createBlockWrite } from "$lib/notes/block-factory";
 import type {
   NotesBlock,
+  NotesAppendBlockChildrenRequest,
   NotesBlockFrontier,
   NotesPage,
   NotesPageOpenResponse,
@@ -54,6 +55,18 @@ vi.mock("$lib/api/notes", async (importOriginal) => {
       next_page_cursor: null,
       next_folder_cursor: null,
     }),
+    appendNotesBlockChildren: async (request: NotesAppendBlockChildrenRequest) => {
+      backend.record("append");
+      if (request.parent.type !== "page_id") throw new Error("Expected a page paragraph");
+      const current = backend.pages.get(request.parent.page_id);
+      if (!current) throw new Error("Missing append parent");
+      const blocks = request.children.map((write) => ({
+        ...paragraph(write.id, request.parent), ...write,
+      }) as NotesBlock);
+      const updated = response(current.page.id, [...current.blocks.results, ...blocks]);
+      backend.pages.set(current.page.id, updated);
+      return { object: "list", type: "block", block: {}, results: blocks, next_cursor: null, has_more: false };
+    },
     openNotesPage: async (pageId: string) => {
       backend.record("open");
       const response = backend.pages.get(pageId);
@@ -265,4 +278,20 @@ describe("Notes critical page opening", () => {
     expect(notes.selectedPageId).toBe(pageAId);
     expect(notes.pageOpenMode).toBe("full");
   });
+  it("opens a previously emptied note with a writable body and persists that recovery only once", async () => {
+    const emptyPageId = "10000000-0000-4000-8000-000000000009";
+    backend.pages.set(emptyPageId, response(emptyPageId, []));
+    backend.clear();
+    await notes.selectPage(emptyPageId);
+    expect(notes.primaryContentReady).toBe(true);
+    expect(notes.flatBlocks).toHaveLength(1);
+    const paragraphId = notes.flatBlocks[0].block.id;
+    expect(notes.flatBlocks[0].block.type).toBe("paragraph");
+    await vi.waitFor(() => expect(backend.count("append")).toBe(1));
+    await notes.selectPage(pageBId);
+    await notes.selectPage(emptyPageId);
+    expect(notes.flatBlocks.map((item) => item.block.id)).toEqual([paragraphId]);
+    expect(backend.count("append")).toBe(1);
+  });
+
 });

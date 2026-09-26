@@ -9,6 +9,8 @@ import {
   blockConvertedToType,
   blockPlainText,
   blockWithCodeLanguage,
+  blockIndent,
+  blockUpdateWithIndent,
   blockWithHeadingToggleable,
   blockWithHeadingToggleOpen,
   blockWithTodoChecked,
@@ -76,7 +78,7 @@ interface NotesStructuralBlockActionsContext {
 }
 
 export interface NotesStructuralBlockActions {
-  convertBlock: (blockId: string, type: NotesBlockType, clearText?: boolean) => Promise<void>;
+  convertBlock: (blockId: string, type: NotesBlockType, clearText?: boolean, selection?: NotesTextSelection) => Promise<void>;
   toggleTodo: (blockId: string, checked: boolean) => Promise<void>;
   updateCodeLanguage: (blockId: string, language: string) => Promise<void>;
   updateBlockColor: (blockId: string, color: NotesColor) => Promise<void>;
@@ -116,7 +118,13 @@ export function createNotesStructuralBlockActions(
       .catch((error: unknown) => console.warn("Notes block update persistence failed", error));
   }
 
-  async function convertBlock(blockId: string, type: NotesBlockType, clearText = false): Promise<void> {
+  /** Convert a block while optionally retaining a specific caret through the undo snapshot. */
+  async function convertBlock(
+    blockId: string,
+    type: NotesBlockType,
+    clearText = false,
+    selection?: NotesTextSelection,
+  ): Promise<void> {
     const block = context.blockById(blockId);
     if (!block) return;
     if (type === "child_page") {
@@ -147,9 +155,9 @@ export function createNotesStructuralBlockActions(
     if (block.type === "table" || block.type === "table_row") return;
     if (block.type === "column_list" || block.type === "column") return;
     if (block.type === "tab") return;
-    const update = clearText ? createBlockUpdate(type, "") : blockConvertedToType(block, type);
+    const update = blockUpdateWithIndent(clearText ? createBlockUpdate(type, "") : blockConvertedToType(block, type), blockIndent(block));
     applyEditorUpdate(blockId, update);
-    context.requestBlockFocus(blockId);
+    context.requestBlockFocus(blockId, selection);
     recordUndoAfter("convert", before, blockId);
   }
 

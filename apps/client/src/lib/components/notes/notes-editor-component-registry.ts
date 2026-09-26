@@ -2,7 +2,7 @@ import {
   createLazyComponentLoader,
   type LazyComponentImporter,
 } from "$lib/lazy-component-loader";
-import type { NotesDatabaseViewKind } from "$lib/notes/database-view-kind";
+import type { NotesDatabaseViewKind } from "$lib/notes/contracts/database/base";
 import type { NotesBlockType } from "$lib/notes/types";
 import {
   importNotesAgentBridgeExportDialog,
@@ -57,6 +57,8 @@ export function notesBlockRenderFamily(type: NotesBlockType): NotesBlockRenderFa
     case "heading_2":
     case "heading_3":
     case "heading_4":
+    case "heading_5":
+    case "heading_6":
     case "bulleted_list_item":
     case "numbered_list_item":
     case "to_do":
@@ -119,6 +121,7 @@ export type LoadedNotesEditorPanel =
   | { kind: "confirm-dialog"; component: typeof import("$lib/components/ui/ConfirmDialog.svelte").default };
 
 export type NotesTextControlKind =
+  | "code-language"
   | "text-context-menu"
   | "link-editor"
   | "mention-menu"
@@ -127,6 +130,7 @@ export type NotesTextControlKind =
   | "button-controls";
 
 export type LoadedNotesTextControl =
+  | { kind: "code-language"; component: typeof import("$lib/components/settings/CustomSelect.svelte").default }
   | { kind: "text-context-menu"; component: typeof import("./NotesTextContextMenu.svelte").default }
   | { kind: "link-editor"; component: typeof import("./NotesLinkEditor.svelte").default }
   | { kind: "mention-menu"; component: typeof import("./NotesMentionMenu.svelte").default }
@@ -204,6 +208,8 @@ const EDITOR_PANEL_IMPORTERS = {
 } satisfies Readonly<Record<NotesEditorPanelKind, LazyComponentImporter<LoadedNotesEditorPanel>>>;
 
 const TEXT_CONTROL_IMPORTERS = {
+  "code-language": () => import("$lib/components/settings/CustomSelect.svelte")
+    .then((module) => ({ default: { kind: "code-language" as const, component: module.default } })),
   "text-context-menu": () => import("./NotesTextContextMenu.svelte")
     .then((module) => ({ default: { kind: "text-context-menu" as const, component: module.default } })),
   "link-editor": () => import("./NotesLinkEditor.svelte")

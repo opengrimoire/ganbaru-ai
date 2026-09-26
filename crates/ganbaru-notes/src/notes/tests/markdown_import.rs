@@ -138,7 +138,7 @@ fn markdown_import_reports_unsupported_or_unsafe_markdown_without_copying_files(
                 after_block_id: None,
                 markdown: r#"# Deep
 
-###### Too deep
+###### Small heading
 
 ![Local](images/local.png)
 
@@ -157,7 +157,6 @@ Paragraph with [relative](docs/page.md) link and inline ![image](https://example
         let result_json = serde_json::to_value(result).unwrap();
         let diagnostics = result_json["diagnostics"].as_array().unwrap();
         for code in [
-            "markdown_heading_depth_approximated",
             "markdown_image_reference_blocked",
             "markdown_html_unsupported",
             "markdown_reference_definition_unsupported",
@@ -181,5 +180,95 @@ Paragraph with [relative](docs/page.md) link and inline ![image](https://example
                 .await
                 .unwrap();
         assert_eq!(imported_file_assets, 0);
+    });
+}
+
+#[test]
+fn six_heading_levels_survive_markdown_html_import_and_export() {
+    crate::test_block_on(async {
+        let pool = migrated_memory_pool().await;
+        let markdown = (1..=6)
+            .map(|level| format!("{} Level {level}", "#".repeat(level)))
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        let html = (1..=6)
+            .map(|level| format!("<h{level}>Level {level}</h{level}>"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let imported_markdown = markdown_import::import_page(
+            &pool,
+            NoteMarkdownImportRequest {
+                parent: workspace_parent(),
+                title: Some("Headings".to_string()),
+                source_name: None,
+                after_block_id: None,
+                markdown: markdown.clone(),
+            },
+        )
+        .await
+        .unwrap();
+        let imported_html = html_import::import_page(
+            &pool,
+            NoteHtmlImportRequest {
+                parent: workspace_parent(),
+                title: Some("Headings".to_string()),
+                source_name: None,
+                after_block_id: None,
+                html,
+                keep_external_file_references: Some(false),
+                project_id: None,
+            },
+        )
+        .await
+        .unwrap();
+        for imported in [
+            serde_json::to_value(imported_markdown).unwrap(),
+            serde_json::to_value(imported_html).unwrap(),
+        ] {
+            assert!(imported["diagnostics"].as_array().unwrap().is_empty());
+            let blocks = imported["page"]["blocks"]["results"].as_array().unwrap();
+            assert_eq!(blocks.len(), 6);
+            for (index, block) in blocks.iter().enumerate() {
+                assert_eq!(block["type"], format!("heading_{}", index + 1));
+            }
+            let page_id = imported["page"]["page"]["id"].as_str().unwrap().to_string();
+            let exported = markdown_export::export_page(
+                &pool,
+                NoteMarkdownExportRequest {
+                    page_id: page_id.clone(),
+                    include_page_title: Some(false),
+                    include_comments: Some(false),
+                    include_resolved_comments: Some(false),
+                },
+            )
+            .await
+            .unwrap();
+            let exported = serde_json::to_value(exported).unwrap();
+            assert_eq!(exported["markdown"].as_str().unwrap().trim(), markdown);
+            let exported_html = html_export::export_page(
+                &pool,
+                NoteHtmlExportRequest {
+                    page_id,
+                    include_page_tree: Some(false),
+                    include_comments: Some(false),
+                    include_resolved_comments: Some(false),
+                    include_assets: Some(false),
+                    include_database_views: Some(false),
+                },
+            )
+            .await
+            .unwrap();
+            let exported_html = serde_json::to_value(exported_html).unwrap();
+            let files = exported_html["files"].as_array().unwrap();
+            let index = files
+                .iter()
+                .find(|file| file["path"] == "index.html")
+                .unwrap()["contents"]
+                .as_str()
+                .unwrap();
+            for level in 1..=6 {
+                assert!(index.contains(&format!("<h{level}>Level {level}</h{level}>")));
+            }
+        }
     });
 }

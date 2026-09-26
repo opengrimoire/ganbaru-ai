@@ -1,4 +1,6 @@
 <script lang="ts">
+  import NotesDatabaseMenu from "./NotesDatabaseMenu.svelte";
+  import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import { tick } from "svelte";
   import {
     beginLazyComponentLoad,
@@ -522,7 +524,7 @@
   ): void {
     event.stopPropagation();
     if (shouldKeepInputArrow(event)) return;
-    if (event.currentTarget instanceof HTMLSelectElement) return;
+    if (event.defaultPrevented || (event.currentTarget instanceof HTMLElement && event.currentTarget.hasAttribute("aria-haspopup"))) return;
     const maxRowIndex = Math.max(0, (table?.rows.length ?? 1) - 1);
     const maxColumnIndex = Math.max(0, visibleColumns.length - 1);
     let nextRowIndex = rowIndex;
@@ -554,7 +556,7 @@
   }
 </script>
 
-<section class="space-y-3 border-t border-border pt-3" aria-label={t("notes.databaseTableTitle")}>
+<section class="space-y-3 pt-2" aria-label={t("notes.databaseTableTitle")}>
   <div class="flex min-w-0 flex-wrap items-center gap-2 text-[0.8rem] text-muted-foreground">
     <span class="min-w-0 flex-1 truncate" role="status">
       {#if loading}
@@ -565,19 +567,57 @@
         {t("notes.databaseRowsCount", table?.rows.length ?? 0)}
       {/if}
     </span>
-    <label class="inline-flex min-w-0 items-center gap-1">
-      <span>{t("notes.databaseTableOpenMode")}</span>
-      <select
-        class="h-8 min-w-32 rounded-md border border-input bg-background px-2 text-[0.8rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-        value={rowOpenMode}
-        disabled={loading || mutating || !table}
-        onchange={(event) => updateRowOpenMode(event.currentTarget.value as NotesDatabaseTableRowOpenMode)}
-        onkeydown={(event) => event.stopPropagation()}
-      >
-        <option value="full_page">{rowOpenModeLabel("full_page")}</option>
-        <option value="side_panel">{rowOpenModeLabel("side_panel")}</option>
-      </select>
-    </label>
+    <NotesDatabaseMenu label={t("notes.databaseLayout")}>
+      <div class="grid gap-3">
+        <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
+          <span>{t("notes.databaseTableOpenMode")}</span>
+          <CustomSelect
+            inline
+            appearance="quiet"
+            contentAlign="start"
+            class="w-full min-w-0"
+            ariaLabel={t("notes.databaseTableOpenMode")}
+            value={String(rowOpenMode ?? "")}
+            disabled={loading || mutating || !table}
+            options={[{ value: "full_page", label: String(rowOpenModeLabel("full_page")) },
+              { value: "side_panel", label: String(rowOpenModeLabel("side_panel")) }]}
+            onChange={(nextValue) => updateRowOpenMode(nextValue as NotesDatabaseTableRowOpenMode)}
+            triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+          />
+        </div>
+      </div>
+    </NotesDatabaseMenu>
+    <NotesDatabaseMenu label={t("notes.databaseNew")} kind="new">
+      <div class="flex min-w-0 flex-wrap items-center gap-2">
+        <input
+          class="h-8 min-w-40 flex-1 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+          value={draftTitle}
+          placeholder={t("notes.databaseRowsNewPlaceholder")}
+          disabled={loading || mutating}
+          oninput={(event) => {
+            draftTitle = event.currentTarget.value;
+          }}
+          onkeydown={(event) => {
+            event.stopPropagation();
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void createRow();
+            }
+          }}
+        />
+        <button
+          type="button"
+          class="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-2 text-[0.8rem] text-primary-foreground disabled:pointer-events-none disabled:opacity-50"
+          disabled={loading || mutating}
+          onclick={() => {
+            void createRow();
+          }}
+        >
+          <Plus class="size-3.5" aria-hidden="true" />
+          <span>{selectedTemplate ? t("notes.databaseRowsAddFromTemplate", selectedTemplate.name) : t("notes.databaseRowsAdd")}</span>
+        </button>
+      </div>
+    </NotesDatabaseMenu>
     <button
       type="button"
       class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
@@ -592,159 +632,11 @@
     </button>
   </div>
 
-  <div class="flex min-w-0 flex-wrap items-center gap-2">
-    <input
-      class="h-8 min-w-40 flex-1 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-      value={draftTitle}
-      placeholder={t("notes.databaseRowsNewPlaceholder")}
-      disabled={loading || mutating}
-      oninput={(event) => {
-        draftTitle = event.currentTarget.value;
-      }}
-      onkeydown={(event) => {
-        event.stopPropagation();
-        if (event.key === "Enter") {
-          event.preventDefault();
-          void createRow();
-        }
-      }}
-    />
-    <button
-      type="button"
-      class="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-2 text-[0.8rem] text-primary-foreground disabled:pointer-events-none disabled:opacity-50"
-      disabled={loading || mutating}
-      onclick={() => {
-        void createRow();
-      }}
-    >
-      <Plus class="size-3.5" aria-hidden="true" />
-      <span>{selectedTemplate ? t("notes.databaseRowsAddFromTemplate", selectedTemplate.name) : t("notes.databaseRowsAdd")}</span>
-    </button>
-  </div>
-
   {#if table}
     <div class="grid gap-2 @container">
-      <details class="rounded-md border border-border p-2 text-[0.8rem]">
-        <summary class="cursor-pointer text-foreground">{t("notes.databaseTemplatesTitle")}</summary>
-        <div class="mt-2 grid min-w-0 gap-2 @lg:grid-cols-[minmax(8rem,1fr)_minmax(8rem,1fr)_auto]">
-          <label class="min-w-0 text-muted-foreground">
-            <span class="mb-1 block">{t("notes.databaseTemplatesUse")}</span>
-            <select
-              class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-              value={selectedTemplateId}
-              disabled={mutating}
-              onchange={(event) => {
-                selectedTemplateId = event.currentTarget.value;
-              }}
-              onkeydown={(event) => event.stopPropagation()}
-            >
-              <option value="">{t("notes.databaseTemplatesNone")}</option>
-              {#each templates as template (template.id)}
-                <option value={template.id}>
-                  {template.is_default ? t("notes.databaseTemplatesDefaultOption", template.name) : template.name}
-                </option>
-              {/each}
-            </select>
-          </label>
-          <label class="min-w-0 text-muted-foreground">
-            <span class="mb-1 block">{t("notes.databaseTemplatesName")}</span>
-            <input
-              class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-              value={templateName}
-              placeholder={t("notes.databaseTemplatesNamePlaceholder")}
-              disabled={mutating}
-              oninput={(event) => {
-                templateName = event.currentTarget.value;
-              }}
-              onkeydown={(event) => event.stopPropagation()}
-            />
-          </label>
-          <label class="min-w-0 text-muted-foreground">
-            <span class="mb-1 block">{t("notes.databaseTemplatesSourceRow")}</span>
-            <select
-              class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-              value={templateSourceRowId}
-              disabled={mutating || table.rows.length === 0}
-              onchange={(event) => {
-                templateSourceRowId = event.currentTarget.value;
-              }}
-              onkeydown={(event) => event.stopPropagation()}
-            >
-              <option value="">{t("notes.databaseTemplatesFirstRow")}</option>
-              {#each table.rows as row (row.id)}
-                <option value={row.id}>{rowTitle(row)}</option>
-              {/each}
-            </select>
-          </label>
-          <label class="flex min-w-0 items-center gap-2 text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={createTemplateAsDefault}
-              disabled={mutating}
-              onchange={(event) => {
-                createTemplateAsDefault = event.currentTarget.checked;
-              }}
-              onkeydown={(event) => event.stopPropagation()}
-            />
-            <span>{t("notes.databaseTemplatesMakeDefault")}</span>
-          </label>
-          <div class="flex min-w-0 flex-wrap items-center gap-1 @lg:col-span-2">
-            <button
-              type="button"
-              class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
-              disabled={mutating || !templateName.trim() || table.rows.length === 0}
-              onclick={() => {
-                void createTemplateFromRow();
-              }}
-            >
-              <Plus class="size-3.5" aria-hidden="true" />
-              <span>{t("notes.databaseTemplatesCreate")}</span>
-            </button>
-            <button
-              type="button"
-              class="inline-flex h-8 items-center gap-1 rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
-              disabled={mutating || !selectedTemplateId}
-              onclick={() => {
-                void deleteSelectedTemplate();
-              }}
-            >
-              <Trash2 class="size-3.5" aria-hidden="true" />
-              <span>{t("notes.databaseTemplatesDelete")}</span>
-            </button>
-          </div>
-        </div>
-      </details>
+      <div class="flex flex-wrap items-center gap-1">
+        <NotesDatabaseMenu label={t("notes.databaseTableColumns")} kind="properties">
 
-      <div class="flex flex-wrap gap-2">
-        <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={() => requestCsvPanel("database-csv-import")}>{t("notes.databaseCsvImportTitle")}</button>
-        {#if fileExportAvailable}
-        <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={() => requestCsvPanel("database-csv-export")}>{t("notes.databaseCsvExportTitle")}</button>
-        {/if}
-      </div>
-      {#if csvPanelOpen === "database-csv-import" && csvPanelLoadState?.status === "ready" && csvPanelLoadState.component.kind === "database-csv-import"}
-        {@const NotesDatabaseCsvImportPanel = csvPanelLoadState.component.component}
-        <NotesDatabaseCsvImportPanel
-          {dataSourceId}
-          disabled={mutating || loading}
-          onImported={async () => {
-            await loadTable();
-          }}
-        />
-      {:else if fileExportAvailable && csvPanelOpen === "database-csv-export" && csvPanelLoadState?.status === "ready" && csvPanelLoadState.component.kind === "database-csv-export"}
-        {@const NotesDatabaseCsvExportPanel = csvPanelLoadState.component.component}
-        <NotesDatabaseCsvExportPanel
-          {dataSourceId}
-          {databaseId}
-          {viewId}
-          disabled={mutating || loading}
-        />
-      {:else if csvPanelOpen && csvPanelLoadState?.status === "failed"}
-        <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={retryCsvPanel}>{t("common.retry")}</button>
-      {/if}
-
-      <div class="grid gap-2 @lg:grid-cols-3">
-        <details class="rounded-md border border-border p-2 text-[0.8rem]">
-          <summary class="cursor-pointer text-foreground">{t("notes.databaseTableColumns")}</summary>
           <div class="mt-2 grid gap-1">
             {#each columns as column (column.id)}
               <label class="flex min-w-0 items-center gap-2 rounded-sm px-1 py-0.5 hover:bg-accent/60">
@@ -764,39 +656,40 @@
               </label>
             {/each}
           </div>
-        </details>
+        </NotesDatabaseMenu>
 
-        <details class="rounded-md border border-border p-2 text-[0.8rem]">
-          <summary class="cursor-pointer text-foreground">{t("notes.databaseTableSorts")}</summary>
+        <NotesDatabaseMenu label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length}>
+
           <div class="mt-2 grid gap-2">
             {#each sorts as sort, index}
               <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1">
-                <select
-                  class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={sort.property_id}
+                <CustomSelect
+                  inline
+                  appearance="quiet"
+                  contentAlign="start"
+                  class="w-full min-w-0"
+                  ariaLabel={t("notes.databaseTableSortProperty")}
+                  value={String(sort.property_id ?? "")}
                   disabled={mutating}
-                  aria-label={t("notes.databaseTableSortProperty")}
-                  onchange={(event) => updateSort(index, { property_id: event.currentTarget.value })}
-                  onkeydown={(event) => event.stopPropagation()}
-                >
-                  {#each columns as column (column.id)}
-                    <option value={column.id}>{column.name}</option>
-                  {/each}
-                </select>
-                <select
-                  class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={sort.direction}
+                  options={[...(columns).map((column) => ({ value: String(column.id), label: String(column.name) }))]}
+                  onChange={(nextValue) => updateSort(index, { property_id: nextValue })}
+                  triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+                />
+                <CustomSelect
+                  inline
+                  appearance="quiet"
+                  contentAlign="start"
+                  class="w-full min-w-0"
+                  ariaLabel={t("notes.databaseTableSortDirection")}
+                  value={String(sort.direction ?? "")}
                   disabled={mutating}
-                  aria-label={t("notes.databaseTableSortDirection")}
-                  onchange={(event) =>
-                    updateSort(index, {
-                      direction: event.currentTarget.value === "descending" ? "descending" : "ascending",
-                    })}
-                  onkeydown={(event) => event.stopPropagation()}
-                >
-                  <option value="ascending">{t("notes.databaseTableSortAscending")}</option>
-                  <option value="descending">{t("notes.databaseTableSortDescending")}</option>
-                </select>
+                  options={[{ value: "ascending", label: t("notes.databaseTableSortAscending") },
+                    { value: "descending", label: t("notes.databaseTableSortDescending") }]}
+                  onChange={(nextValue) => updateSort(index, {
+                    direction: nextValue === "descending" ? "descending" : "ascending",
+                  })}
+                  triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+                />
                 <button
                   type="button"
                   class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
@@ -819,40 +712,39 @@
               <span>{t("notes.databaseTableAddSort")}</span>
             </button>
           </div>
-        </details>
+        </NotesDatabaseMenu>
 
-        <details class="rounded-md border border-border p-2 text-[0.8rem]">
-          <summary class="cursor-pointer text-foreground">{t("notes.databaseTableFilters")}</summary>
+        <NotesDatabaseMenu label={t("notes.databaseTableFilters")} kind="filter" activeCount={filters.length}>
+
           <div class="mt-2 grid gap-2">
             {#each filters as filter, index}
               <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-1">
-                <select
-                  class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={filter.property_id}
+                <CustomSelect
+                  inline
+                  appearance="quiet"
+                  contentAlign="start"
+                  class="w-full min-w-0"
+                  ariaLabel={t("notes.databaseTableFilterProperty")}
+                  value={String(filter.property_id ?? "")}
                   disabled={mutating}
-                  aria-label={t("notes.databaseTableFilterProperty")}
-                  onchange={(event) => updateFilter(index, { property_id: event.currentTarget.value })}
-                  onkeydown={(event) => event.stopPropagation()}
-                >
-                  {#each columns as column (column.id)}
-                    <option value={column.id}>{column.name}</option>
-                  {/each}
-                </select>
-                <select
-                  class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={filter.condition}
+                  options={[...(columns).map((column) => ({ value: String(column.id), label: String(column.name) }))]}
+                  onChange={(nextValue) => updateFilter(index, { property_id: nextValue })}
+                  triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+                />
+                <CustomSelect
+                  inline
+                  appearance="quiet"
+                  contentAlign="start"
+                  class="w-full min-w-0"
+                  ariaLabel={t("notes.databaseTableFilterConditionLabel")}
+                  value={String(filter.condition ?? "")}
                   disabled={mutating}
-                  aria-label={t("notes.databaseTableFilterConditionLabel")}
-                  onchange={(event) =>
-                    updateFilter(index, {
-                      condition: event.currentTarget.value as NotesDatabaseTableFilterCondition,
-                    })}
-                  onkeydown={(event) => event.stopPropagation()}
-                >
-                  {#each FILTER_CONDITIONS as condition}
-                    <option value={condition}>{filterConditionLabel(condition)}</option>
-                  {/each}
-                </select>
+                  options={[...(FILTER_CONDITIONS).map((condition) => ({ value: String(condition), label: String(filterConditionLabel(condition)) }))]}
+                  onChange={(nextValue) => updateFilter(index, {
+                    condition: nextValue as NotesDatabaseTableFilterCondition,
+                  })}
+                  triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+                />
                 <input
                   class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
                   value={String(filter.value ?? "")}
@@ -883,44 +775,166 @@
               <span>{t("notes.databaseTableAddFilter")}</span>
             </button>
           </div>
-        </details>
+        </NotesDatabaseMenu>
+        <NotesDatabaseMenu label={t("notes.databaseTemplatesTitle")} kind="layout">
+
+          <div class="mt-2 grid min-w-0 gap-2 @lg:grid-cols-[minmax(8rem,1fr)_minmax(8rem,1fr)_auto]">
+            <div class="min-w-0 text-muted-foreground">
+              <span class="mb-1 block">{t("notes.databaseTemplatesUse")}</span>
+              <CustomSelect
+                inline
+                appearance="quiet"
+                contentAlign="start"
+                class="w-full min-w-0"
+                ariaLabel={t("notes.databaseTemplatesUse")}
+                value={String(selectedTemplateId ?? "")}
+                disabled={mutating}
+                options={[{ value: "", label: t("notes.databaseTemplatesNone") },
+                  ...(templates).map((template) => ({ value: String(template.id), label: String(template.is_default ? t("notes.databaseTemplatesDefaultOption", template.name) : template.name) }))]}
+                onChange={(nextValue) => {
+                  selectedTemplateId = nextValue;
+                }}
+                triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+              />
+            </div>
+            <label class="min-w-0 text-muted-foreground">
+              <span class="mb-1 block">{t("notes.databaseTemplatesName")}</span>
+              <input
+                class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+                value={templateName}
+                placeholder={t("notes.databaseTemplatesNamePlaceholder")}
+                disabled={mutating}
+                oninput={(event) => {
+                  templateName = event.currentTarget.value;
+                }}
+                onkeydown={(event) => event.stopPropagation()}
+              />
+            </label>
+            <div class="min-w-0 text-muted-foreground">
+              <span class="mb-1 block">{t("notes.databaseTemplatesSourceRow")}</span>
+              <CustomSelect
+                inline
+                appearance="quiet"
+                contentAlign="start"
+                class="w-full min-w-0"
+                ariaLabel={t("notes.databaseTemplatesSourceRow")}
+                value={String(templateSourceRowId ?? "")}
+                disabled={mutating || table.rows.length === 0}
+                options={[{ value: "", label: t("notes.databaseTemplatesFirstRow") },
+                  ...(table.rows).map((row) => ({ value: String(row.id), label: String(rowTitle(row)) }))]}
+                onChange={(nextValue) => {
+                  templateSourceRowId = nextValue;
+                }}
+                triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+              />
+            </div>
+            <label class="flex min-w-0 items-center gap-2 text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={createTemplateAsDefault}
+                disabled={mutating}
+                onchange={(event) => {
+                  createTemplateAsDefault = event.currentTarget.checked;
+                }}
+                onkeydown={(event) => event.stopPropagation()}
+              />
+              <span>{t("notes.databaseTemplatesMakeDefault")}</span>
+            </label>
+            <div class="flex min-w-0 flex-wrap items-center gap-1 @lg:col-span-2">
+              <button
+                type="button"
+                class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+                disabled={mutating || !templateName.trim() || table.rows.length === 0}
+                onclick={() => {
+                  void createTemplateFromRow();
+                }}
+              >
+                <Plus class="size-3.5" aria-hidden="true" />
+                <span>{t("notes.databaseTemplatesCreate")}</span>
+              </button>
+              <button
+                type="button"
+                class="inline-flex h-8 items-center gap-1 rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
+                disabled={mutating || !selectedTemplateId}
+                onclick={() => {
+                  void deleteSelectedTemplate();
+                }}
+              >
+                <Trash2 class="size-3.5" aria-hidden="true" />
+                <span>{t("notes.databaseTemplatesDelete")}</span>
+              </button>
+            </div>
+          </div>
+        </NotesDatabaseMenu>
+
+        <NotesDatabaseMenu label={t("notes.databaseMore")} kind="actions" iconOnly>
+          <div class="grid gap-1">
+            <button class="min-h-8 rounded-md px-2 text-left text-[0.8rem] hover:bg-accent" type="button" onclick={() => requestCsvPanel("database-csv-import")}>{t("notes.databaseCsvImportTitle")}</button>
+            {#if fileExportAvailable}
+              <button class="min-h-8 rounded-md px-2 text-left text-[0.8rem] hover:bg-accent" type="button" onclick={() => requestCsvPanel("database-csv-export")}>{t("notes.databaseCsvExportTitle")}</button>
+            {/if}
+          </div>
+        </NotesDatabaseMenu>
       </div>
 
-      <div bind:this={tableRoot} class="min-w-0 overflow-x-auto rounded-md border border-border">
+      {#if csvPanelOpen === "database-csv-import" && csvPanelLoadState?.status === "ready" && csvPanelLoadState.component.kind === "database-csv-import"}
+        {@const NotesDatabaseCsvImportPanel = csvPanelLoadState.component.component}
+        <NotesDatabaseCsvImportPanel
+          {dataSourceId}
+          disabled={mutating || loading}
+          onImported={async () => {
+            await loadTable();
+          }}
+        />
+      {:else if fileExportAvailable && csvPanelOpen === "database-csv-export" && csvPanelLoadState?.status === "ready" && csvPanelLoadState.component.kind === "database-csv-export"}
+        {@const NotesDatabaseCsvExportPanel = csvPanelLoadState.component.component}
+        <NotesDatabaseCsvExportPanel
+          {dataSourceId}
+          {databaseId}
+          {viewId}
+          disabled={mutating || loading}
+        />
+      {:else if csvPanelOpen && csvPanelLoadState?.status === "failed"}
+        <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={retryCsvPanel}>{t("common.retry")}</button>
+      {/if}
+
+      <div bind:this={tableRoot} class="min-w-0 overflow-x-auto border-y border-border/60">
         <table class="min-w-full border-collapse text-[0.866667rem]">
-          <thead class="bg-muted/50 text-left text-[0.733333rem] text-muted-foreground">
+          <thead class="text-left text-[0.8rem] text-muted-foreground">
             <tr>
               <th class="w-10 border-b border-border px-1 py-1 font-medium">
                 <span class="sr-only">{t("notes.databaseTableRowActions")}</span>
               </th>
               {#each visibleColumns as column (column.id)}
                 <th
-                  class="border-b border-l border-border px-2 py-1 font-medium"
+                  class="group/column border-b border-l border-border/60 px-2 py-1 font-medium"
                   style={`width: ${column.width}px; min-width: ${column.width}px;`}
                 >
                   <div class="flex min-w-0 items-center gap-1">
                     <span class="min-w-0 flex-1 truncate">{column.name}</span>
-                    <ChevronsLeftRight class="size-3.5 shrink-0" aria-hidden="true" />
-                    <button
-                      type="button"
-                      class="inline-flex size-6 items-center justify-center rounded-sm hover:bg-accent disabled:pointer-events-none disabled:opacity-40"
-                      disabled={mutating}
-                      aria-label={t("notes.databaseTableNarrowColumn", column.name)}
-                      title={t("notes.databaseTableNarrowColumn", column.name)}
-                      onclick={() => updateColumnWidth(column.id, -32)}
-                    >
-                      <Minus class="size-3" aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      class="inline-flex size-6 items-center justify-center rounded-sm hover:bg-accent disabled:pointer-events-none disabled:opacity-40"
-                      disabled={mutating}
-                      aria-label={t("notes.databaseTableWidenColumn", column.name)}
-                      title={t("notes.databaseTableWidenColumn", column.name)}
-                      onclick={() => updateColumnWidth(column.id, 32)}
-                    >
-                      <Plus class="size-3" aria-hidden="true" />
-                    </button>
+                    <div class="flex items-center opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/column:opacity-100 [@media(hover:hover)]:group-focus-within/column:opacity-100">
+                      <ChevronsLeftRight class="size-3.5 shrink-0" aria-hidden="true" />
+                      <button
+                        type="button"
+                        class="inline-flex size-6 items-center justify-center rounded-sm hover:bg-accent disabled:pointer-events-none disabled:opacity-40"
+                        disabled={mutating}
+                        aria-label={t("notes.databaseTableNarrowColumn", column.name)}
+                        title={t("notes.databaseTableNarrowColumn", column.name)}
+                        onclick={() => updateColumnWidth(column.id, -32)}
+                      >
+                        <Minus class="size-3" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        class="inline-flex size-6 items-center justify-center rounded-sm hover:bg-accent disabled:pointer-events-none disabled:opacity-40"
+                        disabled={mutating}
+                        aria-label={t("notes.databaseTableWidenColumn", column.name)}
+                        title={t("notes.databaseTableWidenColumn", column.name)}
+                        onclick={() => updateColumnWidth(column.id, 32)}
+                      >
+                        <Plus class="size-3" aria-hidden="true" />
+                      </button>
+                    </div>
                   </div>
                 </th>
               {/each}
@@ -929,48 +943,53 @@
           <tbody>
             {#each table.rows as row, rowIndex (row.id)}
               {@const title = rowTitle(row)}
-              <tr class="border-b border-border last:border-b-0">
+              <tr class="group/row h-11 border-b border-border/50 transition-colors last:border-b-0 hover:bg-accent/20">
                 <td class="w-10 px-1 py-1 align-middle">
-                  <div class="flex items-center gap-0.5">
-                    <button
-                      type="button"
-                      class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-                      aria-label={t("notes.databaseRowsOpen", title)}
-                      title={t("notes.databaseRowsOpen", title)}
-                      onclick={() => openRow(row)}
-                    >
-                      <FileText class="size-3.5" aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
-                      disabled={mutating}
-                      aria-label={t("notes.databaseRowsDuplicate", title)}
-                      title={t("notes.databaseRowsDuplicate", title)}
-                      onclick={() => {
-                        void duplicateRow(row);
-                      }}
-                    >
-                      <Copy class="size-3.5" aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      class="inline-flex size-7 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
-                      disabled={mutating}
-                      aria-label={t("notes.databaseRowsTrash", title)}
-                      title={t("notes.databaseRowsTrash", title)}
-                      onclick={() => {
-                        void trashRow(row);
-                      }}
-                    >
-                      <Trash2 class="size-3.5" aria-hidden="true" />
-                    </button>
-                  </div>
+                  <NotesDatabaseMenu iconOnly kind="actions" label={t("notes.databaseTableRowActions")}>
+                    <div class="grid gap-1">
+                      <button
+                        type="button"
+                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                        aria-label={t("notes.databaseRowsOpen", title)}
+                        title={t("notes.databaseRowsOpen", title)}
+                        onclick={() => openRow(row)}
+                      >
+                        <FileText class="size-3.5" aria-hidden="true" />
+                        <span class="truncate">{t("notes.databaseRowsOpen", title)}</span>
+                      </button>
+                      <button
+                        type="button"
+                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                        disabled={mutating}
+                        aria-label={t("notes.databaseRowsDuplicate", title)}
+                        title={t("notes.databaseRowsDuplicate", title)}
+                        onclick={() => {
+                          void duplicateRow(row);
+                        }}
+                      >
+                        <Copy class="size-3.5" aria-hidden="true" />
+                        <span class="truncate">{t("notes.databaseRowsDuplicate", title)}</span>
+                      </button>
+                      <button
+                        type="button"
+                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                        disabled={mutating}
+                        aria-label={t("notes.databaseRowsTrash", title)}
+                        title={t("notes.databaseRowsTrash", title)}
+                        onclick={() => {
+                          void trashRow(row);
+                        }}
+                      >
+                        <Trash2 class="size-3.5" aria-hidden="true" />
+                        <span class="truncate">{t("notes.databaseRowsTrash", title)}</span>
+                      </button>
+                    </div>
+                  </NotesDatabaseMenu>
                 </td>
                 {#each visibleColumns as column, columnIndex (column.id)}
                   {@const editValue = notesDatabaseTableCellEditValue(row, column)}
                   <td
-                    class="border-l border-border px-1 py-1 align-middle"
+                    class="border-l border-border/40 px-2 py-1 align-middle"
                     style={`width: ${column.width}px; min-width: ${column.width}px;`}
                   >
                     {#if column.type === "checkbox"}
@@ -990,24 +1009,21 @@
                         />
                       </label>
                     {:else if column.type === "select" || column.type === "status"}
-                      <select
-                        data-table-cell="true"
-                        data-row-index={rowIndex}
-                        data-column-index={columnIndex}
-                        class="h-8 w-full min-w-0 rounded-sm border border-transparent bg-transparent px-1 text-foreground outline-none hover:border-input focus:border-input focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+                      <CustomSelect
+                        inline
+                        appearance="quiet"
+                        contentAlign="start"
+                        class="w-full min-w-0"
+                        ariaLabel={column.name}
                         value={String(editValue)}
                         disabled={mutating || !notesDatabaseTableColumnCanEdit(column)}
-                        aria-label={column.name}
-                        onchange={(event) => {
-                          void saveCell(row, column, event.currentTarget.value || null);
+                        options={[{ value: "", label: t("notes.databaseTableEmptyCell") },
+                          ...(column.options).map((option) => ({ value: String(option.name), label: String(option.name) }))]}
+                        onChange={(nextValue) => {
+                          void saveCell(row, column, nextValue || null);
                         }}
-                        onkeydown={(event) => handleCellKeydown(event, rowIndex, columnIndex)}
-                      >
-                        <option value="">{t("notes.databaseTableEmptyCell")}</option>
-                        {#each column.options as option (option.id)}
-                          <option value={option.name}>{option.name}</option>
-                        {/each}
-                        </select>
+                        triggerProps={{ "data-table-cell": "true", "data-row-index": rowIndex, "data-column-index": columnIndex, "onkeydown": (event) => handleCellKeydown(event, rowIndex, columnIndex) }}
+                      />
                     {:else if column.type === "relation"}
                       <NotesDatabaseRelationCell
                         {row}
@@ -1092,7 +1108,7 @@
         <p class="text-[0.8rem] text-muted-foreground">{t("notes.databaseTableNoVisibleColumns")}</p>
       {/if}
 
-      {#if rowOpenMode === "side_panel"}
+      {#if rowOpenMode === "side_panel" && selectedPanelRow}
         <aside class="rounded-md border border-border p-3" aria-label={t("notes.databaseTableSidePanelTitle")}>
           {#if selectedPanelRow}
             {@const title = rowTitle(selectedPanelRow)}

@@ -4,6 +4,7 @@
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { NOTES_PAGE_CHROME_EMOJI_SCALE } from "$lib/notes/page-icon";
   import type { NotesHistoricalPage } from "$lib/notes/types";
+  import { notesNumberedListOrdinals } from "$lib/notes/block-editor-ui";
   import NotesHistoricalBlock from "./NotesHistoricalBlock.svelte";
   import NotesPageCover from "./NotesPageCover.svelte";
   import NotesPageIcon from "./NotesPageIcon.svelte";
@@ -20,6 +21,20 @@
 
   const { t } = getLocalization();
 
+  const listOrdinals = $derived(notesNumberedListOrdinals(page.blocks.map((block, index) => ({
+    id: String(block.id ?? index),
+    type: typeof block.type === "string" ? block.type : "paragraph",
+    parentId: parentBlockId(block),
+    indent: blockIndent(block),
+  }))));
+
+  function blockIndent(block: Record<string, unknown>): number {
+    const payload = block.payload ?? (typeof block.type === "string" ? block[block.type] : null);
+    if (!payload || typeof payload !== "object" || !("ganbaru_indent" in payload)) return 0;
+    const indent = payload.ganbaru_indent;
+    return typeof indent === "number" && Number.isSafeInteger(indent) && indent >= 0 ? indent : 0;
+  }
+
   function blockDepth(block: Record<string, unknown>): number {
     const blocksById = new Map(
       page.blocks
@@ -27,13 +42,13 @@
         .map((item) => [item.id as string, item]),
     );
     let parentId = parentBlockId(block);
-    let depth = 0;
+    let depth = blockIndent(block);
     const visited = new Set<string>();
-    while (parentId && depth < 8 && !visited.has(parentId)) {
+    while (parentId && !visited.has(parentId)) {
       visited.add(parentId);
       const parent = blocksById.get(parentId);
       if (!parent) break;
-      depth += 1;
+      depth += 1 + blockIndent(parent);
       parentId = parentBlockId(parent);
     }
     return depth;
@@ -93,7 +108,7 @@
       {:else}
         <div class="flex flex-col gap-2">
           {#each page.blocks as block, index (`${String(block.id ?? index)}`)}
-            <NotesHistoricalBlock {block} depth={blockDepth(block)} />
+            <NotesHistoricalBlock {block} depth={blockDepth(block)} listOrdinal={listOrdinals.get(String(block.id ?? index))} />
           {/each}
         </div>
       {/if}

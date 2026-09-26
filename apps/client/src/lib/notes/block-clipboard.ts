@@ -4,10 +4,11 @@ import {
   createCodePayload,
   createTodoPayload,
 } from "./block-factory";
-import type { NotesBlockType, NotesBlockUpdate, NotesBlockWrite } from "./types";
+import type { NotesBlockType, NotesBlockUpdate, NotesBlockWrite, NotesParent, NotesAppendBlockChildrenRequest } from "./types";
 
 export const NOTES_CLIPBOARD_MAX_TEXT_LENGTH = 64 * 1024;
 export const NOTES_CLIPBOARD_MAX_BLOCKS = 101;
+const MARKDOWN_TAB_WIDTH = 4;
 
 type NotesPastedTextBlockType =
   | "paragraph"
@@ -15,6 +16,8 @@ type NotesPastedTextBlockType =
   | "heading_2"
   | "heading_3"
   | "heading_4"
+  | "heading_5"
+  | "heading_6"
   | "bulleted_list_item"
   | "numbered_list_item"
   | "to_do"
@@ -26,6 +29,7 @@ type NotesPastedTextBlockType =
 interface NotesPastedBlockSegment {
   type: NotesPastedTextBlockType;
   content: string;
+  depth?: number;
   checked?: boolean;
   language?: string;
 }
@@ -33,6 +37,7 @@ interface NotesPastedBlockSegment {
 export interface NotesPlainTextPastePlan {
   currentUpdate: NotesBlockUpdate;
   appendedBlocks: NotesBlockWrite[];
+  blockDepths: number[];
   focusBlockId: string;
   focusOffset: number;
 }
@@ -67,15 +72,20 @@ function markdownPrefixSegment(line: string): NotesPastedBlockSegment | null {
     return { type: "divider", content: "" };
   }
 
-  const heading = /^(#{1,4})\s+(.*)$/u.exec(trimmedRight);
+  const heading = /^(#{1,6})\s+(.*)$/u.exec(trimmedRight);
   if (heading) {
     const level = heading[1].length;
     const content = heading[2] ?? "";
     if (level === 1) return { type: "heading_1", content };
     if (level === 2) return { type: "heading_2", content };
     if (level === 3) return { type: "heading_3", content };
-    return { type: "heading_4", content };
+    if (level === 4) return { type: "heading_4", content };
+    if (level === 5) return { type: "heading_5", content };
+    return { type: "heading_6", content };
   }
+
+  const task = /^[-*+]\s+\[([ xX])\]\s+(.*)$/u.exec(trimmedRight);
+  if (task) return { type: "to_do", content: task[2], checked: task[1] !== " " };
 
   const bullet = /^[-*+]\s+(.*)$/u.exec(trimmedRight);
   if (bullet) return { type: "bulleted_list_item", content: bullet[1] ?? "" };
@@ -111,8 +121,14 @@ function parsePastedTextSegments(
 ): NotesPastedBlockSegment[] {
   const lines = text.split("\n");
   const segments: NotesPastedBlockSegment[] = [];
+  const listIndents: number[] = [];
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index] ?? "";
+    if (!line.trim() && listIndents.length) {
+      const nextLine = lines.slice(index + 1).find((candidate) => candidate.trim());
+      const nextSegment = nextLine ? markdownPrefixSegment(nextLine.trimStart()) : null;
+      if (nextSegment && ["bulleted_list_item", "numbered_list_item", "to_do"].includes(nextSegment.type)) continue;
+    }
     if (line.trim().startsWith("```")) {
       const language = languageFromFence(line);
       const codeLines: string[] = [];
@@ -125,9 +141,26 @@ function parsePastedTextSegments(
       continue;
     }
 
-    const markdownSegment = index === 0 && !allowMarkdownForFirstLine
-      ? null
-      : markdownPrefixSegment(line);
+    const indentation = line.match(/^[ \t]*/u)?.[0] ?? "";
+    const indent = [...indentation].reduce((column, character) =>
+      character === "\t" ? column + MARKDOWN_TAB_WIDTH - column % MARKDOWN_TAB_WIDTH : column + 1, 0);
+    const sourceSegment = markdownPrefixSegment(line.slice(indentation.length));
+    const markdownSegment: NotesPastedBlockSegment | null = index === 0 && !allowMarkdownForFirstLine
+      ? { type: "paragraph", content: line }
+      : sourceSegment;
+    if (markdownSegment && sourceSegment && ["bulleted_list_item", "numbered_list_item", "to_do"].includes(sourceSegment.type)) {
+      while (listIndents.length && listIndents[listIndents.length - 1] > indent) listIndents.pop();
+      if (!listIndents.length || listIndents[listIndents.length - 1] < indent) listIndents.push(indent);
+      markdownSegment.depth = listIndents.length - 1;
+    } else if (!markdownSegment && line.trim() && listIndents.length && indent > listIndents[listIndents.length - 1]) {
+      const previous = segments.at(-1);
+      if (previous) {
+        previous.content += `\n${line.trimStart()}`;
+        continue;
+      }
+    } else if (line.trim()) {
+      listIndents.length = 0;
+    }
     segments.push(markdownSegment ?? { type: "paragraph", content: line });
   }
   return segments;
@@ -297,7 +330,37 @@ export function planNotesPlainTextPaste(
   return {
     currentUpdate: createUpdateForSegment(input.currentBlockType, prefix, firstSegment),
     appendedBlocks,
+    blockDepths: segments.map((segment) => segment.depth ?? 0),
     focusBlockId: appendedBlocks.at(-1)?.id ?? input.currentBlockId,
     focusOffset,
   };
+}
+
+/** Group pasted blocks by their structural parent, preserving preorder and sibling order. */
+export function notesPasteAppendRequests(
+  currentBlockId: string,
+  parent: NotesParent,
+  writes: readonly NotesBlockWrite[],
+  depths: readonly number[] = [],
+): NotesAppendBlockChildrenRequest[] {
+  const ancestors = [currentBlockId];
+  const groups = new Map<string, NotesAppendBlockChildrenRequest>();
+  for (const [index, write] of writes.entries()) {
+    const depth = Math.min(Math.max(0, depths[index + 1] ?? 0), ancestors.length);
+    const parentId = depth > 0 ? ancestors[depth - 1] : null;
+    const key = parentId ?? "";
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        parent: parentId ? { type: "block_id", block_id: parentId } : parent,
+        after: parentId ? null : currentBlockId,
+        children: [],
+      };
+      groups.set(key, group);
+    }
+    group.children.push(write);
+    ancestors[depth] = write.id;
+    ancestors.length = depth + 1;
+  }
+  return [...groups.values()];
 }

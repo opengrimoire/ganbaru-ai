@@ -103,6 +103,9 @@ export function filterNotesSlashCommandItems(
 ): readonly NotesSlashCommandItem[] {
   const terms = normalizeSearchText(query).split(" ").filter(Boolean);
   if (terms.length === 0) return items;
+  if (/^#{1,6}$/u.test(query.trim())) {
+    return items.filter((item) => item.command.kind === "block" && item.command.blockType === `heading_${query.trim().length}`);
+  }
   return items.filter((item) => {
     return terms.every((term) => item.searchText.includes(term));
   });
@@ -160,11 +163,13 @@ export function nextNotesSlashActiveIndex(
     : (current + itemCount - 1) % itemCount;
 }
 
+/** Follow an existing slash query or text entered into an empty block, independently of keyboard layout. */
 export function notesSlashInputSessionFromText(
   text: string,
   wasOpen: boolean,
+  previousText?: string,
 ): NotesSlashInputSession {
-  if (!wasOpen || !text.startsWith("/") || text.includes("\n")) {
+  if ((!wasOpen && previousText !== "") || !text.startsWith("/") || text.includes("\n")) {
     return { open: false, query: "" };
   }
   return { open: true, query: text.slice(1) };
@@ -233,6 +238,10 @@ function blockKeywords(type: NotesInsertableBlockType): readonly string[] {
       return ["heading 3", "h3"];
     case "heading_4":
       return ["heading 4", "h4"];
+    case "heading_5":
+      return ["heading 5", "h5"];
+    case "heading_6":
+      return ["heading 6", "h6"];
     case "bulleted_list_item":
       return ["bullet", "bulleted list", "list"];
     case "numbered_list_item":
@@ -298,6 +307,10 @@ function toggleHeadingKeywords(type: NotesHeadingBlockType): readonly string[] {
       return ["toggle heading 3", "toggle h3", "collapsible heading 3"];
     case "heading_4":
       return ["toggle heading 4", "toggle h4", "collapsible heading 4"];
+    case "heading_5":
+      return ["toggle heading 5", "toggle h5", "collapsible heading 5"];
+    case "heading_6":
+      return ["toggle heading 6", "toggle h6", "collapsible heading 6"];
   }
 }
 
@@ -327,5 +340,5 @@ function colorKeywords(color: NotesColor): readonly string[] {
 }
 
 function normalizeSearchText(value: string): string {
-  return value.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  return value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
 }

@@ -34,6 +34,17 @@ describe("Notes text editor runtime", () => {
     ]);
   });
 
+  it("opens slash search from text input without requiring a keydown event", () => {
+    expect(planNotesTextInputMenuState("/", { start: 1, end: 1 }, false, true, ""))
+      .toEqual({ slashOpen: true, mentionQuery: null });
+    expect(planNotesTextInputMenuState("/heading", { start: 8, end: 8 }, true, true, "/"))
+      .toEqual({ slashOpen: true, mentionQuery: null });
+    expect(planNotesTextInputMenuState("/heading", { start: 8, end: 8 }, false, true, "/head"))
+      .toEqual({ slashOpen: false, mentionQuery: null });
+    expect(planNotesTextInputMenuState("/", { start: 1, end: 1 }, false, false, ""))
+      .toEqual({ slashOpen: false, mentionQuery: null });
+  });
+
   it("keeps slash and mention sessions mutually exclusive", () => {
     expect(planNotesTextInputMenuState(
       "/table",

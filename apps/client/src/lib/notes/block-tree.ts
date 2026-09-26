@@ -1,5 +1,6 @@
 import {
   blockEditableRichText,
+  blockIndent,
   canBlockHaveChildren,
   headingIsToggleable,
   headingToggleOpen,
@@ -102,14 +103,14 @@ export function flattenNotesBlockChildren(
       const previousSiblingId = previousVisibleSiblingId(state, parentId, index);
       items.push({
         block,
-        depth,
+        depth: depth + blockIndent(block),
         parentId,
         previousSiblingId,
         previousVisibleId: previous,
       });
       previous = id;
       if (blockChildrenAreVisible(block)) {
-        previous = visit(id, depth + 1, previous);
+        previous = visit(id, depth + blockIndent(block) + 1, previous);
       }
     }
     return previous;
@@ -269,7 +270,7 @@ export function planDeleteBlock(
   }
   return {
     deleteBlockId: blockId,
-    focusBlockId: flatItems[Math.max(0, index - 1)]?.block.id ?? flatItems[1]?.block.id ?? blockId,
+    focusBlockId: (index > 0 ? flatItems[index - 1] : flatItems[1])?.block.id ?? blockId,
     keepOnlyBlockAsParagraph: false,
   };
 }

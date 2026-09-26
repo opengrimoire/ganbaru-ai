@@ -26,6 +26,10 @@ export function blockPlainText(block: NotesBlock): string {
       return richTextPlainText(block.heading_3.rich_text);
     case "heading_4":
       return richTextPlainText(block.heading_4.rich_text);
+    case "heading_5":
+      return richTextPlainText(block.heading_5.rich_text);
+    case "heading_6":
+      return richTextPlainText(block.heading_6.rich_text);
     case "bulleted_list_item":
       return richTextPlainText(block.bulleted_list_item.rich_text);
     case "numbered_list_item":
@@ -147,6 +151,10 @@ export function blockEditableRichText(block: NotesBlock): NotesRichText[] {
       return block.heading_3.rich_text;
     case "heading_4":
       return block.heading_4.rich_text;
+    case "heading_5":
+      return block.heading_5.rich_text;
+    case "heading_6":
+      return block.heading_6.rich_text;
     case "bulleted_list_item":
       return block.bulleted_list_item.rich_text;
     case "numbered_list_item":
@@ -174,7 +182,9 @@ export function isHeadingBlockType(type: NotesBlockType): type is NotesHeadingBl
   return type === "heading_1"
     || type === "heading_2"
     || type === "heading_3"
-    || type === "heading_4";
+    || type === "heading_4"
+    || type === "heading_5"
+    || type === "heading_6";
 }
 
 function headingPayload(block: NotesBlock): NotesTextBlockPayload | null {
@@ -182,6 +192,8 @@ function headingPayload(block: NotesBlock): NotesTextBlockPayload | null {
   if (block.type === "heading_2") return block.heading_2;
   if (block.type === "heading_3") return block.heading_3;
   if (block.type === "heading_4") return block.heading_4;
+  if (block.type === "heading_5") return block.heading_5;
+  if (block.type === "heading_6") return block.heading_6;
   return null;
 }
 
@@ -219,4 +231,24 @@ export function canBlockHaveChildren(blockOrType: NotesBlock | NotesBlockType): 
     "template",
     "button",
   ].includes(type);
+}
+
+/** Return explicit indentation relative to the structural parent. */
+export function blockIndent(block: NotesBlock): number {
+  switch (block.type) {
+    case "paragraph": return block.paragraph.ganbaru_indent ?? 0;
+    case "heading_1": return block.heading_1.ganbaru_indent ?? 0;
+    case "heading_2": return block.heading_2.ganbaru_indent ?? 0;
+    case "heading_3": return block.heading_3.ganbaru_indent ?? 0;
+    case "heading_4": return block.heading_4.ganbaru_indent ?? 0;
+    case "heading_5": return block.heading_5.ganbaru_indent ?? 0;
+    case "heading_6": return block.heading_6.ganbaru_indent ?? 0;
+    case "bulleted_list_item": return block.bulleted_list_item.ganbaru_indent ?? 0;
+    case "numbered_list_item": return block.numbered_list_item.ganbaru_indent ?? 0;
+    case "to_do": return block.to_do.ganbaru_indent ?? 0;
+    case "toggle": return block.toggle.ganbaru_indent ?? 0;
+    case "callout": return block.callout.ganbaru_indent ?? 0;
+    case "quote": return block.quote.ganbaru_indent ?? 0;
+    default: return 0;
+  }
 }

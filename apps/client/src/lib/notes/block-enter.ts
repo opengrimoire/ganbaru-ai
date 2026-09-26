@@ -6,6 +6,8 @@ const SPLITTABLE_RICH_TEXT_BLOCK_TYPES = new Set<NotesBlockType>([
   "heading_2",
   "heading_3",
   "heading_4",
+  "heading_5",
+  "heading_6",
   "bulleted_list_item",
   "numbered_list_item",
   "to_do",

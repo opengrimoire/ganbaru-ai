@@ -35,7 +35,7 @@ export const DEFAULT_CODE_LANGUAGE = "plain text";
 export const DEFAULT_TABLE_WIDTH = 2;
 export const DEFAULT_TABLE_ROW_COUNT = 2;
 
-export type NotesHeadingBlockType = "heading_1" | "heading_2" | "heading_3" | "heading_4";
+export type NotesHeadingBlockType = "heading_1" | "heading_2" | "heading_3" | "heading_4" | "heading_5" | "heading_6";
 
 export interface NotesTextPayloadOptions {
   color?: NotesColor;
@@ -260,6 +260,10 @@ function createDefaultBlockUpdate(
       return { type, heading_3: createTextPayload(content, color) };
     case "heading_4":
       return { type, heading_4: createTextPayload(content, color) };
+    case "heading_5":
+      return { type, heading_5: createTextPayload(content, color) };
+    case "heading_6":
+      return { type, heading_6: createTextPayload(content, color) };
     case "bulleted_list_item":
       return { type, bulleted_list_item: createTextPayload(content, color) };
     case "numbered_list_item":
@@ -382,6 +386,26 @@ export function createBlockUpdate(
       ...update,
       heading_4: {
         ...update.heading_4,
+        ...(options.isToggleable === undefined ? {} : { is_toggleable: options.isToggleable }),
+        ...(options.open === undefined ? {} : { ganbaru_open: options.open }),
+      },
+    };
+  }
+  if (type === "heading_5" && update.type === "heading_5") {
+    return {
+      ...update,
+      heading_5: {
+        ...update.heading_5,
+        ...(options.isToggleable === undefined ? {} : { is_toggleable: options.isToggleable }),
+        ...(options.open === undefined ? {} : { ganbaru_open: options.open }),
+      },
+    };
+  }
+  if (type === "heading_6" && update.type === "heading_6") {
+    return {
+      ...update,
+      heading_6: {
+        ...update.heading_6,
         ...(options.isToggleable === undefined ? {} : { is_toggleable: options.isToggleable }),
         ...(options.open === undefined ? {} : { ganbaru_open: options.open }),
       },

@@ -42,6 +42,7 @@ export function parseNotesParent(value: unknown): NotesParent {
 function parseTextPayload(value: unknown, label: string): NotesTextBlockPayload {
   const record = readRecord(value, label);
   return {
+    ...(record.ganbaru_indent === undefined ? {} : { ganbaru_indent: parseNotesIndent(record.ganbaru_indent) }),
     rich_text: parseNotesRichTextArray(record.rich_text, `${label}.rich_text`),
     ...(record.color === undefined ? {} : { color: readNotesColor(record.color, `${label}.color`) }),
     ...(record.is_toggleable === undefined
@@ -300,6 +301,10 @@ export function parseNotesBlock(value: unknown): NotesBlock {
       return { ...base, type, heading_3: parseTextPayload(record.heading_3, "block.heading_3") };
     case "heading_4":
       return { ...base, type, heading_4: parseTextPayload(record.heading_4, "block.heading_4") };
+    case "heading_5":
+      return { ...base, type, heading_5: parseTextPayload(record.heading_5, "block.heading_5") };
+    case "heading_6":
+      return { ...base, type, heading_6: parseTextPayload(record.heading_6, "block.heading_6") };
     case "bulleted_list_item":
       return {
         ...base,
@@ -424,4 +429,10 @@ export function parseNotesPaginatedBlockList(value: unknown): NotesPaginatedBloc
     next_cursor: readNullableString(record.next_cursor, "block list.next_cursor"),
     has_more: readBoolean(record.has_more, "block list.has_more"),
   };
+}
+
+/** Validate persisted indentation independently of any editor nesting limit. */
+export function parseNotesIndent(value: unknown): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) throw new Error("Notes indentation must be a nonnegative safe integer");
+  return value;
 }

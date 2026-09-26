@@ -398,6 +398,8 @@ async function loadPageTree(pageId: string, options: NotesLoadPageTreeOptions = 
   }
   setLoadedPageFromLoaded(loaded);
   replaceBlockOutlines(loaded.outlines, pageId);
+  const bodyId = blockActions.ensurePageBody(pageId);
+  if (options.focusOnLoad && loaded.outlines.length === 0) requestBlockFocus(bodyId, { start: 0, end: 0 });
   pageSession.applyBreadcrumbsIfCurrent(requestId, pageId, loaded.breadcrumb);
   void hydrationController.loadOutlineDescendantFrontiers(pageId, requestId).catch((error) => {
     if (pageSession.isCurrent(requestId, pageId)) {
@@ -865,6 +867,12 @@ const pageActions = createNotesPageActions({
 
 const blockActions = createNotesBlockActions({
   enqueueEditorMutation,
+  readPageRootBlockIds: () => [...new Set([
+    ...treeProjection.flatBlockOutlines
+      .filter(({ outline }) => outline.parent.type === "page_id" && outline.parent.page_id === pageSession.selectedPageId)
+      .map(({ outline }) => outline.id),
+    ...(treeProjection.childIdsByParentId[pageSession.selectedPageId ?? ""] ?? []),
+  ])],
   readSelectedPageId: () => pageSession.selectedPageId,
   readBlocksById: () => treeProjection.blocksById,
   readChildIdsByParentId: () => treeProjection.childIdsByParentId,
@@ -984,6 +992,7 @@ const {
   deleteBlock,
   deleteBlockSelection,
   mergeBlockWithPrevious,
+  indentBlockSelection,
   nestBlock,
   outdentBlock,
   moveBlockUp,
@@ -1462,6 +1471,7 @@ export function getNotes() {
     updateToggleOpen,
     convertBlockToToggleHeading,
     createSiblingAfter,
+    ensurePageBody: blockActions.ensurePageBody,
     splitTextBlockAtSelection,
     pastePlainTextIntoBlock,
     pasteRichHtmlIntoBlock,
@@ -1471,7 +1481,8 @@ export function getNotes() {
     replaceDocumentRange,
     deleteBlockSelection,
     mergeBlockWithPrevious,
-    nestBlock,
+    indentBlockSelection,
+  nestBlock,
     outdentBlock,
     moveBlockUp,
     moveBlockDown,

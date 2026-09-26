@@ -36,6 +36,7 @@ export {
 } from "./block-payloads";
 export {
   blockPlainText,
+  blockIndent,
   tableCellPlainText,
   tableRowPlainText,
   isTextEditableBlock,
@@ -48,6 +49,7 @@ export {
 export {
   type NotesMediaAssetChange,
   blockWithRichText,
+  blockUpdateWithIndent,
   blockWithText,
   blockWithPageMention,
   blockWithDateMention,

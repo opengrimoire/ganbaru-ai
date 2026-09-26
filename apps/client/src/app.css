@@ -534,6 +534,17 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *) {
     font-size: calc(1rem * var(--font-scale));
   }
 
+  .notes-heading-1 { --notes-heading-size: 1.875rem; }
+  .notes-heading-2 { --notes-heading-size: 1.5rem; }
+  .notes-heading-3 { --notes-heading-size: 1.375rem; }
+  .notes-heading-4 { --notes-heading-size: 1.25rem; }
+  .notes-heading-5 { --notes-heading-size: 1.125rem; }
+  .notes-heading-6 { --notes-heading-size: 1rem; }
+
+  .notes-heading-text {
+    font-size: calc(var(--notes-heading-size) * var(--font-scale));
+  }
+
   .notes-editor-page-title {
     font-size: calc(2.5rem * var(--font-scale));
   }

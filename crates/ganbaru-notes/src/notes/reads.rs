@@ -541,7 +541,7 @@ pub async fn open_page(pool: &SqlitePool, page_id: &str) -> Result<NotePageOpenD
     .map_err(|error| format!("load notes page blocks: {error}"))?;
     let outline_rows = sqlx::query_as::<_, BlockOutlineRow>(
         "SELECT id, page_id, parent_type, parent_page_id, parent_block_id,
-                type AS block_type, sort_order, has_children
+                type AS block_type, sort_order, has_children, COALESCE(json_extract(payload, '$.ganbaru_indent'), 0) AS ganbaru_indent
          FROM notes_blocks
          WHERE parent_type = 'page_id' AND parent_page_id = ? AND in_trash = 0
          ORDER BY sort_order ASC, id ASC",
@@ -578,7 +578,7 @@ pub async fn get_block_outline_frontier(
     for parent_batch in parent_ids.chunks(BLOCK_FRONTIER_PARENT_BATCH_SIZE) {
         let mut query = QueryBuilder::<Sqlite>::new(
             "SELECT id, page_id, parent_type, parent_page_id, parent_block_id, \
-                    type AS block_type, sort_order, has_children \
+                    type AS block_type, sort_order, has_children, COALESCE(json_extract(payload, '$.ganbaru_indent'), 0) AS ganbaru_indent \
              FROM notes_blocks WHERE page_id = ",
         );
         query.push_bind(page_id);
@@ -754,6 +754,7 @@ fn block_page_from_rows(
 }
 
 struct BlockOutlineRow {
+    ganbaru_indent: i64,
     id: String,
     page_id: String,
     parent_type: String,
@@ -776,6 +777,7 @@ impl<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> for BlockOutlineRow {
             block_type: row.try_get("block_type")?,
             sort_order: row.try_get("sort_order")?,
             has_children: row.try_get("has_children")?,
+            ganbaru_indent: row.try_get("ganbaru_indent")?,
         })
     }
 }
@@ -801,10 +803,10 @@ impl TryFrom<BlockOutlineRow> for NoteBlockOutlineDto {
             "image" | "video" | "pdf" | "bookmark" | "link_preview" | "embed" => 240,
             "child_database" | "table" | "column_list" | "tab" => 180,
             "code" | "callout" => 72,
-            "heading_1" | "heading_2" | "heading_3" | "heading_4" => 48,
+            "heading_1" | "heading_2" | "heading_3" | "heading_4" | "heading_5" | "heading_6" => 48,
             _ => 36,
         };
-        Ok(NoteBlockOutlineDto::new(
+        let mut outline = NoteBlockOutlineDto::new(
             row.id,
             row.page_id,
             parent,
@@ -812,7 +814,9 @@ impl TryFrom<BlockOutlineRow> for NoteBlockOutlineDto {
             row.sort_order,
             row.has_children != 0,
             retained_height,
-        ))
+        );
+        outline.ganbaru_indent = row.ganbaru_indent;
+        Ok(outline)
     }
 }
 

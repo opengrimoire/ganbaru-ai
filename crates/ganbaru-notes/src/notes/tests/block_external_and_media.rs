@@ -357,82 +357,93 @@ fn update_synced_block_with_children_rejects_duplicate_payload() {
 }
 
 #[test]
-fn append_and_update_heading_4_blocks_round_trip() {
-    crate::test_block_on(async {
-        let pool = migrated_memory_pool().await;
-        create_page(&pool, PAGE_A, BLOCK_A).await;
+fn six_heading_levels_append_update_and_preserve_toggle_children() {
+    for heading in [
+        "heading_1",
+        "heading_2",
+        "heading_3",
+        "heading_4",
+        "heading_5",
+        "heading_6",
+    ] {
+        crate::test_block_on(async {
+            let pool = migrated_memory_pool().await;
+            create_page(&pool, PAGE_A, BLOCK_A).await;
 
-        writes::append_block_children(
-            &pool,
-            NoteAppendBlockChildren {
-                parent: page_parent(PAGE_A),
-                after: Some(BLOCK_A.to_string()),
-                children: vec![block(
-                    BLOCK_B,
-                    "heading_4",
-                    heading_payload("Details", true, Some(false)),
-                )],
-            },
-        )
-        .await
-        .unwrap();
-        writes::append_block_children(
-            &pool,
-            NoteAppendBlockChildren {
-                parent: block_parent(BLOCK_B),
-                after: None,
-                children: vec![block(BLOCK_C, "paragraph", paragraph_payload("Child"))],
-            },
-        )
-        .await
-        .unwrap();
-        writes::update_block(
-            &pool,
-            BLOCK_B,
-            block_update(
-                "heading_4",
-                heading_payload("Updated details", true, Some(true)),
-            ),
-        )
-        .await
-        .unwrap();
-
-        let stored = reads::get_block(&pool, BLOCK_B, false).await.unwrap();
-        let stored_json = serde_json::to_value(stored).unwrap();
-        assert_eq!(stored_json["type"], "heading_4");
-        assert_eq!(stored_json["has_children"], true);
-        assert_eq!(
-            stored_json["heading_4"]["rich_text"][0]["plain_text"],
-            "Updated details"
-        );
-        assert_eq!(stored_json["heading_4"]["is_toggleable"], true);
-        assert_eq!(stored_json["heading_4"]["ganbaru_open"], true);
-
-        let children = reads::get_block_children(&pool, BLOCK_B, None, Some(10))
+            writes::append_block_children(
+                &pool,
+                NoteAppendBlockChildren {
+                    parent: page_parent(PAGE_A),
+                    after: Some(BLOCK_A.to_string()),
+                    children: vec![block(
+                        BLOCK_B,
+                        heading,
+                        heading_payload("Details", true, Some(false)),
+                    )],
+                },
+            )
             .await
             .unwrap();
-        let children_json = serde_json::to_value(children).unwrap();
-        assert_eq!(children_json["results"][0]["id"], BLOCK_C);
+            writes::append_block_children(
+                &pool,
+                NoteAppendBlockChildren {
+                    parent: block_parent(BLOCK_B),
+                    after: None,
+                    children: vec![block(BLOCK_C, "paragraph", paragraph_payload("Child"))],
+                },
+            )
+            .await
+            .unwrap();
+            writes::update_block(
+                &pool,
+                BLOCK_B,
+                block_update(
+                    heading,
+                    heading_payload("Updated details", true, Some(true)),
+                ),
+            )
+            .await
+            .unwrap();
 
-        let result = writes::update_block(
-            &pool,
-            BLOCK_B,
-            block_update("heading_4", paragraph_payload("Not toggleable")),
-        )
-        .await;
-        assert_eq!(
-            result.err(),
-            Some("heading_4 blocks with children must stay toggleable".to_string())
-        );
+            let stored = reads::get_block(&pool, BLOCK_B, false).await.unwrap();
+            let stored_json = serde_json::to_value(stored).unwrap();
+            assert_eq!(stored_json["type"], heading);
+            assert_eq!(stored_json["has_children"], true);
+            assert_eq!(
+                stored_json[heading]["rich_text"][0]["plain_text"],
+                "Updated details"
+            );
+            assert_eq!(stored_json[heading]["is_toggleable"], true);
+            assert_eq!(stored_json[heading]["ganbaru_open"], true);
 
-        let plain_text: String =
-            sqlx::query_scalar("SELECT plain_text FROM notes_blocks WHERE id = ?")
-                .bind(BLOCK_B)
-                .fetch_one(&pool)
+            let children = reads::get_block_children(&pool, BLOCK_B, None, Some(10))
                 .await
                 .unwrap();
-        assert_eq!(plain_text, "Updated details");
-    });
+            let children_json = serde_json::to_value(children).unwrap();
+            assert_eq!(children_json["results"][0]["id"], BLOCK_C);
+
+            let result = writes::update_block(
+                &pool,
+                BLOCK_B,
+                block_update(heading, paragraph_payload("Not toggleable")),
+            )
+            .await;
+            assert_eq!(
+                result.err(),
+                Some(format!(
+                    "{heading} blocks with children must stay toggleable"
+                ))
+            );
+
+            let plain_text: String =
+                sqlx::query_scalar("SELECT plain_text FROM notes_blocks WHERE id = ?")
+                    .bind(BLOCK_B)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(plain_text, "Updated details");
+        });
+    }
 }
 
 #[test]
@@ -777,5 +788,94 @@ fn append_and_update_embed_blocks_round_trip() {
                 .await
                 .unwrap();
         assert_eq!(plain_text, "https://player.vimeo.com/video/226053498");
+    });
+}
+
+#[test]
+fn text_indentation_survives_save_reopen_and_outline_reads() {
+    crate::test_block_on(async {
+        let pool = migrated_memory_pool().await;
+        create_page(&pool, PAGE_A, BLOCK_A).await;
+        for level in [1, 12, 0] {
+            let mut payload = paragraph_payload("Indented text");
+            payload["ganbaru_indent"] = json!(level);
+            writes::update_block(&pool, BLOCK_A, block_update("paragraph", payload))
+                .await
+                .unwrap();
+            let saved =
+                serde_json::to_value(reads::get_block(&pool, BLOCK_A, false).await.unwrap())
+                    .unwrap();
+            assert_eq!(saved["paragraph"]["ganbaru_indent"], level);
+            let reopened =
+                serde_json::to_value(reads::open_page(&pool, PAGE_A).await.unwrap()).unwrap();
+            assert_eq!(reopened["outlines"][0]["ganbaru_indent"], level);
+            let markdown = serde_json::to_value(
+                markdown_export::export_page(
+                    &pool,
+                    NoteMarkdownExportRequest {
+                        page_id: PAGE_A.to_string(),
+                        include_page_title: Some(false),
+                        include_comments: Some(false),
+                        include_resolved_comments: Some(false),
+                    },
+                )
+                .await
+                .unwrap(),
+            )
+            .unwrap();
+            assert!(
+                markdown["markdown"]
+                    .as_str()
+                    .unwrap()
+                    .starts_with(&format!("{}Indented text", "  ".repeat(level as usize)))
+            );
+            let html = serde_json::to_value(
+                html_export::export_page(
+                    &pool,
+                    NoteHtmlExportRequest {
+                        page_id: PAGE_A.to_string(),
+                        include_page_tree: Some(false),
+                        include_comments: Some(false),
+                        include_resolved_comments: Some(false),
+                        include_assets: Some(false),
+                        include_database_views: Some(false),
+                    },
+                )
+                .await
+                .unwrap(),
+            )
+            .unwrap();
+            let contents = html["files"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|file| file["path"] == "index.html")
+                .unwrap()["contents"]
+                .as_str()
+                .unwrap();
+            if level > 0 {
+                assert!(contents.contains(&format!("margin-inline-start:calc({level} * 1.25rem)")));
+            }
+        }
+        for invalid in [
+            json!(-1),
+            json!(1.5),
+            json!("2"),
+            json!(9_007_199_254_740_992_u64),
+        ] {
+            let mut payload = paragraph_payload("Rejected");
+            payload["ganbaru_indent"] = invalid;
+            assert!(
+                writes::update_block(&pool, BLOCK_A, block_update("paragraph", payload))
+                    .await
+                    .is_err()
+            );
+        }
+        let saved =
+            serde_json::to_value(reads::get_block(&pool, BLOCK_A, false).await.unwrap()).unwrap();
+        assert_eq!(
+            saved["paragraph"]["rich_text"][0]["plain_text"],
+            "Indented text"
+        );
     });
 }

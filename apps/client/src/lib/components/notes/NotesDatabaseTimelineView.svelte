@@ -1,4 +1,6 @@
 <script lang="ts">
+  import NotesDatabaseMenu from "./NotesDatabaseMenu.svelte";
+  import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import {
     createNotesDataSourceRowPage,
     duplicateNotesPage,
@@ -444,7 +446,7 @@
   }
 </script>
 
-<section class="space-y-3 border-t border-border pt-3" aria-label={t("notes.databaseTimelineTitle")}>
+<section class="space-y-3 pt-2" aria-label={t("notes.databaseTimelineTitle")}>
   <div class="flex min-w-0 flex-wrap items-center gap-2 text-[0.8rem] text-muted-foreground">
     <span class="min-w-0 flex-1 truncate" role="status">
       {#if loading}
@@ -455,49 +457,59 @@
         {t("notes.databaseTimelineRowsCount", timeline?.rows.length ?? 0)}
       {/if}
     </span>
-    <label class="inline-flex min-w-0 items-center gap-1">
-      <span>{t("notes.databaseTimelineDateProperty")}</span>
-      <select
-        class="h-8 min-w-36 rounded-md border border-input bg-background px-2 text-[0.8rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-        value={configuration.date_property_id ?? ""}
-        disabled={loading || mutating || !timeline}
-        onchange={(event) => updateDateProperty(event.currentTarget.value)}
-        onkeydown={(event) => event.stopPropagation()}
-      >
-        <option value="">{t("notes.databaseTimelineNoDateProperty")}</option>
-        {#each dateColumns as column (column.id)}
-          <option value={column.id}>{column.name}</option>
-        {/each}
-      </select>
-    </label>
-    <label class="inline-flex min-w-0 items-center gap-1">
-      <span>{t("notes.databaseTimelineGroupBy")}</span>
-      <select
-        class="h-8 min-w-36 rounded-md border border-input bg-background px-2 text-[0.8rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-        value={configuration.group_property_id ?? ""}
-        disabled={loading || mutating || !timeline}
-        onchange={(event) => updateGroupProperty(event.currentTarget.value)}
-        onkeydown={(event) => event.stopPropagation()}
-      >
-        <option value="">{t("notes.databaseTimelineNoGroupProperty")}</option>
-        {#each groupableColumns as column (column.id)}
-          <option value={column.id}>{column.name}</option>
-        {/each}
-      </select>
-    </label>
-    <label class="inline-flex min-w-0 items-center gap-1">
-      <span>{t("notes.databaseTableOpenMode")}</span>
-      <select
-        class="h-8 min-w-32 rounded-md border border-input bg-background px-2 text-[0.8rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-        value={configuration.row_open_mode}
-        disabled={loading || mutating || !timeline}
-        onchange={(event) => updateRowOpenMode(event.currentTarget.value as NotesDatabaseTimelineRowOpenMode)}
-        onkeydown={(event) => event.stopPropagation()}
-      >
-        <option value="side_panel">{t("notes.databaseTableOpenSidePanel")}</option>
-        <option value="full_page">{t("notes.databaseTableOpenFullPage")}</option>
-      </select>
-    </label>
+    <NotesDatabaseMenu label={t("notes.databaseLayout")}>
+      <div class="grid gap-3">
+        <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
+          <span>{t("notes.databaseTimelineDateProperty")}</span>
+          <CustomSelect
+            inline
+            appearance="quiet"
+            contentAlign="start"
+            class="w-full min-w-0"
+            ariaLabel={t("notes.databaseTimelineDateProperty")}
+            value={String(configuration.date_property_id ?? "")}
+            disabled={loading || mutating || !timeline}
+            options={[{ value: "", label: t("notes.databaseTimelineNoDateProperty") },
+              ...(dateColumns).map((column) => ({ value: String(column.id), label: String(column.name) }))]}
+            onChange={(nextValue) => updateDateProperty(nextValue)}
+            triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+          />
+        </div>
+        <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
+          <span>{t("notes.databaseTimelineGroupBy")}</span>
+          <CustomSelect
+            inline
+            appearance="quiet"
+            contentAlign="start"
+            class="w-full min-w-0"
+            ariaLabel={t("notes.databaseTimelineGroupBy")}
+            value={String(configuration.group_property_id ?? "")}
+            disabled={loading || mutating || !timeline}
+            options={[{ value: "", label: t("notes.databaseTimelineNoGroupProperty") },
+              ...(groupableColumns).map((column) => ({ value: String(column.id), label: String(column.name) }))]}
+            onChange={(nextValue) => updateGroupProperty(nextValue)}
+            triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+          />
+        </div>
+        <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
+          <span>{t("notes.databaseTableOpenMode")}</span>
+          <CustomSelect
+            inline
+            appearance="quiet"
+            contentAlign="start"
+            class="w-full min-w-0"
+            ariaLabel={t("notes.databaseTableOpenMode")}
+            value={String(configuration.row_open_mode ?? "")}
+            disabled={loading || mutating || !timeline}
+            options={[{ value: "side_panel", label: t("notes.databaseTableOpenSidePanel") },
+              { value: "full_page", label: t("notes.databaseTableOpenFullPage") }]}
+            onChange={(nextValue) => updateRowOpenMode(nextValue as NotesDatabaseTimelineRowOpenMode)}
+            triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+          />
+        </div>
+      </div>
+    </NotesDatabaseMenu>
+
     <button
       type="button"
       class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
@@ -561,9 +573,9 @@
       </div>
     {:else}
       <div class="grid gap-2 @container">
-        <div class="grid gap-2 @lg:grid-cols-4">
-          <details class="rounded-md border border-border p-2 text-[0.8rem]">
-            <summary class="cursor-pointer text-foreground">{t("notes.databaseTimelineRowProperties")}</summary>
+        <div class="flex flex-wrap items-center gap-1">
+          <NotesDatabaseMenu label={t("notes.databaseTimelineRowProperties")} kind="properties">
+
             <div class="mt-2 grid gap-1">
               {#each columns.filter((column) =>
                 column.type !== "title"
@@ -582,11 +594,11 @@
                 </label>
               {/each}
             </div>
-          </details>
+          </NotesDatabaseMenu>
 
           {#if groupColumn}
-            <details class="rounded-md border border-border p-2 text-[0.8rem]">
-              <summary class="cursor-pointer text-foreground">{t("notes.databaseTimelineHiddenGroups")}</summary>
+            <NotesDatabaseMenu label={t("notes.databaseTimelineHiddenGroups")} kind="layout">
+
               <div class="mt-2 grid gap-1">
                 {#each visibleGroups as group (group.id)}
                   <button
@@ -613,40 +625,41 @@
                   </button>
                 {/each}
               </div>
-            </details>
+            </NotesDatabaseMenu>
           {/if}
 
-          <details class="rounded-md border border-border p-2 text-[0.8rem]">
-            <summary class="cursor-pointer text-foreground">{t("notes.databaseTableSorts")}</summary>
+          <NotesDatabaseMenu label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length}>
+
             <div class="mt-2 grid gap-2">
               {#each sorts as sort, index}
                 <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1">
-                  <select
-                    class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={sort.property_id}
+                  <CustomSelect
+                    inline
+                    appearance="quiet"
+                    contentAlign="start"
+                    class="w-full min-w-0"
+                    ariaLabel={t("notes.databaseTableSortProperty")}
+                    value={String(sort.property_id ?? "")}
                     disabled={mutating}
-                    aria-label={t("notes.databaseTableSortProperty")}
-                    onchange={(event) => updateSort(index, { property_id: event.currentTarget.value })}
-                    onkeydown={(event) => event.stopPropagation()}
-                  >
-                    {#each columns as column (column.id)}
-                      <option value={column.id}>{column.name}</option>
-                    {/each}
-                  </select>
-                  <select
-                    class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={sort.direction}
+                    options={[...(columns).map((column) => ({ value: String(column.id), label: String(column.name) }))]}
+                    onChange={(nextValue) => updateSort(index, { property_id: nextValue })}
+                    triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+                  />
+                  <CustomSelect
+                    inline
+                    appearance="quiet"
+                    contentAlign="start"
+                    class="w-full min-w-0"
+                    ariaLabel={t("notes.databaseTableSortDirection")}
+                    value={String(sort.direction ?? "")}
                     disabled={mutating}
-                    aria-label={t("notes.databaseTableSortDirection")}
-                    onchange={(event) =>
-                      updateSort(index, {
-                        direction: event.currentTarget.value === "descending" ? "descending" : "ascending",
-                      })}
-                    onkeydown={(event) => event.stopPropagation()}
-                  >
-                    <option value="ascending">{t("notes.databaseTableSortAscending")}</option>
-                    <option value="descending">{t("notes.databaseTableSortDescending")}</option>
-                  </select>
+                    options={[{ value: "ascending", label: t("notes.databaseTableSortAscending") },
+                      { value: "descending", label: t("notes.databaseTableSortDescending") }]}
+                    onChange={(nextValue) => updateSort(index, {
+                      direction: nextValue === "descending" ? "descending" : "ascending",
+                    })}
+                    triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+                  />
                   <button
                     type="button"
                     class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
@@ -669,40 +682,39 @@
                 <span>{t("notes.databaseTableAddSort")}</span>
               </button>
             </div>
-          </details>
+          </NotesDatabaseMenu>
 
-          <details class="rounded-md border border-border p-2 text-[0.8rem]">
-            <summary class="cursor-pointer text-foreground">{t("notes.databaseTableFilters")}</summary>
+          <NotesDatabaseMenu label={t("notes.databaseTableFilters")} kind="filter" activeCount={filters.length}>
+
             <div class="mt-2 grid gap-2">
               {#each filters as filter, index}
                 <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-1">
-                  <select
-                    class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={filter.property_id}
+                  <CustomSelect
+                    inline
+                    appearance="quiet"
+                    contentAlign="start"
+                    class="w-full min-w-0"
+                    ariaLabel={t("notes.databaseTableFilterProperty")}
+                    value={String(filter.property_id ?? "")}
                     disabled={mutating}
-                    aria-label={t("notes.databaseTableFilterProperty")}
-                    onchange={(event) => updateFilter(index, { property_id: event.currentTarget.value })}
-                    onkeydown={(event) => event.stopPropagation()}
-                  >
-                    {#each columns as column (column.id)}
-                      <option value={column.id}>{column.name}</option>
-                    {/each}
-                  </select>
-                  <select
-                    class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={filter.condition}
+                    options={[...(columns).map((column) => ({ value: String(column.id), label: String(column.name) }))]}
+                    onChange={(nextValue) => updateFilter(index, { property_id: nextValue })}
+                    triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+                  />
+                  <CustomSelect
+                    inline
+                    appearance="quiet"
+                    contentAlign="start"
+                    class="w-full min-w-0"
+                    ariaLabel={t("notes.databaseTableFilterConditionLabel")}
+                    value={String(filter.condition ?? "")}
                     disabled={mutating}
-                    aria-label={t("notes.databaseTableFilterConditionLabel")}
-                    onchange={(event) =>
-                      updateFilter(index, {
-                        condition: event.currentTarget.value as NotesDatabaseTableFilterCondition,
-                      })}
-                    onkeydown={(event) => event.stopPropagation()}
-                  >
-                    {#each FILTER_CONDITIONS as condition}
-                      <option value={condition}>{filterConditionLabel(condition)}</option>
-                    {/each}
-                  </select>
+                    options={[...(FILTER_CONDITIONS).map((condition) => ({ value: String(condition), label: String(filterConditionLabel(condition)) }))]}
+                    onChange={(nextValue) => updateFilter(index, {
+                      condition: nextValue as NotesDatabaseTableFilterCondition,
+                    })}
+                    triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+                  />
                   {#if filterConditionNeedsValue(filter.condition)}
                     <input
                       class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -737,7 +749,7 @@
                 <span>{t("notes.databaseTableAddFilter")}</span>
               </button>
             </div>
-          </details>
+          </NotesDatabaseMenu>
         </div>
 
         <div class="overflow-x-auto rounded-md border border-border">

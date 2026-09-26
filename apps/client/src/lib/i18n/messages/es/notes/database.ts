@@ -2,6 +2,9 @@ import type { database as enDatabase } from "../../en/notes/database";
 import type { MessageShape } from "../../types";
 
 export const database = {
+  databaseLayout: "Diseño",
+  databaseNew: "Nuevo",
+  databaseMore: "Más",
   childDatabaseLocal: "Base de datos local",
   childDatabasePreserved: "Base de datos preservada",
   databaseLinkedViewCreate: "Crear vista vinculada",

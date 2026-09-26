@@ -16,6 +16,24 @@ Right-clicking text opens a compact context menu with formatting, block type, in
 
 Paste converts supported rich text and block structure, sanitizes external markup, and preserves unsupported material visibly when practical. It never inserts executable HTML or unsafe URL schemes.
 
+## Headings
+
+Six heading levels are implemented, matching the six-level Markdown structure documented by [Obsidian](https://obsidian.md/help/syntax). Create them through slash commands, the context menu, or one through six `#` characters followed by Space. All six support rich text, colors, toggle children, table-of-contents navigation, history, and undo/redo.
+
+Heading typography shares the body font-scale setting across editing and historical previews. Levels 1 through 6 use 1.875, 1.5, 1.375, 1.25, 1.125, and 1 times the body size, with semibold weight and a 1.3 line height. Level 6 stays at body size for readability and is distinguished by weight; the page title remains larger than heading 1. Typography tokens live in the shared stylesheet.
+
+Existing vaults receive a transactional migration widening the block and page-template type constraints. It copies each type before replacing its constrained column, preserving block IDs, payloads, parent links, and dependent rows with foreign keys enabled. New rows retain paragraph as the storage default; normal application writes continue to provide an explicit validated type.
+
+## Slash commands
+
+Empty editing rows remain visually blank, including when focused. Entering `/` into an empty text block opens a searchable command menu. Detection follows text input, including keyboard layouts that require Shift for `/` and software-keyboard input. During IME composition the panel pauses and resumes filtering once the composed query commits. Code blocks keep slash characters literal. Typing after `/` filters commands by their localized names and English aliases; `/#` through `/######` select the corresponding heading level.
+
+The menu groups recent commands, basic blocks, media, advanced blocks, actions, and colors. It offers the content types and actions supported by Ganbaru. Up and Down change the active command and scroll it into view; Enter or Tab applies it. Escape, Close menu, moving focus away, or an outside click dismisses the panel without consuming literal slash text. Editing a dismissed query does not reopen it until the trigger is removed and entered again. Deleting the slash closes the menu.
+
+The typed query remains in the editing row, with a search summary in the panel. The insertion menu also offers a search field when there is no editing host. Menus preserve editing focus on pointer selection, render outside clipped block rows within the current floating surface, and reposition above or below the slash trigger as space allows. The horizontal anchor stays stable while the query grows. Scroll and viewport changes, including the software keyboard viewport, update placement. Focus preloads the optional menu; loading and retry states remain visible when needed.
+
+**Reference:** interaction follows Notion's [slash-command guide](https://www.notion.com/en-gb/help/guides/using-slash-commands) and [keyboard shortcuts](https://www.notion.com/help/keyboard-shortcuts), reviewed on 2026-09-25. The available commands are defined by Ganbaru’s local command catalog. Opening slash commands in the middle of existing prose remains outside the current empty-block trigger contract.
+
 ## Enter and line breaks
 
 Enter in ordinary text splits the current block at the selection, removes selected text, preserves rich-text annotations on the correct side, and creates the appropriate sibling type.
@@ -24,11 +42,19 @@ Paragraphs, list items, to-dos, and toggles continue their type. Headings, quote
 
 Shift+Enter inserts a soft line break. Code blocks keep Enter as a code newline and use a documented alternate command to leave the block.
 
+## Lists
+
+Consecutive numbered siblings display increasing ordinals starting at 1. Each parent has an independent sequence, so nested content does not interrupt the outer list; a different sibling block type ends the current sequence. Numbers derive from the complete ordered outline, including unmounted and unhydrated rows, and update immediately after insertion, removal, conversion, reordering, and undo. Lists in columns, tabs, and historical page previews follow the same rule. Number and bullet markers share the editable first line's font size, line height, and vertical padding.
+
 ## Backspace, nesting, and movement
 
-Backspace in an empty block removes it unless it is the only visible editable block. Backspace at the start of compatible text merges into the previous block while retaining valid rich text and children.
+Backspace at a collapsed caret at the start of a numbered item, bullet item, to-do, toggle, quote, callout, or heading first converts it to a paragraph. It removes the marker or block styling, preserves rich text and descendants, and keeps the caret at the start. This applies to empty items too, without removing the row or joining the preceding item. The conversion is one undo step. Hardware and software keyboards use the same rule; range deletion and deletion within text retain the current block type.
 
-Tab nests under a previous sibling only when that parent accepts the source type. Shift+Tab outdents only to a valid destination. Page roots, database surfaces, table internals, columns, and tab-label layers reject structurally invalid moves before persistence.
+Backspace in other empty blocks removes them unless only one editable block remains. Backspace at the start of compatible ordinary text merges into the previous block while retaining valid rich text and children. Forward Delete retains its ordinary text-deletion behavior.
+
+Tab increases indentation on ordinary text, headings, and list items, including an empty first row. Indentation is not limited by the presence of a previous sibling or by a small display-depth cap. When a compatible sibling exists at the current level, nesting uses the block hierarchy. Otherwise explicit indentation in the text payload represents the additional level. Shift+Tab removes one level while preserving document order; later nested siblings remain after the promoted item. At the start of indented text, Backspace removes one level before removing a list marker; at the left margin, Backspace on a list removes the marker and keeps the text. Enter continues the current indentation, while Enter on an empty indented row reduces it one level before exiting list formatting. Code blocks use Tab and Shift+Tab to edit code whitespace.
+
+Indentation updates locally before persistence and preserves the caret or selected range. Shift+Tab at the left margin leaves both text and focus unchanged. Editor Tab commands also recognize the physical Tab key when a webview cannot identify its logical key, including Shift+Tab on Linux. A document selection indents its selected roots equally, retains descendant relationships, and records one undo step. Repeated commands use the latest local state. Nesting opens a collapsed toggle or toggle heading so the edited block stays visible. Page roots, database surfaces, table internals, columns, and tab-label layers remain structural boundaries. Explicit indentation does not create artificial empty parent blocks.
 
 ## Document selection
 
@@ -40,7 +66,7 @@ Cross-block ranges support copy, cut, deletion, replacement typing, multiline an
 
 Selection alone displays no action bar or selected-block counter. Right-click opens selection actions. Cross-block text ranges offer clipboard, deletion, bold, italic, and underline actions; per-block text menus retain their richer link, comment, suggestion, and conversion controls.
 
-Explicit whole-block selection remains available from row margins and Escape in an editor. Its duplicate, movement, clipboard, and deletion actions live in the right-click menu and keyboard shortcuts. Pointer drags originating in text belong to document text selection.
+Explicit whole-block selection remains available from row margins. Escape in editable text dismisses an active menu without selecting the block, moving focus to its wrapper, or replacing text selection with a full-row fill or outline. Escape from an intentional block selection clears it and returns to text editing when available. Its duplicate, movement, clipboard, and deletion actions live in the right-click menu and keyboard shortcuts. Pointer drags originating in text belong to document text selection.
 
 **Partial:** highlight rendering and vertical caret movement depend on the platform webview and still require desktop and Android acceptance. Partial ranges retain their mounted span while extending; very large partial ranges can increase rendering cost. Embedded database fields, table-cell editors, and other form controls retain their own editing domains. Cross-block clipboard copy currently emits plain text, while paste accepts sanitized rich HTML.
 
@@ -81,3 +107,13 @@ One internal page viewport owns long-content scrolling. Arrow-key movement withi
 ## Accessibility
 
 Block handles, insert and conversion menus, formatting, comments, movement, media controls, database open actions, and page navigation are keyboard reachable. Selection and drag actions have non-pointer equivalents. Focus remains visible and returns to a stable nearby target after deletion, movement, dialogs, or responsive layout changes.
+
+## Empty body and deletion
+
+An empty opened page receives a writable paragraph. Deleting all body blocks creates and focuses one empty paragraph immediately, and that paragraph belongs to the same undo step as the deletion. Deleting the only structural block, including a database, trashes the original block and inserts a separate paragraph so undo can restore the original identity. Pending storage writes must not prevent typing into the replacement or overwrite that typing when the append response arrives.
+
+Opening a previously empty page creates one empty paragraph without taking focus from the title. Unloaded root outlines count as existing content and must not trigger empty-page recovery. Enter in the title moves focus to the beginning of the body, except during IME composition. Deleting the first of several blocks focuses the following block rather than the removed block.
+
+### Pasted list hierarchy
+
+**Implemented:** clipboard HTML lists and indented Markdown lists preserve parent and child blocks, including mixed bulleted and numbered lists. Child item text stays separate from its parent, inline HTML formatting survives, and sibling numbering follows each parent independently. Markdown nesting accepts spaces or tabs, retains indented continuation text, and allows blank lines between list items. Markdown task markers retain checked state. Pasting into a block or replacing a document range applies the hierarchy immediately and records one undo step. Existing block parent relationships provide storage; no clipboard-specific schema or migration is required.

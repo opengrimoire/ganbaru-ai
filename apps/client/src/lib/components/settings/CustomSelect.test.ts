@@ -105,6 +105,32 @@ describe("CustomSelect floating interaction", () => {
     expect(onSearchChange).toHaveBeenCalledWith("another tag");
     expect(root.querySelectorAll('[role="option"]')).toHaveLength(1);
   });
+  it("preserves grid metadata and label association while opening from the keyboard", async () => {
+    const form = createHost();
+    const onfocus = vi.fn();
+    const onkeydown = vi.fn((event: KeyboardEvent) => event.stopPropagation());
+    component = mount(CustomSelect, {
+      target: form,
+      props: {
+        inline: true, value: "todo", onChange: vi.fn(), ariaLabel: "Status",
+        options: [{ value: "todo", label: "To do" }, { value: "done", label: "Done" }],
+        triggerProps: { id: "status-cell", "data-table-cell": "true", "data-row-index": 2, "data-column-index": 3, onfocus, onkeydown },
+      },
+    });
+    const trigger = form.querySelector<HTMLButtonElement>('[data-table-cell="true"][data-row-index="2"][data-column-index="3"]')!;
+    expect(trigger.id).toBe("status-cell");
+    trigger.focus();
+    expect(onfocus).toHaveBeenCalledOnce();
+    const arrow = new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true });
+    trigger.dispatchEvent(arrow);
+    expect(arrow.defaultPrevented).toBe(true);
+    expect(onkeydown).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(document.activeElement?.getAttribute("role")).toBe("option"));
+    document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+    expect(document.activeElement?.textContent).toContain("Done");
+    expect(onkeydown).toHaveBeenCalledOnce();
+  });
+
   it("closes on Tab before the surrounding modal computes its focus boundary", async () => {
     const form = createHost();
     component = mount(CustomSelect, {

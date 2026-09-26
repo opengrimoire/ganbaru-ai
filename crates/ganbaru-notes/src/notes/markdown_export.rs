@@ -14,6 +14,7 @@ use sqlx::SqlitePool;
 use std::collections::HashMap;
 
 const MAX_EXPORTED_COMMENT_TEXT_CHARS: usize = 2000;
+const MAX_BLOCK_INDENT_BYTES: usize = 1024 * 1024;
 
 pub async fn export_page(
     pool: &SqlitePool,
@@ -221,7 +222,29 @@ impl MarkdownRenderer {
         let mut output = String::new();
         let mut previous_type: Option<&str> = None;
         for block in blocks {
-            let rendered = self.render_block(block, depth);
+            let mut rendered = self.render_block(block, depth);
+            let extra_indent = block
+                .payload
+                .get("ganbaru_indent")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            if extra_indent > 0 {
+                let width = usize::try_from(extra_indent)
+                    .ok()
+                    .and_then(|value| value.checked_mul(2));
+                if let Some(width) = width.filter(|width| {
+                    width.saturating_mul(rendered.lines().count()) <= MAX_BLOCK_INDENT_BYTES
+                }) {
+                    let prefix = " ".repeat(width);
+                    rendered = rendered
+                        .lines()
+                        .map(|line| format!("{prefix}{line}"))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                } else {
+                    self.warn_block(block, "markdown_export_indentation_too_large", "Indentation exceeds the Markdown whitespace export budget; text is retained");
+                }
+            }
             if rendered.trim().is_empty() {
                 continue;
             }
@@ -238,7 +261,7 @@ impl MarkdownRenderer {
         self.exported_block_count += 1;
         match block.row.block_type.as_str() {
             "paragraph" => self.render_paragraph(block, depth),
-            "heading_1" | "heading_2" | "heading_3" | "heading_4" => {
+            "heading_1" | "heading_2" | "heading_3" | "heading_4" | "heading_5" | "heading_6" => {
                 self.render_heading(block, depth)
             }
             "bulleted_list_item" => self.render_list_item(block, depth, "-"),
@@ -295,7 +318,9 @@ impl MarkdownRenderer {
             "heading_1" => 1,
             "heading_2" => 2,
             "heading_3" => 3,
-            _ => 4,
+            "heading_4" => 4,
+            "heading_5" => 5,
+            _ => 6,
         };
         let heading = format!("{} {}", "#".repeat(level), text);
         if block

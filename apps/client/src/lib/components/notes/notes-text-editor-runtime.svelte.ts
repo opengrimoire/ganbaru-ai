@@ -13,7 +13,7 @@ import {
   type NotesHeadingBlockType,
 } from "$lib/notes/block-factory";
 import { normalizeNotesClipboardPlainText, shouldHandleNotesPlainTextPaste } from "$lib/notes/block-clipboard";
-import { planNotesKeyboardAction, type NotesKeyboardAction } from "$lib/notes/block-keyboard";
+import { isNotesTabKey, planNotesKeyboardAction, type NotesKeyboardAction } from "$lib/notes/block-keyboard";
 import { shouldDeferNotesCompositionInput, shouldLetNativeCompositionHandleKeydown } from "$lib/notes/composition";
 import { planNotesControlledTextEdit } from "$lib/notes/controlled-text-input";
 import { notesSlashMenuItemDomId } from "$lib/notes/editor-accessibility";
@@ -100,6 +100,7 @@ export interface NotesTextEditorControllerSource {
   block: () => NotesBlock;
   previousBlockType: () => NotesBlockType | null;
   isOnlyBlock: () => boolean;
+  indentationDepth: () => number;
   focusBlockId: () => string | null;
   focusRequestId: () => number;
   focusSelection: () => NotesTextSelection | null;
@@ -153,8 +154,9 @@ export function planNotesTextInputMenuState(
   selection: NotesTextSelection | null,
   slashWasOpen: boolean,
   canUseMentions: boolean,
+  previousText?: string,
 ): NotesTextInputMenuState {
-  const slashOpen = notesSlashInputSessionFromText(value, slashWasOpen).open;
+  const slashOpen = canUseMentions && notesSlashInputSessionFromText(value, slashWasOpen, previousText).open;
   return {
     slashOpen,
     mentionQuery: slashOpen || !canUseMentions || !selection
@@ -319,6 +321,7 @@ export class NotesTextEditorController {
   #rightClickSelection: NotesTextSelection | null = null;
 
   slashOpen = $state(false);
+  #resumeSlashAfterComposition = false;
   slashActiveIndex = $state(0);
   slashActiveCommand = $state<NotesSlashCommand | null>(null);
   slashItemCount = $state(0);
@@ -434,6 +437,7 @@ export class NotesTextEditorController {
   }
 
   closeSlashMenu(): void {
+    this.#resumeSlashAfterComposition = false;
     this.slashOpen = false;
     this.slashActiveIndex = 0;
     this.slashActiveCommand = null;
@@ -455,6 +459,7 @@ export class NotesTextEditorController {
   };
 
   handleCompositionStart = (): void => {
+    this.#resumeSlashAfterComposition = this.slashOpen;
     this.runtime.compositionActive = true;
     this.closeCompositionSensitiveMenus();
   };
@@ -616,6 +621,7 @@ export class NotesTextEditorController {
     const selectionEnd = selection?.end ?? selectionStart;
     const action = planNotesKeyboardAction({
       key: event.key,
+      code: event.code,
       shiftKey: event.shiftKey,
       ctrlKey: event.ctrlKey,
       metaKey: event.metaKey,
@@ -626,8 +632,14 @@ export class NotesTextEditorController {
       blockType: this.block.type,
       previousBlockType: this.source.previousBlockType(),
       isOnlyBlock: this.source.isOnlyBlock(),
+      indentationDepth: this.source.indentationDepth(),
     });
     if (action.type === "none") return;
+    if (action.type === "replace_text") {
+      event.preventDefault();
+      this.commitPlainTextValue(action.text, action.selection);
+      return;
+    }
     if (action.type === "insert_newline") {
       event.preventDefault();
       const edit = planNotesControlledTextEdit({
@@ -648,7 +660,10 @@ export class NotesTextEditorController {
     if (action.preventDefault) event.preventDefault();
     this.slashOpen = false;
     this.mentionQuery = null;
-    this.source.onKeyboardAction(this.block.id, action);
+    this.source.onKeyboardAction(this.block.id,
+      action.type === "nest" || action.type === "outdent"
+        ? { ...action, selection: { start: selectionStart, end: selectionEnd } }
+        : action);
   };
 
   private routeMentionKey(event: KeyboardEvent): boolean {
@@ -661,7 +676,7 @@ export class NotesTextEditorController {
         : (this.mentionActiveIndex + (event.key === "ArrowDown" ? 1 : count - 1)) % count;
       return true;
     }
-    if (event.key === "Enter" || event.key === "Tab") {
+    if (event.key === "Enter" || isNotesTabKey(event)) {
       const target = this.mentionMatches[this.mentionActiveIndex];
       if (target) {
         event.preventDefault();
@@ -689,13 +704,14 @@ export class NotesTextEditorController {
       );
       return true;
     }
-    if (event.key === "Enter" || event.key === "Tab") {
+    if (event.key === "Enter" || isNotesTabKey(event)) {
       event.preventDefault();
       if (this.slashActiveCommand) this.selectSlashCommand(this.slashActiveCommand);
       return true;
     }
     if (event.key === "Escape") {
       event.preventDefault();
+      event.stopPropagation();
       this.closeSlashMenu();
       return true;
     }
@@ -714,6 +730,28 @@ export class NotesTextEditorController {
     const selection = notesTextSelectionFromEditableRoot(event.currentTarget);
     const selectionStart = selection?.start ?? currentText.length;
     const selectionEnd = selection?.end ?? selectionStart;
+    const action: NotesKeyboardAction = event.inputType === "insertParagraph" || event.inputType === "deleteContentBackward"
+      ? planNotesKeyboardAction({
+        key: event.inputType === "deleteContentBackward" ? "Backspace" : "Enter",
+        shiftKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        altKey: false,
+        text: currentText,
+        selectionStart,
+        selectionEnd,
+        blockType: this.block.type,
+        previousBlockType: this.source.previousBlockType(),
+        isOnlyBlock: this.source.isOnlyBlock(),
+        indentationDepth: this.source.indentationDepth(),
+      }) : { type: "none" };
+    if (event.inputType === "deleteContentBackward" && action.type !== "none") {
+      event.preventDefault();
+      this.slashOpen = false;
+      this.mentionQuery = null;
+      this.source.onKeyboardAction(this.block.id, action);
+      return;
+    }
     if (event.inputType !== "insertParagraph") {
       const edit = planNotesControlledTextEdit({
         inputType: event.inputType,
@@ -727,20 +765,13 @@ export class NotesTextEditorController {
       this.commitPlainTextValue(edit.text, edit.selection);
       return;
     }
-    if (this.mentionOpen || this.slashOpen) return;
-    const action = planNotesKeyboardAction({
-      key: "Enter",
-      shiftKey: false,
-      ctrlKey: false,
-      metaKey: false,
-      altKey: false,
-      text: currentText,
-      selectionStart,
-      selectionEnd,
-      blockType: this.block.type,
-      previousBlockType: this.source.previousBlockType(),
-      isOnlyBlock: this.source.isOnlyBlock(),
-    });
+    if (this.slashOpen) {
+      event.preventDefault();
+      if (this.slashActiveCommand) this.selectSlashCommand(this.slashActiveCommand);
+      return;
+    }
+    if (this.mentionOpen) return;
+
     if (action.type === "insert_newline") {
       const edit = planNotesControlledTextEdit({
         inputType: event.inputType,
@@ -986,6 +1017,7 @@ export class NotesTextEditorController {
       selection,
       this.slashOpen,
       this.canUseMentions,
+      this.text,
     );
     this.slashOpen = menuState.slashOpen;
     this.mentionQuery = menuState.mentionQuery;
@@ -1016,7 +1048,10 @@ export class NotesTextEditorController {
 
   handleCompositionEnd = (event: CompositionEvent): void => {
     this.runtime.compositionActive = false;
+    const resumeSlash = this.#resumeSlashAfterComposition;
+    this.#resumeSlashAfterComposition = false;
     if (event.currentTarget instanceof HTMLElement && !event.currentTarget.closest("[data-notes-document-selection]")) {
+      this.slashOpen = resumeSlash;
       this.commitRichTextInput(event.currentTarget);
     }
   };
@@ -1070,6 +1105,7 @@ export class NotesTextEditorController {
   };
 
   handleEditorBlur = (): void => {
+    this.#resumeSlashAfterComposition = false;
     this.runtime.compositionActive = false;
     this.slashOpen = false;
     window.setTimeout(() => {
@@ -1081,6 +1117,7 @@ export class NotesTextEditorController {
   handleEditorFocus = (): void => {
     if (this.source.focusBlockId() !== this.block.id) this.source.onFocusBlock(this.block.id);
     this.runtime.requestControl("text-context-menu");
+    if (this.canUseMentions) this.runtime.requestControl("slash-menu");
   };
 
   selectMention = async (target: NotesMentionTarget): Promise<void> => {

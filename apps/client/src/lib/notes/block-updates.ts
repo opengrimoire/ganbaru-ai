@@ -48,6 +48,7 @@ import {
 } from "./block-payloads";
 import {
   blockPlainText,
+  blockIndent,
   blockEditableRichText,
 } from "./block-queries";
 
@@ -104,7 +105,7 @@ function createMediaPayloadFromChange(
 }
 
 /** Convert a loaded block to a Notion-shaped update payload while replacing its rich text. */
-export function blockWithRichText(
+function blockWithRichTextPayload(
   block: NotesBlock,
   richText: readonly NotesRichText[],
 ): NotesBlockUpdate {
@@ -146,6 +147,22 @@ export function blockWithRichText(
         heading_4: createTextPayloadFromRichText(richText, blockColor(block), {
           isToggleable: block.heading_4.is_toggleable,
           open: block.heading_4.ganbaru_open,
+        }),
+      };
+    case "heading_5":
+      return {
+        type: block.type,
+        heading_5: createTextPayloadFromRichText(richText, blockColor(block), {
+          isToggleable: block.heading_5.is_toggleable,
+          open: block.heading_5.ganbaru_open,
+        }),
+      };
+    case "heading_6":
+      return {
+        type: block.type,
+        heading_6: createTextPayloadFromRichText(richText, blockColor(block), {
+          isToggleable: block.heading_6.is_toggleable,
+          open: block.heading_6.ganbaru_open,
         }),
       };
     case "bulleted_list_item":
@@ -460,10 +477,10 @@ export function blockWithHeadingToggleable(
   isToggleable = true,
 ): NotesBlockUpdate {
   const color = canBlockHaveColor(block.type) ? blockColor(block) : DEFAULT_COLOR;
-  return createBlockUpdateFromRichText(headingType, blockEditableRichText(block), color, {
+  return blockUpdateWithIndent(createBlockUpdateFromRichText(headingType, blockEditableRichText(block), color, {
     isToggleable,
     open: isToggleable ? true : undefined,
-  });
+  }), blockIndent(block));
 }
 
 export function blockWithHeadingToggleOpen(
@@ -506,13 +523,31 @@ export function blockWithHeadingToggleOpen(
       },
     };
   }
+  if (block.type === "heading_5" && block.heading_5.is_toggleable === true) {
+    return {
+      type: "heading_5",
+      heading_5: {
+        ...block.heading_5,
+        ganbaru_open: open,
+      },
+    };
+  }
+  if (block.type === "heading_6" && block.heading_6.is_toggleable === true) {
+    return {
+      type: "heading_6",
+      heading_6: {
+        ...block.heading_6,
+        ganbaru_open: open,
+      },
+    };
+  }
   return blockWithText(block, blockPlainText(block));
 }
 
 export function blockConvertedToType(block: NotesBlock, type: NotesBlockType): NotesBlockUpdate {
   const color = canBlockHaveColor(type) ? blockColor(block) : DEFAULT_COLOR;
   if (type === "divider") return createBlockUpdate(type, "", color);
-  return createBlockUpdateFromRichText(type, blockEditableRichText(block), color);
+  return blockUpdateWithIndent(createBlockUpdateFromRichText(type, blockEditableRichText(block), color), blockIndent(block));
 }
 
 function createBlockUpdateFromRichText(
@@ -543,6 +578,16 @@ function createBlockUpdateFromRichText(
       return {
         type,
         heading_4: createTextPayloadFromRichText(richText, color, options),
+      };
+    case "heading_5":
+      return {
+        type,
+        heading_5: createTextPayloadFromRichText(richText, color, options),
+      };
+    case "heading_6":
+      return {
+        type,
+        heading_6: createTextPayloadFromRichText(richText, color, options),
       };
     case "bulleted_list_item":
       return { type, bulleted_list_item: createTextPayloadFromRichText(richText, color) };
@@ -619,6 +664,10 @@ export function blockUpdateFromBlock(block: NotesBlock): NotesBlockUpdate {
       return { type: block.type, heading_3: structuredClone(block.heading_3) };
     case "heading_4":
       return { type: block.type, heading_4: structuredClone(block.heading_4) };
+    case "heading_5":
+      return { type: block.type, heading_5: structuredClone(block.heading_5) };
+    case "heading_6":
+      return { type: block.type, heading_6: structuredClone(block.heading_6) };
     case "bulleted_list_item":
       return { type: block.type, bulleted_list_item: structuredClone(block.bulleted_list_item) };
     case "numbered_list_item":
@@ -707,6 +756,10 @@ export function applyBlockUpdate(block: NotesBlock, update: NotesBlockUpdate): N
       return { ...base, type: update.type, heading_3: update.heading_3 };
     case "heading_4":
       return { ...base, type: update.type, heading_4: update.heading_4 };
+    case "heading_5":
+      return { ...base, type: update.type, heading_5: update.heading_5 };
+    case "heading_6":
+      return { ...base, type: update.type, heading_6: update.heading_6 };
     case "bulleted_list_item":
       return { ...base, type: update.type, bulleted_list_item: update.bulleted_list_item };
     case "numbered_list_item":
@@ -767,5 +820,32 @@ export function applyBlockUpdate(block: NotesBlock, update: NotesBlockUpdate): N
       return { ...base, type: update.type, code: update.code };
     case "unsupported":
       return { ...base, type: update.type, unsupported: update.unsupported };
+  }
+}
+
+/** Preserve indentation across ordinary typing and formatting updates. */
+export function blockWithRichText(block: NotesBlock, richText: readonly NotesRichText[]): NotesBlockUpdate {
+  return blockUpdateWithIndent(blockWithRichTextPayload(block, richText), blockIndent(block));
+}
+
+/** Apply explicit indentation without changing text, annotations, or list markers. */
+export function blockUpdateWithIndent(update: NotesBlockUpdate, indent: number): NotesBlockUpdate {
+  if (!Number.isSafeInteger(indent) || indent < 0) throw new Error("Invalid Notes indentation");
+  const field = indent > 0 ? { ganbaru_indent: indent } : { ganbaru_indent: undefined };
+  switch (update.type) {
+    case "paragraph": return { ...update, paragraph: { ...update.paragraph, ...field } };
+    case "heading_1": return { ...update, heading_1: { ...update.heading_1, ...field } };
+    case "heading_2": return { ...update, heading_2: { ...update.heading_2, ...field } };
+    case "heading_3": return { ...update, heading_3: { ...update.heading_3, ...field } };
+    case "heading_4": return { ...update, heading_4: { ...update.heading_4, ...field } };
+    case "heading_5": return { ...update, heading_5: { ...update.heading_5, ...field } };
+    case "heading_6": return { ...update, heading_6: { ...update.heading_6, ...field } };
+    case "bulleted_list_item": return { ...update, bulleted_list_item: { ...update.bulleted_list_item, ...field } };
+    case "numbered_list_item": return { ...update, numbered_list_item: { ...update.numbered_list_item, ...field } };
+    case "to_do": return { ...update, to_do: { ...update.to_do, ...field } };
+    case "toggle": return { ...update, toggle: { ...update.toggle, ...field } };
+    case "callout": return { ...update, callout: { ...update.callout, ...field } };
+    case "quote": return { ...update, quote: { ...update.quote, ...field } };
+    default: return update;
   }
 }

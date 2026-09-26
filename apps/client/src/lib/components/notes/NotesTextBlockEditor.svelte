@@ -39,6 +39,7 @@
     block,
     previousBlockType,
     isOnlyBlock,
+    indentationDepth = 0,
     focusBlockId,
     focusRequestId,
     focusSelection,
@@ -84,6 +85,7 @@
     block: NotesBlock;
     previousBlockType: NotesBlockType | null;
     isOnlyBlock: boolean;
+    indentationDepth?: number;
     focusBlockId: string | null;
     focusRequestId: number;
     focusSelection: NotesTextSelection | null;
@@ -195,6 +197,7 @@
     block: () => block,
     previousBlockType: () => previousBlockType,
     isOnlyBlock: () => isOnlyBlock,
+    indentationDepth: () => indentationDepth,
     focusBlockId: () => focusBlockId,
     focusRequestId: () => focusRequestId,
     focusSelection: () => focusSelection,
@@ -265,6 +268,10 @@
   const handleEditorFocus = controller.handleEditorFocus;
   const handleEditorBlur = controller.handleEditorBlur;
   const selectMention = controller.selectMention;
+  $effect(() => {
+    if (block.type === "code") runtime.requestControl("code-language");
+  });
+
   const selectSlashCommand = controller.selectSlashCommand;
   const applyLinkFromEditor = controller.applyLinkFromEditor;
   const removeLinkFromEditor = controller.removeLinkFromEditor;
@@ -273,20 +280,29 @@
 
 {#if block.type === "code"}
   <div class="mb-1 flex justify-end">
-    <select
-      class="rounded border border-border bg-background px-1.5 py-0.5 text-[0.733333rem] text-muted-foreground"
-      aria-label={t("notes.codeLanguage")}
-      value={block.code.language}
-      onchange={(event) => onCodeLanguageChange(block.id, event.currentTarget.value)}
-    >
-      <option value="plain text">{t("notes.codeLanguagePlainText")}</option>
-      <option value="typescript">TypeScript</option>
-      <option value="rust">Rust</option>
-      <option value="sql">SQL</option>
-      <option value="bash">Bash</option>
-      <option value="json">JSON</option>
-      <option value="markdown">Markdown</option>
-    </select>
+    {#if controlLoadStates["code-language"]?.status === "ready" && controlLoadStates["code-language"].component.kind === "code-language"}
+      {@const CustomSelect = controlLoadStates["code-language"].component.component}
+      <CustomSelect
+        inline
+        appearance="quiet"
+        contentAlign="start"
+        class="w-36 min-w-0"
+        ariaLabel={t("notes.codeLanguage")}
+        value={String(block.code.language ?? "")}
+        options={[{ value: "plain text", label: t("notes.codeLanguagePlainText") },
+          { value: "typescript", label: "TypeScript" },
+          { value: "rust", label: "Rust" },
+          { value: "sql", label: "SQL" },
+          { value: "bash", label: "Bash" },
+          { value: "json", label: "JSON" },
+          { value: "markdown", label: "Markdown" }]}
+        onChange={(nextValue) => onCodeLanguageChange(block.id, nextValue)}
+      />
+    {:else if controlLoadStates["code-language"]?.status === "failed"}
+      <button type="button" class="h-7 rounded-md px-2 text-[0.8rem] hover:bg-accent" onclick={() => runtime.requestControl("code-language", true)}>{t("common.retry")}</button>
+    {:else}
+      <span class="h-7 px-2 text-[0.8rem] text-muted-foreground" aria-busy="true">{block.code.language}</span>
+    {/if}
   </div>
 {:else if block.type === "template"}
   {#if controller.templateControlsOpen && controlLoadStates["template-controls"]?.status === "ready" && controlLoadStates["template-controls"].component.kind === "template-controls"}
@@ -325,7 +341,6 @@
   role="textbox"
   aria-multiline="true"
   aria-label={t("notes.richTextEditorLabel")}
-  aria-placeholder={t("notes.blockPlaceholder")}
   aria-describedby={mentionOpen || slashOpen
     ? notesRichTextEditorStatusDomId(block.id)
     : undefined}
@@ -342,7 +357,6 @@
   spellcheck={block.type !== "code"}
   tabindex="0"
   data-notes-block-id={block.id}
-  data-placeholder={t("notes.blockPlaceholder")}
   oninput={handleInput}
   onkeydown={handleKeydown}
   onbeforeinput={handleBeforeInput}
@@ -440,6 +454,8 @@
   {#if controlLoadStates["slash-menu"]?.status === "ready" && controlLoadStates["slash-menu"].component.kind === "slash-menu"}
     {@const NotesSlashMenu = controlLoadStates["slash-menu"].component.component}
     <NotesSlashMenu
+    anchor={runtime.editor}
+    onClose={() => controller.closeSlashMenu()}
     menuId={notesSlashMenuDomId(block.id)}
     blockId={block.id}
     query={slashQuery}
@@ -451,7 +467,9 @@
     onSelect={selectSlashCommand}
     />
   {:else if controlLoadStates["slash-menu"]?.status === "failed"}
-    <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem]" type="button" onclick={() => runtime.requestControl("slash-menu", true)}>{t("common.retry")}</button>
+    <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem]" type="button" onmousedown={(event) => event.preventDefault()} onclick={() => runtime.requestControl("slash-menu", true)}>{t("common.retry")}</button>
+  {:else}
+    <div class="text-sm text-muted-foreground" role="status">{t("common.loading")}</div>
   {/if}
 {/if}
 
@@ -460,9 +478,4 @@
     caret-color: var(--foreground);
   }
 
-  .notes-rich-text-editor:empty:focus::before {
-    content: attr(data-placeholder);
-    color: var(--muted-foreground);
-    pointer-events: none;
-  }
 </style>

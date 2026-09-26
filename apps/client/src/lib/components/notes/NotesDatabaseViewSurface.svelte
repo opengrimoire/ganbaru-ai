@@ -1,9 +1,15 @@
 <script lang="ts">
+  import Table2 from "@lucide/svelte/icons/table-2";
+  import Columns3 from "@lucide/svelte/icons/columns-3";
+  import LayoutGrid from "@lucide/svelte/icons/layout-grid";
+  import List from "@lucide/svelte/icons/list";
+  import CalendarDays from "@lucide/svelte/icons/calendar-days";
+  import ChartGantt from "@lucide/svelte/icons/chart-gantt";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
     NOTES_DATABASE_VIEW_KINDS,
     type NotesDatabaseViewKind,
-  } from "$lib/notes/database-view-kind";
+  } from "$lib/notes/contracts/database/base";
   import {
     beginLazyComponentLoad,
     rejectLazyComponentLoad,
@@ -81,15 +87,16 @@
   }
 
   function viewTabClass(view: NotesDatabaseViewKind): string {
-    const base = "inline-flex h-8 items-center rounded-md px-2 text-[0.8rem]";
+    const base = "inline-flex h-9 shrink-0 items-center gap-1.5 border-b-2 px-2.5 text-[0.8rem] font-medium transition-colors";
     return activeView === view
-      ? `${base} bg-primary text-primary-foreground`
-      : `${base} text-muted-foreground hover:bg-accent hover:text-foreground`;
+      ? `${base} border-foreground text-foreground`
+      : `${base} border-transparent text-muted-foreground hover:bg-accent/40 hover:text-foreground`;
   }
 </script>
 
-<div class="flex min-w-0 flex-wrap items-center gap-1 border-t border-border pt-3">
+<div class="flex min-w-0 items-center gap-1 overflow-x-auto border-b border-border">
   {#each NOTES_DATABASE_VIEW_KINDS as view}
+    {@const Icon = view === "table" ? Table2 : view === "board" ? Columns3 : view === "gallery" ? LayoutGrid : view === "list" ? List : view === "calendar" ? CalendarDays : ChartGantt}
     <button
       type="button"
       class={viewTabClass(view)}
@@ -98,6 +105,7 @@
         onActiveViewChange(view);
       }}
     >
+      <Icon class="size-3.5" strokeWidth={1.75} aria-hidden="true" />
       {viewLabel(view)}
     </button>
   {/each}

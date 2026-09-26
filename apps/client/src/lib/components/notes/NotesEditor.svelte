@@ -518,9 +518,10 @@
   }
 
   function handleTitleKeydown(event: KeyboardEvent): void {
-    if (event.key === "Enter") {
+    if (event.key === "Enter" && !event.isComposing && page && notes.primaryContentReady) {
       event.preventDefault();
-      event.currentTarget instanceof HTMLInputElement && event.currentTarget.blur();
+      const blockId = notes.ensurePageBody(page.id);
+      if (blockId) notes.focusBlock(blockId, { start: 0, end: 0 });
     }
   }
 

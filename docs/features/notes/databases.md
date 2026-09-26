@@ -2,6 +2,20 @@
 
 Local databases are structured views over Notes row pages. They follow useful public Notion concepts while remaining an independent local SQLite implementation.
 
+## Database presentation
+
+Status: implemented, with real desktop and Android visual acceptance pending.
+
+Database blocks are inline document regions with a title and icon-led view tabs. They share the application's dropdown control, typography, theme colors, and compact row treatment with Projects. Native operating-system select menus are not used in Notes.
+
+Layout, visible properties, filters, sorts, and templates open in small anchored panels. Table, list, and gallery creation fields live behind New; board and date views retain contextual creation. Table transfer actions are available from More. Configuration forms should not occupy the page before a reader reaches the rows. Applied filter and sort counts remain visible while their panels are closed.
+
+Table and list row actions use an overflow menu. Column width controls remain keyboard accessible and appear on header hover or focus on pointer devices. List properties align with their headers; secondary properties collapse on narrow layouts. A table preview appears only after a row is opened.
+
+Panels stay within the viewport and outside clipped database containers. Their nested dropdowns preserve the owning dialog's focus boundary. Escape closes the innermost dropdown first, then its settings panel, returning focus to the invoking control. Leaving a panel dismisses it without pulling focus back. These controls change the same existing view configuration and row operations described below.
+
+The separation of content, view settings, and property visibility follows [Notion's documented database controls](https://www.notion.com/help/views-filters-and-sorts); visual styling follows Ganbaru Projects.
+
 ## Data source and view model
 
 A child database creates a database shell, one canonical data source, an initial table view, and a visible `child_database` block in one transaction. A linked database view creates another shell and view that reference the same data source without duplicating rows or schema.

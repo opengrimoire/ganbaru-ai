@@ -52,6 +52,7 @@ describe("Notes block action boundaries", () => {
     const pendingInsert = new Promise<void>((resolve) => { finishInsert = resolve; });
     let pendingDelete: Promise<void> | null = null;
     const actions = createNotesBlockMovementActions({
+      ensurePageBody: () => null,
       enqueueEditorMutation: async (mutation) => { await pendingInsert; await mutation(); },
       localApplyBlockUpdate: () => undefined,
       readSelectedPageId: () => pageId,
@@ -169,6 +170,7 @@ describe("Notes block action boundaries", () => {
     };
     const trashAndApply = vi.fn();
     const actions = createNotesBlockMovementActions({
+      ensurePageBody: () => null,
       enqueueEditorMutation: (mutation) => mutation(),
       localApplyBlockUpdate: () => undefined,
       readSelectedPageId: () => pageId,
@@ -207,6 +209,7 @@ describe("Notes block action boundaries", () => {
     const requestBlockFocus = vi.fn();
     const recordUndoAfter = vi.fn();
     const actions = createNotesBlockMovementActions({
+      ensurePageBody: () => null,
       enqueueEditorMutation: (mutation) => mutation(),
       localApplyBlockUpdate: () => undefined,
       readSelectedPageId: () => pageId,

@@ -198,6 +198,10 @@ pub struct NoteBlockDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     heading_4: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    heading_5: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    heading_6: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     bulleted_list_item: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     numbered_list_item: Option<Value>,
@@ -286,6 +290,8 @@ impl NoteBlockDto {
             heading_2: None,
             heading_3: None,
             heading_4: None,
+            heading_5: None,
+            heading_6: None,
             bulleted_list_item: None,
             numbered_list_item: None,
             to_do: None,
@@ -326,6 +332,8 @@ impl NoteBlockDto {
             "heading_2" => block.heading_2 = Some(payload),
             "heading_3" => block.heading_3 = Some(payload),
             "heading_4" => block.heading_4 = Some(payload),
+            "heading_5" => block.heading_5 = Some(payload),
+            "heading_6" => block.heading_6 = Some(payload),
             "bulleted_list_item" => block.bulleted_list_item = Some(payload),
             "numbered_list_item" => block.numbered_list_item = Some(payload),
             "to_do" => block.to_do = Some(payload),
@@ -418,6 +426,8 @@ impl NotePageOpenDto {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct NoteBlockOutlineDto {
+    /// Additional indentation relative to the structural parent.
+    pub ganbaru_indent: i64,
     id: String,
     page_id: String,
     parent: NoteParent,
@@ -446,6 +456,7 @@ impl NoteBlockOutlineDto {
             sort_order,
             has_children,
             retained_height,
+            ganbaru_indent: 0,
         }
     }
 }

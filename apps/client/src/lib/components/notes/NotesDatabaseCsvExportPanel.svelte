@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import { saveNotesDataSourceCsv } from "$lib/api/notes";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
@@ -95,22 +96,25 @@
   <summary class="cursor-pointer text-foreground">{t("notes.databaseCsvExportTitle")}</summary>
   <div class="mt-2 grid min-w-0 gap-2">
     <div class="flex min-w-0 flex-wrap items-center gap-2">
-      <label class="min-w-0 text-muted-foreground">
+      <div class="min-w-0 text-muted-foreground">
         <span class="mb-1 block">{t("notes.databaseCsvExportScope")}</span>
-        <select
-          class="h-8 min-w-40 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-          value={scope}
+        <CustomSelect
+          inline
+          appearance="quiet"
+          contentAlign="start"
+          class="w-full min-w-0"
+          ariaLabel={t("notes.databaseCsvExportScope")}
+          value={String(scope ?? "")}
           disabled={disabled || exporting}
-          onchange={(event) => {
-            scope = event.currentTarget.value === "all" ? "all" : "view";
+          options={[{ value: "view", label: t("notes.databaseCsvExportScopeView") },
+            { value: "all", label: t("notes.databaseCsvExportScopeAll") }]}
+          onChange={(nextValue) => {
+            scope = nextValue === "all" ? "all" : "view";
             result = null;
           }}
-          onkeydown={(event) => event.stopPropagation()}
-        >
-          <option value="view">{t("notes.databaseCsvExportScopeView")}</option>
-          <option value="all">{t("notes.databaseCsvExportScopeAll")}</option>
-        </select>
-      </label>
+          triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+        />
+      </div>
       <button
         type="button"
         class="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-2 text-primary-foreground disabled:pointer-events-none disabled:opacity-50"

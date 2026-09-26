@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import { onMount, tick } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type { Project } from "$lib/projects/types";
@@ -261,17 +262,19 @@
           description={t("notes.agentBridgeExportProjectDescription")}
           forId="notes-agent-bridge-project"
         >
-          <select
-            id="notes-agent-bridge-project"
-            class="h-7 w-56 max-w-full rounded-md border border-border bg-card px-2 text-[0.8rem] text-foreground disabled:opacity-60 dark:bg-transparent max-[560px]:w-full"
-            bind:value={selectedProjectId}
+          <CustomSelect
+            inline
+            appearance="quiet"
+            contentAlign="start"
+            class="w-full min-w-0"
+            ariaLabel={t("notes.agentBridgeExportProjectLabel")}
+            value={String(selectedProjectId ?? "")}
             disabled={!includeTaskContext || projects.loading}
-          >
-            <option value="">{t("notes.agentBridgeExportNoProject")}</option>
-            {#each activeProjects as project (project.id)}
-              <option value={project.id}>{project.name}</option>
-            {/each}
-          </select>
+            options={[{ value: "", label: t("notes.agentBridgeExportNoProject") },
+              ...(activeProjects).map((project) => ({ value: String(project.id), label: String(project.name) }))]}
+            onChange={(nextValue) => { selectedProjectId = nextValue; }}
+            triggerProps={{ "id": "notes-agent-bridge-project" }}
+          />
         </NotesTransferFieldRow>
 
         {#if projects.loading}

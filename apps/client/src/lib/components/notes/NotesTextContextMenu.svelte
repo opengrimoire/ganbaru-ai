@@ -21,6 +21,8 @@
   import Heading2 from "@lucide/svelte/icons/heading-2";
   import Heading3 from "@lucide/svelte/icons/heading-3";
   import Heading4 from "@lucide/svelte/icons/heading-4";
+  import Heading5 from "@lucide/svelte/icons/heading-5";
+  import Heading6 from "@lucide/svelte/icons/heading-6";
   import Italic from "@lucide/svelte/icons/italic";
   import LinkIcon from "@lucide/svelte/icons/link";
   import List from "@lucide/svelte/icons/list";
@@ -93,6 +95,8 @@
     { type: "heading_2", labelKey: "notes.blockType.heading2", icon: Heading2 },
     { type: "heading_3", labelKey: "notes.blockType.heading3", icon: Heading3 },
     { type: "heading_4", labelKey: "notes.blockType.heading4", icon: Heading4 },
+    { type: "heading_5", labelKey: "notes.blockType.heading5", icon: Heading5 },
+    { type: "heading_6", labelKey: "notes.blockType.heading6", icon: Heading6 },
     { type: "bulleted_list_item", labelKey: "notes.blockType.bullet", icon: List },
     { type: "numbered_list_item", labelKey: "notes.blockType.numbered", icon: ListOrdered },
     { type: "to_do", labelKey: "notes.blockType.todo", icon: SquareCheck },

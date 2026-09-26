@@ -1,4 +1,6 @@
 <script lang="ts">
+  import NotesDatabaseMenu from "./NotesDatabaseMenu.svelte";
+  import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import {
     createNotesDataSourceRowPage,
     duplicateNotesPage,
@@ -352,7 +354,7 @@
   }
 </script>
 
-<section class="space-y-3 border-t border-border pt-3" aria-label={t("notes.databaseListTitle")}>
+<section class="space-y-3 pt-2" aria-label={t("notes.databaseListTitle")}>
   <div class="flex min-w-0 flex-wrap items-center gap-2 text-[0.8rem] text-muted-foreground">
     <span class="min-w-0 flex-1 truncate" role="status">
       {#if loading}
@@ -363,34 +365,73 @@
         {t("notes.databaseListRowsCount", list?.rows.length ?? 0)}
       {/if}
     </span>
-    <label class="inline-flex min-w-0 items-center gap-1">
-      <span>{t("notes.databaseListGroupBy")}</span>
-      <select
-        class="h-8 min-w-36 rounded-md border border-input bg-background px-2 text-[0.8rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-        value={configuration.group_property_id ?? ""}
-        disabled={loading || mutating || !list}
-        onchange={(event) => updateGroupProperty(event.currentTarget.value)}
-        onkeydown={(event) => event.stopPropagation()}
-      >
-        <option value="">{t("notes.databaseListNoGroupProperty")}</option>
-        {#each groupableColumns as column (column.id)}
-          <option value={column.id}>{column.name}</option>
-        {/each}
-      </select>
-    </label>
-    <label class="inline-flex min-w-0 items-center gap-1">
-      <span>{t("notes.databaseTableOpenMode")}</span>
-      <select
-        class="h-8 min-w-32 rounded-md border border-input bg-background px-2 text-[0.8rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-        value={configuration.row_open_mode}
-        disabled={loading || mutating || !list}
-        onchange={(event) => updateRowOpenMode(event.currentTarget.value as NotesDatabaseListRowOpenMode)}
-        onkeydown={(event) => event.stopPropagation()}
-      >
-        <option value="side_panel">{t("notes.databaseTableOpenSidePanel")}</option>
-        <option value="full_page">{t("notes.databaseTableOpenFullPage")}</option>
-      </select>
-    </label>
+    <NotesDatabaseMenu label={t("notes.databaseLayout")}>
+      <div class="grid gap-3">
+        <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
+          <span>{t("notes.databaseListGroupBy")}</span>
+          <CustomSelect
+            inline
+            appearance="quiet"
+            contentAlign="start"
+            class="w-full min-w-0"
+            ariaLabel={t("notes.databaseListGroupBy")}
+            value={String(configuration.group_property_id ?? "")}
+            disabled={loading || mutating || !list}
+            options={[{ value: "", label: t("notes.databaseListNoGroupProperty") },
+              ...(groupableColumns).map((column) => ({ value: String(column.id), label: String(column.name) }))]}
+            onChange={(nextValue) => updateGroupProperty(nextValue)}
+            triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+          />
+        </div>
+        <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
+          <span>{t("notes.databaseTableOpenMode")}</span>
+          <CustomSelect
+            inline
+            appearance="quiet"
+            contentAlign="start"
+            class="w-full min-w-0"
+            ariaLabel={t("notes.databaseTableOpenMode")}
+            value={String(configuration.row_open_mode ?? "")}
+            disabled={loading || mutating || !list}
+            options={[{ value: "side_panel", label: t("notes.databaseTableOpenSidePanel") },
+              { value: "full_page", label: t("notes.databaseTableOpenFullPage") }]}
+            onChange={(nextValue) => updateRowOpenMode(nextValue as NotesDatabaseListRowOpenMode)}
+            triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+          />
+        </div>
+      </div>
+    </NotesDatabaseMenu>
+    <NotesDatabaseMenu label={t("notes.databaseNew")} kind="new">
+      <div class="flex min-w-0 flex-wrap items-center gap-2">
+        <input
+          class="h-8 min-w-40 flex-1 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+          value={draftTitle}
+          placeholder={t("notes.databaseRowsNewPlaceholder")}
+          disabled={loading || mutating}
+          oninput={(event) => {
+            draftTitle = event.currentTarget.value;
+          }}
+          onkeydown={(event) => {
+            event.stopPropagation();
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void createRow();
+            }
+          }}
+        />
+        <button
+          type="button"
+          class="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-2 text-[0.8rem] text-primary-foreground disabled:pointer-events-none disabled:opacity-50"
+          disabled={loading || mutating}
+          onclick={() => {
+            void createRow();
+          }}
+        >
+          <Plus class="size-3.5" aria-hidden="true" />
+          <span>{t("notes.databaseListAddRow")}</span>
+        </button>
+      </div>
+    </NotesDatabaseMenu>
     <button
       type="button"
       class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
@@ -405,41 +446,11 @@
     </button>
   </div>
 
-  <div class="flex min-w-0 flex-wrap items-center gap-2">
-    <input
-      class="h-8 min-w-40 flex-1 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-      value={draftTitle}
-      placeholder={t("notes.databaseRowsNewPlaceholder")}
-      disabled={loading || mutating}
-      oninput={(event) => {
-        draftTitle = event.currentTarget.value;
-      }}
-      onkeydown={(event) => {
-        event.stopPropagation();
-        if (event.key === "Enter") {
-          event.preventDefault();
-          void createRow();
-        }
-      }}
-    />
-    <button
-      type="button"
-      class="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-2 text-[0.8rem] text-primary-foreground disabled:pointer-events-none disabled:opacity-50"
-      disabled={loading || mutating}
-      onclick={() => {
-        void createRow();
-      }}
-    >
-      <Plus class="size-3.5" aria-hidden="true" />
-      <span>{t("notes.databaseListAddRow")}</span>
-    </button>
-  </div>
-
   {#if list}
     <div class="grid gap-2 @container">
-      <div class="grid gap-2 @lg:grid-cols-4">
-        <details class="rounded-md border border-border p-2 text-[0.8rem]">
-          <summary class="cursor-pointer text-foreground">{t("notes.databaseListRowProperties")}</summary>
+      <div class="flex flex-wrap items-center gap-1">
+        <NotesDatabaseMenu label={t("notes.databaseListRowProperties")} kind="properties">
+
           <div class="mt-2 grid gap-1">
             {#each columns.filter((column) =>
               column.type !== "title" && column.id !== configuration.group_property_id
@@ -456,11 +467,11 @@
               </label>
             {/each}
           </div>
-        </details>
+        </NotesDatabaseMenu>
 
         {#if groupColumn}
-          <details class="rounded-md border border-border p-2 text-[0.8rem]">
-            <summary class="cursor-pointer text-foreground">{t("notes.databaseListHiddenGroups")}</summary>
+          <NotesDatabaseMenu label={t("notes.databaseListHiddenGroups")} kind="layout">
+
             <div class="mt-2 grid gap-1">
               {#each visibleGroups as group (group.id)}
                 <button
@@ -487,40 +498,41 @@
                 </button>
               {/each}
             </div>
-          </details>
+          </NotesDatabaseMenu>
         {/if}
 
-        <details class="rounded-md border border-border p-2 text-[0.8rem]">
-          <summary class="cursor-pointer text-foreground">{t("notes.databaseTableSorts")}</summary>
+        <NotesDatabaseMenu label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length}>
+
           <div class="mt-2 grid gap-2">
             {#each sorts as sort, index}
               <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1">
-                <select
-                  class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={sort.property_id}
+                <CustomSelect
+                  inline
+                  appearance="quiet"
+                  contentAlign="start"
+                  class="w-full min-w-0"
+                  ariaLabel={t("notes.databaseTableSortProperty")}
+                  value={String(sort.property_id ?? "")}
                   disabled={mutating}
-                  aria-label={t("notes.databaseTableSortProperty")}
-                  onchange={(event) => updateSort(index, { property_id: event.currentTarget.value })}
-                  onkeydown={(event) => event.stopPropagation()}
-                >
-                  {#each columns as column (column.id)}
-                    <option value={column.id}>{column.name}</option>
-                  {/each}
-                </select>
-                <select
-                  class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={sort.direction}
+                  options={[...(columns).map((column) => ({ value: String(column.id), label: String(column.name) }))]}
+                  onChange={(nextValue) => updateSort(index, { property_id: nextValue })}
+                  triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+                />
+                <CustomSelect
+                  inline
+                  appearance="quiet"
+                  contentAlign="start"
+                  class="w-full min-w-0"
+                  ariaLabel={t("notes.databaseTableSortDirection")}
+                  value={String(sort.direction ?? "")}
                   disabled={mutating}
-                  aria-label={t("notes.databaseTableSortDirection")}
-                  onchange={(event) =>
-                    updateSort(index, {
-                      direction: event.currentTarget.value === "descending" ? "descending" : "ascending",
-                    })}
-                  onkeydown={(event) => event.stopPropagation()}
-                >
-                  <option value="ascending">{t("notes.databaseTableSortAscending")}</option>
-                  <option value="descending">{t("notes.databaseTableSortDescending")}</option>
-                </select>
+                  options={[{ value: "ascending", label: t("notes.databaseTableSortAscending") },
+                    { value: "descending", label: t("notes.databaseTableSortDescending") }]}
+                  onChange={(nextValue) => updateSort(index, {
+                    direction: nextValue === "descending" ? "descending" : "ascending",
+                  })}
+                  triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+                />
                 <button
                   type="button"
                   class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
@@ -543,40 +555,39 @@
               <span>{t("notes.databaseTableAddSort")}</span>
             </button>
           </div>
-        </details>
+        </NotesDatabaseMenu>
 
-        <details class="rounded-md border border-border p-2 text-[0.8rem]">
-          <summary class="cursor-pointer text-foreground">{t("notes.databaseTableFilters")}</summary>
+        <NotesDatabaseMenu label={t("notes.databaseTableFilters")} kind="filter" activeCount={filters.length}>
+
           <div class="mt-2 grid gap-2">
             {#each filters as filter, index}
               <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-1">
-                <select
-                  class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={filter.property_id}
+                <CustomSelect
+                  inline
+                  appearance="quiet"
+                  contentAlign="start"
+                  class="w-full min-w-0"
+                  ariaLabel={t("notes.databaseTableFilterProperty")}
+                  value={String(filter.property_id ?? "")}
                   disabled={mutating}
-                  aria-label={t("notes.databaseTableFilterProperty")}
-                  onchange={(event) => updateFilter(index, { property_id: event.currentTarget.value })}
-                  onkeydown={(event) => event.stopPropagation()}
-                >
-                  {#each columns as column (column.id)}
-                    <option value={column.id}>{column.name}</option>
-                  {/each}
-                </select>
-                <select
-                  class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={filter.condition}
+                  options={[...(columns).map((column) => ({ value: String(column.id), label: String(column.name) }))]}
+                  onChange={(nextValue) => updateFilter(index, { property_id: nextValue })}
+                  triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+                />
+                <CustomSelect
+                  inline
+                  appearance="quiet"
+                  contentAlign="start"
+                  class="w-full min-w-0"
+                  ariaLabel={t("notes.databaseTableFilterConditionLabel")}
+                  value={String(filter.condition ?? "")}
                   disabled={mutating}
-                  aria-label={t("notes.databaseTableFilterConditionLabel")}
-                  onchange={(event) =>
-                    updateFilter(index, {
-                      condition: event.currentTarget.value as NotesDatabaseTableFilterCondition,
-                    })}
-                  onkeydown={(event) => event.stopPropagation()}
-                >
-                  {#each FILTER_CONDITIONS as condition}
-                    <option value={condition}>{filterConditionLabel(condition)}</option>
-                  {/each}
-                </select>
+                  options={[...(FILTER_CONDITIONS).map((condition) => ({ value: String(condition), label: String(filterConditionLabel(condition)) }))]}
+                  onChange={(nextValue) => updateFilter(index, {
+                    condition: nextValue as NotesDatabaseTableFilterCondition,
+                  })}
+                  triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+                />
                 <input
                   class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
                   value={String(filter.value ?? "")}
@@ -607,14 +618,21 @@
               <span>{t("notes.databaseTableAddFilter")}</span>
             </button>
           </div>
-        </details>
+        </NotesDatabaseMenu>
       </div>
 
+      <div class="flex min-h-11 items-center gap-3 border-b border-border/60 px-2 text-[0.8rem] font-medium text-muted-foreground">
+        <span class="min-w-0 flex-1">{t("notes.databaseSchemaName")}</span>
+        <div class="hidden min-w-0 flex-1 items-center gap-3 @lg:flex">
+          {#each visibleColumns as column (column.id)}<span class="min-w-0 flex-1 truncate">{column.name}</span>{/each}
+        </div>
+        <span class="w-8" aria-hidden="true"></span>
+      </div>
       <div class="grid min-w-0 gap-3">
         {#each visibleGroups as group (group.id)}
           <section class="min-w-0">
             {#if groupColumn}
-              <div class="mb-1 flex min-w-0 items-center gap-2 border-b border-border pb-1">
+              <div class="mb-1 flex min-h-11 min-w-0 items-center gap-2 border-b border-border/60 px-2">
                 <span class="inline-flex size-2 rounded-full bg-muted-foreground" aria-hidden="true"></span>
                 <h3 class="min-w-0 flex-1 truncate text-[0.8rem] font-medium text-muted-foreground">
                   {group.name}
@@ -625,66 +643,71 @@
               </div>
             {/if}
 
-            <div class="grid min-w-0 divide-y divide-border rounded-md border border-border">
+            <div class="grid min-w-0 divide-y divide-border/50">
               {#each group.rows as row (row.id)}
                 {@const title = rowTitle(row)}
-                <article class="flex min-w-0 items-center gap-2 bg-background px-2 py-1.5">
+                <article class="group/row flex min-h-11 min-w-0 items-center gap-3 rounded-md px-2 py-1 transition-colors hover:bg-accent/20">
                   <button
                     type="button"
                     class="flex min-w-0 flex-1 items-center gap-2 rounded-sm text-left outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                     onclick={() => openRow(row)}
                   >
                     <FileText class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                    <span class="min-w-32 flex-1 truncate text-[0.866667rem] font-medium text-foreground">
+                    <span class="min-w-32 flex-1 truncate text-[0.866667rem] text-foreground">
                       {title}
                     </span>
                   </button>
                   {#if visibleColumns.length > 0}
-                    <dl class="hidden min-w-0 flex-1 items-center justify-end gap-2 text-[0.8rem] text-muted-foreground @lg:flex">
+                    <dl class="hidden min-w-0 flex-1 items-center gap-3 text-[0.8rem] text-muted-foreground @lg:flex">
                       {#each visibleColumns as column (column.id)}
                         {@const text = notesDatabaseListRowText(row, column)}
-                        <div class="min-w-0 max-w-40 truncate">
+                        <div class="min-w-0 flex-1 truncate">
                           <dt class="sr-only">{column.name}</dt>
                           <dd class="truncate">{text || t("notes.databaseTableEmptyCell")}</dd>
                         </div>
                       {/each}
                     </dl>
                   {/if}
-                  <div class="flex shrink-0 items-center gap-1">
-                    <button
-                      type="button"
-                      class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-                      aria-label={t("notes.databaseRowsOpen", title)}
-                      title={t("notes.databaseRowsOpen", title)}
-                      onclick={() => openRow(row)}
-                    >
-                      <ExternalLink class="size-3.5" aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
-                      disabled={mutating}
-                      aria-label={t("notes.databaseRowsDuplicate", title)}
-                      title={t("notes.databaseRowsDuplicate", title)}
-                      onclick={() => {
-                        void duplicateRow(row);
-                      }}
-                    >
-                      <Copy class="size-3.5" aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      class="inline-flex size-7 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
-                      disabled={mutating}
-                      aria-label={t("notes.databaseRowsTrash", title)}
-                      title={t("notes.databaseRowsTrash", title)}
-                      onclick={() => {
-                        void trashRow(row);
-                      }}
-                    >
-                      <Trash2 class="size-3.5" aria-hidden="true" />
-                    </button>
-                  </div>
+                  <NotesDatabaseMenu iconOnly kind="actions" label={t("notes.databaseTableRowActions")}>
+                    <div class="grid gap-1">
+                      <button
+                        type="button"
+                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                        aria-label={t("notes.databaseRowsOpen", title)}
+                        title={t("notes.databaseRowsOpen", title)}
+                        onclick={() => openRow(row)}
+                      >
+                        <ExternalLink class="size-3.5" aria-hidden="true" />
+                        <span class="truncate">{t("notes.databaseRowsOpen", title)}</span>
+                      </button>
+                      <button
+                        type="button"
+                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                        disabled={mutating}
+                        aria-label={t("notes.databaseRowsDuplicate", title)}
+                        title={t("notes.databaseRowsDuplicate", title)}
+                        onclick={() => {
+                          void duplicateRow(row);
+                        }}
+                      >
+                        <Copy class="size-3.5" aria-hidden="true" />
+                        <span class="truncate">{t("notes.databaseRowsDuplicate", title)}</span>
+                      </button>
+                      <button
+                        type="button"
+                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                        disabled={mutating}
+                        aria-label={t("notes.databaseRowsTrash", title)}
+                        title={t("notes.databaseRowsTrash", title)}
+                        onclick={() => {
+                          void trashRow(row);
+                        }}
+                      >
+                        <Trash2 class="size-3.5" aria-hidden="true" />
+                        <span class="truncate">{t("notes.databaseRowsTrash", title)}</span>
+                      </button>
+                    </div>
+                  </NotesDatabaseMenu>
                 </article>
               {/each}
               {#if group.rows.length === 0}
@@ -705,7 +728,7 @@
 
       <NotesDatabaseWindowSentinel hasMore={list.has_more} loading={loadingMore} onLoad={loadMoreList} />
 
-      {#if configuration.row_open_mode === "side_panel"}
+      {#if configuration.row_open_mode === "side_panel" && selectedPanelRow}
         <aside class="rounded-md border border-border p-3" aria-label={t("notes.databaseTableSidePanelTitle")}>
           {#if selectedPanelRow}
             {@const title = rowTitle(selectedPanelRow)}

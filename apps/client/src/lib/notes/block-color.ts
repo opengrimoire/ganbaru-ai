@@ -103,6 +103,8 @@ export function canBlockHaveColor(type: NotesBlockType): boolean {
     "heading_2",
     "heading_3",
     "heading_4",
+    "heading_5",
+    "heading_6",
     "bulleted_list_item",
     "numbered_list_item",
     "to_do",
@@ -125,6 +127,10 @@ export function blockColor(block: NotesBlock): NotesColor {
       return block.heading_3.color ?? "default";
     case "heading_4":
       return block.heading_4.color ?? "default";
+    case "heading_5":
+      return block.heading_5.color ?? "default";
+    case "heading_6":
+      return block.heading_6.color ?? "default";
     case "bulleted_list_item":
       return block.bulleted_list_item.color ?? "default";
     case "numbered_list_item":
@@ -178,6 +184,10 @@ export function blockWithColor(block: NotesBlock, color: NotesColor): NotesBlock
       return { type: block.type, heading_3: textPayloadWithColor(block.heading_3, color) };
     case "heading_4":
       return { type: block.type, heading_4: textPayloadWithColor(block.heading_4, color) };
+    case "heading_5":
+      return { type: block.type, heading_5: textPayloadWithColor(block.heading_5, color) };
+    case "heading_6":
+      return { type: block.type, heading_6: textPayloadWithColor(block.heading_6, color) };
     case "bulleted_list_item":
       return {
         type: block.type,

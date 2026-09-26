@@ -3,6 +3,7 @@
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import Check from "@lucide/svelte/icons/check";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
+  import type { HTMLButtonAttributes } from "svelte/elements";
   import { cn } from "$lib/utils";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { portal } from "$lib/utils/portal";
@@ -48,6 +49,7 @@
     onSearchChange,
     emptyLabel,
     contentAlign = "end",
+    triggerProps = {},
   }: {
     value: string;
     options: readonly Option[];
@@ -78,6 +80,8 @@
     onSearchChange?: (query: string) => void;
     emptyLabel?: string;
     contentAlign?: "start" | "end";
+    /** Native trigger metadata and focus/navigation handlers for labels and editable grids. */
+    triggerProps?: Omit<HTMLButtonAttributes, "children" | "onclick" | "class" | "disabled">;
   } = $props();
 
   const { t } = getLocalization();
@@ -287,6 +291,7 @@
   <div class={cn("relative min-w-0 w-44 max-[480px]:flex-1", className)}>
     <button
       bind:this={triggerEl}
+      {...triggerProps}
       type="button"
       {disabled}
       onclick={toggle}
@@ -295,6 +300,7 @@
           event.preventDefault();
           void toggle();
         }
+        triggerProps.onkeydown?.(event);
       }}
       aria-haspopup={searchPlaceholder ? "dialog" : "listbox"}
       aria-expanded={open}

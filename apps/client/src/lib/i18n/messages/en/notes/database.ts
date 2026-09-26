@@ -1,4 +1,7 @@
 export const database = {
+  databaseLayout: "Layout",
+  databaseNew: "New",
+  databaseMore: "More",
   childDatabaseLocal: "Local database",
   childDatabasePreserved: "Database preserved",
   databaseLinkedViewCreate: "Create linked view",

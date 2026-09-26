@@ -41,6 +41,7 @@
     NotesRichText,
     NotesTableOfContentsItem,
   } from "$lib/notes/types";
+  import { notesNumberedListOrdinals } from "$lib/notes/block-editor-ui";
   import NotesBlockRow from "./NotesBlockRow.svelte";
   import type NotesSelectionContextMenu from "./NotesSelectionContextMenu.svelte";
   import { createNotesDocumentSelectionController } from "./notes-document-selection-controller.svelte";
@@ -124,6 +125,7 @@
     hydrate: notes.hydrateBlockRange,
     replace: notes.replaceDocumentRange,
     format: notes.formatDocumentRange,
+    indent: notes.indentBlockSelection,
     focus: (point) => notes.focusBlock(point.blockId, { start: point.offset, end: point.offset }),
     restoreFocusAfterEdit: () => { if (notes.focusBlockId) notes.focusBlock(notes.focusBlockId, notes.focusSelection); },
     clearBlockSelection: () => blockSelectionController.setSelection(null),
@@ -175,9 +177,16 @@
   const canMoveSelectionUp = $derived(blockSelectionController.canMoveUp);
   const canMoveSelectionDown = $derived(blockSelectionController.canMoveDown);
   const mentionTargets: NotesNamedMentionTarget[] = $derived(buildMentionTargets());
+  const listOrdinals = $derived(notesNumberedListOrdinals(notes.flatBlockOutlines.map(({ outline }) => ({
+    indent: outline.ganbaru_indent ?? 0,
+    id: outline.id,
+    type: outline.type,
+    parentId: outline.parent.type === "page_id" ? outline.parent.page_id : outline.parent.block_id,
+  }))));
   const renderState: NotesBlockRenderState = $derived({
     breadcrumbItems,
     tableOfContentsItems,
+    listOrdinals,
     focusBlockId: notes.focusBlockId,
     focusRequestId: notes.focusRequestId,
     focusSelection: notes.focusSelection,
@@ -333,6 +342,10 @@
       void notes.convertBlock(blockId, "paragraph", true);
       return;
     }
+    if (action.type === "remove_block_format") {
+      void notes.convertBlock(blockId, "paragraph", false, { start: 0, end: 0 });
+      return;
+    }
     if (action.type === "apply_text_shortcut") {
       void notes.convertBlock(blockId, action.blockType, true);
       return;
@@ -353,11 +366,11 @@
       return;
     }
     if (action.type === "nest") {
-      void notes.nestBlock(blockId);
+      void notes.nestBlock(blockId, action.selection);
       return;
     }
     if (action.type === "outdent") {
-      void notes.outdentBlock(blockId);
+      void notes.outdentBlock(blockId, action.selection);
       return;
     }
     if (action.type === "move_up") {

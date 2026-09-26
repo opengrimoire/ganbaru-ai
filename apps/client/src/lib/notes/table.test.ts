@@ -152,6 +152,9 @@ describe("notes table helpers", () => {
       columnIndex: 1,
       preventDefault: true,
     });
+    expect(planNotesTableCellNavigation({
+      ...base, key: "Unidentified", code: "Tab", rowIndex: 1, shiftKey: true,
+    })).toEqual({ type: "focus_cell", rowIndex: 0, columnIndex: 1, preventDefault: true });
     expect(
       planNotesTableCellNavigation({
         ...base,

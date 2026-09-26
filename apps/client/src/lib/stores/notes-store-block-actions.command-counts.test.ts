@@ -109,6 +109,7 @@ describe("notes store block actions", () => {
       has_more: false,
     });
     const context: NotesBlockActionsContext = {
+      readPageRootBlockIds: () => state.childIdsByParentId[pageId] ?? [],
       enqueueEditorMutation: (mutation) => mutation(),
       awaitSelectedPageReady: () => Promise.resolve(),
       readSelectedPageId: () => pageId,

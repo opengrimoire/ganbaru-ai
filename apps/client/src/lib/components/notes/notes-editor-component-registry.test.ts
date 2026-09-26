@@ -15,7 +15,7 @@ import {
   type NotesEditorPanelKind,
   type NotesTextControlKind,
 } from "./notes-editor-component-registry";
-import type { NotesDatabaseViewKind } from "$lib/notes/database-view-kind";
+import type { NotesDatabaseViewKind } from "$lib/notes/contracts/database/base";
 import { NOTES_BLOCK_TYPES } from "$lib/notes/types";
 
 const BLOCK_FAMILIES = [
@@ -55,6 +55,7 @@ const EDITOR_PANELS = [
 ] as const satisfies readonly NotesEditorPanelKind[];
 
 const TEXT_CONTROLS = [
+  "code-language",
   "text-context-menu",
   "link-editor",
   "mention-menu",

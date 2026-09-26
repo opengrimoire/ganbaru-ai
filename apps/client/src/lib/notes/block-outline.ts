@@ -1,3 +1,4 @@
+import { blockIndent } from "./block-queries";
 import type { NotesBlock, NotesBlockOutline, NotesBlockTreeItem } from "./types";
 
 export interface NotesBlockOutlineItem {
@@ -20,6 +21,7 @@ export function notesBlockOutlineFromBlock(
     type: block.type,
     sort_order: sortOrder,
     has_children: block.has_children,
+    ganbaru_indent: blockIndent(block),
     retained_height: notesEstimatedBlockHeight(block.type),
   };
 }
@@ -29,7 +31,7 @@ export function notesEstimatedBlockHeight(type: NotesBlock["type"]): number {
   if (["image", "video", "pdf", "bookmark", "link_preview", "embed"].includes(type)) return 240;
   if (["child_database", "table", "column_list", "tab"].includes(type)) return 180;
   if (type === "code" || type === "callout") return 72;
-  if (["heading_1", "heading_2", "heading_3", "heading_4"].includes(type)) return 48;
+  if (["heading_1", "heading_2", "heading_3", "heading_4", "heading_5", "heading_6"].includes(type)) return 48;
   return 36;
 }
 
@@ -56,8 +58,9 @@ export function flattenNotesBlockOutlines(
     for (const outline of children.get(parentId) ?? []) {
       if (visited.has(outline.id)) continue;
       visited.add(outline.id);
-      result.push({ outline, depth });
-      append(outline.id, depth + 1);
+      const itemDepth = depth + (outline.ganbaru_indent ?? 0);
+      result.push({ outline, depth: itemDepth });
+      append(outline.id, itemDepth + 1);
     }
   };
   append(pageId, 0);

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import { tick } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { notesBlockAnchorId } from "$lib/notes/block-link";
@@ -66,6 +67,7 @@
     focusBlockId,
     focusRequestId,
     focusSelection,
+    listOrdinals = new Map<string, number>(),
     mentionTargets,
     templateStatusForBlock,
     buttonStatusForBlock,
@@ -149,6 +151,7 @@
     focusBlockId: string | null;
     focusRequestId: number;
     focusSelection: NotesTextSelection | null;
+    listOrdinals?: ReadonlyMap<string, number>;
     mentionTargets: NotesNamedMentionTarget[];
     templateStatusForBlock: (blockId: string) => NotesTemplateBlockStatus;
     buttonStatusForBlock: (blockId: string) => NotesButtonBlockStatus;
@@ -504,7 +507,7 @@
   class:notes-block-drop-after={dropPosition === "after"}
   class:notes-block-drop-inside={dropPosition === "inside"}
   class:notes-block-drop-outdent={dropPosition === "outdent"}
-  style={`--notes-depth: ${Math.min(item.depth, 8)}`}
+  style={`--notes-depth: ${item.depth}`}
   ondragover={(event) => onDragOver(block.id, event)}
   ondragleave={(event) => onDragLeave(block.id, event)}
   ondrop={(event) => onDrop(block.id, event)}
@@ -588,16 +591,18 @@
                 onblur={commitActiveLabel}
                 onkeydown={handleLabelKeydown}
               />
-              <select
-                class="notes-tab-icon-select"
-                value={activeIconOptionId()}
-                aria-label={t("notes.tabIcon", activeTabIndex + 1)}
-                onchange={(event) => selectActiveIcon(event.currentTarget.value)}
-              >
-                {#each tabIconChoices as option (option.id)}
-                  <option value={option.id}>{option.id === "none" ? t("notes.noTabIcon") : option.label}</option>
-                {/each}
-              </select>
+              <div class="notes-tab-icon-control">
+                <CustomSelect
+                  inline
+                  appearance="quiet"
+                  contentAlign="start"
+                  class="w-full min-w-0"
+                  ariaLabel={t("notes.tabIcon", activeTabIndex + 1)}
+                  value={String(activeIconOptionId() ?? "")}
+                  options={[...(tabIconChoices).map((option) => ({ value: String(option.id), label: String(option.id === "none" ? t("notes.noTabIcon") : option.label) }))]}
+                  onChange={(nextValue) => selectActiveIcon(nextValue)}
+                />
+              </div>
               <button
                 type="button"
                 class="notes-tab-tool-button"
@@ -662,6 +667,7 @@
                       {focusBlockId}
                       {focusRequestId}
                       {focusSelection}
+                      {listOrdinals}
                       {mentionTargets}
                       templateStatus={templateStatusForBlock(tabBlockItem.block.id)}
                       buttonStatus={buttonStatusForBlock(tabBlockItem.block.id)}
@@ -760,7 +766,7 @@
     z-index: 5;
     height: 2px;
     border-radius: 999px;
-    background: hsl(var(--primary));
+    background: var(--primary);
     content: "";
   }
 
@@ -780,7 +786,7 @@
     z-index: 5;
     height: 2px;
     border-radius: 999px;
-    background: hsl(var(--primary));
+    background: var(--primary);
     content: "";
   }
 
@@ -807,7 +813,7 @@
     gap: 0.25rem;
     border-bottom: 2px solid transparent;
     padding: 0 0.55rem;
-    color: hsl(var(--muted-foreground));
+    color: var(--muted-foreground);
     font-size: calc(0.8rem * var(--type-scale));
     font-weight: 500;
     outline: none;
@@ -815,13 +821,13 @@
 
   .notes-tab-trigger:hover,
   .notes-tab-trigger:focus-visible {
-    background: hsl(var(--accent));
-    color: hsl(var(--accent-foreground));
+    background: var(--accent);
+    color: var(--accent-foreground);
   }
 
   .notes-tab-trigger-active {
-    border-bottom-color: hsl(var(--primary));
-    color: hsl(var(--foreground));
+    border-bottom-color: var(--primary);
+    color: var(--foreground);
   }
 
   .notes-tab-trigger :global(.notes-tab-icon) {
@@ -843,14 +849,13 @@
     padding: 0.4rem 0 0.2rem;
   }
 
-  .notes-tab-label-input,
-  .notes-tab-icon-select {
+  .notes-tab-label-input {
     min-width: 0;
     height: 1.9rem;
     border: 1px solid var(--border);
     border-radius: 0.375rem;
-    background: hsl(var(--background));
-    color: hsl(var(--foreground));
+    background: var(--background);
+    color: var(--foreground);
     font-size: calc(0.78rem * var(--type-scale));
     outline: none;
   }
@@ -859,14 +864,9 @@
     padding: 0 0.5rem;
   }
 
-  .notes-tab-icon-select {
-    padding: 0 1.5rem 0 0.45rem;
-  }
-
   .notes-tab-label-input:focus-visible,
-  .notes-tab-icon-select:focus-visible,
   .notes-tab-tool-button:focus-visible {
-    box-shadow: 0 0 0 2px hsl(var(--ring) / 0.65);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 65%, transparent);
   }
 
   .notes-tab-tool-button {
@@ -877,13 +877,13 @@
     justify-content: center;
     border: 1px solid var(--border);
     border-radius: 0.375rem;
-    color: hsl(var(--muted-foreground));
+    color: var(--muted-foreground);
     outline: none;
   }
 
   .notes-tab-tool-button:hover:not(:disabled) {
-    background: hsl(var(--accent));
-    color: hsl(var(--accent-foreground));
+    background: var(--accent);
+    color: var(--accent-foreground);
   }
 
   .notes-tab-tool-button:disabled {
@@ -918,7 +918,7 @@
       grid-template-columns: minmax(0, 1fr) repeat(4, 1.75rem);
     }
 
-    .notes-tab-icon-select {
+    .notes-tab-icon-control {
       grid-column: 1 / -1;
       width: 100%;
     }

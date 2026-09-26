@@ -7,6 +7,8 @@ export const NOTES_BLOCK_TYPES = [
   "heading_2",
   "heading_3",
   "heading_4",
+  "heading_5",
+  "heading_6",
   "bulleted_list_item",
   "numbered_list_item",
   "to_do",
@@ -71,6 +73,8 @@ export type NotesTextBlockType =
   | "heading_2"
   | "heading_3"
   | "heading_4"
+  | "heading_5"
+  | "heading_6"
   | "bulleted_list_item"
   | "numbered_list_item"
   | "toggle"
@@ -201,6 +205,7 @@ export type NotesRichText =
   | NotesEquationRichText;
 
 export interface NotesTextBlockPayload {
+  ganbaru_indent?: number;
   rich_text: NotesRichText[];
   color?: NotesColor;
   is_toggleable?: boolean;
@@ -405,6 +410,14 @@ export type NotesHeading4Block = NotesBlockBase<"heading_4"> & {
   heading_4: NotesTextBlockPayload;
 };
 
+export type NotesHeading5Block = NotesBlockBase<"heading_5"> & {
+  heading_5: NotesTextBlockPayload;
+};
+
+export type NotesHeading6Block = NotesBlockBase<"heading_6"> & {
+  heading_6: NotesTextBlockPayload;
+};
+
 export type NotesBulletedListItemBlock = NotesBlockBase<"bulleted_list_item"> & {
   bulleted_list_item: NotesTextBlockPayload;
 };
@@ -531,6 +544,8 @@ export type NotesBlock =
   | NotesHeading2Block
   | NotesHeading3Block
   | NotesHeading4Block
+  | NotesHeading5Block
+  | NotesHeading6Block
   | NotesBulletedListItemBlock
   | NotesNumberedListItemBlock
   | NotesTodoBlock
@@ -568,6 +583,8 @@ export type NotesBlockWrite =
   | { id: string; type: "heading_2"; heading_2: NotesTextBlockPayload }
   | { id: string; type: "heading_3"; heading_3: NotesTextBlockPayload }
   | { id: string; type: "heading_4"; heading_4: NotesTextBlockPayload }
+  | { id: string; type: "heading_5"; heading_5: NotesTextBlockPayload }
+  | { id: string; type: "heading_6"; heading_6: NotesTextBlockPayload }
   | { id: string; type: "bulleted_list_item"; bulleted_list_item: NotesTextBlockPayload }
   | { id: string; type: "numbered_list_item"; numbered_list_item: NotesTextBlockPayload }
   | { id: string; type: "to_do"; to_do: NotesTodoBlockPayload }

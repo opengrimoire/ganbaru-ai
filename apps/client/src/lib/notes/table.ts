@@ -2,6 +2,7 @@ import {
   createEmptyTableRowPayload,
   createTableCell,
 } from "./block-factory";
+import { isNotesTabKey } from "./block-keyboard";
 import {
   replacePlainTextPreservingRichText,
   richTextPlainText,
@@ -25,6 +26,7 @@ export interface NotesTableCellCoordinate {
 
 export interface NotesTableCellNavigationInput extends NotesTableCellCoordinate {
   key: string;
+  code?: string;
   shiftKey: boolean;
   ctrlKey: boolean;
   metaKey: boolean;
@@ -268,7 +270,7 @@ export function planNotesTableCellNavigation(
 ): NotesTableCellNavigationPlan {
   if (input.altKey || input.ctrlKey || input.metaKey) return { type: "none" };
 
-  if (input.key === "Tab") {
+  if (isNotesTabKey(input)) {
     return navigationPlanForTarget(
       targetCell({
         ...input,

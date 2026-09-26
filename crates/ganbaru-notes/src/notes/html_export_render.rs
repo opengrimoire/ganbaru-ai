@@ -81,10 +81,26 @@ impl HtmlRenderer<'_> {
     }
 
     fn render_block(&mut self, block: &ExportBlock) -> String {
+        let rendered = self.render_block_content(block);
+        let indent = block
+            .payload
+            .get("ganbaru_indent")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        if indent == 0 {
+            rendered
+        } else {
+            format!("<div style=\"margin-inline-start:calc({indent} * 1.25rem)\">{rendered}</div>")
+        }
+    }
+
+    fn render_block_content(&mut self, block: &ExportBlock) -> String {
         self.exported_block_count += 1;
         let inner = match block.row.block_type.as_str() {
             "paragraph" => tag("p", &self.rich_text_payload(block, &block.payload)),
-            "heading_1" | "heading_2" | "heading_3" | "heading_4" => self.heading(block),
+            "heading_1" | "heading_2" | "heading_3" | "heading_4" | "heading_5" | "heading_6" => {
+                self.heading(block)
+            }
             "bulleted_list_item" => self.list_item(block, "ul"),
             "numbered_list_item" => self.list_item(block, "ol"),
             "to_do" => self.todo(block),
@@ -119,10 +135,12 @@ impl HtmlRenderer<'_> {
 
     fn heading(&mut self, block: &ExportBlock) -> String {
         let level = match block.row.block_type.as_str() {
-            "heading_1" => 2,
-            "heading_2" => 3,
-            "heading_3" => 4,
-            _ => 5,
+            "heading_1" => 1,
+            "heading_2" => 2,
+            "heading_3" => 3,
+            "heading_4" => 4,
+            "heading_5" => 5,
+            _ => 6,
         };
         tag(
             &format!("h{level}"),
