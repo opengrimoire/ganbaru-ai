@@ -32,7 +32,7 @@ Text blocks share the rich-text editor and support conversion when the source an
 
 The editor shows block actions from a block surface's context menu. Text selection has its own context menu. Blocks can be inserted through the text context menu or keyboard editing commands; moving blocks remains available through block actions and multi-block selection. The editor does not show add or drag handles beside each block.
 
-Text payloads may carry a nonnegative `ganbaru_indent` level relative to their structural parent. This supports standalone row indentation without artificial parent blocks or a schema migration. Typing, conversion between text types, history, duplication, and ordinary Enter preserve it. List numbering and bullet presentation derive from sibling structure and relative indentation. To-do checked state is canonical block payload. Toggle open state can be local presentation metadata while toggle children remain canonical content.
+Block payloads may carry a nonnegative `ganbaru_indent` level relative to their structural parent. Text editing can adjust the level of a child, including an embedded block, to keep its visual position unchanged when its former parent is indented or outdented. This supports standalone row indentation without artificial parent blocks or a schema migration. Typing, conversion between text types, history, duplication, and ordinary Enter preserve it. List numbering and bullet presentation derive from sibling structure and relative indentation. To-do checked state is canonical block payload. Toggle open state can be local presentation metadata while toggle children remain canonical content.
 
 ## Child pages and navigation blocks
 

@@ -204,8 +204,12 @@ export type NotesRichText =
   | NotesDateMentionRichText
   | NotesEquationRichText;
 
-export interface NotesTextBlockPayload {
+/** Visual indentation relative to the structural parent, independent of block content. */
+export interface NotesBlockLayout {
   ganbaru_indent?: number;
+}
+
+export interface NotesTextBlockPayload extends NotesBlockLayout {
   rich_text: NotesRichText[];
   color?: NotesColor;
   is_toggleable?: boolean;
@@ -227,38 +231,38 @@ export interface NotesCalloutBlockPayload extends NotesTextBlockPayload {
   icon: NotesCalloutIcon;
 }
 
-export interface NotesCodeBlockPayload {
+export interface NotesCodeBlockPayload extends NotesBlockLayout {
   rich_text: NotesRichText[];
   caption: NotesRichText[];
   language: string;
 }
 
-export interface NotesChildPageBlockPayload {
+export interface NotesChildPageBlockPayload extends NotesBlockLayout {
   title: string;
 }
 
-export interface NotesChildDatabaseBlockPayload {
+export interface NotesChildDatabaseBlockPayload extends NotesBlockLayout {
   title: string;
   database_id?: string;
   data_source_id?: string;
   view_id?: string;
 }
 
-export type NotesDividerBlockPayload = Record<string, unknown>;
+export type NotesDividerBlockPayload = NotesBlockLayout & Record<string, unknown>;
 
-export type NotesBreadcrumbBlockPayload = Record<string, unknown>;
+export type NotesBreadcrumbBlockPayload = NotesBlockLayout & Record<string, unknown>;
 
-export interface NotesTableOfContentsBlockPayload {
+export interface NotesTableOfContentsBlockPayload extends NotesBlockLayout {
   color?: NotesColor;
 }
 
-export type NotesColumnListBlockPayload = Record<string, unknown>;
+export type NotesColumnListBlockPayload = NotesBlockLayout & Record<string, unknown>;
 
-export interface NotesColumnBlockPayload {
+export interface NotesColumnBlockPayload extends NotesBlockLayout {
   width_ratio?: number;
 }
 
-export interface NotesTableBlockPayload {
+export interface NotesTableBlockPayload extends NotesBlockLayout {
   table_width: number;
   has_column_header: boolean;
   has_row_header: boolean;
@@ -266,18 +270,18 @@ export interface NotesTableBlockPayload {
 
 export type NotesTableCell = NotesRichText[];
 
-export interface NotesTableRowBlockPayload {
+export interface NotesTableRowBlockPayload extends NotesBlockLayout {
   cells: NotesTableCell[];
 }
 
-export type NotesTabBlockPayload = Record<string, unknown>;
+export type NotesTabBlockPayload = NotesBlockLayout & Record<string, unknown>;
 
-export interface NotesBookmarkBlockPayload {
+export interface NotesBookmarkBlockPayload extends NotesBlockLayout {
   caption: NotesRichText[];
   url: string;
 }
 
-export interface NotesLinkPreviewBlockPayload {
+export interface NotesLinkPreviewBlockPayload extends NotesBlockLayout {
   url: string;
 }
 
@@ -286,11 +290,11 @@ export interface NotesSyncedBlockReference {
   block_id: string;
 }
 
-export interface NotesSyncedBlockPayload {
+export interface NotesSyncedBlockPayload extends NotesBlockLayout {
   synced_from: NotesSyncedBlockReference | null;
 }
 
-export interface NotesTemplateBlockPayload {
+export interface NotesTemplateBlockPayload extends NotesBlockLayout {
   rich_text: NotesRichText[];
 }
 
@@ -311,21 +315,21 @@ export interface NotesButtonInsertBlocksAction {
 
 export type NotesButtonAction = NotesButtonInsertBlocksAction;
 
-export interface NotesButtonBlockPayload {
+export interface NotesButtonBlockPayload extends NotesBlockLayout {
   rich_text: NotesRichText[];
   icon: NotesIcon | null;
   actions: NotesButtonAction[];
 }
 
-export interface NotesEmbedBlockPayload {
+export interface NotesEmbedBlockPayload extends NotesBlockLayout {
   url: string;
 }
 
-export interface NotesEquationBlockPayload {
+export interface NotesEquationBlockPayload extends NotesBlockLayout {
   expression: string;
 }
 
-export type NotesUnsupportedBlockPayload = Record<string, unknown> & {
+export type NotesUnsupportedBlockPayload = NotesBlockLayout & Record<string, unknown> & {
   block_type?: string;
   source_type?: string;
   raw?: Record<string, unknown>;

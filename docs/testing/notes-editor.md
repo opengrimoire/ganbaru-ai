@@ -154,6 +154,10 @@ Automated coverage exercises both clipboard parsers and the real editor projecti
 - Indent under a collapsed toggle or toggle heading. Verify it opens and the child remains focused; undo restores the original structure and open state.
 - Start with a new note and empty first body row. Press Tab more than eight times, type text, press Enter, and verify the new row keeps the same indentation. Repeat for bullets, numbers, and tasks.
 - Use Shift+Tab and Backspace at offset zero to return to the left margin one level at a time. At the left margin, Backspace removes a list marker while keeping text. Shift+Tab at the left margin is a no-op.
-- Select several rows, including nested descendants, and press Tab or Shift+Tab. Verify equal changes, retained selection, and one undo step.
+- Select several rows, including both a parent and a child, and press Tab or Shift+Tab. Verify each selected text row changes once, unselected descendants retain their depths, selection remains, and one undo restores the operation.
 - Use Tab and Shift+Tab within code, including a multiline selection. Verify whitespace changes and no block movement.
 - Repeat Shift+Tab in the Linux Tauri app on both indented text and text at the left margin. Focus must remain in the same editor. Automated DOM regressions cover WebKitGTK events with `key: "Unidentified"` and `code: "Tab"`, including document selections and code whitespace; table navigation also recognizes that event format.
+
+- Start with ABC at depth 0, DEF at depth 1, and GHI at depth 0. Indent ABC repeatedly and verify DEF remains at depth 1 and GHI at depth 0. Repeat with numbered lists, paragraphs, tasks, deeper descendants, and embedded blocks; verify numbering, undo/redo, and saved positions after reopening.
+- Outdent a parent that already has several indentation levels. Its children and following nested siblings must retain their original depths and document order. Repeat when affected neighbours are outside the rendered window.
+- Press Tab repeatedly immediately after opening a page while nested rows are still loading. Once loaded, only the requested row should change depth. Switching pages before loading finishes must cancel those pending indentation edits.

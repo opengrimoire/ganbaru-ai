@@ -12,7 +12,7 @@ import {
   notesParentCanAcceptBlockType,
 } from "./block-backspace";
 import { richTextPlainText } from "./rich-text";
-import type { NotesBlock, NotesBlockTreeItem, NotesRichText } from "./types";
+import type { NotesBlock, NotesBlockOutline, NotesBlockTreeItem, NotesRichText } from "./types";
 
 export type NotesBlocksById = Readonly<Record<string, NotesBlock>>;
 export type NotesChildIdsByParent = Readonly<Record<string, readonly string[]>>;
@@ -20,6 +20,51 @@ export type NotesChildIdsByParent = Readonly<Record<string, readonly string[]>>;
 export interface NotesTreeState {
   blocksById: NotesBlocksById;
   childIdsByParentId: NotesChildIdsByParent;
+}
+
+/** Find the bodies needed to change row indentation without skipping unloaded neighbours. */
+export function notesIndentationContextIds(
+  outlines: readonly NotesBlockOutline[],
+  ids: readonly string[],
+  direction: "nest" | "outdent",
+): string[] {
+  const byId = new Map(outlines.map((outline) => [outline.id, outline]));
+  const children = new Map<string, NotesBlockOutline[]>();
+  for (const outline of outlines) {
+    const parentId = outline.parent.type === "page_id" ? outline.parent.page_id : outline.parent.block_id;
+    const siblings = children.get(parentId) ?? [];
+    siblings.push(outline);
+    children.set(parentId, siblings);
+  }
+  for (const siblings of children.values()) siblings.sort((a, b) => a.sort_order - b.sort_order || a.id.localeCompare(b.id));
+  const required = new Set(ids);
+  for (const id of ids) {
+    const outline = byId.get(id);
+    if (!outline) continue;
+    const seen = new Set<string>();
+    let ancestor = outline;
+    while (ancestor.parent.type === "block_id" && !seen.has(ancestor.parent.block_id)) {
+      const parentId = ancestor.parent.block_id;
+      seen.add(parentId);
+      required.add(parentId);
+      const parent = byId.get(parentId);
+      if (!parent) break;
+      ancestor = parent;
+    }
+    for (const child of children.get(id) ?? []) required.add(child.id);
+    if ((outline.ganbaru_indent ?? 0) > 0) continue;
+    const parentId = outline.parent.type === "page_id" ? outline.parent.page_id : outline.parent.block_id;
+    const siblings = children.get(parentId) ?? [];
+    const index = siblings.findIndex((sibling) => sibling.id === id);
+    if (direction === "outdent" && outline.parent.type === "block_id") {
+      for (const sibling of siblings.slice(index + 1)) required.add(sibling.id);
+    } else if (direction === "nest" && index > 0) {
+      const previous = siblings[index - 1];
+      required.add(previous.id);
+      for (const child of children.get(previous.id) ?? []) required.add(child.id);
+    }
+  }
+  return [...required];
 }
 
 export interface NotesNestPlan {

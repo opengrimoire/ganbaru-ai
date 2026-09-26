@@ -373,7 +373,7 @@ export function blockWithBookmark(
   if (block.type !== "bookmark") return blockWithText(block, blockPlainText(block));
   return {
     type: "bookmark",
-    bookmark: createBookmarkPayload(url, caption),
+    bookmark: { ...createBookmarkPayload(url, caption), ganbaru_indent: blockIndent(block) || undefined },
   };
 }
 
@@ -381,7 +381,7 @@ export function blockWithEmbedUrl(block: NotesBlock, url: string): NotesBlockUpd
   if (block.type !== "embed") return blockWithText(block, blockPlainText(block));
   return {
     type: "embed",
-    embed: createEmbedPayload(url),
+    embed: { ...createEmbedPayload(url), ganbaru_indent: blockIndent(block) || undefined },
   };
 }
 
@@ -389,7 +389,7 @@ export function blockWithLinkPreviewUrl(block: NotesBlock, url: string): NotesBl
   if (block.type !== "link_preview") return blockWithText(block, blockPlainText(block));
   return {
     type: "link_preview",
-    link_preview: createLinkPreviewPayload(url),
+    link_preview: { ...createLinkPreviewPayload(url), ganbaru_indent: blockIndent(block) || undefined },
   };
 }
 
@@ -400,7 +400,7 @@ export function blockWithEquationExpression(
   if (block.type !== "equation") return blockWithText(block, blockPlainText(block));
   return {
     type: "equation",
-    equation: createEquationPayload(expression),
+    equation: { ...createEquationPayload(expression), ganbaru_indent: blockIndent(block) || undefined },
   };
 }
 
@@ -414,31 +414,31 @@ export function blockWithMedia(
   if (block.type === "image") {
     return {
       type: "image",
-      image: createMediaPayloadFromChange(block.image, url, caption, name, assetChange),
+      image: { ...createMediaPayloadFromChange(block.image, url, caption, name, assetChange), ganbaru_indent: blockIndent(block) || undefined },
     };
   }
   if (block.type === "video") {
     return {
       type: "video",
-      video: createMediaPayloadFromChange(block.video, url, caption, name, assetChange),
+      video: { ...createMediaPayloadFromChange(block.video, url, caption, name, assetChange), ganbaru_indent: blockIndent(block) || undefined },
     };
   }
   if (block.type === "audio") {
     return {
       type: "audio",
-      audio: createMediaPayloadFromChange(block.audio, url, caption, name, assetChange),
+      audio: { ...createMediaPayloadFromChange(block.audio, url, caption, name, assetChange), ganbaru_indent: blockIndent(block) || undefined },
     };
   }
   if (block.type === "file") {
     return {
       type: "file",
-      file: createMediaPayloadFromChange(block.file, url, caption, name, assetChange),
+      file: { ...createMediaPayloadFromChange(block.file, url, caption, name, assetChange), ganbaru_indent: blockIndent(block) || undefined },
     };
   }
   if (block.type === "pdf") {
     return {
       type: "pdf",
-      pdf: createMediaPayloadFromChange(block.pdf, url, caption, name, assetChange),
+      pdf: { ...createMediaPayloadFromChange(block.pdf, url, caption, name, assetChange), ganbaru_indent: blockIndent(block) || undefined },
     };
   }
   return blockWithText(block, blockPlainText(block));
@@ -448,7 +448,7 @@ export function blockWithTodoChecked(block: NotesBlock, checked: boolean): Notes
   if (block.type !== "to_do") return blockWithText(block, blockPlainText(block));
   return {
     type: "to_do",
-    to_do: createTodoPayload(blockPlainText(block), checked, blockColor(block)),
+    to_do: { ...block.to_do, checked },
   };
 }
 
@@ -456,7 +456,11 @@ export function blockWithCodeLanguage(block: NotesBlock, language: string): Note
   const content = blockPlainText(block);
   return {
     type: "code",
-    code: createCodePayload(content, language.trim() || DEFAULT_CODE_LANGUAGE),
+    code: {
+      ...(block.type === "code" ? block.code : createCodePayload(content)),
+      language: language.trim() || DEFAULT_CODE_LANGUAGE,
+      ganbaru_indent: blockIndent(block) || undefined,
+    },
   };
 }
 
@@ -831,21 +835,8 @@ export function blockWithRichText(block: NotesBlock, richText: readonly NotesRic
 /** Apply explicit indentation without changing text, annotations, or list markers. */
 export function blockUpdateWithIndent(update: NotesBlockUpdate, indent: number): NotesBlockUpdate {
   if (!Number.isSafeInteger(indent) || indent < 0) throw new Error("Invalid Notes indentation");
-  const field = indent > 0 ? { ganbaru_indent: indent } : { ganbaru_indent: undefined };
-  switch (update.type) {
-    case "paragraph": return { ...update, paragraph: { ...update.paragraph, ...field } };
-    case "heading_1": return { ...update, heading_1: { ...update.heading_1, ...field } };
-    case "heading_2": return { ...update, heading_2: { ...update.heading_2, ...field } };
-    case "heading_3": return { ...update, heading_3: { ...update.heading_3, ...field } };
-    case "heading_4": return { ...update, heading_4: { ...update.heading_4, ...field } };
-    case "heading_5": return { ...update, heading_5: { ...update.heading_5, ...field } };
-    case "heading_6": return { ...update, heading_6: { ...update.heading_6, ...field } };
-    case "bulleted_list_item": return { ...update, bulleted_list_item: { ...update.bulleted_list_item, ...field } };
-    case "numbered_list_item": return { ...update, numbered_list_item: { ...update.numbered_list_item, ...field } };
-    case "to_do": return { ...update, to_do: { ...update.to_do, ...field } };
-    case "toggle": return { ...update, toggle: { ...update.toggle, ...field } };
-    case "callout": return { ...update, callout: { ...update.callout, ...field } };
-    case "quote": return { ...update, quote: { ...update.quote, ...field } };
-    default: return update;
-  }
+  const record: Record<string, unknown> = { ...update };
+  const payload = record[update.type];
+  if (typeof payload !== "object" || payload === null) throw new Error("Missing Notes block payload");
+  return { ...update, [update.type]: { ...payload, ganbaru_indent: indent > 0 ? indent : undefined } };
 }

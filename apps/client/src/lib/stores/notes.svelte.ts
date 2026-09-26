@@ -5,6 +5,7 @@ import {
 import { blockPlainText } from "$lib/notes/block-factory";
 import type { NotesBlockLinkTarget, NotesPageLinkTarget } from "$lib/notes/block-link";
 import {
+  notesIndentationContextIds,
   parentIdForBlock,
   type NotesTreeState,
 } from "$lib/notes/block-tree";
@@ -388,6 +389,8 @@ function applyPostMutation(result: NotesPostMutationResult): void {
   sidebarRefreshCoordinator.schedule(result.sidebarImpact ?? "none");
 }
 
+let pendingPageOutline: { pageId: string; generation: number; promise: Promise<void> } | null = null;
+
 async function loadPageTree(pageId: string, options: NotesLoadPageTreeOptions = {}): Promise<boolean> {
   const requestId = pageSession.invalidate();
   treeProjection.primaryContentReady = false;
@@ -401,7 +404,11 @@ async function loadPageTree(pageId: string, options: NotesLoadPageTreeOptions = 
   const bodyId = blockActions.ensurePageBody(pageId);
   if (options.focusOnLoad && loaded.outlines.length === 0) requestBlockFocus(bodyId, { start: 0, end: 0 });
   pageSession.applyBreadcrumbsIfCurrent(requestId, pageId, loaded.breadcrumb);
-  void hydrationController.loadOutlineDescendantFrontiers(pageId, requestId).catch((error) => {
+  const outlinePromise = hydrationController.loadOutlineDescendantFrontiers(pageId, requestId);
+  pendingPageOutline = { pageId, generation: requestId, promise: outlinePromise };
+  void outlinePromise.then(() => {
+    if (pendingPageOutline?.promise === outlinePromise) pendingPageOutline = null;
+  }, (error: unknown) => {
     if (pageSession.isCurrent(requestId, pageId)) {
       workspaceController.setError(error instanceof Error ? error.message : String(error));
     }
@@ -866,6 +873,19 @@ const pageActions = createNotesPageActions({
 });
 
 const blockActions = createNotesBlockActions({
+  readPageGeneration: () => pageSession.generation,
+  prepareIndentation: (ids, direction) => {
+    const generation = pageSession.generation;
+    const hydrate = () => {
+      if (pageSession.generation !== generation) return;
+      const required = notesIndentationContextIds(treeProjection.blockOutlines, ids, direction);
+      if (required.some((id) => !blockById(id))) return hydrateBlockRange(required);
+    };
+    if (pendingPageOutline && pageSession.isCurrent(pendingPageOutline.generation, pendingPageOutline.pageId)) {
+      return pendingPageOutline.promise.then(hydrate);
+    }
+    return hydrate();
+  },
   enqueueEditorMutation,
   readPageRootBlockIds: () => [...new Set([
     ...treeProjection.flatBlockOutlines

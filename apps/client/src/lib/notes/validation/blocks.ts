@@ -42,7 +42,6 @@ export function parseNotesParent(value: unknown): NotesParent {
 function parseTextPayload(value: unknown, label: string): NotesTextBlockPayload {
   const record = readRecord(value, label);
   return {
-    ...(record.ganbaru_indent === undefined ? {} : { ganbaru_indent: parseNotesIndent(record.ganbaru_indent) }),
     rich_text: parseNotesRichTextArray(record.rich_text, `${label}.rich_text`),
     ...(record.color === undefined ? {} : { color: readNotesColor(record.color, `${label}.color`) }),
     ...(record.is_toggleable === undefined
@@ -176,7 +175,9 @@ function parseTableRowPayload(value: unknown, label: string): NotesTableRowBlock
 }
 
 function parseTabPayload(value: unknown, label: string): NotesTabBlockPayload {
-  return parseEmptyObjectPayload(value, label);
+  const record = { ...readRecord(value, label) };
+  delete record.ganbaru_indent;
+  return parseEmptyObjectPayload(record, label);
 }
 
 function parseSyncedBlockPayload(value: unknown, label: string): NotesSyncedBlockPayload {
@@ -269,7 +270,19 @@ export function isNotesTimelineRowOpenMode(value: unknown): value is NotesDataba
   return value === "full_page" || value === "side_panel";
 }
 
+/** Validate content and retain shared indentation for text and embedded blocks. */
 export function parseNotesBlock(value: unknown): NotesBlock {
+  const block = parseNotesBlockContent(value);
+  const record = readRecord(value, "block");
+  const payload = readRecord(record[block.type], `block.${block.type}`);
+  if (payload.ganbaru_indent === undefined) return block;
+  const indent = parseNotesIndent(payload.ganbaru_indent);
+  const parsed: Record<string, unknown> = { ...block };
+  return { ...block, [block.type]: { ...readRecord(parsed[block.type], `block.${block.type}`), ganbaru_indent: indent } };
+}
+
+/** Validate block content before attaching its shared layout metadata. */
+function parseNotesBlockContent(value: unknown): NotesBlock {
   const record = readRecord(value, "block");
   if (record.object !== "block") throw new Error("block.object must be block");
   const type = readString(record.type, "block.type");

@@ -879,3 +879,46 @@ fn text_indentation_survives_save_reopen_and_outline_reads() {
         );
     });
 }
+
+#[test]
+fn embedded_block_indentation_survives_save_and_reopen() {
+    crate::test_block_on(async {
+        let pool = migrated_memory_pool().await;
+        create_page(&pool, PAGE_A, BLOCK_A).await;
+        for (block_type, mut payload) in [
+            ("divider", json!({})),
+            ("tab", tab_payload()),
+            ("code", code_payload("value", "plain text")),
+            (
+                "image",
+                media_payload("https://example.com/image.png", "Caption", None),
+            ),
+            ("table", table_payload(2)),
+        ] {
+            payload["ganbaru_indent"] = json!(3);
+            writes::update_block(&pool, BLOCK_A, block_update(block_type, payload.clone()))
+                .await
+                .unwrap();
+            let saved =
+                serde_json::to_value(reads::get_block(&pool, BLOCK_A, false).await.unwrap())
+                    .unwrap();
+            assert_eq!(saved[block_type], payload);
+            let reopened =
+                serde_json::to_value(reads::open_page(&pool, PAGE_A).await.unwrap()).unwrap();
+            assert_eq!(reopened["outlines"][0]["ganbaru_indent"], 3);
+            payload["ganbaru_indent"] = json!(-1);
+            assert!(
+                writes::update_block(&pool, BLOCK_A, block_update(block_type, payload))
+                    .await
+                    .is_err()
+            );
+        }
+        assert!(
+            super::super::validation::validate_block_payload(
+                "tab",
+                &json!({"ganbaru_indent": 1, "unexpected": true})
+            )
+            .is_err()
+        );
+    });
+}

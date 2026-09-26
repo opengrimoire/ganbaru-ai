@@ -84,6 +84,9 @@ import {
 import { createNotesOptimisticWriteTracker } from "./notes-store-optimistic-writes";
 
 export interface NotesBlockReadCapabilities {
+  readPageGeneration?: () => number;
+  /** Omitted by fully hydrated callers; partial page projections load affected neighbours first. */
+  prepareIndentation?: (ids: readonly string[], direction: "nest" | "outdent") => void | Promise<void>;
   readSelectedPageId: () => string | null;
   /** Includes unloaded root outlines, so partial hydration never looks like an empty page. */
   readPageRootBlockIds: () => readonly string[];

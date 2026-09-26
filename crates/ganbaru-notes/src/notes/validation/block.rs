@@ -53,7 +53,11 @@ pub fn validate_block_payload(block_type: &str, payload: &Value) -> Result<(), S
         "column" => validate_column_payload(payload),
         "table" => validate_table_payload(payload),
         "table_row" => validate_table_row_payload(payload),
-        "tab" => validate_empty_object_payload(payload, "tab"),
+        "tab" => {
+            let mut content = payload.clone();
+            content.as_object_mut().unwrap().remove("ganbaru_indent");
+            validate_empty_object_payload(&content, "tab")
+        }
         "image" | "video" | "audio" | "file" | "pdf" => validate_media_payload(block_type, payload),
         "child_page" => validate_child_page_payload(payload),
         "child_database" => validate_child_database_payload(payload),

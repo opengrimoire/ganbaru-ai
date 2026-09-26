@@ -1,8 +1,34 @@
 import { describe, expect, it } from "vitest";
 import { parseNotesBlock, parseNotesFolder, parseNotesHtmlExportResult, parseNotesLocalUser, parseNotesPage } from "./block-validation";
 import { baseBlock, basePage, baseRichText } from "./block-validation.fixtures";
+import { applyBlockUpdate, blockIndent, blockUpdateFromBlock, blockUpdateWithIndent, blockWithCodeLanguage, blockWithMedia, createBlockWrite } from "./block-factory";
+import { NOTES_BLOCK_TYPES } from "./types";
 
 describe("notes core-block boundary validation", () => {
+  it.each(NOTES_BLOCK_TYPES)("retains %s layout through payload writes, parsing, and history", (type) => {
+    const original = parseNotesBlock({ ...baseBlock, ...createBlockWrite(baseBlock.id, type, "") });
+    const indented = applyBlockUpdate(original, blockUpdateWithIndent(blockUpdateFromBlock(original), 3));
+    const parsed = parseNotesBlock(JSON.parse(JSON.stringify(indented)));
+    expect(blockIndent(parsed)).toBe(3);
+    expect(blockUpdateFromBlock(parsed)).toEqual(blockUpdateFromBlock(indented));
+    expect(blockIndent(parseNotesBlock(applyBlockUpdate(parsed, blockUpdateWithIndent(blockUpdateFromBlock(parsed), 0))))).toBe(0);
+    const record: Record<string, unknown> = { ...indented };
+    const payload = record[type];
+    if (typeof payload !== "object" || payload === null) throw new Error("Expected block payload");
+    for (const invalid of [-1, 0.5, "1", null, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() => parseNotesBlock({ ...indented, [type]: { ...payload, ganbaru_indent: invalid } })).toThrow();
+    }
+  });
+
+  it("keeps embedded content at its level when its media or code settings change", () => {
+    const image = parseNotesBlock({ ...baseBlock, ...createBlockWrite(baseBlock.id, "image", "https://example.com/image.png") });
+    const indented = applyBlockUpdate(image, blockUpdateWithIndent(blockUpdateFromBlock(image), 2));
+    expect(blockIndent(applyBlockUpdate(indented, blockWithMedia(indented, "https://example.com/new.png", "Caption")))).toBe(2);
+    const code = parseNotesBlock({ ...baseBlock, ...createBlockWrite(baseBlock.id, "code", "value") });
+    const indentedCode = applyBlockUpdate(code, blockUpdateWithIndent(blockUpdateFromBlock(code), 2));
+    expect(blockIndent(applyBlockUpdate(indentedCode, blockWithCodeLanguage(indentedCode, "javascript")))).toBe(2);
+  });
+
   it("parses folder DTOs and page folder membership", () => {
       const folder = parseNotesFolder({
         object: "folder",

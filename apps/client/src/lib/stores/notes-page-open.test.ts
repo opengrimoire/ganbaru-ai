@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { createBlockWrite } from "$lib/notes/block-factory";
+import { applyBlockUpdate, createBlockWrite } from "$lib/notes/block-factory";
 import type {
   NotesBlock,
+  NotesBlockUpdate,
+  NotesMoveBlockRequest,
   NotesAppendBlockChildrenRequest,
   NotesBlockFrontier,
   NotesPage,
@@ -40,6 +42,21 @@ vi.mock("$lib/api/notes", async (importOriginal) => {
   };
   return {
     ...actual,
+    updateNotesBlock: async (id: string, update: NotesBlockUpdate) => {
+      const block = backend.hydrated.get(id);
+      if (!block) throw new Error("Missing block fixture");
+      const saved = applyBlockUpdate(block, update);
+      backend.hydrated.set(id, saved);
+      return saved;
+    },
+    moveNotesBlock: async (id: string, request: NotesMoveBlockRequest) => {
+      const block = backend.hydrated.get(id);
+      if (!block) throw new Error("Missing block fixture");
+      const saved = { ...block, parent: request.parent };
+      backend.hydrated.set(id, saved);
+      return saved;
+    },
+    saveNotesUndoState: async () => undefined,
     loadNotesWorkspaceShell: async (): Promise<NotesWorkspaceShell> => ({
       pages: [...backend.pages.values()].map((response) => response.page),
       folders: [],
@@ -253,15 +270,18 @@ describe("Notes critical page opening", () => {
     backend.clear();
     await notes.selectPage(pageAId);
     await vi.waitFor(() => expect(backend.count("frontier")).toBe(1));
+    const indentation = notes.nestBlock(topAId);
     await notes.selectPage(pageBId);
     frontierDeferred.resolve?.({
       blocks: [paragraph(staleId, { type: "block_id", block_id: topAId })],
     });
     await Promise.resolve();
+    await indentation;
 
     expect(notes.selectedPageId).toBe(pageBId);
     expect(notes.loadedPage?.id).toBe(pageBId);
     expect(Object.keys(notes.blocksById)).not.toContain(staleId);
+    expect(notes.flatBlocks.map((row) => row.depth)).toEqual([0]);
   });
 
   it("returns to the primary note after closing a contextual page", async () => {
@@ -292,6 +312,22 @@ describe("Notes critical page opening", () => {
     await notes.selectPage(emptyPageId);
     expect(notes.flatBlocks.map((item) => item.block.id)).toEqual([paragraphId]);
     expect(backend.count("append")).toBe(1);
+  });
+
+  it("waits for nested rows to be discovered before applying repeated parent indentation", async () => {
+    let finishFrontier!: (value: NotesBlockFrontier) => void;
+    backend.frontier = () => new Promise((resolve) => { finishFrontier = resolve; });
+    await notes.selectPage(null);
+    await notes.selectPage(pageAId);
+    const first = notes.nestBlock(topAId);
+    const second = notes.nestBlock(topAId);
+    expect(notes.flatBlocks.map((row) => row.depth)).toEqual([0, 0]);
+    finishFrontier({ blocks: [paragraph(childAId, { type: "block_id", block_id: topAId })] });
+    await Promise.all([first, second]);
+    expect(notes.flatBlocks.map((row) => [row.block.id, row.depth])).toEqual([
+      [topAId, 2], [childAId, 1], [topBId, 0],
+    ]);
+    await notes.flushPendingWrites();
   });
 
 });

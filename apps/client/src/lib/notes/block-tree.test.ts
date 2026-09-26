@@ -4,6 +4,7 @@ import {
   buildNotesChildIdsByParent,
   flattenNotesBlockChildren,
   flattenNotesBlockTree,
+  notesIndentationContextIds,
   planDeleteBlock,
   planDropBlockWithinSiblings,
   planMergeWithPrevious,
@@ -15,6 +16,7 @@ import {
   type NotesTreeState,
 } from "./block-tree";
 import { richTextPlainText } from "./rich-text";
+import { notesBlockOutlineFromBlock } from "./block-outline";
 import type { NotesBlock, NotesBlockType, NotesBlockWrite, NotesParent } from "./types";
 
 const now = "2026-06-30T09:00:00.000Z";
@@ -128,6 +130,22 @@ function state(blocks: NotesBlock[]): NotesTreeState {
 }
 
 describe("notes block tree", () => {
+  it("loads indentation neighbours in outline order without loading their full subtrees", () => {
+    const nodes = [
+      block("parent", { type: "page_id", page_id: "page" }, "Parent"),
+      block("before", { type: "block_id", block_id: "parent" }, "Before"),
+      block("before-child", { type: "block_id", block_id: "before" }, "Existing child"),
+      block("current", { type: "block_id", block_id: "parent" }, "Current"),
+      block("child", { type: "block_id", block_id: "current" }, "Child"),
+      block("after", { type: "block_id", block_id: "parent" }, "After"),
+      block("deeper", { type: "block_id", block_id: "after" }, "Deeper"),
+      block("other", { type: "page_id", page_id: "page" }, "Other"),
+    ];
+    const outlines = nodes.map((node, index) => notesBlockOutlineFromBlock(node, "page", index)).reverse();
+    expect(notesIndentationContextIds(outlines, ["current"], "nest")).toEqual(["current", "parent", "child", "before", "before-child"]);
+    expect(notesIndentationContextIds(outlines, ["current"], "outdent")).toEqual(["current", "parent", "child", "after"]);
+  });
+
   it("flattens top-level and nested blocks in render order", () => {
     const tree = state([
       block("a", { type: "page_id", page_id: "page" }, "A"),

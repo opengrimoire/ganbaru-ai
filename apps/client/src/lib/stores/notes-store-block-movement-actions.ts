@@ -1,6 +1,7 @@
+import { cloneNotesJson } from "$lib/notes/json-clone";
 import { moveNotesBlock, trashNotesBlock, updateNotesBlock } from "$lib/api/notes";
 import { collectLoadedBlockSubtreeIds } from "$lib/notes/block-duplicate";
-import { blockPlainText, canBlockHaveChildren, blockEditableRichText, blockWithRichText, blockIndent, blockUpdateWithIndent, blockWithToggleOpen, blockWithHeadingToggleOpen, headingIsToggleable, headingToggleOpen, createBlockUpdate, isTextEditableBlock } from "$lib/notes/block-factory";
+import { blockPlainText, canBlockHaveChildren, blockEditableRichText, blockWithRichText, blockIndent, blockUpdateWithIndent, blockUpdateFromBlock, blockWithToggleOpen, blockWithHeadingToggleOpen, headingIsToggleable, headingToggleOpen, createBlockUpdate, isTextEditableBlock } from "$lib/notes/block-factory";
 import { planNotesBlockDrop, type NotesBlockDropIntent } from "$lib/notes/block-drag";
 import { planNotesDeletedBlockFocus } from "$lib/notes/editor-focus";
 import {
@@ -36,6 +37,8 @@ import type {
 import type { NotesPostMutationResult } from "$lib/notes/post-mutation";
 
 interface NotesBlockMovementActionsContext {
+  readPageGeneration?: () => number;
+  prepareIndentation?: (ids: readonly string[], direction: "nest" | "outdent") => void | Promise<void>;
   enqueueEditorMutation: (mutation: () => Promise<void>) => Promise<void>;
   localApplyBlockUpdate: (blockId: string, update: NotesBlockUpdate) => void;
   readSelectedPageId: () => string | null;
@@ -250,23 +253,22 @@ export function createNotesBlockMovementActions(
     context.trackOptimisticBlockWrites([blockId, target.id, ...childPlan.childIds], persistence);
   }
 
-  /** Apply hierarchy and caret changes immediately, then persist through the editor queue. */
+  /** Change one text row's depth while keeping other rows at their existing visual depths. */
   function applyKeyboardIndent(
     blockId: string,
     direction: "nest" | "outdent",
     selection?: NotesTextSelection,
     record = true,
-    forceLocal = false,
   ): boolean {
     if (!context.readSelectedPageId()) return false;
     const block = context.blockById(blockId);
-    if (!block) return false;
+    if (!block || !isTextEditableBlock(block.type) || block.type === "code") return false;
     const indent = blockIndent(block);
     const candidate = direction === "nest"
       ? planNestBlock(context.treeState(), blockId)
       : planOutdentBlock(context.treeState(), blockId);
     const candidateParent = candidate ? context.blockById(candidate.parentId) : undefined;
-    const plan = !forceLocal && indent === 0 && (direction === "outdent" || !candidateParent || blockIndent(candidateParent) === 0)
+    const plan = indent === 0 && (direction === "outdent" || !candidateParent || blockIndent(candidateParent) === 0)
       ? candidate : null;
     if (!plan && direction === "outdent" && indent === 0) return false;
     const parent = plan ? parentFromMoveParentId(plan.parentId) : block.parent;
@@ -275,7 +277,7 @@ export function createNotesBlockMovementActions(
     const nextIndent = plan
       ? direction === "outdent" && oldParent ? blockIndent(oldParent) : 0
       : indent + (direction === "nest" ? 1 : -1);
-    const indentUpdate = blockUpdateWithIndent(blockWithRichText(block, blockEditableRichText(block)), nextIndent);
+    const indentUpdate = blockUpdateWithIndent(blockUpdateFromBlock(cloneNotesJson(block)), nextIndent);
     const caret = selection ?? selectionAtBlockEnd(blockId);
     const before = record ? context.createUndoSnapshot(blockId, [], caret) : null;
     const parentBlock = direction === "nest" && plan ? context.blockById(plan.parentId) : undefined;
@@ -287,6 +289,17 @@ export function createNotesBlockMovementActions(
     const request = { parent, after: plan?.after ?? null, before: null };
     // Following nested siblings retain their document order when an earlier item is promoted.
     const state = context.treeState();
+    let childAfter = blockId;
+    const children = (state.childIdsByParentId[blockId] ?? []).map((id) => {
+      const child = context.blockById(id);
+      if (!child) throw new Error("Notes indentation requires loaded child blocks");
+      const childIndent = direction === "nest" ? nextIndent + blockIndent(child) : blockIndent(child) + 1;
+      const update = blockUpdateWithIndent(blockUpdateFromBlock(cloneNotesJson(child)), childIndent);
+      // Indenting a row makes its former children peers. Outdenting leaves their depth unchanged.
+      const placement = direction === "nest" ? { blockId: id, parent, after: childAfter } : null;
+      childAfter = id;
+      return { child, update, placement };
+    });
     const oldSiblings = oldParent ? state.childIdsByParentId[oldParent.id] ?? [] : [];
     const followingIds = direction === "outdent" && plan
       ? oldSiblings.slice(oldSiblings.indexOf(blockId) + 1) : [];
@@ -298,18 +311,24 @@ export function createNotesBlockMovementActions(
       const sibling = context.blockById(id);
       if (!sibling) throw new Error("Notes indentation requires loaded following siblings");
       const update = !canBlockHaveChildren(block)
-        ? blockUpdateWithIndent(blockWithRichText(sibling, blockEditableRichText(sibling)), blockIndent(sibling) + nextIndent + 1)
+        ? blockUpdateWithIndent(blockUpdateFromBlock(cloneNotesJson(sibling)), blockIndent(sibling) + nextIndent + 1)
         : null;
       const placement = { blockId: id, parent: followingParent, after: followingAfter };
       followingAfter = id;
       return { sibling, update, placement };
     });
     if (parentBlock && openUpdate) context.localApplyBlockUpdate(parentBlock.id, openUpdate);
+    for (const entry of children) context.localApplyBlockUpdate(entry.child.id, entry.update);
     for (const entry of following) if (entry.update) context.localApplyBlockUpdate(entry.sibling.id, entry.update);
     context.localApplyBlockUpdate(blockId, indentUpdate);
-    if (plan) context.applyPostMutation({
-      blocks: [{ ...context.blockById(blockId)!, parent }, ...following.map(({ sibling }) => ({ ...context.blockById(sibling.id)!, parent: followingParent }))],
-      placements: [{ blockId, ...request }, ...following.map((entry) => entry.placement)],
+    const placements = [
+      ...(plan ? [{ blockId, ...request }] : []),
+      ...children.flatMap((entry) => entry.placement ? [entry.placement] : []),
+      ...following.map((entry) => entry.placement),
+    ];
+    if (placements.length) context.applyPostMutation({
+      blocks: placements.map((placement) => ({ ...context.blockById(placement.blockId)!, parent: placement.parent })),
+      placements,
     });
     if (record) {
       context.requestBlockFocus(blockId, caret);
@@ -319,38 +338,68 @@ export function createNotesBlockMovementActions(
       if (parentBlock && openUpdate) await updateNotesBlock(parentBlock.id, openUpdate);
       await updateNotesBlock(blockId, indentUpdate);
       if (plan) await moveNotesBlock(blockId, request);
+      for (const entry of children) {
+        await updateNotesBlock(entry.child.id, entry.update);
+        if (entry.placement) await moveNotesBlock(entry.child.id, { parent, after: entry.placement.after, before: null });
+      }
       for (const entry of following) {
         if (entry.update) await updateNotesBlock(entry.sibling.id, entry.update);
         await moveNotesBlock(entry.sibling.id, { parent: entry.placement.parent, after: entry.placement.after, before: null });
       }
     });
-    context.trackOptimisticBlockWrites([blockId, ...followingIds, ...(parentBlock && openUpdate ? [parentBlock.id] : [])], persistence);
+    context.trackOptimisticBlockWrites([blockId, ...children.map(({ child }) => child.id), ...followingIds, ...(parentBlock && openUpdate ? [parentBlock.id] : [])], persistence);
     return true;
   }
 
-  /** Indent selected roots once, retaining their text range and a single history entry. */
-  async function indentBlockSelection(ids: readonly string[], direction: "nest" | "outdent", selection?: NotesDocumentSelection): Promise<void> {
-    const roots = notesSelectionRootBlockIds(context.treeState(), ids);
-    if (!roots.length) return;
-    const before = context.createUndoSnapshot(roots[0]);
+  let pendingIndentation: Promise<void> | null = null;
+
+  /** Apply immediately when loaded; serialize commands while required neighbours are loading. */
+  function runIndentation(ids: readonly string[], direction: "nest" | "outdent", apply: () => void): Promise<void> {
+    const pageId = context.readSelectedPageId();
+    const generation = context.readPageGeneration?.();
+    const isCurrent = () => pageId !== null && context.readSelectedPageId() === pageId
+      && context.readPageGeneration?.() === generation;
+    const run = (): void | Promise<void> => {
+      if (!isCurrent()) return;
+      const ready = context.prepareIndentation?.(ids, direction);
+      if (ready) return ready.then(() => { if (isCurrent()) apply(); });
+      apply();
+    };
+    const pending = pendingIndentation ? pendingIndentation.then(run) : run();
+    if (!pending) return Promise.resolve();
+    pendingIndentation = pending;
+    const clear = () => { if (pendingIndentation === pending) pendingIndentation = null; };
+    void pending.then(clear, clear);
+    return pending;
+  }
+
+  /** Change each explicitly selected row once, retaining its text range and one history entry. */
+  function applyIndentBlockSelection(ids: readonly string[], direction: "nest" | "outdent", selection?: NotesDocumentSelection): void {
+    const selected = [...new Set(ids)];
+    if (!selected.length) return;
+    const before = context.createUndoSnapshot(selected[0]);
     if (before && selection) before.documentSelection = selection;
     let changed = false;
-    const ordered = direction === "outdent" ? [...roots].reverse() : roots;
+    const ordered = direction === "outdent" ? [...selected].reverse() : selected;
     for (const id of ordered) {
-      changed = applyKeyboardIndent(id, direction, undefined, false, direction === "nest" && roots.length > 1) || changed;
+      changed = applyKeyboardIndent(id, direction, undefined, false) || changed;
     }
     if (!changed) return;
-    const after = context.createUndoSnapshot(roots[0]);
+    const after = context.createUndoSnapshot(selected[0]);
     if (after && selection) after.documentSelection = selection;
     context.recordUndo("move", before, after);
   }
 
-  async function nestBlock(blockId: string, selection?: NotesTextSelection): Promise<void> {
-    applyKeyboardIndent(blockId, "nest", selection);
+  function indentBlockSelection(ids: readonly string[], direction: "nest" | "outdent", selection?: NotesDocumentSelection): Promise<void> {
+    return runIndentation(ids, direction, () => applyIndentBlockSelection(ids, direction, selection));
   }
 
-  async function outdentBlock(blockId: string, selection?: NotesTextSelection): Promise<void> {
-    applyKeyboardIndent(blockId, "outdent", selection);
+  function nestBlock(blockId: string, selection?: NotesTextSelection): Promise<void> {
+    return runIndentation([blockId], "nest", () => { applyKeyboardIndent(blockId, "nest", selection); });
+  }
+
+  function outdentBlock(blockId: string, selection?: NotesTextSelection): Promise<void> {
+    return runIndentation([blockId], "outdent", () => { applyKeyboardIndent(blockId, "outdent", selection); });
   }
 
   async function moveBlockWithinSiblings(blockId: string, direction: "up" | "down"): Promise<void> {

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { applyBlockUpdate, blockIndent, blockEditableRichText, blockPlainText, createBlockWrite } from "$lib/notes/block-factory";
-import { flattenNotesBlockTree } from "$lib/notes/block-tree";
+import { applyBlockUpdate, blockIndent, blockEditableRichText, blockPlainText, blockUpdateWithIndent, createBlockUpdate, createBlockWrite } from "$lib/notes/block-factory";
+import { buildNotesChildIdsByParent, flattenNotesBlockTree, notesIndentationContextIds } from "$lib/notes/block-tree";
+import { parseNotesBlock } from "$lib/notes/block-validation";
 import { notesNumberedListOrdinals } from "$lib/notes/block-editor-ui";
 import { notesBlockOutlineFromBlock } from "$lib/notes/block-outline";
 import type { NotesAppendBlockChildrenRequest, NotesBlock, NotesBlockUpdate, NotesBlockWrite, NotesParent } from "$lib/notes/types";
@@ -30,7 +31,7 @@ function fromWrite(write: NotesBlockWrite): NotesBlock {
 }
 
 /** Connects the real action, projection, persistence, and history controllers to delayed storage. */
-function editor(initialBlocks?: NotesBlock[]) {
+function editor(initialBlocks?: NotesBlock[], prepareIndentation?: (ids: readonly string[], direction: "nest" | "outdent") => void | Promise<void>) {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
   const first = fromWrite(createBlockWrite(firstId, "paragraph", "FirstSecond"));
@@ -67,7 +68,7 @@ function editor(initialBlocks?: NotesBlock[]) {
   });
   const projection = new NotesTreeProjectionController({ readSelectedPageId: () => pageId });
   projection.blocksById = Object.fromEntries(blocks.map((block) => [block.id, block]));
-  projection.childIdsByParentId = { [pageId]: blocks.map((block) => block.id) };
+  projection.childIdsByParentId = { [pageId]: [], ...buildNotesChildIdsByParent(blocks) };
   projection.syncHydratedOutlines(pageId);
   const focus = vi.fn();
   const restoreSelection = vi.fn();
@@ -85,6 +86,7 @@ function editor(initialBlocks?: NotesBlock[]) {
     applyLocalSnapshot: (target, source) => projection.applyLocalUndoSnapshot(target, source),
   });
   const actions = createNotesBlockActions({
+    prepareIndentation,
     readPageRootBlockIds: () => projection.blockOutlines.filter((outline) => outline.parent.type === "page_id" && outline.parent.page_id === pageId).map((outline) => outline.id),
     ...persistence, readSelectedPageId: () => pageId,
     readBlocksById: () => projection.blocksById, readChildIdsByParentId: () => projection.childIdsByParentId,
@@ -110,6 +112,134 @@ function editor(initialBlocks?: NotesBlock[]) {
 afterEach(() => { vi.clearAllMocks(); });
 
 describe("Notes editing with delayed persistence", () => {
+  it.each(["-", "1."])("changes only the current %s list item's depth, preserving descendants and undo", async (marker) => {
+    const h = editor([fromWrite(createBlockWrite(firstId, "paragraph", ""))]);
+    await h.actions.pastePlainTextIntoBlock(firstId, 0, 0, `${marker} ABC\n  ${marker} DEF\n    ${marker} Nested\n${marker} GHI`);
+    const rows = () => flattenNotesBlockTree(h.projection.treeState(), pageId).map((row) => [blockPlainText(row.block), row.depth]);
+    const original = rows();
+    const caret = { start: 0, end: 0 };
+    await h.actions.nestBlock(firstId, caret);
+    expect(rows()).toEqual([["ABC", 1], ["DEF", 1], ["Nested", 2], ["GHI", 0]]);
+    if (marker === "1.") {
+      const ordinals = notesNumberedListOrdinals(h.projection.flatBlockOutlines.map(({ outline }) => ({
+        id: outline.id, type: outline.type, indent: outline.ganbaru_indent,
+        parentId: outline.parent.type === "page_id" ? outline.parent.page_id : outline.parent.block_id,
+      })));
+      expect(h.projection.flatBlockOutlines.map(({ outline }) => ordinals.get(outline.id))).toEqual([1, 2, 1, 1]);
+    }
+    await h.actions.nestBlock(firstId, caret);
+    expect(rows()).toEqual([["ABC", 2], ["DEF", 1], ["Nested", 2], ["GHI", 0]]);
+    await h.actions.outdentBlock(firstId, caret);
+    expect(rows()).toEqual([["ABC", 1], ["DEF", 1], ["Nested", 2], ["GHI", 0]]);
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    for (const { block } of flattenNotesBlockTree(h.projection.treeState(), pageId)) {
+      const saved = parseNotesBlock(h.stored.get(block.id));
+      expect(saved.parent).toEqual(block.parent);
+      expect(blockIndent(saved)).toBe(blockIndent(block));
+    }
+    await h.undo.undo();
+    expect(rows()[0]).toEqual(["ABC", 2]);
+    await h.undo.undo();
+    await h.undo.undo();
+    expect(rows()).toEqual(original);
+    await h.undo.redo();
+    expect(rows()).toEqual([["ABC", 1], ["DEF", 1], ["Nested", 2], ["GHI", 0]]);
+    expect(h.focus).toHaveBeenLastCalledWith(firstId, caret);
+    await h.persistence.flushPendingBlockSaves();
+  });
+
+  it("outdents a parent without changing the levels of its children or following nested siblings", async () => {
+    const h = editor([fromWrite(createBlockWrite(firstId, "paragraph", ""))]);
+    await h.actions.pastePlainTextIntoBlock(firstId, 0, 0, "- Start\n  - ABC\n    - DEF\n      - Deep\n  - Following\n- GHI");
+    const current = h.projection.childIdsByParentId[firstId][0];
+    await h.actions.outdentBlock(current);
+    expect(flattenNotesBlockTree(h.projection.treeState(), pageId).map((row) => [blockPlainText(row.block), row.depth])).toEqual([
+      ["Start", 0], ["ABC", 0], ["DEF", 2], ["Deep", 3], ["Following", 1], ["GHI", 0],
+    ]);
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+  });
+
+  it("removes several parent indentation levels while retaining the child's absolute depth", async () => {
+    const block = applyBlockUpdate(fromWrite(createBlockWrite(firstId, "numbered_list_item", "ABC")),
+      blockUpdateWithIndent(createBlockUpdate("numbered_list_item", "ABC"), 4));
+    const h = editor([block, { ...fromWrite(createBlockWrite(lastId, "numbered_list_item", "DEF")), parent: { type: "block_id", block_id: firstId } }]);
+    for (const level of [3, 2, 1, 0]) {
+      await h.actions.outdentBlock(firstId);
+      expect(h.projection.flatBlockOutlines.map((row) => row.depth)).toEqual([level, 5]);
+    }
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(blockIndent(parseNotesBlock(h.stored.get(lastId)))).toBe(4);
+  });
+
+  it.each(["paragraph", "bulleted_list_item", "numbered_list_item", "to_do"] as const)("preserves embedded blocks when indenting and outdenting a %s", async (type) => {
+    const childId = "00000000-0000-4000-8000-000000000004";
+    const h = editor([
+      fromWrite(createBlockWrite(firstId, "paragraph", "Before")),
+      { ...fromWrite(createBlockWrite(lastId, type, "ABC")), parent: { type: "block_id", block_id: firstId } },
+      { ...fromWrite(createBlockWrite(childId, "divider", "")), parent: { type: "block_id", block_id: lastId } },
+    ]);
+    await h.actions.outdentBlock(lastId);
+    expect(h.projection.flatBlockOutlines.map((row) => row.depth)).toEqual([0, 0, 2]);
+    await h.actions.nestBlock(lastId);
+    expect(h.projection.flatBlockOutlines.map((row) => row.depth)).toEqual([0, 1, 2]);
+    await h.actions.nestBlock(lastId);
+    expect(h.projection.flatBlockOutlines.map((row) => row.depth)).toEqual([0, 2, 2]);
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(parseNotesBlock(h.stored.get(childId))).toMatchObject({ divider: { ganbaru_indent: 1 } });
+  });
+
+  it("loads an unmounted child before changing its parent and serializes repeated keys", async () => {
+    let finishHydration!: () => void;
+    const hydration = new Promise<void>((resolve) => { finishHydration = resolve; });
+    const prepare = vi.fn((ids: readonly string[], direction: "nest" | "outdent") => {
+      const required = notesIndentationContextIds(h.projection.blockOutlines, ids, direction);
+      if (required.every((id) => h.projection.blocksById[id])) return;
+      return hydration.then(() => {
+        for (const id of required) if (!h.projection.blocksById[id]) h.projection.blocksById[id] = h.stored.get(id)!;
+        h.projection.childIdsByParentId = buildNotesChildIdsByParent(h.projection.flatBlockOutlines
+          .map(({ outline }) => h.projection.blocksById[outline.id]).filter((block): block is NotesBlock => block !== undefined));
+      });
+    });
+    const h = editor([
+      fromWrite(createBlockWrite(firstId, "bulleted_list_item", "ABC")),
+      { ...fromWrite(createBlockWrite(lastId, "bulleted_list_item", "DEF")), parent: { type: "block_id", block_id: firstId } },
+    ], prepare);
+    delete h.projection.blocksById[lastId];
+    h.projection.childIdsByParentId[firstId] = [];
+    const first = h.actions.nestBlock(firstId);
+    const second = h.actions.nestBlock(firstId);
+    const third = h.actions.outdentBlock(firstId);
+    expect(h.projection.flatBlockOutlines.map((row) => row.depth)).toEqual([0, 1]);
+    finishHydration();
+    await Promise.all([first, second, third]);
+    expect(h.projection.flatBlockOutlines.map((row) => row.depth)).toEqual([1, 1]);
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(blockIndent(parseNotesBlock(h.stored.get(lastId)))).toBe(1);
+  });
+
+  it("changes every explicitly selected row once without including its unselected descendants", async () => {
+    const h = editor([fromWrite(createBlockWrite(firstId, "paragraph", ""))]);
+    await h.actions.pastePlainTextIntoBlock(firstId, 0, 0, "- ABC\n  - DEF\n    - Unselected\n- GHI");
+    const child = h.projection.childIdsByParentId[firstId][0];
+    const selection = { anchor: { blockId: firstId, offset: 0 }, focus: { blockId: child, offset: 3 } };
+    await h.actions.indentBlockSelection([firstId, child], "nest", selection);
+    expect(h.projection.flatBlockOutlines.map((row) => row.depth)).toEqual([1, 2, 2, 0]);
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    await h.undo.undo();
+    expect(h.projection.flatBlockOutlines.map((row) => row.depth)).toEqual([0, 1, 2, 0]);
+    expect(h.restoreSelection).toHaveBeenLastCalledWith(pageId, selection);
+    await h.undo.redo();
+    await h.actions.indentBlockSelection([firstId, child], "outdent", selection);
+    expect(h.projection.flatBlockOutlines.map((row) => row.depth)).toEqual([0, 1, 2, 0]);
+    await h.persistence.flushPendingBlockSaves();
+  });
+
   it("keeps document order when outdenting an item before other nested siblings", async () => {
     const h = editor([fromWrite(createBlockWrite(firstId, "paragraph", ""))]);
     await h.actions.pastePlainTextIntoBlock(firstId, 0, 0, "- Parent\n  - First\n  - Second\n- Last");

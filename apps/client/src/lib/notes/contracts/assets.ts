@@ -1,4 +1,4 @@
-import type { NotesRichText } from "./core";
+import type { NotesBlockLayout, NotesRichText } from "./core";
 
 export const NOTES_ICON_COLORS = [
   "gray",
@@ -59,7 +59,7 @@ export type NotesFileObject =
 
 export type NotesPageCover = NotesFileObject;
 
-export type NotesMediaBlockPayload = NotesFileObject & {
+export type NotesMediaBlockPayload = NotesFileObject & NotesBlockLayout & {
   caption?: NotesRichText[];
   name?: string;
 };
