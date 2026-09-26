@@ -299,7 +299,7 @@
     onAddTableColumn: (tableBlockId: string, afterColumnIndex: number) => Promise<void> | void;
     onRemoveTableColumn: (tableBlockId: string, columnIndex: number) => Promise<void> | void;
     onSelectPage: (pageId: string) => void;
-    onFocusBlock: (blockId: string) => void;
+    onFocusBlock: (blockId: string, preventScroll?: boolean) => void;
     onHandleMenuOpenChange: (blockId: string, open: boolean) => void;
   } = $props();
 
@@ -586,7 +586,7 @@
   <div
     class="notes-block-surface flex min-w-0 items-start gap-1 rounded-md py-0.5 pr-2 hover:bg-accent/50"
     class:notes-callout-surface={block.type === "callout"}
-    data-notes-block-selection-zone
+    data-notes-block-selection-zone={showTextEditor ? undefined : ""}
     style={blockSurfaceStyle}
   >
     {#if item.depth > 0}

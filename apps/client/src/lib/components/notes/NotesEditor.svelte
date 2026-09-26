@@ -465,7 +465,7 @@
 
   $effect(() => {
     const focusRequestId = notes.focusRequestId;
-    const focusSelection = notes.focusSelection;
+    const preventScroll = notes.focusPreventScroll;
     const blockId = notes.focusBlockId;
     if (!blockId) return;
     void tick().then(() => {
@@ -485,7 +485,8 @@
         targetTop: targetRect.top,
         targetBottom: targetRect.bottom,
         padding: FOCUSED_BLOCK_SCROLL_PADDING_PX,
-        alignment: focusSelection ? "nearest" : "center",
+        alignment: "nearest",
+        preventScroll,
       });
       if (nextScrollTop !== viewport.scrollTop) viewport.scrollTop = nextScrollTop;
     });
@@ -1363,8 +1364,8 @@
           onSelectPage={(pageId) => {
             void notes.openPageContextually(pageId);
           }}
-          onFocusBlock={(blockId) => {
-            notes.focusBlock(blockId);
+          onFocusBlock={(blockId, preventScroll) => {
+            notes.focusBlock(blockId, null, preventScroll);
           }}
           scrollViewport={blockScrollViewport}
           {musicMentionContext}

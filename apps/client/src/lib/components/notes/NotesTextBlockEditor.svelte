@@ -188,7 +188,7 @@
     onDelete: (blockId: string) => void;
     onToggleOpen: (blockId: string, open: boolean) => void;
     onCodeLanguageChange: (blockId: string, language: string) => void;
-    onFocusBlock: (blockId: string) => void;
+    onFocusBlock: (blockId: string, preventScroll?: boolean) => void;
   } = $props();
 
   const localization = getLocalization();
@@ -228,7 +228,7 @@
     onMoveDown: (blockId) => onMoveDown(blockId),
     onDelete: (blockId) => onDelete(blockId),
     onToggleOpen: (blockId, open) => onToggleOpen(blockId, open),
-    onFocusBlock: (blockId) => onFocusBlock(blockId),
+    onFocusBlock: (blockId, preventScroll) => onFocusBlock(blockId, preventScroll),
   });
   const runtime = controller.runtime;
   const text = $derived(controller.text);

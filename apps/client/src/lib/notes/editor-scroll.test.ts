@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 import { notesEditorScrollTopForTarget } from "./editor-scroll";
 
 describe("Notes editor scrolling", () => {
+  it.each([
+    { targetTop: 320, targetBottom: 345 },
+    { targetTop: 340, targetBottom: 420 },
+    { targetTop: -100, targetBottom: 600 },
+  ])("keeps pointer focus stationary for visible, clipped, and tall rows: %o", (target) => {
+    expect(notesEditorScrollTopForTarget({
+      scrollTop: 100, maxScrollTop: 500, viewportTop: 50, viewportBottom: 350,
+      ...target, padding: 16, alignment: "nearest", preventScroll: true,
+    })).toBe(100);
+  });
+
   it("scrolls down inside the editor viewport to reveal a new row", () => {
     expect(notesEditorScrollTopForTarget({
       scrollTop: 100,

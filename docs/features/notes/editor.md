@@ -68,7 +68,9 @@ The end of a text range is exclusive. A selection ending at the start of a later
 
 Selection alone displays no action bar or selected-block counter. Right-click opens selection actions. Cross-block text ranges offer clipboard, deletion, bold, italic, and underline actions; per-block text menus retain their richer link, comment, suggestion, and conversion controls.
 
-Explicit whole-block selection remains available from row margins. Escape in editable text dismisses an active menu without selecting the block, moving focus to its wrapper, or replacing text selection with a full-row fill or outline. Escape from an intentional block selection clears it and returns to text editing when available. Its duplicate, movement, clipboard, and deletion actions live in the right-click menu and keyboard shortcuts. Pointer drags originating in text belong to document text selection.
+Clicking a text row places the caret in its editor, including clicks on padding, indentation space, or a list marker. Those surrounding areas resolve to the nearest text position on the clicked visual line. They do not focus the row wrapper or enter whole-block selection. Shift-click and dragging from those areas extend ordinary text selection, within one row or across rows. Clicking text clears any previous whole-block selection. Buttons, checkboxes, links, and embedded controls keep their own interactions.
+
+Explicit whole-block selection remains available from non-text block surfaces. A containing layout's selection area does not extend into its child text rows. Escape in editable text dismisses an active menu without selecting the block, moving focus to its wrapper, or replacing text selection with a full-row fill or outline. Escape from an intentional block selection clears it and returns to text editing when available. Its duplicate, movement, clipboard, and deletion actions live in the right-click menu and keyboard shortcuts.
 
 **Partial:** highlight rendering and vertical caret movement depend on the platform webview and still require desktop and Android acceptance. Partial ranges retain their mounted span while extending; very large partial ranges can increase rendering cost. Embedded database fields, table-cell editors, and other form controls retain their own editing domains. Cross-block clipboard copy currently emits plain text, while paste accepts sanitized rich HTML.
 
@@ -104,7 +106,7 @@ Missing managed files show a recoverable unavailable state. Replacing or removin
 
 ## Loading and focus
 
-One internal page viewport owns long-content scrolling. Arrow-key movement within text and between rendered blocks leaves the viewport stable until the caret needs to be revealed. Focus recovery estimates a scroll position for unloaded blocks and rejects stale focus requests from earlier rapid edits. Loading placeholders preserve approximate document position without becoming editable phantom blocks.
+One internal page viewport owns long-content scrolling. Clicking text or its surrounding row space preserves the current scroll position, including partially visible rows and blocks taller than the viewport. Native editor focus must not be interpreted as a request to center or reveal the whole block. Arrow-key movement within text and between rendered blocks leaves the viewport stable until the caret needs to be revealed. Programmatic focus uses the nearest required reveal instead of centering a row merely because no text range was supplied. Focus recovery estimates a scroll position for unloaded blocks only when the request permits scrolling, and rejects stale focus requests from earlier rapid edits. Loading placeholders preserve approximate document position without becoming editable phantom blocks.
 
 ## Accessibility
 

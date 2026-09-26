@@ -15,7 +15,7 @@ export interface NotesBlockVirtualizerOptions {
   readItems: () => readonly NotesBlockTreeItem[];
   readPinnedBlockIds: () => readonly string[];
   readSelectionBlockIds?: () => readonly string[];
-  readFocusRequest: () => { blockId: string | null; requestId: number };
+  readFocusRequest: () => { blockId: string | null; requestId: number; preventScroll?: boolean };
   hydrateBlockRange: (blockIds: readonly string[]) => Promise<void>;
 }
 
@@ -25,8 +25,9 @@ export function notesFocusedBlockEstimatedOffset(
   measuredHeights: ReadonlyMap<string, number>,
   blockId: string,
   targetRendered: boolean,
+  preventScroll = false,
 ): number | null {
-  if (targetRendered) return null;
+  if (targetRendered || preventScroll) return null;
   const index = rangeItems.findIndex((item) => item.id === blockId);
   if (index < 0) return null;
   return rangeItems
@@ -94,7 +95,7 @@ export function createNotesBlockVirtualizer(options: NotesBlockVirtualizerOption
   });
 
   $effect(() => {
-    const { blockId, requestId } = options.readFocusRequest();
+    const { blockId, requestId, preventScroll } = options.readFocusRequest();
     const scrollViewport = options.readScrollViewport();
     if (!blockId || requestId === handledFocusRequestId || !scrollViewport) return;
     const renderedTarget = Array.from(
@@ -105,9 +106,10 @@ export function createNotesBlockVirtualizer(options: NotesBlockVirtualizerOption
       measuredBlockHeights,
       blockId,
       renderedTarget,
+      preventScroll,
     );
     if (targetOffset === null) {
-      if (renderedTarget) handledFocusRequestId = requestId;
+      if (renderedTarget || preventScroll) handledFocusRequestId = requestId;
       return;
     }
     handledFocusRequestId = requestId;

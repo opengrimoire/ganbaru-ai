@@ -4,6 +4,7 @@ export interface NotesFocusRequest {
   blockId: string | null;
   requestId: number;
   selection: NotesTextSelection | null;
+  preventScroll?: boolean;
 }
 
 export interface NotesDeleteFocusInput {
@@ -52,11 +53,13 @@ export function nextNotesFocusRequest(
   current: NotesFocusRequest,
   blockId: string | null,
   selection: NotesTextSelection | null = null,
+  preventScroll = false,
 ): NotesFocusRequest {
   return {
     blockId,
     requestId: current.requestId + 1,
     selection,
+    ...(preventScroll ? { preventScroll: true } : {}),
   };
 }
 

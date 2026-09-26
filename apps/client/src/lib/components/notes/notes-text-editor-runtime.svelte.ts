@@ -131,7 +131,7 @@ export interface NotesTextEditorControllerSource {
   onMoveDown: (blockId: string) => void;
   onDelete: (blockId: string) => void;
   onToggleOpen: (blockId: string, open: boolean) => void;
-  onFocusBlock: (blockId: string) => void;
+  onFocusBlock: (blockId: string, preventScroll?: boolean) => void;
 }
 
 export interface NotesTextEditorVisibleControls {
@@ -1115,7 +1115,7 @@ export class NotesTextEditorController {
   };
 
   handleEditorFocus = (): void => {
-    if (this.source.focusBlockId() !== this.block.id) this.source.onFocusBlock(this.block.id);
+    if (this.source.focusBlockId() !== this.block.id) this.source.onFocusBlock(this.block.id, true);
     this.runtime.requestControl("text-context-menu");
     if (this.canUseMentions) this.runtime.requestControl("slash-menu");
   };

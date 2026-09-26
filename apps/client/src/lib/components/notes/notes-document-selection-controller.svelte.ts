@@ -16,7 +16,7 @@ interface DocumentSelectionOptions {
   replace: (ids: readonly string[], start: number, end: number, text: string, html?: string, documentSelection?: NotesDocumentSelection) => Promise<void>;
   indent?: (ids: readonly string[], direction: "nest" | "outdent", selection?: NotesDocumentSelection) => Promise<void>;
   format: (ids: readonly string[], start: number, end: number, annotation: NotesRichTextAnnotationName, documentSelection?: NotesDocumentSelection) => Promise<void>;
-  focus: (point: NotesDocumentPoint) => void;
+  focus: (point: NotesDocumentPoint, preventScroll?: boolean) => void;
   restoreFocusAfterEdit?: () => void;
   clearBlockSelection: () => void;
   undo: () => Promise<boolean>;
@@ -31,6 +31,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
   let menu = $state<{ x: number; y: number } | null>(null);
   let list: HTMLDivElement | null = null;
   let pointerAnchor: NotesDocumentPoint | null = null;
+  let pointerFromRow = false;
   let request = 0;
   let replacementText: string | null = null;
   let alive = true;
@@ -226,26 +227,65 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     return caret ? point(caret.startContainer, caret.startOffset) : null;
   }
 
+  /** Treat noninteractive space in a text row as part of its editing surface. */
+  function pointerEditor(target: EventTarget | null): HTMLElement | null {
+    if (!(target instanceof Element) || !list?.contains(target)) return null;
+    const root = target.closest<HTMLElement>(EDITOR);
+    if (root) return root;
+    if (target.closest("input, textarea, select, button, a, [role='button'], [role='menu'], [role='dialog'], [contenteditable='true']")) return null;
+    const row = target.closest<HTMLElement>("[data-notes-selectable-block-id]");
+    return row ? editor(row.dataset.notesSelectableBlockId!) ?? null : null;
+  }
+
+  /** Clamp padding and marker hits to the nearest caret position in the same editor. */
+  function pointerPoint(root: HTMLElement, x: number, y: number): NotesDocumentPoint {
+    const id = root.dataset.notesBlockId!;
+    const hit = pointAt(x, y);
+    if (hit?.blockId === id) return hit;
+    const rect = root.getBoundingClientRect();
+    const insetX = Math.min(1, rect.width / 2);
+    const insetY = Math.min(1, rect.height / 2);
+    const clamped = pointAt(
+      Math.min(Math.max(x, rect.left + insetX), rect.right - insetX),
+      Math.min(Math.max(y, rect.top + insetY), rect.bottom - insetY),
+    );
+    if (clamped?.blockId === id) return clamped;
+    return { blockId: id, offset: y < rect.top || x <= rect.left ? 0 : length(id) };
+  }
+
   function pointerDown(event: PointerEvent): void {
-    if (event.button !== 0 || !(event.target instanceof Element) || event.target.closest("[data-notes-selection-menu]")) return;
-    const root = event.target.closest(EDITOR);
+    if (event.defaultPrevented || event.button !== 0 || !(event.target instanceof Element) || event.target.closest("[data-notes-selection-menu]")) return;
+    pointerAnchor = null;
+    pointerFromRow = false;
+    const root = pointerEditor(event.target);
     if (!root) { clear(); return; }
-    const hit = pointAt(event.clientX, event.clientY);
+    const hit = pointerPoint(root, event.clientX, event.clientY);
     const previous = selection ?? nativeSelection();
-    if (event.shiftKey && hit && previous) {
+    pointerFromRow = !root.contains(event.target);
+    options.clearBlockSelection();
+    if (event.shiftKey && previous) {
       event.preventDefault(); event.stopPropagation();
       pointerAnchor = previous.anchor;
       void run(() => select({ anchor: previous.anchor, focus: hit }));
     } else {
       clear();
       pointerAnchor = hit;
+      if (pointerFromRow) {
+        event.preventDefault(); event.stopPropagation();
+        root.focus({ preventScroll: true });
+        options.focus(hit, true);
+        const dom = findEditableDomPoint(root, hit.offset);
+        root.ownerDocument.getSelection()?.collapse(dom.node, dom.offset);
+      }
     }
   }
 
   function pointerMove(event: PointerEvent): void {
     if (!pointerAnchor || !(event.buttons & 1)) return;
-    const hit = pointAt(event.clientX, event.clientY);
-    if (!hit || (hit.blockId === pointerAnchor.blockId && !selection)) return;
+    const root = pointerEditor(event.target);
+    const hit = pointAt(event.clientX, event.clientY)
+      ?? (root ? pointerPoint(root, event.clientX, event.clientY) : null);
+    if (!hit || (hit.blockId === pointerAnchor.blockId && !selection && !pointerFromRow)) return;
     event.preventDefault();
     void run(() => select({ anchor: pointerAnchor!, focus: hit }));
   }
@@ -490,7 +530,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
       resizeObserver?.observe(node);
       node.ownerDocument.addEventListener("scroll", repaint, true);
       view?.addEventListener("resize", repaint);
-      const stop = () => { pointerAnchor = null; };
+      const stop = () => { pointerAnchor = null; pointerFromRow = false; };
       node.addEventListener("keydown", keydown, true);
       node.addEventListener("pointerdown", pointerDown, true);
       node.addEventListener("contextmenu", contextMenu, true);

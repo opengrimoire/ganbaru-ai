@@ -21,7 +21,7 @@ afterEach(async () => {
 });
 
 /** Use a reactive block to exercise the real input, lazy menu, and conversion path. */
-async function editor(blockType: NotesBlockType = "paragraph", text = "", indentationDepth = 0) {
+async function editor(blockType: NotesBlockType = "paragraph", text = "", indentationDepth = 0, initialFocusBlockId = "block") {
   const block: NotesBlock = {
     ...createBlockWrite("block", blockType, text), object: "block", parent: { type: "page_id", page_id: "page" },
     created_time: "", last_edited_time: "", has_children: false, in_trash: false,
@@ -31,9 +31,10 @@ async function editor(blockType: NotesBlockType = "paragraph", text = "", indent
   const current = fromStore(blocks);
   const onConvert = vi.fn();
   const onKeyboardAction = vi.fn();
+  const onFocusBlock = vi.fn();
   const props: ComponentProps<typeof NotesTextBlockEditor> = {
     get block() { return current.current; }, previousBlockType: null, isOnlyBlock: true, indentationDepth,
-    focusBlockId: "block", focusRequestId: 1, focusSelection: { start: 0, end: 0 },
+    focusBlockId: initialFocusBlockId, focusRequestId: 1, focusSelection: { start: 0, end: 0 },
     mentionTargets: [], commentAnchors: [], suggestionAnchors: [],
     templateStatus: EMPTY_NOTES_TEMPLATE_BLOCK_STATUS, buttonStatus: EMPTY_NOTES_BUTTON_BLOCK_STATUS,
     onTextInput: (_id, value) => blocks.update((block) => applyBlockUpdate(block, createBlockUpdate(block.type, value))),
@@ -45,7 +46,7 @@ async function editor(blockType: NotesBlockType = "paragraph", text = "", indent
     onColorChange: vi.fn(), onCopyLink: vi.fn(), onDuplicate: vi.fn(), onUseTemplate: vi.fn(),
     onAddTemplateChild: vi.fn(), onUseButton: vi.fn(), onAddButtonChild: vi.fn(), onButtonIconChange: vi.fn(),
     onButtonInsertPositionChange: vi.fn(), onMoveUp: vi.fn(), onMoveDown: vi.fn(), onDelete: vi.fn(),
-    onToggleOpen: vi.fn(), onCodeLanguageChange: vi.fn(), onFocusBlock: vi.fn(),
+    onToggleOpen: vi.fn(), onCodeLanguageChange: vi.fn(), onFocusBlock,
   };
   const list = document.createElement("div");
   const row = document.createElement("div");
@@ -75,10 +76,15 @@ async function editor(blockType: NotesBlockType = "paragraph", text = "", indent
     await tick(); await tick();
     return event;
   };
-  return { host, input, onConvert, onKeyboardAction, row, blockSelection, focusRow };
+  return { host, input, onConvert, onKeyboardAction, onFocusBlock, row, blockSelection, focusRow };
 }
 
 describe("Notes typed slash commands", () => {
+  it("reports native editor focus without requesting viewport scrolling", async () => {
+    const h = await editor("paragraph", "Clicked text", 0, "another-block");
+    expect(h.onFocusBlock).toHaveBeenCalledExactlyOnceWith("block", true);
+  });
+
   it.each([false, true])("opens and filters through input, then applies a heading (software Enter: %s)", async (softwareEnter) => {
     const h = await editor();
     expect(h.host.hasAttribute("data-placeholder")).toBe(false);

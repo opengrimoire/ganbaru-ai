@@ -228,6 +228,14 @@ export function createNotesBlockNavigationController(options: NotesBlockNavigati
       && target.closest("input, textarea, select, button, a, [contenteditable='true'], [role='textbox']") !== null;
   }
 
+  /** Only an explicit zone in the target row can begin whole-block selection. */
+  function targetIsSelectionZone(target: EventTarget | null): boolean {
+    if (!(target instanceof Element)) return false;
+    const zone = target.closest("[data-notes-block-selection-zone]");
+    const row = target.closest("[data-notes-selectable-block-id]");
+    return !!zone && !!row && zone.closest("[data-notes-selectable-block-id]") === row;
+  }
+
   return {
     rowFromEvent,
     blockIdFromEvent,
@@ -237,5 +245,6 @@ export function createNotesBlockNavigationController(options: NotesBlockNavigati
     focusRow,
     handleKeydown,
     targetIsEditable,
+    targetIsSelectionZone,
   };
 }

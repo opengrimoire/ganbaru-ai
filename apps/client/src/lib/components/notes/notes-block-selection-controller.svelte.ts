@@ -112,6 +112,7 @@ export function createNotesBlockSelectionController(options: NotesBlockSelection
 
   function setSelection(value: NotesBlockSelectionState | null): void {
     selection = value;
+    if (!value) { dragAnchorBlockId = null; dragPointerId = null; }
     queueMicrotask(syncAttributes);
   }
 
@@ -126,16 +127,16 @@ export function createNotesBlockSelectionController(options: NotesBlockSelection
     if (event.target instanceof Element && event.target.closest("[data-notes-selection-menu]")) return;
     const id = options.blockIdFromEvent(event);
     if (!id) { if (selection) setSelection(null); return; }
-    if (event.shiftKey && selection) {
-      event.preventDefault(); clearNativeSelection();
-      const next = notesBlockSelectionAfterClick({ blockIds: options.readRenderedBlockIds(), current: selection, blockId: id, extend: true });
-      setSelection(next); if (next) options.focusRow(next.focusBlockId); return;
-    }
     if (options.targetIsEditable(event.target)) {
       if (selection) setSelection(null);
       return;
     }
     if (!options.targetIsSelectionZone(event.target)) { if (selection) setSelection(null); return; }
+    if (event.shiftKey && selection) {
+      event.preventDefault(); clearNativeSelection();
+      const next = notesBlockSelectionAfterClick({ blockIds: options.readRenderedBlockIds(), current: selection, blockId: id, extend: true });
+      setSelection(next); if (next) options.focusRow(next.focusBlockId); return;
+    }
     event.preventDefault(); clearNativeSelection();
     dragAnchorBlockId = id; dragPointerId = event.pointerId;
     setSelection(notesBlockSelectionForBlock(options.readRenderedBlockIds(), id));

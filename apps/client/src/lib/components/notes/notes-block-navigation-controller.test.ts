@@ -33,6 +33,18 @@ function mockRangeGeometry(rect: DOMRect, rects: DOMRectList): void {
 }
 
 describe("Notes block navigation controller", () => {
+  it("does not inherit a containing layout's block-selection zone into a text row", () => {
+    const list = document.createElement("div");
+    list.innerHTML = `<div data-notes-selectable-block-id="layout" data-notes-block-selection-zone>
+      <div data-notes-selectable-block-id="text"><span class="marker">1.</span></div>
+    </div>`;
+    const controller = createNotesBlockNavigationController({
+      readListElement: () => list, readRenderedBlockIds: () => [], readBlock: () => undefined, requestFocus: vi.fn(),
+    });
+    expect(controller.targetIsSelectionZone(list.firstElementChild)).toBe(true);
+    expect(controller.targetIsSelectionZone(list.querySelector(".marker"))).toBe(false);
+  });
+
   afterEach(() => {
     Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
     Reflect.deleteProperty(Range.prototype, "getClientRects");

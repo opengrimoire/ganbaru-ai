@@ -299,7 +299,7 @@
     ) => Promise<void> | void;
     onMoveBlockToTab: (blockId: string, labelBlockId: string) => Promise<void> | void;
     onSelectPage: (pageId: string) => void;
-    onFocusBlock: (blockId: string) => void;
+    onFocusBlock: (blockId: string, preventScroll?: boolean) => void;
     onHandleMenuOpenChange: (blockId: string, open: boolean) => void;
   } = $props();
 

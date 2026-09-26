@@ -85,7 +85,7 @@
     breadcrumbItems: NotesPageBreadcrumbItem[];
     tableOfContentsItems: NotesTableOfContentsItem[];
     onSelectPage: (pageId: string) => void;
-    onFocusBlock: (blockId: string) => void;
+    onFocusBlock: (blockId: string, preventScroll?: boolean) => void;
     scrollViewport: HTMLDivElement | null;
     musicMentionContext?: NotesMusicMentionContext;
   } = $props();
@@ -109,7 +109,7 @@
     readTreeState: currentTreeState,
     blockIdFromEvent: (event) => navigation.blockIdFromEvent(event),
     targetIsEditable: (target) => navigation.targetIsEditable(target),
-    targetIsSelectionZone: (target) => target instanceof Element && target.closest("[data-notes-block-selection-zone]") !== null,
+    targetIsSelectionZone: (target) => navigation.targetIsSelectionZone(target),
     focusTextEditorAtEnd: (id) => navigation.focusTextEditorAtEnd(id),
     focusRow: (id, preventScroll) => navigation.focusRow(id, preventScroll),
     handleNavigationKeydown: (event, id) => navigation.handleKeydown(event, id),
@@ -126,7 +126,7 @@
     replace: notes.replaceDocumentRange,
     format: notes.formatDocumentRange,
     indent: notes.indentBlockSelection,
-    focus: (point) => notes.focusBlock(point.blockId, { start: point.offset, end: point.offset }),
+    focus: (point, preventScroll) => notes.focusBlock(point.blockId, { start: point.offset, end: point.offset }, preventScroll),
     restoreFocusAfterEdit: () => { if (notes.focusBlockId) notes.focusBlock(notes.focusBlockId, notes.focusSelection); },
     clearBlockSelection: () => blockSelectionController.setSelection(null),
     undo: notes.undoNotesEdit,
@@ -217,6 +217,7 @@
     readFocusRequest: () => ({
       blockId: notes.focusBlockId,
       requestId: notes.focusRequestId,
+      preventScroll: notes.focusPreventScroll,
     }),
     hydrateBlockRange: notes.hydrateBlockRange,
   });
@@ -641,7 +642,7 @@
     onTableCellRichTextChange: replaceTableCellRichText,
     onAddTableRow: addTableRow, onRemoveTableRow: removeTableRow,
     onAddTableColumn: addTableColumn, onRemoveTableColumn: removeTableColumn,
-    onSelectPage: (id) => onSelectPage(id), onFocusBlock: (id) => onFocusBlock(id),
+    onSelectPage: (id) => onSelectPage(id), onFocusBlock: (id, preventScroll) => onFocusBlock(id, preventScroll),
     onHandleMenuOpenChange: updateBlockHandleMenuOpen,
   };
   const renderLookups: NotesBlockRenderLookups = {

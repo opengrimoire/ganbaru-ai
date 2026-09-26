@@ -9,6 +9,7 @@ export interface NotesEditorScrollGeometry {
   targetBottom: number;
   padding: number;
   alignment: NotesEditorScrollAlignment;
+  preventScroll?: boolean;
 }
 
 function clampScrollTop(scrollTop: number, maxScrollTop: number): number {
@@ -21,6 +22,7 @@ function clampScrollTop(scrollTop: number, maxScrollTop: number): number {
 export function notesEditorScrollTopForTarget(
   geometry: NotesEditorScrollGeometry,
 ): number {
+  if (geometry.preventScroll) return geometry.scrollTop;
   const {
     scrollTop,
     maxScrollTop,

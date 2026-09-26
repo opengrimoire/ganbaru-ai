@@ -4,6 +4,8 @@ import { tick } from "svelte";
 import { createBlockWrite } from "$lib/notes/block-factory";
 import type { NotesBlock } from "$lib/notes/types";
 import { createNotesDocumentSelectionController } from "./notes-document-selection-controller.svelte";
+import { createNotesBlockSelectionController } from "./notes-block-selection-controller.svelte";
+import { createNotesBlockNavigationController } from "./notes-block-navigation-controller";
 
 /** Mount real selection listeners on independent editing hosts. */
 function harness(count = 3, type: NotesBlock["type"] = "paragraph") {
@@ -20,9 +22,25 @@ function harness(count = 3, type: NotesBlock["type"] = "paragraph") {
   const hydrate = vi.fn(async () => undefined);
   const focus = vi.fn();
   const indent = vi.fn(async () => undefined);
+  const navigation = createNotesBlockNavigationController({
+    readListElement: () => list, readRenderedBlockIds: () => ids,
+    readBlock: (id) => blocks.get(id), requestFocus: focus,
+  });
+  const focusRow = vi.fn();
+  const blockSelection = createNotesBlockSelectionController({
+    undo: vi.fn(async () => true), redo: vi.fn(async () => true),
+    readPageId: () => "page", readListElement: () => list, readRenderedBlockIds: () => ids,
+    readTreeState: () => ({ blocksById: Object.fromEntries(blocks), childIdsByParentId: { page: ids } }),
+    blockIdFromEvent: navigation.blockIdFromEvent, targetIsEditable: navigation.targetIsEditable,
+    targetIsSelectionZone: navigation.targetIsSelectionZone, focusTextEditorAtEnd: navigation.focusTextEditorAtEnd,
+    focusRow, handleNavigationKeydown: navigation.handleKeydown,
+    pasteBlocks: async () => null, duplicateBlocks: async () => null,
+    moveBlocks: async () => undefined, deleteBlocks: async () => undefined,
+  });
+  const blockDelegates = blockSelection.delegation(list);
   const controller = createNotesDocumentSelectionController({
     readIds: () => ids, readPageId: () => "page", readBlock: (id) => blocks.get(id),
-    hydrate, replace, indent, format: vi.fn(async () => undefined), focus, clearBlockSelection: vi.fn(),
+    hydrate, replace, indent, format: vi.fn(async () => undefined), focus, clearBlockSelection: () => blockSelection.setSelection(null),
     undo: vi.fn(async () => true), redo: vi.fn(async () => true),
   });
   const attached = controller.delegation(list);
@@ -32,12 +50,105 @@ function harness(count = 3, type: NotesBlock["type"] = "paragraph") {
     editor(index).dispatchEvent(event);
     return event;
   };
-  return { controller, replace, indent, hydrate, focus, blocks, ids, editor, key, destroy: attached.destroy };
+  return { controller, blockSelection, focusRow, replace, indent, hydrate, focus, blocks, ids, editor, key,
+    destroy() { attached.destroy(); blockDelegates.destroy(); },
+  };
 }
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(document, "caretPositionFromPoint"); document.body.replaceChildren(); window.getSelection()?.removeAllRanges(); });
 
 describe("Notes document selection", () => {
+  it.each(["paragraph", "numbered_list_item", "bulleted_list_item", "to_do"] as const)(
+    "places a caret near a padding or marker click in a %s row without selecting the block",
+    async (type) => {
+      const h = harness(3, type);
+      const root = h.editor(1);
+      const row = root.parentElement!;
+      const marker = document.createElement("span");
+      marker.textContent = "2.";
+      row.prepend(marker);
+      vi.spyOn(root, "getBoundingClientRect").mockReturnValue(new DOMRect(30, 20, 100, 60));
+      const hit = vi.fn((x: number, y: number) => x >= 30 && x < 130 && y >= 20 && y < 80
+        ? { offsetNode: root.firstChild, offset: x < 50 ? 4 : 7 } : null);
+      Object.defineProperty(document, "caretPositionFromPoint", { configurable: true, value: hit });
+      h.blockSelection.setSelection({ anchorBlockId: h.ids[0], focusBlockId: h.ids[0], selectedBlockIds: [h.ids[0]] });
+      for (const [target, x, expected] of [[marker, 10, 4], [row, 150, 7]] as const) {
+        const event = new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: 65 });
+        target.dispatchEvent(event);
+        await tick();
+        expect(event.defaultPrevented).toBe(true);
+        expect(document.activeElement).toBe(root);
+        expect(window.getSelection()?.focusNode).toBe(root.firstChild);
+        expect(window.getSelection()?.focusOffset).toBe(expected);
+        expect(h.focus).toHaveBeenLastCalledWith({ blockId: h.ids[1], offset: expected }, true);
+        expect(window.getSelection()?.isCollapsed).toBe(true);
+        expect(h.blockSelection.selection).toBeNull();
+        expect(row.hasAttribute("data-notes-block-selected")).toBe(false);
+        expect(h.focusRow).not.toHaveBeenCalled();
+      }
+      h.key(1, "ArrowDown", { shiftKey: true });
+      await tick();
+      expect(h.controller.selection?.focus.blockId).toBe(h.ids[2]);
+      expect(h.blockSelection.selection).toBeNull();
+      h.destroy();
+    },
+  );
+
+  it("extends text from a row margin with Shift-click and dragging, including within one editor", async () => {
+    const h = harness();
+    let hitIndex = 1;
+    let offset = 2;
+    Object.defineProperty(document, "caretPositionFromPoint", { configurable: true,
+      value: () => ({ offsetNode: h.editor(hitIndex).firstChild, offset }),
+    });
+    window.getSelection()?.collapse(h.editor(0).firstChild, 1);
+    h.editor(1).parentElement!.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, shiftKey: true }));
+    expect(h.controller.selection).toEqual({ anchor: { blockId: h.ids[0], offset: 1 }, focus: { blockId: h.ids[1], offset: 2 } });
+    h.editor(1).parentElement!.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 }));
+    offset = 5;
+    h.editor(1).dispatchEvent(new MouseEvent("pointermove", { bubbles: true, cancelable: true, buttons: 1 }));
+    expect(window.getSelection()?.toString()).toBe("ock");
+    hitIndex = 2;
+    offset = 4;
+    // Pointer capture can keep the original target while the hit moves into another row.
+    h.editor(1).parentElement!.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, cancelable: true, buttons: 1 }));
+    expect(h.controller.selection).toEqual({ anchor: { blockId: h.ids[1], offset: 2 }, focus: { blockId: h.ids[2], offset: 4 } });
+    expect(h.blockSelection.selection).toBeNull();
+    await tick();
+    h.destroy();
+  });
+
+  it("focuses an empty row when its padding has no browser caret hit", () => {
+    const h = harness();
+    const root = h.editor(1);
+    root.replaceChildren();
+    const block = h.blocks.get(h.ids[1])!;
+    h.blocks.set(block.id, { ...block, ...createBlockWrite(block.id, "paragraph", "") } as NotesBlock);
+    root.parentElement!.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 }));
+    expect(document.activeElement).toBe(root);
+    expect(window.getSelection()?.focusNode).toBe(root);
+    expect(window.getSelection()?.focusOffset).toBe(0);
+    expect(h.focus).toHaveBeenLastCalledWith({ blockId: h.ids[1], offset: 0 }, true);
+    expect(h.blockSelection.selection).toBeNull();
+    h.destroy();
+  });
+
+  it("leaves row controls to their own pointer handlers even when a block was selected", () => {
+    const h = harness();
+    for (const tag of ["button", "input", "select", "a"]) {
+      const control = document.createElement(tag);
+      h.editor(1).parentElement!.append(control);
+      h.blockSelection.setSelection({ anchorBlockId: h.ids[0], focusBlockId: h.ids[0], selectedBlockIds: [h.ids[0]] });
+      const event = new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, shiftKey: true });
+      control.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+      expect(h.blockSelection.selection).toBeNull();
+      expect(h.controller.selection).toBeNull();
+      expect(h.focusRow).not.toHaveBeenCalled();
+    }
+    h.destroy();
+  });
+
   it.each(["paragraph", "numbered_list_item", "bulleted_list_item", "to_do"] as const)(
     "excludes the untouched endpoint row when indenting a keyboard selection in %s blocks",
     async (type) => {

@@ -194,8 +194,9 @@ function recordRecentPage(pageId: string): void {
 function requestBlockFocus(
   blockId: string | null,
   selection: NotesTextSelection | null = null,
+  preventScroll = false,
 ): void {
-  focusRequest = nextNotesFocusRequest(focusRequest, blockId, selection);
+  focusRequest = nextNotesFocusRequest(focusRequest, blockId, selection, preventScroll);
 }
 
 function requestTitleFocus(pageId: string): void {
@@ -1037,8 +1038,8 @@ function isOnlyBlock(blockId: string): boolean {
   return isOnlyNotesBlockInContext(blockTreeSnapshot(), blockId);
 }
 
-function focusBlock(blockId: string, selection: NotesTextSelection | null = null): void {
-  requestBlockFocus(blockId, selection);
+function focusBlock(blockId: string, selection: NotesTextSelection | null = null, preventScroll = false): void {
+  requestBlockFocus(blockId, selection, preventScroll);
 }
 
 async function undoNotesEdit(): Promise<boolean> {
@@ -1348,6 +1349,9 @@ export function getNotes() {
     get documentSelectionRestore() { return documentSelectionRestore; },
     get focusRequestId(): number {
       return focusRequest.requestId;
+    },
+    get focusPreventScroll(): boolean {
+      return focusRequest.preventScroll ?? false;
     },
     get focusSelection(): NotesTextSelection | null {
       return focusRequest.selection;

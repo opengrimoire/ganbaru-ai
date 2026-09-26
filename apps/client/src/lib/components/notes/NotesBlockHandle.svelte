@@ -256,7 +256,6 @@
 
 <div
   class="notes-block-handle absolute z-10"
-  data-notes-block-selection-zone
   use:dismissOnOutside={{ enabled: anyMenuOpen, onDismiss: closeMenus }}
 >
   {#if commentCount > 0}

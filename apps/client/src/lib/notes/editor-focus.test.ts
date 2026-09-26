@@ -9,6 +9,13 @@ import {
 } from "./editor-focus";
 
 describe("notes editor focus helpers", () => {
+  it("preserves scrolling for pointer focus without disabling the next keyboard reveal", () => {
+    const clicked = nextNotesFocusRequest({ blockId: "a", requestId: 2, selection: null }, "b", null, true);
+    expect(clicked).toEqual({ blockId: "b", requestId: 3, selection: null, preventScroll: true });
+    const next = nextNotesFocusRequest(clicked, "c", { start: 0, end: 0 });
+    expect(next).toEqual({ blockId: "c", requestId: 4, selection: { start: 0, end: 0 } });
+  });
+
   it("treats only background pointers below the final row as the document end", () => {
     expect(notesBackgroundPointerTargetsDocumentEnd({
       pointerY: 240,
