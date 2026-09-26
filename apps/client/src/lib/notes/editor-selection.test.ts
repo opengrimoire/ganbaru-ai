@@ -6,6 +6,7 @@ import {
   createNotesDocumentSelectionPainter,
   notesEditableOffsetFromDomPoint,
   notesEditableSelectionViewportRect,
+  notesDocumentRange,
   notesPlainTextFromEditableRoot,
   notesSelectionForFocus,
   notesTextSelectionFromEditableRoot,
@@ -25,6 +26,25 @@ const { fileURLToPath, URL: NodeUrl } = await vi.importActual<{
 const appStyles = readFileSync(fileURLToPath(new NodeUrl("../../app.css", import.meta.url).href), "utf8");
 
 describe("notes editor selection helpers", () => {
+  it.each([false, true])("excludes a row reached only at offset zero from row commands (backward: %s)", (backward) => {
+    const start = { blockId: "b", offset: 0 };
+    const end = { blockId: "d", offset: 0 };
+    expect(notesDocumentRange(["a", "b", "c", "d"], {
+      anchor: backward ? end : start, focus: backward ? start : end,
+    })).toEqual({ start, end, blockIds: ["b", "c", "d"], rowBlockIds: ["b", "c"] });
+  });
+
+  it("keeps partially selected endpoint rows and explicit whole-document endpoints", () => {
+    for (const offset of [1, Number.MAX_SAFE_INTEGER]) {
+      expect(notesDocumentRange(["a", "b", "c"], {
+        anchor: { blockId: "a", offset: 0 }, focus: { blockId: "c", offset },
+      })?.rowBlockIds).toEqual(["a", "b", "c"]);
+    }
+    expect(notesDocumentRange(["a"], {
+      anchor: { blockId: "a", offset: 0 }, focus: { blockId: "a", offset: 0 },
+    })?.rowBlockIds).toEqual(["a"]);
+  });
+
   it("lets a new explicit caret request replace the previous selected range", () => {
     expect(
       planNotesSelectionReconciliation({

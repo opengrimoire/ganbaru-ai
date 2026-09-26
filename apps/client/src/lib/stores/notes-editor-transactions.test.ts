@@ -586,6 +586,34 @@ describe("Notes editing with delayed persistence", () => {
     await h.persistence.flushPendingBlockSaves();
   });
 
+  it.each([false, true])("leaves text at an exclusive endpoint unformatted (backward: %s)", async (backward) => {
+    const h = editor();
+    const start = { blockId: firstId, offset: 0 };
+    const end = { blockId: lastId, offset: 0 };
+    const selection = { anchor: backward ? end : start, focus: backward ? start : end };
+    const last = blockEditableRichText(h.projection.blocksById[lastId]);
+    await h.actions.formatDocumentRange([firstId, lastId], 0, 0, "bold", selection);
+    expect(blockEditableRichText(h.projection.blocksById[firstId]).every((run) => run.annotations.bold)).toBe(true);
+    expect(blockEditableRichText(h.projection.blocksById[lastId])).toEqual(last);
+    await h.undo.undo();
+    expect(h.restoreSelection).toHaveBeenLastCalledWith(pageId, selection);
+    expect(blockEditableRichText(h.projection.blocksById[firstId]).every((run) => !run.annotations.bold)).toBe(true);
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+  });
+
+  it("replaces through the selected line break while preserving all text at the endpoint", async () => {
+    const h = editor();
+    const selection = { anchor: { blockId: firstId, offset: 0 }, focus: { blockId: lastId, offset: 0 } };
+    await h.actions.replaceDocumentRange([firstId, lastId], 0, 0, "Pasted\n", undefined, selection);
+    expect(flattenNotesBlockTree(h.projection.treeState(), pageId).map(({ block }) => blockPlainText(block))).toEqual(["Pasted", "Last"]);
+    await h.undo.undo();
+    expect(flattenNotesBlockTree(h.projection.treeState(), pageId).map(({ block }) => blockPlainText(block))).toEqual(["FirstSecond", "Last"]);
+    expect(h.restoreSelection).toHaveBeenLastCalledWith(pageId, selection);
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+  });
+
   it("pastes sanitized rich text over a cross-block range without losing the suffix", async () => {
     const h = editor();
     await h.actions.replaceDocumentRange([firstId, lastId], 5, 2, "Bold", "<p><strong>Bold</strong></p>");

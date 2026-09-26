@@ -6,10 +6,10 @@ import type { NotesBlock } from "$lib/notes/types";
 import { createNotesDocumentSelectionController } from "./notes-document-selection-controller.svelte";
 
 /** Mount real selection listeners on independent editing hosts. */
-function harness(count = 3) {
+function harness(count = 3, type: NotesBlock["type"] = "paragraph") {
   const ids = Array.from({ length: count }, (_, index) => `block-${index}`);
   const blocks = new Map(ids.map((id) => [id, {
-    ...createBlockWrite(id, "paragraph", id), object: "block", parent: { type: "page_id", page_id: "page" },
+    ...createBlockWrite(id, type, id), object: "block", parent: { type: "page_id", page_id: "page" },
     created_time: "", last_edited_time: "", has_children: false, in_trash: false,
     source_provider: null, source_object_id: null, source_last_edited_time: null,
   } as NotesBlock]));
@@ -38,6 +38,71 @@ function harness(count = 3) {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(document, "caretPositionFromPoint"); document.body.replaceChildren(); window.getSelection()?.removeAllRanges(); });
 
 describe("Notes document selection", () => {
+  it.each(["paragraph", "numbered_list_item", "bulleted_list_item", "to_do"] as const)(
+    "excludes the untouched endpoint row when indenting a keyboard selection in %s blocks",
+    async (type) => {
+      const h = harness(4, type);
+      for (const backward of [false, true]) {
+        h.controller.clear();
+        const origin = backward ? 3 : 1;
+        window.getSelection()?.collapse(h.editor(origin).firstChild, 0);
+        if (backward) {
+          await h.controller.select({ anchor: { blockId: h.ids[3], offset: 0 }, focus: { blockId: h.ids[1], offset: 0 } });
+        } else {
+          h.key(origin, "ArrowDown", { shiftKey: true });
+          await tick();
+          h.key(origin, "ArrowDown", { shiftKey: true });
+          await tick();
+        }
+        const selected = h.controller.selection;
+        expect(selected).toEqual({
+          anchor: { blockId: h.ids[origin], offset: 0 },
+          focus: { blockId: h.ids[backward ? 1 : 3], offset: 0 },
+        });
+        h.key(origin, "Tab");
+        await vi.waitFor(() => expect(h.indent).toHaveBeenLastCalledWith(h.ids.slice(1, 3), "nest", selected));
+        h.key(origin, "Tab", { shiftKey: true });
+        await vi.waitFor(() => expect(h.indent).toHaveBeenLastCalledWith(h.ids.slice(1, 3), "outdent", selected));
+        expect(h.controller.selection).toEqual(selected);
+        const setData = vi.fn();
+        const copy = new Event("copy", { bubbles: true, cancelable: true });
+        Object.defineProperty(copy, "clipboardData", { value: { setData } });
+        h.editor(origin).dispatchEvent(copy);
+        expect(setData).toHaveBeenCalledWith("text/plain", "block-1\nblock-2\n");
+      }
+      h.destroy();
+    },
+  );
+
+  it("contracts across the line break before removing the previous row's last character", async () => {
+    const h = harness(4, "numbered_list_item");
+    const native = window.getSelection()!;
+    await h.controller.select({ anchor: { blockId: h.ids[1], offset: 0 }, focus: { blockId: h.ids[3], offset: 0 } });
+    h.key(1, "ArrowLeft", { shiftKey: true });
+    await tick();
+    expect(h.controller.selection?.focus).toEqual({ blockId: h.ids[2], offset: 7 });
+    // jsdom has no Selection.modify. Model the browser's movement inside this text node.
+    Object.defineProperty(native, "modify", { configurable: true, value: () => {
+      native.collapse(native.focusNode, native.focusOffset - 1);
+    } });
+    try {
+      h.key(1, "ArrowLeft", { shiftKey: true });
+      await tick();
+      expect(h.controller.selection?.focus).toEqual({ blockId: h.ids[2], offset: 6 });
+      const setData = vi.fn();
+      const cut = new Event("cut", { bubbles: true, cancelable: true });
+      Object.defineProperty(cut, "clipboardData", { value: { setData } });
+      h.editor(1).dispatchEvent(cut);
+      expect(setData).toHaveBeenCalledWith("text/plain", "block-1\nblock-");
+      expect(h.replace).toHaveBeenCalledWith(h.ids.slice(1, 3), 0, 6, "", undefined, {
+        anchor: { blockId: h.ids[1], offset: 0 }, focus: { blockId: h.ids[2], offset: 6 },
+      });
+    } finally {
+      Reflect.deleteProperty(native, "modify");
+      h.destroy();
+    }
+  });
+
   it.each(["Tab", "Unidentified"])("routes Tab and Shift+Tab over the full document selection without moving focus (key: %s)", async (key) => {
     const h = harness();
     window.getSelection()?.collapse(h.editor(1).firstChild, 2);

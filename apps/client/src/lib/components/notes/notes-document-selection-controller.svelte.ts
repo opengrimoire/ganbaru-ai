@@ -367,7 +367,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
         const token = request;
         await hydrateSelection(selected.blockIds);
         if (!alive || token !== request) return;
-        await options.indent?.(selected.blockIds, event.shiftKey ? "outdent" : "nest", selection ?? undefined);
+        await options.indent?.(selected.rowBlockIds, event.shiftKey ? "outdent" : "nest", selection ?? undefined);
         await tick(); paint();
       });
       return;

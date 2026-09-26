@@ -385,17 +385,23 @@ export interface NotesDocumentSelection {
   focus: NotesDocumentPoint;
 }
 
-/** Normalize a directional range without discarding its partial endpoints. */
+/** Normalize text endpoints and identify rows affected by line-level commands. */
 export function notesDocumentRange(ids: readonly string[], selection: NotesDocumentSelection) {
   const anchorIndex = ids.indexOf(selection.anchor.blockId);
   const focusIndex = ids.indexOf(selection.focus.blockId);
   if (anchorIndex < 0 || focusIndex < 0) return null;
   const forward = anchorIndex < focusIndex
     || (anchorIndex === focusIndex && selection.anchor.offset <= selection.focus.offset);
+  const start = forward ? selection.anchor : selection.focus;
+  const end = forward ? selection.focus : selection.anchor;
+  const blockIds = ids.slice(Math.min(anchorIndex, focusIndex), Math.max(anchorIndex, focusIndex) + 1);
   return {
-    start: forward ? selection.anchor : selection.focus,
-    end: forward ? selection.focus : selection.anchor,
-    blockIds: ids.slice(Math.min(anchorIndex, focusIndex), Math.max(anchorIndex, focusIndex) + 1),
+    start,
+    end,
+    // Text operations retain the endpoint block to copy or replace the selected line break.
+    blockIds,
+    // Reaching a row's start does not select that row for indentation.
+    rowBlockIds: blockIds.length > 1 && end.offset === 0 ? blockIds.slice(0, -1) : blockIds,
   };
 }
 
