@@ -55,8 +55,8 @@
   const ASK_COLOR_KEY = "notes.coverPicker.askEveryTime";
   const nativeFilePickerAvailable = platformHasCapability(BUILD_PLATFORM_PROFILE, "storage.native-file-picker");
   const groups = [
-    { label: "notes.pageCoverIllustrations", designs: ["contours", "orbit", "botanical", "atlas", "studio", "study", "mathematics", "programming", "finance"] },
-    { label: "notes.pageCoverSimple", designs: ["solid", "gradient", "glow", "dots", "grid"] },
+    { label: "notes.pageCoverSimple", designs: ["solid", "gradient", "contours", "mosaic", "dots", "grid"] },
+    { label: "notes.pageCoverIllustrations", designs: ["study", "finance", "botanical", "studio", "mathematics", "programming", "atlas", "orbit"] },
   ] as const;
   let activeTab = $state<CoverTab>(initialCover && initialCover.type !== "design" ? "upload" : "designs");
   let currentCover = $state(initialCover);
@@ -68,6 +68,10 @@
   let choiceStyle = $state("");
   let panelElement = $state<HTMLDivElement | null>(null);
   let fileInput = $state<HTMLInputElement>();
+  let designScrollElement = $state<HTMLDivElement>();
+  let designContentElement = $state<HTMLDivElement>();
+  let canScrollUp = $state(false);
+  let canScrollDown = $state(false);
   let panelPlacement = $state({ left: 0, top: 0, width: PANEL_WIDTH, height: PANEL_HEIGHT });
   let query = $state("");
   let uploadUrl = $state("");
@@ -90,6 +94,25 @@
 
   onDestroy(() => { active = false; });
   $effect(() => mobileBackStack.activate({ handle: () => close() }));
+
+  /** Match the icon picker's edge fades, including fractional scroll positions. */
+  function refreshDesignScrollState(): void {
+    const element = designScrollElement;
+    const maxScrollTop = element ? element.scrollHeight - element.clientHeight : 0;
+    canScrollUp = !!element && maxScrollTop > 1 && element.scrollTop > 1;
+    canScrollDown = !!element && maxScrollTop > 1 && element.scrollTop < maxScrollTop - 1;
+  }
+
+  $effect(() => {
+    const viewport = designScrollElement;
+    const content = designContentElement;
+    if (!viewport || !content) return;
+    const observer = new ResizeObserver(refreshDesignScrollState);
+    observer.observe(viewport);
+    observer.observe(content);
+    refreshDesignScrollState();
+    return () => observer.disconnect();
+  });
 
   /** Resolve the same visual viewport boundary used to constrain floating pickers. */
   function viewport(): ProjectIconPickerRect {
@@ -167,7 +190,7 @@
   /** Translate design labels shared by tiles, filtering, and color choices. */
   function designLabel(pattern: CoverDesign): string {
     const keys = {
-      solid: "notes.pageCoverDesignSolid", gradient: "notes.pageCoverDesignGradient", glow: "notes.pageCoverDesignGlow",
+      solid: "notes.pageCoverDesignSolid", gradient: "notes.pageCoverDesignGradient", mosaic: "notes.pageCoverDesignMosaic",
       contours: "notes.pageCoverDesignContours", studio: "notes.pageCoverDesignStudio", botanical: "notes.pageCoverDesignBotanical",
       study: "notes.pageCoverDesignStudy", mathematics: "notes.pageCoverDesignMathematics",
       programming: "notes.pageCoverDesignProgramming", finance: "notes.pageCoverDesignFinance",
@@ -401,24 +424,28 @@
           colorSwatch={(slot) => getEventColor(slot, theme.current).bg} onSelect={selectColor} onOpen={() => { colorChoice = null; }} disabled={busy}
           onAskEveryTimeChange={(value) => { interacted = true; askEveryTime = value; setConfigKey(ASK_COLOR_KEY, value); if (!value) colorChoice = null; }} />
       </div>
-      <div class="min-h-0 flex-1 overflow-y-auto p-3">
-        {#each groups as group}
-          {@const designs = group.designs.filter((pattern) => matchingDesigns.includes(pattern))}
-          {#if designs.length}
-            <section class="mb-3">
-              <div class="mb-1 flex h-5 items-center gap-2 text-[0.733333rem] text-muted-foreground"><span>{t(group.label)}</span><span class="h-px flex-1 bg-border/70"></span></div>
-              <div class="grid grid-cols-2 gap-2">
-                {#each designs as pattern}
-                  <button type="button" disabled={busy} class="group rounded-md p-1 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={designLabel(pattern)} onclick={(event) => chooseDesign(pattern, event.currentTarget)}>
-                    <span class="block h-20 overflow-hidden rounded-md"><NotesCoverDesign {pattern} {color} /></span>
-                    <span class="mt-1 block truncate px-0.5 text-[0.733333rem] text-muted-foreground group-hover:text-foreground">{designLabel(pattern)}</span>
-                  </button>
-                {/each}
-              </div>
-            </section>
-          {/if}
-        {/each}
-        {#if matchingDesigns.length === 0}<p class="py-6 text-center text-[0.8rem] text-muted-foreground">{t("notes.pageCoverNoDesigns")}</p>{/if}
+      <div bind:this={designScrollElement} class="cover-design-scroll min-h-0 flex-1 overflow-y-auto"
+        class:scroll-top={canScrollUp && !canScrollDown} class:scroll-bottom={canScrollDown && !canScrollUp}
+        class:scroll-both={canScrollUp && canScrollDown} onscroll={refreshDesignScrollState}>
+        <div bind:this={designContentElement} class="p-3">
+          {#each groups as group}
+            {@const designs = group.designs.filter((pattern) => matchingDesigns.includes(pattern))}
+            {#if designs.length}
+              <section class="mb-3">
+                <div class="mb-1 flex h-5 items-center gap-2 text-[0.733333rem] text-muted-foreground"><span>{t(group.label)}</span><span class="h-px flex-1 bg-border/70"></span></div>
+                <div class="grid grid-cols-2 gap-2">
+                  {#each designs as pattern}
+                    <button type="button" disabled={busy} class="group rounded-md p-1 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={designLabel(pattern)} onclick={(event) => chooseDesign(pattern, event.currentTarget)}>
+                      <span class="block h-20 overflow-hidden rounded-md"><NotesCoverDesign {pattern} {color} /></span>
+                      <span class="mt-1 block truncate px-0.5 text-[0.733333rem] text-muted-foreground group-hover:text-foreground">{designLabel(pattern)}</span>
+                    </button>
+                  {/each}
+                </div>
+              </section>
+            {/if}
+          {/each}
+          {#if matchingDesigns.length === 0}<p class="py-6 text-center text-[0.8rem] text-muted-foreground">{t("notes.pageCoverNoDesigns")}</p>{/if}
+        </div>
       </div>
       {#if error}<p class="mx-3 mb-3 rounded-md bg-destructive/10 px-2 py-1 text-[0.8rem] text-destructive" role="alert">{error}</p>{/if}
     {:else}
@@ -449,3 +476,24 @@
     {/snippet}
   </IconPickerColorChoicePanel>
 {/if}
+
+<style>
+  .cover-design-scroll {
+    transition: -webkit-mask-image 120ms ease, mask-image 120ms ease;
+  }
+
+  .scroll-top {
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black 20px, black);
+    mask-image: linear-gradient(to bottom, transparent, black 20px, black);
+  }
+
+  .scroll-bottom {
+    -webkit-mask-image: linear-gradient(to bottom, black, black calc(100% - 20px), transparent);
+    mask-image: linear-gradient(to bottom, black, black calc(100% - 20px), transparent);
+  }
+
+  .scroll-both {
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black 20px, black calc(100% - 20px), transparent);
+    mask-image: linear-gradient(to bottom, transparent, black 20px, black calc(100% - 20px), transparent);
+  }
+</style>

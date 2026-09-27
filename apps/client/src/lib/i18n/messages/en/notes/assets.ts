@@ -32,7 +32,7 @@ export const assets = {
   pageCoverExternal: "URL",
   pageCoverDesignSolid: "Solid",
   pageCoverDesignGradient: "Gradient",
-  pageCoverDesignGlow: "Glow",
+  pageCoverDesignMosaic: "Mosaic",
   pageCoverDesignContours: "Contours",
   pageCoverDesignStudio: "Studio",
   pageCoverDesignBotanical: "Nature",

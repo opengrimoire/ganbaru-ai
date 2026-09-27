@@ -23,7 +23,7 @@ export function notesCoverDesignBackground(pattern: NotesCoverDesign, color: str
   switch (pattern) {
     case "solid": return base;
     case "gradient": return `linear-gradient(120deg, ${soft}, ${base} 55%, ${color})`;
-    case "glow": return `radial-gradient(ellipse at 20% 20%, ${color}, transparent 65%), radial-gradient(ellipse at 85% 100%, ${base}, transparent 65%), ${soft}`;
+    case "mosaic": return soft;
     case "contours": return `linear-gradient(125deg, ${soft}, ${base} 45%, ${ink})`;
     case "studio": return `linear-gradient(150deg, ${soft}, ${base})`;
     case "botanical": return `color-mix(in srgb, ${color} 22%, var(--background))`;

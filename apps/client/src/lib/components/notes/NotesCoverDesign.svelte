@@ -23,6 +23,43 @@
   {#if pattern === "study" || pattern === "mathematics" || pattern === "programming" || pattern === "finance"}
     <NotesKnowledgeCoverDesign {pattern} />
   {/if}
+  {#if pattern === "mosaic"}
+    <svg class="abstract-scene" viewBox="0 0 1200 240" preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <pattern id={`${id}-weft`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(28)">
+          <path d="M0 0V6" stroke="var(--cover-highlight)" stroke-width="0.7" opacity="0.3" />
+        </pattern>
+        <pattern id={`${id}-grain`} width="13" height="13" patternUnits="userSpaceOnUse">
+          <circle cx="2" cy="3" r="0.7" fill="var(--cover-deep)" opacity="0.3" />
+          <circle cx="9" cy="10" r="0.5" fill="var(--cover-highlight)" opacity="0.55" />
+        </pattern>
+      </defs>
+      <!-- Asymmetric print blocks share edges, arcs, and a continuous diagonal rhythm. -->
+      <path d="M0 0H1200V240H0Z" fill="var(--cover-light)" />
+      <path d="M0 0H234L92 240H0ZM456 0H747L600 240H314ZM984 0H1200V240H842Z" fill="var(--cover-mid)" />
+      <path d="M0 153L234 0H355L160 240H0ZM747 0H855L687 240H600ZM1096 0H1200V98L1012 240H842Z" fill="var(--cover-color)" />
+      <path d="M234 0H456V112H234ZM687 129H842V240H687ZM1012 0H1200V64H1012Z" fill="var(--cover-deep)" />
+      <path d="M456 112A112 112 0 0 0 344 0V112ZM687 129A129 129 0 0 1 816 0H687ZM1012 240A176 176 0 0 1 1188 64H1200V240Z" fill="var(--cover-highlight)" />
+      <path d="M344 112A112 112 0 0 1 456 224V112ZM456 240V112A128 128 0 0 1 584 240ZM816 0V129A129 129 0 0 0 945 0Z" fill="var(--cover-color)" />
+      <path d="M0 0H150A150 150 0 0 1 0 150ZM160 240A94 94 0 0 1 254 146H314V240ZM945 0A96 96 0 0 1 1041 96H945Z" fill="var(--cover-deep)" />
+      <path d="M0 0H92A92 92 0 0 1 0 92ZM456 240V154A86 86 0 0 1 542 240ZM1012 240A176 176 0 0 1 1188 64H1200V240Z" fill={`url(#${id}-weft)`} />
+      <g fill="none" stroke="var(--cover-highlight)" stroke-width="1.1" opacity="0.65">
+        {#each [0, 1, 2, 3, 4, 5] as line}
+          <path d={`M${244 + line * 15} 112V${132 + line * 15}H314M${705 + line * 18} 240V${150 + line * 14}H842`} />
+          <path d={`M0 ${132 - line * 15}A${132 - line * 15} ${132 - line * 15} 0 0 0 ${132 - line * 15} 0`} />
+        {/each}
+      </g>
+      <g fill="none" stroke="var(--cover-deep)" stroke-width="1" opacity="0.4">
+        <path d="M92 240L234 0M314 240L456 0M600 240L747 0M842 240L984 0" />
+        <path d="M476 100H666M496 80H646M516 60H626M536 40H606M1063 219H1173M1081 199H1173M1100 179H1173M1119 159H1173" />
+      </g>
+      <path d="M0 0H1200V240H0Z" fill={`url(#${id}-grain)`} />
+      <g fill="var(--cover-highlight)">
+        <circle cx="297" cy="52" r="23" /><circle cx="766" cy="191" r="10" />
+        <path d="M932 147H969V184H932Z" transform="rotate(30 950 165)" />
+      </g>
+    </svg>
+  {/if}
   {#if pattern === "botanical" || pattern === "studio"}
     <svg class={pattern === "botanical" ? "nature-scene" : "absolute inset-0 size-full"} viewBox="0 0 1200 240" preserveAspectRatio="none" aria-hidden="true">
       {#if pattern === "botanical"}
@@ -135,7 +172,7 @@
       {#if pattern === "contours"}
         <circle cx="990" cy="60" r="185" fill={`url(#${id}-haze)`} />
         <circle cx="990" cy="60" r="212" fill="none" stroke="var(--cover-highlight)" stroke-opacity="0.22" />
-        <path d="M-80 480C160 380 175 195 410 228S745 450 945 280 1020 5 1280-80" fill="none" stroke="var(--cover-color)" stroke-opacity="0.14" stroke-width="110" />
+        <path d="M-104 559C101 449 236 121 506 239C560 262.6 650.9375 315.0625 690.625 330.125C770 360.25 845 365 945 280S1020 5 1280-80L1280 600H-104Z" fill="var(--cover-color)" stroke="var(--cover-color)" opacity="0.14" stroke-width="110" />
         <g fill="none" stroke="var(--cover-highlight)" stroke-width="1.7" opacity="0.55">
           {#each [0, 1, 2, 3, 4, 5, 6, 7] as line}
             <path d="M-140 470C65 360 200 32 470 150S760 460 982 205 1150-15 1330-90" transform={`translate(${line * 24} ${line * 23})`} />
@@ -236,12 +273,6 @@
             <path d="M-29 0Q10-8 55-1L52 21Q10 15-31 21Z" transform={`translate(0 ${-59 + swatch * 34})`} fill={swatch === 0 ? "var(--cover-light)" : swatch === 1 ? "var(--cover-mid)" : swatch === 2 ? "var(--cover-color)" : "var(--cover-deep)"} />
           {/each}
         </g>
-        <g transform="rotate(-12 623 224)">
-          <path d="M313 219H887L907 224 887 229H313Z" fill="var(--cover-deep)" opacity="0.14" transform="translate(2 4)" />
-          <path d="M313 219H887L907 224 887 229H313Z" fill="var(--cover-color)" />
-          <path d="M321 221H887" stroke="var(--cover-highlight)" stroke-width="1.1" opacity="0.75" />
-          <path d="M887 219L907 224 887 229Z" fill="var(--cover-light)" /><path d="M901 222L907 224 901 226Z" fill="var(--cover-deep)" />
-        </g>
         <g transform="rotate(32 1073 155)">
           <path d="M1069 77H1076L1075 249H1071Z" fill="var(--cover-deep)" opacity="0.7" />
           <path d="M1067 57H1078V80H1067Z" fill="var(--cover-mid)" />
@@ -257,6 +288,7 @@
 </div>
 
 <style>
+  .abstract-scene,
   .nature-scene {
     position: absolute;
     width: 100%;

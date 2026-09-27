@@ -51,7 +51,7 @@ pub fn validate_page_cover_value(value: &Value) -> Result<(), String> {
                 "finance",
                 "solid",
                 "gradient",
-                "glow",
+                "mosaic",
                 "dots",
                 "grid",
             ];

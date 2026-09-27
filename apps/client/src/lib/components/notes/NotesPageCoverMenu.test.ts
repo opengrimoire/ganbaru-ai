@@ -24,12 +24,15 @@ const asset: NotesPageCoverAssetMetadata = {
   contentType: "image/png", byteSize: 42, sha256: "a".repeat(64),
 };
 let component: ReturnType<typeof mount> | undefined;
+const resizeRefreshes = new Map<Element, () => void>();
 beforeEach(async () => {
   await setLanguagePreference("en", { persist: false });
   vi.stubGlobal("ResizeObserver", class {
-    observe(): void {}
-    unobserve(): void {}
-    disconnect(): void {}
+    private targets = new Set<Element>();
+    constructor(private callback: () => void) {}
+    observe(target: Element): void { this.targets.add(target); resizeRefreshes.set(target, this.callback); }
+    unobserve(target: Element): void { this.targets.delete(target); resizeRefreshes.delete(target); }
+    disconnect(): void { for (const target of this.targets) resizeRefreshes.delete(target); }
   });
 });
 afterEach(async () => {
@@ -37,6 +40,7 @@ afterEach(async () => {
   component = undefined;
   document.body.replaceChildren();
   preferences.values.clear();
+  resizeRefreshes.clear();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -59,9 +63,62 @@ async function open(onSelect = vi.fn(async (_cover: NotesPageCover | null) => {}
 }
 
 describe("Notes cover selection", () => {
+  it("lists Simple first and keeps the requested illustration order", async () => {
+    await open();
+    const sections = [...document.querySelectorAll("section")];
+    expect(sections).toHaveLength(2);
+    expect(sections[0].textContent).toContain("Simple");
+    expect([...sections[0].querySelectorAll("button")].map((entry) => entry.getAttribute("aria-label"))).toEqual([
+      "Solid", "Gradient", "Contours", "Mosaic", "Dots", "Grid",
+    ]);
+    expect([...sections[1].querySelectorAll("button")].map((entry) => entry.getAttribute("aria-label"))).toEqual([
+      "Study", "Finance", "Nature", "Studio", "Mathematics", "Programming", "Atlas", "Observatory",
+    ]);
+  });
+
+  it("fades only overflowing edges and refreshes when filtered content changes size", async () => {
+    await open();
+    const scroll = document.querySelector<HTMLDivElement>(".cover-design-scroll")!;
+    let contentHeight = 600;
+    Object.defineProperties(scroll, {
+      clientHeight: { configurable: true, value: 200 },
+      scrollHeight: { configurable: true, get: () => contentHeight },
+    });
+    resizeRefreshes.get(scroll)?.();
+    await tick();
+    expect(scroll.classList.contains("scroll-bottom")).toBe(true);
+    expect(scroll.classList.contains("scroll-top")).toBe(false);
+    scroll.scrollTop = 100;
+    scroll.dispatchEvent(new Event("scroll"));
+    await tick();
+    expect(scroll.classList.contains("scroll-both")).toBe(true);
+    scroll.scrollTop = 400;
+    scroll.dispatchEvent(new Event("scroll"));
+    await tick();
+    expect(scroll.classList.contains("scroll-top")).toBe(true);
+    expect(scroll.classList.contains("scroll-bottom")).toBe(false);
+    const filter = document.querySelector<HTMLInputElement>('input[aria-label="Filter..."]')!;
+    filter.value = "Study";
+    filter.dispatchEvent(new Event("input", { bubbles: true }));
+    await tick();
+    contentHeight = 150;
+    scroll.scrollTop = 0;
+    resizeRefreshes.get(scroll.firstElementChild!)?.();
+    await tick();
+    expect(scroll.classList.contains("scroll-top")).toBe(false);
+    expect(scroll.classList.contains("scroll-bottom")).toBe(false);
+    expect(scroll.classList.contains("scroll-both")).toBe(false);
+  });
+
   it("applies a design on selection with removal in the header and no preview or confirmation footer", async () => {
     const { onSelect, onClose } = await open();
     expect(document.querySelector('[aria-label="Cover preview"]')).toBeNull();
+    const simple = button("Contours").closest("section");
+    expect(simple?.textContent).toContain("Simple");
+    expect(button("Mosaic").closest("section")).toBe(simple);
+    for (const removed of ["Glow", "Waves", "Strata", "Interlace", "Color field", "Relief", "Tide"]) {
+      expect(document.querySelector(`button[aria-label="${removed}"]`)).toBeNull();
+    }
     const referencedShapes = [...document.querySelectorAll<SVGUseElement>("svg use")];
     expect(referencedShapes.length).toBeGreaterThan(0);
     for (const shape of referencedShapes) {
@@ -82,11 +139,13 @@ describe("Notes cover selection", () => {
   });
 
   it.each([
+    ["Contours", "contours"],
+    ["Mosaic", "mosaic"],
     ["Study", "study"],
     ["Mathematics", "mathematics"],
     ["Programming", "programming"],
     ["Finance", "finance"],
-  ] as const)("applies the %s illustration with the chosen theme color", async (label, pattern) => {
+  ] as const)("applies the %s design with the chosen theme color", async (label, pattern) => {
     const { onSelect, onClose } = await open();
     button(label).click();
     await vi.waitFor(() => expect(onClose).toHaveBeenCalledOnce());

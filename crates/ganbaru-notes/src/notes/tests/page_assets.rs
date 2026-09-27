@@ -581,7 +581,7 @@ fn page_cover_design_and_focal_validation() {
         "finance",
         "solid",
         "gradient",
-        "glow",
+        "mosaic",
         "dots",
         "grid",
     ] {
@@ -606,6 +606,7 @@ fn page_cover_design_and_focal_validation() {
     }
     for cover in [
         json!({"type": "design", "design": {"pattern": "unknown", "color": 0}}),
+        json!({"type": "design", "design": {"pattern": "glow", "color": 0}}),
         json!({"type": "design", "design": {"pattern": "grid", "color": 0}, "focal_point": {"x": 0, "y": 0}}),
         json!({"type": "design", "design": null}),
     ] {

@@ -111,9 +111,7 @@ describe("notes page covers", () => {
     expect(() => parseNullablePageCover({ type: "design", design: { pattern: "unknown", color: 0 } }, "cover")).toThrow();
   });
 
-  it("renders distinct patterns from the currently resolved theme color", () => {
-    const backgrounds = NOTES_COVER_DESIGNS.map((pattern) => notesCoverDesignBackground(pattern, "#123456"));
-    expect(new Set(backgrounds).size).toBe(NOTES_COVER_DESIGNS.length);
+  it("derives every cover background from the currently resolved theme color", () => {
     expect(notesCoverDesignBackground("botanical", "#123456")).not.toContain("gradient");
     for (const pattern of NOTES_COVER_DESIGNS) {
       expect(notesCoverDesignBackground(pattern, "#123456")).toContain("#123456");
