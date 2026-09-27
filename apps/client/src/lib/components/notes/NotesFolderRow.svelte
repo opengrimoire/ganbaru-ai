@@ -1,4 +1,5 @@
 <script lang="ts">
+  import EllipsisVertical from "@lucide/svelte/icons/ellipsis-vertical";
   import { tick } from "svelte";
   import {
     beginLazyComponentLoad,
@@ -89,6 +90,7 @@
   const explorerRowIconSize = COMPACT_IDENTITY_ICON_SIZE;
   const explorerRowIconStrokeWidth = COMPACT_IDENTITY_ICON_STROKE_WIDTH;
   let editing = $state(false);
+  let rowElement: HTMLDivElement;
   let menuOpen = $state(false);
   let menuStyle = $state("");
   let moveMenuOpen = $state(false);
@@ -185,6 +187,21 @@
     moveMenuOpen = false;
   }
 
+  /** Open the existing row menu from a keyboard or pointer action button. */
+  function openActionMenu(event: MouseEvent): void {
+    const trigger = event.currentTarget;
+    if (!(trigger instanceof HTMLButtonElement)) return;
+    openContextMenu(event);
+    const rect = trigger.getBoundingClientRect();
+    menuStyle = notesRowContextMenuStyle(notesRowContextMenuGeometry({
+      clientX: rect.left,
+      clientY: rect.bottom,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+    }));
+    void tick().then(() => rowElement?.querySelector<HTMLButtonElement>('[role="menu"] button')?.focus());
+  }
+
   function openContextMenu(event: MouseEvent): void {
     if (editing) return;
     if (event.target instanceof Element && event.target.closest("[data-app-floating-surface]")) {
@@ -272,6 +289,7 @@
 </script>
 
 <div
+  bind:this={rowElement}
   class="notes-folder-row group relative"
   class:notes-row-context-menu-open={menuOpen}
   class:notes-navigation-dragging={navigationDragging}
@@ -291,15 +309,15 @@
   use:dismissOnOutside={{ enabled: menuOpen, onDismiss: closeMenu }}
 >
   {#if editing}
-    <div class="notes-folder-row-content flex min-w-0 items-center gap-1.5 rounded-md bg-accent/50 px-2 py-1.5 text-foreground">
+    <div class="notes-folder-row-content explorer-row flex min-w-0 items-center gap-1.5 rounded-md bg-accent/50 px-2 py-1.5 text-foreground">
       {#if collapsed}
-        <Folder size={explorerRowIconSize} class="shrink-0" strokeWidth={explorerRowIconStrokeWidth} />
+        <Folder size={explorerRowIconSize} class="explorer-row-icon" strokeWidth={explorerRowIconStrokeWidth} />
       {:else}
-        <FolderOpen size={explorerRowIconSize} class="shrink-0" strokeWidth={explorerRowIconStrokeWidth} />
+        <FolderOpen size={explorerRowIconSize} class="explorer-row-icon" strokeWidth={explorerRowIconStrokeWidth} />
       {/if}
       <input
         bind:this={renameInput}
-        class="min-w-0 flex-1 bg-transparent text-[0.866667rem] text-inherit caret-primary outline-none placeholder:text-muted-foreground"
+        class="min-w-0 flex-1 bg-transparent explorer-row-label text-[0.866667rem] text-inherit caret-primary outline-none placeholder:text-muted-foreground"
         data-app-shortcuts="ignore"
         aria-label={t("notes.renameFolder")}
         value={nameDraft}
@@ -310,21 +328,22 @@
       />
     </div>
   {:else}
-    <div class="notes-folder-row-content flex min-w-0 items-center rounded-md pr-1 text-foreground hover:bg-accent/50">
+    <div class="notes-folder-row-content explorer-row flex min-w-0 items-center rounded-md pr-1 text-foreground hover:bg-accent/50">
       <button
-        class="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1.5 text-left text-[0.866667rem] text-inherit"
+        class="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1.5 text-left explorer-row-label text-[0.866667rem] text-inherit"
         type="button"
         aria-expanded={!collapsed}
         aria-label={collapsed ? t("notes.expandFolder") : t("notes.collapseFolder")}
         onclick={activateFolder}
       >
         {#if collapsed}
-          <Folder size={explorerRowIconSize} class="shrink-0" strokeWidth={explorerRowIconStrokeWidth} />
+          <Folder size={explorerRowIconSize} class="explorer-row-icon" strokeWidth={explorerRowIconStrokeWidth} />
         {:else}
-          <FolderOpen size={explorerRowIconSize} class="shrink-0" strokeWidth={explorerRowIconStrokeWidth} />
+          <FolderOpen size={explorerRowIconSize} class="explorer-row-icon" strokeWidth={explorerRowIconStrokeWidth} />
         {/if}
         <span class="min-w-0 flex-1 truncate">{visibleName}</span>
       </button>
+      <button type="button" class="explorer-icon explorer-row-action" aria-label={`${t("notes.folderActions")}: ${visibleName}`} data-app-tooltip={t("notes.folderActions")} aria-haspopup="menu" aria-expanded={menuOpen} onclick={openActionMenu}><EllipsisVertical size={14} /></button>
     </div>
   {/if}
 
@@ -333,6 +352,13 @@
       class="notes-folder-action-menu fixed z-50 min-w-40 rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-lg"
       style={menuStyle}
       role="menu"
+      tabindex="-1"
+      onkeydown={(event) => {
+        if (event.key !== "Escape") return;
+        event.stopPropagation();
+        closeMenu();
+        rowElement?.querySelector<HTMLButtonElement>(".explorer-row-action")?.focus();
+      }}
       data-app-floating-surface
     >
       <button

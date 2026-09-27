@@ -67,7 +67,6 @@ describe("ChatChannelRail", () => {
     expect(toggles.map((toggle) => toggle.textContent?.trim())).toEqual([
       "Channels",
       "Design",
-      "Direct messages",
     ]);
     for (const toggle of toggles) {
       expect(toggle.firstElementChild?.tagName).toBe("SPAN");
@@ -77,17 +76,106 @@ describe("ChatChannelRail", () => {
 
     toggles[0]?.click();
     toggles[1]?.click();
-    toggles[2]?.click();
     await tick();
 
     expect(toggles.map((toggle) => toggle.getAttribute("aria-expanded"))).toEqual([
-      "false",
       "false",
       "false",
     ]);
     expect(toggles.every((toggle) => toggle.classList.contains("collapsed"))).toBe(true);
     expect(target.querySelectorAll(".channel-row")).toHaveLength(0);
     expect(target.textContent).not.toContain("No direct messages yet.");
+  });
+
+  it("keeps search in the toolbar and clears filtering without hiding the field", async () => {
+    component = mount(ChatChannelRail, {
+      target,
+      props: { expanded: true, showCollapsedStrip: true, onExpand: vi.fn(), onCollapse: vi.fn() },
+    });
+    await tick();
+    const input = target.querySelector<HTMLInputElement>('.explorer-toolbar input[type="search"]');
+    expect(input).not.toBeNull();
+    expect(document.activeElement).not.toBe(input);
+    expect(target.querySelectorAll(".explorer-toolbar button")).toHaveLength(1);
+    window.dispatchEvent(new Event("ganbaru-ai:chat-focus-search"));
+    await tick();
+    await vi.waitFor(() => expect(document.activeElement).toBe(input));
+    if (!input) throw new Error("Search input is missing");
+    input.value = "g";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await tick();
+    expect([...target.querySelectorAll(".channel-row")].map((row) => row.textContent?.trim())).toEqual(["general", "design"]);
+    input.value = "z";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await tick();
+    expect(target.querySelectorAll(".channel-row")).toHaveLength(0);
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await tick();
+    expect(input.value).toBe("");
+    expect(target.querySelectorAll(".channel-row")).toHaveLength(2);
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await tick();
+    expect(target.querySelector('input[type="search"]')).toBe(input);
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("focuses new section drafts and cancels them without changing navigation", async () => {
+    component = mount(ChatChannelRail, {
+      target,
+      props: { expanded: true, showCollapsedStrip: true, onExpand: vi.fn(), onCollapse: vi.fn() },
+    });
+    await tick();
+    const trigger = target.querySelector<HTMLElement>(".section-menu summary");
+    trigger?.click();
+    const createSection = target.querySelector<HTMLButtonElement>(".section-menu button");
+    createSection?.click();
+    await tick();
+    const input = target.querySelector<HTMLInputElement>('form input');
+    expect(input).not.toBeNull();
+    await vi.waitFor(() => expect(document.activeElement).toBe(input));
+    if (!input) throw new Error("Section name input is missing");
+    input.value = "Unfinished section";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await tick();
+    expect(target.querySelector("form")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    expect([...target.querySelectorAll(".section-toggle")].map((toggle) => toggle.textContent?.trim())).toEqual(["Channels", "Design"]);
+    trigger?.click();
+    createSection?.click();
+    await tick();
+    expect(target.querySelector<HTMLInputElement>('form input')?.value).toBe("");
+  });
+
+  it("opens channel actions without selecting the channel and restores focus on Escape", async () => {
+    const selectChannel = vi.spyOn(getChat(), "selectChannel").mockResolvedValue();
+    component = mount(ChatChannelRail, {
+      target,
+      props: { expanded: true, showCollapsedStrip: true, onExpand: vi.fn(), onCollapse: vi.fn() },
+    });
+    await tick();
+    const trigger = target.querySelector<HTMLButtonElement>('.explorer-row-action');
+    trigger?.click();
+    await tick();
+    expect(selectChannel).not.toHaveBeenCalled();
+    const menu = target.querySelector<HTMLElement>('[role="menu"]');
+    expect(menu).not.toBeNull();
+    await vi.waitFor(() => expect(menu?.contains(document.activeElement)).toBe(true));
+    menu?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await tick();
+    expect(target.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("does not mark a channel as current while the archive is open", async () => {
+    getChat().channelArchiveOpen = true;
+    component = mount(ChatChannelRail, {
+      target,
+      props: { expanded: true, showCollapsedStrip: true, onExpand: vi.fn(), onCollapse: vi.fn() },
+    });
+    await tick();
+    expect(target.querySelector('.channel-row[aria-current]')).toBeNull();
+    expect(target.querySelector('.archive-button')?.getAttribute("aria-current")).toBe("page");
   });
 
   it("closes the mobile surface after navigating to a channel", async () => {

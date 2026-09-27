@@ -57,7 +57,6 @@
   type ActiveNotesSurfaceKind = NotesSurfaceKind | "home" | "editor";
 
   let showInactiveProjects = $state(false);
-  let explorerCollapsed = $state(false);
   let creationFolderOverride = $state<string | null | undefined>(undefined);
   let creationContextProjectId = $state<string | null>(null);
   let creationContextPageId = $state<string | null>(null);
@@ -512,7 +511,7 @@
     {selectedGroup}
     {selectedProjectId}
     selectedPage={topBarSelectedPage}
-    {explorerCollapsed}
+    explorerCollapsed={notes.explorerCollapsed}
     {creationFolderId}
     {showInactiveProjects}
     onShowInactiveProjectsChange={(value) => {
@@ -599,7 +598,7 @@
       <NotesProjectHome
         {mobileLayout}
         projectId={selectedProjectId}
-        bind:explorerCollapsed
+        bind:explorerCollapsed={notes.explorerCollapsed}
         {creationFolderId}
         {selectedWorkingMarkdownFile}
         onSelectWorkingMarkdownFile={selectWorkingMarkdownFile}

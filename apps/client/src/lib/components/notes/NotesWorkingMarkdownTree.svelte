@@ -34,7 +34,7 @@
 
 {#if tree.roots.length > 0 || tree.unavailableWorkingFolderIds.length > 0 || error}
   <section class="mt-2 border-t border-border/70 pt-2" aria-label={t("notes.workingMarkdown.title")}>
-    <div class="mb-1 flex h-7 items-center gap-2 px-1.5 text-[0.72rem] font-medium text-muted-foreground">
+    <div class="explorer-section-title mb-1 flex min-h-8 items-center gap-2 px-1.5 text-muted-foreground">
       <span class="min-w-0 flex-1 truncate">{t("notes.workingMarkdown.title")}</span>
       <button
         type="button"
@@ -60,11 +60,11 @@
       <button
         type="button"
         class={cn(
-          "flex h-7 w-full min-w-0 items-center gap-1 rounded pr-2 text-left text-[0.78rem] hover:bg-accent",
+          "explorer-row explorer-row-label flex w-full min-w-0 items-center gap-1.5 rounded-md py-1.5 pr-2 text-left",
           row.kind === "file"
             && selectedFile?.workingFolderId === row.workingFolderId
             && selectedFile.relativePath === row.relativePath
-            && "bg-accent text-foreground",
+            && "explorer-selected text-foreground",
           row.kind !== "file" && "text-muted-foreground",
         )}
         style={`padding-left: ${6 + row.depth * 14}px`}

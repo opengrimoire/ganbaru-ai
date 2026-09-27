@@ -49,6 +49,7 @@ export const chat = {
     workspaceMissing: "Working folder missing",
   },
   channels: {
+    actions: "Channel actions",
     explorerLabel: "Project channels",
     search: "Search channels",
     clearSearch: "Clear channel search",

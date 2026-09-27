@@ -132,6 +132,7 @@
   --font-scale: 1;
   --type-scale: calc(var(--default-type-scale) * var(--font-scale));
   --radius: 0.5rem;
+  --explorer-width: 17rem;
   --icon-stroke-width: 1.6;
   --icon-stroke-width-compact: 1.5;
   --icon-stroke-width-delicate: 1;
@@ -217,15 +218,15 @@
   --touch-target-min: 48px;
 }
 
-svg.lucide:not(.app-title-bar *) {
+svg.lucide:not(.app-title-bar *, .explorer-sidebar *) {
   stroke-width: var(--icon-stroke-width);
 }
 
-svg.lucide[stroke-width="1"]:not(.app-title-bar *) {
+svg.lucide[stroke-width="1"]:not(.app-title-bar *, .explorer-sidebar *) {
   stroke-width: var(--icon-stroke-width-delicate);
 }
 
-svg.lucide[stroke-width="1.5"]:not(.app-title-bar *) {
+svg.lucide[stroke-width="1.5"]:not(.app-title-bar *, .explorer-sidebar *) {
   stroke-width: var(--icon-stroke-width-compact);
 }
 
@@ -661,4 +662,197 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *) {
 /* Cover geometry follows the page container, including narrow page previews. */
 .notes-page-banner {
   height: min(clamp(8rem, 20cqw, 15rem), 25svh);
+}
+
+/* Notes and Chat share explorer surfaces, controls, and navigation states. */
+.explorer-sidebar {
+  --explorer-toolbar-height: var(--cal-header-row-h);
+  --explorer-toolbar-icon-size: 1rem;
+  --explorer-row-icon-size: 14px;
+  --explorer-icon-stroke: var(--icon-stroke-width-compact);
+  --explorer-text-size: calc(0.866667rem * var(--type-scale));
+  --explorer-line-height: calc(1.3rem * var(--type-scale));
+  --explorer-row-padding: 0.375rem;
+  --explorer-row-height: max(2rem, calc(var(--explorer-line-height) + 2 * var(--explorer-row-padding)));
+  --explorer-text-weight: 400;
+  --explorer-selected-weight: 500;
+  --explorer-background: color-mix(in oklab, var(--sidebar) 45%, var(--cal-bg));
+  background: var(--explorer-background);
+  color: var(--foreground);
+}
+
+.explorer-toolbar {
+  display: flex;
+  height: var(--explorer-toolbar-height);
+  min-height: var(--explorer-toolbar-height);
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.125rem;
+  padding-inline: 0.5rem;
+}
+
+.explorer-icon {
+  display: inline-flex;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.375rem;
+  color: var(--muted-foreground);
+}
+
+.explorer-icon:hover,
+.explorer-icon[aria-pressed="true"],
+.explorer-icon.explorer-icon-active,
+.explorer-icon[aria-expanded="true"].explorer-row-action {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.explorer-icon:disabled {
+  pointer-events: none;
+  opacity: 0.45;
+}
+
+.explorer-sidebar :is(button, summary):focus-visible,
+.explorer-row :is(button, summary):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+.explorer-search {
+  display: flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 0.375rem;
+  background: color-mix(in oklab, var(--accent) 50%, transparent);
+  padding-inline: 0.5rem;
+  color: var(--muted-foreground);
+}
+
+.explorer-search:focus-within {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+.explorer-search input {
+  width: 0;
+  min-width: 0;
+  flex: 1;
+  padding-block: 0.375rem;
+  background: transparent;
+  color: var(--foreground);
+  font-size: calc(0.8rem * var(--type-scale));
+  outline: none;
+}
+
+.explorer-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.explorer-row {
+  min-height: var(--explorer-row-height, 2rem);
+  border-radius: 0.375rem;
+}
+
+.explorer-row:hover {
+  background: color-mix(in oklab, var(--accent) 50%, transparent);
+}
+
+.explorer-row.explorer-selected {
+  background: var(--selection-background);
+}
+
+.explorer-row-action {
+  margin-right: 0.125rem;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .explorer-row-action {
+    opacity: 0;
+  }
+
+  .explorer-row:hover .explorer-row-action,
+  .explorer-row:focus-within .explorer-row-action,
+  .explorer-row-action[aria-expanded="true"] {
+    opacity: 1;
+  }
+}
+
+.explorer-touch .explorer-toolbar {
+  --explorer-toolbar-height: calc(var(--touch-target-min) + 0.5rem);
+  padding-block: 0.25rem;
+}
+
+.explorer-touch :is(.explorer-icon, .explorer-search, .channel-row, .archive-button, .section-heading > button, .section-menu summary) {
+  min-height: var(--touch-target-min);
+}
+
+.explorer-touch :is(.explorer-icon, .section-heading > button, .section-menu summary) {
+  min-width: var(--touch-target-min);
+}
+
+.explorer-touch .explorer-row-action {
+  opacity: 1;
+}
+
+/* Explorer icons have one owner, independent of feature-specific SVG rules. */
+.explorer-sidebar svg.lucide {
+  stroke-width: var(--explorer-icon-stroke);
+  flex-shrink: 0;
+}
+
+.explorer-sidebar .explorer-toolbar > .explorer-icon svg,
+.explorer-sidebar .explorer-toolbar > div > .explorer-icon svg {
+  width: var(--explorer-toolbar-icon-size);
+  height: var(--explorer-toolbar-icon-size);
+}
+
+.explorer-sidebar :is(.explorer-row, .section-heading, .explorer-section-title, .explorer-search) svg.lucide {
+  width: var(--explorer-row-icon-size);
+  height: var(--explorer-row-icon-size);
+}
+
+.explorer-sidebar .explorer-row-label,
+.explorer-sidebar .section-toggle,
+.explorer-sidebar .section-heading,
+.explorer-sidebar .explorer-section-title,
+.explorer-sidebar .archive-button,
+.explorer-sidebar .explorer-search input {
+  font-size: var(--explorer-text-size);
+  line-height: var(--explorer-line-height);
+  font-weight: var(--explorer-text-weight);
+}
+
+.explorer-sidebar .explorer-row-label[aria-current="page"],
+.explorer-sidebar .explorer-row-label.explorer-selected,
+.explorer-sidebar .archive-button[aria-current="page"] {
+  font-weight: var(--explorer-selected-weight);
+}
+
+/* Section headings occupy one navigation row, preserving the same baseline rhythm. */
+.explorer-sidebar .section-heading,
+.explorer-sidebar .explorer-section-title {
+  min-height: var(--explorer-row-height);
+}
+
+.explorer-sidebar .explorer-row-icon {
+  width: var(--explorer-row-icon-size);
+  height: var(--explorer-row-icon-size);
+  flex: 0 0 auto;
+}
+
+.explorer-sidebar svg.explorer-row-icon {
+  stroke-width: var(--explorer-icon-stroke);
+}
+
+.explorer-touch {
+  --explorer-row-height: max(var(--touch-target-min), calc(var(--explorer-line-height) + 2 * var(--explorer-row-padding)));
+}
+
+.explorer-sidebar .explorer-row > button.explorer-row-label,
+.explorer-sidebar button.explorer-row.explorer-row-label {
+  padding-block: var(--explorer-row-padding);
 }

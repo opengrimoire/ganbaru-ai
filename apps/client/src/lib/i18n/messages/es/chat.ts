@@ -52,6 +52,7 @@ export const chat = {
     workspaceMissing: "Carpeta de trabajo no disponible",
   },
   channels: {
+    actions: "Acciones del canal",
     explorerLabel: "Canales del proyecto",
     search: "Buscar canales",
     clearSearch: "Limpiar búsqueda de canales",

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ExplorerSearch from "$lib/components/ExplorerSearch.svelte";
   import { onMount, tick } from "svelte";
   import ArrowUpNarrowWide from "@lucide/svelte/icons/arrow-up-narrow-wide";
   import Check from "@lucide/svelte/icons/check";
@@ -319,7 +320,7 @@
     if (mobileLayout || event.button !== 0 || event.pointerType === "touch") return;
     const target = event.target;
     if (!(target instanceof Element)) return;
-    if (target.closest("input, textarea, [contenteditable='true']")) return;
+    if (target.closest("input, textarea, [contenteditable='true'], .explorer-row-action")) return;
     const sourceElement = target.closest<HTMLElement>("[data-notes-navigation-drag-kind]");
     if (!sourceElement || !explorerScrollElement?.contains(sourceElement)) return;
     const kind = sourceElement.dataset.notesNavigationDragKind;
@@ -412,6 +413,7 @@
 
   let search = $state("");
   let searchOpen = $state(false);
+  let searchButton: HTMLButtonElement;
   let sortMenuOpen = $state(false);
   let sortOrder = $state<NotesNavigationSortOrder>("name-asc");
   let currentFileHighlightRequestId = $state(0);
@@ -666,7 +668,10 @@
 
   function toggleSearch(): void {
     searchOpen = !searchOpen;
-    if (!searchOpen) search = "";
+    if (!searchOpen) {
+      search = "";
+      searchButton?.focus();
+    }
   }
 
   function selectSortOrder(nextOrder: NotesNavigationSortOrder): void {
@@ -890,11 +895,11 @@
 />
 
 <aside
-  class="notes-project-explorer relative h-full min-h-0 shrink-0 overflow-hidden"
+  class="explorer-sidebar notes-project-explorer relative h-full min-h-0 shrink-0 overflow-hidden"
+  class:explorer-touch={mobileLayout}
   class:notes-project-explorer-mobile={mobileLayout}
   class:notes-project-explorer-collapsed={!mobileLayout && explorerCollapsed}
   class:notes-project-explorer-dragging={draggingNavigationItem !== null}
-  style="background-color: var(--cal-bg);"
   aria-label={t("notes.explorerLabel")}
   data-notes-explorer
   data-notes-first-use-state
@@ -905,11 +910,11 @@
       aria-hidden={!explorerCollapsed}
       inert={!explorerCollapsed}
     >
-      <div class="flex h-(--cal-header-row-h) items-center justify-center">
+      <div class="explorer-toolbar justify-center">
         <button
           bind:this={expandExplorerButtonElement}
           type="button"
-          class="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          class="explorer-icon"
           aria-label={t("notes.expandExplorerSidebar")}
           aria-expanded="false"
           data-app-tooltip={t("notes.expandExplorerSidebar")}
@@ -924,13 +929,13 @@
   {/if}
 
   <div
-    class="notes-project-explorer-content flex h-full min-h-0 w-64 min-w-64 flex-col"
+    class="notes-project-explorer-content flex h-full min-h-0 flex-col"
     inert={!mobileLayout && explorerCollapsed}
   >
-    <div class="flex h-(--cal-header-row-h) shrink-0 items-center justify-start gap-0.5 px-2">
+    <div class="explorer-toolbar">
       <button
         type="button"
-        class="flex {mobileLayout ? 'size-12' : 'size-7'} shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-45"
+        class="explorer-icon"
         aria-label={t("notes.newPage")}
         data-app-tooltip={t("notes.newPage")}
         disabled={!projectId}
@@ -940,7 +945,7 @@
       </button>
     <button
       type="button"
-      class="flex {mobileLayout ? 'size-12' : 'size-7'} shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-45"
+      class="explorer-icon"
       aria-label={t("notes.newFolder")}
       data-app-tooltip={t("notes.newFolder")}
       disabled={!projectId}
@@ -954,7 +959,8 @@
       <button
         bind:this={sortButtonElement}
         type="button"
-        class={`flex ${mobileLayout ? "size-12" : "size-7"} shrink-0 items-center justify-center rounded-md hover:bg-accent hover:text-foreground ${sortMenuOpen ? "bg-accent text-foreground" : "text-muted-foreground"}`}
+        class="explorer-icon"
+        class:explorer-icon-active={sortMenuOpen}
         aria-label={t("notes.sortExplorer")}
         aria-expanded={sortMenuOpen}
         aria-haspopup="menu"
@@ -1069,7 +1075,7 @@
     {#if !mobileLayout}
       <button
         type="button"
-        class="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-45"
+        class="explorer-icon"
         aria-label={t("notes.highlightCurrentFile")}
         data-app-tooltip={t("notes.highlightCurrentFile")}
         disabled={!notes.selectedPageId}
@@ -1082,7 +1088,7 @@
     {/if}
     <button
       type="button"
-      class="flex {mobileLayout ? 'size-12' : 'size-7'} shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-45"
+      class="explorer-icon"
       aria-label={shouldExpandExplorer ? t("notes.expandExplorer") : t("notes.collapseExplorer")}
       data-app-tooltip={shouldExpandExplorer ? t("notes.expandExplorer") : t("notes.collapseExplorer")}
       onclick={toggleExplorerExpansion}
@@ -1095,7 +1101,9 @@
     </button>
     <button
       type="button"
-      class={`flex ${mobileLayout ? "size-12" : "size-7"} shrink-0 items-center justify-center rounded-md hover:bg-accent hover:text-foreground ${searchOpen ? "bg-accent text-foreground" : "text-muted-foreground"}`}
+      class="explorer-icon"
+      class:explorer-icon-active={searchOpen}
+      bind:this={searchButton}
       aria-label={t("notes.searchLabel")}
       aria-pressed={searchOpen}
       data-app-tooltip={t("notes.searchLabel")}
@@ -1107,7 +1115,7 @@
       <button
         bind:this={collapseExplorerButtonElement}
         type="button"
-        class="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+        class="explorer-icon ml-auto"
         aria-label={t("notes.collapseExplorerSidebar")}
         aria-expanded="true"
         data-app-tooltip={t("notes.collapseExplorerSidebar")}
@@ -1121,17 +1129,7 @@
   </div>
 
   {#if searchOpen}
-    <div class="shrink-0 px-2 pb-2">
-      <label class="flex {mobileLayout ? 'min-h-12' : ''} items-center gap-1.5 rounded-md bg-accent/50 px-2 py-1.5">
-        <Search class="size-3.5 shrink-0 text-muted-foreground" />
-        <input
-          class="min-w-0 flex-1 bg-transparent text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground"
-          bind:value={search}
-          placeholder={t("notes.searchPlaceholder")}
-          aria-label={t("notes.searchLabel")}
-        />
-      </label>
-    </div>
+    <ExplorerSearch bind:value={search} label={t("notes.searchLabel")} placeholder={t("notes.searchPlaceholder")} clearLabel={t("notes.clearSearch")} onClose={toggleSearch} />
   {/if}
 
   {#if folderActionError}
@@ -1360,8 +1358,13 @@
 
 <style>
   .notes-project-explorer {
-    width: 16rem;
+    width: var(--explorer-width);
     transition: width 180ms cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  .notes-project-explorer-content {
+    width: var(--explorer-width);
+    min-width: var(--explorer-width);
   }
 
   .notes-project-explorer-mobile {
@@ -1389,7 +1392,7 @@
   }
 
   .notes-project-explorer-collapsed-rail {
-    background-color: var(--cal-bg);
+    background-color: var(--explorer-background);
     opacity: 0;
     pointer-events: none;
     transition: opacity 60ms linear;

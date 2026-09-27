@@ -92,16 +92,18 @@ describe("NotesPageRow lazy actions", () => {
     await tick();
     expect(loader.calls).toEqual([]);
 
-    const row = target.querySelector<HTMLElement>('[role="group"]');
-    expect(row).not.toBeNull();
-    row?.dispatchEvent(new MouseEvent("contextmenu", {
-      bubbles: true,
-      cancelable: true,
-      clientX: 24,
-      clientY: 24,
-    }));
+    const actionButton = target.querySelector<HTMLButtonElement>(".explorer-row-action");
+    expect(actionButton).not.toBeNull();
+    actionButton?.click();
     await tick();
     expect(loader.calls).toEqual([]);
+    expect(target.querySelector('[role="menu"]')?.contains(document.activeElement)).toBe(true);
+    target.querySelector('[role="menu"]')?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await tick();
+    expect(target.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(actionButton);
+    actionButton?.click();
+    await tick();
 
     const moveButton = target.querySelector<HTMLButtonElement>('button[aria-expanded="false"]');
     expect(moveButton).not.toBeNull();

@@ -106,6 +106,8 @@ const BLOCK_SAVE_DEBOUNCE_MS = 350;
 let pages = $state<NotesPage[]>([]);
 let allPages = $state<NotesPage[]>([]);
 let viewMode = $state<NotesViewMode>("pages");
+// Session UI state outlives NotesView when the active application tab changes.
+let explorerCollapsed = $state(false);
 let contextualReturnPageId: string | null = null;
 let documentSelectionRestore = $state<{ pageId: string; selection: NotesDocumentSelection | null } | null>(null);
 let focusRequest = $state<NotesFocusRequest>({
@@ -1099,6 +1101,13 @@ async function flushPendingWrites(): Promise<void> {
 
 export function getNotes() {
   return {
+    /** Whether the desktop Notes explorer is collapsed for this window session. */
+    get explorerCollapsed(): boolean {
+      return explorerCollapsed;
+    },
+    set explorerCollapsed(collapsed: boolean) {
+      explorerCollapsed = collapsed;
+    },
     get editorSaveError() { return editorSaveError; },
     retryEditorMutations: async () => {
       await retryEditorMutations();

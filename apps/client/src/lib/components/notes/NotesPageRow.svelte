@@ -1,4 +1,5 @@
 <script lang="ts">
+  import EllipsisVertical from "@lucide/svelte/icons/ellipsis-vertical";
   import { onDestroy, tick } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
@@ -330,6 +331,21 @@
     folderMoveMenuOpen = false;
   }
 
+  /** Open the existing row menu from a keyboard or pointer action button. */
+  function openActionMenu(event: MouseEvent): void {
+    const trigger = event.currentTarget;
+    if (!(trigger instanceof HTMLButtonElement)) return;
+    openContextMenu(event);
+    const rect = trigger.getBoundingClientRect();
+    menuStyle = notesRowContextMenuStyle(notesRowContextMenuGeometry({
+      clientX: rect.left,
+      clientY: rect.bottom,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+    }));
+    void tick().then(() => rowElement?.querySelector<HTMLButtonElement>('[role="menu"] button')?.focus());
+  }
+
   function openContextMenu(event: MouseEvent): void {
     if (readOnly || editing) return;
     if (event.target instanceof Element && event.target.closest("[data-app-floating-surface]")) {
@@ -449,7 +465,7 @@
   use:dismissOnOutside={{ enabled: menuOpen, onDismiss: closeMenu }}
 >
   {#if editing}
-    <div class={`notes-page-row-content flex min-w-0 items-center rounded-md bg-accent/50 py-1.5 pr-1 text-foreground ${showDisclosure ? "" : "pl-2"}`}>
+    <div class={`notes-page-row-content explorer-row flex min-w-0 items-center rounded-md bg-accent/50 py-1.5 pr-1 text-foreground ${showDisclosure ? "" : "pl-2"}`}>
       {#if showDisclosure}
         <span class="size-6 shrink-0" aria-hidden="true"></span>
       {/if}
@@ -460,7 +476,7 @@
             size={explorerRowIconSize}
             strokeWidth={explorerRowIconStrokeWidth}
             emojiScale={COMPACT_IDENTITY_EMOJI_SCALE}
-            class="shrink-0"
+            class="explorer-row-icon"
           />
         {:else}
           <NotesPageIcon
@@ -468,12 +484,12 @@
             size={explorerRowIconSize}
             strokeWidth={explorerRowIconStrokeWidth}
             emojiScale={COMPACT_IDENTITY_EMOJI_SCALE}
-            class="shrink-0"
+            class="explorer-row-icon"
           />
         {/if}
         <input
           bind:this={renameInput}
-          class="min-w-0 flex-1 bg-transparent text-[0.866667rem] text-inherit caret-primary outline-none placeholder:text-muted-foreground"
+          class="min-w-0 flex-1 bg-transparent explorer-row-label text-[0.866667rem] text-inherit caret-primary outline-none placeholder:text-muted-foreground"
           data-app-shortcuts="ignore"
           aria-label={t("notes.renamePage")}
           value={titleDraft}
@@ -486,7 +502,8 @@
     </div>
   {:else}
     <div
-      class={`notes-page-row-content flex min-w-0 items-center rounded-md pr-1 text-foreground hover:bg-accent/50 ${showDisclosure ? "" : "pl-2"}`}
+      class={`notes-page-row-content explorer-row flex min-w-0 items-center rounded-md pr-1 text-foreground hover:bg-accent/50 ${showDisclosure ? "" : "pl-2"}`}
+      class:explorer-selected={selected}
     >
       {#if showDisclosure}
         <button
@@ -507,7 +524,7 @@
         </button>
       {/if}
       <button
-        class={`flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pr-1 text-left text-[0.866667rem] text-inherit ${selected ? "font-medium" : ""}`}
+        class={`flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pr-1 text-left explorer-row-label text-[0.866667rem] text-inherit ${selected ? "font-medium" : ""}`}
         type="button"
         aria-current={selected ? "page" : undefined}
         onclick={handleSelect}
@@ -518,7 +535,7 @@
             size={explorerRowIconSize}
             strokeWidth={explorerRowIconStrokeWidth}
             emojiScale={COMPACT_IDENTITY_EMOJI_SCALE}
-            class="shrink-0"
+            class="explorer-row-icon"
           />
         {:else}
           <NotesPageIcon
@@ -526,7 +543,7 @@
             size={explorerRowIconSize}
             strokeWidth={explorerRowIconStrokeWidth}
             emojiScale={COMPACT_IDENTITY_EMOJI_SCALE}
-            class="shrink-0"
+            class="explorer-row-icon"
           />
         {/if}
         <span class="min-w-0 flex-1 truncate">{title}</span>
@@ -541,6 +558,9 @@
           <Star class="size-3.5 shrink-0 fill-current text-primary" aria-hidden="true" />
         {/if}
       </button>
+      {#if !readOnly}
+      <button type="button" class="explorer-icon explorer-row-action" aria-label={`${t("notes.pageActions")}: ${title}`} data-app-tooltip={t("notes.pageActions")} aria-haspopup="menu" aria-expanded={menuOpen} onclick={openActionMenu}><EllipsisVertical size={14} /></button>
+      {/if}
     </div>
   {/if}
 
@@ -549,6 +569,13 @@
       class="notes-page-action-menu fixed z-50 min-w-36 rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-lg"
       style={menuStyle}
       role="menu"
+      tabindex="-1"
+      onkeydown={(event) => {
+        if (event.key !== "Escape") return;
+        event.stopPropagation();
+        closeMenu();
+        rowElement?.querySelector<HTMLButtonElement>(".explorer-row-action")?.focus();
+      }}
       data-app-floating-surface
     >
       <button
