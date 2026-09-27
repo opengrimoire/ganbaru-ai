@@ -81,6 +81,18 @@ describe("Notes cover selection", () => {
     expect(images.save).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["Study", "study"],
+    ["Mathematics", "mathematics"],
+    ["Programming", "programming"],
+    ["Finance", "finance"],
+  ] as const)("applies the %s illustration with the chosen theme color", async (label, pattern) => {
+    const { onSelect, onClose } = await open();
+    button(label).click();
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith(createNotesDesignCover(pattern, 4));
+  });
+
   it("uses the shared color palette to recolor the existing design immediately and keeps the picker open", async () => {
     const { onSelect, onClose } = await open();
     button("Theme colors").click();

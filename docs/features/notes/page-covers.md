@@ -16,20 +16,24 @@ Add cover opens a picker with **Designs** and **Upload**. Reopening selects the 
 | Nature | A river valley with angular rock faces, forested banks, a winding river, and illustrated sky |
 | Atlas | A shaded globe integrated with map contours, projection lines, and travel routes |
 | Studio | A design table with construction drawings, a layered print, pigment studies, and drawing tools |
+| Study | An annotated study spread with highlighted passages and a concept map |
+| Mathematics | A coordinate surface connecting a curve, area shading, circle, and tangent construction |
+| Programming | Indented code connected to execution paths on a field of circuit-like traces |
+| Finance | A ledger whose rows continue into plotted trends and stacked columns |
 | Dots | A restrained repeating dot pattern |
 | Grid | Fine, evenly spaced lines |
 
-Ten designs appear in two compact groups, Illustrations and Simple. Their thumbnails reflect the selected color and share the banner's rendering rules. Search and shuffle follow the Add icon toolbar. The picker reuses Add icon's color control, per-item color choice panel, and upload panel. Automatic uses the theme foreground; the other choices are the same 32 theme palette slots used by icons and Calendar. Ask every time opens color variations beside a selected design. Default color and Ask every time preferences are remembered independently for covers.
+Fourteen designs appear in two compact groups, Illustrations and Simple. Their thumbnails reflect the selected color and share the banner's rendering rules. Search and shuffle follow the Add icon toolbar. The picker reuses Add icon's color control, per-item color choice panel, and upload panel. Automatic uses the theme foreground; the other choices are the same 32 theme palette slots used by icons and Calendar. Ask every time opens color variations beside a selected design. Default color and Ask every time preferences are remembered independently for covers.
 
 Designed covers retain their pattern and Automatic or palette-slot identity. Colors resolve against the active theme, with tonal variations derived from theme surfaces. Changing themes updates page covers, gallery cards, and history previews. Uploaded images retain their original colors. Titles remain below the banner.
 
 Pattern density, angle, animation, independent secondary colors, and arbitrary color controls are outside the current scope. Static CSS and small inline SVG compositions render designs directly without generating image files or decoding raster thumbnails. They use no animation or blur filters. Designed covers do not subscribe to image sizing observers. Uploaded images reuse the existing bounded managed-asset cache.
 
-The illustrated collection keeps its subjects recognizable. Science, the outdoors, geography, and creative work guide the imagery. Shared trajectories, connected terrain and water, overlapping cartographic lines, and a common design-table surface connect the elements within each scene. Lighting, transparency, and scale establish depth. Contours remains the abstract option.
+The illustrated collection keeps its subjects recognizable. Science, the outdoors, geography, creative work, learning, mathematics, software, and finance guide the imagery. Shared trajectories, connected terrain and water, overlapping cartographic lines, and a common design-table surface connect the elements within each scene. Lighting, transparency, and scale establish depth. Contours remains the abstract option.
 
 Scenes use a shallow 5:1 drawing canvas. Nature fills the entire banner with flat color layers for sky, distant terrain, rock faces, river, and foreground banks. Rock hatching and water lines add detail without a gradient background or gradient fills. Its composition adapts horizontally on desktop, with a central crop below 30rem to avoid squeezing narrow previews.
 
-Other illustrated scenes scale to the banner height so subjects keep their proportions and remain visible vertically. Studio also renders a drafting grid, paper shapes, and pigment gestures across the full banner width. Narrow views crop the sides of the connected scene. Contours retains its existing sizing and color treatment. Illustrated covers use shades of the selected theme color for contrast. Sizing uses CSS without resize listeners or per-frame work.
+Other illustrated scenes scale to the banner height so subjects keep their proportions and remain visible vertically. Studio also renders a drafting grid, paper shapes, and pigment gestures across the full banner width. Study, Mathematics, Programming, and Finance use full-width ruled pages, coordinate grids, connected traces, and ledger rules respectively. Their foreground compositions retain proportions when the banner changes width. Mathematical notation and code punctuation are decorative, language-independent subject matter; picker names use the localized catalog. Narrow views crop the sides of the connected scene. Contours retains its existing sizing and color treatment. Illustrated covers use shades of the selected theme color for contrast. Sizing uses CSS without resize listeners or per-frame work.
 
 ## Immediate selection
 

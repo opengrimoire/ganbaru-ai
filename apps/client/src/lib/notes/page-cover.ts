@@ -29,6 +29,10 @@ export function notesCoverDesignBackground(pattern: NotesCoverDesign, color: str
     case "botanical": return `color-mix(in srgb, ${color} 22%, var(--background))`;
     case "orbit": return `radial-gradient(ellipse at 60% 30%, ${color}, color-mix(in srgb, ${color} 52%, black) 90%)`;
     case "atlas": return `linear-gradient(145deg, ${soft}, ${base} 65%, ${soft})`;
+    case "study": return `color-mix(in srgb, ${color} 10%, var(--background))`;
+    case "mathematics": return `color-mix(in srgb, ${color} 48%, black)`;
+    case "programming": return `color-mix(in srgb, ${color} 26%, var(--background))`;
+    case "finance": return `color-mix(in srgb, ${color} 18%, var(--background))`;
     case "dots": return `radial-gradient(circle, ${ink} 1px, transparent 1.5px) 0 0 / 18px 18px, ${soft}`;
     case "grid": return `linear-gradient(${base} 1px, transparent 1px) 0 0 / 28px 28px, linear-gradient(90deg, ${base} 1px, transparent 1px) 0 0 / 28px 28px, ${soft}`;
   }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import NotesKnowledgeCoverDesign from "./NotesKnowledgeCoverDesign.svelte";
   import { getEventColor } from "$lib/components/calendar/utils";
   import type { NotesCoverColor, NotesCoverDesign } from "$lib/notes/contracts/assets";
   import { notesCoverDesignBackground } from "$lib/notes/page-cover";
@@ -19,6 +20,9 @@
   class="relative size-full overflow-hidden"
   style={`background: ${notesCoverDesignBackground(pattern, ink)}; --cover-color: ${ink}; --cover-light: color-mix(in srgb, ${ink} 22%, var(--background)); --cover-mid: color-mix(in srgb, ${ink} 58%, var(--background)); --cover-deep: ${deep}; --cover-highlight: color-mix(in srgb, ${ink} 12%, white);`}
 >
+  {#if pattern === "study" || pattern === "mathematics" || pattern === "programming" || pattern === "finance"}
+    <NotesKnowledgeCoverDesign {pattern} />
+  {/if}
   {#if pattern === "botanical" || pattern === "studio"}
     <svg class={pattern === "botanical" ? "nature-scene" : "absolute inset-0 size-full"} viewBox="0 0 1200 240" preserveAspectRatio="none" aria-hidden="true">
       {#if pattern === "botanical"}

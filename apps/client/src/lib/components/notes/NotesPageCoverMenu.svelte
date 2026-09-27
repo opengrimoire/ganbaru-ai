@@ -55,7 +55,7 @@
   const ASK_COLOR_KEY = "notes.coverPicker.askEveryTime";
   const nativeFilePickerAvailable = platformHasCapability(BUILD_PLATFORM_PROFILE, "storage.native-file-picker");
   const groups = [
-    { label: "notes.pageCoverIllustrations", designs: ["contours", "orbit", "botanical", "atlas", "studio"] },
+    { label: "notes.pageCoverIllustrations", designs: ["contours", "orbit", "botanical", "atlas", "studio", "study", "mathematics", "programming", "finance"] },
     { label: "notes.pageCoverSimple", designs: ["solid", "gradient", "glow", "dots", "grid"] },
   ] as const;
   let activeTab = $state<CoverTab>(initialCover && initialCover.type !== "design" ? "upload" : "designs");
@@ -169,6 +169,8 @@
     const keys = {
       solid: "notes.pageCoverDesignSolid", gradient: "notes.pageCoverDesignGradient", glow: "notes.pageCoverDesignGlow",
       contours: "notes.pageCoverDesignContours", studio: "notes.pageCoverDesignStudio", botanical: "notes.pageCoverDesignBotanical",
+      study: "notes.pageCoverDesignStudy", mathematics: "notes.pageCoverDesignMathematics",
+      programming: "notes.pageCoverDesignProgramming", finance: "notes.pageCoverDesignFinance",
       orbit: "notes.pageCoverDesignOrbit", atlas: "notes.pageCoverDesignAtlas", dots: "notes.pageCoverDesignDots", grid: "notes.pageCoverDesignGrid",
     } as const;
     return t(keys[pattern]);
