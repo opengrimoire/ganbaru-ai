@@ -57,7 +57,7 @@ export type NotesFileObject =
     }
   | { type: "file_upload"; file_upload: { id: string } };
 
-export const NOTES_COVER_DESIGNS = ["contours", "ribbons", "landscape", "orbit", "solid", "gradient", "glow", "dots", "grid"] as const;
+export const NOTES_COVER_DESIGNS = ["contours", "studio", "botanical", "orbit", "atlas", "solid", "gradient", "glow", "dots", "grid"] as const;
 export type NotesCoverColor = number | "default";
 export type NotesCoverDesign = (typeof NOTES_COVER_DESIGNS)[number];
 

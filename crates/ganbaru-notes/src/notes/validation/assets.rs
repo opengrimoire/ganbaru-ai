@@ -41,9 +41,10 @@ pub fn validate_page_cover_value(value: &Value) -> Result<(), String> {
         "design" => {
             const PATTERNS: &[&str] = &[
                 "contours",
-                "ribbons",
-                "landscape",
+                "studio",
+                "botanical",
                 "orbit",
+                "atlas",
                 "solid",
                 "gradient",
                 "glow",

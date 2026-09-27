@@ -114,6 +114,7 @@ describe("notes page covers", () => {
   it("renders distinct patterns from the currently resolved theme color", () => {
     const backgrounds = NOTES_COVER_DESIGNS.map((pattern) => notesCoverDesignBackground(pattern, "#123456"));
     expect(new Set(backgrounds).size).toBe(NOTES_COVER_DESIGNS.length);
+    expect(notesCoverDesignBackground("botanical", "#123456")).not.toContain("gradient");
     for (const pattern of NOTES_COVER_DESIGNS) {
       expect(notesCoverDesignBackground(pattern, "#123456")).toContain("#123456");
       expect(notesCoverDesignBackground(pattern, "#abcdef")).not.toContain("#123456");

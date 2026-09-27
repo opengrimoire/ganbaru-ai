@@ -62,11 +62,22 @@ describe("Notes cover selection", () => {
   it("applies a design on selection with removal in the header and no preview or confirmation footer", async () => {
     const { onSelect, onClose } = await open();
     expect(document.querySelector('[aria-label="Cover preview"]')).toBeNull();
+    const referencedShapes = [...document.querySelectorAll<SVGUseElement>("svg use")];
+    expect(referencedShapes.length).toBeGreaterThan(0);
+    for (const shape of referencedShapes) {
+      const reference = shape.getAttribute("href");
+      expect(reference?.startsWith("#")).toBe(true);
+      const definition = document.getElementById(reference!.slice(1));
+      expect(definition).not.toBeNull();
+      expect(shape.ownerSVGElement?.contains(definition)).toBe(true);
+    }
     expect([...document.querySelectorAll("button")].some((entry) => ["Apply", "Cancel", "Close"].includes(entry.textContent?.trim() ?? ""))).toBe(false);
     expect(button("Remove").parentElement?.querySelector('[role="tablist"]')).not.toBeNull();
-    button("Landscape").click();
+    const nature = button("Nature");
+    expect(nature.querySelector("linearGradient, radialGradient")).toBeNull();
+    nature.click();
     await vi.waitFor(() => expect(onClose).toHaveBeenCalledOnce());
-    expect(onSelect).toHaveBeenCalledExactlyOnceWith(createNotesDesignCover("landscape", 4));
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith(createNotesDesignCover("botanical", 4));
     expect(images.save).not.toHaveBeenCalled();
   });
 
@@ -90,13 +101,13 @@ describe("Notes cover selection", () => {
     preferences.values.set("notes.coverPicker.askEveryTime", true);
     const { onSelect, onClose } = await open();
     await tick();
-    button("Ribbons").click();
+    button("Studio").click();
     await tick();
     expect(onSelect).not.toHaveBeenCalled();
     expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(2);
     button("Theme color 8").click();
     await vi.waitFor(() => expect(onClose).toHaveBeenCalledOnce());
-    expect(onSelect).toHaveBeenCalledExactlyOnceWith(createNotesDesignCover("ribbons", 7));
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith(createNotesDesignCover("studio", 7));
   });
 
   it("allows retrying a failed immediate save by selecting the design again", async () => {

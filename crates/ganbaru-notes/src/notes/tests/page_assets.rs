@@ -314,7 +314,7 @@ fn page_cover_variants_round_trip() {
         create_page(&pool, PAGE_A, BLOCK_A).await;
 
         let variants = [
-            json!({"type": "design", "design": {"pattern": "ribbons", "color": 31}}),
+            json!({"type": "design", "design": {"pattern": "studio", "color": 31}}),
             json!({"type": "external", "external": {"url": "https://example.com/cover.png"}, "focal_point": {"x": 0.25, "y": 1.0}}),
             json!({
                 "type": "file",
@@ -571,9 +571,10 @@ fn page_cover_validation_rejects_unsafe_file_objects() {
 fn page_cover_design_and_focal_validation() {
     for pattern in [
         "contours",
-        "ribbons",
-        "landscape",
+        "studio",
+        "botanical",
         "orbit",
+        "atlas",
         "solid",
         "gradient",
         "glow",
