@@ -35,6 +35,7 @@ Favorites and recents are implemented device-local navigation metadata outside t
 Favoriting pins the page in Notes navigation and shows a star in the page action surface and navigation row. Opening or creating a page updates recents. Neither behavior changes parent, project, sort order, content, or collaboration history.
 
 When a page is open, its last-edited detail, favorite control, and page actions share the workspace header immediately before project Notes settings. The editor has no separate page header. Side and center previews keep close and view-mode controls as compact overlays so the page content does not lose another row of height.
+Floating application panels cover these header controls when open.
 
 ## Archive
 
@@ -57,6 +58,7 @@ Opening a block or comment result loads the page and focuses the relevant target
 ## Working-folder Markdown
 
 Authorized project working folders can appear as source-aware roots when they contain supported Markdown descendants. Scanning is recursive and bounded, rejects symbolic links and unsafe paths, excludes common generated and dependency directories, and identifies truncated results.
+An empty scan runs without showing the Working folders section. Existing roots remain visible during refresh, while switching projects clears the previous project's roots before scanning. Unavailable folders and scan errors remain visible.
 
 Opening a file provides raw editing, sanitized preview, dirty state, explicit Save, Refresh, Open externally, and Copy relative path. Reads include a revision digest. Save requires the expected digest and uses atomic replacement.
 

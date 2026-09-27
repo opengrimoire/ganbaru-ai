@@ -886,7 +886,7 @@
     {/if}
     {#if pageActionsTarget}
       <div
-        class="relative z-70 flex shrink-0 items-center gap-1"
+        class="relative z-30 flex shrink-0 items-center gap-1"
         data-notes-page-actions
         use:portal={pageActionsTarget}
         use:dismissOnOutside={{ enabled: !!activePanel, onDismiss: closeActionPanel }}

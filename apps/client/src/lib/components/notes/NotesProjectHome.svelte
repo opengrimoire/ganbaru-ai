@@ -450,6 +450,7 @@
   let workingMarkdownLoading = $state(false);
   let workingMarkdownError = $state<string | null>(null);
   let workingMarkdownGeneration = 0;
+  let workingMarkdownTreeProjectId: string | null = null;
 
   const projectPages = $derived.by(() => notesPagesForProject(
     [...new Map([...notes.allPages, ...notes.linkResolutionPages].map((item) => [item.id, item])).values()],
@@ -615,6 +616,7 @@
   async function refreshWorkingMarkdown(): Promise<void> {
     if (mobileLayout) {
       workingMarkdownGeneration += 1;
+      workingMarkdownTreeProjectId = null;
       workingMarkdownTree = { roots: [], unavailableWorkingFolderIds: [] };
       workingMarkdownLoading = false;
       workingMarkdownError = null;
@@ -622,8 +624,12 @@
     }
     const requestedProjectId = projectId;
     const generation = ++workingMarkdownGeneration;
-    if (!requestedProjectId) {
+    if (requestedProjectId !== workingMarkdownTreeProjectId) {
+      workingMarkdownTreeProjectId = requestedProjectId;
       workingMarkdownTree = { roots: [], unavailableWorkingFolderIds: [] };
+    }
+    if (!requestedProjectId) {
+      workingMarkdownLoading = false;
       workingMarkdownError = null;
       return;
     }

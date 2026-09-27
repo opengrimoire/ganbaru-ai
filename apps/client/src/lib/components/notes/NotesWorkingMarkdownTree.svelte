@@ -32,7 +32,7 @@
   }
 </script>
 
-{#if tree.roots.length > 0 || tree.unavailableWorkingFolderIds.length > 0 || loading || error}
+{#if tree.roots.length > 0 || tree.unavailableWorkingFolderIds.length > 0 || error}
   <section class="mt-2 border-t border-border/70 pt-2" aria-label={t("notes.workingMarkdown.title")}>
     <div class="mb-1 flex h-7 items-center gap-2 px-1.5 text-[0.72rem] font-medium text-muted-foreground">
       <span class="min-w-0 flex-1 truncate">{t("notes.workingMarkdown.title")}</span>
