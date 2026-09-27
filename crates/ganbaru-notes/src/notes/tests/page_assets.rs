@@ -1,4 +1,5 @@
 use super::helpers::*;
+use serde_json::Value;
 
 #[test]
 fn page_icon_set_and_remove_round_trip() {
@@ -313,6 +314,8 @@ fn page_cover_variants_round_trip() {
         create_page(&pool, PAGE_A, BLOCK_A).await;
 
         let variants = [
+            json!({"type": "design", "design": {"pattern": "ribbons", "color": 31}}),
+            json!({"type": "external", "external": {"url": "https://example.com/cover.png"}, "focal_point": {"x": 0.25, "y": 1.0}}),
             json!({
                 "type": "file",
                 "file": {
@@ -561,5 +564,186 @@ fn page_cover_validation_rejects_unsafe_file_objects() {
             .await;
             assert_eq!(result.err(), Some(expected_error.to_string()));
         }
+    });
+}
+
+#[test]
+fn page_cover_design_and_focal_validation() {
+    for pattern in [
+        "contours",
+        "ribbons",
+        "landscape",
+        "orbit",
+        "solid",
+        "gradient",
+        "glow",
+        "dots",
+        "grid",
+    ] {
+        for color in 0..32 {
+            validation::validate_page_cover_value(&json!({
+                "type": "design", "design": {"pattern": pattern, "color": color}
+            }))
+            .unwrap();
+        }
+    }
+    validation::validate_page_cover_value(&json!({
+        "type": "design", "design": {"pattern": "contours", "color": "default"}
+    }))
+    .unwrap();
+    for color in [json!(-1), json!(32), json!(0.5), json!("1"), Value::Null] {
+        assert!(
+            validation::validate_page_cover_value(&json!({
+                "type": "design", "design": {"pattern": "grid", "color": color}
+            }))
+            .is_err()
+        );
+    }
+    for cover in [
+        json!({"type": "design", "design": {"pattern": "unknown", "color": 0}}),
+        json!({"type": "design", "design": {"pattern": "grid", "color": 0}, "focal_point": {"x": 0, "y": 0}}),
+        json!({"type": "design", "design": null}),
+    ] {
+        assert!(validation::validate_page_cover_value(&cover).is_err());
+    }
+    for point in [
+        Value::Null,
+        json!({}),
+        json!({"x": -0.1, "y": 0}),
+        json!({"x": 0, "y": 1.1}),
+        json!({"x": "0", "y": 0}),
+    ] {
+        assert!(validation::validate_page_cover_value(&json!({
+            "type": "external", "external": {"url": "https://example.com/image.png"}, "focal_point": point
+        })).is_err());
+    }
+}
+
+#[test]
+fn page_cover_metadata_survives_templates_duplication_history_and_exports() {
+    crate::test_block_on(async {
+        let pool = migrated_memory_pool().await;
+        create_page(&pool, PAGE_A, BLOCK_A).await;
+        let cover = json!({"type": "design", "design": {"pattern": "dots", "color": 4}});
+        writes::update_page(
+            &pool,
+            PAGE_A,
+            NotePageUpdate {
+                title: None,
+                parent: None,
+                properties: None,
+                icon: OptionalJsonValue::Unset,
+                cover: OptionalJsonValue::Value(cover.clone()),
+            },
+        )
+        .await
+        .unwrap();
+
+        let duplicate = writes::duplicate_page(&pool, PAGE_A, NoteDuplicatePage { title: None })
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(duplicate).unwrap()["page"]["cover"],
+            cover
+        );
+        templates::create_page_template_from_page(
+            &pool,
+            NotePageTemplateCreateFromPage {
+                id: TEMPLATE_A.to_string(),
+                source_page_id: PAGE_A.to_string(),
+                name: "Cover template".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+        let applied = templates::apply_page_template(
+            &pool,
+            TEMPLATE_A,
+            NotePageTemplateApply {
+                parent: workspace_parent(),
+                title: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(applied).unwrap()["page"]["cover"],
+            cover
+        );
+
+        let mut tx = pool.begin().await.unwrap();
+        let snapshot = history::record_page_snapshot_tx(&mut tx, PAGE_A, "restore")
+            .await
+            .unwrap()
+            .unwrap();
+        tx.commit().await.unwrap();
+        let historical = history::load_page_history_snapshot(&pool, PAGE_A, &snapshot)
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(historical).unwrap()["page"]["cover"],
+            cover
+        );
+
+        let graph = json_graph_export::export_graph(
+            &pool,
+            NoteJsonGraphExportRequest {
+                include_indexes: Some(false),
+                include_history: Some(true),
+                include_templates: Some(true),
+                include_local_state: Some(false),
+                pretty: Some(false),
+            },
+        )
+        .await
+        .unwrap();
+        let graph = serde_json::to_value(graph).unwrap();
+        let graph: Value = serde_json::from_str(graph["json"].as_str().unwrap()).unwrap();
+        let page = graph["graph"]["pages"]["notes_pages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|page| page["id"] == PAGE_A)
+            .unwrap();
+        assert_eq!(page["cover"], cover);
+
+        let markdown = markdown_export::export_page(
+            &pool,
+            NoteMarkdownExportRequest {
+                page_id: PAGE_A.to_string(),
+                include_page_title: None,
+                include_comments: None,
+                include_resolved_comments: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert!(
+            serde_json::to_value(markdown).unwrap()["diagnostics"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|warning| warning["code"] == "page_cover_omitted")
+        );
+        let html = html_export::export_page(
+            &pool,
+            NoteHtmlExportRequest {
+                page_id: PAGE_A.to_string(),
+                include_page_tree: Some(false),
+                include_comments: None,
+                include_resolved_comments: None,
+                include_assets: None,
+                include_database_views: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert!(
+            serde_json::to_value(html).unwrap()["diagnostics"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|warning| warning["code"] == "page_cover_omitted")
+        );
     });
 }

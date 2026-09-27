@@ -95,3 +95,7 @@ Navigation links in diagnostics are convenience only. They do not make the sourc
 Markdown and HTML transfers preserve all six heading levels. Markdown emits the matching count of `#` characters. HTML body headings use matching `h1` through `h6` elements instead of shifting levels beneath the page title, which prevents level 6 from being flattened or emitted as an invalid `h7`. Exported HTML uses the editor's relative heading-size hierarchy. Older imports that already flattened deep headings to level 4 cannot recover their original level without reimporting the source.
 
 Explicit text indentation is preserved in JSON graph data and shown as relative margins in HTML export. Markdown export emits leading spaces for explicit indentation; Markdown readers may interpret deeply indented paragraphs as code according to their own syntax rules. Extremely large indentation values that exceed the bounded whitespace export budget produce a diagnostic while retaining the text.
+
+## Page cover presentation
+
+HTML and Markdown exports omit page cover appearance and report `page_cover_omitted` when a page has a cover. Graph export retains the editable cover descriptor, including theme palette identity and image focal coordinates. Static visual cover export is planned separately. See [Page covers](page-covers.md).

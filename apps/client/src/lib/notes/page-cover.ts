@@ -1,5 +1,69 @@
 import { externalMediaUrlIsSupported } from "./media";
 import type { NotesPageCover } from "./types";
+import { NOTES_COVER_DESIGNS, type NotesCoverDesign, type NotesCoverColor, type NotesCoverFocalPoint } from "./contracts/assets";
+import { PALETTE_SIZE } from "$lib/components/calendar/types";
+
+export { NOTES_COVER_DESIGNS };
+export const NOTES_COVER_DEFAULT_FOCAL_POINT: Readonly<NotesCoverFocalPoint> = { x: 0.5, y: 0.5 };
+
+/** Validate the editable design at a typed or external boundary. */
+export function createNotesDesignCover(pattern: NotesCoverDesign, color: NotesCoverColor): NotesPageCover {
+  if (!NOTES_COVER_DESIGNS.includes(pattern)) throw new Error("Unsupported cover design");
+  if (color !== "default" && (!Number.isInteger(color) || color < 0 || color >= PALETTE_SIZE)) {
+    throw new Error("Cover color must reference a theme palette slot");
+  }
+  return { type: "design", design: { pattern, color } };
+}
+
+/** Render all design previews and banners from the same theme-resolved color. */
+export function notesCoverDesignBackground(pattern: NotesCoverDesign, color: string): string {
+  const base = `color-mix(in srgb, ${color} 38%, var(--background))`;
+  const soft = `color-mix(in srgb, ${color} 16%, var(--background))`;
+  const ink = `color-mix(in srgb, ${color} 65%, var(--foreground))`;
+  switch (pattern) {
+    case "solid": return base;
+    case "gradient": return `linear-gradient(120deg, ${soft}, ${base} 55%, ${color})`;
+    case "glow": return `radial-gradient(ellipse at 20% 20%, ${color}, transparent 65%), radial-gradient(ellipse at 85% 100%, ${base}, transparent 65%), ${soft}`;
+    case "contours": return `linear-gradient(125deg, ${soft}, ${base} 45%, ${ink})`;
+    case "ribbons": return `linear-gradient(150deg, ${soft}, ${base})`;
+    case "landscape": return `linear-gradient(180deg, ${soft}, ${base} 80%, ${color})`;
+    case "orbit": return `radial-gradient(ellipse at 70% 30%, ${base}, ${soft} 80%)`;
+    case "dots": return `radial-gradient(circle, ${ink} 1px, transparent 1.5px) 0 0 / 18px 18px, ${soft}`;
+    case "grid": return `linear-gradient(${base} 1px, transparent 1px) 0 0 / 28px 28px, linear-gradient(90deg, ${base} 1px, transparent 1px) 0 0 / 28px 28px, ${soft}`;
+  }
+}
+
+/** Place a subject at the center of a filled image, clamped to its edges. */
+export function notesCoverObjectPosition(
+  focal: NotesCoverFocalPoint,
+  image: { width: number; height: number },
+  viewport: { width: number; height: number },
+): string {
+  if (image.width <= 0 || image.height <= 0 || viewport.width <= 0 || viewport.height <= 0) return "50% 50%";
+  const scale = Math.max(viewport.width / image.width, viewport.height / image.height);
+  const axis = (point: number, source: number, target: number): number => {
+    const overflow = source * scale - target;
+    if (overflow <= 0) return 50;
+    return Math.max(0, Math.min(1, (point * source * scale - target / 2) / overflow)) * 100;
+  };
+  return `${axis(focal.x, image.width, viewport.width)}% ${axis(focal.y, image.height, viewport.height)}%`;
+}
+
+/** Map a pointer within a fitted preview to a normalized source-image location. */
+export function notesCoverFocalPointFromPointer(
+  pointer: { x: number; y: number },
+  image: { width: number; height: number },
+  viewport: { width: number; height: number },
+): NotesCoverFocalPoint {
+  if (image.width <= 0 || image.height <= 0 || viewport.width <= 0 || viewport.height <= 0) return { ...NOTES_COVER_DEFAULT_FOCAL_POINT };
+  const scale = Math.min(viewport.width / image.width, viewport.height / image.height);
+  const width = image.width * scale;
+  const height = image.height * scale;
+  return {
+    x: Math.max(0, Math.min(1, (pointer.x - (viewport.width - width) / 2) / width)),
+    y: Math.max(0, Math.min(1, (pointer.y - (viewport.height - height) / 2) / height)),
+  };
+}
 
 export interface NotesPageCoverAssetMetadata {
   relativePath: string;
@@ -8,18 +72,6 @@ export interface NotesPageCoverAssetMetadata {
   byteSize: number;
   sha256: string;
 }
-
-export interface NotesPageCoverPreset {
-  id: "calm-lines" | "focus-dawn" | "deep-work" | "greenhouse";
-  colors: readonly [string, string, string];
-}
-
-export const NOTES_PAGE_COVER_PRESETS = [
-  { id: "calm-lines", colors: ["#f3f4f6", "#dbeafe", "#334155"] },
-  { id: "focus-dawn", colors: ["#fff7ed", "#fed7aa", "#7c2d12"] },
-  { id: "deep-work", colors: ["#eef2ff", "#c4b5fd", "#312e81"] },
-  { id: "greenhouse", colors: ["#ecfdf5", "#86efac", "#14532d"] },
-] as const satisfies readonly NotesPageCoverPreset[];
 
 const NOTES_PAGE_COVER_ASSET_PATTERN = /^notes\/page-covers\/[a-f0-9]{64}\.(png|jpg|jpeg|webp)$/i;
 
@@ -34,7 +86,7 @@ export function createNotesExternalPageCover(url: string): NotesPageCover {
 }
 
 /** Create a Notion-style local file cover payload from a managed asset. */
-export function createNotesLocalFilePageCover(asset: NotesPageCoverAssetMetadata): NotesPageCover {
+export function createNotesLocalFilePageCover(asset: NotesPageCoverAssetMetadata): Extract<NotesPageCover, { type: "file" }> {
   const relativePath = asset.relativePath.trim();
   if (!isNotesPageCoverAssetPath(relativePath)) {
     throw new Error("page cover asset path must stay under notes/page-covers");
@@ -84,12 +136,6 @@ export function isNotesPageCoverAssetPath(value: string): boolean {
 /** Return true when the URL can be used as an external page cover image. */
 export function isSupportedExternalPageCoverUrl(url: string): boolean {
   return externalMediaUrlIsSupported("image", url);
-}
-
-/** Return a CSS background for the generated cover preset preview. */
-export function notesPageCoverPresetBackground(preset: NotesPageCoverPreset): string {
-  const [start, middle, end] = preset.colors;
-  return `linear-gradient(135deg, ${start} 0%, ${middle} 52%, ${end} 100%)`;
 }
 
 function managedCoverAssetUrl(relativePath: string): string {

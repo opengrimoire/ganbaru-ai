@@ -37,6 +37,13 @@ pub(super) fn render_page(input: HtmlRenderInput<'_>) -> HtmlRenderOutput {
         exported_block_count: 0,
         exported_comment_count: 0,
     };
+    if input.page.row.cover.is_some() {
+        renderer.warn_source(
+            Some(&input.page.row.id), None, None, None,
+            "page_cover_omitted",
+            "Page cover appearance is not included in HTML. Use graph export to preserve editable cover metadata.",
+        );
+    }
     let css = relative_link(&input.page.path, "assets/ganbaru-notes-export.css");
     let body = renderer.render_blocks(input.blocks);
     let child_pages = renderer.render_child_page_list(input.child_pages);

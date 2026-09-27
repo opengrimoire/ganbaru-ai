@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
+import { parseNullablePageCover } from "./validation/assets";
+import { PALETTE_SIZE } from "$lib/components/calendar/types";
 import {
   createNotesExternalPageCover,
   createNotesLocalFilePageCover,
   notesPageCoverAssetPath,
-  notesPageCoverPresetBackground,
+  createNotesDesignCover,
+  notesCoverDesignBackground,
+  notesCoverObjectPosition,
+  notesCoverFocalPointFromPointer,
   notesPageCoverUrl,
-  NOTES_PAGE_COVER_PRESETS,
+  NOTES_COVER_DESIGNS,
 } from "./page-cover";
 
 describe("notes page covers", () => {
@@ -86,8 +91,61 @@ describe("notes page covers", () => {
     ).toBe("notes/page-covers/a.png");
   });
 
-  it("exposes generated cover preset backgrounds", () => {
-    expect(NOTES_PAGE_COVER_PRESETS.length).toBeGreaterThan(0);
-    expect(notesPageCoverPresetBackground(NOTES_PAGE_COVER_PRESETS[0])).toContain("linear-gradient");
+  it("preserves every editable design and palette identity through validation", () => {
+    for (const pattern of NOTES_COVER_DESIGNS) {
+      const automatic = createNotesDesignCover(pattern, "default");
+      expect(parseNullablePageCover(automatic, "cover")).toEqual(automatic);
+      for (let color = 0; color < PALETTE_SIZE; color += 1) {
+        const cover = createNotesDesignCover(pattern, color);
+        expect(parseNullablePageCover(JSON.parse(JSON.stringify(cover)), "cover")).toEqual(cover);
+        expect(notesPageCoverUrl(cover)).toBeNull();
+        expect(notesPageCoverAssetPath(cover)).toBeNull();
+      }
+    }
+  });
+
+  it("rejects unknown designs and invalid palette slots rather than replacing them", () => {
+    for (const color of [-1, PALETTE_SIZE, 0.5, NaN, Infinity, "2", null]) {
+      expect(() => parseNullablePageCover({ type: "design", design: { pattern: "grid", color } }, "cover")).toThrow();
+    }
+    expect(() => parseNullablePageCover({ type: "design", design: { pattern: "unknown", color: 0 } }, "cover")).toThrow();
+  });
+
+  it("renders distinct patterns from the currently resolved theme color", () => {
+    const backgrounds = NOTES_COVER_DESIGNS.map((pattern) => notesCoverDesignBackground(pattern, "#123456"));
+    expect(new Set(backgrounds).size).toBe(NOTES_COVER_DESIGNS.length);
+    for (const pattern of NOTES_COVER_DESIGNS) {
+      expect(notesCoverDesignBackground(pattern, "#123456")).toContain("#123456");
+      expect(notesCoverDesignBackground(pattern, "#abcdef")).not.toContain("#123456");
+    }
+  });
+
+  it("preserves image focal points and rejects invalid coordinates", () => {
+    const image = createNotesExternalPageCover("https://example.com/cover.png");
+    const cover = { ...image, focal_point: { x: 0, y: 1 } };
+    expect(parseNullablePageCover(cover, "cover")).toEqual(cover);
+    for (const point of [null, {}, { x: -0.1, y: 0 }, { x: 0, y: 1.1 }, { x: NaN, y: 0 }, { x: "0", y: 0 }]) {
+      expect(() => parseNullablePageCover({ ...image, focal_point: point }, "cover")).toThrow();
+    }
+    expect(() => parseNullablePageCover({ ...createNotesDesignCover("grid", 0), focal_point: { x: 0, y: 0 } }, "cover")).toThrow();
+  });
+
+  it("centers the subject where possible and clamps the crop at image edges", () => {
+    const image = { width: 1000, height: 1000 };
+    const wide = { width: 1000, height: 200 };
+    expect(notesCoverObjectPosition({ x: 0.5, y: 0.3 }, image, wide)).toBe("50% 25%");
+    expect(notesCoverObjectPosition({ x: 0.5, y: 0 }, image, wide)).toBe("50% 0%");
+    expect(notesCoverObjectPosition({ x: 0.5, y: 1 }, image, wide)).toBe("50% 100%");
+    expect(notesCoverObjectPosition({ x: 0.3, y: 0.5 }, image, { width: 200, height: 1000 })).toBe("25% 50%");
+    expect(notesCoverObjectPosition({ x: 0, y: 0 }, image, image)).toBe("50% 50%");
+    expect(notesCoverObjectPosition({ x: 0, y: 0 }, { width: 0, height: 0 }, wide)).toBe("50% 50%");
+  });
+
+  it("maps fitted source clicks without treating letterboxing as image content", () => {
+    const image = { width: 1000, height: 1000 };
+    const viewport = { width: 400, height: 200 };
+    expect(notesCoverFocalPointFromPointer({ x: 150, y: 100 }, image, viewport)).toEqual({ x: 0.25, y: 0.5 });
+    expect(notesCoverFocalPointFromPointer({ x: 0, y: 250 }, image, viewport)).toEqual({ x: 0, y: 1 });
+    expect(notesCoverFocalPointFromPointer({ x: 200, y: 100 }, image, viewport)).toEqual({ x: 0.5, y: 0.5 });
   });
 });

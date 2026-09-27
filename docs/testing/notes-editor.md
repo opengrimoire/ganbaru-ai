@@ -184,3 +184,16 @@ Automated coverage verifies model serialization, standard clipboard MIME types, 
 - Verify repeated spaces, tabs, Unicode, empty paragraphs, empty code blocks, and quotes containing multiple paragraphs. Compare Markdown-only rendering separately from HTML.
 - Copy internal blocks, then copy different content in another app. Pasting on a block margin must not insert stale internal blocks; paste into the returned text editor to import the external content.
 - Record real application and OS versions and both clipboard representations. Synthetic regression fixtures do not count as confirmed Notion or Obsidian acceptance. See the [interoperability contract](../interop/notes-clipboard.md).
+
+## Page cover redesign acceptance
+
+Automated coverage validates all design and palette combinations, focal crop geometry, invalid metadata, immediate selection, shared color controls, save retries, dismissal, late picker completion, duplication, templates, history, and export preservation or loss diagnostics.
+
+Manual desktop and Android acceptance remains required:
+
+- Compare all nine designs in light, dark, and custom themes, including gallery cards and historical previews.
+- Check full pages, side previews, narrow phones, tablets, landscape, enlarged text, safe areas, and the software keyboard. Covers must leave room for the page title and content.
+- Select designs, colors, uploads, and focal positions. Confirm each applies immediately and persists after reopening the page and app. Compare the header, color controls, Ask every time, upload, and removal with Add icon.
+- Position subjects near image edges using pointer, touch, and keyboard. Verify that changing container size retains the subject where image bounds permit it.
+- Exercise native selection, mobile file selection, paste, invalid images, and failed saves. Closing a picker or switching pages during selection must not update another page.
+- Verify Escape, Android Back, outside dismissal, keyboard focus return, and color panels near viewport edges.

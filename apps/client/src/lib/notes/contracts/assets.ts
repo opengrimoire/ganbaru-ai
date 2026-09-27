@@ -57,7 +57,20 @@ export type NotesFileObject =
     }
   | { type: "file_upload"; file_upload: { id: string } };
 
-export type NotesPageCover = NotesFileObject;
+export const NOTES_COVER_DESIGNS = ["contours", "ribbons", "landscape", "orbit", "solid", "gradient", "glow", "dots", "grid"] as const;
+export type NotesCoverColor = number | "default";
+export type NotesCoverDesign = (typeof NOTES_COVER_DESIGNS)[number];
+
+/** A subject location in the original image, independent of the rendered crop. */
+export interface NotesCoverFocalPoint {
+  x: number;
+  y: number;
+}
+
+/** Designed covers retain their theme palette identity instead of rasterized pixels. */
+export type NotesPageCover =
+  | { type: "design"; design: { pattern: NotesCoverDesign; color: NotesCoverColor } }
+  | (NotesFileObject & { focal_point?: NotesCoverFocalPoint });
 
 export type NotesMediaBlockPayload = NotesFileObject & NotesBlockLayout & {
   caption?: NotesRichText[];

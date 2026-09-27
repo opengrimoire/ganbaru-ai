@@ -22,9 +22,15 @@ pub async fn export_page(
 ) -> Result<NoteMarkdownExportDto, String> {
     let page_id = request.page_id.trim().to_string();
     require_uuid(&page_id, "page_id")?;
-    let title = load_active_page_title(pool, &page_id).await?;
+    let (title, cover) = load_active_page_header(pool, &page_id).await?;
     let rows = load_active_page_blocks(pool, &page_id).await?;
     let mut diagnostics = Vec::new();
+    if cover.is_some() {
+        diagnostics.push(NoteMarkdownExportDiagnosticDto::new(
+            "page_cover_omitted", "warning", None::<String>, None::<String>,
+            "Page covers are not represented in Markdown. Use graph export to preserve editable cover metadata.",
+        ));
+    }
     let blocks = build_block_tree(&page_id, rows, &mut diagnostics)?;
     let mut renderer = MarkdownRenderer::new(diagnostics);
     let mut markdown = String::new();
@@ -74,9 +80,13 @@ pub async fn export_page(
     ))
 }
 
-async fn load_active_page_title(pool: &SqlitePool, page_id: &str) -> Result<String, String> {
-    sqlx::query_scalar::<_, String>(
-        "SELECT title
+/// Load cover presence with the title so lossy exports can report omitted presentation.
+async fn load_active_page_header(
+    pool: &SqlitePool,
+    page_id: &str,
+) -> Result<(String, Option<String>), String> {
+    sqlx::query_as::<_, (String, Option<String>)>(
+        "SELECT title, cover
          FROM notes_pages
          WHERE id = ?
            AND in_trash = 0

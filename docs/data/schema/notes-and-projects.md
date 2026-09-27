@@ -6,6 +6,8 @@ Notes and Projects share project identity, navigation, task scheduling, managed 
 
 A Notes page has stable identity, metadata, placement, trash and archive state, and an ordered block tree. Blocks have stable identity independent of their current parent and order. Page and block mutations validate the resulting graph for cycles, stale parents, invalid project placement, and unsupported content before committing.
 
+Page cover metadata is canonical SQLite data. Designed covers retain a validated pattern identifier and Automatic or a theme palette slot, while image covers retain their source reference and optional normalized focal coordinates. These descriptors follow page duplication, templates, and history; image bytes remain managed assets. Theme-resolved colors and rendered crops are presentation. See [Page covers](../../features/notes/page-covers.md).
+
 Page bodies are not canonical Markdown or HTML. Rich content is stored as validated block data and text runs. Rendered output, Markdown export, previews, and search projections are derivative.
 
 Trash is recoverable state. Restore validates the current graph and chooses a valid destination rather than blindly reinstating a stale parent. Permanent deletion applies retention, asset, link, comment, database, and history rules through one domain service.

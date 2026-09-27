@@ -15,12 +15,64 @@ const NOTE_ICON_COLORS: &[&str] = &[
 const NOTE_MANAGED_IMAGE_EXTENSIONS: &[&str] = &[".gif", ".jpeg", ".jpg", ".png", ".webp"];
 const NOTE_LOCAL_IMAGE_CONTENT_TYPES: &[&str] = &["image/png", "image/jpeg", "image/webp"];
 
+/// Validate editable designs, managed image references, and normalized image focal points.
 pub fn validate_page_cover_value(value: &Value) -> Result<(), String> {
     validate_json_object(value, "cover")?;
     let Some(Value::String(source_type)) = value.get("type") else {
         return Err("cover.type must be a string".to_string());
     };
+    if let Some(focal) = value.get("focal_point") {
+        if source_type == "design" {
+            return Err("designed covers cannot have an image focal point".to_string());
+        }
+        for axis in ["x", "y"] {
+            if !focal
+                .get(axis)
+                .and_then(Value::as_f64)
+                .is_some_and(|coordinate| {
+                    coordinate.is_finite() && (0.0..=1.0).contains(&coordinate)
+                })
+            {
+                return Err("cover.focal_point coordinates must be between 0 and 1".to_string());
+            }
+        }
+    }
     match source_type.as_str() {
+        "design" => {
+            const PATTERNS: &[&str] = &[
+                "contours",
+                "ribbons",
+                "landscape",
+                "orbit",
+                "solid",
+                "gradient",
+                "glow",
+                "dots",
+                "grid",
+            ];
+            const THEME_PALETTE_SIZE: u64 = 32;
+            let design = value
+                .get("design")
+                .and_then(Value::as_object)
+                .ok_or_else(|| "cover.design must be an object".to_string())?;
+            if !design
+                .get("pattern")
+                .and_then(Value::as_str)
+                .is_some_and(|pattern| PATTERNS.contains(&pattern))
+            {
+                return Err("cover.design.pattern is unsupported".to_string());
+            }
+            if design.get("color").and_then(Value::as_str) != Some("default")
+                && !design
+                    .get("color")
+                    .and_then(Value::as_u64)
+                    .is_some_and(|color| color < THEME_PALETTE_SIZE)
+            {
+                return Err("cover.design.color must reference a theme palette slot".to_string());
+            }
+            Ok(())
+        }
+
         "external" => {
             let external = value
                 .get("external")
@@ -51,7 +103,7 @@ pub fn validate_page_cover_value(value: &Value) -> Result<(), String> {
             };
             require_uuid(id, "cover.file_upload.id")
         }
-        _ => Err("cover.type must be file, external, or file_upload".to_string()),
+        _ => Err("cover.type must be design, file, external, or file_upload".to_string()),
     }
 }
 

@@ -28,7 +28,7 @@ export async function pickNotesPageCoverImageFile(): Promise<NotesPageCoverAsset
   return asset ? mapNotesPageCoverAssetDto(asset) : null;
 }
 
-/** Save a pasted or generated image data URL into managed Notes page cover assets. */
+/** Save an uploaded or pasted image data URL into managed Notes page cover assets. */
 export async function saveNotesPageCoverImageDataUrl(
   dataUrl: string,
   originalName?: string | null,

@@ -657,3 +657,8 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *) {
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* Cover geometry follows the page container, including narrow page previews. */
+.notes-page-banner {
+  height: min(clamp(8rem, 20cqw, 15rem), 25svh);
+}

@@ -80,9 +80,9 @@
     </div>
   {/if}
 
-  <div class="min-h-0 flex-1 overflow-auto">
+  <div class="min-h-0 flex-1 overflow-auto" style="container-type: inline-size;">
     {#if page.cover}
-      <div class="h-28 overflow-hidden bg-muted sm:h-44">
+      <div class="notes-page-banner overflow-hidden bg-muted">
         <NotesPageCover cover={page.cover} unavailableLabel={t("notes.pageCoverUnavailable")} />
       </div>
     {/if}

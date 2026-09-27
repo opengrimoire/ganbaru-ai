@@ -16,6 +16,7 @@ Working-folder Markdown never becomes a Notes page automatically. It does not ga
 | Capability | Status |
 | --- | --- |
 | Pages, folders, navigation, project scoping, favorites, recents, archive, and Trash | Implemented |
+| Theme-aware designed covers, managed images, and responsive focal cropping | Implemented; manual platform acceptance pending |
 | Rich-text block editor, keyboard structure, undo/redo, comments, suggestions, and managed assets | Implemented |
 | Broad local block catalog and imported unsupported placeholders | Implemented with documented limits |
 | Local databases with table, board, gallery, list, calendar, and timeline views | Implemented |
@@ -39,6 +40,7 @@ Working-folder Markdown never becomes a Notes page automatically. It does not ga
 ## Documentation map
 
 - [Pages and navigation](pages-and-navigation.md)
+- [Page covers](page-covers.md)
 - [Editor](editor.md)
 - [Blocks](blocks.md)
 - [Databases](databases.md)

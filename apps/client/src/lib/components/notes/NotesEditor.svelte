@@ -115,8 +115,6 @@
   const ACTIVITY_PANEL_WIDTH_PX = 320;
   const PAGE_DETAILS_PANEL_WIDTH_PX = 704;
   const PAGE_DETAILS_PANEL_MAX_HEIGHT_PX = 512;
-  const COVER_PANEL_WIDTH_PX = 360;
-  const COVER_PANEL_MAX_HEIGHT_PX = 420;
   const COMMENTS_PANEL_WIDTH_PX = 400;
   const COMMENTS_PANEL_MAX_HEIGHT_PX = 520;
 
@@ -280,15 +278,7 @@
       PAGE_DETAILS_PANEL_MAX_HEIGHT_PX,
     );
   });
-  const coverMenuStyle = $derived.by(() => {
-    void floatingLayoutVersion;
-    return floatingTitlePanelStyle(
-      coverMenuButton,
-      COVER_PANEL_WIDTH_PX,
-      COVER_PANEL_MAX_HEIGHT_PX,
-      "start",
-    );
-  });
+
 
   /** Keep a title action panel beside its trigger, including in page previews. */
   function floatingTitlePanelStyle(
@@ -1262,11 +1252,12 @@
     <div
       bind:this={blockScrollViewport}
       data-notes-editor-scroll
+      style="container-type: inline-size;"
       class="min-h-0 flex-1 overflow-auto"
       use:documentEndPointer
     >
       {#if page.cover}
-        <div class="h-28 overflow-hidden bg-muted sm:h-44">
+        <div class="notes-page-banner overflow-hidden bg-muted">
           {#if panelLoadStates["page-cover"]?.status === "ready" && panelLoadStates["page-cover"].component.kind === "page-cover"}
             {@const NotesPageCover = panelLoadStates["page-cover"].component.component}
             <NotesPageCover cover={page.cover} unavailableLabel={t("notes.pageCoverUnavailable")} />
@@ -1343,16 +1334,15 @@
               {#if coverMenuOpen}
                 {#if panelLoadStates["cover-menu"]?.status === "ready" && panelLoadStates["cover-menu"].component.kind === "cover-menu"}
                   {@const NotesPageCoverMenu = panelLoadStates["cover-menu"].component.component}
-                  <NotesPageCoverMenu
-                  cover={page.cover}
-                  trigger={coverMenuButton}
-                  style={coverMenuStyle}
-                  onClose={closeCoverMenu}
-                  onSelect={(cover) => {
-                    coverMenuOpen = false;
-                    void notes.updatePageCover(page.id, cover);
-                  }}
-                  />
+                  {#key page.id}
+                    {@const coverPageId = page.id}
+                    <NotesPageCoverMenu
+                      cover={page.cover}
+                      trigger={coverMenuButton}
+                      onClose={closeCoverMenu}
+                      onSelect={(cover) => notes.updatePageCover(coverPageId, cover)}
+                    />
+                  {/key}
                 {:else if panelLoadStates["cover-menu"]?.status === "failed"}
                   <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={() => requestEditorPanel("cover-menu", true)}>{t("common.retry")}</button>
                 {/if}
