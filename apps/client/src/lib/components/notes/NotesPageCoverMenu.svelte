@@ -23,13 +23,12 @@
     type ProjectIconPickerRect,
   } from "$lib/projects/project-icon-picker";
   import { ensureConfigLoaded, getConfigKey, setConfigKey } from "$lib/vault/config";
-  import { createNotesDesignCover, createNotesLocalFilePageCover, NOTES_COVER_DESIGNS, NOTES_COVER_DEFAULT_FOCAL_POINT } from "$lib/notes/page-cover";
-  import type { NotesCoverColor, NotesCoverDesign as CoverDesign, NotesCoverFocalPoint } from "$lib/notes/contracts/assets";
+  import { createNotesDesignCover, createNotesLocalFilePageCover, NOTES_COVER_DESIGNS } from "$lib/notes/page-cover";
+  import type { NotesCoverColor, NotesCoverDesign as CoverDesign } from "$lib/notes/contracts/assets";
   import type { NotesPageCover } from "$lib/notes/types";
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
   import { portal } from "$lib/utils/portal";
   import NotesCoverDesign from "./NotesCoverDesign.svelte";
-  import NotesPageCoverImage from "./NotesPageCover.svelte";
 
   type CoverTab = "designs" | "upload";
   let { cover, trigger, onSelect, onClose }: {
@@ -75,14 +74,11 @@
   let panelPlacement = $state({ left: 0, top: 0, width: PANEL_WIDTH, height: PANEL_HEIGHT });
   let query = $state("");
   let uploadUrl = $state("");
-  let repositioning = $state(false);
   let error = $state<string | null>(null);
   let busy = $state(false);
   let active = true;
   let interacted = false;
   let keyboardInteraction = false;
-  let queuedPosition: Exclude<NotesPageCover, { type: "design" }> | null = null;
-  let positioning = false;
 
   const calendarTokens = $derived(resolveCalendarTokens(theme.current));
   const pickerBg = $derived(calendarTokens["--cal-bg"]);
@@ -129,7 +125,7 @@
     if (!trigger) return;
     panelPlacement = projectIconPickerPanelPlacement({
       triggerRect: trigger.getBoundingClientRect(), boundaryRect: viewport(),
-      preferredWidth: PANEL_WIDTH, preferredHeight: activeTab === "upload" && !repositioning ? UPLOAD_HEIGHT : PANEL_HEIGHT,
+      preferredWidth: PANEL_WIDTH, preferredHeight: activeTab === "upload" ? UPLOAD_HEIGHT : PANEL_HEIGHT,
       align: "start",
     });
     if (colorChoice) {
@@ -345,28 +341,6 @@
     } finally { if (active) busy = false; }
   }
 
-  /** Serialize focal edits, retaining the latest requested position during a save. */
-  async function positionImage(point: NotesCoverFocalPoint): Promise<void> {
-    if (!currentCover || currentCover.type === "design") return;
-    const selected = { ...currentCover, focal_point: point };
-    currentCover = selected;
-    queuedPosition = selected;
-    if (positioning) return;
-    positioning = true;
-    busy = true;
-    error = null;
-    try {
-      while (queuedPosition) {
-        const next = queuedPosition;
-        queuedPosition = null;
-        await persist(next);
-      }
-    } catch (cause) {
-      queuedPosition = null;
-      if (active) error = t("notes.pageCoverSaveFailed", cause instanceof Error ? cause.message : String(cause));
-      else console.error("Could not save Notes cover position", cause);
-    } finally { positioning = false; if (active) busy = false; }
-  }
 </script>
 
 <div
@@ -452,16 +426,6 @@
       <IconPickerUploadPanel uploadDraft={null} uploadPreviewUrl={null} uploadError={error} uploading={busy}
         uploadBodyStyle={`max-height:${Math.max(0, panelPlacement.height - 48)}px;`} bind:uploadUrl
         onChooseFile={chooseLocalFile} onDiscardDraft={() => {}} onSelectDraft={() => {}} onDownloadUrl={() => {}} remoteUrlAvailable={false} />
-      {#if currentCover && currentCover.type !== "design"}
-        <div class="min-h-0 space-y-2 overflow-y-auto px-3 pb-3">
-          <button type="button" disabled={busy} class="h-8 rounded-md px-2 text-[0.866667rem] text-muted-foreground hover:bg-accent hover:text-foreground" aria-expanded={repositioning} onclick={() => { repositioning = !repositioning; placePanel(); }}>{t("notes.pageCoverReposition")}</button>
-          {#if repositioning}
-            <p class="text-[0.733333rem] text-muted-foreground">{t("notes.pageCoverFocalHint")}</p>
-            <div class="h-40 rounded-md bg-muted"><NotesPageCoverImage cover={currentCover} objectFit="contain" unavailableLabel={t("notes.pageCoverUnavailable")} focalLabel={t("notes.pageCoverFocalHint")} onFocalPoint={(point) => { void positionImage(point); }} /></div>
-            <button class="h-8 rounded-md px-2 text-[0.8rem] text-muted-foreground hover:bg-accent" type="button" onclick={() => { void positionImage({ ...NOTES_COVER_DEFAULT_FOCAL_POINT }); }}>{t("notes.pageCoverResetPosition")}</button>
-          {/if}
-        </div>
-      {/if}
     {/if}
   </div>
 </div>

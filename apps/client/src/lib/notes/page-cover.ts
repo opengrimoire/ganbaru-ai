@@ -54,20 +54,23 @@ export function notesCoverObjectPosition(
   return `${axis(focal.x, image.width, viewport.width)}% ${axis(focal.y, image.height, viewport.height)}%`;
 }
 
-/** Map a pointer within a fitted preview to a normalized source-image location. */
-export function notesCoverFocalPointFromPointer(
-  pointer: { x: number; y: number },
+/** Move a filled image with the pointer, preserving the visible crop at clamped edges. */
+export function notesCoverFocalPointFromDrag(
+  focal: NotesCoverFocalPoint,
+  delta: { x: number; y: number },
   image: { width: number; height: number },
   viewport: { width: number; height: number },
 ): NotesCoverFocalPoint {
-  if (image.width <= 0 || image.height <= 0 || viewport.width <= 0 || viewport.height <= 0) return { ...NOTES_COVER_DEFAULT_FOCAL_POINT };
-  const scale = Math.min(viewport.width / image.width, viewport.height / image.height);
-  const width = image.width * scale;
-  const height = image.height * scale;
-  return {
-    x: Math.max(0, Math.min(1, (pointer.x - (viewport.width - width) / 2) / width)),
-    y: Math.max(0, Math.min(1, (pointer.y - (viewport.height - height) / 2) / height)),
+  if (image.width <= 0 || image.height <= 0 || viewport.width <= 0 || viewport.height <= 0) return { ...focal };
+  const scale = Math.max(viewport.width / image.width, viewport.height / image.height);
+  const axis = (point: number, movement: number, source: number, target: number): number => {
+    const scaled = source * scale;
+    const overflow = Math.max(0, scaled - target);
+    if (overflow === 0 || movement === 0) return point;
+    const offset = Math.max(0, Math.min(overflow, point * scaled - target / 2));
+    return (Math.max(0, Math.min(overflow, offset - movement)) + target / 2) / scaled;
   };
+  return { x: axis(focal.x, delta.x, image.width, viewport.width), y: axis(focal.y, delta.y, image.height, viewport.height) };
 }
 
 export interface NotesPageCoverAssetMetadata {

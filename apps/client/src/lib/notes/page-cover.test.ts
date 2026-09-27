@@ -8,7 +8,7 @@ import {
   createNotesDesignCover,
   notesCoverDesignBackground,
   notesCoverObjectPosition,
-  notesCoverFocalPointFromPointer,
+  notesCoverFocalPointFromDrag,
   notesPageCoverUrl,
   NOTES_COVER_DESIGNS,
 } from "./page-cover";
@@ -140,11 +140,28 @@ describe("notes page covers", () => {
     expect(notesCoverObjectPosition({ x: 0, y: 0 }, { width: 0, height: 0 }, wide)).toBe("50% 50%");
   });
 
-  it("maps fitted source clicks without treating letterboxing as image content", () => {
+  it("moves the visible image with the drag and clamps both edges", () => {
     const image = { width: 1000, height: 1000 };
-    const viewport = { width: 400, height: 200 };
-    expect(notesCoverFocalPointFromPointer({ x: 150, y: 100 }, image, viewport)).toEqual({ x: 0.25, y: 0.5 });
-    expect(notesCoverFocalPointFromPointer({ x: 0, y: 250 }, image, viewport)).toEqual({ x: 0, y: 1 });
-    expect(notesCoverFocalPointFromPointer({ x: 200, y: 100 }, image, viewport)).toEqual({ x: 0.5, y: 0.5 });
+    const viewport = { width: 1000, height: 200 };
+    const focal = { x: 0.5, y: 0.5 };
+    expect(notesCoverFocalPointFromDrag(focal, { x: 100, y: 100 }, image, viewport)).toEqual({ x: 0.5, y: 0.4 });
+    expect(notesCoverFocalPointFromDrag(focal, { x: 0, y: 2000 }, image, viewport)).toEqual({ x: 0.5, y: 0.1 });
+    expect(notesCoverFocalPointFromDrag(focal, { x: 0, y: -2000 }, image, viewport)).toEqual({ x: 0.5, y: 0.9 });
+    expect(notesCoverFocalPointFromDrag(focal, { x: 100, y: 0 }, image, { width: 200, height: 1000 })).toEqual({ x: 0.4, y: 0.5 });
+  });
+
+  it("starts dragging from the visible edge without jumping or a dead zone", () => {
+    const image = { width: 1000, height: 1000 };
+    const viewport = { width: 500, height: 100 };
+    expect(notesCoverFocalPointFromDrag({ x: 0.5, y: 0 }, { x: 0, y: -10 }, image, viewport)).toEqual({ x: 0.5, y: 0.12 });
+    expect(notesCoverFocalPointFromDrag({ x: 0.5, y: 1 }, { x: 0, y: 10 }, image, viewport)).toEqual({ x: 0.5, y: 0.88 });
+  });
+
+  it("preserves positioning on uncropped axes and before dimensions are available", () => {
+    const focal = { x: 0.2, y: 0.8 };
+    const image = { width: 1000, height: 1000 };
+    expect(notesCoverFocalPointFromDrag(focal, { x: 50, y: 50 }, image, image)).toEqual(focal);
+    expect(notesCoverFocalPointFromDrag(focal, { x: 50, y: 50 }, { width: 0, height: 0 }, image)).toEqual(focal);
+    expect(notesCoverFocalPointFromDrag(focal, { x: 0, y: 0 }, image, { width: 500, height: 100 })).toEqual(focal);
   });
 });

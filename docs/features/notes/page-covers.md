@@ -37,6 +37,8 @@ Other illustrated scenes scale to the banner height so subjects keep their propo
 
 ## Immediate selection
 
+Without a cover, Add cover appears above the title. Existing covers instead show a compact Change and Reposition toolbar at the top right of the banner on hover or keyboard focus. Desktop buttons use compact sizing. Hover waits 280ms before a 180ms fade-in; leaving cancels a pending reveal or fades out from its current opacity in 90ms. Keyboard focus reveals the controls immediately. The toolbar stays visible while its panel is open and is always available with larger targets on touch devices. Change opens the picker; Reposition enables dragging the image directly within the banner. Designed covers only show Change. There is no download action.
+
 Choosing a design or uploading an image immediately saves it and closes the picker. Changing the default color recolors an existing design immediately and leaves the picker open. Remove sits on the right side of the tab header, matching Add icon. There is no separate top preview, close button, or confirmation footer. Outside dismissal, Escape, and Android Back close the picker without reverting applied choices.
 
 A failed save keeps the picker available with an error so the user can retry the selection. Saving disables repeated submission. Dismissing the picker or switching pages prevents a late file selection from updating a different page. Managed uploads use the existing ownership and cleanup lifecycle.
@@ -45,7 +47,9 @@ A failed save keeps the picker available with an error so the user can retry the
 
 Upload supports the native desktop picker, mobile file input, and paste. Existing PNG, JPG, and WebP validation, byte limits, and dimension limits apply. Image failures remain visible and users can choose another image.
 
-Reposition opens a view of the entire source image. Select the subject to keep visible by clicking or tapping. Arrow keys adjust its position, Shift increases the step, and Home or Reset position centers it. Each position change immediately saves normalized source-image coordinates. Rapid changes are serialized and retain the latest requested position. Each filled renderer centers that subject where possible and clamps the crop to the image edges.
+Reposition lets the user drag the existing banner image with a mouse, pen, or touch. The image follows the pointer and stops at its edges. Arrow keys move it in the same direction, Shift increases the step, and Home centers it. Save position and Cancel replace the cover toolbar during editing, with a compact, translucent drag hint centered over the image and no tooltip on the drag surface. During repositioning, a translated image layer previews the crop without changing object-position on every movement; the layer hint is removed outside editing. Pointer movements stay inside the cover and coalesce to one preview update per animation frame; releasing the pointer transfers the latest position to the editor draft. Tooltip-disabled surfaces skip scrollbar-tooltip layout checks. Movements update a local preview only; Save position persists the normalized source-image focal point once. Cancel, Escape, Android Back, and leaving the page discard an unsaved draft. A failed save preserves the draft with an error for retry. Save and Cancel are disabled during persistence. Unavailable or loading images cannot enter reposition mode. The upload picker no longer contains a separate focal-point editor.
+
+Each filled renderer centers the saved subject where possible and clamps the crop to the image edges.
 
 The original image bytes are retained. There is no destructive crop or resampling when position changes. Gallery cards retain their existing fit-image preference: focal points control filled previews, while fitted previews show the whole image.
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import { notesPageCoverAssetUrl } from "$lib/api/notes-page-covers";
   import NotesCoverDesign from "./NotesCoverDesign.svelte";
   import {
@@ -6,7 +7,7 @@
     notesPageCoverAssetPath,
     notesPageCoverUrl,
     notesCoverObjectPosition,
-    notesCoverFocalPointFromPointer,
+    notesCoverFocalPointFromDrag,
     NOTES_COVER_DEFAULT_FOCAL_POINT,
   } from "$lib/notes/page-cover";
   import type { NotesCoverFocalPoint } from "$lib/notes/contracts/assets";
@@ -23,6 +24,7 @@
     focalPoint,
     onFocalPoint,
     onStatus,
+    positioningDisabled = false,
   }: {
     cover: NotesPageCover | null;
     unavailableLabel: string;
@@ -31,6 +33,7 @@
     focalLabel?: string;
     focalPoint?: NotesCoverFocalPoint;
     onFocalPoint?: (point: NotesCoverFocalPoint) => void;
+    positioningDisabled?: boolean;
     onStatus?: (status: "loading" | "ready" | "error") => void;
   } = $props();
 
@@ -44,16 +47,36 @@
   const assetPath = $derived(notesPageCoverAssetPath(cover));
   const remoteImageUrlsAvailable = platformHasCapability(BUILD_PLATFORM_PROFILE, "notes.external-image-references");
   const url = $derived(previewUrl ?? assetUrl ?? (remoteImageUrlsAvailable ? notesPageCoverUrl(cover) : null));
-  const focal = $derived(focalPoint ?? (cover && cover.type !== "design" ? cover.focal_point ?? NOTES_COVER_DEFAULT_FOCAL_POINT : NOTES_COVER_DEFAULT_FOCAL_POINT));
+  let dragPreview = $state<NotesCoverFocalPoint | null>(null);
+  let pendingPoint: NotesCoverFocalPoint | null = null;
+  let previewFrame: number | null = null;
+  const focal = $derived(dragPreview ?? focalPoint ?? (cover && cover.type !== "design" ? cover.focal_point ?? NOTES_COVER_DEFAULT_FOCAL_POINT : NOTES_COVER_DEFAULT_FOCAL_POINT));
   const objectPosition = $derived(objectFit === "contain" ? "50% 50%" : notesCoverObjectPosition(focal, imageSize, { width, height }));
-  const marker = $derived.by(() => {
-    if (!imageSize.width || !imageSize.height) return { x: width / 2, y: height / 2 };
-    const scale = Math.min(width / imageSize.width, height / imageSize.height);
-    return {
-      x: (width - imageSize.width * scale) / 2 + focal.x * imageSize.width * scale,
-      y: (height - imageSize.height * scale) / 2 + focal.y * imageSize.height * scale,
-    };
+  // Move a composited image while editing instead of repainting its object-position.
+  const editableImage = $derived.by(() => {
+    if (!onFocalPoint || !imageSize.width || !imageSize.height || !width || !height) return null;
+    const scale = Math.max(width / imageSize.width, height / imageSize.height);
+    const scaledWidth = imageSize.width * scale;
+    const scaledHeight = imageSize.height * scale;
+    const x = -Math.max(0, Math.min(scaledWidth - width, focal.x * scaledWidth - width / 2));
+    const y = -Math.max(0, Math.min(scaledHeight - height, focal.y * scaledHeight - height / 2));
+    return { width: scaledWidth, height: scaledHeight, transform: `translate3d(${x}px, ${y}px, 0)` };
   });
+  let drag: { pointerId: number; x: number; y: number; focal: NotesCoverFocalPoint } | null = null;
+  let dragging = $state(false);
+
+  /** Cancel scheduled rendering when editing ends or the cover is removed. */
+  function clearDrag(): void {
+    if (previewFrame !== null) cancelAnimationFrame(previewFrame);
+    previewFrame = null;
+    pendingPoint = null;
+    dragPreview = null;
+    drag = null;
+    dragging = false;
+  }
+
+  onDestroy(clearDrag);
+  $effect(() => { if (!onFocalPoint) clearDrag(); });
 
   $effect(() => {
     const path = assetPath;
@@ -78,29 +101,52 @@
     else onStatus?.("loading");
   });
 
-  /** Select a subject in the complete, fitted source image. */
-  function chooseFocalPoint(event: MouseEvent): void {
-    if (event.detail === 0) return;
-    const rect = event.currentTarget instanceof HTMLElement ? event.currentTarget.getBoundingClientRect() : null;
-    if (!rect || !url || failedUrl === url) return;
-    onFocalPoint?.(notesCoverFocalPointFromPointer(
-      { x: event.clientX - rect.left, y: event.clientY - rect.top }, imageSize, { width, height },
-    ));
+  /** Capture one pointer so dragging continues outside the banner on mouse and touch. */
+  function startDrag(event: PointerEvent): void {
+    if (positioningDisabled || event.button !== 0 || drag || !url || loadedUrl !== url || failedUrl === url) return;
+    if (!(event.currentTarget instanceof HTMLElement)) return;
+    event.preventDefault();
+    event.currentTarget.focus({ preventScroll: true });
+    event.currentTarget.setPointerCapture(event.pointerId);
+    drag = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, focal: { ...focal } };
+    dragging = true;
+  }
+
+  /** Render the latest pointer position once per frame, within the cover only. */
+  function moveDrag(event: PointerEvent): void {
+    if (!drag || drag.pointerId !== event.pointerId || positioningDisabled) return;
+    pendingPoint = notesCoverFocalPointFromDrag(drag.focal,
+      { x: event.clientX - drag.x, y: event.clientY - drag.y }, imageSize, { width, height });
+    if (previewFrame !== null) return;
+    previewFrame = requestAnimationFrame(() => {
+      previewFrame = null;
+      dragPreview = pendingPoint;
+    });
+  }
+
+  /** Transfer the last preview to the editor draft, including moves before the next frame. */
+  function stopDrag(event: PointerEvent): void {
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (event.type === "pointerup") moveDrag(event);
+    const point = pendingPoint;
+    if (point && !positioningDisabled) onFocalPoint?.(point);
+    clearDrag();
+    if (event.currentTarget instanceof HTMLElement && event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
   }
 
   /** Offer the same two-axis positioning through keyboard arrows. */
   function moveFocalPoint(event: KeyboardEvent): void {
-    const step = event.shiftKey ? 0.1 : 0.02;
+    if (positioningDisabled) return;
+    const step = (event.shiftKey ? 0.1 : 0.02) * Math.max(width, height);
     const offsets: Partial<Record<string, readonly [number, number]>> = {
       ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step],
     };
     const delta = offsets[event.key];
     if (!delta && event.key !== "Home") return;
     event.preventDefault();
-    onFocalPoint?.(delta ? {
-      x: Math.max(0, Math.min(1, focal.x + delta[0])),
-      y: Math.max(0, Math.min(1, focal.y + delta[1])),
-    } : { ...NOTES_COVER_DEFAULT_FOCAL_POINT });
+    onFocalPoint?.(delta ? notesCoverFocalPointFromDrag(focal, { x: delta[0], y: delta[1] }, imageSize, { width, height }) : { ...NOTES_COVER_DEFAULT_FOCAL_POINT });
   }
 </script>
 
@@ -108,8 +154,12 @@
   {#if url && failedUrl !== url}
     {#key url}
       <img
-        class={`size-full ${objectFit === "contain" ? "object-contain" : "object-cover"}`}
-        style:object-position={objectPosition}
+        class={editableImage ? "absolute left-0 top-0 max-w-none" : `size-full ${objectFit === "contain" ? "object-contain" : "object-cover"}`}
+        style:object-position={editableImage ? undefined : objectPosition}
+        style:width={editableImage ? `${editableImage.width}px` : undefined}
+        style:height={editableImage ? `${editableImage.height}px` : undefined}
+        style:transform={editableImage?.transform}
+        style:will-change={editableImage ? "transform" : undefined}
         src={url}
         alt=""
         draggable="false"
@@ -121,9 +171,7 @@
         onerror={(event) => { failedUrl = event.currentTarget.getAttribute("src"); }}
       />
     {/key}
-    {#if onFocalPoint && loadedUrl === url}
-      <span class="pointer-events-none absolute size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-black/40 ring-2 ring-black/60" style:left={`${marker.x}px`} style:top={`${marker.y}px`}></span>
-    {/if}
+
   {:else}
     <div class="flex size-full items-center justify-center gap-2 bg-muted text-[0.8rem] text-muted-foreground">
       <ImageIcon class="size-4" />
@@ -135,7 +183,7 @@
 {#if cover?.type === "design"}
   <NotesCoverDesign pattern={cover.design.pattern} color={cover.design.color} />
 {:else if onFocalPoint}
-  <button type="button" class="relative block size-full cursor-crosshair overflow-hidden rounded-md focus-visible:ring-2 focus-visible:ring-ring" bind:clientWidth={width} bind:clientHeight={height} aria-label={focalLabel} onclick={chooseFocalPoint} onkeydown={moveFocalPoint}>
+  <button type="button" class="relative block size-full touch-none select-none overflow-hidden focus-visible:ring-2 focus-visible:ring-ring" bind:clientWidth={width} bind:clientHeight={height} data-cover-drag data-app-tooltip-disabled="true" aria-label={focalLabel} aria-disabled={positioningDisabled} style:cursor={dragging ? "grabbing" : "grab"} onpointerdown={startDrag} onpointermove={moveDrag} onpointerup={stopDrag} onpointercancel={stopDrag} onlostpointercapture={stopDrag} onkeydown={moveFocalPoint}>
     {@render surface()}
   </button>
 {:else if objectFit === "contain"}

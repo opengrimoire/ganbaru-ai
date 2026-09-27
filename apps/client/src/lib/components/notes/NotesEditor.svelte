@@ -14,6 +14,8 @@
   import FolderTree from "@lucide/svelte/icons/folder-tree";
   import GitBranch from "@lucide/svelte/icons/git-branch";
   import History from "@lucide/svelte/icons/history";
+  import { NOTES_COVER_DEFAULT_FOCAL_POINT } from "$lib/notes/page-cover";
+  import type { NotesCoverFocalPoint, NotesPageCover as CoverValue } from "$lib/notes/contracts/assets";
   import ImagePlus from "@lucide/svelte/icons/image-plus";
   import Link2 from "@lucide/svelte/icons/link-2";
   import MessageSquare from "@lucide/svelte/icons/message-square";
@@ -150,6 +152,12 @@
   let titleDraft = $state("");
   let titleInput: HTMLInputElement | null = $state(null);
   let coverMenuOpen = $state(false);
+  let coverPosition = $state<{ pageId: string; cover: Exclude<CoverValue, { type: "design" }>; focal: NotesCoverFocalPoint } | null>(null);
+  let coverPositionSaving = $state(false);
+  let coverPositionError = $state<string | null>(null);
+  let coverStatus = $state<"loading" | "ready" | "error">("loading");
+  let repositionButton: HTMLButtonElement | null = $state(null);
+  let coverBanner: HTMLDivElement | null = $state(null);
   let coverMenuButton: HTMLButtonElement | null = $state(null);
   let commentButton: HTMLButtonElement | null = $state(null);
   let commentsPanelFromTitle = $state(false);
@@ -404,6 +412,9 @@
     activityPanelOpen = false;
     coverMenuOpen = false;
     pageHistoryModalOpen = false;
+    coverPosition = null;
+    coverPositionError = null;
+    coverPositionSaving = false;
   });
 
   $effect(() => {
@@ -681,8 +692,11 @@
     hideActivityPanel();
   }
 
-  function toggleCoverMenu(): void {
+  /** Toggle the cover picker from the active trigger. */
+  function toggleCoverMenu(event: MouseEvent): void {
+    if (!(event.currentTarget instanceof HTMLButtonElement)) return;
     const nextOpen = !coverMenuOpen;
+    coverMenuButton = event.currentTarget;
     coverMenuOpen = nextOpen;
     if (nextOpen) {
       if (panelLoadStates["cover-menu"]?.status === "failed") {
@@ -692,6 +706,70 @@
       closeActionPanel();
     }
   }
+
+  /** Start a local crop draft; pointer movements never write to storage. */
+  function startCoverPosition(): void {
+    if (!page?.cover || page.cover.type === "design" || coverStatus !== "ready") return;
+    coverMenuOpen = false;
+    coverPositionError = null;
+    coverPositionSaving = false;
+    closePageMenu();
+    closeActionPanel();
+    coverPosition = { pageId: page.id, cover: page.cover, focal: { ...(page.cover.focal_point ?? NOTES_COVER_DEFAULT_FOCAL_POINT) } };
+    void tick().then(() => coverBanner?.querySelector<HTMLButtonElement>("[data-cover-drag]")?.focus({ preventScroll: true }));
+  }
+
+  /** Discard the unsaved crop and restore the positioning trigger. */
+  function cancelCoverPosition(): void {
+    if (coverPositionSaving) return;
+    coverPosition = null;
+    coverPositionError = null;
+    void tick().then(() => repositionButton?.focus({ preventScroll: true }));
+  }
+
+  /** Persist one confirmed position and keep failed drafts available for retry. */
+  async function saveCoverPosition(): Promise<void> {
+    const draft = coverPosition;
+    if (!draft || coverPositionSaving) return;
+    coverPositionSaving = true;
+    coverPositionError = null;
+    try {
+      await notes.updatePageCover(draft.pageId, { ...draft.cover, focal_point: { ...draft.focal } });
+      if (coverPosition === draft) {
+        coverPosition = null;
+        void tick().then(() => repositionButton?.focus({ preventScroll: true }));
+      }
+    } catch (cause) {
+      if (coverPosition === draft) coverPositionError = t("notes.pageCoverSaveFailed", cause instanceof Error ? cause.message : String(cause));
+      else console.error("Could not save Notes cover position", cause);
+    } finally {
+      if (!coverPosition || coverPosition === draft) coverPositionSaving = false;
+    }
+  }
+
+  $effect(() => {
+    if (coverPosition && (coverPosition.pageId !== page?.id || !page.cover || page.cover.type === "design")) {
+      coverPosition = null;
+      coverPositionError = null;
+      coverPositionSaving = false;
+    }
+  });
+
+  $effect(() => {
+    if (!coverPosition) return;
+    const handleEscape = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      cancelCoverPosition();
+    };
+    document.addEventListener("keydown", handleEscape, true);
+    return () => document.removeEventListener("keydown", handleEscape, true);
+  });
+
+  $effect(() => {
+    if (mobileLayout && coverPosition) return mobileBackStack.activate({ handle: cancelCoverPosition });
+  });
 
   function closeCoverMenu(): void {
     coverMenuOpen = false;
@@ -1257,14 +1335,68 @@
       use:documentEndPointer
     >
       {#if page.cover}
-        <div class="notes-page-banner overflow-hidden bg-muted">
+        <div bind:this={coverBanner} class="notes-page-banner relative overflow-hidden bg-muted">
           {#if panelLoadStates["page-cover"]?.status === "ready" && panelLoadStates["page-cover"].component.kind === "page-cover"}
             {@const NotesPageCover = panelLoadStates["page-cover"].component.component}
-            <NotesPageCover cover={page.cover} unavailableLabel={t("notes.pageCoverUnavailable")} />
+            <NotesPageCover cover={page.cover} unavailableLabel={t("notes.pageCoverUnavailable")}
+              focalPoint={coverPosition?.focal} focalLabel={t("notes.pageCoverFocalHint")}
+              positioningDisabled={coverPositionSaving}
+              onFocalPoint={coverPosition ? (point) => { if (coverPosition && !coverPositionSaving) coverPosition.focal = point; } : undefined}
+              onStatus={(status) => { coverStatus = status; }} />
           {:else if panelLoadStates["page-cover"]?.status === "failed"}
             <button class="m-2 min-h-8 rounded-md border border-border bg-popover px-2 text-[0.8rem]" type="button" onclick={() => requestEditorPanel("page-cover", true)}>{t("common.retry")}</button>
           {/if}
+          <div
+            class="notes-cover-actions absolute right-3 top-3 flex items-center divide-x divide-border overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-sm"
+            data-open={coverMenuOpen || coverPosition !== null || undefined}
+          >
+            {#if coverPosition}
+              <button class="min-h-7 px-2 text-[0.733333rem] hover:bg-accent focus-visible:bg-accent disabled:opacity-50" type="button" disabled={coverPositionSaving} onclick={saveCoverPosition}>{t("notes.pageCoverSavePosition")}</button>
+              <button class="min-h-7 px-2 text-[0.733333rem] hover:bg-accent focus-visible:bg-accent disabled:opacity-50" type="button" disabled={coverPositionSaving} onclick={cancelCoverPosition}>{t("common.cancel")}</button>
+            {:else}
+              <button
+                class="min-h-7 px-2 text-[0.733333rem] hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                type="button"
+                aria-label={t("notes.changePageCover")}
+                aria-haspopup="dialog"
+                aria-expanded={coverMenuOpen}
+                onclick={(event) => toggleCoverMenu(event)}
+              >{t("notes.pageCoverChangeAction")}</button>
+              {#if page.cover.type !== "design"}
+                <button
+                  class="min-h-7 px-2 text-[0.733333rem] hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                  type="button"
+                  aria-label={t("notes.pageCoverReposition")}
+                  bind:this={repositionButton}
+                  disabled={coverStatus !== "ready"}
+                  onclick={startCoverPosition}
+                >{t("notes.pageCoverRepositionAction")}</button>
+              {/if}
+            {/if}
+          </div>
+          {#if coverPosition}
+            <p class="pointer-events-none absolute left-1/2 top-1/2 flex min-h-7 max-w-[calc(100%-1.5rem)] -translate-x-1/2 -translate-y-1/2 items-center rounded-md bg-popover/60 px-2 text-[0.733333rem] text-popover-foreground">{t("notes.pageCoverDragHint")}</p>
+          {/if}
         </div>
+      {/if}
+
+      {#if coverPositionError}<p class="bg-destructive/10 px-3 py-2 text-[0.8rem] text-destructive" role="alert">{coverPositionError}</p>{/if}
+
+      {#if coverMenuOpen}
+        {#if panelLoadStates["cover-menu"]?.status === "ready" && panelLoadStates["cover-menu"].component.kind === "cover-menu"}
+          {@const NotesPageCoverMenu = panelLoadStates["cover-menu"].component.component}
+          {#key page.id}
+            {@const coverPageId = page.id}
+            <NotesPageCoverMenu
+              cover={page.cover}
+              trigger={coverMenuButton}
+              onClose={closeCoverMenu}
+              onSelect={(cover) => notes.updatePageCover(coverPageId, cover)}
+            />
+          {/key}
+        {:else if panelLoadStates["cover-menu"]?.status === "failed"}
+          <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={() => requestEditorPanel("cover-menu", true)}>{t("common.retry")}</button>
+        {/if}
       {/if}
 
       <div
@@ -1315,39 +1447,20 @@
                 <span class="truncate">{page.icon ? t("notes.changePageIcon") : t("notes.addPageIcon")}</span>
               </button>
             {/if}
-            <div
-            class="relative"
-          >
+            {#if !page.cover}
               <button
-                bind:this={coverMenuButton}
                 class="inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-[0.8rem] text-muted-foreground hover:bg-accent hover:text-foreground"
                 type="button"
-                aria-label={page.cover ? t("notes.changePageCover") : t("notes.addPageCover")}
+                aria-label={t("notes.addPageCover")}
                 aria-haspopup="dialog"
                 aria-expanded={coverMenuOpen}
                 data-notes-cover-open={coverMenuOpen ? "true" : undefined}
-                onclick={toggleCoverMenu}
+                onclick={(event) => toggleCoverMenu(event)}
               >
                 <ImagePlus class="size-3.5" />
-                <span class="truncate">{page.cover ? t("notes.changePageCover") : t("notes.addPageCover")}</span>
+                <span class="truncate">{t("notes.addPageCover")}</span>
               </button>
-              {#if coverMenuOpen}
-                {#if panelLoadStates["cover-menu"]?.status === "ready" && panelLoadStates["cover-menu"].component.kind === "cover-menu"}
-                  {@const NotesPageCoverMenu = panelLoadStates["cover-menu"].component.component}
-                  {#key page.id}
-                    {@const coverPageId = page.id}
-                    <NotesPageCoverMenu
-                      cover={page.cover}
-                      trigger={coverMenuButton}
-                      onClose={closeCoverMenu}
-                      onSelect={(cover) => notes.updatePageCover(coverPageId, cover)}
-                    />
-                  {/key}
-                {:else if panelLoadStates["cover-menu"]?.status === "failed"}
-                  <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={() => requestEditorPanel("cover-menu", true)}>{t("common.retry")}</button>
-                {/if}
-              {/if}
-            </div>
+            {/if}
             <button
               bind:this={commentButton}
               class="inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-[0.8rem] text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -1525,6 +1638,45 @@
 {/if}
 
 <style>
+  .notes-cover-actions {
+    opacity: 0;
+    pointer-events: none;
+    --cover-toolbar-enter-delay: 280ms;
+    --cover-toolbar-enter-duration: 180ms;
+    --cover-toolbar-exit-duration: 90ms;
+    transition: opacity var(--cover-toolbar-exit-duration) ease-out;
+  }
+
+  :where(.notes-page-banner:hover) .notes-cover-actions {
+    opacity: 1;
+    pointer-events: auto;
+    transition: opacity var(--cover-toolbar-enter-duration) ease-out var(--cover-toolbar-enter-delay);
+  }
+
+  .notes-cover-actions:focus-within,
+  .notes-cover-actions[data-open="true"],
+  .notes-editor-root[data-mobile="true"] .notes-cover-actions {
+    opacity: 1;
+    pointer-events: auto;
+    transition: none;
+  }
+
+  .notes-editor-root[data-mobile="true"] .notes-cover-actions button {
+    min-height: 3rem;
+  }
+
+  @media (hover: none), (pointer: coarse) {
+    .notes-cover-actions {
+      opacity: 1;
+      pointer-events: auto;
+      transition: none;
+    }
+
+    .notes-cover-actions button {
+      min-height: 3rem;
+    }
+  }
+
   .notes-page-title-actions:has([data-notes-icon-picker-open="true"], [data-notes-cover-open="true"], [data-notes-comment-open="true"]) {
     opacity: 1;
   }

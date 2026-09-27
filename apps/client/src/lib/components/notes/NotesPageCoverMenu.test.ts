@@ -219,14 +219,4 @@ describe("Notes cover selection", () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it("applies image focal edits without a separate confirmation", async () => {
-    const { onSelect, onClose } = await open(vi.fn(async (_cover: NotesPageCover | null) => {}), createNotesLocalFilePageCover(asset));
-    button("Reposition image").click();
-    await tick();
-    const position = document.querySelector<HTMLButtonElement>('button[aria-label^="Select the subject"]')!;
-    position.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
-    await vi.waitFor(() => expect(onSelect).toHaveBeenCalledOnce());
-    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ type: "file", focal_point: { x: 0.52, y: 0.5 } }));
-    expect(onClose).not.toHaveBeenCalled();
-  });
 });
