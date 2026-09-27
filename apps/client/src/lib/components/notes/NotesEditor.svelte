@@ -175,6 +175,8 @@
   let pendingArchivePage = $state<NotesPage | null>(null);
   let pendingTrashPage = $state<NotesPage | null>(null);
   let requestedIconPicker = $state<"action" | "icon" | null>(null);
+  let iconPickerPanelAnchor: HTMLElement | null = $state(null);
+  let openingIconPickerFromMenu = false;
   let actionIconPickerTrigger: HTMLButtonElement | null = $state(null);
   let pageIconPickerTrigger: HTMLButtonElement | null = $state(null);
   let panelLoadStates = $state<Partial<Record<
@@ -369,7 +371,8 @@
     });
   }
 
-  function openIconPicker(kind: "action" | "icon"): void {
+  function openIconPicker(kind: "action" | "icon", panelAnchor: HTMLElement | null = null): void {
+    if (kind === "action") iconPickerPanelAnchor = panelAnchor;
     requestedIconPicker = kind;
     requestEditorPanel("icon-picker", panelLoadStates["icon-picker"]?.status === "failed");
   }
@@ -394,7 +397,12 @@
       const kind = requestedIconPicker;
       requestedIconPicker = null;
       void tick().then(() => {
-        (kind === "action" ? actionIconPickerTrigger : pageIconPickerTrigger)?.click();
+        openingIconPickerFromMenu = kind === "action" && iconPickerPanelAnchor !== null;
+        try {
+          (kind === "action" ? actionIconPickerTrigger : pageIconPickerTrigger)?.click();
+        } finally {
+          openingIconPickerFromMenu = false;
+        }
       });
     }
   });
@@ -692,19 +700,25 @@
     hideActivityPanel();
   }
 
+  /** Open the cover picker from a trigger that remains mounted after the page menu closes. */
+  function openCoverMenu(trigger: HTMLButtonElement): void {
+    coverMenuButton = trigger;
+    coverMenuOpen = true;
+    if (panelLoadStates["cover-menu"]?.status === "failed") {
+      requestEditorPanel("cover-menu", true);
+    }
+    closePageMenu();
+    closeActionPanel();
+  }
+
   /** Toggle the cover picker from the active trigger. */
   function toggleCoverMenu(event: MouseEvent): void {
     if (!(event.currentTarget instanceof HTMLButtonElement)) return;
-    const nextOpen = !coverMenuOpen;
-    coverMenuButton = event.currentTarget;
-    coverMenuOpen = nextOpen;
-    if (nextOpen) {
-      if (panelLoadStates["cover-menu"]?.status === "failed") {
-        requestEditorPanel("cover-menu", true);
-      }
-      closePageMenu();
-      closeActionPanel();
+    if (coverMenuOpen) {
+      closeCoverMenu();
+      return;
     }
+    openCoverMenu(event.currentTarget);
   }
 
   /** Start a local crop draft; pointer movements never write to storage. */
@@ -921,9 +935,9 @@
     return notes.exportAgentBridge(request);
   }
 
-  function openPageDiscussion(): void {
+  function openPageDiscussion(source: "title" | "menu" = "title"): void {
     if (!page) return;
-    if (activePanel === "comments" && commentsPanelFromTitle) {
+    if (activePanel === "comments" && commentsPanelFromTitle === (source === "title")) {
       closeActionPanel();
       return;
     }
@@ -935,7 +949,7 @@
       notes.setActiveCommentParent(pageParent);
     }
     activePanel = "comments";
-    commentsPanelFromTitle = true;
+    commentsPanelFromTitle = source === "title";
     coverMenuOpen = false;
     notes.setPagePanelSubsystemOpen("comments", true);
     void notes.ensureOptionalSubsystem("comments").catch((error) => {
@@ -1097,6 +1111,7 @@
             onclick={() => {
               pageMenuOpen = !pageMenuOpen;
               closeActionPanel();
+              if (pageMenuOpen) coverMenuOpen = false;
               if (!pageMenuOpen) {
                 moveMenuOpen = false;
                 folderMoveMenuOpen = false;
@@ -1112,6 +1127,26 @@
               role="menu"
               data-app-floating-surface
             >
+              {#if mobileLayout}
+                <button class={menuItemClass()} type="button" role="menuitem" aria-haspopup="dialog" onclick={() => {
+                  openIconPicker("action", pageMenuButton);
+                  closePageMenu();
+                }}>
+                  <SmilePlus class="size-4" strokeWidth={noteActionIconStrokeWidth} />
+                  <span>{page.icon ? t("notes.changePageIcon") : t("notes.addPageIcon")}</span>
+                </button>
+                <button class={`${menuItemClass()} disabled:opacity-50`} type="button" role="menuitem" aria-haspopup="dialog" disabled={coverPosition !== null} onclick={() => {
+                  if (pageMenuButton) openCoverMenu(pageMenuButton);
+                }}>
+                  <ImagePlus class="size-4" strokeWidth={noteActionIconStrokeWidth} />
+                  <span>{page.cover ? t("notes.changePageCover") : t("notes.addPageCover")}</span>
+                </button>
+                <button class={menuItemClass()} type="button" role="menuitem" aria-haspopup="dialog" onclick={() => openPageDiscussion("menu")}>
+                  <MessageSquare class="size-4" strokeWidth={noteActionIconStrokeWidth} />
+                  <span>{t("notes.addComment")}</span>
+                </button>
+                <div class="my-1 border-t border-border" role="separator"></div>
+              {/if}
               <button class={menuItemClass()} type="button" role="menuitem" onclick={() => focusTitleInput()}>
                 <Pencil class="size-4" />
                 <span>{t("notes.renamePage")}</span>
@@ -1416,6 +1451,7 @@
                 value={notesPageIconPickerValue(page.icon)}
                 ariaLabel={page.icon ? t("notes.changePageIcon") : t("notes.addPageIcon")}
                 panelAlign="start"
+                panelAnchor={iconPickerPanelAnchor}
                 uploadAdapter={notesIconUploadAdapter}
                 onChange={updatePageIconFromPicker}
               >
@@ -1429,7 +1465,10 @@
                     aria-expanded={open}
                     aria-controls={panelId}
                     data-notes-icon-picker-open={open ? "true" : undefined}
-                    onclick={() => prepareIconPicker(toggle)}
+                    onclick={() => {
+                      if (!openingIconPickerFromMenu) iconPickerPanelAnchor = null;
+                      prepareIconPicker(toggle);
+                    }}
                   >
                     <SmilePlus class="size-3.5" />
                     <span class="truncate">{page.icon ? t("notes.changePageIcon") : t("notes.addPageIcon")}</span>
@@ -1469,7 +1508,7 @@
               aria-haspopup="dialog"
               aria-expanded={activePanel === "comments" && commentsPanelFromTitle}
               data-notes-comment-open={activePanel === "comments" && commentsPanelFromTitle ? "true" : undefined}
-              onclick={openPageDiscussion}
+              onclick={() => openPageDiscussion()}
             >
               <MessageSquare class="size-3.5" />
               <span class="truncate">{t("notes.addComment")}</span>

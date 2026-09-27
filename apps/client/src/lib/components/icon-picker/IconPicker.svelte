@@ -115,6 +115,7 @@
     showRemove = true,
     initiallyOpen = false,
     panelAlign = "end",
+    panelAnchor = null,
     class: className = "",
   }: {
     value: string;
@@ -127,6 +128,8 @@
     showRemove?: boolean;
     initiallyOpen?: boolean;
     panelAlign?: "start" | "end";
+    /** Stable panel anchor when the action that opened the picker is removed. */
+    panelAnchor?: HTMLElement | null;
     class?: string;
   } = $props();
 
@@ -495,7 +498,7 @@
   }
 
   function placePanel(): void {
-    const trigger = triggerElement;
+    const trigger = panelAnchor ?? triggerElement;
     if (!trigger) return;
     panelPlacement = projectIconPickerPanelPlacement({
       triggerRect: toPickerRect(trigger.getBoundingClientRect()),
@@ -609,7 +612,7 @@
   }
 
   function focusPickerTrigger(): void {
-    const element = triggerElement;
+    const element = panelAnchor ?? triggerElement;
     if (!element) return;
     const selector = [
       "button:not([disabled])",
