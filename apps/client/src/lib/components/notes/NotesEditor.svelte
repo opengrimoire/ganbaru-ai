@@ -1405,9 +1405,9 @@
           openMode === "side" ? "pl-16 pr-4 sm:pr-8" : "px-4 sm:px-8",
         )}
       >
-        <div class="notes-page-title-surface group/title min-w-0 pb-5">
+        <div class="notes-page-title-surface min-w-0 pb-5">
           <div class={cn(
-            "notes-page-title-actions -ml-1.5 flex min-h-8 flex-wrap items-center gap-1.5 opacity-0 transition-opacity group-hover/title:opacity-100 group-focus-within/title:opacity-100",
+            "notes-page-title-actions -ml-1.5 flex min-h-8 flex-wrap items-center gap-1.5",
             peekMode && !page.cover && "pr-28",
           )}>
             {#if panelLoadStates["icon-picker"]?.status === "ready" && panelLoadStates["icon-picker"].component.kind === "icon-picker"}
@@ -1638,24 +1638,29 @@
 {/if}
 
 <style>
-  .notes-cover-actions {
+  .notes-cover-actions,
+  .notes-page-title-actions {
     opacity: 0;
     pointer-events: none;
-    --cover-toolbar-enter-delay: 280ms;
-    --cover-toolbar-enter-duration: 180ms;
-    --cover-toolbar-exit-duration: 90ms;
-    transition: opacity var(--cover-toolbar-exit-duration) ease-out;
+    --notes-actions-enter-delay: 280ms;
+    --notes-actions-enter-duration: 180ms;
+    --notes-actions-exit-duration: 90ms;
+    transition: opacity var(--notes-actions-exit-duration) ease-out;
   }
 
-  :where(.notes-page-banner:hover) .notes-cover-actions {
+  :where(.notes-page-banner:hover) .notes-cover-actions,
+  :where(.notes-page-title-surface:hover) .notes-page-title-actions {
     opacity: 1;
     pointer-events: auto;
-    transition: opacity var(--cover-toolbar-enter-duration) ease-out var(--cover-toolbar-enter-delay);
+    transition: opacity var(--notes-actions-enter-duration) ease-out var(--notes-actions-enter-delay);
   }
 
   .notes-cover-actions:focus-within,
   .notes-cover-actions[data-open="true"],
-  .notes-editor-root[data-mobile="true"] .notes-cover-actions {
+  .notes-editor-root[data-mobile="true"] .notes-cover-actions,
+  :where(.notes-page-title-surface:focus-within) .notes-page-title-actions,
+  .notes-page-title-actions:has([data-notes-icon-picker-open="true"], [data-notes-cover-open="true"], [data-notes-comment-open="true"]),
+  .notes-editor-root[data-mobile="true"] .notes-page-title-actions {
     opacity: 1;
     pointer-events: auto;
     transition: none;
@@ -1666,7 +1671,8 @@
   }
 
   @media (hover: none), (pointer: coarse) {
-    .notes-cover-actions {
+    .notes-cover-actions,
+    .notes-page-title-actions {
       opacity: 1;
       pointer-events: auto;
       transition: none;
@@ -1675,14 +1681,6 @@
     .notes-cover-actions button {
       min-height: 3rem;
     }
-  }
-
-  .notes-page-title-actions:has([data-notes-icon-picker-open="true"], [data-notes-cover-open="true"], [data-notes-comment-open="true"]) {
-    opacity: 1;
-  }
-
-  .notes-editor-root[data-mobile="true"] .notes-page-title-actions {
-    opacity: 1;
   }
 
   .notes-editor-root[data-mobile="true"] .notes-page-title-actions :global(button) {
