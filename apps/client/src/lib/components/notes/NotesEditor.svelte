@@ -70,6 +70,7 @@
   } from "$lib/notes/navigation-tree";
   import { addNotesWorkspaceBreadcrumb, buildNotesPageBreadcrumb } from "$lib/notes/page-breadcrumb";
   import { notesPageTitle } from "$lib/notes/page-title";
+  import { notesFloatingPanelPlacement } from "$lib/notes/floating-panel";
   import {
     notesPageProjectId,
     notesPagesForProject,
@@ -114,6 +115,10 @@
   const ACTIVITY_PANEL_WIDTH_PX = 320;
   const PAGE_DETAILS_PANEL_WIDTH_PX = 704;
   const PAGE_DETAILS_PANEL_MAX_HEIGHT_PX = 512;
+  const COVER_PANEL_WIDTH_PX = 360;
+  const COVER_PANEL_MAX_HEIGHT_PX = 420;
+  const COMMENTS_PANEL_WIDTH_PX = 400;
+  const COMMENTS_PANEL_MAX_HEIGHT_PX = 520;
 
   let {
     projectId = null,
@@ -147,6 +152,9 @@
   let titleDraft = $state("");
   let titleInput: HTMLInputElement | null = $state(null);
   let coverMenuOpen = $state(false);
+  let coverMenuButton: HTMLButtonElement | null = $state(null);
+  let commentButton: HTMLButtonElement | null = $state(null);
+  let commentsPanelFromTitle = $state(false);
   let pageMenuOpen = $state(false);
   let moveMenuOpen = $state(false);
   let folderMoveMenuOpen = $state(false);
@@ -258,12 +266,45 @@
   });
   const pageDetailsPanelStyle = $derived.by(() => {
     void floatingLayoutVersion;
+    if (activePanel === "comments") {
+      return floatingTitlePanelStyle(
+        commentsPanelFromTitle ? commentButton : pageMenuButton,
+        COMMENTS_PANEL_WIDTH_PX,
+        COMMENTS_PANEL_MAX_HEIGHT_PX,
+        commentsPanelFromTitle ? "start" : "end",
+      );
+    }
     return floatingPagePanelStyle(
       pageMenuButton,
       PAGE_DETAILS_PANEL_WIDTH_PX,
       PAGE_DETAILS_PANEL_MAX_HEIGHT_PX,
     );
   });
+  const coverMenuStyle = $derived.by(() => {
+    void floatingLayoutVersion;
+    return floatingTitlePanelStyle(
+      coverMenuButton,
+      COVER_PANEL_WIDTH_PX,
+      COVER_PANEL_MAX_HEIGHT_PX,
+      "start",
+    );
+  });
+
+  /** Keep a title action panel beside its trigger, including in page previews. */
+  function floatingTitlePanelStyle(
+    anchor: HTMLElement | null,
+    width: number,
+    height: number,
+    align: "start" | "end",
+  ): string {
+    if (!anchor || typeof window === "undefined") return "visibility:hidden";
+    const placement = notesFloatingPanelPlacement(
+      anchor.getBoundingClientRect(),
+      { width: window.innerWidth, height: window.innerHeight },
+      { width, height, align },
+    );
+    return `left:${Math.round(placement.left)}px;top:${Math.round(placement.top)}px;width:${Math.round(placement.width)}px;max-height:${Math.round(placement.maxHeight)}px`;
+  }
 
   /** Place a page popover below its toolbar trigger without clipping at viewport edges. */
   function floatingPagePanelStyle(
@@ -294,7 +335,7 @@
   }
 
   $effect(() => {
-    if (!activityPanelOpen && !pageMenuOpen && !activePanel) return;
+    if (!activityPanelOpen && !pageMenuOpen && !activePanel && !coverMenuOpen) return;
     const update = () => {
       floatingLayoutVersion += 1;
     };
@@ -583,6 +624,7 @@
     if (activePanel) notes.setPagePanelSubsystemOpen(activePanel, false);
     const nextPanel = activePanel === panel ? null : panel;
     activePanel = nextPanel;
+    if (nextPanel === "comments") commentsPanelFromTitle = false;
     if (nextPanel) {
       notes.setPagePanelSubsystemOpen(nextPanel, true);
       void notes.ensureOptionalSubsystem(nextPanel).catch((error) => {
@@ -813,6 +855,10 @@
 
   function openPageDiscussion(): void {
     if (!page) return;
+    if (activePanel === "comments" && commentsPanelFromTitle) {
+      closeActionPanel();
+      return;
+    }
     if (activePanel && activePanel !== "comments") {
       notes.setPagePanelSubsystemOpen(activePanel, false);
     }
@@ -821,6 +867,8 @@
       notes.setActiveCommentParent(pageParent);
     }
     activePanel = "comments";
+    commentsPanelFromTitle = true;
+    coverMenuOpen = false;
     notes.setPagePanelSubsystemOpen("comments", true);
     void notes.ensureOptionalSubsystem("comments").catch((error) => {
       console.error("load notes comments failed", error);
@@ -889,7 +937,18 @@
         class="relative z-30 flex shrink-0 items-center gap-1"
         data-notes-page-actions
         use:portal={pageActionsTarget}
-        use:dismissOnOutside={{ enabled: !!activePanel, onDismiss: closeActionPanel }}
+        use:dismissOnOutside={{ enabled: !!activePanel, onDismiss: (reason, event) => {
+          if (reason === "outside-pointer"
+            && activePanel === "comments"
+            && commentsPanelFromTitle
+            && event.target instanceof Node
+            && commentButton?.contains(event.target)) return;
+          const restoreTitleFocus = activePanel === "comments" && commentsPanelFromTitle;
+          closeActionPanel();
+          if (reason === "escape") {
+            (restoreTitleFocus ? commentButton : pageMenuButton)?.focus({ preventScroll: true });
+          }
+        } }}
       >
         {#if mobileLayout && openMode === "full"}
           <button
@@ -1149,8 +1208,12 @@
 
         {#if activePanel}
           <div
-            class="fixed z-80 overflow-auto rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-lg"
+            class={activePanel === "comments"
+              ? "fixed z-80 flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl"
+              : "fixed z-80 overflow-auto rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-lg"}
             style={pageDetailsPanelStyle}
+            role="dialog"
+            aria-label={activePanel === "comments" ? t("notes.pageDiscussion") : activePanel === "links" ? t("notes.noteLinks") : t("notes.suggestedEdits")}
             data-app-floating-surface
           >
             {#if activePanel === "links"}
@@ -1229,6 +1292,7 @@
               <IconPicker
                 value={notesPageIconPickerValue(page.icon)}
                 ariaLabel={page.icon ? t("notes.changePageIcon") : t("notes.addPageIcon")}
+                panelAlign="start"
                 uploadAdapter={notesIconUploadAdapter}
                 onChange={updatePageIconFromPicker}
               >
@@ -1261,13 +1325,16 @@
               </button>
             {/if}
             <div
-              class="relative"
-              use:dismissOnOutside={{ enabled: coverMenuOpen, onDismiss: closeCoverMenu }}
-            >
+            class="relative"
+          >
               <button
+                bind:this={coverMenuButton}
                 class="inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-[0.8rem] text-muted-foreground hover:bg-accent hover:text-foreground"
                 type="button"
                 aria-label={page.cover ? t("notes.changePageCover") : t("notes.addPageCover")}
+                aria-haspopup="dialog"
+                aria-expanded={coverMenuOpen}
+                data-notes-cover-open={coverMenuOpen ? "true" : undefined}
                 onclick={toggleCoverMenu}
               >
                 <ImagePlus class="size-3.5" />
@@ -1278,6 +1345,8 @@
                   {@const NotesPageCoverMenu = panelLoadStates["cover-menu"].component.component}
                   <NotesPageCoverMenu
                   cover={page.cover}
+                  trigger={coverMenuButton}
+                  style={coverMenuStyle}
                   onClose={closeCoverMenu}
                   onSelect={(cover) => {
                     coverMenuOpen = false;
@@ -1290,9 +1359,13 @@
               {/if}
             </div>
             <button
+              bind:this={commentButton}
               class="inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-[0.8rem] text-muted-foreground hover:bg-accent hover:text-foreground"
               type="button"
               aria-label={t("notes.addComment")}
+              aria-haspopup="dialog"
+              aria-expanded={activePanel === "comments" && commentsPanelFromTitle}
+              data-notes-comment-open={activePanel === "comments" && commentsPanelFromTitle ? "true" : undefined}
               onclick={openPageDiscussion}
             >
               <MessageSquare class="size-3.5" />
@@ -1307,6 +1380,7 @@
                 <IconPicker
                   value={notesPageIconPickerValue(page.icon)}
                   ariaLabel={t("notes.changePageIcon")}
+                  panelAlign="start"
                   uploadAdapter={notesIconUploadAdapter}
                   onChange={updatePageIconFromPicker}
                 >
@@ -1461,7 +1535,7 @@
 {/if}
 
 <style>
-  .notes-page-title-actions:has([data-notes-icon-picker-open="true"]) {
+  .notes-page-title-actions:has([data-notes-icon-picker-open="true"], [data-notes-cover-open="true"], [data-notes-comment-open="true"]) {
     opacity: 1;
   }
 

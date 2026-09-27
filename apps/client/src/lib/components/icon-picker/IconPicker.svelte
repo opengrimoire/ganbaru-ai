@@ -114,6 +114,7 @@
     showUpload = true,
     showRemove = true,
     initiallyOpen = false,
+    panelAlign = "end",
     class: className = "",
   }: {
     value: string;
@@ -125,6 +126,7 @@
     showUpload?: boolean;
     showRemove?: boolean;
     initiallyOpen?: boolean;
+    panelAlign?: "start" | "end";
     class?: string;
   } = $props();
 
@@ -500,6 +502,7 @@
       boundaryRect: panelBoundaryRect(trigger),
       preferredWidth: panelWidth,
       preferredHeight: preferredPanelHeight(),
+      align: panelAlign,
     });
   }
 

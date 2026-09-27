@@ -295,6 +295,29 @@ describe("project icon picker helpers", () => {
     });
   });
 
+  it("aligns the panel with the trigger's left edge when requested", () => {
+    expect(projectIconPickerPanelPlacement({
+      triggerRect: pickerTrigger(),
+      boundaryRect: pickerBoundary,
+      preferredWidth: 360,
+      preferredHeight: 440,
+      align: "start",
+    })).toEqual({
+      left: 464,
+      top: 156,
+      width: 360,
+      height: 440,
+    });
+
+    expect(projectIconPickerPanelPlacement({
+      triggerRect: pickerTrigger({ left: 840, right: 960, width: 120 }),
+      boundaryRect: pickerBoundary,
+      preferredWidth: 360,
+      preferredHeight: 160,
+      align: "start",
+    }).left).toBe(532);
+  });
+
   it("caps the icon picker panel before the lower boundary", () => {
     const placement = projectIconPickerPanelPlacement({
       triggerRect: pickerTrigger({ top: 280, bottom: 312 }),

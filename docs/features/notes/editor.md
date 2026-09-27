@@ -106,6 +106,10 @@ Dependent operations such as rapid row creation, paste, and deletion preserve or
 
 Page discussions, block comments, inline anchored comments, and text suggestions are collaboration metadata rather than block content. Comment and suggestion writes append versioned collaboration operations in the same transaction as canonical state changes.
 
+The title actions open compact panels next to their own controls. Clicking an open title action again closes its panel. Add icon, Add cover, and Add comment align their panels with the left edge of the action when viewport space permits. Cover selection shows visual presets, local image upload, and an external image URL where the platform permits it. Add comment opens the page discussion with a composer and scrollable threads. The discussion panel omits a comment count and separates sections and threads with spacing instead of divider lines. The comment fields use a subtle focus fill without an added outline. These panels stay inside the visible viewport and keep the same typography, spacing, and surface treatment as other Notes popovers.
+
+Open and resolved comment threads load together with the page. Show resolved filters the loaded threads immediately without another request.
+
 Accepting or rejecting a suggestion validates the stored base context. Stale anchors or versions produce a conflict rather than applying text to the wrong range.
 
 ## Media and assets

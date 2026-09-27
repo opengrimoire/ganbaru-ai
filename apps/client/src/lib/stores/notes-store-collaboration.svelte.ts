@@ -57,6 +57,12 @@ export function createNotesCollaborationController(
   let commentsLoading = $state(false);
   let commentsError = $state<string | null>(null);
   let commentsIncludeResolved = $state(false);
+  let commentsPageId: string | null = null;
+  const visibleCommentThreads = $derived(
+    commentsIncludeResolved
+      ? commentThreads
+      : commentThreads.filter((thread) => thread.status === "open"),
+  );
   let suggestions = $state<NotesSuggestion[]>([]);
   let activeSuggestionDraft = $state<NotesSuggestionDraft | null>(null);
   let suggestionsLoading = $state(false);
@@ -72,6 +78,7 @@ export function createNotesCollaborationController(
   async function reloadComments(pageId = context.readSelectedPageId()): Promise<void> {
     const requestId = ++commentsRequestId;
     if (!pageId) {
+      commentsPageId = null;
       commentThreads = [];
       activeCommentParent = null;
       activeCommentAnchor = null;
@@ -79,19 +86,24 @@ export function createNotesCollaborationController(
       commentsLoading = false;
       return;
     }
+    if (pageId !== commentsPageId) {
+      commentsPageId = pageId;
+      commentThreads = [];
+    }
+    const previousThreads = commentThreads;
     commentsLoading = true;
     commentsError = null;
     try {
       const next = await listNotesComments(
         pageId,
-        commentsIncludeResolved,
+        true,
         Object.keys(context.readBlocksById()),
       );
       if (requestId !== commentsRequestId || pageId !== context.readSelectedPageId()) return;
       commentThreads = [...next];
     } catch (error) {
       if (requestId !== commentsRequestId || pageId !== context.readSelectedPageId()) return;
-      commentThreads = [];
+      commentThreads = previousThreads;
       commentsError = errorMessage(error);
     } finally {
       if (requestId === commentsRequestId) commentsLoading = false;
@@ -163,13 +175,15 @@ export function createNotesCollaborationController(
   }
 
   function updateCommentThread(thread: NotesCommentThread): void {
-    if (thread.comments.length === 0 || (thread.status === "resolved" && !commentsIncludeResolved)) {
+    if (thread.page_id !== context.readSelectedPageId()) return;
+    if (thread.comments.length === 0) {
       commentThreads = commentThreads.filter((candidate) => candidate.id !== thread.id);
-      return;
+    } else {
+      commentThreads = commentThreads.some((candidate) => candidate.id === thread.id)
+        ? commentThreads.map((candidate) => candidate.id === thread.id ? thread : candidate)
+        : [...commentThreads, thread];
     }
-    commentThreads = commentThreads.some((candidate) => candidate.id === thread.id)
-      ? commentThreads.map((candidate) => candidate.id === thread.id ? thread : candidate)
-      : [...commentThreads, thread];
+    if (commentsLoading) void reloadComments();
   }
 
   function updateSuggestion(suggestion: NotesSuggestion): void {
@@ -303,20 +317,23 @@ export function createNotesCollaborationController(
   async function markCommentThreadsRead(discussionIds: readonly string[]): Promise<void> {
     const pageId = context.readSelectedPageId();
     if (!pageId) return;
+    const requestId = commentsRequestId;
     const ids = [...new Set(discussionIds.map((id) => id.trim()).filter(Boolean))];
     if (ids.length === 0) return;
-    commentThreads = await markNotesCommentThreadsRead({
+    const next = await markNotesCommentThreadsRead({
       page_id: pageId,
       discussion_ids: ids,
-      include_resolved: commentsIncludeResolved,
+      include_resolved: true,
     });
+    if (requestId !== commentsRequestId || pageId !== context.readSelectedPageId()) return;
+    commentThreads = [...next];
     commentsError = null;
   }
 
   async function markVisibleCommentThreadsRead(parent: NotesCommentParent | null = null): Promise<void> {
     const visible = parent
-      ? commentThreads.filter((thread) => notesCommentParentMatches(thread.parent, parent))
-      : commentThreads;
+      ? visibleCommentThreads.filter((thread) => notesCommentParentMatches(thread.parent, parent))
+      : visibleCommentThreads;
     await markCommentThreadsRead(visible.filter((thread) => thread.unread).map((thread) => thread.id));
   }
 
@@ -324,6 +341,7 @@ export function createNotesCollaborationController(
     commentsRequestId += 1;
     suggestionsRequestId += 1;
     commentThreads = [];
+    commentsPageId = null;
     suggestions = [];
     activeCommentParent = null;
     activeCommentAnchor = null;
@@ -335,7 +353,7 @@ export function createNotesCollaborationController(
   }
 
   return {
-    get commentThreads(): NotesCommentThread[] { return commentThreads; },
+    get commentThreads(): NotesCommentThread[] { return visibleCommentThreads; },
     get commentsLoading(): boolean { return commentsLoading; },
     get commentsError(): string | null { return commentsError; },
     get commentsIncludeResolved(): boolean { return commentsIncludeResolved; },
@@ -374,7 +392,6 @@ export function createNotesCollaborationController(
     markVisibleCommentThreadsRead,
     async setCommentsIncludeResolved(value: boolean): Promise<void> {
       commentsIncludeResolved = value;
-      await reloadComments();
     },
     resetPageState,
     notesCommentParentKey,

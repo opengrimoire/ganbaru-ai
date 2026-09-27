@@ -1,13 +1,11 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { blockPlainText } from "$lib/notes/block-factory";
   import {
     notesCommentParentKey,
     notesCommentPlainText,
     notesResolveCommentAnchor,
-    notesCommentThreadSnippet,
-    openNotesCommentThreadCount,
-    unreadNotesCommentThreadCount,
   } from "$lib/notes/comments";
   import type { NotesComment, NotesCommentParent, NotesCommentThread } from "$lib/notes/types";
   import { getNotes } from "$lib/stores/notes.svelte";
@@ -16,6 +14,7 @@
   import MessageSquare from "@lucide/svelte/icons/message-square";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import NotesCheckboxField from "./NotesCheckboxField.svelte";
 
   const notes = getNotes();
   const localization = getLocalization();
@@ -23,14 +22,13 @@
   let { embedded = false }: { embedded?: boolean } = $props();
   let open = $state(false);
   let newCommentDraft = $state("");
+  let newCommentInput: HTMLTextAreaElement | null = $state(null);
   let replyThreadId = $state<string | null>(null);
   let replyDrafts = $state<Record<string, string>>({});
   let editingCommentId = $state<string | null>(null);
   let editingDraft = $state("");
   let lastMarkedReadKey = $state("");
   const activeParent = $derived(notes.activeCommentParent ?? pageCommentParent());
-  const openThreadCount = $derived(openNotesCommentThreadCount(notes.commentThreads));
-  const unreadThreadCount = $derived(unreadNotesCommentThreadCount(notes.commentThreads));
   const unreadThreadKey = $derived(
     notes.commentThreads
       .filter((thread) => thread.unread)
@@ -38,6 +36,12 @@
       .join("|"),
   );
   const panelOpen = $derived(embedded || open);
+
+  onMount(() => {
+    if (!embedded) return;
+    const frame = requestAnimationFrame(() => newCommentInput?.focus({ preventScroll: true }));
+    return () => cancelAnimationFrame(frame);
+  });
 
   $effect(() => {
     if (notes.activeCommentParent) open = true;
@@ -126,7 +130,7 @@
   }
 </script>
 
-<div class={embedded ? "min-w-0" : "mt-2"}>
+<div class={embedded ? "flex min-h-0 min-w-0 flex-col" : "mt-2"}>
   {#if !embedded}
     <button
       class="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[0.733333rem] text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -140,10 +144,8 @@
       <span>
         {#if notes.commentsLoading}
           {t("notes.loadingComments")}
-        {:else if unreadThreadCount > 0}
-          {t("notes.commentsCountWithUnread", openThreadCount, unreadThreadCount)}
         {:else}
-          {t("notes.commentsCount", openThreadCount)}
+          {t("notes.pageDiscussion")}
         {/if}
       </span>
       <ChevronDown class={`size-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
@@ -151,40 +153,40 @@
   {/if}
 
   {#if panelOpen}
-    <section class={embedded ? "rounded-md bg-muted/25 p-2" : "mt-2 max-w-3xl rounded-md border border-border bg-muted/25 p-2"}>
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <div class="text-[0.8rem] font-medium text-foreground">
-          {parentLabel(activeParent)}
+    <section class={embedded ? "flex min-h-0 flex-col" : "mt-2 max-w-3xl rounded-xl border border-border bg-popover shadow-sm"}>
+      <div class="flex items-center justify-between gap-3 px-4 pb-2 pt-4">
+        <div class="min-w-0">
+          <div class="truncate text-[0.933333rem] font-semibold text-foreground">
+            {parentLabel(activeParent)}
+          </div>
         </div>
-        <label class="flex items-center gap-1.5 text-[0.733333rem] text-muted-foreground">
-          <input
-            class="size-3.5 accent-primary"
-            type="checkbox"
-            checked={notes.commentsIncludeResolved}
-            onchange={(event) => {
-              void notes.setCommentsIncludeResolved(event.currentTarget.checked);
-            }}
-          />
-          <span>{t("notes.showResolvedComments")}</span>
-        </label>
+        <NotesCheckboxField
+          checked={notes.commentsIncludeResolved}
+          label={t("notes.showResolvedComments")}
+          showLabel
+          onChange={(checked) => {
+            void notes.setCommentsIncludeResolved(checked);
+          }}
+        />
       </div>
 
       {#if notes.commentsError}
-        <div class="mt-2 rounded-md border border-destructive/35 bg-destructive/10 px-2 py-1.5 text-[0.8rem] text-destructive">
+        <div class="mx-4 mt-3 rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-[0.8rem] text-destructive" role="alert">
           {t("notes.loadCommentsFailed", notes.commentsError)}
         </div>
       {/if}
 
-      <div class="mt-2 flex min-w-0 flex-col gap-2">
+      <div class="flex min-w-0 flex-col gap-2 px-4 pb-3 pt-2">
         <textarea
-          class="min-h-16 w-full resize-y rounded-md border border-input bg-background px-2 py-1.5 text-[0.866667rem] outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          bind:this={newCommentInput}
+          class="min-h-18 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-[0.866667rem] outline-none placeholder:text-muted-foreground focus-visible:bg-muted/20"
           bind:value={newCommentDraft}
           placeholder={t("notes.commentPlaceholder")}
           aria-label={t("notes.commentInput")}
         ></textarea>
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="flex flex-wrap items-center justify-end gap-2">
           <button
-            class="rounded-md bg-primary px-2.5 py-1.5 text-[0.8rem] font-medium text-primary-foreground disabled:opacity-50"
+            class="h-8 rounded-md bg-primary px-3 text-[0.8rem] font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             type="button"
             disabled={!newCommentDraft.trim() || !activeParent}
             onclick={() => {
@@ -205,24 +207,27 @@
         </div>
       </div>
 
-      <div class="mt-3 flex min-w-0 flex-col gap-2">
-        {#if notes.commentsLoading}
-          <div class="text-[0.8rem] text-muted-foreground">{t("notes.loadingComments")}</div>
+      <div class="min-h-0 min-w-0 space-y-2 overflow-y-auto px-1 pb-2">
+        {#if notes.commentsLoading && notes.commentThreads.length === 0}
+          <div class="px-4 py-6 text-center text-[0.8rem] text-muted-foreground">{t("notes.loadingComments")}</div>
         {:else if notes.commentThreads.length === 0}
-          <div class="text-[0.8rem] text-muted-foreground">{t("notes.noComments")}</div>
+          <div class="flex flex-col items-center gap-2 px-4 py-8 text-center text-muted-foreground">
+            <MessageSquare class="size-5" strokeWidth={1.5} />
+            <span class="text-[0.8rem]">{t("notes.noComments")}</span>
+          </div>
         {:else}
           {#each notes.commentThreads as thread (thread.id)}
             <article
-              class={`rounded-md border p-2 ${
+              class={`rounded-lg px-3 py-3 ${
                 thread.unread
-                  ? "border-primary/50 bg-primary/5"
-                  : "border-border bg-background"
+                  ? "bg-primary/5"
+                  : ""
               }`}
             >
-              <div class="flex flex-wrap items-start justify-between gap-2">
+              <div class="flex items-start justify-between gap-2">
                 <div class="min-w-0">
                   <div class="flex min-w-0 flex-wrap items-center gap-1.5">
-                    <div class="truncate text-[0.8rem] font-medium text-foreground">
+                    <div class="line-clamp-2 text-[0.8rem] font-medium text-foreground">
                       {threadLabel(thread)}
                     </div>
                     {#if thread.unread}
@@ -231,11 +236,6 @@
                       </span>
                     {/if}
                   </div>
-                  {#if notesCommentThreadSnippet(thread)}
-                    <div class="mt-0.5 line-clamp-2 text-[0.733333rem] text-muted-foreground">
-                      {notesCommentThreadSnippet(thread)}
-                    </div>
-                  {/if}
                   {#if threadAnchorMissing(thread)}
                     <div class="mt-0.5 text-[0.733333rem] text-muted-foreground">
                       {t("notes.inlineCommentAnchorMissing")}
@@ -243,7 +243,7 @@
                   {/if}
                 </div>
                 <button
-                  class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[0.733333rem] text-muted-foreground hover:bg-accent hover:text-foreground"
+                  class="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-[0.733333rem] text-muted-foreground hover:bg-accent hover:text-foreground"
                   type="button"
                   onclick={() => {
                     void notes.setCommentThreadResolved(thread.id, thread.status !== "resolved");
@@ -259,9 +259,9 @@
                 </button>
               </div>
 
-              <div class="mt-2 flex min-w-0 flex-col gap-1.5">
+              <div class="mt-3 flex min-w-0 flex-col gap-3">
                 {#each thread.comments as comment (comment.id)}
-                  <div class="rounded-md bg-muted/40 px-2 py-1.5">
+                  <div class="min-w-0">
                     <div class="flex flex-wrap items-center justify-between gap-2 text-[0.733333rem] text-muted-foreground">
                       <span>{displayName(comment)}, {commentTime(comment)}</span>
                       <span class="flex items-center gap-1">
@@ -286,7 +286,7 @@
                     </div>
                     {#if editingCommentId === comment.id}
                       <textarea
-                        class="mt-1 min-h-14 w-full resize-y rounded-md border border-input bg-background px-2 py-1.5 text-[0.866667rem] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        class="mt-1 min-h-14 w-full resize-y rounded-md border border-input bg-background px-2 py-1.5 text-[0.866667rem] outline-none focus-visible:bg-muted/20"
                         bind:value={editingDraft}
                         aria-label={t("notes.editCommentInput")}
                       ></textarea>
@@ -324,7 +324,7 @@
               {#if replyThreadId === thread.id}
                 <div class="mt-2">
                   <textarea
-                    class="min-h-14 w-full resize-y rounded-md border border-input bg-background px-2 py-1.5 text-[0.866667rem] outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                    class="min-h-14 w-full resize-y rounded-md border border-input bg-background px-2 py-1.5 text-[0.866667rem] outline-none placeholder:text-muted-foreground focus-visible:bg-muted/20"
                     value={replyDrafts[thread.id] ?? ""}
                     placeholder={t("notes.replyPlaceholder")}
                     aria-label={t("notes.replyCommentInput")}

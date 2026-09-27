@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import {
     pickNotesPageCoverImageFile,
     saveNotesPageCoverImageDataUrl,
@@ -24,20 +25,25 @@
   } from "$lib/notes/page-cover";
   import type { NotesPageCover } from "$lib/notes/types";
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
+  import { dismissOnOutside } from "$lib/utils/dismiss-on-outside";
+  import { portal } from "$lib/utils/portal";
   import ImageIcon from "@lucide/svelte/icons/image";
   import LinkIcon from "@lucide/svelte/icons/link";
   import Save from "@lucide/svelte/icons/save";
-  import Trash2 from "@lucide/svelte/icons/trash-2";
   import Upload from "@lucide/svelte/icons/upload";
 
   type CoverTab = "presets" | "upload" | "url";
 
   let {
     cover,
+    trigger,
+    style,
     onSelect,
     onClose,
   }: {
     cover: NotesPageCover | null;
+    trigger: HTMLElement | null;
+    style: string;
     onSelect: (cover: NotesPageCover | null) => void;
     onClose: () => void;
   } = $props();
@@ -56,6 +62,7 @@
     ? ["presets", "upload", "url"]
     : ["presets", "upload"]);
   let activeTab = $state<CoverTab>("presets");
+  let panelElement: HTMLDivElement | null = $state(null);
   let fileInput = $state<HTMLInputElement>();
   let urlDraft = $state("");
   let error = $state<string | null>(null);
@@ -63,6 +70,13 @@
   let lastCoverUrl = "";
 
   $effect(() => mobileBackStack.activate({ handle: onClose }));
+
+  onMount(() => {
+    const frame = requestAnimationFrame(() => {
+      panelElement?.querySelector<HTMLButtonElement>('[role="tab"]')?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  });
 
   $effect(() => {
     const nextUrl = notesPageCoverUrl(cover) ?? "";
@@ -76,6 +90,19 @@
     if (tab === "presets") return t("notes.pageCoverGenerated");
     if (tab === "upload") return t("notes.pageCoverLocal");
     return t("notes.pageCoverExternal");
+  }
+
+  function handleTabKeydown(event: KeyboardEvent, index: number): void {
+    let nextIndex = index;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % tabs.length;
+    else if (event.key === "ArrowLeft") nextIndex = (index - 1 + tabs.length) % tabs.length;
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = tabs.length - 1;
+    else return;
+    event.preventDefault();
+    activeTab = tabs[nextIndex];
+    error = null;
+    panelElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[nextIndex]?.focus();
   }
 
   function presetLabel(preset: NotesPageCoverPreset): string {
@@ -245,7 +272,16 @@
 </script>
 
 <div
-  class="absolute right-0 top-9 z-30 max-h-[min(26rem,calc(100vh-1rem))] w-[min(18rem,calc(100vw-1rem))] overflow-auto rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-lg"
+  bind:this={panelElement}
+  use:portal
+  use:dismissOnOutside={{ onDismiss: (reason, event) => {
+    if (reason === "outside-pointer" && event.target instanceof Node && trigger?.contains(event.target)) return;
+    if (reason === "escape") trigger?.focus({ preventScroll: true });
+    onClose();
+  } }}
+  class="fixed z-90 flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl"
+  {style}
+  role="dialog"
   aria-label={t("notes.pageCover")}
   data-app-floating-surface
   onpaste={(event) => { void handlePaste(event); }}
@@ -259,53 +295,72 @@
     tabindex="-1"
     onchange={(event) => { void handleFileInput(event); }}
   />
-  <div class="mb-2 grid grid-cols-3 gap-1">
-    {#each tabs as tab}
+  <div class="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border/70 px-3">
+    <div class="flex min-w-0 items-center gap-3" role="tablist" aria-label={t("notes.pageCover")}>
+    {#each tabs as tab, index}
       <button
         type="button"
-        class={`rounded px-2 py-1 text-[0.733333rem] ${
-          activeTab === tab ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+        id={`notes-cover-tab-${tab}`}
+        role="tab"
+        aria-selected={activeTab === tab}
+        aria-controls="notes-cover-tab-panel"
+        tabindex={activeTab === tab ? 0 : -1}
+        class={`h-12 border-b-2 px-0.5 text-[0.866667rem] transition-colors ${
+          activeTab === tab ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
         }`}
         onclick={() => {
           activeTab = tab;
           error = null;
         }}
+        onkeydown={(event) => handleTabKeydown(event, index)}
       >
         {tabLabel(tab)}
       </button>
     {/each}
+    </div>
+    {#if cover}
+      <button
+        class="h-9 shrink-0 px-1 text-[0.866667rem] text-muted-foreground hover:text-destructive"
+        type="button"
+        disabled={uploading}
+        onclick={() => onSelect(null)}
+      >
+        {t("notes.removePageCover")}
+      </button>
+    {/if}
   </div>
 
+  <div id="notes-cover-tab-panel" role="tabpanel" aria-labelledby={`notes-cover-tab-${activeTab}`} class="min-h-0 overflow-y-auto p-3">
   {#if activeTab === "presets"}
-    <div class="grid gap-2">
+    <div class="grid grid-cols-2 gap-2">
       {#each NOTES_PAGE_COVER_PRESETS as preset}
         <button
           type="button"
-          class="group flex h-16 w-full items-end overflow-hidden rounded-md border border-border p-2 text-left shadow-sm hover:border-foreground/30 disabled:cursor-not-allowed disabled:opacity-50"
+          class="group flex h-24 w-full items-end overflow-hidden rounded-lg border border-border/70 p-2 text-left transition-[border-color,transform] hover:-translate-y-0.5 hover:border-foreground/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
           style={`background: ${notesPageCoverPresetBackground(preset)}`}
           disabled={uploading}
           aria-label={t("notes.usePageCover", presetLabel(preset))}
           data-app-tooltip={t("notes.usePageCover", presetLabel(preset))}
           onclick={() => { void choosePreset(preset); }}
         >
-          <span class="rounded bg-background/85 px-2 py-1 text-[0.733333rem] font-medium text-foreground shadow-sm">
+          <span class="rounded-md bg-background/90 px-2 py-1 text-[0.733333rem] font-medium text-foreground shadow-sm">
             {presetLabel(preset)}
           </span>
         </button>
       {/each}
     </div>
   {:else if activeTab === "upload"}
-    <div class="grid gap-2">
+    <div class="grid gap-3">
       <button
         type="button"
-        class="flex min-h-14 w-full items-center justify-center gap-2 rounded-md bg-muted/50 text-[0.866667rem] text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+        class="flex min-h-32 w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-muted/30 text-[0.866667rem] text-foreground hover:border-foreground/40 hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
         disabled={uploading}
         onclick={() => { void chooseLocalFile(); }}
       >
-        <Upload class="size-4" />
-        {t("notes.uploadPageCover")}
+        <Upload class="size-5 text-muted-foreground" />
+        <span class="font-medium">{t("notes.uploadPageCover")}</span>
+        <span class="text-[0.733333rem] text-muted-foreground">{t("notes.pageCoverPasteHint")}</span>
       </button>
-      <div class="text-center text-[0.733333rem] text-muted-foreground">{t("notes.pageCoverPasteHint")}</div>
       <div class="flex items-center justify-center gap-1 text-[0.733333rem] text-muted-foreground">
         <ImageIcon class="size-3.5" />
         <span>{t("notes.pageCoverImageTypes")}</span>
@@ -313,29 +368,29 @@
     </div>
   {:else}
     <form
-      class="grid gap-2"
+      class="grid gap-3"
       onsubmit={(event) => {
         event.preventDefault();
         saveExternalCover();
       }}
     >
-      <label class="block text-[0.733333rem] font-medium text-muted-foreground" for="notes-cover-url">
+      <label class="block text-[0.866667rem] font-medium text-foreground" for="notes-cover-url">
         {t("notes.pageCoverUrl")}
       </label>
-      <div class="flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5">
+      <div class="flex h-10 items-center gap-2 rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
         <LinkIcon class="size-3.5 shrink-0 text-muted-foreground" />
         <input
           id="notes-cover-url"
-          class="min-w-0 flex-1 bg-transparent text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground"
+          class="min-w-0 flex-1 bg-transparent text-[0.866667rem] text-foreground outline-none placeholder:text-muted-foreground"
           type="url"
           bind:value={urlDraft}
           placeholder={t("notes.pageCoverUrlPlaceholder")}
         />
       </div>
       <button
-        class="flex items-center justify-center gap-1.5 rounded bg-primary px-2 py-1.5 text-[0.8rem] text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+        class="flex h-9 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-[0.866667rem] font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
         type="submit"
-        disabled={!urlDraft.trim()}
+        disabled={uploading || !urlDraft.trim()}
       >
         <Save class="size-3.5" />
         <span>{t("notes.savePageCover")}</span>
@@ -344,19 +399,7 @@
   {/if}
 
   {#if error}
-    <div class="mt-2 rounded-md bg-destructive/10 px-2 py-1 text-[0.8rem] text-destructive">{error}</div>
+    <div class="mt-3 rounded-md bg-destructive/10 px-3 py-2 text-[0.8rem] text-destructive" role="alert">{error}</div>
   {/if}
-
-  {#if cover}
-    <button
-      class="mt-2 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[0.8rem] text-muted-foreground hover:bg-accent hover:text-foreground"
-      type="button"
-      onclick={() => {
-        onSelect(null);
-      }}
-    >
-      <Trash2 class="size-3.5" />
-      <span>{t("notes.removePageCover")}</span>
-    </button>
-  {/if}
+  </div>
 </div>

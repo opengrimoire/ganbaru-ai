@@ -34,6 +34,8 @@ Automated delayed-storage coverage connects the actual action, persistence, tree
 ## Block acceptance
 
 - Check that the title action row sits evenly between the top edge of the note content and the title, with and without a cover, in full and side views.
+- Open Add icon, Add cover, and Add comment near each viewport edge in full, side, and center views. Confirm each panel aligns with the left edge of its title action when space permits and stays visible after scrolling or resizing. Clicking each title action again should close its panel. Check the cover tabs, upload, URL, removal, and comment composer and thread scrolling in light and dark themes. The discussion panel should show no comment count or divider lines, and Show resolved should use the standard Notes checkbox. Comment fields should gain a subtle fill without an added focus outline. Open the actions with a keyboard, then confirm focus enters each panel and Escape returns focus to its trigger.
+- On a page with open and resolved threads, toggle Show resolved repeatedly by clicking both the square and the text. Each click should change the filter once without another loading state, including after marking a thread read or resolving a thread. Switching pages must not reuse the earlier page's threads.
 - Confirm the page title and the first plain text block start at the same left edge in full and side page views, without shifting the title right.
 - Confirm block rows have no left-side add or drag buttons. Right-click a non-text block surface to open block actions, while right-clicking editable text opens the text menu. Existing comment counts remain visible without shifting block content.
 - Insert, convert, duplicate, move, nest, Trash, restore, and delete each supported block family.

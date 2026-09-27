@@ -198,6 +198,7 @@ interface ProjectIconPickerPanelPlacementInput {
   boundaryRect: ProjectIconPickerRect;
   preferredWidth: number;
   preferredHeight: number;
+  align?: "start" | "end";
   gap?: number;
   inset?: number;
 }
@@ -524,6 +525,7 @@ export function projectIconPickerPanelPlacement({
   boundaryRect,
   preferredWidth,
   preferredHeight,
+  align = "end",
   gap = 4,
   inset = 8,
 }: ProjectIconPickerPanelPlacementInput): ProjectIconPickerPanelPlacement {
@@ -535,7 +537,7 @@ export function projectIconPickerPanelPlacement({
   const bottomBound = boundaryRect.bottom - safeInset;
   const maxWidth = finiteOrZero(rightBound - leftBound);
   const width = Math.min(finiteOrZero(preferredWidth), maxWidth);
-  const preferredLeft = triggerRect.right - width;
+  const preferredLeft = align === "start" ? triggerRect.left : triggerRect.right - width;
   const left = clamp(preferredLeft, leftBound, rightBound - width);
   const preferredTop = triggerRect.bottom + safeGap;
   const top = Math.max(topBound, preferredTop);
