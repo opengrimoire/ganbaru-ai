@@ -106,6 +106,7 @@ export const PROJECT_TOOLBAR_PANEL_EDGE_MARGIN = 8;
 export const PROJECT_TOOLBAR_PANEL_GAP = 6;
 export const PROJECT_TOOLBAR_PANEL_WIDTH = 380;
 export const PROJECT_TOOLBAR_PANEL_HEIGHT = 560;
+export const PROJECT_SETTINGS_PANEL_MAX_HEIGHT = 680;
 export const PROJECT_TOOLBAR_PANEL_COMPACT_BREAKPOINT = 460;
 
 function boundedNumber(value: number): number {

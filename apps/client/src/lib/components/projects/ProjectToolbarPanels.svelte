@@ -28,6 +28,7 @@
     projectPriorityDisplayLabel,
   } from "$lib/projects/project-display";
   import {
+    PROJECT_SETTINGS_PANEL_MAX_HEIGHT,
     projectToolbarPanelGeometry,
     type ProjectListColumnControl,
     type ProjectToolbarPanel,
@@ -193,7 +194,7 @@
   }
 
   function panelPreferredHeight(currentPanel: ProjectToolbarPanel): number {
-    if (currentPanel === "settings") return 680;
+    if (currentPanel === "settings") return PROJECT_SETTINGS_PANEL_MAX_HEIGHT;
     if (currentPanel === "customize") return 360;
     if (currentPanel === "group") return 240;
     return 440;

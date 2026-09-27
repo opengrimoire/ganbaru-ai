@@ -20,7 +20,10 @@
     isNotesHistoryRetentionDays,
     type NotesHistoryRetentionDays,
   } from "$lib/notes/history-retention";
-  import { projectToolbarPanelGeometry } from "$lib/projects/project-toolbar";
+  import {
+    PROJECT_SETTINGS_PANEL_MAX_HEIGHT,
+    projectToolbarPanelGeometry,
+  } from "$lib/projects/project-toolbar";
   import { getProjects } from "$lib/stores/projects.svelte";
   import { getNotes } from "$lib/stores/notes.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
@@ -137,13 +140,12 @@
       viewportWidth: viewport.width,
       viewportHeight: viewport.height,
       preferredWidth: 430,
-      preferredHeight: 340,
+      preferredHeight: PROJECT_SETTINGS_PANEL_MAX_HEIGHT,
     });
     panelStyle = [
       `left: ${Math.round(geometry.left)}px`,
       `top: ${Math.round(geometry.top)}px`,
       `width: ${Math.round(geometry.width)}px`,
-      `height: ${Math.round(geometry.maxHeight)}px`,
       `max-height: ${Math.round(geometry.maxHeight)}px`,
     ].join("; ");
   }
