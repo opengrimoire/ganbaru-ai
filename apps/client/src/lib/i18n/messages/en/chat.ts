@@ -22,6 +22,7 @@ export const chat = {
   activeChats: "Active chats",
   hiddenGroup: "Hidden",
   settings: "Chat settings",
+  projectSettingsTitle: (projectName: string) => `Chat settings for ${projectName}`,
   openFolder: "Open working folder",
   detach: "Open in detached window",
   copyThreadId: "Copy thread ID",

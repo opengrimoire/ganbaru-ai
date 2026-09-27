@@ -175,7 +175,7 @@ describe("ChatChannelRail", () => {
     });
     await tick();
     expect(target.querySelector('.channel-row[aria-current]')).toBeNull();
-    expect(target.querySelector('.archive-button')?.getAttribute("aria-current")).toBe("page");
+    expect(target.querySelector('.archive-button')).toBeNull();
   });
 
   it("closes the mobile surface after navigating to a channel", async () => {

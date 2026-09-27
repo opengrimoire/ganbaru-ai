@@ -2,7 +2,6 @@
   import { onMount, tick } from "svelte";
   import { COMPACT_IDENTITY_ICON_SIZE, COMPACT_IDENTITY_ICON_STROKE_WIDTH } from "$lib/icon-sizing";
   import ExplorerSearch from "$lib/components/ExplorerSearch.svelte";
-  import Archive from "@lucide/svelte/icons/archive";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import ChevronsLeft from "@lucide/svelte/icons/chevrons-left";
@@ -267,11 +266,6 @@
     if (presentation === "surface") onCollapse();
   }
 
-  function openArchive(): void {
-    chat.openChannelArchive();
-    if (presentation === "surface") onCollapse();
-  }
-
   /** Focus the persistent search field after the rail has opened. */
   function openSearch(): void {
     void tick().then(() => railElement?.querySelector<HTMLInputElement>('input[type="search"]')?.focus());
@@ -421,9 +415,6 @@
 
     </div>
 
-    <div class="shrink-0 p-2">
-      <button type="button" class="archive-button flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[0.8rem] text-muted-foreground hover:bg-accent hover:text-foreground" aria-current={chat.channelArchiveOpen ? "page" : undefined} class:bg-accent={chat.channelArchiveOpen} onclick={openArchive}><Archive size={15} /><span class="min-w-0 flex-1 truncate">{t("chat.channels.archive")}</span>{#if chat.archivedChannels.length > 0}<span class="rounded bg-muted px-1.5 text-[0.666667rem]">{chat.archivedChannels.length}</span>{/if}</button>
-    </div>
   </aside>
 {:else if showCollapsedStrip}
   <aside class="explorer-sidebar flex h-full flex-col items-center" aria-label={t("chat.channels.explorerLabel")}><div class="explorer-toolbar"><button type="button" class="explorer-icon" aria-expanded="false" data-app-tooltip={t("chat.openRail")} aria-label={t("chat.openRail")} onclick={onExpand}><ChevronsRight size={16} /></button></div></aside>

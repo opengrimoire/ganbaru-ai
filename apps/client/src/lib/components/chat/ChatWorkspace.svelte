@@ -45,6 +45,7 @@
   import ChatWorkspaceHeader from "./ChatWorkspaceHeader.svelte";
   import ChatFirstUse from "./ChatFirstUse.svelte";
   import ChatHeaderActions from "./ChatHeaderActions.svelte";
+  import ChatProjectSettingsPanel from "./ChatProjectSettingsPanel.svelte";
   import ChatChannelRail from "./ChatChannelRail.svelte";
   import ChatChannelArchive from "./ChatChannelArchive.svelte";
   import ChatChannelFeed from "./ChatChannelFeed.svelte";
@@ -94,6 +95,9 @@
   let bottomPanelSkipCloseTransition = $state(false);
   let reducedMotion = $state(false);
   let headerEditingTitle = $state(false);
+  let projectSettingsOpen = $state(false);
+  let projectSettingsTrigger = $state<HTMLButtonElement | null>(null);
+  let projectSettingsProjectId = $state<string | null>(null);
   let inspectorWasOpen = false;
   let inspectorReturnFocus: HTMLElement | null = null;
   let replyThreadWasOpen = false;
@@ -306,6 +310,34 @@
     if (visibleRailOpen) closeRail();
     else openRail();
   }
+
+  function toggleProjectSettings(trigger: HTMLButtonElement): void {
+    if (projectSettingsOpen) {
+      closeProjectSettings();
+      return;
+    }
+    projectSettingsTrigger = trigger;
+    projectSettingsProjectId = projects.selectedProjectId;
+    projectSettingsOpen = true;
+  }
+
+  function closeProjectSettings(): void {
+    projectSettingsOpen = false;
+    projectSettingsTrigger = null;
+    projectSettingsProjectId = null;
+  }
+
+  function openArchiveFromProjectSettings(): void {
+    closeProjectSettings();
+    chat.openChannelArchive();
+    if (mobileShell) closeRail();
+  }
+
+  $effect(() => {
+    if (projectSettingsOpen && projectSettingsProjectId !== projects.selectedProjectId) {
+      closeProjectSettings();
+    }
+  });
 
   $effect(() => {
     if (!chat.loading) {
@@ -972,8 +1004,22 @@
   </aside>
 
   <div bind:this={globalActionsElement} class="chat-global-actions">
-    <ChatHeaderActions {bottomPanelOpen} onToggleBottomPanel={toggleBottomPanel} onRename={() => { headerEditingTitle = true; }} />
+    <ChatHeaderActions
+      {bottomPanelOpen}
+      projectName={projects.selectedProject?.name ?? null}
+      {projectSettingsOpen}
+      onToggleBottomPanel={toggleBottomPanel}
+      onToggleProjectSettings={toggleProjectSettings}
+    />
   </div>
+  {#if projectSettingsOpen && projectSettingsTrigger && projects.selectedProject}
+    <ChatProjectSettingsPanel
+      projectName={projects.selectedProject.name}
+      triggerElement={projectSettingsTrigger}
+      onClose={closeProjectSettings}
+      onOpenArchive={openArchiveFromProjectSettings}
+    />
+  {/if}
 
   {#if bottomPanelMounted}
     <div class="chat-panel-separator chat-bottom-separator" class:hidden={!bottomPanelVisible} class:active={resizingBottomPanel}><input type="range" min={MIN_BOTTOM_PANEL_HEIGHT} max={bottomPanelResizeMaximum()} step="any" value={bottomPanelHeight} aria-label={t("chat.resizeBottomPanel")} onpointerdown={beginBottomPanelResize} onkeydown={resizeBottomPanelFromKey} ondblclick={(event) => { event.preventDefault(); fitBottomPanelToAvailableSpace(); }} /><span class="chat-panel-separator-line" aria-hidden="true"></span></div>
