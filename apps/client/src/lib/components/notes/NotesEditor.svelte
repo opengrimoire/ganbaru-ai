@@ -1040,7 +1040,7 @@
           <button
             bind:this={activityButton}
             type="button"
-            class="flex h-7 max-w-40 items-center rounded-md px-2 text-[0.8rem] text-foreground transition-colors hover:bg-accent focus:bg-accent"
+            class="flex h-7 max-w-40 items-center rounded-md px-2 text-[0.8rem] text-foreground transition-colors hover:bg-accent focus-visible:bg-accent"
             aria-label={activityPanelLabel}
             aria-expanded={activityPanelOpen}
             aria-controls={activityPanelId}
