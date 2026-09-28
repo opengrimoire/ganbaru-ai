@@ -119,6 +119,33 @@ describe("ChatChannelRail", () => {
     expect(document.activeElement).toBe(input);
   });
 
+  it("shows a channel name tooltip only while the label is clipped", async () => {
+    component = mount(ChatChannelRail, {
+      target,
+      props: { expanded: true, showCollapsedStrip: true, onExpand: vi.fn(), onCollapse: vi.fn() },
+    });
+    await tick();
+    const label = target.querySelector<HTMLElement>(".channel-row .truncate");
+    if (!label) throw new Error("Channel label is missing");
+    let renderedWidth = 80;
+    Object.defineProperties(label, {
+      scrollWidth: { configurable: true, get: () => renderedWidth },
+      clientWidth: { configurable: true, value: 100 },
+    });
+
+    expect(label.hasAttribute("title")).toBe(false);
+    label.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+    expect(label.dataset.appTooltip).toBeUndefined();
+
+    renderedWidth = 150;
+    label.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+    expect(label.dataset.appTooltip).toBe("general");
+
+    renderedWidth = 100;
+    label.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+    expect(label.dataset.appTooltip).toBeUndefined();
+  });
+
   it("focuses new section drafts and cancels them without changing navigation", async () => {
     component = mount(ChatChannelRail, {
       target,

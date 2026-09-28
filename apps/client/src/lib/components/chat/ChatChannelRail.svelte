@@ -161,6 +161,33 @@
     return section.channelIds.flatMap((id) => byId.get(id) ?? []);
   }
 
+  /** Show a full channel name only when its rendered label is clipped. */
+  function overflowTooltip(node: HTMLElement, name: string): {
+    update: (nextName: string) => void;
+    destroy: () => void;
+  } {
+    let currentName = name;
+    const sync = (): void => {
+      if (node.scrollWidth - node.clientWidth > 2) node.dataset.appTooltip = currentName;
+      else delete node.dataset.appTooltip;
+    };
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(sync);
+    observer?.observe(node);
+    node.addEventListener("pointerover", sync);
+    queueMicrotask(sync);
+    return {
+      update(nextName: string): void {
+        currentName = nextName;
+        sync();
+      },
+      destroy(): void {
+        observer?.disconnect();
+        node.removeEventListener("pointerover", sync);
+        delete node.dataset.appTooltip;
+      },
+    };
+  }
+
   function persist(next: ChatSidebarSection[]): void {
     sections = next;
     if (loadedProjectId) saveChatSidebarSections(loadedProjectId, next);
@@ -666,7 +693,7 @@
   <div class="channel-row-group explorer-row" class:explorer-selected={chat.selectedChannelId === channel.id && !chat.channelArchiveOpen} role="group" aria-label={channel.name} draggable="true" ondragstart={(event) => beginDrag(event, channel.id)}>
     <button type="button" class="channel-row explorer-row-label" class:selected={chat.selectedChannelId === channel.id && !chat.channelArchiveOpen} aria-current={chat.selectedChannelId === channel.id && !chat.channelArchiveOpen ? "page" : undefined} onclick={() => void selectChannel(channel.id)} oncontextmenu={(event) => void openChannelContextMenu(event, channel)}>
       <Hash size={COMPACT_IDENTITY_ICON_SIZE} strokeWidth={COMPACT_IDENTITY_ICON_STROKE_WIDTH} class="explorer-row-icon" />
-      <span class="min-w-0 flex-1 truncate" title={channel.name}>{channel.name}</span>
+      <span class="min-w-0 flex-1 truncate" use:overflowTooltip={channel.name}>{channel.name}</span>
     </button>
     <button type="button" class="explorer-icon explorer-row-action" aria-label={`${t("chat.channels.actions")}: ${channel.name}`} data-app-tooltip-disabled="true" aria-haspopup="menu" aria-expanded={channelContextMenu?.channel.id === channel.id} onclick={(event) => void openChannelContextMenu(event, channel)}><EllipsisVertical size={14} /></button>
   </div>
