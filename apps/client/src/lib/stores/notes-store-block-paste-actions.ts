@@ -1,4 +1,4 @@
-import { appendNotesBlockChildren, updateNotesBlock } from "$lib/api/notes";
+import { appendNotesBlockChildren, moveNotesBlock, updateNotesBlock } from "$lib/api/notes";
 import { cloneNotesJson } from "$lib/notes/json-clone";
 import { notesPasteAppendRequests, planNotesPlainTextPaste } from "$lib/notes/block-clipboard";
 import { planNotesRichHtmlPaste } from "$lib/notes/rich-text-paste";
@@ -50,6 +50,7 @@ interface NotesBlockPasteActionsContext {
   blockById: (blockId: string) => NotesBlock | undefined;
   localApplyBlockUpdate: (blockId: string, update: NotesBlockUpdate) => void;
   localInsertBlockAfter: (block: NotesBlock, afterBlockId: string | null) => void;
+  localInsertBlockBefore: (block: NotesBlock, beforeBlockId: string) => void;
   requestBlockFocus: (blockId: string | null, selection?: NotesTextSelection | null) => void;
   scheduleBlockSave: (blockId: string, update: NotesBlockUpdate) => void;
   saveBlockNow: (blockId: string, update: NotesBlockUpdate) => Promise<void>;
@@ -104,6 +105,37 @@ export function createNotesBlockPasteActions(
     const block = context.blockById(blockId);
     const pageId = context.readSelectedPageId();
     if (!block || !notesEnterSplitsRichTextBlock(block.type) || !pageId) return;
+    if (block.type === "toggle" && selectionStart === 0 && selectionEnd === 0
+      && blockPlainText(block).length > 0) {
+      const before = context.undoSnapshotForBlocks([blockId], blockId, START_OF_BLOCK_SELECTION);
+      const newBlockId = crypto.randomUUID();
+      const parent = cloneNotesJson(block.parent);
+      const write = cloneNotesJson({
+        id: newBlockId,
+        ...blockUpdateWithIndent(
+          createBlockWriteFromRichText(newBlockId, "toggle", [], blockColor(block)),
+          blockIndent(block),
+        ),
+      });
+      context.localInsertBlockBefore(context.optimisticBlockFromWrite(write, parent), blockId);
+      context.requestBlockFocus(newBlockId, START_OF_BLOCK_SELECTION);
+      context.recordUndo(
+        "create",
+        before,
+        context.undoSnapshotForBlocks([blockId, newBlockId], newBlockId, START_OF_BLOCK_SELECTION),
+        `create:enter:${parentIdForBlock(block)}`,
+      );
+      let appended = false;
+      const persistence = context.enqueueEditorMutation(async () => {
+        if (!appended) {
+          await appendNotesBlockChildren({ parent, after: blockId, children: [write] });
+          appended = true;
+        }
+        await moveNotesBlock(newBlockId, { parent, after: null, before: blockId });
+      });
+      context.trackOptimisticBlockWrites([blockId, newBlockId], persistence);
+      return;
+    }
     const beforeSelection = {
       start: Math.min(selectionStart, selectionEnd),
       end: Math.max(selectionStart, selectionEnd),

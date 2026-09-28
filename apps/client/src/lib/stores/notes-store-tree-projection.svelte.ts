@@ -101,6 +101,39 @@ export class NotesTreeProjectionController {
     const current = (this.childIdsByParentId[parentId] ?? []).filter((id) => id !== block.id);
     const afterIndex = afterBlockId ? current.indexOf(afterBlockId) : -1;
     const insertIndex = afterIndex >= 0 ? afterIndex + 1 : current.length;
+    this.insertBlockAt(block, parentId, current, insertIndex);
+  }
+
+  insertBlockBefore(block: NotesBlock, beforeBlockId: string): void {
+    const parentId = parentIdForBlock(block);
+    const current = (this.childIdsByParentId[parentId] ?? []).filter((id) => id !== block.id);
+    const beforeIndex = current.indexOf(beforeBlockId);
+    if (beforeIndex < 0) throw new Error("Notes insertion target not found");
+    const pageId = this.options.readSelectedPageId();
+    if (pageId) {
+      const siblings = this.blockOutlines
+        .filter((outline) => (outline.parent.type === "page_id"
+          ? outline.parent.page_id : outline.parent.block_id) === parentId)
+        .sort((left, right) => left.sort_order - right.sort_order || left.id.localeCompare(right.id));
+      const outlineIndex = siblings.findIndex((outline) => outline.id === beforeBlockId);
+      if (outlineIndex >= 0) {
+        siblings.splice(outlineIndex, 0, notesBlockOutlineFromBlock(block, pageId, outlineIndex));
+        const siblingIds = new Set(siblings.map((outline) => outline.id));
+        this.blockOutlines = [
+          ...this.blockOutlines.filter((outline) => !siblingIds.has(outline.id)),
+          ...siblings.map((outline, index) => ({ ...outline, sort_order: index })),
+        ];
+      }
+    }
+    this.insertBlockAt(block, parentId, current, beforeIndex);
+  }
+
+  private insertBlockAt(
+    block: NotesBlock,
+    parentId: string,
+    current: string[],
+    insertIndex: number,
+  ): void {
     this.childIdsByParentId = {
       ...this.childIdsByParentId,
       [parentId]: [...current.slice(0, insertIndex), block.id, ...current.slice(insertIndex)],

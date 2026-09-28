@@ -142,6 +142,7 @@ describe("notes store block actions", () => {
         };
       },
       localInsertBlockAfter: () => undefined,
+      localInsertBlockBefore: () => undefined,
       localRemoveLeafBlock: () => false,
       saveBlockNow,
       scheduleBlockSave,

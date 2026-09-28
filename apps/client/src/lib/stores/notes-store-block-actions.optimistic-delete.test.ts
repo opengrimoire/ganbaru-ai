@@ -109,6 +109,7 @@ describe("notes store block actions", () => {
       refreshOpenLinks: async () => undefined,
       localApplyBlockUpdate: (_blockId: string, _update: NotesBlockUpdate) => undefined,
       localInsertBlockAfter: () => undefined,
+      localInsertBlockBefore: () => undefined,
       localRemoveLeafBlock: (blockId) => {
         const next = notesTreeStateWithoutLeafBlock(state, blockId);
         if (!next) return false;

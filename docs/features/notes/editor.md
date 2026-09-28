@@ -38,7 +38,7 @@ The typed query remains in the editing row, with a search summary in the panel. 
 
 Enter in ordinary text splits the current block at the selection, removes selected text, preserves rich-text annotations on the correct side, and creates the appropriate sibling type.
 
-Paragraphs, list items, and to-dos continue their type. Headings, quotes, and callouts continue into a paragraph. Enter on a toggle label opens it and creates a paragraph child, moving the text after the caret into that child. Empty list items, to-dos, quotes, and callouts convert to a paragraph instead of creating an endless empty structure. Empty toggle labels still enter the toggle body.
+Paragraphs, list items, and to-dos continue their type. Headings, quotes, and callouts continue into a paragraph. Enter at the start of a nonempty toggle label inserts an empty sibling toggle before it. Enter elsewhere on a toggle label opens it and creates a paragraph child, moving the text after the caret into that child. Empty list items, to-dos, quotes, and callouts convert to a paragraph instead of creating an endless empty structure. Empty toggle labels still enter the toggle body.
 
 Shift+Enter inserts a soft line break. Code blocks keep Enter as a code newline and use a documented alternate command to leave the block.
 

@@ -261,6 +261,10 @@ function insertBlockAfter(block: NotesBlock, afterBlockId: string | null): void 
   treeProjection.insertBlockAfter(block, afterBlockId);
 }
 
+function insertBlockBefore(block: NotesBlock, beforeBlockId: string): void {
+  treeProjection.insertBlockBefore(block, beforeBlockId);
+}
+
 function removeLeafBlockLocally(blockId: string): boolean {
   return treeProjection.removeLeafBlock(blockId);
 }
@@ -916,6 +920,7 @@ const blockActions = createNotesBlockActions({
   refreshOpenLinks,
   localApplyBlockUpdate,
   localInsertBlockAfter: insertBlockAfter,
+  localInsertBlockBefore: insertBlockBefore,
   localRemoveLeafBlock: removeLeafBlockLocally,
   saveBlockNow,
   scheduleBlockSave,

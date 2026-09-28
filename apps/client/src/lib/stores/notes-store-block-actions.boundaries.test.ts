@@ -105,6 +105,7 @@ describe("Notes block action boundaries", () => {
       blockById: (id) => id === block.id ? block : undefined,
       localApplyBlockUpdate: () => undefined,
       localInsertBlockAfter: () => undefined,
+      localInsertBlockBefore: () => undefined,
       requestBlockFocus: () => undefined,
       scheduleBlockSave: () => undefined,
       saveBlockNow: async () => undefined,

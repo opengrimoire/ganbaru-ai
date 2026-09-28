@@ -116,6 +116,7 @@ export interface NotesBlockLocalMutationCapabilities {
   applyPostMutation: (result: NotesPostMutationResult) => void;
   localApplyBlockUpdate: (blockId: string, update: NotesBlockUpdate) => void;
   localInsertBlockAfter: (block: NotesBlock, afterBlockId: string | null) => void;
+  localInsertBlockBefore: (block: NotesBlock, beforeBlockId: string) => void;
   localRemoveLeafBlock: (blockId: string) => boolean;
 }
 
