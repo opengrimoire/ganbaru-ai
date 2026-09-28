@@ -14,6 +14,7 @@ While the editor title is being edited, the workspace header and sidebar show it
 Folders organize workspace-parented pages inside a project. They are navigation containers, not page blocks and not Markdown directories. Moving a page into a folder changes local placement without changing the page's canonical content.
 
 Folders can nest within practical bounds. Moving a folder or page rejects self-parenting, descendant cycles, inactive destinations, and destinations outside the effective project scope.
+Dragging onto a folder highlights its subtree. Dragging onto the project root highlights the explorer area without adding a separate drop row.
 
 ## Child pages
 

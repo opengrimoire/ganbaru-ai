@@ -9,7 +9,6 @@
   import ChevronsUpDown from "@lucide/svelte/icons/chevrons-up-down";
   import FileQuestionMark from "@lucide/svelte/icons/file-question-mark";
   import FolderPlus from "@lucide/svelte/icons/folder-plus";
-  import FolderRoot from "@lucide/svelte/icons/folder-root";
   import Search from "@lucide/svelte/icons/search";
   import SquarePen from "@lucide/svelte/icons/square-pen";
   import { getLocalization } from "$lib/i18n/translator.svelte";
@@ -122,15 +121,6 @@
 
   function navigationTargetKey(target: NotesNavigationDropTarget): string {
     return target.kind === "root" ? "root" : `${target.kind}:${target.id}`;
-  }
-
-  function navigationDropState(target: NotesNavigationDropTarget): "none" | "valid" | "invalid" {
-    return navigationDropStateForKey(navigationTargetKey(target));
-  }
-
-  function navigationDropStateForKey(targetKey: string): "none" | "valid" | "invalid" {
-    if (navigationDropTargetKey !== targetKey) return "none";
-    return navigationDropAllowed ? "valid" : "invalid";
   }
 
   function pageNavigationDropTarget(pageId: string): NotesNavigationDropTarget {
@@ -1146,6 +1136,8 @@
   <div
     bind:this={explorerScrollElement}
     class="min-h-0 flex-1 overflow-auto px-2 pb-2"
+    class:notes-navigation-root-drop-valid={navigationDropTargetKey === "root" && navigationDropAllowed}
+    class:notes-navigation-root-drop-invalid={navigationDropTargetKey === "root" && !navigationDropAllowed}
     role="region"
     aria-label={t("notes.explorerLabel")}
     data-notes-explorer-scroll
@@ -1282,20 +1274,6 @@
         onRefresh={() => { void refreshWorkingMarkdown(); }}
       />
     {/if}
-    {#if draggingNavigationItem}
-      <div
-        class={`sticky bottom-1 z-10 mt-2 flex min-h-9 items-center justify-center gap-1.5 rounded-md border px-2 text-[0.8rem] shadow-sm backdrop-blur-sm ${navigationDropState({ kind: "root" }) === "valid"
-          ? "notes-navigation-root-drop-valid text-foreground"
-          : navigationDropState({ kind: "root" }) === "invalid"
-            ? "border-border bg-accent/60 text-muted-foreground"
-            : "border-border bg-background/95 text-muted-foreground"}`}
-        role="status"
-        data-notes-navigation-drop-kind="root"
-      >
-        <FolderRoot class="size-3.5" strokeWidth={explorerIconStrokeWidth} />
-        <span>{t("notes.moveToProjectRoot")}</span>
-      </div>
-    {/if}
   </div>
   </div>
 
@@ -1418,8 +1396,11 @@
   }
 
   .notes-navigation-root-drop-valid {
-    border-color: color-mix(in oklab, var(--selection-background) 72%, var(--border));
-    background: var(--selection-background);
+    background: color-mix(in oklab, var(--selection-background) 55%, transparent);
+  }
+
+  .notes-navigation-root-drop-invalid {
+    background: color-mix(in oklab, var(--accent) 36%, transparent);
   }
 
   .notes-navigation-folder-drop-area-single {
