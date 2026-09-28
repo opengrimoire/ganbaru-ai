@@ -2,8 +2,10 @@
 
 import { describe, expect, it, vi } from "vitest";
 import type {
+  NotesPage,
   NotesPageSummaryWindow,
   NotesSearchWindow,
+  NotesWorkspaceShell,
 } from "$lib/notes/types";
 
 const backend = vi.hoisted(() => {
@@ -19,6 +21,7 @@ const backend = vi.hoisted(() => {
   return {
     archive: queue<NotesPageSummaryWindow>(),
     search: queue<NotesSearchWindow>(),
+    destinations: queue<NotesWorkspaceShell>(),
   };
 });
 
@@ -29,8 +32,49 @@ vi.mock("$lib/api/notes", async (importOriginal) => {
     listArchivedNotesPages: backend.archive.next,
     listTrashedNotesPages: vi.fn(),
     searchNotes: backend.search.next,
+    listNotesDestinationCandidates: backend.destinations.next,
   };
 });
+
+function destinationPage(id: string, folderId: string | null): NotesPage {
+  return {
+    object: "page",
+    id,
+    created_time: "2026-07-03T00:00:00.000Z",
+    last_edited_time: "2026-07-03T00:00:00.000Z",
+    parent: { type: "workspace", workspace: true },
+    folder_id: folderId,
+    in_trash: false,
+    archived: false,
+    icon: null,
+    cover: null,
+    properties: {},
+    url: null,
+    public_url: null,
+    source_provider: null,
+    source_object_id: null,
+    source_workspace_id: null,
+    source_last_edited_time: null,
+  };
+}
+
+function destinationShell(pages: NotesPage[]): NotesWorkspaceShell {
+  return {
+    pages,
+    folders: [],
+    navigation_pages: [],
+    navigation_folders: [],
+    navigation_page_ids_with_children: [],
+    page_ids_with_children: [],
+    missing_parent_page_ids: [],
+    trashed_parent_page_ids: [],
+    resolved_selected_page_id: null,
+    total_page_count: pages.length,
+    total_folder_count: 0,
+    next_page_cursor: null,
+    next_folder_cursor: null,
+  };
+}
 
 describe("Notes query controllers", () => {
   it("rejects a stale archive reload", async () => {
@@ -68,5 +112,40 @@ describe("Notes query controllers", () => {
     expect(backend.search.next).toHaveBeenLastCalledWith("new", 20, false, "current");
     backend.search.resolve(2, { results: [], next_cursor: null });
     await more;
+  });
+
+  it("keeps changed and removed pages current when a destination read finishes late", async () => {
+    const { createNotesLinksController } = await import("./notes-store-links.svelte");
+    const stale = destinationPage("page-a", "old-folder");
+    const current = destinationPage("page-a", "new-folder");
+    const extra = destinationPage("page-b", null);
+    let workspacePages: NotesPage[] = [stale];
+    const controller = createNotesLinksController({
+      readSelectedPageId: () => null,
+      readSelectedProjectId: () => "project-a",
+      readAllPages: () => workspacePages,
+      reloadSelectedPage: async () => undefined,
+      scheduleVisibleMetadataRefresh: () => undefined,
+    });
+
+    const pending = controller.reloadLinkResolutionPages();
+    workspacePages = [current];
+    controller.reconcileDestinationPages([current], []);
+    backend.destinations.resolve(0, destinationShell([stale, extra]));
+    await pending;
+    expect(controller.destinations).toEqual([current, extra]);
+
+    const movedAgain = destinationPage("page-a", "latest-folder");
+    workspacePages = [movedAgain];
+    controller.reconcileDestinationPages([movedAgain], []);
+    expect(controller.destinations).toEqual([movedAgain, extra]);
+
+    workspacePages = [];
+    controller.reconcileDestinationPages([], [current.id]);
+    expect(controller.destinations).toEqual([extra]);
+    const late = controller.reloadLinkResolutionPages();
+    backend.destinations.resolve(1, destinationShell([stale, extra]));
+    await late;
+    expect(controller.destinations).toEqual([extra]);
   });
 });

@@ -7,6 +7,7 @@ A page has a stable identity, title, parent, optional project, icon, cover, prop
 Page parents can represent workspace, page, data source, or other supported local contexts. Database row pages are ordinary Notes pages parented by a data source and use the same editor when opened.
 
 An empty page title is valid and receives a localized fallback in navigation. Renaming a page updates derived navigation and link presentation without changing stable link identity.
+While the editor title is being edited, the workspace header and sidebar show its draft. A committed rename or page move updates the open page and navigation without requiring a page or project switch.
 
 ## Folder model
 

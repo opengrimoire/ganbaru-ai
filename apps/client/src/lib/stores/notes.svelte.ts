@@ -20,6 +20,7 @@ import {
   type NotesPageOpenMode,
 } from "$lib/notes/page-open-mode";
 import {
+  mergeNotesNavigationPages,
   notesPageProjectId,
 } from "$lib/notes/project-membership";
 import {
@@ -106,6 +107,7 @@ const BLOCK_SAVE_DEBOUNCE_MS = 350;
 
 let pages = $state<NotesPage[]>([]);
 let allPages = $state<NotesPage[]>([]);
+let navigationMutationRevision = 0;
 let viewMode = $state<NotesViewMode>("pages");
 // Session UI state outlives NotesView when the active application tab changes.
 let explorerCollapsed = $state(false);
@@ -137,12 +139,14 @@ const linksController = createNotesLinksController({
   },
   scheduleVisibleMetadataRefresh: () => sidebarRefreshCoordinator.schedule("visible-metadata"),
 });
+const navigationPages = $derived(mergeNotesNavigationPages(allPages, linksController.destinations));
 const sidebarController = createNotesSidebarController({
   reloadPages: () => reloadPages(),
 });
 const foldersController = createNotesFoldersController({
   setFolderCollapsed: (folderId, collapsed) => sidebarController.setFolderCollapsed(folderId, collapsed),
   scheduleHierarchyRefresh: () => sidebarRefreshCoordinator.schedule("hierarchy"),
+  markNavigationMutation: () => { navigationMutationRevision += 1; },
 });
 const {
   reloadArchivedPages,
@@ -233,12 +237,14 @@ function upsertPageInActiveCollections(page: NotesPage): void {
   allPages = allPages.some((item) => item.id === page.id)
     ? allPages.map((item) => (item.id === page.id ? page : item))
     : [page, ...allPages];
+  navigationMutationRevision += 1;
   invalidateNotesNotificationSchedule();
 }
 
 function removePagesFromActiveCollections(pageIds: ReadonlySet<string>): void {
   pages = pages.filter((page) => !pageIds.has(page.id));
   allPages = allPages.filter((page) => !pageIds.has(page.id));
+  navigationMutationRevision += 1;
   invalidateNotesNotificationSchedule();
 }
 
@@ -394,6 +400,7 @@ function applyPostMutation(result: NotesPostMutationResult): void {
   if (result.removedPageIds?.length) {
     removePagesFromActiveCollections(new Set(result.removedPageIds));
   }
+  linksController.reconcileDestinationPages(result.pages ?? [], result.removedPageIds ?? []);
   sidebarRefreshCoordinator.schedule(result.sidebarImpact ?? "none");
 }
 
@@ -796,6 +803,7 @@ const optionalSubsystemController = createNotesOptionalSubsystemController({
 });
 
 const workspaceController = createNotesWorkspaceController({
+  readNavigationMutationRevision: () => navigationMutationRevision,
   readRequestState: () => ({
     projectId: projects.selectedProjectId,
     expandedPageIds: [...sidebarController.expandedPageIds],
@@ -1130,6 +1138,9 @@ export function getNotes() {
     },
     get allPages(): NotesPage[] {
       return allPages;
+    },
+    get navigationPages(): NotesPage[] {
+      return navigationPages;
     },
     get folders() {
       return foldersController.folders;

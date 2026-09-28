@@ -32,6 +32,7 @@ export function createNotesLinksController(context: NotesLinksControllerContext)
   let aliases = $state<NotesPageAlias[]>([]);
   let unresolved = $state<NotesUnresolvedLink[]>([]);
   let destinations = $state<NotesPage[]>([]);
+  const removedDestinationPageIds = new Set<string>();
   let destinationNextCursor = $state<string | null>(null);
   let destinationQuery = "";
   let backlinksLoading = $state(false);
@@ -45,6 +46,23 @@ export function createNotesLinksController(context: NotesLinksControllerContext)
   let unresolvedRequestId = 0;
   let destinationsRequestId = 0;
 
+  function currentDestinationPages(candidates: readonly NotesPage[]): NotesPage[] {
+    const workspacePages = new Map(context.readAllPages().map((page) => [page.id, page]));
+    return candidates
+      .filter((page) => !removedDestinationPageIds.has(page.id))
+      .map((page) => workspacePages.get(page.id) ?? page);
+  }
+
+  function reconcileDestinationPages(
+    changedPages: readonly NotesPage[],
+    removedPageIds: readonly string[],
+  ): void {
+    if (changedPages.length === 0 && removedPageIds.length === 0) return;
+    for (const pageId of removedPageIds) removedDestinationPageIds.add(pageId);
+    for (const page of changedPages) removedDestinationPageIds.delete(page.id);
+    destinations = currentDestinationPages(destinations);
+  }
+
   async function reloadDestinations(query = ""): Promise<void> {
     const requestId = ++destinationsRequestId;
     const projectId = context.readSelectedProjectId();
@@ -52,11 +70,11 @@ export function createNotesLinksController(context: NotesLinksControllerContext)
     try {
       const result = await listNotesDestinationCandidates(projectId, null, destinationQuery);
       if (requestId !== destinationsRequestId || projectId !== context.readSelectedProjectId()) return;
-      destinations = [...result.pages];
+      destinations = currentDestinationPages(result.pages);
       destinationNextCursor = result.next_page_cursor;
     } catch {
       if (requestId !== destinationsRequestId || projectId !== context.readSelectedProjectId()) return;
-      destinations = [...context.readAllPages()];
+      destinations = currentDestinationPages(context.readAllPages());
       destinationNextCursor = null;
     }
   }
@@ -68,9 +86,9 @@ export function createNotesLinksController(context: NotesLinksControllerContext)
     const projectId = context.readSelectedProjectId();
     const result = await listNotesDestinationCandidates(projectId, cursor, destinationQuery);
     if (requestId !== destinationsRequestId || projectId !== context.readSelectedProjectId()) return;
-    destinations = [
+    destinations = currentDestinationPages([
       ...new Map([...destinations, ...result.pages].map((page) => [page.id, page])).values(),
-    ];
+    ]);
     destinationNextCursor = result.next_page_cursor;
   }
 
@@ -186,6 +204,7 @@ export function createNotesLinksController(context: NotesLinksControllerContext)
     resetPageState();
     destinationsRequestId += 1;
     destinations = [];
+    removedDestinationPageIds.clear();
     destinationNextCursor = null;
     destinationQuery = "";
   }
@@ -207,6 +226,7 @@ export function createNotesLinksController(context: NotesLinksControllerContext)
     reloadUnresolvedLinks: reloadUnresolved,
     reloadLinkResolutionPages: reloadDestinations,
     loadMoreDestinationCandidates: loadMoreDestinations,
+    reconcileDestinationPages,
     addPageAlias: addAlias,
     deletePageAlias: deleteAlias,
     resolveUnresolvedLink,

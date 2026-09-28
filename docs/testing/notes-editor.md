@@ -61,7 +61,8 @@ Automated delayed-storage coverage connects the actual action, persistence, tree
 - Use Left and Right at text boundaries, and Up and Down through wrapped text and adjacent blocks. Confirm the caret moves one visual line at a time and the viewport does not jump a visible block to the top; then jump to an unloaded block and confirm it scrolls into view.
 - Open a page in full, side, and center modes. Confirm the editor has no separate header row, last edited, favorite, and page actions appear before project Notes settings in the workspace header, and preview close/view-mode controls stay reachable without covering title actions.
 - Create root, folder, nested, and database-row pages with empty and authored titles.
-- Move pages among project root, folders, and parent pages while preserving paired child blocks.
+- Rename a selected page in the editor and in the sidebar. Confirm the header and sidebar follow an editor draft, and both rename paths update the other visible title after saving without switching pages or projects. Repeat with a delayed save, and check that an active editor draft is not overwritten.
+- Move pages among project root, folders, and parent pages through the sidebar and editor. Confirm the visible navigation and selected page path update after each save without switching pages or projects, while paired child blocks remain correct.
 - Reject self, descendant, cross-project, inactive, and block-parent destinations where invalid.
 - Favorite, reopen, archive, Trash, restore, and permanently delete pages and subtrees.
 - Verify invalid restored parents produce safe root placement and an explanation.

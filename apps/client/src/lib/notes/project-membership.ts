@@ -36,6 +36,16 @@ export function notesPagesForProject(
   return pages.filter((page) => notesPageProjectId(page) === normalizedProjectId);
 }
 
+/** Add destination-only pages without replacing newer workspace page records. */
+export function mergeNotesNavigationPages(
+  workspacePages: readonly NotesPage[],
+  destinationPages: readonly NotesPage[],
+): NotesPage[] {
+  return [...new Map(
+    [...destinationPages, ...workspacePages].map((page) => [page.id, page]),
+  ).values()];
+}
+
 export function notesPageProjectProperties(
   projectId: string | null | undefined,
 ): Record<string, unknown> | undefined {

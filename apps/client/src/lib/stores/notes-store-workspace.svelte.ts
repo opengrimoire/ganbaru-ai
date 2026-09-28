@@ -10,6 +10,7 @@ interface NotesWorkspaceShellRequestState {
 
 interface NotesWorkspaceControllerContext {
   readRequestState: () => NotesWorkspaceShellRequestState;
+  readNavigationMutationRevision: () => number;
   prepareLoad: () => void;
   applyInitialShell: (
     shell: NotesWorkspaceShell,
@@ -93,6 +94,7 @@ export function createNotesWorkspaceController(context: NotesWorkspaceController
   async function loadMoreWorkspaceWindow(): Promise<void> {
     if (windowLoading || (!nextPageCursor && !nextFolderCursor)) return;
     const currentRequestId = requestId;
+    const mutationRevision = context.readNavigationMutationRevision();
     const state = context.readRequestState();
     const pageCursor = nextPageCursor;
     const folderCursor = nextFolderCursor;
@@ -109,6 +111,10 @@ export function createNotesWorkspaceController(context: NotesWorkspaceController
         folder_cursor: folderCursor ?? "end",
       });
       if (currentRequestId !== requestId) return;
+      if (mutationRevision !== context.readNavigationMutationRevision()) {
+        await reloadPages();
+        return;
+      }
       context.applyAdditionalShell(shell);
       nextPageCursor = shell.next_page_cursor;
       nextFolderCursor = shell.next_folder_cursor;
@@ -121,20 +127,29 @@ export function createNotesWorkspaceController(context: NotesWorkspaceController
     selectedPageIdOverride = context.readSelectedPageId(),
     expandedPageIdsOverride?: readonly string[],
   ): Promise<void> {
-    const state = context.readRequestState();
-    const projectId = state.projectId;
-    const shell = await loadNotesWorkspaceShell({
-      ...requestFromState({
-        ...state,
-        selectedPageId: selectedPageIdOverride,
-        expandedPageIds: expandedPageIdsOverride
-          ? [...expandedPageIdsOverride]
-          : state.expandedPageIds,
-      }),
-      include_navigation_index: false,
-    });
-    if (projectId !== context.readRequestState().projectId) return;
-    context.mergeReloadedShell(shell);
+    for (;;) {
+      const state = context.readRequestState();
+      const currentRequestId = requestId;
+      const mutationRevision = context.readNavigationMutationRevision();
+      const shell = await loadNotesWorkspaceShell({
+        ...requestFromState({
+          ...state,
+          selectedPageId: selectedPageIdOverride,
+          expandedPageIds: expandedPageIdsOverride
+            ? [...expandedPageIdsOverride]
+            : state.expandedPageIds,
+        }),
+        include_navigation_index: false,
+      });
+      if (currentRequestId !== requestId || state.projectId !== context.readRequestState().projectId) return;
+      if (mutationRevision !== context.readNavigationMutationRevision()) continue;
+      nextPageCursor = shell.next_page_cursor;
+      nextFolderCursor = shell.next_folder_cursor;
+      totalPageCount = shell.total_page_count;
+      totalFolderCount = shell.total_folder_count;
+      context.mergeReloadedShell(shell);
+      return;
+    }
   }
 
   return {

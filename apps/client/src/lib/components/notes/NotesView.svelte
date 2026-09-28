@@ -86,9 +86,7 @@
     if (creationFolderOverride !== undefined) return creationFolderOverride;
     return notesPageContainingFolderId(
       notes.selectedPageId,
-      [...new Map(
-        [...notes.allPages, ...notes.linkResolutionPages].map((page) => [page.id, page]),
-      ).values()],
+      notes.navigationPages,
     );
   });
   const topBarSelectedPage = $derived.by(() => {

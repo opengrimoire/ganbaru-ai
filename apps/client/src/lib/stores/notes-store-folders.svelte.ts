@@ -9,6 +9,7 @@ import type { NotesFolder } from "$lib/notes/types";
 interface NotesFoldersControllerContext {
   setFolderCollapsed: (folderId: string, collapsed: boolean) => void;
   scheduleHierarchyRefresh: () => void;
+  markNavigationMutation: () => void;
 }
 
 /** Own Notes folder state and lifecycle operations. */
@@ -27,6 +28,7 @@ export function createNotesFoldersController(context: NotesFoldersControllerCont
     folders = folders.some((item) => item.id === folder.id)
       ? folders.map((item) => item.id === folder.id ? folder : item)
       : [...folders, folder];
+    context.markNavigationMutation();
   }
 
   async function create(
@@ -75,6 +77,7 @@ export function createNotesFoldersController(context: NotesFoldersControllerCont
   async function remove(folderId: string): Promise<void> {
     const deletedId = await deleteNotesFolder(folderId);
     folders = folders.filter((folder) => folder.id !== deletedId);
+    context.markNavigationMutation();
     context.setFolderCollapsed(deletedId, false);
     context.scheduleHierarchyRefresh();
   }

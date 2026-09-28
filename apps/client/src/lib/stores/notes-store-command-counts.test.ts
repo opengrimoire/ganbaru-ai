@@ -227,7 +227,7 @@ describe("Notes store command counts", () => {
     expect(backend.count("breadcrumb")).toBeLessThanOrEqual(1);
     expect(backend.count("page")).toBe(0);
     await vi.advanceTimersByTimeAsync(60);
-    expect(backend.count("workspace")).toBe(1);
+    expect(backend.count("workspace")).toBe(0);
     expect(backend.count("sidebar")).toBe(0);
     expect(backend.count("all-pages")).toBe(0);
     expect(backend.count("folders")).toBe(0);

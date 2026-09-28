@@ -9,6 +9,7 @@ const notesState = vi.hoisted(() => ({
   store: {
     viewMode: "pages" as const,
     allPages: [] as NotesPage[],
+    get navigationPages(): NotesPage[] { return this.allPages; },
     linkResolutionPages: [] as NotesPage[],
     folders: [] as NotesFolder[],
     sidebarPageIdsWithChildren: [] as string[],

@@ -188,7 +188,7 @@ export function createNotesPageActions(context: NotesPageActionsContext) {
   async function renamePage(pageId: string, title: string): Promise<void> {
     await context.awaitPageReady(pageId);
     const page = await updateNotesPage(pageId, { title: title.trim() });
-    context.applyPostMutation({ pages: [page], sidebarImpact: "visible-metadata" });
+    context.applyPostMutation({ pages: [page] });
     if (context.readSelectedPageId() === page.id) await context.reloadPageBreadcrumb(page.id);
   }
 
@@ -234,7 +234,7 @@ export function createNotesPageActions(context: NotesPageActionsContext) {
     const page = await updateNotesPage(pageId, { icon });
     const nextPath = notesPageIconAssetPath(page.icon);
     if (previousPath && previousPath !== nextPath) invalidateNotesPageIconAssetUrl(previousPath);
-    context.applyPostMutation({ pages: [page], sidebarImpact: "visible-metadata" });
+    context.applyPostMutation({ pages: [page] });
   }
 
   async function updatePageCover(pageId: string, cover: NotesPageCover | null): Promise<void> {

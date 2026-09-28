@@ -136,9 +136,7 @@
   });
   const selectedPageId = $derived(selectedPage?.id ?? null);
   const selectedProjectPages = $derived.by(() => notesPagesForProject(
-    [...new Map(
-      [...notes.allPages, ...notes.linkResolutionPages].map((page) => [page.id, page]),
-    ).values()],
+    notes.navigationPages,
     selectedProjectId,
   ));
   const selectedProjectFolders = $derived.by(() => notesFoldersForProject(

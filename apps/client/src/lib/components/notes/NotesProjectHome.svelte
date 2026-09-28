@@ -455,7 +455,7 @@
   let workingMarkdownTreeProjectId: string | null = null;
 
   const projectPages = $derived.by(() => notesPagesForProject(
-    [...new Map([...notes.allPages, ...notes.linkResolutionPages].map((item) => [item.id, item])).values()],
+    notes.navigationPages,
     projectId,
   ));
   const projectFolders = $derived.by(() => notesFoldersForProject(notes.folders, projectId));
@@ -1222,6 +1222,7 @@
         {:else}
           <NotesPageRow
             page={item.page}
+            displayTitle={notes.pageTitleDraftForPage(item.page.id) ?? undefined}
             depth={item.depth}
             hasChildren={item.hasChildren}
             collapsed={item.collapsed}

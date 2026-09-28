@@ -3,6 +3,7 @@ import { flattenNotesBlockOutlines, notesBlockOutlineFromBlock, type NotesBlockO
 import { blockChildrenAreVisible, buildNotesChildIdsByParent, parentIdForBlock, type NotesTreeState } from "$lib/notes/block-tree";
 import type { NotesUndoSnapshot } from "$lib/notes/undo-history";
 import { applyNotesPostMutationToTree, type NotesPostMutationResult } from "$lib/notes/post-mutation";
+import { notesPageTitle } from "$lib/notes/page-title";
 import type { NotesBlock, NotesBlockOutline, NotesLoadedPage, NotesPage } from "$lib/notes/types";
 import { notesTreeState, notesTreeStateWithoutLeafBlock, type NotesBlockTreeSnapshot } from "./notes-store-block-tree";
 
@@ -253,6 +254,17 @@ export class NotesTreeProjectionController {
       );
       for (const block of result.blocks ?? []) this.markLocallyChanged(block.id);
       for (const blockId of result.removedBlockIds ?? []) this.markLocallyChanged(blockId);
+    }
+    for (const page of result.pages ?? []) {
+      const childPageBlock = this.blocksById[page.id];
+      if (childPageBlock?.type !== "child_page") continue;
+      const title = notesPageTitle(page, "");
+      if (childPageBlock.child_page.title === title) continue;
+      this.replaceBlock({
+        ...childPageBlock,
+        last_edited_time: page.last_edited_time,
+        child_page: { ...childPageBlock.child_page, title },
+      });
     }
     if (this.loadedPage) {
       const returned = result.pages?.find((page) => page.id === this.loadedPage?.id);

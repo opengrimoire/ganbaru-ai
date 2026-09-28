@@ -196,7 +196,7 @@
   const pageIconLabel = $derived(pageIconScreenReaderText(page?.icon ?? null));
   const effectiveProjectId = $derived(page ? notesPageProjectId(page) ?? projectId : projectId);
   const projectPages = $derived(notesPagesForProject(
-    [...new Map([...notes.allPages, ...notes.linkResolutionPages].map((item) => [item.id, item])).values()],
+    notes.navigationPages,
     effectiveProjectId,
   ));
   const projectFolders = $derived(notesFoldersForProject(notes.folders, effectiveProjectId));
@@ -426,6 +426,14 @@
   });
 
   $effect(() => {
+    if (!page || page.id !== lastTitlePageId) return;
+    const storedTitle = editablePageTitle;
+    if (notes.pageTitleDraftForPage(page.id) !== null) return;
+    if (typeof document !== "undefined" && document.activeElement === titleInput) return;
+    titleDraft = storedTitle;
+  });
+
+  $effect(() => {
     const pageId = page?.id ?? null;
     if (!pageId) {
       lastPanelPresencePageId = "";
@@ -551,6 +559,10 @@
 
   async function saveTitle(): Promise<void> {
     if (!page) return;
+    if (notes.pageTitleDraftForPage(page.id) === null) {
+      titleDraft = editablePageTitle;
+      return;
+    }
     const title = titleDraft.trim();
     titleDraft = title;
     if (title === editablePageTitle) {
