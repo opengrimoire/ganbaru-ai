@@ -34,6 +34,10 @@ The editor shows block actions from a block surface's context menu. Text selecti
 
 Block payloads may carry a nonnegative `ganbaru_indent` level relative to their structural parent. Text editing can adjust the level of a child, including an embedded block, to keep its visual position unchanged when its former parent is indented or outdented. This supports standalone row indentation without artificial parent blocks or a schema migration. Typing, conversion between text types, history, duplication, and ordinary Enter preserve it. List numbering and bullet presentation derive from sibling structure and relative indentation. To-do checked state is canonical block payload. Toggle open state can be local presentation metadata while toggle children remain canonical content.
 
+A toggle's label is editable text. Enter in the label opens the toggle and creates a paragraph child from the text after the caret; a selected range is removed. Enter on an empty label creates an empty child. Opening an empty toggle with its chevron leaves the area beneath it blank until content is added. Closing the toggle removes its child rows from the rendered page without deleting them. Ctrl/Cmd+Enter opens or closes a focused toggle. Child paragraphs follow ordinary editing and outdent rules, so a new empty child can leave the toggle with Enter or Backspace. At the page margin, Backspace at the beginning of an empty toggle label converts the toggle to a paragraph.
+
+The row Delete action loads a toggle's hidden children and moves them to the row's parent before removing the row. Deleting a whole-block selection removes the selected toggle subtree. Replacing a text range that fully includes a closed toggle also removes its hidden body; clearing the last selected toggle leaves an ordinary paragraph. Pending text and structural writes complete before the row is trashed.
+
 ## Child pages and navigation blocks
 
 Child-page blocks stay paired with normal page rows. Converting a block to a child page creates the nested page, moves valid existing children into its body, and opens it without losing the parent link.

@@ -1,6 +1,6 @@
 import { notesClipboardLinkUrl } from "./clipboard-links";
 import { Marked } from "marked";
-import { normalizeNotesClipboardPlainText } from "./block-clipboard";
+import { NOTES_MARKDOWN_LIST_PARAGRAPHS_ATTRIBUTE, normalizeNotesClipboardPlainText } from "./block-clipboard";
 import { sanitizeNotesRichHtml } from "./rich-text-paste";
 
 const markdown = new Marked({
@@ -33,6 +33,19 @@ function comparableText(node: ParentNode): string {
   return (node.textContent ?? "").replace(/\s+/gu, "");
 }
 
+/** Prefer foldable Markdown when HTML exposes only a styled wrapper with the same words. */
+function markdownRecoversFoldableCallout(original: ParentNode, rendered: ParentNode): boolean {
+  if (Array.from(original.querySelectorAll("details")).some((details) => details.querySelector("summary"))) {
+    return false;
+  }
+  const marker = /^\[![A-Za-z][A-Za-z0-9_-]*\][+-](?:[ \t]+|$)/u;
+  const hasCallout = Array.from(rendered.querySelectorAll("blockquote > p"))
+    .some((paragraph) => marker.test(paragraph.textContent ?? ""));
+  if (!hasCallout) return false;
+  return comparableText(original) === comparableText(rendered)
+    .replace(/\[![A-Za-z][A-Za-z0-9_-]*\][+-]/gu, "");
+}
+
 /** Resolve clipboard representations, using matching Markdown headings as authorial levels. */
 export function notesClipboardPasteHtml(plainText: string, html = ""): string {
   const text = normalizeNotesClipboardPlainText(plainText);
@@ -44,11 +57,14 @@ export function notesClipboardPasteHtml(plainText: string, html = ""): string {
     if (["heading", "list", "blockquote", "code", "codespan", "strong", "em", "del", "link", "hr", "table", "image", "escape", "br"].includes(token.type)) formatted = true;
   });
   if (!formatted) return html;
-  const rendered = markdown.parser(tokens);
+  const rendered = markdown.parser(tokens)
+    .replaceAll("<li>", `<li ${NOTES_MARKDOWN_LIST_PARAGRAPHS_ATTRIBUTE}>`);
   if (!html.trim()) return rendered;
   const original = sanitizeNotesRichHtml(html);
   const fromMarkdown = sanitizeNotesRichHtml(rendered);
-  if (!original || !fromMarkdown || comparableText(original) !== comparableText(fromMarkdown)) return html;
+  if (!original || !fromMarkdown) return html;
+  if (markdownRecoversFoldableCallout(original, fromMarkdown)) return rendered;
+  if (comparableText(original) !== comparableText(fromMarkdown)) return html;
   const headings = Array.from(original.querySelectorAll("h1,h2,h3,h4,h5,h6"));
   const markdownHeadings = Array.from(fromMarkdown.querySelectorAll("h1,h2,h3,h4,h5,h6"));
   if (!headings.length || headings.length !== markdownHeadings.length

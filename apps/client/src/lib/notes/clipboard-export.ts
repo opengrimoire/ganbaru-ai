@@ -1,6 +1,6 @@
-import { blockEditableRichText, blockIndent, isHeadingBlockType } from "./block-factory";
+import { blockEditableRichText, blockIndent, blockPlainText, isHeadingBlockType } from "./block-factory";
 import { blockColor, notesClipboardColorStyle } from "./block-color";
-import { parentIdForBlock } from "./block-tree";
+import { blockChildrenAreVisible, parentIdForBlock } from "./block-tree";
 import { richTextPlainText, richTextRangeSlice } from "./rich-text";
 import { notesMarkdownFence, notesRichTextMarkdown } from "./clipboard-markdown";
 import { notesClipboardLinkUrl } from "./clipboard-links";
@@ -20,6 +20,51 @@ export interface NotesClipboardBlock {
 interface ClipboardNode {
   entry: NotesClipboardBlock;
   children: ClipboardNode[];
+}
+
+/** Include hidden descendants of fully selected collapsed blocks in document order. */
+export function notesDocumentClipboardBlockIds(
+  visibleBlockIds: readonly string[],
+  startOffset: number,
+  endOffset: number,
+  readBlock: (blockId: string) => NotesBlock | undefined,
+  outlineSubtreeIds: (rootBlockIds: readonly string[]) => readonly string[],
+): string[] {
+  const collapsedRoots = new Set<string>();
+  for (const [index, blockId] of visibleBlockIds.entries()) {
+    const block = readBlock(blockId);
+    if (!block) throw new Error("Notes selection content is still loading");
+    const startsAtBlockStart = index > 0 || startOffset === 0;
+    const endsAtBlockEnd = index < visibleBlockIds.length - 1
+      || (endOffset > 0 && endOffset >= blockPlainText(block).length);
+    if (startsAtBlockStart && endsAtBlockEnd && !blockChildrenAreVisible(block)) {
+      collapsedRoots.add(blockId);
+    }
+  }
+  const descendantsByRoot = new Map<string, string[]>();
+  let currentRoot: string | null = null;
+  if (collapsedRoots.size > 0) {
+    for (const blockId of outlineSubtreeIds([...collapsedRoots])) {
+      if (collapsedRoots.has(blockId)) {
+        currentRoot = blockId;
+        descendantsByRoot.set(blockId, []);
+      } else if (currentRoot) {
+        descendantsByRoot.get(currentRoot)?.push(blockId);
+      }
+    }
+  }
+  const included: string[] = [];
+  const seen = new Set<string>();
+  const append = (blockId: string): void => {
+    if (seen.has(blockId)) return;
+    seen.add(blockId);
+    included.push(blockId);
+  };
+  for (const blockId of visibleBlockIds) {
+    append(blockId);
+    for (const descendantId of descendantsByRoot.get(blockId) ?? []) append(descendantId);
+  }
+  return included;
 }
 
 /** Escape user content for both HTML text and quoted attributes. */
@@ -85,6 +130,9 @@ function renderNode({ entry, children }: ClipboardNode): string {
     return `<${tag}${style}>${content}</${tag}>${descendants}`;
   }
   switch (block.type) {
+    case "toggle":
+      // Keep descendants readable to rich clipboard importers even when this toggle is closed.
+      return `<details open${block.toggle.ganbaru_open === false ? ' data-notes-toggle-open="false"' : ""}><summary${style}>${content}</summary>${descendants}</details>`;
     case "bulleted_list_item":
     case "numbered_list_item":
       return `<li${style}>${content}${descendants}</li>`;
@@ -134,6 +182,10 @@ function renderMarkdown(nodes: readonly ClipboardNode[]): string {
     number = list === "numbered_list_item" ? (previousList === list ? number + 1 : 1) : 0;
     let value = content;
     if (isHeadingBlockType(block.type)) value = `${"#".repeat(Number(block.type.slice(-1)))} ${content}`;
+    else if (block.type === "toggle") {
+      value = `- ${content}`;
+      if (descendants) value += `\n\n${descendants.split("\n").map((line) => `    ${line}`).join("\n")}`;
+    }
     else if (list) {
       const marker = block.type === "numbered_list_item" ? `${number}. `
         : block.type === "to_do" ? `- [${block.to_do.checked ? "x" : " "}] ` : "- ";
@@ -164,7 +216,7 @@ function renderMarkdown(nodes: readonly ClipboardNode[]): string {
         value = [header, `| ${Array.from({ length: width }, () => "---").join(" | ")} |`, ...lines].join("\n");
       } else value = "";
     } else if (["column", "column_list", "tab"].includes(block.type)) value = descendants;
-    if (descendants && !list && !["quote", "callout", "table", "column", "column_list", "tab"].includes(block.type)) {
+    if (descendants && !list && !["toggle", "quote", "callout", "table", "column", "column_list", "tab"].includes(block.type)) {
       value += `\n\n${descendants}`;
     }
     const separator = list && previousList === list ? "\n" : "\n\n";

@@ -127,6 +127,7 @@
     readIds: () => notes.flatBlockOutlines.map((item) => item.outline.id),
     readPageId: () => pageId,
     readBlock: notes.blockById,
+    outlineSubtreeIds: notes.outlineSubtreeIds,
     hydrate: notes.hydrateBlockRange,
     replace: notes.replaceDocumentRange,
     format: notes.formatDocumentRange,

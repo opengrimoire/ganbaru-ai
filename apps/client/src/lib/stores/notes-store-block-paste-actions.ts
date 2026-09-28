@@ -6,11 +6,13 @@ import {
   blockColor,
 } from "$lib/notes/block-color";
 import {
+  applyBlockUpdate,
   blockEditableRichText,
   blockIndent,
   blockUpdateWithIndent,
   blockPlainText,
   blockWithRichText,
+  blockWithToggleOpen,
 } from "$lib/notes/block-factory";
 import { createBlockWriteFromRichText } from "$lib/notes/block-rich-text-write";
 import {
@@ -109,20 +111,27 @@ export function createNotesBlockPasteActions(
     const before = context.undoSnapshotForBlocks([blockId], blockId, beforeSelection);
     const split = splitRichTextForBlock(blockEditableRichText(block), selectionStart, selectionEnd);
     const newBlockId = crypto.randomUUID();
-    const currentUpdate = cloneNotesJson(blockWithRichText(block, split.before));
+    const textUpdate = blockWithRichText(block, split.before);
+    const currentUpdate = cloneNotesJson(block.type === "toggle"
+      ? blockWithToggleOpen(applyBlockUpdate(block, textUpdate), true)
+      : textUpdate);
+    const isToggle = block.type === "toggle";
     const nextPayload = createBlockWriteFromRichText(
       newBlockId,
       notesEnterSiblingBlockType(block.type),
       split.after,
-      blockColor(block),
+      isToggle ? "default" : blockColor(block),
     );
-    const nextWrite = cloneNotesJson({ id: newBlockId, ...blockUpdateWithIndent(nextPayload, blockIndent(block)) });
-    const parent = cloneNotesJson(block.parent);
+    const nextWrite = cloneNotesJson({ id: newBlockId, ...blockUpdateWithIndent(nextPayload, isToggle ? 0 : blockIndent(block)) });
+    const parent = cloneNotesJson(isToggle
+      ? { type: "block_id" as const, block_id: block.id }
+      : block.parent);
+    const after = isToggle ? null : blockId;
     const nextBlock = context.optimisticBlockFromWrite(nextWrite, parent);
     const focusBlockId = planNotesInsertedBlockFocus([newBlockId], blockId) ?? newBlockId;
 
     context.localApplyBlockUpdate(blockId, currentUpdate);
-    context.localInsertBlockAfter(nextBlock, blockId);
+    context.localInsertBlockAfter(nextBlock, after);
     context.requestBlockFocus(focusBlockId, START_OF_BLOCK_SELECTION);
     context.recordUndo(
       "create",
@@ -132,11 +141,11 @@ export function createNotesBlockPasteActions(
         focusBlockId,
         START_OF_BLOCK_SELECTION,
       ),
-      `create:enter:${parentIdForBlock(block)}`,
+      `create:enter:${isToggle ? block.id : parentIdForBlock(block)}`,
     );
     const persistence = context.enqueueEditorMutation(async () => {
       await updateNotesBlock(blockId, currentUpdate);
-      await appendNotesBlockChildren({ parent, after: blockId, children: [nextWrite] });
+      await appendNotesBlockChildren({ parent, after, children: [nextWrite] });
     });
     context.trackOptimisticBlockWrites([blockId, newBlockId], persistence);
   }

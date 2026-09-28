@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { blockEditableRichText, createBlockWrite } from "./block-factory";
-import { notesClipboardContent, writeNotesClipboard } from "./clipboard-export";
+import { notesClipboardContent, notesDocumentClipboardBlockIds, writeNotesClipboard } from "./clipboard-export";
 import { createLinkedTextRichText, createTextRichText } from "./rich-text";
 import { planNotesRichHtmlPaste } from "./rich-text-paste";
 import type { NotesBlock } from "./types";
@@ -26,6 +26,69 @@ function fragment(html: string): DocumentFragment {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("Notes clipboard export", () => {
+  it("includes hidden toggle children only when its full label is selected", () => {
+    const toggle = block("toggle", "toggle", "Details");
+    if (toggle.type !== "toggle") throw new Error("Expected toggle");
+    toggle.toggle.ganbaru_open = false;
+    const child = block("child", "paragraph", "Inside", toggle.id);
+    const following = block("after", "paragraph", "Following");
+    const blocks = new Map([toggle, child, following].map((entry) => [entry.id, entry]));
+    const subtree = (roots: readonly string[]) => roots[0] === toggle.id ? [toggle.id, child.id] : [...roots];
+    const ids = (visible: readonly string[], start: number, end: number) => notesDocumentClipboardBlockIds(
+      visible, start, end, (id) => blocks.get(id), subtree,
+    );
+
+    expect(ids([toggle.id, following.id], 0, Number.MAX_SAFE_INTEGER))
+      .toEqual([toggle.id, child.id, following.id]);
+    expect(ids([toggle.id, following.id], 1, Number.MAX_SAFE_INTEGER))
+      .toEqual([toggle.id, following.id]);
+    expect(ids([following.id, toggle.id], 0, 0))
+      .toEqual([following.id, toggle.id]);
+    expect(ids([toggle.id], 0, Number.MAX_SAFE_INTEGER))
+      .toEqual([toggle.id, child.id]);
+  });
+
+  it("reads the full outline once for several selected closed toggles", () => {
+    const first = block("first", "toggle", "First");
+    const second = block("second", "toggle", "Second");
+    if (first.type !== "toggle" || second.type !== "toggle") throw new Error("Expected toggles");
+    first.toggle.ganbaru_open = false;
+    second.toggle.ganbaru_open = false;
+    const firstChild = block("first-child", "paragraph", "A", first.id);
+    const secondChild = block("second-child", "paragraph", "B", second.id);
+    const blocks = new Map([first, firstChild, second, secondChild].map((entry) => [entry.id, entry]));
+    const subtree = vi.fn(() => [first.id, firstChild.id, second.id, secondChild.id]);
+
+    expect(notesDocumentClipboardBlockIds(
+      [first.id, second.id], 0, Number.MAX_SAFE_INTEGER, (id) => blocks.get(id), subtree,
+    )).toEqual([first.id, firstChild.id, second.id, secondChild.id]);
+    expect(subtree).toHaveBeenCalledExactlyOnceWith([first.id, second.id]);
+  });
+
+  it("copies surrounding paragraphs and a closed toggle as readable nested text", () => {
+    const toggle = block("toggle", "toggle", "Toggle start");
+    if (toggle.type !== "toggle") throw new Error("Expected toggle");
+    toggle.toggle.ganbaru_open = false;
+    const entries = [
+      block("before", "paragraph", "Normal text"),
+      toggle,
+      block("first", "paragraph", "First row", toggle.id),
+      block("second", "paragraph", "Second row", toggle.id),
+      block("third", "paragraph", "Third row", toggle.id),
+      block("after", "paragraph", "Normal text"),
+    ].map((block) => ({ block }));
+    const content = notesClipboardContent(entries);
+    expect(content.plainText).toBe([
+      "Normal text", "", "- Toggle start", "", "    First row", "    ",
+      "    Second row", "    ", "    Third row", "", "Normal text",
+    ].join("\n"));
+    const details = fragment(content.html).querySelector("details");
+    expect(details?.open).toBe(true);
+    expect(details?.getAttribute("data-notes-toggle-open")).toBe("false");
+    expect(Array.from(details?.querySelectorAll("p") ?? []).map((paragraph) => paragraph.textContent))
+      .toEqual(["First row", "Second row", "Third row"]);
+  });
+
   it.each(["heading_1", "heading_2", "heading_3", "heading_4", "heading_5", "heading_6"] as const)("exports %s as the matching Markdown heading", (type) => {
     const level = Number(type.slice(-1));
     const content = notesClipboardContent([{ block: block("title", type, "Title") }]);

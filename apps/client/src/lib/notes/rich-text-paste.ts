@@ -18,6 +18,7 @@ import {
 import {
   NOTES_CLIPBOARD_MAX_BLOCKS,
   NOTES_CLIPBOARD_MAX_TEXT_LENGTH,
+  NOTES_MARKDOWN_LIST_PARAGRAPHS_ATTRIBUTE,
 } from "./block-clipboard";
 import {
   NOTES_COLORS,
@@ -40,6 +41,7 @@ type NotesRichHtmlPasteBlockType =
   | "heading_6"
   | "bulleted_list_item"
   | "numbered_list_item"
+  | "toggle"
   | "quote"
   | "to_do"
   | "divider"
@@ -53,6 +55,7 @@ interface NotesRichHtmlPasteSegment {
   depth?: number;
   language?: string;
   checked?: boolean;
+  open?: boolean;
   table?: NotesClipboardTable;
   cells?: NotesRichText[][];
 }
@@ -89,6 +92,7 @@ const SANITIZER_CONFIG = {
     "br",
     "code",
     "del",
+    "details",
     "div",
     "em",
     "h1",
@@ -116,6 +120,7 @@ const SANITIZER_CONFIG = {
     "span",
     "strike",
     "strong",
+    "summary",
     "u",
     "ul",
   ],
@@ -130,6 +135,7 @@ const SANITIZER_CONFIG = {
     "href",
     "type",
     "checked",
+    "open",
     "class",
     "colspan",
     "rowspan",
@@ -159,6 +165,7 @@ const SANITIZER_CONFIG = {
 
 const BLOCK_TAGS = new Set([
   "blockquote",
+  "details",
   "div",
   "h1",
   "h2",
@@ -425,6 +432,41 @@ function segmentFromElement(
   };
 }
 
+/** Read a foldable Obsidian callout as a toggle with ordinary child blocks. */
+function foldableCalloutSegments(
+  element: Element,
+  context: NotesRichHtmlInlineContext,
+  depth: number,
+): NotesRichHtmlPasteSegment[] | null {
+  const titleNode = Array.from(element.children).find((child) => normalizedTagName(child) === "p");
+  if (!titleNode) return null;
+  const richText: NotesRichText[] = [];
+  const titleContext = { ...contextForElement(titleNode, context), preformatted: true };
+  for (const child of titleNode.childNodes) collectInline(child, titleContext, richText);
+  const text = richTextPlainText(richText);
+  const lineEnd = text.indexOf("\n");
+  const titleLine = lineEnd < 0 ? text : text.slice(0, lineEnd);
+  const marker = /^\[![A-Za-z][A-Za-z0-9_-]*\]([+-])(?:[ \t]+|$)/u.exec(titleLine);
+  if (!marker) return null;
+  const segments: NotesRichHtmlPasteSegment[] = [{
+    type: "toggle",
+    richText: richTextRangeSlice(richText, marker[0].length, titleLine.length),
+    open: marker[1] === "+",
+    depth,
+  }];
+  if (lineEnd >= 0) {
+    const firstBody = richTextRangeSlice(richText, lineEnd + 1, text.length);
+    if (richTextPlainText(firstBody).trim()) {
+      segments.push({ type: "paragraph", richText: firstBody, depth: depth + 1 });
+    }
+  }
+  const body = document.createDocumentFragment();
+  for (const child of element.childNodes) {
+    if (child !== titleNode) body.append(child.cloneNode(true));
+  }
+  return [...segments, ...collectSegments(body, context, null, depth + 1)];
+}
+
 function collectSegments(
   parent: ParentNode,
   context: NotesRichHtmlInlineContext,
@@ -448,6 +490,34 @@ function collectSegments(
       continue;
     }
     const tagName = normalizedTagName(child);
+    if (tagName === "details") {
+      const summary = Array.from(child.children).find((element) => normalizedTagName(element) === "summary");
+      if (summary) {
+        flushInline();
+        const richText: NotesRichText[] = [];
+        const summaryContext = contextForElement(summary, context);
+        for (const node of summary.childNodes) collectInline(node, summaryContext, richText);
+        segments.push({
+          type: "toggle", richText,
+          open: child.getAttribute("data-notes-toggle-open") === "false" ? false : child.hasAttribute("open"),
+          depth,
+        });
+        const body = document.createDocumentFragment();
+        for (const node of child.childNodes) {
+          if (node !== summary) body.append(node.cloneNode(true));
+        }
+        segments.push(...collectSegments(body, contextForElement(child, context), null, depth + 1));
+        continue;
+      }
+    }
+    if (tagName === "blockquote") {
+      const foldable = foldableCalloutSegments(child, context, depth);
+      if (foldable) {
+        flushInline();
+        segments.push(...foldable);
+        continue;
+      }
+    }
     if (tagName === "table") {
       flushInline();
       const table = readNotesClipboardTable(child, (cell) => {
@@ -480,7 +550,28 @@ function collectSegments(
     }
     if (BLOCK_TAGS.has(tagName)) {
       flushInline();
-      segments.push({ ...segmentFromElement(child, context, listType), depth });
+      const directParagraphs = tagName === "li"
+        ? Array.from(child.children).filter((element) => normalizedTagName(element) === "p") : [];
+      const firstParagraph = directParagraphs[0];
+      const firstParagraphIndex = firstParagraph ? Array.from(child.childNodes).indexOf(firstParagraph) : -1;
+      const hasLeadingContent = firstParagraphIndex > 0 && Array.from(child.childNodes)
+        .slice(0, firstParagraphIndex).some((node) => !!node.textContent?.trim());
+      if (firstParagraph && directParagraphs.length > 1 && !hasLeadingContent
+        && child.hasAttribute(NOTES_MARKDOWN_LIST_PARAGRAPHS_ATTRIBUTE)) {
+        const title = segmentFromElement(firstParagraph, context, null);
+        const list = segmentFromElement(child, context, listType);
+        segments.push({ ...title, type: list.type, checked: list.checked, depth });
+        for (const paragraph of directParagraphs.slice(1)) {
+          const body = segmentFromElement(paragraph, context, null);
+          const text = richTextPlainText(body.richText);
+          segments.push({ ...body,
+            richText: richTextRangeSlice(body.richText, text.length - text.trimStart().length, text.trimEnd().length),
+            depth: depth + 1,
+          });
+        }
+      } else {
+        segments.push({ ...segmentFromElement(child, context, listType), depth });
+      }
       if (tagName !== "pre") {
         // Nested list containers are handled by their nearest list ancestor.
         for (const list of child.querySelectorAll("ul, ol")) {
@@ -579,6 +670,11 @@ function createUpdateForSegment(segment: NotesRichHtmlPasteSegment): NotesBlockU
       return { type: "divider", divider: {} };
     case "to_do":
       return { type: "to_do", to_do: { ...createTextPayloadFromRichText(richTextOrEmptyText(segment.richText)), checked: segment.checked ?? false } };
+    case "toggle":
+      return { type: "toggle", toggle: {
+        ...createTextPayloadFromRichText(richTextOrEmptyText(segment.richText)),
+        ganbaru_open: segment.open ?? true,
+      } };
     case "heading_1":
       return {
         type: "heading_1",
@@ -663,6 +759,19 @@ function segmentWithSuffix(
   };
 }
 
+/** Keep paste focus out of children hidden by a closed toggle. */
+function lastVisibleSegmentIndex(segments: readonly NotesRichHtmlPasteSegment[]): number {
+  let lastVisible = 0;
+  let closedDepth: number | null = null;
+  for (const [index, segment] of segments.entries()) {
+    const depth = segment.depth ?? 0;
+    if (closedDepth !== null && depth > closedDepth) continue;
+    closedDepth = segment.type === "toggle" && segment.open === false ? depth : null;
+    lastVisible = index;
+  }
+  return lastVisible;
+}
+
 export function planNotesRichHtmlPaste(
   input: NotesRichHtmlPastePlanInput,
 ): NotesRichHtmlPastePlan | null {
@@ -679,13 +788,16 @@ export function planNotesRichHtmlPaste(
   );
   const prefix = richTextRangeSlice(currentRichText, 0, start);
   const suffix = richTextRangeSlice(currentRichText, end, currentPlainText.length);
-  if (["table", "divider"].includes(segments[0].type)
+  if (["table", "divider", "toggle"].includes(segments[0].type)
     && (richTextPlainText(prefix).length > 0
       || (input.currentBlock.type !== "paragraph" && end !== currentPlainText.length))) {
     segments.unshift({ type: "paragraph", richText: [], depth: 0 });
   }
   if (segments.at(-1)?.type === "table_row" || segments.at(-1)?.type === "table"
-    || (segments.at(-1)?.type === "divider" && richTextPlainText(suffix))) {
+    || (segments.at(-1)?.type === "divider" && richTextPlainText(suffix))
+    || (segments.some((segment) => segment.type === "toggle")
+      && richTextPlainText(suffix)
+      && (segments.at(-1)?.type === "toggle" || (segments.at(-1)?.depth ?? 0) > 0))) {
     segments.push({ type: "paragraph", richText: [], depth: 0 });
   }
   const [firstSegment, ...remainingSegments] = segments;
@@ -729,14 +841,18 @@ export function planNotesRichHtmlPaste(
     const id = input.createId();
     return createWriteForSegment(id, segment);
   });
+  const visibleIndex = lastVisibleSegmentIndex(segments);
+  const visibleSegment = segments[visibleIndex];
   return {
     currentUpdate: shouldConvertCurrentBlock
       ? createUpdateForSegment(currentSegment)
       : blockWithRichText(input.currentBlock, currentSegment.richText),
     appendedBlocks,
     blockDepths: segments.map((segment) => segment.depth ?? 0),
-    focusBlockId: appendedBlocks.at(-1)?.id ?? input.currentBlock.id,
-    focusOffset: lastSegment ? richTextPlainText(lastSegment.richText).length : 0,
+    focusBlockId: visibleIndex === 0 ? input.currentBlock.id : appendedBlocks[visibleIndex - 1].id,
+    focusOffset: visibleIndex === segments.length - 1 && lastSegment
+      ? richTextPlainText(lastSegment.richText).length
+      : richTextPlainText(visibleSegment.richText).length,
   };
 }
 

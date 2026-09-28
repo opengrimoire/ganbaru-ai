@@ -3,6 +3,7 @@ import type { NotesDocumentSelection } from "$lib/notes/editor-selection";
 import { planNotesRichHtmlPaste } from "$lib/notes/rich-text-paste";
 import { appendNotesBlockChildren, moveNotesBlock, trashNotesBlock, updateNotesBlock } from "$lib/api/notes";
 import { applyBlockUpdate, blockIndent, blockUpdateWithIndent, blockEditableRichText, blockPlainText, blockWithRichText, createBlockUpdate, isTextEditableBlock } from "$lib/notes/block-factory";
+import { blockChildrenAreVisible } from "$lib/notes/block-tree";
 import { applyRichTextAnnotations, replaceRichTextRange, createTextRichText, richTextAnnotationsForSelection, richTextPlainText, type NotesRichTextAnnotationName } from "$lib/notes/rich-text";
 import { splitRichTextForBlock } from "$lib/notes/rich-text-split";
 import type { NotesBlockActionsContext } from "./notes-store-block-actions";
@@ -64,12 +65,24 @@ export function createNotesDocumentEdit(context: NotesBlockActionsContext, optim
         }
       }
     }
+    const fullySelectedHiddenRoots = blocks.filter((block, index) => {
+      if (!block || blockChildrenAreVisible(block)) return false;
+      const beginsAtStart = index > 0 || start === 0;
+      const endsAtEnd = index < blocks.length - 1 || (end > 0 && end >= blockPlainText(block).length);
+      return beginsAtStart && endsAtEnd;
+    }).map((block) => block!.id);
+    if (!text && fullySelectedHiddenRoots.includes(first.id) && first.type === "toggle") {
+      update = blockWithRichText(applyBlockUpdate(first, createBlockUpdate("paragraph", "")), [...prefix, ...suffix]);
+    }
     update = blockUpdateWithIndent(update, blockIndent(first));
     writes = writes.map((write, index) => ({ id: write.id,
       ...blockUpdateWithIndent(write, (pastePlan?.blockDepths[index + 1] ?? 0) === 0 ? blockIndent(first) : 0) }));
     const before = context.createUndoSnapshot(first.id, [], { start, end: first.id === last.id ? end : blockPlainText(first).length });
     if (before) before.documentSelection = documentSelection ?? { anchor: { blockId: first.id, offset: start }, focus: { blockId: last.id, offset: end } };
     const removed = new Set(blockIds.slice(1));
+    for (const descendantId of context.outlineSubtreeIds(fullySelectedHiddenRoots)) {
+      if (descendantId !== first.id) removed.add(descendantId);
+    }
     const tree = context.treeState();
     const moved: NotesBlock[] = [];
     const placements: NotesBlockPlacement[] = [];

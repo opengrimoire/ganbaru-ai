@@ -67,6 +67,9 @@ export function planNotesKeyboardAction(input: NotesKeyboardPlanInput): NotesKey
   if (primaryModifier && input.shiftKey && input.key === "ArrowDown") {
     return { type: "move_down", preventDefault: true };
   }
+  if (primaryModifier && !input.shiftKey && input.key === "Enter" && input.blockType === "toggle") {
+    return { type: "toggle_block_open", preventDefault: true };
+  }
 
   if (input.metaKey) return { type: "none" };
 
@@ -91,14 +94,11 @@ export function planNotesKeyboardAction(input: NotesKeyboardPlanInput): NotesKey
   if ((input.indentationDepth ?? 0) > 0 && input.blockType !== "code"
     && !input.ctrlKey && !input.shiftKey && input.selectionStart === input.selectionEnd
     && ((input.key === "Backspace" && input.selectionStart === 0)
-      || (input.key === "Enter" && input.text.length === 0))) {
+      || (input.key === "Enter" && input.text.length === 0 && input.blockType !== "toggle"))) {
     return { type: "outdent", preventDefault: true, selection: { start: input.selectionStart, end: input.selectionEnd } };
   }
 
   if (input.key === "Enter") {
-    if (input.ctrlKey && input.blockType === "toggle") {
-      return { type: "toggle_block_open", preventDefault: true };
-    }
     if (input.blockType === "code" && !input.ctrlKey) {
       return { type: "insert_newline", preventDefault: true };
     }

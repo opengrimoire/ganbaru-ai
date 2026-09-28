@@ -61,6 +61,21 @@ describe("notes keyboard planning", () => {
     });
   });
 
+  it("enters a toggle body from its title, including an empty nested toggle", () => {
+    expect(plan({ blockType: "toggle", text: "Details", selectionStart: 7, selectionEnd: 7 }))
+      .toMatchObject({ type: "split_text_block" });
+    expect(plan({ blockType: "toggle", indentationDepth: 2 }))
+      .toMatchObject({ type: "split_text_block" });
+    expect(plan({ blockType: "paragraph", indentationDepth: 1 }))
+      .toMatchObject({ type: "outdent" });
+    expect(plan({ key: "Backspace", blockType: "paragraph", indentationDepth: 1 }))
+      .toMatchObject({ type: "outdent" });
+    expect(plan({ blockType: "toggle", ctrlKey: true }))
+      .toMatchObject({ type: "toggle_block_open" });
+    expect(plan({ blockType: "toggle", metaKey: true }))
+      .toMatchObject({ type: "toggle_block_open" });
+  });
+
   it("allows newline insertion for Shift+Enter and code Enter", () => {
     expect(plan({ key: "Enter", shiftKey: true })).toEqual({
       type: "insert_newline",

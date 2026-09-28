@@ -1,5 +1,5 @@
 import { notesClipboardPasteHtml, readNotesClipboard } from "$lib/notes/clipboard-paste";
-import { notesClipboardContent, setNotesClipboardData, writeNotesClipboard } from "$lib/notes/clipboard-export";
+import { notesClipboardContent, notesDocumentClipboardBlockIds, setNotesClipboardData, writeNotesClipboard } from "$lib/notes/clipboard-export";
 import { notesRichTextFormattingShortcutAnnotationName } from "$lib/notes/rich-text-shortcuts";
 import type { NotesRichTextAnnotationName } from "$lib/notes/rich-text";
 import { tick } from "svelte";
@@ -14,6 +14,7 @@ interface DocumentSelectionOptions {
   readIds: () => readonly string[];
   readPageId: () => string;
   readBlock: (id: string) => NotesBlock | undefined;
+  outlineSubtreeIds: (rootBlockIds: readonly string[]) => readonly string[];
   hydrate: (ids: readonly string[]) => Promise<void>;
   replace: (ids: readonly string[], start: number, end: number, text: string, html?: string, documentSelection?: NotesDocumentSelection) => Promise<void>;
   indent?: (ids: readonly string[], direction: "nest" | "outdent", selection?: NotesDocumentSelection) => Promise<void>;
@@ -134,7 +135,9 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     pinnedIds = entireDocument() ? [] : range.blockIds;
     list?.setAttribute("data-notes-document-selection", "");
     paint();
-    if (next.anchor.blockId === next.focus.blockId && editor(next.anchor.blockId)) { clear(); return; }
+    if (next.anchor.blockId === next.focus.blockId && editor(next.anchor.blockId) && !entireDocument()) {
+      clear(); return;
+    }
     await tick();
     if (!alive || token !== request || page !== options.readPageId()) return;
     if (!entireDocument() && range.blockIds.some((id) => !options.readBlock(id))) await options.hydrate(range.blockIds);
@@ -166,14 +169,25 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
 
   function range() { return selection ? notesDocumentRange(options.readIds(), selection) : null; }
 
-  function clipboardContent() {
+  function clipboardBlockIds(): string[] {
+    const selected = range();
+    return selected ? notesDocumentClipboardBlockIds(
+      selected.blockIds,
+      selected.start.offset,
+      selected.end.offset,
+      options.readBlock,
+      options.outlineSubtreeIds,
+    ) : [];
+  }
+
+  function clipboardContent(blockIds = clipboardBlockIds()) {
     const selected = range();
     if (!selected) return notesClipboardContent([]);
-    return notesClipboardContent(selected.blockIds.map((id, index) => {
+    return notesClipboardContent(blockIds.map((id) => {
       const block = options.readBlock(id);
       if (!block) throw new Error("Notes selection content is still loading");
-      return { block, start: index === 0 ? selected.start.offset : 0,
-        end: index === selected.blockIds.length - 1 ? selected.end.offset : undefined };
+      return { block, start: id === selected.blockIds[0] ? selected.start.offset : 0,
+        end: id === selected.blockIds.at(-1) ? selected.end.offset : undefined };
     }));
   }
 
@@ -201,7 +215,10 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     const token = request;
     if (selected.blockIds.some((id) => !options.readBlock(id))) await hydrateSelection(selected.blockIds);
     if (!alive || token !== request || page !== options.readPageId()) return;
-    await writeNotesClipboard(clipboardContent());
+    const blockIds = clipboardBlockIds();
+    if (blockIds.some((id) => !options.readBlock(id))) await hydrateSelection(blockIds);
+    if (!alive || token !== request || page !== options.readPageId()) return;
+    await writeNotesClipboard(clipboardContent(blockIds));
     if (token !== request) return;
     if (cut) await replace("");
     menu = null;
@@ -455,8 +472,13 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
       return;
     }
     try {
+      const blockIds = clipboardBlockIds();
+      if (blockIds.some((id) => !options.readBlock(id))) {
+        void run(() => copy(event.type === "cut"));
+        return;
+      }
       if (!event.clipboardData) throw new Error("Notes clipboard is unavailable");
-      setNotesClipboardData(event.clipboardData, clipboardContent());
+      setNotesClipboardData(event.clipboardData, clipboardContent(blockIds));
       if (event.type === "cut") void run(() => replace(""));
     } catch (reason) { error = reason instanceof Error ? reason.message : String(reason); }
   }

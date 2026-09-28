@@ -20,6 +20,7 @@ function harness(count = 3, type: NotesBlock["type"] = "paragraph") {
   document.body.append(list);
   const replace = vi.fn(async () => undefined);
   const hydrate = vi.fn(async () => undefined);
+  const outlineSubtreeIds = vi.fn((rootBlockIds: readonly string[]) => [...rootBlockIds]);
   const focus = vi.fn();
   const indent = vi.fn(async () => undefined);
   const navigation = createNotesBlockNavigationController({
@@ -42,7 +43,7 @@ function harness(count = 3, type: NotesBlock["type"] = "paragraph") {
   const blockDelegates = blockSelection.delegation(list);
   const controller = createNotesDocumentSelectionController({
     readIds: () => ids, readPageId: () => "page", readBlock: (id) => blocks.get(id),
-    hydrate, replace, indent, format: vi.fn(async () => undefined), focus, clearBlockSelection: () => blockSelection.setSelection(null),
+    hydrate, outlineSubtreeIds, replace, indent, format: vi.fn(async () => undefined), focus, clearBlockSelection: () => blockSelection.setSelection(null),
     undo: vi.fn(async () => true), redo: vi.fn(async () => true),
   });
   const attached = controller.delegation(list);
@@ -52,7 +53,7 @@ function harness(count = 3, type: NotesBlock["type"] = "paragraph") {
     editor(index).dispatchEvent(event);
     return event;
   };
-  return { controller, blockSelection, hydrateSubtrees, focusRow, replace, indent, hydrate, focus, blocks, ids, editor, key,
+  return { controller, blockSelection, hydrateSubtrees, outlineSubtreeIds, focusRow, replace, indent, hydrate, focus, blocks, ids, editor, key,
     destroy() { attached.destroy(); blockDelegates.destroy(); },
   };
 }
@@ -60,6 +61,95 @@ function harness(count = 3, type: NotesBlock["type"] = "paragraph") {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(document, "caretPositionFromPoint"); document.body.replaceChildren(); window.getSelection()?.removeAllRanges(); });
 
 describe("Notes document selection", () => {
+  it("copies hidden children when Ctrl+A selects a single closed toggle", async () => {
+    const h = harness(1, "toggle");
+    const root = h.blocks.get(h.ids[0])!;
+    if (root.type !== "toggle") throw new Error("Expected toggle");
+    root.toggle.ganbaru_open = false;
+    const child = { ...createBlockWrite("hidden", "paragraph", "Inside"),
+      parent: { type: "block_id", block_id: root.id } } as NotesBlock;
+    h.blocks.set(child.id, child);
+    h.outlineSubtreeIds.mockReturnValue([root.id, child.id]);
+    h.key(0, "a", { ctrlKey: true });
+    await tick();
+    expect(h.controller.selection).not.toBeNull();
+
+    const setData = vi.fn();
+    const event = new Event("copy", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: { setData } });
+    h.editor(0).dispatchEvent(event);
+    expect(setData).toHaveBeenCalledWith("text/plain", "- block-0\n\n    Inside");
+    expect(setData).toHaveBeenCalledWith("text/html", '<details open data-notes-toggle-open="false"><summary>block-0</summary><p>Inside</p></details>');
+    h.destroy();
+  });
+
+  it("copies both toggle bodies in document order when the first toggle is closed", async () => {
+    const h = harness(5);
+    const set = (id: string, type: "toggle" | "paragraph", text: string, parentId?: string) => {
+      const previous = h.blocks.get(id)!;
+      h.blocks.set(id, { ...previous, ...createBlockWrite(id, type, text),
+        parent: parentId ? { type: "block_id", block_id: parentId } : previous.parent,
+      } as NotesBlock);
+    };
+    set(h.ids[0], "toggle", "Example one");
+    set(h.ids[1], "toggle", "Example two");
+    const first = h.blocks.get(h.ids[0])!;
+    if (first.type !== "toggle") throw new Error("Expected toggle");
+    first.toggle.ganbaru_open = false;
+    for (const [index, text] of ["First row", "Second row", "Third row"].entries()) {
+      set(h.ids[index + 2], "paragraph", text, h.ids[1]);
+    }
+    const hiddenIds = ["hidden-1", "hidden-2", "hidden-3"];
+    for (const [index, text] of ["First row", "Second row", "Third row"].entries()) {
+      h.blocks.set(hiddenIds[index], { ...createBlockWrite(hiddenIds[index], "paragraph", text),
+        parent: { type: "block_id", block_id: first.id } } as NotesBlock);
+    }
+    h.outlineSubtreeIds.mockImplementation((roots) => roots[0] === first.id
+      ? [first.id, ...hiddenIds] : [...roots]);
+    h.key(1, "a", { ctrlKey: true });
+    await tick();
+
+    const setData = vi.fn();
+    const event = new Event("copy", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: { setData } });
+    h.editor(1).dispatchEvent(event);
+    const expectedMarkdown = [
+      "- Example one", "", "    First row", "    ", "    Second row", "    ", "    Third row",
+      "", "- Example two", "", "    First row", "    ", "    Second row", "    ", "    Third row",
+    ].join("\n");
+    expect(setData).toHaveBeenCalledWith("text/plain", expectedMarkdown);
+    const html = setData.mock.calls.find(([type]) => type === "text/html")?.[1] as string;
+    expect(html).toContain('<details open data-notes-toggle-open="false"><summary>Example one</summary><p>First row</p><p>Second row</p><p>Third row</p></details>');
+    expect(html).toContain("<details open><summary>Example two</summary><p>First row</p><p>Second row</p><p>Third row</p></details>");
+    h.controller.clear();
+    await h.controller.select({ anchor: { blockId: h.ids[0], offset: 0 },
+      focus: { blockId: h.ids[4], offset: "Third row".length } });
+    setData.mockClear();
+    h.editor(1).dispatchEvent(event);
+    expect(setData).toHaveBeenCalledWith("text/plain", expectedMarkdown);
+    h.destroy();
+  });
+
+  it("hydrates an unloaded closed toggle child before the asynchronous clipboard write", async () => {
+    const h = harness(1, "toggle");
+    const root = h.blocks.get(h.ids[0])!;
+    if (root.type !== "toggle") throw new Error("Expected toggle");
+    root.toggle.ganbaru_open = false;
+    const child = { ...createBlockWrite("hidden", "paragraph", "Inside"),
+      parent: { type: "block_id", block_id: root.id } } as NotesBlock;
+    h.outlineSubtreeIds.mockReturnValue([root.id, child.id]);
+    h.hydrate.mockImplementation(async () => { h.blocks.set(child.id, child); });
+    const copied: Record<string, Blob>[] = [];
+    vi.stubGlobal("ClipboardItem", class { constructor(data: Record<string, Blob>) { copied.push(data); } });
+    vi.stubGlobal("navigator", { clipboard: { write: vi.fn(async () => undefined) } });
+    h.key(0, "a", { ctrlKey: true });
+    await tick();
+    await h.controller.copy();
+    expect(h.hydrate).toHaveBeenCalledWith([root.id, child.id]);
+    expect(await copied[0]["text/plain"].text()).toContain("    Inside");
+    h.destroy();
+  });
+
   it("hydrates unloaded descendants before exporting whole blocks", async () => {
     const h = harness();
     const child = h.blocks.get(h.ids[1])!;

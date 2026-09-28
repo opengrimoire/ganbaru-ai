@@ -39,6 +39,8 @@ import type { NotesPostMutationResult } from "$lib/notes/post-mutation";
 interface NotesBlockMovementActionsContext {
   readPageGeneration?: () => number;
   prepareIndentation?: (ids: readonly string[], direction: "nest" | "outdent") => void | Promise<void>;
+  prepareBlockDeletion?: (blockId: string) => void | Promise<void>;
+  outlineSubtreeIds?: (rootBlockIds: readonly string[]) => string[];
   enqueueEditorMutation: (mutation: () => Promise<void>) => Promise<void>;
   localApplyBlockUpdate: (blockId: string, update: NotesBlockUpdate) => void;
   readSelectedPageId: () => string | null;
@@ -139,7 +141,6 @@ export function createNotesBlockMovementActions(
     if (!parent) return false;
     let after = plan.after;
     for (const childId of plan.childIds) {
-      await context.flushBlockSave(childId);
       await context.moveAndApply(childId, { parent, after, before: null });
       after = childId;
     }
@@ -148,7 +149,10 @@ export function createNotesBlockMovementActions(
 
   async function deleteBlock(blockId: string): Promise<void> {
     const pageId = context.readSelectedPageId();
+    const generation = context.readPageGeneration?.();
     if (!pageId) return;
+    await context.prepareBlockDeletion?.(blockId);
+    if (pageId !== context.readSelectedPageId() || generation !== context.readPageGeneration?.()) return;
     const plan = planDeleteBlock(context.flatBlockItemsForBlockContext(blockId), blockId);
     if (!plan) return;
     const block = context.blockById(blockId);
@@ -190,9 +194,10 @@ export function createNotesBlockMovementActions(
         void persistence;
         return;
       }
-      await context.flushBlockSave(blockId);
-      if (!(await moveReparentedChildren(childPlan))) return;
-      await context.trashAndApply([plan.deleteBlockId]);
+      await context.enqueueEditorMutation(async () => {
+        if (!(await moveReparentedChildren(childPlan))) return;
+        await context.trashAndApply([plan.deleteBlockId!]);
+      });
     }
     context.requestBlockFocus(plan.focusBlockId);
     context.recordUndoAfter("delete", before, plan.focusBlockId);
@@ -205,7 +210,10 @@ export function createNotesBlockMovementActions(
     if (roots.length === 0) return;
     const before = context.undoSnapshot(roots[0] ?? null);
     const focus = focusAfterDeletingSelection(roots);
-    const removed = notesSelectionSubtreeIds(context.treeState(), roots);
+    const removed = [...new Set([
+      ...notesSelectionSubtreeIds(context.treeState(), roots),
+      ...(context.outlineSubtreeIds?.(roots) ?? []),
+    ])];
     context.applyPostMutation({ removedBlockIds: removed });
     const bodyId = context.ensurePageBody(pageId);
     const nextFocus = focus ?? bodyId;

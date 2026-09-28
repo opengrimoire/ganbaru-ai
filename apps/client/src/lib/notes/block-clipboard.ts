@@ -8,6 +8,7 @@ import type { NotesBlockType, NotesBlockUpdate, NotesBlockWrite, NotesParent, No
 
 export const NOTES_CLIPBOARD_MAX_TEXT_LENGTH = 64 * 1024;
 export const NOTES_CLIPBOARD_MAX_BLOCKS = 101;
+export const NOTES_MARKDOWN_LIST_PARAGRAPHS_ATTRIBUTE = "data-notes-markdown-list-paragraphs";
 const MARKDOWN_TAB_WIDTH = 4;
 
 type NotesPastedTextBlockType =

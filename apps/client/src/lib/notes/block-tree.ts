@@ -164,7 +164,8 @@ export function flattenNotesBlockChildren(
   return items;
 }
 
-function blockChildrenAreVisible(block: NotesBlock): boolean {
+/** Decide whether a hydrated block exposes its children in the editor. */
+export function blockChildrenAreVisible(block: NotesBlock): boolean {
   if (block.type === "child_page") return false;
   if (block.type === "column_list" || block.type === "column") return false;
   if (block.type === "table" || block.type === "table_row") return false;

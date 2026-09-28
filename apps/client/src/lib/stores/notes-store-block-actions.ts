@@ -87,6 +87,8 @@ export interface NotesBlockReadCapabilities {
   readPageGeneration?: () => number;
   /** Omitted by fully hydrated callers; partial page projections load affected neighbours first. */
   prepareIndentation?: (ids: readonly string[], direction: "nest" | "outdent") => void | Promise<void>;
+  /** Hydrate descendants before a keyboard delete can reparent them. */
+  prepareBlockDeletion?: (blockId: string) => void | Promise<void>;
   readSelectedPageId: () => string | null;
   /** Includes unloaded root outlines, so partial hydration never looks like an empty page. */
   readPageRootBlockIds: () => readonly string[];

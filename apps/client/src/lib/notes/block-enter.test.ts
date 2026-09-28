@@ -21,7 +21,7 @@ describe("notes Enter block behavior", () => {
     expect(notesEnterSiblingBlockType("bulleted_list_item")).toBe("bulleted_list_item");
     expect(notesEnterSiblingBlockType("numbered_list_item")).toBe("numbered_list_item");
     expect(notesEnterSiblingBlockType("to_do")).toBe("to_do");
-    expect(notesEnterSiblingBlockType("toggle")).toBe("toggle");
+    expect(notesEnterSiblingBlockType("toggle")).toBe("paragraph");
     expect(notesEnterSiblingBlockType("heading_2")).toBe("paragraph");
     expect(notesEnterSiblingBlockType("callout")).toBe("paragraph");
     expect(notesEnterSiblingBlockType("quote")).toBe("paragraph");
@@ -31,7 +31,7 @@ describe("notes Enter block behavior", () => {
     expect(notesEmptyEnterReturnsParagraph("bulleted_list_item")).toBe(true);
     expect(notesEmptyEnterReturnsParagraph("numbered_list_item")).toBe(true);
     expect(notesEmptyEnterReturnsParagraph("to_do")).toBe(true);
-    expect(notesEmptyEnterReturnsParagraph("toggle")).toBe(true);
+    expect(notesEmptyEnterReturnsParagraph("toggle")).toBe(false);
     expect(notesEmptyEnterReturnsParagraph("callout")).toBe(true);
     expect(notesEmptyEnterReturnsParagraph("quote")).toBe(true);
     expect(notesEmptyEnterReturnsParagraph("paragraph")).toBe(false);

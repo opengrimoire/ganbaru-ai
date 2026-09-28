@@ -1,4 +1,5 @@
 import { blockIndent } from "./block-queries";
+import { blockChildrenAreVisible } from "./block-tree";
 import type { NotesBlock, NotesBlockOutline, NotesBlockTreeItem } from "./types";
 
 export interface NotesBlockOutlineItem {
@@ -35,10 +36,12 @@ export function notesEstimatedBlockHeight(type: NotesBlock["type"]): number {
   return 36;
 }
 
-/** Flatten page and nested block outlines in persisted sibling order. */
+/** Flatten page outlines in sibling order, omitting children of known hidden blocks. */
 export function flattenNotesBlockOutlines(
   outlines: readonly NotesBlockOutline[],
   pageId: string,
+  blocksById: Readonly<Record<string, NotesBlock>> = {},
+  hiddenChildBlockIds?: ReadonlySet<string>,
 ): NotesBlockOutlineItem[] {
   const children = new Map<string, NotesBlockOutline[]>();
   for (const outline of outlines) {
@@ -60,11 +63,40 @@ export function flattenNotesBlockOutlines(
       visited.add(outline.id);
       const itemDepth = depth + (outline.ganbaru_indent ?? 0);
       result.push({ outline, depth: itemDepth });
-      append(outline.id, itemDepth + 1);
+      const block = blocksById[outline.id];
+      if (block ? blockChildrenAreVisible(block) : !hiddenChildBlockIds?.has(outline.id)) {
+        append(outline.id, itemDepth + 1);
+      }
     }
   };
   append(pageId, 0);
   return result;
+}
+
+/** Return complete outline subtrees, including children hidden by collapsed blocks. */
+export function notesOutlineSubtreeIds(
+  outlines: readonly NotesBlockOutline[],
+  pageId: string,
+  rootBlockIds: readonly string[],
+): string[] {
+  const roots = new Set(rootBlockIds);
+  const outlinesById = new Map(outlines.map((outline) => [outline.id, outline]));
+  const included: string[] = [];
+  for (const { outline } of flattenNotesBlockOutlines(outlines, pageId)) {
+    let current: NotesBlockOutline | undefined = outline;
+    const visitedAncestors = new Set<string>();
+    while (current && !visitedAncestors.has(current.id)) {
+      visitedAncestors.add(current.id);
+      if (roots.has(current.id)) {
+        included.push(outline.id);
+        break;
+      }
+      current = current.parent.type === "block_id"
+        ? outlinesById.get(current.parent.block_id)
+        : undefined;
+    }
+  }
+  return included;
 }
 
 /** Map hydrated tree items to the order established by the lightweight outline. */

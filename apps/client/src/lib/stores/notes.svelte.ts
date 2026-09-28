@@ -10,6 +10,7 @@ import {
   type NotesTreeState,
 } from "$lib/notes/block-tree";
 import {
+  notesOutlineSubtreeIds,
   type NotesBlockOutlineItem,
 } from "$lib/notes/block-outline";
 import {
@@ -715,23 +716,8 @@ function visibleBlockIds(): string[] {
 
 /** Find complete subtree identities from outlines, including unhydrated block bodies. */
 function outlineSubtreeIds(rootBlockIds: readonly string[]): string[] {
-  const roots = new Set(rootBlockIds);
-  const outlinesById = new Map(treeProjection.blockOutlines.map((outline) => [outline.id, outline]));
-  const included = new Set<string>();
-  for (const item of treeProjection.flatBlockOutlines) {
-    let current: NotesBlockOutline | undefined = item.outline;
-    while (current) {
-      if (roots.has(current.id)) {
-        included.add(item.outline.id);
-        break;
-      }
-      const parentId: string | null = current.parent.type === "block_id"
-        ? current.parent.block_id
-        : null;
-      current = parentId ? outlinesById.get(parentId) : undefined;
-    }
-  }
-  return [...included];
+  const pageId = pageSession.selectedPageId;
+  return pageId ? notesOutlineSubtreeIds(treeProjection.blockOutlines, pageId, rootBlockIds) : [];
 }
 
 function requestPageLoadFocus(requestedBlockId: string | null = null): void {
@@ -878,6 +864,18 @@ const pageActions = createNotesPageActions({
 
 const blockActions = createNotesBlockActions({
   readPageGeneration: () => pageSession.generation,
+  prepareBlockDeletion: async (blockId) => {
+    const pageId = pageSession.selectedPageId;
+    const generation = pageSession.generation;
+    if (pendingPageOutline && pageSession.isCurrent(pendingPageOutline.generation, pendingPageOutline.pageId)) {
+      await pendingPageOutline.promise;
+    }
+    if (!pageId || pageId !== pageSession.selectedPageId || generation !== pageSession.generation) return;
+    const required = outlineSubtreeIds([blockId]);
+    if (required.some((id) => !blockById(id))) await hydrateBlockRange(required, generation);
+    if (pageId !== pageSession.selectedPageId || generation !== pageSession.generation) return;
+    if (required.some((id) => !blockById(id))) throw new Error("Notes block descendants could not be loaded for deletion");
+  },
   prepareIndentation: (ids, direction) => {
     const generation = pageSession.generation;
     const hydrate = () => {
@@ -933,7 +931,17 @@ const blockActions = createNotesBlockActions({
 async function replaceDocumentRange(ids: readonly string[], start: number, end: number, text: string, html?: string, documentSelection?: NotesDocumentSelection): Promise<void> {
   const pageId = pageSession.selectedPageId;
   const generation = pageSession.generation;
-  const required = [...new Set([...ids, ...outlineSubtreeIds(ids.slice(1))])];
+  if (pendingPageOutline && pageSession.isCurrent(pendingPageOutline.generation, pendingPageOutline.pageId)) {
+    await pendingPageOutline.promise;
+  }
+  if (pageId !== pageSession.selectedPageId || generation !== pageSession.generation) return;
+  const first = blockById(ids[0]);
+  const firstIsFullySelected = first && start === 0
+    && (ids.length > 1 || end >= blockPlainText(first).length);
+  const required = [...new Set([
+    ...ids,
+    ...outlineSubtreeIds(firstIsFullySelected ? ids : ids.slice(1)),
+  ])];
   if (required.some((id) => !blockById(id))) await hydrateBlockRange(required);
   if (pageId !== pageSession.selectedPageId || generation !== pageSession.generation) return;
   if (required.some((id) => !blockById(id))) throw new Error("Notes selection content could not be loaded");
@@ -959,8 +967,7 @@ const hydrationController = createNotesHydrationController({
   readFocusRequest: () => focusRequest,
   mergeBlockOutlines,
   replaceHydratedBlocks: (nextBlocksById, nextChildIdsByParentId) => {
-    treeProjection.blocksById = nextBlocksById;
-    treeProjection.childIdsByParentId = nextChildIdsByParentId;
+    treeProjection.replaceHydratedBlocks(nextBlocksById, nextChildIdsByParentId);
   },
   setLoadError: (message) => {
     workspaceController.setError(message);

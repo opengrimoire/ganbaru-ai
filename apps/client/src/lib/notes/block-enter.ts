@@ -21,14 +21,12 @@ const SAME_TYPE_ENTER_BLOCK_TYPES = new Set<NotesBlockType>([
   "bulleted_list_item",
   "numbered_list_item",
   "to_do",
-  "toggle",
 ]);
 
 const EMPTY_ENTER_RETURNS_PARAGRAPH_TYPES = new Set<NotesBlockType>([
   "bulleted_list_item",
   "numbered_list_item",
   "to_do",
-  "toggle",
   "callout",
   "quote",
 ]);

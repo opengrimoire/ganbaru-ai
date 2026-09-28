@@ -4,7 +4,7 @@ import { applyBlockUpdate, blockIndent, blockEditableRichText, blockPlainText, b
 import { buildNotesChildIdsByParent, flattenNotesBlockTree, notesIndentationContextIds } from "$lib/notes/block-tree";
 import { parseNotesBlock } from "$lib/notes/block-validation";
 import { notesNumberedListOrdinals } from "$lib/notes/block-editor-ui";
-import { notesBlockOutlineFromBlock } from "$lib/notes/block-outline";
+import { notesBlockOutlineFromBlock, notesOutlineSubtreeIds } from "$lib/notes/block-outline";
 import type { NotesAppendBlockChildrenRequest, NotesBlock, NotesBlockUpdate, NotesBlockWrite, NotesParent } from "$lib/notes/types";
 import { createNotesBlockActions } from "./notes-store-block-actions";
 import { createNotesBlockPersistence } from "./notes-store-persistence";
@@ -31,7 +31,11 @@ function fromWrite(write: NotesBlockWrite): NotesBlock {
 }
 
 /** Connects the real action, projection, persistence, and history controllers to delayed storage. */
-function editor(initialBlocks?: NotesBlock[], prepareIndentation?: (ids: readonly string[], direction: "nest" | "outdent") => void | Promise<void>) {
+function editor(
+  initialBlocks?: NotesBlock[],
+  prepareIndentation?: (ids: readonly string[], direction: "nest" | "outdent") => void | Promise<void>,
+  prepareBlockDeletion?: (blockId: string) => void | Promise<void>,
+) {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
   const first = fromWrite(createBlockWrite(firstId, "paragraph", "FirstSecond"));
@@ -87,10 +91,12 @@ function editor(initialBlocks?: NotesBlock[], prepareIndentation?: (ids: readonl
   });
   const actions = createNotesBlockActions({
     prepareIndentation,
+    prepareBlockDeletion,
     readPageRootBlockIds: () => projection.blockOutlines.filter((outline) => outline.parent.type === "page_id" && outline.parent.page_id === pageId).map((outline) => outline.id),
     ...persistence, readSelectedPageId: () => pageId,
     readBlocksById: () => projection.blocksById, readChildIdsByParentId: () => projection.childIdsByParentId,
-    treeState: () => projection.treeState(), outlineSubtreeIds: (ids) => [...ids],
+    treeState: () => projection.treeState(),
+    outlineSubtreeIds: (ids) => notesOutlineSubtreeIds(projection.blockOutlines, pageId, ids),
     blockById: (id) => projection.blocksById[id],
     flatBlockItemsForBlockContext: () => flattenNotesBlockTree(projection.treeState(), pageId),
     tableRowsForBlock: () => [], columnItemsForBlock: () => [], tabItemsForBlock: () => [],
@@ -543,6 +549,120 @@ describe("Notes editing with delayed persistence", () => {
     expect(blockPlainText(h.stored.get(firstId)!)).toBe("After");
   });
 
+  it("deletes hidden toggle descendants when a document range replaces the whole toggle", async () => {
+    const toggle = fromWrite(createBlockWrite(firstId, "toggle", "Details"));
+    if (toggle.type !== "toggle") throw new Error("Expected toggle");
+    toggle.toggle.ganbaru_open = false;
+    const childId = "00000000-0000-4000-8000-000000000004";
+    const child = { ...fromWrite(createBlockWrite(childId, "paragraph", "Hidden")),
+      parent: { type: "block_id" as const, block_id: firstId } };
+    const h = editor([toggle, child, fromWrite(createBlockWrite(lastId, "paragraph", "After"))]);
+
+    await h.actions.replaceDocumentRange([firstId, lastId], 0, Number.MAX_SAFE_INTEGER, "");
+    expect(h.projection.childIdsByParentId[pageId]).toEqual([firstId]);
+    expect(h.projection.blocksById[firstId].type).toBe("paragraph");
+    expect(h.projection.blocksById[childId]).toBeUndefined();
+    expect(h.projection.blockOutlines.some((outline) => outline.id === childId)).toBe(false);
+
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(h.stored.get(childId)?.in_trash).toBe(true);
+    expect(h.stored.get(lastId)?.in_trash).toBe(true);
+    expect(h.error).not.toHaveBeenCalled();
+  });
+
+  it("clears a selected closed toggle and its body when it is the only visible row", async () => {
+    const toggle = fromWrite(createBlockWrite(firstId, "toggle", "Details"));
+    if (toggle.type !== "toggle") throw new Error("Expected toggle");
+    toggle.toggle.ganbaru_open = false;
+    const childId = "00000000-0000-4000-8000-000000000004";
+    const child = { ...fromWrite(createBlockWrite(childId, "paragraph", "Hidden")),
+      parent: { type: "block_id" as const, block_id: firstId } };
+    const h = editor([toggle, child]);
+
+    await h.actions.replaceDocumentRange([firstId], 0, Number.MAX_SAFE_INTEGER, "");
+    expect(h.projection.blocksById[firstId].type).toBe("paragraph");
+    expect(h.projection.blocksById[childId]).toBeUndefined();
+
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(h.stored.get(childId)?.in_trash).toBe(true);
+    expect(h.error).not.toHaveBeenCalled();
+  });
+
+  it("serializes toggle updates before reparenting and deleting its row", async () => {
+    const toggle = fromWrite(createBlockWrite(firstId, "toggle", "Details"));
+    if (toggle.type !== "toggle") throw new Error("Expected toggle");
+    toggle.toggle.ganbaru_open = false;
+    const childId = "00000000-0000-4000-8000-000000000004";
+    const child = { ...fromWrite(createBlockWrite(childId, "paragraph", "Hidden")),
+      parent: { type: "block_id" as const, block_id: firstId } };
+    const h = editor([fromWrite(createBlockWrite(lastId, "paragraph", "Before")), toggle, child]);
+    let releaseUpdate!: () => void;
+    const updateGate = new Promise<void>((resolve) => { releaseUpdate = resolve; });
+    const events: string[] = [];
+    api.updateNotesBlock.mockImplementation(async (id: string, update: NotesBlockUpdate) => {
+      events.push("update started");
+      await updateGate;
+      const block = h.stored.get(id);
+      if (!block || block.in_trash) throw new Error("notes block not found");
+      const saved = applyBlockUpdate(block, update);
+      h.stored.set(id, saved);
+      events.push("update finished");
+      return saved;
+    });
+    api.moveNotesBlock.mockImplementation(async (id: string, request: { parent: NotesParent }) => {
+      events.push("move");
+      const block = h.stored.get(id)!;
+      const moved = { ...block, parent: request.parent };
+      h.stored.set(id, moved);
+      return moved;
+    });
+    api.trashNotesBlock.mockImplementation(async (id: string, inTrash: boolean) => {
+      events.push("trash");
+      const block = h.stored.get(id)!;
+      h.stored.set(id, { ...block, in_trash: inTrash });
+    });
+
+    await h.actions.updateToggleOpen(firstId, true);
+    const deletion = h.actions.deleteBlock(firstId);
+    await Promise.resolve();
+    expect(events).toEqual(["update started"]);
+    releaseUpdate();
+    await deletion;
+    expect(events).toEqual(["update started", "update finished", "move", "trash"]);
+    expect(h.stored.get(childId)?.parent).toEqual(parent);
+    expect(h.stored.get(firstId)?.in_trash).toBe(true);
+    expect(h.error).not.toHaveBeenCalled();
+    h.release();
+  });
+
+  it("loads a closed toggle's children before deleting only its row", async () => {
+    const toggle = fromWrite(createBlockWrite(firstId, "toggle", "Details"));
+    if (toggle.type !== "toggle") throw new Error("Expected toggle");
+    toggle.toggle.ganbaru_open = false;
+    const childId = "00000000-0000-4000-8000-000000000004";
+    const child = { ...fromWrite(createBlockWrite(childId, "paragraph", "Hidden")),
+      parent: { type: "block_id" as const, block_id: firstId } };
+    const prepare = vi.fn(async () => {
+      h.projection.blocksById[childId] = child;
+      h.projection.childIdsByParentId[firstId] = [childId];
+    });
+    const h = editor([fromWrite(createBlockWrite(lastId, "paragraph", "Before")), toggle, child], undefined, prepare);
+    delete h.projection.blocksById[childId];
+    h.projection.childIdsByParentId[firstId] = [];
+
+    const deletion = h.actions.deleteBlock(firstId);
+    await Promise.resolve();
+    expect(prepare).toHaveBeenCalledExactlyOnceWith(firstId);
+    h.release();
+    await deletion;
+    expect(h.stored.get(childId)?.parent).toEqual(parent);
+    expect(h.stored.get(childId)?.in_trash).toBe(false);
+    expect(h.stored.get(firstId)?.in_trash).toBe(true);
+    expect(h.error).not.toHaveBeenCalled();
+  });
+
   it("does not add an empty paragraph when only unloaded root outlines remain", async () => {
     const h = editor([]);
     h.projection.blockOutlines = [notesBlockOutlineFromBlock(fromWrite(createBlockWrite(firstId, "paragraph", "Unloaded")), pageId, 0)];
@@ -686,6 +806,107 @@ describe("Notes editing with delayed persistence", () => {
     await e.persistence.flushPendingBlockSaves();
     expect(blockPlainText(e.projection.blocksById[newId])).toBe("Second edited");
     expect(blockPlainText(e.stored.get(newId)!)).toBe("Second edited");
+  });
+
+  it("opens a collapsed toggle and writes the split title suffix as an editable child", async () => {
+    const toggle = fromWrite(createBlockWrite(firstId, "toggle", "Title suffix"));
+    if (toggle.type !== "toggle") throw new Error("Expected toggle");
+    toggle.toggle.ganbaru_open = false;
+    const h = editor([toggle, fromWrite(createBlockWrite(lastId, "paragraph", "After"))]);
+    await h.actions.splitTextBlockAtSelection(firstId, 6, 6);
+    const childId = h.projection.childIdsByParentId[firstId]?.[0];
+    expect(childId).toBeTruthy();
+    expect(h.projection.childIdsByParentId[pageId]).toEqual([firstId, lastId]);
+    expect(h.projection.flatBlockOutlines.map((item) => item.outline.id)).toEqual([firstId, childId, lastId]);
+    expect(h.projection.blocksById[firstId]).toMatchObject({ toggle: { ganbaru_open: true } });
+    expect(blockPlainText(h.projection.blocksById[firstId])).toBe("Title ");
+    expect(h.projection.blocksById[childId].parent).toEqual({ type: "block_id", block_id: firstId });
+    expect(h.projection.blocksById[childId].type).toBe("paragraph");
+    expect(blockPlainText(h.projection.blocksById[childId])).toBe("suffix");
+    await h.undo.undo();
+    expect(h.projection.childIdsByParentId[firstId] ?? []).toEqual([]);
+    expect(h.projection.blocksById[firstId]).toMatchObject({ toggle: { ganbaru_open: false } });
+    expect(blockPlainText(h.projection.blocksById[firstId])).toBe("Title suffix");
+    await h.undo.redo();
+    expect(h.projection.childIdsByParentId[firstId]).toEqual([childId]);
+    await h.actions.updateBlockText(childId, "Edited child");
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(h.stored.get(firstId)).toMatchObject({ toggle: { ganbaru_open: true } });
+    expect(h.stored.get(childId)?.parent).toEqual({ type: "block_id", block_id: firstId });
+    expect(blockPlainText(h.stored.get(childId)!)).toBe("Edited child");
+    expect(h.error).not.toHaveBeenCalled();
+  });
+
+  it("adds an empty paragraph inside an empty toggle without creating another top-level toggle", async () => {
+    const h = editor([fromWrite(createBlockWrite(firstId, "toggle", "")),
+      fromWrite(createBlockWrite(lastId, "paragraph", "After"))]);
+    await h.actions.splitTextBlockAtSelection(firstId, 0, 0);
+    const childId = h.projection.childIdsByParentId[firstId]?.[0];
+    expect(childId).toBeTruthy();
+    expect(h.projection.childIdsByParentId[pageId]).toEqual([firstId, lastId]);
+    expect(h.projection.blocksById[childId]).toMatchObject({
+      type: "paragraph", parent: { type: "block_id", block_id: firstId },
+    });
+    expect(h.focus).toHaveBeenLastCalledWith(childId, { start: 0, end: 0 });
+    await h.actions.outdentBlock(childId);
+    expect(h.projection.childIdsByParentId[firstId] ?? []).toEqual([]);
+    expect(h.projection.childIdsByParentId[pageId]).toEqual([firstId, childId, lastId]);
+    expect(h.projection.blocksById[childId].parent).toEqual(parent);
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(h.stored.get(childId)?.parent).toEqual(parent);
+  });
+
+  it("removes collapsed toggle descendants from rendered outlines without deleting them", async () => {
+    const root = fromWrite(createBlockWrite(firstId, "toggle", "Details"));
+    const child = { ...fromWrite(createBlockWrite("child", "paragraph", "Hidden")),
+      parent: { type: "block_id", block_id: firstId } as const };
+    const sibling = fromWrite(createBlockWrite(lastId, "paragraph", "After"));
+    const h = editor([root, child, sibling]);
+    const visibleIds = () => h.projection.flatBlockOutlines.map(({ outline }) => outline.id);
+    expect(visibleIds()).toEqual([firstId, child.id, lastId]);
+
+    await h.actions.updateToggleOpen(firstId, false);
+    expect(visibleIds()).toEqual([firstId, lastId]);
+    expect(h.projection.blockOutlines.map((outline) => outline.id)).toContain(child.id);
+    expect(h.projection.childIdsByParentId[firstId]).toEqual([child.id]);
+
+    await h.actions.updateToggleOpen(firstId, true);
+    expect(visibleIds()).toEqual([firstId, child.id, lastId]);
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(h.stored.get(child.id)?.parent).toEqual(child.parent);
+    expect(h.error).not.toHaveBeenCalled();
+  });
+
+  it("hides toggle child placeholders once a closed parent body hydrates", () => {
+    const root = fromWrite(createBlockWrite(firstId, "toggle", "Details"));
+    if (root.type !== "toggle") throw new Error("Expected toggle");
+    root.toggle.ganbaru_open = false;
+    const child = { ...fromWrite(createBlockWrite("child", "paragraph", "Hidden")),
+      parent: { type: "block_id", block_id: firstId } as const };
+    const sibling = fromWrite(createBlockWrite(lastId, "paragraph", "After"));
+    const projection = new NotesTreeProjectionController({ readSelectedPageId: () => pageId });
+    projection.replaceOutlines([root, child, sibling].map((block, index) => (
+      notesBlockOutlineFromBlock(block, pageId, index)
+    )), pageId);
+    expect(projection.flatBlockOutlines.map(({ outline }) => outline.id))
+      .toEqual([firstId, child.id, lastId]);
+
+    projection.replaceHydratedBlocks({ [firstId]: root }, { [pageId]: [firstId, lastId] });
+    expect(projection.flatBlockOutlines.map(({ outline }) => outline.id))
+      .toEqual([firstId, lastId]);
+    expect(projection.blockOutlines.map((outline) => outline.id)).toContain(child.id);
+
+    projection.replaceHydratedBlocks({}, {});
+    expect(projection.flatBlockOutlines.map(({ outline }) => outline.id))
+      .toEqual([firstId, lastId]);
+    projection.replaceHydratedBlocks({ [firstId]: {
+      ...root, toggle: { ...root.toggle, ganbaru_open: true },
+    } }, { [pageId]: [firstId, lastId] });
+    expect(projection.flatBlockOutlines.map(({ outline }) => outline.id))
+      .toEqual([firstId, child.id, lastId]);
   });
 
   it("merges, splits, and undoes before storage responds without resurrecting stale text", async () => {

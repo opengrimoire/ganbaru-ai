@@ -1,6 +1,6 @@
 import { blockIndent } from "$lib/notes/block-queries";
 import { flattenNotesBlockOutlines, notesBlockOutlineFromBlock, type NotesBlockOutlineItem } from "$lib/notes/block-outline";
-import { buildNotesChildIdsByParent, parentIdForBlock, type NotesTreeState } from "$lib/notes/block-tree";
+import { blockChildrenAreVisible, buildNotesChildIdsByParent, parentIdForBlock, type NotesTreeState } from "$lib/notes/block-tree";
 import type { NotesUndoSnapshot } from "$lib/notes/undo-history";
 import { applyNotesPostMutationToTree, type NotesPostMutationResult } from "$lib/notes/post-mutation";
 import type { NotesBlock, NotesBlockOutline, NotesLoadedPage, NotesPage } from "$lib/notes/types";
@@ -20,6 +20,7 @@ export class NotesTreeProjectionController {
   primaryContentReady = $state(false);
 
   private markLocallyChanged: (blockId: string) => void = () => {};
+  private hiddenChildBlockIds = new Set<string>();
 
   constructor(private readonly options: NotesTreeProjectionOptions) {}
 
@@ -42,8 +43,10 @@ export class NotesTreeProjectionController {
   replaceBlock(block: NotesBlock): void {
     const previous = this.blocksById[block.id];
     this.blocksById = { ...this.blocksById, [block.id]: block };
-    // Conversions affect outline-based rendering even when sibling order is unchanged.
-    if (previous && (previous.type !== block.type || blockIndent(previous) !== blockIndent(block))) this.syncLocalOutlines();
+    this.rememberChildVisibility(block);
+    // Type, indentation, and collapsed state affect outline rendering without changing sibling order.
+    if (previous && (previous.type !== block.type || blockIndent(previous) !== blockIndent(block)
+      || blockChildrenAreVisible(previous) !== blockChildrenAreVisible(block))) this.syncLocalOutlines();
   }
 
   applyLocalUndoSnapshot(target: NotesUndoSnapshot, source: NotesUndoSnapshot): void {
@@ -52,9 +55,15 @@ export class NotesTreeProjectionController {
     const affectedIds = new Set([...targetIds, ...sourceIds]);
     const nextBlocksById = { ...this.blocksById };
     for (const blockId of sourceIds) {
-      if (!targetIds.has(blockId)) delete nextBlocksById[blockId];
+      if (!targetIds.has(blockId)) {
+        delete nextBlocksById[blockId];
+        this.hiddenChildBlockIds.delete(blockId);
+      }
     }
-    for (const block of target.blocks) nextBlocksById[block.id] = block;
+    for (const block of target.blocks) {
+      nextBlocksById[block.id] = block;
+      this.rememberChildVisibility(block);
+    }
     for (const blockId of affectedIds) this.markLocallyChanged(blockId);
     this.blocksById = nextBlocksById;
     const targetById = new Map(target.blocks.map((block) => [block.id, block]));
@@ -105,6 +114,7 @@ export class NotesTreeProjectionController {
     const next = notesTreeStateWithoutLeafBlock(this.treeState(), blockId);
     if (!next) return false;
     this.markLocallyChanged(blockId);
+    this.hiddenChildBlockIds.delete(blockId);
     this.blocksById = next.blocksById;
     this.childIdsByParentId = next.childIdsByParentId;
     this.blockOutlines = this.blockOutlines.filter((outline) => outline.id !== blockId);
@@ -119,15 +129,37 @@ export class NotesTreeProjectionController {
 
   setLoadedPage(loaded: NotesLoadedPage): void {
     this.loadedPage = loaded.page;
+    this.hiddenChildBlockIds.clear();
     const blocks = loaded.blocks.results;
     this.blocksById = Object.fromEntries(blocks.map((block) => [block.id, block]));
     this.childIdsByParentId = buildNotesChildIdsByParent(blocks);
     this.primaryContentReady = true;
   }
 
+  replaceHydratedBlocks(
+    blocksById: Record<string, NotesBlock>,
+    childIdsByParentId: Record<string, string[]>,
+  ): void {
+    for (const block of Object.values(this.blocksById)) {
+      if (!blocksById[block.id] && !blockChildrenAreVisible(block)) {
+        this.hiddenChildBlockIds.add(block.id);
+      }
+    }
+    for (const block of Object.values(blocksById)) this.rememberChildVisibility(block);
+    this.blocksById = blocksById;
+    this.childIdsByParentId = childIdsByParentId;
+    const pageId = this.options.readSelectedPageId();
+    if (pageId) this.flatBlockOutlines = flattenNotesBlockOutlines(this.blockOutlines, pageId, blocksById, this.hiddenChildBlockIds);
+  }
+
+  private rememberChildVisibility(block: NotesBlock): void {
+    if (blockChildrenAreVisible(block)) this.hiddenChildBlockIds.delete(block.id);
+    else this.hiddenChildBlockIds.add(block.id);
+  }
+
   replaceOutlines(outlines: readonly NotesBlockOutline[], pageId: string): void {
     this.blockOutlines = [...outlines];
-    this.flatBlockOutlines = flattenNotesBlockOutlines(this.blockOutlines, pageId);
+    this.flatBlockOutlines = flattenNotesBlockOutlines(this.blockOutlines, pageId, this.blocksById, this.hiddenChildBlockIds);
   }
 
   mergeOutlines(outlines: readonly NotesBlockOutline[], pageId: string): void {
@@ -181,6 +213,8 @@ export class NotesTreeProjectionController {
     if (result.blocks || result.placements || result.removedBlockIds) {
       const next = applyNotesPostMutationToTree(this.treeState(), result);
       this.blocksById = { ...next.blocksById };
+      for (const block of result.blocks ?? []) this.rememberChildVisibility(block);
+      for (const blockId of result.removedBlockIds ?? []) this.hiddenChildBlockIds.delete(blockId);
       this.childIdsByParentId = Object.fromEntries(
         Object.entries(next.childIdsByParentId).map(([parentId, childIds]) => [parentId, [...childIds]]),
       );
@@ -205,6 +239,7 @@ export class NotesTreeProjectionController {
 
   clearLoadedTree(): void {
     this.loadedPage = null;
+    this.hiddenChildBlockIds.clear();
     this.blocksById = {};
     this.childIdsByParentId = {};
   }

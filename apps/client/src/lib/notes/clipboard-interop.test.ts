@@ -26,6 +26,62 @@ function pasted(text: string, html = "", currentText = "", start = 0, end = star
 }
 
 describe("Notes portable clipboard interoperability", () => {
+  it("preserves a closed toggle through HTML and provides a readable plain-text list", () => {
+    const toggle = block("toggle", "Details", "toggle");
+    if (toggle.type !== "toggle") throw new Error("Expected toggle");
+    toggle.toggle.ganbaru_open = false;
+    const paragraph = block("paragraph", "Inside", "child");
+    paragraph.parent = { type: "block_id", block_id: toggle.id };
+    const bullet = block("bulleted_list_item", "Nested", "bullet");
+    bullet.parent = { type: "block_id", block_id: toggle.id };
+    const content = notesClipboardContent([toggle, paragraph, bullet, block("paragraph", "Outside", "after")]
+      .map((block) => ({ block })));
+    expect(content.plainText).toBe("- Details\n\n    Inside\n    \n    - Nested\n\nOutside");
+    expect(content.html).toContain('<details open data-notes-toggle-open="false"><summary>Details</summary><p>Inside</p><ul><li>Nested</li></ul></details>');
+    const { plan, blocks } = pasted(content.plainText, content.html);
+    expect(blocks.map((block) => block.type)).toEqual(["toggle", "paragraph", "bulleted_list_item", "paragraph"]);
+    expect(blocks.map(blockPlainText)).toEqual(["Details", "Inside", "Nested", "Outside"]);
+    expect(plan?.blockDepths).toEqual([0, 1, 1, 0]);
+    expect(blocks[0]).toMatchObject({ toggle: { ganbaru_open: false } });
+    const plainOnly = pasted(content.plainText);
+    expect(plainOnly.blocks.map(blockPlainText)).toEqual(["Details", "Inside", "Nested", "Outside"]);
+    expect(plainOnly.blocks[0].type).toBe("bulleted_list_item");
+  });
+
+  it("converts a foldable Obsidian callout with an inline body into an open toggle", () => {
+    const { plan, blocks } = pasted("> [!faq]+ Question\n> Answer\n>\n> - Next step");
+    expect(blocks.map((block) => block.type)).toEqual(["toggle", "paragraph", "bulleted_list_item"]);
+    expect(blocks.map(blockPlainText)).toEqual(["Question", "Answer", "Next step"]);
+    expect(plan?.blockDepths).toEqual([0, 1, 1]);
+    expect(blocks[0]).toMatchObject({ toggle: { ganbaru_open: true } });
+  });
+
+  it("uses matching foldable Markdown when rich HTML contains only a styled callout wrapper", () => {
+    const text = "> [!note]- Details\n> Body";
+    const html = '<div class="callout"><div class="callout-title">Details</div><div class="callout-content"><p>Body</p></div></div>';
+    const { plan, blocks } = pasted(text, html);
+    expect(blocks.map((block) => block.type)).toEqual(["toggle", "paragraph"]);
+    expect(blocks.map(blockPlainText)).toEqual(["Details", "Body"]);
+    expect(plan?.blockDepths).toEqual([0, 1]);
+    expect(blocks[0]).toMatchObject({ toggle: { ganbaru_open: false } });
+    expect(notesClipboardPasteHtml(text, "<p>Unrelated content</p>")).toBe("<p>Unrelated content</p>");
+  });
+
+  it("keeps surrounding paragraph text outside a pasted toggle", () => {
+    const { plan, blocks } = pasted("", "<details><summary>Details</summary><p>Inside</p></details>",
+      "Before after", 7);
+    expect(blocks.map((block) => block.type)).toEqual(["paragraph", "toggle", "paragraph", "paragraph"]);
+    expect(blocks.map(blockPlainText)).toEqual(["Before ", "Details", "Inside", "after"]);
+    expect(plan?.blockDepths).toEqual([0, 0, 1, 0]);
+  });
+
+  it("focuses the title instead of a hidden child after pasting a closed toggle", () => {
+    const { plan, blocks } = pasted("> [!note]- Closed\n>\n> Body");
+    expect(blocks.map((block) => block.type)).toEqual(["toggle", "paragraph"]);
+    expect(plan?.focusBlockId).toBe("block");
+    expect(plan?.focusOffset).toBe("Closed".length);
+  });
+
   it.each(["html", "markdown"])("preserves table cells, headers, inline styles, and insertion boundaries via %s", (format) => {
     const html = '<table><thead><tr><th>Name</th><th>Value</th></tr></thead><tbody><tr><td><strong>A</strong></td><td>B<br>C</td></tr></tbody></table>';
     const text = '| Name | Value |\n| --- | --- |\n| **A** | B<br>C |';
