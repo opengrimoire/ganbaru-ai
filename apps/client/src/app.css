@@ -670,6 +670,7 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *, .explorer-sidebar *) {
   --explorer-row-icon-size: 14px;
   --explorer-toolbar-icon-size: var(--explorer-row-icon-size);
   --explorer-action-size: 1.75rem;
+  --explorer-row-action-end-inset: 0.375rem;
   --explorer-icon-stroke: var(--icon-stroke-width-compact);
   --explorer-text-size: calc(0.866667rem * var(--type-scale));
   --explorer-line-height: calc(1.3rem * var(--type-scale));
@@ -774,7 +775,7 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *, .explorer-sidebar *) {
 }
 
 .explorer-row-action {
-  margin-right: 0.125rem;
+  margin-inline-end: var(--explorer-row-action-end-inset);
 }
 
 .explorer-row .explorer-row-action:is(:hover, :focus-visible, [aria-expanded="true"]) {
@@ -788,7 +789,7 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *, .explorer-sidebar *) {
   }
 
   .explorer-row:hover .explorer-row-action,
-  .explorer-row:focus-within .explorer-row-action,
+  .explorer-row:has(:focus-visible) .explorer-row-action,
   .explorer-row-action[aria-expanded="true"] {
     opacity: 1;
   }

@@ -334,7 +334,7 @@
       />
     </div>
   {:else}
-    <div class="notes-folder-row-content explorer-row flex min-w-0 items-center rounded-md pr-1 text-foreground">
+    <div class="notes-folder-row-content explorer-row flex min-w-0 items-center rounded-md text-foreground">
       <button
         class="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1.5 text-left explorer-row-label text-[0.866667rem] text-inherit"
         type="button"

@@ -544,6 +544,7 @@
   .message-result small { min-width:0; overflow:hidden; color:var(--muted-foreground); font-size: calc(0.6rem * var(--type-scale)); text-overflow:ellipsis; white-space:nowrap; }
   .message-result > span:last-child { display:-webkit-box; overflow:hidden; color:var(--muted-foreground); font-size: calc(0.68rem * var(--type-scale)); line-height: calc(1rem * var(--type-scale)); -webkit-box-orient:vertical; -webkit-line-clamp:2; line-clamp:2; }
   .section-heading { display: flex; min-height: var(--explorer-row-height); align-items: center; gap: 0.2rem; padding-inline: 0.5rem; color: var(--muted-foreground); }
+  .channel-section > .section-heading { padding-inline-end: var(--explorer-row-action-end-inset); }
   .section-heading > button { display: flex; min-width: var(--explorer-action-size); min-height: var(--explorer-action-size); align-items: center; justify-content: center; gap: 0.2rem; border-radius: 0.3rem; }
   .section-heading > button:hover { background: var(--accent); color: var(--foreground); }
   .section-heading > .section-toggle { min-width: 0; flex: 1; justify-content: flex-start; }

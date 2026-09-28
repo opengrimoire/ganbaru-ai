@@ -508,7 +508,7 @@
     </div>
   {:else}
     <div
-      class={`notes-page-row-content explorer-row flex min-w-0 items-center rounded-md pr-1 text-foreground ${showDisclosure ? "" : "pl-2"}`}
+      class={`notes-page-row-content explorer-row flex min-w-0 items-center rounded-md text-foreground ${readOnly ? "pr-1" : ""} ${showDisclosure ? "" : "pl-2"}`}
       class:explorer-selected={selected}
     >
       {#if showDisclosure}
