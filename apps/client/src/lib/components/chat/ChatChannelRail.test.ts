@@ -210,6 +210,153 @@ describe("ChatChannelRail", () => {
     expect(target.textContent).toContain("Delete section");
   });
 
+  it("renames a section in its heading and keeps its navigation state", async () => {
+    const prompt = vi.spyOn(window, "prompt");
+    component = mount(ChatChannelRail, {
+      target,
+      props: { expanded: true, showCollapsedStrip: true, onExpand: vi.fn(), onCollapse: vi.fn() },
+    });
+    await tick();
+    const section = target.querySelectorAll<HTMLElement>(".channel-section")[1];
+    const toggle = section?.querySelector<HTMLButtonElement>(".section-toggle");
+    toggle?.click();
+    await tick();
+    section?.querySelector<HTMLButtonElement>(".section-heading .explorer-row-action")?.click();
+    await tick();
+    target.querySelector<HTMLButtonElement>(".section-context-menu button")?.click();
+    await tick();
+
+    const input = section?.querySelector<HTMLInputElement>(".section-heading input");
+    expect(prompt).not.toHaveBeenCalled();
+    expect(input?.value).toBe("Design");
+    expect(input?.parentElement?.classList.contains("section-renaming")).toBe(true);
+    expect([...section?.querySelectorAll<HTMLButtonElement>(".section-rename-control") ?? []].map((button) => button.getAttribute("aria-label"))).toEqual(["Save", "Cancel"]);
+    await vi.waitFor(() => expect(document.activeElement).toBe(input));
+    expect(input?.selectionStart).toBe(0);
+    expect(input?.selectionEnd).toBe("Design".length);
+    if (!input) throw new Error("Section rename input is missing");
+    input.value = "  Product planning  ";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await tick();
+
+    expect(section?.querySelector(".section-heading input")).toBeNull();
+    expect(section?.querySelector(".section-toggle")?.textContent?.trim()).toBe("Product planning");
+    expect(section?.querySelector(".section-toggle")?.getAttribute("aria-expanded")).toBe("false");
+    expect(readChatSidebarSections("project-1")[0]?.name).toBe("Product planning");
+    expect(document.activeElement).toBe(section?.querySelector(".section-toggle"));
+  });
+
+  it("cancels section renaming on Escape and saves valid edits on blur", async () => {
+    component = mount(ChatChannelRail, {
+      target,
+      props: { expanded: true, showCollapsedStrip: true, onExpand: vi.fn(), onCollapse: vi.fn() },
+    });
+    await tick();
+    const section = target.querySelectorAll<HTMLElement>(".channel-section")[1];
+    async function openRename(): Promise<HTMLInputElement> {
+      section?.querySelector<HTMLButtonElement>(".section-heading .explorer-row-action")?.click();
+      await tick();
+      target.querySelector<HTMLButtonElement>(".section-context-menu button")?.click();
+      await tick();
+      const input = section?.querySelector<HTMLInputElement>(".section-heading input");
+      if (!input) throw new Error("Section rename input is missing");
+      await vi.waitFor(() => expect(document.activeElement).toBe(input));
+      return input;
+    }
+
+    const cancelled = await openRename();
+    cancelled.value = "Discarded";
+    cancelled.dispatchEvent(new Event("input", { bubbles: true }));
+    cancelled.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await tick();
+    expect(readChatSidebarSections("project-1")[0]?.name).toBe("Design");
+    expect(document.activeElement).toBe(section?.querySelector(".section-toggle"));
+
+    const saved = await openRename();
+    saved.value = "Research";
+    saved.dispatchEvent(new Event("input", { bubbles: true }));
+    saved.blur();
+    await tick();
+    expect(readChatSidebarSections("project-1")[0]?.name).toBe("Research");
+
+    const empty = await openRename();
+    empty.value = "   ";
+    empty.dispatchEvent(new Event("input", { bubbles: true }));
+    empty.blur();
+    await tick();
+    expect(readChatSidebarSections("project-1")[0]?.name).toBe("Research");
+
+    const tabbed = await openRename();
+    tabbed.value = "Planning";
+    tabbed.dispatchEvent(new Event("input", { bubbles: true }));
+    section?.querySelector<HTMLButtonElement>('.section-rename-control[aria-label="Save"]')?.focus();
+    expect(section?.querySelector(".section-heading input")).toBe(tabbed);
+    target.querySelector<HTMLButtonElement>(".channel-section .section-toggle")?.focus();
+    await tick();
+    expect(readChatSidebarSections("project-1")[0]?.name).toBe("Planning");
+
+    const keyboardCancelled = await openRename();
+    keyboardCancelled.value = "Discarded again";
+    keyboardCancelled.dispatchEvent(new Event("input", { bubbles: true }));
+    const cancel = section?.querySelector<HTMLButtonElement>('.section-rename-control[aria-label="Cancel"]');
+    cancel?.focus();
+    cancel?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await tick();
+    expect(readChatSidebarSections("project-1")[0]?.name).toBe("Planning");
+    expect(document.activeElement).toBe(section?.querySelector(".section-toggle"));
+  });
+
+  it("keeps mobile rename controls tappable without saving before Cancel", async () => {
+    component = mount(ChatChannelRail, {
+      target,
+      props: { presentation: "surface", expanded: true, showCollapsedStrip: true, onExpand: vi.fn(), onCollapse: vi.fn() },
+    });
+    await tick();
+    const section = target.querySelectorAll<HTMLElement>(".channel-section")[1];
+    async function openRename(): Promise<HTMLInputElement> {
+      section?.querySelector<HTMLButtonElement>(".section-heading .explorer-row-action")?.click();
+      await tick();
+      target.querySelector<HTMLButtonElement>(".section-context-menu button")?.click();
+      await tick();
+      const input = section?.querySelector<HTMLInputElement>(".section-heading input");
+      if (!input) throw new Error("Section rename input is missing");
+      await vi.waitFor(() => expect(document.activeElement).toBe(input));
+      return input;
+    }
+
+    const cancelled = await openRename();
+    cancelled.value = "Do not save";
+    cancelled.dispatchEvent(new Event("input", { bubbles: true }));
+    const cancel = section?.querySelector<HTMLButtonElement>('.section-rename-control[aria-label="Cancel"]');
+    expect(cancel).not.toBeNull();
+    cancel?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+    cancelled.blur();
+    expect(section?.querySelector(".section-heading input")).toBe(cancelled);
+    cancel?.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "touch" }));
+    cancel?.click();
+    await tick();
+    expect(readChatSidebarSections("project-1")[0]?.name).toBe("Design");
+
+    const saved = await openRename();
+    saved.value = "Research";
+    saved.dispatchEvent(new Event("input", { bubbles: true }));
+    const save = section?.querySelector<HTMLButtonElement>('.section-rename-control[aria-label="Save"]');
+    expect(save?.disabled).toBe(false);
+    save?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+    saved.blur();
+    save?.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "touch" }));
+    save?.click();
+    await tick();
+    expect(readChatSidebarSections("project-1")[0]?.name).toBe("Research");
+
+    const empty = await openRename();
+    empty.value = "   ";
+    empty.dispatchEvent(new Event("input", { bubbles: true }));
+    await tick();
+    expect(section?.querySelector<HTMLButtonElement>('.section-rename-control[aria-label="Save"]')?.disabled).toBe(true);
+  });
+
   it("opens channel actions without selecting the channel and restores focus on Escape", async () => {
     const selectChannel = vi.spyOn(getChat(), "selectChannel").mockResolvedValue();
     component = mount(ChatChannelRail, {

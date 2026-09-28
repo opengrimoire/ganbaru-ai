@@ -3,6 +3,7 @@
   import { COMPACT_IDENTITY_ICON_SIZE, COMPACT_IDENTITY_ICON_STROKE_WIDTH } from "$lib/icon-sizing";
   import ExplorerSearch from "$lib/components/ExplorerSearch.svelte";
   import Archive from "@lucide/svelte/icons/archive";
+  import Check from "@lucide/svelte/icons/check";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import ChevronsLeft from "@lucide/svelte/icons/chevrons-left";
@@ -16,6 +17,7 @@
   import Pencil from "@lucide/svelte/icons/pencil";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import X from "@lucide/svelte/icons/x";
   import type { ChatChannelRead, ChatMessageSearchResultRead } from "$lib/chat/contracts";
   import { chatParticipantDisplayName } from "$lib/chat/participant-display";
   import {
@@ -57,6 +59,10 @@
   const menuViewportGap = 8;
   let sectionInput = $state<HTMLInputElement>();
   let sectionButton = $state<HTMLButtonElement>();
+  let renameSectionInput = $state<HTMLInputElement>();
+  let renamingSectionId = $state<string | null>(null);
+  let sectionNameDraft = $state("");
+  let sectionRenameControlPointerActive = false;
   let sectionMenuTrigger: HTMLButtonElement | null = null;
   let sectionContextMenuElement = $state<HTMLElement | null>(null);
   let sectionContextMenu = $state<{ section: ChatSidebarSection | null; x: number; y: number } | null>(null);
@@ -101,6 +107,8 @@
     const projectChannels = chat.activeChannels.filter((channel) => channel.projectId === projectId);
     if (projectChannels.length === 0 && chat.activeChannels.length > 0) return;
     loadedProjectId = projectId;
+    renamingSectionId = null;
+    sectionNameDraft = "";
     sections = normalizeChatSidebarSections(readChatSidebarSections(projectId), projectChannels.map((channel) => channel.id));
   });
 
@@ -197,10 +205,58 @@
     if (section) deleteSection(section);
   }
 
-  function renameSection(section: ChatSidebarSection): void {
-    const name = window.prompt(t("chat.channels.sectionName"), section.name)?.trim();
-    if (!name || [...name].length > 80 || name === section.name) return;
-    persist(sections.map((entry) => entry.id === section.id ? { ...entry, name } : entry));
+  function startSectionRename(section: ChatSidebarSection): void {
+    renamingSectionId = section.id;
+    sectionNameDraft = section.name;
+    void tick().then(() => {
+      if (renamingSectionId !== section.id) return;
+      renameSectionInput?.focus();
+      renameSectionInput?.select();
+    });
+  }
+
+  function finishSectionRename(save: boolean): void {
+    const sectionId = renamingSectionId;
+    if (!sectionId) return;
+    const name = sectionNameDraft.trim();
+    renamingSectionId = null;
+    sectionNameDraft = "";
+    sectionRenameControlPointerActive = false;
+    if (!save || !name || [...name].length > 80) return;
+    const section = sections.find((entry) => entry.id === sectionId);
+    if (!section || name === section.name) return;
+    persist(sections.map((entry) => entry.id === sectionId ? { ...entry, name } : entry));
+  }
+
+  function handleSectionRenameKeydown(event: KeyboardEvent): void {
+    if (event.key !== "Enter" && event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    finishSectionRenameAndFocus(event, event.key === "Enter");
+  }
+
+  function handleSectionRenameControlKeydown(event: KeyboardEvent): void {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    finishSectionRenameAndFocus(event, false);
+  }
+
+  function finishSectionRenameAndFocus(event: Event, save: boolean): void {
+    const target = event.currentTarget;
+    const heading = target instanceof HTMLElement ? target.closest<HTMLElement>(".section-heading") : null;
+    finishSectionRename(save);
+    void tick().then(() => heading?.querySelector<HTMLButtonElement>(".section-toggle")?.focus());
+  }
+
+  function handleSectionRenameFocusOut(event: FocusEvent): void {
+    const target = event.currentTarget;
+    if (sectionRenameControlPointerActive || (target instanceof HTMLElement && event.relatedTarget instanceof Node && target.contains(event.relatedTarget))) return;
+    finishSectionRename(true);
+  }
+
+  function releaseSectionRenameControlPointer(): void {
+    window.setTimeout(() => { sectionRenameControlPointerActive = false; }, 0);
   }
 
   function closeSectionContextMenu(): void {
@@ -239,7 +295,7 @@
   function renameSectionFromContextMenu(): void {
     const section = sectionContextMenu?.section;
     closeSectionContextMenu();
-    if (section) renameSection(section);
+    if (section) startSectionRename(section);
   }
 
   function deleteSectionFromContextMenu(): void {
@@ -426,6 +482,8 @@
     const unsubscribeVault = onActiveVaultIdentityChange(() => {
       loadedProjectId = null;
       sections = [];
+      renamingSectionId = null;
+      sectionNameDraft = "";
     });
     return () => {
       window.removeEventListener("ganbaru-ai:chat-new-channel", createChannel);
@@ -492,13 +550,31 @@
 
       {#each sections as section (section.id)}
         <section class="channel-section" role="group" ondragover={(event) => event.preventDefault()} ondrop={(event) => handleDrop(event, section.id)}>
-          <div class="section-heading">
-            <button type="button" class="section-toggle" class:collapsed={section.collapsed} aria-label={sectionToggleLabel(section.name, section.collapsed)} aria-expanded={!section.collapsed} onclick={() => toggleSection(section.id)}>
-              <span>{section.name}</span>
-              {#if section.collapsed}<ChevronRight class="section-chevron" size={13} />{:else}<ChevronDown class="section-chevron" size={13} />{/if}
-            </button>
-            <button type="button" aria-label={t("chat.channels.createTitle")} title={t("chat.channels.createTitle")} onclick={() => openCreate(section.id)}><Plus size={13} /></button>
-            <button type="button" class="explorer-icon explorer-row-action" aria-label={`${t("chat.moreActions")}: ${section.name}`} data-app-tooltip-disabled="true" aria-haspopup="menu" aria-expanded={sectionContextMenu?.section?.id === section.id} onclick={(event) => void toggleSectionContextMenu(event, section)}><EllipsisVertical size={14} /></button>
+          <div
+            class="section-heading"
+            class:section-renaming={renamingSectionId === section.id}
+            onfocusout={(event) => { if (renamingSectionId === section.id) handleSectionRenameFocusOut(event); }}
+          >
+            {#if renamingSectionId === section.id}
+              <input
+                bind:this={renameSectionInput}
+                class="section-rename-input"
+                bind:value={sectionNameDraft}
+                maxlength="80"
+                aria-label={t("chat.channels.sectionName")}
+                data-app-shortcuts="ignore"
+                onkeydown={handleSectionRenameKeydown}
+              />
+              <button type="button" class="explorer-icon section-rename-control" aria-label={t("chat.save")} disabled={!sectionNameDraft.trim() || [...sectionNameDraft.trim()].length > 80} data-app-tooltip-disabled="true" onpointerdown={() => { sectionRenameControlPointerActive = true; }} onpointerup={releaseSectionRenameControlPointer} onpointercancel={() => { sectionRenameControlPointerActive = false; }} onkeydown={handleSectionRenameControlKeydown} onclick={(event) => finishSectionRenameAndFocus(event, true)}><Check size={14} /></button>
+              <button type="button" class="explorer-icon section-rename-control" aria-label={t("chat.cancel")} data-app-tooltip-disabled="true" onpointerdown={() => { sectionRenameControlPointerActive = true; }} onpointerup={releaseSectionRenameControlPointer} onpointercancel={() => { sectionRenameControlPointerActive = false; }} onkeydown={handleSectionRenameControlKeydown} onclick={(event) => finishSectionRenameAndFocus(event, false)}><X size={14} /></button>
+            {:else}
+              <button type="button" class="section-toggle" class:collapsed={section.collapsed} aria-label={sectionToggleLabel(section.name, section.collapsed)} aria-expanded={!section.collapsed} onclick={() => toggleSection(section.id)}>
+                <span>{section.name}</span>
+                {#if section.collapsed}<ChevronRight class="section-chevron" size={13} />{:else}<ChevronDown class="section-chevron" size={13} />{/if}
+              </button>
+              <button type="button" aria-label={t("chat.channels.createTitle")} title={t("chat.channels.createTitle")} onclick={() => openCreate(section.id)}><Plus size={13} /></button>
+              <button type="button" class="explorer-icon explorer-row-action" aria-label={`${t("chat.moreActions")}: ${section.name}`} data-app-tooltip-disabled="true" aria-haspopup="menu" aria-expanded={sectionContextMenu?.section?.id === section.id} onclick={(event) => void toggleSectionContextMenu(event, section)}><EllipsisVertical size={14} /></button>
+            {/if}
           </div>
           {#if !section.collapsed}
             {#each sectionChannels(section) as channel (channel.id)}{@render ChannelRow({ channel })}{/each}
@@ -614,6 +690,10 @@
   .message-result > span:last-child { display:-webkit-box; overflow:hidden; color:var(--muted-foreground); font-size: calc(0.68rem * var(--type-scale)); line-height: calc(1rem * var(--type-scale)); -webkit-box-orient:vertical; -webkit-line-clamp:2; line-clamp:2; }
   .section-heading { display: flex; min-height: var(--explorer-row-height); align-items: center; gap: 0.2rem; padding-inline: 0.5rem; color: var(--muted-foreground); }
   .channel-section > .section-heading { padding-inline-end: 0; }
+  .section-heading.section-renaming { border-radius: 0.375rem; background: color-mix(in oklab, var(--accent) 50%, transparent); }
+  .section-rename-input { min-width: 0; width: 0; flex: 1; min-height: var(--explorer-action-size); border: 0; background: transparent; color: var(--foreground); caret-color: var(--primary); font: inherit; outline: none; }
+  .section-rename-control { color: var(--foreground); }
+  .section-heading > .section-rename-control:last-child { margin-inline-end: var(--explorer-row-action-end-inset); }
   .section-heading > button { display: flex; min-width: var(--explorer-action-size); min-height: var(--explorer-action-size); align-items: center; justify-content: center; gap: 0.2rem; border-radius: 0.3rem; }
   .section-heading > button:not(.explorer-row-action):hover { background: var(--accent); color: var(--foreground); }
   .section-heading > .section-toggle { min-width: 0; flex: 1; justify-content: flex-start; }
