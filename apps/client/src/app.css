@@ -677,7 +677,6 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *, .explorer-sidebar *) {
   --explorer-row-padding: 0.375rem;
   --explorer-row-height: max(2rem, calc(var(--explorer-line-height) + 2 * var(--explorer-row-padding)));
   --explorer-text-weight: 400;
-  --explorer-selected-weight: 500;
   --explorer-background: color-mix(in oklab, var(--sidebar) 45%, var(--cal-bg));
   background: var(--explorer-background);
   color: var(--foreground);
@@ -838,12 +837,6 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *, .explorer-sidebar *) {
   font-size: var(--explorer-text-size);
   line-height: var(--explorer-line-height);
   font-weight: var(--explorer-text-weight);
-}
-
-.explorer-sidebar .explorer-row-label[aria-current="page"],
-.explorer-sidebar .explorer-row-label.explorer-selected,
-.explorer-sidebar .archive-button[aria-current="page"] {
-  font-weight: var(--explorer-selected-weight);
 }
 
 /* Section headings occupy one navigation row, preserving the same baseline rhythm. */

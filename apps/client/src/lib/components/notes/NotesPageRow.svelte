@@ -531,7 +531,7 @@
         </button>
       {/if}
       <button
-        class={`flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pr-1 text-left explorer-row-label text-[0.866667rem] text-inherit ${selected ? "font-medium" : ""}`}
+        class="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pr-1 text-left explorer-row-label text-[0.866667rem] text-inherit"
         type="button"
         aria-current={selected ? "page" : undefined}
         onclick={handleSelect}
