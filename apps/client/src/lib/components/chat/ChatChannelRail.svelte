@@ -529,7 +529,7 @@
             <span>{t("chat.channels.defaultSection")}</span>
             {#if channelsCollapsed}<ChevronRight class="section-chevron" size={13} />{:else}<ChevronDown class="section-chevron" size={13} />{/if}
           </button>
-          <button type="button" aria-label={t("chat.channels.createTitle")} onclick={() => openCreate()}><Plus size={13} /></button>
+          <button type="button" class="section-create-action" aria-label={t("chat.channels.createTitle")} data-app-tooltip={t("chat.channels.createTitle")} onclick={() => openCreate()}><Plus size={13} /></button>
           <button bind:this={sectionButton} type="button" class="explorer-icon explorer-row-action" aria-label={t("chat.moreActions")} data-app-tooltip-disabled="true" aria-haspopup="menu" aria-expanded={sectionContextMenu !== null && sectionContextMenu.section === null} onclick={(event) => void toggleSectionContextMenu(event, null)}><EllipsisVertical size={14} /></button>
         </div>
         {#if !channelsCollapsed}
@@ -572,7 +572,7 @@
                 <span>{section.name}</span>
                 {#if section.collapsed}<ChevronRight class="section-chevron" size={13} />{:else}<ChevronDown class="section-chevron" size={13} />{/if}
               </button>
-              <button type="button" aria-label={t("chat.channels.createTitle")} title={t("chat.channels.createTitle")} onclick={() => openCreate(section.id)}><Plus size={13} /></button>
+              <button type="button" class="section-create-action" aria-label={t("chat.channels.createTitle")} data-app-tooltip={t("chat.channels.createTitle")} onclick={() => openCreate(section.id)}><Plus size={13} /></button>
               <button type="button" class="explorer-icon explorer-row-action" aria-label={`${t("chat.moreActions")}: ${section.name}`} data-app-tooltip-disabled="true" aria-haspopup="menu" aria-expanded={sectionContextMenu?.section?.id === section.id} onclick={(event) => void toggleSectionContextMenu(event, section)}><EllipsisVertical size={14} /></button>
             {/if}
           </div>
@@ -688,14 +688,17 @@
   .message-result strong { flex:0 0 auto; font-size: calc(0.72rem * var(--type-scale)); }
   .message-result small { min-width:0; overflow:hidden; color:var(--muted-foreground); font-size: calc(0.6rem * var(--type-scale)); text-overflow:ellipsis; white-space:nowrap; }
   .message-result > span:last-child { display:-webkit-box; overflow:hidden; color:var(--muted-foreground); font-size: calc(0.68rem * var(--type-scale)); line-height: calc(1rem * var(--type-scale)); -webkit-box-orient:vertical; -webkit-line-clamp:2; line-clamp:2; }
-  .section-heading { display: flex; min-height: var(--explorer-row-height); align-items: center; gap: 0.2rem; padding-inline: 0.5rem; color: var(--muted-foreground); }
+  .section-heading { --section-heading-gap: 0.2rem; display: flex; min-height: var(--explorer-row-height); align-items: center; gap: var(--section-heading-gap); padding-inline: 0.5rem; color: var(--muted-foreground); }
   .channel-section > .section-heading { padding-inline-end: 0; }
   .section-heading.section-renaming { border-radius: 0.375rem; background: color-mix(in oklab, var(--accent) 50%, transparent); }
   .section-rename-input { min-width: 0; width: 0; flex: 1; min-height: var(--explorer-action-size); border: 0; background: transparent; color: var(--foreground); caret-color: var(--primary); font: inherit; outline: none; }
   .section-rename-control { color: var(--foreground); }
   .section-heading > .section-rename-control:last-child { margin-inline-end: var(--explorer-row-action-end-inset); }
   .section-heading > button { display: flex; min-width: var(--explorer-action-size); min-height: var(--explorer-action-size); align-items: center; justify-content: center; gap: 0.2rem; border-radius: 0.3rem; }
-  .section-heading > button:not(.explorer-row-action):hover { background: var(--accent); color: var(--foreground); }
+  .section-heading > .section-create-action { margin-inline-end: calc(-1 * var(--section-heading-gap)); }
+  .section-heading > .section-create-action:is(:hover, :focus-visible) { background: transparent; color: var(--foreground); }
+  .channel-section > .section-heading > .explorer-row-action { opacity: 1; }
+  .section-heading > :is(.section-toggle, .section-rename-control):hover { background: var(--accent); color: var(--foreground); }
   .section-heading > .section-toggle { min-width: 0; flex: 1; justify-content: flex-start; }
   .section-toggle > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .section-toggle :global(.section-chevron) { flex: 0 0 auto; transition: opacity 120ms ease; }
