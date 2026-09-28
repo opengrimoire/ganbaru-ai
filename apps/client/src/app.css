@@ -667,8 +667,9 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *, .explorer-sidebar *) {
 /* Notes and Chat share explorer surfaces, controls, and navigation states. */
 .explorer-sidebar {
   --explorer-toolbar-height: var(--cal-header-row-h);
-  --explorer-toolbar-icon-size: 1rem;
   --explorer-row-icon-size: 14px;
+  --explorer-toolbar-icon-size: var(--explorer-row-icon-size);
+  --explorer-action-size: 1.75rem;
   --explorer-icon-stroke: var(--icon-stroke-width-compact);
   --explorer-text-size: calc(0.866667rem * var(--type-scale));
   --explorer-line-height: calc(1.3rem * var(--type-scale));
@@ -693,8 +694,8 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *, .explorer-sidebar *) {
 
 .explorer-icon {
   display: inline-flex;
-  width: 1.75rem;
-  height: 1.75rem;
+  width: var(--explorer-action-size);
+  height: var(--explorer-action-size);
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
@@ -715,6 +716,12 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *, .explorer-sidebar *) {
   opacity: 0.45;
 }
 
+.explorer-sidebar .explorer-row-disclosure {
+  width: var(--explorer-action-size);
+  height: var(--explorer-action-size);
+  flex: 0 0 auto;
+}
+
 .explorer-sidebar :is(button, summary):focus-visible,
 .explorer-row :is(button, summary):focus-visible {
   outline: 2px solid var(--ring);
@@ -723,7 +730,7 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *, .explorer-sidebar *) {
 
 .explorer-search {
   display: flex;
-  min-height: 2rem;
+  height: var(--explorer-row-height);
   align-items: center;
   gap: 0.375rem;
   border-radius: 0.375rem;
@@ -732,19 +739,18 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *, .explorer-sidebar *) {
   color: var(--muted-foreground);
 }
 
-.explorer-search:focus-within {
-  outline: 2px solid var(--ring);
-  outline-offset: -2px;
-}
-
 .explorer-search input {
   width: 0;
   min-width: 0;
   flex: 1;
-  padding-block: 0.375rem;
+  padding-block: var(--explorer-row-padding);
   background: transparent;
   color: var(--foreground);
-  font-size: calc(0.8rem * var(--type-scale));
+  outline: none;
+}
+
+/* Keep the shared sidebar search fields free of the global keyboard focus outline. */
+.explorer-search input:focus {
   outline: none;
 }
 
@@ -786,11 +792,11 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *, .explorer-sidebar *) {
   padding-block: 0.25rem;
 }
 
-.explorer-touch :is(.explorer-icon, .explorer-search, .channel-row, .archive-button, .section-heading > button, .section-menu summary) {
+.explorer-touch :is(.explorer-icon, .explorer-row-disclosure, .channel-row, .archive-button, .section-heading > button, .section-menu summary) {
   min-height: var(--touch-target-min);
 }
 
-.explorer-touch :is(.explorer-icon, .section-heading > button, .section-menu summary) {
+.explorer-touch :is(.explorer-icon, .explorer-row-disclosure, .section-heading > button, .section-menu summary) {
   min-width: var(--touch-target-min);
 }
 

@@ -471,13 +471,13 @@
   .message-result small { min-width:0; overflow:hidden; color:var(--muted-foreground); font-size: calc(0.6rem * var(--type-scale)); text-overflow:ellipsis; white-space:nowrap; }
   .message-result > span:last-child { display:-webkit-box; overflow:hidden; color:var(--muted-foreground); font-size: calc(0.68rem * var(--type-scale)); line-height: calc(1rem * var(--type-scale)); -webkit-box-orient:vertical; -webkit-line-clamp:2; line-clamp:2; }
   .section-heading { display: flex; min-height: var(--explorer-row-height); align-items: center; gap: 0.2rem; padding-inline: 0.5rem; color: var(--muted-foreground); }
-  .section-heading > button { display: flex; min-width: 1.75rem; min-height: 1.75rem; align-items: center; justify-content: center; gap: 0.2rem; border-radius: 0.3rem; }
+  .section-heading > button { display: flex; min-width: var(--explorer-action-size); min-height: var(--explorer-action-size); align-items: center; justify-content: center; gap: 0.2rem; border-radius: 0.3rem; }
   .section-heading > button:hover { background: var(--accent); color: var(--foreground); }
   .section-heading > .section-toggle { min-width: 0; flex: 1; justify-content: flex-start; }
   .section-toggle > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .section-toggle :global(.section-chevron) { flex: 0 0 auto; transition: opacity 120ms ease; }
   .section-menu { position:relative; }
-  .section-menu summary { display:grid;min-width:1.75rem;min-height:1.75rem;list-style:none;place-items:center;border-radius:0.3rem; }
+  .section-menu summary { display:grid;min-width:var(--explorer-action-size);min-height:var(--explorer-action-size);list-style:none;place-items:center;border-radius:0.3rem; }
   .section-menu summary::-webkit-details-marker { display:none; }
   .section-menu summary:hover { background:var(--accent);color:var(--foreground); }
   .section-menu > div { position:absolute;right:0;z-index:75;width:9rem;border:1px solid var(--border);border-radius:0.5rem;background:var(--popover);padding:0.25rem;box-shadow:0 12px 30px rgb(0 0 0 / 0.2); }

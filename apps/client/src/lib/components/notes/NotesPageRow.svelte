@@ -467,7 +467,7 @@
   {#if editing}
     <div class={`notes-page-row-content explorer-row flex min-w-0 items-center rounded-md bg-accent/50 py-1.5 pr-1 text-foreground ${showDisclosure ? "" : "pl-2"}`}>
       {#if showDisclosure}
-        <span class="size-6 shrink-0" aria-hidden="true"></span>
+        <span class="explorer-row-disclosure" aria-hidden="true"></span>
       {/if}
       <div class="flex min-w-0 flex-1 items-center gap-1.5">
         {#if page.icon}
@@ -507,7 +507,7 @@
     >
       {#if showDisclosure}
         <button
-          class="flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-background/80 hover:text-foreground disabled:pointer-events-none disabled:opacity-0"
+          class="explorer-row-disclosure flex items-center justify-center rounded text-muted-foreground hover:bg-background/80 hover:text-foreground disabled:pointer-events-none disabled:opacity-0"
           type="button"
           aria-label={collapsed ? t("notes.expandPage") : t("notes.collapsePage")}
           disabled={!hasChildren}
@@ -517,9 +517,9 @@
           }}
         >
           {#if hasChildren && collapsed}
-            <ChevronRight class="size-4" strokeWidth={explorerRowIconStrokeWidth} />
+            <ChevronRight class="explorer-row-icon" strokeWidth={explorerRowIconStrokeWidth} />
           {:else if hasChildren}
-            <ChevronDown class="size-4" strokeWidth={explorerRowIconStrokeWidth} />
+            <ChevronDown class="explorer-row-icon" strokeWidth={explorerRowIconStrokeWidth} />
           {/if}
         </button>
       {/if}
@@ -771,23 +771,35 @@
   }
 
   .notes-page-row-current-file-pulse .notes-page-row-content {
-    animation: notes-current-file-highlight 360ms ease-in-out 2;
+    position: relative;
+    isolation: isolate;
+  }
+
+  .notes-page-row-current-file-pulse .notes-page-row-content::before {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--selection-background);
+    opacity: 0;
+    pointer-events: none;
+    content: "";
+    animation: notes-current-file-highlight 720ms ease-in-out;
   }
 
   @keyframes notes-current-file-highlight {
-    0%, 100% {
-      background-color: transparent;
+    0%, 50%, 100% {
+      opacity: 0;
     }
 
-    50% {
-      background-color: color-mix(in oklab, var(--accent) 55%, transparent);
+    25%, 75% {
+      opacity: 1;
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .notes-page-row-current-file-pulse .notes-page-row-content {
+    .notes-page-row-current-file-pulse .notes-page-row-content::before {
       animation-duration: 1ms;
-      animation-iteration-count: 1;
     }
   }
 
