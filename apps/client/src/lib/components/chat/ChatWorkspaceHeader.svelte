@@ -27,7 +27,7 @@
   type ChatNavigatorMode = ProjectNavigatorPanelMode | "channels";
 
   let {
-    explorerExpanded: _explorerExpanded,
+    explorerExpanded,
     showRailButton,
     onOpenRail,
     reserveGlobalActions,
@@ -73,6 +73,7 @@
     Math.max(124, selectedProjectChannels.length * 32 + 84),
   ));
   const selectedFolder = $derived(chat.selectedWorkingFolder);
+  const showChannelBreadcrumb = $derived(!explorerExpanded || (editingTitle && !!selectedChannel && !selectedChannel.isDefault));
 
   function triggerForMode(mode: ChatNavigatorMode): HTMLButtonElement | null {
     if (mode === "groups") return groupTriggerElement;
@@ -155,6 +156,10 @@
     requestAnimationFrame(refreshNavigatorGeometry);
   });
 
+  $effect(() => {
+    if (explorerExpanded && navigatorOpen && navigatorMode === "channels") navigatorOpen = false;
+  });
+
 </script>
 
 <svelte:window onpointerdown={handleWindowPointerDown} />
@@ -166,15 +171,15 @@
       {#if selectedProject && selectedGroup}
         <button bind:this={groupTriggerElement} type="button" class={cn("chat-context-segment", navigatorOpen && navigatorMode === "groups" && "bg-accent")} aria-label={t("projects.navigator.open")} aria-expanded={navigatorOpen && navigatorMode === "groups"} data-chat-group-trigger onpointerenter={() => { if (!mobilePresentation) openNavigator("groups"); }} onclick={() => toggleNavigator("groups")}>{#if !mobilePresentation}<ProjectIcon name={selectedGroup.icon} size={identityIconSize} strokeWidth={identityIconStrokeWidth} emojiScale={identityEmojiScale} />{/if}<span class="truncate">{selectedGroup.name}</span></button>
         <span class="chat-context-divider">/</span>
-        <button bind:this={projectTriggerElement} type="button" class={cn("chat-context-segment", navigatorOpen && navigatorMode === "projects" && "bg-accent")} aria-label={t("projects.navigator.open")} aria-expanded={navigatorOpen && navigatorMode === "projects"} data-chat-project-trigger onpointerenter={() => { if (!mobilePresentation) openNavigator("projects"); }} onclick={() => toggleNavigator("projects")}>{#if !mobilePresentation}<ProjectIcon name={selectedProject.icon} size={identityIconSize} strokeWidth={identityIconStrokeWidth} emojiScale={identityEmojiScale} />{/if}<span class="truncate">{selectedProject.name}</span>{#if selectedProject.status !== "active"}<span class={cn("rounded border px-1.5 py-0.5 text-[0.666667rem]", projectLifecycleBadgeClass(selectedProject.status))}>{projectLifecycleLabel(selectedProject.status, t)}</span>{/if}</button>
-        {#if selectedChannel}
+        <button bind:this={projectTriggerElement} type="button" class={cn("chat-context-segment", navigatorOpen && navigatorMode === "projects" && "bg-accent")} aria-label={t("projects.navigator.open")} aria-expanded={navigatorOpen && navigatorMode === "projects"} data-chat-project-trigger onpointerenter={() => { if (!mobilePresentation) openNavigator("projects"); }} onclick={() => toggleNavigator("projects")}>{#if !mobilePresentation}<ProjectIcon name={selectedProject.icon} size={identityIconSize} strokeWidth={identityIconStrokeWidth} emojiScale={identityEmojiScale} />{/if}<span class="truncate">{selectedProject.name}</span>{#if selectedProject.status !== "active"}<span class={cn("rounded border px-1.5 py-0.5 text-[0.666667rem]", projectLifecycleBadgeClass(selectedProject.status))}>{projectLifecycleLabel(selectedProject.status, t)}</span>{/if}{#if !selectedChannel || !showChannelBreadcrumb}<WorkspaceBreadcrumbTerminalIcon kind="chevron" context="chat" class="shrink-0 text-muted-foreground" />{/if}</button>
+        {#if selectedChannel && showChannelBreadcrumb}
           <span class="chat-context-divider">/</span>
           {#if editingTitle && !selectedChannel.isDefault}
             <div class="min-w-36 max-w-64 px-1"><ChatTitleEditor title={selectedChannel.name} onCommit={commitTitle} onCancel={() => { editingTitle = false; }} /></div>
           {:else}
-            <button bind:this={channelTriggerElement} type="button" class={cn("chat-context-segment", navigatorOpen && navigatorMode === "channels" && "bg-accent")} aria-label={t("chat.channels.navigatorLabel")} aria-expanded={navigatorOpen && navigatorMode === "channels"} data-chat-channel-trigger onpointerenter={() => { if (!mobilePresentation) openNavigator("channels"); }} onclick={() => toggleNavigator("channels")}>{#if !mobilePresentation}<Hash size={identityIconSize} strokeWidth={identityIconStrokeWidth} class="shrink-0" />{/if}<span class="truncate">{selectedChannel.name}</span><WorkspaceBreadcrumbTerminalIcon kind="chevron" class="shrink-0 text-muted-foreground" /></button>
+            <button bind:this={channelTriggerElement} type="button" class={cn("chat-context-segment", navigatorOpen && navigatorMode === "channels" && "bg-accent")} aria-label={t("chat.channels.navigatorLabel")} aria-expanded={navigatorOpen && navigatorMode === "channels"} data-chat-channel-trigger onpointerenter={() => { if (!mobilePresentation) openNavigator("channels"); }} onclick={() => toggleNavigator("channels")}>{#if !mobilePresentation}<Hash size={identityIconSize} strokeWidth={identityIconStrokeWidth} class="shrink-0" />{/if}<span class="truncate">{selectedChannel.name}</span><WorkspaceBreadcrumbTerminalIcon kind="chevron" context="chat" class="shrink-0 text-muted-foreground" /></button>
           {/if}
-          {#if selectedChannel.topic}<span class="hidden max-w-80 truncate px-1 text-xs text-muted-foreground @min-[760px]:inline">{selectedChannel.topic}</span>{/if}
+          {#if selectedChannel.topic && !explorerExpanded}<span class="hidden max-w-80 truncate px-1 text-xs text-muted-foreground @min-[760px]:inline" data-chat-channel-topic>{selectedChannel.topic}</span>{/if}
         {/if}
         <button type="button" class="chat-inline-new-button" aria-label={t("chat.channels.createTitle")} data-chat-new-channel-button onclick={() => window.dispatchEvent(new Event("ganbaru-ai:chat-new-channel"))}><WorkspaceBreadcrumbTerminalIcon kind="plus" /></button>
       {:else}

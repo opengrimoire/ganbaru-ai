@@ -228,14 +228,21 @@ describe("ChatWorkspaceHeader", () => {
     expect(syncProjectSelection).not.toHaveBeenCalled();
   });
 
-  it("keeps the organization and channel breadcrumb stable across explorer states", () => {
+  it("shows the channel breadcrumb only when the explorer is collapsed", () => {
     const expanded = setup(true);
     expect(expanded.querySelector("[data-chat-group-trigger]")?.textContent).toContain("Work");
     expect(expanded.querySelector("[data-chat-project-trigger]")?.textContent).toContain("Ganbaru");
-    expect(expanded.querySelector("[data-chat-channel-trigger]")?.textContent).toContain("general");
+    expect(expanded.querySelector("[data-chat-channel-trigger]")).toBeNull();
+    expect(expanded.querySelector("[data-chat-channel-topic]")).toBeNull();
+    expect(expanded.querySelector("[data-chat-context-chevron]")?.closest("button")).toBe(expanded.querySelector("[data-chat-project-trigger]"));
+    expect(expanded.querySelectorAll("[data-chat-context-chevron]")).toHaveLength(1);
+    expect(expanded.querySelector("[data-chat-new-channel-button]")).not.toBeNull();
 
     const collapsed = setup(false);
     expect(collapsed.querySelector("[data-chat-channel-trigger]")?.textContent).toContain("general");
+    expect(collapsed.querySelector("[data-chat-channel-topic]")?.textContent).toBe("Project coordination");
+    expect(collapsed.querySelector("[data-chat-context-chevron]")?.closest("button")).toBe(collapsed.querySelector("[data-chat-channel-trigger]"));
+    expect(collapsed.querySelectorAll("[data-chat-context-chevron]")).toHaveLength(1);
     expect(collapsed.querySelector("[data-chat-new-channel-button]")).not.toBeNull();
   });
 
@@ -255,7 +262,7 @@ describe("ChatWorkspaceHeader", () => {
   });
 
   it("opens the current project's complete channel navigator from the channel segment", async () => {
-    const target = setup(true);
+    const target = setup(false);
     const channelTrigger = target.querySelector("[data-chat-channel-trigger]");
 
     (channelTrigger as HTMLButtonElement | null)?.click();
