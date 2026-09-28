@@ -112,6 +112,7 @@ export function createNotesBlockSelectionController(options: NotesBlockSelection
   }
 
   function setSelection(value: NotesBlockSelectionState | null): void {
+    if (sameSelection(selection, value)) return;
     selection = value;
     if (!value) { dragAnchorBlockId = null; dragPointerId = null; }
     queueMicrotask(syncAttributes);

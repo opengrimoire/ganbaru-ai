@@ -12,6 +12,7 @@ export const assets = {
   noPageIcon: "Sin icono",
   addPageIcon: "Agregar icono",
   changePageIcon: "Cambiar icono de nota",
+  changeCalloutIcon: "Cambiar icono del recuadro",
   removePageIcon: "Quitar icono de nota",
   usePageIcon: (icon: string) => `Usar ${icon}`,
   pageIconColor: (color: string) => `Usar ${color}`,

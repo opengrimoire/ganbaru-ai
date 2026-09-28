@@ -282,6 +282,23 @@ export function createNotesBlockMovementActions(
     const parent = plan ? parentFromMoveParentId(plan.parentId) : block.parent;
     if (!parent) return false;
     const oldParent = block.parent.type === "block_id" ? context.blockById(block.parent.block_id) : undefined;
+    if (direction === "outdent" && plan && oldParent?.type === "callout"
+      && blockPlainText(block).length === 0
+      && (context.treeState().childIdsByParentId[blockId] ?? []).length === 0) {
+      const caret = selection ?? { start: 0, end: 0 };
+      const before = record ? context.createUndoSnapshot(blockId, [], caret) : null;
+      const placement = { blockId, parent, after: oldParent.id, before: null };
+      context.applyPostMutation({ blocks: [{ ...block, parent }], placements: [placement] });
+      if (record) {
+        context.requestBlockFocus(blockId, caret);
+        context.recordUndo("move", before, context.createUndoSnapshot(blockId, [], caret));
+      }
+      const persistence = context.enqueueEditorMutation(async () => {
+        await moveNotesBlock(blockId, placement);
+      });
+      context.trackOptimisticBlockWrites([blockId], persistence);
+      return true;
+    }
     const nextIndent = plan
       ? direction === "outdent" && oldParent ? blockIndent(oldParent) : 0
       : indent + (direction === "nest" ? 1 : -1);

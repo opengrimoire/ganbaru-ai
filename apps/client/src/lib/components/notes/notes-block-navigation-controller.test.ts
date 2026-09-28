@@ -2,6 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NotesBlock } from "$lib/notes/types";
+import { createRichText } from "$lib/notes/block-factory";
 import { createNotesBlockNavigationController } from "./notes-block-navigation-controller";
 
 function paragraph(id: string): NotesBlock {
@@ -39,7 +40,8 @@ describe("Notes block navigation controller", () => {
       <div data-notes-selectable-block-id="text"><span class="marker">1.</span></div>
     </div>`;
     const controller = createNotesBlockNavigationController({
-      readListElement: () => list, readRenderedBlockIds: () => [], readBlock: () => undefined, requestFocus: vi.fn(),
+      readListElement: () => list, readRenderedBlockIds: () => [], readBlock: () => undefined,
+      isHiddenCalloutLabel: () => false, requestFocus: vi.fn(),
     });
     expect(controller.targetIsSelectionZone(list.firstElementChild)).toBe(true);
     expect(controller.targetIsSelectionZone(list.querySelector(".marker"))).toBe(false);
@@ -48,6 +50,7 @@ describe("Notes block navigation controller", () => {
   afterEach(() => {
     Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
     Reflect.deleteProperty(Range.prototype, "getClientRects");
+    Reflect.deleteProperty(document, "caretPositionFromPoint");
     document.getSelection()?.removeAllRanges();
     document.body.replaceChildren();
   });
@@ -80,12 +83,67 @@ describe("Notes block navigation controller", () => {
       readListElement: () => list,
       readRenderedBlockIds: () => ["first", "second"],
       readBlock: (id) => blocks.get(id),
+      isHiddenCalloutLabel: () => false,
       requestFocus,
     });
     const event = new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true });
     Object.defineProperty(event, "target", { value: editor });
     expect(controller.handleKeydown(event, "first")).toBe(true);
     expect(requestFocus).toHaveBeenCalledWith("second", { start: 0, end: 0 });
+  });
+
+  it("moves directly across a callout's hidden label in both directions", () => {
+    mockRangeGeometry({ width: 0, height: 0 } as DOMRect, [] as unknown as DOMRectList);
+    const list = document.createElement("div");
+    list.innerHTML = `
+      <div data-notes-selectable-block-id="before"><div contenteditable="true" role="textbox" data-notes-block-id="before">Above</div></div>
+      <div data-notes-selectable-block-id="callout"></div>
+      <div data-notes-selectable-block-id="child"><div contenteditable="true" role="textbox" data-notes-block-id="child">Inside</div></div>
+    `;
+    document.body.append(list);
+    const before = paragraph("before");
+    if (before.type !== "paragraph") throw new Error("Expected paragraph");
+    before.paragraph.rich_text = [createRichText("Above")];
+    const child = paragraph("child");
+    if (child.type !== "paragraph") throw new Error("Expected paragraph");
+    child.paragraph.rich_text = [createRichText("Inside")];
+    const blocks = new Map([[before.id, before], [child.id, child]]);
+    const requestFocus = vi.fn();
+    const controller = createNotesBlockNavigationController({
+      readListElement: () => list,
+      readRenderedBlockIds: () => ["before", "callout", "child"],
+      readBlock: (id) => blocks.get(id),
+      isHiddenCalloutLabel: (id) => id === "callout",
+      requestFocus,
+    });
+    for (const [id, offset, key, targetId, targetOffset] of [
+      ["before", 5, "ArrowDown", "child", 0],
+      ["child", 0, "ArrowUp", "before", 5],
+    ] as const) {
+      const editor = list.querySelector<HTMLElement>(`[data-notes-block-id='${id}']`)!;
+      document.getSelection()?.collapse(editor.firstChild, offset);
+      const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+      Object.defineProperty(event, "target", { value: editor });
+      expect(controller.handleKeydown(event, id)).toBe(true);
+      expect(requestFocus).toHaveBeenLastCalledWith(targetId, { start: targetOffset, end: targetOffset });
+    }
+    const hiddenRow = list.querySelector<HTMLElement>("[data-notes-selectable-block-id='callout']")!;
+    const hiddenRowEvent = new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true });
+    Object.defineProperty(hiddenRowEvent, "target", { value: hiddenRow });
+    expect(controller.handleKeydown(hiddenRowEvent, "callout")).toBe(true);
+    expect(requestFocus).toHaveBeenLastCalledWith("child", { start: 0, end: 0 });
+    const boundaryController = createNotesBlockNavigationController({
+      readListElement: () => list,
+      readRenderedBlockIds: () => ["callout", "child"],
+      readBlock: (id) => blocks.get(id),
+      isHiddenCalloutLabel: (id) => id === "callout",
+      requestFocus,
+    });
+    const home = new KeyboardEvent("keydown", { key: "Home", ctrlKey: true, bubbles: true, cancelable: true });
+    Object.defineProperty(home, "target", { value: list.querySelector("[data-notes-block-id='child']") });
+    expect(boundaryController.handleKeydown(home, "child")).toBe(true);
+    expect(requestFocus).toHaveBeenLastCalledWith("child", { start: 0, end: 0 });
+    expect(requestFocus).toHaveBeenCalledTimes(4);
   });
 
   it("keeps an arrow key within a wrapped block before the last visual line", () => {
@@ -114,6 +172,7 @@ describe("Notes block navigation controller", () => {
       readListElement: () => list,
       readRenderedBlockIds: () => ["first", "second"],
       readBlock: (id) => id === "first" || id === "second" ? paragraph(id) : undefined,
+      isHiddenCalloutLabel: () => false,
       requestFocus,
     });
     const event = new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true });
@@ -121,5 +180,63 @@ describe("Notes block navigation controller", () => {
     expect(controller.handleKeydown(event, "first")).toBe(false);
     expect(event.defaultPrevented).toBe(false);
     expect(requestFocus).not.toHaveBeenCalled();
+  });
+
+  it("keeps the original visual column when moving through a short block", () => {
+    const list = document.createElement("div");
+    list.innerHTML = ["abcdefgh", "x", "abcdefgh"].map((text, index) =>
+      `<div data-notes-selectable-block-id="row-${index}"><div contenteditable="true" role="textbox" data-notes-block-id="row-${index}">${text}</div></div>`,
+    ).join("");
+    document.body.append(list);
+    const editors = Array.from(list.querySelectorAll<HTMLElement>("[contenteditable='true']"));
+    editors.forEach((editor, index) => {
+      vi.spyOn(editor, "getBoundingClientRect").mockReturnValue(new DOMRect(40, 100 + index * 40, 200, 20));
+    });
+    Object.defineProperty(Range.prototype, "getBoundingClientRect", { configurable: true,
+      value: function (this: Range) {
+        const index = editors.findIndex((editor) => editor.contains(this.startContainer));
+        return new DOMRect(40 + this.startOffset * 10, 100 + index * 40, 0, 20);
+      },
+    });
+    Object.defineProperty(Range.prototype, "getClientRects", { configurable: true,
+      value: function (this: Range) {
+        const index = editors.findIndex((editor) => editor.contains(this.startContainer));
+        return [new DOMRect(40, 100 + index * 40, 80, 20)];
+      },
+    });
+    Object.defineProperty(document, "caretPositionFromPoint", { configurable: true,
+      value: (x: number, y: number) => {
+        const index = editors.findIndex((_, candidate) => y >= 100 + candidate * 40 && y < 120 + candidate * 40);
+        if (index < 0) return null;
+        const length = editors[index].textContent?.length ?? 0;
+        return { offsetNode: editors[index].firstChild, offset: Math.min(length, Math.max(0, Math.round((x - 40) / 10))) };
+      },
+    });
+    const requestFocus = vi.fn();
+    const blocks = new Map(editors.map((editor, index) => {
+      const id = `row-${index}`;
+      const block = paragraph(id);
+      if (block.type !== "paragraph") throw new Error("Expected paragraph");
+      block.paragraph.rich_text = [createRichText(editor.textContent ?? "")];
+      return [id, block] as const;
+    }));
+    const controller = createNotesBlockNavigationController({
+      readListElement: () => list,
+      readRenderedBlockIds: () => ["row-0", "row-1", "row-2"],
+      readBlock: (id) => blocks.get(id),
+      isHiddenCalloutLabel: () => false,
+      requestFocus,
+    });
+    const down = (index: number) => {
+      const event = new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true });
+      Object.defineProperty(event, "target", { value: editors[index] });
+      expect(controller.handleKeydown(event, `row-${index}`)).toBe(true);
+    };
+    document.getSelection()?.collapse(editors[0].firstChild, 4);
+    down(0);
+    expect(requestFocus).toHaveBeenLastCalledWith("row-1", { start: 1, end: 1 });
+    document.getSelection()?.collapse(editors[1].firstChild, 1);
+    down(1);
+    expect(requestFocus).toHaveBeenLastCalledWith("row-2", { start: 4, end: 4 });
   });
 });

@@ -42,6 +42,7 @@ import type {
   NotesBlockUpdate,
   NotesBlockWrite,
   NotesColor,
+  NotesIcon,
   NotesColumnBlockItems,
   NotesTabBlockItems,
   NotesTableRowBlock,
@@ -82,6 +83,7 @@ export interface NotesStructuralBlockActions {
   toggleTodo: (blockId: string, checked: boolean) => Promise<void>;
   updateCodeLanguage: (blockId: string, language: string) => Promise<void>;
   updateBlockColor: (blockId: string, color: NotesColor) => Promise<void>;
+  updateCalloutIcon: (blockId: string, icon: NotesIcon | null) => Promise<void>;
   updateToggleOpen: (blockId: string, open: boolean) => Promise<void>;
   convertBlockToToggleHeading: (
     blockId: string,
@@ -349,9 +351,19 @@ export function createNotesStructuralBlockActions(
   async function updateBlockColor(blockId: string, color: NotesColor): Promise<void> {
     const block = context.blockById(blockId);
     if (!block) return;
+    if (block.type === "callout" && color !== "default" && !color.endsWith("_background")) return;
     const before = undoSnapshot(blockId);
     applyEditorUpdate(blockId, blockWithColor(block, color));
     recordUndoAfter("formatting", before, blockId);
+  }
+
+  async function updateCalloutIcon(blockId: string, icon: NotesIcon | null): Promise<void> {
+    const block = context.blockById(blockId);
+    if (!block || block.type !== "callout") return;
+    const before = undoSnapshot(blockId);
+    const update = { type: "callout" as const, callout: { ...block.callout, icon } };
+    applyEditorUpdate(blockId, update);
+    recordUndoAfter("update", before, blockId);
   }
 
   async function updateToggleOpen(blockId: string, open: boolean): Promise<void> {
@@ -572,6 +584,7 @@ export function createNotesStructuralBlockActions(
     toggleTodo,
     updateCodeLanguage,
     updateBlockColor,
+    updateCalloutIcon,
     updateToggleOpen,
     convertBlockToToggleHeading,
     createSiblingAfter,

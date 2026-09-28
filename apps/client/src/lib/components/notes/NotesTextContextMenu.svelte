@@ -48,6 +48,8 @@
     blockType,
     hasSelection,
     canFormatSelection,
+    canSetCalloutBackground = false,
+    calloutBackgroundColor,
     canOpenLink,
     onToggleAnnotation,
     onColorSelect,
@@ -70,6 +72,8 @@
     blockType: NotesBlockType;
     hasSelection: boolean;
     canFormatSelection: boolean;
+    canSetCalloutBackground?: boolean;
+    calloutBackgroundColor?: NotesColor;
     canOpenLink: boolean;
     onToggleAnnotation: (name: NotesRichTextAnnotationName) => void;
     onColorSelect: (color: NotesColor) => void;
@@ -236,7 +240,7 @@
     role="menuitem"
     aria-haspopup="menu"
     aria-expanded={submenu === "format"}
-    disabled={!canFormatSelection}
+    disabled={!canFormatSelection && !canSetCalloutBackground}
     onmouseenter={(event) => openSubmenu("format", event.currentTarget)}
     onclick={(event) => openSubmenu("format", event.currentTarget, event.detail === 0)}
   >
@@ -358,7 +362,7 @@
       style:width={`${NOTES_TEXT_CONTEXT_SUBMENU_WIDTH}px`}
       style:visibility={palettePosition ? "visible" : "hidden"}
     >
-      <NotesTextColorPalette currentColor={annotations.color} onSelect={(color) => runAction(() => onColorSelect(color))} />
+      <NotesTextColorPalette currentColor={annotations.color} {calloutBackgroundColor} onSelect={(color) => runAction(() => onColorSelect(color))} />
     </div>
   {/if}
 </div>

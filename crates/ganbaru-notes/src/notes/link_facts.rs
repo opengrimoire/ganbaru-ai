@@ -586,6 +586,7 @@ fn asset_link_type(role: &str) -> &'static str {
         "page_icon" => "page_icon",
         "page_cover" => "page_cover",
         "block_file" => "block_file",
+        "callout_icon" => "callout_icon",
         "property_file" => "property_file",
         "comment_attachment" => "comment_attachment",
         _ => "import_source",

@@ -91,7 +91,7 @@ export function createCalloutPayload(
 ): NotesCalloutBlockPayload {
   return {
     ...createTextPayload(content, color),
-    icon: { type: "icon", icon: { name: "info", color: "gray" } },
+    icon: { type: "emoji", emoji: "💡" },
   };
 }
 

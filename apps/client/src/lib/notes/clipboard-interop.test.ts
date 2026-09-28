@@ -26,6 +26,44 @@ function pasted(text: string, html = "", currentText = "", start = 0, end = star
 }
 
 describe("Notes portable clipboard interoperability", () => {
+  it("imports Notion aside text as a callout with heading and paragraph children", () => {
+    const text = "Normal text\n\n<aside>\n💡\n\n# Title\n\nOne\n\nTwo\n\nThree\n\n</aside>\n\nNormal text";
+    const { plan, blocks } = pasted(text);
+    expect(blocks.map((item) => item.type)).toEqual([
+      "paragraph", "callout", "heading_1", "paragraph", "paragraph", "paragraph", "paragraph",
+    ]);
+    expect(blocks.map(blockPlainText)).toEqual(["Normal text", "", "Title", "One", "Two", "Three", "Normal text"]);
+    expect(plan?.blockDepths).toEqual([0, 0, 1, 1, 1, 1, 0]);
+    expect(blocks[1]).toMatchObject({ callout: { icon: { type: "emoji", emoji: "💡" } } });
+  });
+
+  it("copies nested callouts as asides and restores their icons, colors, and structure", () => {
+    const callout = block("callout", "", "callout");
+    if (callout.type !== "callout") throw new Error("Expected callout");
+    callout.callout.color = "blue_background";
+    callout.callout.icon = { type: "emoji", emoji: "💡" };
+    const heading = block("heading_1", "Title", "heading");
+    heading.parent = { type: "block_id", block_id: callout.id };
+    const nested = block("callout", "", "nested");
+    nested.parent = { type: "block_id", block_id: callout.id };
+    if (nested.type !== "callout") throw new Error("Expected nested callout");
+    nested.callout.icon = { type: "emoji", emoji: "⚠️" };
+    const body = block("paragraph", "Check this", "body");
+    body.parent = { type: "block_id", block_id: nested.id };
+    const content = notesClipboardContent([callout, heading, nested, body].map((item) => ({ block: item })));
+    expect(content.plainText).toContain("<aside>\n💡\n\n# Title");
+    expect(content.plainText).not.toContain("> # Title");
+    expect(content.html).toContain("<aside data-notes-callout-icon-json=");
+    const rich = pasted(content.plainText, content.html);
+    expect(rich.blocks.map((item) => item.type)).toEqual(["callout", "heading_1", "callout", "paragraph"]);
+    expect(rich.plan?.blockDepths).toEqual([0, 1, 1, 2]);
+    expect(rich.blocks[0]).toMatchObject({ callout: { color: "blue_background", icon: { type: "emoji", emoji: "💡" } } });
+    expect(rich.blocks[2]).toMatchObject({ callout: { icon: { type: "emoji", emoji: "⚠️" } } });
+    const plain = pasted(content.plainText);
+    expect(plain.blocks.map((item) => item.type)).toEqual(["callout", "heading_1", "callout", "paragraph"]);
+    expect(plain.plan?.blockDepths).toEqual([0, 1, 1, 2]);
+  });
+
   it("preserves a closed toggle through HTML and provides a readable plain-text list", () => {
     const toggle = block("toggle", "Details", "toggle");
     if (toggle.type !== "toggle") throw new Error("Expected toggle");

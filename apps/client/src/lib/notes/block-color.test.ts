@@ -246,7 +246,7 @@ describe("notes block colors", () => {
     expect(update.type).toBe("callout");
     if (update.type === "callout") {
       expect(update.callout.color).toBe("yellow_background");
-      expect(update.callout.icon).toEqual({ type: "icon", icon: { name: "info", color: "gray" } });
+      expect(update.callout.icon).toEqual({ type: "emoji", emoji: "💡" });
       expect(update.callout.rich_text[0]?.plain_text).toBe("Updated");
     }
   });

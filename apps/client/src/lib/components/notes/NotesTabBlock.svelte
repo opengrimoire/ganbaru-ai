@@ -3,6 +3,7 @@
   import { tick } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { notesBlockAnchorId } from "$lib/notes/block-link";
+  import { notesEmbeddedCalloutLayers } from "$lib/notes/callout-layout";
   import { notesBlockContextMenuPoint } from "$lib/notes/block-handle";
   import { blockPlainText, type NotesHeadingBlockType } from "$lib/notes/block-factory";
   import type { NotesBlockInsertRequest } from "$lib/notes/block-insertion";
@@ -48,6 +49,7 @@
   } from "$lib/notes/types";
   import NotesBlockHandle from "./NotesBlockHandle.svelte";
   import NotesBlockRow from "./NotesBlockRow.svelte";
+  import NotesCalloutEmbeddedRow from "./NotesCalloutEmbeddedRow.svelte";
   import NotesLazySlashMenu from "./NotesLazySlashMenu.svelte";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
@@ -90,6 +92,7 @@
     onConvert,
     onConvertToToggleHeading,
     onColorChange,
+    onCalloutIconChange,
     onCopyLink,
     onDuplicate,
     onUseTemplate,
@@ -233,6 +236,7 @@
       clearText?: boolean,
     ) => void;
     onColorChange: (blockId: string, color: NotesColor) => void;
+    onCalloutIconChange: (blockId: string, icon: NotesIcon | null) => Promise<void> | void;
     onCopyLink: (blockId: string) => Promise<void> | void;
     onDuplicate: (blockId: string) => void;
     onUseTemplate: (blockId: string) => void;
@@ -317,6 +321,9 @@
     activeTab ? tabItems.findIndex((tab) => tab.label.id === activeTab.label.id) : -1,
   );
   const canAddTab = $derived(notesTabCanAdd(tabItems.length));
+  const calloutLayersByTab = $derived(new Map(tabItems.map((tab) => [
+    tab.label.id, notesEmbeddedCalloutLayers(tab.items),
+  ])));
   const canRemoveTab = $derived(notesTabCanRemove(tabItems.length));
 
   $effect(() => {
@@ -655,81 +662,86 @@
                   {t("notes.emptyTabs")}
                 </button>
               {:else}
-                <div class="flex min-w-0 flex-col gap-0.5">
+                <div class="flex min-w-0 flex-col">
                   {#each activeTab.items as tabBlockItem (tabBlockItem.block.id)}
-                    <NotesBlockRow
-                      item={tabBlockItem}
-                      {breadcrumbItems}
-                      {tableOfContentsItems}
-                      tableRows={tableRowsForBlock(tabBlockItem.block.id)}
-                      previousBlockType={previousBlockTypeForBlock(tabBlockItem.block.id)}
-                      isOnlyBlock={isOnlyBlockForBlock(tabBlockItem.block.id)}
-                      {focusBlockId}
-                      {focusRequestId}
-                      {focusSelection}
-                      {listOrdinals}
-                      {mentionTargets}
-                      templateStatus={templateStatusForBlock(tabBlockItem.block.id)}
-                      buttonStatus={buttonStatusForBlock(tabBlockItem.block.id)}
-                      {onTextInput}
-                      {onReplaceRichText}
-                      {onInsertPageMention}
-                      {onInsertDateMention}
-                      {onInsertObjectMention}
-                      {onApplyTextLink}
-                      {onInsertInlineEquation}
-                      {onPastePlainText}
-                      {onPasteRichHtml}
-                      {onApplyTextAnnotations}
-                      {onCreateInlineComment}
-                      {onCreateInlineSuggestion}
-                      {onKeyboardAction}
-                      {onUndo}
-                      {onRedo}
-                      {onAddBelow}
-                      {onConvert}
-                      {onConvertToToggleHeading}
-                      {onColorChange}
-                      {onCopyLink}
-                      {onDuplicate}
-                      {onUseTemplate}
-                      {onAddTemplateChild}
-                      {onUseButton}
-                      {onAddButtonChild}
-                      {onButtonIconChange}
-                      {onButtonInsertPositionChange}
-                      {onCreateLinkedDatabaseView}
-                      {onConvertUnsupported}
-                      {onComment}
-                      {onMoveUp}
-                      {onMoveDown}
-                      moveTargets={moveTargetsForBlock(tabBlockItem.block.id)}
-                      {onMoveToPage}
-                      {onDelete}
-                      isDragging={draggingBlockId === tabBlockItem.block.id}
-                      dropPosition={dropPositionForBlock(tabBlockItem.block.id)}
-                      {onDragStart}
-                      {onDragEnd}
-                      {onDragOver}
-                      {onDragLeave}
-                      {onDrop}
-                      {onToggleTodo}
-                      {onToggleOpen}
-                      {onCodeLanguageChange}
-                      {onBookmarkChange}
-                      {onLinkPreviewUrlChange}
-                      {onEmbedUrlChange}
-                      {onEquationExpressionChange}
-                      {onMediaChange}
-                      {onTableCellRichTextChange}
-                      {onAddTableRow}
-                      {onRemoveTableRow}
-                      {onAddTableColumn}
-                      {onRemoveTableColumn}
-                      {onSelectPage}
-                      {onFocusBlock}
-                      {onHandleMenuOpenChange}
-                    />
+                    <NotesCalloutEmbeddedRow layers={calloutLayersByTab.get(activeTab.label.id)?.get(tabBlockItem.block.id) ?? []}>
+                      {#snippet body()}
+                        <NotesBlockRow
+                          item={tabBlockItem}
+                          {breadcrumbItems}
+                          {tableOfContentsItems}
+                          tableRows={tableRowsForBlock(tabBlockItem.block.id)}
+                          previousBlockType={previousBlockTypeForBlock(tabBlockItem.block.id)}
+                          isOnlyBlock={isOnlyBlockForBlock(tabBlockItem.block.id)}
+                          {focusBlockId}
+                          {focusRequestId}
+                          {focusSelection}
+                          {listOrdinals}
+                          {mentionTargets}
+                          templateStatus={templateStatusForBlock(tabBlockItem.block.id)}
+                          buttonStatus={buttonStatusForBlock(tabBlockItem.block.id)}
+                          {onTextInput}
+                          {onReplaceRichText}
+                          {onInsertPageMention}
+                          {onInsertDateMention}
+                          {onInsertObjectMention}
+                          {onApplyTextLink}
+                          {onInsertInlineEquation}
+                          {onPastePlainText}
+                          {onPasteRichHtml}
+                          {onApplyTextAnnotations}
+                          {onCreateInlineComment}
+                          {onCreateInlineSuggestion}
+                          {onKeyboardAction}
+                          {onUndo}
+                          {onRedo}
+                          {onAddBelow}
+                          {onConvert}
+                          {onConvertToToggleHeading}
+                          {onColorChange}
+                          {onCalloutIconChange}
+                          {onCopyLink}
+                          {onDuplicate}
+                          {onUseTemplate}
+                          {onAddTemplateChild}
+                          {onUseButton}
+                          {onAddButtonChild}
+                          {onButtonIconChange}
+                          {onButtonInsertPositionChange}
+                          {onCreateLinkedDatabaseView}
+                          {onConvertUnsupported}
+                          {onComment}
+                          {onMoveUp}
+                          {onMoveDown}
+                          moveTargets={moveTargetsForBlock(tabBlockItem.block.id)}
+                          {onMoveToPage}
+                          {onDelete}
+                          isDragging={draggingBlockId === tabBlockItem.block.id}
+                          dropPosition={dropPositionForBlock(tabBlockItem.block.id)}
+                          {onDragStart}
+                          {onDragEnd}
+                          {onDragOver}
+                          {onDragLeave}
+                          {onDrop}
+                          {onToggleTodo}
+                          {onToggleOpen}
+                          {onCodeLanguageChange}
+                          {onBookmarkChange}
+                          {onLinkPreviewUrlChange}
+                          {onEmbedUrlChange}
+                          {onEquationExpressionChange}
+                          {onMediaChange}
+                          {onTableCellRichTextChange}
+                          {onAddTableRow}
+                          {onRemoveTableRow}
+                          {onAddTableColumn}
+                          {onRemoveTableColumn}
+                          {onSelectPage}
+                          {onFocusBlock}
+                          {onHandleMenuOpenChange}
+                        />
+                      {/snippet}
+                    </NotesCalloutEmbeddedRow>
                   {/each}
                 </div>
               {/if}

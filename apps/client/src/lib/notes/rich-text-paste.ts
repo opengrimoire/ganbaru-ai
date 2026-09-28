@@ -4,6 +4,7 @@ import DOMPurify, { type Config } from "dompurify";
 import {
   blockEditableRichText,
   blockWithRichText,
+  createCalloutPayload,
   createCodePayload,
   createTextPayloadFromRichText,
 } from "./block-factory";
@@ -15,6 +16,7 @@ import {
   richTextPlainText,
   richTextRangeSlice,
 } from "./rich-text";
+import { parseNullableNotesIcon } from "./validation/assets";
 import {
   NOTES_CLIPBOARD_MAX_BLOCKS,
   NOTES_CLIPBOARD_MAX_TEXT_LENGTH,
@@ -26,6 +28,7 @@ import {
   type NotesBlockUpdate,
   type NotesBlockWrite,
   type NotesColor,
+  type NotesIcon,
   type NotesRichText,
   type NotesRichTextAnnotations,
   type NotesRichTextLink,
@@ -42,6 +45,7 @@ type NotesRichHtmlPasteBlockType =
   | "bulleted_list_item"
   | "numbered_list_item"
   | "toggle"
+  | "callout"
   | "quote"
   | "to_do"
   | "divider"
@@ -58,6 +62,8 @@ interface NotesRichHtmlPasteSegment {
   open?: boolean;
   table?: NotesClipboardTable;
   cells?: NotesRichText[][];
+  icon?: NotesIcon | null;
+  color?: NotesColor;
 }
 
 interface NotesRichHtmlInlineContext {
@@ -87,6 +93,7 @@ const NOTES_RICH_HTML_MAX_LENGTH = 128 * 1024;
 const SANITIZER_CONFIG = {
   ALLOWED_TAGS: [
     "a",
+    "aside",
     "b",
     "blockquote",
     "br",
@@ -127,6 +134,10 @@ const SANITIZER_CONFIG = {
   ALLOWED_ATTR: [
     "data-notes-bold",
     "data-notes-code",
+    "data-notes-callout-color",
+    "data-notes-callout-icon-json",
+    "data-notes-callout-label",
+    "data-notes-callout-marker",
     "data-notes-italic",
     "data-notes-link-url",
     "data-notes-rich-text-color",
@@ -164,6 +175,7 @@ const SANITIZER_CONFIG = {
 } satisfies Config;
 
 const BLOCK_TAGS = new Set([
+  "aside",
   "blockquote",
   "details",
   "div",
@@ -490,6 +502,32 @@ function collectSegments(
       continue;
     }
     const tagName = normalizedTagName(child);
+    if (tagName === "aside") {
+      flushInline();
+      const directChildren = Array.from(child.children);
+      const explicitMarker = directChildren.find((element) => element.hasAttribute("data-notes-callout-marker"));
+      const firstChild = directChildren[0];
+      const implicitMarker = !explicitMarker && firstChild && normalizedTagName(firstChild) === "p"
+        && singleEmoji(firstChild.textContent ?? "") ? firstChild : null;
+      const marker = explicitMarker ?? implicitMarker;
+      const label = directChildren.find((element) => element.hasAttribute("data-notes-callout-label"));
+      const labelRichText: NotesRichText[] = [];
+      if (label) {
+        const labelContext = contextForElement(label, context);
+        for (const node of label.childNodes) collectInline(node, labelContext, labelRichText);
+      }
+      const icon = calloutIconFromElement(child, marker);
+      const rawColor = child.getAttribute("data-notes-callout-color");
+      const color = rawColor && NOTES_COLORS.includes(rawColor as NotesColor)
+        ? rawColor as NotesColor : "gray_background";
+      segments.push({ type: "callout", richText: labelRichText, icon, color, depth });
+      const body = document.createDocumentFragment();
+      for (const node of child.childNodes) {
+        if (node !== marker && node !== label) body.append(node.cloneNode(true));
+      }
+      segments.push(...collectSegments(body, contextForElement(child, context), null, depth + 1));
+      continue;
+    }
     if (tagName === "details") {
       const summary = Array.from(child.children).find((element) => normalizedTagName(element) === "summary");
       if (summary) {
@@ -589,6 +627,25 @@ function collectSegments(
   return segments;
 }
 
+function singleEmoji(value: string): boolean {
+  const text = value.trim();
+  return /\p{Extended_Pictographic}/u.test(text)
+    && [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text)].length === 1;
+}
+
+function calloutIconFromElement(element: Element, marker: Element | null): NotesIcon | null {
+  const metadata = element.getAttribute("data-notes-callout-icon-json");
+  if (metadata) {
+    try {
+      return parseNullableNotesIcon(JSON.parse(metadata) as unknown, "callout clipboard icon");
+    } catch (error) {
+      console.warn("Ignoring invalid Notes callout clipboard icon", error);
+    }
+  }
+  const emoji = marker?.textContent?.trim();
+  return emoji && singleEmoji(emoji) ? { type: "emoji", emoji } : createCalloutPayload("").icon;
+}
+
 /** Sanitize clipboard markup before reading semantic content or reconciling formats. */
 export function sanitizeNotesRichHtml(html: string): DocumentFragment | null {
   if (!html.trim() || html.length > NOTES_RICH_HTML_MAX_LENGTH) return null;
@@ -674,6 +731,11 @@ function createUpdateForSegment(segment: NotesRichHtmlPasteSegment): NotesBlockU
       return { type: "toggle", toggle: {
         ...createTextPayloadFromRichText(richTextOrEmptyText(segment.richText)),
         ganbaru_open: segment.open ?? true,
+      } };
+    case "callout":
+      return { type: "callout", callout: {
+        ...createTextPayloadFromRichText(richTextOrEmptyText(segment.richText), segment.color ?? "gray_background"),
+        icon: segment.icon === undefined ? createCalloutPayload("").icon : segment.icon,
       } };
     case "heading_1":
       return {
@@ -788,16 +850,16 @@ export function planNotesRichHtmlPaste(
   );
   const prefix = richTextRangeSlice(currentRichText, 0, start);
   const suffix = richTextRangeSlice(currentRichText, end, currentPlainText.length);
-  if (["table", "divider", "toggle"].includes(segments[0].type)
+  if (["table", "divider", "toggle", "callout"].includes(segments[0].type)
     && (richTextPlainText(prefix).length > 0
       || (input.currentBlock.type !== "paragraph" && end !== currentPlainText.length))) {
     segments.unshift({ type: "paragraph", richText: [], depth: 0 });
   }
   if (segments.at(-1)?.type === "table_row" || segments.at(-1)?.type === "table"
     || (segments.at(-1)?.type === "divider" && richTextPlainText(suffix))
-    || (segments.some((segment) => segment.type === "toggle")
+    || (segments.some((segment) => segment.type === "toggle" || segment.type === "callout")
       && richTextPlainText(suffix)
-      && (segments.at(-1)?.type === "toggle" || (segments.at(-1)?.depth ?? 0) > 0))) {
+      && (["toggle", "callout"].includes(segments.at(-1)?.type ?? "") || (segments.at(-1)?.depth ?? 0) > 0))) {
     segments.push({ type: "paragraph", richText: [], depth: 0 });
   }
   const [firstSegment, ...remainingSegments] = segments;

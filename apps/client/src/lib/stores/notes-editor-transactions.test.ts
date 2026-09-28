@@ -839,6 +839,92 @@ describe("Notes editing with delayed persistence", () => {
     expect(h.error).not.toHaveBeenCalled();
   });
 
+  it("keeps Enter-created rows inside a callout and exits on an empty child row", async () => {
+    const callout = fromWrite(createBlockWrite(firstId, "callout", "Title body"));
+    const h = editor([callout, fromWrite(createBlockWrite(lastId, "paragraph", "After"))]);
+    await h.actions.splitTextBlockAtSelection(firstId, 6, 6);
+    const childId = h.projection.childIdsByParentId[firstId]?.[0];
+    expect(childId).toBeTruthy();
+    expect(h.projection.childIdsByParentId[pageId]).toEqual([firstId, lastId]);
+    expect(h.projection.blocksById[childId]).toMatchObject({
+      type: "paragraph", parent: { type: "block_id", block_id: firstId },
+    });
+    expect(blockPlainText(h.projection.blocksById[childId])).toBe("body");
+    await h.actions.splitTextBlockAtSelection(childId, 4, 4);
+    const emptyId = h.projection.childIdsByParentId[firstId]?.[1];
+    expect(blockPlainText(h.projection.blocksById[emptyId])).toBe("");
+    await h.actions.splitTextBlockAtSelection(emptyId, 0, 0);
+    const followingId = h.projection.childIdsByParentId[firstId]?.[2];
+    await h.actions.updateBlockText(followingId, "Still inside");
+    await h.actions.outdentBlock(emptyId, { start: 0, end: 0 });
+    expect(h.projection.childIdsByParentId[firstId]).toEqual([childId, followingId]);
+    expect(h.projection.childIdsByParentId[pageId]).toEqual([firstId, emptyId, lastId]);
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(h.stored.get(childId)?.parent).toEqual({ type: "block_id", block_id: firstId });
+    expect(h.stored.get(followingId)?.parent).toEqual({ type: "block_id", block_id: firstId });
+    expect(h.stored.get(emptyId)?.parent).toEqual(parent);
+    expect(h.error).not.toHaveBeenCalled();
+  });
+
+  it("creates an ordinary paragraph before a callout when Enter starts its text", async () => {
+    const callout = fromWrite(createBlockWrite(firstId, "callout", "Keep this"));
+    const childId = crypto.randomUUID();
+    const child = { ...fromWrite(createBlockWrite(childId, "heading_1", "Heading")),
+      parent: { type: "block_id", block_id: firstId } as const };
+    const h = editor([callout, child, fromWrite(createBlockWrite(lastId, "paragraph", "After"))]);
+    await h.actions.splitTextBlockAtSelection(firstId, 0, 0);
+    const previousId = h.projection.childIdsByParentId[pageId][0];
+    expect(h.projection.childIdsByParentId[pageId]).toEqual([previousId, firstId, lastId]);
+    expect(h.projection.blocksById[previousId].type).toBe("paragraph");
+    expect(h.projection.childIdsByParentId[firstId]).toEqual([childId]);
+    expect(blockPlainText(h.projection.blocksById[firstId])).toBe("Keep this");
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(h.stored.get(previousId)?.parent).toEqual(parent);
+    expect(h.stored.get(childId)?.parent).toEqual(child.parent);
+  });
+
+  it("creates a paragraph before an empty-label callout when Enter starts its first child", async () => {
+    const callout = fromWrite(createBlockWrite(firstId, "callout"));
+    const childId = crypto.randomUUID();
+    const child = { ...fromWrite(createBlockWrite(childId, "heading_1", "Title")),
+      parent: { type: "block_id", block_id: firstId } as const };
+    const h = editor([callout, child, fromWrite(createBlockWrite(lastId, "paragraph", "After"))]);
+    await h.actions.splitTextBlockAtSelection(childId, 0, 0);
+    const previousId = h.projection.childIdsByParentId[pageId][0];
+    expect(h.projection.childIdsByParentId[pageId]).toEqual([previousId, firstId, lastId]);
+    expect(h.projection.blocksById[previousId].type).toBe("paragraph");
+    expect(h.projection.childIdsByParentId[firstId]).toEqual([childId]);
+    expect(blockPlainText(h.projection.blocksById[childId])).toBe("Title");
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(h.stored.get(previousId)?.parent).toEqual(parent);
+    expect(h.stored.get(childId)?.parent).toEqual(child.parent);
+    expect(h.error).not.toHaveBeenCalled();
+  });
+
+  it("changes a callout icon while preserving its text and child blocks", async () => {
+    const callout = fromWrite(createBlockWrite(firstId, "callout", "Notice"));
+    const childId = crypto.randomUUID();
+    const child = { ...fromWrite(createBlockWrite(childId, "paragraph", "Details")),
+      parent: { type: "block_id", block_id: firstId } as const };
+    const h = editor([callout, child]);
+    await h.actions.updateCalloutIcon(firstId, { type: "emoji", emoji: "⚠️" });
+    await h.actions.updateBlockColor(firstId, "yellow_background");
+    await h.actions.updateBlockColor(firstId, "red");
+    expect(h.projection.blocksById[firstId]).toMatchObject({
+      callout: { icon: { type: "emoji", emoji: "⚠️" }, color: "yellow_background" },
+    });
+    expect(blockPlainText(h.projection.blocksById[firstId])).toBe("Notice");
+    expect(h.projection.childIdsByParentId[firstId]).toEqual([childId]);
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(h.stored.get(firstId)).toMatchObject({
+      callout: { icon: { type: "emoji", emoji: "⚠️" }, color: "yellow_background" },
+    });
+  });
+
   it("inserts an empty sibling before a toggle when Enter is pressed at the start of its title", async () => {
     const precedingId = crypto.randomUUID();
     const childId = crypto.randomUUID();

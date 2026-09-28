@@ -45,6 +45,8 @@
     onTurnInto,
     canSetColor,
     currentColor,
+    currentBackgroundColor = currentColor,
+    backgroundOnly = false,
     onColorSelect,
     onCopyLink,
     onDuplicate,
@@ -62,6 +64,8 @@
     onTurnInto: () => void;
     canSetColor: boolean;
     currentColor: NotesColor;
+    currentBackgroundColor?: NotesColor;
+    backgroundOnly?: boolean;
     onColorSelect: (color: NotesColor) => void;
     onCopyLink: () => Promise<void> | void;
     onDuplicate: () => void;
@@ -299,7 +303,7 @@
         <div class="px-2.5 pb-1 pt-1 text-[0.7rem] font-medium text-muted-foreground">
           {t("notes.color")}
         </div>
-        {#each NOTES_TEXT_COLORS as color}
+        {#each backgroundOnly ? NOTES_TEXT_COLORS.slice(0, 1) : NOTES_TEXT_COLORS as color}
           <button
             class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent hover:text-accent-foreground"
             type="button"
@@ -328,7 +332,7 @@
             class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent hover:text-accent-foreground"
             type="button"
             role="menuitemradio"
-            aria-checked={currentColor === color}
+            aria-checked={currentBackgroundColor === color}
             onclick={() => selectColor(color)}
           >
             <span
@@ -339,7 +343,7 @@
               A
             </span>
             <span class="min-w-0 flex-1 truncate">{colorLabel(color)}</span>
-            {#if currentColor === color}
+            {#if currentBackgroundColor === color}
               <Check class="size-3.5 shrink-0" />
             {/if}
           </button>

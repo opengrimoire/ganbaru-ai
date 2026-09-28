@@ -460,3 +460,73 @@ fn append_and_update_callout_blocks_round_trip() {
         );
     });
 }
+
+#[test]
+fn callout_icon_assets_follow_icon_changes_and_block_conversion() {
+    crate::test_block_on(async {
+        let pool = migrated_memory_pool().await;
+        create_page(&pool, PAGE_A, BLOCK_A).await;
+        let asset_path =
+            "notes/page-icons/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.png";
+        let callout_with_file = json!({
+            "rich_text": [rich_text("Notice")],
+            "color": "gray_background",
+            "icon": {
+                "type": "file",
+                "file": {
+                    "url": format!("ganbaru-asset:{asset_path}"),
+                    "ganbaru_asset_path": asset_path,
+                    "content_type": "image/png",
+                    "byte_size": 42,
+                    "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                }
+            }
+        });
+        writes::append_block_children(
+            &pool,
+            NoteAppendBlockChildren {
+                parent: page_parent(PAGE_A),
+                after: Some(BLOCK_A.to_string()),
+                children: vec![block(BLOCK_B, "callout", callout_with_file.clone())],
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(callout_icon_reference_count(&pool, asset_path).await, 1);
+
+        let mut emoji = callout_with_file.clone();
+        emoji["icon"] = json!({ "type": "emoji", "emoji": "💡" });
+        writes::update_block(&pool, BLOCK_B, block_update("callout", emoji))
+            .await
+            .unwrap();
+        assert_eq!(callout_icon_reference_count(&pool, asset_path).await, 0);
+
+        writes::update_block(&pool, BLOCK_B, block_update("callout", callout_with_file))
+            .await
+            .unwrap();
+        assert_eq!(callout_icon_reference_count(&pool, asset_path).await, 1);
+
+        writes::update_block(
+            &pool,
+            BLOCK_B,
+            block_update("paragraph", json!({ "rich_text": [rich_text("Text")] })),
+        )
+        .await
+        .unwrap();
+        assert_eq!(callout_icon_reference_count(&pool, asset_path).await, 0);
+    });
+}
+
+async fn callout_icon_reference_count(pool: &SqlitePool, asset_path: &str) -> i64 {
+    sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM notes_asset_references
+         WHERE owner_type = 'block' AND owner_id = ? AND asset_id = ?
+           AND role = 'callout_icon'",
+    )
+    .bind(BLOCK_B)
+    .bind(asset_path)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}

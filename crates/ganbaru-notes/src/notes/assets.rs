@@ -153,19 +153,30 @@ pub async fn sync_block_asset_reference_tx(
     block_type: &str,
     payload: &Value,
 ) -> Result<(), String> {
-    if !matches!(block_type, "image" | "video" | "audio" | "file" | "pdf") {
-        return Ok(());
-    }
     sqlx::query(
         "DELETE FROM notes_asset_references
-         WHERE owner_type = 'block' AND owner_id = ? AND role = 'block_file'",
+         WHERE owner_type = 'block' AND owner_id = ? AND role IN ('block_file', 'callout_icon')",
     )
     .bind(block_id)
     .execute(&mut **tx)
     .await
     .map_err(|e| format!("clear notes block asset reference: {e}"))?;
 
-    let Some(asset) = media_local_file_asset(payload, block_type)? else {
+    let (role, asset) = if block_type == "callout" {
+        (
+            "callout_icon",
+            page_local_file_asset(
+                payload.get("icon"),
+                "callout.icon",
+                NOTES_ASSET_PAGE_ICON_PREFIX,
+            )?,
+        )
+    } else if matches!(block_type, "image" | "video" | "audio" | "file" | "pdf") {
+        ("block_file", media_local_file_asset(payload, block_type)?)
+    } else {
+        ("block_file", None)
+    };
+    let Some(asset) = asset else {
         return Ok(());
     };
     let asset_path = asset.relative_path.trim().to_string();
@@ -179,7 +190,7 @@ pub async fn sync_block_asset_reference_tx(
             block_id,
             role
          )
-         VALUES (?, 'block', ?, ?, ?, 'block_file')
+         VALUES (?, 'block', ?, ?, ?, ?)
          ON CONFLICT(asset_id, owner_type, owner_id, role)
          DO UPDATE SET
             page_id = excluded.page_id,
@@ -190,6 +201,7 @@ pub async fn sync_block_asset_reference_tx(
     .bind(block_id)
     .bind(page_id)
     .bind(block_id)
+    .bind(role)
     .execute(&mut **tx)
     .await
     .map_err(|e| format!("record notes block asset reference: {e}"))?;

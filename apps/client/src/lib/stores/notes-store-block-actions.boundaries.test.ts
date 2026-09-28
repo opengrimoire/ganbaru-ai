@@ -102,6 +102,7 @@ describe("Notes block action boundaries", () => {
     const actions = createNotesBlockPasteActions({
       enqueueEditorMutation: (mutation) => mutation(),
       readSelectedPageId: () => pageId,
+      readChildIdsByParentId: () => ({ [pageId]: [block.id] }),
       blockById: (id) => id === block.id ? block : undefined,
       localApplyBlockUpdate: () => undefined,
       localInsertBlockAfter: () => undefined,

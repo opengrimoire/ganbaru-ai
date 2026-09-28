@@ -269,6 +269,13 @@ export function notesBlockColorStyle(color: NotesColor): string {
   ].join("; ");
 }
 
+/** Resolve a callout's shared surface color without tinting its individual text rows. */
+export function notesCalloutBackground(color: NotesColor): string {
+  if (color === "default") return "var(--background)";
+  if (color === "gray_background") return "color-mix(in srgb, var(--foreground) 4%, var(--background))";
+  return color.endsWith("_background") ? COLOR_TOKENS[color].background : "var(--background)";
+}
+
 export function notesBlockColorSwatchStyle(color: NotesColor): string {
   const tokens = COLOR_TOKENS[color];
   return [

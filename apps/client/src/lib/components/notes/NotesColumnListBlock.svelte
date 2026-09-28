@@ -2,6 +2,7 @@
   import { tick } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { notesBlockAnchorId } from "$lib/notes/block-link";
+  import { notesEmbeddedCalloutLayers } from "$lib/notes/callout-layout";
   import { notesBlockContextMenuPoint } from "$lib/notes/block-handle";
   import type { NotesMoveToPageTarget } from "$lib/notes/block-move";
   import type { NotesBlockInsertRequest } from "$lib/notes/block-insertion";
@@ -52,6 +53,7 @@
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import NotesBlockHandle from "./NotesBlockHandle.svelte";
   import NotesBlockRow from "./NotesBlockRow.svelte";
+  import NotesCalloutEmbeddedRow from "./NotesCalloutEmbeddedRow.svelte";
   import NotesLazySlashMenu from "./NotesLazySlashMenu.svelte";
 
   let {
@@ -90,6 +92,7 @@
     onConvert,
     onConvertToToggleHeading,
     onColorChange,
+    onCalloutIconChange,
     onCopyLink,
     onDuplicate,
     onUseTemplate,
@@ -232,6 +235,7 @@
       clearText?: boolean,
     ) => void;
     onColorChange: (blockId: string, color: NotesColor) => void;
+    onCalloutIconChange: (blockId: string, icon: NotesIcon | null) => Promise<void> | void;
     onCopyLink: (blockId: string) => Promise<void> | void;
     onDuplicate: (blockId: string) => void;
     onUseTemplate: (blockId: string) => void;
@@ -311,6 +315,9 @@
   let columnDropTargetId = $state<string | null>(null);
   const block = $derived(item.block);
   const columns = $derived(columnItems.map((columnItem) => columnItem.column));
+  const calloutLayersByColumn = $derived(new Map(columnItems.map((columnItem) => [
+    columnItem.column.id, notesEmbeddedCalloutLayers(columnItem.items),
+  ])));
   const columnTemplate = $derived(notesColumnGridTemplate(columns));
   const columnWidths = $derived(notesColumnWidths(columns));
   const canAddColumn = $derived(notesColumnCanAdd(columnItems.length));
@@ -606,81 +613,86 @@
                     {t("notes.emptyColumns")}
                   </button>
                 {:else}
-                  <div class="flex min-w-0 flex-col gap-0.5">
+                  <div class="flex min-w-0 flex-col">
                     {#each columnItem.items as columnBlockItem (columnBlockItem.block.id)}
-                      <NotesBlockRow
-                        item={columnBlockItem}
-                        {breadcrumbItems}
-                        {tableOfContentsItems}
-                        tableRows={tableRowsForBlock(columnBlockItem.block.id)}
-                        previousBlockType={previousBlockTypeForBlock(columnBlockItem.block.id)}
-                        isOnlyBlock={isOnlyBlockForBlock(columnBlockItem.block.id)}
-                        {focusBlockId}
-                        {focusRequestId}
-                        {focusSelection}
-                        {listOrdinals}
-                        {mentionTargets}
-                        templateStatus={templateStatusForBlock(columnBlockItem.block.id)}
-                        buttonStatus={buttonStatusForBlock(columnBlockItem.block.id)}
-                        {onTextInput}
-                        {onReplaceRichText}
-                        {onInsertPageMention}
-                        {onInsertDateMention}
-                        {onInsertObjectMention}
-                        {onApplyTextLink}
-                        {onInsertInlineEquation}
-                        {onPastePlainText}
-                        {onPasteRichHtml}
-                        {onApplyTextAnnotations}
-                        {onCreateInlineComment}
-                        {onCreateInlineSuggestion}
-                        {onKeyboardAction}
-                        {onUndo}
-                        {onRedo}
-                        {onAddBelow}
-                        {onConvert}
-                        {onConvertToToggleHeading}
-                        {onColorChange}
-                        {onCopyLink}
-                        {onDuplicate}
-                        {onUseTemplate}
-                        {onAddTemplateChild}
-                        {onUseButton}
-                        {onAddButtonChild}
-                        {onButtonIconChange}
-                        {onButtonInsertPositionChange}
-                        {onCreateLinkedDatabaseView}
-                        {onConvertUnsupported}
-                        {onComment}
-                        {onMoveUp}
-                        {onMoveDown}
-                        moveTargets={moveTargetsForBlock(columnBlockItem.block.id)}
-                        {onMoveToPage}
-                        {onDelete}
-                        isDragging={draggingBlockId === columnBlockItem.block.id}
-                        dropPosition={dropPositionForBlock(columnBlockItem.block.id)}
-                        {onDragStart}
-                        {onDragEnd}
-                        {onDragOver}
-                        {onDragLeave}
-                        {onDrop}
-                        {onToggleTodo}
-                        {onToggleOpen}
-                        {onCodeLanguageChange}
-                        {onBookmarkChange}
-                        {onLinkPreviewUrlChange}
-                        {onEmbedUrlChange}
-                        {onEquationExpressionChange}
-                        {onMediaChange}
-                        {onTableCellRichTextChange}
-                        {onAddTableRow}
-                        {onRemoveTableRow}
-                        {onAddTableColumn}
-                        {onRemoveTableColumn}
-                        {onSelectPage}
-                        {onFocusBlock}
-                        {onHandleMenuOpenChange}
-                      />
+                      <NotesCalloutEmbeddedRow layers={calloutLayersByColumn.get(columnItem.column.id)?.get(columnBlockItem.block.id) ?? []}>
+                        {#snippet body()}
+                          <NotesBlockRow
+                            item={columnBlockItem}
+                            {breadcrumbItems}
+                            {tableOfContentsItems}
+                            tableRows={tableRowsForBlock(columnBlockItem.block.id)}
+                            previousBlockType={previousBlockTypeForBlock(columnBlockItem.block.id)}
+                            isOnlyBlock={isOnlyBlockForBlock(columnBlockItem.block.id)}
+                            {focusBlockId}
+                            {focusRequestId}
+                            {focusSelection}
+                            {listOrdinals}
+                            {mentionTargets}
+                            templateStatus={templateStatusForBlock(columnBlockItem.block.id)}
+                            buttonStatus={buttonStatusForBlock(columnBlockItem.block.id)}
+                            {onTextInput}
+                            {onReplaceRichText}
+                            {onInsertPageMention}
+                            {onInsertDateMention}
+                            {onInsertObjectMention}
+                            {onApplyTextLink}
+                            {onInsertInlineEquation}
+                            {onPastePlainText}
+                            {onPasteRichHtml}
+                            {onApplyTextAnnotations}
+                            {onCreateInlineComment}
+                            {onCreateInlineSuggestion}
+                            {onKeyboardAction}
+                            {onUndo}
+                            {onRedo}
+                            {onAddBelow}
+                            {onConvert}
+                            {onConvertToToggleHeading}
+                            {onColorChange}
+                            {onCalloutIconChange}
+                            {onCopyLink}
+                            {onDuplicate}
+                            {onUseTemplate}
+                            {onAddTemplateChild}
+                            {onUseButton}
+                            {onAddButtonChild}
+                            {onButtonIconChange}
+                            {onButtonInsertPositionChange}
+                            {onCreateLinkedDatabaseView}
+                            {onConvertUnsupported}
+                            {onComment}
+                            {onMoveUp}
+                            {onMoveDown}
+                            moveTargets={moveTargetsForBlock(columnBlockItem.block.id)}
+                            {onMoveToPage}
+                            {onDelete}
+                            isDragging={draggingBlockId === columnBlockItem.block.id}
+                            dropPosition={dropPositionForBlock(columnBlockItem.block.id)}
+                            {onDragStart}
+                            {onDragEnd}
+                            {onDragOver}
+                            {onDragLeave}
+                            {onDrop}
+                            {onToggleTodo}
+                            {onToggleOpen}
+                            {onCodeLanguageChange}
+                            {onBookmarkChange}
+                            {onLinkPreviewUrlChange}
+                            {onEmbedUrlChange}
+                            {onEquationExpressionChange}
+                            {onMediaChange}
+                            {onTableCellRichTextChange}
+                            {onAddTableRow}
+                            {onRemoveTableRow}
+                            {onAddTableColumn}
+                            {onRemoveTableColumn}
+                            {onSelectPage}
+                            {onFocusBlock}
+                            {onHandleMenuOpenChange}
+                          />
+                        {/snippet}
+                      </NotesCalloutEmbeddedRow>
                     {/each}
                   </div>
                 {/if}

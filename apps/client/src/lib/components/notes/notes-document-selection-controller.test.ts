@@ -8,8 +8,9 @@ import { createNotesBlockSelectionController } from "./notes-block-selection-con
 import { createNotesBlockNavigationController } from "./notes-block-navigation-controller";
 
 /** Mount real selection listeners on independent editing hosts. */
-function harness(count = 3, type: NotesBlock["type"] = "paragraph") {
+function harness(count = 3, type: NotesBlock["type"] = "paragraph", hiddenCalloutIndices: readonly number[] = []) {
   const ids = Array.from({ length: count }, (_, index) => `block-${index}`);
+  const hiddenCalloutIds = new Set(hiddenCalloutIndices.map((index) => ids[index]));
   const blocks = new Map(ids.map((id) => [id, {
     ...createBlockWrite(id, type, id), object: "block", parent: { type: "page_id", page_id: "page" },
     created_time: "", last_edited_time: "", has_children: false, in_trash: false,
@@ -25,7 +26,7 @@ function harness(count = 3, type: NotesBlock["type"] = "paragraph") {
   const indent = vi.fn(async () => undefined);
   const navigation = createNotesBlockNavigationController({
     readListElement: () => list, readRenderedBlockIds: () => ids,
-    readBlock: (id) => blocks.get(id), requestFocus: focus,
+    readBlock: (id) => blocks.get(id), isHiddenCalloutLabel: (id) => hiddenCalloutIds.has(id), requestFocus: focus,
   });
   const focusRow = vi.fn();
   const hydrateSubtrees = vi.fn(async (ids: readonly string[]) => ids);
@@ -43,6 +44,7 @@ function harness(count = 3, type: NotesBlock["type"] = "paragraph") {
   const blockDelegates = blockSelection.delegation(list);
   const controller = createNotesDocumentSelectionController({
     readIds: () => ids, readPageId: () => "page", readBlock: (id) => blocks.get(id),
+    isHiddenCalloutLabel: (id) => hiddenCalloutIds.has(id),
     hydrate, outlineSubtreeIds, replace, indent, format: vi.fn(async () => undefined), focus, clearBlockSelection: () => blockSelection.setSelection(null),
     undo: vi.fn(async () => true), redo: vi.fn(async () => true),
   });
@@ -55,6 +57,78 @@ function harness(count = 3, type: NotesBlock["type"] = "paragraph") {
   };
   return { controller, blockSelection, hydrateSubtrees, outlineSubtreeIds, focusRow, replace, indent, hydrate, focus, blocks, ids, editor, key,
     destroy() { attached.destroy(); blockDelegates.destroy(); },
+  };
+}
+
+/** Model wrapped browser line rectangles and caret hit-testing in jsdom. */
+function mockVisualLines(
+  editors: readonly HTMLElement[],
+  lineStarts: readonly (readonly number[])[],
+): () => void {
+  const characterWidth = 10;
+  const lineHeight = 20;
+  const left = 20;
+  const top = (index: number) => 100 + index * 100;
+  const lineForOffset = (index: number, offset: number) => {
+    const starts = lineStarts[index] ?? [0];
+    let line = 0;
+    while (line + 1 < starts.length && offset >= starts[line + 1]) line += 1;
+    return line;
+  };
+  const lineRect = (index: number, line: number) => {
+    const starts = lineStarts[index] ?? [0];
+    const end = starts[line + 1] ?? (editors[index].textContent?.length ?? 0);
+    return new DOMRect(left, top(index) + line * lineHeight, (end - starts[line]) * characterWidth, lineHeight);
+  };
+  const caretRect = (index: number, offset: number) => {
+    const line = lineForOffset(index, offset);
+    const start = lineStarts[index]?.[line] ?? 0;
+    return new DOMRect(left + (offset - start) * characterWidth, top(index) + line * lineHeight, 0, lineHeight);
+  };
+  const originalBounding = Object.getOwnPropertyDescriptor(Range.prototype, "getBoundingClientRect");
+  const originalClient = Object.getOwnPropertyDescriptor(Range.prototype, "getClientRects");
+  Object.defineProperty(Range.prototype, "getBoundingClientRect", {
+    configurable: true,
+    value: function (this: Range) {
+      const index = editors.findIndex((editor) => editor.contains(this.startContainer));
+      return index < 0 ? new DOMRect() : caretRect(index, this.startOffset);
+    },
+  });
+  Object.defineProperty(Range.prototype, "getClientRects", {
+    configurable: true,
+    value: function (this: Range) {
+      const index = editors.findIndex((editor) => editor.contains(this.startContainer));
+      if (index < 0) return [];
+      const fullText = this.startContainer.nodeType === Node.TEXT_NODE
+        && this.startOffset === 0 && this.endOffset === (this.startContainer.textContent?.length ?? 0);
+      return fullText
+        ? (lineStarts[index] ?? [0]).map((_, line) => lineRect(index, line))
+        : [caretRect(index, this.startOffset)];
+    },
+  });
+  const rectSpies = editors.map((editor, index) => vi.spyOn(editor, "getBoundingClientRect")
+    .mockImplementation(() => new DOMRect(left, top(index), 200, (lineStarts[index]?.length ?? 1) * lineHeight)));
+  Object.defineProperty(document, "caretPositionFromPoint", {
+    configurable: true,
+    value: (x: number, y: number) => {
+      const index = editors.findIndex((_, candidate) => y >= top(candidate)
+        && y < top(candidate) + (lineStarts[candidate]?.length ?? 1) * lineHeight);
+      if (index < 0) return null;
+      const starts = lineStarts[index] ?? [0];
+      const line = Math.floor((y - top(index)) / lineHeight);
+      const start = starts[line];
+      const end = starts[line + 1] ?? (editors[index].textContent?.length ?? 0);
+      const offset = Math.min(end, Math.max(start, start + Math.round((x - left) / characterWidth)));
+      return { offsetNode: editors[index].firstChild, offset };
+    },
+  });
+  return () => {
+    if (originalBounding) Object.defineProperty(Range.prototype, "getBoundingClientRect", originalBounding);
+    else Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
+    if (originalClient) Object.defineProperty(Range.prototype, "getClientRects", originalClient);
+    else Reflect.deleteProperty(Range.prototype, "getClientRects");
+    rectSpies.forEach((spy) => spy.mockRestore());
+    Reflect.deleteProperty(document, "caretPositionFromPoint");
   };
 }
 
@@ -374,10 +448,74 @@ describe("Notes document selection", () => {
     window.getSelection()?.collapse(h.editor(1).firstChild, 2);
     expect(h.key(1, "a", { ctrlKey: true }).defaultPrevented).toBe(true);
     await tick();
-    expect(h.controller.renderIds).toEqual([]);
+    expect(h.controller.pinnedIds).toEqual([]);
     expect(h.controller.selection?.focus.blockId).toBe(h.ids.at(-1));
     expect(window.getSelection()?.anchorNode).toBe(h.editor(0).firstChild);
     expect(window.getSelection()?.focusNode).toBe(h.editor(219).firstChild);
+    h.destroy();
+  });
+
+  it("does not load unmounted content while only extending a text selection", async () => {
+    const h = harness(4);
+    const missing = h.blocks.get(h.ids[2])!;
+    h.blocks.delete(missing.id);
+    h.hydrate.mockImplementation(async () => { h.blocks.set(missing.id, missing); });
+    vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn(async () => undefined) } });
+    await h.controller.select({
+      anchor: { blockId: h.ids[0], offset: 2 }, focus: { blockId: h.ids[3], offset: 4 },
+    });
+    expect(h.controller.pinnedIds).toEqual([]);
+    expect(h.hydrate).not.toHaveBeenCalled();
+    await h.controller.copy();
+    expect(h.hydrate).toHaveBeenCalledWith(h.ids);
+    h.destroy();
+  });
+
+  it("coalesces repeated cross-block keyboard repaints into one frame", async () => {
+    class TestHighlight { constructor(..._ranges: Range[]) {} }
+    const registry = new Map<string, TestHighlight>();
+    const painted = vi.fn((name: string, highlight: TestHighlight) => registry.set(name, highlight));
+    vi.stubGlobal("CSS", { highlights: { set: painted, delete: (name: string) => registry.delete(name) } });
+    vi.stubGlobal("Highlight", TestHighlight);
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const h = harness();
+    await h.controller.select({
+      anchor: { blockId: h.ids[0], offset: 2 }, focus: { blockId: h.ids[2], offset: 4 },
+    });
+    expect(painted).toHaveBeenCalledTimes(1);
+    for (const key of ["ArrowUp", "ArrowDown", "ArrowUp", "ArrowDown"]) {
+      h.key(2, key, { shiftKey: true });
+      await tick();
+    }
+    expect(h.controller.selection?.anchor).toEqual({ blockId: h.ids[0], offset: 2 });
+    expect(painted).toHaveBeenCalledTimes(1);
+    expect(frames).toHaveLength(1);
+    frames[0](0);
+    expect(painted).toHaveBeenCalledTimes(2);
+    h.destroy();
+  });
+
+  it("stops pending keyboard movement when Shift is released during hydration", async () => {
+    const h = harness();
+    const missing = h.blocks.get(h.ids[1])!;
+    h.blocks.delete(missing.id);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    h.hydrate.mockImplementation(async () => { await gate; h.blocks.set(missing.id, missing); });
+    window.getSelection()?.collapse(h.editor(0).firstChild, 4);
+    h.key(0, "ArrowDown", { shiftKey: true });
+    await vi.waitFor(() => expect(h.hydrate).toHaveBeenCalledExactlyOnceWith([h.ids[1]]));
+    h.key(0, "ArrowDown", { shiftKey: true });
+    document.dispatchEvent(new KeyboardEvent("keyup", { key: "Shift", bubbles: true }));
+    release();
+    await tick();
+    await tick();
+    expect(h.controller.selection).toBeNull();
+    expect(h.hydrate).toHaveBeenCalledTimes(1);
     h.destroy();
   });
 
@@ -497,6 +635,204 @@ describe("Notes document selection", () => {
     h.destroy();
   });
 
+  it("moves one visual line per Shift+Up or Shift+Down and keeps the original text anchor", async () => {
+    const h = harness();
+    const restoreGeometry = mockVisualLines([h.editor(0), h.editor(1), h.editor(2)], [[0], [0, 3, 6], [0]]);
+    const native = window.getSelection()!;
+    native.collapse(h.editor(1).firstChild, 4);
+    try {
+      for (const [key, block, offset] of [
+        ["ArrowUp", 1, 1], ["ArrowUp", 0, 1], ["ArrowDown", 1, 1],
+        ["ArrowDown", 1, 4], ["ArrowDown", 1, 7], ["ArrowDown", 2, 1],
+      ] as const) {
+        expect(h.key(1, key, { shiftKey: true }).defaultPrevented).toBe(true);
+        await tick();
+        if (block === 1 && offset === 4) {
+          expect(h.controller.selection).toBeNull();
+          expect(native.anchorOffset).toBe(4);
+        } else {
+          expect(h.controller.selection).toEqual({
+            anchor: { blockId: h.ids[1], offset: 4 },
+            focus: { blockId: h.ids[block], offset },
+          });
+        }
+      }
+      expect(native.anchorNode).toBe(h.editor(1).firstChild);
+      expect(native.anchorOffset).toBe(4);
+    } finally {
+      restoreGeometry();
+      h.destroy();
+    }
+  });
+
+  it("does not repeat a wrapped line when a boundary offset has ambiguous caret geometry", async () => {
+    const h = harness();
+    const restoreGeometry = mockVisualLines([h.editor(0), h.editor(1), h.editor(2)], [[0, 3, 6], [0], [0]]);
+    const bounding = Range.prototype.getBoundingClientRect;
+    Object.defineProperty(Range.prototype, "getBoundingClientRect", { configurable: true,
+      value: function (this: Range) {
+        if (this.startContainer === h.editor(0).firstChild && this.startOffset === 3) {
+          return new DOMRect(20, 100, 0, 20);
+        }
+        return bounding.call(this);
+      },
+    });
+    window.getSelection()?.collapse(h.editor(0).firstChild, 0);
+    try {
+      for (const [key, offset] of [["ArrowDown", 3], ["ArrowDown", 6], ["ArrowUp", 3]] as const) {
+        h.key(0, key, { shiftKey: true });
+        await tick();
+        expect(h.controller.selection).toEqual({
+          anchor: { blockId: h.ids[0], offset: 0 }, focus: { blockId: h.ids[0], offset },
+        });
+      }
+    } finally {
+      restoreGeometry();
+      h.destroy();
+    }
+  });
+
+  it("crosses a block edge on the first vertical key and keeps the anchor after reversing direction", async () => {
+    const h = harness();
+    const restoreGeometry = mockVisualLines([h.editor(0), h.editor(1), h.editor(2)], [[0], [0], [0]]);
+    const native = window.getSelection()!;
+    native.collapse(h.editor(1).firstChild, 4);
+    try {
+      h.key(1, "ArrowUp", { shiftKey: true });
+      await tick();
+      expect(h.controller.selection).toEqual({
+        anchor: { blockId: h.ids[1], offset: 4 }, focus: { blockId: h.ids[0], offset: 4 },
+      });
+      h.key(1, "ArrowDown", { shiftKey: true });
+      await tick();
+      expect(h.controller.selection).toBeNull();
+      expect(native.anchorNode).toBe(h.editor(1).firstChild);
+      expect(native.anchorOffset).toBe(4);
+      h.key(1, "ArrowDown", { shiftKey: true });
+      await tick();
+      expect(h.controller.selection).toEqual({
+        anchor: { blockId: h.ids[1], offset: 4 }, focus: { blockId: h.ids[2], offset: 4 },
+      });
+    } finally {
+      restoreGeometry();
+      h.destroy();
+    }
+  });
+
+  it("retains the original anchor when a reversed range reenters its editor at another offset", async () => {
+    const h = harness();
+    const restoreGeometry = mockVisualLines([h.editor(0), h.editor(1), h.editor(2)], [[0], [0], [0]]);
+    const normalHit = document.caretPositionFromPoint!.bind(document);
+    const native = window.getSelection()!;
+    native.collapse(h.editor(1).firstChild, 4);
+    try {
+      h.key(1, "ArrowUp", { shiftKey: true });
+      await tick();
+      Object.defineProperty(document, "caretPositionFromPoint", { configurable: true,
+        value: (x: number, y: number) => y >= 200 && y < 220
+          ? { offsetNode: h.editor(1).firstChild, offset: 2 }
+          : normalHit(x, y),
+      });
+      h.key(1, "ArrowDown", { shiftKey: true });
+      await tick();
+      expect(h.controller.selection).toEqual({
+        anchor: { blockId: h.ids[1], offset: 4 }, focus: { blockId: h.ids[1], offset: 2 },
+      });
+      h.key(1, "ArrowDown", { shiftKey: true });
+      await tick();
+      expect(h.controller.selection).toEqual({
+        anchor: { blockId: h.ids[1], offset: 4 }, focus: { blockId: h.ids[2], offset: 4 },
+      });
+    } finally {
+      restoreGeometry();
+      h.destroy();
+    }
+  });
+
+  it("keeps a visual column through a short block and reaches the next full line", async () => {
+    const h = harness();
+    const short = h.blocks.get(h.ids[1])!;
+    h.blocks.set(short.id, { ...short, ...createBlockWrite(short.id, "paragraph", "x") } as NotesBlock);
+    h.editor(1).textContent = "x";
+    const restoreGeometry = mockVisualLines([h.editor(0), h.editor(1), h.editor(2)], [[0], [0], [0]]);
+    window.getSelection()?.collapse(h.editor(0).firstChild, 4);
+    try {
+      h.key(0, "ArrowDown", { shiftKey: true });
+      await tick();
+      expect(h.controller.selection?.focus).toEqual({ blockId: h.ids[1], offset: 1 });
+      h.key(0, "ArrowDown", { shiftKey: true });
+      await tick();
+      expect(h.controller.selection).toEqual({
+        anchor: { blockId: h.ids[0], offset: 4 }, focus: { blockId: h.ids[2], offset: 4 },
+      });
+    } finally {
+      restoreGeometry();
+      h.destroy();
+    }
+  });
+
+  it("returns a same-editor keyboard selection to native editing when Shift is released", async () => {
+    const h = harness();
+    const restoreGeometry = mockVisualLines([h.editor(0), h.editor(1), h.editor(2)], [[0, 3], [0], [0]]);
+    const native = window.getSelection()!;
+    native.collapse(h.editor(0).firstChild, 4);
+    try {
+      h.key(0, "ArrowUp", { shiftKey: true });
+      await tick();
+      expect(h.controller.selection).toEqual({
+        anchor: { blockId: h.ids[0], offset: 4 }, focus: { blockId: h.ids[0], offset: 1 },
+      });
+      document.dispatchEvent(new KeyboardEvent("keyup", { key: "Shift", bubbles: true }));
+      expect(h.controller.selection).toBeNull();
+      expect(native.anchorOffset).toBe(4);
+      expect(native.focusOffset).toBe(1);
+    } finally {
+      restoreGeometry();
+      h.destroy();
+    }
+  });
+
+  it("selects to the first note line's start without changing its original anchor", async () => {
+    const h = harness();
+    const restoreGeometry = mockVisualLines([h.editor(0), h.editor(1), h.editor(2)], [[0], [0], [0]]);
+    const native = window.getSelection()!;
+    native.collapse(h.editor(0).firstChild, 4);
+    try {
+      h.key(0, "ArrowUp", { shiftKey: true });
+      await tick();
+      expect(h.controller.selection).toEqual({
+        anchor: { blockId: h.ids[0], offset: 4 }, focus: { blockId: h.ids[0], offset: 0 },
+      });
+      document.dispatchEvent(new KeyboardEvent("keyup", { key: "Shift", bubbles: true }));
+      expect(native.anchorOffset).toBe(4);
+      expect(native.focusOffset).toBe(0);
+      expect(native.toString()).toBe("bloc");
+    } finally {
+      restoreGeometry();
+      h.destroy();
+    }
+  });
+
+  it("skips a hidden callout label when extending text in either direction", async () => {
+    const h = harness(4, "paragraph", [1]);
+    const calloutId = h.ids[1];
+    const prior = h.blocks.get(calloutId)!;
+    h.blocks.set(calloutId, { ...prior, ...createBlockWrite(calloutId, "callout"), has_children: true } as NotesBlock);
+    h.editor(1).remove();
+    const native = window.getSelection()!;
+    native.collapse(h.editor(0).firstChild, 7);
+    h.key(0, "ArrowDown", { shiftKey: true });
+    await tick();
+    expect(h.controller.selection?.focus).toEqual({ blockId: h.ids[2], offset: 0 });
+    expect(h.editor(0).closest("[data-notes-document-selection]")).not.toBeNull();
+    h.controller.clear();
+    native.collapse(h.editor(2).firstChild, 0);
+    h.key(2, "ArrowUp", { shiftKey: true });
+    await tick();
+    expect(h.controller.selection?.focus).toEqual({ blockId: h.ids[0], offset: 7 });
+    h.destroy();
+  });
+
   it("extends to the document boundary and replaces a reverse partial range", async () => {
     const h = harness();
     window.getSelection()?.collapse(h.editor(1).firstChild, 3);
@@ -534,11 +870,13 @@ describe("Notes document selection", () => {
     await h.controller.select({ anchor: { blockId: h.ids[0], offset: 2 }, focus: { blockId: h.ids[2], offset: 4 } });
     const restoreSelection = vi.spyOn(window.getSelection()!, "setBaseAndExtent");
     h.editor(0).dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
+    expect(h.editor(0).closest("[data-notes-document-selection-composing]")).not.toBeNull();
     h.controller.repaint();
     expect(restoreSelection).not.toHaveBeenCalled();
     h.editor(0).dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "insertCompositionText", data: "に", isComposing: true }));
     expect(h.replace).not.toHaveBeenCalled();
     h.editor(0).dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, data: "日本" }));
+    expect(h.editor(0).closest("[data-notes-document-selection-composing]")).toBeNull();
     expect(h.replace).toHaveBeenCalledExactlyOnceWith(h.ids, 2, 4, "日本", undefined, { anchor: { blockId: h.ids[0], offset: 2 }, focus: { blockId: h.ids[2], offset: 4 } });
     h.destroy();
   });

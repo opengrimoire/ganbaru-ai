@@ -9,9 +9,11 @@
 
   let {
     currentColor,
+    calloutBackgroundColor,
     onSelect,
   }: {
     currentColor: NotesColor;
+    calloutBackgroundColor?: NotesColor;
     onSelect: (color: NotesColor) => void;
   } = $props();
 
@@ -68,10 +70,10 @@
         role="menuitemradio"
         aria-label={colorLabel(color)}
         title={colorLabel(color)}
-        aria-checked={currentColor === color}
+        aria-checked={(calloutBackgroundColor ?? currentColor) === color}
         onclick={() => onSelect(color)}
       >
-        <span class:notes-color-selected={currentColor === color} class="notes-color-swatch" style={notesBlockColorSwatchStyle(color)} aria-hidden="true">A</span>
+        <span class:notes-color-selected={(calloutBackgroundColor ?? currentColor) === color} class="notes-color-swatch" style={notesBlockColorSwatchStyle(color)} aria-hidden="true">A</span>
       </button>
     {/each}
   </div>

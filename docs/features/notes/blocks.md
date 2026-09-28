@@ -13,7 +13,7 @@ Blocks are ordered children of a page or another compatible block. Their canonic
 
 | Family | Block types | Status | Important limits |
 | --- | --- | --- | --- |
-| Text | `paragraph`, `heading_1` through `heading_6`, `quote`, `callout` | Implemented | Headings 4 through 6 are local extensions beyond the current Notion API shape. Custom callout icon editing remains polish. |
+| Text | `paragraph`, `heading_1` through `heading_6`, `quote`, `callout` | Implemented | Headings 4 through 6 are local extensions beyond the current Notion API shape. |
 | Lists | `bulleted_list_item`, `numbered_list_item`, `to_do`, `toggle` | Implemented | Nesting follows valid parent rules and hidden toggle children remain canonical. |
 | Code and structure | `code`, `divider`, `equation` | Implemented | Equation rendering uses a safe local formula surface until a vetted renderer is selected. |
 | Navigation | `child_page`, `breadcrumb`, `table_of_contents` | Implemented | Generated breadcrumb and heading text is derived rather than duplicated. |
@@ -31,6 +31,8 @@ Blocks are ordered children of a page or another compatible block. Their canonic
 Text blocks share the rich-text editor and support conversion when the source and destination payloads are compatible. Color, annotations, links, mentions, comments, and child subtrees survive compatible conversions and duplication.
 
 The editor shows block actions from a block surface's context menu. Text selection has its own context menu. Blocks can be inserted through the text context menu or keyboard editing commands; moving blocks remains available through block actions and multi-block selection. The editor does not show add or drag handles beside each block.
+
+A callout is one colored container with ordinary child blocks. Its own text can serve as the first paragraph; an empty callout with children shows the icon next to the first child instead of a blank label row. The hidden label is skipped by text caret navigation, so Up, Down, and Shift selection move directly between the first child and content above the callout. The icon matches body text size and centers on the first text line. The gap between its click target and the text matches the callout's left inset. Children can be paragraphs, headings, lists, and nested callouts, with their normal editing and movement actions, including inside columns and tabs. Clicking the callout icon opens the shared note icon picker, including emoji, native icons, custom emoji, and supported images. Uploaded callout icons remain managed assets referenced by their block. Background colors apply to the complete callout surface, including descendants. Text colors remain inline formatting for selected text.
 
 Block payloads may carry a nonnegative `ganbaru_indent` level relative to their structural parent. Text editing can adjust the level of a child, including an embedded block, to keep its visual position unchanged when its former parent is indented or outdented. This supports standalone row indentation without artificial parent blocks or a schema migration. Typing, conversion between text types, history, duplication, and ordinary Enter preserve it. List numbering and bullet presentation derive from sibling structure and relative indentation. To-do checked state is canonical block payload. Toggle open state can be local presentation metadata while toggle children remain canonical content.
 

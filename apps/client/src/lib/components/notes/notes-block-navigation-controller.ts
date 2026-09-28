@@ -7,42 +7,30 @@ import {
   type NotesBlockNavigationDirection,
 } from "$lib/notes/block-navigation";
 import {
-  notesEditableOffsetFromDomPoint,
   notesPlainTextFromEditableRoot,
   notesTextSelectionFromEditableRoot,
   restoreNotesEditableSelection,
   type NotesTextSelection,
 } from "$lib/notes/editor-selection";
 import type { NotesBlock } from "$lib/notes/types";
-
-interface NotesEditableVisualLine {
-  top: number;
-  right: number;
-  bottom: number;
-  left: number;
-}
-
-interface DocumentWithCaretPositionFromPoint {
-  caretPositionFromPoint?: (
-    x: number,
-    y: number,
-    options?: CaretPositionFromPointOptions,
-  ) => CaretPosition | null;
-}
-
-interface DocumentWithCaretRangeFromPoint {
-  caretRangeFromPoint?: (x: number, y: number) => Range | null;
-}
+import { notesCaretOffsetOnVisualLine, notesEditableVisualLines } from "./notes-visual-line-navigation";
 
 export interface NotesBlockNavigationOptions {
   readListElement: () => HTMLDivElement | null;
   readRenderedBlockIds: () => readonly string[];
   readBlock: (blockId: string) => NotesBlock | undefined;
+  isHiddenCalloutLabel: (blockId: string) => boolean;
   requestFocus: (blockId: string, selection: NotesTextSelection | null) => void;
 }
 
 /** Coordinate DOM-aware keyboard navigation and focus across rendered Notes blocks. */
 export function createNotesBlockNavigationController(options: NotesBlockNavigationOptions) {
+  let verticalGoalX: number | null = null;
+
+  function resetVerticalGoal(): void {
+    verticalGoalX = null;
+  }
+
   function rowFromEvent(event: Event): HTMLElement | null {
     const target = event.target;
     const list = options.readListElement();
@@ -94,33 +82,14 @@ export function createNotesBlockNavigationController(options: NotesBlockNavigati
     return editor?.dataset.notesBlockId === blockId ? editor : null;
   }
 
-  function editableVisualLines(editor: HTMLElement): NotesEditableVisualLine[] {
-    const range = editor.ownerDocument.createRange();
-    range.selectNodeContents(editor);
-    const lines: NotesEditableVisualLine[] = [];
-    for (const rect of Array.from(range.getClientRects())) {
-      if (rect.width <= 0 && rect.height <= 0) continue;
-      const existing = lines.find((line) => Math.abs(line.top - rect.top) < 2);
-      if (existing) {
-        existing.top = Math.min(existing.top, rect.top);
-        existing.right = Math.max(existing.right, rect.right);
-        existing.bottom = Math.max(existing.bottom, rect.bottom);
-        existing.left = Math.min(existing.left, rect.left);
-      } else {
-        lines.push({ top: rect.top, right: rect.right, bottom: rect.bottom, left: rect.left });
-      }
-    }
-    return lines.sort((left, right) => left.top - right.top);
-  }
-
   function collapsedSelectionRect(editor: HTMLElement): DOMRect | null {
     const selection = editor.ownerDocument.getSelection();
     if (!selection || selection.rangeCount === 0 || !selection.isCollapsed) return null;
     if (!selection.focusNode || !editor.contains(selection.focusNode)) return null;
     const range = selection.getRangeAt(0).cloneRange();
-    const rect = range.getBoundingClientRect();
-    if (rect.width > 0 || rect.height > 0) return rect;
-    return Array.from(range.getClientRects())
+    const rect = range.getBoundingClientRect?.();
+    if (rect && (rect.width > 0 || rect.height > 0)) return rect;
+    return Array.from(range.getClientRects?.() ?? [])
       .find((candidate) => candidate.width > 0 || candidate.height > 0) ?? null;
   }
 
@@ -131,7 +100,7 @@ export function createNotesBlockNavigationController(options: NotesBlockNavigati
       if (direction === "previous" && selection.start === 0) return true;
       if (direction === "next" && selection.start === textLength) return true;
     }
-    const lineTops = editableVisualLines(editor).map((line) => line.top);
+    const lineTops = notesEditableVisualLines(editor).map((line) => line.top);
     if (lineTops.length <= 1) return true;
     const caretRect = collapsedSelectionRect(editor);
     if (!caretRect) return false;
@@ -139,27 +108,11 @@ export function createNotesBlockNavigationController(options: NotesBlockNavigati
     return boundaryTop !== undefined && Math.abs(caretRect.top - boundaryTop) < 2;
   }
 
-  function caretOffsetFromPoint(editor: HTMLElement, x: number, y: number): number | null {
-    const caretDocument = editor.ownerDocument as DocumentWithCaretPositionFromPoint;
-    const position = caretDocument.caretPositionFromPoint?.(x, y) ?? null;
-    if (position && editor.contains(position.offsetNode)) {
-      return notesEditableOffsetFromDomPoint(editor, position.offsetNode, position.offset);
-    }
-    const rangeDocument = editor.ownerDocument as DocumentWithCaretRangeFromPoint;
-    const range = rangeDocument.caretRangeFromPoint?.(x, y) ?? null;
-    if (!range || !editor.contains(range.startContainer)) return null;
-    return notesEditableOffsetFromDomPoint(editor, range.startContainer, range.startOffset);
-  }
-
   function targetLineOffset(editor: HTMLElement, direction: NotesBlockNavigationDirection, x: number): number | null {
-    const lines = editableVisualLines(editor);
+    const lines = notesEditableVisualLines(editor);
     const line = direction === "previous" ? lines.at(-1) : lines[0];
     if (!line) return null;
-    const rect = editor.getBoundingClientRect();
-    const left = rect.left + 1;
-    const right = rect.right - 1;
-    const safeX = right <= left ? rect.left : Math.min(Math.max(x, left), right);
-    return caretOffsetFromPoint(editor, safeX, line.top + Math.max(1, (line.bottom - line.top) / 2));
+    return notesCaretOffsetOnVisualLine(editor, line, x);
   }
 
   function clampedSelection(blockId: string, selection: NotesTextSelection | null): NotesTextSelection | null {
@@ -176,7 +129,11 @@ export function createNotesBlockNavigationController(options: NotesBlockNavigati
   }
 
   function focusAdjacent(currentId: string, direction: NotesBlockNavigationDirection, x: number | null): boolean {
-    const targetId = notesAdjacentRenderedBlockId(options.readRenderedBlockIds(), currentId, direction);
+    const ids = options.readRenderedBlockIds();
+    let targetId = notesAdjacentRenderedBlockId(ids, currentId, direction);
+    while (targetId && options.isHiddenCalloutLabel(targetId)) {
+      targetId = notesAdjacentRenderedBlockId(ids, targetId, direction);
+    }
     if (!targetId) return false;
     const block = options.readBlock(targetId);
     const fallback = direction === "next" ? 0 : block && isTextEditableBlock(block.type) ? blockPlainText(block).length : 0;
@@ -187,7 +144,8 @@ export function createNotesBlockNavigationController(options: NotesBlockNavigati
   }
 
   function focusBoundary(boundary: NotesBlockNavigationBoundary): boolean {
-    const targetId = notesBoundaryRenderedBlockId(options.readRenderedBlockIds(), boundary);
+    const ids = options.readRenderedBlockIds().filter((id) => !options.isHiddenCalloutLabel(id));
+    const targetId = notesBoundaryRenderedBlockId(ids, boundary);
     if (!targetId) return false;
     const block = options.readBlock(targetId);
     const offset = boundary === "first" ? 0 : block && isTextEditableBlock(block.type) ? blockPlainText(block).length : 0;
@@ -196,8 +154,9 @@ export function createNotesBlockNavigationController(options: NotesBlockNavigati
   }
 
   function handleKeydown(event: KeyboardEvent, blockId: string): boolean {
-    if (event.altKey || event.shiftKey) return false;
+    if (event.altKey || event.shiftKey) { resetVerticalGoal(); return false; }
     if (event.ctrlKey || event.metaKey) {
+      resetVerticalGoal();
       if (event.key === "Home" || (event.metaKey && event.key === "ArrowUp")) {
         event.preventDefault();
         return focusBoundary("first");
@@ -208,17 +167,20 @@ export function createNotesBlockNavigationController(options: NotesBlockNavigati
       }
       return false;
     }
-    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return false;
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") { resetVerticalGoal(); return false; }
     const direction: NotesBlockNavigationDirection = event.key === "ArrowUp" ? "previous" : "next";
     const editor = editorFromEvent(event, blockId);
     if (editor) {
       const selection = notesTextSelectionFromEditableRoot(editor);
+      if (selection && selection.start === selection.end) {
+        verticalGoalX ??= collapsedSelectionRect(editor)?.left ?? null;
+      } else resetVerticalGoal();
       if (!selection || selection.start !== selection.end || !caretIsOnBoundaryLine(editor, direction)) return false;
-      if (!focusAdjacent(blockId, direction, collapsedSelectionRect(editor)?.left ?? null)) return false;
+      if (!focusAdjacent(blockId, direction, verticalGoalX)) return false;
       event.preventDefault();
       return true;
     }
-    if (targetIsEditable(event.target) || !focusAdjacent(blockId, direction, null)) return false;
+    if (targetIsEditable(event.target) || !focusAdjacent(blockId, direction, verticalGoalX)) return false;
     event.preventDefault();
     return true;
   }
@@ -243,6 +205,7 @@ export function createNotesBlockNavigationController(options: NotesBlockNavigati
     textEditorForBlock,
     focusTextEditorAtEnd,
     focusRow,
+    resetVerticalGoal,
     handleKeydown,
     targetIsEditable,
     targetIsSelectionZone,

@@ -32,7 +32,7 @@ describe("notes Enter block behavior", () => {
     expect(notesEmptyEnterReturnsParagraph("numbered_list_item")).toBe(true);
     expect(notesEmptyEnterReturnsParagraph("to_do")).toBe(true);
     expect(notesEmptyEnterReturnsParagraph("toggle")).toBe(false);
-    expect(notesEmptyEnterReturnsParagraph("callout")).toBe(true);
+    expect(notesEmptyEnterReturnsParagraph("callout")).toBe(false);
     expect(notesEmptyEnterReturnsParagraph("quote")).toBe(true);
     expect(notesEmptyEnterReturnsParagraph("paragraph")).toBe(false);
   });

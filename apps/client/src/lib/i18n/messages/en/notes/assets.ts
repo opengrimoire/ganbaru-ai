@@ -9,6 +9,7 @@ export const assets = {
   noPageIcon: "No icon",
   addPageIcon: "Add icon",
   changePageIcon: "Change note icon",
+  changeCalloutIcon: "Change callout icon",
   removePageIcon: "Remove note icon",
   usePageIcon: (icon: string) => `Use ${icon}`,
   pageIconColor: (color: string) => `Use ${color}`,

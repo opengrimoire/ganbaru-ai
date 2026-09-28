@@ -94,15 +94,19 @@ describe("notes keyboard planning", () => {
     });
   });
 
-  it("converts empty list-like blocks to paragraphs on Enter", () => {
+  it("converts empty list items while opening callout bodies and exiting empty child rows", () => {
     expect(plan({ key: "Enter", blockType: "bulleted_list_item", text: "" })).toEqual({
       type: "convert_to_paragraph",
       preventDefault: true,
     });
     expect(plan({ key: "Enter", blockType: "callout", text: "" })).toEqual({
-      type: "convert_to_paragraph",
+      type: "split_text_block",
+      selectionStart: 0,
+      selectionEnd: 0,
+      text: "",
       preventDefault: true,
     });
+    expect(plan({ key: "Enter", blockType: "paragraph", indentationDepth: 1 })).toMatchObject({ type: "outdent" });
   });
 
   it("plans Backspace deletion, only-block recovery, and merge", () => {

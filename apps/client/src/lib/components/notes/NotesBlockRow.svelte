@@ -8,6 +8,8 @@
   } from "$lib/lazy-component-loader";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getNotes } from "$lib/stores/notes.svelte";
+  import type NotesCalloutIconPicker from "./NotesCalloutIconPicker.svelte";
+  import NotesPageIcon from "./NotesPageIcon.svelte";
   import {
     notesCommentAnchorsForBlock,
     unreadNotesCommentThreadCount,
@@ -45,6 +47,7 @@
   } from "$lib/notes/block-color";
   import type { NotesBlockInsertRequest } from "$lib/notes/block-insertion";
   import { notesBlockMarker } from "$lib/notes/block-editor-ui";
+  import { notesCalloutOwnTextHidden } from "$lib/notes/callout-layout";
   import {
     planNotesKeyboardAction,
     type NotesKeyboardAction,
@@ -67,7 +70,7 @@
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import FileText from "@lucide/svelte/icons/file-text";
-  import Info from "@lucide/svelte/icons/info";
+  import SmilePlus from "@lucide/svelte/icons/smile-plus";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import NotesBlockHandle from "./NotesBlockHandle.svelte";
   import NotesTextBlockEditor from "./NotesTextBlockEditor.svelte";
@@ -115,6 +118,7 @@
     onConvert,
     onConvertToToggleHeading,
     onColorChange,
+    onCalloutIconChange,
     onCopyLink,
     onDuplicate,
     onUseTemplate,
@@ -246,6 +250,7 @@
       clearText?: boolean,
     ) => void;
     onColorChange: (blockId: string, color: NotesColor) => void;
+    onCalloutIconChange: (blockId: string, icon: NotesIcon | null) => Promise<void> | void;
     onCopyLink: (blockId: string) => Promise<void> | void;
     onDuplicate: (blockId: string) => void;
     onUseTemplate: (blockId: string) => void;
@@ -354,10 +359,55 @@
   const blockUnreadCommentCount = $derived(unreadNotesCommentThreadCount(blockCommentThreads));
   const commentAnchors = $derived(notesCommentAnchorsForBlock(notes.commentThreads, block.id, text));
   const suggestionAnchors = $derived(notesSuggestionAnchorsForBlock(notes.suggestions, block.id, text));
-  const showTextEditor = $derived(isTextEditableBlock(block.type));
+  const calloutContainerOnly = $derived(notesCalloutOwnTextHidden(
+    block,
+    notes.childIdsByParentId[block.id]?.length ?? 0,
+  ));
+  const firstCalloutChild = $derived.by(() => {
+    if (block.type !== "callout") return undefined;
+    const firstChildId = notes.childIdsByParentId[block.id]?.[0];
+    return firstChildId ? notes.blockById(firstChildId) : undefined;
+  });
+  const firstCalloutChildHeadingClass = $derived(
+    firstCalloutChild && isHeadingBlockType(firstCalloutChild.type)
+      ? `notes-${firstCalloutChild.type.replaceAll("_", "-")}`
+      : "",
+  );
+  const showTextEditor = $derived(isTextEditableBlock(block.type) && !calloutContainerOnly);
   const currentColor = $derived(blockColor(block));
+  const calloutContext = $derived.by(() => {
+    let current: NotesBlockTreeItem["block"] | undefined = block;
+    const visited = new Set<string>();
+    let target: { id: string; color: NotesColor } | null = null;
+    let count = 0;
+    while (current && !visited.has(current.id)) {
+      visited.add(current.id);
+      if (current.type === "callout") {
+        target ??= { id: current.id, color: blockColor(current) };
+        count += 1;
+      }
+      current = current.parent.type === "block_id" ? notes.blockById(current.parent.block_id) : undefined;
+    }
+    return { target, nestedLayerCount: Math.max(0, count - 1) };
+  });
+  const calloutColorTarget = $derived(calloutContext.target);
+  const visualDepth = $derived(Math.max(0, item.depth - calloutContext.nestedLayerCount));
+  const directCalloutChild = $derived(
+    block.parent.type === "block_id"
+    && notes.blockById(block.parent.block_id)?.type === "callout",
+  );
   const blockSupportsColor = $derived(canBlockHaveColor(block.type));
-  const blockSurfaceStyle = $derived(notesBlockColorStyle(currentColor));
+  const blockSurfaceStyle = $derived(notesBlockColorStyle(block.type === "callout" ? "default" : currentColor));
+  let CalloutIconPicker = $state<typeof NotesCalloutIconPicker | null>(null);
+  let calloutIconPickerRequested = $state(false);
+
+  function openCalloutIconPicker(): void {
+    calloutIconPickerRequested = true;
+    if (CalloutIconPicker) return;
+    void import("./NotesCalloutIconPicker.svelte")
+      .then((module) => { CalloutIconPicker = module.default; })
+      .catch((error: unknown) => console.error("load Notes callout icon picker failed", error));
+  }
   const toggleOpen = $derived(block.type !== "toggle" || block.toggle.ganbaru_open !== false);
   const headingToggleable = $derived(isHeadingBlockType(block.type) && headingIsToggleable(block));
   const headingOpen = $derived(!isHeadingBlockType(block.type) || headingToggleOpen(block));
@@ -525,9 +575,14 @@
       case "color":
         if (!blockSupportsColor) return;
         clearSlashText();
-        onColorChange(block.id, command.color);
+        changeBlockColor(command.color);
         return;
     }
+  }
+
+  function changeBlockColor(color: NotesColor): void {
+    const targetId = color.endsWith("_background") ? calloutColorTarget?.id : null;
+    onColorChange(targetId ?? block.id, color);
   }
 
   function runSlashAction(action: NotesSlashAction): void {
@@ -567,7 +622,7 @@
 
 <div
   id={notesBlockAnchorId(block.id)}
-  class="notes-block-row group relative"
+  class={`notes-block-row group relative ${firstCalloutChildHeadingClass}`}
   role="group"
   tabindex="-1"
   data-notes-selectable-block-id={block.id}
@@ -577,7 +632,8 @@
   class:notes-block-drop-after={dropPosition === "after"}
   class:notes-block-drop-inside={dropPosition === "inside"}
   class:notes-block-drop-outdent={dropPosition === "outdent"}
-  style={`--notes-depth: ${item.depth}`}
+  class:notes-callout-container-only={calloutContainerOnly}
+  style={`--notes-depth: ${visualDepth}`}
   ondragover={(event) => onDragOver(block.id, event)}
   ondragleave={(event) => onDragLeave(block.id, event)}
   ondrop={(event) => onDrop(block.id, event)}
@@ -586,10 +642,11 @@
   <div
     class="notes-block-surface flex min-w-0 items-start gap-1 rounded-md py-0.5 pr-2 hover:bg-accent/50"
     class:notes-callout-surface={block.type === "callout"}
+    class:notes-callout-direct-child={directCalloutChild && block.type !== "callout"}
     data-notes-block-selection-zone={showTextEditor ? undefined : ""}
     style={blockSurfaceStyle}
   >
-    {#if item.depth > 0}
+    {#if visualDepth > 0}
       <div class="notes-block-indent shrink-0"></div>
     {/if}
     <NotesBlockHandle
@@ -597,7 +654,9 @@
       onTurnInto={openTurnIntoMenu}
       canSetColor={blockSupportsColor}
       currentColor={currentColor}
-      onColorSelect={(color) => onColorChange(block.id, color)}
+      currentBackgroundColor={calloutColorTarget?.color ?? currentColor}
+      backgroundOnly={block.type === "callout"}
+      onColorSelect={changeBlockColor}
       onCopyLink={() => onCopyLink(block.id)}
       onDuplicate={() => onDuplicate(block.id)}
       onComment={() => onComment(block.id)}
@@ -652,12 +711,26 @@
         {/if}
       </button>
     {:else if block.type === "callout"}
-      <div
-        class="mt-1.5 flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground"
-        aria-hidden="true"
-      >
-        <Info class="size-4" />
-      </div>
+      {#if CalloutIconPicker}
+        <CalloutIconPicker
+          icon={block.callout.icon}
+          initiallyOpen={calloutIconPickerRequested}
+          onChange={(icon) => onCalloutIconChange(block.id, icon)}
+        />
+      {:else}
+        <button
+          class="notes-callout-icon flex size-6 shrink-0 items-center justify-center rounded hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          type="button"
+          aria-label={t("notes.changeCalloutIcon")}
+          onclick={openCalloutIconPicker}
+        >
+          {#if block.callout.icon}
+            <NotesPageIcon icon={block.callout.icon} size={16} class="notes-callout-icon-glyph" />
+          {:else}
+            <SmilePlus class="notes-callout-icon-glyph size-4 text-muted-foreground" />
+          {/if}
+        </button>
+      {/if}
     {:else if marker}
       <div
         class="notes-editor-body-text min-w-5 shrink-0 select-none whitespace-nowrap py-1 text-right leading-normal text-muted-foreground"
@@ -905,6 +978,8 @@
       {:else if showTextEditor}
         <NotesTextBlockEditor
           indentationDepth={item.depth}
+          calloutBackgroundTargetId={calloutColorTarget?.id ?? null}
+          calloutBackgroundColor={calloutColorTarget?.color ?? null}
           {block}
           {previousBlockType}
           {isOnlyBlock}
@@ -1034,8 +1109,53 @@
   }
 
   .notes-callout-surface {
-    min-height: 2.5rem;
-    padding-block: 0.35rem;
+    min-height: 2.25rem;
+    padding-block: 0.2rem;
+    gap: var(--notes-callout-inset, 0.75rem);
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .notes-callout-direct-child {
+    padding-left: var(--notes-callout-inset, 0.75rem);
+  }
+
+  .notes-callout-surface :global(.notes-callout-icon) {
+    margin-top: calc(0.75rem * var(--font-scale) - 0.5rem);
+  }
+
+  .notes-callout-surface :global(.notes-callout-icon-glyph) {
+    transform: scale(var(--font-scale));
+  }
+
+  .notes-callout-container-only > .notes-block-surface {
+    height: 0;
+    min-height: 0;
+    padding: 0;
+    overflow: visible;
+  }
+
+  .notes-callout-container-only {
+    --notes-callout-first-line-height: calc(1.5rem * var(--font-scale));
+  }
+
+  .notes-callout-container-only:where(
+    .notes-heading-1,
+    .notes-heading-2,
+    .notes-heading-3,
+    .notes-heading-4,
+    .notes-heading-5,
+    .notes-heading-6
+  ) {
+    --notes-callout-first-line-height: calc(var(--notes-heading-size) * var(--font-scale) * 1.3);
+  }
+
+  .notes-callout-container-only :global(.notes-callout-icon) {
+    position: absolute;
+    top: calc(var(--notes-callout-first-line-height) / 2 - 0.375rem);
+    left: calc(var(--notes-depth) * 1.25rem);
+    margin-top: 0;
+    z-index: 2;
   }
 
   .notes-toc-item {

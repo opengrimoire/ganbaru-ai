@@ -42,6 +42,7 @@
     NotesTableOfContentsItem,
   } from "$lib/notes/types";
   import { notesNumberedListOrdinals } from "$lib/notes/block-editor-ui";
+  import { notesCalloutLayers, notesCalloutOwnTextHidden } from "$lib/notes/callout-layout";
   import NotesBlockRow from "./NotesBlockRow.svelte";
   import type NotesSelectionContextMenu from "./NotesSelectionContextMenu.svelte";
   import { createNotesDocumentSelectionController } from "./notes-document-selection-controller.svelte";
@@ -123,10 +124,18 @@
     moveBlocks: notes.moveBlockSelection,
     deleteBlocks: notes.deleteBlockSelection,
   });
+  function isHiddenCalloutLabel(blockId: string): boolean {
+    const block = notes.blockById(blockId);
+    return !!block && notesCalloutOwnTextHidden(
+      block,
+      notes.childIdsByParentId[blockId]?.length ?? 0,
+    );
+  }
   const documentSelection = createNotesDocumentSelectionController({
     readIds: () => notes.flatBlockOutlines.map((item) => item.outline.id),
     readPageId: () => pageId,
     readBlock: notes.blockById,
+    isHiddenCalloutLabel,
     outlineSubtreeIds: notes.outlineSubtreeIds,
     hydrate: notes.hydrateBlockRange,
     replace: notes.replaceDocumentRange,
@@ -212,7 +221,6 @@
     readListElement: () => blockListElement,
     readOutlines: () => notes.flatBlockOutlines,
     readItems: () => items,
-    readSelectionBlockIds: () => documentSelection.renderIds,
     readPinnedBlockIds: () => [
       ...documentSelection.pinnedIds,
       blockDrag.draggingBlockId,
@@ -229,12 +237,12 @@
   });
   const visibleRange = $derived(virtualizer.visibleRange);
   const visibleOutlines = $derived(virtualizer.visibleOutlines);
+  const calloutLayersById = $derived(notesCalloutLayers(notes.flatBlockOutlines, notes.blockById));
   const hydratedItemsById = $derived(virtualizer.hydratedItemsById);
   const measureVirtualBlock = virtualizer.measureBlock;
   $effect(() => {
     void visibleOutlines;
     void hydratedItemsById;
-    void documentSelection.selection;
     void tick().then(documentSelection.repaint);
   });
 
@@ -322,8 +330,10 @@
     readListElement: () => blockListElement,
     readRenderedBlockIds: renderedSelectableBlockIds,
     readBlock: notes.blockById,
+    isHiddenCalloutLabel,
     requestFocus: notes.focusBlock,
   });
+  $effect(() => { void pageId; navigation.resetVerticalGoal(); });
 
   const selectableBlockIdFromEvent = navigation.blockIdFromEvent;
   const eventTargetIsEditable = navigation.targetIsEditable;
@@ -629,6 +639,7 @@
     onKeyboardAction: handleKeyboardAction, onUndo: undoNotesEdit, onRedo: redoNotesEdit,
     onAddBelow: (id, request) => void notes.createSiblingAfter(id, request), onConvert: handleConvert,
     onConvertToToggleHeading: convertToToggleHeading, onColorChange: (id, color) => void notes.updateBlockColor(id, color),
+    onCalloutIconChange: (id, icon) => void notes.updateCalloutIcon(id, icon),
     onCopyLink: copyBlockLink, onDuplicate: (id) => void notes.duplicateBlock(id),
     onUseTemplate: (id) => void notes.useTemplateBlock(id), onAddTemplateChild: (id) => void notes.addTemplateChild(id),
     onUseButton: (id) => void notes.useButtonBlock(id), onAddButtonChild: (id) => void notes.addButtonChild(id),
@@ -666,7 +677,9 @@
   use:selectionContextMenu
   use:blockSelectionDelegation
   bind:this={blockListElement}
-  class="notes-block-list relative flex min-w-0 flex-col gap-0.5 pb-8"
+  onpointerdowncapture={navigation.resetVerticalGoal}
+  onkeyupcapture={(event) => { if (event.key === "Shift") navigation.resetVerticalGoal(); }}
+  class="notes-block-list relative flex min-w-0 flex-col pb-8"
   role="group"
   aria-label={t("notes.blockList")}
 >
@@ -705,6 +718,7 @@
       {item}
       blockId={outlineItem.outline.id}
       retainedHeight={outlineItem.outline.retained_height}
+      calloutLayers={calloutLayersById.get(outlineItem.outline.id) ?? []}
       measure={measureVirtualBlock}
     >
       {#snippet children(item)}
@@ -739,6 +753,10 @@
 </div>
 
 <style>
+  :global(.notes-block-list[data-notes-document-selection]:not([data-notes-document-selection-composing]) [contenteditable='true'][data-notes-block-id]) {
+    caret-color: transparent;
+  }
+
   :global(.notes-block-row[data-notes-block-selected] > .notes-block-surface) {
     user-select: none;
     background: var(--selection-background);

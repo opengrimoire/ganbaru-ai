@@ -8,12 +8,14 @@ import { isNotesTabKey } from "$lib/notes/block-keyboard";
 import { createNotesDocumentSelectionPainter, findEditableDomPoint, notesEditableOffsetFromDomPoint } from "$lib/notes/editor-selection";
 import { notesDocumentRange, type NotesDocumentPoint, type NotesDocumentSelection } from "$lib/notes/editor-selection";
 import type { NotesBlock } from "$lib/notes/types";
+import { notesCaretOffsetOnVisualLine, notesCaretRectAtOffset, notesCaretVisualLineIndex, notesEditableVisualLines } from "./notes-visual-line-navigation";
 
 const EDITOR = "[contenteditable='true'][data-notes-block-id][role='textbox']";
 interface DocumentSelectionOptions {
   readIds: () => readonly string[];
   readPageId: () => string;
   readBlock: (id: string) => NotesBlock | undefined;
+  isHiddenCalloutLabel: (id: string) => boolean;
   outlineSubtreeIds: (rootBlockIds: readonly string[]) => readonly string[];
   hydrate: (ids: readonly string[]) => Promise<void>;
   replace: (ids: readonly string[], start: number, end: number, text: string, html?: string, documentSelection?: NotesDocumentSelection) => Promise<void>;
@@ -39,7 +41,19 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
   let replacementText: string | null = null;
   let alive = true;
   let composing = false;
+  let verticalGoalX: number | null = null;
+  let verticalFocusLine: { blockId: string; offset: number; index: number } | null = null;
+  let extensionInProgress = false;
+  let extensionEpoch = 0;
   let painter: ReturnType<typeof createNotesDocumentSelectionPainter> | null = null;
+  let paintFrame: number | null = null;
+
+  function resetVerticalNavigation(): void {
+    verticalGoalX = null;
+    verticalFocusLine = null;
+    extensionEpoch += 1;
+    extensionInProgress = false;
+  }
 
   function editor(id: string): HTMLElement | undefined {
     return Array.from(list?.querySelectorAll<HTMLElement>(EDITOR) ?? []).find((node) => node.dataset.notesBlockId === id);
@@ -67,35 +81,67 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
   function adjacentTextId(id: string, forward: boolean): string | undefined {
     const ids = options.readIds();
     const index = ids.indexOf(id);
-    const candidates = forward ? ids.slice(index + 1) : ids.slice(0, index).reverse();
-    return candidates.find((candidate) => {
+    for (let next = index + (forward ? 1 : -1); next >= 0 && next < ids.length; next += forward ? 1 : -1) {
+      const candidate = ids[next];
+      if (options.isHiddenCalloutLabel(candidate)) continue;
       const block = options.readBlock(candidate);
-      return !block || isTextEditableBlock(block.type);
-    });
+      if (!block || isTextEditableBlock(block.type)) return candidate;
+    }
+    return undefined;
   }
 
-  function clear(): void {
+  function cancelScheduledPaint(): void {
+    if (paintFrame === null) return;
+    list?.ownerDocument.defaultView?.cancelAnimationFrame(paintFrame);
+    paintFrame = null;
+  }
+
+  function schedulePaint(): void {
+    if (paintFrame !== null) return;
+    const view = list?.ownerDocument.defaultView;
+    if (!view?.requestAnimationFrame) { paint(); return; }
+    paintFrame = view.requestAnimationFrame(() => { paintFrame = null; paint(); });
+  }
+
+  function clear(preserveVerticalGoal = false): void {
     request += 1;
+    cancelScheduledPaint();
+    if (!preserveVerticalGoal) resetVerticalNavigation();
     selection = null;
     replacementText = null;
     pinnedIds = [];
     menu = null;
     list?.removeAttribute("data-notes-document-selection");
+    list?.removeAttribute("data-notes-document-selection-composing");
     painter?.clear();
   }
 
   function paint(): void {
+    cancelScheduledPaint();
     if (!selection || !list || composing) { painter?.clear(); return; }
+    if (selection.anchor.blockId === selection.focus.blockId) {
+      const root = editor(selection.anchor.blockId);
+      if (root) {
+        const anchor = findEditableDomPoint(root, selection.anchor.offset);
+        const focus = findEditableDomPoint(root, selection.focus.offset);
+        list.ownerDocument.getSelection()?.setBaseAndExtent(anchor.node, anchor.offset, focus.node, focus.offset);
+        list.removeAttribute("data-notes-document-selection");
+        if (list.hasAttribute("data-notes-painted-selection")) painter?.clear();
+        return;
+      }
+    }
     list.setAttribute("data-notes-document-selection", "");
     const ids = options.readIds();
     const selected = notesDocumentRange(ids, selection);
     if (!selected) { painter?.clear(); return; }
     const selectedIds = new Set(selected.blockIds);
+    const editors = new Map(Array.from(list.querySelectorAll<HTMLElement>(EDITOR))
+      .map((root) => [root.dataset.notesBlockId!, root] as const));
     const roots = Array.from(list.querySelectorAll<HTMLElement>("[data-notes-selectable-block-id]"))
       .filter((node) => selectedIds.has(node.dataset.notesSelectableBlockId ?? ""));
     const ranges = roots.flatMap((row) => {
       const id = row.dataset.notesSelectableBlockId!;
-      const root = editor(id);
+      const root = editors.get(id);
       const range = list!.ownerDocument.createRange();
       if (root) {
         const start = findEditableDomPoint(root, id === selected.start.blockId ? selected.start.offset : 0);
@@ -113,8 +159,8 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     if (!startRow || !endRow) return;
     const startId = startRow.dataset.notesSelectableBlockId!;
     const endId = endRow.dataset.notesSelectableBlockId!;
-    const startEditor = editor(startId);
-    const endEditor = editor(endId);
+    const startEditor = editors.get(startId);
+    const endEditor = editors.get(endId);
     const startOffset = startId === selected.start.blockId ? selected.start.offset : 0;
     const endOffset = endId === selected.end.blockId ? selected.end.offset : length(endId);
     const start = startEditor ? findEditableDomPoint(startEditor, startOffset) : { node: startRow, offset: 0 };
@@ -125,25 +171,30 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     list.ownerDocument.getSelection()?.setBaseAndExtent(anchor.node, anchor.offset, focus.node, focus.offset);
   }
 
-  async function select(next: NotesDocumentSelection): Promise<void> {
-    const page = options.readPageId();
-    const token = ++request;
-    const range = notesDocumentRange(options.readIds(), next);
-    if (!range) return;
+  async function select(next: NotesDocumentSelection, keepKeyboardAnchor = false): Promise<void> {
+    const ids = options.readIds();
+    if (!ids.includes(next.anchor.blockId) || !ids.includes(next.focus.blockId)) return;
+    request += 1;
+    if (!keepKeyboardAnchor) resetVerticalNavigation();
     options.clearBlockSelection();
+    if (next.anchor.blockId === next.focus.blockId && next.anchor.offset === next.focus.offset) {
+      const root = editor(next.focus.blockId);
+      if (root) {
+        const dom = findEditableDomPoint(root, next.focus.offset);
+        root.ownerDocument.getSelection()?.collapse(dom.node, dom.offset);
+      }
+      clear(keepKeyboardAnchor);
+      return;
+    }
     selection = next;
-    pinnedIds = entireDocument() ? [] : range.blockIds;
-    list?.setAttribute("data-notes-document-selection", "");
-    paint();
-    if (next.anchor.blockId === next.focus.blockId && editor(next.anchor.blockId) && !entireDocument()) {
+    if (pinnedIds.length) pinnedIds = [];
+    if (keepKeyboardAnchor && next.anchor.blockId !== next.focus.blockId) {
+      list?.setAttribute("data-notes-document-selection", "");
+      schedulePaint();
+    } else paint();
+    if (!keepKeyboardAnchor && next.anchor.blockId === next.focus.blockId && editor(next.anchor.blockId) && !entireDocument()) {
       clear(); return;
     }
-    await tick();
-    if (!alive || token !== request || page !== options.readPageId()) return;
-    if (!entireDocument() && range.blockIds.some((id) => !options.readBlock(id))) await options.hydrate(range.blockIds);
-    await tick();
-    if (!alive || token !== request || page !== options.readPageId()) return;
-    paint();
   }
 
   async function run(action: () => Promise<void>): Promise<void> {
@@ -275,6 +326,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     if (event.defaultPrevented || event.button !== 0 || !(event.target instanceof Element) || event.target.closest("[data-notes-selection-menu]")) return;
     pointerAnchor = null;
     pointerFromRow = false;
+    resetVerticalNavigation();
     const root = pointerEditor(event.target);
     if (!root) { clear(); return; }
     const hit = pointerPoint(root, event.clientX, event.clientY);
@@ -308,7 +360,63 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     void run(() => select({ anchor: pointerAnchor!, focus: hit }));
   }
 
-  async function extend(event: KeyboardEvent, current: NotesDocumentSelection): Promise<void> {
+  async function verticalFocus(current: NotesDocumentPoint, forward: boolean, root: HTMLElement, epoch: number): Promise<NotesDocumentPoint | null> {
+    const caret = notesCaretRectAtOffset(root, current.offset);
+    const goalX = verticalGoalX ?? caret?.left ?? root.getBoundingClientRect().left + 1;
+    verticalGoalX = goalX;
+    const lines = notesEditableVisualLines(root);
+    const lineIndex = verticalFocusLine?.blockId === current.blockId && verticalFocusLine.offset === current.offset
+      && verticalFocusLine.index < lines.length
+      ? verticalFocusLine.index : notesCaretVisualLineIndex(lines, caret);
+    const nextLineIndex = lineIndex === null ? null : lineIndex + (forward ? 1 : -1);
+    const nextLine = nextLineIndex === null ? undefined : lines[nextLineIndex];
+    if (nextLine && nextLineIndex !== null) {
+      const offset = notesCaretOffsetOnVisualLine(root, nextLine, goalX);
+      if (offset !== null) {
+        verticalFocusLine = { blockId: current.blockId, offset, index: nextLineIndex };
+        return { blockId: current.blockId, offset };
+      }
+      const native = root.ownerDocument.getSelection();
+      if (native?.modify) {
+        const dom = findEditableDomPoint(root, current.offset);
+        native.collapse(dom.node, dom.offset);
+        native.modify("move", forward ? "forward" : "backward", "line");
+        const moved = point(native.focusNode, native.focusOffset);
+        if (moved?.blockId === current.blockId && moved.offset !== current.offset) {
+          verticalFocusLine = { blockId: current.blockId, offset: moved.offset, index: nextLineIndex };
+          return moved;
+        }
+      }
+      return current;
+    }
+    const adjacent = adjacentTextId(current.blockId, forward);
+    if (adjacent) {
+      if (!options.readBlock(adjacent) || !editor(adjacent)) {
+        extensionInProgress = true;
+        const token = request;
+        const page = options.readPageId();
+        pinnedIds = [adjacent];
+        if (!editor(adjacent)) options.focus({ blockId: adjacent, offset: forward ? 0 : length(adjacent) });
+        await tick();
+        if (!alive || epoch !== extensionEpoch || token !== request || page !== options.readPageId()) return null;
+        if (!options.readBlock(adjacent)) await options.hydrate([adjacent]);
+        await tick();
+        if (!alive || epoch !== extensionEpoch || token !== request || page !== options.readPageId()) return null;
+      }
+      const target = editor(adjacent);
+      const targetLines = target ? notesEditableVisualLines(target) : [];
+      const targetLine = forward ? targetLines[0] : targetLines.at(-1);
+      const offset = target && targetLine ? notesCaretOffsetOnVisualLine(target, targetLine, goalX) : null;
+      const nextOffset = offset ?? (forward ? 0 : length(adjacent));
+      verticalFocusLine = targetLine ? { blockId: adjacent, offset: nextOffset, index: forward ? 0 : targetLines.length - 1 } : null;
+      return { blockId: adjacent, offset: nextOffset };
+    }
+    const boundaryOffset = forward ? length(current.blockId) : 0;
+    verticalFocusLine = lineIndex === null ? null : { blockId: current.blockId, offset: boundaryOffset, index: lineIndex };
+    return { blockId: current.blockId, offset: boundaryOffset };
+  }
+
+  async function extend(event: KeyboardEvent, current: NotesDocumentSelection, epoch: number): Promise<void> {
     const ids = options.readIds();
     const forward = ["ArrowRight", "ArrowDown", "End"].includes(event.key);
     let focus = current.focus;
@@ -316,64 +424,66 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
       focus = { blockId: forward ? ids[ids.length - 1] : ids[0], offset: forward ? Number.MAX_SAFE_INTEGER : 0 };
     } else {
       if (!editor(focus.blockId)) {
+        extensionInProgress = true;
         const token = request;
         options.focus(focus);
         await tick();
-        if (!alive || token !== request) return;
+        if (!alive || epoch !== extensionEpoch || token !== request) return;
         if (!options.readBlock(focus.blockId)) await options.hydrate([focus.blockId]);
         await tick();
-        if (!alive || token !== request) return;
+        if (!alive || epoch !== extensionEpoch || token !== request) return;
       }
       const root = editor(focus.blockId);
-      const native = list?.ownerDocument.getSelection();
-      if (!native) return;
       if (!root) {
         const adjacent = adjacentTextId(focus.blockId, forward);
-        if (adjacent) await select({ anchor: current.anchor, focus: { blockId: adjacent, offset: forward ? 0 : Number.MAX_SAFE_INTEGER } });
+        if (adjacent) await select({ anchor: current.anchor, focus: { blockId: adjacent, offset: forward ? 0 : Number.MAX_SAFE_INTEGER } }, true);
         return;
       }
-      const dom = findEditableDomPoint(root, focus.offset);
-      native.collapse(dom.node, dom.offset);
-      const beforeRect = native.rangeCount ? native.getRangeAt(0).getBoundingClientRect?.() : null;
-      const granularity = event.key === "Home" || event.key === "End" ? "lineboundary"
-        : event.key === "ArrowUp" || event.key === "ArrowDown" ? "line"
-        : event.ctrlKey || event.metaKey ? "word" : "character";
-      native.modify?.("move", forward ? "forward" : "backward", granularity);
-      const moved = point(native.focusNode, native.focusOffset);
-      const afterRect = native.rangeCount ? native.getRangeAt(0).getBoundingClientRect?.() : null;
-      const stoppedOnSameLine = granularity === "line" && beforeRect && afterRect
-        && beforeRect.height > 0 && afterRect.height > 0 && Math.abs(beforeRect.top - afterRect.top) < 1;
-      if (moved && !stoppedOnSameLine && (moved.blockId !== focus.blockId || moved.offset !== focus.offset)) focus = moved;
-      else if (event.key.startsWith("Arrow")) {
-        const adjacent = adjacentTextId(focus.blockId, forward);
-        if (adjacent) {
-          if (!options.readBlock(adjacent) || !editor(adjacent)) {
-            const token = request;
-            const page = options.readPageId();
-            pinnedIds = [...new Set([...pinnedIds, focus.blockId, adjacent])];
-            await tick();
-            if (!alive || token !== request || page !== options.readPageId()) return;
-            if (!options.readBlock(adjacent)) await options.hydrate(pinnedIds);
-            await tick();
-            if (!alive || token !== request || page !== options.readPageId()) return;
+      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+        const moved = await verticalFocus(focus, forward, root, epoch);
+        if (!moved || epoch !== extensionEpoch) return;
+        focus = moved;
+      } else {
+        const native = list?.ownerDocument.getSelection();
+        if (!native) return;
+        const dom = findEditableDomPoint(root, focus.offset);
+        native.collapse(dom.node, dom.offset);
+        const granularity = event.key === "Home" || event.key === "End" ? "lineboundary"
+          : event.ctrlKey || event.metaKey ? "word" : "character";
+        native.modify?.("move", forward ? "forward" : "backward", granularity);
+        const moved = point(native.focusNode, native.focusOffset);
+        if (moved && (moved.blockId !== focus.blockId || moved.offset !== focus.offset)) focus = moved;
+        else if (event.key.startsWith("Arrow")) {
+          const adjacent = adjacentTextId(focus.blockId, forward);
+          if (adjacent) {
+            if (!options.readBlock(adjacent) || !editor(adjacent)) {
+              extensionInProgress = true;
+              const token = request;
+              const page = options.readPageId();
+              pinnedIds = [adjacent];
+              if (!editor(adjacent)) options.focus({ blockId: adjacent, offset: forward ? 0 : length(adjacent) });
+              await tick();
+              if (!alive || epoch !== extensionEpoch || token !== request || page !== options.readPageId()) return;
+              if (!options.readBlock(adjacent)) await options.hydrate([adjacent]);
+              await tick();
+              if (!alive || epoch !== extensionEpoch || token !== request || page !== options.readPageId()) return;
+            }
+            focus = { blockId: adjacent, offset: forward ? 0 : length(adjacent) };
           }
-          const adjacentEditor = editor(adjacent);
-          const rect = adjacentEditor?.getBoundingClientRect();
-          const hit = granularity === "line" && rect && beforeRect
-            ? pointAt(beforeRect.left, forward ? rect.top + 1 : rect.bottom - 1) : null;
-          focus = hit?.blockId === adjacent ? hit : { blockId: adjacent, offset: forward ? 0 : length(adjacent) };
         }
       }
     }
-    await select({ anchor: current.anchor, focus });
-    const root = editor(focus.blockId);
-    root?.scrollIntoView?.({ block: "nearest" });
+    await select({ anchor: current.anchor, focus }, true);
+    if (focus.blockId !== current.focus.blockId) {
+      editor(focus.blockId)?.scrollIntoView?.({ block: "nearest" });
+    }
   }
 
   function keydown(event: KeyboardEvent): void {
     if (event.defaultPrevented || event.isComposing || !(event.target instanceof Element)) return;
     if (!event.target.closest(EDITOR) && !event.target.matches("[data-notes-selectable-block-id]") && !selection) return;
     if (event.target.closest("[data-notes-selection-menu]")) return;
+    if (!["ArrowUp", "ArrowDown", "Shift"].includes(event.key) || !event.shiftKey) resetVerticalNavigation();
     const modifier = event.ctrlKey || event.metaKey;
     if (replacementText !== null && !modifier && !event.altKey) {
       if (event.key.length === 1 || ["Enter", "Backspace", "Delete"].includes(event.key)) {
@@ -414,7 +524,11 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     }
     if (event.shiftKey && !event.altKey && current && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
       event.preventDefault(); event.stopPropagation();
-      void run(() => extend(event, current));
+      if (extensionInProgress) return;
+      const epoch = extensionEpoch;
+      void run(() => extend(event, current, epoch)).finally(() => {
+        if (epoch === extensionEpoch) extensionInProgress = false;
+      });
       return;
     }
     if (!selection) return;
@@ -455,6 +569,14 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
         if (root) { root.focus({ preventScroll: true }); const dom = findEditableDomPoint(root, target.offset); root.ownerDocument.getSelection()?.collapse(dom.node, dom.offset); }
       }
     }
+  }
+
+  function keyup(event: KeyboardEvent): void {
+    if (!["Shift", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) return;
+    resetVerticalNavigation();
+    if (event.key !== "Shift") return;
+    if (!selection || selection.anchor.blockId !== selection.focus.blockId) return;
+    if (editor(selection.anchor.blockId) && !entireDocument()) clear();
   }
 
   function clipboard(event: ClipboardEvent): void {
@@ -498,6 +620,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     const root = event.target.closest<HTMLElement>(EDITOR);
     if (!root) return;
     composing = true;
+    list?.setAttribute("data-notes-document-selection-composing", "");
     painter?.clear();
     const offset = root.dataset.notesBlockId === selection.anchor.blockId ? selection.anchor.offset : 0;
     const dom = findEditableDomPoint(root, offset);
@@ -507,6 +630,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
   function compositionEnd(event: CompositionEvent): void {
     if (!composing) return;
     composing = false;
+    list?.removeAttribute("data-notes-document-selection-composing");
     if (event.data) void run(() => replace(event.data));
     else paint();
   }
@@ -523,7 +647,6 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
 
   return {
     get pinnedIds() { return pinnedIds; },
-    get renderIds() { return entireDocument() ? [] : pinnedIds; },
     repaint: paint,
     get selection() { return selection; },
     get error() { return error; },
@@ -544,17 +667,14 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
       list = node; alive = true;
       painter = createNotesDocumentSelectionPainter(node);
       const view = node.ownerDocument.defaultView;
-      let paintFrame: number | null = null;
-      const repaint = () => {
-        if (!selection || paintFrame !== null || !view) return;
-        paintFrame = view.requestAnimationFrame(() => { paintFrame = null; paint(); });
-      };
+      const repaint = () => { if (selection) schedulePaint(); };
       const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(repaint);
       resizeObserver?.observe(node);
       node.ownerDocument.addEventListener("scroll", repaint, true);
       view?.addEventListener("resize", repaint);
       const stop = () => { pointerAnchor = null; pointerFromRow = false; };
       node.addEventListener("keydown", keydown, true);
+      node.ownerDocument.addEventListener("keyup", keyup, true);
       node.addEventListener("pointerdown", pointerDown, true);
       node.addEventListener("contextmenu", contextMenu, true);
       node.addEventListener("beforeinput", beforeInput, true);
@@ -570,9 +690,9 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
         resizeObserver?.disconnect();
         node.ownerDocument.removeEventListener("scroll", repaint, true);
         view?.removeEventListener("resize", repaint);
-        if (paintFrame !== null) view?.cancelAnimationFrame(paintFrame);
         painter = null;
         node.removeEventListener("keydown", keydown, true);
+        node.ownerDocument.removeEventListener("keyup", keyup, true);
         node.removeEventListener("pointerdown", pointerDown, true);
         node.removeEventListener("contextmenu", contextMenu, true);
         node.removeEventListener("beforeinput", beforeInput, true);

@@ -27,7 +27,6 @@ const EMPTY_ENTER_RETURNS_PARAGRAPH_TYPES = new Set<NotesBlockType>([
   "bulleted_list_item",
   "numbered_list_item",
   "to_do",
-  "callout",
   "quote",
 ]);
 

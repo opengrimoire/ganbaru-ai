@@ -40,6 +40,8 @@
     previousBlockType,
     isOnlyBlock,
     indentationDepth = 0,
+    calloutBackgroundTargetId = null,
+    calloutBackgroundColor = null,
     focusBlockId,
     focusRequestId,
     focusSelection,
@@ -172,6 +174,8 @@
       clearText?: boolean,
     ) => void;
     onColorChange: (blockId: string, color: NotesColor) => void;
+    calloutBackgroundTargetId?: string | null;
+    calloutBackgroundColor?: NotesColor | null;
     onCopyLink: (blockId: string) => Promise<void> | void;
     onDuplicate: (blockId: string) => void;
     onUseTemplate: (blockId: string) => void;
@@ -221,7 +225,10 @@
     onRedo: () => onRedo(),
     onConvert: (blockId, type, clearText) => onConvert(blockId, type, clearText),
     onConvertToToggleHeading: (blockId, type, clearText) => onConvertToToggleHeading(blockId, type, clearText),
-    onColorChange: (blockId, color) => onColorChange(blockId, color),
+    onColorChange: (blockId, color) => onColorChange(
+      color.endsWith("_background") && calloutBackgroundTargetId ? calloutBackgroundTargetId : blockId,
+      color,
+    ),
     onCopyLink: (blockId) => onCopyLink(blockId),
     onDuplicate: (blockId) => onDuplicate(blockId),
     onMoveUp: (blockId) => onMoveUp(blockId),
@@ -254,7 +261,13 @@
   const linkError = $derived(controller.linkError);
 
   const toggleTextAnnotation = controller.toggleTextAnnotation.bind(controller);
-  const applyTextColor = controller.applyTextColor.bind(controller);
+  function applyTextColor(color: NotesColor): void {
+    if (color.endsWith("_background") && calloutBackgroundTargetId) {
+      onColorChange(calloutBackgroundTargetId, color);
+      return;
+    }
+    controller.applyTextColor(color);
+  }
   const insertInlineEquationFromSelection = controller.insertInlineEquationFromSelection.bind(controller);
   const createInlineCommentFromSelection = controller.createInlineCommentFromSelection.bind(controller);
   const createInlineSuggestionFromSelection = controller.createInlineSuggestionFromSelection.bind(controller);
@@ -387,6 +400,8 @@
       canOpenLink={canOpenLinkEditor}
       onToggleAnnotation={toggleTextAnnotation}
       onColorSelect={applyTextColor}
+      canSetCalloutBackground={calloutBackgroundTargetId !== null}
+      calloutBackgroundColor={calloutBackgroundColor ?? undefined}
       onCreateEquation={insertInlineEquationFromSelection}
       onCreateComment={createInlineCommentFromSelection}
       onCreateSuggestion={createInlineSuggestionFromSelection}

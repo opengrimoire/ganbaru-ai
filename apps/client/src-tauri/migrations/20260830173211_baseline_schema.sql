@@ -2480,6 +2480,7 @@ CREATE TABLE notes_asset_references (
             'page_icon',
             'page_cover',
             'block_file',
+            'callout_icon',
             'property_file',
             'comment_attachment',
             'import_source'
@@ -2500,7 +2501,7 @@ CREATE TABLE notes_asset_references (
         )
         OR (
             owner_type = 'block'
-            AND role = 'block_file'
+            AND role IN ('block_file', 'callout_icon')
             AND page_id IS NOT NULL
             AND block_id = owner_id
             AND data_source_id IS NULL
@@ -3157,6 +3158,7 @@ CREATE TABLE notes_link_facts (
             'page_icon',
             'page_cover',
             'block_file',
+            'callout_icon',
             'property_file',
             'comment_attachment',
             'import_source'

@@ -10,7 +10,7 @@ Incoming text editors and document ranges accept sanitized HTML or Markdown. Tab
 
 This contract concerns clipboard exchange. SQLite remains authoritative for Notes. File import/export, managed assets, and working Markdown have separate workflows.
 
-Sources reviewed on 2026-09-27:
+Sources reviewed through 2026-09-28:
 
 - [Obsidian basic syntax](https://obsidian.md/help/syntax) documents six heading levels, inline formatting, lists, tasks, links, and code.
 - [Obsidian Flavored Markdown](https://obsidian.md/help/obsidian-flavored-markdown) describes CommonMark/GFM support and warns that Markdown inside HTML elements is not rendered. Underline combined with other marks therefore uses nested semantic HTML.
@@ -18,6 +18,7 @@ Sources reviewed on 2026-09-27:
 - [GFM](https://github.github.com/gfm/) defines the Markdown table, task, and strikethrough syntax used for portable exchange.
 - [Notion import documentation](https://www.notion.com/help/import-data-into-notion) documents supported import formats and conversion limits. File-import support is not evidence that its clipboard reader preserves every feature.
 - [Notion keyboard shortcuts](https://www.notion.com/help/keyboard-shortcuts) documents toggle creation and open/close shortcuts, but does not define a clipboard format.
+- [Notion content styling](https://www.notion.com/help/customize-and-style-your-content) documents callout icons, backgrounds, and nested content, but does not define a clipboard format.
 
 Automated fixtures are synthetic semantic examples, not captured Notion or Obsidian clipboard payloads. The user observed that Notion copies toggles as nested bullets in plain text, and that pasting Notes HTML from a closed `<details>` into Notion omits its body. Notion does not publish a clipboard-format contract in the linked documentation. The reported Notion heading discrepancy motivated matching-format reconciliation; its behavior has not been reproduced in a live external application in this environment.
 
@@ -32,6 +33,7 @@ Automated fixtures are synthetic semantic examples, not captured Notion or Obsid
 | Web/email links | Explicit HTTP, HTTPS, and mailto links | Supported links; relative destinations remain readable text without an invented host |
 | Bullets, numbered lists, tasks | Nested lists and checked state | Mixed nested hierarchy and checked/unchecked tasks |
 | Toggles | Open `<details><summary>` in HTML so child blocks stay available to rich paste readers; a Notes attribute records closed state. Plain text uses a nested bullet with indented child paragraphs | Sanitized `<details><summary>` and incoming foldable callouts become toggles with children and initial open state; a plain-text bullet remains a list |
+| Callouts | Semantic `<aside>` in HTML with icon and color metadata; plain text uses a readable `<aside>` wrapper with an emoji line and nested Markdown blocks | Sanitized HTML and Notion-style plain-text `<aside>` wrappers become callouts with normal child blocks, including headings and nested callouts |
 | Quotes and dividers | HTML and Markdown | Quote text, paragraph boundaries, and dividers |
 | Fenced code | Safe variable-length fences and language metadata; literal HTML code text | Code text and language; existing code editors keep pasted source literal |
 | Simple tables | HTML cells and header flags; GFM table syntax | Structured tables, rich cell text, headers, and retained surrounding text |
@@ -51,7 +53,7 @@ Plain-text toggle children use indented blank lines to keep their paragraphs sep
 - Ordered lists use the Notes numbering model; arbitrary HTML start values, reversed numbering, and custom task states do not survive as distinct metadata.
 - GFM requires a header row. Exporting a headerless table adds an empty header without promoting the first data row. Markdown cannot represent row-header flags or merged cells. HTML merged cells are expanded into a rectangle with content in the first covered cell.
 - Nested tables and tables exceeding the supported width degrade to readable row/cell text. Oversized block structures flatten excess content rather than constructing invalid partial tables.
-- Ordinary callouts transfer readable content and descendants without portable callout styling. Notes records closed state in an HTML attribute while keeping copied details open for external rich paste. Another app may import that toggle as open. Incoming foldable callouts preserve their marker's open state. Columns flatten into document order.
+- Other applications may ignore `<aside>` or choose a different clipboard representation. Notes icon and color metadata round-trip through its own HTML, while plain text preserves only a leading emoji icon. Notes records closed toggle state in an HTML attribute while keeping copied details open for external rich paste. Another app may import that toggle as open. Incoming foldable Obsidian callouts preserve their marker's open state. Columns flatten into document order.
 - There is no shared Markdown toggle syntax across Notion and Obsidian. Notes emits a readable nested bullet in plain text and semantic `<details>` in HTML. Another app may choose either representation, turn the toggle into a list, or ignore its open state.
 - Relative paths lack a shared vault base. Image HTML and Markdown retain descriptions and source references as text; clipboard handling does not download images, import media bytes, or authorize foreign filesystem paths.
 - Wikilinks, equations, highlights, footnotes, embeds, comments, database relations, synced objects, page identities, and plugin syntax have no general conversion contract. Available source text or labels can remain readable, but app-specific behavior is not recreated.

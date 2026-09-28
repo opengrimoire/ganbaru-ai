@@ -138,8 +138,13 @@ function renderNode({ entry, children }: ClipboardNode): string {
       return `<li${style}>${content}${descendants}</li>`;
     case "to_do":
       return `<li${style}><input type="checkbox" disabled${block.to_do.checked ? " checked" : ""}> ${content}${descendants}</li>`;
+    case "callout": {
+      const icon = block.callout.icon;
+      const marker = icon?.type === "emoji" ? escapeHtml(icon.emoji) : "";
+      const metadata = escapeHtml(JSON.stringify(icon));
+      return `<aside data-notes-callout-icon-json="${metadata}" data-notes-callout-color="${escapeHtml(color)}"${style}><span data-notes-callout-marker>${marker}</span>${content ? `<p data-notes-callout-label>${content}</p>` : ""}${descendants}</aside>`;
+    }
     case "quote":
-    case "callout":
       return `<blockquote${style}>${content}${descendants}</blockquote>`;
     case "code":
       return `<pre><code class="language-${escapeHtml(block.code.language)}">${escapeHtml(richTextPlainText(selectedRichText(entry)))}</code></pre>${descendants}`;
@@ -198,7 +203,11 @@ function renderMarkdown(nodes: readonly ClipboardNode[]): string {
       const language = block.code.language === "plain text" ? "" : block.code.language.replace(/[\r\n`]/gu, "");
       value = `${fence}${language}\n${text}\n${fence}`;
     } else if (block.type === "divider") value = "---";
-    else if (block.type === "quote" || block.type === "callout") {
+    else if (block.type === "callout") {
+      const icon = block.callout.icon?.type === "emoji" ? `${block.callout.icon.emoji}\n\n` : "";
+      const body = [content, descendants].filter(Boolean).join("\n\n");
+      value = `<aside>\n${icon}${body}${body ? "\n\n" : ""}</aside>`;
+    } else if (block.type === "quote") {
       value = [content, descendants].filter(Boolean).join("\n\n").split("\n").map((line) => `> ${line}`).join("\n");
     } else if (block.type === "table") {
       const rows = children.filter((node) => node.entry.block.type === "table_row");

@@ -47,6 +47,7 @@ interface OptimisticPastePlan {
 interface NotesBlockPasteActionsContext {
   enqueueEditorMutation: (mutation: () => Promise<void>) => Promise<void>;
   readSelectedPageId: () => string | null;
+  readChildIdsByParentId: () => Readonly<Record<string, readonly string[]>>;
   blockById: (blockId: string) => NotesBlock | undefined;
   localApplyBlockUpdate: (blockId: string, update: NotesBlockUpdate) => void;
   localInsertBlockAfter: (block: NotesBlock, afterBlockId: string | null) => void;
@@ -105,35 +106,43 @@ export function createNotesBlockPasteActions(
     const block = context.blockById(blockId);
     const pageId = context.readSelectedPageId();
     if (!block || !notesEnterSplitsRichTextBlock(block.type) || !pageId) return;
-    if (block.type === "toggle" && selectionStart === 0 && selectionEnd === 0
-      && blockPlainText(block).length > 0) {
-      const before = context.undoSnapshotForBlocks([blockId], blockId, START_OF_BLOCK_SELECTION);
+    const parentCallout = block.parent.type === "block_id"
+      ? context.blockById(block.parent.block_id) : undefined;
+    const firstCalloutChild = parentCallout?.type === "callout"
+      && blockPlainText(parentCallout).length === 0
+      && context.readChildIdsByParentId()[parentCallout.id]?.[0] === blockId;
+    if (selectionStart === 0 && selectionEnd === 0 && blockPlainText(block).length > 0
+      && (block.type === "toggle" || block.type === "callout" || firstCalloutChild)) {
+      const leadingBlock = firstCalloutChild ? parentCallout : block;
+      const beforeBlockId = leadingBlock.id;
+      const before = context.undoSnapshotForBlocks([blockId, beforeBlockId], blockId, START_OF_BLOCK_SELECTION);
       const newBlockId = crypto.randomUUID();
-      const parent = cloneNotesJson(block.parent);
+      const parent = cloneNotesJson(leadingBlock.parent);
       const write = cloneNotesJson({
         id: newBlockId,
         ...blockUpdateWithIndent(
-          createBlockWriteFromRichText(newBlockId, "toggle", [], blockColor(block)),
-          blockIndent(block),
+          createBlockWriteFromRichText(newBlockId, block.type === "toggle" && !firstCalloutChild ? "toggle" : "paragraph", [],
+            block.type === "toggle" && !firstCalloutChild ? blockColor(block) : "default"),
+          blockIndent(leadingBlock),
         ),
       });
-      context.localInsertBlockBefore(context.optimisticBlockFromWrite(write, parent), blockId);
+      context.localInsertBlockBefore(context.optimisticBlockFromWrite(write, parent), beforeBlockId);
       context.requestBlockFocus(newBlockId, START_OF_BLOCK_SELECTION);
       context.recordUndo(
         "create",
         before,
-        context.undoSnapshotForBlocks([blockId, newBlockId], newBlockId, START_OF_BLOCK_SELECTION),
-        `create:enter:${parentIdForBlock(block)}`,
+        context.undoSnapshotForBlocks([blockId, beforeBlockId, newBlockId], newBlockId, START_OF_BLOCK_SELECTION),
+        `create:enter:${parentIdForBlock(leadingBlock)}`,
       );
       let appended = false;
       const persistence = context.enqueueEditorMutation(async () => {
         if (!appended) {
-          await appendNotesBlockChildren({ parent, after: blockId, children: [write] });
+          await appendNotesBlockChildren({ parent, after: beforeBlockId, children: [write] });
           appended = true;
         }
-        await moveNotesBlock(newBlockId, { parent, after: null, before: blockId });
+        await moveNotesBlock(newBlockId, { parent, after: null, before: beforeBlockId });
       });
-      context.trackOptimisticBlockWrites([blockId, newBlockId], persistence);
+      context.trackOptimisticBlockWrites([blockId, beforeBlockId, newBlockId], persistence);
       return;
     }
     const beforeSelection = {
@@ -147,18 +156,18 @@ export function createNotesBlockPasteActions(
     const currentUpdate = cloneNotesJson(block.type === "toggle"
       ? blockWithToggleOpen(applyBlockUpdate(block, textUpdate), true)
       : textUpdate);
-    const isToggle = block.type === "toggle";
+    const isContainer = block.type === "toggle" || block.type === "callout";
     const nextPayload = createBlockWriteFromRichText(
       newBlockId,
       notesEnterSiblingBlockType(block.type),
       split.after,
-      isToggle ? "default" : blockColor(block),
+      isContainer ? "default" : blockColor(block),
     );
-    const nextWrite = cloneNotesJson({ id: newBlockId, ...blockUpdateWithIndent(nextPayload, isToggle ? 0 : blockIndent(block)) });
-    const parent = cloneNotesJson(isToggle
+    const nextWrite = cloneNotesJson({ id: newBlockId, ...blockUpdateWithIndent(nextPayload, isContainer ? 0 : blockIndent(block)) });
+    const parent = cloneNotesJson(isContainer
       ? { type: "block_id" as const, block_id: block.id }
       : block.parent);
-    const after = isToggle ? null : blockId;
+    const after = isContainer ? null : blockId;
     const nextBlock = context.optimisticBlockFromWrite(nextWrite, parent);
     const focusBlockId = planNotesInsertedBlockFocus([newBlockId], blockId) ?? newBlockId;
 
@@ -173,7 +182,7 @@ export function createNotesBlockPasteActions(
         focusBlockId,
         START_OF_BLOCK_SELECTION,
       ),
-      `create:enter:${isToggle ? block.id : parentIdForBlock(block)}`,
+      `create:enter:${isContainer ? block.id : parentIdForBlock(block)}`,
     );
     const persistence = context.enqueueEditorMutation(async () => {
       await updateNotesBlock(blockId, currentUpdate);

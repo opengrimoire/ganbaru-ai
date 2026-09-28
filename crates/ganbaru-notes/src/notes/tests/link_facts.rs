@@ -12,6 +12,8 @@ fn link_facts_rebuild_payload_and_file_references() {
             "notes/files/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png";
         let comment_asset_path =
             "notes/files/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.pdf";
+        let callout_icon_path =
+            "notes/page-icons/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.png";
 
         writes::append_block_children(
             &pool,
@@ -44,6 +46,24 @@ fn link_facts_rebuild_payload_and_file_references() {
                             "Diagram",
                             Some("diagram.png"),
                         ),
+                    ),
+                    block(
+                        BLOCK_F,
+                        "callout",
+                        json!({
+                            "rich_text": [rich_text("Note")],
+                            "color": "gray_background",
+                            "icon": {
+                                "type": "file",
+                                "file": {
+                                    "url": format!("ganbaru-asset:{callout_icon_path}"),
+                                    "ganbaru_asset_path": callout_icon_path,
+                                    "content_type": "image/png",
+                                    "byte_size": 12,
+                                    "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                                }
+                            }
+                        }),
                     ),
                 ],
             },
@@ -101,6 +121,15 @@ fn link_facts_rebuild_payload_and_file_references() {
             "file",
             block_asset_path,
             "block_file",
+        )
+        .await;
+        assert_fact(
+            &pool,
+            "block",
+            BLOCK_F,
+            "file",
+            callout_icon_path,
+            "callout_icon",
         )
         .await;
         assert_fact(

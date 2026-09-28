@@ -23,7 +23,7 @@ export type NotesBlockRenderActions = Pick<RowProps,
   | "onInsertInlineEquation" | "onPastePlainText" | "onPasteRichHtml"
   | "onApplyTextAnnotations" | "onCreateInlineComment" | "onCreateInlineSuggestion"
   | "onKeyboardAction" | "onUndo" | "onRedo" | "onAddBelow" | "onConvert"
-  | "onConvertToToggleHeading" | "onColorChange" | "onCopyLink" | "onDuplicate"
+  | "onConvertToToggleHeading" | "onColorChange" | "onCalloutIconChange" | "onCopyLink" | "onDuplicate"
   | "onUseTemplate" | "onAddTemplateChild" | "onUseButton" | "onAddButtonChild"
   | "onButtonIconChange" | "onButtonInsertPositionChange" | "onCreateLinkedDatabaseView"
   | "onConvertUnsupported" | "onComment" | "onMoveUp" | "onMoveDown"
