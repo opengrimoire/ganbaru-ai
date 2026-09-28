@@ -191,6 +191,12 @@
   function openActionMenu(event: MouseEvent): void {
     const trigger = event.currentTarget;
     if (!(trigger instanceof HTMLButtonElement)) return;
+    if (menuOpen) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeMenu();
+      return;
+    }
     openContextMenu(event);
     const rect = trigger.getBoundingClientRect();
     menuStyle = notesRowContextMenuStyle(notesRowContextMenuGeometry({
@@ -328,7 +334,7 @@
       />
     </div>
   {:else}
-    <div class="notes-folder-row-content explorer-row flex min-w-0 items-center rounded-md pr-1 text-foreground hover:bg-accent/50">
+    <div class="notes-folder-row-content explorer-row flex min-w-0 items-center rounded-md pr-1 text-foreground">
       <button
         class="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1.5 text-left explorer-row-label text-[0.866667rem] text-inherit"
         type="button"
@@ -343,7 +349,7 @@
         {/if}
         <span class="min-w-0 flex-1 truncate">{visibleName}</span>
       </button>
-      <button type="button" class="explorer-icon explorer-row-action" aria-label={`${t("notes.folderActions")}: ${visibleName}`} data-app-tooltip={t("notes.folderActions")} aria-haspopup="menu" aria-expanded={menuOpen} onclick={openActionMenu}><EllipsisVertical size={14} /></button>
+      <button type="button" class="explorer-icon explorer-row-action" aria-label={`${t("notes.folderActions")}: ${visibleName}`} data-app-tooltip-disabled="true" aria-haspopup="menu" aria-expanded={menuOpen} onclick={openActionMenu}><EllipsisVertical size={14} /></button>
     </div>
   {/if}
 
@@ -459,7 +465,7 @@
   }
 
   .notes-row-context-menu-open .notes-folder-row-content {
-    background: color-mix(in oklab, var(--accent) 50%, transparent);
+    background: var(--explorer-row-highlight);
   }
 
   .notes-navigation-dragging .notes-folder-row-content {
@@ -485,7 +491,7 @@
   }
 
   .notes-folder-action-menu {
-    width: min(16rem, calc(100vw - 1rem));
+    width: min(12rem, calc(100vw - 1rem));
     max-height: min(22rem, calc(100vh - 4rem));
     overflow-y: auto;
   }

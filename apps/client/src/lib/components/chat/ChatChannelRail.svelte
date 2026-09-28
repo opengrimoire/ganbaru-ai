@@ -2,13 +2,17 @@
   import { onMount, tick } from "svelte";
   import { COMPACT_IDENTITY_ICON_SIZE, COMPACT_IDENTITY_ICON_STROKE_WIDTH } from "$lib/icon-sizing";
   import ExplorerSearch from "$lib/components/ExplorerSearch.svelte";
+  import Archive from "@lucide/svelte/icons/archive";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import ChevronsLeft from "@lucide/svelte/icons/chevrons-left";
   import ChevronsRight from "@lucide/svelte/icons/chevrons-right";
   import EllipsisVertical from "@lucide/svelte/icons/ellipsis-vertical";
+  import Folder from "@lucide/svelte/icons/folder";
+  import FolderInput from "@lucide/svelte/icons/folder-input";
   import Hash from "@lucide/svelte/icons/hash";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
+  import Pencil from "@lucide/svelte/icons/pencil";
   import Plus from "@lucide/svelte/icons/plus";
   import type { ChatChannelRead, ChatMessageSearchResultRead } from "$lib/chat/contracts";
   import { chatParticipantDisplayName } from "$lib/chat/participant-display";
@@ -48,10 +52,15 @@
   let query = $state("");
   let railElement = $state<HTMLElement | null>(null);
   let channelMenuTrigger: HTMLElement | null = null;
+  const menuViewportGap = 8;
   let sectionInput = $state<HTMLInputElement>();
   let sectionButton = $state<HTMLElement>();
   let channelContextMenuElement = $state<HTMLElement | null>(null);
   let channelContextMenu = $state<{ channel: ChatChannelRead; x: number; y: number } | null>(null);
+  let moveMenuTrigger = $state<HTMLButtonElement | null>(null);
+  let moveMenuElement = $state<HTMLElement | null>(null);
+  let moveMenuOpen = $state(false);
+  let moveMenuPosition = $state<{ x: number; y: number } | null>(null);
   let setupChannel = $state<ChatChannelRead | null | undefined>(undefined);
   let setupSectionId = $state<string | null>(null);
   let sections = $state<ChatSidebarSection[]>([]);
@@ -206,29 +215,67 @@
 
   async function openChannelContextMenu(event: MouseEvent, channel: ChatChannelRead): Promise<void> {
     event.preventDefault();
-    const viewportGap = 8;
     const trigger = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    if (event.type === "click" && trigger?.classList.contains("explorer-row-action") && channelContextMenu?.channel.id === channel.id) {
+      closeChannelContextMenu();
+      return;
+    }
+    hideMoveMenu();
     channelMenuTrigger = trigger;
     const triggerBounds = trigger?.getBoundingClientRect();
     const openedFromKeyboard = event.type === "click" || (event.clientX === 0 && event.clientY === 0);
-    const initialX = openedFromKeyboard ? triggerBounds?.left ?? viewportGap : event.clientX;
-    const initialY = openedFromKeyboard ? triggerBounds?.bottom ?? viewportGap : event.clientY;
+    const initialX = openedFromKeyboard ? triggerBounds?.left ?? menuViewportGap : event.clientX;
+    const initialY = openedFromKeyboard ? triggerBounds?.bottom ?? menuViewportGap : event.clientY;
     channelContextMenu = { channel, x: initialX, y: initialY };
     await tick();
     if (!channelContextMenuElement || channelContextMenu?.channel.id !== channel.id) return;
     const menuBounds = channelContextMenuElement.getBoundingClientRect();
     channelContextMenu = {
       channel,
-      x: Math.min(Math.max(viewportGap, initialX), Math.max(viewportGap, window.innerWidth - menuBounds.width - viewportGap)),
-      y: Math.min(Math.max(viewportGap, initialY), Math.max(viewportGap, window.innerHeight - menuBounds.height - viewportGap)),
+      x: Math.min(Math.max(menuViewportGap, initialX), Math.max(menuViewportGap, window.innerWidth - menuBounds.width - menuViewportGap)),
+      y: Math.min(Math.max(menuViewportGap, initialY), Math.max(menuViewportGap, window.innerHeight - menuBounds.height - menuViewportGap)),
     };
     channelContextMenuElement.querySelector<HTMLButtonElement>("button")?.focus();
+  }
+
+  function hideMoveMenu(): void {
+    moveMenuOpen = false;
+    moveMenuPosition = null;
+  }
+
+  function closeChannelContextMenu(): void {
+    channelContextMenu = null;
+    hideMoveMenu();
+  }
+
+  async function showMoveMenu(focusFirst = false): Promise<void> {
+    if (!channelContextMenu) return;
+    moveMenuOpen = true;
+    await tick();
+    const triggerBounds = moveMenuTrigger?.getBoundingClientRect();
+    const menuBounds = channelContextMenuElement?.getBoundingClientRect();
+    const submenuBounds = moveMenuElement?.getBoundingClientRect();
+    if (!triggerBounds || !menuBounds || !submenuBounds || !moveMenuOpen) return;
+
+    const spaceRight = window.innerWidth - menuBounds.right - menuViewportGap;
+    const spaceLeft = menuBounds.left - menuViewportGap;
+    const preferredX = spaceRight >= submenuBounds.width || spaceRight >= spaceLeft
+      ? menuBounds.right - 1
+      : menuBounds.left - submenuBounds.width + 1;
+    moveMenuPosition = {
+      x: Math.min(Math.max(menuViewportGap, preferredX), Math.max(menuViewportGap, window.innerWidth - submenuBounds.width - menuViewportGap)),
+      y: Math.min(Math.max(menuViewportGap, triggerBounds.top), Math.max(menuViewportGap, window.innerHeight - submenuBounds.height - menuViewportGap)),
+    };
+    if (focusFirst) {
+      await tick();
+      moveMenuElement?.querySelector<HTMLButtonElement>("button")?.focus();
+    }
   }
 
   function editChannelFromContextMenu(): void {
     const menu = channelContextMenu;
     if (!menu) return;
-    channelContextMenu = null;
+    closeChannelContextMenu();
     setupChannel = menu.channel;
     setupSectionId = sections.find((section) => section.channelIds.includes(menu.channel.id))?.id ?? null;
   }
@@ -236,14 +283,14 @@
   function moveChannelFromContextMenu(sectionId: string | null): void {
     const menu = channelContextMenu;
     if (!menu) return;
-    channelContextMenu = null;
+    closeChannelContextMenu();
     moveChannel(menu.channel.id, sectionId);
   }
 
   function archiveChannelFromContextMenu(): void {
     const menu = channelContextMenu;
     if (!menu) return;
-    channelContextMenu = null;
+    closeChannelContextMenu();
     archiveCandidate = menu.channel;
   }
 
@@ -319,7 +366,10 @@
       for (const menu of openMenus) {
         if (!menu.contains(target)) menu.open = false;
       }
-      if (channelContextMenu && !channelContextMenuElement?.contains(target)) channelContextMenu = null;
+      if (channelContextMenu && !channelContextMenuElement?.contains(target)
+        && !(channelMenuTrigger?.classList.contains("explorer-row-action") && channelMenuTrigger.contains(target))) {
+        closeChannelContextMenu();
+      }
     };
     window.addEventListener("ganbaru-ai:chat-new-channel", createChannel);
     window.addEventListener("ganbaru-ai:chat-focus-search", focusSearch);
@@ -423,24 +473,47 @@
 {#if channelContextMenu}
   <div
     bind:this={channelContextMenuElement}
-    class="channel-context-menu"
+    class="channel-context-menu fixed z-90 min-w-36 rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-lg"
     class:explorer-touch={presentation === "surface"}
     role="menu"
     tabindex="-1"
     style={`left:${channelContextMenu.x}px;top:${channelContextMenu.y}px`}
+    data-app-floating-surface
     onkeydown={(event) => {
       if (event.key === "Escape") {
         event.stopPropagation();
-        channelContextMenu = null;
+        closeChannelContextMenu();
         channelMenuTrigger?.focus();
       }
     }}
+    onscroll={hideMoveMenu}
   >
-    <button type="button" role="menuitem" onclick={editChannelFromContextMenu}>{t("chat.channels.edit")}</button>
-    <span>{t("chat.channels.moveTo")}</span>
-    <button type="button" role="menuitem" onclick={() => moveChannelFromContextMenu(null)}>{t("chat.channels.defaultSection")}</button>
-    {#each sections as section (section.id)}<button type="button" role="menuitem" onclick={() => moveChannelFromContextMenu(section.id)}>{section.name}</button>{/each}
-    {#if !channelContextMenu.channel.isDefault}<button type="button" role="menuitem" class="danger" onclick={archiveChannelFromContextMenu}>{t("chat.archive")}</button>{/if}
+    <button type="button" role="menuitem" class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent focus-visible:bg-accent" onclick={editChannelFromContextMenu}><Pencil class="size-4" /><span>{t("chat.channels.edit")}</span></button>
+    <div
+      role="group"
+      aria-label={t("chat.channels.moveTo")}
+      onpointerenter={(event) => { if (event.pointerType !== "touch") void showMoveMenu(); }}
+      onpointerleave={(event) => { if (event.pointerType !== "touch") hideMoveMenu(); }}
+      onfocusout={(event) => { if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) hideMoveMenu(); }}
+    >
+      <button bind:this={moveMenuTrigger} type="button" role="menuitem" aria-haspopup="menu" aria-expanded={moveMenuOpen} class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent focus-visible:bg-accent" onfocus={() => void showMoveMenu()} onclick={() => void showMoveMenu(true)} onkeydown={(event) => { if (event.key === "ArrowRight") { event.preventDefault(); void showMoveMenu(true); } }}><FolderInput class="size-4" /><span class="min-w-0 flex-1 truncate">{t("chat.channels.moveTo")}</span><ChevronRight class="size-4" /></button>
+      {#if moveMenuOpen}
+        <div
+          bind:this={moveMenuElement}
+          class="channel-move-menu fixed z-100 min-w-36 rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-lg"
+          class:invisible={moveMenuPosition === null}
+          role="menu"
+          tabindex="-1"
+          aria-label={t("chat.channels.moveTo")}
+          style={`left:${moveMenuPosition?.x ?? -9999}px;top:${moveMenuPosition?.y ?? -9999}px`}
+          onkeydown={(event) => { if (event.key === "ArrowLeft") { event.preventDefault(); event.stopPropagation(); hideMoveMenu(); moveMenuTrigger?.focus(); } }}
+        >
+          <button type="button" role="menuitem" class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent focus-visible:bg-accent" onclick={() => moveChannelFromContextMenu(null)}><Hash class="size-4" /><span class="min-w-0 truncate">{t("chat.channels.defaultSection")}</span></button>
+          {#each sections as section (section.id)}<button type="button" role="menuitem" class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent focus-visible:bg-accent" onclick={() => moveChannelFromContextMenu(section.id)}><Folder class="size-4" /><span class="min-w-0 truncate">{section.name}</span></button>{/each}
+        </div>
+      {/if}
+    </div>
+    {#if !channelContextMenu.channel.isDefault}<button type="button" role="menuitem" class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] text-destructive hover:bg-accent focus-visible:bg-accent" onclick={archiveChannelFromContextMenu}><Archive class="size-4" /><span>{t("chat.archive")}</span></button>{/if}
   </div>
 {/if}
 
@@ -450,7 +523,7 @@
       <Hash size={COMPACT_IDENTITY_ICON_SIZE} strokeWidth={COMPACT_IDENTITY_ICON_STROKE_WIDTH} class="explorer-row-icon" />
       <span class="min-w-0 flex-1 truncate" title={channel.name}>{channel.name}</span>
     </button>
-    <button type="button" class="explorer-icon explorer-row-action" aria-label={`${t("chat.channels.actions")}: ${channel.name}`} aria-haspopup="menu" aria-expanded={channelContextMenu?.channel.id === channel.id} data-app-tooltip={t("chat.channels.actions")} onclick={(event) => void openChannelContextMenu(event, channel)}><EllipsisVertical size={14} /></button>
+    <button type="button" class="explorer-icon explorer-row-action" aria-label={`${t("chat.channels.actions")}: ${channel.name}`} data-app-tooltip-disabled="true" aria-haspopup="menu" aria-expanded={channelContextMenu?.channel.id === channel.id} onclick={(event) => void openChannelContextMenu(event, channel)}><EllipsisVertical size={14} /></button>
   </div>
 {/snippet}
 
@@ -485,12 +558,8 @@
   .section-menu button:hover { background:var(--accent); }
   .section-menu button.danger { color:var(--destructive); }
   .section-menu > div { box-shadow: 0 2px 8px rgb(0 0 0 / 0.08); }
-  .channel-context-menu { position:fixed;z-index:90;display:grid;width:9rem;max-height:calc(100vh - 1rem);overflow-y:auto;border:1px solid var(--border);border-radius:0.5rem;background:var(--popover);padding:0.25rem;color:var(--popover-foreground);box-shadow:0 2px 8px rgb(0 0 0 / 0.08); }
-  .channel-context-menu button { display:flex;width:100%;min-height:2rem;align-items:center;border-radius:0.3rem;padding-inline:0.5rem;text-align:left;font-size: calc(0.8rem * var(--type-scale)); }
-  .channel-context-menu button:hover, .channel-context-menu button:focus-visible { background:var(--accent); }
-  .channel-context-menu > span { padding:0.3rem 0.5rem 0.15rem;color:var(--muted-foreground);font-size: calc(0.6rem * var(--type-scale)); }
+  .channel-context-menu, .channel-move-menu { width: min(12rem, calc(100vw - 1rem)); max-height: min(22rem, calc(100vh - 4rem)); overflow-y: auto; }
   .channel-context-menu.explorer-touch button { min-height: var(--touch-target-min); }
-  .channel-context-menu button.danger { color:var(--destructive); }
   .channel-row-group { position: relative; display: flex; min-width: 0; align-items: center; }
   .channel-row { display: flex; width: 100%; min-width: 0; min-height: var(--explorer-row-height); align-items: center; gap: 0.375rem; border-radius: 0.35rem; padding: var(--explorer-row-padding) 0.5rem; color: var(--foreground); text-align: left; }
   .channel-row-group .channel-row { flex: 1; }

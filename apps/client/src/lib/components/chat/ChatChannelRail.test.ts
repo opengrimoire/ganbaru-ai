@@ -3,7 +3,7 @@
 import { mount, tick, unmount } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatChannelRead } from "$lib/chat/contracts";
-import { saveChatSidebarSections } from "$lib/chat/channel-sections";
+import { readChatSidebarSections, saveChatSidebarSections } from "$lib/chat/channel-sections";
 import { getChat } from "$lib/stores/chat.svelte";
 import { setActiveVaultIdentity } from "$lib/vault/active-vault";
 import ChatChannelRail from "./ChatChannelRail.svelte";
@@ -165,6 +165,67 @@ describe("ChatChannelRail", () => {
     await tick();
     expect(target.querySelector('[role="menu"]')).toBeNull();
     expect(document.activeElement).toBe(trigger);
+  });
+
+  it("closes a channel menu when its action button is clicked again", async () => {
+    component = mount(ChatChannelRail, {
+      target,
+      props: { expanded: true, showCollapsedStrip: true, onExpand: vi.fn(), onCollapse: vi.fn() },
+    });
+    await tick();
+    const trigger = target.querySelector<HTMLButtonElement>('.explorer-row-action');
+    expect(trigger).not.toBeNull();
+
+    trigger?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    trigger?.click();
+    await tick();
+    expect(target.querySelector('[role="menu"]')).not.toBeNull();
+    expect(trigger?.getAttribute("aria-expanded")).toBe("true");
+
+    trigger?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    trigger?.click();
+    await tick();
+    expect(target.querySelector('[role="menu"]')).toBeNull();
+    expect(trigger?.getAttribute("aria-expanded")).toBe("false");
+
+    trigger?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    trigger?.click();
+    await tick();
+    expect(target.querySelector('[role="menu"]')).not.toBeNull();
+
+    document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    await tick();
+    expect(target.querySelector('[role="menu"]')).toBeNull();
+  });
+
+  it("reveals move destinations on hover and keeps them available by keyboard focus", async () => {
+    component = mount(ChatChannelRail, {
+      target,
+      props: { expanded: true, showCollapsedStrip: true, onExpand: vi.fn(), onCollapse: vi.fn() },
+    });
+    await tick();
+    target.querySelector<HTMLButtonElement>(".explorer-row-action")?.click();
+    await tick();
+    const group = target.querySelector<HTMLElement>('.channel-context-menu [role="group"]');
+    const moveTrigger = group?.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]');
+    expect(group).not.toBeNull();
+    expect(target.querySelector(".channel-move-menu")).toBeNull();
+
+    group?.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse" }));
+    await vi.waitFor(() => expect(target.querySelector(".channel-move-menu")).not.toBeNull());
+    expect(moveTrigger?.getAttribute("aria-expanded")).toBe("true");
+    group?.dispatchEvent(new PointerEvent("pointerleave", { pointerType: "mouse" }));
+    await tick();
+    expect(target.querySelector(".channel-move-menu")).toBeNull();
+
+    moveTrigger?.focus();
+    await vi.waitFor(() => expect(target.querySelector(".channel-move-menu")).not.toBeNull());
+    const destinations = target.querySelectorAll<HTMLButtonElement>('.channel-move-menu [role="menuitem"]');
+    expect([...destinations].map((button) => button.textContent?.trim())).toEqual(["Channels", "Design"]);
+    destinations[1]?.click();
+    await tick();
+    expect(target.querySelector(".channel-context-menu")).toBeNull();
+    expect(readChatSidebarSections("project-1")[0]?.channelIds).toContain("channel-general");
   });
 
   it("does not mark a channel as current while the archive is open", async () => {

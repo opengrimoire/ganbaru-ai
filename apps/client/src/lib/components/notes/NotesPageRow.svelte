@@ -335,6 +335,12 @@
   function openActionMenu(event: MouseEvent): void {
     const trigger = event.currentTarget;
     if (!(trigger instanceof HTMLButtonElement)) return;
+    if (menuOpen) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeMenu();
+      return;
+    }
     openContextMenu(event);
     const rect = trigger.getBoundingClientRect();
     menuStyle = notesRowContextMenuStyle(notesRowContextMenuGeometry({
@@ -502,7 +508,7 @@
     </div>
   {:else}
     <div
-      class={`notes-page-row-content explorer-row flex min-w-0 items-center rounded-md pr-1 text-foreground hover:bg-accent/50 ${showDisclosure ? "" : "pl-2"}`}
+      class={`notes-page-row-content explorer-row flex min-w-0 items-center rounded-md pr-1 text-foreground ${showDisclosure ? "" : "pl-2"}`}
       class:explorer-selected={selected}
     >
       {#if showDisclosure}
@@ -559,7 +565,7 @@
         {/if}
       </button>
       {#if !readOnly}
-      <button type="button" class="explorer-icon explorer-row-action" aria-label={`${t("notes.pageActions")}: ${title}`} data-app-tooltip={t("notes.pageActions")} aria-haspopup="menu" aria-expanded={menuOpen} onclick={openActionMenu}><EllipsisVertical size={14} /></button>
+      <button type="button" class="explorer-icon explorer-row-action" aria-label={`${t("notes.pageActions")}: ${title}`} data-app-tooltip-disabled="true" aria-haspopup="menu" aria-expanded={menuOpen} onclick={openActionMenu}><EllipsisVertical size={14} /></button>
       {/if}
     </div>
   {/if}
@@ -740,7 +746,7 @@
   }
 
   .notes-row-context-menu-open .notes-page-row-content {
-    background: color-mix(in oklab, var(--accent) 50%, transparent);
+    background: var(--explorer-row-highlight);
   }
 
   .notes-page-block-drop-target .notes-page-row-content {
@@ -804,7 +810,7 @@
   }
 
   .notes-page-action-menu {
-    width: min(16rem, calc(100vw - 1rem));
+    width: min(12rem, calc(100vw - 1rem));
     max-height: min(22rem, calc(100vh - 4rem));
     overflow-y: auto;
   }

@@ -74,7 +74,9 @@ Android omits working-folder Markdown because local project execution folders an
 
 Notes search opens below the toolbar and focuses its field. Chat search stays in the toolbar and does not take focus automatically when navigation opens. Both features share the same search component and its fields have no focus outline. The clear button and Escape clear a nonempty query. Escape in an empty Notes search closes the field and returns focus to its toolbar button; the Chat field remains visible.
 
-Page, folder, and channel rows expose an action button on pointer hover or keyboard focus, and always on touch layouts. These buttons open the existing context actions without navigating. Escape dismisses the menu and returns focus to its trigger. Selected pages and channels use the theme selection color, while hover uses a lighter accent treatment. Mobile navigation preserves larger touch targets.
+Page, folder, and channel rows expose an action button on pointer hover or keyboard focus, and always on touch layouts. These buttons toggle the existing context actions without navigating. Escape dismisses the menu and returns focus to its trigger. Selected pages and channels use the theme selection color, while hover uses a lighter accent treatment. Row actions have no tooltip or separate hover background; their icons use the foreground color on hover, keyboard focus, or while the menu is open. Mobile navigation preserves larger touch targets.
+
+Chat channel, Notes page, and Notes folder action menus share a 12rem panel width, surface, shadow, action spacing, and icon placement. Chat Move to opens its destination panel on hover and remains available by click or keyboard focus. Archive keeps its destructive color.
 
 Highlight current file scrolls to the selected note and fades two brief pulses over its existing theme selection color.
 
