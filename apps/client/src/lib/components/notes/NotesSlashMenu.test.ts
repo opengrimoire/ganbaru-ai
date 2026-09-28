@@ -10,6 +10,7 @@ afterEach(async () => {
   component = undefined;
   document.body.replaceChildren();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   await setLanguagePreference("en", { persist: false });
 });
 
@@ -30,6 +31,48 @@ function host() {
 }
 
 describe("Notes slash menu", () => {
+  it("fades only edges with hidden commands and updates when filtering removes overflow", async () => {
+    const resizeRefreshes = new Map<Element, () => void>();
+    vi.stubGlobal("ResizeObserver", class {
+      private targets = new Set<Element>();
+      constructor(private callback: () => void) {}
+      observe(target: Element): void { this.targets.add(target); resizeRefreshes.set(target, this.callback); }
+      unobserve(target: Element): void { this.targets.delete(target); resizeRefreshes.delete(target); }
+      disconnect(): void { for (const target of this.targets) resizeRefreshes.delete(target); }
+    });
+    const { row } = host();
+    component = mount(NotesSlashMenu, { target: row, props: { onSelect: vi.fn() } });
+    await tick();
+    const scroll = row.querySelector<HTMLDivElement>(".slash-scroll")!;
+    let contentHeight = 600;
+    Object.defineProperties(scroll, {
+      clientHeight: { configurable: true, value: 200 },
+      scrollHeight: { configurable: true, get: () => contentHeight },
+    });
+    resizeRefreshes.get(scroll)?.();
+    await tick();
+    expect(scroll.classList.contains("scroll-bottom")).toBe(true);
+    scroll.scrollTop = 100;
+    scroll.dispatchEvent(new Event("scroll"));
+    await tick();
+    expect(scroll.classList.contains("scroll-both")).toBe(true);
+    scroll.scrollTop = 400;
+    scroll.dispatchEvent(new Event("scroll"));
+    await tick();
+    expect(scroll.classList.contains("scroll-top")).toBe(true);
+    const input = row.querySelector<HTMLInputElement>("input")!;
+    input.value = "missing-command";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await tick();
+    contentHeight = 150;
+    scroll.scrollTop = 0;
+    resizeRefreshes.get(scroll.firstElementChild!)?.();
+    await tick();
+    expect(scroll.classList.contains("scroll-top")).toBe(false);
+    expect(scroll.classList.contains("scroll-bottom")).toBe(false);
+    expect(scroll.classList.contains("scroll-both")).toBe(false);
+  });
+
   it("escapes the clipped row, stays inside its dialog, and preserves editor focus on selection", async () => {
     const { dialog, row, anchor } = host();
     anchor.focus();
@@ -122,7 +165,7 @@ describe("Notes slash menu", () => {
     await tick();
     const menu = row.querySelector<HTMLElement>('[role="menu"]')!;
     const option = menu.querySelector<HTMLElement>('[role="menuitem"]')!;
-    const scroller = option.parentElement!;
+    const scroller = menu.querySelector<HTMLDivElement>(".slash-scroll")!;
     vi.spyOn(scroller, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 300, 100));
     const second = menu.querySelectorAll<HTMLElement>('[role="menuitem"]')[1];
     vi.spyOn(second, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 110, 300, 36));

@@ -358,7 +358,7 @@
   tabindex="0"
   data-notes-block-id={block.id}
   oninput={handleInput}
-  onkeydown={handleKeydown}
+  onkeydowncapture={handleKeydown}
   onbeforeinput={handleBeforeInput}
   oncompositionstart={controller.handleCompositionStart}
   oncompositionend={handleCompositionEnd}

@@ -86,6 +86,9 @@
 
   const { t } = getLocalization();
   let scrollArea: HTMLDivElement | null = $state(null);
+  let scrollContent: HTMLDivElement | null = $state(null);
+  let canScrollUp = $state(false);
+  let canScrollDown = $state(false);
   let localQuery = $state("");
   let localActiveIndex = $state(0);
   let recentKeys = $state<readonly string[]>(notesRecentSlashCommandKeys());
@@ -113,6 +116,25 @@
     localActiveIndex = 0;
   });
 
+  /** Fade only the edges with additional commands outside the scroll viewport. */
+  function refreshScrollState(): void {
+    const element = scrollArea;
+    const maxScrollTop = element ? element.scrollHeight - element.clientHeight : 0;
+    canScrollUp = !!element && maxScrollTop > 1 && element.scrollTop > 1;
+    canScrollDown = !!element && maxScrollTop > 1 && element.scrollTop < maxScrollTop - 1;
+  }
+
+  $effect(() => {
+    const viewport = scrollArea;
+    const content = scrollContent;
+    if (!viewport || !content) return;
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(refreshScrollState);
+    observer?.observe(viewport);
+    observer?.observe(content);
+    refreshScrollState();
+    return () => observer?.disconnect();
+  });
+
   $effect(() => {
     const index = safeActiveIndex;
     const command = flatItems[index]?.command ?? null;
@@ -125,6 +147,7 @@
       const viewport = scrollArea.getBoundingClientRect();
       if (item.top < viewport.top) scrollArea.scrollTop -= viewport.top - item.top;
       else if (item.bottom > viewport.bottom) scrollArea.scrollTop += item.bottom - viewport.bottom;
+      refreshScrollState();
     });
   });
 
@@ -538,7 +561,10 @@
       <input class="min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground" aria-label={t("notes.slashSearch")} placeholder={t("notes.slashSearch")} bind:value={localQuery} />
     {/if}
   </div>
-  <div bind:this={scrollArea} class="min-h-0 overflow-y-auto overscroll-contain p-1">
+  <div bind:this={scrollArea} class="slash-scroll min-h-0 overflow-y-auto overscroll-contain"
+    class:scroll-top={canScrollUp && !canScrollDown} class:scroll-bottom={canScrollDown && !canScrollUp}
+    class:scroll-both={canScrollUp && canScrollDown} onscroll={refreshScrollState}>
+  <div bind:this={scrollContent} class="p-1">
   {#if hasResults}
     {#each groups as group}
       {@const items = group.items}
@@ -592,6 +618,7 @@
     </div>
   {/if}
   </div>
+  </div>
   {#if onClose}
     <button class="flex min-h-10 w-full shrink-0 items-center justify-between border-t border-border px-3 py-2 text-left text-sm hover:bg-accent" type="button" onclick={onClose}>
       {t("notes.slashClose")}<kbd class="text-xs text-muted-foreground">Esc</kbd>
@@ -600,6 +627,25 @@
 </div>
 
 <style>
+  .slash-scroll {
+    transition: -webkit-mask-image 120ms ease, mask-image 120ms ease;
+  }
+
+  .scroll-top {
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black 20px, black);
+    mask-image: linear-gradient(to bottom, transparent, black 20px, black);
+  }
+
+  .scroll-bottom {
+    -webkit-mask-image: linear-gradient(to bottom, black, black calc(100% - 20px), transparent);
+    mask-image: linear-gradient(to bottom, black, black calc(100% - 20px), transparent);
+  }
+
+  .scroll-both {
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black 20px, black calc(100% - 20px), transparent);
+    mask-image: linear-gradient(to bottom, transparent, black 20px, black calc(100% - 20px), transparent);
+  }
+
   .notes-color-swatch {
     display: inline-flex;
     width: 1rem;

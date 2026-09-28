@@ -56,6 +56,7 @@ async function editor(blockType: NotesBlockType = "paragraph", text = "", indent
   list.append(row);
   document.body.append(list);
   const focusRow = vi.fn(() => row.focus());
+  const navigationKeydown = vi.fn(() => false);
   const blockSelection = createNotesBlockSelectionController({
     hydrateSubtrees: async (ids) => ids,
     readPageId: () => "page", readListElement: () => list, readRenderedBlockIds: () => ["block"],
@@ -63,7 +64,7 @@ async function editor(blockType: NotesBlockType = "paragraph", text = "", indent
     blockIdFromEvent: () => "block",
     targetIsEditable: (target) => target instanceof Element && !!target.closest('[contenteditable="true"]'),
     targetIsSelectionZone: () => false, focusTextEditorAtEnd: () => true, focusRow,
-    handleNavigationKeydown: () => false, undo: async () => false, redo: async () => false,
+    handleNavigationKeydown: navigationKeydown, undo: async () => false, redo: async () => false,
     pasteBlocks: async () => null, duplicateBlocks: async () => null,
     moveBlocks: async () => undefined, deleteBlocks: async () => undefined,
   });
@@ -78,7 +79,7 @@ async function editor(blockType: NotesBlockType = "paragraph", text = "", indent
     await tick(); await tick();
     return event;
   };
-  return { host, input, onConvert, onKeyboardAction, onPasteRichHtml, onFocusBlock, row, blockSelection, focusRow };
+  return { host, input, onConvert, onKeyboardAction, onPasteRichHtml, onFocusBlock, row, blockSelection, focusRow, navigationKeydown };
 }
 
 describe("Notes typed slash commands", () => {
@@ -132,6 +133,33 @@ describe("Notes typed slash commands", () => {
     }
     await h.input("continue");
     expect(h.host.textContent).toBe("/continue");
+  });
+
+  it("routes both arrow keys to the slash menu before block navigation", async () => {
+    const h = await editor();
+    await h.input("/");
+    await vi.waitFor(() => expect(document.querySelector('[role="menu"]')).not.toBeNull());
+    const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
+    const items = menu.querySelectorAll<HTMLElement>('[role^="menuitem"]');
+    expect(items.length).toBeGreaterThan(1);
+    await vi.waitFor(() => expect(h.host.getAttribute("aria-activedescendant")).toBeTruthy());
+    expect(items[0].dataset.active).toBe("true");
+
+    const up = new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true });
+    h.host.dispatchEvent(up);
+    await tick();
+    expect(up.defaultPrevented).toBe(true);
+    expect(h.navigationKeydown).not.toHaveBeenCalled();
+    expect([...items].findIndex((item) => item.dataset.active === "true")).toBe(items.length - 1);
+    expect(document.activeElement).toBe(h.host);
+
+    const down = new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true });
+    h.host.dispatchEvent(down);
+    await tick();
+    expect(down.defaultPrevented).toBe(true);
+    expect(h.navigationKeydown).not.toHaveBeenCalled();
+    expect(items[0].dataset.active).toBe("true");
+    expect(document.activeElement).toBe(h.host);
   });
 
   it("retains literal slash text after dismissal and reopens after deleting the trigger", async () => {
