@@ -1135,7 +1135,7 @@
 
   <div
     bind:this={explorerScrollElement}
-    class="min-h-0 flex-1 overflow-auto px-2 pb-2"
+    class="min-h-0 flex-1 overflow-x-auto overflow-y-scroll px-2 pb-2"
     class:notes-navigation-root-drop-valid={navigationDropTargetKey === "root" && navigationDropAllowed}
     class:notes-navigation-root-drop-invalid={navigationDropTargetKey === "root" && !navigationDropAllowed}
     role="region"

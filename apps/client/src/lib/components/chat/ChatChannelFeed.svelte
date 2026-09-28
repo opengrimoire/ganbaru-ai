@@ -172,7 +172,7 @@
 
 <style>
   .channel-surface { display:flex; min-height:0; flex:1; flex-direction:column; overflow:hidden; }
-  .channel-feed { min-height:0; flex:1; overflow-y:auto; overscroll-behavior:contain; }
+  .channel-feed { min-height:0; flex:1; overflow-y:scroll; overscroll-behavior:contain; }
   .feed-canvas { --channel-feed-section-space:1.2rem; --chat-message-row-padding-inline:0rem; width:min(calc(100% - var(--chat-conversation-gutter,1rem) - var(--chat-conversation-gutter,1rem)),var(--chat-conversation-max-width,60rem)); min-height:100%; margin-inline:auto; padding-bottom:1rem; }
   .channel-introduction { width:100%; padding-top:var(--channel-feed-section-space); }
   .channel-introduction h1 { font-size: calc(1.25rem * var(--type-scale)); font-weight:700; }

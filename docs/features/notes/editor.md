@@ -6,6 +6,8 @@
 
 The editor presents a continuous document backed by a canonical page block tree. Blocks carry rich content and structure; they must not impose text selection boundaries. Lightweight outlines and retained content windows support incremental loading without treating the rendered window as the complete document.
 
+The document scroll area keeps the same content width when the page begins or stops overflowing, so the title and blocks remain aligned.
+
 Block mutations use stable IDs and transactional commands. Multi-block move, duplicate, and Trash operations include unloaded descendants through canonical tree reads so hidden content cannot be lost.
 
 ## Rich text

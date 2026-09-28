@@ -293,7 +293,7 @@
           class="text-[0.8rem]"
         />
       </div>
-      <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto" onscroll={(event) => trackColumnScroll(status.id, event)}>
+      <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-scroll" onscroll={(event) => trackColumnScroll(status.id, event)}>
         {#if visibleStatusTasks.beforePx > 0}
           <div aria-hidden="true" style={`height: ${visibleStatusTasks.beforePx}px`}></div>
         {/if}

@@ -1378,7 +1378,7 @@
       bind:this={blockScrollViewport}
       data-notes-editor-scroll
       style="container-type: inline-size;"
-      class="min-h-0 flex-1 overflow-auto"
+      class="min-h-0 flex-1 overflow-x-auto overflow-y-scroll"
       use:documentEndPointer
     >
       {#if page.cover}

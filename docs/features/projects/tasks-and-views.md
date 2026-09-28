@@ -34,6 +34,8 @@ Rows can group by section, status, priority, due-date bucket, or scheduled state
 
 Kanban groups cards by status and supports creation, movement, selection, and compact task metadata. Moving a card changes its status through the same validation as the task detail surface.
 
+Each Kanban column keeps its card area at the same width as cards begin or stop overflowing, so adding a card does not shift existing cards horizontally.
+
 Hidden or archived statuses do not make tasks disappear without an explicit filter or recovery path.
 
 ## Calendar project view

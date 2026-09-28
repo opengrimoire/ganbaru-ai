@@ -25,6 +25,8 @@ Messages are durable participant-authored records. They can include text, valida
 
 Reply threads keep detailed work from overwhelming the main channel. A provider run may be initiated from a reply without forcing every provider event into the shared conversation. The main timeline receives concise state and result events; detailed execution remains inspectable in the linked run.
 
+Channel feeds and reply threads keep their content width stable as messages begin or stop overflowing, so incoming messages do not shift the conversation horizontally. The execution timeline uses an overlaid scrollbar and also keeps its content width stable.
+
 ## Composer
 
 The composer supports drafts, attachments, replies, explicit teammate mentions, provider interactions, and scheduled sends. A message can be sent without invoking AI. Plain conversation never silently becomes an execution request.

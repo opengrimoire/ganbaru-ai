@@ -74,6 +74,8 @@ Android omits working-folder Markdown because local project execution folders an
 
 **Implemented:** Notes and Chat use the same theme-derived sidebar tint for both expanded and collapsed navigation, with a shared 17rem expanded desktop width, toolbar height, row spacing, typography, hover treatment, and selected-row highlight. Notes creation controls begin the toolbar; Chat places its always-visible search field before the collapse control. Both sidebars use the same toolbar button styling, with collapse at the trailing edge. Chat creation actions live in the channel section headers and menus. Feature-specific actions remain available, including Notes sorting and hierarchy controls and Chat channel sections and archive.
 
+Both navigation lists keep their content width stable as the list grows or shrinks, keeping their rows in place.
+
 On desktop, the selected note or channel appears in the workspace header when its sidebar is collapsed. With the sidebar expanded, the selected item remains visible in navigation without repeating its name in the header. Mobile headers retain the selected item because navigation is a separate surface. An active Chat title edit remains visible until it is completed or canceled.
 
 Notes search opens below the toolbar and focuses its field. Chat search stays in the toolbar and does not take focus automatically when navigation opens. Both features share the same search component and its fields have no focus outline. The clear button and Escape clear a nonempty query. Escape in an empty Notes search closes the field and returns focus to its toolbar button; the Chat field remains visible.

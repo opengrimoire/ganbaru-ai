@@ -511,7 +511,7 @@
 
     {#if railError}<p class="mx-2 mb-1 rounded bg-destructive/10 px-2 py-1 text-xs text-destructive" role="alert">{railError}</p>{/if}
 
-    <div class="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+    <div class="min-h-0 flex-1 overflow-y-scroll px-2 pb-2">
       {#if query.trim().length >= 2}
         <section class="message-results" aria-label={t("chat.organization.messageSearchResults")}>
           <div class="section-heading"><span>{t("chat.organization.messages")}</span>{#if messageSearchLoading}<LoaderCircle size={12} class="animate-spin" aria-label={t("common.loading")} />{/if}</div>
