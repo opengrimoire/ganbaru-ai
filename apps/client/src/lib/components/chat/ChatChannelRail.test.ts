@@ -125,10 +125,10 @@ describe("ChatChannelRail", () => {
       props: { expanded: true, showCollapsedStrip: true, onExpand: vi.fn(), onCollapse: vi.fn() },
     });
     await tick();
-    const trigger = target.querySelector<HTMLElement>(".section-menu summary");
+    const trigger = target.querySelector<HTMLButtonElement>(".section-heading .explorer-row-action");
     trigger?.click();
-    const createSection = target.querySelector<HTMLButtonElement>(".section-menu button");
-    createSection?.click();
+    await tick();
+    target.querySelector<HTMLButtonElement>(".section-context-menu button")?.click();
     await tick();
     const input = target.querySelector<HTMLInputElement>('form input');
     expect(input).not.toBeNull();
@@ -142,9 +142,72 @@ describe("ChatChannelRail", () => {
     expect(document.activeElement).toBe(trigger);
     expect([...target.querySelectorAll(".section-toggle")].map((toggle) => toggle.textContent?.trim())).toEqual(["Channels", "Design"]);
     trigger?.click();
-    createSection?.click();
+    await tick();
+    target.querySelector<HTMLButtonElement>(".section-context-menu button")?.click();
     await tick();
     expect(target.querySelector<HTMLInputElement>('form input')?.value).toBe("");
+  });
+
+  it("toggles section actions, clamps the menu, and closes it from outside or Escape", async () => {
+    component = mount(ChatChannelRail, {
+      target,
+      props: { expanded: true, showCollapsedStrip: true, onExpand: vi.fn(), onCollapse: vi.fn() },
+    });
+    await tick();
+    const trigger = target.querySelector<HTMLButtonElement>(".section-heading .explorer-row-action");
+    expect(trigger).not.toBeNull();
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("section-context-menu")) return DOMRect.fromRect({ width: 180, height: 80 });
+      if (this === trigger) return DOMRect.fromRect({ x: window.innerWidth - 20, y: 30, width: 28, height: 28 });
+      return DOMRect.fromRect();
+    });
+
+    trigger?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    trigger?.click();
+    await tick();
+    const menu = target.querySelector<HTMLElement>(".section-context-menu");
+    await vi.waitFor(() => expect(menu?.style.left).toBe(`${window.innerWidth - 180 - 8}px`));
+    expect(menu?.querySelectorAll('[role="menuitem"]')).toHaveLength(1);
+    expect(menu?.querySelector("svg")).not.toBeNull();
+    expect(trigger?.getAttribute("aria-expanded")).toBe("true");
+
+    trigger?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    trigger?.click();
+    await tick();
+    expect(target.querySelector(".section-context-menu")).toBeNull();
+    expect(trigger?.getAttribute("aria-expanded")).toBe("false");
+
+    trigger?.click();
+    await tick();
+    target.querySelector<HTMLElement>(".section-context-menu")?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await tick();
+    expect(target.querySelector(".section-context-menu")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+
+    trigger?.click();
+    await tick();
+    document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    await tick();
+    expect(target.querySelector(".section-context-menu")).toBeNull();
+  });
+
+  it("shows section edit actions and closes the menu before confirmation", async () => {
+    component = mount(ChatChannelRail, {
+      target,
+      props: { expanded: true, showCollapsedStrip: true, onExpand: vi.fn(), onCollapse: vi.fn() },
+    });
+    await tick();
+    const trigger = target.querySelectorAll<HTMLButtonElement>(".section-heading .explorer-row-action")[1];
+    trigger?.click();
+    await tick();
+    const menu = target.querySelector<HTMLElement>(".section-context-menu");
+    expect([...menu?.querySelectorAll('[role="menuitem"]') ?? []].map((item) => item.textContent?.trim())).toEqual(["Rename", "Delete section"]);
+    expect(menu?.querySelectorAll("svg")).toHaveLength(2);
+    menu?.querySelectorAll<HTMLButtonElement>("button")[1]?.click();
+    await tick();
+    expect(target.querySelector(".section-context-menu")).toBeNull();
+    expect(trigger?.getAttribute("aria-expanded")).toBe("false");
+    expect(target.textContent).toContain("Delete section");
   });
 
   it("opens channel actions without selecting the channel and restores focus on Escape", async () => {
@@ -154,7 +217,7 @@ describe("ChatChannelRail", () => {
       props: { expanded: true, showCollapsedStrip: true, onExpand: vi.fn(), onCollapse: vi.fn() },
     });
     await tick();
-    const trigger = target.querySelector<HTMLButtonElement>('.explorer-row-action');
+    const trigger = target.querySelector<HTMLButtonElement>('.channel-row-group .explorer-row-action');
     trigger?.click();
     await tick();
     expect(selectChannel).not.toHaveBeenCalled();
@@ -173,7 +236,7 @@ describe("ChatChannelRail", () => {
       props: { expanded: true, showCollapsedStrip: true, onExpand: vi.fn(), onCollapse: vi.fn() },
     });
     await tick();
-    const trigger = target.querySelector<HTMLButtonElement>('.explorer-row-action');
+    const trigger = target.querySelector<HTMLButtonElement>('.channel-row-group .explorer-row-action');
     expect(trigger).not.toBeNull();
 
     trigger?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
@@ -204,7 +267,7 @@ describe("ChatChannelRail", () => {
       props: { expanded: true, showCollapsedStrip: true, onExpand: vi.fn(), onCollapse: vi.fn() },
     });
     await tick();
-    target.querySelector<HTMLButtonElement>(".explorer-row-action")?.click();
+    target.querySelector<HTMLButtonElement>(".channel-row-group .explorer-row-action")?.click();
     await tick();
     const group = target.querySelector<HTMLElement>('.channel-context-menu [role="group"]');
     const moveTrigger = group?.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]');

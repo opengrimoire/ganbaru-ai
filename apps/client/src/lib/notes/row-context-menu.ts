@@ -12,8 +12,8 @@ export interface NotesRowContextMenuGeometry {
   maxHeight: number;
 }
 
-const MENU_WIDTH_PX = 256;
-const MENU_ESTIMATED_HEIGHT_PX = 352;
+const MENU_WIDTH_PX = 180;
+const MENU_ESTIMATED_HEIGHT_PX = 330;
 const MENU_EDGE_GAP_PX = 8;
 
 /** Clamp a Notes row context menu to the visible viewport. */

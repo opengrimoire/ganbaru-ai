@@ -10,10 +10,12 @@
   import EllipsisVertical from "@lucide/svelte/icons/ellipsis-vertical";
   import Folder from "@lucide/svelte/icons/folder";
   import FolderInput from "@lucide/svelte/icons/folder-input";
+  import FolderPlus from "@lucide/svelte/icons/folder-plus";
   import Hash from "@lucide/svelte/icons/hash";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Plus from "@lucide/svelte/icons/plus";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
   import type { ChatChannelRead, ChatMessageSearchResultRead } from "$lib/chat/contracts";
   import { chatParticipantDisplayName } from "$lib/chat/participant-display";
   import {
@@ -54,7 +56,10 @@
   let channelMenuTrigger: HTMLElement | null = null;
   const menuViewportGap = 8;
   let sectionInput = $state<HTMLInputElement>();
-  let sectionButton = $state<HTMLElement>();
+  let sectionButton = $state<HTMLButtonElement>();
+  let sectionMenuTrigger: HTMLButtonElement | null = null;
+  let sectionContextMenuElement = $state<HTMLElement | null>(null);
+  let sectionContextMenu = $state<{ section: ChatSidebarSection | null; x: number; y: number } | null>(null);
   let channelContextMenuElement = $state<HTMLElement | null>(null);
   let channelContextMenu = $state<{ channel: ChatChannelRead; x: number; y: number } | null>(null);
   let moveMenuTrigger = $state<HTMLButtonElement | null>(null);
@@ -198,6 +203,51 @@
     persist(sections.map((entry) => entry.id === section.id ? { ...entry, name } : entry));
   }
 
+  function closeSectionContextMenu(): void {
+    sectionContextMenu = null;
+  }
+
+  async function toggleSectionContextMenu(event: MouseEvent, section: ChatSidebarSection | null): Promise<void> {
+    const trigger = event.currentTarget;
+    if (!(trigger instanceof HTMLButtonElement)) return;
+    if (sectionContextMenu && sectionMenuTrigger === trigger) {
+      closeSectionContextMenu();
+      return;
+    }
+    closeChannelContextMenu();
+    sectionMenuTrigger = trigger;
+    const bounds = trigger.getBoundingClientRect();
+    const initialX = bounds.left;
+    const initialY = bounds.bottom;
+    sectionContextMenu = { section, x: initialX, y: initialY };
+    await tick();
+    if (!sectionContextMenu || !sectionContextMenuElement || sectionMenuTrigger !== trigger) return;
+    const menuBounds = sectionContextMenuElement.getBoundingClientRect();
+    sectionContextMenu = {
+      section,
+      x: Math.min(Math.max(menuViewportGap, initialX), Math.max(menuViewportGap, window.innerWidth - menuBounds.width - menuViewportGap)),
+      y: Math.min(Math.max(menuViewportGap, initialY), Math.max(menuViewportGap, window.innerHeight - menuBounds.height - menuViewportGap)),
+    };
+    (sectionContextMenuElement.querySelector<HTMLButtonElement>("button:not(:disabled)") ?? sectionContextMenuElement).focus();
+  }
+
+  function createSectionFromContextMenu(): void {
+    closeSectionContextMenu();
+    toggleSectionDraft();
+  }
+
+  function renameSectionFromContextMenu(): void {
+    const section = sectionContextMenu?.section;
+    closeSectionContextMenu();
+    if (section) renameSection(section);
+  }
+
+  function deleteSectionFromContextMenu(): void {
+    const section = sectionContextMenu?.section;
+    closeSectionContextMenu();
+    if (section) deleteSectionCandidate = section;
+  }
+
   function moveChannel(channelId: string, sectionId: string | null): void {
     persist(moveChatChannelToSection(sections, channelId, sectionId));
   }
@@ -220,6 +270,7 @@
       closeChannelContextMenu();
       return;
     }
+    closeSectionContextMenu();
     hideMoveMenu();
     channelMenuTrigger = trigger;
     const triggerBounds = trigger?.getBoundingClientRect();
@@ -362,10 +413,8 @@
     const closeOpenMenus = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
-      const openMenus = railElement?.querySelectorAll<HTMLDetailsElement>(".section-menu[open]") ?? [];
-      for (const menu of openMenus) {
-        if (!menu.contains(target)) menu.open = false;
-      }
+      if (sectionContextMenu && !sectionContextMenuElement?.contains(target)
+        && !sectionMenuTrigger?.contains(target)) closeSectionContextMenu();
       if (channelContextMenu && !channelContextMenuElement?.contains(target)
         && !(channelMenuTrigger?.classList.contains("explorer-row-action") && channelMenuTrigger.contains(target))) {
         closeChannelContextMenu();
@@ -423,10 +472,7 @@
             {#if channelsCollapsed}<ChevronRight class="section-chevron" size={13} />{:else}<ChevronDown class="section-chevron" size={13} />{/if}
           </button>
           <button type="button" aria-label={t("chat.channels.createTitle")} onclick={() => openCreate()}><Plus size={13} /></button>
-          <details class="section-menu">
-            <summary bind:this={sectionButton} aria-label={t("chat.moreActions")}><EllipsisVertical size={13} /></summary>
-            <div><button type="button" disabled={!projects.selectedProjectId} onclick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); toggleSectionDraft(); }}>{t("chat.channels.newSection")}</button></div>
-          </details>
+          <button bind:this={sectionButton} type="button" class="explorer-icon explorer-row-action" aria-label={t("chat.moreActions")} data-app-tooltip-disabled="true" aria-haspopup="menu" aria-expanded={sectionContextMenu !== null && sectionContextMenu.section === null} onclick={(event) => void toggleSectionContextMenu(event, null)}><EllipsisVertical size={14} /></button>
         </div>
         {#if !channelsCollapsed}
           {#if chat.channelsLoading && projects.selectedProjectId}
@@ -452,10 +498,7 @@
               {#if section.collapsed}<ChevronRight class="section-chevron" size={13} />{:else}<ChevronDown class="section-chevron" size={13} />{/if}
             </button>
             <button type="button" aria-label={t("chat.channels.createTitle")} title={t("chat.channels.createTitle")} onclick={() => openCreate(section.id)}><Plus size={13} /></button>
-            <details class="section-menu">
-              <summary aria-label={`${t("chat.moreActions")}: ${section.name}`}><EllipsisVertical size={13} /></summary>
-              <div><button type="button" onclick={() => renameSection(section)}>{t("chat.rename")}</button><button type="button" class="danger" onclick={() => { deleteSectionCandidate = section; }}>{t("chat.channels.deleteSectionConfirm")}</button></div>
-            </details>
+            <button type="button" class="explorer-icon explorer-row-action" aria-label={`${t("chat.moreActions")}: ${section.name}`} data-app-tooltip-disabled="true" aria-haspopup="menu" aria-expanded={sectionContextMenu?.section?.id === section.id} onclick={(event) => void toggleSectionContextMenu(event, section)}><EllipsisVertical size={14} /></button>
           </div>
           {#if !section.collapsed}
             {#each sectionChannels(section) as channel (channel.id)}{@render ChannelRow({ channel })}{/each}
@@ -468,6 +511,32 @@
   </aside>
 {:else if showCollapsedStrip}
   <aside class="explorer-sidebar flex h-full flex-col items-center" aria-label={t("chat.channels.explorerLabel")}><div class="explorer-toolbar"><button type="button" class="explorer-icon" aria-expanded="false" data-app-tooltip={t("chat.openRail")} aria-label={t("chat.openRail")} onclick={onExpand}><ChevronsRight size={16} /></button></div></aside>
+{/if}
+
+{#if sectionContextMenu}
+  <div
+    bind:this={sectionContextMenuElement}
+    class="section-context-menu fixed z-90 min-w-36 rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-lg"
+    class:explorer-touch={presentation === "surface"}
+    role="menu"
+    tabindex="-1"
+    style={`left:${sectionContextMenu.x}px;top:${sectionContextMenu.y}px`}
+    data-app-floating-surface
+    onkeydown={(event) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        closeSectionContextMenu();
+        sectionMenuTrigger?.focus();
+      }
+    }}
+  >
+    {#if sectionContextMenu.section === null}
+      <button type="button" role="menuitem" disabled={!projects.selectedProjectId} class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent focus-visible:bg-accent" onclick={createSectionFromContextMenu}><FolderPlus class="size-4" /><span>{t("chat.channels.newSection")}</span></button>
+    {:else}
+      <button type="button" role="menuitem" class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent focus-visible:bg-accent" onclick={renameSectionFromContextMenu}><Pencil class="size-4" /><span>{t("chat.rename")}</span></button>
+      <button type="button" role="menuitem" class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] text-destructive hover:bg-accent focus-visible:bg-accent" onclick={deleteSectionFromContextMenu}><Trash2 class="size-4" /><span>{t("chat.channels.deleteSectionConfirm")}</span></button>
+    {/if}
+  </div>
 {/if}
 
 {#if channelContextMenu}
@@ -544,28 +613,18 @@
   .message-result small { min-width:0; overflow:hidden; color:var(--muted-foreground); font-size: calc(0.6rem * var(--type-scale)); text-overflow:ellipsis; white-space:nowrap; }
   .message-result > span:last-child { display:-webkit-box; overflow:hidden; color:var(--muted-foreground); font-size: calc(0.68rem * var(--type-scale)); line-height: calc(1rem * var(--type-scale)); -webkit-box-orient:vertical; -webkit-line-clamp:2; line-clamp:2; }
   .section-heading { display: flex; min-height: var(--explorer-row-height); align-items: center; gap: 0.2rem; padding-inline: 0.5rem; color: var(--muted-foreground); }
-  .channel-section > .section-heading { padding-inline-end: var(--explorer-row-action-end-inset); }
+  .channel-section > .section-heading { padding-inline-end: 0; }
   .section-heading > button { display: flex; min-width: var(--explorer-action-size); min-height: var(--explorer-action-size); align-items: center; justify-content: center; gap: 0.2rem; border-radius: 0.3rem; }
-  .section-heading > button:hover { background: var(--accent); color: var(--foreground); }
+  .section-heading > button:not(.explorer-row-action):hover { background: var(--accent); color: var(--foreground); }
   .section-heading > .section-toggle { min-width: 0; flex: 1; justify-content: flex-start; }
   .section-toggle > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .section-toggle :global(.section-chevron) { flex: 0 0 auto; transition: opacity 120ms ease; }
-  .section-menu { position:relative; }
-  .section-menu summary { display:grid;min-width:var(--explorer-action-size);min-height:var(--explorer-action-size);list-style:none;place-items:center;border-radius:0.3rem; }
-  .section-menu summary::-webkit-details-marker { display:none; }
-  .section-menu summary:hover { background:var(--accent);color:var(--foreground); }
-  .section-menu > div { position:absolute;right:0;z-index:75;width:9rem;border:1px solid var(--border);border-radius:0.5rem;background:var(--popover);padding:0.25rem;box-shadow:0 12px 30px rgb(0 0 0 / 0.2); }
-  .section-menu button { display:flex;width:100%;min-height:2rem;align-items:center;border-radius:0.3rem;padding-inline:0.5rem;text-align:left;font-size: calc(0.8rem * var(--type-scale)); }
-  .section-menu button:hover { background:var(--accent); }
-  .section-menu button.danger { color:var(--destructive); }
-  .section-menu > div { box-shadow: 0 2px 8px rgb(0 0 0 / 0.08); }
-  .channel-context-menu, .channel-move-menu { width: min(12rem, calc(100vw - 1rem)); max-height: min(22rem, calc(100vh - 4rem)); overflow-y: auto; }
-  .channel-context-menu.explorer-touch button { min-height: var(--touch-target-min); }
+  .section-context-menu, .channel-context-menu, .channel-move-menu { width: min(12rem, calc(100vw - 1rem)); max-height: min(22rem, calc(100vh - 4rem)); overflow-y: auto; }
+  .section-context-menu.explorer-touch button, .channel-context-menu.explorer-touch button { min-height: var(--touch-target-min); }
   .channel-row-group { position: relative; display: flex; min-width: 0; align-items: center; }
   .channel-row { display: flex; width: 100%; min-width: 0; min-height: var(--explorer-row-height); align-items: center; gap: 0.375rem; border-radius: 0.35rem; padding: var(--explorer-row-padding) 0.5rem; color: var(--foreground); text-align: left; }
   .channel-row-group .channel-row { flex: 1; }
-  .explorer-touch .section-heading > button,
-  .explorer-touch .section-menu summary { min-width: var(--touch-target-min); min-height: var(--touch-target-min); }
+  .explorer-touch .section-heading > button { min-width: var(--touch-target-min); min-height: var(--touch-target-min); }
   .explorer-touch .section-heading > .section-toggle { min-width: 0; }
   .channel-loading { padding-right: 0.55rem; opacity: 0.72; }
 </style>

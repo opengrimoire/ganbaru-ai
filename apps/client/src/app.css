@@ -778,7 +778,7 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *, .explorer-sidebar *) {
   margin-inline-end: var(--explorer-row-action-end-inset);
 }
 
-.explorer-row .explorer-row-action:is(:hover, :focus-visible, [aria-expanded="true"]) {
+.explorer-sidebar .explorer-row-action:is(:hover, :focus-visible, [aria-expanded="true"]) {
   background: transparent;
   color: var(--foreground);
 }
@@ -788,8 +788,8 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *, .explorer-sidebar *) {
     opacity: 0;
   }
 
-  .explorer-row:hover .explorer-row-action,
-  .explorer-row:has(:focus-visible) .explorer-row-action,
+  :is(.explorer-row, .section-heading):hover .explorer-row-action,
+  :is(.explorer-row, .section-heading):has(:focus-visible) .explorer-row-action,
   .explorer-row-action[aria-expanded="true"] {
     opacity: 1;
   }
@@ -800,11 +800,11 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *, .explorer-sidebar *) {
   padding-block: 0.25rem;
 }
 
-.explorer-touch :is(.explorer-icon, .explorer-row-disclosure, .channel-row, .archive-button, .section-heading > button, .section-menu summary) {
+.explorer-touch :is(.explorer-icon, .explorer-row-disclosure, .channel-row, .archive-button, .section-heading > button) {
   min-height: var(--touch-target-min);
 }
 
-.explorer-touch :is(.explorer-icon, .explorer-row-disclosure, .section-heading > button, .section-menu summary) {
+.explorer-touch :is(.explorer-icon, .explorer-row-disclosure, .section-heading > button) {
   min-width: var(--touch-target-min);
 }
 

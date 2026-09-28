@@ -11,7 +11,7 @@ describe("Notes row context menu geometry", () => {
       clientY: 80,
       viewportWidth: 800,
       viewportHeight: 600,
-    })).toEqual({ left: 120, top: 80, width: 256, maxHeight: 352 });
+    })).toEqual({ left: 120, top: 80, width: 180, maxHeight: 330 });
   });
 
   it("clamps the menu to the right and bottom edges", () => {
@@ -20,19 +20,19 @@ describe("Notes row context menu geometry", () => {
       clientY: 590,
       viewportWidth: 800,
       viewportHeight: 600,
-    })).toEqual({ left: 536, top: 240, width: 256, maxHeight: 352 });
+    })).toEqual({ left: 612, top: 262, width: 180, maxHeight: 330 });
   });
 
   it("shrinks within a compact viewport", () => {
     const geometry = notesRowContextMenuGeometry({
       clientX: 200,
       clientY: 120,
-      viewportWidth: 220,
+      viewportWidth: 180,
       viewportHeight: 180,
     });
 
-    expect(geometry).toEqual({ left: 8, top: 8, width: 204, maxHeight: 164 });
+    expect(geometry).toEqual({ left: 8, top: 8, width: 164, maxHeight: 164 });
     expect(notesRowContextMenuStyle(geometry))
-      .toBe("left: 8px; top: 8px; width: 204px; max-height: 164px");
+      .toBe("left: 8px; top: 8px; width: 164px; max-height: 164px");
   });
 });

@@ -76,7 +76,7 @@ Notes search opens below the toolbar and focuses its field. Chat search stays in
 
 Page, folder, and channel rows expose an action button on pointer hover or visible keyboard focus, and always on touch layouts. Pointer-initiated focus does not keep the action visible after its menu closes. These buttons toggle the existing context actions without navigating. Escape dismisses the menu and returns focus to its trigger. Selected pages and channels use the theme selection color, while hover uses a lighter accent treatment. Row actions have no tooltip or separate hover background; their icons use the foreground color on hover, keyboard focus, or while the menu is open. Mobile navigation preserves larger touch targets.
 
-Chat channel, Notes page, and Notes folder action menus share a 12rem panel width, surface, shadow, action spacing, and icon placement. Chat Move to opens its destination panel on hover and remains available by click or keyboard focus. Archive keeps its destructive color.
+Chat channel, Chat section, Notes page, and Notes folder action menus share a 12rem panel width, surface, shadow, action spacing, and icon placement. Section menus open from the action button's left edge when space allows and stay within the viewport. Section action buttons use the same hover, focus, tooltip, and toggle behavior as row actions. Chat Move to opens its destination panel on hover and remains available by click or keyboard focus. Archive and Delete section keep their destructive color.
 
 Highlight current file scrolls to the selected note and fades two brief pulses over its existing theme selection color.
 

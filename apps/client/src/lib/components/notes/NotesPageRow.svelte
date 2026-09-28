@@ -810,8 +810,6 @@
   }
 
   .notes-page-action-menu {
-    width: min(12rem, calc(100vw - 1rem));
-    max-height: min(22rem, calc(100vh - 4rem));
     overflow-y: auto;
   }
 
