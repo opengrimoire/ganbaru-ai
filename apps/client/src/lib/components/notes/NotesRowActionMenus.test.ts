@@ -62,7 +62,28 @@ describe("Notes row action menus", () => {
     expect(target.querySelector('[role="menu"]')).toBeNull();
   }
 
-  it("toggles the page menu on repeated action clicks", async () => {
+  function expectOverflowTooltip(): void {
+    const label = target.querySelector<HTMLElement>(".explorer-row-label > .truncate");
+    if (!label) throw new Error("Notes row label is missing");
+    let renderedWidth = 80;
+    Object.defineProperties(label, {
+      scrollWidth: { configurable: true, get: () => renderedWidth },
+      clientWidth: { configurable: true, value: 100 },
+    });
+
+    label.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+    expect(label.dataset.appTooltip).toBeUndefined();
+
+    renderedWidth = 150;
+    label.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+    expect(label.dataset.appTooltip).toBe(label.textContent);
+
+    renderedWidth = 100;
+    label.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+    expect(label.dataset.appTooltip).toBeUndefined();
+  }
+
+  it("toggles the page menu and shows its name only when clipped", async () => {
     target = document.createElement("div");
     document.body.append(target);
     component = mount(NotesPageRow, {
@@ -88,10 +109,11 @@ describe("Notes row action menus", () => {
       },
     });
     await tick();
+    expectOverflowTooltip();
     await expectToggle();
   });
 
-  it("toggles the folder menu on repeated action clicks", async () => {
+  it("toggles the folder menu and shows its name only when clipped", async () => {
     target = document.createElement("div");
     document.body.append(target);
     component = mount(NotesFolderRow, {
@@ -111,6 +133,7 @@ describe("Notes row action menus", () => {
       },
     });
     await tick();
+    expectOverflowTooltip();
     await expectToggle();
   });
 });

@@ -14,6 +14,7 @@
     type LazyComponentLoadState,
   } from "$lib/lazy-component-loader";
   import { dismissOnOutside } from "$lib/utils/dismiss-on-outside";
+  import { overflowTooltip } from "$lib/utils/overflow-tooltip";
   import {
     createInlineRenameHistory,
     inlineRenameHistoryAction,
@@ -552,7 +553,7 @@
             class="explorer-row-icon"
           />
         {/if}
-        <span class="min-w-0 flex-1 truncate">{title}</span>
+        <span class="min-w-0 flex-1 truncate" use:overflowTooltip={title}>{title}</span>
         {#if parentStatus}
           <TriangleAlert
             class="size-3.5 shrink-0 text-destructive"

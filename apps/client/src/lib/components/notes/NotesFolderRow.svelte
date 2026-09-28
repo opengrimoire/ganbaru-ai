@@ -34,6 +34,7 @@
   } from "$lib/notes/row-context-menu";
   import type { NotesFolder } from "$lib/notes/types";
   import { dismissOnOutside } from "$lib/utils/dismiss-on-outside";
+  import { overflowTooltip } from "$lib/utils/overflow-tooltip";
   import {
     loadNotesOptionalComponent,
     retryNotesOptionalComponent,
@@ -347,7 +348,7 @@
         {:else}
           <FolderOpen size={explorerRowIconSize} class="explorer-row-icon" strokeWidth={explorerRowIconStrokeWidth} />
         {/if}
-        <span class="min-w-0 flex-1 truncate">{visibleName}</span>
+        <span class="min-w-0 flex-1 truncate" use:overflowTooltip={visibleName}>{visibleName}</span>
       </button>
       <button type="button" class="explorer-icon explorer-row-action" aria-label={`${t("notes.folderActions")}: ${visibleName}`} data-app-tooltip-disabled="true" aria-haspopup="menu" aria-expanded={menuOpen} onclick={openActionMenu}><EllipsisVertical size={14} /></button>
     </div>

@@ -32,6 +32,7 @@
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import { getProjects } from "$lib/stores/projects.svelte";
   import { onActiveVaultIdentityChange } from "$lib/vault/active-vault";
+  import { overflowTooltip } from "$lib/utils/overflow-tooltip";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import ChatChannelSetupDialog from "./ChatChannelSetupDialog.svelte";
 
@@ -159,33 +160,6 @@
   function sectionChannels(section: ChatSidebarSection): ChatChannelRead[] {
     const byId = new Map(matchingChannels.map((channel) => [channel.id, channel]));
     return section.channelIds.flatMap((id) => byId.get(id) ?? []);
-  }
-
-  /** Show a full channel name only when its rendered label is clipped. */
-  function overflowTooltip(node: HTMLElement, name: string): {
-    update: (nextName: string) => void;
-    destroy: () => void;
-  } {
-    let currentName = name;
-    const sync = (): void => {
-      if (node.scrollWidth - node.clientWidth > 2) node.dataset.appTooltip = currentName;
-      else delete node.dataset.appTooltip;
-    };
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(sync);
-    observer?.observe(node);
-    node.addEventListener("pointerover", sync);
-    queueMicrotask(sync);
-    return {
-      update(nextName: string): void {
-        currentName = nextName;
-        sync();
-      },
-      destroy(): void {
-        observer?.disconnect();
-        node.removeEventListener("pointerover", sync);
-        delete node.dataset.appTooltip;
-      },
-    };
   }
 
   function persist(next: ChatSidebarSection[]): void {
@@ -553,7 +527,7 @@
       <section class="channel-section" role="group" ondragover={(event) => event.preventDefault()} ondrop={(event) => handleDrop(event, null)}>
         <div class="section-heading">
           <button type="button" class="section-toggle" class:collapsed={channelsCollapsed} aria-label={sectionToggleLabel(t("chat.channels.defaultSection"), channelsCollapsed)} aria-expanded={!channelsCollapsed} onclick={() => { channelsCollapsed = !channelsCollapsed; }}>
-            <span>{t("chat.channels.defaultSection")}</span>
+            <span use:overflowTooltip={t("chat.channels.defaultSection")}>{t("chat.channels.defaultSection")}</span>
             {#if channelsCollapsed}<ChevronRight class="section-chevron" size={13} />{:else}<ChevronDown class="section-chevron" size={13} />{/if}
           </button>
           <button type="button" class="section-create-action" aria-label={t("chat.channels.createTitle")} data-app-tooltip={t("chat.channels.createTitle")} onclick={() => openCreate()}><Plus size={13} /></button>
@@ -596,7 +570,7 @@
               <button type="button" class="explorer-icon section-rename-control" aria-label={t("chat.cancel")} data-app-tooltip-disabled="true" onpointerdown={() => { sectionRenameControlPointerActive = true; }} onpointerup={releaseSectionRenameControlPointer} onpointercancel={() => { sectionRenameControlPointerActive = false; }} onkeydown={handleSectionRenameControlKeydown} onclick={(event) => finishSectionRenameAndFocus(event, false)}><X size={14} /></button>
             {:else}
               <button type="button" class="section-toggle" class:collapsed={section.collapsed} aria-label={sectionToggleLabel(section.name, section.collapsed)} aria-expanded={!section.collapsed} onclick={() => toggleSection(section.id)}>
-                <span>{section.name}</span>
+                <span use:overflowTooltip={section.name}>{section.name}</span>
                 {#if section.collapsed}<ChevronRight class="section-chevron" size={13} />{:else}<ChevronDown class="section-chevron" size={13} />{/if}
               </button>
               <button type="button" class="section-create-action" aria-label={t("chat.channels.createTitle")} data-app-tooltip={t("chat.channels.createTitle")} onclick={() => openCreate(section.id)}><Plus size={13} /></button>
