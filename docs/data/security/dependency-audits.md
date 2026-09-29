@@ -4,7 +4,7 @@ This file records reviewed Rust advisory exceptions and the most recent known au
 
 Audits checked on 2026-09-28:
 
-- pnpm -w run audit:deps reports one moderate advisory, GHSA-3wwx-pv8p-q78v, in undici 7.29.0 through jsdom and Vitest. The audit identifies 7.29.1 as patched. This blocks `validate:full` before its code checks; the lockfile and audit protections have not been changed by the Notes startup work.
+- pnpm -w run audit:deps reports no known npm vulnerabilities after updating the workspace override and lockfile to undici 7.29.1. This fixes [GHSA-3wwx-pv8p-q78v](https://github.com/nodejs/undici/security/advisories/GHSA-3wwx-pv8p-q78v), reached through jsdom and Vitest. Release-age restrictions, install-script controls, and audit protections remain unchanged.
 - pnpm -w run audit:rust exits successfully with the existing seven allowed warnings. Using the existing Tokio workspace dependency for database initialization adds no package or version to Cargo.lock.
 
 Previous snapshot checked on 2026-09-18:
