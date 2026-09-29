@@ -3,6 +3,7 @@ import {
   createNotesChildPageFromBlock,
   createNotesPage,
   duplicateNotesPage,
+  isNotesPageActive,
   moveNotesPage,
   permanentlyDeleteNotesPage,
   trashNotesPage,
@@ -55,14 +56,19 @@ interface NotesPageActionsContext {
     openMode?: NotesPageOpenMode,
   ) => Promise<void>;
   activateProvisionalPage: (loaded: NotesLoadedPage, openMode: NotesPageOpenMode) => void;
-  beginPageCreation: (request: Parameters<typeof createNotesPage>[0]) => void;
+  beginPageCreation: (request: Parameters<typeof createNotesPage>[0], provisional: NotesLoadedPage) => void;
   awaitPageReady: (pageId: string | null) => Promise<void>;
+  awaitPageCreationAttempt: (pageId: string) => Promise<"ready" | "failed">;
+  discardFailedPageCreation: (pageId: string) => void;
   activateRestoredPage: (page: NotesPage) => Promise<void>;
   applyPostMutation: (result: NotesPostMutationResult) => void;
   selectPage: (pageId: string | null) => Promise<void>;
+  selectPageAfterRemoval: (pageId: string | null) => Promise<void>;
+  discardRemovedPageWrites: () => void;
   reloadPageBreadcrumb: (pageId: string) => Promise<void>;
   flushBlockSave: (blockId: string) => Promise<void>;
   flushPendingBlockSaves: () => Promise<void>;
+  flushPendingWrites: () => Promise<void>;
   requestBlockFocus: (blockId: string | null, selection?: NotesTextSelection | null) => void;
   requestTitleFocus: (pageId: string) => void;
   requestPageLoadFocus: () => void;
@@ -76,6 +82,9 @@ interface NotesPageActionsContext {
   removePagesFromActiveCollections: (pageIds: ReadonlySet<string>) => void;
   removeSidebarPageIds: (pageIds: ReadonlySet<string>) => void;
   scheduleHierarchyRefresh: () => void;
+  beginPageRemoval: (pageId: string) => ReadonlySet<string> | null;
+  endPageRemoval: (pageId: string) => void;
+  setTrashActionError: (message: string | null) => void;
 }
 
 /** Create Notes page lifecycle operations over the facade-owned reactive state. */
@@ -102,6 +111,12 @@ export function createNotesPageActions(context: NotesPageActionsContext) {
     parent: NotesParent,
     options: NotesCreatePageOptions,
   ): Promise<void> {
+    try {
+      await context.flushPendingWrites();
+    } catch {
+      // The editor retains its draft and displays the save error.
+      return;
+    }
     const pageId = crypto.randomUUID();
     const firstBlockId = crypto.randomUUID();
     const projectId = projectIdForParent(parent, options);
@@ -123,7 +138,7 @@ export function createNotesPageActions(context: NotesPageActionsContext) {
     );
     context.requestBlockFocus(null);
     context.requestTitleFocus(provisional.page.id);
-    context.beginPageCreation(request);
+    context.beginPageCreation(request, provisional);
   }
 
   async function createPage(title: string, options: NotesCreatePageOptions = {}): Promise<void> {
@@ -249,16 +264,70 @@ export function createNotesPageActions(context: NotesPageActionsContext) {
   }
 
   async function trashPage(pageId: string): Promise<void> {
-    const trashed = await trashNotesPage(pageId, true);
-    const preferred = nextSelectedNotesPageId(context.readPages(), pageId);
-    context.prependTrashedPage(trashed);
-    context.removeArchivedPages(new Set([pageId]));
-    context.applyPostMutation({ removedPageIds: [pageId], sidebarImpact: "hierarchy" });
-    const pages = context.readPages();
-    const next = preferred && pages.some((page) => page.id === preferred)
-      ? preferred
-      : pages[0]?.id ?? null;
-    await context.selectPage(next);
+    const visiblePages = context.readPages();
+    const removedIds = context.beginPageRemoval(pageId);
+    if (!removedIds) return;
+    context.setTrashActionError(null);
+    let removalConfirmed = false;
+    let pendingWriteFailed = false;
+    try {
+      const failedCreationIds = new Set<string>();
+      for (const id of removedIds) {
+        if (await context.awaitPageCreationAttempt(id) === "failed") failedCreationIds.add(id);
+      }
+      const rootIsAlreadyInactive = failedCreationIds.has(pageId)
+        && !await isNotesPageActive(pageId);
+      let trashed: NotesPage | null = null;
+      if (!rootIsAlreadyInactive) {
+        try {
+          const selectedPageId = context.readSelectedPageId();
+          if (selectedPageId && removedIds.has(selectedPageId) && !failedCreationIds.has(selectedPageId)) {
+            try {
+              await context.flushPendingWrites();
+            } catch (error) {
+              pendingWriteFailed = true;
+              throw error;
+            }
+          }
+          trashed = await trashNotesPage(pageId, true);
+        } catch (error) {
+          let stillActive: boolean | null = null;
+          try {
+            stillActive = await isNotesPageActive(pageId);
+          } catch (probeError) {
+            console.error("check Notes page after Trash failure failed", probeError);
+          }
+          if (stillActive !== false) throw error;
+        }
+      }
+      removalConfirmed = true;
+      const selectedPageId = context.readSelectedPageId();
+      if (selectedPageId && removedIds.has(selectedPageId)
+        && (pendingWriteFailed || failedCreationIds.has(selectedPageId))) {
+        context.discardRemovedPageWrites();
+      }
+      for (const id of failedCreationIds) context.discardFailedPageCreation(id);
+      const preferred = nextSelectedNotesPageId(visiblePages, pageId);
+      if (trashed) {
+        context.prependTrashedPage(trashed);
+        context.removeArchivedPages(removedIds);
+      }
+      context.applyPostMutation({ removedPageIds: [...removedIds], sidebarImpact: "hierarchy" });
+      context.removeSidebarPageIds(removedIds);
+      const currentPageId = context.readSelectedPageId();
+      if (currentPageId && removedIds.has(currentPageId)) {
+        const pages = context.readPages();
+        const next = preferred && pages.some((page) => page.id === preferred)
+          ? preferred
+          : pages[0]?.id ?? null;
+        await context.selectPageAfterRemoval(next);
+      }
+    } catch (error) {
+      if (!removalConfirmed) context.setTrashActionError(error instanceof Error ? error.message : String(error));
+      throw error;
+    } finally {
+      context.endPageRemoval(pageId);
+    }
   }
 
   async function archivePage(pageId: string): Promise<void> {

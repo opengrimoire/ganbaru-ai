@@ -99,6 +99,7 @@
   const hasOpenPage = $derived(
     notes.viewMode === "pages"
       && notes.selectedPageId !== null
+      && !notes.isPagePendingRemoval(notes.selectedPageId)
       && notes.loadedPage?.id === notes.selectedPageId
       && notes.primaryContentReady,
   );
@@ -121,7 +122,9 @@
   const activeSurfaceKind = $derived.by((): ActiveNotesSurfaceKind => {
     if (notes.viewMode === "archive") return "archive";
     if (notes.viewMode === "trash") return "trash";
-    if (notes.selectedPageId !== null) return "editor";
+    if (notes.selectedPageId !== null
+      && !notes.isPagePendingRemoval(notes.selectedPageId)
+      && !notes.loadError) return "editor";
     return "home";
   });
   const activeSurfaceLoadState = $derived(

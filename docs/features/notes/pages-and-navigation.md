@@ -8,6 +8,7 @@ Page parents can represent workspace, page, data source, or other supported loca
 
 An empty page title is valid and receives a localized fallback in navigation. Renaming a page updates derived navigation and link presentation without changing stable link identity.
 While the editor title is being edited, the workspace header and sidebar show its draft. A committed rename or page move updates the open page and navigation without requiring a page or project switch.
+New pages appear in navigation and the editor while their database creation is in progress. Selecting one during creation uses its local draft, and the first later open can use the completed creation result without another page read. Editing invalidates that reusable result. Starting another page waits for pending edits on the current page to settle.
 
 ## Folder model
 
@@ -50,6 +51,7 @@ Restoring validates the stored parent. Invalid parents result in safe project-ro
 ## Trash
 
 Trashing applies to the reachable page subtree so active children do not remain under an inactive parent. Trashed pages disappear from active navigation and Archive but remain available in Trash for the configured recovery period.
+The page and its visible descendants leave navigation as soon as Trash is confirmed. A newly created page waits for its database creation before moving to Trash. If creation fails and the page exists only as a local draft, Trash discards that draft. If the move fails while the page is still active, it returns with an error and retains pending edits. If the page is already inactive, navigation drops its stale entry and releases writes that can no longer be saved to that page. A page-load error leaves navigation available so another page can be opened.
 
 Restore preserves valid structure and reactivates paired child-page blocks. Permanent deletion requires confirmation or retention expiry and removes the page subtree, paired blocks, and owned canonical content transactionally. Asset cleanup follows the ownership graph and history pins rather than deleting bytes solely because one live reference disappeared.
 

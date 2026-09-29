@@ -31,7 +31,7 @@ describe("Notes page creation controller", () => {
     const { createNotesPageCreationController } = await import("./notes-store-page-creation.svelte");
     const controller = createNotesPageCreationController({ reconcile });
 
-    controller.begin(request);
+    controller.begin(request, loaded);
     const ready = controller.awaitReady(request.id);
     expect(controller.isPending(request.id)).toBe(true);
     expect(reconcile).not.toHaveBeenCalled();
@@ -52,7 +52,7 @@ describe("Notes page creation controller", () => {
       afterPersisted,
     });
 
-    controller.begin(request);
+    controller.begin(request, loaded);
     await vi.waitFor(() => expect(afterPersisted).toHaveBeenCalledWith(request.id));
   });
 
@@ -64,7 +64,7 @@ describe("Notes page creation controller", () => {
     const { createNotesPageCreationController } = await import("./notes-store-page-creation.svelte");
     const controller = createNotesPageCreationController({ reconcile });
 
-    controller.begin(request);
+    controller.begin(request, loaded);
     let mutationReleased = false;
     const bufferedMutation = controller.awaitReady(request.id).then(() => {
       mutationReleased = true;
@@ -80,5 +80,39 @@ describe("Notes page creation controller", () => {
     expect(backend.createNotesPage).toHaveBeenNthCalledWith(2, request);
     expect(reconcile).toHaveBeenCalledWith(loaded);
     expect(mutationReleased).toBe(true);
+  });
+
+  it("settles a failed creation attempt and releases blocked edits when the draft is discarded", async () => {
+    backend.createNotesPage.mockRejectedValueOnce(new Error("disk full"));
+    const { createNotesPageCreationController } = await import("./notes-store-page-creation.svelte");
+    const controller = createNotesPageCreationController({ reconcile: () => Promise.resolve() });
+
+    controller.begin(request, loaded);
+    const blockedEdit = controller.awaitReady(request.id);
+    expect(await controller.awaitAttempt(request.id)).toBe("failed");
+    expect(controller.errorFor(request.id)).toBe("disk full");
+
+    controller.discardFailed(request.id);
+    await expect(blockedEdit).rejects.toThrow("notes page was discarded");
+    expect(controller.isPending(request.id)).toBe(false);
+    expect(controller.errorFor(request.id)).toBeNull();
+  });
+
+  it("reuses a clean new page once and invalidates the preview after editing", async () => {
+    backend.createNotesPage.mockResolvedValue(loaded);
+    const { createNotesPageCreationController } = await import("./notes-store-page-creation.svelte");
+    const first = createNotesPageCreationController({ reconcile: () => Promise.resolve() });
+    first.begin(request, loaded);
+    expect(first.previewForSelection(request.id)).toEqual({ loaded, pending: true });
+    expect(await first.awaitAttempt(request.id)).toBe("ready");
+    expect(first.previewForSelection(request.id)).toEqual({ loaded, pending: false });
+    expect(first.previewForSelection(request.id)).toBeNull();
+
+    const edited = createNotesPageCreationController({ reconcile: () => Promise.resolve() });
+    edited.begin(request, loaded);
+    edited.markChanged(request.id);
+    expect(edited.previewForSelection(request.id)).toEqual({ loaded, pending: true });
+    expect(await edited.awaitAttempt(request.id)).toBe("ready");
+    expect(edited.previewForSelection(request.id)).toBeNull();
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   filterNotesPagesByTitle,
   nextSelectedNotesPageId,
+  notesPageSubtreeIds,
   parseStoredNotesPageId,
   restoredNotesPageSelection,
 } from "./page-selection";
@@ -18,6 +19,15 @@ describe("notes page selection", () => {
     expect(nextSelectedNotesPageId(pages, "b")).toBe("c");
     expect(nextSelectedNotesPageId(pages, "c")).toBe("b");
     expect(nextSelectedNotesPageId([{ id: "a" }], "a")).toBe(null);
+  });
+
+  it("includes nested visible pages when a parent goes to Trash", () => {
+    const pages = [
+      { id: "grandchild", parent: { type: "page_id" as const, page_id: "child" } },
+      { id: "other", parent: { type: "workspace" as const, workspace: true as const } },
+      { id: "child", parent: { type: "page_id" as const, page_id: "root" } },
+    ];
+    expect([...notesPageSubtreeIds(pages, "root")]).toEqual(["root", "child", "grandchild"]);
   });
 
   it("restores only an explicit existing page selection", () => {

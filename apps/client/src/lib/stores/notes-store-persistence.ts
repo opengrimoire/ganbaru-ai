@@ -25,6 +25,7 @@ export interface NotesBlockPersistence {
   scheduleBlockSave: (blockId: string, update: NotesBlockUpdate) => void;
   flushBlockSave: (blockId: string) => Promise<void>;
   flushPendingBlockSaves: () => Promise<void>;
+  discardPendingEditorWrites: () => void;
   enqueueEditorMutation: (mutation: () => Promise<void>) => Promise<void>;
 }
 
@@ -37,6 +38,7 @@ export function createNotesBlockPersistence(
   const pendingBlockSaves = new Map<string, PendingBlockSave>();
   const blockRevisions = new Map<string, number>();
   let mutationChain = Promise.resolve();
+  let queueGeneration = 0;
   let failed = false;
   const queuedMutations: Array<() => Promise<void>> = [];
   const dirtyBlocks = new Set<string>();
@@ -59,9 +61,12 @@ export function createNotesBlockPersistence(
   }
 
   async function saveBlockNow(blockId: string, update: NotesBlockUpdate, revision = blockRevisions.get(blockId) ?? 0): Promise<void> {
+    const saveGeneration = queueGeneration;
     const save = enqueue(async () => {
       await context.beforeSave(blockId);
+      if (saveGeneration !== queueGeneration) return;
       const saved = await updateNotesBlock(blockId, update);
+      if (saveGeneration !== queueGeneration) return;
       if ((blockRevisions.get(blockId) ?? 0) === revision) {
         dirtyBlocks.delete(blockId);
         if (context.readBlock(blockId)) context.replaceBlock(saved);
@@ -79,9 +84,11 @@ export function createNotesBlockPersistence(
     const pending = pendingBlockSaves.get(blockId);
     if (pending) clearTimeout(pending.timer);
     const revision = blockRevisions.get(blockId) ?? 0;
+    const saveGeneration = queueGeneration;
     const timer = setTimeout(() => {
       pendingBlockSaves.delete(blockId);
       void saveBlockNow(blockId, update, revision).catch((error: unknown) => {
+        if (saveGeneration !== queueGeneration) return;
         context.setLoadError(error instanceof Error ? error.message : String(error));
       });
     }, context.debounceMs);
@@ -106,12 +113,17 @@ export function createNotesBlockPersistence(
   }
 
   function runQueued(mutation: () => Promise<void>): Promise<void> {
+    const operationGeneration = queueGeneration;
     const operation = mutationChain.then(async () => {
+      if (operationGeneration !== queueGeneration) return;
       await mutation();
-      queuedMutations.splice(queuedMutations.indexOf(mutation), 1);
+      if (operationGeneration !== queueGeneration) return;
+      const index = queuedMutations.indexOf(mutation);
+      if (index >= 0) queuedMutations.splice(index, 1);
     });
     mutationChain = operation;
     void operation.catch((error: unknown) => {
+      if (operationGeneration !== queueGeneration) return;
       failed = true;
       context.setLoadError(error instanceof Error ? error.message : String(error));
     });
@@ -133,6 +145,20 @@ export function createNotesBlockPersistence(
       void flushBlockSave(blockId).catch(() => undefined);
     }
     return mutationChain;
+  }
+
+  /** Abandon local writes only after their selected page is confirmed inactive. */
+  function discardPendingEditorWrites(): void {
+    queueGeneration += 1;
+    for (const pending of pendingBlockSaves.values()) clearTimeout(pending.timer);
+    pendingBlockSaves.clear();
+    queuedMutations.length = 0;
+    dirtyBlocks.clear();
+    blockRevisions.clear();
+    saveChains.clear();
+    mutationChain = Promise.resolve();
+    failed = false;
+    context.setLoadError(null);
   }
 
   /** Captures pending typing before a structural edit enters the same write queue. */
@@ -157,5 +183,6 @@ export function createNotesBlockPersistence(
     scheduleBlockSave,
     flushBlockSave,
     flushPendingBlockSaves,
+    discardPendingEditorWrites,
   };
 }

@@ -71,6 +71,7 @@ import {
   initialNotesSelectedPageId,
   saveNotesSelectedPageId,
 } from "./notes-store-page-state";
+import { notesPageSubtreeIds } from "$lib/notes/page-selection";
 import { createNotesBlockPersistence } from "./notes-store-persistence";
 import { NotesPageSessionController } from "./notes-store-page-session.svelte";
 import { NotesTreeProjectionController } from "./notes-store-tree-projection.svelte";
@@ -107,6 +108,9 @@ const BLOCK_SAVE_DEBOUNCE_MS = 350;
 
 let pages = $state<NotesPage[]>([]);
 let allPages = $state<NotesPage[]>([]);
+let pendingPageRemovals = $state<Record<string, string[]>>({});
+const pendingPageRemovalIds = $derived(new Set(Object.values(pendingPageRemovals).flat()));
+let trashActionError = $state<string | null>(null);
 let navigationMutationRevision = 0;
 let viewMode = $state<NotesViewMode>("pages");
 // Session UI state outlives NotesView when the active application tab changes.
@@ -139,7 +143,10 @@ const linksController = createNotesLinksController({
   },
   scheduleVisibleMetadataRefresh: () => sidebarRefreshCoordinator.schedule("visible-metadata"),
 });
-const navigationPages = $derived(mergeNotesNavigationPages(allPages, linksController.destinations));
+const navigationPages = $derived(
+  mergeNotesNavigationPages(allPages, linksController.destinations)
+    .filter((page) => !pendingPageRemovalIds.has(page.id)),
+);
 const sidebarController = createNotesSidebarController({
   reloadPages: () => reloadPages(),
 });
@@ -211,6 +218,7 @@ function requestTitleFocus(pageId: string): void {
 }
 
 function setPageTitleDraft(pageId: string, title: string): void {
+  pageCreationController.markChanged(pageId);
   pageSession.setTitleDraft(pageId, title);
 }
 
@@ -246,6 +254,27 @@ function removePagesFromActiveCollections(pageIds: ReadonlySet<string>): void {
   allPages = allPages.filter((page) => !pageIds.has(page.id));
   navigationMutationRevision += 1;
   invalidateNotesNotificationSchedule();
+}
+
+function beginPageRemoval(pageId: string): ReadonlySet<string> | null {
+  if (pendingPageRemovalIds.has(pageId)) return null;
+  const loadedPage = treeProjection.loadedPage;
+  const ids = notesPageSubtreeIds(
+    loadedPage ? [...navigationPages, loadedPage] : navigationPages,
+    pageId,
+  );
+  if (loadedPage?.id === pageSession.selectedPageId
+    && pageSession.breadcrumbs.some((item) => item.id === pageId)) {
+    for (const id of notesPageSubtreeIds(navigationPages, loadedPage.id)) ids.add(id);
+  }
+  pendingPageRemovals = { ...pendingPageRemovals, [pageId]: [...ids] };
+  return ids;
+}
+
+function endPageRemoval(pageId: string): void {
+  pendingPageRemovals = Object.fromEntries(
+    Object.entries(pendingPageRemovals).filter(([rootId]) => rootId !== pageId),
+  );
 }
 
 function sidebarSeedPageIds(): string[] {
@@ -335,6 +364,7 @@ function mergeReloadedWorkspaceShell(shell: NotesWorkspaceShell): void {
 }
 
 function prepareWorkspaceLoad(): void {
+  trashActionError = null;
   pageSession.invalidate();
   hydrationController.invalidate();
   treeProjection.resetOutlines();
@@ -394,7 +424,11 @@ const sidebarRefreshCoordinator = createNotesSidebarRefreshCoordinator({
   },
 });
 
-function applyPostMutation(result: NotesPostMutationResult): void {
+function applyPostMutation(
+  result: NotesPostMutationResult,
+  options: { preserveCreatedPreview?: boolean } = {},
+): void {
+  if (!options.preserveCreatedPreview) pageCreationController.markChanged(pageSession.selectedPageId);
   treeProjection.applyPostMutation(result);
   for (const page of result.pages ?? []) upsertPageInActiveCollections(page);
   if (result.removedPageIds?.length) {
@@ -518,12 +552,14 @@ async function refreshOpenLinks(): Promise<void> {
   optionalSubsystemController.markPageSubsystemLoaded("links", pageId, generation);
 }
 
-async function selectPage(
+async function selectPageInternal(
   pageId: string | null,
-  options: NotesSelectPageOptions = {},
+  options: NotesSelectPageOptions,
+  skipPendingWrites: boolean,
 ): Promise<void> {
+  if (pageId && pendingPageRemovalIds.has(pageId)) return;
   const alreadyLoaded = pageSession.selectedPageId === pageId && (!pageId || treeProjection.loadedPage?.id === pageId);
-  if (!alreadyLoaded) {
+  if (!alreadyLoaded && !skipPendingWrites) {
     try {
       await flushPendingWrites();
     } catch {
@@ -531,6 +567,7 @@ async function selectPage(
       return;
     }
   }
+  if (pageId && pendingPageRemovalIds.has(pageId)) return;
   const openMode = notesPageOpenModeForSelection({
     requestedOpenMode: options.openMode,
     currentOpenMode: pageSession.pageOpenMode,
@@ -555,6 +592,8 @@ async function selectPage(
   linksController.resetPageState();
   collaborationController.resetPageState();
   if (!pageId) {
+    workspaceController.setError(null);
+    workspaceController.setLoading(false);
     treeProjection.clearSelection();
     pageSession.breadcrumbs = [];
     linksController.resetAll();
@@ -563,18 +602,49 @@ async function selectPage(
   }
   workspaceController.setLoading(true);
   workspaceController.setError(null);
+  const preview = pageCreationController.previewForSelection(pageId);
+  if (preview) {
+    const currentPage = allPages.find((page) => page.id === pageId) ?? preview.loaded.page;
+    const loaded = { ...preview.loaded, page: currentPage };
+    requestLoadedPageFocus(loaded, options.focusBlockId ?? null);
+    treeProjection.applyPostMutation({ loadedPage: loaded });
+    pageSession.breadcrumbs = [];
+    pageSession.recordRecentIfCurrent(pageSession.generation, pageId);
+    workspaceController.setLoading(false);
+    if (!preview.pending) {
+      void reloadPageBreadcrumb(pageId).catch((error: unknown) => {
+        console.error("load Notes page breadcrumb failed", error);
+      });
+    }
+    return;
+  }
+  const load = loadPageTree(pageId, {
+    focusOnLoad: true,
+    focusBlockId: options.focusBlockId ?? null,
+  });
+  const loadGeneration = pageSession.generation;
   try {
-    const applied = await loadPageTree(pageId, {
-      focusOnLoad: true,
-      focusBlockId: options.focusBlockId ?? null,
-    });
+    const applied = await load;
     if (applied) pageSession.recordRecentIfCurrent(pageSession.generation, pageId);
   } catch (error) {
+    if (!pageSession.isCurrent(loadGeneration, pageId) || pendingPageRemovalIds.has(pageId)) return;
     workspaceController.setError(error instanceof Error ? error.message : String(error));
     throw error;
   } finally {
-    workspaceController.setLoading(false);
+    if (pageSession.isCurrent(loadGeneration, pageId)) workspaceController.setLoading(false);
   }
+}
+
+async function selectPage(
+  pageId: string | null,
+  options: NotesSelectPageOptions = {},
+): Promise<void> {
+  await selectPageInternal(pageId, options, false);
+}
+
+/** Select a replacement after the removed page's pending writes are settled or discarded. */
+async function selectPageAfterRemoval(pageId: string | null): Promise<void> {
+  await selectPageInternal(pageId, {}, true);
 }
 
 async function openPageContextually(pageId: string): Promise<void> {
@@ -643,7 +713,7 @@ async function reconcileCreatedPage(loaded: NotesLoadedPage): Promise<void> {
     } : {}),
     pages: [loaded.page],
     sidebarImpact: "hierarchy",
-  });
+  }, { preserveCreatedPreview: true });
   if (remainsSelected) await reloadPageBreadcrumb(loaded.page.id);
 }
 
@@ -750,14 +820,15 @@ let editorSaveError = $state<string | null>(null);
 
 const {
   retryEditorMutations,
-  enqueueEditorMutation,
+  enqueueEditorMutation: queueEditorMutation,
   hasLocalChanges,
-  localApplyBlockUpdate,
+  localApplyBlockUpdate: applyBlockUpdateLocally,
   markBlockLocallyChanged,
   saveBlockNow,
-  scheduleBlockSave,
+  scheduleBlockSave: queueBlockSave,
   flushBlockSave,
   flushPendingBlockSaves,
+  discardPendingEditorWrites,
 } = createNotesBlockPersistence({
   readBlock: (blockId) => treeProjection.blocksById[blockId],
   beforeSave: () => pageCreationController.awaitReady(pageSession.selectedPageId),
@@ -767,6 +838,21 @@ const {
   },
   debounceMs: BLOCK_SAVE_DEBOUNCE_MS,
 });
+
+function enqueueEditorMutation(mutation: () => Promise<void>): Promise<void> {
+  pageCreationController.markChanged(pageSession.selectedPageId);
+  return queueEditorMutation(mutation);
+}
+
+function localApplyBlockUpdate(blockId: string, update: Parameters<typeof applyBlockUpdateLocally>[1]): void {
+  pageCreationController.markChanged(pageSession.selectedPageId);
+  applyBlockUpdateLocally(blockId, update);
+}
+
+function scheduleBlockSave(blockId: string, update: Parameters<typeof queueBlockSave>[1]): void {
+  pageCreationController.markChanged(pageSession.selectedPageId);
+  queueBlockSave(blockId, update);
+}
 treeProjection.setLocalChangeMarker(markBlockLocallyChanged);
 
 const undoController = createNotesUndoController({
@@ -853,12 +939,17 @@ const pageActions = createNotesPageActions({
   activateProvisionalPage,
   beginPageCreation: pageCreationController.begin,
   awaitPageReady: pageCreationController.awaitReady,
+  awaitPageCreationAttempt: pageCreationController.awaitAttempt,
+  discardFailedPageCreation: pageCreationController.discardFailed,
   activateRestoredPage,
   applyPostMutation,
   selectPage: (pageId) => selectPage(pageId),
+  selectPageAfterRemoval,
+  discardRemovedPageWrites: () => discardPendingEditorWrites(),
   reloadPageBreadcrumb: (pageId) => reloadPageBreadcrumb(pageId),
   flushBlockSave,
   flushPendingBlockSaves,
+  flushPendingWrites,
   requestBlockFocus,
   requestTitleFocus,
   requestPageLoadFocus: () => requestPageLoadFocus(),
@@ -872,6 +963,9 @@ const pageActions = createNotesPageActions({
   removePagesFromActiveCollections,
   removeSidebarPageIds: sidebarController.removePageIds,
   scheduleHierarchyRefresh: () => sidebarRefreshCoordinator.schedule("hierarchy"),
+  beginPageRemoval,
+  endPageRemoval,
+  setTrashActionError: (message) => { trashActionError = message; },
 });
 
 const blockActions = createNotesBlockActions({
@@ -1130,6 +1224,7 @@ export function getNotes() {
       explorerCollapsed = collapsed;
     },
     get editorSaveError() { return editorSaveError; },
+    get trashActionError(): string | null { return trashActionError; },
     retryEditorMutations: async () => {
       await retryEditorMutations();
       await undoController.persist();
@@ -1188,6 +1283,7 @@ export function getNotes() {
     get selectedPageId(): string | null {
       return pageSession.selectedPageId;
     },
+    isPagePendingRemoval: (pageId: string): boolean => pendingPageRemovalIds.has(pageId),
     get pageOpenMode(): NotesPageOpenMode {
       return pageSession.pageOpenMode;
     },

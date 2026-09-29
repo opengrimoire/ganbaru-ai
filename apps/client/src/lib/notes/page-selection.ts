@@ -1,3 +1,5 @@
+import type { NotesPage } from "./types";
+
 const SELECTED_PAGE_CONFIG_KEY = "notes.selectedPageId";
 
 export function notesSelectedPageConfigKey(): string {
@@ -30,6 +32,30 @@ export function nextSelectedNotesPageId(
   if (remaining.length === 0) return null;
   if (index < 0) return remaining[0]?.id ?? null;
   return remaining[Math.min(index, remaining.length - 1)]?.id ?? null;
+}
+
+/** Find the visible page subtree that follows a page into Trash. */
+export function notesPageSubtreeIds(
+  pages: readonly Pick<NotesPage, "id" | "parent">[],
+  rootPageId: string,
+): Set<string> {
+  const childrenByParentId = new Map<string, string[]>();
+  for (const page of pages) {
+    if (page.parent.type !== "page_id") continue;
+    const children = childrenByParentId.get(page.parent.page_id) ?? [];
+    children.push(page.id);
+    childrenByParentId.set(page.parent.page_id, children);
+  }
+  const ids = new Set([rootPageId]);
+  const queue = [rootPageId];
+  for (let index = 0; index < queue.length; index += 1) {
+    for (const childId of childrenByParentId.get(queue[index] ?? "") ?? []) {
+      if (ids.has(childId)) continue;
+      ids.add(childId);
+      queue.push(childId);
+    }
+  }
+  return ids;
 }
 
 export function filterNotesPagesByTitle<Page>(

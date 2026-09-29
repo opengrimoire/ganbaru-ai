@@ -38,6 +38,7 @@ export const pageActions = {
   trashConfirmMessage:
     "This removes the note without deleting it. It will be permanently deleted after 7 days, but you can restore it from Trash before then.",
   trashConfirm: "Move to trash",
+  trashFailed: (message: string) => `Could not move note to Trash: ${message}`,
   restorePage: (title: string) => `Restore ${title}`,
   restoreMovesToWorkspace: "Restores to Workspace because its parent is in Trash.",
   deleteForever: "Delete forever",

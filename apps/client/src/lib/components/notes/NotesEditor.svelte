@@ -894,7 +894,9 @@
   function confirmTrashPage(): void {
     const targetPage = pendingTrashPage;
     pendingTrashPage = null;
-    if (targetPage) void notes.trashPage(targetPage.id);
+    if (targetPage) void notes.trashPage(targetPage.id).catch((error) => {
+      console.error("trash Notes page failed", error);
+    });
   }
 
   function archiveCurrentPage(): void {

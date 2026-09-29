@@ -64,6 +64,19 @@ export async function loadNotesWorkspaceShell(
   };
 }
 
+/** Check whether a page is still active after an uncertain lifecycle mutation. */
+export async function isNotesPageActive(pageId: string): Promise<boolean> {
+  const shell = await loadNotesWorkspaceShell({
+    project_id: null,
+    selected_page_id: pageId,
+    expanded_page_ids: [],
+    seed_page_ids: [],
+    page_cursor: "end",
+    folder_cursor: "end",
+  });
+  return shell.pages.some((page) => page.id === pageId);
+}
+
 export async function listNotesDestinationCandidates(
   projectId: string | null,
   cursor: string | null = null,

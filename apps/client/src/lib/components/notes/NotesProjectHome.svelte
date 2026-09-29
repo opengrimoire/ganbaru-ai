@@ -602,7 +602,9 @@
     if (!onBeforeDocumentNavigation()) return;
     if (notes.viewMode === "archive") notes.closeArchive();
     if (notes.viewMode === "trash") notes.closeTrash();
-    void notes.selectPage(pageId, { openMode: "full" });
+    void notes.selectPage(pageId, { openMode: "full" }).catch((error) => {
+      console.error("open Notes page failed", error);
+    });
   }
 
   async function refreshWorkingMarkdown(): Promise<void> {
@@ -857,7 +859,9 @@
   function confirmTrashPage(): void {
     const page = pendingTrashPage;
     pendingTrashPage = null;
-    if (page) void notes.trashPage(page.id);
+    if (page) void notes.trashPage(page.id).catch((error) => {
+      console.error("trash Notes page failed", error);
+    });
   }
 
   async function confirmDeleteFolder(): Promise<void> {
@@ -1127,6 +1131,11 @@
       {t("notes.folderActionFailed", folderActionError)}
     </div>
   {/if}
+  {#if notes.trashActionError}
+    <div class="shrink-0 px-3 py-2 text-[0.8rem] text-destructive" role="alert">
+      {t("notes.trashFailed", notes.trashActionError)}
+    </div>
+  {/if}
   {#if navigationDragError}
     <div class="shrink-0 px-3 py-2 text-[0.8rem] text-destructive" role="alert">
       {t("notes.navigationMoveFailed", navigationDragError)}
@@ -1150,11 +1159,12 @@
       <div class="px-1 py-2 text-[0.8rem] text-destructive">
         {t("notes.loadFailed", notes.loadError)}
       </div>
-    {:else if treeItems.length === 0 && (mobileLayout || !workingMarkdownHasMatches) && search.trim()}
+    {/if}
+    {#if notes.loaded && treeItems.length === 0 && (mobileLayout || !workingMarkdownHasMatches) && search.trim()}
       <div class="px-1 py-2 text-[0.8rem] text-muted-foreground">
         {t("notes.noSearchResults")}
       </div>
-    {:else if mobileLayout && treeItems.length === 0}
+    {:else if mobileLayout && notes.loaded && treeItems.length === 0}
       <div class="flex min-h-48 flex-col items-center justify-center gap-3 px-4 py-8 text-center">
         <p class="text-sm text-muted-foreground">{t("notes.noPages")}</p>
         <button

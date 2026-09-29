@@ -129,4 +129,53 @@ describe("notes block persistence", () => {
     expect(error).toHaveBeenLastCalledWith(null);
   });
 
+  it("releases failed writes after their page is confirmed inactive", async () => {
+    let current = paragraph("Draft");
+    const error = vi.fn();
+    const persistence = createNotesBlockPersistence({
+      readBlock: () => current,
+      beforeSave: async () => undefined,
+      replaceBlock: (block) => { current = block; },
+      setLoadError: error,
+      debounceMs: 250,
+    });
+    updateNotesBlock.mockReset().mockRejectedValueOnce(new Error("notes page not found"))
+      .mockImplementation(async (_id: string, update: NotesBlockUpdate) => applyBlockUpdate(current, update));
+    const draft = blockWithText(current, "Unsaved");
+    persistence.localApplyBlockUpdate(blockId, draft);
+    await expect(persistence.saveBlockNow(blockId, draft)).rejects.toThrow("notes page not found");
+    expect(persistence.hasLocalChanges(blockId)).toBe(true);
+
+    persistence.discardPendingEditorWrites();
+    expect(persistence.hasLocalChanges(blockId)).toBe(false);
+    expect(error).toHaveBeenLastCalledWith(null);
+    await expect(persistence.flushPendingBlockSaves()).resolves.toBeUndefined();
+    await persistence.saveBlockNow(blockId, blockWithText(current, "Next page"));
+    expect(updateNotesBlock).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores a removed page's late save failure after releasing its writes", async () => {
+    let rejectSave!: (error: Error) => void;
+    updateNotesBlock.mockReset().mockImplementation(() => new Promise<NotesBlock>((_resolve, reject) => {
+      rejectSave = reject;
+    }));
+    let current = paragraph("Draft");
+    const error = vi.fn();
+    const persistence = createNotesBlockPersistence({
+      readBlock: () => current,
+      beforeSave: async () => undefined,
+      replaceBlock: (block) => { current = block; },
+      setLoadError: error,
+      debounceMs: 250,
+    });
+
+    const save = persistence.saveBlockNow(blockId, blockWithText(current, "Unsaved"));
+    await vi.waitFor(() => expect(updateNotesBlock).toHaveBeenCalledOnce());
+    persistence.discardPendingEditorWrites();
+    rejectSave(new Error("notes page not found"));
+    await expect(save).rejects.toThrow("notes page not found");
+    expect(error).toHaveBeenLastCalledWith(null);
+    await expect(persistence.flushPendingBlockSaves()).resolves.toBeUndefined();
+  });
+
 });
