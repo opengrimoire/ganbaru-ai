@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { NotesMentionCatalog } from "./notes-mention-data-controller.svelte";
   import { tick } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { notesBlockAnchorId } from "$lib/notes/block-link";
@@ -28,7 +29,6 @@
   import type { NotesSlashAction, NotesSlashCommand } from "$lib/notes/slash-commands";
   import type {
     NotesDateMentionTarget,
-    NotesNamedMentionTarget,
     NotesObjectMentionTarget,
     NotesPageMentionTarget,
     NotesRichTextAnnotationPatch,
@@ -154,7 +154,7 @@
     focusRequestId: number;
     focusSelection: NotesTextSelection | null;
     listOrdinals?: ReadonlyMap<string, number>;
-    mentionTargets: NotesNamedMentionTarget[];
+    mentionTargets: NotesMentionCatalog;
     templateStatusForBlock: (blockId: string) => NotesTemplateBlockStatus;
     buttonStatusForBlock: (blockId: string) => NotesButtonBlockStatus;
     onTextInput: (

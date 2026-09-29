@@ -10,6 +10,8 @@ import type { NotesPageOpenMode } from "$lib/notes/page-open-mode";
 const backend = vi.hoisted(() => ({
   pages: new Map<string, NotesPageOpenResponse>(),
   open: vi.fn(), createChild: vi.fn(), createPage: vi.fn(), saveBlock: vi.fn(),
+  mentionSources: vi.fn(async () => []),
+  destinations: vi.fn(async () => ({ pages: [], next_page_cursor: null })),
 }));
 
 vi.mock("$lib/api/notes", async (importOriginal) => ({
@@ -28,7 +30,7 @@ vi.mock("$lib/api/notes", async (importOriginal) => ({
   getNotesPageBreadcrumb: async (id: string) => backend.pages.get(id)!.breadcrumb,
   hydrateNotesBlocks: async (request: NotesBlockHydrationRequest) => backend.pages.get(request.page_id)!.blocks.results.filter((block) => request.block_ids.includes(block.id)),
   listNotesBacklinks: async () => [], listNotesPageAliases: async () => [], listNotesUnresolvedLinks: async () => [],
-  listNotesComments: async () => [], listNotesSuggestions: async () => [], listNotesDataSources: async () => [],
+  listNotesComments: async () => [], listNotesSuggestions: async () => [], listNotesDataSources: backend.mentionSources,
   getNotesLocalUser: async (): Promise<NotesLocalUser> => ({
     object: "user", id: "local", display_name: "Local",
     created_time: "2026-09-28T12:00:00Z", last_edited_time: "2026-09-28T12:00:00Z",
@@ -36,7 +38,7 @@ vi.mock("$lib/api/notes", async (importOriginal) => ({
   saveNotesUndoState: async () => undefined,
   loadNotesUndoState: async () => null,
   listNotesWorkingMarkdown: async () => ({ roots: [], unavailableWorkingFolderIds: [] }),
-  listNotesDestinationCandidates: async () => ({ pages: [...backend.pages.values()].map(({ page }) => page), next_page_cursor: null }),
+  listNotesDestinationCandidates: backend.destinations,
 }));
 vi.mock("$lib/stores/projects.svelte", () => {
   const group = { id: "group", name: "Group", icon: "folder" };
@@ -145,6 +147,8 @@ describe("Notes preview ownership", () => {
     expect(background.textContent).toContain("Main note content");
     expect(background.textContent).not.toContain("Sub-note content");
     expect(document.querySelector("[data-notes-page-peek]")?.textContent).toContain("Sub-note content");
+    expect(backend.mentionSources).not.toHaveBeenCalled();
+    expect(backend.destinations).not.toHaveBeenCalled();
     const path = document.querySelector("[data-notes-workspace-header]")!.textContent!;
     expect(path).toContain("Main note");
     expect(path.indexOf("Sub-note")).toBeGreaterThan(path.indexOf("Main note"));

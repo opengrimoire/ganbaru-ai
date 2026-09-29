@@ -251,7 +251,7 @@ describe("Notes store command counts", () => {
     expect(backend.count("workspace")).toBe(1);
   });
 
-  it("starts panel reads together and ignores a late old-page backlink result", async () => {
+  it("loads link presence without destinations and ignores a late old-page backlink result", async () => {
     backend.clear();
     notes.setPagePanelSubsystemOpen("links", true);
     const oldPanel = notes.ensureOptionalSubsystem("links", pageAId);
@@ -259,6 +259,8 @@ describe("Notes store command counts", () => {
     expect(backend.count("backlinks")).toBe(1);
     expect(backend.count("aliases")).toBe(1);
     expect(backend.count("unresolved")).toBe(1);
+    expect(backend.count("destinations")).toBe(0);
+    await notes.reloadLinkResolutionPages();
     expect(backend.count("destinations")).toBe(1);
 
     await notes.selectPage(pageBId);

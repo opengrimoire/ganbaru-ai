@@ -67,7 +67,7 @@ export function createNotesWorkspaceController(context: NotesWorkspaceController
       const nextSelected = context.applyInitialShell(shell, requestedSelection);
       loaded = true;
       if (nextSelected) {
-        void context.loadSelectedPage(nextSelected).catch((caught) => {
+        await context.loadSelectedPage(nextSelected).catch((caught) => {
           if (context.readSelectedPageId() === nextSelected) error = errorMessage(caught);
         });
       } else {
@@ -83,8 +83,8 @@ export function createNotesWorkspaceController(context: NotesWorkspaceController
   }
 
   async function ensureLoaded(): Promise<void> {
-    if (loaded) return;
     if (loadPromise) return loadPromise;
+    if (loaded) return;
     loadPromise = load().finally(() => {
       loadPromise = null;
     });

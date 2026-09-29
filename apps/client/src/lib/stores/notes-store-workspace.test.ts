@@ -37,6 +37,30 @@ describe("Notes workspace reloads", () => {
     backend.load.mockClear();
   });
 
+  it("keeps concurrent startup callers waiting until the selected note has loaded", async () => {
+    const { createNotesWorkspaceController } = await import("./notes-store-workspace.svelte");
+    let finishPage!: () => void;
+    const loadSelectedPage = vi.fn(() => new Promise<void>((resolve) => { finishPage = resolve; }));
+    const controller = createNotesWorkspaceController({
+      readRequestState: () => ({ projectId: null, expandedPageIds: [], seedPageIds: [], selectedPageId: "page" }),
+      readNavigationMutationRevision: () => 0,
+      prepareLoad: vi.fn(), applyInitialShell: () => "page",
+      applyAdditionalShell: vi.fn(), mergeReloadedShell: vi.fn(),
+      loadSelectedPage, clearSelectedPageState: vi.fn(), readSelectedPageId: () => "page",
+    });
+    const first = controller.ensureLoaded();
+    backend.resolvers[0]?.(shell("end"));
+    await vi.waitFor(() => expect(loadSelectedPage).toHaveBeenCalledOnce());
+    const ready = vi.fn();
+    const second = controller.ensureLoaded().then(ready);
+    await Promise.resolve();
+    expect(ready).not.toHaveBeenCalled();
+    expect(backend.load).toHaveBeenCalledOnce();
+    finishPage();
+    await Promise.all([first, second]);
+    expect(ready).toHaveBeenCalledOnce();
+  });
+
   it("rereads a shell that began before a local navigation mutation", async () => {
     const { createNotesWorkspaceController } = await import("./notes-store-workspace.svelte");
     let mutationRevision = 0;

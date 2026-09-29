@@ -36,6 +36,8 @@ Suggestions store original and proposed text, range and context anchors, author,
 
 Rich text can mention users, projects, tasks, pages, dates, and supported local objects. Reminder and participant mentions can create local notification rows. Delivery is owned by the local application or platform scheduler and never by a hosted Notes service.
 
+Opening a note does not load the database mention catalog. A mention menu requests that data when opened, shares an in-flight request with other open menus, and releases it after the menus close. Reopening refreshes the catalog so database edits are reflected without retaining every row in each editor pane.
+
 Notification previews and deep links obey the same effective page access as direct reads.
 
 ## Collaboration operations

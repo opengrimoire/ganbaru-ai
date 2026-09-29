@@ -25,6 +25,104 @@ fn migration_set_identity_is_stable_and_nonempty() {
     assert_eq!(first, crate::migration_set_identity_material());
 }
 
+fn registry_test_directory(name: &str) -> std::path::PathBuf {
+    let directory = std::env::temp_dir().join(format!(
+        "ganbaru-db-{name}-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&directory).unwrap();
+    directory
+}
+
+#[test]
+fn pool_registry_concurrent_startup_returns_one_initialized_pool() {
+    block_on(async {
+        let directory = registry_test_directory("concurrent");
+        let path = directory.join("ganbaru-ai.sqlite");
+        let registry = crate::DatabasePoolRegistry::default();
+        let mut requests = tokio::task::JoinSet::new();
+        for _ in 0..8 {
+            let registry = registry.clone();
+            let path = path.clone();
+            requests.spawn(async move { registry.connect_path(path).await });
+        }
+        let mut pools = Vec::new();
+        while let Some(result) = requests.join_next().await {
+            let pool = result.unwrap().unwrap();
+            crate::validate_current_schema(&pool).await.unwrap();
+            pools.push(pool);
+        }
+        pools[0].close().await;
+        assert!(pools.iter().all(sqlx::SqlitePool::is_closed));
+        registry.close_all().await.unwrap();
+        std::fs::remove_dir_all(directory).unwrap();
+    });
+}
+
+#[test]
+fn pool_registry_close_waits_for_an_in_progress_open() {
+    block_on(async {
+        let directory = registry_test_directory("close-opening");
+        let path = directory.join("ganbaru-ai.sqlite");
+        let registry = crate::DatabasePoolRegistry::default();
+        // Poll open first so close must also retire a pool whose initialization is pending.
+        let (opened, closed) = tokio::join!(
+            biased;
+            registry.connect_path(&path),
+            registry.close_path(&path),
+        );
+        closed.unwrap();
+        assert!(opened.unwrap().is_closed());
+        let reopened = registry.connect_path(&path).await.unwrap();
+        assert!(!reopened.is_closed());
+        crate::validate_current_schema(&reopened).await.unwrap();
+        registry.close_all().await.unwrap();
+        std::fs::remove_dir_all(directory).unwrap();
+    });
+}
+
+#[test]
+fn pool_registry_failed_initialization_can_be_retried() {
+    block_on(async {
+        let directory = registry_test_directory("retry-opening");
+        let path = directory.join("ganbaru-ai.sqlite");
+        let options = sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&path)
+            .create_if_missing(true);
+        let seed = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .unwrap();
+        // Force migration failure after connection succeeds.
+        sqlx::query("CREATE TABLE projects (unexpected TEXT)")
+            .execute(&seed)
+            .await
+            .unwrap();
+        let registry = crate::DatabasePoolRegistry::default();
+        assert!(
+            registry
+                .connect_path(&path)
+                .await
+                .unwrap_err()
+                .contains("migrations")
+        );
+        sqlx::query("DROP TABLE projects")
+            .execute(&seed)
+            .await
+            .unwrap();
+        seed.close().await;
+        let pool = registry.connect_path(&path).await.unwrap();
+        crate::validate_current_schema(&pool).await.unwrap();
+        registry.close_all().await.unwrap();
+        std::fs::remove_dir_all(directory).unwrap();
+    });
+}
+
 #[test]
 fn pool_registry_reuses_and_closes_authorized_path() {
     block_on(async {

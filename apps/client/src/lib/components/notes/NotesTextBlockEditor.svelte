@@ -15,7 +15,6 @@
   import type { NotesTextSelection } from "$lib/notes/editor-selection";
   import {
     type NotesDateMentionTarget,
-    type NotesNamedMentionTarget,
     type NotesObjectMentionTarget,
     type NotesPageMentionTarget,
     type NotesRichTextAnnotationPatch,
@@ -34,6 +33,7 @@
   import type { NotesButtonBlockStatus } from "$lib/notes/button-block";
   import NotesRichTextInline from "./NotesRichTextInline.svelte";
   import { createNotesTextEditorController } from "./notes-text-editor-runtime.svelte";
+  import type { NotesMentionCatalog } from "./notes-mention-data-controller.svelte";
 
   let {
     block,
@@ -91,7 +91,7 @@
     focusBlockId: string | null;
     focusRequestId: number;
     focusSelection: NotesTextSelection | null;
-    mentionTargets: NotesNamedMentionTarget[];
+    mentionTargets: NotesMentionCatalog;
     commentAnchors: readonly NotesResolvedCommentAnchor[];
     suggestionAnchors: readonly NotesResolvedSuggestionAnchor[];
     templateStatus: NotesTemplateBlockStatus;
@@ -205,7 +205,7 @@
     focusBlockId: () => focusBlockId,
     focusRequestId: () => focusRequestId,
     focusSelection: () => focusSelection,
-    mentionTargets: () => mentionTargets,
+    mentionTargets: () => mentionTargets.read(),
     locale: () => localization.locale,
     translate: t,
     onTextInput: (blockId, value, selection) => onTextInput(blockId, value, selection),
@@ -248,6 +248,9 @@
   const currentTextAnnotationRange = $derived(controller.currentTextAnnotationRange);
   const controlLoadStates = $derived(runtime.controlLoadStates);
   const mentionOpen = $derived(controller.mentionOpen);
+  $effect(() => {
+    if (mentionOpen) return mentionTargets.acquire();
+  });
   const mentionMatches = $derived(controller.mentionMatches);
   const slashOpen = $derived(controller.slashOpen);
   const slashQuery = $derived(controller.slashQuery);

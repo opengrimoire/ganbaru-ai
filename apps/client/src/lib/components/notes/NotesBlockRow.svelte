@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { NotesMentionCatalog } from "./notes-mention-data-controller.svelte";
   import { tick } from "svelte";
   import {
     beginLazyComponentLoad,
@@ -33,7 +34,6 @@
   import type { NotesButtonBlockStatus } from "$lib/notes/button-block";
   import {
     type NotesDateMentionTarget,
-    type NotesNamedMentionTarget,
     type NotesObjectMentionTarget,
     type NotesRichTextAnnotationPatch,
     type NotesPageMentionTarget,
@@ -169,7 +169,7 @@
     focusRequestId: number;
     focusSelection: NotesTextSelection | null;
     listOrdinals?: ReadonlyMap<string, number>;
-    mentionTargets: NotesNamedMentionTarget[];
+    mentionTargets: NotesMentionCatalog;
     templateStatus: NotesTemplateBlockStatus;
     buttonStatus: NotesButtonBlockStatus;
     onTextInput: (

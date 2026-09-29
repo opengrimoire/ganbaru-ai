@@ -539,7 +539,6 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
           linksController.reloadBacklinks(pageId),
           linksController.reloadPageAliases(pageId),
           linksController.reloadUnresolvedLinks(pageId),
-          linksController.reloadLinkResolutionPages(),
         ]);
         break;
       case "comments":

@@ -33,11 +33,14 @@ async function editor(blockType: NotesBlockType = "paragraph", text = "", indent
   const onTextInput = vi.fn((_id: string, value: string) => blocks.update((block) => applyBlockUpdate(block, createBlockUpdate(block.type, value))));
   const onKeyboardAction = vi.fn();
   const onFocusBlock = vi.fn();
+  const readMentionTargets = vi.fn(() => []);
+  const releaseMentionTargets = vi.fn();
+  const acquireMentionTargets = vi.fn(() => releaseMentionTargets);
   const onPasteRichHtml = vi.fn((_id: string, _start: number, _end: number, _html: string) => false);
   const props: ComponentProps<typeof NotesTextBlockEditor> = {
     get block() { return current.current; }, previousBlockType: null, isOnlyBlock: true, indentationDepth,
     focusBlockId: initialFocusBlockId, focusRequestId: 1, focusSelection: { start: 0, end: 0 },
-    mentionTargets: [], commentAnchors: [], suggestionAnchors: [],
+    mentionTargets: { read: readMentionTargets, acquire: acquireMentionTargets }, commentAnchors: [], suggestionAnchors: [],
     templateStatus: EMPTY_NOTES_TEMPLATE_BLOCK_STATUS, buttonStatus: EMPTY_NOTES_BUTTON_BLOCK_STATUS,
     onTextInput,
     onConvert, onReplaceRichText: vi.fn(), onInsertPageMention: vi.fn(), onInsertDateMention: vi.fn(),
@@ -80,10 +83,23 @@ async function editor(blockType: NotesBlockType = "paragraph", text = "", indent
     await tick(); await tick();
     return event;
   };
-  return { host, input, onConvert, onTextInput, onKeyboardAction, onPasteRichHtml, onFocusBlock, row, blockSelection, focusRow, navigationKeydown };
+  return { host, input, onConvert, onTextInput, onKeyboardAction, onPasteRichHtml, onFocusBlock, row, blockSelection, focusRow, navigationKeydown, readMentionTargets, acquireMentionTargets, releaseMentionTargets };
 }
 
 describe("Notes typed slash commands", () => {
+  it("reads and acquires mention data only while the mention menu is open", async () => {
+    const h = await editor();
+    await h.input("Ordinary text ");
+    expect(h.readMentionTargets).not.toHaveBeenCalled();
+    expect(h.acquireMentionTargets).not.toHaveBeenCalled();
+    await h.input("@");
+    expect(h.readMentionTargets).toHaveBeenCalled();
+    expect(h.acquireMentionTargets).toHaveBeenCalledOnce();
+    h.host.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    await tick();
+    expect(h.releaseMentionTargets).toHaveBeenCalledOnce();
+  });
+
   it("delegates slash-note clearing to the lifecycle command without an extra paragraph save", async () => {
     const h = await editor();
     await h.input("/Note");

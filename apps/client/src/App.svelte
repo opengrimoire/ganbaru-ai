@@ -40,6 +40,7 @@
   } from "$lib/notes/types";
   import { detachableTabViewFromWindowLabel } from "$lib/windows/detached";
   import { ensureDbUrl } from "$lib/api/db";
+  import { prepareDesktopWorkspace } from "$lib/windows/desktop-workspace-readiness";
   import { APP_SOUND_IDS, playAppSound, type AppSoundId } from "$lib/app-sounds";
   import "$lib/stores/app-session";
   import type { CalendarEvent } from "$lib/components/calendar/types";
@@ -383,12 +384,7 @@
       : null;
 
     if (isMainWindow) {
-      void ensureDbUrl()
-        .then(() => projects.ensureLoaded())
-        .then(() => Promise.all([
-          notes.ensureLoaded(),
-          chat.prewarmForProject(projects.selectedProjectId),
-        ]))
+      void prepareDesktopWorkspace()
         .catch((error) => {
           console.error("core workspace preload failed", error);
         });

@@ -69,7 +69,7 @@
     EMPTY_NOTES_MUSIC_MENTION_CONTEXT,
     type NotesMusicMentionContext,
   } from "./notes-block-mention-targets";
-  import { createNotesMentionDataController } from "./notes-mention-data-controller.svelte";
+  import { notesMentionData, type NotesMentionCatalog } from "./notes-mention-data-controller.svelte";
 
   let {
     items,
@@ -97,9 +97,6 @@
   const projects = getProjects();
   const { t } = getLocalization();
   let blockListElement: HTMLDivElement | null = $state(null);
-  const mentionDataController = createNotesMentionDataController();
-  const mentionDataSources = $derived(mentionDataController.dataSources);
-  const mentionDataSourceRowPages = $derived(mentionDataController.rowPages);
   const blockHandle = createNotesBlockHandleController();
   const blockSelectionController = createNotesBlockSelectionController({
     undo: notes.undoNotesEdit,
@@ -191,7 +188,10 @@
   const selectionActionError = $derived(blockSelectionController.error);
   const canMoveSelectionUp = $derived(blockSelectionController.canMoveUp);
   const canMoveSelectionDown = $derived(blockSelectionController.canMoveDown);
-  const mentionTargets: NotesNamedMentionTarget[] = $derived(buildMentionTargets());
+  const mentionTargets: NotesMentionCatalog = {
+    read: buildMentionTargets,
+    acquire: notesMentionData.acquire,
+  };
   const listOrdinals = $derived(notesNumberedListOrdinals(notes.flatBlockOutlines.map(({ outline }) => ({
     indent: outline.ganbaru_indent ?? 0,
     id: outline.id,
@@ -254,10 +254,6 @@
   });
 
   $effect(() => {
-    void mentionDataController.reload();
-  });
-
-  $effect(() => {
     if (!projects.loaded && !projects.loading) {
       void projects.ensureLoaded()
         .then(() => {
@@ -281,8 +277,8 @@
     return buildNotesMentionTargets({
       pages: notes.allPages,
       localUser: notes.localUser,
-      dataSources: mentionDataSources,
-      dataSourceRowPages: mentionDataSourceRowPages,
+      dataSources: notesMentionData.dataSources,
+      dataSourceRowPages: notesMentionData.rowPages,
       projects: projects.projects,
       tasks: projects.tasks,
       calendarEvents: calendar.rawBlocks,

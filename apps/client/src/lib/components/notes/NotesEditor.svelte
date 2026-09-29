@@ -679,6 +679,11 @@
       void notes.ensureOptionalSubsystem(nextPanel).catch((error) => {
         console.error(`load notes ${nextPanel} panel failed`, error);
       });
+      if (nextPanel === "links") {
+        void notes.reloadLinkResolutionPages().catch((error) => {
+          console.error("load notes link destinations failed", error);
+        });
+      }
     }
     pageMenuOpen = false;
     moveMenuOpen = false;

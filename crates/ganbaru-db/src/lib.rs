@@ -5,9 +5,10 @@ use sqlx::{
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::Duration,
 };
+use tokio::sync::Mutex;
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("../../apps/client/src-tauri/migrations");
 const WRITE_CONTENTION_TIMEOUT: Duration = Duration::from_secs(5);
@@ -25,6 +26,9 @@ struct RegisteredPool {
 }
 
 /// Shared registry for SQLite pools keyed by their authorized filesystem path.
+///
+/// Opening, initialization, and closing are serialized so concurrent first reads
+/// cannot create competing pools or run the migration chain more than once.
 #[derive(Clone, Default)]
 pub struct DatabasePoolRegistry {
     pools: Arc<Mutex<HashMap<PathBuf, RegisteredPool>>>,
@@ -52,12 +56,8 @@ impl DatabasePoolRegistry {
         access: DatabaseAccessMode,
     ) -> Result<SqlitePool, String> {
         let path = path.as_ref().to_path_buf();
-        if let Some(registered) = self
-            .pools
-            .lock()
-            .map_err(|_| "database pool lock poisoned".to_string())?
-            .get(&path)
-        {
+        let mut pools = self.pools.lock().await;
+        if let Some(registered) = pools.get(&path) {
             if registered.access != access {
                 return Err("database access changed; close the existing pool first".to_string());
             }
@@ -80,57 +80,40 @@ impl DatabasePoolRegistry {
             .connect_with(options)
             .await
             .map_err(|error| format!("connect: {error}"))?;
-        if access == DatabaseAccessMode::ReadWrite {
-            run_migrations(&pool).await?;
-            sqlx::raw_sql("PRAGMA optimize")
-                .execute(&pool)
-                .await
-                .map_err(|error| format!("pragma optimize: {error}"))?;
-        } else {
-            sqlx::raw_sql("PRAGMA query_only = ON")
-                .execute(&pool)
-                .await
-                .map_err(|error| format!("enable query-only database access: {error}"))?;
-        }
-
-        let existing = {
-            let mut pools = self
-                .pools
-                .lock()
-                .map_err(|_| "database pool lock poisoned".to_string())?;
-            if let Some(existing) = pools.get(&path) {
-                if existing.access != access {
-                    return Err(
-                        "database access changed while opening; close the existing pool first"
-                            .to_string(),
-                    );
-                }
-                Some(existing.pool.clone())
+        let initialization = async {
+            if access == DatabaseAccessMode::ReadWrite {
+                run_migrations(&pool).await?;
+                sqlx::raw_sql("PRAGMA optimize")
+                    .execute(&pool)
+                    .await
+                    .map_err(|error| format!("pragma optimize: {error}"))?;
             } else {
-                pools.insert(
-                    path,
-                    RegisteredPool {
-                        access,
-                        pool: pool.clone(),
-                    },
-                );
-                None
+                sqlx::raw_sql("PRAGMA query_only = ON")
+                    .execute(&pool)
+                    .await
+                    .map_err(|error| format!("enable query-only database access: {error}"))?;
             }
-        };
-        if let Some(existing) = existing {
-            pool.close().await;
-            return Ok(existing);
+            Ok::<(), String>(())
         }
+        .await;
+        if let Err(error) = initialization {
+            pool.close().await;
+            return Err(error);
+        }
+        pools.insert(
+            path,
+            RegisteredPool {
+                access,
+                pool: pool.clone(),
+            },
+        );
         Ok(pool)
     }
 
     /// Closes and removes the pool registered for a filesystem path.
     pub async fn close_path(&self, path: impl AsRef<Path>) -> Result<(), String> {
-        let pool = self
-            .pools
-            .lock()
-            .map_err(|_| "database pool lock poisoned".to_string())?
-            .remove(path.as_ref());
+        let mut pools = self.pools.lock().await;
+        let pool = pools.remove(path.as_ref());
         if let Some(registered) = pool {
             registered.pool.close().await;
         }
@@ -139,13 +122,8 @@ impl DatabasePoolRegistry {
 
     /// Closes every pool currently held by the registry.
     pub async fn close_all(&self) -> Result<(), String> {
-        let pools = std::mem::take(
-            &mut *self
-                .pools
-                .lock()
-                .map_err(|_| "database pool lock poisoned".to_string())?,
-        );
-        for registered in pools.into_values() {
+        let mut pools = self.pools.lock().await;
+        for registered in std::mem::take(&mut *pools).into_values() {
             registered.pool.close().await;
         }
         Ok(())

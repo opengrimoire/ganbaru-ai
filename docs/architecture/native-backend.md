@@ -34,6 +34,8 @@ The scratch command facade keeps generation identity and shared owner/inspection
 
 The active vault SQLite database is the source of truth for structured data. SQLx embeds migrations from `apps/client/src-tauri/migrations/`. Migration filenames use UTC timestamps and are applied in order.
 
+The shared database pool registry serializes opening, migration, optimization, and closing with an asynchronous lock. Concurrent startup commands reuse one initialized pool instead of opening temporary competing pools. Failed initialization closes its pool before allowing a retry. The registry retains one SQLite connection per pool and the existing WAL and full synchronization settings.
+
 The database layer does not expose a generic query bridge to the frontend. Domain services own statements, transactions, validation, and result shapes. Cross-table changes that represent one user action commit atomically where partial success would violate the product contract.
 
 Exact columns and indexes belong to migrations. The [schema guide](../data/schema/README.md) documents domain ownership, evolution rules, and important relationships without mirroring every SQL declaration.
