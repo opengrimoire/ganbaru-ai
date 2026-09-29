@@ -1,6 +1,6 @@
 use super::models::{
-    NoteBlockRow, NoteCreatedDatabaseDto, NoteDataSourceRow, NoteDatabaseCreate, NoteDatabaseRow,
-    NoteDatabaseViewRow, NoteLinkedDatabaseCreate,
+    NoteBlockRow, NoteCreatedDatabaseDto, NoteDataSourceRow, NoteDatabaseCreate,
+    NoteDatabaseRename, NoteDatabaseRow, NoteDatabaseViewRow, NoteLinkedDatabaseCreate,
 };
 use super::validation::{
     plain_text_from_payload, require_uuid, validate_block_payload, validate_database_create,
@@ -13,6 +13,68 @@ use sqlx::{Sqlite, SqlitePool, Transaction};
 const DEFAULT_DATABASE_TITLE: &str = "Untitled database";
 const DEFAULT_TITLE_PROPERTY_NAME: &str = "Name";
 const DEFAULT_TABLE_VIEW_NAME: &str = "Table";
+
+pub async fn rename_database(
+    pool: &SqlitePool,
+    database_id: &str,
+    update: NoteDatabaseRename,
+) -> Result<String, String> {
+    require_uuid(database_id, "database_id")?;
+    let title = update.title.trim();
+    if title.is_empty() || title.chars().count() > 200 || title.chars().any(char::is_control) {
+        return Err("database title must contain 1 to 200 printable characters".to_string());
+    }
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| format!("begin Notes database rename: {error}"))?;
+    let block = load_block_row_tx(&mut tx, database_id).await?;
+    if block.block_type != "child_database" {
+        return Err("database block not found".to_string());
+    }
+    let database: NoteDatabaseRow =
+        sqlx::query_as("SELECT * FROM notes_databases WHERE id = ? AND in_trash = 0")
+            .bind(database_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|error| format!("load Notes database to rename: {error}"))?
+            .ok_or_else(|| "database not found".to_string())?;
+    if database.title == title {
+        return Ok(title.to_string());
+    }
+    history::record_page_snapshot_tx(&mut tx, &block.page_id, "rename_database").await?;
+    project_history::mark_page_dirty_tx(&mut tx, &block.page_id, "Rename database", false).await?;
+    let mut payload: Value = serde_json::from_str(&block.payload)
+        .map_err(|error| format!("parse Notes database block: {error}"))?;
+    payload["title"] = Value::String(title.to_string());
+    validate_block_payload("child_database", &payload)?;
+    sqlx::query("UPDATE notes_blocks SET payload = ?, plain_text = ?, last_edited_time = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
+        .bind(payload.to_string())
+        .bind(title)
+        .bind(database_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|error| format!("rename Notes database block: {error}"))?;
+    sqlx::query("UPDATE notes_databases SET title = ?, title_rich_text = ?, last_edited_time = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
+        .bind(title)
+        .bind(rich_text_array(title).to_string())
+        .bind(database_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|error| format!("rename Notes database: {error}"))?;
+    sqlx::query("UPDATE notes_data_sources SET title = ?, title_rich_text = ?, last_edited_time = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE database_id = ? AND in_trash = 0")
+        .bind(title)
+        .bind(rich_text_array(title).to_string())
+        .bind(database_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|error| format!("rename Notes database data source: {error}"))?;
+    writes::touch_page(&mut tx, &block.page_id).await?;
+    tx.commit()
+        .await
+        .map_err(|error| format!("commit Notes database rename: {error}"))?;
+    Ok(title.to_string())
+}
 
 pub async fn create_database(
     pool: &SqlitePool,

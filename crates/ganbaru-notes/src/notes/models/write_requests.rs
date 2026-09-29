@@ -634,6 +634,24 @@ pub struct NoteLinkedDatabaseCreate {
 }
 
 #[derive(Deserialize)]
+pub struct NoteDatabaseViewDuplicate {
+    pub id: String,
+    pub database_id: String,
+    pub source_view_id: String,
+    pub name: String,
+}
+
+#[derive(Deserialize)]
+pub struct NoteDatabaseViewRename {
+    pub name: String,
+}
+
+#[derive(Deserialize)]
+pub struct NoteDatabaseRename {
+    pub title: String,
+}
+
+#[derive(Deserialize)]
 pub struct NoteDataSourceSchemaUpdate {
     pub properties: Value,
     pub property_order: Vec<String>,

@@ -1,13 +1,15 @@
 <script lang="ts">
   import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import { onMount, tick } from "svelte";
+  import { portal } from "$lib/utils/portal";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
     getNotesDataSourceSchema,
+    listNotesDatabaseViews,
     listNotesDataSources,
+    renameNotesDatabase,
     updateNotesDataSourceSchema,
   } from "$lib/api/notes";
-  import { notesChildDatabaseViewScope } from "$lib/notes/database-linked";
   import NotesDatabaseRollupSchemaControls from "./NotesDatabaseRollupSchemaControls.svelte";
   import NotesDatabaseViewSurface from "./NotesDatabaseViewSurface.svelte";
   import {
@@ -25,7 +27,6 @@
     type NotesDataSourceSchemaOptionDraft,
     type NotesDataSourceSchemaPropertyDraft,
   } from "$lib/notes/data-source-schema";
-  import type { NotesDatabaseViewKind } from "$lib/notes/contracts/database/base";
   import {
     NOTES_DATA_SOURCE_NUMBER_FORMATS,
     NOTES_DATA_SOURCE_PROPERTY_TYPES,
@@ -44,11 +45,11 @@
   import Database from "@lucide/svelte/icons/database";
   import Eye from "@lucide/svelte/icons/eye";
   import EyeOff from "@lucide/svelte/icons/eye-off";
-  import Link2 from "@lucide/svelte/icons/link-2";
   import Plus from "@lucide/svelte/icons/plus";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import Save from "@lucide/svelte/icons/save";
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import X from "@lucide/svelte/icons/x";
 
   let {
     block,
@@ -71,8 +72,13 @@
   const localization = getLocalization();
   const { t } = localization;
 
-  let button: HTMLButtonElement | null = $state(null);
+  let titleInput: HTMLInputElement | null = $state(null);
   let expanded = $state(false);
+  let titleDraft = $state("");
+  let savedTitle = $state("");
+  let titleSaving = $state(false);
+  let titleError = $state<string | null>(null);
+  let selectedPropertyId = $state<string | null>(null);
   let loading = $state(false);
   let saving = $state(false);
   let linking = $state(false);
@@ -81,10 +87,11 @@
   let saved = $state(false);
   let dirty = $state(false);
   let schema = $state<NotesDataSourceSchema | null>(null);
+  let schemaViewId = $state<string | null>(null);
+  let schemaLoadPromise: Promise<void> | null = null;
   let availableDataSources = $state<NotesDataSource[]>([]);
   let properties = $state<NotesDataSourceSchemaPropertyDraft[]>([]);
   let newPropertyType = $state<NotesDataSourcePropertyType>("rich_text");
-  let activeView = $state<NotesDatabaseViewKind>("table");
   let tableReloadKey = $state(0);
   let boardReloadKey = $state(0);
   let galleryReloadKey = $state(0);
@@ -92,7 +99,7 @@
   let calendarReloadKey = $state(0);
   let timelineReloadKey = $state(0);
 
-  const title = $derived(block.child_database.title.trim());
+  const title = $derived(titleDraft.trim());
   const dataSourceId = $derived(block.child_database.data_source_id ?? null);
   const databaseId = $derived(block.child_database.database_id ?? null);
   const viewId = $derived(block.child_database.view_id ?? null);
@@ -101,31 +108,41 @@
       && block.child_database.data_source_id !== undefined
       && block.child_database.view_id !== undefined,
   );
-  const viewScope = $derived(notesChildDatabaseViewScope(block));
   const propertyCount = $derived(properties.length);
 
   onMount(() => {
-    if (localDatabase) void loadSchema();
+    titleDraft = block.child_database.title;
+    savedTitle = block.child_database.title;
   });
 
   $effect(() => {
     const _focusRequestId = focusRequestId;
     if (focusBlockId !== block.id) return;
-    void tick().then(() => button?.focus());
+    void tick().then(() => titleInput?.focus());
   });
 
-  async function loadSchema(): Promise<void> {
+  function loadSchema(): Promise<void> {
+    if (schemaLoadPromise) return schemaLoadPromise;
+    schemaLoadPromise = performLoadSchema().finally(() => { schemaLoadPromise = null; });
+    return schemaLoadPromise;
+  }
+
+  async function performLoadSchema(): Promise<void> {
     if (!dataSourceId) return;
     loading = true;
     error = null;
     try {
-      const [loaded, dataSources] = await Promise.all([
-        getNotesDataSourceSchema(dataSourceId, viewScope),
+      const [views, dataSources] = await Promise.all([
+        databaseId ? listNotesDatabaseViews(databaseId) : Promise.resolve([]),
         listNotesDataSources(),
       ]);
+      const tableViewId = views.find((view) => view.type === "table")?.id ?? null;
+      const loaded = await getNotesDataSourceSchema(dataSourceId, { databaseId, viewId: tableViewId });
       schema = loaded;
+      schemaViewId = tableViewId;
       availableDataSources = dataSources;
       properties = notesDataSourceSchemaDraftFromDto(loaded.data_source, loaded.view);
+      selectedPropertyId = properties[0]?.id ?? null;
       dirty = false;
       saved = false;
       tableReloadKey += 1;
@@ -141,13 +158,13 @@
     }
   }
 
-  async function saveSchema(): Promise<void> {
-    if (!dataSourceId) return;
+  async function saveSchema(nextProperties: NotesDataSourceSchemaPropertyDraft[] = properties): Promise<boolean> {
+    if (!dataSourceId) return false;
     saving = true;
     error = null;
     try {
-      const update = notesDataSourceSchemaUpdateFromDraft(properties);
-      const updated = await updateNotesDataSourceSchema(dataSourceId, update, viewScope);
+      const update = notesDataSourceSchemaUpdateFromDraft(nextProperties);
+      const updated = await updateNotesDataSourceSchema(dataSourceId, update, { databaseId, viewId: schemaViewId });
       schema = updated;
       properties = notesDataSourceSchemaDraftFromDto(updated.data_source, updated.view);
       dirty = false;
@@ -158,14 +175,38 @@
       listReloadKey += 1;
       calendarReloadKey += 1;
       timelineReloadKey += 1;
+      return true;
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);
+      return false;
     } finally {
       saving = false;
     }
   }
 
+  async function saveTitle(): Promise<void> {
+    if (!databaseId || titleSaving) return;
+    const nextTitle = titleDraft.trim();
+    if (!nextTitle) {
+      titleDraft = savedTitle;
+      return;
+    }
+    if (nextTitle === savedTitle) return;
+    titleSaving = true;
+    titleError = null;
+    try {
+      titleDraft = await renameNotesDatabase(databaseId, nextTitle);
+      savedTitle = titleDraft;
+    } catch (caught) {
+      titleDraft = savedTitle;
+      titleError = caught instanceof Error ? caught.message : String(caught);
+    } finally {
+      titleSaving = false;
+    }
+  }
+
   async function createLinkedView(): Promise<void> {
+    if (linking) return;
     linking = true;
     linkedViewError = null;
     try {
@@ -272,10 +313,34 @@
       Object.assign(property, notesDataSourceDefaultButtonPatch(properties, property.id));
     }
     markDirty([...properties, property]);
+    selectedPropertyId = property.id;
+  }
+
+  async function addPropertyFromView(type: NotesDataSourcePropertyType, rawName: string): Promise<void> {
+    if (schemaLoadPromise) await schemaLoadPromise;
+    if (!schema) await loadSchema();
+    if (!schema) throw new Error(error ?? t("notes.databaseSchemaLoadFailed", ""));
+    const previous = properties;
+    const wasDirty = dirty;
+    const name = rawName.trim() || defaultNotesDataSourcePropertyName(type, properties);
+    const property = createNotesDataSourcePropertyDraft(type, name);
+    if (type === "relation") property.relationDataSourceId = dataSourceId ?? "";
+    if (type === "rollup") Object.assign(property, notesDataSourceDefaultRollupPatch(properties, property.id, dataSourceId, rollupDataSources()));
+    if (type === "formula") property.formulaExpression = defaultFormulaExpression(property.id);
+    if (type === "button") Object.assign(property, notesDataSourceDefaultButtonPatch(properties, property.id));
+    const next = [...properties, property];
+    markDirty(next);
+    if (!(await saveSchema(next))) {
+      properties = previous;
+      dirty = wasDirty;
+      throw new Error(error ?? t("notes.databaseSchemaSaveFailed", ""));
+    }
   }
 
   function deleteProperty(propertyId: string): void {
-    markDirty(properties.filter((property) => property.id !== propertyId || property.type === "title"));
+    const next = properties.filter((property) => property.id !== propertyId || property.type === "title");
+    markDirty(next);
+    if (selectedPropertyId === propertyId) selectedPropertyId = next[0]?.id ?? null;
   }
 
   function moveProperty(propertyId: string, direction: -1 | 1): void {
@@ -473,60 +538,68 @@
 </script>
 
 <section
-  class="my-4 min-w-0 space-y-2"
+  class="my-5 min-w-0 space-y-1"
   aria-label={t("notes.blockType.childDatabase")}
 >
   <div class="flex min-w-0 items-center gap-2 px-1">
-    <div
-      class="flex size-7 shrink-0 items-center justify-center text-muted-foreground"
-      aria-hidden="true"
-    >
-      <Database class="size-4" />
-    </div>
-    <button
-      bind:this={button}
-      type="button"
-      class="flex min-h-8 min-w-0 flex-1 flex-col gap-0.5 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      onkeydown={onKeydown}
-      onclick={() => onFocusBlock(block.id)}
-    >
-      <span class="min-w-0 truncate text-base font-semibold text-foreground">
-        {title || t("notes.untitled")}
-      </span>
-      {#if !localDatabase}<span class="min-w-0 truncate text-[0.8rem] text-muted-foreground">{t("notes.childDatabasePreserved")}</span>{/if}
-    </button>
     {#if localDatabase}
-      <button
-        type="button"
-        class="inline-flex h-8 shrink-0 items-center gap-1 rounded-md px-2 text-[0.8rem] text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
-        disabled={linking}
-        aria-label={t("notes.databaseLinkedViewCreate")}
-        title={t("notes.databaseLinkedViewCreate")}
-        onclick={() => {
-          void createLinkedView();
+      <input
+        bind:this={titleInput}
+        class="min-h-10 min-w-0 flex-1 border-0 bg-transparent px-0 text-[1.4rem] font-semibold leading-tight text-foreground outline-none placeholder:text-muted-foreground/50 focus:ring-0"
+        aria-label={t("notes.databaseTitle")}
+        placeholder={t("notes.databaseNewTitle")}
+        bind:value={titleDraft}
+        disabled={titleSaving}
+        onfocus={() => onFocusBlock(block.id)}
+        onblur={() => { void saveTitle(); }}
+        onkeydown={(event) => {
+          event.stopPropagation();
+          if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); }
         }}
-      >
-        <Link2 class="size-3.5" aria-hidden="true" />
-        <span>{linking ? t("notes.databaseLinkedViewCreating") : t("notes.databaseLinkedViewCreate")}</span>
-      </button>
-      <button
-        type="button"
-        class="inline-flex h-8 shrink-0 items-center gap-1 rounded-md px-2 text-[0.8rem] text-muted-foreground hover:bg-accent hover:text-foreground"
-        aria-expanded={expanded}
-        onclick={() => {
-          expanded = !expanded;
-        }}
-      >
-        {t("notes.databaseSchemaToggle")}
-      </button>
+      />
+    {:else}
+      <Database class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <button type="button" class="min-h-9 min-w-0 flex-1 truncate text-left text-base font-semibold" onkeydown={onKeydown} onclick={() => onFocusBlock(block.id)}>{title || t("notes.untitled")}</button>
+      <span class="text-[0.8rem] text-muted-foreground">{t("notes.childDatabasePreserved")}</span>
     {/if}
   </div>
+  {#if titleError}
+    <p class="px-1 text-[0.8rem] text-destructive" role="alert">{titleError}</p>
+  {/if}
   {#if linkedViewError}
     <p class="mt-2 text-[0.8rem] text-destructive">{linkedViewError}</p>
   {/if}
 
-  {#if localDatabase && expanded}
-    <div class="mt-3 min-w-0 space-y-3 border-t border-border pt-3">
+  {#if localDatabase && dataSourceId}
+    <NotesDatabaseViewSurface
+      {dataSourceId}
+      {databaseId}
+      initialViewId={viewId}
+      {onSelectPage}
+      onEditProperties={() => { expanded = true; if (!schema) void loadSchema(); }}
+      onCreateLinkedDatabaseView={() => { void createLinkedView(); }}
+      onAddProperty={addPropertyFromView}
+      reloadKeys={{
+        table: tableReloadKey,
+        board: boardReloadKey,
+        gallery: galleryReloadKey,
+        list: listReloadKey,
+        calendar: calendarReloadKey,
+        timeline: timelineReloadKey,
+      }}
+    />
+  {/if}
+</section>
+
+{#if localDatabase && expanded}
+  <div use:portal class="fixed inset-0 z-80 flex justify-end" data-app-floating-surface>
+    <button type="button" class="absolute inset-0" aria-label={t("common.close")} onclick={() => { expanded = false; }}></button>
+    <div role="dialog" aria-modal="true" aria-label={t("notes.databaseViewEditProperties")} tabindex="-1" data-floating-root class="relative flex h-full w-full max-w-100 flex-col border-l border-border bg-background shadow-2xl" onkeydown={(event) => { if (event.key === "Escape") { event.stopPropagation(); expanded = false; } }}>
+      <div class="flex items-center justify-between border-b border-border px-4 py-3">
+        <h3 class="text-sm font-semibold">{t("notes.databaseViewEditProperties")}</h3>
+        <button type="button" class="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={t("common.close")} onclick={() => { expanded = false; }}><X class="size-4" /></button>
+      </div>
+      <div class="min-h-0 space-y-3 overflow-y-auto p-4">
       <div class="flex min-w-0 flex-wrap items-center gap-2 text-[0.8rem] text-muted-foreground">
         <span class="min-w-0 flex-1 truncate" role="status">
           {#if error}
@@ -562,14 +635,22 @@
         </button>
       </div>
 
+      <div class="flex flex-wrap gap-1 border-b border-border pb-3">
+        {#each properties as property (property.id)}
+          <button type="button" class="min-h-8 rounded-md px-2 text-left text-[0.8rem] hover:bg-accent" class:bg-accent={selectedPropertyId === property.id} class:text-foreground={selectedPropertyId === property.id} class:text-muted-foreground={selectedPropertyId !== property.id} onclick={() => { selectedPropertyId = property.id; }}>
+            {property.name || t("notes.databaseSchemaName")}
+          </button>
+        {/each}
+      </div>
       <div class="space-y-2">
-        {#each properties as property, index (property.id)}
-          <div class="grid min-w-0 gap-2 rounded-md border border-border p-2 @container">
+        {#each properties.filter((property) => property.id === selectedPropertyId) as property (property.id)}
+          {@const index = properties.findIndex((candidate) => candidate.id === property.id)}
+          <div class="grid min-w-0 gap-3 @container">
             <div class="grid min-w-0 gap-2 @lg:grid-cols-[minmax(7rem,1fr)_minmax(7rem,12rem)_auto]">
               <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
                 <span class="mb-1 block">{t("notes.databaseSchemaName")}</span>
                 <input
-                  class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-70"
+                  class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring disabled:opacity-70"
                   value={property.name}
                   disabled={saving}
                   oninput={(event) => {
@@ -648,7 +729,7 @@
             <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
               <span class="mb-1 block">{t("notes.databaseSchemaDescription")}</span>
               <input
-                class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-70"
+                class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring disabled:opacity-70"
                 value={property.description}
                 placeholder={t("notes.databaseSchemaDescriptionPlaceholder")}
                 disabled={saving}
@@ -682,7 +763,7 @@
               <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
                 <span class="mb-1 block">{t("notes.databaseSchemaUniquePrefix")}</span>
                 <input
-                  class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
                   value={property.uniquePrefix}
                   placeholder={t("notes.databaseSchemaUniquePrefixPlaceholder")}
                   oninput={(event) => {
@@ -715,7 +796,7 @@
                 <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
                   <span class="mb-1 block">{t("notes.databaseSchemaRelationSyncedPropertyId")}</span>
                   <input
-                    class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
                     value={property.relationSyncedPropertyId}
                     placeholder={t("notes.databaseSchemaRelationSyncedPropertyIdPlaceholder")}
                     oninput={(event) => {
@@ -728,7 +809,7 @@
                 <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
                   <span class="mb-1 block">{t("notes.databaseSchemaRelationSyncedPropertyName")}</span>
                   <input
-                    class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
                     value={property.relationSyncedPropertyName}
                     placeholder={t("notes.databaseSchemaRelationSyncedPropertyNamePlaceholder")}
                     oninput={(event) => {
@@ -758,7 +839,7 @@
               <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
                 <span class="mb-1 block">{t("notes.databaseSchemaFormulaExpression")}</span>
                 <textarea
-                  class="min-h-20 w-full min-w-0 resize-y rounded-md border border-input bg-background px-2 py-1.5 font-mono text-[0.8rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  class="min-h-20 w-full min-w-0 resize-y rounded-md border border-input bg-background px-2 py-1.5 font-mono text-[0.8rem] text-foreground outline-none focus:border-ring"
                   value={property.formulaExpression}
                   placeholder={t("notes.databaseSchemaFormulaExpressionPlaceholder")}
                   disabled={saving}
@@ -774,7 +855,7 @@
                 <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
                   <span class="mb-1 block">{t("notes.databaseSchemaButtonLabel")}</span>
                   <input
-                    class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
                     value={property.buttonLabel}
                     placeholder={t("notes.databaseSchemaButtonDefaultLabel")}
                     oninput={(event) => {
@@ -831,7 +912,7 @@
                     <label class="min-w-0 text-[0.733333rem] text-muted-foreground @lg:col-span-2">
                       <span class="mb-1 block">{t("notes.databaseSchemaButtonValue")}</span>
                       <input
-                        class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
                         value={buttonActionValueText(property.buttonActionValue)}
                         placeholder={t("notes.databaseSchemaButtonValuePlaceholder")}
                         oninput={(event) => updateButtonValue(property, event.currentTarget.value)}
@@ -847,7 +928,7 @@
                     <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
                       <span class="mb-1 block">{t("notes.databaseSchemaOptionName")}</span>
                       <input
-                        class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
                         value={option.name}
                         oninput={(event) => {
                           updateOption(property.id, option.id, {
@@ -948,26 +1029,7 @@
         </button>
       </div>
 
-      {#if dataSourceId}
-        <NotesDatabaseViewSurface
-          {activeView}
-          {dataSourceId}
-          {databaseId}
-          {viewId}
-          {onSelectPage}
-          reloadKeys={{
-            table: tableReloadKey,
-            board: boardReloadKey,
-            gallery: galleryReloadKey,
-            list: listReloadKey,
-            calendar: calendarReloadKey,
-            timeline: timelineReloadKey,
-          }}
-          onActiveViewChange={(view) => {
-            activeView = view;
-          }}
-        />
-      {/if}
+      </div>
     </div>
-  {/if}
-</section>
+  </div>
+{/if}

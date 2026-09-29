@@ -122,4 +122,35 @@ describe("Notes database settings panels", () => {
     component = undefined;
     expect(dialog.querySelector('[role="dialog"]')).toBeNull();
   });
+
+  it("keeps the panel open when an action reveals an inline editor", async () => {
+    const { dialog, row } = host();
+    const children = createRawSnippet(() => ({
+      render: () => '<button type="button" data-database-menu-keep-open>Edit title</button>',
+    }));
+    component = mount(NotesDatabaseMenu, { target: row, props: { label: "View options", kind: "actions", children } });
+    await open(row);
+    dialog.querySelector<HTMLButtonElement>("[data-database-menu-keep-open]")?.click();
+    await tick();
+    expect(dialog.querySelector('[role="dialog"]')).not.toBeNull();
+  });
+
+  it("closes the New template picker after a template is chosen", async () => {
+    const { dialog, row } = host();
+    const applyTemplate = vi.fn();
+    const children = createRawSnippet(() => ({
+      render: () => '<div><button type="button">Weekly review</button></div>',
+      setup: (element) => { element.querySelector("button")?.addEventListener("click", applyTemplate); },
+    }));
+    component = mount(NotesDatabaseMenu, { target: row, props: {
+      label: "New page options", kind: "new-options", iconOnly: true, primary: true, showHeader: false,
+      dismissOnAction: true, children,
+    } });
+    const trigger = await open(row);
+    dialog.querySelector<HTMLButtonElement>("[data-database-menu-body] button")?.click();
+    await tick();
+    expect(applyTemplate).toHaveBeenCalledOnce();
+    expect(dialog.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
 });

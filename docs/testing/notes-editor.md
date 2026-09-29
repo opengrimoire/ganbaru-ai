@@ -87,8 +87,10 @@ Automated delayed-storage coverage connects the actual action, persistence, tree
 
 For table, board, gallery, list, calendar, and timeline:
 
-- Check the inline database title, view tabs, compact configuration panels, aligned table/list rows, and row overflow actions in light and dark themes and narrow page previews.
-- Open Layout, Properties, Filter, Sort, Templates, New, and table More actions. Change settings, create a row, and reopen the page to confirm existing behavior is retained.
+- Create `/database` and confirm the table is visible immediately beneath its title and saved-view bar. Click blank table space, the title, header, cells, New page, and menus; none should select or highlight the whole document block. Verify the same in light and dark themes and narrow page previews.
+- Add table, board, gallery, list, calendar, and timeline views from the picker. Switch, rename, duplicate, and delete views; confirm deletion asks first and duplicated filters, sorts, and layout remain independent while rows stay shared. Check the active tab stays visible when views overflow. The last view and last table view must remain protected.
+- Open the table's view settings side panel, then Layout, Property visibility, Filter, Sort, Templates, and More. Edit one property in the separate data source panel and add another from the table header. Change settings, create a page from New and New page, apply an existing template from New's dropdown, and use New in another layout. Reopen the note to confirm titles, views, schema, rows, and settings persist.
+- Rename a local database, then a linked database. The linked title must change without renaming its source or original block.
 - Navigate custom dropdowns with arrows, Enter, Tab, and Escape. Opening a table status or relation cell must retain its grid position. Relation targets must remain selectable while options load.
 - Open a dropdown inside a settings panel. First Escape closes the dropdown; second closes the panel. Verify clicking an option keeps the settings panel open, clicking elsewhere dismisses it, and focus returns appropriately.
 - Open panels near viewport edges and inside horizontally scrolled tables. Add filters and sorts while open; confirm the panel resizes, scrolls, and never clips nested menus.

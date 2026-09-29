@@ -4,23 +4,27 @@ Local databases are structured views over Notes row pages. They follow useful pu
 
 ## Database presentation
 
-Status: implemented, with real desktop and Android visual acceptance pending.
+Status: partial, with real desktop and Android visual acceptance pending.
 
-Database blocks are inline document regions with a title and icon-led view tabs. They share the application's dropdown control, typography, theme colors, and compact row treatment with Projects. Native operating-system select menus are not used in Notes.
+Database blocks render their current view directly in the page. A new database starts with one table view, a title field, and a row creation line. The editor does not require expanding a block or editing its property schema before rows become visible. The database's controls remain separate from document block selection, so clicking a cell, menu, or unused table space does not select the whole database block.
 
-Layout, visible properties, filters, sorts, and templates open in small anchored panels. Table, list, and gallery creation fields live behind New; board and date views retain contextual creation. Table transfer actions are available from More. Configuration forms should not occupy the page before a reader reaches the rows. Applied filter and sort counts remain visible while their panels are closed.
+View tabs correspond to saved views in the database shell. The add-view picker creates one of the six implemented layouts: table, board, gallery, list, calendar, or timeline. A view can be renamed or duplicated with its own presentation settings. Deleting a view asks for confirmation and leaves rows and properties in its shared data source. The last view cannot be removed, and a data source retains a table view for property editing. Additional view types shown by Notion, including chart, dashboard, map, form, and feed, remain unimplemented.
+
+New stays beside the view tabs across layouts. Its split-button menu applies existing page templates and links to template management; creating a template still starts from an existing row. The table puts Add property in the column header. Its view settings open in a side panel, with layout, property visibility, filters, sorts, templates, and transfer controls in anchored submenus. The data source property editor opens separately and shows one property's fields at a time. Configuration forms do not occupy the page before the rows. Applied filter and sort counts remain visible on their controls. Board and date views retain contextual creation.
 
 Table and list row actions use an overflow menu. Column width controls remain keyboard accessible and appear on header hover or focus on pointer devices. List properties align with their headers; secondary properties collapse on narrow layouts. A table preview appears only after a row is opened.
 
 Panels stay within the viewport and outside clipped database containers. Their nested dropdowns preserve the owning dialog's focus boundary. Escape closes the innermost dropdown first, then its settings panel, returning focus to the invoking control. Leaving a panel dismisses it without pulling focus back. These controls change the same existing view configuration and row operations described below.
 
-The separation of content, view settings, and property visibility follows [Notion's documented database controls](https://www.notion.com/help/views-filters-and-sorts); visual styling follows Ganbaru Projects.
+The separation of content, view settings, and property visibility follows [Notion's documented database controls](https://www.notion.com/help/views-filters-and-sorts). Ganbaru AI uses its own theme colors and existing control primitives.
 
 ## Data source and view model
 
 A child database creates a database shell, one canonical data source, an initial table view, and a visible `child_database` block in one transaction. A linked database view creates another shell and view that reference the same data source without duplicating rows or schema.
 
 Each view owns independent presentation settings such as filters, sorts, visible properties, grouping, date range, and row-open mode. Views never become separate sources of row data.
+
+Renaming a local database updates its block, database shell, and owned data source title together. Renaming a linked database changes only that linked shell and block, leaving the shared source title intact.
 
 Imported title-only child databases remain visible preservation placeholders until they can be connected to local data.
 
@@ -42,7 +46,7 @@ Writable cell types include ordinary text, number, boolean, select-like, date, c
 
 ## Table view
 
-Table supports row creation, template selection, inline cell editing, visible and hidden columns, column order and width, filters, sorts, keyboard cell navigation, and full-page or preview opening.
+Table supports row creation from its final New page line or toolbar, template selection, inline cell editing, adding a property from the header, visible and hidden columns, column order and width, filters, sorts, keyboard cell navigation, and full-page or preview opening.
 
 Title remains visible. Changing a value reloads the affected filtered and sorted window rather than assuming the row remains in the same position.
 

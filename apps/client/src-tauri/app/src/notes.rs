@@ -17,10 +17,10 @@ pub mod working_markdown;
 use ganbaru_notes::notes::{
     backlinks, comments, data_source_board, data_source_buttons, data_source_calendar,
     data_source_csv_import, data_source_gallery, data_source_list, data_source_rows,
-    data_source_schema, data_source_table, data_source_templates, data_source_timeline, databases,
-    folders, history, html_import, link_facts, links, local_user, markdown_export, markdown_import,
-    mention_notifications, notion_api_import, reads, search, suggestions, templates, undo_state,
-    workspace_shell, writes,
+    data_source_schema, data_source_table, data_source_templates, data_source_timeline,
+    database_view_management, databases, folders, history, html_import, link_facts, links,
+    local_user, markdown_export, markdown_import, mention_notifications, notion_api_import, reads,
+    search, suggestions, templates, undo_state, workspace_shell, writes,
 };
 
 pub use file_assets::*;
@@ -726,6 +726,67 @@ pub async fn notes_create_linked_database_view<R: Runtime>(
 ) -> Result<project_history::NotesMutationResultDto<NoteCreatedDatabaseDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
     let value = databases::create_linked_database_view(&pool, request).await?;
+    project_history::mutation_result(&pool, value).await
+}
+
+#[tauri::command]
+pub async fn notes_rename_database<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    database_id: String,
+    update: NoteDatabaseRename,
+) -> Result<project_history::NotesMutationResultDto<String>, String> {
+    let pool = connect_sqlite(app, db_url).await?;
+    let value = databases::rename_database(&pool, &database_id, update).await?;
+    project_history::mutation_result(&pool, value).await
+}
+
+#[tauri::command]
+pub async fn notes_list_database_views<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    database_id: String,
+) -> Result<Vec<NoteDatabaseViewDto>, String> {
+    let pool = connect_sqlite(app, db_url).await?;
+    database_view_management::list_database_views(&pool, &database_id).await
+}
+
+#[tauri::command]
+pub async fn notes_duplicate_database_view<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    request: NoteDatabaseViewDuplicate,
+) -> Result<project_history::NotesMutationResultDto<NoteDatabaseViewDto>, String> {
+    let pool = connect_sqlite(app, db_url).await?;
+    let value = database_view_management::duplicate_database_view(&pool, request).await?;
+    project_history::mutation_result(&pool, value).await
+}
+
+#[tauri::command]
+pub async fn notes_rename_database_view<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    database_id: String,
+    view_id: String,
+    update: NoteDatabaseViewRename,
+) -> Result<project_history::NotesMutationResultDto<NoteDatabaseViewDto>, String> {
+    let pool = connect_sqlite(app, db_url).await?;
+    let value =
+        database_view_management::rename_database_view(&pool, &database_id, &view_id, update)
+            .await?;
+    project_history::mutation_result(&pool, value).await
+}
+
+#[tauri::command]
+pub async fn notes_delete_database_view<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    database_id: String,
+    view_id: String,
+) -> Result<project_history::NotesMutationResultDto<String>, String> {
+    let pool = connect_sqlite(app, db_url).await?;
+    let value =
+        database_view_management::delete_database_view(&pool, &database_id, &view_id).await?;
     project_history::mutation_result(&pool, value).await
 }
 

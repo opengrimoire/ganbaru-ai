@@ -3,6 +3,7 @@ import { ensureDbUrl } from "$lib/api/db";
 import {
   mapNotesCreatedDatabaseDto,
   mapNotesDataSourceDto,
+  mapNotesDatabaseViewDto,
   mapNotesDataSourceBoardViewDto,
   mapNotesDataSourceCalendarViewDto,
   mapNotesDataSourceCsvExportDto,
@@ -36,6 +37,8 @@ import type {
   NotesDataSourceListView,
   NotesDataSourceListViewUpdate,
   NotesDatabaseViewScope,
+  NotesDatabaseView,
+  NotesDatabaseViewDuplicateRequest,
   NotesDataSource,
   NotesDataSourceRowPageCreateRequest,
   NotesDataSourceRowPropertyUpdate,
@@ -87,6 +90,56 @@ export async function createNotesLinkedDatabaseView(
   return mapNotesCreatedDatabaseDto(
     await invokeNotesMutation("notes_create_linked_database_view", { dbUrl, request }),
   );
+}
+
+/** Rename an inline database and its owned data source. */
+export async function renameNotesDatabase(databaseId: string, title: string): Promise<string> {
+  const dbUrl = await ensureDbUrl();
+  const renamed = await invokeNotesMutation("notes_rename_database", {
+    dbUrl,
+    databaseId,
+    update: { title },
+  });
+  if (typeof renamed !== "string") throw new Error("notes_rename_database returned an invalid title");
+  return renamed;
+}
+
+/** List only views saved in this database shell. */
+export async function listNotesDatabaseViews(databaseId: string): Promise<NotesDatabaseView[]> {
+  const dbUrl = await ensureDbUrl();
+  const rows = await invoke<unknown>("notes_list_database_views", { dbUrl, databaseId });
+  if (!Array.isArray(rows)) throw new Error("notes_list_database_views returned a non-array payload");
+  return rows.map(mapNotesDatabaseViewDto);
+}
+
+/** Copy a view's independent layout, filters, and sorts. */
+export async function duplicateNotesDatabaseView(
+  request: NotesDatabaseViewDuplicateRequest,
+): Promise<NotesDatabaseView> {
+  const dbUrl = await ensureDbUrl();
+  return mapNotesDatabaseViewDto(await invokeNotesMutation("notes_duplicate_database_view", { dbUrl, request }));
+}
+
+/** Rename one saved view without changing its row data. */
+export async function renameNotesDatabaseView(
+  databaseId: string,
+  viewId: string,
+  name: string,
+): Promise<NotesDatabaseView> {
+  const dbUrl = await ensureDbUrl();
+  return mapNotesDatabaseViewDto(await invokeNotesMutation("notes_rename_database_view", {
+    dbUrl,
+    databaseId,
+    viewId,
+    update: { name },
+  }));
+}
+
+/** Remove a saved view while keeping its shared data source and row pages. */
+export async function deleteNotesDatabaseView(databaseId: string, viewId: string): Promise<void> {
+  const dbUrl = await ensureDbUrl();
+  const deleted = await invokeNotesMutation("notes_delete_database_view", { dbUrl, databaseId, viewId });
+  if (deleted !== viewId) throw new Error("notes_delete_database_view returned an unexpected view id");
 }
 
 export async function getNotesDataSourceSchema(

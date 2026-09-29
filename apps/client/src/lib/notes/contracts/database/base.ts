@@ -291,6 +291,13 @@ export interface NotesDatabaseCreateRequest {
   cover?: NotesPageCover | null;
 }
 
+export interface NotesDatabaseViewDuplicateRequest {
+  id: string;
+  database_id: string;
+  source_view_id: string;
+  name: string;
+}
+
 export const NOTES_DATABASE_VIEW_KINDS = [
   "table",
   "board",

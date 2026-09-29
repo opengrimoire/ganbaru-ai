@@ -643,10 +643,10 @@
   oncontextmenu={openBlockContextMenu}
 >
   <div
-    class="notes-block-surface flex min-w-0 items-start gap-1 rounded-md py-0.5 pr-2 hover:bg-accent/50"
+    class={`notes-block-surface flex min-w-0 items-start gap-1 rounded-md py-0.5 pr-2 ${block.type === "child_database" ? "" : "hover:bg-accent/50"}`}
     class:notes-callout-surface={block.type === "callout"}
     class:notes-callout-direct-child={directCalloutChild && block.type !== "callout"}
-    data-notes-block-selection-zone={showTextEditor ? undefined : ""}
+    data-notes-block-selection-zone={showTextEditor || block.type === "child_database" ? undefined : ""}
     style={blockSurfaceStyle}
   >
     {#if visualDepth > 0}

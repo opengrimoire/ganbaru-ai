@@ -23,6 +23,7 @@ pub mod data_source_templates;
 pub mod data_source_timeline;
 pub mod data_source_views;
 pub mod data_source_window;
+pub mod database_view_management;
 pub mod databases;
 pub mod file_assets;
 pub mod folders;
