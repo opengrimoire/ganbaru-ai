@@ -2,12 +2,13 @@ use super::block_tree::{
     load_block_row_in_tx, load_blocks_by_ids, load_blocks_by_ids_with_trash,
     normalize_selection_root_ids, set_block_subtree_trash,
 };
+use super::pages::load_page_row;
 use super::parents::{
     ParentTarget, insert_block, parent_target_from_block_row, refresh_parent_has_children,
     resolve_block_parent, touch_page, validate_block_update_children, validate_block_update_parent,
     validate_children_for_parent,
 };
-use super::payloads::page_title_properties;
+use super::payloads::page_row_properties_for_title;
 use super::sort::next_sort_orders;
 use crate::notes::models::{
     NoteAppendBlockChildren, NoteBlockDto, NoteBlockUpdate, NotePaginatedBlockList, NoteTrashBlocks,
@@ -68,6 +69,12 @@ pub async fn update_block(
     let current = reads::get_block_row(pool, block_id, false).await?;
     project_history::ensure_page_baseline_for_mutation(pool, &current.page_id).await?;
     let (block_type, payload) = validate_block_update(&current.block_type, &update)?;
+    if (current.block_type == "child_page") != (block_type == "child_page") {
+        return Err(
+            "child page identities must be created or removed through page lifecycle operations"
+                .to_string(),
+        );
+    }
     validate_block_update_parent(pool, &current, &block_type, &payload).await?;
     validate_block_update_children(pool, block_id, &current.block_type, &block_type, &payload)
         .await?;
@@ -100,6 +107,7 @@ pub async fn update_block(
             .get("title")
             .and_then(Value::as_str)
             .unwrap_or_default();
+        let page = load_page_row(&mut tx, block_id).await?;
         sqlx::query(
             "UPDATE notes_pages
              SET title = ?,
@@ -108,7 +116,7 @@ pub async fn update_block(
              WHERE id = ?",
         )
         .bind(title)
-        .bind(page_title_properties(title).to_string())
+        .bind(page_row_properties_for_title(&page, title)?)
         .bind(block_id)
         .execute(&mut *tx)
         .await

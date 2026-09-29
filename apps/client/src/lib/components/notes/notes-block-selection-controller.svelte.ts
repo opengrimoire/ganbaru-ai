@@ -206,7 +206,7 @@ export function createNotesBlockSelectionController(options: NotesBlockSelection
       void run(historyAction === "undo" ? async () => { await options.undo(); } : async () => { await options.redo(); });
       return;
     }
-    if (!selection && !event.shiftKey && options.handleNavigationKeydown(event, id)) return;
+    if (!selection && options.handleNavigationKeydown(event, id)) return;
     const modifier = event.ctrlKey || event.metaKey; const key = event.key.toLowerCase();
     if (modifier && !event.shiftKey && !event.altKey && key === "a" && (!options.targetIsEditable(event.target) || selection)) {
       const ids = options.readRenderedBlockIds();

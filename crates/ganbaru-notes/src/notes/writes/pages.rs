@@ -270,7 +270,6 @@ pub async fn create_child_page_from_block(
         .title
         .as_deref()
         .map(str::trim)
-        .filter(|value| !value.is_empty())
         .unwrap_or_else(|| current.plain_text.trim())
         .to_string();
     let properties = page_properties_for_create(&title, request.properties.as_ref())?;
@@ -397,6 +396,12 @@ pub async fn create_child_page_from_block(
     .map_err(|e| format!("convert notes block to child page: {e}"))?;
     touch_page(&mut tx, &current.page_id).await?;
     touch_page(&mut tx, block_id).await?;
+    // Earlier block snapshots cannot replay a paragraph over the new page identity.
+    sqlx::query("DELETE FROM notes_undo_state WHERE page_id = ?")
+        .bind(&current.page_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("clear notes history before child page conversion: {e}"))?;
     tx.commit()
         .await
         .map_err(|e| format!("commit notes child page create: {e}"))?;

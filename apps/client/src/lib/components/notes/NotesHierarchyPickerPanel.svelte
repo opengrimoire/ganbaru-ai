@@ -24,7 +24,7 @@
     projectPickerPanelFrameStyle,
     projectPickerSubpanelGeometry,
   } from "$lib/projects/project-picker-panels";
-  import { getNotes } from "$lib/stores/notes.svelte";
+  import { getNotesEditor } from "./notes-editor-context";
   import { cn } from "$lib/utils";
   import NotesHierarchyPickerPanel from "./NotesHierarchyPickerPanel.svelte";
   import NotesPageIcon from "./NotesPageIcon.svelte";
@@ -68,7 +68,7 @@
     onClose?: () => void;
   } = $props();
 
-  const notes = getNotes();
+  const notes = getNotesEditor();
   const { t } = getLocalization();
   const activateNestedMobileBack = getContext<((handle: () => void) => () => void) | undefined>(
     "ganbaru-mobile-nested-back",

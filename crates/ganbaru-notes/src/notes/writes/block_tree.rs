@@ -198,16 +198,34 @@ pub(super) async fn load_page_block_subtree_rows(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
 ) -> Result<Vec<NoteBlockRow>, String> {
+    load_page_block_subtree_rows_for_copy(tx, page_id, false).await
+}
+
+/// Include paired notes trashed with their containing page when pasting a cut note.
+pub(super) async fn load_page_block_subtree_rows_for_copy(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    page_id: &str,
+    include_trashed: bool,
+) -> Result<Vec<NoteBlockRow>, String> {
     sqlx::query_as::<_, NoteBlockRow>(
-        "WITH RECURSIVE subtree(id, path) AS (
+        "WITH RECURSIVE eligible AS (
+            SELECT block.* FROM notes_blocks AS block
+            WHERE block.page_id = ? AND (block.in_trash = 0 OR (
+                ? AND block.type = 'child_page' AND EXISTS (
+                    SELECT 1 FROM notes_pages AS child
+                    JOIN notes_pages AS parent ON parent.id = block.page_id
+                    WHERE child.id = block.id AND parent.in_trash = 1
+                      AND child.trashed_time = parent.trashed_time
+                )
+            ))
+         ), subtree(id, path) AS (
             SELECT id, printf('%020.6f:%s', sort_order, id)
-            FROM notes_blocks
-            WHERE parent_type = 'page_id' AND parent_page_id = ? AND in_trash = 0
+            FROM eligible
+            WHERE parent_type = 'page_id' AND parent_page_id = ?
             UNION ALL
             SELECT child.id, subtree.path || '/' || printf('%020.6f:%s', child.sort_order, child.id)
-            FROM notes_blocks AS child
+            FROM eligible AS child
             JOIN subtree ON child.parent_block_id = subtree.id
-            WHERE child.in_trash = 0
          )
          SELECT
             notes_blocks.id,
@@ -230,6 +248,8 @@ pub(super) async fn load_page_block_subtree_rows(
          JOIN subtree ON subtree.id = notes_blocks.id
          ORDER BY subtree.path ASC",
     )
+    .bind(page_id)
+    .bind(include_trashed)
     .bind(page_id)
     .fetch_all(&mut **tx)
     .await

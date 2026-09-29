@@ -42,6 +42,7 @@ export interface NotesUndoControllerContext {
 
 export interface NotesUndoController {
   persist: () => Promise<void>;
+  dispose: () => void;
   reset: (pageId: string | null) => void;
   hydrate: (pageId: string | null) => Promise<void>;
   snapshot: (
@@ -276,6 +277,11 @@ export function createNotesUndoController(
 
   return {
     persist: persistNow,
+    dispose: () => {
+      if (persistTimer) clearTimeout(persistTimer);
+      persistTimer = null;
+      hydrateRequestId += 1;
+    },
     reset,
     hydrate,
     snapshot,

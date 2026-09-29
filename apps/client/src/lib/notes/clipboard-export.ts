@@ -2,7 +2,7 @@ import { blockEditableRichText, blockIndent, blockPlainText, isHeadingBlockType 
 import { blockColor, notesClipboardColorStyle } from "./block-color";
 import { blockChildrenAreVisible, parentIdForBlock } from "./block-tree";
 import { richTextPlainText, richTextRangeSlice } from "./rich-text";
-import { notesMarkdownFence, notesRichTextMarkdown } from "./clipboard-markdown";
+import { escapeNotesMarkdown, notesMarkdownFence, notesRichTextMarkdown } from "./clipboard-markdown";
 import { notesClipboardLinkUrl } from "./clipboard-links";
 import type { NotesBlock, NotesRichText } from "./types";
 
@@ -150,6 +150,8 @@ function renderNode({ entry, children }: ClipboardNode): string {
       return `<pre><code class="language-${escapeHtml(block.code.language)}">${escapeHtml(richTextPlainText(selectedRichText(entry)))}</code></pre>${descendants}`;
     case "divider":
       return `<hr>${descendants}`;
+    case "child_page":
+      return `<p data-notes-child-page-id="${escapeHtml(block.id)}"><a href="#notes?page=${encodeURIComponent(block.id)}">${escapeHtml(block.child_page.title)}</a></p>`;
     case "table":
       return `<table><tbody>${children.map((node, rowIndex) => {
         const row = node.entry.block;
@@ -203,6 +205,7 @@ function renderMarkdown(nodes: readonly ClipboardNode[]): string {
       const language = block.code.language === "plain text" ? "" : block.code.language.replace(/[\r\n`]/gu, "");
       value = `${fence}${language}\n${text}\n${fence}`;
     } else if (block.type === "divider") value = "---";
+    else if (block.type === "child_page") value = `[${escapeNotesMarkdown(block.child_page.title)}](#notes?page=${encodeURIComponent(block.id)})`;
     else if (block.type === "callout") {
       const icon = block.callout.icon?.type === "emoji" ? `${block.callout.icon.emoji}\n\n` : "";
       const body = [content, descendants].filter(Boolean).join("\n\n");
@@ -239,7 +242,8 @@ function renderMarkdown(nodes: readonly ClipboardNode[]): string {
 /** Build HTML and plain text from selected model content, independent of mounted rows. */
 export function notesClipboardContent(entries: readonly NotesClipboardBlock[]): NotesClipboardContent {
   const endsAtBoundary = entries.length > 1 && entries.at(-1)?.end === 0;
-  const selectedEntries = endsAtBoundary ? entries.slice(0, -1) : entries;
+  const selectedEntries = (endsAtBoundary ? entries.slice(0, -1) : entries)
+    .filter((entry) => entry.block.type !== "child_page" || ((entry.start ?? 0) === 0 && (entry.end ?? 1) > 0));
   const roots: ClipboardNode[] = [];
   const byId = new Map<string, ClipboardNode>();
   const indentStacks = new Map<string, ClipboardNode[]>();

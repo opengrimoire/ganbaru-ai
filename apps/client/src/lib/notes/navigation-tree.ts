@@ -44,6 +44,8 @@ export type NotesNavigationSortOrder =
   | "created-asc";
 
 export interface NotesNavigationTreeOptions {
+  /** Restrict the sidebar to folders and their workspace-parented notes. */
+  rootPagesOnly?: boolean;
   collapsedPageIds?: readonly string[];
   expandedPageIds?: readonly string[];
   collapsedFolderIds?: readonly string[];
@@ -155,6 +157,7 @@ export function buildNotesNavigationTree(
     appendNavigationChild(childrenByParentKey, parentKey, { kind: "folder", key, folder });
   }
   for (const page of pages) {
+    if (options.rootPagesOnly && page.parent.type !== "workspace") continue;
     const key = pageKey(page.id);
     const parentKey = navigationParentKeyForPage(
       page,
@@ -176,7 +179,7 @@ export function buildNotesNavigationTree(
     collapsedPageIds: new Set(options.collapsedPageIds ?? []),
     expandedPageIds: options.expandedPageIds ? new Set(options.expandedPageIds) : null,
     collapsedFolderIds: new Set(options.collapsedFolderIds ?? []),
-    pageIdsWithChildren: new Set(options.pageIdsWithChildren ?? []),
+    pageIdsWithChildren: new Set(options.rootPagesOnly ? [] : options.pageIdsWithChildren ?? []),
     missingParentPageIds,
     trashedParentPageIds,
     activeAncestorKeys: navigationActiveAncestorKeys(

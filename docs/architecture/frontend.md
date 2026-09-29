@@ -38,6 +38,8 @@ State is scoped to the smallest useful owner:
 
 Changing responsive variants must preserve active drafts, selections, scroll intent, and open workflows.
 
+The Notes workspace coordinator (`stores/notes.svelte.ts`) owns the main pane, optional preview, and active pane identity. Each pane has an independent editor store from `stores/notes-editor-store.svelte.ts`, including page selection, hydration, editing, persistence, and history. Workspace metadata and navigation preferences are shared. Editor descendants receive their owning session through Svelte context, so an interaction in the main pane cannot mutate the preview document. A keyed editor remains mounted when its presentation changes between a preview and a full page. The header follows the active session's ancestry.
+
 The Chat teammate settings editor uses a component-scoped controller for draft baselines, revision checks, asynchronous access loading, and save/conflict recovery. Its Svelte component owns rendering, menus, focus restoration, and layout. The controller reuses the pure access and draft helpers; backend authorization remains authoritative. A save captures its submitted draft so edits made during the request remain unsaved, and access confirmation is valid only for the exact previewed snapshot.
 
 ## UI foundations

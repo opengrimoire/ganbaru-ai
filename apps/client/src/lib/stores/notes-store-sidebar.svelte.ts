@@ -6,16 +6,10 @@ import {
   initialNotesFavoritePageIds,
   initialNotesRecentPageIds,
   initialNotesSidebarCollapsedFolderIds,
-  initialNotesSidebarExpandedPageIds,
   saveNotesFavoritePageIds,
   saveNotesRecentPageIds,
   saveNotesSidebarCollapsedFolderIds,
-  saveNotesSidebarExpandedPageIds,
 } from "./notes-store-page-state";
-
-interface NotesSidebarControllerContext {
-  reloadPages: () => Promise<void>;
-}
 
 interface NotesSidebarShellMetadata {
   pageIdsWithChildren: readonly string[];
@@ -24,11 +18,10 @@ interface NotesSidebarShellMetadata {
 }
 
 /** Own persisted Notes sidebar navigation state and shell metadata. */
-export function createNotesSidebarController(context: NotesSidebarControllerContext) {
+export function createNotesSidebarController() {
   let favoritePageIds = $state<string[]>(initialNotesFavoritePageIds());
   let recentPageIds = $state<string[]>(initialNotesRecentPageIds());
   let collapsedFolderIds = $state<string[]>(initialNotesSidebarCollapsedFolderIds());
-  let expandedPageIds = $state<string[]>(initialNotesSidebarExpandedPageIds());
   let pageIdsWithChildren = $state<string[]>([]);
   let missingParentPageIds = $state<string[]>([]);
   let trashedParentPageIds = $state<string[]>([]);
@@ -52,16 +45,6 @@ export function createNotesSidebarController(context: NotesSidebarControllerCont
     saveNotesSidebarCollapsedFolderIds(collapsedFolderIds);
   }
 
-  function setPageCollapsed(pageId: string, collapsed: boolean): void {
-    const id = pageId.trim();
-    if (!id) return;
-    expandedPageIds = collapsed
-      ? expandedPageIds.filter((candidate) => candidate !== id)
-      : [id, ...expandedPageIds.filter((candidate) => candidate !== id)];
-    saveNotesSidebarExpandedPageIds(expandedPageIds);
-    if (!collapsed) void context.reloadPages();
-  }
-
   function replaceMetadata(metadata: NotesSidebarShellMetadata): void {
     pageIdsWithChildren = [...metadata.pageIdsWithChildren];
     missingParentPageIds = [...metadata.missingParentPageIds];
@@ -79,20 +62,17 @@ export function createNotesSidebarController(context: NotesSidebarControllerCont
   function removePageIds(pageIds: ReadonlySet<string>): void {
     favoritePageIds = favoritePageIds.filter((id) => !pageIds.has(id));
     recentPageIds = recentPageIds.filter((id) => !pageIds.has(id));
-    expandedPageIds = expandedPageIds.filter((id) => !pageIds.has(id));
     pageIdsWithChildren = pageIdsWithChildren.filter((id) => !pageIds.has(id));
     missingParentPageIds = missingParentPageIds.filter((id) => !pageIds.has(id));
     trashedParentPageIds = trashedParentPageIds.filter((id) => !pageIds.has(id));
     saveNotesFavoritePageIds(favoritePageIds);
     saveNotesRecentPageIds(recentPageIds);
-    saveNotesSidebarExpandedPageIds(expandedPageIds);
   }
 
   return {
     get favoritePageIds(): readonly string[] { return favoritePageIds; },
     get recentPageIds(): readonly string[] { return recentPageIds; },
     get collapsedFolderIds(): readonly string[] { return collapsedFolderIds; },
-    get expandedPageIds(): readonly string[] { return expandedPageIds; },
     get pageIdsWithChildren(): readonly string[] { return pageIdsWithChildren; },
     get missingParentPageIds(): readonly string[] { return missingParentPageIds; },
     get trashedParentPageIds(): readonly string[] { return trashedParentPageIds; },
@@ -102,7 +82,6 @@ export function createNotesSidebarController(context: NotesSidebarControllerCont
     recordRecentPage,
     setPageFavorited,
     setFolderCollapsed,
-    setPageCollapsed,
     replaceMetadata,
     mergeMetadata,
     removePageIds,

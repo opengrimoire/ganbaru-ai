@@ -100,6 +100,7 @@ describe("Notes block action boundaries", () => {
     notesApi.updateNotesBlock.mockImplementation(async () => { events.push("update"); });
     notesApi.appendNotesBlockChildren.mockImplementation(async () => { events.push("append"); throw new Error("append failed"); });
     const actions = createNotesBlockPasteActions({
+      applyPostMutation: () => undefined,
       enqueueEditorMutation: (mutation) => mutation(),
       readSelectedPageId: () => pageId,
       readChildIdsByParentId: () => ({ [pageId]: [block.id] }),

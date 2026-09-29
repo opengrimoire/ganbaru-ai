@@ -60,6 +60,77 @@ function harness(count = 3, type: NotesBlock["type"] = "paragraph", hiddenCallou
   };
 }
 
+/** Replace a text editing host with the atomic note surface used by the component. */
+function noteRow(h: ReturnType<typeof harness>, index: number): HTMLButtonElement {
+  const id = h.ids[index];
+  const block = h.blocks.get(id)!;
+  h.blocks.set(id, { ...block, type: "child_page", child_page: { title: "Nested note" } });
+  const button = document.createElement("button");
+  button.dataset.notesAtomicBlock = id;
+  button.textContent = "Nested note";
+  h.editor(index).replaceWith(button);
+  return button;
+}
+
+describe("document ranges containing note rows", () => {
+  it("selects across a single note button without opening it on pointer release", async () => {
+    const h = harness(1);
+    const button = noteRow(h, 0);
+    vi.spyOn(button, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 100, 20));
+    button.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 1, clientY: 10 }));
+    button.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, buttons: 1, clientX: 99, clientY: 10 }));
+    await tick();
+    expect(h.controller.selection).toEqual({ anchor: { blockId: h.ids[0], offset: 0 }, focus: { blockId: h.ids[0], offset: 1 } });
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+    button.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
+    h.destroy();
+  });
+
+  it("extends to a note at the end of a document and copies its local reference", async () => {
+    const h = harness(2);
+    noteRow(h, 1);
+    const root = h.editor(0);
+    document.getSelection()?.collapse(root.firstChild, 2);
+    h.key(0, "ArrowDown", { shiftKey: true });
+    await tick();
+    expect(h.controller.selection?.focus).toEqual({ blockId: h.ids[1], offset: 1 });
+    const setData = vi.fn();
+    const copy = new Event("copy", { bubbles: true, cancelable: true });
+    Object.defineProperty(copy, "clipboardData", { value: { setData } });
+    root.dispatchEvent(copy);
+    expect(setData).toHaveBeenCalledWith("text/plain", `ock-0\n\n[Nested note](#notes?page=${h.ids[1]})`);
+    h.destroy();
+  });
+
+  it("selects a single note with Shift+Right and pastes beside an unselected note", async () => {
+    const h = harness(1);
+    const button = noteRow(h, 0);
+    button.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", shiftKey: true, bubbles: true, cancelable: true }));
+    await tick();
+    expect(h.controller.selection).toEqual({ anchor: { blockId: h.ids[0], offset: 0 }, focus: { blockId: h.ids[0], offset: 1 } });
+    h.controller.clear();
+    const paste = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, "clipboardData", { value: { getData: (type: string) => type === "text/plain" ? "After" : "" } });
+    button.dispatchEvent(paste);
+    await tick();
+    expect(h.replace).toHaveBeenCalledWith([h.ids[0]], 1, 1, "After", undefined);
+    h.destroy();
+  });
+
+  it("includes a note when pointer selection starts on its button", async () => {
+    const h = harness(2);
+    const button = noteRow(h, 0);
+    vi.spyOn(button, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 100, 20));
+    button.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 1, clientY: 10 }));
+    h.editor(1).dispatchEvent(new MouseEvent("pointermove", { bubbles: true, buttons: 1, clientX: 100, clientY: 100 }));
+    await tick();
+    expect(h.controller.selection?.anchor).toEqual({ blockId: h.ids[0], offset: 0 });
+    expect(h.controller.selection?.focus.blockId).toBe(h.ids[1]);
+    h.destroy();
+  });
+});
+
 /** Model wrapped browser line rectangles and caret hit-testing in jsdom. */
 function mockVisualLines(
   editors: readonly HTMLElement[],

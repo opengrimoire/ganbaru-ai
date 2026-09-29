@@ -1,5 +1,6 @@
 import { readNotesClipboardTable, type NotesClipboardTable } from "./clipboard-html-table";
 import { notesClipboardLinkUrl } from "./clipboard-links";
+import { isNotesUuid, parseNotesLinkHash } from "./block-link";
 import DOMPurify, { type Config } from "dompurify";
 import {
   blockEditableRichText,
@@ -10,6 +11,7 @@ import {
 } from "./block-factory";
 import {
   createLinkedTextRichText,
+  createPageMentionRichText,
   createTextRichText,
   defaultRichTextAnnotations,
   replaceRichTextRange,
@@ -51,6 +53,7 @@ type NotesRichHtmlPasteBlockType =
   | "divider"
   | "table"
   | "table_row"
+  | "child_page"
   | "code";
 
 interface NotesRichHtmlPasteSegment {
@@ -64,6 +67,7 @@ interface NotesRichHtmlPasteSegment {
   cells?: NotesRichText[][];
   icon?: NotesIcon | null;
   color?: NotesColor;
+  sourcePageId?: string;
 }
 
 interface NotesRichHtmlInlineContext {
@@ -78,6 +82,8 @@ export interface NotesRichHtmlPastePlan {
   blockDepths: number[];
   focusBlockId: string;
   focusOffset: number;
+  /** New paired block identities mapped to local source notes for canonical duplication. */
+  copiedPageIds?: Readonly<Record<string, string>>;
 }
 
 export interface NotesRichHtmlPastePlanInput {
@@ -378,6 +384,16 @@ function collectInline(
   }
   if (!(node instanceof Element)) return;
   const tagName = normalizedTagName(node);
+  if (tagName === "a") {
+    const href = node.getAttribute("href") ?? "";
+    const target = href.startsWith("#notes?") ? parseNotesLinkHash(href) : null;
+    if (target && !target.blockId) {
+      const mention = createPageMentionRichText(target.pageId, node.textContent ?? "", href);
+      mention.annotations = { ...contextForElement(node, context).annotations };
+      output.push(mention);
+      return;
+    }
+  }
   if (tagName === "br") {
     appendText(output, "\n", context);
     return;
@@ -502,6 +518,12 @@ function collectSegments(
       continue;
     }
     const tagName = normalizedTagName(child);
+    const sourcePageId = child.getAttribute("data-notes-child-page-id");
+    if (tagName === "p" && isNotesUuid(sourcePageId)) {
+      flushInline();
+      segments.push({ type: "child_page", richText: [createTextRichText(child.textContent ?? "")], sourcePageId, depth });
+      continue;
+    }
     if (tagName === "aside") {
       flushInline();
       const directChildren = Array.from(child.children);
@@ -716,6 +738,8 @@ function richTextOrEmptyText(richText: readonly NotesRichText[]): NotesRichText[
 
 function createUpdateForSegment(segment: NotesRichHtmlPasteSegment): NotesBlockUpdate {
   switch (segment.type) {
+    case "child_page":
+      return { type: "child_page", child_page: { title: richTextPlainText(segment.richText) } };
     case "table": {
       if (!segment.table) throw new Error("Clipboard table has no cell structure");
       return { type: "table", table: { table_width: segment.table.width,
@@ -850,12 +874,13 @@ export function planNotesRichHtmlPaste(
   );
   const prefix = richTextRangeSlice(currentRichText, 0, start);
   const suffix = richTextRangeSlice(currentRichText, end, currentPlainText.length);
-  if (["table", "divider", "toggle", "callout"].includes(segments[0].type)
+  if (segments[0].type === "child_page" || (["table", "divider", "toggle", "callout"].includes(segments[0].type)
     && (richTextPlainText(prefix).length > 0
-      || (input.currentBlock.type !== "paragraph" && end !== currentPlainText.length))) {
+      || (input.currentBlock.type !== "paragraph" && end !== currentPlainText.length)))) {
     segments.unshift({ type: "paragraph", richText: [], depth: 0 });
   }
   if (segments.at(-1)?.type === "table_row" || segments.at(-1)?.type === "table"
+    || segments.at(-1)?.type === "child_page"
     || (segments.at(-1)?.type === "divider" && richTextPlainText(suffix))
     || (segments.some((segment) => segment.type === "toggle" || segment.type === "callout")
       && richTextPlainText(suffix)
@@ -903,6 +928,8 @@ export function planNotesRichHtmlPaste(
     const id = input.createId();
     return createWriteForSegment(id, segment);
   });
+  const copiedPageIds = Object.fromEntries(appendedSegments.flatMap((segment, index) =>
+    segment.sourcePageId ? [[appendedBlocks[index].id, segment.sourcePageId]] : []));
   const visibleIndex = lastVisibleSegmentIndex(segments);
   const visibleSegment = segments[visibleIndex];
   return {
@@ -910,6 +937,7 @@ export function planNotesRichHtmlPaste(
       ? createUpdateForSegment(currentSegment)
       : blockWithRichText(input.currentBlock, currentSegment.richText),
     appendedBlocks,
+    ...(Object.keys(copiedPageIds).length ? { copiedPageIds } : {}),
     blockDepths: segments.map((segment) => segment.depth ?? 0),
     focusBlockId: visibleIndex === 0 ? input.currentBlock.id : appendedBlocks[visibleIndex - 1].id,
     focusOffset: visibleIndex === segments.length - 1 && lastSegment

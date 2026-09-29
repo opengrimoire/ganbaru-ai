@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount, tick } from "svelte";
+  import { onDestroy, onMount, tick, untrack } from "svelte";
   import {
     beginLazyComponentLoad,
     rejectLazyComponentLoad,
@@ -89,6 +89,8 @@
     NotesParent,
   } from "$lib/notes/types";
   import { getNotes } from "$lib/stores/notes.svelte";
+  import type { NotesEditorStore } from "$lib/stores/notes-editor-store.svelte";
+  import { provideNotesEditor } from "./notes-editor-context";
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
   import { cn } from "$lib/utils";
   import { dismissOnOutside } from "$lib/utils/dismiss-on-outside";
@@ -127,6 +129,8 @@
     onOpenModeChange,
     pageActionsTarget = null,
     musicMentionContext = EMPTY_NOTES_MUSIC_MENTION_CONTEXT,
+    editorStore = null,
+    active = true,
   }: {
     projectId?: string | null;
     openMode?: NotesPageOpenMode;
@@ -134,9 +138,13 @@
     onOpenModeChange?: (mode: NotesPageOpenMode) => void;
     pageActionsTarget?: HTMLElement | null;
     musicMentionContext?: NotesMusicMentionContext;
+    editorStore?: NotesEditorStore | null;
+    active?: boolean;
   } = $props();
 
-  const notes = getNotes();
+  // A pane keeps the same editor session for its entire mounted lifetime.
+  const notes = untrack(() => editorStore) ?? getNotes();
+  provideNotesEditor(notes);
   const mobileBackStack = getMobileBackStack();
   const mobileLayout = BUILD_PLATFORM_PROFILE.shell === "mobile";
   const preferences = getPreferences();
@@ -505,6 +513,21 @@
     };
   }
 
+  /** Restore the retained page's viewport before its virtualized rows settle. */
+  function editorViewport(node: HTMLDivElement): void {
+    $effect(() => {
+      const pageId = page?.id;
+      const top = untrack(() => notes.editorScrollTop);
+      let cancelled = false;
+      void tick().then(() => {
+        if (cancelled || page?.id !== pageId) return;
+        node.scrollTop = top;
+        node.dispatchEvent(new Event("scroll"));
+      });
+      return () => { cancelled = true; };
+    });
+  }
+
   onMount(() => {
     activityNowMs = Date.now();
     const intervalId = window.setInterval(() => {
@@ -514,6 +537,7 @@
   });
 
   $effect(() => {
+    if (!active) return;
     const titleFocusRequestId = notes.titleFocusRequestId;
     if (titleFocusRequestId === lastHandledTitleFocusRequestId) return;
     if (!page || notes.titleFocusPageId !== page.id) return;
@@ -521,8 +545,12 @@
     focusTitleInput(false);
   });
 
+  let lastScrolledFocusRequestId = 0;
   $effect(() => {
+    if (!active) return;
     const focusRequestId = notes.focusRequestId;
+    if (focusRequestId === lastScrolledFocusRequestId) return;
+    lastScrolledFocusRequestId = focusRequestId;
     const preventScroll = notes.focusPreventScroll;
     const blockId = notes.focusBlockId;
     if (!blockId) return;
@@ -1379,6 +1407,8 @@
     <div
       bind:this={blockScrollViewport}
       data-notes-editor-scroll
+      use:editorViewport
+      onscroll={(event) => { if (page) notes.rememberEditorScroll(page.id, event.currentTarget.scrollTop); }}
       style="container-type: inline-size;"
       class="min-h-0 flex-1 overflow-x-auto overflow-y-scroll"
       use:documentEndPointer
@@ -1592,7 +1622,9 @@
           {breadcrumbItems}
           {tableOfContentsItems}
           onSelectPage={(pageId) => {
-            void notes.openPageContextually(pageId);
+            void notes.openPageContextually(pageId).catch((error: unknown) => {
+              console.warn("Open Notes preview failed", error);
+            });
           }}
           onFocusBlock={(blockId, preventScroll) => {
             notes.focusBlock(blockId, null, preventScroll);

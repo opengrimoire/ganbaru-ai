@@ -100,7 +100,7 @@ function editor(
     blockById: (id) => projection.blocksById[id],
     flatBlockItemsForBlockContext: () => flattenNotesBlockTree(projection.treeState(), pageId),
     tableRowsForBlock: () => [], columnItemsForBlock: () => [], tabItemsForBlock: () => [],
-    setSidebarPageCollapsed: () => undefined, requestBlockFocus: focus,
+    requestBlockFocus: focus,
     createChildPageFromBlock: async () => undefined, createChildPageAfterBlock: async () => undefined,
     loadPageTree: async () => { throw new Error("Must retain local draft"); }, refreshOpenLinks: async () => undefined,
     applyPostMutation: (result) => {
@@ -119,6 +119,74 @@ function editor(
 afterEach(() => { vi.clearAllMocks(); });
 
 describe("Notes editing with delayed persistence", () => {
+  it.each(["previous", "next"] as const)("inserts a writable paragraph %s to an only note without changing its identity", async (direction) => {
+    const h = editor([fromWrite(createBlockWrite(firstId, "child_page", "Child"))]);
+    await h.actions.insertParagraphAdjacent(firstId, direction);
+    const ids = h.projection.childIdsByParentId[pageId];
+    const inserted = ids.find((id) => id !== firstId)!;
+    expect(ids).toEqual(direction === "previous" ? [inserted, firstId] : [firstId, inserted]);
+    await h.actions.updateBlockText(inserted, "Typed before saving");
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(blockPlainText(h.stored.get(inserted)!)).toBe("Typed before saving");
+    expect(h.stored.get(firstId)?.type).toBe("child_page");
+    await h.undo.undo();
+    await h.undo.undo();
+    await h.persistence.flushPendingBlockSaves();
+    expect(h.projection.childIdsByParentId[pageId]).toEqual([firstId]);
+    expect(h.error).not.toHaveBeenCalled();
+  });
+
+  it("deletes an only note as a page and restores it through undo", async () => {
+    const h = editor([fromWrite(createBlockWrite(firstId, "child_page", "Child"))]);
+    await h.actions.replaceDocumentRange([firstId], 0, 1, "");
+    const [replacementId] = h.projection.childIdsByParentId[pageId];
+    expect(replacementId).not.toBe(firstId);
+    expect(h.projection.blocksById[replacementId].type).toBe("paragraph");
+    expect(blockPlainText(h.projection.blocksById[replacementId])).toBe("");
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(h.stored.get(firstId)).toMatchObject({ type: "child_page", in_trash: true });
+    expect(api.updateNotesBlock).not.toHaveBeenCalledWith(firstId, expect.objectContaining({ type: "paragraph" }));
+    await h.undo.undo();
+    await h.persistence.flushPendingBlockSaves();
+    expect(h.projection.childIdsByParentId[pageId]).toEqual([firstId]);
+    expect(h.stored.get(firstId)).toMatchObject({ type: "child_page", in_trash: false });
+    expect(h.error).not.toHaveBeenCalled();
+  });
+
+  it("preserves a note excluded by a document range endpoint", async () => {
+    const h = editor([fromWrite(createBlockWrite(firstId, "paragraph", "Before")), fromWrite(createBlockWrite(lastId, "child_page", "Child"))]);
+    await h.actions.replaceDocumentRange([firstId, lastId], 3, 0, "!");
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(h.projection.childIdsByParentId[pageId]).toEqual([firstId, lastId]);
+    expect(blockPlainText(h.stored.get(firstId)!)).toBe("Bef!");
+    expect(h.stored.get(lastId)).toMatchObject({ type: "child_page", in_trash: false });
+    expect(h.error).not.toHaveBeenCalled();
+  });
+
+  it("resumes a failed range deletion after its leading note is already in Trash", async () => {
+    const h = editor([fromWrite(createBlockWrite(firstId, "child_page", "Child")), fromWrite(createBlockWrite(lastId, "paragraph", "Last"))]);
+    const persistTrash = api.trashNotesBlock.getMockImplementation()!;
+    let fail = true;
+    api.trashNotesBlock.mockImplementation(async (id: string, inTrash: boolean) => {
+      if (id === lastId && fail) { fail = false; throw new Error("Temporary failure"); }
+      return persistTrash(id, inTrash);
+    });
+    await h.actions.replaceDocumentRange([firstId, lastId], 0, 4, "Replacement");
+    h.release();
+    await expect(h.persistence.flushPendingBlockSaves()).rejects.toThrow("Temporary failure");
+    expect(h.stored.get(firstId)?.in_trash).toBe(true);
+    await h.persistence.retryEditorMutations();
+    await h.persistence.flushPendingBlockSaves();
+    expect(api.appendNotesBlockChildren).toHaveBeenCalledTimes(1);
+    expect(api.moveNotesBlock).toHaveBeenCalledTimes(1);
+    expect(h.stored.get(lastId)?.in_trash).toBe(true);
+    const [replacement] = h.projection.childIdsByParentId[pageId];
+    expect(blockPlainText(h.stored.get(replacement)!)).toBe("Replacement");
+  });
+
   it.each(["-", "1."])("changes only the current %s list item's depth, preserving descendants and undo", async (marker) => {
     const h = editor([fromWrite(createBlockWrite(firstId, "paragraph", ""))]);
     await h.actions.pastePlainTextIntoBlock(firstId, 0, 0, `${marker} ABC\n  ${marker} DEF\n    ${marker} Nested\n${marker} GHI`);

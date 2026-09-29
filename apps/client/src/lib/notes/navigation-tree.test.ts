@@ -65,6 +65,20 @@ function page(
 }
 
 describe("notes navigation tree", () => {
+  it("keeps child notes out of sidebar folders even after loading or selecting them", () => {
+    const pages = [page("root", "Root", undefined, "folder"),
+      page("child", "Child", { type: "page_id", page_id: "root" }),
+      page("nested", "Nested", { type: "block_id", block_id: "block" })];
+    const folders = [folder("folder", "Folder")];
+    const sidebar = buildNotesNavigationTree(pages, folders, {
+      rootPagesOnly: true, activePageId: "child", expandedPageIds: ["root"], pageIdsWithChildren: ["root"],
+    });
+    expect(sidebar.map((item) => [item.key, item.depth, item.hasChildren])).toEqual([
+      ["folder:folder", 0, true], ["page:root", 1, false],
+    ]);
+    expect(buildNotesNavigationTree(pages, folders).some((item) => item.key === "page:child")).toBe(true);
+  });
+
   it("combines nested folders with folder-owned and nested pages", () => {
     const pages = [
       page("root-note", "Root note", undefined, "research"),

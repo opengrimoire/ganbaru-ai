@@ -21,6 +21,14 @@ Dragging onto a folder highlights its subtree. Dragging onto the project root hi
 
 A child page has both a normal page row and a paired `child_page` block in its parent document. The page and block share stable identity. Creation, rename, move, Trash, restore, and permanent deletion keep the pair synchronized.
 
+Creating a note with `/Note` uses the same preview navigation as opening an existing child note. A side or center preview opens a separate editor session beside the retained main note, including when creation returns the new page directly. Navigating further inside the preview replaces only its document. Promoting it to full page preserves its editor and releases the previous main session after its pending writes finish. Child creation belongs to the document containing the command, even when another pane is open.
+
+The main editor stays mounted behind a center preview or beside a side preview. If it was itself a preview without a main page behind it, opening another note retains it in the main pane. Each editor owns its document, hydration, draft state, save queue, and undo history. Both panes accept input in side view; pointer and keyboard focus select the active pane. A center preview blocks interaction with the main pane while open. Closing the preview saves its pending edits and returns to the existing main editor without loading the page again or resetting its scroll position. A save failure keeps the draft open. Small viewports show the preview at full size while keeping the main editor mounted and hidden.
+
+With the desktop sidebar collapsed, the workspace header shows the active note's ancestry: group, project, any containing folders, and the path to that note. Viewing a main note ends the path at that note. Opening one of its children adds only that child; sibling notes never appear as additional path segments. In side view, focusing the main pane returns the path to the main note; focusing the preview shows its ancestry. Hover subpanels remain available at each note level for browsing children.
+
+The sidebar shows folders and workspace-parented notes. Child notes do not become nested sidebar rows when opened, loaded, or found in a destination picker. The containing root note remains highlighted when a child is selected. Folder expansion remains available. The top bar keeps its note hierarchy and hover subpanels, including lazy loading of child notes.
+
 Moving a page under another page creates or restores the paired child block at the destination. Moving it back to the project workspace hides the old paired block rather than leaving a broken navigation reference.
 
 If a restored page's former parent is missing, archived, or in Trash, the page is promoted to a safe project root and the UI explains the placement.

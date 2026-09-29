@@ -2,7 +2,7 @@
   import { tick, untrack } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getCalendar } from "$lib/stores/calendar.svelte";
-  import { getNotes } from "$lib/stores/notes.svelte";
+  import { getNotesEditor } from "./notes-editor-context";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { getProjects } from "$lib/stores/projects.svelte";
   import { buildNotesBlockLink, buildNotesPageLink } from "$lib/notes/block-link";
@@ -91,7 +91,7 @@
     musicMentionContext?: NotesMusicMentionContext;
   } = $props();
 
-  const notes = getNotes();
+  const notes = getNotesEditor();
   const calendar = getCalendar();
   const pomodoro = getPomodoro();
   const projects = getProjects();
@@ -332,6 +332,9 @@
     readBlock: notes.blockById,
     isHiddenCalloutLabel,
     requestFocus: notes.focusBlock,
+    insertParagraphAdjacent: (id, direction) => {
+      void blockSelectionController.run(() => notes.insertParagraphAdjacent(id, direction));
+    },
   });
   $effect(() => { void pageId; navigation.resetVerticalGoal(); });
 
@@ -408,7 +411,8 @@
   }
 
   function handleConvert(blockId: string, type: NotesBlockType, clearText = false): void {
-    void notes.convertBlock(blockId, type, clearText);
+    void notes.convertBlock(blockId, type, clearText)
+      .catch((error: unknown) => console.warn("Notes block conversion failed", error));
   }
 
   function convertToToggleHeading(blockId: string, type: NotesHeadingBlockType, clearText = false): void {

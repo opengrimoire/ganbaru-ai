@@ -21,6 +21,7 @@ export interface NotesBlockNavigationOptions {
   readBlock: (blockId: string) => NotesBlock | undefined;
   isHiddenCalloutLabel: (blockId: string) => boolean;
   requestFocus: (blockId: string, selection: NotesTextSelection | null) => void;
+  insertParagraphAdjacent?: (blockId: string, direction: NotesBlockNavigationDirection) => void;
 }
 
 /** Coordinate DOM-aware keyboard navigation and focus across rendered Notes blocks. */
@@ -154,6 +155,14 @@ export function createNotesBlockNavigationController(options: NotesBlockNavigati
   }
 
   function handleKeydown(event: KeyboardEvent, blockId: string): boolean {
+    const atomic = options.readBlock(blockId)?.type === "child_page"
+      && event.target instanceof Element
+      && (event.target.matches("[data-notes-selectable-block-id]") || !!event.target.closest("[data-notes-atomic-block]"));
+    if (atomic && !event.ctrlKey && !event.metaKey && !event.altKey && event.key === "Enter") {
+      event.preventDefault();
+      options.insertParagraphAdjacent?.(blockId, event.shiftKey ? "previous" : "next");
+      return true;
+    }
     if (event.altKey || event.shiftKey) { resetVerticalGoal(); return false; }
     if (event.ctrlKey || event.metaKey) {
       resetVerticalGoal();
@@ -180,7 +189,7 @@ export function createNotesBlockNavigationController(options: NotesBlockNavigati
       event.preventDefault();
       return true;
     }
-    if (targetIsEditable(event.target) || !focusAdjacent(blockId, direction, verticalGoalX)) return false;
+    if ((!atomic && targetIsEditable(event.target)) || !focusAdjacent(blockId, direction, verticalGoalX)) return false;
     event.preventDefault();
     return true;
   }

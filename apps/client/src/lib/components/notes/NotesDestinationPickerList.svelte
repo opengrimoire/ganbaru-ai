@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import { getNotes } from "$lib/stores/notes.svelte";
+  import { getNotesEditor } from "./notes-editor-context";
   import {
     flatNotesDestinationPickerTargets,
     nextNotesDestinationPickerIndex,
@@ -35,7 +35,7 @@
 
   let query = $state("");
   let queryInitialized = false;
-  const notes = getNotes();
+  const notes = getNotesEditor();
   const { t } = getLocalization();
   let activeIndex = $state(0);
   let searchInput = $state<HTMLInputElement | null>(null);

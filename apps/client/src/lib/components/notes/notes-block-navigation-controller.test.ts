@@ -34,6 +34,30 @@ function mockRangeGeometry(rect: DOMRect, rects: DOMRectList): void {
 }
 
 describe("Notes block navigation controller", () => {
+  it("navigates from a focused note button and inserts paragraphs on either side", () => {
+    const list = document.createElement("div");
+    list.innerHTML = '<div data-notes-selectable-block-id="note"><button data-notes-atomic-block="note">Note</button></div>';
+    document.body.append(list);
+    const button = list.querySelector("button")!;
+    const block: NotesBlock = { ...paragraph("note"), type: "child_page", child_page: { title: "Note" } };
+    const requestFocus = vi.fn();
+    const insertParagraphAdjacent = vi.fn();
+    const controller = createNotesBlockNavigationController({
+      readListElement: () => list, readRenderedBlockIds: () => ["before", "note", "after"],
+      readBlock: (id) => id === "note" ? block : paragraph(id),
+      isHiddenCalloutLabel: () => false, requestFocus, insertParagraphAdjacent,
+    });
+    list.addEventListener("keydown", (event) => controller.handleKeydown(event, "note"));
+    for (const key of ["ArrowUp", "ArrowDown"]) button.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+    expect(requestFocus.mock.calls.map(([id]) => id)).toEqual(["before", "after"]);
+    for (const shiftKey of [false, true]) {
+      const event = new KeyboardEvent("keydown", { key: "Enter", shiftKey, bubbles: true, cancelable: true });
+      button.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+    }
+    expect(insertParagraphAdjacent.mock.calls).toEqual([["note", "next"], ["note", "previous"]]);
+  });
+
   it("does not inherit a containing layout's block-selection zone into a text row", () => {
     const list = document.createElement("div");
     list.innerHTML = `<div data-notes-selectable-block-id="layout" data-notes-block-selection-zone>

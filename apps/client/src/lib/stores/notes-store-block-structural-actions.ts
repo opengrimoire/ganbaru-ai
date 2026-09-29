@@ -63,7 +63,7 @@ interface NotesStructuralBlockActionsContext {
   columnItemsForBlock: (blockId: string) => NotesColumnBlockItems[];
   tabItemsForBlock: (blockId: string) => NotesTabBlockItems[];
   tableRowsForBlock: (blockId: string) => NotesTableRowBlock[];
-  createChildPageFromBlock: (blockId: string) => Promise<void>;
+  createChildPageFromBlock: (blockId: string, clearText?: boolean) => Promise<void>;
   createChildPageAfterBlock: (blockId: string) => Promise<void>;
   requestBlockFocus: (blockId: string | null, selection?: NotesTextSelection | null) => void;
   flushBlockSave: (blockId: string) => Promise<void>;
@@ -128,9 +128,9 @@ export function createNotesStructuralBlockActions(
     selection?: NotesTextSelection,
   ): Promise<void> {
     const block = context.blockById(blockId);
-    if (!block) return;
+    if (!block || block.type === "child_page") return;
     if (type === "child_page") {
-      await context.createChildPageFromBlock(blockId);
+      await context.createChildPageFromBlock(blockId, clearText);
       return;
     }
     if (type === "child_database") {
@@ -153,7 +153,6 @@ export function createNotesStructuralBlockActions(
       recordUndoAfter("convert", before, blockId);
       return;
     }
-    if (block.type === "child_page") return;
     if (block.type === "table" || block.type === "table_row") return;
     if (block.type === "column_list" || block.type === "column") return;
     if (block.type === "tab") return;

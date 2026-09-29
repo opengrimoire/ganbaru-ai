@@ -2,11 +2,11 @@
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { notesPageTitle } from "$lib/notes/page-title";
   import type { NotesBacklink } from "$lib/notes/types";
-  import { getNotes } from "$lib/stores/notes.svelte";
+  import { getNotesEditor } from "./notes-editor-context";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import Link2 from "@lucide/svelte/icons/link-2";
 
-  const notes = getNotes();
+  const notes = getNotesEditor();
   const { t } = getLocalization();
   let { embedded = false }: { embedded?: boolean } = $props();
   let open = $state(false);

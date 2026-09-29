@@ -104,9 +104,8 @@ export interface NotesBlockReadCapabilities {
 }
 
 export interface NotesBlockNavigationCapabilities {
-  setSidebarPageCollapsed: (pageId: string, collapsed: boolean) => void;
   requestBlockFocus: (blockId: string | null, selection?: NotesTextSelection | null) => void;
-  createChildPageFromBlock: (blockId: string) => Promise<void>;
+  createChildPageFromBlock: (blockId: string, clearText?: boolean) => Promise<void>;
   createChildPageAfterBlock: (blockId: string) => Promise<void>;
   loadPageTree: (pageId: string) => Promise<void>;
   refreshOpenLinks: () => Promise<void>;
@@ -403,7 +402,10 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
       include_trashed_sources: input.includeTrashedSources ?? false,
     };
     const response = await duplicateNotesBlocks(request);
-    context.applyPostMutation(notesPostMoveManyResult(request, response));
+    context.applyPostMutation({
+      ...notesPostMoveManyResult(request, response),
+      sidebarImpact: response.results.some((block) => block.type === "child_page") ? "hierarchy" : "none",
+    });
     return response.results;
   }
 

@@ -100,7 +100,6 @@ describe("notes store block actions", () => {
       tableRowsForBlock: () => [],
       columnItemsForBlock: () => [],
       tabItemsForBlock: () => [],
-      setSidebarPageCollapsed: () => undefined,
       requestBlockFocus,
       createChildPageFromBlock: async () => undefined,
       createChildPageAfterBlock: async () => undefined,

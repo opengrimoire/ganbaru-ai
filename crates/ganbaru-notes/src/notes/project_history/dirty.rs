@@ -190,7 +190,7 @@ pub async fn ensure_blocks_baseline_for_mutation(
     Ok(())
 }
 
-pub(super) async fn resolve_project_id_for_page_tx(
+pub(crate) async fn resolve_project_id_for_page_tx(
     tx: &mut Transaction<'_, Sqlite>,
     page_id: &str,
 ) -> Result<Option<String>, String> {

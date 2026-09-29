@@ -8,7 +8,7 @@
     notesResolveCommentAnchor,
   } from "$lib/notes/comments";
   import type { NotesComment, NotesCommentParent, NotesCommentThread } from "$lib/notes/types";
-  import { getNotes } from "$lib/stores/notes.svelte";
+  import { getNotesEditor } from "./notes-editor-context";
   import Check from "@lucide/svelte/icons/check";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import MessageSquare from "@lucide/svelte/icons/message-square";
@@ -16,7 +16,7 @@
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import NotesCheckboxField from "./NotesCheckboxField.svelte";
 
-  const notes = getNotes();
+  const notes = getNotesEditor();
   const localization = getLocalization();
   const { t } = localization;
   let { embedded = false }: { embedded?: boolean } = $props();

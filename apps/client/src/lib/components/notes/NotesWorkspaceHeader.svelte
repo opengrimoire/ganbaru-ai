@@ -136,7 +136,7 @@
   });
   const selectedPageId = $derived(selectedPage?.id ?? null);
   const selectedProjectPages = $derived.by(() => notesPagesForProject(
-    notes.navigationPages,
+    selectedPage ? [...notes.navigationPages.filter((page) => page.id !== selectedPage.id), selectedPage] : notes.navigationPages,
     selectedProjectId,
   ));
   const selectedProjectFolders = $derived.by(() => notesFoldersForProject(

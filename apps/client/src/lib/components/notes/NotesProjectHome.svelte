@@ -390,7 +390,6 @@
         { type: "page_id", page_id: target.id },
         { preserveSelection: true },
       );
-      notes.setSidebarPageCollapsed(target.id, false);
       return;
     }
     await notes.movePageToFolder(
@@ -449,10 +448,13 @@
     projectId,
   ));
   const projectFolders = $derived.by(() => notesFoldersForProject(notes.folders, projectId));
+  const selectedRootPageId = $derived(projectPages.find((page) =>
+    page.parent.type === "workspace" && (page.id === notes.selectedPageId
+      || notes.pageBreadcrumbItems.some((crumb) => crumb.id === page.id)))?.id ?? null);
   const treeItems = $derived.by(() =>
     buildNotesNavigationTree(projectPages, projectFolders, {
-      activePageId: notes.selectedPageId,
-      expandedPageIds: notes.sidebarExpandedPageIds,
+      rootPagesOnly: true,
+      activePageId: selectedRootPageId,
       collapsedFolderIds: notes.collapsedFolderIds,
       pageIdsWithChildren: notes.sidebarPageIdsWithChildren,
       missingParentPageIds: notes.sidebarMissingParentPageIds,
@@ -510,21 +512,8 @@
       root.classList.remove("notes-navigation-pointer-dragging");
     };
   });
-  const expandablePageIds = $derived.by(() => {
-    const projectPageIds = new Set(projectPages.map((page) => page.id));
-    const result = new Set(
-      notes.sidebarPageIdsWithChildren.filter((pageId) => projectPageIds.has(pageId)),
-    );
-    for (const page of projectPages) {
-      if (page.parent.type === "page_id" && projectPageIds.has(page.parent.page_id)) {
-        result.add(page.parent.page_id);
-      }
-    }
-    return [...result];
-  });
   const shouldExpandExplorer = $derived(
     projectFolders.some((folder) => notes.collapsedFolderIds.includes(folder.id))
-    || expandablePageIds.some((pageId) => !notes.sidebarExpandedPageIds.includes(pageId))
   );
 
   async function setExplorerCollapsed(collapsed: boolean): Promise<void> {
@@ -712,7 +701,7 @@
   }
 
   async function highlightCurrentFile(): Promise<void> {
-    const selectedPageId = notes.selectedPageId;
+    const selectedPageId = selectedRootPageId;
     if (!selectedPageId) return;
     const pageById = new Map(projectPages.map((page) => [page.id, page]));
     const folderById = new Map(projectFolders.map((folder) => [folder.id, folder]));
@@ -726,7 +715,6 @@
         folderId = currentPage.folder_id;
         break;
       }
-      notes.setSidebarPageCollapsed(currentPage.parent.page_id, false);
       currentPage = pageById.get(currentPage.parent.page_id);
     }
 
@@ -760,9 +748,6 @@
     const collapsed = !shouldExpandExplorer;
     for (const folder of projectFolders) {
       notes.setFolderCollapsed(folder.id, collapsed);
-    }
-    for (const pageId of expandablePageIds) {
-      notes.setSidebarPageCollapsed(pageId, collapsed);
     }
   }
 
@@ -1230,9 +1215,9 @@
             collapsed={item.collapsed}
             parentStatus={item.parentStatus}
             favorited={notes.favoritePageIds.includes(item.page.id)}
-            selected={item.page.id === notes.selectedPageId}
+            selected={item.page.id === selectedRootPageId}
             showDisclosure={false}
-            highlightRequestId={item.page.id === notes.selectedPageId ? currentFileHighlightRequestId : 0}
+            highlightRequestId={item.page.id === selectedRootPageId ? currentFileHighlightRequestId : 0}
             navigationDragging={draggingNavigationItem?.kind === "page" && draggingNavigationItem.id === item.page.id}
             onSelect={() => {
               onCreationFolderChange(notesPageContainingFolderId(item.page.id, projectPages));
@@ -1240,9 +1225,6 @@
             }}
             onRename={(title) => {
               return renamePage(item.page.id, title);
-            }}
-            onToggleCollapsed={(collapsed) => {
-              notes.setSidebarPageCollapsed(item.page.id, collapsed);
             }}
             onToggleFavorite={(favorited) => {
               notes.setPageFavorited(item.page.id, favorited);

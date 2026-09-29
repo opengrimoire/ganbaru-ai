@@ -3,6 +3,7 @@
 import { mount, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NotesFolder, NotesPage } from "$lib/notes/types";
+import { createProvisionalNotesPage } from "$lib/notes/page-creation";
 import NotesWorkspaceHeader from "./NotesWorkspaceHeader.svelte";
 
 const notesState = vi.hoisted(() => ({
@@ -100,8 +101,8 @@ describe("NotesWorkspaceHeader", () => {
     vi.clearAllMocks();
   });
 
-  function setup(explorerCollapsed: boolean): HTMLDivElement {
-    notesState.store.allPages = [page];
+  function setup(explorerCollapsed: boolean, selectedPage = page, pages = [page]): HTMLDivElement {
+    notesState.store.allPages = pages;
     notesState.store.folders = [folder];
     const target = document.createElement("div");
     document.body.append(target);
@@ -111,7 +112,7 @@ describe("NotesWorkspaceHeader", () => {
         selectedProject: project,
         selectedGroup: group,
         selectedProjectId: project.id,
-        selectedPage: page,
+        selectedPage,
         explorerCollapsed,
         creationFolderId: folder.id,
         showInactiveProjects: false,
@@ -134,5 +135,20 @@ describe("NotesWorkspaceHeader", () => {
     const collapsed = setup(true);
     expect(collapsed.querySelectorAll("[data-notes-context-chevron]")).toHaveLength(1);
     expect(collapsed.querySelector("[data-notes-context-chevron]")?.closest("button")?.textContent).toContain("Untitled");
+  });
+
+  it("shows group, project, main note, and sub-note in order with the sidebar collapsed", () => {
+    const parent = createProvisionalNotesPage({
+      id: "main", title: "Main note", first_block_id: "main-body", folder_id: null,
+      parent: { type: "workspace", workspace: true }, properties: { __ganbaru_project_id: project.id },
+    }).page;
+    const child = createProvisionalNotesPage({
+      id: "child", title: "Sub-note", first_block_id: "child-body", folder_id: null,
+      parent: { type: "page_id", page_id: parent.id }, properties: parent.properties,
+    }).page;
+    const header = setup(true, child, [parent, child]);
+    const labels = Array.from(header.querySelectorAll("button")).map((button) => button.textContent?.trim());
+    expect(labels.filter((label) => ["Routine", "Learning", "Main note", "Sub-note"].includes(label ?? "")))
+      .toEqual(["Routine", "Learning", "Main note", "Sub-note"]);
   });
 });

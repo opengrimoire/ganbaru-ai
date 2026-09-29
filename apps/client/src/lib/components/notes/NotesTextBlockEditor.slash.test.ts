@@ -30,6 +30,7 @@ async function editor(blockType: NotesBlockType = "paragraph", text = "", indent
   const blocks = writable(block);
   const current = fromStore(blocks);
   const onConvert = vi.fn();
+  const onTextInput = vi.fn((_id: string, value: string) => blocks.update((block) => applyBlockUpdate(block, createBlockUpdate(block.type, value))));
   const onKeyboardAction = vi.fn();
   const onFocusBlock = vi.fn();
   const onPasteRichHtml = vi.fn((_id: string, _start: number, _end: number, _html: string) => false);
@@ -38,7 +39,7 @@ async function editor(blockType: NotesBlockType = "paragraph", text = "", indent
     focusBlockId: initialFocusBlockId, focusRequestId: 1, focusSelection: { start: 0, end: 0 },
     mentionTargets: [], commentAnchors: [], suggestionAnchors: [],
     templateStatus: EMPTY_NOTES_TEMPLATE_BLOCK_STATUS, buttonStatus: EMPTY_NOTES_BUTTON_BLOCK_STATUS,
-    onTextInput: (_id, value) => blocks.update((block) => applyBlockUpdate(block, createBlockUpdate(block.type, value))),
+    onTextInput,
     onConvert, onReplaceRichText: vi.fn(), onInsertPageMention: vi.fn(), onInsertDateMention: vi.fn(),
     onInsertObjectMention: vi.fn(), onApplyTextLink: vi.fn(), onInsertInlineEquation: vi.fn(),
     onPastePlainText: () => false, onPasteRichHtml, onApplyTextAnnotations: vi.fn(),
@@ -79,10 +80,20 @@ async function editor(blockType: NotesBlockType = "paragraph", text = "", indent
     await tick(); await tick();
     return event;
   };
-  return { host, input, onConvert, onKeyboardAction, onPasteRichHtml, onFocusBlock, row, blockSelection, focusRow, navigationKeydown };
+  return { host, input, onConvert, onTextInput, onKeyboardAction, onPasteRichHtml, onFocusBlock, row, blockSelection, focusRow, navigationKeydown };
 }
 
 describe("Notes typed slash commands", () => {
+  it("delegates slash-note clearing to the lifecycle command without an extra paragraph save", async () => {
+    const h = await editor();
+    await h.input("/Note");
+    await vi.waitFor(() => expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(1));
+    h.onTextInput.mockClear();
+    h.host.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    expect(h.onConvert).toHaveBeenCalledExactlyOnceWith("block", "child_page", true);
+    expect(h.onTextInput).not.toHaveBeenCalled();
+  });
+
   it("reports native editor focus without requesting viewport scrolling", async () => {
     const h = await editor("paragraph", "Clicked text", 0, "another-block");
     expect(h.onFocusBlock).toHaveBeenCalledExactlyOnceWith("block", true);

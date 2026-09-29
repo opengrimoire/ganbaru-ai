@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { createRichText } from "./block-factory";
 import {
   buildNotesPageTree,
-  parseStoredNotesSidebarExpandedPageIds,
 } from "./page-tree";
 import type { NotesPage, NotesParent } from "./types";
 
@@ -145,8 +144,4 @@ describe("notes page tree", () => {
     ]);
   });
 
-  it("parses stored expanded ids defensively", () => {
-    expect(parseStoredNotesSidebarExpandedPageIds(["a", "b", "a", 1])).toEqual(["a", "b"]);
-    expect(parseStoredNotesSidebarExpandedPageIds("a")).toEqual([]);
-  });
 });

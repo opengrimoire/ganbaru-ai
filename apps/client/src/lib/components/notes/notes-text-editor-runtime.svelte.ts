@@ -1142,7 +1142,6 @@ export class NotesTextEditorController {
     recordRecentNotesSlashCommandKey(notesSlashCommandKey(command));
     switch (command.kind) {
       case "block":
-        if (command.blockType === "child_page" && clearTypedSlashText) this.clearSlashText();
         this.source.onConvert(this.block.id, command.blockType, clearTypedSlashText);
         return;
       case "toggle_heading":

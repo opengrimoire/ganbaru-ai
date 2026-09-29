@@ -7,7 +7,7 @@
     type LazyComponentLoadState,
   } from "$lib/lazy-component-loader";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import { getNotes } from "$lib/stores/notes.svelte";
+  import { getNotesEditor } from "./notes-editor-context";
   import type NotesCalloutIconPicker from "./NotesCalloutIconPicker.svelte";
   import NotesPageIcon from "./NotesPageIcon.svelte";
   import {
@@ -310,7 +310,7 @@
 
   const localization = getLocalization();
   const { t } = localization;
-  const notes = getNotes();
+  const notes = getNotesEditor();
 
   function breadcrumbStatusLabel(crumb: NotesPageBreadcrumbItem): string | null {
     switch (crumb.status) {
@@ -331,6 +331,7 @@
   }
 
   let dividerButton: HTMLButtonElement | null = $state(null);
+  let childPageButton: HTMLButtonElement | null = $state(null);
   let breadcrumbButton: HTMLButtonElement | null = $state(null);
   let tableOfContentsButton: HTMLButtonElement | null = $state(null);
   let syncedBlockButton: HTMLButtonElement | null = $state(null);
@@ -491,6 +492,8 @@
     if (focusBlockId !== block.id) return;
     if (showTextEditor) return;
     void tick().then(() => {
+      if (focusBlockId !== block.id || _focusRequestId !== focusRequestId) return;
+      focusControl(childPageButton);
       focusControl(syncedBlockButton);
       focusControl(dividerButton);
       focusControl(breadcrumbButton);
@@ -499,7 +502,7 @@
   });
 
   function focusControl(control: HTMLElement | null): void {
-    control?.focus();
+    control?.focus({ preventScroll: true });
   }
 
   function toggleButtonLabel(): string {
@@ -752,6 +755,8 @@
         </button>
       {:else if block.type === "child_page"}
         <button
+          bind:this={childPageButton}
+          data-notes-atomic-block={block.id}
           type="button"
           class="my-1 flex min-h-9 w-full min-w-0 items-center gap-2 rounded-md px-1 text-left text-[0.933333rem] font-medium text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={t("notes.openChildPage", childPageTitle || t("notes.untitled"))}

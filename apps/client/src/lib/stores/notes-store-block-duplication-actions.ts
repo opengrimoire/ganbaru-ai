@@ -78,7 +78,7 @@ export function createNotesBlockDuplicationActions(
   }
 
   async function duplicateBlock(blockId: string): Promise<void> {
-    if (!context.readSelectedPageId() || context.blockById(blockId)?.type === "child_page") return;
+    if (!context.readSelectedPageId()) return;
     await context.flushBlockSave(blockId);
     const before = context.undoSnapshot(blockId);
     const subtreeIds = context.outlineSubtreeIds([blockId]);
@@ -99,7 +99,6 @@ export function createNotesBlockDuplicationActions(
     if (!context.readSelectedPageId()) return null;
     const rootBlockIds = notesSelectionRootBlockIds(context.treeState(), blockIds);
     if (rootBlockIds.length === 0) return null;
-    if (rootBlockIds.some((id) => context.blockById(id)?.type === "child_page")) return null;
     const first = rootBlockIds[0] ? context.blockById(rootBlockIds[0]) : undefined;
     if (!first) return null;
     const key = parentStorageKey(first.parent);

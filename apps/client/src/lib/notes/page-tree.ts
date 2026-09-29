@@ -1,8 +1,6 @@
 import { notesPageTitle } from "./page-title";
 import type { NotesPage } from "./types";
 
-const SIDEBAR_EXPANDED_PAGE_IDS_CONFIG_KEY = "notes.sidebarExpandedPageIds";
-
 export type NotesPageParentStatus = "missing" | "trashed";
 
 export interface NotesPageTreeItem {
@@ -27,18 +25,7 @@ export interface NotesPageTreeOptions {
   titleForPage?: (page: NotesPage) => string;
 }
 
-/** Return the config key that stores expanded sidebar page ids. */
-export function notesSidebarExpandedPageIdsConfigKey(): string {
-  return SIDEBAR_EXPANDED_PAGE_IDS_CONFIG_KEY;
-}
-
-/** Parse persisted expanded sidebar page ids from config defensively. */
-export function parseStoredNotesSidebarExpandedPageIds(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return [...new Set(value.filter((item): item is string => typeof item === "string"))];
-}
-
-/** Build the flat visible tree for the Notes sidebar. */
+/** Build a visible page hierarchy for navigation and destination pickers. */
 export function buildNotesPageTree(
   pages: readonly NotesPage[],
   options: NotesPageTreeOptions = {},

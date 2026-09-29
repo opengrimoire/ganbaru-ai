@@ -8,6 +8,7 @@ mod restore;
 pub mod retention;
 pub mod schedule;
 mod scope;
+pub(crate) use dirty::resolve_project_id_for_page_tx;
 
 use checkpoint::create_checkpoint;
 #[cfg(test)]

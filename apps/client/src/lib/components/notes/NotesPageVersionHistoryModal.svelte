@@ -10,7 +10,7 @@
     NotesLoadedPage,
     NotesPageHistorySnapshot,
   } from "$lib/notes/types";
-  import { getNotes } from "$lib/stores/notes.svelte";
+  import { getNotesEditor } from "./notes-editor-context";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import NotesHistoricalPagePreview from "./NotesHistoricalPagePreview.svelte";
   import NotesVersionHistoryModalShell from "./NotesVersionHistoryModalShell.svelte";
@@ -23,7 +23,7 @@
     onClose: () => void;
   } = $props();
 
-  const notes = getNotes();
+  const notes = getNotesEditor();
   const localization = getLocalization();
   const { t } = localization;
   const viewport = getViewport();

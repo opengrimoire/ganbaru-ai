@@ -126,7 +126,7 @@ export function createNotesRichTextBlockActions(
     selection: NotesTextSelection | null = null,
   ): Promise<void> {
     const block = context.blockById(blockId);
-    if (!block) return;
+    if (!block || block.type === "child_page") return;
     const currentText = blockPlainText(block);
     if (currentText === text) return;
     const undoSelections = notesTextChangeUndoSelections(currentText, text, selection);
@@ -142,7 +142,7 @@ export function createNotesRichTextBlockActions(
     richText: readonly NotesRichText[],
   ): Promise<void> {
     const block = context.blockById(blockId);
-    if (!block) return;
+    if (!block || block.type === "child_page") return;
     const before = snapshot(blockId);
     const update = blockWithRichText(block, richText);
     context.localApplyBlockUpdate(blockId, update);

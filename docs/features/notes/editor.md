@@ -34,6 +34,8 @@ The menu groups recent commands, basic blocks, media, advanced blocks, actions, 
 
 The typed query remains in the editing row, with a search summary in the panel. The insertion menu also offers a search field when there is no editing host. Menus preserve editing focus on pointer selection, render outside clipped block rows within the current floating surface, and reposition above or below the slash trigger as space allows. The horizontal anchor stays stable while the query grows. Scroll and viewport changes, including the software keyboard viewport, update placement. Focus preloads the optional menu; loading and retry states remain visible when needed.
 
+Choosing `/Note` immediately replaces the editable source row with a note item. Creation joins the same ordered queue as typing and block insertion, then opens the child preview when its canonical page is available. Repeated commands and late text-editor events cannot convert that reserved note back into a paragraph. The lifecycle command clears the slash query without a separate text-clearing save. Failed creation remains visible and retryable through the editor save state.
+
 **Reference:** interaction follows Notion's [slash-command guide](https://www.notion.com/en-gb/help/guides/using-slash-commands) and [keyboard shortcuts](https://www.notion.com/help/keyboard-shortcuts), reviewed on 2026-09-25. The available commands are defined by Ganbaru’s local command catalog. Opening slash commands in the middle of existing prose remains outside the current empty-block trigger contract.
 
 ## Enter and line breaks
@@ -43,6 +45,10 @@ Enter in ordinary text splits the current block at the selection, removes select
 Paragraphs, list items, and to-dos continue their type. Headings and quotes continue into a paragraph. Enter at the start of a nonempty toggle label inserts an empty sibling toggle before it. Enter elsewhere on a toggle label opens it and creates a paragraph child, moving the text after the caret into that child. Enter at the start of nonempty callout text inserts an ordinary paragraph before the callout. The same action at the start of the first child of an empty-label callout inserts a paragraph before the callout. Enter elsewhere in the callout creates a paragraph child, moving any text after the caret into that child. Enter in an empty callout also creates its first child. A second Enter in an empty child row moves only that row after the callout; later callout children stay inside. Empty list items, to-dos, and quotes convert to a paragraph. Empty toggle labels still enter the toggle body.
 
 Shift+Enter inserts a soft line break. Code blocks keep Enter as a code newline and use a documented alternate command to leave the block.
+
+An unselected `/Note` row is an atomic document item. Arrow keys move onto and past it. Enter inserts and focuses a paragraph below it; Shift+Enter inserts one above it, including when the note is the only, first, or last row. Clicking the note or pressing Space opens it. Its title is edited in the child page.
+
+Pointer dragging, Shift+Arrow, and Select all include note rows in document ranges. A note is selected as a whole, with positions before and after the item. Deleting or replacing a range that includes a note removes its paired page block through the note lifecycle; replacement text receives a separate paragraph identity. A range ending immediately before a note preserves it. Undo restores the original page identity.
 
 ## Lists
 
@@ -86,6 +92,10 @@ Normal paste accepts sanitized rich HTML and Markdown within the supported paste
 
 Actual formatting fidelity depends on the receiving app and platform clipboard. Menu copy uses the Markdown text representation if the webview lacks the rich asynchronous clipboard API; native copy events provide both formats. Failed writes leave cut content intact.
 
+Copying a note row includes its title and stable local page reference. Rich HTML paste within the same vault duplicates the canonical note and its nested notes with new page and block identities, preserving content, page presentation, managed asset references, and block comments. The copied pages belong to the destination project. Copying into the source note itself captures the source graph before inserting the copy. Each copied page graph and its paired row commit together. Mixed text and note paste keeps surrounding text outside note titles and records one editor undo step. Cut sources remain recoverable in Trash.
+
+Plain text represents a note as `[Title](#notes?page=UUID)`. This identifies a note in the current vault; it is not a public URL or an operating-system link. Pasting that Markdown back into Notes creates a page mention referring to the original note. Rich HTML carries the separate instruction to duplicate a note row. Another application can retain the title and reference as readable text, but needs Ganbaru and the corresponding vault to resolve it.
+
 Pointer block movement and destination pickers preserve full subtrees. Moving a block across pages validates access, active state, ancestry, and target type.
 
 ## Undo and redo
@@ -95,6 +105,8 @@ Undo and redo record page-local snapshot pairs at the same semantic mutation bou
 Snapshots preserve focus and selection, including both block IDs, UTF-16 offsets, and direction for document ranges. Undoing range deletion or replacement restores the complete active highlight; redo restores the resulting caret. Formatting history preserves the range in both directions. Older recovery entries without document ranges retain their recorded block-local selection. Undo updates the local tree immediately and persists ordered canonical mutations. The recovery stack is bounded by count and serialized size and is derived state, not a second content source.
 
 An undo failure never prevents the canonical page from loading. See [Notes editor testing](../../testing/notes-editor.md).
+
+Turning a block into a child page starts a new undo boundary in the source page. Its earlier block snapshots are invalidated locally and removed transactionally during conversion, because replaying a paragraph over the new page identity would break the paired page/block lifecycle. Subsequent edits retain ordinary undo and redo.
 
 ## Optimistic persistence
 

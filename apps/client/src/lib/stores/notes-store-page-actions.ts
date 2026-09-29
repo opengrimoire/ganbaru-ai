@@ -3,6 +3,7 @@ import {
   createNotesChildPageFromBlock,
   createNotesPage,
   duplicateNotesPage,
+  hydrateNotesBlocks,
   isNotesPageActive,
   moveNotesPage,
   permanentlyDeleteNotesPage,
@@ -11,7 +12,7 @@ import {
 } from "$lib/api/notes";
 import { invalidateNotesPageCoverAssetUrl } from "$lib/api/notes-page-covers";
 import { invalidateNotesPageIconAssetUrl } from "$lib/api/notes-page-icons";
-import { blockPlainText } from "$lib/notes/block-factory";
+import { blockPlainText, createBlockUpdate } from "$lib/notes/block-factory";
 import { planNotesInsertedBlockFocus, planNotesPageLoadFocus } from "$lib/notes/editor-focus";
 import { nextSelectedNotesPageId } from "$lib/notes/page-selection";
 import { notesPageCoverAssetPath } from "$lib/notes/page-cover";
@@ -27,6 +28,7 @@ import {
 import type { NotesPostMutationResult, NotesSidebarMetadataImpact } from "$lib/notes/post-mutation";
 import type {
   NotesBlock,
+  NotesBlockUpdate,
   NotesFolder,
   NotesLoadedPage,
   NotesPage,
@@ -55,7 +57,7 @@ interface NotesPageActionsContext {
     impact: Exclude<NotesSidebarMetadataImpact, "none">,
     openMode?: NotesPageOpenMode,
   ) => Promise<void>;
-  activateProvisionalPage: (loaded: NotesLoadedPage, openMode: NotesPageOpenMode) => void;
+  activateProvisionalPage: (loaded: NotesLoadedPage, openMode: NotesPageOpenMode) => void | Promise<void>;
   beginPageCreation: (request: Parameters<typeof createNotesPage>[0], provisional: NotesLoadedPage) => void;
   awaitPageReady: (pageId: string | null) => Promise<void>;
   awaitPageCreationAttempt: (pageId: string) => Promise<"ready" | "failed">;
@@ -69,12 +71,14 @@ interface NotesPageActionsContext {
   flushBlockSave: (blockId: string) => Promise<void>;
   flushPendingBlockSaves: () => Promise<void>;
   flushPendingWrites: () => Promise<void>;
+  enqueueEditorMutation: (mutation: () => Promise<void>) => Promise<void>;
+  localApplyBlockUpdate: (blockId: string, update: NotesBlockUpdate) => void;
+  resetUndoHistory: (pageId: string) => void;
   requestBlockFocus: (blockId: string | null, selection?: NotesTextSelection | null) => void;
   requestTitleFocus: (pageId: string) => void;
   requestPageLoadFocus: () => void;
   queueDescendantHydration: () => void;
   setFolderCollapsed: (folderId: string, collapsed: boolean) => void;
-  setSidebarPageCollapsed: (pageId: string, collapsed: boolean) => void;
   prependArchivedPage: (page: NotesPage) => void;
   prependTrashedPage: (page: NotesPage) => void;
   removeArchivedPages: (pageIds: ReadonlySet<string>) => void;
@@ -132,7 +136,7 @@ export function createNotesPageActions(context: NotesPageActionsContext) {
     };
     const provisional = createProvisionalNotesPage(request);
     if (provisional.page.folder_id) context.setFolderCollapsed(provisional.page.folder_id, false);
-    context.activateProvisionalPage(
+    await context.activateProvisionalPage(
       provisional,
       options.openMode ?? context.defaultOpenMode(projectId),
     );
@@ -150,34 +154,43 @@ export function createNotesPageActions(context: NotesPageActionsContext) {
     title: string,
     options: NotesCreatePageOptions = {},
   ): Promise<void> {
-    context.setSidebarPageCollapsed(parentPageId, false);
     await createPageWithParent(title, { type: "page_id", page_id: parentPageId }, options);
   }
 
-  async function createChildPageFromBlock(blockId: string): Promise<void> {
-    await context.awaitPageReady(context.readSelectedPageId());
+  /** Reserve the note row immediately and serialize its lifecycle after earlier editor writes. */
+  function createChildPageFromBlock(blockId: string, clearText = false): Promise<void> {
+    const sourcePageId = context.readSelectedPageId();
     const block = context.readBlocksById()[blockId];
-    if (!block || block.type === "child_page") return;
-    await context.flushBlockSave(blockId);
+    if (!sourcePageId || !block || block.type === "child_page") return Promise.resolve();
     const firstBlockId = crypto.randomUUID();
     const page = context.readLoadedPage();
-    const loaded = await createNotesChildPageFromBlock(blockId, {
+    const request = {
       first_block_id: firstBlockId,
-      title: blockPlainText(block).trim(),
+      title: clearText ? "" : blockPlainText(block).trim(),
       properties: notesPageProjectProperties(page ? notesPageProjectId(page) : null),
+    };
+    context.localApplyBlockUpdate(blockId, createBlockUpdate("child_page", request.title));
+    context.resetUndoHistory(sourcePageId);
+    context.requestBlockFocus(blockId);
+    let loaded: NotesLoadedPage | null = null;
+    return context.enqueueEditorMutation(async () => {
+      await context.awaitPageReady(sourcePageId);
+      loaded ??= await createNotesChildPageFromBlock(blockId, request);
+      await context.activateReturnedPage(loaded, "hierarchy");
+      context.requestBlockFocus(
+        planNotesInsertedBlockFocus([loaded.blocks.results[0]?.id, firstBlockId]),
+        START_OF_NOTES_BLOCK_SELECTION,
+      );
     });
-    await context.activateReturnedPage(loaded, "hierarchy");
-    context.requestBlockFocus(
-      planNotesInsertedBlockFocus([loaded.blocks.results[0]?.id, firstBlockId]),
-      START_OF_NOTES_BLOCK_SELECTION,
-    );
   }
 
   async function createChildPageAfterBlock(blockId: string): Promise<void> {
-    await context.awaitPageReady(context.readSelectedPageId());
+    const sourcePageId = context.readSelectedPageId();
+    if (!sourcePageId) return;
+    await context.awaitPageReady(sourcePageId);
     const block = context.readBlocksById()[blockId];
     if (!block) return;
-    await context.flushBlockSave(blockId);
+    await context.flushPendingWrites();
     const pageId = crypto.randomUUID();
     const firstBlockId = crypto.randomUUID();
     const page = context.readLoadedPage();
@@ -190,9 +203,14 @@ export function createNotesPageActions(context: NotesPageActionsContext) {
       after_block_id: blockId,
       properties: notesPageProjectProperties(page ? notesPageProjectId(page) : null),
     });
-    if (block.parent.type === "page_id") {
-      context.setSidebarPageCollapsed(block.parent.page_id, false);
-    }
+    const blocks = await hydrateNotesBlocks({ page_id: sourcePageId, block_ids: [loaded.page.id] });
+    context.applyPostMutation({
+      blocks,
+      placements: [{ blockId: loaded.page.id, parent: block.parent, after: blockId }],
+      pages: [loaded.page],
+      sidebarImpact: "hierarchy",
+    });
+    context.resetUndoHistory(sourcePageId);
     await context.activateReturnedPage(loaded, "hierarchy");
     context.requestBlockFocus(
       planNotesInsertedBlockFocus([loaded.blocks.results[0]?.id, firstBlockId]),
@@ -210,9 +228,6 @@ export function createNotesPageActions(context: NotesPageActionsContext) {
   async function duplicatePage(pageId: string, title: string): Promise<void> {
     await context.flushPendingBlockSaves();
     const loaded = await duplicateNotesPage(pageId, { title });
-    if (loaded.page.parent.type === "page_id") {
-      context.setSidebarPageCollapsed(loaded.page.parent.page_id, false);
-    }
     if (loaded.page.folder_id) context.setFolderCollapsed(loaded.page.folder_id, false);
     await context.activateReturnedPage(loaded, "hierarchy");
     context.requestBlockFocus(planNotesPageLoadFocus(loaded.blocks.results.map((block) => block.id)));
@@ -226,9 +241,6 @@ export function createNotesPageActions(context: NotesPageActionsContext) {
   ): Promise<void> {
     await context.flushPendingBlockSaves();
     const loaded = await moveNotesPage(pageId, { parent, folder_id: folderId });
-    if (loaded.page.parent.type === "page_id") {
-      context.setSidebarPageCollapsed(loaded.page.parent.page_id, false);
-    }
     if (loaded.page.folder_id) context.setFolderCollapsed(loaded.page.folder_id, false);
     if (options.preserveSelection) {
       context.applyPostMutation({ pages: [loaded.page], sidebarImpact: "hierarchy" });
@@ -312,9 +324,9 @@ export function createNotesPageActions(context: NotesPageActionsContext) {
         context.prependTrashedPage(trashed);
         context.removeArchivedPages(removedIds);
       }
+      const currentPageId = context.readSelectedPageId();
       context.applyPostMutation({ removedPageIds: [...removedIds], sidebarImpact: "hierarchy" });
       context.removeSidebarPageIds(removedIds);
-      const currentPageId = context.readSelectedPageId();
       if (currentPageId && removedIds.has(currentPageId)) {
         const pages = context.readPages();
         const next = preferred && pages.some((page) => page.id === preferred)

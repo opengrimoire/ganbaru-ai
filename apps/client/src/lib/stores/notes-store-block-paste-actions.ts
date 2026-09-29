@@ -1,4 +1,5 @@
 import { appendNotesBlockChildren, moveNotesBlock, updateNotesBlock } from "$lib/api/notes";
+import { createNotesPastePersistence } from "./notes-store-paste-persistence";
 import { cloneNotesJson } from "$lib/notes/json-clone";
 import { notesPasteAppendRequests, planNotesPlainTextPaste } from "$lib/notes/block-clipboard";
 import { planNotesRichHtmlPaste } from "$lib/notes/rich-text-paste";
@@ -13,6 +14,7 @@ import {
   blockPlainText,
   blockWithRichText,
   blockWithToggleOpen,
+  createBlockWrite,
 } from "$lib/notes/block-factory";
 import { createBlockWriteFromRichText } from "$lib/notes/block-rich-text-write";
 import {
@@ -23,6 +25,7 @@ import { planNotesInsertedBlockFocus } from "$lib/notes/editor-focus";
 import { parentIdForBlock } from "$lib/notes/block-tree";
 import { splitRichTextForBlock } from "$lib/notes/rich-text-split";
 import type { NotesTextSelection } from "$lib/notes/editor-selection";
+import type { NotesPostMutationResult } from "$lib/notes/post-mutation";
 import type {
   NotesAppendBlockChildrenRequest,
   NotesBlock,
@@ -42,9 +45,11 @@ interface OptimisticPastePlan {
   blockDepths: number[];
   focusBlockId: string;
   focusOffset: number;
+  copiedPageIds?: Readonly<Record<string, string>>;
 }
 
 interface NotesBlockPasteActionsContext {
+  applyPostMutation: (result: NotesPostMutationResult) => void;
   enqueueEditorMutation: (mutation: () => Promise<void>) => Promise<void>;
   readSelectedPageId: () => string | null;
   readChildIdsByParentId: () => Readonly<Record<string, readonly string[]>>;
@@ -75,6 +80,7 @@ interface NotesBlockPasteActionsContext {
 }
 
 export interface NotesBlockPasteActions {
+  insertParagraphAdjacent: (blockId: string, direction: "previous" | "next") => Promise<void>;
   splitTextBlockAtSelection: (
     blockId: string,
     selectionStart: number,
@@ -98,6 +104,28 @@ export interface NotesBlockPasteActions {
 export function createNotesBlockPasteActions(
   context: NotesBlockPasteActionsContext,
 ): NotesBlockPasteActions {
+  /** Insert a writable sibling beside an atomic row, including either document boundary. */
+  async function insertParagraphAdjacent(blockId: string, direction: "previous" | "next"): Promise<void> {
+    const block = context.blockById(blockId);
+    if (!block || !context.readSelectedPageId()) return;
+    const before = context.undoSnapshotForBlocks([blockId], blockId);
+    const write = createBlockWrite(crypto.randomUUID(), "paragraph", "");
+    const parent = cloneNotesJson(block.parent);
+    const inserted = context.optimisticBlockFromWrite(write, parent);
+    if (direction === "previous") context.localInsertBlockBefore(inserted, blockId);
+    else context.localInsertBlockAfter(inserted, blockId);
+    context.requestBlockFocus(write.id, START_OF_BLOCK_SELECTION);
+    context.recordUndo("create", before, context.undoSnapshotForBlocks([blockId, write.id], write.id, START_OF_BLOCK_SELECTION));
+    let appended = false;
+    const persistence = context.enqueueEditorMutation(async () => {
+      if (!appended) {
+        await appendNotesBlockChildren({ parent, after: blockId, children: [write] });
+        appended = true;
+      }
+      if (direction === "previous") await moveNotesBlock(write.id, { parent, after: null, before: blockId });
+    });
+    context.trackOptimisticBlockWrites([blockId, write.id], persistence);
+  }
   async function splitTextBlockAtSelection(
     blockId: string,
     selectionStart: number,
@@ -225,9 +253,11 @@ export function createNotesBlockPasteActions(
       before,
       context.undoSnapshotForBlocks(affectedIds, plan.focusBlockId, focusSelection),
     );
+    const persistPaste = createNotesPastePersistence(requests, plan.copiedPageIds);
     const persistence = context.enqueueEditorMutation(async () => {
       await updateNotesBlock(currentBlock.id, currentUpdate);
-      for (const request of requests) await appendNotesBlockChildren(request);
+      await persistPaste();
+      if (plan.copiedPageIds) context.applyPostMutation({ sidebarImpact: "hierarchy" });
     });
     context.trackOptimisticBlockWrites(affectedIds, persistence);
     void persistence;
@@ -283,5 +313,5 @@ export function createNotesBlockPasteActions(
     return true;
   }
 
-  return { splitTextBlockAtSelection, pastePlainTextIntoBlock, pasteRichHtmlIntoBlock };
+  return { insertParagraphAdjacent, splitTextBlockAtSelection, pastePlainTextIntoBlock, pasteRichHtmlIntoBlock };
 }

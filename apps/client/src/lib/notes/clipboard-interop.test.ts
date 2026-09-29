@@ -26,6 +26,41 @@ function pasted(text: string, html = "", currentText = "", start = 0, end = star
 }
 
 describe("Notes portable clipboard interoperability", () => {
+  it("copies child notes as readable local references and pastes independent page copies between text", () => {
+    const noteId = "10000000-0000-4000-8000-000000000001";
+    const entries = [block("paragraph", "Before", "first"), block("child_page", "A [note]", noteId), block("paragraph", "After", "last")];
+    const clipboard = notesClipboardContent(entries.map((block) => ({ block })));
+    expect(clipboard.plainText).toBe(`Before\n\n[A \\[note\\]](#notes?page=${noteId})\n\nAfter`);
+    const result = pasted(clipboard.plainText, clipboard.html);
+    expect(result.blocks.map((block) => block.type)).toEqual(["paragraph", "child_page", "paragraph"]);
+    expect(result.plan?.copiedPageIds).toEqual({ "new-1": noteId });
+    expect(blockPlainText(result.blocks[1])).toBe("A [note]");
+  });
+
+  it("keeps text on both sides of a pasted note outside its title", () => {
+    const note = block("child_page", "", "10000000-0000-4000-8000-000000000001");
+    const clipboard = notesClipboardContent([{ block: note, start: 0, end: 1 }]);
+    const { blocks, plan } = pasted(clipboard.plainText, clipboard.html, "BeforeAfter", 6);
+    expect(blocks.map(blockPlainText)).toEqual(["Before", "", "After"]);
+    expect(plan?.copiedPageIds).toEqual({ "new-1": note.id });
+    expect(notesClipboardContent([{ block: note, start: 1 }]).plainText).toBe("");
+    expect(notesClipboardContent([{ block: note, end: 0 }]).plainText).toBe("");
+  });
+
+  it("treats an invalid copied note identity as readable text", () => {
+    const { plan, blocks } = pasted("Readable", '<p data-notes-child-page-id="invalid">Readable</p>');
+    expect(plan?.copiedPageIds).toBeUndefined();
+    expect(blocks.map(blockPlainText)).toEqual(["Readable"]);
+  });
+
+  it("pastes a plain local note reference as a page mention without duplicating the note", () => {
+    const id = "10000000-0000-4000-8000-000000000001";
+    const clipboard = notesClipboardContent([{ block: block("child_page", "Note", id) }]);
+    const { plan, blocks } = pasted(clipboard.plainText);
+    expect(plan?.copiedPageIds).toBeUndefined();
+    expect(blockEditableRichText(blocks[0])[0]).toMatchObject({ type: "mention", mention: { type: "page", page: { id } } });
+  });
+
   it("imports Notion aside text as a callout with heading and paragraph children", () => {
     const text = "Normal text\n\n<aside>\n💡\n\n# Title\n\nOne\n\nTwo\n\nThree\n\n</aside>\n\nNormal text";
     const { plan, blocks } = pasted(text);

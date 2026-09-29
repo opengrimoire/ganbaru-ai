@@ -1,8 +1,9 @@
 import { notesPasteAppendRequests, planNotesPlainTextPaste } from "$lib/notes/block-clipboard";
+import { createNotesPastePersistence } from "./notes-store-paste-persistence";
 import type { NotesDocumentSelection } from "$lib/notes/editor-selection";
 import { planNotesRichHtmlPaste } from "$lib/notes/rich-text-paste";
 import { appendNotesBlockChildren, moveNotesBlock, trashNotesBlock, updateNotesBlock } from "$lib/api/notes";
-import { applyBlockUpdate, blockIndent, blockUpdateWithIndent, blockEditableRichText, blockPlainText, blockWithRichText, createBlockUpdate, isTextEditableBlock } from "$lib/notes/block-factory";
+import { applyBlockUpdate, blockIndent, blockUpdateWithIndent, blockEditableRichText, blockPlainText, blockWithRichText, createBlockUpdate, createBlockWrite, isTextEditableBlock } from "$lib/notes/block-factory";
 import { blockChildrenAreVisible } from "$lib/notes/block-tree";
 import { applyRichTextAnnotations, replaceRichTextRange, createTextRichText, richTextAnnotationsForSelection, richTextPlainText, type NotesRichTextAnnotationName } from "$lib/notes/rich-text";
 import { splitRichTextForBlock } from "$lib/notes/rich-text-split";
@@ -19,10 +20,13 @@ export function createNotesDocumentEdit(context: NotesBlockActionsContext, optim
   ): Promise<void> {
     const blocks = blockIds.map((id) => context.blockById(id));
     if (!blocks.length || blocks.some((block) => !block)) throw new Error("Notes selection content is not loaded");
-    const first = blocks[0]!;
+    const originalFirst = blocks[0]!;
+    const replacement = originalFirst.type === "child_page"
+      ? createBlockWrite(crypto.randomUUID(), "paragraph", "") : null;
+    const first = replacement ? optimisticBlockFromWrite(replacement, originalFirst.parent) : originalFirst;
     const last = blocks[blocks.length - 1]!;
     const prefix = splitRichTextForBlock(blockEditableRichText(first), start, blockPlainText(first).length).before;
-    const suffix = splitRichTextForBlock(blockEditableRichText(last), 0, end).after;
+    const suffix = last.type === "child_page" ? [] : splitRichTextForBlock(blockEditableRichText(last), 0, end).after;
     const lines = text.replace(/\r\n?/gu, "\n").split("\n");
     const richText = [...prefix, createTextRichText(lines[0]), ...(lines.length === 1 ? suffix : [])];
     let update = isTextEditableBlock(first.type)
@@ -34,11 +38,12 @@ export function createNotesDocumentEdit(context: NotesBlockActionsContext, optim
     ));
     const merged = isTextEditableBlock(first.type)
       ? blockWithRichText(first, [...prefix, ...suffix]) : createBlockUpdate("paragraph", richTextPlainText([...prefix, ...suffix]));
-    const pastePlan = html ? planNotesRichHtmlPaste({
+    const richPastePlan = html ? planNotesRichHtmlPaste({
       currentBlock: applyBlockUpdate(first, merged),
       selectionStart: richTextPlainText(prefix).length, selectionEnd: richTextPlainText(prefix).length,
       html, createId: () => crypto.randomUUID(),
-    }) : text.trim() ? planNotesPlainTextPaste({
+    }) : null;
+    const pastePlan = html ? richPastePlan : text.trim() ? planNotesPlainTextPaste({
       currentBlockId: first.id, currentBlockType: first.type,
       currentText: richTextPlainText([...prefix, ...suffix]),
       selectionStart: richTextPlainText(prefix).length, selectionEnd: richTextPlainText(prefix).length,
@@ -77,9 +82,11 @@ export function createNotesDocumentEdit(context: NotesBlockActionsContext, optim
     update = blockUpdateWithIndent(update, blockIndent(first));
     writes = writes.map((write, index) => ({ id: write.id,
       ...blockUpdateWithIndent(write, (pastePlan?.blockDepths[index + 1] ?? 0) === 0 ? blockIndent(first) : 0) }));
-    const before = context.createUndoSnapshot(first.id, [], { start, end: first.id === last.id ? end : blockPlainText(first).length });
-    if (before) before.documentSelection = documentSelection ?? { anchor: { blockId: first.id, offset: start }, focus: { blockId: last.id, offset: end } };
+    const before = context.createUndoSnapshot(originalFirst.id, [], { start, end: originalFirst.id === last.id ? end : blockPlainText(originalFirst).length });
+    if (before) before.documentSelection = documentSelection ?? { anchor: { blockId: originalFirst.id, offset: start }, focus: { blockId: last.id, offset: end } };
     const removed = new Set(blockIds.slice(1));
+    if (replacement && start === 0 && (originalFirst.id !== last.id || end > 0)) removed.add(originalFirst.id);
+    if (last.type === "child_page" && end === 0) removed.delete(last.id);
     for (const descendantId of context.outlineSubtreeIds(fullySelectedHiddenRoots)) {
       if (descendantId !== first.id) removed.add(descendantId);
     }
@@ -98,7 +105,11 @@ export function createNotesDocumentEdit(context: NotesBlockActionsContext, optim
         placements.push({ blockId: childId, parent, after: placements.at(-1)?.blockId ?? first.id });
       }
     }
-    context.localApplyBlockUpdate(first.id, update);
+    if (replacement) {
+      const inserted = applyBlockUpdate(first, update);
+      if (start === 0) context.localInsertBlockBefore(inserted, originalFirst.id);
+      else context.localInsertBlockAfter(inserted, originalFirst.id);
+    } else context.localApplyBlockUpdate(first.id, update);
     context.applyPostMutation({ blocks: moved, placements, removedBlockIds: [...removed], sidebarImpact: blocks.some((block) => block?.type === "child_page") ? "hierarchy" : "none" });
     const requests = notesPasteAppendRequests(first.id, first.parent, writes, pastePlan?.blockDepths);
     for (const request of requests) {
@@ -113,15 +124,27 @@ export function createNotesDocumentEdit(context: NotesBlockActionsContext, optim
     const selection = { start: offset, end: offset };
     context.requestBlockFocus(focusId, selection);
     context.recordUndo({ kind: "delete", before, after: context.createUndoSnapshot(focusId, [], selection) });
+    const persistPaste = createNotesPastePersistence(requests, richPastePlan?.copiedPageIds);
+    const mutations: Array<() => Promise<unknown>> = [];
+    if (replacement) {
+      mutations.push(() => appendNotesBlockChildren({ parent: first.parent, after: originalFirst.id, children: [{ id: first.id, ...update }] }));
+      if (start === 0) mutations.push(() => moveNotesBlock(first.id, { parent: first.parent, after: null, before: originalFirst.id }));
+    } else mutations.push(() => updateNotesBlock(first.id, update));
+    mutations.push(persistPaste);
+    for (const placement of placements) {
+      mutations.push(() => moveNotesBlock(placement.blockId, { parent: placement.parent, after: placement.after, before: null }));
+    }
+    // Children first avoids trashing surviving descendants through a removed ancestor.
+    for (const id of [...removed].reverse()) mutations.push(() => trashNotesBlock(id, true));
+    let completed = 0;
     void context.enqueueEditorMutation(async () => {
       await context.awaitSelectedPageReady();
-      await updateNotesBlock(first.id, update);
-      for (const request of requests) await appendNotesBlockChildren(request);
-      for (const placement of placements) {
-        await moveNotesBlock(placement.blockId, { parent: placement.parent, after: placement.after, before: null });
+      // A retry must not use a removed note as an insertion anchor or duplicate completed writes.
+      while (completed < mutations.length) {
+        await mutations[completed]();
+        completed += 1;
       }
-      // Children first avoids trashing surviving descendants through a removed ancestor.
-      for (const id of [...removed].reverse()) await trashNotesBlock(id, true);
+      if (richPastePlan?.copiedPageIds) context.applyPostMutation({ sidebarImpact: "hierarchy" });
     });
   };
 }

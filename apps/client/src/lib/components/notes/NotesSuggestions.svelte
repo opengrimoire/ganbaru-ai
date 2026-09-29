@@ -6,13 +6,13 @@
     openNotesSuggestionCount,
   } from "$lib/notes/suggestions";
   import type { NotesSuggestion } from "$lib/notes/types";
-  import { getNotes } from "$lib/stores/notes.svelte";
+  import { getNotesEditor } from "./notes-editor-context";
   import Check from "@lucide/svelte/icons/check";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import PencilLine from "@lucide/svelte/icons/pencil-line";
   import X from "@lucide/svelte/icons/x";
 
-  const notes = getNotes();
+  const notes = getNotesEditor();
   const localization = getLocalization();
   const { t } = localization;
   let { embedded = false }: { embedded?: boolean } = $props();

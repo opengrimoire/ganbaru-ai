@@ -10,7 +10,6 @@
   } from "$lib/lazy-component-loader";
   import { parseNotesLinkHash } from "$lib/notes/block-link";
   import { notesPageContainingFolderId } from "$lib/notes/hierarchy-navigation";
-  import type { NotesPageOpenMode } from "$lib/notes/page-open-mode";
   import { notesUndoShortcutAction } from "$lib/notes/undo-history";
   import type { NotesWorkingMarkdownFileRef } from "$lib/notes/types";
   import { getNotes } from "$lib/stores/notes.svelte";
@@ -90,41 +89,33 @@
     );
   });
   const topBarSelectedPage = $derived.by(() => {
-    if ((!mobileLayout && notes.pageOpenMode !== "full") || !notes.selectedPageId) return null;
+    if (!notes.selectedPageId) return null;
     if (notes.loadedPage?.id === notes.selectedPageId) return notes.loadedPage;
     return notes.allPages.find((page) => page.id === notes.selectedPageId)
       ?? notes.linkResolutionPages.find((page) => page.id === notes.selectedPageId)
       ?? null;
   });
-  const hasOpenPage = $derived(
-    notes.viewMode === "pages"
-      && notes.selectedPageId !== null
-      && !notes.isPagePendingRemoval(notes.selectedPageId)
-      && notes.loadedPage?.id === notes.selectedPageId
-      && notes.primaryContentReady,
+  const contextualPane = $derived(notes.previewPane
+    ?? notes.editorPanes.find((pane) => pane.store.pageOpenMode !== "full") ?? null);
+  const hasContextualSelection = $derived(
+    notes.viewMode === "pages" && contextualPane?.store.selectedPageId != null,
   );
   const peekPromotesToFullPage = $derived(
-    hasOpenPage
-      && notes.pageOpenMode !== "full"
-      && (
-        viewport.width < CENTER_PEEK_FULL_PAGE_MIN_WIDTH_PX
-        || viewport.height < CENTER_PEEK_FULL_PAGE_MIN_HEIGHT_PX
-      ),
-  );
-  const showFullPageEditor = $derived(
-    hasOpenPage && (notes.pageOpenMode === "full" || peekPromotesToFullPage),
+    hasContextualSelection && (
+      viewport.width < CENTER_PEEK_FULL_PAGE_MIN_WIDTH_PX
+      || viewport.height < CENTER_PEEK_FULL_PAGE_MIN_HEIGHT_PX
+    ),
   );
   const showPagePeek = $derived(
-    hasOpenPage && notes.pageOpenMode !== "full" && !peekPromotesToFullPage,
+    hasContextualSelection && !peekPromotesToFullPage,
   );
-  const showCenterPeek = $derived(showPagePeek && notes.pageOpenMode === "center");
-  const showSidePeek = $derived(showPagePeek && notes.pageOpenMode === "side");
+  const showCenterPeek = $derived(showPagePeek && contextualPane?.store.pageOpenMode === "center");
+  const showSidePeek = $derived(showPagePeek && contextualPane?.store.pageOpenMode === "side");
   const activeSurfaceKind = $derived.by((): ActiveNotesSurfaceKind => {
     if (notes.viewMode === "archive") return "archive";
     if (notes.viewMode === "trash") return "trash";
     if (notes.selectedPageId !== null
-      && !notes.isPagePendingRemoval(notes.selectedPageId)
-      && !notes.loadError) return "editor";
+      && !notes.isPagePendingRemoval(notes.selectedPageId)) return "editor";
     return "home";
   });
   const activeSurfaceLoadState = $derived(
@@ -195,8 +186,7 @@
     return mobileBackStack.activate({
       handle: () => {
         if (!beforeDocumentNavigation()) return;
-        void notes.closeContextualPage();
-        clearMobileNotesHash();
+        closePagePeek();
       },
     });
   });
@@ -262,9 +252,6 @@
     if (activeSurfaceKind === "archive" || activeSurfaceKind === "trash") {
       requestNotesSurface(activeSurfaceKind);
     }
-  });
-
-  $effect(() => {
   });
 
   $effect(() => {
@@ -399,8 +386,9 @@
   }
 
   function closePagePeek(): void {
-    void notes.closeContextualPage();
-    if (mobileLayout) clearMobileNotesHash();
+    void notes.closeContextualPage().then(() => {
+      if (mobileLayout) clearMobileNotesHash();
+    }).catch((error: unknown) => console.warn("Close Notes preview failed", error));
   }
 
   function clearMobileNotesHash(): void {
@@ -413,14 +401,6 @@
       oldURL: previousUrl,
       newURL: nextUrl.href,
     }));
-  }
-
-  function showSelectedPageAs(openMode: NotesPageOpenMode): void {
-    notes.showSelectedPageAs(openMode);
-  }
-
-  function handleCenterPeekBackdropClick(event: MouseEvent): void {
-    if (event.target === event.currentTarget) closePagePeek();
   }
 
   function notesShortcutTargetBlocked(target: EventTarget | Element | null): boolean {
@@ -610,7 +590,7 @@
       />
     {/if}
     {#if showPrimaryContent}
-      <div class={showSidePeek ? "flex min-w-0 basis-1/2 overflow-hidden" : "flex min-w-0 flex-1 overflow-hidden"}>
+      <div class="flex min-w-0 flex-1 overflow-hidden">
         {#if !notes.loaded && notes.loadError}
           <div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-3 p-4 text-center" role="alert" data-notes-first-use-state>
             <p class="text-sm text-destructive">{t("notes.loadFailed", notes.loadError)}</p>
@@ -643,66 +623,64 @@
           {:else}
             <div class="flex min-w-0 flex-1 items-center justify-center p-4 text-sm text-muted-foreground" aria-busy="true">{t("common.loading")}</div>
           {/if}
-        {:else if showFullPageEditor}
-          <NotesEditor
-            projectId={selectedProjectId}
-            openMode="full"
-            {pageActionsTarget}
-            onClose={closePagePeek}
-            onOpenModeChange={showSelectedPageAs}
-            {musicMentionContext}
-          />
-        {:else if mobileLayout && activeSurfaceKind === "editor"}
-          <div class="flex min-w-0 flex-1 items-center justify-center p-4 text-sm text-muted-foreground" aria-busy="true">
-            {t("common.loading")}
-          </div>
         {:else}
-          <div class="min-w-0 flex-1"></div>
+          {#each notes.editorPanes as pane (pane.id)}
+            {@const store = pane.store}
+            {@const isContextual = contextualPane?.id === pane.id}
+            {@const center = isContextual && showCenterPeek}
+            {@const side = isContextual && showSidePeek}
+            {@const hidden = !isContextual && peekPromotesToFullPage}
+            {@const selected = store.selectedPageId !== null && !store.isPagePendingRemoval(store.selectedPageId)}
+            <div
+              class={hidden ? "hidden" : center
+                ? "fixed inset-x-0 bottom-0 z-50 flex items-center justify-center bg-black/45 px-3 py-4 sm:px-6 sm:py-8"
+                : side ? "ml-auto flex min-w-0 basis-1/2 overflow-hidden"
+                  : showSidePeek ? "flex min-w-0 basis-1/2 overflow-hidden" : "flex min-w-0 flex-1 overflow-hidden"}
+              style={center ? "top: calc(var(--titlebar-h) + var(--cal-header-row-h));" : undefined}
+              inert={!isContextual && showCenterPeek}
+              data-notes-pane={pane.id}
+              data-notes-main-page={pane.id === notes.mainPaneId ? store.selectedPageId : undefined}
+              role="presentation"
+              onpointerdowncapture={(event) => {
+                if (event.target !== event.currentTarget || !center) notes.activatePane(pane.id);
+              }}
+              onfocusincapture={() => notes.activatePane(pane.id)}
+              onclick={(event) => { if (center && event.target === event.currentTarget) closePagePeek(); }}
+            >
+              <div
+                class={center
+                  ? "notes-center-peek-panel flex min-w-0 overflow-hidden rounded-lg border border-border"
+                  : side ? "flex min-w-0 flex-1 overflow-hidden border-l border-border" : "flex min-w-0 flex-1 overflow-hidden"}
+                style="background-color: var(--cal-bg);"
+                role={isContextual && showPagePeek ? "dialog" : undefined}
+                aria-modal={isContextual && showPagePeek ? center : undefined}
+                data-notes-page-peek={isContextual && showPagePeek || undefined}
+              >
+                {#if selected && store.loadedPage?.id === store.selectedPageId && store.primaryContentReady}
+                  <NotesEditor
+                    projectId={selectedProjectId}
+                    editorStore={store}
+                    active={notes.activePaneId === pane.id}
+                    openMode={isContextual && showPagePeek ? store.pageOpenMode : "full"}
+                    pageActionsTarget={notes.activePaneId === pane.id ? pageActionsTarget : null}
+                    onClose={() => { void notes.closePane(pane.id).catch((error: unknown) => console.warn("Close Notes pane failed", error)); }}
+                    onOpenModeChange={(mode) => { void notes.showPaneAs(pane.id, mode).catch((error: unknown) => console.warn("Change Notes pane mode failed", error)); }}
+                    {musicMentionContext}
+                  />
+                {:else if selected}
+                  <div class="flex min-w-0 flex-1 flex-col gap-3 p-4" aria-busy={!store.loadError}>
+                    <button type="button" class="min-h-8 self-end rounded-md border border-border px-3 hover:bg-accent" onclick={() => { void notes.closePane(pane.id).catch((error: unknown) => console.warn("Close Notes pane failed", error)); }}>{t("notes.closePeek")}</button>
+                    {#if store.loadError}
+                      <p role="alert" class="text-sm text-destructive">{t("notes.loadFailed", store.loadError)}</p>
+                    {:else}
+                      <p class="text-sm text-muted-foreground">{t("common.loading")}</p>
+                    {/if}
+                  </div>
+                {/if}
+              </div>
+            </div>
+          {/each}
         {/if}
-      </div>
-    {/if}
-
-    {#if showSidePeek}
-      <div
-        class="flex min-w-0 basis-1/2 overflow-hidden border-l border-border"
-        role="dialog"
-        aria-modal="false"
-        data-notes-page-peek
-      >
-        <NotesEditor
-          projectId={selectedProjectId}
-          openMode="side"
-          {pageActionsTarget}
-          onClose={closePagePeek}
-          onOpenModeChange={showSelectedPageAs}
-          {musicMentionContext}
-        />
-      </div>
-    {/if}
-
-    {#if showCenterPeek}
-      <div
-        class="fixed inset-x-0 bottom-0 z-50 flex items-center justify-center bg-black/45 px-3 py-4 sm:px-6 sm:py-8"
-        style="top: calc(var(--titlebar-h) + var(--cal-header-row-h));"
-        role="presentation"
-        onclick={handleCenterPeekBackdropClick}
-      >
-        <div
-          class="notes-center-peek-panel flex min-w-0 overflow-hidden rounded-lg border border-border"
-          style="background-color: var(--cal-bg);"
-          role="dialog"
-          aria-modal="true"
-          data-notes-page-peek
-        >
-          <NotesEditor
-            projectId={selectedProjectId}
-            openMode="center"
-            {pageActionsTarget}
-            onClose={closePagePeek}
-            onOpenModeChange={showSelectedPageAs}
-            {musicMentionContext}
-          />
-        </div>
       </div>
     {/if}
   </div>

@@ -8,10 +8,6 @@ import {
   parseStoredNotesPageIdList,
 } from "$lib/notes/page-navigation";
 import {
-  notesSidebarExpandedPageIdsConfigKey,
-  parseStoredNotesSidebarExpandedPageIds,
-} from "$lib/notes/page-tree";
-import {
   notesSidebarCollapsedFolderIdsConfigKey,
   parseStoredNotesSidebarCollapsedFolderIds,
 } from "$lib/notes/navigation-tree";
@@ -20,7 +16,6 @@ import { getConfigKey, setConfigKey } from "$lib/vault/config";
 export const notesSelectedPageKey = notesSelectedPageConfigKey();
 export const notesFavoritePageIdsKey = notesFavoritePageIdsConfigKey();
 export const notesRecentPageIdsKey = notesRecentPageIdsConfigKey();
-export const notesSidebarExpandedPageIdsKey = notesSidebarExpandedPageIdsConfigKey();
 export const notesSidebarCollapsedFolderIdsKey = notesSidebarCollapsedFolderIdsConfigKey();
 
 /**
@@ -42,15 +37,6 @@ export function initialNotesFavoritePageIds(): string[] {
  */
 export function initialNotesRecentPageIds(): string[] {
   return parseStoredNotesPageIdList(getConfigKey<unknown>(notesRecentPageIdsKey, undefined));
-}
-
-/**
- * Load the persisted expanded Notes sidebar page ids.
- */
-export function initialNotesSidebarExpandedPageIds(): string[] {
-  return parseStoredNotesSidebarExpandedPageIds(
-    getConfigKey<unknown>(notesSidebarExpandedPageIdsKey, undefined),
-  );
 }
 
 /**
@@ -81,13 +67,6 @@ export function saveNotesFavoritePageIds(pageIds: readonly string[]): void {
  */
 export function saveNotesRecentPageIds(pageIds: readonly string[]): void {
   setConfigKey(notesRecentPageIdsKey, pageIds.length > 0 ? [...pageIds] : undefined);
-}
-
-/**
- * Persist the expanded Notes sidebar page ids.
- */
-export function saveNotesSidebarExpandedPageIds(pageIds: readonly string[]): void {
-  setConfigKey(notesSidebarExpandedPageIdsKey, pageIds.length > 0 ? [...pageIds] : undefined);
 }
 
 /**

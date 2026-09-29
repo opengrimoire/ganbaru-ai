@@ -96,7 +96,7 @@
     selected: boolean;
     onSelect: () => void;
     onRename: (title: string) => boolean | void | Promise<boolean | void>;
-    onToggleCollapsed: (collapsed: boolean) => void;
+    onToggleCollapsed?: (collapsed: boolean) => void;
     onToggleFavorite: (favorited: boolean) => void;
     onCreateChild: () => void;
     onDuplicate: () => void;
@@ -520,7 +520,7 @@
           disabled={!hasChildren}
           onclick={(event) => {
             event.stopPropagation();
-            onToggleCollapsed(!collapsed);
+            onToggleCollapsed?.(!collapsed);
           }}
         >
           {#if hasChildren && collapsed}

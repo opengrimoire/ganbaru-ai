@@ -1,6 +1,49 @@
 use super::helpers::*;
 
 #[test]
+fn create_child_page_from_block_honors_empty_slash_title_and_clears_incompatible_undo() {
+    crate::test_block_on(async {
+        let pool = migrated_memory_pool().await;
+        create_page(&pool, PAGE_A, BLOCK_A).await;
+        writes::update_block(
+            &pool,
+            BLOCK_A,
+            block_update("paragraph", paragraph_payload("/Note")),
+        )
+        .await
+        .unwrap();
+        crate::notes::undo_state::save_undo_state(&pool, PAGE_A, r#"{"undo":[],"redo":[]}"#)
+            .await
+            .unwrap();
+        let loaded = writes::create_child_page_from_block(
+            &pool,
+            BLOCK_A,
+            NoteChildPageFromBlockCreate {
+                first_block_id: BLOCK_B.to_string(),
+                title: Some(String::new()),
+                properties: None,
+            },
+        )
+        .await
+        .unwrap();
+        let loaded = serde_json::to_value(loaded).unwrap();
+        assert_eq!(
+            loaded["page"]["properties"]["title"]["title"][0]["plain_text"],
+            ""
+        );
+        let paired =
+            serde_json::to_value(reads::get_block(&pool, BLOCK_A, false).await.unwrap()).unwrap();
+        assert_eq!(paired["child_page"]["title"], "");
+        assert!(
+            crate::notes::undo_state::load_undo_state(&pool, PAGE_A)
+                .await
+                .unwrap()
+                .is_none()
+        );
+    });
+}
+
+#[test]
 fn create_child_page_from_block_moves_nested_children_and_syncs_page_state() {
     crate::test_block_on(async {
         let pool = migrated_memory_pool().await;
@@ -105,7 +148,7 @@ fn create_child_page_from_block_moves_nested_children_and_syncs_page_state() {
 }
 
 #[test]
-fn duplicate_block_rejects_child_page_blocks_until_page_duplication_exists() {
+fn duplicate_block_copies_child_page_with_independent_content() {
     crate::test_block_on(async {
         let pool = migrated_memory_pool().await;
         create_page(&pool, PAGE_A, BLOCK_A).await;
@@ -134,12 +177,15 @@ fn duplicate_block_rejects_child_page_blocks_until_page_duplication_exists() {
                 }],
             },
         )
-        .await;
-
-        assert_eq!(
-            result.err(),
-            Some("child_page blocks must be duplicated through page duplication".to_string())
-        );
+        .await
+        .unwrap();
+        let result = serde_json::to_value(result).unwrap();
+        assert_eq!(result["type"], "child_page");
+        assert_eq!(result["id"], BLOCK_C);
+        let duplicate =
+            serde_json::to_value(reads::load_page(&pool, BLOCK_C).await.unwrap()).unwrap();
+        assert_eq!(duplicate["page"]["parent"]["page_id"], PAGE_A);
+        assert_ne!(duplicate["blocks"]["results"][0]["id"], BLOCK_B);
     });
 }
 
@@ -224,6 +270,264 @@ fn duplicate_blocks_copies_loaded_subtrees_and_block_comments() {
             thread["parent"]["block_id"] == BLOCK_E
                 && thread["comments"][0]["rich_text"][0]["plain_text"] == "Nested comment"
         }));
+    });
+}
+
+#[test]
+fn duplicate_blocks_copies_nested_notes_after_cut_and_rolls_back_failed_copies() {
+    crate::test_block_on(async {
+        let pool = migrated_memory_pool().await;
+        create_page(&pool, PAGE_A, BLOCK_A).await;
+        for (id, parent_id, first_block_id, title) in [
+            (PAGE_B, PAGE_A, BLOCK_B, "Child"),
+            (PAGE_C, PAGE_B, BLOCK_C, "Grandchild"),
+        ] {
+            writes::create_page(
+                &pool,
+                NotePageCreate {
+                    id: id.to_string(),
+                    title: title.to_string(),
+                    parent: page_parent(parent_id),
+                    folder_id: None,
+                    first_block_id: first_block_id.to_string(),
+                    after_block_id: None,
+                    properties: None,
+                },
+            )
+            .await
+            .unwrap();
+        }
+        writes::update_block(
+            &pool,
+            BLOCK_C,
+            serde_json::from_value(json!({
+                "type": "paragraph", "paragraph": paragraph_payload("Deep content"),
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+        writes::trash_page(&pool, PAGE_B, true).await.unwrap();
+        let request = NoteDuplicateBlocks {
+            block_ids: vec![PAGE_B.to_string()],
+            duplicated_block_ids: vec![NoteDuplicatedBlockId {
+                source_id: PAGE_B.to_string(),
+                duplicate_id: BLOCK_D.to_string(),
+            }],
+            parent: page_parent(PAGE_A),
+            after: Some(BLOCK_A.to_string()),
+            before: None,
+            include_trashed_sources: Some(true),
+        };
+        writes::duplicate_blocks(&pool, request).await.unwrap();
+        let blocks = serde_json::to_value(
+            reads::get_block_children(&pool, BLOCK_D, None, Some(10))
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        let nested = blocks["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|block| block["type"] == "child_page")
+            .unwrap();
+        let nested_id = nested["id"].as_str().unwrap();
+        assert_ne!(nested_id, PAGE_C);
+        let nested_page =
+            serde_json::to_value(reads::get_page(&pool, nested_id, false).await.unwrap()).unwrap();
+        assert_eq!(nested_page["parent"]["page_id"], BLOCK_D);
+        let content = serde_json::to_value(
+            reads::get_block_children(&pool, nested_id, None, Some(10))
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(content["results"][0]["id"], BLOCK_C);
+        assert_eq!(
+            content["results"][0]["paragraph"]["rich_text"][0]["plain_text"],
+            "Deep content"
+        );
+        assert!(reads::get_page(&pool, PAGE_B, false).await.is_err());
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM notes_pages")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let failed = writes::duplicate_blocks(
+            &pool,
+            NoteDuplicateBlocks {
+                block_ids: vec![BLOCK_D.to_string()],
+                duplicated_block_ids: vec![NoteDuplicatedBlockId {
+                    source_id: BLOCK_D.to_string(),
+                    duplicate_id: BLOCK_A.to_string(),
+                }],
+                parent: page_parent(PAGE_A),
+                after: None,
+                before: None,
+                include_trashed_sources: None,
+            },
+        )
+        .await;
+        assert!(failed.is_err());
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM notes_pages")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            count
+        );
+    });
+}
+
+#[test]
+fn duplicate_blocks_can_copy_a_note_into_itself_without_copying_the_new_graph() {
+    crate::test_block_on(async {
+        let pool = migrated_memory_pool().await;
+        create_page(&pool, PAGE_A, BLOCK_A).await;
+        writes::create_page(
+            &pool,
+            NotePageCreate {
+                id: PAGE_B.to_string(),
+                title: "Child".to_string(),
+                parent: page_parent(PAGE_A),
+                folder_id: None,
+                first_block_id: BLOCK_B.to_string(),
+                after_block_id: None,
+                properties: None,
+            },
+        )
+        .await
+        .unwrap();
+        writes::duplicate_blocks(
+            &pool,
+            NoteDuplicateBlocks {
+                block_ids: vec![PAGE_B.to_string()],
+                duplicated_block_ids: vec![NoteDuplicatedBlockId {
+                    source_id: PAGE_B.to_string(),
+                    duplicate_id: PAGE_C.to_string(),
+                }],
+                parent: page_parent(PAGE_B),
+                after: Some(BLOCK_B.to_string()),
+                before: None,
+                include_trashed_sources: None,
+            },
+        )
+        .await
+        .unwrap();
+        let copied = serde_json::to_value(
+            reads::get_block_children(&pool, PAGE_C, None, Some(10))
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(copied["results"].as_array().unwrap().len(), 1);
+        assert_eq!(copied["results"][0]["type"], "paragraph");
+    });
+}
+
+#[test]
+fn duplicate_blocks_adopts_destination_project_and_preserves_page_properties_on_undo_updates() {
+    crate::test_block_on(async {
+        let pool = migrated_memory_pool().await;
+        sqlx::query("INSERT INTO project_groups (id, name) VALUES ('group', 'Group')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        for id in ["source-project", "destination-project"] {
+            sqlx::query("INSERT INTO projects (id, group_id, name) VALUES (?, 'group', ?)")
+                .bind(id)
+                .bind(id)
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+        for (id, first_block, project, parent) in [
+            (
+                PAGE_A,
+                BLOCK_A,
+                "destination-project",
+                NoteParent::Workspace { workspace: true },
+            ),
+            (
+                PAGE_B,
+                BLOCK_B,
+                "source-project",
+                NoteParent::Workspace { workspace: true },
+            ),
+            (PAGE_C, BLOCK_C, "source-project", page_parent(PAGE_B)),
+        ] {
+            writes::create_page(
+                &pool,
+                NotePageCreate {
+                    id: id.to_string(),
+                    title: "Page".to_string(),
+                    parent,
+                    folder_id: None,
+                    first_block_id: first_block.to_string(),
+                    after_block_id: None,
+                    properties: Some(
+                        json!({ "__ganbaru_project_id": project, "custom": "retained" }),
+                    ),
+                },
+            )
+            .await
+            .unwrap();
+        }
+        writes::duplicate_blocks(
+            &pool,
+            NoteDuplicateBlocks {
+                block_ids: vec![PAGE_C.to_string()],
+                duplicated_block_ids: vec![NoteDuplicatedBlockId {
+                    source_id: PAGE_C.to_string(),
+                    duplicate_id: BLOCK_D.to_string(),
+                }],
+                parent: page_parent(PAGE_A),
+                after: Some(BLOCK_A.to_string()),
+                before: None,
+                include_trashed_sources: None,
+            },
+        )
+        .await
+        .unwrap();
+        writes::update_block(
+            &pool,
+            BLOCK_D,
+            serde_json::from_value(json!({
+                "type": "child_page", "child_page": { "title": "Restored title" },
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+        let copy =
+            serde_json::to_value(reads::get_page(&pool, BLOCK_D, false).await.unwrap()).unwrap();
+        assert_eq!(
+            copy["properties"]["__ganbaru_project_id"],
+            "destination-project"
+        );
+        assert_eq!(copy["properties"]["custom"], "retained");
+        let source =
+            serde_json::to_value(reads::get_page(&pool, PAGE_C, false).await.unwrap()).unwrap();
+        assert_eq!(
+            source["properties"]["__ganbaru_project_id"],
+            "source-project"
+        );
+        assert!(
+            writes::update_block(
+                &pool,
+                BLOCK_D,
+                serde_json::from_value(json!({
+                    "type": "paragraph", "paragraph": paragraph_payload("Invalid conversion"),
+                }))
+                .unwrap()
+            )
+            .await
+            .is_err()
+        );
+        assert_eq!(
+            serde_json::to_value(reads::get_block(&pool, BLOCK_D, false).await.unwrap()).unwrap()["type"],
+            "child_page"
+        );
     });
 }
 

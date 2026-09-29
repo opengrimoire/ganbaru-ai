@@ -3,6 +3,7 @@ use super::block_tree::{
     load_block_subtree_rows, load_block_subtree_rows_with_trash, load_blocks_by_ids,
     normalize_selection_root_ids, refresh_duplicated_has_children,
 };
+use super::page_duplicates::{insert_child_page_copy, plan_child_page_copy};
 use super::parents::{
     ParentTarget, refresh_parent_has_children, resolve_block_parent, touch_page,
     validate_block_for_parent,
@@ -10,7 +11,7 @@ use super::parents::{
 use super::sort::{next_sort_orders, sort_orders_before};
 use crate::notes::models::{
     NoteBlockDto, NoteDuplicateBlock, NoteDuplicateBlocks, NoteDuplicatedBlockId,
-    NotePaginatedBlockList,
+    NotePaginatedBlockList, NoteParent,
 };
 use crate::notes::validation::{
     require_uuid, validate_duplicate_block_count, validate_parent, validate_sort_order,
@@ -56,13 +57,6 @@ pub async fn duplicate_block(
     if source_rows.is_empty() {
         return Err("notes block not found".to_string());
     }
-    if source_rows
-        .first()
-        .map(|row| row.block_type.as_str())
-        .is_some_and(|block_type| block_type == "child_page")
-    {
-        return Err("child_page blocks must be duplicated through page duplication".to_string());
-    }
     if source_rows.len() != duplicate_ids.len() {
         return Err("duplicated_block_ids must match the source block subtree".to_string());
     }
@@ -97,6 +91,52 @@ pub async fn duplicate_block(
     let root_sort_order =
         next_sort_orders(&mut tx, &root_parent, Some(source_root.id.as_str()), 1).await?[0];
     history::record_page_snapshot_tx(&mut tx, &source_root.page_id, "duplicate_block").await?;
+    let mut reserved_ids = seen_duplicate_ids.clone();
+    let mut page_copies = Vec::new();
+    let destination_project_id =
+        project_history::resolve_project_id_for_page_tx(&mut tx, &source_root.page_id).await?;
+    for row in source_rows
+        .iter()
+        .filter(|row| row.block_type == "child_page")
+    {
+        let parent = if row.id == source_root.id {
+            if let Some(id) = &root_parent.parent_page_id {
+                NoteParent::PageId {
+                    page_id: id.clone(),
+                }
+            } else {
+                NoteParent::BlockId {
+                    block_id: root_parent
+                        .parent_block_id
+                        .clone()
+                        .ok_or("missing block parent")?,
+                }
+            }
+        } else {
+            NoteParent::BlockId {
+                block_id: duplicate_ids
+                    .get(
+                        row.parent_block_id
+                            .as_deref()
+                            .ok_or("missing block parent")?,
+                    )
+                    .cloned()
+                    .ok_or("missing duplicate parent")?,
+            }
+        };
+        page_copies.push(
+            plan_child_page_copy(
+                &mut tx,
+                &row.id,
+                &duplicate_ids[&row.id],
+                parent,
+                false,
+                &mut reserved_ids,
+                destination_project_id.as_deref(),
+            )
+            .await?,
+        );
+    }
     for row in &source_rows {
         let duplicate_id = duplicate_ids.get(&row.id).ok_or_else(|| {
             "duplicated_block_ids must match the source block subtree".to_string()
@@ -153,6 +193,9 @@ pub async fn duplicate_block(
         .await
         .map_err(|e| format!("duplicate notes block: {e}"))?;
     }
+    for copy in &page_copies {
+        insert_child_page_copy(&mut tx, copy).await?;
+    }
     refresh_duplicated_has_children(&mut tx, &seen_duplicate_ids).await?;
     duplicate_block_comment_threads(&mut tx, &duplicate_ids, &source_root.page_id).await?;
     touch_page(&mut tx, &source_root.page_id).await?;
@@ -190,11 +233,6 @@ pub async fn duplicate_blocks(
         let source_root = subtree_rows
             .first()
             .ok_or_else(|| "notes block not found".to_string())?;
-        if source_root.block_type == "child_page" {
-            return Err(
-                "child_page blocks must be duplicated through page duplication".to_string(),
-            );
-        }
         let payload: Value = serde_json::from_str(&source_root.payload)
             .map_err(|e| format!("parse duplicated block payload: {e}"))?;
         validate_block_for_parent(&destination_parent, &source_root.block_type, &payload)?;
@@ -237,6 +275,42 @@ pub async fn duplicate_blocks(
         .collect::<HashMap<_, _>>();
     history::record_page_snapshot_tx(&mut tx, &destination_parent.page_id, "duplicate_blocks")
         .await?;
+    let mut reserved_ids = seen_duplicate_ids.clone();
+    let mut page_copies = Vec::new();
+    let destination_project_id =
+        project_history::resolve_project_id_for_page_tx(&mut tx, &destination_parent.page_id)
+            .await?;
+    for row in source_rows
+        .iter()
+        .filter(|row| row.block_type == "child_page")
+    {
+        let parent = if root_id_set.contains(row.id.as_str()) {
+            request.parent.clone()
+        } else {
+            NoteParent::BlockId {
+                block_id: duplicate_ids
+                    .get(
+                        row.parent_block_id
+                            .as_deref()
+                            .ok_or("missing block parent")?,
+                    )
+                    .cloned()
+                    .ok_or("missing duplicate parent")?,
+            }
+        };
+        page_copies.push(
+            plan_child_page_copy(
+                &mut tx,
+                &row.id,
+                &duplicate_ids[&row.id],
+                parent,
+                include_trashed_sources,
+                &mut reserved_ids,
+                destination_project_id.as_deref(),
+            )
+            .await?,
+        );
+    }
     for row in &source_rows {
         let duplicate_id = duplicate_ids.get(&row.id).ok_or_else(|| {
             "duplicated_block_ids must match the source block subtrees".to_string()
@@ -294,6 +368,9 @@ pub async fn duplicate_blocks(
         .execute(&mut *tx)
         .await
         .map_err(|e| format!("duplicate notes block: {e}"))?;
+    }
+    for copy in &page_copies {
+        insert_child_page_copy(&mut tx, copy).await?;
     }
     refresh_duplicated_has_children(&mut tx, &seen_duplicate_ids).await?;
     duplicate_block_comment_threads(&mut tx, &duplicate_ids, &destination_parent.page_id).await?;

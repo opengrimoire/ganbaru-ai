@@ -228,7 +228,7 @@ describe("Notes page lifecycle", () => {
     expect(notes.editorSaveError).toBeNull();
   });
 
-  it("reads an edited new note from the database on its next open", async () => {
+  it("retains an edited main note while a preview is open and reads it again after leaving the document", async () => {
     const { getNotes } = await import("./notes.svelte");
     const notes = getNotes();
     await notes.load();
@@ -252,6 +252,10 @@ describe("Notes page lifecycle", () => {
     await nextCreation;
 
     await notes.selectPage(firstId);
+    expect(backend.openCalls).not.toContain(firstId);
+    expect(notes.loadedPage?.id).toBe(firstId);
+    await notes.selectPage(otherId, { openMode: "full" });
+    await notes.selectPage(firstId, { openMode: "full" });
     expect(backend.openCalls).toContain(firstId);
     expect(notes.loadedPage?.id).toBe(firstId);
   });
@@ -458,5 +462,24 @@ describe("Notes page lifecycle", () => {
     await deletion;
 
     expect(notes.selectedPageId).toBe(otherId);
+  });
+
+  it.each([childId, rootId])("closes affected preview panes when removing %s and keeps a valid main selection", async (removedId) => {
+    const { getNotes } = await import("./notes.svelte");
+    const notes = getNotes();
+    await notes.load();
+    await notes.selectPage(rootId, { openMode: "full" });
+    const main = notes.editorPanes[0].store;
+    await notes.selectPage(childId, { openMode: "side" });
+    const deletion = notes.trashPage(removedId);
+    await vi.waitFor(() => expect(backend.pendingTrashes).toHaveLength(1));
+    const removed = backend.pages.get(removedId)!;
+    backend.pages.delete(removedId);
+    backend.pages.delete(childId);
+    backend.pendingTrashes[0].resolve({ ...removed, in_trash: true });
+    await deletion;
+    expect(notes.previewPane).toBeNull();
+    expect(notes.editorPanes[0].store).toBe(main);
+    expect(notes.selectedPageId).toBe(removedId === rootId ? otherId : rootId);
   });
 });
