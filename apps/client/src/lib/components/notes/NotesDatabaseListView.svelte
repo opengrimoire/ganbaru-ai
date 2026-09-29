@@ -1,5 +1,9 @@
 <script lang="ts">
-  import NotesDatabaseMenu from "./NotesDatabaseMenu.svelte";
+  import NotesDatabasePropertyValue from "./NotesDatabasePropertyValue.svelte";
+  import CollectionSettings from "$lib/components/collections/CollectionSettings.svelte";
+  import CollectionRow from "$lib/components/collections/CollectionRow.svelte";
+  import CollectionCell from "$lib/components/collections/CollectionCell.svelte";
+  import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
   import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import {
     createNotesDataSourceRowPage,
@@ -35,7 +39,6 @@
     NotesDataSourceListView,
     NotesPage,
   } from "$lib/notes/types";
-  import Check from "@lucide/svelte/icons/check";
   import Copy from "@lucide/svelte/icons/copy";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import Eye from "@lucide/svelte/icons/eye";
@@ -50,13 +53,21 @@
     databaseId = null,
     viewId = null,
     onSelectPage,
+    onSavingChange = () => {},
     reloadKey = 0,
+    settingsOpen = false,
+    onCloseSettings,
+    onEditProperties,
   }: {
     dataSourceId: string;
     databaseId?: string | null;
     viewId?: string | null;
     onSelectPage: (pageId: string) => void;
+    onSavingChange?: (saving: boolean) => void;
     reloadKey?: number;
+    settingsOpen?: boolean;
+    onCloseSettings: () => void;
+    onEditProperties: () => void;
   } = $props();
 
   const { t } = getLocalization();
@@ -74,6 +85,11 @@
   let loadingMore = $state(false);
   let requestId = 0;
   let mutating = $state(false);
+
+  $effect(() => {
+    onSavingChange(mutating);
+    return () => onSavingChange(false);
+  });
   let error = $state<string | null>(null);
   let draftTitle = $state("");
   let selectedPanelRowId = $state<string | null>(null);
@@ -352,10 +368,10 @@
       row_open_mode: "side_panel",
     };
   }
+  const listTemplate = $derived(`minmax(12rem, 1fr) ${visibleColumns.map(() => "minmax(0, 1fr)").join(" ")} 2rem`);
 </script>
-
-<section class="space-y-3 pt-2" aria-label={t("notes.databaseListTitle")}>
-  <div class="flex min-w-0 flex-wrap items-center gap-2 text-[0.8rem] text-muted-foreground">
+{#snippet viewControls()}
+  <div class="flex min-w-0 flex-col items-stretch gap-1 text-[0.8rem]">
     <span class="min-w-0 flex-1 truncate" role="status">
       {#if loading}
         {t("notes.databaseListLoading")}
@@ -365,7 +381,7 @@
         {t("notes.databaseListRowsCount", list?.rows.length ?? 0)}
       {/if}
     </span>
-    <NotesDatabaseMenu label={t("notes.databaseLayout")}>
+    <CollectionMenu fullWidth label={t("notes.databaseLayout")}>
       <div class="grid gap-3">
         <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
           <span>{t("notes.databaseListGroupBy")}</span>
@@ -400,11 +416,11 @@
           />
         </div>
       </div>
-    </NotesDatabaseMenu>
-    <NotesDatabaseMenu label={t("notes.databaseNew")} kind="new">
+    </CollectionMenu>
+    <CollectionMenu fullWidth label={t("notes.databaseNew")} kind="new">
       <div class="flex min-w-0 flex-wrap items-center gap-2">
         <input
-          class="h-8 min-w-40 flex-1 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+          class="h-8 min-w-40 flex-1 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
           value={draftTitle}
           placeholder={t("notes.databaseRowsNewPlaceholder")}
           disabled={loading || mutating}
@@ -421,7 +437,7 @@
         />
         <button
           type="button"
-          class="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-2 text-[0.8rem] text-primary-foreground disabled:pointer-events-none disabled:opacity-50"
+          class="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-2 text-[0.8rem] text-primary-foreground disabled:pointer-events-none"
           disabled={loading || mutating}
           onclick={() => {
             void createRow();
@@ -431,10 +447,10 @@
           <span>{t("notes.databaseListAddRow")}</span>
         </button>
       </div>
-    </NotesDatabaseMenu>
+    </CollectionMenu>
     <button
       type="button"
-      class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+      class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none"
       disabled={loading || mutating}
       aria-label={t("notes.databaseListReload")}
       title={t("notes.databaseListReload")}
@@ -445,11 +461,11 @@
       <RefreshCw class="size-3.5" aria-hidden="true" />
     </button>
   </div>
+{/snippet}
 
-  {#if list}
-    <div class="grid gap-2 @container">
-      <div class="flex flex-wrap items-center gap-1">
-        <NotesDatabaseMenu label={t("notes.databaseListRowProperties")} kind="properties">
+{#snippet propertyControls()}
+      <div class="flex flex-col items-stretch gap-1">
+        <CollectionMenu fullWidth label={t("notes.databaseListRowProperties")} kind="properties">
 
           <div class="mt-2 grid gap-1">
             {#each columns.filter((column) =>
@@ -467,16 +483,16 @@
               </label>
             {/each}
           </div>
-        </NotesDatabaseMenu>
+        </CollectionMenu>
 
         {#if groupColumn}
-          <NotesDatabaseMenu label={t("notes.databaseListHiddenGroups")} kind="layout">
+          <CollectionMenu fullWidth label={t("notes.databaseListHiddenGroups")} kind="layout">
 
             <div class="mt-2 grid gap-1">
               {#each visibleGroups as group (group.id)}
                 <button
                   type="button"
-                  class="flex min-w-0 items-center gap-2 rounded-sm px-1 py-1 text-left hover:bg-accent/60 disabled:pointer-events-none disabled:opacity-50"
+                  class="flex min-w-0 items-center gap-2 rounded-sm px-1 py-1 text-left hover:bg-accent/60 disabled:pointer-events-none"
                   disabled={mutating}
                   aria-label={t("notes.databaseListHideGroup", group.name)}
                   onclick={() => setGroupHidden(group.id, true)}
@@ -488,7 +504,7 @@
               {#each hiddenGroups as group (group.id)}
                 <button
                   type="button"
-                  class="flex min-w-0 items-center gap-2 rounded-sm px-1 py-1 text-left hover:bg-accent/60 disabled:pointer-events-none disabled:opacity-50"
+                  class="flex min-w-0 items-center gap-2 rounded-sm px-1 py-1 text-left hover:bg-accent/60 disabled:pointer-events-none"
                   disabled={mutating}
                   aria-label={t("notes.databaseListShowGroup", group.name)}
                   onclick={() => setGroupHidden(group.id, false)}
@@ -498,10 +514,10 @@
                 </button>
               {/each}
             </div>
-          </NotesDatabaseMenu>
+          </CollectionMenu>
         {/if}
 
-        <NotesDatabaseMenu label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length}>
+        <CollectionMenu fullWidth label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length}>
 
           <div class="mt-2 grid gap-2">
             {#each sorts as sort, index}
@@ -535,7 +551,7 @@
                 />
                 <button
                   type="button"
-                  class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
+                  class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none"
                   disabled={mutating}
                   aria-label={t("notes.databaseTableRemoveSort")}
                   title={t("notes.databaseTableRemoveSort")}
@@ -547,7 +563,7 @@
             {/each}
             <button
               type="button"
-              class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+              class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none"
               disabled={mutating || columns.length === 0}
               onclick={addSort}
             >
@@ -555,9 +571,9 @@
               <span>{t("notes.databaseTableAddSort")}</span>
             </button>
           </div>
-        </NotesDatabaseMenu>
+        </CollectionMenu>
 
-        <NotesDatabaseMenu label={t("notes.databaseTableFilters")} kind="filter" activeCount={filters.length}>
+        <CollectionMenu fullWidth label={t("notes.databaseTableFilters")} kind="filter" activeCount={filters.length}>
 
           <div class="mt-2 grid gap-2">
             {#each filters as filter, index}
@@ -589,7 +605,7 @@
                   triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
                 />
                 <input
-                  class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+                  class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   value={String(filter.value ?? "")}
                   disabled={mutating || !filterConditionNeedsValue(filter.condition)}
                   aria-label={t("notes.databaseTableFilterValue")}
@@ -598,7 +614,7 @@
                 />
                 <button
                   type="button"
-                  class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
+                  class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none"
                   disabled={mutating}
                   aria-label={t("notes.databaseTableRemoveFilter")}
                   title={t("notes.databaseTableRemoveFilter")}
@@ -610,7 +626,7 @@
             {/each}
             <button
               type="button"
-              class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+              class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none"
               disabled={mutating || columns.length === 0}
               onclick={addFilter}
             >
@@ -618,16 +634,33 @@
               <span>{t("notes.databaseTableAddFilter")}</span>
             </button>
           </div>
-        </NotesDatabaseMenu>
+        </CollectionMenu>
       </div>
 
-      <div class="flex min-h-11 items-center gap-3 border-b border-border/60 px-2 text-[0.8rem] font-medium text-muted-foreground">
-        <span class="min-w-0 flex-1">{t("notes.databaseSchemaName")}</span>
-        <div class="hidden min-w-0 flex-1 items-center gap-3 @lg:flex">
-          {#each visibleColumns as column (column.id)}<span class="min-w-0 flex-1 truncate">{column.name}</span>{/each}
-        </div>
-        <span class="w-8" aria-hidden="true"></span>
-      </div>
+
+
+{/snippet}
+
+
+<section class="space-y-3 pt-2" aria-label={t("notes.databaseListTitle")}>
+  <span class="sr-only" role="status">{#if loading}{t("notes.databaseListLoading")}{/if}</span>
+  {#if error}<p class="text-[0.8rem] text-destructive" role="alert">{error}</p>{/if}
+  {#if settingsOpen}
+    <CollectionSettings label={t("notes.databaseViewSettings")} onclose={onCloseSettings}>
+      {@render viewControls()}
+      {#if list}{@render propertyControls()}{/if}
+      <button type="button" class="mt-2 min-h-9 w-full rounded-md px-2 text-left text-sm hover:bg-accent" onclick={() => { onCloseSettings(); onEditProperties(); }}>{t("notes.databaseViewEditProperties")}</button>
+    </CollectionSettings>
+  {/if}
+
+
+  {#if list}
+    <div class="grid gap-2 @container">
+      <CollectionRow template={listTemplate} compactTemplate="minmax(0, 1fr) 2rem" header>
+        <CollectionCell>{t("notes.databaseSchemaName")}</CollectionCell>
+        {#each visibleColumns as column (column.id)}<CollectionCell data-collection-secondary>{column.name}</CollectionCell>{/each}
+        <div></div>
+      </CollectionRow>
       <div class="grid min-w-0 gap-3">
         {#each visibleGroups as group (group.id)}
           <section class="min-w-0">
@@ -643,36 +676,30 @@
               </div>
             {/if}
 
-            <div class="grid min-w-0 divide-y divide-border/50">
+            <div class="grid min-w-0">
               {#each group.rows as row (row.id)}
                 {@const title = rowTitle(row)}
-                <article class="group/row flex min-h-11 min-w-0 items-center gap-3 rounded-md px-2 py-1 transition-colors hover:bg-accent/20">
+                <CollectionRow template={listTemplate} compactTemplate="minmax(0, 1fr) 2rem">
+                  <CollectionCell>
                   <button
                     type="button"
                     class="flex min-w-0 flex-1 items-center gap-2 rounded-sm text-left outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                     onclick={() => openRow(row)}
                   >
                     <FileText class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                    <span class="min-w-32 flex-1 truncate text-[0.866667rem] text-foreground">
+                    <span class="min-w-0 flex-1 truncate text-[0.866667rem] text-foreground">
                       {title}
                     </span>
                   </button>
-                  {#if visibleColumns.length > 0}
-                    <dl class="hidden min-w-0 flex-1 items-center gap-3 text-[0.8rem] text-muted-foreground @lg:flex">
-                      {#each visibleColumns as column (column.id)}
-                        {@const text = notesDatabaseListRowText(row, column)}
-                        <div class="min-w-0 flex-1 truncate">
-                          <dt class="sr-only">{column.name}</dt>
-                          <dd class="truncate">{text || t("notes.databaseTableEmptyCell")}</dd>
-                        </div>
-                      {/each}
-                    </dl>
-                  {/if}
-                  <NotesDatabaseMenu iconOnly kind="actions" label={t("notes.databaseTableRowActions")}>
+                  </CollectionCell>
+                  {#each visibleColumns as column (column.id)}
+                    <CollectionCell data-collection-secondary><NotesDatabasePropertyValue {row} {column} /></CollectionCell>
+                  {/each}
+                  <CollectionMenu iconOnly kind="actions" label={t("notes.databaseTableRowActions")}>
                     <div class="grid gap-1">
                       <button
                         type="button"
-                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
                         aria-label={t("notes.databaseRowsOpen", title)}
                         title={t("notes.databaseRowsOpen", title)}
                         onclick={() => openRow(row)}
@@ -682,7 +709,7 @@
                       </button>
                       <button
                         type="button"
-                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
                         disabled={mutating}
                         aria-label={t("notes.databaseRowsDuplicate", title)}
                         title={t("notes.databaseRowsDuplicate", title)}
@@ -695,7 +722,7 @@
                       </button>
                       <button
                         type="button"
-                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
                         disabled={mutating}
                         aria-label={t("notes.databaseRowsTrash", title)}
                         title={t("notes.databaseRowsTrash", title)}
@@ -707,8 +734,8 @@
                         <span class="truncate">{t("notes.databaseRowsTrash", title)}</span>
                       </button>
                     </div>
-                  </NotesDatabaseMenu>
-                </article>
+                  </CollectionMenu>
+                </CollectionRow>
               {/each}
               {#if group.rows.length === 0}
                 <p class="px-2 py-2 text-[0.8rem] text-muted-foreground">{t("notes.databaseRowsEmpty")}</p>
@@ -717,10 +744,6 @@
           </section>
         {/each}
       </div>
-
-      {#if visibleColumns.length === 0}
-        <p class="text-[0.8rem] text-muted-foreground">{t("notes.databaseListNoVisibleProperties")}</p>
-      {/if}
 
       {#if list.rows.length === 0 && !loading && !error}
         <p class="text-[0.8rem] text-muted-foreground">{t("notes.databaseRowsEmpty")}</p>
@@ -764,10 +787,4 @@
     </div>
   {/if}
 
-  {#if mutating}
-    <p class="flex items-center gap-1 text-[0.8rem] text-muted-foreground">
-      <Check class="size-3.5" aria-hidden="true" />
-      <span>{t("notes.databaseListSaving")}</span>
-    </p>
-  {/if}
 </section>

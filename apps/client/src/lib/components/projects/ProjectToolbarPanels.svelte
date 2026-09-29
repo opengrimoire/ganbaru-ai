@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CollectionPanel from "$lib/components/collections/CollectionPanel.svelte";
   import Archive from "@lucide/svelte/icons/archive";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
@@ -684,15 +685,7 @@
 {/snippet}
 
 {#if panel}
-  <div
-    bind:this={panelElement}
-    class="fixed z-80 flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card text-[0.8rem] text-foreground shadow-xl"
-    style={panelStyle}
-    role="dialog"
-    tabindex="-1"
-    aria-label={panelTitle(panel)}
-    data-app-shortcuts="ignore"
-  >
+  <CollectionPanel bind:element={panelElement} class="fixed z-80" style={panelStyle} label={panelTitle(panel)}>
     {#if panel === "settings" && projectId}
       <ProjectSettingsPanel
         {projectId}
@@ -816,7 +809,7 @@
         </div>
       {/if}
     {/if}
-  </div>
+  </CollectionPanel>
 {/if}
 
 {#if activeSubpanel}

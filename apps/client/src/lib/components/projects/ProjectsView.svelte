@@ -459,9 +459,7 @@
                 routeUi.selectedTaskIds = taskIds;
               }}
               onRevealTask={revealCreatedTask}
-              onTaskListColumnWidthsChange={(widths, options) => {
-                void taskQuery.updateColumnWidths(widths, options);
-              }}
+              onTaskListColumnWidthsChange={(widths, options) => taskQuery.updateColumnWidths(widths, options)}
               onNeedMore={() => taskQuery.loadNextList(routeUi.selectedTaskIds)}
             />
             {:else}

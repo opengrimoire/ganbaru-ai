@@ -162,6 +162,7 @@ pub struct NoteDataSourceTemplateCreateFromRow {
 
 #[derive(Deserialize)]
 pub struct NoteDataSourceTemplateApply {
+    pub id: Option<String>,
     pub title: Option<String>,
 }
 

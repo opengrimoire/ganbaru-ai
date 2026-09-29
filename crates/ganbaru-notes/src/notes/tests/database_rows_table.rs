@@ -218,13 +218,30 @@ fn database_row_pages_are_real_pages_with_page_lifecycle() {
             DATA_SOURCE_A,
             NoteDataSourceRowPageCreate {
                 id: PAGE_B.to_string(),
-                title: "Write spec".to_string(),
+                title: String::new(),
                 first_block_id: BLOCK_B.to_string(),
                 properties: None,
             },
         )
         .await
         .unwrap();
+        let blank_json = serde_json::to_value(&loaded).unwrap();
+        assert_eq!(
+            blank_json["page"]["properties"]["Name"]["title"][0]["plain_text"],
+            ""
+        );
+        data_source_table::update_data_source_row_property(
+            &pool,
+            DATA_SOURCE_A,
+            PAGE_B,
+            NoteDataSourceRowPropertyUpdate {
+                property_id: "title".to_string(),
+                value: json!("Write spec"),
+            },
+        )
+        .await
+        .unwrap();
+        let loaded = reads::load_page(&pool, PAGE_B).await.unwrap();
         let loaded_json = serde_json::to_value(&loaded).unwrap();
         assert_eq!(loaded_json["page"]["parent"]["type"], "data_source_id");
         assert_eq!(

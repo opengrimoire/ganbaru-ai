@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick, type Snippet } from "svelte";
   import { portal } from "$lib/utils/portal";
-  import { notesBlockInsertMenuStyle } from "$lib/notes/block-insertion";
+  import { anchoredPanelStyle } from "$lib/utils/anchored-panel";
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
   import ListFilter from "@lucide/svelte/icons/list-filter";
   import ArrowDownUp from "@lucide/svelte/icons/arrow-down-up";
@@ -46,11 +46,11 @@
   /** Keep settings outside clipped rows, with nested dropdowns inside the owning dialog. */
   function floatPanel(node: HTMLDivElement) {
     const moved = portal(node, trigger?.closest<HTMLElement>("[data-floating-root]") ?? "body");
-    const content = node.querySelector<HTMLElement>("[data-database-menu-content]");
+    const content = node.querySelector<HTMLElement>("[data-collection-menu-content]");
     let disposed = false;
     const place = () => {
       if (disposed || !trigger) return;
-      node.style.cssText = notesBlockInsertMenuStyle({
+      node.style.cssText = anchoredPanelStyle({
         triggerRect: trigger.getBoundingClientRect(),
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight,
@@ -72,7 +72,7 @@
     const action = (event: MouseEvent) => {
       if ((kind !== "actions" && !dismissOnAction) || !(event.target instanceof Element)) return;
       const button = event.target.closest("button");
-      if (!button || button.disabled || button.hasAttribute("aria-haspopup") || button.hasAttribute("data-database-menu-keep-open")) return;
+      if (!button || button.disabled || button.hasAttribute("aria-haspopup") || button.hasAttribute("data-collection-menu-keep-open")) return;
       // Let delegated action handlers run before their panel is removed.
       queueMicrotask(() => {
         if (disposed) return;
@@ -94,7 +94,7 @@
     void tick().then(() => {
       if (disposed) return;
       place();
-      const target = node.querySelector<HTMLElement>("[data-database-menu-body] input:not(:disabled), [data-database-menu-body] button:not(:disabled)");
+      const target = node.querySelector<HTMLElement>("[data-collection-menu-body] input:not(:disabled), [data-collection-menu-body] button:not(:disabled)");
       (target ?? node).focus({ preventScroll: true });
     });
     return {
@@ -117,7 +117,7 @@
   <button
     bind:this={trigger}
     type="button"
-    class={`inline-flex h-8 min-w-0 items-center gap-1.5 rounded-md px-2 text-[0.8rem] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${primary ? "bg-primary text-primary-foreground hover:bg-primary/90" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"}`}
+    class={`collection-menu-trigger inline-flex h-8 min-w-0 items-center gap-1.5 rounded-md px-2 text-[0.8rem] font-medium transition-colors focus-visible:outline-none focus-visible:bg-accent ${primary ? "bg-primary text-primary-foreground hover:bg-primary/90" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"}`}
     class:w-full={fullWidth}
     class:bg-accent={open && !primary}
     class:text-foreground={!primary && (open || activeCount > 0)}
@@ -134,7 +134,7 @@
   {#if open}
     <div use:floatPanel id={id} role="dialog" aria-label={label} tabindex="-1" data-app-floating-surface data-floating-root class="z-50 max-w-[calc(100vw-1rem)] rounded-xl border border-border bg-popover text-sm text-popover-foreground shadow-lg">
       <div class="max-h-[inherit] overflow-auto rounded-xl">
-        <div data-database-menu-content class="@container p-3">
+        <div data-collection-menu-content class="@container p-3">
           {#if showHeader}
             <div class="mb-3 flex items-center justify-between gap-2">
               <span class="font-medium">{label}</span>
@@ -143,9 +143,15 @@
               </button>
             </div>
           {/if}
-          <div data-database-menu-body>{@render children()}</div>
+          <div data-collection-menu-body>{@render children()}</div>
         </div>
       </div>
     </div>
   {/if}
 </div>
+
+<style>
+  @media (pointer: coarse) {
+    .collection-menu-trigger { min-height: 2.75rem; min-width: 2.75rem; }
+  }
+</style>

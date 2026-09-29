@@ -50,6 +50,9 @@ export interface TitleBarShortcutControllerContext {
   zoomIn: () => void;
   zoomOut: () => void;
   resetZoom: () => void;
+  toggleMusic: () => void;
+  toggleDiagnostics: () => void;
+  openShortcutHelp: () => void;
 }
 
 /** Own shell shortcut capture and the hidden reset sequence lifecycle. */
@@ -92,10 +95,8 @@ export function createTitleBarShortcutController(
 
   $effect(() => {
     function handleShortcut(event: KeyboardEvent): void {
-      const action = titleBarShortcutAction(
-        event,
-        isEditableKeyboardTarget(event.target),
-      );
+      if (event.defaultPrevented || event.isComposing) return;
+      const action = titleBarShortcutAction(event);
       if (!action) return;
       event.preventDefault();
       event.stopPropagation();
@@ -114,6 +115,12 @@ export function createTitleBarShortcutController(
         context.zoomIn();
       } else if (action === "zoom-out") {
         context.zoomOut();
+      } else if (action === "music-toggle") {
+        context.toggleMusic();
+      } else if (action === "diagnostics-toggle") {
+        context.toggleDiagnostics();
+      } else if (action === "shortcut-help") {
+        context.openShortcutHelp();
       } else {
         context.resetZoom();
       }

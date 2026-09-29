@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CollectionCell from "$lib/components/collections/CollectionCell.svelte";
   import { Temporal } from "@js-temporal/polyfill";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import Check from "@lucide/svelte/icons/check";
@@ -433,8 +434,7 @@
   }
 </script>
 
-<div
-  class="project-list-cell-frame relative flex min-h-11 min-w-0 self-stretch items-center rounded-md px-2 py-1"
+<CollectionCell
   data-list-status-menu-root={column === "status" ? "true" : undefined}
   data-list-priority-menu-root={column === "priority" ? "true" : undefined}
   data-list-date-menu-root={column === "start" || column === "due" ? "true" : undefined}
@@ -855,24 +855,9 @@
       {/if}
     {/if}
   {/if}
-</div>
+</CollectionCell>
 
 <style>
-  .project-list-cell-frame::before {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    border: 1px solid transparent;
-    border-radius: 0.375rem;
-    content: "";
-    pointer-events: none;
-  }
-
-  .project-list-cell-frame:hover::before,
-  .project-list-cell-frame:focus-within::before {
-    border-color: color-mix(in srgb, var(--foreground) 25%, transparent);
-  }
-
   :global(.project-list-time-panel .time-picker-scroll) {
     max-height: var(--project-list-time-picker-max-height, 12.5rem);
   }

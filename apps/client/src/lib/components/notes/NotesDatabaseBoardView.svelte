@@ -1,5 +1,12 @@
 <script lang="ts">
-  import NotesDatabaseMenu from "./NotesDatabaseMenu.svelte";
+  import NotesDatabaseOptionBadge from "./NotesDatabaseOptionBadge.svelte";
+  import NotesDatabasePropertyValue from "./NotesDatabasePropertyValue.svelte";
+  import CollectionSettings from "$lib/components/collections/CollectionSettings.svelte";
+  import CollectionBoard from "$lib/components/collections/CollectionBoard.svelte";
+  import CollectionCard from "$lib/components/collections/CollectionCard.svelte";
+  import CollectionQuickAdd from "$lib/components/collections/CollectionQuickAdd.svelte";
+  import { formatNumber } from "$lib/i18n/formatters";
+  import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
   import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import {
     createNotesDataSourceRowPage,
@@ -36,13 +43,11 @@
     NotesDataSourceBoardView,
     NotesPage,
   } from "$lib/notes/types";
-  import Check from "@lucide/svelte/icons/check";
   import Copy from "@lucide/svelte/icons/copy";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import Eye from "@lucide/svelte/icons/eye";
   import EyeOff from "@lucide/svelte/icons/eye-off";
   import FileText from "@lucide/svelte/icons/file-text";
-  import GripVertical from "@lucide/svelte/icons/grip-vertical";
   import Plus from "@lucide/svelte/icons/plus";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import Trash2 from "@lucide/svelte/icons/trash-2";
@@ -52,16 +57,25 @@
     databaseId = null,
     viewId = null,
     onSelectPage,
+    onSavingChange = () => {},
     reloadKey = 0,
+    settingsOpen = false,
+    onCloseSettings,
+    onEditProperties,
   }: {
     dataSourceId: string;
     databaseId?: string | null;
     viewId?: string | null;
     onSelectPage: (pageId: string) => void;
+    onSavingChange?: (saving: boolean) => void;
     reloadKey?: number;
+    settingsOpen?: boolean;
+    onCloseSettings: () => void;
+    onEditProperties: () => void;
   } = $props();
 
-  const { t } = getLocalization();
+  const localization = getLocalization();
+  const { t } = localization;
   const FILTER_CONDITIONS: NotesDatabaseTableFilterCondition[] = [
     "contains",
     "equals",
@@ -76,10 +90,13 @@
   let loadingMore = $state(false);
   let requestId = 0;
   let mutating = $state(false);
+
+  $effect(() => {
+    onSavingChange(mutating);
+    return () => onSavingChange(false);
+  });
   let error = $state<string | null>(null);
-  let draftTitleByGroup = $state<Record<string, string>>({});
   let selectedPanelRowId = $state<string | null>(null);
-  let draggingRowId = $state<string | null>(null);
   let lastLoadSignature = $state("");
 
   const columns = $derived(board ? notesDatabaseBoardColumns(board.data_source, board.view) : []);
@@ -97,7 +114,7 @@
   const sorts = $derived(board ? notesDatabaseBoardSortsFromView(board.view) : []);
   const visibleGroups = $derived(board ? board.groups.filter((group) => !group.hidden) : []);
   const hiddenGroups = $derived(board ? board.groups.filter((group) => group.hidden) : []);
-  const cardCount = $derived(board?.groups.reduce((count, group) => count + group.rows.length, 0) ?? 0);
+  const cardCount = $derived(board?.total_row_count ?? 0);
   const selectedPanelRow = $derived(findBoardRow(selectedPanelRowId));
   const canMoveCards = $derived(notesDatabaseBoardCanMoveCards(groupColumn));
 
@@ -178,43 +195,32 @@
     }
   }
 
-  async function createCard(group: NotesDataSourceBoardGroup): Promise<void> {
-    const title = (draftTitleByGroup[group.id] ?? "").trim() || t("notes.untitled");
+  async function createCard(group: NotesDataSourceBoardGroup, title: string): Promise<boolean> {
     mutating = true;
     error = null;
+    let created = false;
     try {
       const loaded = await createNotesDataSourceRowPage(dataSourceId, {
-        id: crypto.randomUUID(),
-        first_block_id: crypto.randomUUID(),
-        title,
+        id: crypto.randomUUID(), first_block_id: crypto.randomUUID(), title,
       });
-      draftTitleByGroup = { ...draftTitleByGroup, [group.id]: "" };
-      if (canMoveCards) {
-        await moveNotesDataSourceBoardRow(dataSourceId, {
-          page_id: loaded.page.id,
-          group_id: group.id,
-        }, viewScope());
-      }
-      selectedPanelRowId = loaded.page.id;
+      created = true;
+      if (canMoveCards) await moveNotesDataSourceBoardRow(dataSourceId, { page_id: loaded.page.id, group_id: group.id }, viewScope());
       await loadBoard();
     } catch (caught) {
+      if (created) await loadBoard();
       error = caught instanceof Error ? caught.message : String(caught);
     } finally {
       mutating = false;
     }
+    return created;
   }
 
-  async function moveCardToGroup(group: NotesDataSourceBoardGroup): Promise<void> {
-    const pageId = draggingRowId;
-    draggingRowId = null;
-    if (!pageId || !canMoveCards) return;
+  async function moveCardToGroup(row: NotesPage, group: NotesDataSourceBoardGroup): Promise<void> {
+    if (!canMoveCards || mutating) return;
     mutating = true;
     error = null;
     try {
-      board = await moveNotesDataSourceBoardRow(dataSourceId, {
-        page_id: pageId,
-        group_id: group.id,
-      }, viewScope());
+      board = await moveNotesDataSourceBoardRow(dataSourceId, { page_id: row.id, group_id: group.id }, viewScope());
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);
     } finally {
@@ -394,9 +400,8 @@
     };
   }
 </script>
-
-<section class="space-y-3 pt-2" aria-label={t("notes.databaseBoardTitle")}>
-  <div class="flex min-w-0 flex-wrap items-center gap-2 text-[0.8rem] text-muted-foreground">
+{#snippet viewControls()}
+  <div class="flex min-w-0 flex-col items-stretch gap-1 text-[0.8rem]">
     <span class="min-w-0 flex-1 truncate" role="status">
       {#if loading}
         {t("notes.databaseBoardLoading")}
@@ -406,7 +411,7 @@
         {t("notes.databaseBoardCardsCount", cardCount)}
       {/if}
     </span>
-    <NotesDatabaseMenu label={t("notes.databaseLayout")}>
+    <CollectionMenu fullWidth label={t("notes.databaseLayout")}>
       <div class="grid gap-3">
         <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
           <span>{t("notes.databaseBoardGroupBy")}</span>
@@ -441,11 +446,11 @@
           />
         </div>
       </div>
-    </NotesDatabaseMenu>
+    </CollectionMenu>
 
     <button
       type="button"
-      class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+      class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none"
       disabled={loading || mutating}
       aria-label={t("notes.databaseBoardReload")}
       title={t("notes.databaseBoardReload")}
@@ -456,11 +461,11 @@
       <RefreshCw class="size-3.5" aria-hidden="true" />
     </button>
   </div>
+{/snippet}
 
-  {#if board}
-    <div class="grid gap-2 @container">
-      <div class="flex flex-wrap items-center gap-1">
-        <NotesDatabaseMenu label={t("notes.databaseBoardCardProperties")} kind="properties">
+{#snippet propertyControls()}
+      <div class="flex flex-col items-stretch gap-1">
+        <CollectionMenu fullWidth label={t("notes.databaseBoardCardProperties")} kind="properties">
 
           <div class="mt-2 grid gap-1">
             {#each columns.filter((column) => column.type !== "title" && column.id !== configuration.group_property_id) as column (column.id)}
@@ -476,9 +481,9 @@
               </label>
             {/each}
           </div>
-        </NotesDatabaseMenu>
+        </CollectionMenu>
 
-        <NotesDatabaseMenu label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length}>
+        <CollectionMenu fullWidth label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length}>
 
           <div class="mt-2 grid gap-2">
             {#each sorts as sort, index}
@@ -512,7 +517,7 @@
                 />
                 <button
                   type="button"
-                  class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
+                  class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none"
                   disabled={mutating}
                   aria-label={t("notes.databaseTableRemoveSort")}
                   title={t("notes.databaseTableRemoveSort")}
@@ -524,7 +529,7 @@
             {/each}
             <button
               type="button"
-              class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+              class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none"
               disabled={mutating || columns.length === 0}
               onclick={addSort}
             >
@@ -532,9 +537,9 @@
               <span>{t("notes.databaseTableAddSort")}</span>
             </button>
           </div>
-        </NotesDatabaseMenu>
+        </CollectionMenu>
 
-        <NotesDatabaseMenu label={t("notes.databaseTableFilters")} kind="filter" activeCount={filters.length}>
+        <CollectionMenu fullWidth label={t("notes.databaseTableFilters")} kind="filter" activeCount={filters.length}>
 
           <div class="mt-2 grid gap-2">
             {#each filters as filter, index}
@@ -566,7 +571,7 @@
                   triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
                 />
                 <input
-                  class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+                  class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   value={String(filter.value ?? "")}
                   disabled={mutating || !filterConditionNeedsValue(filter.condition)}
                   aria-label={t("notes.databaseTableFilterValue")}
@@ -575,7 +580,7 @@
                 />
                 <button
                   type="button"
-                  class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
+                  class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none"
                   disabled={mutating}
                   aria-label={t("notes.databaseTableRemoveFilter")}
                   title={t("notes.databaseTableRemoveFilter")}
@@ -587,7 +592,7 @@
             {/each}
             <button
               type="button"
-              class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+              class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none"
               disabled={mutating || columns.length === 0}
               onclick={addFilter}
             >
@@ -595,17 +600,17 @@
               <span>{t("notes.databaseTableAddFilter")}</span>
             </button>
           </div>
-        </NotesDatabaseMenu>
+        </CollectionMenu>
       </div>
 
       {#if hiddenGroups.length > 0}
-        <NotesDatabaseMenu label={t("notes.databaseBoardHiddenGroups")} kind="layout">
+        <CollectionMenu fullWidth label={t("notes.databaseBoardHiddenGroups")} kind="layout">
 
           <div class="mt-2 flex min-w-0 flex-wrap gap-1">
             {#each hiddenGroups as group (group.id)}
               <button
                 type="button"
-                class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+                class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none"
                 disabled={mutating}
                 aria-label={t("notes.databaseBoardShowGroup", group.name)}
                 onclick={() => updateGroupHidden(group, false)}
@@ -615,167 +620,67 @@
               </button>
             {/each}
           </div>
-        </NotesDatabaseMenu>
+        </CollectionMenu>
       {/if}
 
-      <div class="min-w-0 overflow-x-auto pb-1">
-        <div class="grid min-w-max auto-cols-72 grid-flow-col gap-3">
-          {#each visibleGroups as group (group.id)}
-            <section
-              class="flex max-h-136 min-h-72 min-w-0 flex-col rounded-md border border-border bg-muted/20"
-              aria-label={group.name}
-              ondragover={(event) => {
-                if (!canMoveCards) return;
-                event.preventDefault();
-              }}
-              ondrop={(event) => {
-                event.preventDefault();
-                void moveCardToGroup(group);
-              }}
-            >
-              <div class="flex min-w-0 items-center gap-2 border-b border-border px-2 py-2">
-                <span class="min-w-0 flex-1 truncate text-[0.866667rem] font-medium text-foreground">
-                  {group.name}
-                </span>
-                <span class="shrink-0 text-[0.733333rem] text-muted-foreground">
-                  {group.rows.length}
-                </span>
-                <button
-                  type="button"
-                  class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
-                  disabled={mutating}
-                  aria-label={t("notes.databaseBoardHideGroup", group.name)}
-                  title={t("notes.databaseBoardHideGroup", group.name)}
-                  onclick={() => updateGroupHidden(group, true)}
-                >
-                  <EyeOff class="size-3.5" aria-hidden="true" />
-                </button>
-              </div>
-              <div class="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
-                {#if !canMoveCards && group.rows.length > 0}
-                  <p class="text-[0.733333rem] text-muted-foreground">
-                    {t("notes.databaseBoardDropDisabled")}
-                  </p>
+
+{/snippet}
+
+
+<section class="space-y-3 pt-2" aria-label={t("notes.databaseBoardTitle")}>
+  <span class="sr-only" role="status">{#if loading}{t("notes.databaseBoardLoading")}{/if}</span>
+  {#if error}<p class="text-[0.8rem] text-destructive" role="alert">{error}</p>{/if}
+  {#if settingsOpen}
+    <CollectionSettings label={t("notes.databaseViewSettings")} onclose={onCloseSettings}>
+      {@render viewControls()}
+      {#if board}{@render propertyControls()}{/if}
+      <button type="button" class="mt-2 min-h-9 w-full rounded-md px-2 text-left text-sm hover:bg-accent" onclick={() => { onCloseSettings(); onEditProperties(); }}>{t("notes.databaseViewEditProperties")}</button>
+    </CollectionSettings>
+  {/if}
+
+
+  {#if board}
+    <div class="grid gap-2 @container">
+      <CollectionBoard groups={visibleGroups} items={(group) => group.rows} label={(group) => group.name}
+        emptyLabel={t("notes.databaseRowsEmpty")} dragLabel={(row) => t("notes.databaseBoardDragCard", rowTitle(row))}
+        canMove={() => canMoveCards} disabled={mutating} onmove={moveCardToGroup}>
+        {#snippet header(group)}
+          <div class="min-w-0 flex-1"><NotesDatabaseOptionBadge label={group.name} color={group.color} /></div>
+          <span class="text-[0.8rem] tabular-nums text-muted-foreground">{formatNumber(localization.locale, board?.group_counts[group.id] ?? group.rows.length)}</span>
+          <CollectionMenu kind="actions" iconOnly showHeader={false} label={group.name}>
+            <button type="button" class="flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left hover:bg-accent" disabled={mutating} onclick={() => updateGroupHidden(group, true)}><EyeOff class="size-4" />{t("notes.databaseBoardHideGroup", group.name)}</button>
+          </CollectionMenu>
+        {/snippet}
+        {#snippet card(row, group, dragHandle)}
+          {@const title = rowTitle(row)}
+          <CollectionCard {title} onopen={() => openCard(row)}>
+            {#snippet leading()}{@render dragHandle()}{/snippet}
+            {#snippet actions()}
+              <CollectionMenu kind="actions" iconOnly showHeader={false} label={t("notes.databaseTableRowActions")}>
+                <button type="button" class="flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left hover:bg-accent" onclick={() => openCard(row)}><FileText class="size-4" />{t("notes.databaseRowsOpen", title)}</button>
+                {#if canMoveCards}
+                  {#each visibleGroups.filter((entry) => entry.id !== group.id) as destination (destination.id)}
+                    <button type="button" class="min-h-9 w-full rounded-md px-2 text-left hover:bg-accent" disabled={mutating} onclick={() => { void moveCardToGroup(row, destination); }}>{t("notes.databaseBoardMoveCard", destination.name)}</button>
+                  {/each}
                 {/if}
-                {#each group.rows as row (row.id)}
-                  {@const title = rowTitle(row)}
-                  <article
-                    class="rounded-md border border-border bg-background p-2 shadow-sm"
-                    draggable={canMoveCards && !mutating}
-                    ondragstart={() => {
-                      draggingRowId = row.id;
-                    }}
-                    ondragend={() => {
-                      draggingRowId = null;
-                    }}
-                  >
-                    <div class="flex min-w-0 items-start gap-1">
-                      <GripVertical class="mt-1 size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                      <button
-                        type="button"
-                        class="min-w-0 flex-1 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        onclick={() => openCard(row)}
-                      >
-                        <span class="block truncate text-[0.866667rem] font-medium text-foreground">
-                          {title}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-                        aria-label={t("notes.databaseRowsOpen", title)}
-                        title={t("notes.databaseRowsOpen", title)}
-                        onclick={() => openCard(row)}
-                      >
-                        <FileText class="size-3.5" aria-hidden="true" />
-                      </button>
-                    </div>
-                    {#if visibleColumns.length > 0}
-                      <dl class="mt-2 grid gap-1">
-                        {#each visibleColumns as column (column.id)}
-                          {@const text = notesDatabaseBoardCardText(row, column)}
-                          <div class="min-w-0">
-                            <dt class="truncate text-[0.666667rem] text-muted-foreground">{column.name}</dt>
-                            <dd class="truncate text-[0.8rem] text-foreground">
-                              {text || t("notes.databaseTableEmptyCell")}
-                            </dd>
-                          </div>
-                        {/each}
-                      </dl>
-                    {/if}
-                    <div class="mt-2 flex justify-end gap-1">
-                      <button
-                        type="button"
-                        class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
-                        disabled={mutating}
-                        aria-label={t("notes.databaseRowsDuplicate", title)}
-                        title={t("notes.databaseRowsDuplicate", title)}
-                        onclick={() => {
-                          void duplicateCard(row);
-                        }}
-                      >
-                        <Copy class="size-3.5" aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        class="inline-flex size-7 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
-                        disabled={mutating}
-                        aria-label={t("notes.databaseRowsTrash", title)}
-                        title={t("notes.databaseRowsTrash", title)}
-                        onclick={() => {
-                          void trashCard(row);
-                        }}
-                      >
-                        <Trash2 class="size-3.5" aria-hidden="true" />
-                      </button>
-                    </div>
-                  </article>
+                <button type="button" class="flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left hover:bg-accent" disabled={mutating} onclick={() => { void duplicateCard(row); }}><Copy class="size-4" />{t("notes.databaseRowsDuplicate", title)}</button>
+                <button type="button" class="flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left text-destructive hover:bg-destructive/10" disabled={mutating} onclick={() => { void trashCard(row); }}><Trash2 class="size-4" />{t("notes.databaseRowsTrash", title)}</button>
+              </CollectionMenu>
+            {/snippet}
+            {#if visibleColumns.length > 0}
+              <dl class="grid gap-1.5">
+                {#each visibleColumns as column (column.id)}
+                  {@const text = notesDatabaseBoardCardText(row, column)}
+                  {#if text}<div class="flex min-w-0 items-baseline gap-2"><dt class="max-w-24 truncate text-[0.733333rem] text-muted-foreground">{column.name}</dt><dd class="min-w-0 flex-1"><NotesDatabasePropertyValue {row} {column} /></dd></div>{/if}
                 {/each}
-              </div>
-              <div class="border-t border-border p-2">
-                <input
-                  class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.8rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-                  value={draftTitleByGroup[group.id] ?? ""}
-                  placeholder={t("notes.databaseRowsNewPlaceholder")}
-                  disabled={loading || mutating}
-                  oninput={(event) => {
-                    draftTitleByGroup = {
-                      ...draftTitleByGroup,
-                      [group.id]: event.currentTarget.value,
-                    };
-                  }}
-                  onkeydown={(event) => {
-                    event.stopPropagation();
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void createCard(group);
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  class="mt-1 inline-flex h-8 w-full items-center justify-center gap-1 rounded-md px-2 text-[0.8rem] hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
-                  disabled={loading || mutating}
-                  onclick={() => {
-                    void createCard(group);
-                  }}
-                >
-                  <Plus class="size-3.5" aria-hidden="true" />
-                  <span>{t("notes.databaseBoardAddCard")}</span>
-                </button>
-              </div>
-            </section>
-          {/each}
-        </div>
-      </div>
-
-      {#if visibleColumns.length === 0}
-        <p class="text-[0.8rem] text-muted-foreground">{t("notes.databaseBoardNoVisibleProperties")}</p>
-      {/if}
-
-      {#if cardCount === 0 && !loading && !error}
-        <p class="text-[0.8rem] text-muted-foreground">{t("notes.databaseRowsEmpty")}</p>
-      {/if}
+              </dl>
+            {/if}
+          </CollectionCard>
+        {/snippet}
+        {#snippet footer(group)}
+          <CollectionQuickAdd label={t("notes.databaseBoardAddCard")} disabled={loading || mutating} onsubmit={(title) => createCard(group, title)} />
+        {/snippet}
+      </CollectionBoard>
 
       <NotesDatabaseWindowSentinel hasMore={board.has_more} loading={loadingMore} onLoad={loadMoreBoard} />
 
@@ -815,10 +720,4 @@
     </div>
   {/if}
 
-  {#if mutating}
-    <p class="flex items-center gap-1 text-[0.8rem] text-muted-foreground">
-      <Check class="size-3.5" aria-hidden="true" />
-      <span>{t("notes.databaseBoardSaving")}</span>
-    </p>
-  {/if}
 </section>

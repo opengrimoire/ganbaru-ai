@@ -208,6 +208,8 @@ export interface NotesDataSourceTemplateCreateFromRowRequest {
 }
 
 export interface NotesDataSourceTemplateApplyRequest {
+  /** Reserve the resulting page identity while template body block IDs are generated. */
+  id?: string;
   title?: string | null;
 }
 

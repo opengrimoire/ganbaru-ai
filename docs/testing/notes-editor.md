@@ -87,9 +87,14 @@ Automated delayed-storage coverage connects the actual action, persistence, tree
 
 For table, board, gallery, list, calendar, and timeline:
 
+- Compare shared cells, view buttons, menus, cards, and inline creation against Projects in the same theme. Resize a Notes column by dragging and keyboard, cancel a drag, and reopen the saved view. Check Projects automatic width fitting and task selection still work.
+- In both boards, move a card by drag and menu, try a failed write, and create within a group. In Projects, check manual ordering separately from sorted status moves and scroll through cards with wrapped titles and extra metadata.
+- Open Notes Calendar creation from a single day, cancel a draft, and check the month grid at narrow widths. Check settings in table, board, gallery, list, and calendar stay outside document content.
 - Create `/database` and confirm the table is visible immediately beneath its title and saved-view bar. Click blank table space, the title, header, cells, New page, and menus; none should select or highlight the whole document block. Verify the same in light and dark themes and narrow page previews.
 - Add table, board, gallery, list, calendar, and timeline views from the picker. Switch, rename, duplicate, and delete views; confirm deletion asks first and duplicated filters, sorts, and layout remain independent while rows stay shared. Check the active tab stays visible when views overflow. The last view and last table view must remain protected.
 - Open the table's view settings side panel, then Layout, Property visibility, Filter, Sort, Templates, and More. Edit one property in the separate data source panel and add another from the table header. Change settings, create a page from New and New page, apply an existing template from New's dropdown, and use New in another layout. Reopen the note to confirm titles, views, schema, rows, and settings persist.
+- Click New page and table toolbar New. A blank editable row and the next New page control must appear immediately, without waiting for storage or showing a separate draft form. Add several unnamed pages, type while creation is delayed, and press Enter on the last row. Verify the title survives creation, Enter saves it, and focus reaches New page. Delay a refresh across creation, fail creation and a title write, then retry. The draft must remain visible and the same page ID must be reused without duplicates. Repeat with a default template and after switching away before creation finishes. Projects must continue to require task names.
+- Click New page without moving the mouse. Its old hover highlight must not move down to the replacement New page line. Verify the new row receives the hover highlight in place, then move between rows to check normal hover feedback. Press Enter after editing the last title and verify focus stays on New page when the title save and table refresh finish.
 - Rename a local database, then a linked database. The linked title must change without renaming its source or original block.
 - Navigate custom dropdowns with arrows, Enter, Tab, and Escape. Opening a table status or relation cell must retain its grid position. Relation targets must remain selectable while options load.
 - Open a dropdown inside a settings panel. First Escape closes the dropdown; second closes the panel. Verify clicking an option keeps the settings panel open, clicking elsewhere dismisses it, and focus returns appropriately.
@@ -216,3 +221,13 @@ Manual desktop and Android acceptance remains required:
 - Position subjects near image edges using pointer, touch, and keyboard. Verify that changing container size retains the subject where image bounds permit it.
 - Exercise native selection, mobile file selection, paste, invalid images, and failed saves. Closing a picker or switching pages during selection must not update another page.
 - Verify Escape, Android Back, outside dismissal, keyboard focus return, and color panels near viewport edges.
+
+## Shared collection regression checks
+
+- Drag and keyboard-resize Notes and Projects columns. The released width must remain visible during a delayed save; cancellation restores the previous width, and a rejected save reports an error.
+- In Projects, grow columns past the viewport, shrink them again, toggle columns, and change groups. The horizontal thumb must appear, update, and disappear without a wheel gesture. Shrinking the content clamps its position and the pinned leading controls together.
+- In Notes, cross the horizontal overflow threshold in both directions. The table must not briefly show a nested vertical scrollbar.
+- Projects view tabs retain text labels without icons, including when the header becomes narrow.
+- With focus in a note title, text block, database input, or an open slash menu, exercise Alt+number, Ctrl+Tab, Ctrl+Shift+Tab, settings, music, theme, and zoom commands. On Apple platforms use the primary Command modifier. App commands must not type, indent, select a slash command, or format text as a side effect. Verify ordinary Tab indentation, formatting, undo, and composition still work.
+
+- In each database layout, save a cell, resize a column, rename the database, and change view settings. Fast writes must not add a saving row or dim controls. Delay a write beyond 600 ms and verify one spinner beside the database title, then verify it disappears on completion or failure. Multiple databases must keep separate indicators.

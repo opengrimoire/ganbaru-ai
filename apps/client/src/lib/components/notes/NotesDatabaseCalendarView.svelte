@@ -1,5 +1,9 @@
 <script lang="ts">
-  import NotesDatabaseMenu from "./NotesDatabaseMenu.svelte";
+  import NotesDatabasePropertyValue from "./NotesDatabasePropertyValue.svelte";
+  import CollectionQuickAdd from "$lib/components/collections/CollectionQuickAdd.svelte";
+  import CollectionCard from "$lib/components/collections/CollectionCard.svelte";
+  import CollectionSettings from "$lib/components/collections/CollectionSettings.svelte";
+  import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
   import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import {
     createNotesDataSourceRowPage,
@@ -53,13 +57,21 @@
     databaseId = null,
     viewId = null,
     onSelectPage,
+    onSavingChange = () => {},
     reloadKey = 0,
+    settingsOpen = false,
+    onCloseSettings,
+    onEditProperties,
   }: {
     dataSourceId: string;
     databaseId?: string | null;
     viewId?: string | null;
     onSelectPage: (pageId: string) => void;
+    onSavingChange?: (saving: boolean) => void;
     reloadKey?: number;
+    settingsOpen?: boolean;
+    onCloseSettings: () => void;
+    onEditProperties: () => void;
   } = $props();
 
   const localization = getLocalization();
@@ -78,8 +90,12 @@
   let loadingMore = $state(false);
   let requestId = 0;
   let mutating = $state(false);
+
+  $effect(() => {
+    onSavingChange(mutating);
+    return () => onSavingChange(false);
+  });
   let error = $state<string | null>(null);
-  let draftTitleByDate = $state<Record<string, string>>({});
   let selectedPanelRowId = $state<string | null>(null);
   let lastLoadSignature = $state("");
 
@@ -172,9 +188,8 @@
     }
   }
 
-  async function createRow(date: string): Promise<void> {
-    if (!calendar || !configuration.date_property_id) return;
-    const title = (draftTitleByDate[date] ?? "").trim() || t("notes.untitled");
+  async function createRow(date: string, title: string): Promise<boolean> {
+    if (!calendar || !configuration.date_property_id || mutating) return false;
     mutating = true;
     error = null;
     try {
@@ -188,11 +203,12 @@
           date,
         ),
       });
-      draftTitleByDate = { ...draftTitleByDate, [date]: "" };
       selectedPanelRowId = loaded.page.id;
       await loadCalendar();
+      return true;
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);
+      return false;
     } finally {
       mutating = false;
     }
@@ -330,9 +346,6 @@
     return notesDatabaseCalendarRowTitle(row, columns, t("notes.untitled"));
   }
 
-  function updateDraftTitle(date: string, value: string): void {
-    draftTitleByDate = { ...draftTitleByDate, [date]: value };
-  }
 
   function monthLabel(): string {
     return formatDateTime(
@@ -385,9 +398,8 @@
     };
   }
 </script>
-
-<section class="space-y-3 pt-2" aria-label={t("notes.databaseCalendarTitle")}>
-  <div class="flex min-w-0 flex-wrap items-center gap-2 text-[0.8rem] text-muted-foreground">
+{#snippet viewControls()}
+  <div class="flex min-w-0 flex-col items-stretch gap-1 text-[0.8rem]">
     <span class="min-w-0 flex-1 truncate" role="status">
       {#if loading}
         {t("notes.databaseCalendarLoading")}
@@ -397,7 +409,7 @@
         {t("notes.databaseCalendarRowsCount", calendar?.rows.length ?? 0)}
       {/if}
     </span>
-    <NotesDatabaseMenu label={t("notes.databaseLayout")}>
+    <CollectionMenu fullWidth label={t("notes.databaseLayout")}>
       <div class="grid gap-3">
         <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
           <span>{t("notes.databaseCalendarDateProperty")}</span>
@@ -432,11 +444,11 @@
           />
         </div>
       </div>
-    </NotesDatabaseMenu>
+    </CollectionMenu>
 
     <button
       type="button"
-      class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+      class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none"
       disabled={loading || mutating}
       aria-label={t("notes.databaseCalendarReload")}
       title={t("notes.databaseCalendarReload")}
@@ -447,48 +459,11 @@
       <RefreshCw class="size-3.5" aria-hidden="true" />
     </button>
   </div>
+{/snippet}
 
-  <div class="flex min-w-0 flex-wrap items-center gap-2">
-    <button
-      type="button"
-      class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
-      disabled={loading || mutating || !calendar}
-      aria-label={t("notes.databaseCalendarPreviousMonth")}
-      title={t("notes.databaseCalendarPreviousMonth")}
-      onclick={() => shiftMonth(-1)}
-    >
-      <ChevronLeft class="size-3.5" aria-hidden="true" />
-    </button>
-    <div class="min-w-36 text-[0.933333rem] font-medium text-foreground">{monthLabel()}</div>
-    <button
-      type="button"
-      class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
-      disabled={loading || mutating || !calendar}
-      aria-label={t("notes.databaseCalendarNextMonth")}
-      title={t("notes.databaseCalendarNextMonth")}
-      onclick={() => shiftMonth(1)}
-    >
-      <ChevronRight class="size-3.5" aria-hidden="true" />
-    </button>
-    <button
-      type="button"
-      class="inline-flex h-8 items-center rounded-md px-2 text-[0.8rem] hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
-      disabled={loading || mutating || !calendar}
-      onclick={goToday}
-    >
-      {t("notes.databaseCalendarToday")}
-    </button>
-  </div>
-
-  {#if calendar}
-    {#if dateColumns.length === 0}
-      <div class="rounded-md border border-border p-3 text-[0.866667rem] text-muted-foreground">
-        {t("notes.databaseCalendarNoDateProperties")}
-      </div>
-    {:else}
-      <div class="grid gap-2 @container">
-        <div class="flex flex-wrap items-center gap-1">
-          <NotesDatabaseMenu label={t("notes.databaseCalendarRowProperties")} kind="properties">
+{#snippet propertyControls()}
+        <div class="flex flex-col items-stretch gap-1">
+          <CollectionMenu fullWidth label={t("notes.databaseCalendarRowProperties")} kind="properties">
 
             <div class="mt-2 grid gap-1">
               {#each columns.filter((column) =>
@@ -506,9 +481,9 @@
                 </label>
               {/each}
             </div>
-          </NotesDatabaseMenu>
+          </CollectionMenu>
 
-          <NotesDatabaseMenu label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length}>
+          <CollectionMenu fullWidth label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length}>
 
             <div class="mt-2 grid gap-2">
               {#each sorts as sort, index}
@@ -542,7 +517,7 @@
                   />
                   <button
                     type="button"
-                    class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
+                    class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none"
                     disabled={mutating}
                     aria-label={t("notes.databaseTableRemoveSort")}
                     title={t("notes.databaseTableRemoveSort")}
@@ -554,7 +529,7 @@
               {/each}
               <button
                 type="button"
-                class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+                class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none"
                 disabled={mutating || columns.length === 0}
                 onclick={addSort}
               >
@@ -562,9 +537,9 @@
                 <span>{t("notes.databaseTableAddSort")}</span>
               </button>
             </div>
-          </NotesDatabaseMenu>
+          </CollectionMenu>
 
-          <NotesDatabaseMenu label={t("notes.databaseTableFilters")} kind="filter" activeCount={filters.length}>
+          <CollectionMenu fullWidth label={t("notes.databaseTableFilters")} kind="filter" activeCount={filters.length}>
 
             <div class="mt-2 grid gap-2">
               {#each filters as filter, index}
@@ -609,7 +584,7 @@
                   {/if}
                   <button
                     type="button"
-                    class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
+                    class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none"
                     disabled={mutating}
                     aria-label={t("notes.databaseTableRemoveFilter")}
                     title={t("notes.databaseTableRemoveFilter")}
@@ -621,7 +596,7 @@
               {/each}
               <button
                 type="button"
-                class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+                class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none"
                 disabled={mutating || columns.length === 0}
                 onclick={addFilter}
               >
@@ -629,104 +604,99 @@
                 <span>{t("notes.databaseTableAddFilter")}</span>
               </button>
             </div>
-          </NotesDatabaseMenu>
+          </CollectionMenu>
         </div>
 
-        <div class="grid grid-cols-7 gap-px overflow-hidden rounded-md border border-border bg-border text-[0.8rem]">
+
+{/snippet}
+
+
+<section class="space-y-3 pt-2" aria-label={t("notes.databaseCalendarTitle")}>
+  <span class="sr-only" role="status">{#if loading}{t("notes.databaseCalendarLoading")}{/if}</span>
+  {#if error}<p class="text-[0.8rem] text-destructive" role="alert">{error}</p>{/if}
+  {#if settingsOpen}
+    <CollectionSettings label={t("notes.databaseViewSettings")} onclose={onCloseSettings}>
+      {@render viewControls()}
+      {#if calendar}{@render propertyControls()}{/if}
+      <button type="button" class="mt-2 min-h-9 w-full rounded-md px-2 text-left text-sm hover:bg-accent" onclick={() => { onCloseSettings(); onEditProperties(); }}>{t("notes.databaseViewEditProperties")}</button>
+    </CollectionSettings>
+  {/if}
+
+
+  <div class="flex min-w-0 flex-wrap items-center gap-2">
+    <button
+      type="button"
+      class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none"
+      disabled={loading || mutating || !calendar}
+      aria-label={t("notes.databaseCalendarPreviousMonth")}
+      title={t("notes.databaseCalendarPreviousMonth")}
+      onclick={() => shiftMonth(-1)}
+    >
+      <ChevronLeft class="size-3.5" aria-hidden="true" />
+    </button>
+    <div class="min-w-36 text-[0.933333rem] font-medium text-foreground">{monthLabel()}</div>
+    <button
+      type="button"
+      class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none"
+      disabled={loading || mutating || !calendar}
+      aria-label={t("notes.databaseCalendarNextMonth")}
+      title={t("notes.databaseCalendarNextMonth")}
+      onclick={() => shiftMonth(1)}
+    >
+      <ChevronRight class="size-3.5" aria-hidden="true" />
+    </button>
+    <button
+      type="button"
+      class="inline-flex h-8 items-center rounded-md px-2 text-[0.8rem] hover:bg-accent disabled:pointer-events-none"
+      disabled={loading || mutating || !calendar}
+      onclick={goToday}
+    >
+      {t("notes.databaseCalendarToday")}
+    </button>
+  </div>
+
+  {#if calendar}
+    {#if dateColumns.length === 0}
+      <div class="rounded-md border border-border p-3 text-[0.866667rem] text-muted-foreground">
+        {t("notes.databaseCalendarNoDateProperties")}
+      </div>
+    {:else}
+      <div class="grid gap-2 @container">
+        <div class="min-w-0 overflow-x-auto">
+        <div class="grid min-w-2xl grid-cols-7 gap-px overflow-hidden rounded-md border border-border bg-border text-[0.8rem]">
           {#each weekdayLabels() as weekday}
             <div class="bg-muted px-2 py-1 text-center font-medium text-muted-foreground">{weekday}</div>
           {/each}
           {#each days as day (day.date)}
             <div class={`min-h-32 min-w-0 bg-background p-1 ${day.in_month ? "" : "opacity-45"}`}>
               <div class="mb-1 flex min-w-0 items-center justify-between gap-1">
-                <span class="text-[0.8rem] font-medium text-muted-foreground">{dayNumber(day.date)}</span>
+                <span class="flex size-7 items-center justify-center rounded-full text-[0.8rem] font-medium" class:bg-primary={day.date === Temporal.Now.plainDateISO().toString()} class:text-primary-foreground={day.date === Temporal.Now.plainDateISO().toString()}>{dayNumber(day.date)}</span>
                 {#if day.in_month && configuration.date_property_id}
-                  <button
-                    type="button"
-                    class="inline-flex size-6 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
-                    disabled={loading || mutating}
-                    aria-label={t("notes.databaseCalendarCreateOnDate", day.date)}
-                    title={t("notes.databaseCalendarCreateOnDate", day.date)}
-                    onclick={() => createRow(day.date)}
-                  >
-                    <Plus class="size-3" aria-hidden="true" />
-                  </button>
+                  <CollectionMenu kind="new" iconOnly label={t("notes.databaseCalendarCreateOnDate", day.date)}>
+                    <CollectionQuickAdd active label={t("notes.databaseRowsNewPlaceholder")} disabled={loading || mutating} onsubmit={(title) => createRow(day.date, title)} />
+                  </CollectionMenu>
                 {/if}
               </div>
-              {#if day.in_month && configuration.date_property_id}
-                <input
-                  class="mb-1 h-7 w-full rounded-sm border border-transparent bg-muted/40 px-1 text-[0.733333rem] text-foreground outline-none focus-visible:border-input focus-visible:bg-background focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-60"
-                  value={draftTitleByDate[day.date] ?? ""}
-                  placeholder={t("notes.databaseRowsNewPlaceholder")}
-                  disabled={loading || mutating}
-                  oninput={(event) => updateDraftTitle(day.date, event.currentTarget.value)}
-                  onkeydown={(event) => {
-                    event.stopPropagation();
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void createRow(day.date);
-                    }
-                  }}
-                />
-              {/if}
               <div class="grid gap-1">
                 {#each day.rows as row (row.id)}
-                  <div class="group grid min-w-0 gap-1 rounded-sm border border-border bg-muted/30 p-1">
-                    <button
-                      type="button"
-                      class="min-w-0 truncate text-left text-[0.8rem] font-medium text-foreground hover:underline"
-                      onclick={() => openRow(row)}
-                    >
-                      {rowTitle(row)}
-                    </button>
-                    {#if visibleColumns.length > 0}
-                      <div class="grid gap-0.5">
-                        {#each visibleColumns as column (column.id)}
-                          {@const value = notesDatabaseCalendarRowText(row, column)}
-                          {#if value}
-                            <div class="min-w-0 truncate text-[0.733333rem] text-muted-foreground">
-                              {column.name}: {value}
-                            </div>
-                          {/if}
-                        {/each}
-                      </div>
-                    {/if}
-                    <div class="flex min-w-0 items-center gap-1 opacity-100 @lg:opacity-0 @lg:group-focus-within:opacity-100 @lg:group-hover:opacity-100">
-                      <button
-                        type="button"
-                        class="inline-flex size-6 items-center justify-center rounded-md hover:bg-accent"
-                        aria-label={t("notes.databaseRowsOpen", rowTitle(row))}
-                        title={t("notes.databaseRowsOpen", rowTitle(row))}
-                        onclick={() => onSelectPage(row.id)}
-                      >
-                        <ExternalLink class="size-3" aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        class="inline-flex size-6 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
-                        disabled={mutating}
-                        aria-label={t("notes.duplicatePage")}
-                        title={t("notes.duplicatePage")}
-                        onclick={() => duplicateRow(row)}
-                      >
-                        <Copy class="size-3" aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        class="inline-flex size-6 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
-                        disabled={mutating}
-                        aria-label={t("notes.databaseRowsTrash", rowTitle(row))}
-                        title={t("notes.databaseRowsTrash", rowTitle(row))}
-                        onclick={() => trashRow(row)}
-                      >
-                        <Trash2 class="size-3" aria-hidden="true" />
-                      </button>
-                    </div>
-                  </div>
+                  <CollectionCard title={rowTitle(row)} onopen={() => openRow(row)} compact>
+                    {#snippet actions()}
+                      <CollectionMenu kind="actions" iconOnly showHeader={false} label={t("notes.databaseTableRowActions")}>
+                        <button type="button" class="flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left hover:bg-accent" onclick={() => onSelectPage(row.id)}><ExternalLink class="size-4" />{t("notes.databaseRowsOpen", rowTitle(row))}</button>
+                        <button type="button" class="flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left hover:bg-accent" disabled={mutating} onclick={() => { void duplicateRow(row); }}><Copy class="size-4" />{t("notes.duplicatePage")}</button>
+                        <button type="button" class="flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left text-destructive hover:bg-destructive/10" disabled={mutating} onclick={() => { void trashRow(row); }}><Trash2 class="size-4" />{t("notes.databaseRowsTrash", rowTitle(row))}</button>
+                      </CollectionMenu>
+                    {/snippet}
+                    {#each visibleColumns as column (column.id)}
+                      {@const value = notesDatabaseCalendarRowText(row, column)}
+                      {#if value}<div class="min-w-0 text-[0.733333rem] text-muted-foreground" title={column.name}><NotesDatabasePropertyValue {row} {column} /></div>{/if}
+                    {/each}
+                  </CollectionCard>
                 {/each}
               </div>
             </div>
           {/each}
+        </div>
         </div>
       </div>
     {/if}

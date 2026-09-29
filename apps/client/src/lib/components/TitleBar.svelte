@@ -15,14 +15,13 @@
   import type { DetachableTabView } from "$lib/navigation";
   import { getDetachedWindows } from "$lib/stores/detached-windows.svelte";
   import { detachableTabViewFromWindowLabel } from "$lib/windows/detached";
-  import { isEditableKeyboardTarget } from "$lib/utils";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
   import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
   import { getBenchmarkStatus } from "$lib/stores/benchmarkStatus.svelte";
   import type { StartupMemorySnapshot } from "$lib/components/perf/memoryReport";
   import type { SectionId } from "$lib/components/settings/types";
-  import { formatShortcut, hasOnlyShortcutModifier } from "$lib/keyboard-shortcuts";
+  import { formatShortcut } from "$lib/keyboard-shortcuts";
   import TitleBarOverlayHost from "$lib/components/title-bar/TitleBarOverlayHost.svelte";
   import TitleBarTabs from "$lib/components/title-bar/TitleBarTabs.svelte";
   import TitleBarMediaControls from "$lib/components/title-bar/TitleBarMediaControls.svelte";
@@ -274,6 +273,9 @@
     zoomIn: () => zoom.zoomIn(),
     zoomOut: () => zoom.zoomOut(),
     resetZoom: () => zoom.reset(),
+    toggleMusic: () => { if (isMainWindow) toggleMusicPanel(); },
+    toggleDiagnostics: togglePerfMenu,
+    openShortcutHelp: () => { if (!lockedByThemeEditor) openSettings("shortcuts"); },
   });
 
   const detachedController = createTitleBarDetachedController({
@@ -341,18 +343,6 @@
 
 
   function handleModalKeydown(e: KeyboardEvent) {
-    if (
-      isMainWindow
-      && hasOnlyShortcutModifier(e)
-      && e.key.toLowerCase() === "m"
-      && !isEditableKeyboardTarget(e.target)
-    ) {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleMusicPanel();
-      return;
-    }
-
     if (showPomodoroMenu && e.key === "Escape") {
       showPomodoroMenu = false;
       return;
@@ -380,23 +370,7 @@
       showPerfMenu = false;
       return;
     }
-
-    if (e.key === "F1") {
-      e.preventDefault();
-      e.stopPropagation();
-      if (!lockedByThemeEditor) openSettings("shortcuts");
-      return;
-    }
-
-    if (hasOnlyShortcutModifier(e, { shift: true }) && e.key.toLowerCase() === "d") {
-      if (isEditableKeyboardTarget(e.target)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      togglePerfMenu();
-      return;
-    }
   }
-
 
 
   function openTitleBarMenu(e: MouseEvent) {

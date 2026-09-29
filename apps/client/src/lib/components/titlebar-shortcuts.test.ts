@@ -79,21 +79,21 @@ describe("title bar shortcuts", () => {
   });
 
   it("classifies theme and zoom shortcuts", () => {
-    expect(titleBarShortcutAction(shortcutEvent({ ctrlKey: true, shiftKey: true, key: "l" }), false))
+    expect(titleBarShortcutAction(shortcutEvent({ ctrlKey: true, shiftKey: true, key: "l" })))
       .toBe("theme-toggle");
-    expect(titleBarShortcutAction(shortcutEvent({ ctrlKey: true, shiftKey: true, key: "t" }), false))
+    expect(titleBarShortcutAction(shortcutEvent({ ctrlKey: true, shiftKey: true, key: "t" })))
       .toBe("theme-switcher");
-    expect(titleBarShortcutAction(shortcutEvent({ ctrlKey: true, key: "+" }), false))
+    expect(titleBarShortcutAction(shortcutEvent({ ctrlKey: true, key: "+" })))
       .toBe("zoom-in");
-    expect(titleBarShortcutAction(shortcutEvent({ ctrlKey: true, key: "-" }), false))
+    expect(titleBarShortcutAction(shortcutEvent({ ctrlKey: true, key: "-" })))
       .toBe("zoom-out");
-    expect(titleBarShortcutAction(shortcutEvent({ ctrlKey: true, key: "0" }), false))
+    expect(titleBarShortcutAction(shortcutEvent({ ctrlKey: true, key: "0" })))
       .toBe("zoom-reset");
   });
 
-  it("keeps close global but ignores editing-sensitive shortcuts", () => {
-    expect(titleBarShortcutAction(shortcutEvent({ ctrlKey: true }), true)).toBe("close");
-    expect(titleBarShortcutAction(shortcutEvent({ ctrlKey: true, shiftKey: true, key: "l" }), true))
-      .toBeNull();
+  it("keeps close and theme commands global", () => {
+    expect(titleBarShortcutAction(shortcutEvent({ ctrlKey: true }))).toBe("close");
+    expect(titleBarShortcutAction(shortcutEvent({ ctrlKey: true, shiftKey: true, key: "l" })))
+      .toBe("theme-toggle");
   });
 });

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CollectionViewButton from "$lib/components/collections/CollectionViewButton.svelte";
   import { tick } from "svelte";
   import Table2 from "@lucide/svelte/icons/table-2";
   import Columns3 from "@lucide/svelte/icons/columns-3";
@@ -40,7 +41,7 @@
     resolveLazyComponentLoad,
     type LazyComponentLoadState,
   } from "$lib/lazy-component-loader";
-  import NotesDatabaseMenu from "./NotesDatabaseMenu.svelte";
+  import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
   import {
     loadNotesDatabaseView,
     retryNotesDatabaseView,
@@ -56,6 +57,7 @@
     onEditProperties,
     onCreateLinkedDatabaseView,
     onAddProperty,
+    onSavingChange = () => {},
   }: {
     dataSourceId: string;
     databaseId: string | null;
@@ -65,6 +67,7 @@
     onEditProperties: () => void;
     onCreateLinkedDatabaseView: () => void;
     onAddProperty: (type: NotesDataSourcePropertyType, name: string) => Promise<void>;
+    onSavingChange?: (saving: boolean) => void;
   } = $props();
 
   const { t } = getLocalization();
@@ -81,11 +84,17 @@
   let selectedViewId = $state<string | null>(null);
   let viewError = $state<string | null>(null);
   let busy = $state(false);
+  let layoutSaving = $state(false);
+
+  $effect(() => {
+    onSavingChange(busy || layoutSaving);
+    return () => onSavingChange(false);
+  });
   let editingName = $state(false);
   let nameInput: HTMLInputElement | null = $state(null);
   let nameDraft = $state("");
   let viewSearch = $state("");
-  let tableSettingsOpen = $state(false);
+  let viewSettingsOpen = $state(false);
   let newRowRequest = $state(0);
   let templates = $state<NotesDataSourceTemplate[]>([]);
   let templateError = $state<string | null>(null);
@@ -119,7 +128,7 @@
   });
 
   $effect(() => {
-    if (tableSettingsOpen) return;
+    if (viewSettingsOpen) return;
     void loadTemplates();
   });
 
@@ -301,7 +310,7 @@
     const tableView = supportedViews.find((view) => view.type === "table");
     if (!tableView) return;
     selectedViewId = tableView.id;
-    tableSettingsOpen = true;
+    viewSettingsOpen = true;
   }
 </script>
 
@@ -309,30 +318,29 @@
   <div class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
     {#each shownViews as view (view.id)}
       {@const Icon = viewIcons[view.type as NotesDatabaseViewKind]}
-      <button type="button" class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[0.866667rem] transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" class:bg-accent={activeViewId === view.id} class:text-foreground={activeViewId === view.id} class:text-muted-foreground={activeViewId !== view.id} aria-pressed={activeViewId === view.id} onclick={() => { selectedViewId = view.id; tableSettingsOpen = false; }}>
+      <CollectionViewButton label={view.name} active={activeViewId === view.id} onclick={() => { selectedViewId = view.id; viewSettingsOpen = false; }}>
         <Icon class="size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-        <span class="max-w-36 truncate">{view.name}</span>
-      </button>
+      </CollectionViewButton>
     {/each}
     {#if overflowCount > 0}
-      <NotesDatabaseMenu label={t("notes.databaseMoreViews", overflowCount)} kind="actions" showHeader={false} dismissOnAction>
+      <CollectionMenu label={t("notes.databaseMoreViews", overflowCount)} kind="actions" showHeader={false} dismissOnAction>
         <input class="mb-2 h-8 w-full rounded-md border border-border bg-background px-2 text-sm outline-none focus:border-ring" aria-label={t("notes.databaseSearchViews")} placeholder={t("notes.databaseSearchViews")} bind:value={viewSearch} />
         <div class="grid gap-0.5">
           {#each searchableViews as view (view.id)}
             {@const Icon = viewIcons[view.type as NotesDatabaseViewKind]}
-            <button type="button" class="flex min-h-9 items-center gap-2 rounded-md px-2 text-left hover:bg-accent" onclick={() => { selectedViewId = view.id; tableSettingsOpen = false; }}>
+            <button type="button" class="flex min-h-9 items-center gap-2 rounded-md px-2 text-left hover:bg-accent" onclick={() => { selectedViewId = view.id; viewSettingsOpen = false; }}>
               <Icon class="size-4 shrink-0" aria-hidden="true" /><span class="min-w-0 flex-1 truncate">{view.name}</span>
             </button>
           {/each}
         </div>
-      </NotesDatabaseMenu>
+      </CollectionMenu>
     {/if}
-    <NotesDatabaseMenu label={t("notes.databaseAddView")} kind="new" iconOnly showHeader={false} dismissOnAction>
+    <CollectionMenu label={t("notes.databaseAddView")} kind="new" iconOnly showHeader={false} dismissOnAction>
       <p class="mb-2 text-muted-foreground">{t("notes.databaseAddView")}</p>
       <div class="grid grid-cols-2 gap-1">
         {#each NOTES_DATABASE_VIEW_KINDS as kind}
           {@const Icon = viewIcons[kind]}
-          <button type="button" class="flex min-h-16 flex-col items-center justify-center gap-1 rounded-lg text-foreground hover:bg-accent disabled:opacity-50" disabled={busy} onclick={() => { void addView(kind); }}>
+          <button type="button" class="flex min-h-16 flex-col items-center justify-center gap-1 rounded-lg text-foreground hover:bg-accent" disabled={busy} onclick={() => { void addView(kind); }}>
             <Icon class="size-5" strokeWidth={1.75} aria-hidden="true" /><span>{viewLabel(kind)}</span>
           </button>
         {/each}
@@ -340,32 +348,26 @@
       <div class="mt-3 border-t border-border pt-2">
         <button type="button" class="flex min-h-9 w-full items-center rounded-md px-2 text-left hover:bg-accent" onclick={onCreateLinkedDatabaseView}>{t("notes.databaseLinkedViewCreate")}</button>
       </div>
-    </NotesDatabaseMenu>
+    </CollectionMenu>
     {#if selectedView}
-      <NotesDatabaseMenu label={t("notes.databaseViewActions")} kind="actions" iconOnly showHeader={false}>
+      <CollectionMenu label={t("notes.databaseViewActions")} kind="actions" iconOnly showHeader={false}>
         {#if editingName}
           <input bind:this={nameInput} class="h-9 w-full rounded-md border border-border bg-background px-2 outline-none focus:border-ring" aria-label={t("notes.databaseViewName")} bind:value={nameDraft} onkeydown={(event) => { event.stopPropagation(); if (event.key === "Enter") void saveName(); if (event.key === "Escape") { nameDraft = selectedView?.name ?? ""; editingName = false; } }} onblur={() => { if (editingName) void saveName(); }} />
         {:else}
           <div class="grid gap-0.5">
-            <button data-database-menu-keep-open type="button" class="flex min-h-9 items-center gap-2 rounded-md px-2 text-left hover:bg-accent" onclick={beginRename}><Pencil class="size-4" />{t("notes.databaseViewRename")}</button>
+            <button data-collection-menu-keep-open type="button" class="flex min-h-9 items-center gap-2 rounded-md px-2 text-left hover:bg-accent" onclick={beginRename}><Pencil class="size-4" />{t("notes.databaseViewRename")}</button>
             <button type="button" class="flex min-h-9 items-center gap-2 rounded-md px-2 text-left hover:bg-accent" onclick={() => { void duplicateView(); }}><Copy class="size-4" />{t("notes.databaseViewDuplicate")}</button>
-            <button type="button" class="flex min-h-9 items-center gap-2 rounded-md px-2 text-left text-destructive hover:bg-destructive/10 disabled:opacity-50" disabled={supportedViews.length < 2 || (selectedView.type === "table" && supportedViews.filter((view) => view.type === "table").length < 2)} onclick={() => { pendingDeleteView = selectedView; }}><Trash2 class="size-4" />{t("notes.databaseViewDelete")}</button>
+            <button type="button" class="flex min-h-9 items-center gap-2 rounded-md px-2 text-left text-destructive hover:bg-destructive/10" disabled={supportedViews.length < 2 || (selectedView.type === "table" && supportedViews.filter((view) => view.type === "table").length < 2)} onclick={() => { pendingDeleteView = selectedView; }}><Trash2 class="size-4" />{t("notes.databaseViewDelete")}</button>
           </div>
         {/if}
-      </NotesDatabaseMenu>
+      </CollectionMenu>
     {/if}
   </div>
-  {#if activeView === "table"}
-    <button type="button" class="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={t("notes.databaseViewSettings")} title={t("notes.databaseViewSettings")} onclick={() => { tableSettingsOpen = true; }}><SlidersHorizontal class="size-4" aria-hidden="true" /></button>
-  {:else}
-    <NotesDatabaseMenu label={t("notes.databaseViewSettings")} kind="layout" iconOnly dismissOnAction>
-      <button type="button" class="min-h-9 rounded-md px-2 text-left hover:bg-accent" onclick={onEditProperties}>{t("notes.databaseViewEditProperties")}</button>
-    </NotesDatabaseMenu>
-  {/if}
+  <button type="button" class="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={t("notes.databaseViewSettings")} title={t("notes.databaseViewSettings")} onclick={() => { if (activeView === "timeline") onEditProperties(); else viewSettingsOpen = true; }}><SlidersHorizontal class="size-4" aria-hidden="true" /></button>
   <div class="inline-flex shrink-0 items-center rounded-md bg-primary">
-    <button type="button" class="min-h-8 rounded-l-md px-3 text-[0.866667rem] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50" disabled={busy} onclick={() => { void createNewRow(); }}>{t("notes.databaseNew")}</button>
+    <button type="button" class="min-h-8 rounded-l-md px-3 text-[0.866667rem] font-medium text-primary-foreground hover:bg-primary/90" disabled={busy} onclick={() => { void createNewRow(); }}>{t("notes.databaseNew")}</button>
     <span class="h-5 w-px bg-primary-foreground/25" aria-hidden="true"></span>
-    <NotesDatabaseMenu label={t("notes.databaseNewOptions")} kind="new-options" iconOnly primary showHeader={false} dismissOnAction>
+    <CollectionMenu label={t("notes.databaseNewOptions")} kind="new-options" iconOnly primary showHeader={false} dismissOnAction>
       <p class="mb-2 text-[0.8rem] font-medium text-muted-foreground">{t("notes.databaseTemplatesTitle")}</p>
       {#if templateError}<p class="mb-2 text-[0.8rem] text-destructive" role="alert">{templateError}</p>{/if}
       {#if templates.length === 0}
@@ -373,14 +375,14 @@
       {:else}
         <div class="grid gap-0.5">
           {#each templates as template (template.id)}
-            <button type="button" class="min-h-9 rounded-md px-2 text-left hover:bg-accent disabled:opacity-50" disabled={busy} onclick={() => { void createFromTemplate(template.id); }}>{template.name}</button>
+            <button type="button" class="min-h-9 rounded-md px-2 text-left hover:bg-accent" disabled={busy} onclick={() => { void createFromTemplate(template.id); }}>{template.name}</button>
           {/each}
         </div>
       {/if}
       <div class="mt-2 border-t border-border pt-2">
         <button type="button" class="min-h-9 w-full rounded-md px-2 text-left hover:bg-accent" onclick={openTemplateSettings}>{t("notes.databaseTemplatesManage")}</button>
       </div>
-    </NotesDatabaseMenu>
+    </CollectionMenu>
   </div>
 </div>
 
@@ -405,22 +407,22 @@
 
 {#if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeView && viewLoadState.component.kind === "table"}
   {@const NotesDatabaseTableView = viewLoadState.component.component}
-  <NotesDatabaseTableView {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} {onAddProperty} {newRowRequest} settingsOpen={tableSettingsOpen} onCloseSettings={() => { tableSettingsOpen = false; }} {onEditProperties} reloadKey={reloadKeys.table} />
+  <NotesDatabaseTableView onSavingChange={(saving) => { layoutSaving = saving; }} {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} {onAddProperty} {newRowRequest} settingsOpen={viewSettingsOpen} onCloseSettings={() => { viewSettingsOpen = false; }} {onEditProperties} reloadKey={reloadKeys.table} />
 {:else if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeView && viewLoadState.component.kind === "board"}
   {@const NotesDatabaseBoardView = viewLoadState.component.component}
-  <NotesDatabaseBoardView {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.board} />
+  <NotesDatabaseBoardView onSavingChange={(saving) => { layoutSaving = saving; }} settingsOpen={viewSettingsOpen} onCloseSettings={() => { viewSettingsOpen = false; }} {onEditProperties} {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.board} />
 {:else if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeView && viewLoadState.component.kind === "gallery"}
   {@const NotesDatabaseGalleryView = viewLoadState.component.component}
-  <NotesDatabaseGalleryView {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.gallery} />
+  <NotesDatabaseGalleryView onSavingChange={(saving) => { layoutSaving = saving; }} settingsOpen={viewSettingsOpen} onCloseSettings={() => { viewSettingsOpen = false; }} {onEditProperties} {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.gallery} />
 {:else if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeView && viewLoadState.component.kind === "list"}
   {@const NotesDatabaseListView = viewLoadState.component.component}
-  <NotesDatabaseListView {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.list} />
+  <NotesDatabaseListView onSavingChange={(saving) => { layoutSaving = saving; }} settingsOpen={viewSettingsOpen} onCloseSettings={() => { viewSettingsOpen = false; }} {onEditProperties} {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.list} />
 {:else if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeView && viewLoadState.component.kind === "calendar"}
   {@const NotesDatabaseCalendarView = viewLoadState.component.component}
-  <NotesDatabaseCalendarView {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.calendar} />
+  <NotesDatabaseCalendarView onSavingChange={(saving) => { layoutSaving = saving; }} settingsOpen={viewSettingsOpen} onCloseSettings={() => { viewSettingsOpen = false; }} {onEditProperties} {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.calendar} />
 {:else if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeView && viewLoadState.component.kind === "timeline"}
   {@const NotesDatabaseTimelineView = viewLoadState.component.component}
-  <NotesDatabaseTimelineView {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.timeline} />
+  <NotesDatabaseTimelineView onSavingChange={(saving) => { layoutSaving = saving; }} {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.timeline} />
 {:else if viewLoadState?.status === "failed" && viewLoadState.key === activeView}
   <div class="my-3 rounded-md border border-destructive/40 p-3 text-[0.8rem] text-destructive" role="alert"><p>{t("common.viewLoadFailed", viewLabel(activeView))}</p><button class="mt-2 min-h-8 rounded-md border border-border px-2 text-foreground hover:bg-accent" type="button" onclick={() => requestActiveView(true)}>{t("common.retry")}</button></div>
 {:else}

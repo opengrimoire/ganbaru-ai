@@ -1,5 +1,5 @@
 <script lang="ts">
-  import NotesDatabaseMenu from "./NotesDatabaseMenu.svelte";
+  import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
   import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import {
     createNotesDataSourceRowPage,
@@ -61,12 +61,14 @@
     databaseId = null,
     viewId = null,
     onSelectPage,
+    onSavingChange = () => {},
     reloadKey = 0,
   }: {
     dataSourceId: string;
     databaseId?: string | null;
     viewId?: string | null;
     onSelectPage: (pageId: string) => void;
+    onSavingChange?: (saving: boolean) => void;
     reloadKey?: number;
   } = $props();
 
@@ -86,6 +88,11 @@
   let loadingMore = $state(false);
   let requestId = 0;
   let mutating = $state(false);
+
+  $effect(() => {
+    onSavingChange(mutating);
+    return () => onSavingChange(false);
+  });
   let error = $state<string | null>(null);
   let draftTitle = $state("");
   let selectedPanelRowId = $state<string | null>(null);
@@ -457,7 +464,7 @@
         {t("notes.databaseTimelineRowsCount", timeline?.rows.length ?? 0)}
       {/if}
     </span>
-    <NotesDatabaseMenu label={t("notes.databaseLayout")}>
+    <CollectionMenu label={t("notes.databaseLayout")}>
       <div class="grid gap-3">
         <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
           <span>{t("notes.databaseTimelineDateProperty")}</span>
@@ -508,11 +515,11 @@
           />
         </div>
       </div>
-    </NotesDatabaseMenu>
+    </CollectionMenu>
 
     <button
       type="button"
-      class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+      class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none"
       disabled={loading || mutating}
       aria-label={t("notes.databaseTimelineReload")}
       title={t("notes.databaseTimelineReload")}
@@ -527,7 +534,7 @@
   <div class="flex min-w-0 flex-wrap items-center gap-2">
     <button
       type="button"
-      class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+      class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none"
       disabled={loading || mutating || !timeline}
       aria-label={t("notes.databaseTimelinePreviousMonth")}
       title={t("notes.databaseTimelinePreviousMonth")}
@@ -538,7 +545,7 @@
     <div class="min-w-36 text-[0.933333rem] font-medium text-foreground">{monthLabel()}</div>
     <button
       type="button"
-      class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+      class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none"
       disabled={loading || mutating || !timeline}
       aria-label={t("notes.databaseTimelineNextMonth")}
       title={t("notes.databaseTimelineNextMonth")}
@@ -548,14 +555,14 @@
     </button>
     <button
       type="button"
-      class="inline-flex h-8 items-center rounded-md px-2 text-[0.8rem] hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+      class="inline-flex h-8 items-center rounded-md px-2 text-[0.8rem] hover:bg-accent disabled:pointer-events-none"
       disabled={loading || mutating || !timeline}
       onclick={goToday}
     >
       {t("notes.databaseTimelineToday")}
     </button>
     <input
-      class="h-8 min-w-40 flex-1 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+      class="h-8 min-w-40 flex-1 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
       value={draftTitle}
       placeholder={t("notes.databaseRowsNewPlaceholder")}
       disabled={loading || mutating}
@@ -574,7 +581,7 @@
     {:else}
       <div class="grid gap-2 @container">
         <div class="flex flex-wrap items-center gap-1">
-          <NotesDatabaseMenu label={t("notes.databaseTimelineRowProperties")} kind="properties">
+          <CollectionMenu label={t("notes.databaseTimelineRowProperties")} kind="properties">
 
             <div class="mt-2 grid gap-1">
               {#each columns.filter((column) =>
@@ -594,16 +601,16 @@
                 </label>
               {/each}
             </div>
-          </NotesDatabaseMenu>
+          </CollectionMenu>
 
           {#if groupColumn}
-            <NotesDatabaseMenu label={t("notes.databaseTimelineHiddenGroups")} kind="layout">
+            <CollectionMenu label={t("notes.databaseTimelineHiddenGroups")} kind="layout">
 
               <div class="mt-2 grid gap-1">
                 {#each visibleGroups as group (group.id)}
                   <button
                     type="button"
-                    class="flex min-w-0 items-center gap-2 rounded-sm px-1 py-1 text-left hover:bg-accent/60 disabled:pointer-events-none disabled:opacity-50"
+                    class="flex min-w-0 items-center gap-2 rounded-sm px-1 py-1 text-left hover:bg-accent/60 disabled:pointer-events-none"
                     disabled={mutating}
                     aria-label={t("notes.databaseTimelineHideGroup", group.name)}
                     onclick={() => setGroupHidden(group.id, true)}
@@ -615,7 +622,7 @@
                 {#each hiddenGroups as group (group.id)}
                   <button
                     type="button"
-                    class="flex min-w-0 items-center gap-2 rounded-sm px-1 py-1 text-left hover:bg-accent/60 disabled:pointer-events-none disabled:opacity-50"
+                    class="flex min-w-0 items-center gap-2 rounded-sm px-1 py-1 text-left hover:bg-accent/60 disabled:pointer-events-none"
                     disabled={mutating}
                     aria-label={t("notes.databaseTimelineShowGroup", group.name)}
                     onclick={() => setGroupHidden(group.id, false)}
@@ -625,10 +632,10 @@
                   </button>
                 {/each}
               </div>
-            </NotesDatabaseMenu>
+            </CollectionMenu>
           {/if}
 
-          <NotesDatabaseMenu label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length}>
+          <CollectionMenu label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length}>
 
             <div class="mt-2 grid gap-2">
               {#each sorts as sort, index}
@@ -662,7 +669,7 @@
                   />
                   <button
                     type="button"
-                    class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
+                    class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none"
                     disabled={mutating}
                     aria-label={t("notes.databaseTableRemoveSort")}
                     title={t("notes.databaseTableRemoveSort")}
@@ -674,7 +681,7 @@
               {/each}
               <button
                 type="button"
-                class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+                class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none"
                 disabled={mutating || columns.length === 0}
                 onclick={addSort}
               >
@@ -682,9 +689,9 @@
                 <span>{t("notes.databaseTableAddSort")}</span>
               </button>
             </div>
-          </NotesDatabaseMenu>
+          </CollectionMenu>
 
-          <NotesDatabaseMenu label={t("notes.databaseTableFilters")} kind="filter" activeCount={filters.length}>
+          <CollectionMenu label={t("notes.databaseTableFilters")} kind="filter" activeCount={filters.length}>
 
             <div class="mt-2 grid gap-2">
               {#each filters as filter, index}
@@ -729,7 +736,7 @@
                   {/if}
                   <button
                     type="button"
-                    class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
+                    class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none"
                     disabled={mutating}
                     aria-label={t("notes.databaseTableRemoveFilter")}
                     title={t("notes.databaseTableRemoveFilter")}
@@ -741,7 +748,7 @@
               {/each}
               <button
                 type="button"
-                class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+                class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none"
                 disabled={mutating || columns.length === 0}
                 onclick={addFilter}
               >
@@ -749,7 +756,7 @@
                 <span>{t("notes.databaseTableAddFilter")}</span>
               </button>
             </div>
-          </NotesDatabaseMenu>
+          </CollectionMenu>
         </div>
 
         <div class="overflow-x-auto rounded-md border border-border">
@@ -761,7 +768,7 @@
                   {#if configuration.date_property_id}
                     <button
                       type="button"
-                      class="inline-flex size-6 shrink-0 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+                      class="inline-flex size-6 shrink-0 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none"
                       disabled={loading || mutating}
                       aria-label={t("notes.databaseTimelineCreateOnDate", date)}
                       title={t("notes.databaseTimelineCreateOnDate", date)}
@@ -810,7 +817,7 @@
                           <span class="truncate text-muted-foreground">{t("notes.databaseTimelineStartDate")}</span>
                           <input
                             type="date"
-                            class="h-7 min-w-0 rounded-sm border border-input bg-background px-1 text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-60"
+                            class="h-7 min-w-0 rounded-sm border border-input bg-background px-1 text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring"
                             value={item.start}
                             disabled={mutating}
                             onchange={(event) => {
@@ -823,7 +830,7 @@
                           <span class="truncate text-muted-foreground">{t("notes.databaseTimelineEndDate")}</span>
                           <input
                             type="date"
-                            class="h-7 min-w-0 rounded-sm border border-input bg-background px-1 text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-60"
+                            class="h-7 min-w-0 rounded-sm border border-input bg-background px-1 text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring"
                             value={item.end}
                             disabled={mutating}
                             onchange={(event) => {
@@ -845,7 +852,7 @@
                         </button>
                         <button
                           type="button"
-                          class="inline-flex size-6 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+                          class="inline-flex size-6 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none"
                           disabled={mutating}
                           aria-label={t("notes.databaseRowsDuplicate", rowTitle(item.row))}
                           title={t("notes.databaseRowsDuplicate", rowTitle(item.row))}
@@ -855,7 +862,7 @@
                         </button>
                         <button
                           type="button"
-                          class="inline-flex size-6 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
+                          class="inline-flex size-6 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none"
                           disabled={mutating}
                           aria-label={t("notes.databaseRowsTrash", rowTitle(item.row))}
                           title={t("notes.databaseRowsTrash", rowTitle(item.row))}

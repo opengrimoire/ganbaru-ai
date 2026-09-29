@@ -1,5 +1,8 @@
 <script lang="ts">
-  import NotesDatabaseMenu from "./NotesDatabaseMenu.svelte";
+  import NotesDatabasePropertyValue from "./NotesDatabasePropertyValue.svelte";
+  import CollectionSettings from "$lib/components/collections/CollectionSettings.svelte";
+  import CollectionCard from "$lib/components/collections/CollectionCard.svelte";
+  import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
   import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import {
     createNotesDataSourceRowPage,
@@ -35,7 +38,6 @@
     NotesDataSourceGalleryView,
     NotesPage,
   } from "$lib/notes/types";
-  import Check from "@lucide/svelte/icons/check";
   import Copy from "@lucide/svelte/icons/copy";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import FileText from "@lucide/svelte/icons/file-text";
@@ -50,13 +52,21 @@
     databaseId = null,
     viewId = null,
     onSelectPage,
+    onSavingChange = () => {},
     reloadKey = 0,
+    settingsOpen = false,
+    onCloseSettings,
+    onEditProperties,
   }: {
     dataSourceId: string;
     databaseId?: string | null;
     viewId?: string | null;
     onSelectPage: (pageId: string) => void;
+    onSavingChange?: (saving: boolean) => void;
     reloadKey?: number;
+    settingsOpen?: boolean;
+    onCloseSettings: () => void;
+    onEditProperties: () => void;
   } = $props();
 
   const { t } = getLocalization();
@@ -74,6 +84,11 @@
   let loadingMore = $state(false);
   let requestId = 0;
   let mutating = $state(false);
+
+  $effect(() => {
+    onSavingChange(mutating);
+    return () => onSavingChange(false);
+  });
   let error = $state<string | null>(null);
   let draftTitle = $state("");
   let selectedPanelRowId = $state<string | null>(null);
@@ -90,7 +105,7 @@
   const selectedPanelRow = $derived(
     gallery?.rows.find((row) => row.id === selectedPanelRowId) ?? null,
   );
-  const gridStyle = $derived(`grid-template-columns: repeat(auto-fill, minmax(${cardMinWidth()}px, 1fr));`);
+  const gridStyle = $derived(`grid-template-columns: repeat(auto-fill, minmax(min(100%, ${cardMinWidth()}px), 1fr));`);
   const previewStyle = $derived(`height: ${previewHeight()}px;`);
 
   $effect(() => {
@@ -359,9 +374,8 @@
     };
   }
 </script>
-
-<section class="space-y-3 pt-2" aria-label={t("notes.databaseGalleryTitle")}>
-  <div class="flex min-w-0 flex-wrap items-center gap-2 text-[0.8rem] text-muted-foreground">
+{#snippet viewControls()}
+  <div class="flex min-w-0 flex-col items-stretch gap-1 text-[0.8rem]">
     <span class="min-w-0 flex-1 truncate" role="status">
       {#if loading}
         {t("notes.databaseGalleryLoading")}
@@ -371,7 +385,7 @@
         {t("notes.databaseGalleryCardsCount", gallery?.rows.length ?? 0)}
       {/if}
     </span>
-    <NotesDatabaseMenu label={t("notes.databaseLayout")}>
+    <CollectionMenu fullWidth label={t("notes.databaseLayout")}>
       <div class="grid gap-3">
         <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
           <span>{t("notes.databaseGalleryPreview")}</span>
@@ -452,11 +466,11 @@
           />
         </div>
       </div>
-    </NotesDatabaseMenu>
-    <NotesDatabaseMenu label={t("notes.databaseNew")} kind="new">
+    </CollectionMenu>
+    <CollectionMenu fullWidth label={t("notes.databaseNew")} kind="new">
       <div class="flex min-w-0 flex-wrap items-center gap-2">
         <input
-          class="h-8 min-w-40 flex-1 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+          class="h-8 min-w-40 flex-1 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
           value={draftTitle}
           placeholder={t("notes.databaseRowsNewPlaceholder")}
           disabled={loading || mutating}
@@ -473,7 +487,7 @@
         />
         <button
           type="button"
-          class="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-2 text-[0.8rem] text-primary-foreground disabled:pointer-events-none disabled:opacity-50"
+          class="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-2 text-[0.8rem] text-primary-foreground disabled:pointer-events-none"
           disabled={loading || mutating}
           onclick={() => {
             void createCard();
@@ -483,10 +497,10 @@
           <span>{t("notes.databaseGalleryAddCard")}</span>
         </button>
       </div>
-    </NotesDatabaseMenu>
+    </CollectionMenu>
     <button
       type="button"
-      class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+      class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none"
       disabled={loading || mutating}
       aria-label={t("notes.databaseGalleryReload")}
       title={t("notes.databaseGalleryReload")}
@@ -497,11 +511,11 @@
       <RefreshCw class="size-3.5" aria-hidden="true" />
     </button>
   </div>
+{/snippet}
 
-  {#if gallery}
-    <div class="grid gap-2 @container">
-      <div class="flex flex-wrap items-center gap-1">
-        <NotesDatabaseMenu label={t("notes.databaseGalleryCardProperties")} kind="properties">
+{#snippet propertyControls()}
+      <div class="flex flex-col items-stretch gap-1">
+        <CollectionMenu fullWidth label={t("notes.databaseGalleryCardProperties")} kind="properties">
 
           <div class="mt-2 grid gap-1">
             {#each columns.filter((column) => column.type !== "title") as column (column.id)}
@@ -517,9 +531,9 @@
               </label>
             {/each}
           </div>
-        </NotesDatabaseMenu>
+        </CollectionMenu>
 
-        <NotesDatabaseMenu label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length}>
+        <CollectionMenu fullWidth label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length}>
 
           <div class="mt-2 grid gap-2">
             {#each sorts as sort, index}
@@ -553,7 +567,7 @@
                 />
                 <button
                   type="button"
-                  class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
+                  class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none"
                   disabled={mutating}
                   aria-label={t("notes.databaseTableRemoveSort")}
                   title={t("notes.databaseTableRemoveSort")}
@@ -565,7 +579,7 @@
             {/each}
             <button
               type="button"
-              class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+              class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none"
               disabled={mutating || columns.length === 0}
               onclick={addSort}
             >
@@ -573,9 +587,9 @@
               <span>{t("notes.databaseTableAddSort")}</span>
             </button>
           </div>
-        </NotesDatabaseMenu>
+        </CollectionMenu>
 
-        <NotesDatabaseMenu label={t("notes.databaseTableFilters")} kind="filter" activeCount={filters.length}>
+        <CollectionMenu fullWidth label={t("notes.databaseTableFilters")} kind="filter" activeCount={filters.length}>
 
           <div class="mt-2 grid gap-2">
             {#each filters as filter, index}
@@ -607,7 +621,7 @@
                   triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
                 />
                 <input
-                  class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+                  class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   value={String(filter.value ?? "")}
                   disabled={mutating || !filterConditionNeedsValue(filter.condition)}
                   aria-label={t("notes.databaseTableFilterValue")}
@@ -616,7 +630,7 @@
                 />
                 <button
                   type="button"
-                  class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
+                  class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none"
                   disabled={mutating}
                   aria-label={t("notes.databaseTableRemoveFilter")}
                   title={t("notes.databaseTableRemoveFilter")}
@@ -628,7 +642,7 @@
             {/each}
             <button
               type="button"
-              class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+              class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none"
               disabled={mutating || columns.length === 0}
               onclick={addFilter}
             >
@@ -636,15 +650,34 @@
               <span>{t("notes.databaseTableAddFilter")}</span>
             </button>
           </div>
-        </NotesDatabaseMenu>
+        </CollectionMenu>
       </div>
 
+
+{/snippet}
+
+
+<section class="space-y-3 pt-2" aria-label={t("notes.databaseGalleryTitle")}>
+  <span class="sr-only" role="status">{#if loading}{t("notes.databaseGalleryLoading")}{/if}</span>
+  {#if error}<p class="text-[0.8rem] text-destructive" role="alert">{error}</p>{/if}
+  {#if settingsOpen}
+    <CollectionSettings label={t("notes.databaseViewSettings")} onclose={onCloseSettings}>
+      {@render viewControls()}
+      {#if gallery}{@render propertyControls()}{/if}
+      <button type="button" class="mt-2 min-h-9 w-full rounded-md px-2 text-left text-sm hover:bg-accent" onclick={() => { onCloseSettings(); onEditProperties(); }}>{t("notes.databaseViewEditProperties")}</button>
+    </CollectionSettings>
+  {/if}
+
+
+  {#if gallery}
+    <div class="grid gap-2 @container">
       <div class="grid min-w-0 gap-3" style={gridStyle}>
         {#each gallery.rows as row (row.id)}
           {@const title = rowTitle(row)}
-          {@const cover = notesDatabaseGalleryCardCover(row, configuration)}
-          <article class="min-w-0 overflow-hidden rounded-md border border-border bg-background shadow-sm">
-            {#if configuration.cover_source !== "none"}
+          {@const cardCover = notesDatabaseGalleryCardCover(row, configuration)}
+          <CollectionCard {title} onopen={() => openCard(row)}>
+            {#snippet cover()}
+              {#if configuration.cover_source !== "none"}
               <button
                 type="button"
                 class="block w-full overflow-hidden border-b border-border bg-muted/40"
@@ -653,80 +686,36 @@
                 onclick={() => openCard(row)}
               >
                 <NotesPageCover
-                  {cover}
+                  cover={cardCover}
                   unavailableLabel={t("notes.databaseGalleryPreviewUnavailable")}
                   objectFit={configuration.fit_image ? "contain" : "cover"}
                 />
               </button>
-            {/if}
-            <div class="space-y-2 p-2">
-              <div class="flex min-w-0 items-start gap-1">
-                <button
-                  type="button"
-                  class="min-w-0 flex-1 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  onclick={() => openCard(row)}
-                >
-                  <span class="block truncate text-[0.866667rem] font-medium text-foreground">
-                    {title}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-                  aria-label={t("notes.databaseRowsOpen", title)}
-                  title={t("notes.databaseRowsOpen", title)}
-                  onclick={() => openCard(row)}
-                >
-                  <FileText class="size-3.5" aria-hidden="true" />
-                </button>
-              </div>
+              {/if}
+            {/snippet}
+            {#snippet actions()}
+              <CollectionMenu kind="actions" iconOnly showHeader={false} label={t("notes.databaseTableRowActions")}>
+                <button type="button" class="flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left hover:bg-accent" onclick={() => openCard(row)}><FileText class="size-4" />{t("notes.databaseRowsOpen", title)}</button>
+                <button type="button" class="flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left hover:bg-accent" disabled={mutating} onclick={() => { void duplicateCard(row); }}><Copy class="size-4" />{t("notes.databaseRowsDuplicate", title)}</button>
+                <button type="button" class="flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left text-destructive hover:bg-destructive/10" disabled={mutating} onclick={() => { void trashCard(row); }}><Trash2 class="size-4" />{t("notes.databaseRowsTrash", title)}</button>
+              </CollectionMenu>
+            {/snippet}
               {#if visibleColumns.length > 0}
                 <dl class="grid gap-1">
                   {#each visibleColumns as column (column.id)}
-                    {@const text = notesDatabaseGalleryCardText(row, column)}
                     <div class="min-w-0">
                       <dt class="truncate text-[0.666667rem] text-muted-foreground">{column.name}</dt>
                       <dd class="truncate text-[0.8rem] text-foreground">
-                        {text || t("notes.databaseTableEmptyCell")}
+                        <NotesDatabasePropertyValue {row} {column} />
                       </dd>
                     </div>
                   {/each}
                 </dl>
               {/if}
-              <div class="flex justify-end gap-1">
-                <button
-                  type="button"
-                  class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
-                  disabled={mutating}
-                  aria-label={t("notes.databaseRowsDuplicate", title)}
-                  title={t("notes.databaseRowsDuplicate", title)}
-                  onclick={() => {
-                    void duplicateCard(row);
-                  }}
-                >
-                  <Copy class="size-3.5" aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  class="inline-flex size-7 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
-                  disabled={mutating}
-                  aria-label={t("notes.databaseRowsTrash", title)}
-                  title={t("notes.databaseRowsTrash", title)}
-                  onclick={() => {
-                    void trashCard(row);
-                  }}
-                >
-                  <Trash2 class="size-3.5" aria-hidden="true" />
-                </button>
-              </div>
-            </div>
-          </article>
+          </CollectionCard>
         {/each}
       </div>
 
-      {#if visibleColumns.length === 0}
-        <p class="text-[0.8rem] text-muted-foreground">{t("notes.databaseGalleryNoVisibleProperties")}</p>
-      {/if}
 
       {#if gallery.rows.length === 0 && !loading && !error}
         <p class="text-[0.8rem] text-muted-foreground">{t("notes.databaseRowsEmpty")}</p>
@@ -773,10 +762,4 @@
     </div>
   {/if}
 
-  {#if mutating}
-    <p class="flex items-center gap-1 text-[0.8rem] text-muted-foreground">
-      <Check class="size-3.5" aria-hidden="true" />
-      <span>{t("notes.databaseGallerySaving")}</span>
-    </p>
-  {/if}
 </section>

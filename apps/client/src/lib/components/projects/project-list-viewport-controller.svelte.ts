@@ -16,7 +16,7 @@ const KEYBOARD_SCROLL_PX = 48;
 export interface ProjectListViewportControllerContext {
   getColumnWidths: () => ProjectTaskListColumnWidths;
   getGridInput: (widths: ProjectTaskListColumnWidths) => ProjectTaskListGridInput;
-  persistColumnWidths: (widths: ProjectTaskListColumnWidths) => void;
+  persistColumnWidths: (widths: ProjectTaskListColumnWidths) => Promise<void>;
 }
 
 function cssPixelValue(value: string): number {
@@ -32,11 +32,32 @@ function keyboardScrollAllowed(target: EventTarget | null): boolean {
 export class ProjectListViewportController {
   container = $state<HTMLDivElement | null>(null);
   resizeGesture = $state<ProjectTaskListColumnResizeGesture | null>(null);
+  resizeError = $state<string | null>(null);
+  private pendingWidths = $state<ProjectTaskListColumnWidths | null>(null);
+  private resizeWriteId = 0;
 
   constructor(private readonly context: ProjectListViewportControllerContext) {}
 
   get effectiveColumnWidths(): ProjectTaskListColumnWidths {
-    return this.resizeGesture?.draftWidths ?? this.context.getColumnWidths();
+    return this.resizeGesture?.draftWidths ?? this.pendingWidths ?? this.context.getColumnWidths();
+  }
+
+  /** Retain the preview until persistence and the parent's props have settled. */
+  private async commitWidths(widths: ProjectTaskListColumnWidths): Promise<void> {
+    const writeId = ++this.resizeWriteId;
+    this.pendingWidths = widths;
+    this.resizeError = null;
+    try {
+      await this.context.persistColumnWidths(widths);
+    } catch (error) {
+      if (writeId === this.resizeWriteId) {
+        this.resizeError = error instanceof Error ? error.message : String(error);
+      }
+    } finally {
+      await tick();
+      if (writeId === this.resizeWriteId) this.pendingWidths = null;
+      this.syncAfterRender();
+    }
   }
 
   maxHorizontalScrollLeft = (): number => {
@@ -85,7 +106,7 @@ export class ProjectListViewportController {
     if (!(trigger instanceof HTMLElement)) return;
     const parsedRootSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
     const rootFontSizePx = Number.isFinite(parsedRootSize) && parsedRootSize > 0 ? parsedRootSize : 16;
-    const headerCell = trigger.closest(".project-list-header-cell");
+    const headerCell = trigger.closest(".collection-cell");
     const startWidthRem = headerCell instanceof HTMLElement
       ? headerCell.getBoundingClientRect().width / rootFontSizePx
       : projectTaskListResizableColumnWidthRem(column, this.context.getGridInput(this.effectiveColumnWidths));
@@ -111,7 +132,7 @@ export class ProjectListViewportController {
   finishResize = (event: PointerEvent, persist: boolean): void => {
     const gesture = this.resizeGesture;
     if (!gesture || event.pointerId !== gesture.pointerId) return;
-    if (persist && gesture.moved) this.context.persistColumnWidths(gesture.draftWidths);
+    if (persist && gesture.moved) void this.commitWidths(gesture.draftWidths);
     this.resizeGesture = null;
     this.syncAfterRender();
   };
@@ -119,7 +140,7 @@ export class ProjectListViewportController {
   handleResizeDoubleClick = (event: MouseEvent, column: ProjectTaskListResizableColumn): void => {
     event.preventDefault();
     event.stopPropagation();
-    this.context.persistColumnWidths(doubleClickProjectTaskListColumnResizeWidths({
+    void this.commitWidths(doubleClickProjectTaskListColumnResizeWidths({
       column,
       widths: this.effectiveColumnWidths,
       gridInput: this.context.getGridInput(this.effectiveColumnWidths),
@@ -131,7 +152,7 @@ export class ProjectListViewportController {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
     event.stopPropagation();
-    this.context.persistColumnWidths(keyboardProjectTaskListColumnResizeWidths({
+    void this.commitWidths(keyboardProjectTaskListColumnResizeWidths({
       column,
       direction: event.key === "ArrowRight" ? 1 : -1,
       wideStep: event.shiftKey,

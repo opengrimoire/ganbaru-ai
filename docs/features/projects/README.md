@@ -55,6 +55,7 @@ Project Notes are canonical Notes pages with project membership. Working-folder 
 
 ## Documentation map
 
+- [Shared collection views](../collections.md)
 - [Tasks and views](tasks-and-views.md)
 - [Settings and scheduling](settings-and-scheduling.md)
 - [Guided planning](guided-planning.md)

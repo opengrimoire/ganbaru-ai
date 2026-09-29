@@ -10,13 +10,13 @@ Database blocks render their current view directly in the page. A new database s
 
 View tabs correspond to saved views in the database shell. The add-view picker creates one of the six implemented layouts: table, board, gallery, list, calendar, or timeline. A view can be renamed or duplicated with its own presentation settings. Deleting a view asks for confirmation and leaves rows and properties in its shared data source. The last view cannot be removed, and a data source retains a table view for property editing. Additional view types shown by Notion, including chart, dashboard, map, form, and feed, remain unimplemented.
 
-New stays beside the view tabs across layouts. Its split-button menu applies existing page templates and links to template management; creating a template still starts from an existing row. The table puts Add property in the column header. Its view settings open in a side panel, with layout, property visibility, filters, sorts, templates, and transfer controls in anchored submenus. The data source property editor opens separately and shows one property's fields at a time. Configuration forms do not occupy the page before the rows. Applied filter and sort counts remain visible on their controls. Board and date views retain contextual creation.
+New stays beside the view tabs across layouts. Its split-button menu applies existing page templates and links to template management; creating a template still starts from an existing row. The table puts Add property in the column header. Table, board, gallery, list, and calendar settings open in a side panel, with layout, property visibility, filters, sorts, and applicable template and transfer controls in anchored submenus. The data source property editor opens separately and shows one property's fields at a time. Configuration forms do not occupy the page before the rows. Applied filter and sort counts remain visible on their controls in settings. Board and date views retain contextual creation.
 
 Table and list row actions use an overflow menu. Column width controls remain keyboard accessible and appear on header hover or focus on pointer devices. List properties align with their headers; secondary properties collapse on narrow layouts. A table preview appears only after a row is opened.
 
 Panels stay within the viewport and outside clipped database containers. Their nested dropdowns preserve the owning dialog's focus boundary. Escape closes the innermost dropdown first, then its settings panel, returning focus to the invoking control. Leaving a panel dismisses it without pulling focus back. These controls change the same existing view configuration and row operations described below.
 
-The separation of content, view settings, and property visibility follows [Notion's documented database controls](https://www.notion.com/help/views-filters-and-sorts). Ganbaru AI uses its own theme colors and existing control primitives.
+The separation of content, view settings, and property visibility follows [Notion's documented database controls](https://www.notion.com/help/views-filters-and-sorts). Notes and Projects use the same [collection components and visual rules](../collections.md), with domain-specific editors and actions.
 
 ## Data source and view model
 
@@ -46,13 +46,17 @@ Writable cell types include ordinary text, number, boolean, select-like, date, c
 
 ## Table view
 
-Table supports row creation from its final New page line or toolbar, template selection, inline cell editing, adding a property from the header, visible and hidden columns, column order and width, filters, sorts, keyboard cell navigation, and full-page or preview opening.
+Table supports row creation from its final New page line or toolbar, template selection, inline cell editing, adding a property from the header, visible and hidden columns, column order and width, filters, sorts, keyboard cell navigation, and full-page or preview opening. Column edges support dragging and keyboard resizing, with one saved width update when the gesture completes.
 
-Title remains visible. Changing a value reloads the affected filtered and sorted window rather than assuming the row remains in the same position.
+Clicking New page or the table toolbar New immediately reserves a blank row and focuses its title. Creation starts without waiting for a name. The next New page line stays available, including while earlier rows are saving. Its hover highlight does not follow the control down when a new row takes its place. Empty titles remain empty in storage. Typing stays intact when creation returns; Enter or leaving the title saves it after creation. Enter on the last row moves focus to New page, and subsequent saves and refreshes preserve that control's focus. The creation response supplies canonical defaults and template values without a full table or template reload.
+
+Title remains visible. Existing cell edits and submitted new-row edits reload the affected filtered and sorted window. Active titles and failed drafts stay visible while editing or retrying. A refresh started before a row finished creating cannot discard that row. Failed creation exposes an error and retry on the row, reuses its reserved page ID, and checks for an already committed page before reporting failure. Closing the table submits pending title drafts. Templates also accept a reserved page ID so a failed response can be recovered without creating another page.
 
 ## Board view
 
 Board groups rows by a compatible property, retains empty and hidden groups, exposes selected card properties, filters and sorts, and supports row creation.
+
+Board shares its Kanban columns, cards, drag feedback, action menus, and inline creation with Projects. Move actions in each card's menu provide keyboard and touch alternatives. Column counts use the backend group counts rather than only the currently loaded cards.
 
 Dragging a card writes only when the grouping property has a safe local representation, such as select, status, checkbox, date, or supported multi-select behavior. Read-only or ambiguous group types disable drag writes.
 
@@ -71,6 +75,8 @@ Grouping changes the view only and never changes page hierarchy.
 ## Calendar view
 
 Calendar uses a selected date property, month range, visible properties, filters, and sorts. Date-range rows appear on every covered visible date. Creating from a day prefills the selected date property.
+
+Day creation opens on demand instead of showing a text field in every cell. Cards use the shared compact card treatment and action menu. The month grid scrolls horizontally in narrow containers to keep dates and row titles readable.
 
 This is a database view and does not create Ganbaru Calendar events automatically.
 
@@ -115,3 +121,5 @@ The command reloads current schema and row state before applying the action. Bro
 All views apply filters and sorts before bounded row hydration and use stable cursors. Relation titles, rollups, formulas, buttons, covers, and previews hydrate only for returned rows. A late response for an older view state cannot replace the active result.
 
 The exact table layout, query plans, and cache schema belong in [data documentation](../../data/README.md), not this feature contract.
+
+Save feedback stays beside the inline database title. Fast saves remain visually quiet; a save lasting at least 600 ms shows the standard loading spinner without inserting a status row or dimming the database. Save errors remain visible and pending writes retain their duplicate-submission guards.

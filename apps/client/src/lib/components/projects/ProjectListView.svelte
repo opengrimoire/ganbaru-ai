@@ -97,7 +97,7 @@
     onOpenTask: (task: ProjectTask) => void;
     onSelectedTaskIdsChange: (taskIds: string[]) => void;
     onRevealTask: (task: ProjectTask | undefined) => void;
-    onTaskListColumnWidthsChange: (widths: ProjectTaskListColumnWidths, options?: { persist?: boolean }) => void;
+    onTaskListColumnWidthsChange: (widths: ProjectTaskListColumnWidths, options?: { persist?: boolean }) => Promise<void>;
     onNeedMore: () => void;
   } = $props();
 
@@ -468,6 +468,9 @@
   onscroll={handleProjectListScroll}
 >
   <div class="flex min-h-full flex-col gap-5 p-3">
+    {#if viewport.resizeError}
+      <p role="alert" class="text-sm text-destructive">{viewport.resizeError}</p>
+    {/if}
     {#if taskGroupBy === "section"}
       {#each sections as section (section.id)}
         {@const sectionTasks = drag.tasksForSection(section)}

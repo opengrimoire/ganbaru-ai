@@ -44,6 +44,7 @@ Working-folder Markdown never becomes a Notes page automatically. It does not ga
 - [Editor](editor.md)
 - [Blocks](blocks.md)
 - [Databases](databases.md)
+- [Shared collection views](../collections.md)
 - [Import and export](import-export.md)
 - [History and recovery](history-and-recovery.md)
 - [Links and collaboration](links-and-collaboration.md)

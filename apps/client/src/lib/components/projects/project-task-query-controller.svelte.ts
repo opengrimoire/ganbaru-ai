@@ -487,9 +487,10 @@ export class ProjectTaskQueryController {
     widths: ProjectTaskListColumnWidths,
     options: { persist?: boolean } = {},
   ): Promise<void> {
-    this.listColumnWidths = widths;
     if (options.persist && this.projectId) {
       await this.#projects.saveTaskListColumnWidths(this.projectId, widths);
+    } else {
+      this.listColumnWidths = widths;
     }
   }
 

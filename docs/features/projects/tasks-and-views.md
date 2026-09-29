@@ -26,6 +26,8 @@ List and Kanban support multi-select with bulk completion, reopening, priority, 
 
 List is the default view. It presents section or computed groups, configurable columns, inline editing, selection, task creation, and horizontal access to wider schemas.
 
+Its rows, cells, resize handles, and inline task creation use the [shared collection components](../collections.md) also used by Notes. Task property editors, automatic width fitting, section controls, subtasks, selection, and manual ordering remain project-specific.
+
 Columns can include status, dates, priority, assignee, reviewer, estimate, schedule, dependencies, tags, and compatible custom fields. Users can show, hide, reorder, and resize columns per project. Long values truncate with accessible full text.
 
 Rows can group by section, status, priority, due-date bucket, or scheduled state. Computed groups are projections over the same tasks. Quick creation pre-fills a group value only when it maps safely to canonical fields.
@@ -35,6 +37,8 @@ Rows can group by section, status, priority, due-date bucket, or scheduled state
 Kanban groups cards by status and supports creation, movement, selection, and compact task metadata. Moving a card changes its status through the same validation as the task detail surface.
 
 Each Kanban column keeps its card area at the same width as cards begin or stop overflowing, so adding a card does not shift existing cards horizontally.
+
+Cards and columns share the Notes board presentation. Card menus contain movement and detail actions, and each column offers inline task creation with that status. Manual sorting supports card reordering; other sorts permit status changes without rewriting manual order. Measured card heights keep virtual scrolling aligned with wrapped titles and metadata. Rejected drag writes display an error and keep the previous canonical position.
 
 Hidden or archived statuses do not make tasks disappear without an explicit filter or recovery path.
 

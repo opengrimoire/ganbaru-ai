@@ -1,4 +1,6 @@
 <script lang="ts">
+  import CollectionRow from "$lib/components/collections/CollectionRow.svelte";
+  import CollectionCell from "$lib/components/collections/CollectionCell.svelte";
   import Check from "@lucide/svelte/icons/check";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import { getLocalization } from "$lib/i18n/translator.svelte";
@@ -161,12 +163,7 @@
   )}
   style={`min-width: ${gridMinWidth};`}
 >
-  <div
-    class={cn(
-      "group/row grid min-h-11 items-center px-1 hover:bg-accent/20",
-      selectedTaskId === task.id && "bg-accent/40 ring-1 ring-inset ring-primary/20",
-    )}
-    style={`grid-template-columns: ${gridTemplate}; min-width: ${gridMinWidth};`}
+  <CollectionRow template={gridTemplate} minWidth={gridMinWidth} divider={false} selected={selectedTaskId === task.id}
     role="group"
     aria-label={task.title}
     {draggable}
@@ -205,10 +202,11 @@
         <ChevronRight size={14} strokeWidth={1.75} />
       </button>
     </div>
+    <CollectionCell>
     <button
       type="button"
       data-list-row-drag-source="true"
-      class="project-list-cell-frame relative flex min-h-11 min-w-0 cursor-pointer flex-col justify-center self-stretch rounded-md px-2 py-1 text-left"
+      class="flex min-h-9 w-full min-w-0 cursor-pointer flex-col justify-center rounded-sm text-left outline-none focus-visible:bg-accent/40"
       aria-label={t("projects.actions.openTaskDetails", task.title)}
       onclick={() => onOpenTask(task)}
     >
@@ -247,6 +245,7 @@
         </span>
       {/if}
     </button>
+    </CollectionCell>
     {#each taskListColumns as column (column)}
       <ProjectListColumnCell
         {column}
@@ -287,7 +286,7 @@
       />
     {/each}
     <div class="min-h-11 self-stretch" aria-hidden="true"></div>
-  </div>
+  </CollectionRow>
   <ProjectListSubtaskRows
     {subtasks}
     {selectedTaskId}
@@ -303,18 +302,4 @@
     .project-list-open-control { opacity: 1; }
   }
 
-  .project-list-cell-frame::before {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    border: 1px solid transparent;
-    border-radius: 0.375rem;
-    content: "";
-    pointer-events: none;
-  }
-
-  .project-list-cell-frame:hover::before,
-  .project-list-cell-frame:focus-visible::before {
-    border-color: color-mix(in srgb, var(--foreground) 25%, transparent);
-  }
 </style>

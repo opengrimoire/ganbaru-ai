@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   notesDatabaseTableCellEditValue,
+  notesDatabaseTableOptionNames,
   notesDatabaseTableCellText,
   notesDatabaseTableColumnCanEdit,
   notesDatabaseTableColumns,
@@ -385,5 +386,16 @@ describe("database table helpers", () => {
     expect(finish?.buttonRequiresConfirmation).toBe(true);
     expect(finish && notesDatabaseTableCellText(pageWithButton, finish)).toBe("Mark done");
     expect(finish && notesDatabaseTableColumnCanEdit(finish)).toBe(false);
+  });
+});
+
+
+describe("database option display", () => {
+  it("preserves punctuation in multi-select names and skips malformed entries", () => {
+    const columns = notesDatabaseTableColumns(dataSource, view);
+    const column = { ...columns[0], id: "tags", name: "Tags", type: "multi_select" as const };
+    const row = { ...page, properties: { Tags: { id: "tags", type: "multi_select", multi_select: [{ name: "Design, review" }, { name: "Build" }, null, { name: 123 }] } } };
+    expect(notesDatabaseTableOptionNames(row, column)).toEqual(["Design, review", "Build"]);
+    expect(notesDatabaseTableOptionNames({ ...row, properties: {} }, column)).toEqual([]);
   });
 });

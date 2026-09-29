@@ -1,8 +1,15 @@
 <script lang="ts">
-  import NotesDatabaseMenu from "./NotesDatabaseMenu.svelte";
+  import { NOTES_TEXT_COLORS, notesBlockColorStyle } from "$lib/notes/block-color";
+  import CollectionRow from "$lib/components/collections/CollectionRow.svelte";
+  import CollectionCell from "$lib/components/collections/CollectionCell.svelte";
+  import CollectionColumnHeader from "$lib/components/collections/CollectionColumnHeader.svelte";
+  import CollectionQuickAdd from "$lib/components/collections/CollectionQuickAdd.svelte";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
   import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
-  import { tick } from "svelte";
-  import { portal } from "$lib/utils/portal";
+  import { onDestroy, tick } from "svelte";
+  import { createNotesDatabaseRowCreation } from "$lib/notes/database-row-creation.svelte";
+  import CollectionSettings from "$lib/components/collections/CollectionSettings.svelte";
   import {
     beginLazyComponentLoad,
     rejectLazyComponentLoad,
@@ -10,9 +17,7 @@
     type LazyComponentLoadState,
   } from "$lib/lazy-component-loader";
   import {
-    applyNotesDataSourceTemplate,
     clickNotesDataSourceButton,
-    createNotesDataSourceRowPage,
     createNotesDataSourceTemplateFromRow,
     deleteNotesDataSourceTemplate,
     duplicateNotesPage,
@@ -62,7 +67,6 @@
   import ArrowUpRight from "@lucide/svelte/icons/arrow-up-right";
   import AtSign from "@lucide/svelte/icons/at-sign";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
-  import ChevronsLeftRight from "@lucide/svelte/icons/chevrons-left-right";
   import Copy from "@lucide/svelte/icons/copy";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import Eye from "@lucide/svelte/icons/eye";
@@ -73,7 +77,6 @@
   import Link from "@lucide/svelte/icons/link";
   import List from "@lucide/svelte/icons/list";
   import MapPin from "@lucide/svelte/icons/map-pin";
-  import Minus from "@lucide/svelte/icons/minus";
   import MousePointerClick from "@lucide/svelte/icons/mouse-pointer-click";
   import Paperclip from "@lucide/svelte/icons/paperclip";
   import Phone from "@lucide/svelte/icons/phone";
@@ -83,13 +86,13 @@
   import SquareCheck from "@lucide/svelte/icons/square-check";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Users from "@lucide/svelte/icons/users";
-  import X from "@lucide/svelte/icons/x";
 
   let {
     dataSourceId,
     databaseId = null,
     viewId = null,
     onSelectPage,
+    onSavingChange = () => {},
     onAddProperty,
     onEditProperties,
     newRowRequest = 0,
@@ -101,6 +104,7 @@
     databaseId?: string | null;
     viewId?: string | null;
     onSelectPage: (pageId: string) => void;
+    onSavingChange?: (saving: boolean) => void;
     onAddProperty: (type: NotesDataSourcePropertyType, name: string) => Promise<void>;
     onEditProperties: () => void;
     newRowRequest?: number;
@@ -156,10 +160,51 @@
   let loadMoreSentinel: HTMLDivElement | null = $state(null);
   let tableRequestId = 0;
   let mutating = $state(false);
+
+  let viewOpen = true;
+  const rowCreation = createNotesDatabaseRowCreation(() => viewOpen ? loadTable(false) : Promise.resolve(null));
+  onDestroy(() => {
+    viewOpen = false;
+    rowCreation.flush();
+  });
+
+  $effect(() => {
+    onSavingChange(mutating || rowCreation.isSaving(dataSourceId));
+    return () => onSavingChange(false);
+  });
   let error = $state<string | null>(null);
-  let draftTitle = $state("");
-  let addingRow = $state(false);
-  let newRowInput: HTMLInputElement | null = $state(null);
+  let addRowKey = $state<string | null>(null);
+  let resizing = $state<{ id: string; pointerId: number; startX: number; startWidth: number; width: number } | null>(null);
+  let pendingColumnWidth = $state<{ id: string; width: number } | null>(null);
+
+  function startColumnResize(event: PointerEvent, column: NotesDatabaseTableColumn): void {
+    if (event.button !== 0 || mutating) return;
+    event.preventDefault();
+    event.stopPropagation();
+    resizing = { id: column.id, pointerId: event.pointerId, startX: event.clientX, startWidth: column.width, width: column.width };
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  }
+
+  function moveColumnResize(event: PointerEvent): void {
+    if (!resizing || event.pointerId !== resizing.pointerId) return;
+    const column = columns.find((item) => item.id === resizing?.id);
+    if (!column) return;
+    resizing.width = notesDatabaseTableColumnWidth(column, event.clientX - resizing.startX);
+  }
+
+  function finishColumnResize(event: PointerEvent, commit: boolean): void {
+    if (!resizing || event.pointerId !== resizing.pointerId) return;
+    const gesture = resizing;
+    resizing = null;
+    if (commit && gesture.width !== gesture.startWidth) updateColumnWidth(gesture.id, gesture.width - gesture.startWidth);
+  }
+
+  function resizeColumnKey(event: KeyboardEvent, column: NotesDatabaseTableColumn): void {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    event.stopPropagation();
+    updateColumnWidth(column.id, (event.key === "ArrowRight" ? 1 : -1) * (event.shiftKey ? 32 : 8));
+  }
   let propertyName = $state("");
   let propertySearch = $state("");
   let handledNewRowRequest = $state(0);
@@ -210,15 +255,18 @@
     if (kind) requestCsvPanel(kind, true);
   }
 
+  const visibleRows = $derived(rowCreation.rowsFor(dataSourceId, table?.rows ?? []));
+  const templateSourceRows = $derived(visibleRows.filter((row) => !rowCreation.blocked(row.id)));
   const columns = $derived(table ? notesDatabaseTableColumns(table.data_source, table.view) : []);
   const visibleColumns = $derived(notesDatabaseTableVisibleColumns(columns));
+  const gridTemplate = $derived(`1.5rem 1.75rem ${visibleColumns.map((column) => `${resizing?.id === column.id ? resizing.width : pendingColumnWidth?.id === column.id ? pendingColumnWidth.width : column.width}px`).join(" ")} minmax(10rem, 1fr)`);
   const filters = $derived(table ? notesDatabaseTableFiltersFromView(table.view) : []);
   const sorts = $derived(table ? notesDatabaseTableSortsFromView(table.view) : []);
   const rowOpenMode = $derived(
     table ? notesDatabaseTableConfigurationFromView(table.view).row_open_mode : "full_page",
   );
   const selectedPanelRow = $derived(
-    table?.rows.find((row) => row.id === selectedPanelRowId) ?? null,
+    visibleRows.find((row) => row.id === selectedPanelRowId) ?? null,
   );
   const propertyTypes = $derived(NOTES_DATA_SOURCE_PROPERTY_TYPES.filter((type) =>
     type !== "title" && propertyTypeLabel(type).toLocaleLowerCase().includes(propertySearch.toLocaleLowerCase()),
@@ -253,16 +301,13 @@
     return t(keys[type]);
   }
 
-  function beginRow(): void {
-    addingRow = true;
-    void tick().then(() => newRowInput?.focus());
-  }
-
   $effect(() => {
     if (newRowRequest <= handledNewRowRequest) return;
     if (loading || mutating || !table) return;
-    handledNewRowRequest = newRowRequest;
-    void createRow();
+    while (handledNewRowRequest < newRowRequest) {
+      handledNewRowRequest += 1;
+      createRow();
+    }
   });
 
   async function addNewProperty(type: NotesDataSourcePropertyType): Promise<void> {
@@ -291,23 +336,26 @@
     return { databaseId, viewId };
   }
 
-  async function loadTable(): Promise<NotesDataSourceTableView | null> {
+  async function loadTable(refreshTemplates = true): Promise<NotesDataSourceTableView | null> {
     const requestId = ++tableRequestId;
+    const settledIds = rowCreation.settledIds(dataSourceId);
     loading = true;
     loadingMore = false;
     error = null;
     try {
       const [loaded, loadedTemplates] = await Promise.all([
         getNotesDataSourceTableView(dataSourceId, viewScope()),
-        listNotesDataSourceTemplates(dataSourceId),
+        refreshTemplates ? listNotesDataSourceTemplates(dataSourceId) : Promise.resolve(templates),
       ]);
       if (requestId !== tableRequestId) return null;
+      const focusedId = document.activeElement?.closest<HTMLElement>("[data-database-row-id]")?.dataset.databaseRowId ?? null;
+      rowCreation.acceptWindow(dataSourceId, focusedId, settledIds);
       table = loaded;
       templates = loadedTemplates;
-      if (selectedPanelRowId && !loaded.rows.some((row) => row.id === selectedPanelRowId)) {
+      if (selectedPanelRowId && !visibleRows.some((row) => row.id === selectedPanelRowId)) {
         selectedPanelRowId = null;
       }
-      if (templateSourceRowId && !loaded.rows.some((row) => row.id === templateSourceRowId)) {
+      if (templateSourceRowId && !visibleRows.some((row) => row.id === templateSourceRowId)) {
         templateSourceRowId = "";
       }
       if (selectedTemplateId && !loadedTemplates.some((template) => template.id === selectedTemplateId)) {
@@ -316,7 +364,7 @@
       if (!selectedTemplateId) {
         selectedTemplateId = loadedTemplates.find((template) => template.is_default)?.id ?? "";
       }
-      await focusPendingRow(loaded);
+      await focusPendingRow();
       return loaded;
     } catch (caught) {
       if (requestId !== tableRequestId) return null;
@@ -357,11 +405,11 @@
     return () => observer.disconnect();
   });
 
-  async function focusPendingRow(loaded: NotesDataSourceTableView): Promise<void> {
+  async function focusPendingRow(): Promise<void> {
     const rowId = pendingFocusRowId;
     pendingFocusRowId = null;
     if (!rowId) return;
-    const rowIndex = loaded.rows.findIndex((row) => row.id === rowId);
+    const rowIndex = visibleRows.findIndex((row) => row.id === rowId);
     if (rowIndex < 0) return;
     await tick();
     focusCell(rowIndex, 0);
@@ -373,14 +421,18 @@
     nextFilters: NotesDatabaseTableFilter[],
     nextSorts: NotesDatabaseTableSort[],
   ): Promise<void> {
+    const settledIds = rowCreation.settledIds(dataSourceId);
     mutating = true;
     error = null;
     try {
-      table = await updateNotesDataSourceTableView(
+      const loaded = await updateNotesDataSourceTableView(
         dataSourceId,
         notesDatabaseTableUpdate(nextColumns, nextRowOpenMode, nextFilters, nextSorts),
         viewScope(),
       );
+      const focusedId = document.activeElement?.closest<HTMLElement>("[data-database-row-id]")?.dataset.databaseRowId ?? null;
+      rowCreation.acceptWindow(dataSourceId, focusedId, settledIds);
+      table = loaded;
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);
     } finally {
@@ -388,32 +440,19 @@
     }
   }
 
-  async function createRow(): Promise<void> {
-    if (mutating || loading) return;
-    const title = draftTitle.trim() || t("notes.untitled");
-    mutating = true;
-    error = null;
-    try {
-      const loaded = selectedTemplateId
-        ? await applyNotesDataSourceTemplate(dataSourceId, selectedTemplateId, { title })
-        : await createNotesDataSourceRowPage(dataSourceId, {
-            id: crypto.randomUUID(),
-            first_block_id: crypto.randomUUID(),
-            title,
-          });
-      draftTitle = "";
-      addingRow = false;
-      pendingFocusRowId = loaded.page.id;
-      await loadTable();
-    } catch (caught) {
-      error = caught instanceof Error ? caught.message : String(caught);
-    } finally {
-      mutating = false;
-    }
+  function createRow(): void {
+    if (mutating || loading || !table) return;
+    const pageId = rowCreation.begin(dataSourceId, selectedTemplateId);
+    addRowKey = pageId;
+    void tick().then(() => {
+      const rowIndex = visibleRows.findIndex((row) => row.id === pageId);
+      const titleIndex = visibleColumns.findIndex((column) => column.type === "title");
+      if (rowIndex >= 0 && titleIndex >= 0) focusCell(rowIndex, titleIndex);
+    });
   }
 
   async function createTemplateFromRow(): Promise<void> {
-    const sourceRowId = templateSourceRowId || table?.rows[0]?.id || "";
+    const sourceRowId = templateSourceRowId || templateSourceRows[0]?.id || "";
     const name = templateName.trim();
     if (!sourceRowId || !name) return;
     mutating = true;
@@ -508,6 +547,7 @@
     column: NotesDatabaseTableColumn,
     value: NotesDatabaseTableEditValue,
   ): Promise<void> {
+    if (rowCreation.submit(row.id, column, value)) return;
     const current = notesDatabaseTableCellEditValue(row, column);
     if (notesDatabaseTableEditValuesEqual(current, value)) return;
     mutating = true;
@@ -534,12 +574,18 @@
   }
 
   function updateColumnWidth(columnId: string, delta: number): void {
+    if (mutating) return;
     const nextColumns = columns.map((column) =>
       column.id === columnId
         ? { ...column, width: notesDatabaseTableColumnWidth(column, delta) }
         : { ...column },
     );
-    void persistTable(nextColumns, rowOpenMode, filters, sorts);
+    const resizedColumn = nextColumns.find((column) => column.id === columnId);
+    if (!resizedColumn) return;
+    pendingColumnWidth = { id: columnId, width: resizedColumn.width };
+    void persistTable(nextColumns, rowOpenMode, filters, sorts).finally(() => {
+      pendingColumnWidth = null;
+    });
   }
 
   function updateRowOpenMode(mode: NotesDatabaseTableRowOpenMode): void {
@@ -642,7 +688,7 @@
     event.stopPropagation();
     if (shouldKeepInputArrow(event)) return;
     if (event.defaultPrevented || (event.currentTarget instanceof HTMLElement && event.currentTarget.hasAttribute("aria-haspopup"))) return;
-    const maxRowIndex = Math.max(0, (table?.rows.length ?? 1) - 1);
+    const maxRowIndex = Math.max(0, visibleRows.length - 1);
     const maxColumnIndex = Math.max(0, visibleColumns.length - 1);
     let nextRowIndex = rowIndex;
     let nextColumnIndex = columnIndex;
@@ -653,7 +699,10 @@
     else if (event.key === "Enter") nextRowIndex = Math.min(maxRowIndex, rowIndex + 1);
     else return;
     event.preventDefault();
-    focusCell(nextRowIndex, nextColumnIndex);
+    if (event.key === "Enter" && nextRowIndex === rowIndex) {
+      if (event.currentTarget instanceof HTMLElement) event.currentTarget.blur();
+      tableRoot?.querySelector<HTMLButtonElement>("[data-database-new-row] button")?.focus();
+    } else focusCell(nextRowIndex, nextColumnIndex);
   }
 
   function shouldKeepInputArrow(event: KeyboardEvent): boolean {
@@ -673,12 +722,14 @@
   }
 </script>
 
+<svelte:window onpointermove={moveColumnResize} onpointerup={(event) => finishColumnResize(event, true)} onpointercancel={(event) => finishColumnResize(event, false)} onkeydown={(event) => { if (event.key === "Escape") resizing = null; }} />
+
 <section class="space-y-3 pt-2" aria-label={t("notes.databaseTableTitle")}>
   <span class="sr-only" role="status">
     {#if loading}
       {t("notes.databaseTableLoading")}
     {:else}
-      {t("notes.databaseRowsCount", table?.rows.length ?? 0)}
+      {t("notes.databaseRowsCount", visibleRows.length)}
     {/if}
   </span>
 
@@ -694,22 +745,15 @@
   {#if table}
     <div class="grid gap-2 @container">
       {#if settingsOpen}
-        <div use:portal class="fixed inset-0 z-80 flex justify-end" data-app-floating-surface>
-          <button type="button" class="absolute inset-0" aria-label={t("common.close")} onclick={onCloseSettings}></button>
-          <div role="dialog" aria-modal="true" aria-label={t("notes.databaseViewSettings")} tabindex="-1" data-floating-root class="relative flex h-full w-full max-w-100 flex-col border-l border-border bg-background shadow-2xl" onkeydown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onCloseSettings(); } }}>
-            <div class="flex items-center justify-between border-b border-border px-4 py-3">
-              <h3 class="text-sm font-semibold">{t("notes.databaseViewSettings")}</h3>
-              <button type="button" class="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent" aria-label={t("common.close")} onclick={onCloseSettings}><X class="size-4" /></button>
-            </div>
-            <div class="min-h-0 space-y-3 overflow-y-auto p-4">
+        <CollectionSettings label={t("notes.databaseViewSettings")} onclose={onCloseSettings}>
               <div class="flex flex-col items-stretch gap-0.5">
-              <NotesDatabaseMenu label={t("notes.databaseLayout")} fullWidth>
+              <CollectionMenu label={t("notes.databaseLayout")} fullWidth>
                 <div class="grid gap-2">
                   <span>{t("notes.databaseTableOpenMode")}</span>
                   <CustomSelect inline appearance="quiet" contentAlign="start" class="w-full min-w-0" ariaLabel={t("notes.databaseTableOpenMode")} value={String(rowOpenMode ?? "")} disabled={loading || mutating || !table} options={[{ value: "full_page", label: String(rowOpenModeLabel("full_page")) }, { value: "side_panel", label: String(rowOpenModeLabel("side_panel")) }]} onChange={(nextValue) => updateRowOpenMode(nextValue as NotesDatabaseTableRowOpenMode)} triggerProps={{ "onkeydown": (event) => event.stopPropagation() }} />
                 </div>
-              </NotesDatabaseMenu>
-                <NotesDatabaseMenu label={t("notes.databaseTableColumns")} kind="properties" fullWidth>
+              </CollectionMenu>
+                <CollectionMenu label={t("notes.databaseTableColumns")} kind="properties" fullWidth>
 
           <div class="mt-2 grid gap-1">
             {#each columns as column (column.id)}
@@ -730,9 +774,9 @@
               </label>
             {/each}
           </div>
-        </NotesDatabaseMenu>
+        </CollectionMenu>
 
-        <NotesDatabaseMenu label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length} fullWidth>
+        <CollectionMenu label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length} fullWidth>
 
           <div class="mt-2 grid gap-2">
             {#each sorts as sort, index}
@@ -766,7 +810,7 @@
                 />
                 <button
                   type="button"
-                  class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
+                  class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none"
                   disabled={mutating}
                   aria-label={t("notes.databaseTableRemoveSort")}
                   title={t("notes.databaseTableRemoveSort")}
@@ -778,7 +822,7 @@
             {/each}
             <button
               type="button"
-              class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+              class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none"
               disabled={mutating || columns.length === 0}
               onclick={addSort}
             >
@@ -786,9 +830,9 @@
               <span>{t("notes.databaseTableAddSort")}</span>
             </button>
           </div>
-        </NotesDatabaseMenu>
+        </CollectionMenu>
 
-        <NotesDatabaseMenu label={t("notes.databaseTableFilters")} kind="filter" activeCount={filters.length} fullWidth>
+        <CollectionMenu label={t("notes.databaseTableFilters")} kind="filter" activeCount={filters.length} fullWidth>
 
           <div class="mt-2 grid gap-2">
             {#each filters as filter, index}
@@ -820,7 +864,7 @@
                   triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
                 />
                 <input
-                  class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+                  class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   value={String(filter.value ?? "")}
                   disabled={mutating || !filterConditionNeedsValue(filter.condition)}
                   aria-label={t("notes.databaseTableFilterValue")}
@@ -829,7 +873,7 @@
                 />
                 <button
                   type="button"
-                  class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
+                  class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none"
                   disabled={mutating}
                   aria-label={t("notes.databaseTableRemoveFilter")}
                   title={t("notes.databaseTableRemoveFilter")}
@@ -841,7 +885,7 @@
             {/each}
             <button
               type="button"
-              class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+              class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none"
               disabled={mutating || columns.length === 0}
               onclick={addFilter}
             >
@@ -849,8 +893,8 @@
               <span>{t("notes.databaseTableAddFilter")}</span>
             </button>
           </div>
-        </NotesDatabaseMenu>
-        <NotesDatabaseMenu label={t("notes.databaseTemplatesTitle")} kind="layout" fullWidth>
+        </CollectionMenu>
+        <CollectionMenu label={t("notes.databaseTemplatesTitle")} kind="layout" fullWidth>
 
           <div class="mt-2 grid min-w-0 gap-2 @lg:grid-cols-[minmax(8rem,1fr)_minmax(8rem,1fr)_auto]">
             <div class="min-w-0 text-muted-foreground">
@@ -874,7 +918,7 @@
             <label class="min-w-0 text-muted-foreground">
               <span class="mb-1 block">{t("notes.databaseTemplatesName")}</span>
               <input
-                class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+                class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 value={templateName}
                 placeholder={t("notes.databaseTemplatesNamePlaceholder")}
                 disabled={mutating}
@@ -893,9 +937,9 @@
                 class="w-full min-w-0"
                 ariaLabel={t("notes.databaseTemplatesSourceRow")}
                 value={String(templateSourceRowId ?? "")}
-                disabled={mutating || table.rows.length === 0}
+                disabled={mutating || templateSourceRows.length === 0}
                 options={[{ value: "", label: t("notes.databaseTemplatesFirstRow") },
-                  ...(table.rows).map((row) => ({ value: String(row.id), label: String(rowTitle(row)) }))]}
+                  ...(templateSourceRows).map((row) => ({ value: String(row.id), label: String(rowTitle(row)) }))]}
                 onChange={(nextValue) => {
                   templateSourceRowId = nextValue;
                 }}
@@ -917,8 +961,8 @@
             <div class="flex min-w-0 flex-wrap items-center gap-1 @lg:col-span-2">
               <button
                 type="button"
-                class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
-                disabled={mutating || !templateName.trim() || table.rows.length === 0}
+                class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none"
+                disabled={mutating || !templateName.trim() || templateSourceRows.length === 0}
                 onclick={() => {
                   void createTemplateFromRow();
                 }}
@@ -928,7 +972,7 @@
               </button>
               <button
                 type="button"
-                class="inline-flex h-8 items-center gap-1 rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
+                class="inline-flex h-8 items-center gap-1 rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none"
                 disabled={mutating || !selectedTemplateId}
                 onclick={() => {
                   void deleteSelectedTemplate();
@@ -939,23 +983,21 @@
               </button>
             </div>
           </div>
-        </NotesDatabaseMenu>
+        </CollectionMenu>
 
         <div class="my-2 border-t border-border"></div>
         <button type="button" class="min-h-9 w-full rounded-md px-2 text-left text-[0.8rem] text-muted-foreground hover:bg-accent hover:text-foreground" onclick={() => { onCloseSettings(); onEditProperties(); }}>{t("notes.databaseViewEditProperties")}</button>
-        <NotesDatabaseMenu label={t("notes.databaseMore")} kind="actions" fullWidth>
+        <CollectionMenu label={t("notes.databaseMore")} kind="actions" fullWidth>
           <div class="grid gap-1">
             <button class="min-h-8 rounded-md px-2 text-left text-[0.8rem] hover:bg-accent" type="button" onclick={() => requestCsvPanel("database-csv-import")}>{t("notes.databaseCsvImportTitle")}</button>
             {#if fileExportAvailable}
               <button class="min-h-8 rounded-md px-2 text-left text-[0.8rem] hover:bg-accent" type="button" onclick={() => requestCsvPanel("database-csv-export")}>{t("notes.databaseCsvExportTitle")}</button>
             {/if}
           </div>
-        </NotesDatabaseMenu>
+        </CollectionMenu>
               </div>
-              <button type="button" class="min-h-9 w-full rounded-md px-2 text-left hover:bg-accent disabled:opacity-50" disabled={loading || mutating} onclick={() => { void loadTable(); }}>{t("notes.databaseTableReload")}</button>
-            </div>
-          </div>
-        </div>
+              <button type="button" class="min-h-9 w-full rounded-md px-2 text-left hover:bg-accent" disabled={loading || mutating} onclick={() => { void loadTable(); }}>{t("notes.databaseTableReload")}</button>
+        </CollectionSettings>
       {/if}
 
       {#if csvPanelOpen === "database-csv-import" && csvPanelLoadState?.status === "ready" && csvPanelLoadState.component.kind === "database-csv-import"}
@@ -979,49 +1021,19 @@
         <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={retryCsvPanel}>{t("common.retry")}</button>
       {/if}
 
-      <div bind:this={tableRoot} class="min-w-0 overflow-x-auto border-y border-border/60">
-        <table class="min-w-full border-collapse text-[0.866667rem]">
-          <thead class="text-left text-[0.8rem] text-muted-foreground">
-            <tr>
-              <th class="w-8 border-b border-border px-1 py-1 font-medium">
-                <span class="sr-only">{t("notes.databaseTableRowActions")}</span>
-              </th>
-              {#each visibleColumns as column (column.id)}
-                <th
-                  class="group/column border-b border-l border-border/60 px-2 py-1 font-medium"
-                  style={`width: ${column.width}px; min-width: ${column.width}px;`}
-                >
-                  <div class="flex min-w-0 items-center gap-1">
-                    {#if column.type === "title"}<span class="text-base font-semibold" aria-hidden="true">Aa</span>{/if}
-                    <span class="min-w-0 flex-1 truncate">{column.name}</span>
-                    <div class="flex items-center opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/column:opacity-100 [@media(hover:hover)]:group-focus-within/column:opacity-100">
-                      <ChevronsLeftRight class="size-3.5 shrink-0" aria-hidden="true" />
-                      <button
-                        type="button"
-                        class="inline-flex size-6 items-center justify-center rounded-sm hover:bg-accent disabled:pointer-events-none disabled:opacity-40"
-                        disabled={mutating}
-                        aria-label={t("notes.databaseTableNarrowColumn", column.name)}
-                        title={t("notes.databaseTableNarrowColumn", column.name)}
-                        onclick={() => updateColumnWidth(column.id, -32)}
-                      >
-                        <Minus class="size-3" aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        class="inline-flex size-6 items-center justify-center rounded-sm hover:bg-accent disabled:pointer-events-none disabled:opacity-40"
-                        disabled={mutating}
-                        aria-label={t("notes.databaseTableWidenColumn", column.name)}
-                        title={t("notes.databaseTableWidenColumn", column.name)}
-                        onclick={() => updateColumnWidth(column.id, 32)}
-                      >
-                        <Plus class="size-3" aria-hidden="true" />
-                      </button>
-                    </div>
-                  </div>
-                </th>
-              {/each}
-              <th class="min-w-40 border-b border-l border-border/60 px-1 py-1 font-normal">
-                <NotesDatabaseMenu label={t("notes.databaseSchemaAddProperty")} kind="new" showHeader={false} dismissOnAction>
+      <div bind:this={tableRoot} class="min-w-0 overflow-x-auto overflow-y-hidden">
+        <div role="table" aria-label={t("notes.databaseViewTable")} class="min-w-max">
+          <CollectionRow template={gridTemplate} header role="row">
+            <div role="columnheader"><span class="sr-only">{t("notes.databaseTableRowActions")}</span></div>
+            <div role="columnheader"></div>
+            {#each visibleColumns as column (column.id)}
+              <CollectionColumnHeader label={column.name} resizeLabel={t("notes.databaseTableResizeColumn", column.name)} disabled={mutating}
+                onpointerdown={(event) => startColumnResize(event, column)} onkeydown={(event) => resizeColumnKey(event, column)}>
+                {#snippet icon()}{@const Icon = propertyIcons[column.type]}<Icon class="size-3.5 shrink-0 text-muted-foreground" />{/snippet}
+              </CollectionColumnHeader>
+            {/each}
+            <div role="columnheader" class="min-w-0 font-normal">
+                <CollectionMenu label={t("notes.databaseSchemaAddProperty")} kind="new" showHeader={false} dismissOnAction>
                   <input class="mb-2 h-9 w-full rounded-md border border-border bg-background px-2 text-sm outline-none focus:border-ring" aria-label={t("notes.databaseSchemaName")} placeholder={t("notes.databasePropertyNamePlaceholder")} bind:value={propertyName} onkeydown={(event) => event.stopPropagation()} />
                   <input class="mb-2 h-8 w-full rounded-md border border-border bg-background px-2 text-sm outline-none focus:border-ring" aria-label={t("notes.databasePropertySearchType")} placeholder={t("notes.databasePropertySearchType")} bind:value={propertySearch} onkeydown={(event) => event.stopPropagation()} />
                   <div class="grid max-h-64 grid-cols-2 gap-1 overflow-y-auto">
@@ -1030,31 +1042,29 @@
                       <button type="button" class="flex min-h-9 items-center gap-2 rounded-md px-2 text-left text-sm text-foreground hover:bg-accent" onclick={() => { void addNewProperty(type); }}><Icon class="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />{propertyTypeLabel(type)}</button>
                     {/each}
                   </div>
-                </NotesDatabaseMenu>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each table.rows as row, rowIndex (row.id)}
+                </CollectionMenu>
+            </div>
+          </CollectionRow>
+            {#each visibleRows as row, rowIndex (row.id)}
               {@const title = rowTitle(row)}
-              <tr class="group/row h-11 border-b border-border/50 transition-colors last:border-b-0 hover:bg-accent/20">
-                <td class="w-8 px-1 py-1 align-middle">
-                  <NotesDatabaseMenu iconOnly kind="actions" label={t("notes.databaseTableRowActions")}>
+              <CollectionRow template={gridTemplate} role="row" data-database-row-id={row.id}>
+                <div role="cell" class="flex justify-center">
+                  <CollectionMenu iconOnly kind="actions" label={t("notes.databaseTableRowActions")}>
                     <div class="grid gap-1">
                       <button
                         type="button"
-                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
                         aria-label={t("notes.databaseRowsOpen", title)}
                         title={t("notes.databaseRowsOpen", title)}
-                        onclick={() => openRow(row)}
+                        disabled={mutating || rowCreation.blocked(row.id)} onclick={() => openRow(row)}
                       >
                         <FileText class="size-3.5" aria-hidden="true" />
                         <span class="truncate">{t("notes.databaseRowsOpen", title)}</span>
                       </button>
                       <button
                         type="button"
-                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
-                        disabled={mutating}
+                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+                        disabled={mutating || rowCreation.blocked(row.id)}
                         aria-label={t("notes.databaseRowsDuplicate", title)}
                         title={t("notes.databaseRowsDuplicate", title)}
                         onclick={() => {
@@ -1066,8 +1076,8 @@
                       </button>
                       <button
                         type="button"
-                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
-                        disabled={mutating}
+                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+                        disabled={mutating || rowCreation.blocked(row.id)}
                         aria-label={t("notes.databaseRowsTrash", title)}
                         title={t("notes.databaseRowsTrash", title)}
                         onclick={() => {
@@ -1078,14 +1088,12 @@
                         <span class="truncate">{t("notes.databaseRowsTrash", title)}</span>
                       </button>
                     </div>
-                  </NotesDatabaseMenu>
-                </td>
+                  </CollectionMenu>
+                </div>
+                <div role="cell" class="flex justify-center"><button type="button" class="flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-100 hover:bg-accent hover:text-foreground [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/row:opacity-100 [@media(hover:hover)]:group-focus-within/row:opacity-100" aria-label={t("notes.databaseRowsOpen", title)} disabled={mutating || rowCreation.blocked(row.id)} onclick={() => openRow(row)}><ChevronRight class="size-3.5" /></button></div>
                 {#each visibleColumns as column, columnIndex (column.id)}
-                  {@const editValue = notesDatabaseTableCellEditValue(row, column)}
-                  <td
-                    class="border-l border-border/40 px-2 py-1 align-middle"
-                    style={`width: ${column.width}px; min-width: ${column.width}px;`}
-                  >
+                  {@const editValue = rowCreation.valueFor(row, column)}
+                  <CollectionCell role="cell">
                     {#if column.type === "checkbox"}
                       <label class="flex h-8 items-center justify-center">
                         <input
@@ -1094,7 +1102,7 @@
                           data-column-index={columnIndex}
                           type="checkbox"
                           checked={editValue === true}
-                          disabled={mutating || !notesDatabaseTableColumnCanEdit(column)}
+                          disabled={mutating || rowCreation.blocked(row.id) || !notesDatabaseTableColumnCanEdit(column)}
                           aria-label={column.name}
                           onchange={(event) => {
                             void saveCell(row, column, event.currentTarget.checked);
@@ -1110,21 +1118,26 @@
                         class="w-full min-w-0"
                         ariaLabel={column.name}
                         value={String(editValue)}
-                        disabled={mutating || !notesDatabaseTableColumnCanEdit(column)}
+                        disabled={mutating || rowCreation.blocked(row.id) || !notesDatabaseTableColumnCanEdit(column)}
                         options={[{ value: "", label: t("notes.databaseTableEmptyCell") },
                           ...(column.options).map((option) => ({ value: String(option.name), label: String(option.name) }))]}
                         onChange={(nextValue) => {
                           void saveCell(row, column, nextValue || null);
                         }}
                         triggerProps={{ "data-table-cell": "true", "data-row-index": rowIndex, "data-column-index": columnIndex, "onkeydown": (event) => handleCellKeydown(event, rowIndex, columnIndex) }}
-                      />
+                      >
+                        {#snippet leading(value)}
+                          {@const color = column.options.find((option) => option.name === value)?.color}
+                          {#if value}<span class="size-2 shrink-0 rounded-full" style={`${notesBlockColorStyle(NOTES_TEXT_COLORS.find((entry) => entry === color) ?? "default")}; background-color: var(--notes-block-color);`}></span>{/if}
+                        {/snippet}
+                      </CustomSelect>
                     {:else if column.type === "relation"}
                       <NotesDatabaseRelationCell
                         {row}
                         {column}
                         {rowIndex}
                         {columnIndex}
-                        {mutating}
+                        mutating={mutating || rowCreation.blocked(row.id)}
                         onSave={(value) => saveCell(row, column, value)}
                         onNavigate={handleCellKeydown}
                       />
@@ -1134,8 +1147,8 @@
                         data-row-index={rowIndex}
                         data-column-index={columnIndex}
                         type="button"
-                        class="inline-flex h-8 w-full min-w-0 items-center justify-center gap-1 rounded-sm border border-input bg-background px-2 text-[0.8rem] text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
-                        disabled={mutating}
+                        class="inline-flex h-8 w-full min-w-0 items-center justify-center gap-1 rounded-sm border border-input bg-background px-2 text-[0.8rem] text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none"
+                        disabled={mutating || rowCreation.blocked(row.id)}
                         title={notesDatabaseTableCellText(row, column)}
                         onclick={() => {
                           void runButton(row, column);
@@ -1155,11 +1168,12 @@
                         data-table-cell="true"
                         data-row-index={rowIndex}
                         data-column-index={columnIndex}
-                        class="h-8 w-full min-w-0 rounded-sm border border-transparent bg-transparent px-1 text-foreground outline-none hover:bg-accent/20 focus:bg-accent/20 focus:border-transparent focus-visible:ring-0 disabled:opacity-60"
+                        class="h-8 w-full min-w-0 rounded-sm border border-transparent bg-transparent px-1 text-foreground outline-none hover:bg-accent/20 focus:bg-accent/20 focus:border-transparent focus-visible:ring-0"
                         value={String(editValue)}
                         inputmode={column.type === "number" ? "decimal" : "text"}
                         aria-label={column.name}
-                        disabled={mutating}
+                        disabled={mutating || (column.type !== "title" && rowCreation.blocked(row.id))}
+                        oninput={(event) => { if (column.type === "title") rowCreation.draft(row.id, column.id, event.currentTarget.value); }}
                         onblur={(event) => {
                           void saveCell(row, column, event.currentTarget.value);
                         }}
@@ -1180,32 +1194,25 @@
                         </span>
                       </button>
                     {/if}
-                  </td>
+                  </CollectionCell>
                 {/each}
-                <td class="border-l border-border/40"></td>
-              </tr>
-            {/each}
-            <tr class="h-11 border-b border-border/50 text-muted-foreground">
-              <td></td>
-              <td colspan={visibleColumns.length + 1} class="px-2">
-                {#if addingRow}
-                  <input bind:this={newRowInput} class="h-9 w-full bg-transparent px-1 text-foreground outline-none placeholder:text-muted-foreground" aria-label={t("notes.databaseRowsNewPlaceholder")} placeholder={t("notes.databaseRowsNewPlaceholder")} bind:value={draftTitle} onkeydown={(event) => { event.stopPropagation(); if (event.key === "Enter") { event.preventDefault(); void createRow(); } if (event.key === "Escape") { addingRow = false; draftTitle = ""; } }} />
-                {:else}
-                  <button type="button" class="flex min-h-9 w-full items-center gap-2 text-left hover:text-foreground" onclick={beginRow}><Plus class="size-4" aria-hidden="true" />{t("notes.databaseNewPage")}</button>
+                <div role="cell"></div>
+                {#if rowCreation.errorFor(row.id)}
+                  <div class="col-span-full flex items-center gap-2 px-2 py-1 text-[0.8rem] text-destructive" role="alert">
+                    <span>{rowCreation.errorFor(row.id)}</span>
+                    <button type="button" class="rounded-md px-2 py-1 hover:bg-destructive/10" onclick={() => rowCreation.retry(row.id)}>{t("common.retry")}</button>
+                  </div>
                 {/if}
-              </td>
-            </tr>
-            {#if table.rows.length === 0}
-              {#each [0, 1] as placeholder}
-                <tr class="h-11 border-b border-border/40" aria-hidden="true">
-                  <td></td>
-                  {#each visibleColumns as column (column.id)}<td class="border-l border-border/30"></td>{/each}
-                  <td class="border-l border-border/30"></td>
-                </tr>
-              {/each}
-            {/if}
-          </tbody>
-        </table>
+              </CollectionRow>
+            {/each}
+
+          {#key addRowKey}
+            <CollectionRow template={gridTemplate}>
+              <div class="col-span-2"></div>
+              <div data-database-new-row style={`grid-column: 3 / -1;`}><CollectionQuickAdd label={t("notes.databaseNewPage")} disabled={mutating || loading} oncreate={createRow} /></div>
+            </CollectionRow>
+          {/key}
+        </div>
       </div>
 
       {#if table.has_more}
@@ -1255,10 +1262,4 @@
     </div>
   {/if}
 
-  {#if mutating}
-    <p class="flex items-center gap-1 text-[0.8rem] text-muted-foreground">
-      <Check class="size-3.5" aria-hidden="true" />
-      <span>{t("notes.databaseTableSaving")}</span>
-    </p>
-  {/if}
 </section>

@@ -131,6 +131,7 @@ fn database_templates_create_row_pages_with_properties_and_body_blocks() {
             DATA_SOURCE_A,
             TEMPLATE_A,
             NoteDataSourceTemplateApply {
+                id: None,
                 title: Some("QA pass".to_string()),
             },
         )
@@ -157,6 +158,50 @@ fn database_templates_create_row_pages_with_properties_and_body_blocks() {
         assert_eq!(
             applied_json["blocks"]["results"][1]["paragraph"]["rich_text"][0]["plain_text"],
             "Review risks"
+        );
+        let blank = data_source_templates::apply_data_source_template(
+            &pool,
+            DATA_SOURCE_A,
+            TEMPLATE_A,
+            NoteDataSourceTemplateApply {
+                id: Some(PAGE_C.to_string()),
+                title: Some(String::new()),
+            },
+        )
+        .await
+        .unwrap();
+        let blank_json = serde_json::to_value(blank).unwrap();
+        assert_eq!(blank_json["page"]["id"], PAGE_C);
+        assert_eq!(
+            blank_json["page"]["properties"]["Name"]["title"][0]["plain_text"],
+            ""
+        );
+        assert_eq!(blank_json["blocks"]["results"].as_array().unwrap().len(), 2);
+        assert!(
+            data_source_templates::apply_data_source_template(
+                &pool,
+                DATA_SOURCE_A,
+                TEMPLATE_A,
+                NoteDataSourceTemplateApply {
+                    id: Some(PAGE_C.to_string()),
+                    title: Some(String::new()),
+                },
+            )
+            .await
+            .is_err()
+        );
+        let rows = data_source_rows::list_data_source_row_pages(&pool, DATA_SOURCE_A)
+            .await
+            .unwrap();
+        let rows_json = serde_json::to_value(rows).unwrap();
+        assert_eq!(
+            rows_json
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|page| page["id"] == PAGE_C)
+                .count(),
+            1
         );
     });
 }

@@ -2,7 +2,7 @@
 import { createRawSnippet, mount, tick, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
-import NotesDatabaseMenu from "./NotesDatabaseMenu.svelte";
+import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
 
 let component: ReturnType<typeof mount> | undefined;
 let nested: ReturnType<typeof mount> | undefined;
@@ -16,7 +16,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-/** Create a clipped database inside a page preview's floating boundary. */
+/** Create a clipped collection inside a page preview's floating boundary. */
 function host() {
   const dialog = document.createElement("div");
   dialog.dataset.floatingRoot = "";
@@ -36,11 +36,11 @@ async function open(row: HTMLElement): Promise<HTMLButtonElement> {
   return trigger;
 }
 
-describe("Notes database settings panels", () => {
+describe("Shared collection menus", () => {
   it("escapes clipped content, focuses the first field and dismisses without stealing outside focus", async () => {
     const { dialog, row } = host();
     const children = createRawSnippet(() => ({ render: () => '<div><input aria-label="Filter value" /></div>' }));
-    component = mount(NotesDatabaseMenu, { target: row, props: { label: "Filter", kind: "filter", children } });
+    component = mount(CollectionMenu, { target: row, props: { label: "Filter", kind: "filter", children } });
     const trigger = await open(row);
     const panel = dialog.querySelector<HTMLElement>('[role="dialog"]')!;
     expect(panel.parentElement).toBe(dialog);
@@ -74,7 +74,7 @@ describe("Notes database settings panels", () => {
         } });
       },
     }));
-    component = mount(NotesDatabaseMenu, { target: row, props: { label: "Layout", children } });
+    component = mount(CollectionMenu, { target: row, props: { label: "Layout", children } });
     const trigger = await open(row);
     const panel = dialog.querySelector<HTMLElement>('[role="dialog"]')!;
     const select = panel.querySelector<HTMLButtonElement>('[aria-haspopup="listbox"]')!;
@@ -108,9 +108,9 @@ describe("Notes database settings panels", () => {
       render: () => '<div><button type="button">Duplicate</button></div>',
       setup: (element) => { element.querySelector("button")?.addEventListener("click", action); },
     }));
-    component = mount(NotesDatabaseMenu, { target: row, props: { label: "Actions", kind: "actions", children } });
+    component = mount(CollectionMenu, { target: row, props: { label: "Actions", kind: "actions", children } });
     const trigger = await open(row);
-    dialog.querySelector<HTMLButtonElement>("[data-database-menu-body] button")?.click();
+    dialog.querySelector<HTMLButtonElement>("[data-collection-menu-body] button")?.click();
     await tick();
     await tick();
     expect(action).toHaveBeenCalledOnce();
@@ -126,11 +126,11 @@ describe("Notes database settings panels", () => {
   it("keeps the panel open when an action reveals an inline editor", async () => {
     const { dialog, row } = host();
     const children = createRawSnippet(() => ({
-      render: () => '<button type="button" data-database-menu-keep-open>Edit title</button>',
+      render: () => '<button type="button" data-collection-menu-keep-open>Edit title</button>',
     }));
-    component = mount(NotesDatabaseMenu, { target: row, props: { label: "View options", kind: "actions", children } });
+    component = mount(CollectionMenu, { target: row, props: { label: "View options", kind: "actions", children } });
     await open(row);
-    dialog.querySelector<HTMLButtonElement>("[data-database-menu-keep-open]")?.click();
+    dialog.querySelector<HTMLButtonElement>("[data-collection-menu-keep-open]")?.click();
     await tick();
     expect(dialog.querySelector('[role="dialog"]')).not.toBeNull();
   });
@@ -142,12 +142,12 @@ describe("Notes database settings panels", () => {
       render: () => '<div><button type="button">Weekly review</button></div>',
       setup: (element) => { element.querySelector("button")?.addEventListener("click", applyTemplate); },
     }));
-    component = mount(NotesDatabaseMenu, { target: row, props: {
+    component = mount(CollectionMenu, { target: row, props: {
       label: "New page options", kind: "new-options", iconOnly: true, primary: true, showHeader: false,
       dismissOnAction: true, children,
     } });
     const trigger = await open(row);
-    dialog.querySelector<HTMLButtonElement>("[data-database-menu-body] button")?.click();
+    dialog.querySelector<HTMLButtonElement>("[data-collection-menu-body] button")?.click();
     await tick();
     expect(applyTemplate).toHaveBeenCalledOnce();
     expect(dialog.querySelector('[role="dialog"]')).toBeNull();

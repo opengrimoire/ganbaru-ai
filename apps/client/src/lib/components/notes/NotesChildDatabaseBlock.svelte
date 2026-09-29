@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CollectionSaveIndicator from "$lib/components/collections/CollectionSaveIndicator.svelte";
   import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import { onMount, tick } from "svelte";
   import { portal } from "$lib/utils/portal";
@@ -77,6 +78,7 @@
   let titleDraft = $state("");
   let savedTitle = $state("");
   let titleSaving = $state(false);
+  let viewSaving = $state(false);
   let titleError = $state<string | null>(null);
   let selectedPropertyId = $state<string | null>(null);
   let loading = $state(false);
@@ -562,6 +564,9 @@
       <button type="button" class="min-h-9 min-w-0 flex-1 truncate text-left text-base font-semibold" onkeydown={onKeydown} onclick={() => onFocusBlock(block.id)}>{title || t("notes.untitled")}</button>
       <span class="text-[0.8rem] text-muted-foreground">{t("notes.childDatabasePreserved")}</span>
     {/if}
+    {#if localDatabase}
+      <CollectionSaveIndicator pending={saving || titleSaving || linking || viewSaving} label={t("notes.databaseSaving")} />
+    {/if}
   </div>
   {#if titleError}
     <p class="px-1 text-[0.8rem] text-destructive" role="alert">{titleError}</p>
@@ -572,6 +577,7 @@
 
   {#if localDatabase && dataSourceId}
     <NotesDatabaseViewSurface
+      onSavingChange={(pending) => { viewSaving = pending; }}
       {dataSourceId}
       {databaseId}
       initialViewId={viewId}
@@ -612,7 +618,7 @@
         </span>
         <button
           type="button"
-          class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+          class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none"
           disabled={loading || saving}
           aria-label={t("notes.databaseSchemaReload")}
           title={t("notes.databaseSchemaReload")}
@@ -624,7 +630,7 @@
         </button>
         <button
           type="button"
-          class="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-2 text-primary-foreground disabled:pointer-events-none disabled:opacity-50"
+          class="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-2 text-primary-foreground disabled:pointer-events-none"
           disabled={loading || saving || !dirty}
           onclick={() => {
             void saveSchema();
@@ -650,7 +656,7 @@
               <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
                 <span class="mb-1 block">{t("notes.databaseSchemaName")}</span>
                 <input
-                  class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring disabled:opacity-70"
+                  class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
                   value={property.name}
                   disabled={saving}
                   oninput={(event) => {
@@ -681,7 +687,7 @@
               <div class="flex min-w-0 items-end justify-end gap-1">
                 <button
                   type="button"
-                  class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none disabled:opacity-40"
+                  class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none"
                   disabled={saving || index === 0}
                   aria-label={t("notes.databaseSchemaMoveUp")}
                   title={t("notes.databaseSchemaMoveUp")}
@@ -691,7 +697,7 @@
                 </button>
                 <button
                   type="button"
-                  class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none disabled:opacity-40"
+                  class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none"
                   disabled={saving || index === properties.length - 1}
                   aria-label={t("notes.databaseSchemaMoveDown")}
                   title={t("notes.databaseSchemaMoveDown")}
@@ -701,7 +707,7 @@
                 </button>
                 <button
                   type="button"
-                  class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none disabled:opacity-40"
+                  class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none"
                   disabled={saving || property.type === "title"}
                   aria-label={property.hidden ? t("notes.databaseSchemaShow") : t("notes.databaseSchemaHide")}
                   title={property.hidden ? t("notes.databaseSchemaShow") : t("notes.databaseSchemaHide")}
@@ -715,7 +721,7 @@
                 </button>
                 <button
                   type="button"
-                  class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-40"
+                  class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none"
                   disabled={saving || property.type === "title"}
                   aria-label={t("notes.databaseSchemaDelete")}
                   title={t("notes.databaseSchemaDelete")}
@@ -729,7 +735,7 @@
             <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
               <span class="mb-1 block">{t("notes.databaseSchemaDescription")}</span>
               <input
-                class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring disabled:opacity-70"
+                class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
                 value={property.description}
                 placeholder={t("notes.databaseSchemaDescriptionPlaceholder")}
                 disabled={saving}

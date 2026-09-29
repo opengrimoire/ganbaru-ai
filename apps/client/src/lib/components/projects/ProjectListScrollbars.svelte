@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
 
   const { t } = getLocalization();
@@ -53,9 +54,10 @@
 
     const trackWidth = horizontalTrackEl.clientWidth;
     const ratio = clientWidth / (clientWidth + scrollRange);
-    horizontalThumbWidth = Math.min(trackWidth, Math.max(ratio * trackWidth, MIN_THUMB_WIDTH_PX));
+    const thumbWidth = Math.min(trackWidth, Math.max(ratio * trackWidth, MIN_THUMB_WIDTH_PX));
+    horizontalThumbWidth = thumbWidth;
     horizontalThumbLeft = scrollRange > 0
-      ? (Math.min(scrollLeft, scrollRange) / scrollRange) * (trackWidth - horizontalThumbWidth)
+      ? (Math.min(scrollLeft, scrollRange) / scrollRange) * (trackWidth - thumbWidth)
       : 0;
   }
 
@@ -72,9 +74,10 @@
 
     const trackHeight = verticalTrackEl.clientHeight;
     const ratio = clientHeight / scrollHeight;
-    verticalThumbHeight = Math.min(trackHeight, Math.max(ratio * trackHeight, MIN_THUMB_WIDTH_PX));
+    const thumbHeight = Math.min(trackHeight, Math.max(ratio * trackHeight, MIN_THUMB_WIDTH_PX));
+    verticalThumbHeight = thumbHeight;
     verticalThumbTop = scrollRange > 0
-      ? (scrollTop / scrollRange) * (trackHeight - verticalThumbHeight)
+      ? (scrollTop / scrollRange) * (trackHeight - thumbHeight)
       : 0;
   }
 
@@ -94,19 +97,40 @@
 
   $effect(() => {
     const el = scrollContainer;
-    if (!el) return;
+    const horizontalTrack = horizontalTrackEl;
+    const verticalTrack = verticalTrackEl;
+    if (!el || !horizontalTrack || !verticalTrack) return;
 
-    updateThumbs();
     el.addEventListener("scroll", updateThumbs, { passive: true });
 
-    const observer = new ResizeObserver(updateThumbs);
-    observer.observe(el);
-    const content = el.firstElementChild;
-    if (content) observer.observe(content);
+    const refreshGeometry = (): void => {
+      onScrollPositionChange?.(el.scrollLeft);
+      updateThumbs();
+    };
+
+    const observer = new ResizeObserver(refreshGeometry);
+    const mutations = new MutationObserver(() => observeContent());
+
+    // Groups can overflow a fixed-width wrapper without resizing that wrapper.
+    const observeContent = (): void => {
+      observer.disconnect();
+      mutations.disconnect();
+      for (const target of [el, horizontalTrack, verticalTrack]) observer.observe(target);
+      mutations.observe(el, { childList: true });
+      const content = el.firstElementChild;
+      if (content) {
+        observer.observe(content);
+        for (const child of content.children) observer.observe(child);
+        mutations.observe(content, { childList: true });
+      }
+      refreshGeometry();
+    };
+    untrack(observeContent);
 
     return () => {
       el.removeEventListener("scroll", updateThumbs);
       observer.disconnect();
+      mutations.disconnect();
     };
   });
 

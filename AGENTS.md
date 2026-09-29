@@ -73,6 +73,7 @@ apps/
           benchmark/: benchmark overlay and diagnostics components
           calendar/: calendar views, event editing, recurrence, import, and session block rendering
           chat/: local coding-agent shell, timeline, composer, interactive requests, inspector, file browser, terminal, navigation, and archive
+          collections/: shared Notes and Projects rows, cells, view controls, panels, cards, inline creation, and Kanban interaction
           icon-picker/: shared icon, emoji, custom emoji, and image picker
           music/: player controls, source parsing, playlist management surfaces
           mobile/: adaptive phone and tablet shell, navigation, status, and overlays

@@ -1,16 +1,12 @@
 <script lang="ts">
+  import CollectionViewButton from "$lib/components/collections/CollectionViewButton.svelte";
   import ArrowUpDown from "@lucide/svelte/icons/arrow-up-down";
-  import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import Columns3 from "@lucide/svelte/icons/columns-3";
-  import FileChartColumnIncreasing from "@lucide/svelte/icons/file-chart-column-increasing";
   import Layers from "@lucide/svelte/icons/layers";
   import ListFilter from "@lucide/svelte/icons/list-filter";
-  import Route from "@lucide/svelte/icons/route";
-  import ListCollapse from "@lucide/svelte/icons/list-collapse";
   import MessageSquare from "@lucide/svelte/icons/message-square";
   import Settings2 from "@lucide/svelte/icons/settings-2";
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
-  import SquareKanban from "@lucide/svelte/icons/square-kanban";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
     COMPACT_IDENTITY_EMOJI_SCALE,
@@ -85,17 +81,12 @@
   let mobileCustomizationMenuOpen = $state(false);
   let projectNavigatorMode = $state<ProjectNavigatorPanelMode>("groups");
   let projectHeaderElement = $state<HTMLDivElement | null>(null);
-  let projectIdentityElement = $state<HTMLDivElement | null>(null);
   let projectNavigatorAnchorElement = $state<HTMLButtonElement | null>(null);
   let projectGroupTriggerElement = $state<HTMLButtonElement | null>(null);
   let projectProjectTriggerElement = $state<HTMLButtonElement | null>(null);
   let projectNavigatorPanelElement = $state<HTMLDivElement | null>(null);
-  let expandedViewTabsMeasureElement = $state<HTMLElement | null>(null);
-  let toolbarActionsElement = $state<HTMLDivElement | null>(null);
-  let viewLabelsCollapsed = $state(false);
   let projectNavigatorPanelStyle = $state("");
   let projectNavigatorPanelMaxHeight = $state(0);
-  let viewTabDensityFrame: number | null = null;
   const projectWorkingFolders = $derived(
     projectChat?.listWorkingFolders(selectedProject.id) ?? [],
   );
@@ -116,15 +107,6 @@
     right: number;
     top: number;
     bottom: number;
-  }
-
-  function viewIcon(view: ProjectViewId) {
-    if (view === "dashboard") return FileChartColumnIncreasing;
-    if (view === "list") return ListCollapse;
-    if (view === "kanban") return SquareKanban;
-    if (view === "calendar") return CalendarDays;
-    if (view === "gantt") return Route;
-    return ListCollapse;
   }
 
   function viewLabel(view: ProjectViewId): string {
@@ -186,37 +168,6 @@
   function selectMobileCustomization(panel: MobileCustomizationPanel): void {
     closeMobileMenus();
     onToggleToolbarPanel(panel);
-  }
-
-  function projectHeaderGap(): number {
-    if (!projectHeaderElement) return 0;
-    const style = getComputedStyle(projectHeaderElement);
-    return Number.parseFloat(style.columnGap || style.gap) || 0;
-  }
-
-  function projectHeaderHorizontalPadding(): number {
-    if (!projectHeaderElement) return 0;
-    const style = getComputedStyle(projectHeaderElement);
-    return (Number.parseFloat(style.paddingLeft) || 0) + (Number.parseFloat(style.paddingRight) || 0);
-  }
-
-  function syncViewTabDensity(): void {
-    viewTabDensityFrame = null;
-    if (!projectHeaderElement || !projectIdentityElement || !expandedViewTabsMeasureElement || !toolbarActionsElement) {
-      return;
-    }
-
-    const requiredExpandedWidth = projectHeaderHorizontalPadding()
-      + projectIdentityElement.getBoundingClientRect().width
-      + expandedViewTabsMeasureElement.getBoundingClientRect().width
-      + toolbarActionsElement.getBoundingClientRect().width
-      + projectHeaderGap() * 3;
-    viewLabelsCollapsed = requiredExpandedWidth > projectHeaderElement.clientWidth;
-  }
-
-  function requestViewTabDensitySync(): void {
-    if (viewTabDensityFrame !== null) cancelAnimationFrame(viewTabDensityFrame);
-    viewTabDensityFrame = requestAnimationFrame(syncViewTabDensity);
   }
 
   function projectNavigatorBounds(): ProjectNavigatorBounds {
@@ -320,30 +271,6 @@
     requestAnimationFrame(refreshProjectNavigatorPanelGeometry);
   });
 
-  $effect(() => {
-    const elements = [
-      projectHeaderElement,
-      projectIdentityElement,
-      expandedViewTabsMeasureElement,
-      toolbarActionsElement,
-    ];
-    if (elements.some((element) => element === null)) return;
-
-    requestViewTabDensitySync();
-    if (typeof ResizeObserver === "undefined") return;
-
-    const observer = new ResizeObserver(requestViewTabDensitySync);
-    for (const element of elements) {
-      if (element) observer.observe(element);
-    }
-    return () => {
-      observer.disconnect();
-      if (viewTabDensityFrame !== null) {
-        cancelAnimationFrame(viewTabDensityFrame);
-        viewTabDensityFrame = null;
-      }
-    };
-  });
 </script>
 
 <svelte:window onpointerdown={handleProjectWindowPointerDown} />
@@ -358,7 +285,6 @@
   onscroll={refreshProjectNavigatorPanelGeometry}
 >
   <div
-    bind:this={projectIdentityElement}
     class={cn(
       "relative",
       mobileLayout
@@ -475,12 +401,11 @@
     {/if}
   </div>
   {#if mobileLayout}
-    {@const ActiveViewIcon = viewIcon(projects.activeView)}
     <div class="flex shrink-0 items-center gap-0">
       <div class="relative shrink-0">
         <button
           type="button"
-          class={toolbarIconButtonClass(false, mobileViewMenuOpen)}
+          class={cn("flex h-12 items-center rounded-md px-2 text-sm hover:bg-accent", mobileViewMenuOpen && "bg-accent")}
           aria-label={viewLabel(projects.activeView)}
           title={viewLabel(projects.activeView)}
           aria-haspopup="menu"
@@ -491,11 +416,7 @@
             mobileViewMenuOpen = !mobileViewMenuOpen;
           }}
         >
-          <ActiveViewIcon
-            size={16}
-            strokeWidth={1.75}
-            class={projects.activeView === "gantt" ? "-scale-x-100" : undefined}
-          />
+          {viewLabel(projects.activeView)}
         </button>
         {#if mobileViewMenuOpen}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -507,7 +428,6 @@
             aria-label={t("projects.toolbar.views")}
           >
             {#each PROJECT_VIEW_IDS as view}
-              {@const Icon = viewIcon(view)}
               {@const label = viewLabel(view)}
               <button
                 type="button"
@@ -521,11 +441,6 @@
                 )}
                 onclick={() => selectMobileView(view)}
               >
-                <Icon
-                  size={16}
-                  strokeWidth={1.75}
-                  class={view === "gantt" ? "-scale-x-100" : undefined}
-                />
                 <span>{label}</span>
               </button>
             {/each}
@@ -600,49 +515,12 @@
     </div>
   {:else}
     <div class="flex-1"></div>
-    <nav
-      bind:this={expandedViewTabsMeasureElement}
-      class="pointer-events-none fixed left-0 top-0 flex h-7 items-center gap-0.5 overflow-visible whitespace-nowrap opacity-0"
-      aria-hidden="true"
-      inert
-    >
+    <nav class="flex shrink-0 items-center gap-0.5" aria-label={t("projects.toolbar.views")}>
       {#each PROJECT_VIEW_IDS as view}
-        {@const Icon = viewIcon(view)}
-        {@const label = viewLabel(view)}
-        <span class="flex h-6 shrink-0 items-center gap-1 rounded-md px-2 text-xs font-medium">
-          <Icon size={14} strokeWidth={1.75} class={view === "gantt" ? "-scale-x-100" : undefined} />
-          <span>{label}</span>
-        </span>
+        <CollectionViewButton label={viewLabel(view)} title={viewShortcutTitle(view)} active={projects.activeView === view} onclick={() => { projects.activeView = view; }} />
       {/each}
     </nav>
-    <nav class="flex min-w-0 shrink-0 items-center gap-0.5">
-      {#each PROJECT_VIEW_IDS as view}
-        {@const Icon = viewIcon(view)}
-        {@const label = viewLabel(view)}
-        {@const title = viewShortcutTitle(view)}
-        <button
-          type="button"
-          class={cn(
-            "flex shrink-0 items-center gap-1 rounded-md text-xs font-medium transition-colors hover:bg-accent",
-            viewLabelsCollapsed ? "h-6 w-7 justify-center px-0" : "h-6 px-2",
-            projects.activeView === view
-              ? "text-foreground"
-              : "text-muted-foreground",
-          )}
-          aria-label={label}
-          title={title}
-          onclick={() => {
-            projects.activeView = view;
-          }}
-        >
-          <Icon size={14} strokeWidth={1.75} class={view === "gantt" ? "-scale-x-100" : undefined} />
-          {#if !viewLabelsCollapsed}
-            <span>{label}</span>
-          {/if}
-        </button>
-      {/each}
-    </nav>
-    <div bind:this={toolbarActionsElement} class="flex shrink-0 items-center gap-1">
+    <div class="flex shrink-0 items-center gap-1">
       {#if projectChat}
         <button
           type="button"

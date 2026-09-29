@@ -1,3 +1,4 @@
+import { anchoredPanelStyle } from "$lib/utils/anchored-panel";
 import {
   createBlockWrite,
   createTextPayload,
@@ -132,34 +133,6 @@ export function createBlockWriteFromInsertCommand(
   }
 }
 
-export function notesBlockInsertMenuStyle(
-  input: NotesBlockInsertMenuPlacementInput,
-): string {
-  const margin = input.margin ?? 8;
-  const gap = input.gap ?? 4;
-  const preferredWidth = input.preferredWidth ?? 256;
-  const preferredMaxHeight = input.preferredMaxHeight ?? 448;
-  const width = Math.max(0, Math.min(preferredWidth, input.viewportWidth - margin * 2));
-  const maxLeft = Math.max(margin, input.viewportWidth - margin - width);
-  const left = clamp(input.triggerRect.left, margin, maxLeft);
-  const belowTop = input.triggerRect.bottom + gap;
-  const aboveAvailable = Math.max(0, input.triggerRect.top - margin - gap);
-  const belowAvailable = Math.max(0, input.viewportHeight - belowTop - margin);
-  const openAbove = belowAvailable < Math.min(180, preferredMaxHeight) && aboveAvailable > belowAvailable;
-  const maxHeight = Math.max(0, Math.min(preferredMaxHeight, openAbove ? aboveAvailable : belowAvailable));
-  const top = openAbove
-    ? Math.max(margin, input.triggerRect.top - gap - maxHeight)
-    : Math.min(belowTop, Math.max(margin, input.viewportHeight - margin - maxHeight));
-  return [
-    "position:fixed",
-    `left:${Math.round(left)}px`,
-    `top:${Math.round(top)}px`,
-    `width:${Math.round(width)}px`,
-    `max-height:${Math.round(maxHeight)}px`,
-  ].join("; ");
-}
-
-function clamp(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) return min;
-  return Math.min(max, Math.max(min, value));
+export function notesBlockInsertMenuStyle(input: NotesBlockInsertMenuPlacementInput): string {
+  return anchoredPanelStyle(input);
 }

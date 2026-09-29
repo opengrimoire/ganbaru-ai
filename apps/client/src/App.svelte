@@ -48,7 +48,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import { hasOnlyShortcutModifier, hasShortcutModifier } from "$lib/keyboard-shortcuts";
+  import { appNavigationShortcut, hasShortcutModifier } from "$lib/keyboard-shortcuts";
   import TitleBar from "$lib/components/TitleBar.svelte";
   import { getAppCloseCoordinator } from "$lib/components/title-bar/title-bar-shortcut-controller.svelte";
   import WindowResizeHandles from "$lib/components/WindowResizeHandles.svelte";
@@ -647,60 +647,31 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
+    if (e.defaultPrevented || e.isComposing) return;
     if (
       import.meta.env.DEV
       && (e.key === "F12" || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "i"))
     ) {
       e.preventDefault();
+      e.stopImmediatePropagation();
       toggleDevtools();
       return;
     }
 
-    if (hasOnlyShortcutModifier(e) && e.key === ",") {
-      e.preventDefault();
-      if (settingsLauncher.isOpen) {
-        settingsLauncher.close();
-      } else {
-        settingsLauncher.open();
-      }
-      return;
-    }
-
-    if (hasOnlyShortcutModifier(e) && (e.key === "=" || e.key === "+")) {
-      e.preventDefault();
-      zoom.zoomIn();
-      return;
-    }
-    if (hasOnlyShortcutModifier(e) && e.key === "-") {
-      e.preventDefault();
-      zoom.zoomOut();
-      return;
-    }
-    if (hasOnlyShortcutModifier(e) && e.key === "0") {
-      e.preventDefault();
-      zoom.reset();
-      return;
-    }
-
-    if (showStopConfirm || suspendInfo || idleInfo) return;
-
-    if (e.altKey && e.key >= "1" && e.key <= String(visibleTabViews.length)) {
-      e.preventDefault();
-      nav.navigate(visibleTabViews[parseInt(e.key) - 1]);
-      return;
-    }
-
-    if (hasShortcutModifier(e) && !e.altKey && e.code === "Tab") {
-      e.preventDefault();
-      if (e.shiftKey) navigatePrev();
-      else navigateNext();
-      return;
-    }
-
-    if (hasOnlyShortcutModifier(e) && (e.key === "PageDown" || e.key === "PageUp")) {
-      e.preventDefault();
-      if (e.key === "PageUp") navigatePrev();
-      else navigateNext();
+    const action = appNavigationShortcut(e, visibleTabViews.length);
+    if (!action) return;
+    if (action.type !== "settings" && (showStopConfirm || suspendInfo || idleInfo)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (action.type === "settings") {
+      if (settingsLauncher.isOpen) settingsLauncher.close();
+      else settingsLauncher.open();
+    } else if (action.type === "view") {
+      nav.navigate(visibleTabViews[action.index]);
+    } else if (action.direction === -1) {
+      navigatePrev();
+    } else {
+      navigateNext();
     }
   }
 
@@ -1051,7 +1022,7 @@
   }
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
+<svelte:window onkeydowncapture={handleKeydown} />
 
 <div
   class="app-shell h-screen w-screen"

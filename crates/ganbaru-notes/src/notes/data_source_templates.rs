@@ -108,6 +108,7 @@ pub async fn create_data_source_template_from_row(
     get_data_source_template(pool, data_source_id, &template_id).await
 }
 
+/// Apply a template with an optional caller-reserved page ID and fresh body block IDs.
 pub async fn apply_data_source_template(
     pool: &SqlitePool,
     data_source_id: &str,
@@ -117,6 +118,11 @@ pub async fn apply_data_source_template(
     let data_source_id = data_source_id.trim();
     let template_id = normalize_uuid(template_id, "template_id")?;
     require_uuid(data_source_id, "data_source_id")?;
+    let requested_id = request
+        .id
+        .as_deref()
+        .map(|id| normalize_uuid(id, "id"))
+        .transpose()?;
     let title_override = request
         .title
         .as_deref()
@@ -142,12 +148,16 @@ pub async fn apply_data_source_template(
         Some(&replay_properties),
     )?;
     let blocks = load_template_block_rows_tx(&mut tx, &template_id).await?;
-    let page_id = data_source_views::generated_uuid_tx(
-        &mut tx,
-        "generate data source template page id",
-        "generated_data_source_template_page_id",
-    )
-    .await?;
+    let page_id = if let Some(id) = requested_id {
+        id
+    } else {
+        data_source_views::generated_uuid_tx(
+            &mut tx,
+            "generate data source template page id",
+            "generated_data_source_template_page_id",
+        )
+        .await?
+    };
     sqlx::query(
         "INSERT INTO notes_pages (
             id,

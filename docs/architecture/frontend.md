@@ -23,6 +23,8 @@ The frontend uses four broad layers under `apps/client/src/lib/`:
 
 Components should not duplicate command contracts or parse unknown backend values ad hoc. Untrusted or versioned responses pass through bounded validation before entering typed state.
 
+`components/collections/` owns the shared presentation and interactions for Notes databases and Projects collections. Rows, cells, column headers, view buttons, floating panels, cards, inline creation, and the generic Kanban board accept typed callbacks and Svelte snippets. This layer has no Notes or Projects store or API imports. Domain components retain data loading, property editors, persisted settings, validation, task selection, and write operations. Shared floating geometry lives in `utils/anchored-panel.ts`. See the [shared collection behavior](../features/collections.md) for the user-facing boundary and deliberate variations.
+
 The Notes block API separates payload creation, read-only inspection, and edit operations behind `notes/block-factory.ts`. Payload construction does not depend on editing or store lifecycle. Typed block switches preserve each block variant's payload and metadata explicitly.
 
 ## State model

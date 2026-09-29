@@ -255,6 +255,18 @@ export function notesDatabaseTableCellText(
   }
 }
 
+/** Read exact option labels without splitting names that contain punctuation. */
+export function notesDatabaseTableOptionNames(page: NotesPage, column: NotesDatabaseTableColumn): string[] {
+  const property = Object.values(page.properties).find((value) => propertyMatchesColumn(value, column));
+  if (!isRecord(property)) return [];
+  const payload = property[column.type];
+  if (column.type === "multi_select") {
+    return Array.isArray(payload) ? payload.filter(isRecord).map((item) => readString(item.name)).filter(Boolean) : [];
+  }
+  return (column.type === "select" || column.type === "status") && isRecord(payload) && readString(payload.name)
+    ? [readString(payload.name)] : [];
+}
+
 export function notesDatabaseTableCellEditValue(
   page: NotesPage,
   column: NotesDatabaseTableColumn,

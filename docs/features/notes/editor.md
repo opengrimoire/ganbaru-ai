@@ -8,6 +8,8 @@ The editor presents a continuous document backed by a canonical page block tree.
 
 The document scroll area keeps the same content width when the page begins or stops overflowing, so the title and blocks remain aligned.
 
+App-wide shortcuts remain available while editing titles, text blocks, and database cells, including numbered Alt navigation, next/previous app tab, settings, music, theme controls, zoom, diagnostics, and shortcut help. The shell handles these commands before editor key handling. Plain Tab, Shift+Tab, text formatting, undo, and composition remain owned by the editor.
+
 Block mutations use stable IDs and transactional commands. Multi-block move, duplicate, and Trash operations include unloaded descendants through canonical tree reads so hidden content cannot be lost.
 
 ## Rich text

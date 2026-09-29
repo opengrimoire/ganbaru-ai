@@ -23,7 +23,10 @@ export type TitleBarShortcutAction =
   | "theme-switcher"
   | "zoom-in"
   | "zoom-out"
-  | "zoom-reset";
+  | "zoom-reset"
+  | "music-toggle"
+  | "diagnostics-toggle"
+  | "shortcut-help";
 
 export type TitleBarShortcutEvent = Pick<KeyboardEvent, "key"> & KeyboardModifierState;
 
@@ -66,16 +69,17 @@ export function isCloseWindowShortcut(event: CloseWindowShortcutEvent): boolean 
 /** Resolve shell-wide shortcuts before view-level handlers run. */
 export function titleBarShortcutAction(
   event: TitleBarShortcutEvent,
-  editableTarget: boolean,
 ): TitleBarShortcutAction | null {
   if (isCloseWindowShortcut(event)) return "close";
-  if (editableTarget) return null;
   const key = event.key.toLowerCase();
+  if (key === "f1" && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) return "shortcut-help";
   if (hasOnlyShortcutModifier(event, { shift: true })) {
     if (key === "l") return "theme-toggle";
     if (key === "t") return "theme-switcher";
+    if (key === "d") return "diagnostics-toggle";
   }
   if (!hasOnlyShortcutModifier(event)) return null;
+  if (key === "m") return "music-toggle";
   if (key === "=" || key === "+") return "zoom-in";
   if (key === "-") return "zoom-out";
   if (key === "0") return "zoom-reset";
