@@ -1,6 +1,6 @@
 import { render } from "svelte/server";
 import { describe, expect, it } from "vitest";
-import { createTextRichText } from "$lib/notes/rich-text";
+import { applyRichTextLink, createTextRichText } from "$lib/notes/rich-text";
 import type { NotesRichText } from "$lib/notes/types";
 import NotesRichTextInline from "./NotesRichTextInline.svelte";
 
@@ -40,5 +40,16 @@ describe("NotesRichTextInline", () => {
 
   it("renders a zero-width trailing sentinel without extra whitespace", () => {
     expect(renderedText([createTextRichText("Example\n")])).toBe("Example\n\u200b");
+  });
+
+  it("renders local links as anchors without a URL tooltip and keeps unsafe destinations inert", () => {
+    const url = "#notes?page=11111111-1111-4111-8111-111111111111";
+    const html = renderedHtml(applyRichTextLink([createTextRichText("Tasks")], 0, 5, url));
+    expect(html).toContain(`<a href="${url}"`);
+    expect(html).not.toContain("title=");
+    const unsafe = createTextRichText("Unsafe");
+    unsafe.text.link = { url: "javascript:alert(1)" };
+    unsafe.href = unsafe.text.link.url;
+    expect(renderedHtml([unsafe])).not.toContain("<a ");
   });
 });

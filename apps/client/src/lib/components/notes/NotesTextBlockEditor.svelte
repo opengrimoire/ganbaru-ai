@@ -373,6 +373,7 @@
   spellcheck={block.type !== "code"}
   tabindex="0"
   data-notes-block-id={block.id}
+  data-notes-link-actions
   oninput={handleInput}
   onkeydowncapture={handleKeydown}
   onbeforeinput={handleBeforeInput}
@@ -384,7 +385,9 @@
   onpointerdown={controller.captureContextMenuSelection}
   oncontextmenu={controller.openContextMenu}
   onkeyup={(event) => syncTextSelection(event.currentTarget)}
-  onclick={(event) => syncTextSelection(event.currentTarget)}
+  onclick={(event) => { syncTextSelection(event.currentTarget); controller.handleLinkClick(event); }}
+  onpointerover={controller.handleLinkPointerOver}
+  onpointerout={controller.handleLinkPointerOut}
   onpointerup={(event) => syncTextSelection(event.currentTarget)}
   onmouseup={(event) => syncTextSelection(event.currentTarget)}
   onfocus={handleEditorFocus}
@@ -439,9 +442,22 @@
     {@const NotesLinkEditor = controlLoadStates["link-editor"].component.component}
     <NotesLinkEditor
     value={linkUrlInput}
+    title={controller.linkTitleInput}
+    mode={controller.linkMode}
+    destinationTitle={controller.linkDestinationTitle}
+    pageTargets={controller.linkPageTargets}
+    busy={controller.linkBusy}
+    editor={runtime.editor}
+    readAnchor={controller.readLinkAnchor}
     error={linkError}
     canRemove={linkRange.url !== null}
     onInput={controller.updateLinkInput}
+    onTitleInput={controller.updateLinkTitle}
+    onOpen={() => { void controller.openLinkDestination(); }}
+    onCopy={() => { void controller.copyLinkDestination(); }}
+    onEdit={controller.editLinkDestination}
+    onPointerEnter={controller.keepLinkPreviewOpen}
+    onPointerLeave={controller.scheduleLinkPreviewClose}
     onApply={() => {
       void applyLinkFromEditor();
     }}
@@ -451,7 +467,7 @@
     onCancel={controller.cancelLinkEditor}
     />
   {:else if controlLoadStates["link-editor"]?.status === "failed"}
-    <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem]" type="button" onclick={() => runtime.requestControl("link-editor", true)}>{t("common.retry")}</button>
+    <button class="fixed z-60 min-h-8 rounded-md border border-border bg-popover px-2 text-[0.8rem]" type="button" onclick={() => runtime.requestControl("link-editor", true)}>{t("common.retry")}</button>
   {/if}
 {/if}
 

@@ -114,8 +114,7 @@ fn backlinks_refresh_when_local_notes_rich_text_links_are_edited() {
                 .is_empty()
         );
 
-        let target_url =
-            format!("http://localhost:1420/?view=notes#notes?page={PAGE_B}&block={BLOCK_B}");
+        let target_url = format!("#notes?page={PAGE_B}&block={BLOCK_B}");
         writes::update_block(
             &pool,
             BLOCK_C,
@@ -129,6 +128,12 @@ fn backlinks_refresh_when_local_notes_rich_text_links_are_edited() {
         )
         .await
         .unwrap();
+        let saved = reads::get_block(&pool, BLOCK_C, false).await.unwrap();
+        let saved_json = serde_json::to_value(saved).unwrap();
+        assert_eq!(
+            saved_json["paragraph"]["rich_text"][0]["text"]["link"]["url"],
+            target_url
+        );
         let backlinks = backlinks::list_backlinks(&pool, PAGE_B).await.unwrap();
         let backlinks_json = serde_json::to_value(backlinks).unwrap();
         assert_eq!(backlinks_json.as_array().unwrap().len(), 1);

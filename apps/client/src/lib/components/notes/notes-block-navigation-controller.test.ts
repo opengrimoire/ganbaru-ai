@@ -34,6 +34,57 @@ function mockRangeGeometry(rect: DOMRect, rects: DOMRectList): void {
 }
 
 describe("Notes block navigation controller", () => {
+  it("moves from text through a database title and back in both directions", () => {
+    const list = document.createElement("div");
+    list.innerHTML = `
+      <div data-notes-selectable-block-id="before"><div contenteditable="true" role="textbox" data-notes-block-id="before">Above</div></div>
+      <div data-notes-selectable-block-id="database"><input data-notes-database-title value="Tasks"><input data-cell value="Cell"></div>
+      <div data-notes-selectable-block-id="after"><div contenteditable="true" role="textbox" data-notes-block-id="after">Below</div></div>
+    `;
+    document.body.append(list);
+    const database: NotesBlock = { ...paragraph("database"), type: "child_database", child_database: { title: "Tasks" } };
+    const requestFocus = vi.fn();
+    const controller = createNotesBlockNavigationController({
+      readListElement: () => list, readRenderedBlockIds: () => ["before", "database", "after"],
+      readBlock: (id) => {
+        if (id === database.id) return database;
+        const block = paragraph(id);
+        if (block.type === "paragraph") block.paragraph.rich_text = [createRichText(id === "before" ? "Above" : "Below")];
+        return block;
+      },
+      isHiddenCalloutLabel: () => false, requestFocus,
+    });
+    const title = list.querySelector<HTMLInputElement>("[data-notes-database-title]")!;
+    for (const [id, key, targetId] of [
+      ["before", "ArrowDown", "database"], ["database", "ArrowDown", "after"],
+      ["after", "ArrowUp", "database"], ["database", "ArrowUp", "before"],
+    ] as const) {
+      const target = id === "database" ? title : list.querySelector<HTMLElement>(`[data-notes-block-id='${id}']`)!;
+      if (id !== "database") document.getSelection()?.collapse(target.firstChild, key === "ArrowDown" ? 5 : 0);
+      const event = new KeyboardEvent("keydown", { key, cancelable: true });
+      Object.defineProperty(event, "target", { value: target });
+      expect(controller.handleKeydown(event, id)).toBe(true);
+      expect(event.defaultPrevented).toBe(true);
+      expect(requestFocus).toHaveBeenLastCalledWith(targetId, targetId === "database" ? null
+        : { start: key === "ArrowDown" ? 0 : 5, end: key === "ArrowDown" ? 0 : 5 });
+    }
+    for (const init of [
+      { key: "ArrowLeft" }, { key: "ArrowRight" }, { key: "Enter" },
+      { key: "ArrowDown", shiftKey: true }, { key: "ArrowUp", altKey: true },
+      { key: "ArrowDown", isComposing: true },
+    ]) {
+      const event = new KeyboardEvent("keydown", { cancelable: true, ...init });
+      Object.defineProperty(event, "target", { value: title });
+      expect(controller.handleKeydown(event, database.id)).toBe(false);
+      expect(event.defaultPrevented).toBe(false);
+    }
+    const cellEvent = new KeyboardEvent("keydown", { key: "ArrowDown", cancelable: true });
+    Object.defineProperty(cellEvent, "target", { value: list.querySelector("[data-cell]") });
+    expect(controller.handleKeydown(cellEvent, database.id)).toBe(false);
+    expect(controller.targetIsEditable(title)).toBe(true);
+    expect(requestFocus).toHaveBeenCalledTimes(4);
+  });
+
   it("navigates from a focused note button and inserts paragraphs on either side", () => {
     const list = document.createElement("div");
     list.innerHTML = '<div data-notes-selectable-block-id="note"><button data-notes-atomic-block="note">Note</button></div>';

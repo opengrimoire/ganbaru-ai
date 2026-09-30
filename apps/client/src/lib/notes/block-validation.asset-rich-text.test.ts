@@ -654,6 +654,14 @@ describe("notes asset-rich-text boundary validation", () => {
       ).toThrow("rich_text[0].annotations.color must be a supported Notion color");
     });
 
+  it("reads saved local page and database links and rejects malformed identities", () => {
+    const url = `#notes?page=${basePage.id}&block=${baseBlock.id}`;
+    const item = { ...baseRichText, text: { content: "Tasks", link: { url } }, plain_text: "Tasks", href: url };
+    expect(parseNotesRichTextArray([item], "rich_text")).toEqual([item]);
+    for (const invalid of ["#notes?page=bad", `#notes?page=${basePage.id}&block=bad`, "#other"])
+      expect(() => parseNotesRichTextArray([{ ...item, text: { ...item.text, link: { url: invalid } } }], "rich_text")).toThrow();
+  });
+
   it("rejects unsafe linked text URLs", () => {
       expect(() =>
         parseNotesRichTextArray(

@@ -61,6 +61,7 @@
     onSelectPage,
     onCreateLinkedDatabaseView,
     onReady = () => {},
+    onTitleSaved = () => {},
   }: {
     block: NotesChildDatabaseBlock;
     focusBlockId: string | null;
@@ -70,6 +71,7 @@
     onSelectPage: (pageId: string) => void;
     onCreateLinkedDatabaseView: (blockId: string) => Promise<void> | void;
     onReady?: () => void;
+    onTitleSaved?: (databaseId: string, title: string) => void;
   } = $props();
 
   const localization = getLocalization();
@@ -126,7 +128,9 @@
   $effect(() => {
     const _focusRequestId = focusRequestId;
     if (!contentReady || focusBlockId !== block.id) return;
-    void tick().then(() => titleInput?.focus());
+    void tick().then(() => {
+      if (focusBlockId === block.id && _focusRequestId === focusRequestId) titleInput?.focus({ preventScroll: true });
+    });
   });
 
   function loadSchema(): Promise<void> {
@@ -193,14 +197,16 @@
   }
 
   async function saveTitle(): Promise<void> {
-    if (!databaseId || titleSaving) return;
+    const renamedDatabaseId = databaseId;
+    if (!renamedDatabaseId || titleSaving) return;
     const nextTitle = titleDraft.trim();
     if (nextTitle === savedTitle) return;
     titleSaving = true;
     titleError = null;
     try {
-      titleDraft = await renameNotesDatabase(databaseId, nextTitle);
+      titleDraft = await renameNotesDatabase(renamedDatabaseId, nextTitle);
       savedTitle = titleDraft;
+      onTitleSaved(renamedDatabaseId, savedTitle);
     } catch (caught) {
       titleDraft = savedTitle;
       titleError = caught instanceof Error ? caught.message : String(caught);
@@ -549,6 +555,7 @@
     {#if localDatabase}
       <input
         bind:this={titleInput}
+        data-notes-database-title
         class="min-h-10 min-w-0 flex-1 border-0 bg-transparent px-0 text-[1.4rem] font-semibold leading-tight text-foreground outline-none placeholder:text-muted-foreground/50 focus:ring-0"
         aria-label={t("notes.databaseTitle")}
         placeholder={t("notes.databaseNewTitle")}
@@ -557,6 +564,8 @@
         onfocus={() => onFocusBlock(block.id)}
         onblur={() => { void saveTitle(); }}
         onkeydown={(event) => {
+          if (!event.isComposing && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+            && (event.key === "ArrowUp" || event.key === "ArrowDown")) return;
           event.stopPropagation();
           if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); }
         }}

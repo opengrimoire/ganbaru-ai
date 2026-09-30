@@ -4,6 +4,7 @@
   import { equationPreviewText } from "$lib/notes/equation";
   import type { NotesResolvedSuggestionAnchor } from "$lib/notes/suggestions";
   import type { NotesRichText } from "$lib/notes/types";
+  import { normalizeNotesTextLinkUrl, openNotesTextLink } from "$lib/notes/link-navigation";
 
   let {
     richText,
@@ -58,7 +59,7 @@
       classes.push("rounded bg-muted/70 px-1 py-0.5 font-mono text-[0.9em]");
     }
     if (item.type === "text" && (item.href || item.text.link)) {
-      classes.push("text-primary underline underline-offset-2");
+      classes.push("cursor-pointer underline decoration-muted-foreground/50 underline-offset-4");
     }
     return classes.join(" ");
   }
@@ -147,7 +148,28 @@
   }
 
   function linkUrl(item: NotesRichText): string | null {
-    return item.type === "text" ? item.text.link?.url ?? item.href : item.href;
+    const value = item.type === "text" ? item.text.link?.url ?? item.href : item.href;
+    return value ? normalizeNotesTextLinkUrl(value, typeof window === "undefined" ? undefined : window.location.href) : null;
+  }
+
+  /** Editing hosts own their link popover; read-only rich text opens the same destinations directly. */
+  function activateReadOnlyLink(event: MouseEvent | KeyboardEvent): void {
+    if (!(event.currentTarget instanceof HTMLElement)) return;
+    const url = event.currentTarget.dataset.notesLinkUrl;
+    if (!url) return;
+    const editor = event.currentTarget.closest<HTMLElement>("[contenteditable='true']");
+    if (editor) {
+      if (!(event instanceof MouseEvent)) return;
+      event.preventDefault();
+      if (editor.hasAttribute("data-notes-link-actions")) return;
+      if (!event.ctrlKey && !event.metaKey && !editor.ownerDocument.getSelection()?.isCollapsed) return;
+    }
+    event.preventDefault();
+    void openNotesTextLink(url).catch((error: unknown) => console.warn("Notes inline link navigation failed", error));
+  }
+
+  function handleLinkKeydown(event: KeyboardEvent): void {
+    if (event.key === "Enter") activateReadOnlyLink(event);
   }
 
   function appendLinePart(
@@ -193,8 +215,13 @@
       <span class="notes-rich-text-empty-line-sentinel" data-notes-editor-sentinel="empty-line">{"\u200b"}</span>
     {:else}
       {#each line.parts as part}
+        {@const url = linkUrl(part.item)}
         {#if part.item.type === "mention"}
-          <span
+          <svelte:element this={url ? "a" : "span"}
+            href={url ?? undefined}
+            role={url ? "link" : undefined}
+            onclick={activateReadOnlyLink}
+            onkeydown={handleLinkKeydown}
             class={`notes-rich-text-segment inline-flex max-w-full items-center rounded bg-accent px-1 text-accent-foreground${commentAnchorClass(part.start, part.end)}${suggestionAnchorClass(part.start, part.end)}`}
             style={notesRichTextColorStyle(part.item.annotations.color)}
             data-notes-bold={part.item.annotations.bold ? "true" : undefined}
@@ -208,9 +235,13 @@
             data-notes-suggestion-anchor={suggestionAnchorIdsForRange(part.start, part.end)}
           >
             {part.text}
-          </span>
+          </svelte:element>
         {:else if part.item.type === "equation"}
-          <span
+          <svelte:element this={url ? "a" : "span"}
+            href={url ?? undefined}
+            role={url ? "link" : undefined}
+            onclick={activateReadOnlyLink}
+            onkeydown={handleLinkKeydown}
             class={`${textClass(part.item)} inline-flex max-w-full items-center rounded bg-muted/70 px-1 py-0.5 font-serif text-[1.02em]${commentAnchorClass(part.start, part.end)}${suggestionAnchorClass(part.start, part.end)}`}
             style={notesRichTextColorStyle(part.item.annotations.color)}
             title={part.item.equation.expression}
@@ -225,12 +256,15 @@
             data-notes-suggestion-anchor={suggestionAnchorIdsForRange(part.start, part.end)}
           >
             {part.text}
-          </span>
+          </svelte:element>
         {:else}
-          <span
+          <svelte:element this={url ? "a" : "span"}
+            href={url ?? undefined}
+            role={url ? "link" : undefined}
+            onclick={activateReadOnlyLink}
+            onkeydown={handleLinkKeydown}
             class={`${textClass(part.item)}${commentAnchorClass(part.start, part.end)}${suggestionAnchorClass(part.start, part.end)}`}
             style={notesRichTextColorStyle(part.item.annotations.color)}
-            title={part.item.href ?? part.item.text.link?.url ?? undefined}
             data-notes-bold={part.item.annotations.bold ? "true" : undefined}
             data-notes-italic={part.item.annotations.italic ? "true" : undefined}
             data-notes-underline={part.item.annotations.underline ? "true" : undefined}
@@ -242,7 +276,7 @@
             data-notes-suggestion-anchor={suggestionAnchorIdsForRange(part.start, part.end)}
           >
             {part.text}
-          </span>
+          </svelte:element>
         {/if}
       {/each}
     {/if}

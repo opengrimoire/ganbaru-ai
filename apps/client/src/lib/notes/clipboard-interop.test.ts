@@ -26,6 +26,44 @@ function pasted(text: string, html = "", currentText = "", start = 0, end = star
 }
 
 describe("Notes portable clipboard interoperability", () => {
+  it.each(["Task [list] & <items>", ""])("copies a database named %j between text as a local block link", (title) => {
+    const pageId = "10000000-0000-4000-8000-000000000001";
+    const databaseId = "10000000-0000-4000-8000-000000000002";
+    const database = { ...block("child_database", title, databaseId), parent: { type: "page_id", page_id: pageId } } as NotesBlock;
+    const options = { pageId, unnamedDatabaseTitle: "New database" };
+    const link = `#notes?page=${pageId}&block=${databaseId}`;
+    const clipboard = notesClipboardContent([
+      block("paragraph", "Before", "first"), database, block("paragraph", "After", "last"),
+    ].map((block) => ({ block })), options);
+    const template = document.createElement("template");
+    template.innerHTML = clipboard.html;
+    expect(template.content.querySelector("a")?.textContent).toBe(title || options.unnamedDatabaseTitle);
+    expect(template.content.querySelector("a")?.getAttribute("href")).toBe(link);
+    expect(template.content.querySelector("table")).toBeNull();
+    expect(clipboard.plainText).toContain(link);
+    for (const html of [clipboard.html, ""]) {
+      const result = pasted(clipboard.plainText, html);
+      expect(result.blocks.map((entry) => entry.type)).toEqual(["paragraph", "paragraph", "paragraph"]);
+      expect(result.blocks.map(blockPlainText)).toEqual(["Before", title || options.unnamedDatabaseTitle, "After"]);
+      expect(blockEditableRichText(result.blocks[1])[0].href).toBe(link);
+      expect(result.plan?.copiedPageIds).toBeUndefined();
+    }
+    expect(notesClipboardContent([{ block: database, start: 1 }], options).plainText).toBe("");
+    expect(notesClipboardContent([{ block: database, end: 0 }], options).plainText).toBe("");
+  });
+
+  it("resolves a database inside selected layout blocks and uses page context for omitted ancestors", () => {
+    const pageId = "10000000-0000-4000-8000-000000000001";
+    const databaseId = "10000000-0000-4000-8000-000000000002";
+    const layout = { ...block("column", "", "layout"), parent: { type: "page_id", page_id: pageId } } as NotesBlock;
+    const database = { ...block("child_database", "Tasks", databaseId), parent: { type: "block_id", block_id: layout.id } } as NotesBlock;
+    const options = { pageId, unnamedDatabaseTitle: "New database" };
+    const reference = `[Tasks](#notes?page=${pageId}&block=${databaseId})`;
+    expect(notesClipboardContent([{ block: layout }, { block: database }], options).plainText).toBe(reference);
+    expect(notesClipboardContent([{ block: database }], options).plainText).toBe(reference);
+    expect(notesClipboardContent([{ block: database }]).plainText).toBe("Tasks");
+  });
+
   it("copies child notes as readable local references and pastes independent page copies between text", () => {
     const noteId = "10000000-0000-4000-8000-000000000001";
     const entries = [block("paragraph", "Before", "first"), block("child_page", "A [note]", noteId), block("paragraph", "After", "last")];

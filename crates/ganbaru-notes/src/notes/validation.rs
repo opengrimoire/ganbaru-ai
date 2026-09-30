@@ -37,4 +37,4 @@ pub use requests::{
     validate_folder_create, validate_folder_project_id, validate_folder_update,
     validate_page_create, validate_page_update, validate_parent,
 };
-pub use rich_text::validate_comment_rich_text;
+pub use rich_text::{validate_comment_rich_text, validate_rich_text_url};

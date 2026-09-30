@@ -24,6 +24,7 @@ function harness(count = 3, type: NotesBlock["type"] = "paragraph", hiddenCallou
   const outlineSubtreeIds = vi.fn((rootBlockIds: readonly string[]) => [...rootBlockIds]);
   const focus = vi.fn();
   const indent = vi.fn(async () => undefined);
+  const link = vi.fn(async () => undefined);
   const navigation = createNotesBlockNavigationController({
     readListElement: () => list, readRenderedBlockIds: () => ids,
     readBlock: (id) => blocks.get(id), isHiddenCalloutLabel: (id) => hiddenCalloutIds.has(id), requestFocus: focus,
@@ -45,7 +46,7 @@ function harness(count = 3, type: NotesBlock["type"] = "paragraph", hiddenCallou
   const controller = createNotesDocumentSelectionController({
     readIds: () => ids, readPageId: () => "page", readBlock: (id) => blocks.get(id),
     isHiddenCalloutLabel: (id) => hiddenCalloutIds.has(id),
-    hydrate, outlineSubtreeIds, replace, indent, format: vi.fn(async () => undefined), focus, clearBlockSelection: () => blockSelection.setSelection(null),
+    hydrate, outlineSubtreeIds, replace, indent, link, format: vi.fn(async () => undefined), focus, clearBlockSelection: () => blockSelection.setSelection(null),
     undo: vi.fn(async () => true), redo: vi.fn(async () => true),
   });
   const attached = controller.delegation(list);
@@ -55,7 +56,7 @@ function harness(count = 3, type: NotesBlock["type"] = "paragraph", hiddenCallou
     editor(index).dispatchEvent(event);
     return event;
   };
-  return { controller, blockSelection, hydrateSubtrees, outlineSubtreeIds, focusRow, replace, indent, hydrate, focus, blocks, ids, editor, key,
+  return { controller, blockSelection, hydrateSubtrees, outlineSubtreeIds, focusRow, replace, indent, link, hydrate, focus, blocks, ids, editor, key,
     destroy() { attached.destroy(); blockDelegates.destroy(); },
   };
 }
@@ -206,6 +207,62 @@ function mockVisualLines(
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(document, "caretPositionFromPoint"); document.body.replaceChildren(); window.getSelection()?.removeAllRanges(); });
 
 describe("Notes document selection", () => {
+  it("links a backward partial document selection when pasting a URL instead of replacing its words", async () => {
+    const h = harness();
+    const selection = { anchor: { blockId: h.ids[2], offset: 3 }, focus: { blockId: h.ids[0], offset: 2 } };
+    await h.controller.select(selection);
+    const paste = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, "clipboardData", { value: { getData: (type: string) => type === "text/plain" ? "https://example.com/tasks" : "" } });
+    h.editor(0).dispatchEvent(paste);
+    await tick(); await tick();
+    expect(h.link).toHaveBeenCalledExactlyOnceWith(h.ids, 2, 3, "https://example.com/tasks", selection);
+    expect(h.replace).not.toHaveBeenCalled();
+    expect(h.controller.selection).toEqual(selection);
+    h.destroy();
+  });
+
+  it("honors plain-text paste over a document range instead of applying a hyperlink", async () => {
+    const h = harness();
+    const selection = { anchor: { blockId: h.ids[0], offset: 2 }, focus: { blockId: h.ids[2], offset: 3 } };
+    await h.controller.select(selection);
+    h.key(0, "v", { ctrlKey: true, shiftKey: true });
+    const paste = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, "clipboardData", { value: { getData: (type: string) => type === "text/plain" ? "https://example.com/tasks" : "<b>Tasks</b>" } });
+    h.editor(0).dispatchEvent(paste);
+    await tick(); await tick();
+    expect(h.link).not.toHaveBeenCalled();
+    expect(h.replace).toHaveBeenCalledExactlyOnceWith(h.ids, 2, 3, "https://example.com/tasks", undefined, selection);
+    h.destroy();
+  });
+
+  it.each([3, 4])("includes named and empty databases in a whole-note copy with %i blocks", async (count) => {
+    const h = harness(count);
+    const pageId = "10000000-0000-4000-8000-000000000001";
+    for (const [index, title] of [[1, "Tasks"], [2, ""]] as const) {
+      const id = `10000000-0000-4000-8000-00000000000${index + 1}`;
+      const previousId = h.ids[index];
+      const database: NotesBlock = { ...h.blocks.get(previousId)!, id,
+        parent: { type: "page_id", page_id: pageId }, type: "child_database", child_database: { title } };
+      const row = h.editor(index).parentElement!;
+      h.editor(index).replaceWith(document.createElement("section"));
+      row.dataset.notesSelectableBlockId = id;
+      row.firstElementChild!.textContent = title || "New database";
+      h.ids[index] = id;
+      h.blocks.delete(previousId);
+      h.blocks.set(id, database);
+    }
+    h.key(0, "a", { ctrlKey: true });
+    await tick();
+    const setData = vi.fn();
+    const copy = new Event("copy", { bubbles: true, cancelable: true });
+    Object.defineProperty(copy, "clipboardData", { value: { setData } });
+    h.editor(0).dispatchEvent(copy);
+    expect(setData).toHaveBeenCalledWith("text/plain", `block-0\n\n[Tasks](#notes?page=${pageId}&block=${h.ids[1]})\n\n[New database](#notes?page=${pageId}&block=${h.ids[2]})${count === 4 ? "\n\nblock-3" : ""}`);
+    expect(h.controller.error).toBeNull();
+    expect(copy.defaultPrevented).toBe(true);
+    h.destroy();
+  });
+
   it("copies hidden children when Ctrl+A selects a single closed toggle", async () => {
     const h = harness(1, "toggle");
     const root = h.blocks.get(h.ids[0])!;

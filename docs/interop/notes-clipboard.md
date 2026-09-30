@@ -8,6 +8,8 @@ Notes writes readable Markdown in `text/plain` and semantic markup in `text/html
 
 Incoming text editors and document ranges accept sanitized HTML or Markdown. Table cells accept the same inline formatting and flatten block structure into text. Whole-block paste from a non-editable row remains an internal graph operation. If another app replaces the system clipboard, that operation discards its stale internal reference and returns focus to the text editor; external content can then be pasted there.
 
+Pasting a single recognized web, email, or local Notes URL over selected prose applies a link to the existing words. Cross-block document selections retain their structure and use one formatting undo step. Code remains literal, and explicit plain-text paste replaces the selected words. Copied URLs from the current app origin normalize to portable local references.
+
 This contract concerns clipboard exchange. SQLite remains authoritative for Notes. File import/export, managed assets, and working Markdown have separate workflows.
 
 Sources reviewed through 2026-09-28:
@@ -31,7 +33,9 @@ Automated fixtures are synthetic semantic examples, not captured Notion or Obsid
 | Bold, italic, strike, inline code | Semantic HTML and Markdown | Both representations, including adjacent and overlapping annotations |
 | Underline | HTML, including portable inline HTML in Markdown | Supported semantic inline HTML |
 | Web/email links | Explicit HTTP, HTTPS, and mailto links | Supported links; relative destinations remain readable text without an invented host |
+| Local text links | Linked label and validated `#notes?page=UUID` reference, optionally with `block=UUID` | A navigable reference to the original page or block, preserved through canonical saving |
 | Local note rows | Title and `#notes?page=UUID` reference in Markdown; HTML includes the local source page identity | Same-vault rich paste creates independent canonical note copies, including nested notes; plain Markdown creates a page mention |
+| Embedded databases | Title and `#notes?page=UUID&block=UUID` reference in Markdown and HTML, in document order; unnamed databases use a localized placeholder | A text link to the original database block; rows and schema are not copied or read |
 | Bullets, numbered lists, tasks | Nested lists and checked state | Mixed nested hierarchy and checked/unchecked tasks |
 | Toggles | Open `<details><summary>` in HTML so child blocks stay available to rich paste readers; a Notes attribute records closed state. Plain text uses a nested bullet with indented child paragraphs | Sanitized `<details><summary>` and incoming foldable callouts become toggles with children and initial open state; a plain-text bullet remains a list |
 | Callouts | Semantic `<aside>` in HTML with icon and color metadata; plain text uses a readable `<aside>` wrapper with an emoji line and nested Markdown blocks | Sanitized HTML and Notion-style plain-text `<aside>` wrappers become callouts with normal child blocks, including headings and nested callouts |

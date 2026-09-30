@@ -305,14 +305,37 @@ pub fn validate_rich_text_common_fields(
     Ok(())
 }
 
+/// Validate web, email, and vault-local Notes references without admitting arbitrary URI schemes.
 pub fn validate_rich_text_url(value: &str, field: &str) -> Result<(), String> {
-    if value.trim().is_empty() || contains_control_characters(value) {
+    if value.trim().is_empty() || value.chars().any(char::is_control) {
         return Err(format!(
             "{field} must not be empty or contain control characters"
         ));
     }
     if value.len() > 2048 {
         return Err(format!("{field} is too long"));
+    }
+    if let Some(query) = value.strip_prefix("#notes?") {
+        let invalid =
+            || format!("{field} must contain a valid local Notes page and optional block UUID");
+        let parsed = reqwest::Url::parse(&format!("notes:?{query}")).map_err(|_| invalid())?;
+        if parsed.fragment().is_some() {
+            return Err(invalid());
+        }
+        let params = parsed.query_pairs().collect::<Vec<_>>();
+        let page_id = params
+            .iter()
+            .find(|(key, _)| key == "page")
+            .map(|(_, value)| value);
+        let block_id = params
+            .iter()
+            .find(|(key, _)| key == "block")
+            .map(|(_, value)| value);
+        require_uuid(page_id.ok_or_else(invalid)?, "page").map_err(|_| invalid())?;
+        if let Some(block_id) = block_id {
+            require_uuid(block_id, "block").map_err(|_| invalid())?;
+        }
+        return Ok(());
     }
     let parsed = reqwest::Url::parse(value)
         .map_err(|_| format!("{field} must be a valid HTTP, HTTPS, or email URL"))?;

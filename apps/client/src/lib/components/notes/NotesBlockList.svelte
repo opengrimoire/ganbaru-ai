@@ -137,6 +137,7 @@
     hydrate: notes.hydrateBlockRange,
     replace: notes.replaceDocumentRange,
     format: notes.formatDocumentRange,
+    link: notes.linkDocumentRange,
     indent: notes.indentBlockSelection,
     focus: (point, preventScroll) => notes.focusBlock(point.blockId, { start: point.offset, end: point.offset }, preventScroll),
     restoreFocusAfterEdit: () => { if (notes.focusBlockId) notes.focusBlock(notes.focusBlockId, notes.focusSelection); },

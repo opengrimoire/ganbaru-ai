@@ -11,6 +11,7 @@ const backend = vi.hoisted(() => ({
   pages: new Map<string, NotesPageOpenResponse>(),
   open: vi.fn(), createChild: vi.fn(), createPage: vi.fn(), saveBlock: vi.fn(),
   createDatabase: vi.fn(), databaseViews: vi.fn(), databaseTable: vi.fn(),
+  renameDatabase: vi.fn(async (_databaseId: string, title: string) => title),
   mentionSources: vi.fn(async () => []),
   destinations: vi.fn(async () => ({ pages: [], next_page_cursor: null })),
   workspaceRequests: [] as NotesWorkspaceShellRequest[],
@@ -26,6 +27,7 @@ vi.mock("$lib/api/notes", async (importOriginal) => ({
   createNotesPage: backend.createPage,
   updateNotesBlock: backend.saveBlock,
   createNotesDatabase: backend.createDatabase,
+  renameNotesDatabase: backend.renameDatabase,
   listNotesDatabaseViews: backend.databaseViews,
   getNotesDataSourceTableView: backend.databaseTable,
   listNotesDataSourceTemplates: async () => [],
@@ -255,6 +257,32 @@ describe("Notes preview ownership", () => {
       expect(title.value).toBe("");
       expect(title.placeholder).toBe("New database");
       await vi.waitFor(() => expect(document.activeElement).toBe(title));
+      const down = new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true });
+      title.dispatchEvent(down);
+      expect(down.defaultPrevented).toBe(true);
+      expect(notes.focusBlockId).toBe(parent.blocks.results[1].id);
+      await tick();
+      const childButton = document.querySelector<HTMLButtonElement>(`[data-notes-atomic-block='${parent.blocks.results[1].id}']`)!;
+      childButton.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true }));
+      await vi.waitFor(() => expect(document.activeElement).toBe(title));
+      const updateCount = backend.saveBlock.mock.calls.length;
+      for (const name of ["Planning", ""]) {
+        title.value = name;
+        title.dispatchEvent(new Event("input", { bubbles: true }));
+        title.blur();
+        await vi.waitFor(() => expect(blockPlainText(notes.blockById(blockId)!)).toBe(name));
+        expect(backend.renameDatabase).toHaveBeenLastCalledWith(blockId, name);
+        expect(backend.saveBlock).toHaveBeenCalledTimes(updateCount);
+        title.focus();
+        await tick();
+      }
+      backend.renameDatabase.mockRejectedValueOnce(new Error("Rename failed"));
+      title.value = "Unsaved title";
+      title.dispatchEvent(new Event("input", { bubbles: true }));
+      title.blur();
+      await vi.waitFor(() => expect(document.body.textContent).toContain("Rename failed"));
+      expect(blockPlainText(notes.blockById(blockId)!)).toBe("");
+      expect(title.value).toBe("");
     } finally {
       finishSave(); finishCreation(); finishRows();
       await creation;

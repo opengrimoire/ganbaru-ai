@@ -19,6 +19,8 @@ import {
   insertPageMentionRichText,
   normalizeRichTextEquationExpression,
   normalizeRichTextLinkUrl,
+  notesPastedLinkUrl,
+  editRichTextLink,
   planRichTextEquationConversion,
   replacePlainTextPreservingRichText,
   richTextAnnotationTogglePatch,
@@ -347,6 +349,36 @@ describe("notes rich text helpers", () => {
     expect(normalizeRichTextLinkUrl("team@example")).toBeNull();
     expect(normalizeRichTextLinkUrl("mailto:team%40example.com")).toBeNull();
     expect(normalizeRichTextLinkUrl("javascript:alert(1)")).toBeNull();
+  });
+
+  it("preserves valid local block links while rejecting invalid fragments", () => {
+    const url = `#notes?page=${pageId}&block=${pageId}`;
+    expect(normalizeRichTextLinkUrl(url)).toBe(url);
+    expect(normalizeRichTextLinkUrl("#notes?page=invalid")).toBeNull();
+    expect(normalizeRichTextLinkUrl("#unrelated")).toBeNull();
+    expect(applyRichTextLink([createTextRichText("Tasks")], 0, 5, url)[0].href).toBe(url);
+  });
+
+  it.each([
+    ["https://example.com/tasks", "https://example.com/tasks"],
+    ["example.com", "https://example.com/"],
+    ["team@example.com", "mailto:team@example.com"],
+    [`#notes?page=${pageId}`, `#notes?page=${pageId}`],
+    ["ordinary words", null], ["Text", null], ["javascript:alert(1)", null],
+    ["file:///tmp/file", null], ["https://example.com\nMore text", null], ["#notes?page=bad", null],
+  ])("recognizes a copied destination %j as %j", (input, expected) => {
+    expect(notesPastedLinkUrl(input)).toBe(expected);
+  });
+
+  it("edits a linked label without losing its bold formatting or surrounding Unicode text", () => {
+    const text = createLinkedTextRichText("Old title", "https://example.com/old");
+    text.annotations.bold = true;
+    const richText = [createTextRichText("Before "), text, createTextRichText(" after")];
+    const result = editRichTextLink(richText, 7, 16, "New 𝄞 title", "https://example.com/new");
+    expect(richTextPlainText(result)).toBe("Before New 𝄞 title after");
+    expect(result.filter((item) => item.href).every((item) => item.annotations.bold && item.href === "https://example.com/new")).toBe(true);
+    expect(result[0].href).toBeNull();
+    expect(result.at(-1)?.href).toBeNull();
   });
 
   it("builds reminder mention targets from reminder queries", () => {

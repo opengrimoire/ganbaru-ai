@@ -10,6 +10,8 @@ The document scroll area keeps the same content width when the page begins or st
 
 App-wide shortcuts remain available while editing titles, text blocks, and database cells, including numbered Alt navigation, next/previous app tab, settings, music, theme controls, zoom, diagnostics, and shortcut help. The shell handles these commands before editor key handling. Plain Tab, Shift+Tab, text formatting, undo, and composition remain owned by the editor.
 
+Plain Up and Down move between surrounding text blocks and an inline database title. From the title, Up reaches the previous block and Down reaches the next block without traversing database rows. Left and Right, title text selection, composition, and database cell navigation retain their normal editing behavior.
+
 Block mutations use stable IDs and transactional commands. Multi-block move, duplicate, and Trash operations include unloaded descendants through canonical tree reads so hidden content cannot be lost.
 
 ## Rich text
@@ -19,6 +21,8 @@ Text-capable blocks store structured rich text with plain-text caches for search
 Right-clicking text opens a compact context menu with formatting, block type, insert, link, comment, suggestion, and clipboard actions. A selected range stays visibly highlighted while the pointer-operated menu is open, and formatting applies to that range. Block type and insert actions are available at a caret. Comment and suggestion are direct menu actions. The formatting submenu includes a palette of labeled text and background swatches.
 
 Paste converts supported rich text and block structure, sanitizes external markup, and preserves unsupported material visibly when practical. It never inserts executable HTML or unsafe URL schemes.
+
+Pasting a single URL over selected prose creates a link on the existing words. Normal copied text still replaces the selection, while code and explicit paste as plain text remain literal. Link actions and editing use floating panels that do not occupy document space. See [Inline links](links-and-collaboration.md#inline-links) for navigation, editing, and dismissal behavior.
 
 ## Headings
 
@@ -97,6 +101,8 @@ Actual formatting fidelity depends on the receiving app and platform clipboard. 
 Copying a note row includes its title and stable local page reference. Rich HTML paste within the same vault duplicates the canonical note and its nested notes with new page and block identities, preserving content, page presentation, managed asset references, and block comments. The copied pages belong to the destination project. Copying into the source note itself captures the source graph before inserting the copy. Each copied page graph and its paired row commit together. Mixed text and note paste keeps surrounding text outside note titles and records one editor undo step. Cut sources remain recoverable in Trash.
 
 Plain text represents a note as `[Title](#notes?page=UUID)`. This identifies a note in the current vault; it is not a public URL or an operating-system link. Pasting that Markdown back into Notes creates a page mention referring to the original note. Rich HTML carries the separate instruction to duplicate a note row. Another application can retain the title and reference as readable text, but needs Ganbaru and the corresponding vault to resolve it.
+
+Copying a document range or whole blocks includes each embedded database as its title linked to its block in the containing note: `[Title](#notes?page=UUID&block=UUID)`. HTML carries the same link and readable title. Successful renames update the note's copy model immediately. An unnamed database uses the localized New database placeholder without changing its stored title. Text paste back into Notes preserves a link to the original block. It does not read, duplicate, or transfer database rows and schema. Local database references require the corresponding vault, just like local note references.
 
 Pointer block movement and destination pickers preserve full subtrees. Moving a block across pages validates access, active state, ancestry, and target type.
 

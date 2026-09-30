@@ -28,19 +28,22 @@ import {
 import {
   clampNotesTextSelection,
   notesEditableSelectionViewportRect,
+  notesEditableOffsetFromDomPoint,
   notesPlainTextFromEditableRoot,
   notesTextSelectionFromEditableRoot,
   planNotesSelectionReconciliation,
   restoreNotesEditableSelection,
   type NotesTextSelection,
 } from "$lib/notes/editor-selection";
-import { shouldRestoreNotesEditorFocusAfterLazyLoad } from "$lib/notes/lazy-editor-focus";
+import { normalizeNotesTextLinkUrl, notesPastedTextLinkUrl, notesLinkTarget, openNotesTextLink } from "$lib/notes/link-navigation";
+import { writeTextToClipboard } from "$lib/utils/clipboard";
+import type { NotesFloatingPanelRect } from "$lib/notes/floating-panel";
 import { notesTextContextMenuSelectionAtPoint } from "$lib/notes/text-context-menu";
 import {
   buildDateMentionTargets,
   detectPageMentionQuery,
   filterNotesMentionTargets,
-  normalizeRichTextLinkUrl,
+  editRichTextLink,
   planRichTextEquationConversion,
   replacePlainTextPreservingRichText,
   richTextAnnotationTogglePatch,
@@ -252,7 +255,6 @@ export class NotesTextEditorRuntime {
     const current = this.controlLoadStates[kind] ?? null;
     if (!retry && current?.key === kind) return;
     const loadingState = beginLazyComponentLoad(current, kind);
-    const requestedWhileFocused = typeof document !== "undefined" && document.activeElement === this.editor;
     this.controlLoadStates = { ...this.controlLoadStates, [kind]: loadingState };
     const request = retry ? retryNotesTextControl(kind) : loadNotesTextControl(kind);
     void request.then((component) => {
@@ -262,18 +264,6 @@ export class NotesTextEditorRuntime {
         ...this.controlLoadStates,
         [kind]: resolveLazyComponentLoad(latest, kind, loadingState.requestId, component),
       };
-      if (kind === "link-editor") {
-        void tick().then(() => {
-          if (shouldRestoreNotesEditorFocusAfterLazyLoad({
-            requestedWhileFocused,
-            stillOwnsFocus: typeof document !== "undefined" && document.activeElement === this.editor,
-            compositionActive: this.compositionActive,
-          })) {
-            this.editor?.focus();
-            this.restoreTrackedSelection(this.textSelection);
-          }
-        });
-      }
     }).catch((error: unknown) => {
       const latest = this.controlLoadStates[kind];
       if (!latest) return;
@@ -317,10 +307,13 @@ export function createNotesTextEditorRuntime(
   return new NotesTextEditorRuntime(source);
 }
 
+const NOTES_LINK_HOVER_CLOSE_DELAY_MS = 150;
+
 /** Owns all stateful editing, command routing, and DOM reconciliation for one text block. */
 export class NotesTextEditorController {
   readonly runtime: NotesTextEditorRuntime;
   #rightClickSelection: NotesTextSelection | null = null;
+  #pasteAsPlainText = false;
 
   slashOpen = $state(false);
   #resumeSlashAfterComposition = false;
@@ -332,6 +325,13 @@ export class NotesTextEditorController {
   linkEditorOpen = $state(false);
   linkRange = $state({ start: 0, end: 0, url: null as string | null });
   linkUrlInput = $state("");
+  linkTitleInput = $state("");
+  linkMode = $state<"preview" | "edit">("edit");
+  linkBusy = $state(false);
+  #linkAnchorElement: HTMLElement | null = null;
+  #linkAnchorRange: Range | null = null;
+  #linkSourceText = "";
+  #linkHoverCloseTimer: ReturnType<typeof setTimeout> | null = null;
   linkError = $state<string | null>(null);
   contextMenuOpen = $state(false);
   contextMenuPoint = $state<{ x: number; y: number } | null>(null);
@@ -364,6 +364,8 @@ export class NotesTextEditorController {
       void this.slashOpen;
       this.slashActiveIndex = 0;
     });
+
+    $effect(() => () => this.keepLinkPreviewOpen());
   }
 
   get block(): NotesBlock { return this.source.block(); }
@@ -390,6 +392,21 @@ export class NotesTextEditorController {
       || this.linkEditorOpen
     );
   }
+  get linkPageTargets(): NotesPageMentionTarget[] {
+    return this.linkEditorOpen ? this.source.mentionTargets().filter((target) => target.kind === "page") : [];
+  }
+  get linkDestinationTitle(): string {
+    const target = notesLinkTarget(this.linkUrlInput, typeof window === "undefined" ? undefined : window.location.href);
+    if (!target) return this.linkUrlInput;
+    return target.blockId ? this.linkTitleInput
+      : this.linkPageTargets.find((page) => page.id === target.pageId)?.title || this.linkTitleInput;
+  }
+
+  /** Re-read the original link or selection geometry as the note scrolls. */
+  readLinkAnchor = (): NotesFloatingPanelRect | null => {
+    return this.#linkAnchorElement?.isConnected ? this.#linkAnchorElement.getBoundingClientRect()
+      : this.#linkAnchorRange?.getBoundingClientRect?.() ?? this.runtime.editor?.getBoundingClientRect() ?? null;
+  };
   get currentColor(): NotesColor { return blockColor(this.block); }
   get blockSupportsColor(): boolean { return canBlockHaveColor(this.block.type); }
   get headingToggleable(): boolean {
@@ -461,6 +478,7 @@ export class NotesTextEditorController {
   };
 
   handleCompositionStart = (): void => {
+    this.cancelLinkEditor();
     this.#resumeSlashAfterComposition = this.slashOpen;
     this.runtime.compositionActive = true;
     this.closeCompositionSensitiveMenus();
@@ -471,8 +489,17 @@ export class NotesTextEditorController {
     this.linkError = null;
   };
 
-  cancelLinkEditor = (): void => {
+  updateLinkTitle = (value: string): void => {
+    this.linkTitleInput = value;
+    this.linkError = null;
+  };
+
+  cancelLinkEditor = (restoreFocus = false): void => {
+    this.keepLinkPreviewOpen();
     this.linkEditorOpen = false;
+    this.#linkAnchorElement = null;
+    this.#linkAnchorRange = null;
+    if (restoreFocus) void this.runtime.focusEditorWithSelection(this.linkRange.start, this.linkRange.end);
   };
 
   updateSlashActiveIndex = (index: number): void => {
@@ -595,6 +622,12 @@ export class NotesTextEditorController {
       eventIsComposing: event.isComposing,
       key: event.key,
     })) return;
+    if (this.linkEditorOpen && event.key === "Escape") {
+      event.preventDefault();
+      this.cancelLinkEditor(true);
+      return;
+    }
+    this.#pasteAsPlainText = (event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "v";
     const undoAction = notesUndoShortcutAction(event);
     if (undoAction) {
       event.preventDefault();
@@ -722,6 +755,7 @@ export class NotesTextEditorController {
 
   handleBeforeInput = (event: InputEvent): void => {
     if (event.isComposing || this.runtime.compositionActive) return;
+    this.cancelLinkEditor();
     if (event.inputType === "historyUndo" || event.inputType === "historyRedo") {
       event.preventDefault();
       void Promise.resolve(event.inputType === "historyUndo" ? this.source.onUndo() : this.source.onRedo());
@@ -924,6 +958,13 @@ export class NotesTextEditorController {
       : await readNotesClipboard();
     if (this.block.id !== blockId || this.text !== originalText
       || this.textSelection.start !== start || this.textSelection.end !== end) return;
+    const pastedUrl = !plainOnly && this.canUseLinks && start !== end
+      ? notesPastedTextLinkUrl(clipboard.plainText, window.location.href) : null;
+    if (pastedUrl) {
+      await this.source.onApplyTextLink(blockId, start, end, pastedUrl);
+      await this.runtime.focusEditorWithSelection(start, end);
+      return;
+    }
     const html = plainOnly || this.block.type === "code" ? "" : notesClipboardPasteHtml(clipboard.plainText, clipboard.html);
     if (html.trim() && await Promise.resolve(this.source.onPasteRichHtml(this.block.id, start, end, html))) return;
     const plainText = normalizeNotesClipboardPlainText(clipboard.plainText);
@@ -954,8 +995,14 @@ export class NotesTextEditorController {
     if (!selection) return false;
     const range = blockTextLinkRangeForSelection(this.block, selection.start, selection.end);
     if (range.start === range.end && !range.url) return false;
+    this.keepLinkPreviewOpen();
     this.linkRange = range;
     this.linkUrlInput = range.url ?? "";
+    this.linkTitleInput = this.text.slice(range.start, range.end);
+    this.linkMode = "edit";
+    this.#linkSourceText = this.text;
+    this.#linkAnchorElement = null;
+    this.#linkAnchorRange = target.ownerDocument.getSelection()?.getRangeAt(0).cloneRange() ?? null;
     this.linkError = null;
     this.inlineEquationErrorReason = null;
     this.linkEditorOpen = true;
@@ -968,25 +1015,135 @@ export class NotesTextEditorController {
     if (this.runtime.editor) this.openLinkEditorFromEditor(this.runtime.editor);
   };
 
+  /** Read a link's text range without changing the caret or native selection. */
+  private prepareLinkTarget(target: EventTarget | null): boolean {
+    const editor = this.runtime.editor;
+    if (!(target instanceof Element) || !editor) return false;
+    const link = target.closest<HTMLElement>("[data-notes-link-url]");
+    const url = link?.dataset.notesLinkUrl;
+    if (!link || !url || !editor.contains(link) || !this.canUseLinks) return false;
+    const offset = notesEditableOffsetFromDomPoint(editor, link, 0);
+    if (offset === null) return false;
+    this.keepLinkPreviewOpen();
+    this.linkRange = blockTextLinkRangeForSelection(this.block, offset + 1, offset + 1);
+    this.linkUrlInput = url;
+    this.linkTitleInput = this.text.slice(this.linkRange.start, this.linkRange.end) || link.textContent || "";
+    this.#linkSourceText = this.text;
+    this.#linkAnchorElement = link;
+    this.#linkAnchorRange = null;
+    this.linkError = null;
+    this.linkMode = "preview";
+    return true;
+  }
+
+  /** Show floating actions on hover without interrupting dragging, touch, or an open edit form. */
+  handleLinkPointerOver = (event: PointerEvent): void => {
+    if (event.pointerType === "touch" || event.buttons || this.linkBusy || this.contextMenuOpen || (this.linkEditorOpen && this.linkMode === "edit")) return;
+    if (this.linkEditorOpen && event.target instanceof Node && this.#linkAnchorElement?.contains(event.target)) {
+      this.keepLinkPreviewOpen();
+      return;
+    }
+    if (this.prepareLinkTarget(event.target)) this.linkEditorOpen = true;
+  };
+
+  handleLinkPointerOut = (event: PointerEvent): void => {
+    if (!this.#linkAnchorElement?.contains(event.target instanceof Node ? event.target : null)) return;
+    if (event.relatedTarget instanceof Node && this.#linkAnchorElement.contains(event.relatedTarget)) return;
+    this.scheduleLinkPreviewClose();
+  };
+
+  keepLinkPreviewOpen = (): void => {
+    if (this.#linkHoverCloseTimer !== null) clearTimeout(this.#linkHoverCloseTimer);
+    this.#linkHoverCloseTimer = null;
+  };
+
+  /** Allow the pointer to cross the small gap between the link and its portaled preview. */
+  scheduleLinkPreviewClose = (): void => {
+    this.keepLinkPreviewOpen();
+    if (!this.linkEditorOpen || this.linkMode !== "preview" || this.linkBusy || this.linkError) return;
+    this.#linkHoverCloseTimer = setTimeout(() => this.cancelLinkEditor(), NOTES_LINK_HOVER_CLOSE_DELAY_MS);
+  };
+
+  /** Open links directly while leaving text selection gestures intact. */
+  handleLinkClick = (event: MouseEvent): void => {
+    const editor = this.runtime.editor;
+    if (!(event.target instanceof Element) || !editor || event.shiftKey || event.altKey) return;
+    if (!event.target.closest("[data-notes-link-url]")) return;
+    event.preventDefault();
+    if (!event.ctrlKey && !event.metaKey && !editor.ownerDocument.getSelection()?.isCollapsed) return;
+    if (this.linkBusy || !this.prepareLinkTarget(event.target)) return;
+    this.linkEditorOpen = false;
+    this.contextMenuOpen = false;
+    this.slashOpen = false;
+    this.mentionQuery = null;
+    void this.openLinkDestination();
+  };
+
+  editLinkDestination = (): void => { this.keepLinkPreviewOpen(); this.linkMode = "edit"; };
+
+  openLinkDestination = async (): Promise<void> => {
+    if (this.linkBusy) return;
+    this.linkBusy = true;
+    try {
+      await openNotesTextLink(this.linkUrlInput);
+      this.cancelLinkEditor();
+    } catch (error: unknown) {
+      console.warn("Notes link navigation failed", error);
+      this.linkError = this.source.translate("notes.linkOpenFailed");
+      this.linkEditorOpen = true;
+    } finally { this.linkBusy = false; }
+  };
+
+  copyLinkDestination = async (): Promise<void> => {
+    try {
+      await writeTextToClipboard(this.linkUrlInput);
+      this.cancelLinkEditor(true);
+    } catch (error: unknown) {
+      console.warn("Notes link copy failed", error);
+      this.linkError = this.source.translate("notes.linkCopyFailed");
+    }
+  };
+
   applyLinkFromEditor = async (): Promise<void> => {
-    const normalizedUrl = normalizeRichTextLinkUrl(this.linkUrlInput);
+    if (this.linkBusy) return;
+    const normalizedUrl = normalizeNotesTextLinkUrl(this.linkUrlInput, window.location.href);
     if (!normalizedUrl) {
       this.linkError = this.source.translate("notes.linkUrlInvalid");
       return;
     }
     this.linkError = null;
     const { start, end } = this.linkRange;
-    await Promise.resolve(this.source.onApplyTextLink(this.block.id, start, end, normalizedUrl));
-    this.linkEditorOpen = false;
-    await this.runtime.focusEditorWithSelection(start, end);
+    if (this.text !== this.#linkSourceText) { this.linkError = this.source.translate("notes.linkSelectionChanged"); return; }
+    if (!this.linkTitleInput.trim()) { this.linkError = this.source.translate("notes.linkTitleRequired"); return; }
+    this.linkBusy = true;
+    try {
+      if (this.linkTitleInput === this.text.slice(start, end)) {
+        await this.source.onApplyTextLink(this.block.id, start, end, normalizedUrl);
+      } else {
+        await this.source.onReplaceRichText(this.block.id, editRichTextLink(this.editableRichText, start, end, this.linkTitleInput, normalizedUrl));
+      }
+      this.cancelLinkEditor();
+      await this.runtime.focusEditorWithSelection(start, start + this.linkTitleInput.length);
+    } catch (error: unknown) {
+      console.warn("Notes link edit failed", error);
+      this.linkError = this.source.translate("notes.linkSaveFailed");
+    } finally { this.linkBusy = false; }
   };
 
   removeLinkFromEditor = async (): Promise<void> => {
+    if (this.linkBusy) return;
     this.linkError = null;
     const { start, end } = this.linkRange;
-    await Promise.resolve(this.source.onApplyTextLink(this.block.id, start, end, null));
-    this.linkEditorOpen = false;
-    await this.runtime.focusEditorWithSelection(start, end);
+    if (this.text !== this.#linkSourceText) { this.linkError = this.source.translate("notes.linkSelectionChanged"); return; }
+    this.linkBusy = true;
+    try {
+      await this.source.onApplyTextLink(this.block.id, start, end, null);
+      this.cancelLinkEditor();
+      await this.runtime.focusEditorWithSelection(start, end);
+    } catch (error: unknown) {
+      console.warn("Notes link removal failed", error);
+      this.linkError = this.source.translate("notes.linkSaveFailed");
+    } finally { this.linkBusy = false; }
   };
 
   commitPlainTextValue(value: string, selection: NotesTextSelection | null): void {
@@ -1053,10 +1210,31 @@ export class NotesTextEditorController {
 
   handlePaste = async (event: ClipboardEvent): Promise<void> => {
     if (!(event.currentTarget instanceof HTMLElement)) return;
+    this.cancelLinkEditor();
+    const plainOnly = this.#pasteAsPlainText;
+    this.#pasteAsPlainText = false;
     const clipboardText = event.clipboardData?.getData("text/plain") ?? "";
-    const html = this.block.type === "code" ? "" : notesClipboardPasteHtml(clipboardText, event.clipboardData?.getData("text/html") ?? "");
     const selection = notesTextSelectionFromEditableRoot(event.currentTarget);
     if (!selection) return;
+    if (plainOnly) {
+      event.preventDefault();
+      const plainText = normalizeNotesClipboardPlainText(clipboardText);
+      if (!plainText) return;
+      const nextText = `${this.text.slice(0, selection.start)}${plainText}${this.text.slice(selection.end)}`;
+      const cursor = selection.start + plainText.length;
+      this.source.onTextInput(this.block.id, nextText, { start: cursor, end: cursor });
+      await this.runtime.focusEditorWithSelection(cursor, cursor);
+      return;
+    }
+    const pastedUrl = this.canUseLinks && selection.start !== selection.end
+      ? notesPastedTextLinkUrl(clipboardText, window.location.href) : null;
+    if (pastedUrl) {
+      event.preventDefault();
+      await this.source.onApplyTextLink(this.block.id, selection.start, selection.end, pastedUrl);
+      await this.runtime.focusEditorWithSelection(selection.start, selection.end);
+      return;
+    }
+    const html = this.block.type === "code" ? "" : notesClipboardPasteHtml(clipboardText, event.clipboardData?.getData("text/html") ?? "");
     if (html.trim() && this.block.type !== "code") {
       event.preventDefault();
       const handled = await Promise.resolve(

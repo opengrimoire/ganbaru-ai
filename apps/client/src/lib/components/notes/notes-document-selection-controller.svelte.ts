@@ -3,6 +3,8 @@ import { notesClipboardContent, notesDocumentClipboardBlockIds, setNotesClipboar
 import { notesRichTextFormattingShortcutAnnotationName } from "$lib/notes/rich-text-shortcuts";
 import type { NotesRichTextAnnotationName } from "$lib/notes/rich-text";
 import { tick } from "svelte";
+import { getLocalization } from "$lib/i18n/translator.svelte";
+import { notesPastedTextLinkUrl } from "$lib/notes/link-navigation";
 import { blockPlainText, isTextEditableBlock } from "$lib/notes/block-factory";
 import { isNotesTabKey } from "$lib/notes/block-keyboard";
 import { createNotesDocumentSelectionPainter, findEditableDomPoint, notesEditableOffsetFromDomPoint } from "$lib/notes/editor-selection";
@@ -22,6 +24,7 @@ interface DocumentSelectionOptions {
   replace: (ids: readonly string[], start: number, end: number, text: string, html?: string, documentSelection?: NotesDocumentSelection) => Promise<void>;
   indent?: (ids: readonly string[], direction: "nest" | "outdent", selection?: NotesDocumentSelection) => Promise<void>;
   format: (ids: readonly string[], start: number, end: number, annotation: NotesRichTextAnnotationName, documentSelection?: NotesDocumentSelection) => Promise<void>;
+  link?: (ids: readonly string[], start: number, end: number, url: string, documentSelection?: NotesDocumentSelection) => Promise<void>;
   focus: (point: NotesDocumentPoint, preventScroll?: boolean) => void;
   restoreFocusAfterEdit?: () => void;
   clearBlockSelection: () => void;
@@ -43,6 +46,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
   let replacementText: string | null = null;
   let alive = true;
   let composing = false;
+  let pasteAsPlainText = false;
   let verticalGoalX: number | null = null;
   let verticalFocusLine: { blockId: string; offset: number; index: number } | null = null;
   let extensionInProgress = false;
@@ -80,7 +84,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
 
   function length(id: string): number {
     const block = options.readBlock(id);
-    if (block?.type === "child_page") return 1;
+    if (block?.type === "child_page" || block?.type === "child_database") return 1;
     return block ? blockPlainText(block).length : 0;
   }
 
@@ -247,7 +251,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
       if (!block) throw new Error("Notes selection content is still loading");
       return { block, start: id === selected.blockIds[0] ? selected.start.offset : 0,
         end: id === selected.blockIds.at(-1) ? selected.end.offset : undefined };
-    }));
+    }), { pageId: options.readPageId(), unnamedDatabaseTitle: getLocalization().t("notes.databaseNewTitle") });
   }
 
   async function replace(value: string, html?: string): Promise<void> {
@@ -265,6 +269,27 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
       clear();
       options.restoreFocusAfterEdit?.();
     } finally { if (token === request) replacementText = null; }
+  }
+
+  /** Apply a copied destination to the selected words, hydrating only the selected block content. */
+  async function pasteLink(value: string): Promise<boolean> {
+    const url = notesPastedTextLinkUrl(value, list?.ownerDocument.defaultView?.location.href);
+    const selected = range();
+    if (!url || !selected || !options.link) return false;
+    const token = request;
+    const pageId = options.readPageId();
+    await hydrateSelection(selected.blockIds);
+    if (!alive || token !== request || pageId !== options.readPageId()) return true;
+    const hasText = selected.blockIds.some((id) => {
+      const block = options.readBlock(id);
+      return block && isTextEditableBlock(block.type) && block.type !== "code"
+        && (id === selected.end.blockId ? selected.end.offset : length(id))
+          > (id === selected.start.blockId ? selected.start.offset : 0);
+    });
+    if (!hasText) return false;
+    await options.link(selected.blockIds, selected.start.offset, selected.end.offset, url, selection ?? undefined);
+    await tick(); paint();
+    return true;
   }
 
   async function copy(cut = false): Promise<void> {
@@ -514,6 +539,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     if (event.defaultPrevented || event.isComposing || !(event.target instanceof Element)) return;
     if (!event.target.closest(`${EDITOR}, ${ATOMIC}`) && !event.target.matches("[data-notes-selectable-block-id]") && !selection) return;
     if (event.target.closest("[data-notes-selection-menu]")) return;
+    pasteAsPlainText = (event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "v";
     if (!["ArrowUp", "ArrowDown", "Shift"].includes(event.key) || !event.shiftKey) resetVerticalNavigation();
     const modifier = event.ctrlKey || event.metaKey;
     if (replacementText !== null && !modifier && !event.altKey) {
@@ -623,13 +649,15 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
   }
 
   function clipboard(event: ClipboardEvent): void {
+    const plainOnly = event.type === "paste" && pasteAsPlainText;
+    if (event.type === "paste") pasteAsPlainText = false;
     if (!selection && event.target instanceof Element) {
       const atomic = event.target.closest<HTMLElement>(ATOMIC);
       const id = atomic?.dataset.notesAtomicBlock;
       if (id) {
         if (event.type === "paste") {
           const plainText = event.clipboardData?.getData("text/plain") ?? "";
-          const html = notesClipboardPasteHtml(plainText, event.clipboardData?.getData("text/html") ?? "") || undefined;
+          const html = plainOnly ? undefined : notesClipboardPasteHtml(plainText, event.clipboardData?.getData("text/html") ?? "") || undefined;
           event.preventDefault(); event.stopPropagation();
           if (plainText || html) void run(() => options.replace([id], 1, 1, plainText, html));
           return;
@@ -641,8 +669,8 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     event.preventDefault(); event.stopPropagation();
     if (event.type === "paste") {
       const plainText = event.clipboardData?.getData("text/plain") ?? "";
-      const html = notesClipboardPasteHtml(plainText, event.clipboardData?.getData("text/html") ?? "") || undefined;
-      if (plainText || html) void run(() => replace(plainText, html));
+      const html = plainOnly ? undefined : notesClipboardPasteHtml(plainText, event.clipboardData?.getData("text/html") ?? "") || undefined;
+      if (plainText || html) void run(async () => { if (plainOnly || !await pasteLink(plainText)) await replace(plainText, html); });
       return;
     }
     const selected = range();
@@ -718,7 +746,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     async paste() {
       const token = request;
       const { plainText, html } = await readNotesClipboard();
-      if (token === request && (plainText || html)) await replace(plainText, notesClipboardPasteHtml(plainText, html) || undefined);
+      if (token === request && (plainText || html) && !await pasteLink(plainText)) await replace(plainText, notesClipboardPasteHtml(plainText, html) || undefined);
     },
     delegation(node: HTMLDivElement) {
       list = node; alive = true;

@@ -51,6 +51,8 @@ Network adapters validate:
 
 An origin permitted by CSP is not automatically permitted by a Rust network adapter, and an opener allowlist does not grant fetch authority.
 
+Explicitly activated Notes hyperlinks use a feature-owned native command on desktop and Android. It applies the rich-text URL size and control-character bounds, allows only HTTP, HTTPS, and validated email links, and rejects embedded URL credentials before opening the system handler. Local note and database-block references use Notes navigation. Opening a hyperlink does not fetch its content through the app or expand the generic opener capability allowlist.
+
 ## Local data encryption
 
 The vault and SQLite database are not application-encrypted. Ganbaru AI trusts operating-system account isolation and full-disk encryption such as LUKS, BitLocker, or FileVault.

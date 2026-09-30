@@ -4,6 +4,7 @@ import { blockChildrenAreVisible, parentIdForBlock } from "./block-tree";
 import { richTextPlainText, richTextRangeSlice } from "./rich-text";
 import { escapeNotesMarkdown, notesMarkdownFence, notesRichTextMarkdown } from "./clipboard-markdown";
 import { notesClipboardLinkUrl } from "./clipboard-links";
+import { isNotesUuid } from "./block-link";
 import type { NotesBlock, NotesRichText } from "./types";
 
 export interface NotesClipboardContent {
@@ -17,9 +18,39 @@ export interface NotesClipboardBlock {
   end?: number;
 }
 
+export interface NotesClipboardOptions {
+  pageId: string;
+  unnamedDatabaseTitle: string;
+}
+
 interface ClipboardNode {
   entry: NotesClipboardBlock;
   children: ClipboardNode[];
+  databaseReference?: { title: string; url: string | null };
+}
+
+/** Resolve nested database blocks to their owning note without reading database rows. */
+function databaseClipboardReference(
+  block: NotesBlock,
+  blocks: ReadonlyMap<string, NotesBlock>,
+  options?: NotesClipboardOptions,
+): ClipboardNode["databaseReference"] {
+  if (block.type !== "child_database") return undefined;
+  let current: NotesBlock = block;
+  const seen = new Set<string>();
+  let pageId = options?.pageId;
+  while (!seen.has(current.id)) {
+    seen.add(current.id);
+    if (current.parent.type === "page_id") { pageId = current.parent.page_id; break; }
+    if (current.parent.type !== "block_id") break;
+    const parent = blocks.get(current.parent.block_id);
+    if (!parent) break;
+    if (parent.type === "child_page") { pageId = parent.id; break; }
+    current = parent;
+  }
+  const url = isNotesUuid(pageId) && isNotesUuid(block.id)
+    ? `#notes?${new URLSearchParams({ page: pageId, block: block.id })}` : null;
+  return { title: block.child_database.title || options?.unnamedDatabaseTitle || "", url };
 }
 
 /** Include hidden descendants of fully selected collapsed blocks in document order. */
@@ -119,7 +150,7 @@ function renderNodes(nodes: readonly ClipboardNode[], insideTable = false): stri
 }
 
 /** Represent common blocks with HTML semantics and other blocks with readable text. */
-function renderNode({ entry, children }: ClipboardNode): string {
+function renderNode({ entry, children, databaseReference }: ClipboardNode): string {
   const { block } = entry;
   const content = richTextHtml(selectedRichText(entry));
   const descendants = renderNodes(children, block.type === "table");
@@ -152,6 +183,10 @@ function renderNode({ entry, children }: ClipboardNode): string {
       return `<hr>${descendants}`;
     case "child_page":
       return `<p data-notes-child-page-id="${escapeHtml(block.id)}"><a href="#notes?page=${encodeURIComponent(block.id)}">${escapeHtml(block.child_page.title)}</a></p>`;
+    case "child_database": {
+      const label = escapeHtml(databaseReference?.title ?? block.child_database.title);
+      return `<p>${databaseReference?.url ? `<a href="${escapeHtml(databaseReference.url)}">${label}</a>` : label}</p>`;
+    }
     case "table":
       return `<table><tbody>${children.map((node, rowIndex) => {
         const row = node.entry.block;
@@ -180,7 +215,7 @@ function renderMarkdown(nodes: readonly ClipboardNode[]): string {
   const parts: string[] = [];
   let previousList = "";
   let number = 0;
-  for (const { entry, children } of nodes) {
+  for (const { entry, children, databaseReference } of nodes) {
     const { block } = entry;
     const items = selectedRichText(entry);
     const content = notesRichTextMarkdown(items);
@@ -206,6 +241,10 @@ function renderMarkdown(nodes: readonly ClipboardNode[]): string {
       value = `${fence}${language}\n${text}\n${fence}`;
     } else if (block.type === "divider") value = "---";
     else if (block.type === "child_page") value = `[${escapeNotesMarkdown(block.child_page.title)}](#notes?page=${encodeURIComponent(block.id)})`;
+    else if (block.type === "child_database") {
+      const label = escapeNotesMarkdown(databaseReference?.title ?? block.child_database.title);
+      value = databaseReference?.url ? `[${label}](${databaseReference.url})` : label;
+    }
     else if (block.type === "callout") {
       const icon = block.callout.icon?.type === "emoji" ? `${block.callout.icon.emoji}\n\n` : "";
       const body = [content, descendants].filter(Boolean).join("\n\n");
@@ -239,16 +278,22 @@ function renderMarkdown(nodes: readonly ClipboardNode[]): string {
   return parts.join("");
 }
 
-/** Build HTML and plain text from selected model content, independent of mounted rows. */
-export function notesClipboardContent(entries: readonly NotesClipboardBlock[]): NotesClipboardContent {
+/**
+ * Build HTML and Markdown from selected model content, independent of mounted rows.
+ * Supply the containing page and localized placeholder when copying database blocks.
+ * Database copies contain a local block reference without reading their rows or schema.
+ */
+export function notesClipboardContent(entries: readonly NotesClipboardBlock[], options?: NotesClipboardOptions): NotesClipboardContent {
   const endsAtBoundary = entries.length > 1 && entries.at(-1)?.end === 0;
   const selectedEntries = (endsAtBoundary ? entries.slice(0, -1) : entries)
-    .filter((entry) => entry.block.type !== "child_page" || ((entry.start ?? 0) === 0 && (entry.end ?? 1) > 0));
+    .filter((entry) => !["child_page", "child_database"].includes(entry.block.type)
+      || ((entry.start ?? 0) === 0 && (entry.end ?? 1) > 0));
+  const blocks = new Map(entries.map(({ block }) => [block.id, block]));
   const roots: ClipboardNode[] = [];
   const byId = new Map<string, ClipboardNode>();
   const indentStacks = new Map<string, ClipboardNode[]>();
   for (const entry of selectedEntries) {
-    const node: ClipboardNode = { entry, children: [] };
+    const node: ClipboardNode = { entry, children: [], databaseReference: databaseClipboardReference(entry.block, blocks, options) };
     const { block } = entry;
     const parentId = parentIdForBlock(block);
     const stack = indentStacks.get(parentId) ?? [];

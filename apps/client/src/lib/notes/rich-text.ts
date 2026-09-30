@@ -15,6 +15,7 @@ import type {
   NotesUserMentionRichText,
 } from "./types";
 import { cloneNotesJson } from "./json-clone";
+import { parseNotesLinkHash } from "./block-link";
 
 const DEFAULT_RICH_TEXT_ANNOTATIONS: NotesRichTextAnnotations = {
   bold: false,
@@ -675,10 +676,12 @@ export function insertEquationRichText(
   ];
 }
 
+/** Normalize supported web, email, and validated local Notes destinations. */
 export function normalizeRichTextLinkUrl(rawUrl: string): string | null {
   const trimmed = rawUrl.trim();
   if (!trimmed) return null;
   if (trimmed.length > 2048 || /[\u0000-\u001f]/u.test(trimmed)) return null;
+  if (trimmed.startsWith("#")) return parseNotesLinkHash(trimmed) ? trimmed : null;
   const hasScheme = LINK_SCHEME_PATTERN.test(trimmed);
   if (!hasScheme && EMAIL_ADDRESS_PATTERN.test(trimmed)) return `mailto:${trimmed}`;
   if (!hasScheme && trimmed.includes("@")) return null;
@@ -695,6 +698,26 @@ export function normalizeRichTextLinkUrl(rawUrl: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** Recognize a single copied URL without treating ordinary replacement text as a host name. */
+export function notesPastedLinkUrl(text: string): string | null {
+  const candidate = text.trim();
+  if (/\s/u.test(candidate)) return null;
+  if (!/^(?:https?:|mailto:|#notes\?)/iu.test(candidate)
+    && !EMAIL_ADDRESS_PATTERN.test(candidate)
+    && !/^[^\s/:?#]+\.[^\s/:?#]+(?:[/:?#].*)?$/u.test(candidate)) return null;
+  return normalizeRichTextLinkUrl(candidate);
+}
+
+/** Edit a link label while preserving surrounding text and the selected text's shared formatting. */
+export function editRichTextLink(
+  richText: readonly NotesRichText[], start: number, end: number, title: string, url: string,
+): NotesRichText[] {
+  const selected = richTextRangeSlice(richText, start, end);
+  const replacement = createTextRichText(title);
+  replacement.annotations = { ...richTextAnnotationsForSelection(selected, 0, richTextPlainText(selected).length).annotations };
+  return applyRichTextLink(replaceRichTextRange(richText, start, end, [replacement]), start, start + title.length, url);
 }
 
 function itemLinkUrl(item: NotesRichText): string | null {

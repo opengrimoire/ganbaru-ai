@@ -784,6 +784,7 @@
                 {@const NotesChildDatabaseBlock = advancedBlockLoadState.component.component}
                 <NotesChildDatabaseBlock
                   onReady={() => { readyDatabaseIdentity = databaseIdentity; }}
+                  onTitleSaved={(databaseId, title) => notes.reconcileDatabaseTitle(block.id, databaseId, title)}
                   {block}
                   {focusBlockId}
                   {focusRequestId}

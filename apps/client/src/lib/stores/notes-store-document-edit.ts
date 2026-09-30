@@ -5,13 +5,13 @@ import { planNotesRichHtmlPaste } from "$lib/notes/rich-text-paste";
 import { appendNotesBlockChildren, moveNotesBlock, trashNotesBlock, updateNotesBlock } from "$lib/api/notes";
 import { applyBlockUpdate, blockIndent, blockUpdateWithIndent, blockEditableRichText, blockPlainText, blockWithRichText, createBlockUpdate, createBlockWrite, isTextEditableBlock } from "$lib/notes/block-factory";
 import { blockChildrenAreVisible } from "$lib/notes/block-tree";
-import { applyRichTextAnnotations, replaceRichTextRange, createTextRichText, richTextAnnotationsForSelection, richTextPlainText, type NotesRichTextAnnotationName } from "$lib/notes/rich-text";
+import { applyRichTextAnnotations, applyRichTextLink, normalizeRichTextLinkUrl, replaceRichTextRange, createTextRichText, richTextAnnotationsForSelection, richTextPlainText, type NotesRichTextAnnotationName } from "$lib/notes/rich-text";
 import { splitRichTextForBlock } from "$lib/notes/rich-text-split";
 import type { NotesBlockActionsContext } from "./notes-store-block-actions";
 import type { NotesBlockPlacement } from "$lib/notes/post-mutation";
 import { createBlockWriteFromRichText } from "$lib/notes/block-rich-text-write";
 import { notesEnterSiblingBlockType } from "$lib/notes/block-enter";
-import type { NotesBlock, NotesBlockWrite, NotesParent } from "$lib/notes/types";
+import type { NotesBlock, NotesBlockUpdate, NotesBlockWrite, NotesParent } from "$lib/notes/types";
 
 /** Replace a document range as one local edit and one undo entry. */
 export function createNotesDocumentEdit(context: NotesBlockActionsContext, optimisticBlockFromWrite: (write: NotesBlockWrite, parent: NotesParent) => NotesBlock) {
@@ -149,34 +149,63 @@ export function createNotesDocumentEdit(context: NotesBlockActionsContext, optim
   };
 }
 
+/** Read the selected editable segments without rounding partial endpoints to whole blocks. */
+function documentTextSegments(context: NotesBlockActionsContext, ids: readonly string[], start: number, end: number) {
+  return ids.flatMap((id, index) => {
+    const block = context.blockById(id);
+    if (!block) throw new Error("Notes selection content is not loaded");
+    if (!isTextEditableBlock(block.type)) return [];
+    const from = index === 0 ? start : 0;
+    const to = Math.min(index === ids.length - 1 ? end : blockPlainText(block).length, blockPlainText(block).length);
+    return from < to ? [{ block, from, to }] : [];
+  });
+}
+
+/** Apply document formatting immediately with one undo entry and ordered canonical writes. */
+function applyDocumentFormattingUpdates(
+  context: NotesBlockActionsContext, ids: readonly string[], start: number, end: number,
+  updates: readonly { id: string; update: NotesBlockUpdate }[], documentSelection?: NotesDocumentSelection,
+  refreshLinks = false,
+): void {
+  if (!updates.length) return;
+  const before = context.createUndoSnapshot(ids[0]);
+  const selected = documentSelection ?? { anchor: { blockId: ids[0], offset: start }, focus: { blockId: ids[ids.length - 1], offset: end } };
+  if (before) before.documentSelection = selected;
+  for (const { id, update } of updates) context.localApplyBlockUpdate(id, update);
+  const after = context.createUndoSnapshot(ids[0]);
+  if (after) after.documentSelection = selected;
+  context.recordUndo({ kind: "formatting", before, after });
+  void context.enqueueEditorMutation(async () => {
+    await context.awaitSelectedPageReady();
+    for (const { id, update } of updates) await updateNotesBlock(id, update);
+    if (refreshLinks) await context.refreshOpenLinks();
+  }).catch((error: unknown) => console.warn("Notes document formatting persistence failed", error));
+}
+
 /** Toggle a formatting annotation over every selected text segment in one undo step. */
 export function createNotesDocumentFormatting(context: NotesBlockActionsContext) {
   return async (ids: readonly string[], start: number, end: number, annotation: NotesRichTextAnnotationName, documentSelection?: NotesDocumentSelection): Promise<void> => {
-    const segments = ids.flatMap((id, index) => {
-      const block = context.blockById(id);
-      if (!block) throw new Error("Notes selection content is not loaded");
-      if (!isTextEditableBlock(block.type)) return [];
-      const from = index === 0 ? start : 0;
-      const to = Math.min(index === ids.length - 1 ? end : blockPlainText(block).length, blockPlainText(block).length);
-      return from < to ? [{ block, from, to }] : [];
-    });
-    if (!segments.length) return;
+    const segments = documentTextSegments(context, ids, start, end);
     const enabled = !segments.every(({ block, from, to }) =>
       richTextAnnotationsForSelection(blockEditableRichText(block), from, to).annotations[annotation]);
-    const before = context.createUndoSnapshot(ids[0]);
-    const selected = documentSelection ?? { anchor: { blockId: ids[0], offset: start }, focus: { blockId: ids[ids.length - 1], offset: end } };
-    if (before) before.documentSelection = selected;
     const updates = segments.map(({ block, from, to }) => ({
       id: block.id,
       update: blockWithRichText(block, applyRichTextAnnotations(blockEditableRichText(block), from, to, { [annotation]: enabled })),
     }));
-    for (const { id, update } of updates) context.localApplyBlockUpdate(id, update);
-    const after = context.createUndoSnapshot(ids[0]);
-    if (after) after.documentSelection = selected;
-    context.recordUndo({ kind: "formatting", before, after });
-    void context.enqueueEditorMutation(async () => {
-      await context.awaitSelectedPageReady();
-      for (const { id, update } of updates) await updateNotesBlock(id, update);
-    });
+    applyDocumentFormattingUpdates(context, ids, start, end, updates, documentSelection);
+  };
+}
+
+/** Link selected document text without replacing its words, structural blocks, or code. */
+export function createNotesDocumentLinks(context: NotesBlockActionsContext) {
+  return async (ids: readonly string[], start: number, end: number, url: string, documentSelection?: NotesDocumentSelection): Promise<void> => {
+    const normalized = normalizeRichTextLinkUrl(url);
+    if (!normalized) throw new Error("Notes document link destination is invalid");
+    const updates = documentTextSegments(context, ids, start, end).filter(({ block }) => block.type !== "code")
+      .map(({ block, from, to }) => ({
+        id: block.id,
+        update: blockWithRichText(block, applyRichTextLink(blockEditableRichText(block), from, to, normalized)),
+      }));
+    applyDocumentFormattingUpdates(context, ids, start, end, updates, documentSelection, true);
   };
 }

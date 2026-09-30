@@ -874,6 +874,13 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
     return queueEditorMutation(mutation);
   }
 
+  /** Reconcile an acknowledged database rename without another write or replacing its identity. */
+  function reconcileDatabaseTitle(blockId: string, databaseId: string, title: string): void {
+    const block = blockById(blockId);
+    if (block?.type !== "child_database" || block.child_database.database_id !== databaseId) return;
+    applyPostMutation({ blocks: [{ ...block, child_database: { ...block.child_database, title } }] });
+  }
+
   function localApplyBlockUpdate(blockId: string, update: Parameters<typeof applyBlockUpdateLocally>[1]): void {
     pageCreationController.markChanged(pageSession.selectedPageId);
     applyBlockUpdateLocally(blockId, update);
@@ -1682,6 +1689,7 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
     redoNotesEdit,
     setPageTitleDraft,
     clearPageTitleDraft,
+    reconcileDatabaseTitle,
     updateBlockText, updateBlockRichText,
     insertPageMention,
     insertDateMention,
@@ -1708,6 +1716,7 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
     pasteBlockSelection,
     deleteBlock,
     formatDocumentRange: blockActions.formatDocumentRange,
+    linkDocumentRange: blockActions.linkDocumentRange,
     replaceDocumentRange,
     deleteBlockSelection,
     mergeBlockWithPrevious,

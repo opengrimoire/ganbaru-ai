@@ -1,5 +1,19 @@
 # Notes links and collaboration
 
+## Inline links
+
+**Implemented:** linked text uses semantic anchors. In the editor, hovering a link opens a compact floating popover with its destination, Copy, and Edit. Clicking the text or destination opens the link, including Ctrl/Cmd-click. The preview preserves the caret and allows moving the pointer across its gap; leaving the link and preview dismisses it. Touch and text dragging do not trigger hover actions. Local note and database-block references use normal Notes navigation; web and email links open through the system handler. Read-only rich text opens links directly. Selecting linked text does not interrupt the selection or navigate.
+
+Ctrl/Cmd+K and Edit open an anchored panel with Page or URL and Link title fields. The edit form stays open when the pointer leaves it. Available note titles can be searched without reading database rows. Apply and Remove link share the bottom action area beneath a divider aligned with the field margins. Both use plain text button styling, with an icon only for Remove link. Applying changes preserves surrounding text and inline formatting. Remove link keeps the text. Outside clicks and leaving the panel with keyboard focus dismiss it without taking focus back; Escape returns focus to the original text range. Resuming typing dismisses the preview. A delayed editor-panel load does not take focus back from another field. Invalid destinations, stale selections, and failed actions stay visible in the panel.
+
+Pasting a single valid URL onto selected text applies the hyperlink while preserving the words and formatting. Document selections support this across text blocks with one undo step, leaving database blocks and code unchanged. Ordinary copied text still replaces the selection, and code and explicit paste as plain text keep their literal paste behavior.
+
+Link panels use 80% of the rendered Notes paragraph font size and inherit it through their buttons and fields, including when portaled outside the note. Labels and errors scale with the panel text. The note's paragraph typography stays unchanged. They use a light shadow and a field border cue instead of an extra focus contour. They live outside the note's layout, reposition on scrolling and viewport changes, and scroll only when their full bordered height exceeds available space. They release their observers and hover timers when closed and load only when opened. Linking and copying a local database reference do not read or duplicate its rows or schema.
+
+Local text links persist as `#notes?page=UUID` with an optional `block=UUID`. Links copied from the current app origin normalize to this portable form. Rust validates these identities before saving; navigation still checks whether the target is available. This does not register an operating-system URL scheme or create a public sharing URL.
+
+External activation uses a Notes-owned native command on desktop and Android. It validates the existing rich-text URL bounds, allows only HTTP, HTTPS, and email destinations, and rejects embedded credentials before invoking the system handler. Local references stay within Notes navigation. The command does not fetch content or widen the generic opener allowlist.
+
 ## Stable links and aliases
 
 Local Notes links resolve to stable page identities when known. Aliases provide alternate names for pages and database rows without changing the canonical title.

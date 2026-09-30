@@ -3,6 +3,7 @@ use tauri::{AppHandle, Runtime};
 
 mod agent_bridge_export;
 mod data_source_csv_export;
+pub(crate) mod external_links;
 mod file_assets;
 mod html_export;
 mod json_graph_export;

@@ -1,6 +1,44 @@
 use super::helpers::*;
 
 #[test]
+fn notes_rich_text_links_validate_local_page_and_block_identities() {
+    for url in [
+        format!("#notes?page={PAGE_B}"),
+        format!("#notes?page={PAGE_B}&block={BLOCK_B}"),
+        format!("#notes?block={BLOCK_B}&page={PAGE_B}"),
+    ] {
+        assert!(
+            validation::validate_block_payload(
+                "paragraph",
+                &json!({ "rich_text": [linked_rich_text("Target", &url)] }),
+            )
+            .is_ok(),
+            "valid local link rejected: {url}"
+        );
+    }
+    for url in [
+        "#notes?page=bad".to_string(),
+        format!("#notes?block={BLOCK_B}"),
+        format!("#notes?page={PAGE_B}&block="),
+        format!("#notes?page={PAGE_B}&block=bad"),
+        format!("#notes?page={PAGE_B}#other"),
+        format!("#notes?page={PAGE_B}\n"),
+        format!("#other?page={PAGE_B}"),
+        format!("notes:?page={PAGE_B}"),
+        "file:///tmp/private".to_string(),
+    ] {
+        assert!(
+            validation::validate_block_payload(
+                "paragraph",
+                &json!({ "rich_text": [linked_rich_text("Target", &url)] }),
+            )
+            .is_err(),
+            "invalid local link accepted: {url}"
+        );
+    }
+}
+
+#[test]
 fn notes_validation_rejects_bad_ids_and_payloads() {
     assert_eq!(
         validation::require_uuid("bad", "id"),

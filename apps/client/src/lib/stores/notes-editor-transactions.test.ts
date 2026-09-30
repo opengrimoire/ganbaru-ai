@@ -136,6 +136,38 @@ function editor(
 afterEach(() => { vi.clearAllMocks(); });
 
 describe("Notes editing with delayed persistence", () => {
+  it("links partial document text immediately, preserves code and databases, and undoes it in one step", async () => {
+    const codeId = "00000000-0000-4000-8000-000000000004";
+    const databaseId = "00000000-0000-4000-8000-000000000005";
+    const first = fromWrite(createBlockWrite(firstId, "paragraph", "FirstSecond"));
+    const last = fromWrite(createBlockWrite(lastId, "paragraph", "Last"));
+    const code = fromWrite(createBlockWrite(codeId, "code", "Code"));
+    const database = fromWrite(createBlockWrite(databaseId, "child_database", "Tasks"));
+    const h = editor([first, code, database, last]);
+    const ids = [firstId, codeId, databaseId, lastId];
+    const url = `#notes?page=${pageId}&block=${databaseId}`;
+    const selection = { anchor: { blockId: lastId, offset: 2 }, focus: { blockId: firstId, offset: 5 } };
+    await h.actions.linkDocumentRange(ids, 5, 2, url, selection);
+    const firstText = blockEditableRichText(h.projection.blocksById[firstId]);
+    const lastText = blockEditableRichText(h.projection.blocksById[lastId]);
+    expect(firstText.map((item) => [item.plain_text, item.href])).toEqual([["First", null], ["Second", url]]);
+    expect(lastText.map((item) => [item.plain_text, item.href])).toEqual([["La", url], ["st", null]]);
+    expect(h.projection.blocksById[codeId]).toEqual(code);
+    expect(h.projection.blocksById[databaseId]).toEqual(database);
+    expect(blockEditableRichText(h.stored.get(firstId)!)[0].href).toBeNull();
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(blockEditableRichText(parseNotesBlock(h.stored.get(firstId)))[1].href).toBe(url);
+    expect(api.updateNotesBlock.mock.calls.map(([id]) => id)).toEqual([firstId, lastId]);
+    await h.undo.undo();
+    expect(blockEditableRichText(h.projection.blocksById[firstId]).every((item) => item.href === null)).toBe(true);
+    expect(blockEditableRichText(h.projection.blocksById[lastId]).every((item) => item.href === null)).toBe(true);
+    expect(h.restoreSelection).toHaveBeenLastCalledWith(pageId, selection);
+    await h.undo.redo();
+    expect(blockEditableRichText(h.projection.blocksById[firstId])[1].href).toBe(url);
+    await h.persistence.flushPendingBlockSaves();
+  });
+
   it("reserves a slash database immediately, saves earlier typing first, and ignores repeated conversion and stale text", async () => {
     const h = editor([fromWrite(createBlockWrite(firstId, "paragraph", "/dat"))]);
     await h.actions.updateBlockText(firstId, "/datab");

@@ -1,4 +1,5 @@
 import { readNotesClipboard } from "$lib/notes/clipboard-paste";
+import { getLocalization } from "$lib/i18n/translator.svelte";
 import { notesClipboardContent, writeNotesClipboard } from "$lib/notes/clipboard-export";
 import { notesUndoShortcutAction } from "$lib/notes/undo-history";
 import type { NotesBlockSelectionState } from "$lib/notes/block-selection";
@@ -168,7 +169,7 @@ export function createNotesBlockSelectionController(options: NotesBlockSelection
       const block = tree.blocksById[id];
       if (!block) throw new Error("Notes selection content is still loading");
       return { block };
-    }));
+    }), { pageId, unnamedDatabaseTitle: getLocalization().t("notes.databaseNewTitle") });
     await writeNotesClipboard(content);
     if (pageId !== options.readPageId() || !sameSelection(selected, selection)) return;
     const plainText = content.plainText;

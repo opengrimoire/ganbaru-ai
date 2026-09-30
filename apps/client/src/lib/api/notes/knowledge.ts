@@ -30,6 +30,11 @@ export async function listNotesBacklinks(pageId: string): Promise<NotesBacklink[
   return rows.map(mapNotesBacklinkDto);
 }
 
+/** Open a user-activated web or email link through the validating native Notes adapter. */
+export async function openNotesExternalUrl(url: string): Promise<void> {
+  await invoke<void>("notes_open_external_url", { url });
+}
+
 export async function rebuildNotesBacklinkIndex(): Promise<number> {
   const dbUrl = await ensureDbUrl();
   const count = await invoke<unknown>("notes_rebuild_backlink_index", { dbUrl });

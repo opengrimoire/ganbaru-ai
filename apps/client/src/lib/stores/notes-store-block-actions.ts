@@ -1,6 +1,6 @@
 import { createBlockWrite } from "$lib/notes/block-factory";
 import type { NotesRichTextAnnotationName } from "$lib/notes/rich-text";
-import { createNotesDocumentEdit, createNotesDocumentFormatting } from "./notes-store-document-edit";
+import { createNotesDocumentEdit, createNotesDocumentFormatting, createNotesDocumentLinks } from "./notes-store-document-edit";
 import {
   appendNotesBlockChildren,
   duplicateNotesBlocks,
@@ -162,6 +162,7 @@ export interface NotesBlockActions
     NotesBlockPasteActions,
     NotesStructuralBlockActions {
   formatDocumentRange: (ids: readonly string[], start: number, end: number, annotation: NotesRichTextAnnotationName, documentSelection?: NotesDocumentSelection) => Promise<void>;
+  linkDocumentRange: (ids: readonly string[], start: number, end: number, url: string, documentSelection?: NotesDocumentSelection) => Promise<void>;
   replaceDocumentRange: (ids: readonly string[], start: number, end: number, text: string, html?: string, documentSelection?: NotesDocumentSelection) => Promise<void>;
   flushOptimisticBlockWrites: () => Promise<void>;
   ensurePageBody: (pageId: string) => string | null;
@@ -412,6 +413,7 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
 
   return {
     formatDocumentRange: createNotesDocumentFormatting(context),
+    linkDocumentRange: createNotesDocumentLinks(context),
     replaceDocumentRange: createNotesDocumentEdit(context, optimisticBlockFromWrite),
     flushOptimisticBlockWrites,
     ensurePageBody,

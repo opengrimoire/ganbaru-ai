@@ -2,13 +2,19 @@
 import { mount, tick, unmount, type ComponentProps } from "svelte";
 import { fromStore, writable } from "svelte/store";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { applyBlockUpdate, createBlockUpdate, createBlockWrite } from "$lib/notes/block-factory";
+import { applyBlockUpdate, blockEditableRichText, blockPlainText, blockWithRichText, createBlockUpdate, createBlockWrite } from "$lib/notes/block-factory";
+import { applyRichTextLink } from "$lib/notes/rich-text";
 import { notesTextSelectionFromEditableRoot, restoreNotesEditableSelection } from "$lib/notes/editor-selection";
 import { EMPTY_NOTES_BUTTON_BLOCK_STATUS } from "$lib/notes/button-block";
 import { EMPTY_NOTES_TEMPLATE_BLOCK_STATUS } from "$lib/notes/template-block";
-import type { NotesBlock, NotesBlockType } from "$lib/notes/types";
+import type { NotesBlock, NotesBlockType, NotesRichText } from "$lib/notes/types";
 import NotesTextBlockEditor from "./NotesTextBlockEditor.svelte";
 import { createNotesBlockSelectionController } from "./notes-block-selection-controller.svelte";
+
+const openLink = vi.hoisted(() => vi.fn(async (_url: string) => undefined));
+vi.mock("$lib/notes/link-navigation", async (importOriginal) => ({
+  ...await importOriginal<typeof import("$lib/notes/link-navigation")>(), openNotesTextLink: openLink,
+}));
 
 let component: ReturnType<typeof mount> | undefined;
 let releaseDelegates: (() => void) | undefined;
@@ -18,6 +24,10 @@ afterEach(async () => {
   if (component) await unmount(component);
   component = undefined;
   document.body.replaceChildren();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+  openLink.mockClear();
 });
 
 /** Use a reactive block to exercise the real input, lazy menu, and conversion path. */
@@ -37,14 +47,20 @@ async function editor(blockType: NotesBlockType = "paragraph", text = "", indent
   const releaseMentionTargets = vi.fn();
   const acquireMentionTargets = vi.fn(() => releaseMentionTargets);
   const onPasteRichHtml = vi.fn((_id: string, _start: number, _end: number, _html: string) => false);
+  const onApplyTextLink = vi.fn((_id: string, start: number, end: number, url: string | null) => {
+    blocks.update((block) => applyBlockUpdate(block, blockWithRichText(block, applyRichTextLink(blockEditableRichText(block), start, end, url))));
+  });
+  const onReplaceRichText = vi.fn((_id: string, richText: readonly NotesRichText[]) => {
+    blocks.update((block) => applyBlockUpdate(block, blockWithRichText(block, richText)));
+  });
   const props: ComponentProps<typeof NotesTextBlockEditor> = {
     get block() { return current.current; }, previousBlockType: null, isOnlyBlock: true, indentationDepth,
     focusBlockId: initialFocusBlockId, focusRequestId: 1, focusSelection: { start: 0, end: 0 },
     mentionTargets: { read: readMentionTargets, acquire: acquireMentionTargets }, commentAnchors: [], suggestionAnchors: [],
     templateStatus: EMPTY_NOTES_TEMPLATE_BLOCK_STATUS, buttonStatus: EMPTY_NOTES_BUTTON_BLOCK_STATUS,
     onTextInput,
-    onConvert, onReplaceRichText: vi.fn(), onInsertPageMention: vi.fn(), onInsertDateMention: vi.fn(),
-    onInsertObjectMention: vi.fn(), onApplyTextLink: vi.fn(), onInsertInlineEquation: vi.fn(),
+    onConvert, onReplaceRichText, onInsertPageMention: vi.fn(), onInsertDateMention: vi.fn(),
+    onInsertObjectMention: vi.fn(), onApplyTextLink, onInsertInlineEquation: vi.fn(),
     onPastePlainText: () => false, onPasteRichHtml, onApplyTextAnnotations: vi.fn(),
     onCreateInlineComment: vi.fn(), onCreateInlineSuggestion: vi.fn(), onKeyboardAction,
     onUndo: vi.fn(), onRedo: vi.fn(), onAddBelow: vi.fn(), onConvertToToggleHeading: vi.fn(),
@@ -83,8 +99,285 @@ async function editor(blockType: NotesBlockType = "paragraph", text = "", indent
     await tick(); await tick();
     return event;
   };
-  return { host, input, onConvert, onTextInput, onKeyboardAction, onPasteRichHtml, onFocusBlock, row, blockSelection, focusRow, navigationKeydown, readMentionTargets, acquireMentionTargets, releaseMentionTargets };
+  return { host, input, onConvert, onTextInput, onKeyboardAction, onPasteRichHtml, onFocusBlock, row, blockSelection, focusRow, navigationKeydown, readMentionTargets, acquireMentionTargets, releaseMentionTargets,
+    onApplyTextLink, onReplaceRichText, readBlock: () => current.current };
 }
+
+/** Deliver the actual clipboard event path rather than synthesizing an inserted URL. */
+function pasteUrl(host: HTMLElement, url: string): Event {
+  const event = new Event("paste", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", { value: { getData: (type: string) => type === "text/plain" ? url : "" } });
+  host.dispatchEvent(event);
+  return event;
+}
+
+/** Hover linked text through the editor's delegated pointer handler. */
+function hoverLink(host: HTMLElement): HTMLAnchorElement {
+  const link = host.querySelector<HTMLAnchorElement>("a")!;
+  link.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  return link;
+}
+
+describe("Notes inline links", () => {
+  it("links selected text when a URL is pasted, offers hover actions, and opens on plain or modifier click", async () => {
+    const h = await editor("paragraph", "Before Text after");
+    restoreNotesEditableSelection(h.host, { start: 7, end: 11 });
+    expect(pasteUrl(h.host, "https://example.com/tasks").defaultPrevented).toBe(true);
+    await tick(); await tick();
+    expect(h.onApplyTextLink).toHaveBeenCalledExactlyOnceWith("block", 7, 11, "https://example.com/tasks");
+    expect(blockPlainText(h.readBlock())).toBe("Before Text after");
+    expect(h.onPasteRichHtml).not.toHaveBeenCalled();
+    const link = h.host.querySelector<HTMLAnchorElement>("a")!;
+    expect(link.getAttribute("href")).toBe("https://example.com/tasks");
+    expect(link.hasAttribute("title")).toBe(false);
+    restoreNotesEditableSelection(h.host, { start: 8, end: 8 });
+    hoverLink(h.host);
+    await vi.waitFor(() => expect(document.querySelector("[data-notes-link-panel]")).not.toBeNull());
+    const panel = document.querySelector<HTMLElement>("[data-notes-link-panel]")!;
+    expect(h.row.contains(panel)).toBe(false);
+    expect(panel.classList.contains("fixed")).toBe(true);
+    const open = panel.querySelector<HTMLButtonElement>('button[aria-label="Open link"]')!;
+    open.click();
+    await vi.waitFor(() => expect(openLink).toHaveBeenCalledExactlyOnceWith("https://example.com/tasks"));
+    await tick();
+    expect(document.querySelector("[data-notes-link-panel]")).toBeNull();
+    link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true }));
+    await vi.waitFor(() => expect(openLink).toHaveBeenCalledTimes(2));
+    await tick();
+    restoreNotesEditableSelection(h.host, { start: 8, end: 8 });
+    link.click();
+    await vi.waitFor(() => expect(openLink).toHaveBeenCalledTimes(3));
+  });
+
+  it("edits the link title and destination without replacing surrounding text, and can remove the link", async () => {
+    const h = await editor("paragraph", "Before Text after");
+    restoreNotesEditableSelection(h.host, { start: 7, end: 11 });
+    pasteUrl(h.host, "https://example.com");
+    await tick(); await tick();
+    restoreNotesEditableSelection(h.host, { start: 8, end: 8 });
+    hoverLink(h.host);
+    await vi.waitFor(() => expect(document.querySelector("[data-notes-link-panel]")).not.toBeNull());
+    [...document.querySelectorAll<HTMLButtonElement>("[data-notes-link-panel] button")].find((button) => button.textContent === "Edit")!.click();
+    await tick(); await tick();
+    const title = document.querySelector<HTMLInputElement>("#notes-link-title")!;
+    const url = document.querySelector<HTMLInputElement>("#notes-link-destination")!;
+    title.value = "Task list";
+    title.dispatchEvent(new Event("input", { bubbles: true }));
+    url.value = "https://example.com/planning";
+    url.dispatchEvent(new Event("input", { bubbles: true }));
+    title.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await tick(); await tick();
+    expect(blockPlainText(h.readBlock())).toBe("Before Task list after");
+    expect(h.host.querySelector("a")?.getAttribute("href")).toBe("https://example.com/planning");
+    expect(document.querySelector("[data-notes-link-panel]")).toBeNull();
+    restoreNotesEditableSelection(h.host, { start: 8, end: 8 });
+    h.host.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true, cancelable: true }));
+    await tick(); await tick();
+    [...document.querySelectorAll<HTMLButtonElement>("[data-notes-link-panel] button")].find((button) => button.textContent?.includes("Remove link"))!.click();
+    await tick(); await tick();
+    expect(blockPlainText(h.readBlock())).toBe("Before Task list after");
+    expect(h.host.querySelector("a")).toBeNull();
+  });
+
+  it("closes on outside click without stealing focus and on Escape with the original selection restored", async () => {
+    const h = await editor("paragraph", "Text");
+    restoreNotesEditableSelection(h.host, { start: 0, end: 4 });
+    h.host.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(document.querySelector("[data-notes-link-panel]")).not.toBeNull());
+    document.body.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+    await tick();
+    expect(document.querySelector("[data-notes-link-panel]")).toBeNull();
+    h.host.focus();
+    restoreNotesEditableSelection(h.host, { start: 0, end: 4 });
+    h.host.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true, cancelable: true }));
+    await tick(); await tick();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    await tick(); await tick();
+    expect(document.querySelector("[data-notes-link-panel]")).toBeNull();
+    expect(notesTextSelectionFromEditableRoot(h.host)).toEqual({ start: 0, end: 4 });
+    expect(h.onApplyTextLink).not.toHaveBeenCalled();
+  });
+
+  it("keeps URL paste literal in code", async () => {
+    const h = await editor("code", "Text");
+    restoreNotesEditableSelection(h.host, { start: 0, end: 4 });
+    pasteUrl(h.host, "https://example.com");
+    await tick(); await tick();
+    expect(h.onApplyTextLink).not.toHaveBeenCalled();
+    expect(blockPlainText(h.readBlock())).toBe("https://example.com");
+  });
+
+  it("does not take focus back when another field is focused before the link editor mounts", async () => {
+    const h = await editor("paragraph", "Text");
+    restoreNotesEditableSelection(h.host, { start: 0, end: 4 });
+    h.host.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true, cancelable: true }));
+    const other = document.createElement("input");
+    document.body.append(other);
+    other.focus();
+    await tick(); await tick(); await tick();
+    expect(document.activeElement).toBe(other);
+    expect(document.querySelector("[data-notes-link-panel]")).toBeNull();
+    expect(h.onApplyTextLink).not.toHaveBeenCalled();
+  });
+
+  it("replaces selected words with the literal URL when explicitly pasting as plain text", async () => {
+    const h = await editor("paragraph", "Before Text after");
+    restoreNotesEditableSelection(h.host, { start: 7, end: 11 });
+    h.host.dispatchEvent(new KeyboardEvent("keydown", { key: "v", ctrlKey: true, shiftKey: true, bubbles: true }));
+    pasteUrl(h.host, "https://example.com");
+    await tick(); await tick();
+    expect(h.onApplyTextLink).not.toHaveBeenCalled();
+    expect(blockPlainText(h.readBlock())).toBe("Before https://example.com after");
+  });
+
+  it("keeps pasted local database links functional without sending them to the system browser", async () => {
+    const h = await editor("paragraph", "Tasks");
+    const hash = "#notes?page=11111111-1111-4111-8111-111111111111&block=22222222-2222-4222-8222-222222222222";
+    restoreNotesEditableSelection(h.host, { start: 0, end: 5 });
+    pasteUrl(h.host, hash);
+    await tick(); await tick();
+    expect(blockPlainText(h.readBlock())).toBe("Tasks");
+    const link = h.host.querySelector<HTMLAnchorElement>("a")!;
+    expect(link.getAttribute("href")).toBe(hash);
+    link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }));
+    await vi.waitFor(() => expect(openLink).toHaveBeenCalledExactlyOnceWith(hash));
+    expect(document.querySelector("[data-notes-link-panel]")).toBeNull();
+  });
+
+  it("shows navigation failures in the floating actions so the destination can be corrected", async () => {
+    const h = await editor("paragraph", "Tasks");
+    restoreNotesEditableSelection(h.host, { start: 0, end: 5 });
+    pasteUrl(h.host, "https://example.com");
+    await tick(); await tick();
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    openLink.mockRejectedValueOnce(new Error("Target unavailable"));
+    h.host.querySelector<HTMLAnchorElement>("a")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true }));
+    await vi.waitFor(() => expect(document.querySelector("[data-notes-link-panel] [role=alert]")).not.toBeNull());
+    expect(document.querySelector("[data-notes-link-panel]")?.textContent).toContain("Edit");
+    hoverLink(h.host);
+    await tick();
+    expect(document.querySelector("[data-notes-link-panel] [role=alert]")).not.toBeNull();
+    warning.mockRestore();
+  });
+
+  it("does not open link actions when clicking at the end of a text selection gesture", async () => {
+    const h = await editor("paragraph", "Linked text");
+    restoreNotesEditableSelection(h.host, { start: 0, end: 11 });
+    pasteUrl(h.host, "https://example.com");
+    await tick(); await tick();
+    restoreNotesEditableSelection(h.host, { start: 2, end: 8 });
+    h.host.querySelector<HTMLAnchorElement>("a")!.click();
+    await tick();
+    expect(document.querySelector("[data-notes-link-panel]")).toBeNull();
+    expect(openLink).not.toHaveBeenCalled();
+  });
+
+  it("dismisses the link preview when typing resumes in the note", async () => {
+    const h = await editor("paragraph", "Tasks");
+    restoreNotesEditableSelection(h.host, { start: 0, end: 5 });
+    pasteUrl(h.host, "https://example.com");
+    await tick(); await tick();
+    restoreNotesEditableSelection(h.host, { start: 2, end: 2 });
+    hoverLink(h.host);
+    await vi.waitFor(() => expect(document.querySelector("[data-notes-link-panel]")).not.toBeNull());
+    restoreNotesEditableSelection(h.host, { start: 2, end: 2 });
+    await h.input("X");
+    expect(document.querySelector("[data-notes-link-panel]")).toBeNull();
+    expect(blockPlainText(h.readBlock())).toBe("TaXsks");
+  });
+
+  it("keeps the preview reachable across the pointer gap, closes on leaving, and pins the edit form", async () => {
+    const h = await editor("paragraph", "Tasks");
+    restoreNotesEditableSelection(h.host, { start: 0, end: 5 });
+    pasteUrl(h.host, "https://example.com");
+    await tick(); await tick();
+    await tick(); await tick();
+    restoreNotesEditableSelection(h.host, { start: 2, end: 2 });
+    const link = hoverLink(h.host);
+    await vi.waitFor(() => expect(document.querySelector("[data-notes-link-panel]")).not.toBeNull());
+    expect(notesTextSelectionFromEditableRoot(h.host)).toEqual({ start: 2, end: 2 });
+    const panel = document.querySelector<HTMLElement>("[data-notes-link-panel]")!;
+    vi.useFakeTimers();
+    link.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: document.body }));
+    await vi.advanceTimersByTimeAsync(75);
+    panel.dispatchEvent(new MouseEvent("pointerenter"));
+    await vi.advanceTimersByTimeAsync(200);
+    expect(document.querySelector("[data-notes-link-panel]")).toBe(panel);
+    panel.dispatchEvent(new MouseEvent("pointerleave"));
+    await vi.advanceTimersByTimeAsync(200);
+    await tick();
+    expect(document.querySelector("[data-notes-link-panel]")).toBeNull();
+    hoverLink(h.host);
+    await tick(); await tick();
+    const editPanel = document.querySelector<HTMLElement>("[data-notes-link-panel]")!;
+    [...editPanel.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Edit")!.click();
+    await tick(); await tick();
+    editPanel.dispatchEvent(new MouseEvent("pointerleave"));
+    await vi.advanceTimersByTimeAsync(200);
+    expect(document.querySelector("#notes-link-title")).not.toBeNull();
+  });
+
+  it("does not show hover actions during touch or text dragging", async () => {
+    const h = await editor("paragraph", "Tasks");
+    restoreNotesEditableSelection(h.host, { start: 0, end: 5 });
+    pasteUrl(h.host, "https://example.com");
+    await tick(); await tick();
+    const link = h.host.querySelector<HTMLAnchorElement>("a")!;
+    const touch = new MouseEvent("pointerover", { bubbles: true });
+    Object.defineProperty(touch, "pointerType", { value: "touch" });
+    link.dispatchEvent(touch);
+    link.dispatchEvent(new MouseEvent("pointerover", { bubbles: true, buttons: 1 }));
+    await tick();
+    expect(document.querySelector("[data-notes-link-panel]")).toBeNull();
+    expect(openLink).not.toHaveBeenCalled();
+  });
+
+  it("does not constrain a fitting preview or editor to its inner height", async () => {
+    const h = await editor("paragraph", "Tasks");
+    vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (this: HTMLElement) {
+      return this.hasAttribute("data-notes-link-panel") ? 120 : 0;
+    });
+    restoreNotesEditableSelection(h.host, { start: 0, end: 5 });
+    pasteUrl(h.host, "https://example.com");
+    await tick(); await tick();
+    hoverLink(h.host);
+    await vi.waitFor(() => expect(document.querySelector("[data-notes-link-panel]")).not.toBeNull());
+    const panel = document.querySelector<HTMLElement>("[data-notes-link-panel]")!;
+    panel.style.borderWidth = "1px";
+    window.dispatchEvent(new Event("resize"));
+    await tick();
+    expect(panel.style.maxHeight).toBe("");
+    [...panel.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Edit")!.click();
+    await tick(); await tick();
+    expect(panel.style.maxHeight).toBe("");
+    const apply = [...panel.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Apply")!;
+    const remove = [...panel.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Remove link"))!;
+    expect(apply.parentElement).toBe(remove.parentElement);
+    vi.stubGlobal("innerHeight", 80);
+    window.dispatchEvent(new Event("resize"));
+    await tick();
+    expect(Number.parseFloat(panel.style.maxHeight)).toBeLessThan(120);
+  });
+
+  it("keeps preview and edit text smaller than paragraphs while following paragraph font changes", async () => {
+    const h = await editor("paragraph", "Tasks");
+    h.host.style.fontSize = "15px";
+    restoreNotesEditableSelection(h.host, { start: 0, end: 5 });
+    pasteUrl(h.host, "https://example.com");
+    await tick(); await tick();
+    hoverLink(h.host);
+    await vi.waitFor(() => expect(document.querySelector<HTMLElement>("[data-notes-link-panel]")?.style.fontSize).toBe("12px"));
+    const panel = document.querySelector<HTMLElement>("[data-notes-link-panel]")!;
+    [...panel.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Edit")!.click();
+    await tick(); await tick();
+    expect(panel.style.fontSize).toBe("12px");
+    expect(h.host.style.fontSize).toBe("15px");
+    h.host.style.fontSize = "20px";
+    window.dispatchEvent(new Event("resize"));
+    await tick();
+    expect(panel.style.fontSize).toBe("16px");
+  });
+});
 
 describe("Notes typed slash commands", () => {
   it("reads and acquires mention data only while the mention menu is open", async () => {

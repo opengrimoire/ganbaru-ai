@@ -264,6 +264,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             notes::notes_update_folder,
             notes::notes_delete_folder,
             notes::notes_list_backlinks,
+            notes::external_links::notes_open_external_url,
             notes::notes_get_page_breadcrumb,
             notes::notes_search,
             notes::notes_rebuild_search_index,
