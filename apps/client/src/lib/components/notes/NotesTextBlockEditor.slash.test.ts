@@ -100,13 +100,16 @@ describe("Notes typed slash commands", () => {
     expect(h.releaseMentionTargets).toHaveBeenCalledOnce();
   });
 
-  it("delegates slash-note clearing to the lifecycle command without an extra paragraph save", async () => {
+  it.each([
+    ["/Note", "child_page"],
+    ["/datab", "child_database"],
+  ] as const)("delegates %s search clearing to creation without an extra paragraph save", async (query, blockType) => {
     const h = await editor();
-    await h.input("/Note");
+    await h.input(query);
     await vi.waitFor(() => expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(1));
     h.onTextInput.mockClear();
     h.host.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
-    expect(h.onConvert).toHaveBeenCalledExactlyOnceWith("block", "child_page", true);
+    expect(h.onConvert).toHaveBeenCalledExactlyOnceWith("block", blockType, true);
     expect(h.onTextInput).not.toHaveBeenCalled();
   });
 

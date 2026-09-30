@@ -4,12 +4,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyBlockUpdate, blockPlainText, createBlockUpdate } from "$lib/notes/block-factory";
 import { notesBlockOutlineFromBlock } from "$lib/notes/block-outline";
 import { createProvisionalNotesPage } from "$lib/notes/page-creation";
-import type { NotesBlockHydrationRequest, NotesBlockUpdate, NotesChildPageFromBlockCreate, NotesLocalUser, NotesPageCreate, NotesPageOpenResponse, NotesWorkspaceShell, NotesWorkspaceShellRequest } from "$lib/notes/types";
+import type { NotesBlockHydrationRequest, NotesBlockUpdate, NotesChildPageFromBlockCreate, NotesDataSourceTableView, NotesDatabaseCreateRequest, NotesLocalUser, NotesPageCreate, NotesPageOpenResponse, NotesWorkspaceShell, NotesWorkspaceShellRequest } from "$lib/notes/types";
 import type { NotesPageOpenMode } from "$lib/notes/page-open-mode";
 
 const backend = vi.hoisted(() => ({
   pages: new Map<string, NotesPageOpenResponse>(),
   open: vi.fn(), createChild: vi.fn(), createPage: vi.fn(), saveBlock: vi.fn(),
+  createDatabase: vi.fn(), databaseViews: vi.fn(), databaseTable: vi.fn(),
   mentionSources: vi.fn(async () => []),
   destinations: vi.fn(async () => ({ pages: [], next_page_cursor: null })),
   workspaceRequests: [] as NotesWorkspaceShellRequest[],
@@ -24,6 +25,10 @@ vi.mock("$lib/api/notes", async (importOriginal) => ({
   createNotesChildPageFromBlock: backend.createChild,
   createNotesPage: backend.createPage,
   updateNotesBlock: backend.saveBlock,
+  createNotesDatabase: backend.createDatabase,
+  listNotesDatabaseViews: backend.databaseViews,
+  getNotesDataSourceTableView: backend.databaseTable,
+  listNotesDataSourceTemplates: async () => [],
   loadNotesWorkspaceShell: async (request: NotesWorkspaceShellRequest): Promise<NotesWorkspaceShell> => {
     backend.workspaceRequests.push(request);
     const allPages = [...backend.pages.values()].map(({ page }) => page);
@@ -100,6 +105,32 @@ function page(id: string, title: string, parentId?: string, projectId = "project
   };
 }
 
+/** Return the initial empty table using the identities reserved by database creation. */
+function emptyDatabaseTable(request: NotesDatabaseCreateRequest): NotesDataSourceTableView {
+  const source = {
+    source_provider: null, source_object_id: null, source_workspace_id: null,
+    source_last_edited_time: null, created_time: "2026-09-30T00:00:00Z", last_edited_time: "2026-09-30T00:00:00Z",
+  };
+  return {
+    data_source: {
+      ...source, object: "data_source", id: request.data_source_id,
+      parent: { type: "database_id", database_id: request.id },
+      database_parent: { type: "page_id", page_id: "parent" }, title: request.title,
+      title_rich_text: [], description: [], icon: null, in_trash: false,
+      properties: { Name: { id: "title", name: "Name", type: "title", title: {} } },
+    },
+    view: {
+      ...source, object: "view", id: request.view_id,
+      parent: { type: "database_id", database_id: request.id }, data_source_id: request.data_source_id,
+      name: "Table", type: "table", filter: {}, sorts: [], url: null,
+      configuration: { type: "table", table: {
+        property_order: ["title"], hidden_property_ids: [], column_widths: {}, row_open_mode: "full_page",
+      } },
+    },
+    rows: [], total_row_count: 0, has_more: false, next_cursor: null,
+  };
+}
+
 describe("Notes preview ownership", () => {
   let component: ReturnType<typeof mount> | undefined;
   afterEach(async () => {
@@ -117,7 +148,7 @@ describe("Notes preview ownership", () => {
     backend.projectsReady.mockResolvedValue(undefined);
   });
 
-  async function setup(openMode: NotesPageOpenMode = "full", emptyChildWithCover = false) {
+  async function setup(openMode: NotesPageOpenMode = "full", emptyChildWithCover = false, parentBodyId?: string) {
     const { getProjects } = await import("$lib/stores/projects.svelte");
     getProjects().selectedProjectId = "project";
     vi.stubGlobal("CSS", { escape: (value: string) => value });
@@ -125,6 +156,7 @@ describe("Notes preview ownership", () => {
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0));
     vi.stubGlobal("cancelAnimationFrame", (id: number) => window.clearTimeout(id));
     const parent = page("parent", "Main note");
+    if (parentBodyId) parent.blocks.results[0] = { ...parent.blocks.results[0], id: parentBodyId };
     const child = page("child", "Sub-note", parent.page.id);
     if (emptyChildWithCover) {
       child.blocks.results[0] = applyBlockUpdate(child.blocks.results[0], createBlockUpdate("paragraph", ""));
@@ -169,6 +201,65 @@ describe("Notes preview ownership", () => {
     await tick(); await tick();
     return { notes, parent, child, sibling, other };
   }
+
+  it("keeps one database placeholder across earlier saves, creation, and initial rows, then focuses an empty title", async () => {
+    const { notes, parent } = await setup("full", false, crypto.randomUUID());
+    const blockId = parent.blocks.results[0].id;
+    let finishSave!: () => void;
+    let finishCreation!: () => void;
+    let finishRows!: () => void;
+    const saving = new Promise<void>((resolve) => { finishSave = resolve; });
+    const creating = new Promise<void>((resolve) => { finishCreation = resolve; });
+    const rows = new Promise<void>((resolve) => { finishRows = resolve; });
+    const saveBlock = backend.saveBlock.getMockImplementation()!;
+    backend.saveBlock.mockImplementation(async (id: string, update: NotesBlockUpdate) => {
+      await saving;
+      return saveBlock(id, update);
+    });
+    backend.createDatabase.mockImplementation(async (request: NotesDatabaseCreateRequest) => {
+      const table = emptyDatabaseTable(request);
+      backend.databaseViews.mockResolvedValue([table.view]);
+      backend.databaseTable.mockImplementation(async () => { await rows; return table; });
+      await creating;
+      const index = parent.blocks.results.findIndex((block) => block.id === blockId);
+      const block = applyBlockUpdate(parent.blocks.results[index], {
+        type: "child_database",
+        child_database: { title: request.title, database_id: request.id, data_source_id: request.data_source_id, view_id: request.view_id },
+      });
+      parent.blocks.results[index] = block;
+      return { block };
+    });
+    await notes.updateBlockText(blockId, "/datab");
+    const creation = notes.convertBlock(blockId, "child_database", true);
+    try {
+      await tick(); await tick();
+      const skeleton = document.querySelector('[data-notes-skeleton="database"]')!;
+      expect(skeleton).not.toBeNull();
+      const shapes = skeleton.querySelector<HTMLElement>(".notes-skeleton-shapes")!;
+      expect(backend.createDatabase).not.toHaveBeenCalled();
+      expect(backend.databaseViews).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(shapes.style.opacity).toBe("1"));
+      finishSave();
+      await vi.waitFor(() => expect(backend.createDatabase).toHaveBeenCalledOnce());
+      expect(backend.databaseViews).not.toHaveBeenCalled();
+      expect(document.querySelector('[data-notes-skeleton="database"]')).toBe(skeleton);
+      finishCreation();
+      await creation;
+      await vi.waitFor(() => expect(backend.databaseTable).toHaveBeenCalled(), { timeout: 5_000 });
+      expect(document.querySelector('[data-notes-skeleton="database"]')).toBe(skeleton);
+      expect(skeleton.contains(shapes)).toBe(true);
+      expect(shapes.style.opacity).toBe("1");
+      finishRows();
+      await vi.waitFor(() => expect(document.querySelector('[data-notes-skeleton="database"]')).toBeNull());
+      const title = document.querySelector<HTMLInputElement>('input[aria-label="Database title"]')!;
+      expect(title.value).toBe("");
+      expect(title.placeholder).toBe("New database");
+      await vi.waitFor(() => expect(document.activeElement).toBe(title));
+    } finally {
+      finishSave(); finishCreation(); finishRows();
+      await creation;
+    }
+  }, 15_000);
 
   it("updates the header and sidebar when the top-bar selector opens a note from another group", async () => {
     const { notes, other } = await setup();

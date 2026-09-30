@@ -14,6 +14,7 @@ const DEFAULT_DATABASE_TITLE: &str = "Untitled database";
 const DEFAULT_TITLE_PROPERTY_NAME: &str = "Name";
 const DEFAULT_TABLE_VIEW_NAME: &str = "Table";
 
+/// Rename the database and its owned data source, allowing an intentionally empty title.
 pub async fn rename_database(
     pool: &SqlitePool,
     database_id: &str,
@@ -21,8 +22,8 @@ pub async fn rename_database(
 ) -> Result<String, String> {
     require_uuid(database_id, "database_id")?;
     let title = update.title.trim();
-    if title.is_empty() || title.chars().count() > 200 || title.chars().any(char::is_control) {
-        return Err("database title must contain 1 to 200 printable characters".to_string());
+    if title.chars().count() > 200 || title.chars().any(char::is_control) {
+        return Err("database title must contain at most 200 printable characters".to_string());
     }
     let mut tx = pool
         .begin()
@@ -76,6 +77,7 @@ pub async fn rename_database(
     Ok(title.to_string())
 }
 
+/// Create a database using the explicit title, including an intentionally empty title.
 pub async fn create_database(
     pool: &SqlitePool,
     request: NoteDatabaseCreate,
@@ -95,7 +97,7 @@ pub async fn create_database(
         let current = load_block_row_tx(&mut tx, replace_block_id).await?;
         validate_replacement_block(&current)?;
         let parent = writes::parent_target_from_block_row(&current);
-        let title = database_title(&request.title, Some(&current));
+        let title = request.title.trim().to_string();
         history::record_page_snapshot_tx(&mut tx, &current.page_id, "create_database_from_block")
             .await?;
         replace_block_with_database(&mut tx, &current, &request, &title).await?;
@@ -106,7 +108,7 @@ pub async fn create_database(
             .as_ref()
             .ok_or_else(|| "parent is required".to_string())?;
         let parent = writes::resolve_block_parent(&mut tx, request_parent).await?;
-        let title = database_title(&request.title, None);
+        let title = request.title.trim().to_string();
         let sort_order =
             writes::next_sort_orders(&mut tx, &parent, request.after_block_id.as_deref(), 1)
                 .await?
@@ -434,15 +436,6 @@ fn validate_replacement_block(current: &NoteBlockRow) -> Result<(), String> {
         ));
     }
     Ok(())
-}
-
-fn database_title(request_title: &str, current: Option<&NoteBlockRow>) -> String {
-    request_title
-        .trim()
-        .to_string()
-        .or_else_not_empty()
-        .or_else(|| current.and_then(|row| row.plain_text.trim().to_string().or_else_not_empty()))
-        .unwrap_or_else(|| DEFAULT_DATABASE_TITLE.to_string())
 }
 
 fn child_database_payload(request: &NoteDatabaseCreate, title: &str) -> Value {

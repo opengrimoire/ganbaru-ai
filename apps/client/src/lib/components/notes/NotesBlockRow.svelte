@@ -776,10 +776,11 @@
         </button>
       {:else if block.type === "child_database"}
         {@const databaseIdentity = JSON.stringify([block.id, block.child_database.database_id, block.child_database.data_source_id])}
-        <NotesLoadingSkeleton kind="database" ready={readyDatabaseIdentity === databaseIdentity || advancedBlockLoadState?.status === "failed"}>
+        {@const databaseCreationPending = notes.isDatabaseCreationPending(block.id)}
+        <NotesLoadingSkeleton kind="database" ready={!databaseCreationPending && (readyDatabaseIdentity === databaseIdentity || (advancedBlockLoadState?.key === "child-database" && advancedBlockLoadState.status === "failed"))}>
           {#snippet children()}
             {#key databaseIdentity}
-              {#if advancedBlockLoadState?.status === "ready" && advancedBlockLoadState.component.kind === "child-database"}
+              {#if !databaseCreationPending && advancedBlockLoadState?.status === "ready" && advancedBlockLoadState.component.kind === "child-database"}
                 {@const NotesChildDatabaseBlock = advancedBlockLoadState.component.component}
                 <NotesChildDatabaseBlock
                   onReady={() => { readyDatabaseIdentity = databaseIdentity; }}

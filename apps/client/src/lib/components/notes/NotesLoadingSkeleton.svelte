@@ -19,7 +19,8 @@
   } = $props();
 
   const { t } = getLocalization();
-  const REVEAL_DELAY_MS = 120;
+  const PAGE_REVEAL_DELAY_MS = 500;
+  const EMBEDDED_REVEAL_DELAY_MS = 120;
   const HANDOFF_DURATION_MS = 100;
   let revealed = $state(false);
   let retainPlaceholder = $state(untrack(() => !ready));
@@ -28,7 +29,8 @@
     if (!ready) {
       retainPlaceholder = true;
       revealed = false;
-      const timer = setTimeout(() => { revealed = true; }, REVEAL_DELAY_MS);
+      const revealDelay = kind === "page" ? PAGE_REVEAL_DELAY_MS : EMBEDDED_REVEAL_DELAY_MS;
+      const timer = setTimeout(() => { revealed = true; }, revealDelay);
       return () => clearTimeout(timer);
     }
     if (!untrack(() => revealed)) {

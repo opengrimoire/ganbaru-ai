@@ -316,6 +316,7 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
     appendAndApply,
     undoSnapshot,
     recordUndoAfter,
+    optimisticBlockFromWrite,
   });
 
   async function replaceBlockWithUpdate(blockId: string, update: NotesBlockUpdate): Promise<void> {

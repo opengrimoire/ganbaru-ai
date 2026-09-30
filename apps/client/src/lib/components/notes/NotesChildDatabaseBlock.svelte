@@ -195,10 +195,6 @@
   async function saveTitle(): Promise<void> {
     if (!databaseId || titleSaving) return;
     const nextTitle = titleDraft.trim();
-    if (!nextTitle) {
-      titleDraft = savedTitle;
-      return;
-    }
     if (nextTitle === savedTitle) return;
     titleSaving = true;
     titleError = null;

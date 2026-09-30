@@ -3,6 +3,94 @@ use crate::notes::database_view_management;
 use crate::notes::models::{NoteDatabaseRename, NoteDatabaseViewDuplicate, NoteDatabaseViewRename};
 
 #[test]
+fn database_creation_preserves_an_explicit_empty_title_instead_of_slash_search_text() {
+    crate::test_block_on(async {
+        let pool = migrated_memory_pool().await;
+        create_page(&pool, PAGE_A, BLOCK_A).await;
+        writes::update_block(
+            &pool,
+            BLOCK_A,
+            block_update("paragraph", paragraph_payload("/datab")),
+        )
+        .await
+        .unwrap();
+        let created = databases::create_database(
+            &pool,
+            NoteDatabaseCreate {
+                id: BLOCK_A.to_string(),
+                data_source_id: DATA_SOURCE_A.to_string(),
+                view_id: DATABASE_VIEW_A.to_string(),
+                title: String::new(),
+                parent: None,
+                after_block_id: None,
+                replace_block_id: Some(BLOCK_A.to_string()),
+                icon: None,
+                cover: None,
+            },
+        )
+        .await
+        .unwrap();
+        let created_json = serde_json::to_value(created).unwrap();
+        assert_eq!(created_json["block"]["child_database"]["title"], "");
+        assert_eq!(created_json["database"]["title"], "");
+        assert_eq!(created_json["data_source"]["title"], "");
+        let stored = reads::get_block(&pool, BLOCK_A, false).await.unwrap();
+        assert_eq!(
+            serde_json::to_value(stored).unwrap()["child_database"]["title"],
+            ""
+        );
+    });
+}
+
+#[test]
+fn database_titles_can_be_cleared_without_replacing_them_with_a_default() {
+    crate::test_block_on(async {
+        let pool = migrated_memory_pool().await;
+        create_page(&pool, PAGE_A, BLOCK_A).await;
+        create_database(
+            &pool,
+            DATABASE_A,
+            DATA_SOURCE_A,
+            DATABASE_VIEW_A,
+            "",
+            BLOCK_A,
+        )
+        .await;
+        for title in ["Planning", ""] {
+            let saved = databases::rename_database(
+                &pool,
+                DATABASE_A,
+                NoteDatabaseRename {
+                    title: title.to_string(),
+                },
+            )
+            .await
+            .unwrap();
+            assert_eq!(saved, title);
+            let block = reads::get_block(&pool, DATABASE_A, false).await.unwrap();
+            assert_eq!(
+                serde_json::to_value(block).unwrap()["child_database"]["title"],
+                title
+            );
+            let database_title: String =
+                sqlx::query_scalar("SELECT title FROM notes_databases WHERE id = ?")
+                    .bind(DATABASE_A)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            let source_title: String =
+                sqlx::query_scalar("SELECT title FROM notes_data_sources WHERE id = ?")
+                    .bind(DATA_SOURCE_A)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(database_title, title);
+            assert_eq!(source_title, title);
+        }
+    });
+}
+
+#[test]
 fn create_local_database_inside_notes_page() {
     crate::test_block_on(async {
         let pool = migrated_memory_pool().await;

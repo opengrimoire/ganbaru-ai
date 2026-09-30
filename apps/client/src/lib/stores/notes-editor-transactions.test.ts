@@ -5,7 +5,7 @@ import { buildNotesChildIdsByParent, flattenNotesBlockTree, notesIndentationCont
 import { parseNotesBlock } from "$lib/notes/block-validation";
 import { notesNumberedListOrdinals } from "$lib/notes/block-editor-ui";
 import { notesBlockOutlineFromBlock, notesOutlineSubtreeIds } from "$lib/notes/block-outline";
-import type { NotesAppendBlockChildrenRequest, NotesBlock, NotesBlockUpdate, NotesBlockWrite, NotesParent } from "$lib/notes/types";
+import type { NotesAppendBlockChildrenRequest, NotesBlock, NotesBlockUpdate, NotesBlockWrite, NotesDatabaseCreateRequest, NotesParent } from "$lib/notes/types";
 import { createNotesBlockActions } from "./notes-store-block-actions";
 import { createNotesBlockPersistence } from "./notes-store-persistence";
 import { NotesTreeProjectionController } from "./notes-store-tree-projection.svelte";
@@ -14,6 +14,7 @@ import { createNotesUndoController } from "./notes-store-undo";
 const api = vi.hoisted(() => ({
   updateNotesBlock: vi.fn(), appendNotesBlockChildren: vi.fn(), trashNotesBlock: vi.fn(),
   moveNotesBlock: vi.fn(), saveNotesUndoState: vi.fn(), clearNotesUndoState: vi.fn(),
+  createNotesDatabase: vi.fn(),
 }));
 vi.mock("$lib/api/notes", () => api);
 const pageId = "00000000-0000-4000-8000-000000000001";
@@ -42,6 +43,22 @@ function editor(
   const last = fromWrite(createBlockWrite(lastId, "paragraph", "Last"));
   const blocks = initialBlocks ?? [first, last];
   const stored = new Map(blocks.map((block) => [block.id, block]));
+  api.createNotesDatabase.mockImplementation(async (request: NotesDatabaseCreateRequest) => {
+    await gate;
+    const source = request.replace_block_id ? stored.get(request.replace_block_id) : undefined;
+    if (request.replace_block_id && !source) throw new Error("Missing source block");
+    if (source && source.type !== "paragraph") throw new Error("Source typing must be saved before conversion");
+    const created = fromWrite({
+      id: request.id,
+      type: "child_database",
+      child_database: {
+        title: request.title, database_id: request.id,
+        data_source_id: request.data_source_id, view_id: request.view_id,
+      },
+    });
+    stored.set(created.id, created);
+    return { block: created };
+  });
   api.updateNotesBlock.mockImplementation(async (id: string, update: NotesBlockUpdate) => {
     await gate;
     const block = stored.get(id);
@@ -119,6 +136,71 @@ function editor(
 afterEach(() => { vi.clearAllMocks(); });
 
 describe("Notes editing with delayed persistence", () => {
+  it("reserves a slash database immediately, saves earlier typing first, and ignores repeated conversion and stale text", async () => {
+    const h = editor([fromWrite(createBlockWrite(firstId, "paragraph", "/dat"))]);
+    await h.actions.updateBlockText(firstId, "/datab");
+    const creation = h.actions.convertBlock(firstId, "child_database", true);
+    const reserved = h.projection.blocksById[firstId];
+    expect(reserved).toMatchObject({ type: "child_database", child_database: { title: "" } });
+    expect(h.actions.isDatabaseCreationPending(firstId)).toBe(true);
+    expect(api.createNotesDatabase).not.toHaveBeenCalled();
+    await h.actions.convertBlock(firstId, "child_database", true);
+    await h.actions.convertBlock(firstId, "paragraph", true);
+    await h.actions.updateBlockText(firstId, "/database");
+    await h.actions.updateBlockRichText(firstId, []);
+    h.release();
+    await creation;
+    await h.persistence.flushPendingBlockSaves();
+    expect(api.createNotesDatabase).toHaveBeenCalledOnce();
+    expect(api.createNotesDatabase).toHaveBeenCalledWith(expect.objectContaining({ title: "", replace_block_id: firstId }));
+    expect(api.updateNotesBlock).toHaveBeenCalledOnce();
+    if (reserved.type !== "child_database") throw new Error("Expected a reserved database block");
+    expect(h.stored.get(firstId)).toMatchObject({ type: "child_database", child_database: reserved.child_database });
+    expect(h.actions.isDatabaseCreationPending(firstId)).toBe(false);
+    expect(h.focus).toHaveBeenLastCalledWith(firstId);
+    expect(h.error).not.toHaveBeenCalled();
+  });
+
+  it("retains an ordinary paragraph title when converting it through the block menu", async () => {
+    const h = editor([fromWrite(createBlockWrite(firstId, "paragraph", "Project tasks"))]);
+    const creation = h.actions.convertBlock(firstId, "child_database");
+    h.release();
+    await creation;
+    expect(h.stored.get(firstId)).toMatchObject({ child_database: { title: "Project tasks" } });
+  });
+
+  it("inserts an empty database placeholder before native creation completes without replacing its preceding text", async () => {
+    const h = editor();
+    const creation = h.actions.createSiblingAfter(firstId, { kind: "block", blockType: "child_database" });
+    const ids = h.projection.childIdsByParentId[pageId];
+    const databaseId = ids[1];
+    expect(ids).toEqual([firstId, databaseId, lastId]);
+    expect(h.projection.blocksById[databaseId]).toMatchObject({ type: "child_database", child_database: { title: "" } });
+    expect(h.actions.isDatabaseCreationPending(databaseId)).toBe(true);
+    h.release();
+    await creation;
+    expect(h.projection.childIdsByParentId[pageId]).toEqual(ids);
+    expect(blockPlainText(h.stored.get(firstId)!)).toBe("FirstSecond");
+    expect(h.stored.get(databaseId)).toMatchObject({ child_database: { title: "" } });
+    expect(h.actions.isDatabaseCreationPending(databaseId)).toBe(false);
+  });
+
+  it("keeps failed database creation retryable with the same reserved identities", async () => {
+    const h = editor([fromWrite(createBlockWrite(firstId, "paragraph", "/datab"))]);
+    api.createNotesDatabase.mockRejectedValueOnce(new Error("Storage unavailable"));
+    const creation = h.actions.convertBlock(firstId, "child_database", true);
+    h.release();
+    await expect(creation).rejects.toThrow("Storage unavailable");
+    expect(h.actions.isDatabaseCreationPending(firstId)).toBe(true);
+    expect(h.error).toHaveBeenLastCalledWith("Storage unavailable");
+    await h.persistence.retryEditorMutations();
+    expect(api.createNotesDatabase).toHaveBeenCalledTimes(2);
+    expect(api.createNotesDatabase.mock.calls[1]).toEqual(api.createNotesDatabase.mock.calls[0]);
+    expect(h.actions.isDatabaseCreationPending(firstId)).toBe(false);
+    expect(h.stored.get(firstId)).toMatchObject({ child_database: { title: "" } });
+    expect(h.error).toHaveBeenLastCalledWith(null);
+  });
+
   it.each(["previous", "next"] as const)("inserts a writable paragraph %s to an only note without changing its identity", async (direction) => {
     const h = editor([fromWrite(createBlockWrite(firstId, "child_page", "Child"))]);
     await h.actions.insertParagraphAdjacent(firstId, direction);

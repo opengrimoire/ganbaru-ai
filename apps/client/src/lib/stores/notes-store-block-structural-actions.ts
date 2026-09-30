@@ -1,4 +1,5 @@
 import { invalidateReplacedNotesMediaAsset } from "./notes-store-block-media-actions";
+import { SvelteSet } from "svelte/reactivity";
 import {
   updateNotesBlock,
   createNotesDatabase,
@@ -46,6 +47,8 @@ import type {
   NotesColumnBlockItems,
   NotesTabBlockItems,
   NotesTableRowBlock,
+  NotesParent,
+  NotesCreatedDatabase,
 } from "$lib/notes/types";
 import type { NotesTextSelection } from "$lib/notes/editor-selection";
 import type { NotesUndoKind, NotesUndoSnapshot } from "$lib/notes/undo-history";
@@ -70,6 +73,8 @@ interface NotesStructuralBlockActionsContext {
   applyPostMutation: (result: NotesPostMutationResult) => void;
   replaceBlockWithUpdate: (blockId: string, update: NotesBlockUpdate) => Promise<void>;
   appendAndApply: (request: NotesAppendBlockChildrenRequest) => Promise<NotesBlock[]>;
+  optimisticBlockFromWrite: (write: NotesBlockWrite, parent: NotesParent) => NotesBlock;
+  localInsertBlockAfter: (block: NotesBlock, afterBlockId: string | null) => void;
   undoSnapshot: (focusBlockId: string | null) => NotesUndoSnapshot | null;
   recordUndoAfter: (
     kind: NotesUndoKind,
@@ -79,6 +84,8 @@ interface NotesStructuralBlockActionsContext {
 }
 
 export interface NotesStructuralBlockActions {
+  /** Keep the inline placeholder active and defer database reads until creation commits. */
+  isDatabaseCreationPending: (blockId: string) => boolean;
   convertBlock: (blockId: string, type: NotesBlockType, clearText?: boolean, selection?: NotesTextSelection) => Promise<void>;
   toggleTodo: (blockId: string, checked: boolean) => Promise<void>;
   updateCodeLanguage: (blockId: string, language: string) => Promise<void>;
@@ -102,6 +109,7 @@ export interface NotesStructuralBlockActions {
 export function createNotesStructuralBlockActions(
   context: NotesStructuralBlockActionsContext,
 ): NotesStructuralBlockActions {
+  const pendingDatabaseCreations = new SvelteSet<string>();
   const childIdsByParentId = context.readChildIdsByParentId;
   const {
     appendAndApply,
@@ -128,13 +136,13 @@ export function createNotesStructuralBlockActions(
     selection?: NotesTextSelection,
   ): Promise<void> {
     const block = context.blockById(blockId);
-    if (!block || block.type === "child_page") return;
+    if (!block || block.type === "child_page" || pendingDatabaseCreations.has(blockId)) return;
     if (type === "child_page") {
       await context.createChildPageFromBlock(blockId, clearText);
       return;
     }
     if (type === "child_database") {
-      await createDatabaseFromBlock(blockId);
+      await createDatabaseFromBlock(blockId, clearText);
       return;
     }
     const before = undoSnapshot(blockId);
@@ -179,25 +187,37 @@ export function createNotesStructuralBlockActions(
     recordUndoAfter("convert", before, blockId);
   }
 
-  async function createDatabaseFromBlock(blockId: string): Promise<void> {
+  /** Reserve the database surface before saving earlier typing or creating native objects. */
+  function createDatabaseFromBlock(blockId: string, clearText: boolean): Promise<void> {
     const selectedPageId = context.readSelectedPageId();
     const block = context.blockById(blockId);
-    if (!selectedPageId || !block || !canConvertBlockToDatabase(block)) return;
-    await context.flushBlockSave(blockId);
-    const currentBlock = context.blockById(blockId) ?? block;
-    if (!canConvertBlockToDatabase(currentBlock)) return;
+    if (!selectedPageId || !block || !canConvertBlockToDatabase(block)) return Promise.resolve();
     const before = undoSnapshot(blockId);
-    const title = blockPlainText(currentBlock).trim() || DEFAULT_DATABASE_TITLE;
-    const created = await createNotesDatabase({
+    const request = {
       id: blockId,
       data_source_id: crypto.randomUUID(),
       view_id: crypto.randomUUID(),
-      title,
+      title: clearText ? "" : blockPlainText(block).trim(),
       replace_block_id: blockId,
+    };
+    pendingDatabaseCreations.add(blockId);
+    context.localApplyBlockUpdate(blockId, {
+      type: "child_database",
+      child_database: {
+        title: request.title,
+        database_id: request.id,
+        data_source_id: request.data_source_id,
+        view_id: request.view_id,
+      },
     });
-    context.applyPostMutation({ blocks: [created.block] });
-    context.requestBlockFocus(created.block.id);
-    recordUndoAfter("convert", before, created.block.id);
+    let created: NotesCreatedDatabase | null = null;
+    return context.enqueueEditorMutation(async () => {
+      created ??= await createNotesDatabase(request);
+      context.applyPostMutation({ blocks: [created.block] });
+      pendingDatabaseCreations.delete(blockId);
+      context.requestBlockFocus(created.block.id);
+      recordUndoAfter("convert", before, created.block.id);
+    });
   }
 
   function canConvertBlockToDatabase(block: NotesBlock): boolean {
@@ -520,31 +540,39 @@ export function createNotesStructuralBlockActions(
     recordUndoAfter("create", before, focusBlockId);
   }
 
-  async function createDatabaseAfterBlock(blockId: string): Promise<void> {
+  /** Insert a database placeholder immediately and commit it in editor write order. */
+  function createDatabaseAfterBlock(blockId: string): Promise<void> {
     const block = context.blockById(blockId);
     const selectedPageId = context.readSelectedPageId();
-    if (!block || !selectedPageId) return;
-    await context.flushBlockSave(blockId);
-    const currentBlock = context.blockById(blockId) ?? block;
+    if (!block || !selectedPageId) return Promise.resolve();
     const before = undoSnapshot(blockId);
-    const created = await createNotesDatabase({
+    const request = {
       id: crypto.randomUUID(),
       data_source_id: crypto.randomUUID(),
       view_id: crypto.randomUUID(),
-      title: DEFAULT_DATABASE_TITLE,
-      parent: currentBlock.parent,
+      title: "",
+      parent: block.parent,
       after_block_id: blockId,
+    };
+    pendingDatabaseCreations.add(request.id);
+    context.localInsertBlockAfter(context.optimisticBlockFromWrite({
+      id: request.id,
+      type: "child_database",
+      child_database: {
+        title: request.title,
+        database_id: request.id,
+        data_source_id: request.data_source_id,
+        view_id: request.view_id,
+      },
+    }, block.parent), blockId);
+    let created: NotesCreatedDatabase | null = null;
+    return context.enqueueEditorMutation(async () => {
+      created ??= await createNotesDatabase(request);
+      context.applyPostMutation({ blocks: [created.block] });
+      pendingDatabaseCreations.delete(request.id);
+      context.requestBlockFocus(created.block.id);
+      recordUndoAfter("create", before, created.block.id);
     });
-    context.applyPostMutation({
-      blocks: [created.block],
-      placements: [{
-        blockId: created.block.id,
-        parent: currentBlock.parent,
-        after: blockId,
-      }],
-    });
-    context.requestBlockFocus(created.block.id);
-    recordUndoAfter("create", before, created.block.id);
   }
 
   async function createLinkedDatabaseViewAfter(blockId: string): Promise<void> {
@@ -579,6 +607,7 @@ export function createNotesStructuralBlockActions(
 
 
   return {
+    isDatabaseCreationPending: (blockId) => pendingDatabaseCreations.has(blockId),
     convertBlock,
     toggleTodo,
     updateCodeLanguage,

@@ -1692,6 +1692,7 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
     flushBlockSave,
     flushPendingWrites,
     convertBlock,
+    isDatabaseCreationPending: blockActions.isDatabaseCreationPending,
     toggleTodo,
     updateCodeLanguage,
     updateBlockColor,
