@@ -64,7 +64,7 @@
   {/if}
   {#if retainPlaceholder}
     <div
-      class="notes-skeleton-placeholder {kind === 'page' ? 'min-h-0 overflow-x-hidden overflow-y-scroll' : kind === 'cover' ? 'size-full' : kind === 'database' ? 'my-5' : 'overflow-hidden py-2'}"
+      class="notes-skeleton-placeholder {kind === 'page' ? 'h-full min-h-0 overflow-x-hidden overflow-y-scroll' : kind === 'cover' ? 'size-full' : kind === 'database' ? 'my-5' : 'overflow-hidden py-2'}"
       style:container-type={kind === "page" ? "inline-size" : undefined}
       data-retiring={ready}
       aria-hidden="true"
@@ -165,9 +165,9 @@
 
   .notes-skeleton-placeholder[data-retiring="true"] {
     position: absolute;
-    inset: 0;
+    inset-inline: 0;
+    top: 0;
     overflow: hidden;
-    margin: 0;
   }
 
   .notes-skeleton-shapes {
@@ -177,6 +177,12 @@
   .notes-skeleton-content {
     visibility: hidden;
     opacity: 0;
+  }
+
+  .notes-skeleton-content[data-ready="false"] {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
   }
 
   .notes-skeleton-content[data-ready="true"] {
