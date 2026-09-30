@@ -13,6 +13,8 @@ Notes testing covers pure editing plans, canonical Rust commands, persistence or
 
 For child-note previews, create two sibling notes and collapse the sidebar. Viewing the main note must show group / project / main note. Opening either child appends only that child; switching siblings replaces the last segment. In side view, edit both panes and check that the header and undo target follow the pane receiving input. Create another child from the main pane while a sibling is open and confirm its parent remains the main note. Center previews block interaction with the main pane. Closing either preview keeps the same main editor and scroll position without reloading its content. Failed saves keep the preview draft open. Repeat with `/Note`, an existing child, further preview navigation, and promotion to full page. Check a long virtualized note and a note with a cover, columns, and nested blocks in the real Tauri app.
 
+Open the group/project/note selector and choose a note in another project and another group. Confirm the header names, sidebar roots, selected row, creation location, and project settings all follow the destination. Repeat with a nested note and with the sidebar collapsed. Open a note from another project in a side preview, switch focus between panes, and close the preview: each active pane must restore its owning context without reloading its document. Delay sidebar reads while switching projects and confirm late results cannot restore old pagination or roots.
+
 ## Rich-text acceptance
 
 Using a scratch page with other pages and relevant project objects available, verify:

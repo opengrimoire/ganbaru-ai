@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyBlockUpdate, blockPlainText, createBlockUpdate } from "$lib/notes/block-factory";
 import { notesBlockOutlineFromBlock } from "$lib/notes/block-outline";
 import { createProvisionalNotesPage } from "$lib/notes/page-creation";
-import type { NotesBlockHydrationRequest, NotesBlockUpdate, NotesChildPageFromBlockCreate, NotesLocalUser, NotesPageCreate, NotesPageOpenResponse, NotesWorkspaceShell } from "$lib/notes/types";
+import type { NotesBlockHydrationRequest, NotesBlockUpdate, NotesChildPageFromBlockCreate, NotesLocalUser, NotesPageCreate, NotesPageOpenResponse, NotesWorkspaceShell, NotesWorkspaceShellRequest } from "$lib/notes/types";
 import type { NotesPageOpenMode } from "$lib/notes/page-open-mode";
 
 const backend = vi.hoisted(() => ({
@@ -12,6 +12,10 @@ const backend = vi.hoisted(() => ({
   open: vi.fn(), createChild: vi.fn(), createPage: vi.fn(), saveBlock: vi.fn(),
   mentionSources: vi.fn(async () => []),
   destinations: vi.fn(async () => ({ pages: [], next_page_cursor: null })),
+  workspaceRequests: [] as NotesWorkspaceShellRequest[],
+  otherProjectCursor: null as string | null,
+  projectsLoaded: true,
+  projectsReady: vi.fn(async (): Promise<void> => undefined),
 }));
 
 vi.mock("$lib/api/notes", async (importOriginal) => ({
@@ -20,13 +24,19 @@ vi.mock("$lib/api/notes", async (importOriginal) => ({
   createNotesChildPageFromBlock: backend.createChild,
   createNotesPage: backend.createPage,
   updateNotesBlock: backend.saveBlock,
-  loadNotesWorkspaceShell: async (): Promise<NotesWorkspaceShell> => ({
-    pages: [...backend.pages.values()].map(({ page }) => page), folders: [],
-    navigation_pages: [], navigation_folders: [], navigation_page_ids_with_children: [],
-    page_ids_with_children: [], missing_parent_page_ids: [], trashed_parent_page_ids: [],
-    resolved_selected_page_id: null, total_page_count: backend.pages.size, total_folder_count: 0,
-    next_page_cursor: null, next_folder_cursor: null,
-  }),
+  loadNotesWorkspaceShell: async (request: NotesWorkspaceShellRequest): Promise<NotesWorkspaceShell> => {
+    backend.workspaceRequests.push(request);
+    const allPages = [...backend.pages.values()].map(({ page }) => page);
+    const pages = allPages.filter((page) => page.properties.__ganbaru_project_id === request.project_id);
+    return {
+      pages, folders: [], navigation_pages: request.include_navigation_index ? allPages : [],
+      navigation_folders: [], navigation_page_ids_with_children: [],
+      page_ids_with_children: [], missing_parent_page_ids: [], trashed_parent_page_ids: [],
+      resolved_selected_page_id: null, total_page_count: pages.length, total_folder_count: 0,
+      next_page_cursor: request.project_id === "other-project" && !request.page_cursor ? backend.otherProjectCursor : null,
+      next_folder_cursor: null,
+    };
+  },
   getNotesPageBreadcrumb: async (id: string) => backend.pages.get(id)!.breadcrumb,
   hydrateNotesBlocks: async (request: NotesBlockHydrationRequest) => backend.pages.get(request.page_id)!.blocks.results.filter((block) => request.block_ids.includes(block.id)),
   listNotesBacklinks: async () => [], listNotesPageAliases: async () => [], listNotesUnresolvedLinks: async () => [],
@@ -40,13 +50,27 @@ vi.mock("$lib/api/notes", async (importOriginal) => ({
   listNotesWorkingMarkdown: async () => ({ roots: [], unavailableWorkingFolderIds: [] }),
   listNotesDestinationCandidates: backend.destinations,
 }));
-vi.mock("$lib/stores/projects.svelte", () => {
+vi.mock("$lib/stores/projects.svelte", async () => {
+  const { SvelteMap } = await import("svelte/reactivity");
   const group = { id: "group", name: "Group", icon: "folder" };
+  const otherGroup = { id: "other-group", name: "Other group", icon: "folder" };
   const project = { id: "project", groupId: group.id, name: "Project", icon: "folder", status: "active" };
+  const otherProject = { id: "other-project", groupId: otherGroup.id, name: "Other project", icon: "folder", status: "active" };
+  const selection = new SvelteMap([["projectId", project.id]]);
+  const projects = [project, otherProject];
+  const groups = [group, otherGroup];
   const store = {
-    loaded: true, selectedProjectId: project.id, selectedProject: project, selectedGroup: group,
-    projects: [project], tasks: [], customEmojis: [], ensureLoaded: async () => undefined,
-    projectById: (id: string) => id === project.id ? project : undefined,
+    get loaded(): boolean { return backend.projectsLoaded; },
+    get selectedProjectId(): string | null { return selection.get("projectId") ?? null; },
+    set selectedProjectId(id: string | null) { if (id) selection.set("projectId", id); else selection.delete("projectId"); },
+    get selectedProject(): typeof project | undefined { return projects.find((project) => project.id === store.selectedProjectId); },
+    get selectedGroup(): typeof group | undefined { return groups.find((group) => group.id === store.selectedProject?.groupId); },
+    projects, tasks: [], customEmojis: [], ensureLoaded: backend.projectsReady,
+    projectById: (id: string) => projects.find((project) => project.id === id),
+    groupById: (id: string) => groups.find((group) => group.id === id),
+    visibleGroups: () => groups,
+    projectsForGroup: (id: string) => projects.filter((project) => project.groupId === id),
+    projectsForGroupIncludingInactive: (id: string) => projects.filter((project) => project.groupId === id),
   };
   return { getProjects: () => store };
 });
@@ -59,11 +83,11 @@ vi.mock("$lib/stores/viewport.svelte", () => ({ getViewport: () => ({ width: 120
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({ label: "main" }) }));
 
 /** Build the same page, initial body, and outline contract returned by native page loading. */
-function page(id: string, title: string, parentId?: string): NotesPageOpenResponse {
+function page(id: string, title: string, parentId?: string, projectId = "project"): NotesPageOpenResponse {
   const loaded = createProvisionalNotesPage({
     id, title, first_block_id: `${id}-body`, folder_id: null,
     parent: parentId ? { type: "page_id", page_id: parentId } : { type: "workspace", workspace: true },
-    properties: { __ganbaru_project_id: "project" },
+    properties: { __ganbaru_project_id: projectId },
   });
   loaded.blocks.results[0] = applyBlockUpdate(loaded.blocks.results[0], createBlockUpdate("paragraph", `${title} content`));
   return {
@@ -87,9 +111,15 @@ describe("Notes preview ownership", () => {
     vi.unstubAllGlobals();
     vi.clearAllMocks();
     backend.pages.clear();
+    backend.workspaceRequests.length = 0;
+    backend.otherProjectCursor = null;
+    backend.projectsLoaded = true;
+    backend.projectsReady.mockResolvedValue(undefined);
   });
 
   async function setup(openMode: NotesPageOpenMode = "full", emptyChildWithCover = false) {
+    const { getProjects } = await import("$lib/stores/projects.svelte");
+    getProjects().selectedProjectId = "project";
     vi.stubGlobal("CSS", { escape: (value: string) => value });
     vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0));
@@ -101,6 +131,7 @@ describe("Notes preview ownership", () => {
       child.page.cover = { type: "design", design: { pattern: "solid", color: "default" } };
     }
     const sibling = page("sibling", "Second sub-note", parent.page.id);
+    const other = page("other-note", "Other project note", undefined, "other-project");
     parent.blocks.results.push(...[child, sibling].map(({ page: childPage }) => applyBlockUpdate(
       { ...parent.blocks.results[0], id: childPage.id }, createBlockUpdate("child_page", childPage.id === child.page.id ? "Sub-note" : "Second sub-note"),
     )));
@@ -108,6 +139,7 @@ describe("Notes preview ownership", () => {
     backend.pages.set(parent.page.id, parent);
     backend.pages.set(child.page.id, child);
     backend.pages.set(sibling.page.id, sibling);
+    backend.pages.set(other.page.id, other);
     backend.open.mockImplementation(async (id: string) => backend.pages.get(id)!);
     backend.createPage.mockImplementation(async (request: NotesPageCreate) => {
       const parentId = request.parent.type === "page_id" ? request.parent.page_id : undefined;
@@ -135,8 +167,100 @@ describe("Notes preview ownership", () => {
     const { default: NotesView } = await import("./NotesView.svelte");
     component = mount(NotesView, { target: document.body });
     await tick(); await tick();
-    return { notes, parent, child, sibling };
+    return { notes, parent, child, sibling, other };
   }
+
+  it("updates the header and sidebar when the top-bar selector opens a note from another group", async () => {
+    const { notes, other } = await setup();
+    notes.explorerCollapsed = false;
+    await tick();
+    const namedButton = (name: string) => [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.trim() === name);
+    namedButton("Group")!.click();
+    await vi.waitFor(() => expect(namedButton("Other group")).toBeDefined());
+    namedButton("Other group")!.click();
+    await vi.waitFor(() => expect(namedButton("Other project")).toBeDefined());
+    namedButton("Other project")!.focus();
+    await vi.waitFor(() => expect(namedButton("Other project note")).toBeDefined());
+    namedButton("Other project note")!.click();
+    await vi.waitFor(() => expect(notes.loadedPage?.id).toBe(other.page.id));
+    const { getProjects } = await import("$lib/stores/projects.svelte");
+    await vi.waitFor(() => expect(getProjects().selectedProjectId).toBe("other-project"));
+    await tick();
+    const header = document.querySelector("[data-notes-workspace-header]")!.textContent!;
+    expect(header).toContain("Other group");
+    expect(header).toContain("Other project");
+    const explorer = document.querySelector("[data-notes-explorer]")!.textContent!;
+    expect(explorer).toContain("Other project note");
+    expect(explorer).not.toContain("Main note");
+    expect(backend.workspaceRequests.at(-1)).toMatchObject({
+      project_id: "other-project", selected_page_id: other.page.id, include_navigation_index: false,
+    });
+    expect(backend.open.mock.calls.filter(([id]) => id === other.page.id)).toHaveLength(1);
+  }, 15_000);
+
+  it("restores each pane's project context on focus and preview close without reopening either document", async () => {
+    const { notes, parent, other } = await setup();
+    const { getProjects } = await import("$lib/stores/projects.svelte");
+    const mainViewport = document.querySelector("[data-notes-editor-scroll]");
+    backend.otherProjectCursor = "other-project-next";
+    await notes.selectPage(other.page.id, { openMode: "side" });
+    expect(getProjects().selectedProjectId).toBe("other-project");
+    await tick();
+    await notes.loadMoreWorkspaceWindow();
+    expect(backend.workspaceRequests.at(-1)).toMatchObject({ project_id: "other-project", page_cursor: "other-project-next" });
+    const previewId = notes.activePaneId;
+    notes.activatePane(notes.mainPaneId);
+    expect(getProjects().selectedProjectId).toBe("project");
+    notes.activatePane(previewId);
+    expect(getProjects().selectedProjectId).toBe("other-project");
+    await notes.closeContextualPage();
+    await tick();
+    expect(getProjects().selectedProjectId).toBe("project");
+    expect(document.querySelector("[data-notes-editor-scroll]")).toBe(mainViewport);
+    expect(backend.open.mock.calls.filter(([id]) => id === parent.page.id)).toHaveLength(1);
+    expect(backend.open.mock.calls.filter(([id]) => id === other.page.id)).toHaveLength(1);
+  });
+
+  it("keeps the current project when opening a note from another project fails", async () => {
+    const { notes, other } = await setup();
+    const { getProjects } = await import("$lib/stores/projects.svelte");
+    const shellReads = backend.workspaceRequests.length;
+    backend.open.mockRejectedValueOnce(new Error("Read failed"));
+    await expect(notes.selectPage(other.page.id, { openMode: "full" })).rejects.toThrow("Read failed");
+    expect(getProjects().selectedProjectId).toBe("project");
+    expect(backend.workspaceRequests).toHaveLength(shellReads);
+  });
+
+  it("keeps an explicit project selection while reloading the workspace closes an old preview", async () => {
+    const { notes, child } = await setup();
+    const { getProjects } = await import("$lib/stores/projects.svelte");
+    await notes.selectPage(child.page.id, { openMode: "side" });
+    getProjects().selectedProjectId = "other-project";
+    await notes.load();
+    expect(notes.previewPane).toBeNull();
+    expect(getProjects().selectedProjectId).toBe("other-project");
+    expect(backend.workspaceRequests.at(-1)?.project_id).toBe("other-project");
+  });
+
+  it("does not restore an earlier note's project after project metadata finishes loading", async () => {
+    const { notes, parent, other } = await setup();
+    const { getProjects } = await import("$lib/stores/projects.svelte");
+    backend.projectsLoaded = false;
+    let finishProjects!: () => void;
+    const readiness = new Promise<void>((resolve) => { finishProjects = resolve; });
+    backend.projectsReady.mockReturnValue(readiness);
+    await notes.selectPage(other.page.id, { openMode: "full" });
+    await notes.selectPage(parent.page.id, { openMode: "full" });
+    const shellReads = backend.workspaceRequests.length;
+    backend.projectsLoaded = true;
+    finishProjects();
+    await readiness;
+    await tick(); await tick();
+    expect(notes.selectedPageId).toBe(parent.page.id);
+    expect(getProjects().selectedProjectId).toBe("project");
+    expect(backend.workspaceRequests).toHaveLength(shellReads);
+  });
 
   it.each(["center", "side"] as const)("keeps the main editor mounted when a %s preview opens and closes, without reloading it", async (mode) => {
     const { notes, parent, child } = await setup();

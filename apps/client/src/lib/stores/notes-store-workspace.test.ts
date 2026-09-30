@@ -37,6 +37,68 @@ describe("Notes workspace reloads", () => {
     backend.load.mockClear();
   });
 
+  it("cancels old project pagination while refreshing the destination sidebar without reopening its note", async () => {
+    const { createNotesWorkspaceController } = await import("./notes-store-workspace.svelte");
+    let projectId = "project-a";
+    const applyAdditionalShell = vi.fn();
+    const mergeReloadedShell = vi.fn();
+    const prepareLoad = vi.fn();
+    const loadSelectedPage = vi.fn(async () => undefined);
+    const controller = createNotesWorkspaceController({
+      readRequestState: () => ({ projectId, expandedPageIds: [], seedPageIds: [], selectedPageId: "note" }),
+      readNavigationMutationRevision: () => 0,
+      prepareLoad, applyInitialShell: () => null, applyAdditionalShell, mergeReloadedShell,
+      loadSelectedPage, clearSelectedPageState: vi.fn(), readSelectedPageId: () => "note",
+    });
+    const initial = controller.load();
+    backend.resolvers[0]?.(shell("project-a-next"));
+    await initial;
+    const oldPagination = controller.loadMoreWorkspaceWindow();
+    projectId = "project-b";
+    const refresh = controller.refreshProjectNavigation();
+    expect(backend.load).toHaveBeenLastCalledWith(expect.objectContaining({ project_id: "project-b", selected_page_id: "note" }));
+    await controller.loadMoreWorkspaceWindow();
+    expect(backend.load).toHaveBeenCalledTimes(3);
+    backend.resolvers[1]?.(shell("stale-next"));
+    await oldPagination;
+    expect(applyAdditionalShell).not.toHaveBeenCalled();
+    const fresh = shell("project-b-next");
+    backend.resolvers[2]?.(fresh);
+    await refresh;
+    expect(mergeReloadedShell).toHaveBeenCalledExactlyOnceWith(fresh);
+    expect(prepareLoad).toHaveBeenCalledOnce();
+    expect(loadSelectedPage).not.toHaveBeenCalled();
+    const more = controller.loadMoreWorkspaceWindow();
+    expect(backend.load).toHaveBeenLastCalledWith(expect.objectContaining({ project_id: "project-b", page_cursor: "project-b-next" }));
+    backend.resolvers[3]?.(shell("end"));
+    await more;
+  });
+
+  it("drops earlier sidebar reads even when navigation returns to the same project", async () => {
+    const { createNotesWorkspaceController } = await import("./notes-store-workspace.svelte");
+    let projectId = "project-a";
+    const mergeReloadedShell = vi.fn();
+    const controller = createNotesWorkspaceController({
+      readRequestState: () => ({ projectId, expandedPageIds: [], seedPageIds: [], selectedPageId: "note" }),
+      readNavigationMutationRevision: () => 0,
+      prepareLoad: vi.fn(), applyInitialShell: () => null,
+      applyAdditionalShell: vi.fn(), mergeReloadedShell,
+      loadSelectedPage: async () => undefined, clearSelectedPageState: vi.fn(), readSelectedPageId: () => "note",
+    });
+    const old = controller.refreshProjectNavigation();
+    projectId = "project-b";
+    const intermediate = controller.refreshProjectNavigation();
+    projectId = "project-a";
+    const current = controller.refreshProjectNavigation();
+    const fresh = shell("latest-a");
+    backend.resolvers[2]?.(fresh);
+    await current;
+    backend.resolvers[0]?.(shell("old-a"));
+    backend.resolvers[1]?.(shell("old-b"));
+    await Promise.all([old, intermediate]);
+    expect(mergeReloadedShell).toHaveBeenCalledExactlyOnceWith(fresh);
+  });
+
   it("keeps concurrent startup callers waiting until the selected note has loaded", async () => {
     const { createNotesWorkspaceController } = await import("./notes-store-workspace.svelte");
     let finishPage!: () => void;

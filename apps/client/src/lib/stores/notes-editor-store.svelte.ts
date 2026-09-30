@@ -1574,6 +1574,7 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
     load: workspaceController.load,
     ensureLoaded: () => workspaceLoaded ? Promise.resolve() : workspaceController.ensureLoaded(),
     loadMoreWorkspaceWindow: workspaceController.loadMoreWorkspaceWindow,
+    refreshProjectNavigation: workspaceController.refreshProjectNavigation,
     selectPage,
     openPageContextually,
     closeContextualPage,

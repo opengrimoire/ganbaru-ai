@@ -31,6 +31,8 @@ The main editor stays mounted behind a center preview or beside a side preview. 
 
 With the desktop sidebar collapsed, the workspace header shows the active note's ancestry: group, project, any containing folders, and the path to that note. Viewing a main note ends the path at that note. Opening one of its children adds only that child; sibling notes never appear as additional path segments. In side view, focusing the main pane returns the path to the main note; focusing the preview shows its ancestry. Hover subpanels remain available at each note level for browsing children.
 
+Opening a note owned by another project, including through the group/project/note selector, updates the shared active project and group to match that note. The header and sidebar follow the same context. Project changes refresh only the sidebar metadata and pagination, without reopening the note or replacing its editor. Focusing or closing a preview restores the context of the active pane. Late reads cannot restore an earlier project's sidebar window.
+
 The sidebar shows folders and workspace-parented notes. Child notes do not become nested sidebar rows when opened, loaded, or found in a destination picker. The containing root note remains highlighted when a child is selected. Folder expansion remains available. The top bar keeps its note hierarchy and hover subpanels, including lazy loading of child notes.
 
 Moving a page under another page creates or restores the paired child block at the destination. Moving it back to the project workspace hides the old paired block rather than leaving a broken navigation reference.

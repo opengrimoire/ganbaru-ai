@@ -1,6 +1,8 @@
 import { untrack } from "svelte";
 import { createNotesEditorStore, type NotesEditorStore, type NotesSelectPageOptions } from "./notes-editor-store.svelte";
 import { saveNotesSelectedPageId } from "./notes-store-page-state";
+import { getProjects } from "./projects.svelte";
+import { notesPageProjectId } from "$lib/notes/project-membership";
 import type { NotesPageOpenMode } from "$lib/notes/page-open-mode";
 import type { NotesLoadedPage } from "$lib/notes/types";
 import type { NotesSidebarMetadataImpact } from "$lib/notes/post-mutation";
@@ -12,6 +14,7 @@ export interface NotesEditorPane {
 
 /** Coordinate live panes without replacing the main editor when a preview opens. */
 function createNotesWorkspace() {
+  const projects = getProjects();
   let nextPaneId = 0;
   let main = $state.raw<NotesEditorPane>(createPane(true));
   let preview = $state.raw<NotesEditorPane | null>(null);
@@ -67,13 +70,36 @@ function createNotesWorkspace() {
     return pane;
   }
 
-  function activatePane(id: string): void {
-    if (activePaneId === id || !panes.some((pane) => pane.id === id)) return;
-    activePaneId = id;
-    saveNotesSelectedPageId(paneById(id).store.selectedPageId);
+  function activatePane(id: string, restoreProjectContext = true): void {
+    if (!panes.some((pane) => pane.id === id)) return;
+    const pane = paneById(id);
+    if (activePaneId !== id) {
+      activePaneId = id;
+      saveNotesSelectedPageId(pane.store.selectedPageId);
+    }
+    if (!restoreProjectContext) return;
+    void synchronizeProjectContext(pane).catch((error: unknown) => {
+      console.warn("Refresh Notes project context failed", error);
+    });
   }
 
-  async function closePreview(): Promise<void> {
+  /** Follow the active document's owning project without reopening its content. */
+  async function synchronizeProjectContext(pane: NotesEditorPane): Promise<void> {
+    const page = pane.store.loadedPage;
+    if (!page || page.id !== pane.store.selectedPageId) return;
+    const projectId = notesPageProjectId(page);
+    if (!projectId) return;
+    if (!projects.loaded) await projects.ensureLoaded();
+    if (activePaneId !== pane.id
+      || pane.store.selectedPageId !== page.id
+      || !pane.store.loadedPage
+      || notesPageProjectId(pane.store.loadedPage) !== projectId) return;
+    if (!projects.projectById(projectId) || projects.selectedProjectId === projectId) return;
+    projects.selectedProjectId = projectId;
+    await pane.store.refreshProjectNavigation();
+  }
+
+  async function closePreview(restoreProjectContext = true): Promise<void> {
     const closing = preview;
     if (!closing) return;
     const pageId = closing.store.selectedPageId;
@@ -81,13 +107,13 @@ function createNotesWorkspace() {
     if (preview !== closing || closing.store.selectedPageId !== pageId) return;
     preview = null;
     closing.store.dispose();
-    activatePane(main.id);
+    activatePane(main.id, restoreProjectContext);
   }
 
   async function closePane(id: string): Promise<void> {
     if (preview?.id === id) await closePreview();
     else if (main.id === id) {
-      await closePreview();
+      await closePreview(false);
       await main.store.selectPageLocally(null);
       activatePane(main.id);
     }
@@ -111,13 +137,13 @@ function createNotesWorkspace() {
     const source = paneById(sourceId);
     const existing = panes.find((pane) => pane.store.selectedPageId === pageId);
     if (existing) {
-      if (existing === main && preview && (mode === "full" || preview.store.pageOpenMode === "center")) await closePreview();
+      if (existing === main && preview && (mode === "full" || preview.store.pageOpenMode === "center")) await closePreview(false);
       if (mode === "full") await showPaneAs(existing.id, mode);
       activatePane(existing.id);
       return existing;
     }
     if (mode === "full") {
-      await closePreview();
+      await closePreview(false);
       activatePane(main.id);
       return main;
     }
@@ -138,7 +164,7 @@ function createNotesWorkspace() {
 
   async function selectFrom(sourceId: string, pageId: string | null, options: NotesSelectPageOptions = {}): Promise<void> {
     if (!pageId) {
-      await closePreview();
+      await closePreview(false);
       await main.store.selectPageLocally(null, options);
       activatePane(main.id);
       return;
@@ -173,9 +199,9 @@ function createNotesWorkspace() {
     closeContextualPage: () => preview ? closePreview() : closePane(main.id),
     // Workspace navigation always acts on the pane currently receiving user input.
     selectPage: (pageId: string | null, options?: NotesSelectPageOptions) => selectFrom(active.id, pageId, options),
-    load: () => preview ? closePreview().then(() => main.store.load()) : main.store.load(),
+    load: () => preview ? closePreview(false).then(() => main.store.load()) : main.store.load(),
     ensureLoaded: () => main.store.ensureLoaded(),
-    loadMoreWorkspaceWindow: () => main.store.loadMoreWorkspaceWindow(),
+    loadMoreWorkspaceWindow: () => active.store.loadMoreWorkspaceWindow(),
     flushPendingWrites: async () => {
       for (const pane of panes) await pane.store.flushPendingWrites();
     },

@@ -152,6 +152,16 @@ export function createNotesWorkspaceController(context: NotesWorkspaceController
     }
   }
 
+  /** Replace project-scoped pagination and refresh metadata without resetting the editor. */
+  async function refreshProjectNavigation(): Promise<void> {
+    requestId += 1;
+    loading = false;
+    windowLoading = false;
+    nextPageCursor = null;
+    nextFolderCursor = null;
+    await reloadPages();
+  }
+
   return {
     get loaded(): boolean { return loaded; },
     get loading(): boolean { return loading; },
@@ -163,6 +173,7 @@ export function createNotesWorkspaceController(context: NotesWorkspaceController
     ensureLoaded,
     loadMoreWorkspaceWindow,
     reloadPages,
+    refreshProjectNavigation,
     setLoading(value: boolean): void { loading = value; },
     setError(value: string | null): void { error = value; },
   };
