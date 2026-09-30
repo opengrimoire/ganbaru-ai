@@ -2,6 +2,10 @@
 
 **Status: Implemented. Real desktop and Android visual and interaction acceptance remains required. Curated images are planned.**
 
+While a cover renderer, managed asset, or image is loading, a lightweight skeleton occupies the existing banner geometry. The unavailable state appears only after a failed or unsupported source. Loading adds no image prefetch, permanent decoded-image cache, or delay before showing a ready image. Already loaded cover renderers are reused on editor remounts.
+
+The image placeholder stays mounted through managed asset resolution and image loading. Fast images reveal directly; a visible skeleton fades out over the decoded image using the same brief, nonblocking handoff as page loading.
+
 ## Design and color
 
 Add cover opens a picker with **Designs** and **Upload**. Reopening selects the current cover's source and restores its choices.

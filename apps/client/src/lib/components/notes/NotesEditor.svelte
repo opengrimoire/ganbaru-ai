@@ -1,4 +1,5 @@
 <script lang="ts">
+  import NotesLoadingSkeleton from "./NotesLoadingSkeleton.svelte";
   import { onDestroy, onMount, tick, untrack } from "svelte";
   import {
     beginLazyComponentLoad,
@@ -100,6 +101,7 @@
   import NotesPeekModeIcon from "./NotesPeekModeIcon.svelte";
   import {
     loadNotesEditorPanel,
+    readNotesEditorPanel,
     retryNotesEditorPanel,
     type LoadedNotesEditorPanel,
     type NotesEditorPanelKind,
@@ -359,6 +361,11 @@
     const current = panelLoadStates[kind] ?? null;
     if (!retry && current?.key === kind) return;
     const loadingState = beginLazyComponentLoad(current, kind);
+    const cached = retry ? null : readNotesEditorPanel(kind);
+    if (cached) {
+      panelLoadStates = { ...panelLoadStates, [kind]: resolveLazyComponentLoad(loadingState, kind, loadingState.requestId, cached) };
+      return;
+    }
     panelLoadStates = { ...panelLoadStates, [kind]: loadingState };
     const request = retry ? retryNotesEditorPanel(kind) : loadNotesEditorPanel(kind);
     void request.then((component) => {
@@ -1429,6 +1436,8 @@
               onStatus={(status) => { coverStatus = status; }} />
           {:else if panelLoadStates["page-cover"]?.status === "failed"}
             <button class="m-2 min-h-8 rounded-md border border-border bg-popover px-2 text-[0.8rem]" type="button" onclick={() => requestEditorPanel("page-cover", true)}>{t("common.retry")}</button>
+          {:else}
+            <NotesLoadingSkeleton kind="cover" />
           {/if}
           <div
             class="notes-cover-actions absolute right-3 top-3 flex items-center divide-x divide-border overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-sm"

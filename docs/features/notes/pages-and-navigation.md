@@ -10,6 +10,10 @@ An empty page title is valid and receives a localized fallback in navigation. Re
 While the editor title is being edited, the workspace header and sidebar show its draft. A committed rename or page move updates the open page and navigation without requiring a page or project switch.
 New pages appear in navigation and the editor while their database creation is in progress. Selecting one during creation uses its local draft, and the first later open can use the completed creation result without another page read. Editing invalidates that reusable result. Starting another page waits for pending edits on the current page to settle.
 
+Switching to another existing page reads its current content through one native page-open command, including breadcrumbs, the initial block range, and its outline. Optional panels and descendant hydration do not delay initial editor readiness. Pending edits are flushed before leaving the previous document, without waiting for the typing debounce. Previous documents are released rather than retained in a navigation cache; previews keep only their explicitly open editor sessions.
+
+While a page loads, a lightweight skeleton follows the editor's content width and cover geometry using navigation metadata already in memory. There is no visible loading label or temporary close button. A cancelable reveal timer avoids showing skeleton shapes during fast reads. Fast results appear directly with no fade or minimum loading duration. If shapes have become visible, they fade away over ready content for 100 ms without blocking input or preserving a second layout row. Only the decorative overlay survives that handoff; previous documents are not retained. Reduced motion disables fading. A failed page read shows its error and Retry; failed previews also expose Close, and navigation remains available.
+
 ## Folder model
 
 Folders organize workspace-parented pages inside a project. They are navigation containers, not page blocks and not Markdown directories. Moving a page into a folder changes local placement without changing the page's canonical content.

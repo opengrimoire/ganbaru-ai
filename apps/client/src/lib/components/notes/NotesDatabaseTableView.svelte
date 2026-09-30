@@ -1,4 +1,5 @@
 <script lang="ts">
+  import NotesLoadingSkeleton from "./NotesLoadingSkeleton.svelte";
   import { NOTES_TEXT_COLORS, notesBlockColorStyle } from "$lib/notes/block-color";
   import CollectionRow from "$lib/components/collections/CollectionRow.svelte";
   import CollectionCell from "$lib/components/collections/CollectionCell.svelte";
@@ -94,6 +95,7 @@
     viewId = null,
     onSelectPage,
     onSavingChange = () => {},
+    onReady = () => {},
     onAddProperty,
     onEditProperties,
     newRowRequest = 0,
@@ -106,6 +108,7 @@
     viewId?: string | null;
     onSelectPage: (pageId: string) => void;
     onSavingChange?: (saving: boolean) => void;
+    onReady?: () => void;
     onAddProperty: (type: NotesDataSourcePropertyType, name: string) => Promise<void>;
     onEditProperties: () => void;
     newRowRequest?: number;
@@ -343,6 +346,8 @@
     return { databaseId, viewId };
   }
 
+  $effect(() => { if (table || error) onReady(); });
+
   async function loadTable(refreshTemplates = true, force = true): Promise<NotesDataSourceTableView | null> {
     const requestId = ++tableRequestId;
     const settledIds = rowCreation.settledIds(dataSourceId);
@@ -352,28 +357,35 @@
     try {
       const sourceId = dataSourceId;
       const scope = viewScope();
-      const [loaded, loadedTemplates] = await Promise.all([
-        notesDatabaseSession.load(databaseResource("table", sourceId, scope), () => getNotesDataSourceTableView(sourceId, scope), force),
-        refreshTemplates ? notesDatabaseSession.load(databaseResource("templates", sourceId), () => listNotesDataSourceTemplates(sourceId), force) : Promise.resolve(templates),
-      ]);
+      const templateRead = (refreshTemplates
+        ? notesDatabaseSession.load(databaseResource("templates", sourceId), () => listNotesDataSourceTemplates(sourceId), force)
+        : Promise.resolve(templates)).then(
+          (value) => ({ value }),
+          (reason: unknown) => ({ reason }),
+        );
+      const loaded = await notesDatabaseSession.load(databaseResource("table", sourceId, scope), () => getNotesDataSourceTableView(sourceId, scope), force);
       if (requestId !== tableRequestId) return null;
       const focusedId = document.activeElement?.closest<HTMLElement>("[data-database-row-id]")?.dataset.databaseRowId ?? null;
       rowCreation.acceptWindow(dataSourceId, focusedId, settledIds);
       table = loaded;
-      templates = loadedTemplates;
       if (selectedPanelRowId && !visibleRows.some((row) => row.id === selectedPanelRowId)) {
         selectedPanelRowId = null;
       }
       if (templateSourceRowId && !visibleRows.some((row) => row.id === templateSourceRowId)) {
         templateSourceRowId = "";
       }
+      await focusPendingRow();
+      const templateResult = await templateRead;
+      if (requestId !== tableRequestId) return null;
+      if ("reason" in templateResult) throw templateResult.reason;
+      const loadedTemplates = templateResult.value;
+      templates = loadedTemplates;
       if (selectedTemplateId && !loadedTemplates.some((template) => template.id === selectedTemplateId)) {
         selectedTemplateId = "";
       }
       if (!selectedTemplateId) {
         selectedTemplateId = loadedTemplates.find((template) => template.is_default)?.id ?? "";
       }
-      await focusPendingRow();
       return loaded;
     } catch (caught) {
       if (requestId !== tableRequestId) return null;
@@ -739,13 +751,7 @@
 <svelte:window onpointermove={moveColumnResize} onpointerup={(event) => finishColumnResize(event, true)} onpointercancel={(event) => finishColumnResize(event, false)} onkeydown={(event) => { if (event.key === "Escape") resizing = null; }} />
 
 <section class="space-y-3 pt-2" aria-label={t("notes.databaseTableTitle")}>
-  <span class="sr-only" role="status">
-    {#if loading}
-      {t("notes.databaseTableLoading")}
-    {:else}
-      {t("notes.databaseRowsCount", visibleRows.length)}
-    {/if}
-  </span>
+  {#if table}<span class="sr-only" role="status">{t("notes.databaseRowsCount", visibleRows.length)}</span>{/if}
 
   {#if error}
     <div class="flex items-center gap-2 text-[0.8rem] text-destructive" role="alert">
@@ -756,6 +762,7 @@
     </div>
   {/if}
 
+  {#if !table && !error}<NotesLoadingSkeleton kind="table" />{/if}
   {#if table}
     <div class="grid gap-2 @container">
       {#if settingsOpen}

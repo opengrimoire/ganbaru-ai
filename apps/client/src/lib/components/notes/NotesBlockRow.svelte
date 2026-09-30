@@ -1,4 +1,5 @@
 <script lang="ts">
+  import NotesLoadingSkeleton from "./NotesLoadingSkeleton.svelte";
   import type { NotesMentionCatalog } from "./notes-mention-data-controller.svelte";
   import { tick } from "svelte";
   import {
@@ -341,6 +342,7 @@
     NotesAdvancedBlockFamily,
     LoadedNotesAdvancedBlock
   > | null>(null);
+  let readyDatabaseIdentity = $state<string | null>(null);
   let slashMenuLoadState = $state<LazyComponentLoadState<
     "slash-menu",
     LoadedNotesTextControl
@@ -773,18 +775,26 @@
           <span class="min-w-0 truncate">{childPageTitle || t("notes.untitled")}</span>
         </button>
       {:else if block.type === "child_database"}
-        {#if advancedBlockLoadState?.status === "ready" && advancedBlockLoadState.component.kind === "child-database"}
-          {@const NotesChildDatabaseBlock = advancedBlockLoadState.component.component}
-          <NotesChildDatabaseBlock
-          {block}
-          {focusBlockId}
-          {focusRequestId}
-          onFocusBlock={onFocusBlock}
-          onKeydown={handleKeydown}
-          {onSelectPage}
-          {onCreateLinkedDatabaseView}
-          />
-        {/if}
+        {@const databaseIdentity = JSON.stringify([block.id, block.child_database.database_id, block.child_database.data_source_id])}
+        <NotesLoadingSkeleton kind="database" ready={readyDatabaseIdentity === databaseIdentity || advancedBlockLoadState?.status === "failed"}>
+          {#snippet children()}
+            {#key databaseIdentity}
+              {#if advancedBlockLoadState?.status === "ready" && advancedBlockLoadState.component.kind === "child-database"}
+                {@const NotesChildDatabaseBlock = advancedBlockLoadState.component.component}
+                <NotesChildDatabaseBlock
+                  onReady={() => { readyDatabaseIdentity = databaseIdentity; }}
+                  {block}
+                  {focusBlockId}
+                  {focusRequestId}
+                  onFocusBlock={onFocusBlock}
+                  onKeydown={handleKeydown}
+                  {onSelectPage}
+                  {onCreateLinkedDatabaseView}
+                />
+              {/if}
+            {/key}
+          {/snippet}
+        </NotesLoadingSkeleton>
       {:else if block.type === "breadcrumb"}
         <nav
           class="my-1 flex min-h-8 min-w-0 items-center gap-1 rounded-md px-1 text-[0.8rem] text-muted-foreground"
@@ -1043,8 +1053,8 @@
           <p>{t("common.viewLoadFailed", block.type)}</p>
           <button class="mt-2 min-h-8 rounded-md border border-border px-2 text-foreground hover:bg-accent" type="button" onclick={() => requestAdvancedBlock(true)}>{t("common.retry")}</button>
         </div>
-      {:else if advancedBlockFamily && advancedBlockLoadState?.status !== "ready"}
-        <div class="my-1 min-h-8 text-[0.8rem] text-muted-foreground" aria-busy="true">{t("common.loading")}</div>
+      {:else if advancedBlockFamily && advancedBlockFamily !== "child-database" && advancedBlockLoadState?.status !== "ready"}
+        <NotesLoadingSkeleton kind={advancedBlockFamily === "table" ? "table" : "block"} />
       {/if}
 
       {#if slashOpen}

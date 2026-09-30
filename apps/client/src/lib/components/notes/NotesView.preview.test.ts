@@ -89,13 +89,17 @@ describe("Notes preview ownership", () => {
     backend.pages.clear();
   });
 
-  async function setup(openMode: NotesPageOpenMode = "full") {
+  async function setup(openMode: NotesPageOpenMode = "full", emptyChildWithCover = false) {
     vi.stubGlobal("CSS", { escape: (value: string) => value });
     vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0));
     vi.stubGlobal("cancelAnimationFrame", (id: number) => window.clearTimeout(id));
     const parent = page("parent", "Main note");
     const child = page("child", "Sub-note", parent.page.id);
+    if (emptyChildWithCover) {
+      child.blocks.results[0] = applyBlockUpdate(child.blocks.results[0], createBlockUpdate("paragraph", ""));
+      child.page.cover = { type: "design", design: { pattern: "solid", color: "default" } };
+    }
     const sibling = page("sibling", "Second sub-note", parent.page.id);
     parent.blocks.results.push(...[child, sibling].map(({ page: childPage }) => applyBlockUpdate(
       { ...parent.blocks.results[0], id: childPage.id }, createBlockUpdate("child_page", childPage.id === child.page.id ? "Sub-note" : "Second sub-note"),
@@ -204,13 +208,17 @@ describe("Notes preview ownership", () => {
     expect(document.querySelector("[data-notes-main-page] [data-notes-editor-scroll]")).toBe(mainViewport);
   });
 
-  it("keeps the parent visible and the preview closable while loading and after a load failure", async () => {
+  it("keeps the parent visible, shows a skeleton without a close button while loading, and allows closing a failed preview", async () => {
     const { notes, parent, child } = await setup();
     let rejectLoad!: (error: Error) => void;
     backend.open.mockImplementationOnce(() => new Promise<never>((_resolve, reject) => { rejectLoad = reject; }));
     const opening = notes.openPageContextually(child.page.id);
     const failure = expect(opening).rejects.toThrow("Read failed");
     await vi.waitFor(() => expect(document.querySelector("[data-notes-page-peek] [aria-busy='true']")).not.toBeNull());
+    const pendingPreview = document.querySelector("[data-notes-page-peek]")!;
+    expect(pendingPreview.querySelector('[data-notes-skeleton="page"]')).not.toBeNull();
+    expect(pendingPreview.querySelector("button")).toBeNull();
+    expect(pendingPreview.textContent).not.toContain("Loading");
     expect(document.querySelector("[data-notes-main-page]")?.textContent).toContain("Main note content");
     rejectLoad(new Error("Read failed"));
     await failure; await tick();
@@ -221,6 +229,46 @@ describe("Notes preview ownership", () => {
       expect(notes.loadedPage?.id).toBe(parent.page.id);
       expect(notes.primaryContentReady).toBe(true);
     });
+  });
+
+  it("opens an empty note through one page read and shows its known cover while pending", async () => {
+    const { notes, child } = await setup("full", true);
+    let resolveLoad!: (loaded: NotesPageOpenResponse) => void;
+    backend.open.mockClear();
+    backend.open.mockImplementationOnce(() => new Promise<NotesPageOpenResponse>((resolve) => { resolveLoad = resolve; }));
+    const opening = notes.selectPage(child.page.id, { openMode: "full" });
+    await vi.waitFor(() => expect(document.querySelector('[data-notes-skeleton="page"]')).not.toBeNull());
+    const skeleton = document.querySelector('[data-notes-skeleton="page"]')!;
+    expect(skeleton.querySelector("[data-notes-skeleton-cover]")).not.toBeNull();
+    expect(skeleton.querySelector("button")).toBeNull();
+    expect(skeleton.textContent).not.toContain("Loading");
+    expect(document.querySelector("[data-notes-editor-scroll]")).toBeNull();
+    expect(backend.open).toHaveBeenCalledExactlyOnceWith(child.page.id);
+    resolveLoad(child);
+    await opening; await tick();
+    expect(document.querySelector('[data-notes-skeleton="page"]')).toBeNull();
+    expect(document.querySelector("[data-notes-editor-scroll]")).not.toBeNull();
+    expect(backend.open).toHaveBeenCalledTimes(1);
+    expect(backend.mentionSources).not.toHaveBeenCalled();
+    expect(backend.destinations).not.toHaveBeenCalled();
+  });
+
+  it("lets a failed main note retry its read without adding a close button", async () => {
+    const { notes, child } = await setup();
+    backend.open.mockClear();
+    backend.open.mockRejectedValueOnce(new Error("Read failed"));
+    await expect(notes.selectPage(child.page.id, { openMode: "full" })).rejects.toThrow("Read failed");
+    await tick();
+    const pane = document.querySelector("[data-notes-main-page]")!;
+    expect(pane.querySelector("[role='alert']")?.textContent).toContain("Read failed");
+    expect(pane.querySelector('[data-notes-skeleton="page"]')).toBeNull();
+    const buttons = pane.querySelectorAll<HTMLButtonElement>("button");
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].textContent).toBe("Retry");
+    buttons[0].click();
+    await vi.waitFor(() => expect(pane.querySelector("[data-notes-editor-scroll]")).not.toBeNull());
+    expect(notes.loadedPage?.id).toBe(child.page.id);
+    expect(backend.open).toHaveBeenCalledTimes(2);
   });
 
   it("shows only the active note's ancestors while switching between two sibling previews and the main pane", async () => {

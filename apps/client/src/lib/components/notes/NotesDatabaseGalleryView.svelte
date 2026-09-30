@@ -1,4 +1,5 @@
 <script lang="ts">
+  import NotesLoadingSkeleton from "./NotesLoadingSkeleton.svelte";
   import { untrack } from "svelte";
   import { databaseResource, notesDatabaseSession } from "$lib/notes/database-session.svelte";
   import NotesDatabasePropertyValue from "./NotesDatabasePropertyValue.svelte";
@@ -55,6 +56,7 @@
     viewId = null,
     onSelectPage,
     onSavingChange = () => {},
+    onReady = () => {},
     reloadKey = 0,
     settingsOpen = false,
     onCloseSettings,
@@ -65,6 +67,7 @@
     viewId?: string | null;
     onSelectPage: (pageId: string) => void;
     onSavingChange?: (saving: boolean) => void;
+    onReady?: () => void;
     reloadKey?: number;
     settingsOpen?: boolean;
     onCloseSettings: () => void;
@@ -125,6 +128,8 @@
   function viewScope(): NotesDatabaseViewScope {
     return { databaseId, viewId };
   }
+
+  $effect(() => { if (gallery || error) onReady(); });
 
   async function loadGallery(force = true): Promise<NotesDataSourceGalleryView | null> {
     const currentRequest = ++requestId;
@@ -675,7 +680,6 @@
 
 
 <section class="space-y-3 pt-2" aria-label={t("notes.databaseGalleryTitle")}>
-  <span class="sr-only" role="status">{#if loading}{t("notes.databaseGalleryLoading")}{/if}</span>
   {#if error}<p class="text-[0.8rem] text-destructive" role="alert">{error}</p>{/if}
   {#if settingsOpen}
     <CollectionSettings label={t("notes.databaseViewSettings")} onclose={onCloseSettings}>
@@ -686,6 +690,7 @@
   {/if}
 
 
+  {#if !gallery && !error}<NotesLoadingSkeleton kind="gallery" />{/if}
   {#if gallery}
     <div class="grid gap-2 @container">
       <div class="grid min-w-0 gap-3" style={gridStyle}>

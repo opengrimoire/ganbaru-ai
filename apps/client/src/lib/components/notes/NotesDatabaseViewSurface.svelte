@@ -1,4 +1,5 @@
 <script lang="ts">
+  import NotesLoadingSkeleton from "./NotesLoadingSkeleton.svelte";
   import CollectionViewButton from "$lib/components/collections/CollectionViewButton.svelte";
   import { tick, untrack } from "svelte";
   import { databaseResource, notesDatabaseSession } from "$lib/notes/database-session.svelte";
@@ -60,6 +61,7 @@
     onCreateLinkedDatabaseView,
     onAddProperty,
     onSavingChange = () => {},
+    onReady = () => {},
   }: {
     dataSourceId: string;
     databaseId: string | null;
@@ -70,6 +72,7 @@
     onCreateLinkedDatabaseView: () => void;
     onAddProperty: (type: NotesDataSourcePropertyType, name: string) => Promise<void>;
     onSavingChange?: (saving: boolean) => void;
+    onReady?: () => void;
   } = $props();
 
   const { t } = getLocalization();
@@ -92,6 +95,8 @@
     onSavingChange(busy || layoutSaving);
     return () => onSavingChange(false);
   });
+
+  $effect(() => { if (viewError || viewLoadState?.status === "failed") onReady(); });
   let editingName = $state(false);
   let nameInput: HTMLInputElement | null = $state(null);
   let nameDraft = $state("");
@@ -190,6 +195,7 @@
   }
 
   function requestActiveView(retry = false): void {
+    if (!selectedView) return;
     if (!retry && viewLoadState?.key === activeView) return;
     const kind = activeView;
     const component = readNotesDatabaseView(kind);
@@ -444,24 +450,24 @@
 
 {#if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeView && viewLoadState.component.kind === "table"}
   {@const NotesDatabaseTableView = viewLoadState.component.component}
-  <NotesDatabaseTableView onSavingChange={(saving) => { layoutSaving = saving; }} {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} {onAddProperty} {newRowRequest} settingsOpen={viewSettingsOpen} onCloseSettings={() => { viewSettingsOpen = false; }} {onEditProperties} reloadKey={reloadKeys.table} />
+  <NotesDatabaseTableView {onReady} onSavingChange={(saving) => { layoutSaving = saving; }} {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} {onAddProperty} {newRowRequest} settingsOpen={viewSettingsOpen} onCloseSettings={() => { viewSettingsOpen = false; }} {onEditProperties} reloadKey={reloadKeys.table} />
 {:else if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeView && viewLoadState.component.kind === "board"}
   {@const NotesDatabaseBoardView = viewLoadState.component.component}
-  <NotesDatabaseBoardView onSavingChange={(saving) => { layoutSaving = saving; }} settingsOpen={viewSettingsOpen} onCloseSettings={() => { viewSettingsOpen = false; }} {onEditProperties} {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.board} />
+  <NotesDatabaseBoardView {onReady} onSavingChange={(saving) => { layoutSaving = saving; }} settingsOpen={viewSettingsOpen} onCloseSettings={() => { viewSettingsOpen = false; }} {onEditProperties} {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.board} />
 {:else if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeView && viewLoadState.component.kind === "gallery"}
   {@const NotesDatabaseGalleryView = viewLoadState.component.component}
-  <NotesDatabaseGalleryView onSavingChange={(saving) => { layoutSaving = saving; }} settingsOpen={viewSettingsOpen} onCloseSettings={() => { viewSettingsOpen = false; }} {onEditProperties} {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.gallery} />
+  <NotesDatabaseGalleryView {onReady} onSavingChange={(saving) => { layoutSaving = saving; }} settingsOpen={viewSettingsOpen} onCloseSettings={() => { viewSettingsOpen = false; }} {onEditProperties} {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.gallery} />
 {:else if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeView && viewLoadState.component.kind === "list"}
   {@const NotesDatabaseListView = viewLoadState.component.component}
-  <NotesDatabaseListView onSavingChange={(saving) => { layoutSaving = saving; }} settingsOpen={viewSettingsOpen} onCloseSettings={() => { viewSettingsOpen = false; }} {onEditProperties} {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.list} />
+  <NotesDatabaseListView {onReady} onSavingChange={(saving) => { layoutSaving = saving; }} settingsOpen={viewSettingsOpen} onCloseSettings={() => { viewSettingsOpen = false; }} {onEditProperties} {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.list} />
 {:else if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeView && viewLoadState.component.kind === "calendar"}
   {@const NotesDatabaseCalendarView = viewLoadState.component.component}
-  <NotesDatabaseCalendarView onSavingChange={(saving) => { layoutSaving = saving; }} settingsOpen={viewSettingsOpen} onCloseSettings={() => { viewSettingsOpen = false; }} {onEditProperties} {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.calendar} />
+  <NotesDatabaseCalendarView {onReady} onSavingChange={(saving) => { layoutSaving = saving; }} settingsOpen={viewSettingsOpen} onCloseSettings={() => { viewSettingsOpen = false; }} {onEditProperties} {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.calendar} />
 {:else if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeView && viewLoadState.component.kind === "timeline"}
   {@const NotesDatabaseTimelineView = viewLoadState.component.component}
-  <NotesDatabaseTimelineView onSavingChange={(saving) => { layoutSaving = saving; }} {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.timeline} />
+  <NotesDatabaseTimelineView {onReady} onSavingChange={(saving) => { layoutSaving = saving; }} {dataSourceId} {databaseId} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.timeline} />
 {:else if viewLoadState?.status === "failed" && viewLoadState.key === activeView}
   <div class="my-3 rounded-md border border-destructive/40 p-3 text-[0.8rem] text-destructive" role="alert"><p>{t("common.viewLoadFailed", viewLabel(activeView))}</p><button class="mt-2 min-h-8 rounded-md border border-border px-2 text-foreground hover:bg-accent" type="button" onclick={() => requestActiveView(true)}>{t("common.retry")}</button></div>
 {:else}
-  <div class="my-3 text-[0.8rem] text-muted-foreground" aria-busy="true">{t("common.loading")}</div>
+  <NotesLoadingSkeleton kind={activeView} />
 {/if}

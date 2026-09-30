@@ -1,4 +1,5 @@
 <script lang="ts">
+  import NotesLoadingSkeleton from "./NotesLoadingSkeleton.svelte";
   import { untrack } from "svelte";
   import { databaseResource, notesDatabaseSession } from "$lib/notes/database-session.svelte";
   import NotesDatabasePropertyValue from "./NotesDatabasePropertyValue.svelte";
@@ -56,6 +57,7 @@
     viewId = null,
     onSelectPage,
     onSavingChange = () => {},
+    onReady = () => {},
     reloadKey = 0,
     settingsOpen = false,
     onCloseSettings,
@@ -66,6 +68,7 @@
     viewId?: string | null;
     onSelectPage: (pageId: string) => void;
     onSavingChange?: (saving: boolean) => void;
+    onReady?: () => void;
     reloadKey?: number;
     settingsOpen?: boolean;
     onCloseSettings: () => void;
@@ -130,6 +133,8 @@
   function viewScope(): NotesDatabaseViewScope {
     return { databaseId, viewId };
   }
+
+  $effect(() => { if (list || error) onReady(); });
 
   async function loadList(force = true): Promise<NotesDataSourceListView | null> {
     const currentRequest = ++requestId;
@@ -660,7 +665,6 @@
 
 
 <section class="space-y-3 pt-2" aria-label={t("notes.databaseListTitle")}>
-  <span class="sr-only" role="status">{#if loading}{t("notes.databaseListLoading")}{/if}</span>
   {#if error}<p class="text-[0.8rem] text-destructive" role="alert">{error}</p>{/if}
   {#if settingsOpen}
     <CollectionSettings label={t("notes.databaseViewSettings")} onclose={onCloseSettings}>
@@ -671,6 +675,7 @@
   {/if}
 
 
+  {#if !list && !error}<NotesLoadingSkeleton kind="list" />{/if}
   {#if list}
     <div class="grid gap-2 @container">
       <CollectionRow template={listTemplate} compactTemplate="minmax(0, 1fr) 2rem" header>

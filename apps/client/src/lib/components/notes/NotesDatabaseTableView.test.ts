@@ -76,6 +76,38 @@ async function open(onSavingChange = vi.fn<(saving: boolean) => void>(), initial
 }
 
 describe("Notes table width handoff", () => {
+  it("reveals ready rows before an unrelated template read finishes", async () => {
+    const onReady = vi.fn();
+    let finishTemplates!: (value: []) => void;
+    vi.mocked(getNotesDataSourceTableView).mockResolvedValue(table(240));
+    vi.mocked(listNotesDataSourceTemplates).mockImplementationOnce(() => new Promise((resolve) => { finishTemplates = resolve; }));
+    component = mount(NotesDatabaseTableView, { target: document.body, props: {
+      dataSourceId: "source", onReady, onSelectPage: vi.fn(), onAddProperty: vi.fn(), onEditProperties: vi.fn(), onCloseSettings: vi.fn(),
+    } });
+    await vi.waitFor(() => expect(document.querySelector(".collection-resize")).not.toBeNull());
+    expect(onReady).toHaveBeenCalled();
+    expect(document.querySelector('[data-notes-skeleton="table"]')).toBeNull();
+    finishTemplates([]);
+    await tick(); await tick();
+    expect(getNotesDataSourceTableView).toHaveBeenCalledOnce();
+    expect(listNotesDataSourceTemplates).toHaveBeenCalledOnce();
+  });
+
+  it("shows a table skeleton during the first row read and removes it as soon as rows arrive", async () => {
+    let finish!: (view: NotesDataSourceTableView) => void;
+    vi.mocked(getNotesDataSourceTableView).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    vi.mocked(listNotesDataSourceTemplates).mockResolvedValue([]);
+    component = mount(NotesDatabaseTableView, { target: document.body, props: {
+      dataSourceId: "source", onSelectPage: vi.fn(), onAddProperty: vi.fn(), onEditProperties: vi.fn(), onCloseSettings: vi.fn(),
+    } });
+    await vi.waitFor(() => expect(getNotesDataSourceTableView).toHaveBeenCalledOnce());
+    expect(document.querySelector('[data-notes-skeleton="table"]')).not.toBeNull();
+    expect(document.querySelector('[role="table"]')).toBeNull();
+    finish(table(240));
+    await vi.waitFor(() => expect(document.querySelector(".collection-resize")).not.toBeNull());
+    expect(document.querySelector('[data-notes-skeleton="table"]')).toBeNull();
+  });
+
   it("restores rows and horizontal position without querying again after a tab switch", async () => {
     await open();
     const viewport = document.querySelector<HTMLElement>(".overflow-x-auto")!;
@@ -96,6 +128,7 @@ describe("Notes table width handoff", () => {
     vi.mocked(getNotesDataSourceTableView).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
     notesDatabaseSession.invalidate();
     await vi.waitFor(() => expect(getNotesDataSourceTableView).toHaveBeenCalledTimes(2));
+    expect(document.querySelector('[data-notes-skeleton="table"]')).toBeNull();
     expect(width()).toContain("240px");
     expect(document.querySelector(".collection-resize")).not.toBeNull();
     finish(table(320));

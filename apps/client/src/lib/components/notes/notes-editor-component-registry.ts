@@ -302,6 +302,11 @@ export function notesEditorPanelHasLoaded(kind: NotesEditorPanelKind): boolean {
   return editorPanelLoader.hasLoaded(kind);
 }
 
+/** Reuse an already loaded panel renderer during editor remounts. */
+export function readNotesEditorPanel(kind: NotesEditorPanelKind): LoadedNotesEditorPanel | null {
+  return editorPanelLoader.read(kind);
+}
+
 /** Loads one rich-text control only when its interaction state requires it. */
 export function loadNotesTextControl(kind: NotesTextControlKind): Promise<LoadedNotesTextControl> {
   return textControlLoader.load(kind);

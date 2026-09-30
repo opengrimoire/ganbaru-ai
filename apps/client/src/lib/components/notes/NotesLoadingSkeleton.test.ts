@@ -1,0 +1,82 @@
+// @vitest-environment jsdom
+import { mount, tick, unmount } from "svelte";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import NotesLoadingSkeletonHarness from "./NotesLoadingSkeletonHarness.svelte";
+
+let component: ReturnType<typeof mount> | undefined;
+
+afterEach(async () => {
+  if (component) await unmount(component);
+  component = undefined;
+  document.body.replaceChildren();
+  vi.useRealTimers();
+});
+
+/** Mount actual loading state while keeping readiness controlled by a sibling trigger. */
+async function open(initiallyReady = false) {
+  vi.useFakeTimers();
+  const onAction = vi.fn();
+  component = mount(NotesLoadingSkeletonHarness, { target: document.body, props: { initiallyReady, onAction } });
+  await tick();
+  const toggle = document.querySelector<HTMLButtonElement>("[data-toggle-loading]")!;
+  const content = document.querySelector<HTMLButtonElement>("[data-ready-content]")!;
+  return { toggle, content, onAction };
+}
+
+describe("Notes loading handoff", () => {
+  it("skips the placeholder and fade for already ready content", async () => {
+    const { content, onAction } = await open(true);
+    expect(document.querySelector(".notes-skeleton-placeholder")).toBeNull();
+    expect(content.closest(".notes-skeleton-content")?.getAttribute("data-handoff")).toBe("false");
+    content.click();
+    expect(onAction).toHaveBeenCalledOnce();
+  });
+
+  it("shows fast results immediately without waiting for the reveal timer", async () => {
+    const { toggle, content, onAction } = await open();
+    expect(document.querySelector<HTMLElement>(".notes-skeleton-shapes")?.style.opacity).toBe("0");
+    toggle.click();
+    await tick();
+    expect(document.querySelector(".notes-skeleton-placeholder")).toBeNull();
+    expect(content.closest<HTMLElement>(".notes-skeleton-content")?.inert).toBe(false);
+    expect(content.closest(".notes-skeleton-content")?.getAttribute("data-handoff")).toBe("false");
+    content.click();
+    expect(onAction).toHaveBeenCalledOnce();
+  });
+
+  it("retires a visible skeleton without blocking ready content or keeping a second layout row", async () => {
+    const { toggle, content, onAction } = await open();
+    await vi.advanceTimersToNextTimerAsync();
+    await tick();
+    expect(document.querySelector<HTMLElement>(".notes-skeleton-shapes")?.style.opacity).toBe("1");
+    toggle.click();
+    await tick();
+    expect(document.querySelector("[data-notes-skeleton]")).toBeNull();
+    expect(document.querySelector(".notes-skeleton-placeholder")?.getAttribute("data-retiring")).toBe("true");
+    expect(document.querySelector<HTMLElement>(".notes-skeleton-shapes")?.style.opacity).toBe("0");
+    expect(content.closest<HTMLElement>(".notes-skeleton-content")?.inert).toBe(false);
+    content.click();
+    expect(onAction).toHaveBeenCalledOnce();
+    await vi.advanceTimersToNextTimerAsync();
+    await tick();
+    expect(document.querySelector(".notes-skeleton-placeholder")).toBeNull();
+  });
+
+  it("cancels an earlier handoff when loading restarts and clears timers on disposal", async () => {
+    const { toggle, content } = await open();
+    await vi.advanceTimersToNextTimerAsync();
+    toggle.click();
+    await tick();
+    toggle.click();
+    await tick();
+    expect(content.closest<HTMLElement>(".notes-skeleton-content")?.inert).toBe(true);
+    await vi.advanceTimersToNextTimerAsync();
+    await tick();
+    expect(document.querySelector<HTMLElement>(".notes-skeleton-shapes")?.style.opacity).toBe("1");
+    toggle.click();
+    await tick();
+    await unmount(component!);
+    component = undefined;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});

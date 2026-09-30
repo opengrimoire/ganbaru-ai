@@ -1,4 +1,5 @@
 <script lang="ts">
+  import NotesLoadingSkeleton from "./NotesLoadingSkeleton.svelte";
   import { untrack } from "svelte";
   import { databaseResource, notesDatabaseSession, rememberDatabaseScroll } from "$lib/notes/database-session.svelte";
   import NotesDatabasePropertyValue from "./NotesDatabasePropertyValue.svelte";
@@ -60,6 +61,7 @@
     viewId = null,
     onSelectPage,
     onSavingChange = () => {},
+    onReady = () => {},
     reloadKey = 0,
     settingsOpen = false,
     onCloseSettings,
@@ -70,6 +72,7 @@
     viewId?: string | null;
     onSelectPage: (pageId: string) => void;
     onSavingChange?: (saving: boolean) => void;
+    onReady?: () => void;
     reloadKey?: number;
     settingsOpen?: boolean;
     onCloseSettings: () => void;
@@ -132,6 +135,8 @@
   function viewScope(): NotesDatabaseViewScope {
     return { databaseId, viewId };
   }
+
+  $effect(() => { if (calendar || error) onReady(); });
 
   async function loadCalendar(force = true): Promise<NotesDataSourceCalendarView | null> {
     const currentRequest = ++requestId;
@@ -629,7 +634,6 @@
 
 
 <section class="space-y-3 pt-2" aria-label={t("notes.databaseCalendarTitle")}>
-  <span class="sr-only" role="status">{#if loading}{t("notes.databaseCalendarLoading")}{/if}</span>
   {#if error}<p class="text-[0.8rem] text-destructive" role="alert">{error}</p>{/if}
   {#if settingsOpen}
     <CollectionSettings label={t("notes.databaseViewSettings")} onclose={onCloseSettings}>
@@ -672,6 +676,7 @@
     </button>
   </div>
 
+  {#if !calendar && !error}<NotesLoadingSkeleton kind="calendar" />{/if}
   {#if calendar}
     {#if dateColumns.length === 0}
       <div class="rounded-md border border-border p-3 text-[0.866667rem] text-muted-foreground">

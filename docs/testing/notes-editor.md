@@ -2,6 +2,15 @@
 
 Notes testing covers pure editing plans, canonical Rust commands, persistence ordering, imports, assets, databases, and manual interaction that cannot be proven by unit tests alone.
 
+## Loading acceptance
+
+- Switch between existing empty notes and notes with covers. Confirm the editor shows a correctly aligned skeleton when the read is slow, with no visible Loading text or temporary Close button. Fast reads must display their content immediately without waiting for the skeleton reveal. Repeat in full, side, and center views, at narrow sizes, with scaled text, light and dark themes, and reduced motion enabled.
+- Load managed and external cover images slowly. The placeholder must retain the banner height through renderer loading, asset resolution, and image loading. Unavailable content must appear only for an actual failure or unsupported source.
+- Open a database with a cold view renderer and row read. Table, list, Kanban, gallery, calendar, and timeline each show a matching placeholder until ready. Cached database rows remain visible during background refreshes, without another skeleton. Switch notes before a read completes and confirm late results cannot replace the active note.
+- Delay a database's renderer, saved-view metadata, and row reads independently. The inline placeholder must persist across all three stages without showing the title and tabs early or starting another reveal delay. Its initial title must never flash empty. Delay only templates and confirm ready table rows appear while the existing creation readiness rules remain intact. Create a database with `/database` and confirm its requested title focus arrives after the surface becomes ready.
+- For a slow page, database, or cover read, confirm the visible skeleton fades over ready content without blocking pointer or keyboard input. Fast reads must skip both placeholder paint and fading. Repeat navigation during the fade and with reduced motion; overlays must not create another layout row or leave delayed timers after disposal.
+- Fail a page read. Confirm Retry opens the selected page again, sidebar navigation remains usable, and a failed preview can be closed. Repeat switching notes after typing to ensure pending edits are saved before their document is released.
+
 For child-note previews, create two sibling notes and collapse the sidebar. Viewing the main note must show group / project / main note. Opening either child appends only that child; switching siblings replaces the last segment. In side view, edit both panes and check that the header and undo target follow the pane receiving input. Create another child from the main pane while a sibling is open and confirm its parent remains the main note. Center previews block interaction with the main pane. Closing either preview keeps the same main editor and scroll position without reloading its content. Failed saves keep the preview draft open. Repeat with `/Note`, an existing child, further preview navigation, and promotion to full page. Check a long virtualized note and a note with a cover, columns, and nested blocks in the real Tauri app.
 
 ## Rich-text acceptance

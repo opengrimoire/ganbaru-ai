@@ -2,6 +2,7 @@
   import { onDestroy } from "svelte";
   import { notesPageCoverAssetUrl } from "$lib/api/notes-page-covers";
   import NotesCoverDesign from "./NotesCoverDesign.svelte";
+  import NotesLoadingSkeleton from "./NotesLoadingSkeleton.svelte";
   import {
     isNotesPageCoverAssetPath,
     notesPageCoverAssetPath,
@@ -47,6 +48,9 @@
   const assetPath = $derived(notesPageCoverAssetPath(cover));
   const remoteImageUrlsAvailable = platformHasCapability(BUILD_PLATFORM_PROFILE, "notes.external-image-references");
   const url = $derived(previewUrl ?? assetUrl ?? (remoteImageUrlsAvailable ? notesPageCoverUrl(cover) : null));
+  const imageLoading = $derived(cover?.type !== "design" && !assetFailed && (
+    url ? loadedUrl !== url && failedUrl !== url : !!assetPath && isNotesPageCoverAssetPath(assetPath)
+  ));
   let dragPreview = $state<NotesCoverFocalPoint | null>(null);
   let pendingPoint: NotesCoverFocalPoint | null = null;
   let previewFrame: number | null = null;
@@ -95,7 +99,7 @@
 
   $effect(() => {
     if (cover?.type === "design") onStatus?.("ready");
-    else if (assetFailed || (!url && cover && !assetPath)) onStatus?.("error");
+    else if (assetFailed || (!url && cover && (!assetPath || !isNotesPageCoverAssetPath(assetPath)))) onStatus?.("error");
     else if (url && failedUrl === url) onStatus?.("error");
     else if (url && loadedUrl === url) onStatus?.("ready");
     else onStatus?.("loading");
@@ -151,6 +155,8 @@
 </script>
 
 {#snippet surface()}
+  <NotesLoadingSkeleton kind="cover" ready={!imageLoading}>
+  {#snippet children()}
   {#if url && failedUrl !== url}
     {#key url}
       <img
@@ -172,12 +178,14 @@
       />
     {/key}
 
-  {:else}
+  {:else if !imageLoading}
     <div class="flex size-full items-center justify-center gap-2 bg-muted text-[0.8rem] text-muted-foreground">
       <ImageIcon class="size-4" />
       <span class="max-w-full truncate px-2">{unavailableLabel}</span>
     </div>
   {/if}
+  {/snippet}
+  </NotesLoadingSkeleton>
 {/snippet}
 
 {#if cover?.type === "design"}
@@ -187,9 +195,9 @@
     {@render surface()}
   </button>
 {:else if objectFit === "contain"}
-  <div class="size-full overflow-hidden">{@render surface()}</div>
+  <div class="relative size-full overflow-hidden">{@render surface()}</div>
 {:else}
-  <div class="size-full overflow-hidden" bind:clientWidth={width} bind:clientHeight={height}>
+  <div class="relative size-full overflow-hidden" bind:clientWidth={width} bind:clientHeight={height}>
     {@render surface()}
   </div>
 {/if}

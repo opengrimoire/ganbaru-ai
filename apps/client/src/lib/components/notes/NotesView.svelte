@@ -28,6 +28,7 @@
     type NotesSurfaceKind,
   } from "./notes-component-registry";
   import NotesEditor from "./NotesEditor.svelte";
+  import NotesLoadingSkeleton from "./NotesLoadingSkeleton.svelte";
   import NotesProjectHome from "./NotesProjectHome.svelte";
   import NotesProjectSettingsPanel from "$lib/components/notes/NotesProjectSettingsPanel.svelte";
   import NotesWorkspaceHeader from "./NotesWorkspaceHeader.svelte";
@@ -656,26 +657,37 @@
                 aria-modal={isContextual && showPagePeek ? center : undefined}
                 data-notes-page-peek={isContextual && showPagePeek || undefined}
               >
-                {#if selected && store.loadedPage?.id === store.selectedPageId && store.primaryContentReady}
-                  <NotesEditor
-                    projectId={selectedProjectId}
-                    editorStore={store}
-                    active={notes.activePaneId === pane.id}
-                    openMode={isContextual && showPagePeek ? store.pageOpenMode : "full"}
-                    pageActionsTarget={notes.activePaneId === pane.id ? pageActionsTarget : null}
-                    onClose={() => { void notes.closePane(pane.id).catch((error: unknown) => console.warn("Close Notes pane failed", error)); }}
-                    onOpenModeChange={(mode) => { void notes.showPaneAs(pane.id, mode).catch((error: unknown) => console.warn("Change Notes pane mode failed", error)); }}
-                    {musicMentionContext}
-                  />
-                {:else if selected}
-                  <div class="flex min-w-0 flex-1 flex-col gap-3 p-4" aria-busy={!store.loadError}>
-                    <button type="button" class="min-h-8 self-end rounded-md border border-border px-3 hover:bg-accent" onclick={() => { void notes.closePane(pane.id).catch((error: unknown) => console.warn("Close Notes pane failed", error)); }}>{t("notes.closePeek")}</button>
-                    {#if store.loadError}
-                      <p role="alert" class="text-sm text-destructive">{t("notes.loadFailed", store.loadError)}</p>
-                    {:else}
-                      <p class="text-sm text-muted-foreground">{t("common.loading")}</p>
-                    {/if}
-                  </div>
+                {#if selected}
+                  {#key store.selectedPageId}
+                    <NotesLoadingSkeleton
+                      ready={store.loadedPage?.id === store.selectedPageId && store.primaryContentReady || !!store.loadError}
+                      page={store.allPages.find((page) => page.id === store.selectedPageId) ?? store.linkResolutionPages.find((page) => page.id === store.selectedPageId) ?? null}
+                      openMode={isContextual && showPagePeek ? store.pageOpenMode : "full"}
+                    >
+                      {#snippet children()}
+                        {#if store.loadedPage?.id === store.selectedPageId && store.primaryContentReady}
+                          <NotesEditor
+                            projectId={selectedProjectId}
+                            editorStore={store}
+                            active={notes.activePaneId === pane.id}
+                            openMode={isContextual && showPagePeek ? store.pageOpenMode : "full"}
+                            pageActionsTarget={notes.activePaneId === pane.id ? pageActionsTarget : null}
+                            onClose={() => { void notes.closePane(pane.id).catch((error: unknown) => console.warn("Close Notes pane failed", error)); }}
+                            onOpenModeChange={(mode) => { void notes.showPaneAs(pane.id, mode).catch((error: unknown) => console.warn("Change Notes pane mode failed", error)); }}
+                            {musicMentionContext}
+                          />
+                        {:else if store.loadError}
+                          <div class="flex min-w-0 flex-1 flex-col gap-3 p-4">
+                            {#if isContextual && showPagePeek}
+                              <button type="button" class="min-h-8 self-end rounded-md border border-border px-3 hover:bg-accent" onclick={() => { void notes.closePane(pane.id).catch((error: unknown) => console.warn("Close Notes pane failed", error)); }}>{t("notes.closePeek")}</button>
+                            {/if}
+                            <p role="alert" class="text-sm text-destructive">{t("notes.loadFailed", store.loadError)}</p>
+                            <button type="button" class="min-h-8 self-start rounded-md border border-border px-3 hover:bg-accent" onclick={() => { void store.selectPageLocally(store.selectedPageId).catch((error: unknown) => console.warn("Retry Notes page load failed", error)); }}>{t("common.retry")}</button>
+                          </div>
+                        {/if}
+                      {/snippet}
+                    </NotesLoadingSkeleton>
+                  {/key}
                 {/if}
               </div>
             </div>

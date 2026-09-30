@@ -5,6 +5,7 @@ import {
   readNotesAdvancedBlock,
   loadNotesDatabaseView,
   loadNotesEditorPanel,
+  readNotesEditorPanel,
   loadNotesTextControl,
   notesAdvancedBlockHasLoaded,
   notesDatabaseViewHasLoaded,
@@ -93,8 +94,10 @@ describe("Notes editor component registry", () => {
 
   it("has a loadable entry for every trigger-owned panel and control", async () => {
     for (const kind of EDITOR_PANELS) {
-      await expect(loadNotesEditorPanel(kind)).resolves.toMatchObject({ kind });
+      const component = await loadNotesEditorPanel(kind);
+      expect(component).toMatchObject({ kind });
       expect(notesEditorPanelHasLoaded(kind)).toBe(true);
+      expect(readNotesEditorPanel(kind)).toBe(component);
     }
     for (const kind of TEXT_CONTROLS) {
       await expect(loadNotesTextControl(kind)).resolves.toMatchObject({ kind });

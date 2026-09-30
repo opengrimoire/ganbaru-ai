@@ -1,7 +1,7 @@
 <script lang="ts">
   import CollectionSaveIndicator from "$lib/components/collections/CollectionSaveIndicator.svelte";
   import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
-  import { onMount, tick } from "svelte";
+  import { tick, untrack } from "svelte";
   import { portal } from "$lib/utils/portal";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
@@ -60,6 +60,7 @@
     onKeydown,
     onSelectPage,
     onCreateLinkedDatabaseView,
+    onReady = () => {},
   }: {
     block: NotesChildDatabaseBlock;
     focusBlockId: string | null;
@@ -68,6 +69,7 @@
     onKeydown: (event: KeyboardEvent) => void;
     onSelectPage: (pageId: string) => void;
     onCreateLinkedDatabaseView: (blockId: string) => Promise<void> | void;
+    onReady?: () => void;
   } = $props();
 
   const localization = getLocalization();
@@ -75,10 +77,11 @@
 
   let titleInput: HTMLInputElement | null = $state(null);
   let expanded = $state(false);
-  let titleDraft = $state("");
-  let savedTitle = $state("");
+  let titleDraft = $state(untrack(() => block.child_database.title));
+  let savedTitle = $state(untrack(() => block.child_database.title));
   let titleSaving = $state(false);
   let viewSaving = $state(false);
+  let contentReady = $state(false);
   let titleError = $state<string | null>(null);
   let selectedPropertyId = $state<string | null>(null);
   let loading = $state(false);
@@ -112,14 +115,17 @@
   );
   const propertyCount = $derived(properties.length);
 
-  onMount(() => {
-    titleDraft = block.child_database.title;
-    savedTitle = block.child_database.title;
-  });
+  /** Reveal this database and defer requested title focus until its surface can receive input. */
+  function reportReady(): void {
+    contentReady = true;
+    onReady();
+  }
+
+  $effect(() => { if (!localDatabase || !dataSourceId) reportReady(); });
 
   $effect(() => {
     const _focusRequestId = focusRequestId;
-    if (focusBlockId !== block.id) return;
+    if (!contentReady || focusBlockId !== block.id) return;
     void tick().then(() => titleInput?.focus());
   });
 
@@ -577,6 +583,7 @@
 
   {#if localDatabase && dataSourceId}
     <NotesDatabaseViewSurface
+      onReady={reportReady}
       onSavingChange={(pending) => { viewSaving = pending; }}
       {dataSourceId}
       {databaseId}

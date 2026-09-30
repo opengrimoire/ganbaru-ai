@@ -39,9 +39,10 @@ afterEach(async () => {
   vi.resetAllMocks();
 });
 
-function open(): void {
+function open(onReady = () => {}): void {
   component = mount(NotesDatabaseViewSurface, { target: document.body, props: {
     dataSourceId: "source", databaseId: "database", initialViewId: "First",
+    onReady,
     reloadKeys: { table: 0, board: 0, gallery: 0, list: 0, calendar: 0, timeline: 0 },
     onSelectPage: vi.fn(), onEditProperties: vi.fn(), onCreateLinkedDatabaseView: vi.fn(), onAddProperty: vi.fn(),
   } });
@@ -55,6 +56,17 @@ function chooseSecond(): void {
 }
 
 describe("Notes database view sessions", () => {
+  it("reports readiness after rows are ready, without reporting metadata alone", async () => {
+    const onReady = vi.fn();
+    vi.mocked(listNotesDatabaseViews).mockResolvedValue(views());
+    vi.mocked(listNotesDataSourceTemplates).mockResolvedValue([]);
+    open(onReady);
+    await vi.waitFor(() => expect(document.querySelector("[data-finish-view]")).not.toBeNull());
+    expect(onReady).not.toHaveBeenCalled();
+    document.querySelector<HTMLButtonElement>("[data-finish-view]")!.click();
+    expect(onReady).toHaveBeenCalledOnce();
+  });
+
   it("restores the chosen saved view immediately without refetching metadata", async () => {
     vi.mocked(listNotesDatabaseViews).mockResolvedValue(views());
     vi.mocked(listNotesDataSourceTemplates).mockResolvedValue([]);

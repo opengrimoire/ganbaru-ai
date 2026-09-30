@@ -2,6 +2,7 @@
 import { mount, tick, unmount } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import NotesPageCover from "./NotesPageCover.svelte";
+import { notesPageCoverAssetUrl } from "$lib/api/notes-page-covers";
 
 vi.mock("$lib/api/notes-page-covers", () => ({ notesPageCoverAssetUrl: vi.fn() }));
 const frames = new Map<number, FrameRequestCallback>();
@@ -56,6 +57,50 @@ function pointer(button: HTMLButtonElement, type: string, y: number, id = 1): vo
 }
 
 describe("cover drag positioning", () => {
+  it("keeps a skeleton until the image loads and exposes unavailable content only after failure", async () => {
+    const onStatus = vi.fn();
+    component = mount(NotesPageCover, { target: document.body, props: {
+      cover: { type: "external", external: { url: "https://example.com/cover.png" } },
+      previewUrl: "https://example.com/cover.png",
+      unavailableLabel: "Unavailable", onStatus,
+    } });
+    await tick();
+    expect(document.querySelector('[data-notes-skeleton="cover"]')).not.toBeNull();
+    expect(document.body.textContent).not.toContain("Unavailable");
+    expect(onStatus).toHaveBeenLastCalledWith("loading");
+    const image = document.querySelector("img")!;
+    image.dispatchEvent(new Event("load"));
+    await tick();
+    expect(document.querySelector('[data-notes-skeleton="cover"]')).toBeNull();
+    expect(image.classList.contains("opacity-0")).toBe(false);
+    expect(onStatus).toHaveBeenLastCalledWith("ready");
+    image.dispatchEvent(new Event("error"));
+    await tick();
+    expect(document.querySelector('[data-notes-skeleton="cover"]')).toBeNull();
+    expect(document.body.textContent).toContain("Unavailable");
+    expect(onStatus).toHaveBeenLastCalledWith("error");
+  });
+
+  it("keeps the managed cover placeholder through asset resolution and image decoding", async () => {
+    let resolveAsset!: (url: string) => void;
+    vi.mocked(notesPageCoverAssetUrl).mockImplementationOnce(() => new Promise<string>((resolve) => { resolveAsset = resolve; }));
+    const assetPath = `notes/page-covers/${"a".repeat(64)}.webp`;
+    component = mount(NotesPageCover, { target: document.body, props: {
+      cover: { type: "file", file: { url: `ganbaru-asset:${assetPath}`, ganbaru_asset_path: assetPath } },
+      unavailableLabel: "Unavailable",
+    } });
+    await tick();
+    expect(document.querySelector('[data-notes-skeleton="cover"]')).not.toBeNull();
+    expect(document.body.textContent).not.toContain("Unavailable");
+    expect(document.querySelector("img")).toBeNull();
+    resolveAsset("data:image/webp;base64,YQ==");
+    await tick(); await tick();
+    expect(document.querySelector('[data-notes-skeleton="cover"]')).not.toBeNull();
+    document.querySelector("img")!.dispatchEvent(new Event("load"));
+    await tick();
+    expect(document.querySelector('[data-notes-skeleton="cover"]')).toBeNull();
+  });
+
   it("preserves the centered crop in a translated layer without a drag tooltip", async () => {
     const { button } = await open();
     const image = button.querySelector("img")!;

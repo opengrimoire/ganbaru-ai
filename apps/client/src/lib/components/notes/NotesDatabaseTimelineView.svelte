@@ -1,4 +1,5 @@
 <script lang="ts">
+  import NotesLoadingSkeleton from "./NotesLoadingSkeleton.svelte";
   import { untrack } from "svelte";
   import { databaseResource, notesDatabaseSession, rememberDatabaseScroll } from "$lib/notes/database-session.svelte";
   import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
@@ -64,6 +65,7 @@
     viewId = null,
     onSelectPage,
     onSavingChange = () => {},
+    onReady = () => {},
     reloadKey = 0,
   }: {
     dataSourceId: string;
@@ -71,6 +73,7 @@
     viewId?: string | null;
     onSelectPage: (pageId: string) => void;
     onSavingChange?: (saving: boolean) => void;
+    onReady?: () => void;
     reloadKey?: number;
   } = $props();
 
@@ -141,6 +144,8 @@
   function viewScope(): NotesDatabaseViewScope {
     return { databaseId, viewId };
   }
+
+  $effect(() => { if (timeline || error) onReady(); });
 
   async function loadTimeline(force = true): Promise<NotesDataSourceTimelineView | null> {
     const currentRequest = ++requestId;
@@ -473,12 +478,10 @@
 <section class="space-y-3 pt-2" aria-label={t("notes.databaseTimelineTitle")}>
   <div class="flex min-w-0 flex-wrap items-center gap-2 text-[0.8rem] text-muted-foreground">
     <span class="min-w-0 flex-1 truncate" role="status">
-      {#if loading}
-        {t("notes.databaseTimelineLoading")}
-      {:else if error}
+      {#if error}
         {t("notes.databaseTimelineFailed", error)}
-      {:else}
-        {t("notes.databaseTimelineRowsCount", timeline?.rows.length ?? 0)}
+      {:else if timeline}
+        {t("notes.databaseTimelineRowsCount", timeline.rows.length)}
       {/if}
     </span>
     <CollectionMenu label={t("notes.databaseLayout")}>
@@ -590,6 +593,7 @@
     />
   </div>
 
+  {#if !timeline && !error}<NotesLoadingSkeleton kind="timeline" />{/if}
   {#if timeline}
     {#if dateColumns.length === 0}
       <div class="rounded-md border border-border p-3 text-[0.866667rem] text-muted-foreground">
