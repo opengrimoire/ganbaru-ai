@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { untrack } from "svelte";
+  import { databaseResource, notesDatabaseSession, rememberDatabaseScroll } from "$lib/notes/database-session.svelte";
   import NotesDatabasePropertyValue from "./NotesDatabasePropertyValue.svelte";
   import CollectionQuickAdd from "$lib/components/collections/CollectionQuickAdd.svelte";
   import CollectionCard from "$lib/components/collections/CollectionCard.svelte";
@@ -85,7 +87,7 @@
     "unchecked",
   ];
 
-  let calendar = $state<NotesDataSourceCalendarView | null>(null);
+  let calendar = $state<NotesDataSourceCalendarView | null>(untrack(() => notesDatabaseSession.read(databaseResource("calendar", dataSourceId, viewScope()))));
   let loading = $state(false);
   let loadingMore = $state(false);
   let requestId = 0;
@@ -98,6 +100,7 @@
   let error = $state<string | null>(null);
   let selectedPanelRowId = $state<string | null>(null);
   let lastLoadSignature = $state("");
+  let lastReloadKey = untrack(() => reloadKey);
 
   const columns = $derived(calendar ? notesDatabaseCalendarColumns(calendar.data_source, calendar.view) : []);
   const configuration = $derived(
@@ -116,22 +119,30 @@
   const selectedPanelRow = $derived(calendar?.rows.find((row) => row.id === selectedPanelRowId) ?? null);
 
   $effect(() => {
-    const signature = `${dataSourceId}:${databaseId ?? ""}:${viewId ?? ""}:${reloadKey}`;
+    const revision = notesDatabaseSession.revision;
+    if (mutating) return;
+    const signature = `${dataSourceId}:${databaseId ?? ""}:${viewId ?? ""}:${reloadKey}:${revision}`;
     if (signature === lastLoadSignature) return;
+    const force = reloadKey !== lastReloadKey;
+    lastReloadKey = reloadKey;
     lastLoadSignature = signature;
-    void loadCalendar();
+    void loadCalendar(force);
   });
 
   function viewScope(): NotesDatabaseViewScope {
     return { databaseId, viewId };
   }
 
-  async function loadCalendar(): Promise<NotesDataSourceCalendarView | null> {
+  async function loadCalendar(force = true): Promise<NotesDataSourceCalendarView | null> {
     const currentRequest = ++requestId;
-    loading = true;
+    loading = !calendar;
+    loadingMore = false;
     error = null;
     try {
-      const loaded = await getNotesDataSourceCalendarView(dataSourceId, viewScope());
+      const sourceId = dataSourceId;
+      const scope = viewScope();
+      const resource = databaseResource("calendar", sourceId, scope);
+      const loaded = await notesDatabaseSession.load(resource, () => getNotesDataSourceCalendarView(sourceId, scope), force);
       if (currentRequest !== requestId) return null;
       calendar = loaded;
       if (selectedPanelRowId && !loaded.rows.some((row) => row.id === selectedPanelRowId)) {
@@ -139,10 +150,11 @@
       }
       return loaded;
     } catch (caught) {
+      if (currentRequest !== requestId) return null;
       error = caught instanceof Error ? caught.message : String(caught);
       return null;
     } finally {
-      loading = false;
+      if (currentRequest === requestId) loading = false;
     }
   }
 
@@ -150,6 +162,7 @@
     const current = calendar;
     if (!current?.has_more || !current.next_cursor || loadingMore) return;
     const currentRequest = requestId;
+    const revision = notesDatabaseSession.revision;
     loadingMore = true;
     try {
       const loaded = await getNotesDataSourceCalendarView(dataSourceId, viewScope(), {
@@ -157,8 +170,9 @@
         range_start: configuration.range_start,
         range_end: configuration.range_end,
       });
-      if (currentRequest !== requestId || calendar !== current) return;
+      if (currentRequest !== requestId || calendar !== current || revision !== notesDatabaseSession.revision) return;
       calendar = { ...loaded, rows: mergeNotesDatabaseRows(current.rows, loaded.rows) };
+      notesDatabaseSession.write(databaseResource("calendar", dataSourceId, viewScope()), calendar);
     } catch (caught) {
       if (currentRequest === requestId) error = caught instanceof Error ? caught.message : String(caught);
     } finally {
@@ -173,6 +187,8 @@
     nextSorts = sorts,
   ): Promise<void> {
     if (!calendar) return;
+    const resource = databaseResource("calendar", dataSourceId, viewScope());
+    const epoch = notesDatabaseSession.epoch;
     mutating = true;
     error = null;
     try {
@@ -181,6 +197,7 @@
         notesDatabaseCalendarUpdate(nextConfiguration, nextVisibleColumns, nextFilters, nextSorts),
         viewScope(),
       );
+      notesDatabaseSession.write(resource, calendar, epoch);
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);
     } finally {
@@ -662,7 +679,7 @@
       </div>
     {:else}
       <div class="grid gap-2 @container">
-        <div class="min-w-0 overflow-x-auto">
+        <div use:rememberDatabaseScroll={databaseResource("calendar", dataSourceId, viewScope()).key} class="min-w-0 overflow-x-auto">
         <div class="grid min-w-2xl grid-cols-7 gap-px overflow-hidden rounded-md border border-border bg-border text-[0.8rem]">
           {#each weekdayLabels() as weekday}
             <div class="bg-muted px-2 py-1 text-center font-medium text-muted-foreground">{weekday}</div>

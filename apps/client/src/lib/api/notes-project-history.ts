@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { publishNotesDatabaseChange } from "$lib/notes/database-window-sync";
 import { ensureDbUrl } from "$lib/api/db";
 import type {
   NotesCommentDisplayName,
@@ -270,11 +271,7 @@ export async function restoreNotesProjectHistoryVersion(
   versionId: string,
 ): Promise<NotesProjectHistoryVersion> {
   const dbUrl = await ensureDbUrl();
-  return version(
-    await invoke<unknown>("notes_restore_project_history_version", {
-      dbUrl,
-      projectId,
-      versionId,
-    }),
-  );
+  const restored = await invoke<unknown>("notes_restore_project_history_version", { dbUrl, projectId, versionId });
+  publishNotesDatabaseChange();
+  return version(restored);
 }

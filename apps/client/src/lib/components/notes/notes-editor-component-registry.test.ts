@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import { createLazyComponentLoader } from "$lib/lazy-component-loader";
 import {
   loadNotesAdvancedBlock,
+  readNotesAdvancedBlock,
   loadNotesDatabaseView,
   loadNotesEditorPanel,
   loadNotesTextControl,
   notesAdvancedBlockHasLoaded,
   notesDatabaseViewHasLoaded,
+  readNotesDatabaseView,
   notesEditorPanelHasLoaded,
   notesTextControlHasLoaded,
   notesBlockRenderFamily,
@@ -67,8 +69,10 @@ const TEXT_CONTROLS = [
 describe("Notes editor component registry", () => {
   it("has a loadable typed entry for every advanced block family", async () => {
     for (const kind of BLOCK_FAMILIES) {
-      await expect(loadNotesAdvancedBlock(kind)).resolves.toMatchObject({ kind });
+      const component = await loadNotesAdvancedBlock(kind);
+      expect(component).toMatchObject({ kind });
       expect(notesAdvancedBlockHasLoaded(kind)).toBe(true);
+      expect(readNotesAdvancedBlock(kind)).toBe(component);
     }
   }, 15_000);
 
@@ -80,8 +84,10 @@ describe("Notes editor component registry", () => {
 
   it("has a separate loadable entry for every database view", async () => {
     for (const kind of DATABASE_VIEWS) {
-      await expect(loadNotesDatabaseView(kind)).resolves.toMatchObject({ kind });
+      const component = await loadNotesDatabaseView(kind);
+      expect(component).toMatchObject({ kind });
       expect(notesDatabaseViewHasLoaded(kind)).toBe(true);
+      expect(readNotesDatabaseView(kind)).toBe(component);
     }
   });
 

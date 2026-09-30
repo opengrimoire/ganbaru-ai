@@ -1,6 +1,7 @@
 <script lang="ts">
   import CollectionViewButton from "$lib/components/collections/CollectionViewButton.svelte";
-  import { tick } from "svelte";
+  import { tick, untrack } from "svelte";
+  import { databaseResource, notesDatabaseSession } from "$lib/notes/database-session.svelte";
   import Table2 from "@lucide/svelte/icons/table-2";
   import Columns3 from "@lucide/svelte/icons/columns-3";
   import LayoutGrid from "@lucide/svelte/icons/layout-grid";
@@ -45,6 +46,7 @@
   import {
     loadNotesDatabaseView,
     retryNotesDatabaseView,
+    readNotesDatabaseView,
     type LoadedNotesDatabaseView,
   } from "./notes-editor-component-registry";
 
@@ -80,8 +82,8 @@
     calendar: CalendarDays,
     timeline: ChartGantt,
   };
-  let views = $state<NotesDatabaseView[]>([]);
-  let selectedViewId = $state<string | null>(null);
+  let views = $state<NotesDatabaseView[]>(untrack(() => notesDatabaseSession.read(databaseResource("views", dataSourceId, { databaseId })) ?? []));
+  let selectedViewId = $state<string | null>(untrack(() => notesDatabaseSession.recall(databaseId ?? dataSourceId)?.viewId ?? initialViewId));
   let viewError = $state<string | null>(null);
   let busy = $state(false);
   let layoutSaving = $state(false);
@@ -96,11 +98,17 @@
   let viewSearch = $state("");
   let viewSettingsOpen = $state(false);
   let newRowRequest = $state(0);
-  let templates = $state<NotesDataSourceTemplate[]>([]);
+  let templates = $state<NotesDataSourceTemplate[]>(untrack(() => notesDatabaseSession.read(databaseResource("templates", dataSourceId)) ?? []));
   let templateError = $state<string | null>(null);
   let pendingDeleteView = $state<NotesDatabaseView | null>(null);
   let lastDatabaseId = $state<string | null>(null);
-  let viewLoadState = $state<LazyComponentLoadState<NotesDatabaseViewKind, LoadedNotesDatabaseView> | null>(null);
+  let metadataRequest = 0;
+  let viewLoadState = $state<LazyComponentLoadState<NotesDatabaseViewKind, LoadedNotesDatabaseView> | null>(untrack(() => {
+    const kind = (views.find((view) => view.id === selectedViewId) ?? views[0])?.type ?? "table";
+    if (!NOTES_DATABASE_VIEW_KINDS.includes(kind as NotesDatabaseViewKind)) return null;
+    const component = readNotesDatabaseView(kind as NotesDatabaseViewKind);
+    return component ? { key: component.kind, status: "ready", requestId: 0, component } : null;
+  }));
 
   const supportedViews = $derived(views.filter((view) => NOTES_DATABASE_VIEW_KINDS.includes(view.type as NotesDatabaseViewKind)));
   const selectedView = $derived(supportedViews.find((view) => view.id === selectedViewId) ?? supportedViews[0] ?? null);
@@ -117,9 +125,21 @@
   const searchableViews = $derived(supportedViews.filter((view) => view.name.toLocaleLowerCase().includes(viewSearch.toLocaleLowerCase())));
 
   $effect(() => {
-    if (!databaseId || databaseId === lastDatabaseId) return;
-    lastDatabaseId = databaseId;
-    void reloadViews(initialViewId);
+    const revision = notesDatabaseSession.revision;
+    if (!databaseId || busy) return;
+    const signature = `${dataSourceId}:${databaseId}:${revision}`;
+    if (signature === lastDatabaseId) return;
+    lastDatabaseId = signature;
+    void reloadViews(selectedViewId ?? initialViewId, false);
+  });
+
+  $effect(() => {
+    const id = selectedViewId;
+    if (!id) return;
+    untrack(() => {
+      const key = databaseId ?? dataSourceId;
+      notesDatabaseSession.remember(key, { viewId: id, scrollLeft: notesDatabaseSession.recall(key)?.scrollLeft ?? 0 });
+    });
   });
 
   $effect(() => {
@@ -128,31 +148,43 @@
   });
 
   $effect(() => {
+    notesDatabaseSession.revision;
+    if (busy) return;
     if (viewSettingsOpen) return;
-    void loadTemplates();
+    void loadTemplates(false);
   });
 
-  async function loadTemplates(): Promise<void> {
+  async function loadTemplates(force = true): Promise<void> {
+    const sourceId = dataSourceId;
     try {
-      templates = await listNotesDataSourceTemplates(dataSourceId);
+      const loaded = await notesDatabaseSession.load(databaseResource("templates", sourceId), () => listNotesDataSourceTemplates(sourceId), force);
+      if (sourceId !== dataSourceId) return;
+      templates = loaded;
       templateError = null;
     } catch (caught) {
       templateError = caught instanceof Error ? caught.message : String(caught);
     }
   }
 
-  async function reloadViews(preferredId: string | null): Promise<void> {
+  async function reloadViews(preferredId: string | null, force = true): Promise<void> {
     if (!databaseId) return;
+    const request = ++metadataRequest;
+    const sourceId = dataSourceId;
+    const shellId = databaseId;
+    const previousSelection = selectedViewId;
     try {
-      const loaded = await listNotesDatabaseViews(databaseId);
+      const loaded = await notesDatabaseSession.load(databaseResource("views", sourceId, { databaseId: shellId }), () => listNotesDatabaseViews(shellId), force);
+      if (request !== metadataRequest) return;
       views = loaded;
-      selectedViewId = loaded.some((view) => view.id === preferredId)
-        ? preferredId
+      const preferred = selectedViewId !== previousSelection ? selectedViewId : preferredId;
+      selectedViewId = loaded.some((view) => view.id === preferred)
+        ? preferred
         : loaded.some((view) => view.id === selectedViewId)
           ? selectedViewId
           : loaded[0]?.id ?? null;
       viewError = null;
     } catch (caught) {
+      if (request !== metadataRequest) return;
       viewError = caught instanceof Error ? caught.message : String(caught);
     }
   }
@@ -160,6 +192,11 @@
   function requestActiveView(retry = false): void {
     if (!retry && viewLoadState?.key === activeView) return;
     const kind = activeView;
+    const component = readNotesDatabaseView(kind);
+    if (component) {
+      viewLoadState = { key: kind, status: "ready", requestId: (viewLoadState?.requestId ?? 0) + 1, component };
+      return;
+    }
     const loadingState = beginLazyComponentLoad(viewLoadState, kind);
     viewLoadState = loadingState;
     const request = retry ? retryNotesDatabaseView(kind) : loadNotesDatabaseView(kind);

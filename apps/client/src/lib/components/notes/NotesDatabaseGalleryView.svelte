@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { untrack } from "svelte";
+  import { databaseResource, notesDatabaseSession } from "$lib/notes/database-session.svelte";
   import NotesDatabasePropertyValue from "./NotesDatabasePropertyValue.svelte";
   import CollectionSettings from "$lib/components/collections/CollectionSettings.svelte";
   import CollectionCard from "$lib/components/collections/CollectionCard.svelte";
@@ -79,7 +81,7 @@
     "unchecked",
   ];
 
-  let gallery = $state<NotesDataSourceGalleryView | null>(null);
+  let gallery = $state<NotesDataSourceGalleryView | null>(untrack(() => notesDatabaseSession.read(databaseResource("gallery", dataSourceId, viewScope()))));
   let loading = $state(false);
   let loadingMore = $state(false);
   let requestId = 0;
@@ -93,6 +95,7 @@
   let draftTitle = $state("");
   let selectedPanelRowId = $state<string | null>(null);
   let lastLoadSignature = $state("");
+  let lastReloadKey = untrack(() => reloadKey);
 
   const columns = $derived(gallery ? notesDatabaseGalleryColumns(gallery.data_source, gallery.view) : []);
   const configuration = $derived(
@@ -109,22 +112,30 @@
   const previewStyle = $derived(`height: ${previewHeight()}px;`);
 
   $effect(() => {
-    const signature = `${dataSourceId}:${databaseId ?? ""}:${viewId ?? ""}:${reloadKey}`;
+    const revision = notesDatabaseSession.revision;
+    if (mutating) return;
+    const signature = `${dataSourceId}:${databaseId ?? ""}:${viewId ?? ""}:${reloadKey}:${revision}`;
     if (signature === lastLoadSignature) return;
+    const force = reloadKey !== lastReloadKey;
+    lastReloadKey = reloadKey;
     lastLoadSignature = signature;
-    void loadGallery();
+    void loadGallery(force);
   });
 
   function viewScope(): NotesDatabaseViewScope {
     return { databaseId, viewId };
   }
 
-  async function loadGallery(): Promise<NotesDataSourceGalleryView | null> {
+  async function loadGallery(force = true): Promise<NotesDataSourceGalleryView | null> {
     const currentRequest = ++requestId;
-    loading = true;
+    loading = !gallery;
+    loadingMore = false;
     error = null;
     try {
-      const loaded = await getNotesDataSourceGalleryView(dataSourceId, viewScope());
+      const sourceId = dataSourceId;
+      const scope = viewScope();
+      const resource = databaseResource("gallery", sourceId, scope);
+      const loaded = await notesDatabaseSession.load(resource, () => getNotesDataSourceGalleryView(sourceId, scope), force);
       if (currentRequest !== requestId) return null;
       gallery = loaded;
       if (selectedPanelRowId && !loaded.rows.some((row) => row.id === selectedPanelRowId)) {
@@ -132,10 +143,11 @@
       }
       return loaded;
     } catch (caught) {
+      if (currentRequest !== requestId) return null;
       error = caught instanceof Error ? caught.message : String(caught);
       return null;
     } finally {
-      loading = false;
+      if (currentRequest === requestId) loading = false;
     }
   }
 
@@ -143,13 +155,15 @@
     const current = gallery;
     if (!current?.has_more || !current.next_cursor || loadingMore) return;
     const currentRequest = requestId;
+    const revision = notesDatabaseSession.revision;
     loadingMore = true;
     try {
       const loaded = await getNotesDataSourceGalleryView(dataSourceId, viewScope(), {
         start_cursor: current.next_cursor,
       });
-      if (currentRequest !== requestId || gallery !== current) return;
+      if (currentRequest !== requestId || gallery !== current || revision !== notesDatabaseSession.revision) return;
       gallery = { ...loaded, rows: mergeNotesDatabaseRows(current.rows, loaded.rows) };
+      notesDatabaseSession.write(databaseResource("gallery", dataSourceId, viewScope()), gallery);
     } catch (caught) {
       if (currentRequest === requestId) error = caught instanceof Error ? caught.message : String(caught);
     } finally {
@@ -164,6 +178,8 @@
     nextSorts = sorts,
   ): Promise<void> {
     if (!gallery) return;
+    const resource = databaseResource("gallery", dataSourceId, viewScope());
+    const epoch = notesDatabaseSession.epoch;
     mutating = true;
     error = null;
     try {
@@ -172,6 +188,7 @@
         notesDatabaseGalleryUpdate(nextConfiguration, nextVisibleColumns, nextFilters, nextSorts),
         viewScope(),
       );
+      notesDatabaseSession.write(resource, gallery, epoch);
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);
     } finally {

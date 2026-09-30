@@ -76,6 +76,7 @@
   import NotesTextBlockEditor from "./NotesTextBlockEditor.svelte";
   import {
     loadNotesAdvancedBlock,
+    readNotesAdvancedBlock,
     loadNotesTextControl,
     notesBlockRenderFamily,
     retryNotesAdvancedBlock,
@@ -429,6 +430,11 @@
   function requestAdvancedBlock(retry = false): void {
     const family = advancedBlockFamily;
     if (!family || (!retry && advancedBlockLoadState?.key === family)) return;
+    const component = readNotesAdvancedBlock(family);
+    if (component) {
+      advancedBlockLoadState = { key: family, status: "ready", requestId: (advancedBlockLoadState?.requestId ?? 0) + 1, component };
+      return;
+    }
     const loadingState = beginLazyComponentLoad(advancedBlockLoadState, family);
     advancedBlockLoadState = loadingState;
     const request = retry

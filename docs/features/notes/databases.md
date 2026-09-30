@@ -18,6 +18,12 @@ Panels stay within the viewport and outside clipped database containers. Their n
 
 The separation of content, view settings, and property visibility follows [Notion's documented database controls](https://www.notion.com/help/views-filters-and-sorts). Notes and Projects use the same [collection components and visual rules](../collections.md), with domain-specific editors and actions.
 
+Switching to another application tab unmounts the Notes UI but retains recently visited database row windows, view lists, templates, selected views, and horizontal scroll positions. Returning renders those snapshots immediately without another SQLite read when they remain current. The editor retains the note's vertical scroll separately. All six database layouts share this session behavior.
+
+Successful Notes mutations, including row-body edits, schema changes, imports, and history restoration, invalidate database snapshots conservatively across the active vault. Linked views therefore refresh together. Mounted views defer refresh during their own writes, and tables also defer automatic refresh while a text cell has focus so it cannot replace active typing. Existing rows remain visible while canonical data loads. Concurrent reads share their work, and a response that predates invalidation cannot become current. Other desktop windows publish vault-scoped invalidations even while Notes is inactive. Switching vaults clears snapshots and rejects requests from the previous vault.
+
+The session retains at most 32 resources with a combined serialized-data budget of 4 MiB, plus 32 small presentation entries. Least recently used resources are evicted first; an oversized response can render but is not retained. These limits bound cached data rather than measuring total JavaScript heap usage. No inactive database DOM or observers are retained, and eviction falls back to an ordinary load.
+
 ## Data source and view model
 
 A child database creates a database shell, one canonical data source, an initial table view, and a visible `child_database` block in one transaction. A linked database view creates another shell and view that reference the same data source without duplicating rows or schema.

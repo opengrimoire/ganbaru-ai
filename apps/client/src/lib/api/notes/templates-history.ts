@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { publishNotesDatabaseChange } from "$lib/notes/database-window-sync";
 import { ensureDbUrl } from "$lib/api/db";
 import {
   mapNotesBlockListDto,
@@ -45,9 +46,9 @@ export async function applyNotesPageTemplate(
   request: NotesPageTemplateApplyRequest,
 ): Promise<NotesLoadedPage> {
   const dbUrl = await ensureDbUrl();
-  return mapNotesLoadedPageDto(
-    await invoke<unknown>("notes_apply_page_template", { dbUrl, templateId, request }),
-  );
+  const applied = await invoke<unknown>("notes_apply_page_template", { dbUrl, templateId, request });
+  publishNotesDatabaseChange();
+  return mapNotesLoadedPageDto(applied);
 }
 
 export async function updateNotesPageTemplate(

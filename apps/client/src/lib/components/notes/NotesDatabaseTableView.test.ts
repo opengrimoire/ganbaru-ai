@@ -8,6 +8,7 @@ import {
 } from "$lib/api/notes";
 import { createProvisionalNotesPage } from "$lib/notes/page-creation";
 import NotesDatabaseTableView from "./NotesDatabaseTableView.svelte";
+import { notesDatabaseSession } from "$lib/notes/database-session.svelte";
 
 vi.mock("$lib/api/notes", () => ({
   getNotesDataSourceTableView: vi.fn(),
@@ -46,6 +47,7 @@ let component: ReturnType<typeof mount> | undefined;
 afterEach(async () => {
   if (component) await unmount(component);
   component = undefined;
+  notesDatabaseSession.clear();
   document.body.replaceChildren();
   vi.resetAllMocks();
 });
@@ -57,8 +59,8 @@ function pointer(target: EventTarget, type: string, x: number): void {
   target.dispatchEvent(event);
 }
 
-async function open(onSavingChange = vi.fn<(saving: boolean) => void>()) {
-  vi.mocked(getNotesDataSourceTableView).mockResolvedValue(table(240));
+async function open(onSavingChange = vi.fn<(saving: boolean) => void>(), initialTable = table(240)) {
+  vi.mocked(getNotesDataSourceTableView).mockResolvedValue(initialTable);
   vi.mocked(listNotesDataSourceTemplates).mockResolvedValue([]);
   vi.mocked(loadNotesPage).mockRejectedValue(new Error("Page not found"));
   component = mount(NotesDatabaseTableView, { target: document.body, props: {
@@ -74,6 +76,51 @@ async function open(onSavingChange = vi.fn<(saving: boolean) => void>()) {
 }
 
 describe("Notes table width handoff", () => {
+  it("restores rows and horizontal position without querying again after a tab switch", async () => {
+    await open();
+    const viewport = document.querySelector<HTMLElement>(".overflow-x-auto")!;
+    viewport.scrollLeft = 160;
+    viewport.dispatchEvent(new Event("scroll"));
+    await unmount(component!);
+    component = undefined;
+    document.body.replaceChildren();
+    await open();
+    expect(getNotesDataSourceTableView).toHaveBeenCalledOnce();
+    expect(listNotesDataSourceTemplates).toHaveBeenCalledOnce();
+    expect(document.querySelector<HTMLElement>(".overflow-x-auto")?.scrollLeft).toBe(160);
+  });
+
+  it("keeps the table visible during refresh and applies writes from another view", async () => {
+    const { width } = await open();
+    let finish: (view: NotesDataSourceTableView) => void = () => {};
+    vi.mocked(getNotesDataSourceTableView).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    notesDatabaseSession.invalidate();
+    await vi.waitFor(() => expect(getNotesDataSourceTableView).toHaveBeenCalledTimes(2));
+    expect(width()).toContain("240px");
+    expect(document.querySelector(".collection-resize")).not.toBeNull();
+    finish(table(320));
+    await vi.waitFor(() => expect(width()).toContain("320px"));
+  });
+
+  it("defers remote refresh while a cell is being edited so typing cannot be overwritten", async () => {
+    const page = created({ id: "existing", first_block_id: "block", title: "Original" }).page;
+    await open(vi.fn(), { ...table(240), rows: [page], total_row_count: 1 });
+    const input = titleInput();
+    input.focus();
+    typeTitle(input, "My draft");
+    notesDatabaseSession.invalidate();
+    await tick();
+    await tick();
+    expect(input.value).toBe("My draft");
+    expect(getNotesDataSourceTableView).toHaveBeenCalledOnce();
+    vi.mocked(updateNotesDataSourceRowProperty).mockResolvedValue(page);
+    input.blur();
+    await vi.waitFor(() => expect(updateNotesDataSourceRowProperty).toHaveBeenCalledWith("source", "existing", {
+      property_id: "title", value: "My draft",
+    }));
+    await vi.waitFor(() => expect(getNotesDataSourceTableView).toHaveBeenCalledTimes(2));
+  });
+
   it("keeps the drag width through a delayed save and accepts its canonical response", async () => {
     let complete: (view: NotesDataSourceTableView) => void = () => {};
     vi.mocked(updateNotesDataSourceTableView).mockImplementation(() => new Promise((resolve) => { complete = resolve; }));

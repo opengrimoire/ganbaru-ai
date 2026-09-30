@@ -258,6 +258,11 @@ export function notesDatabaseViewHasLoaded(kind: NotesDatabaseViewKind): boolean
   return databaseViewLoader.hasLoaded(kind);
 }
 
+/** Read a resolved renderer synchronously when returning to a visited database. */
+export function readNotesDatabaseView(kind: NotesDatabaseViewKind): LoadedNotesDatabaseView | null {
+  return databaseViewLoader.read(kind);
+}
+
 /** Loads only an advanced block family present in the current page. */
 export function loadNotesAdvancedBlock(
   kind: NotesAdvancedBlockFamily,
@@ -275,6 +280,11 @@ export function retryNotesAdvancedBlock(
 /** Reports whether an advanced block family implementation has loaded. */
 export function notesAdvancedBlockHasLoaded(kind: NotesAdvancedBlockFamily): boolean {
   return advancedBlockLoader.hasLoaded(kind);
+}
+
+/** Reuse a loaded block renderer without temporarily shrinking a restored note. */
+export function readNotesAdvancedBlock(kind: NotesAdvancedBlockFamily): LoadedNotesAdvancedBlock | null {
+  return advancedBlockLoader.read(kind);
 }
 
 /** Loads one editor panel only after its trigger opens it. */

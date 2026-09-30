@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { untrack } from "svelte";
+  import { databaseResource, notesDatabaseSession, rememberDatabaseScroll } from "$lib/notes/database-session.svelte";
   import NotesDatabaseOptionBadge from "./NotesDatabaseOptionBadge.svelte";
   import NotesDatabasePropertyValue from "./NotesDatabasePropertyValue.svelte";
   import CollectionSettings from "$lib/components/collections/CollectionSettings.svelte";
@@ -85,7 +87,7 @@
     "unchecked",
   ];
 
-  let board = $state<NotesDataSourceBoardView | null>(null);
+  let board = $state<NotesDataSourceBoardView | null>(untrack(() => notesDatabaseSession.read(databaseResource("board", dataSourceId, viewScope()))));
   let loading = $state(false);
   let loadingMore = $state(false);
   let requestId = 0;
@@ -98,6 +100,7 @@
   let error = $state<string | null>(null);
   let selectedPanelRowId = $state<string | null>(null);
   let lastLoadSignature = $state("");
+  let lastReloadKey = untrack(() => reloadKey);
 
   const columns = $derived(board ? notesDatabaseBoardColumns(board.data_source, board.view) : []);
   const configuration = $derived(
@@ -119,22 +122,30 @@
   const canMoveCards = $derived(notesDatabaseBoardCanMoveCards(groupColumn));
 
   $effect(() => {
-    const signature = `${dataSourceId}:${databaseId ?? ""}:${viewId ?? ""}:${reloadKey}`;
+    const revision = notesDatabaseSession.revision;
+    if (mutating) return;
+    const signature = `${dataSourceId}:${databaseId ?? ""}:${viewId ?? ""}:${reloadKey}:${revision}`;
     if (signature === lastLoadSignature) return;
+    const force = reloadKey !== lastReloadKey;
+    lastReloadKey = reloadKey;
     lastLoadSignature = signature;
-    void loadBoard();
+    void loadBoard(force);
   });
 
   function viewScope(): NotesDatabaseViewScope {
     return { databaseId, viewId };
   }
 
-  async function loadBoard(): Promise<NotesDataSourceBoardView | null> {
+  async function loadBoard(force = true): Promise<NotesDataSourceBoardView | null> {
     const currentRequest = ++requestId;
-    loading = true;
+    loading = !board;
+    loadingMore = false;
     error = null;
     try {
-      const loaded = await getNotesDataSourceBoardView(dataSourceId, viewScope());
+      const sourceId = dataSourceId;
+      const scope = viewScope();
+      const resource = databaseResource("board", sourceId, scope);
+      const loaded = await notesDatabaseSession.load(resource, () => getNotesDataSourceBoardView(sourceId, scope), force);
       if (currentRequest !== requestId) return null;
       board = loaded;
       if (selectedPanelRowId && !hasBoardRow(selectedPanelRowId, loaded.groups)) {
@@ -142,10 +153,11 @@
       }
       return loaded;
     } catch (caught) {
+      if (currentRequest !== requestId) return null;
       error = caught instanceof Error ? caught.message : String(caught);
       return null;
     } finally {
-      loading = false;
+      if (currentRequest === requestId) loading = false;
     }
   }
 
@@ -153,13 +165,15 @@
     const current = board;
     if (!current?.has_more || !current.next_cursor || loadingMore) return;
     const currentRequest = requestId;
+    const revision = notesDatabaseSession.revision;
     loadingMore = true;
     try {
       const loaded = await getNotesDataSourceBoardView(dataSourceId, viewScope(), {
         start_cursor: current.next_cursor,
       });
-      if (currentRequest !== requestId || board !== current) return;
+      if (currentRequest !== requestId || board !== current || revision !== notesDatabaseSession.revision) return;
       board = mergeNotesDatabaseBoardWindow(current, loaded);
+      notesDatabaseSession.write(databaseResource("board", dataSourceId, viewScope()), board);
     } catch (caught) {
       if (currentRequest === requestId) error = caught instanceof Error ? caught.message : String(caught);
     } finally {
@@ -174,6 +188,8 @@
     nextSorts = sorts,
   ): Promise<void> {
     if (!board) return;
+    const resource = databaseResource("board", dataSourceId, viewScope());
+    const epoch = notesDatabaseSession.epoch;
     mutating = true;
     error = null;
     try {
@@ -188,6 +204,7 @@
         ),
         viewScope(),
       );
+      notesDatabaseSession.write(resource, board, epoch);
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);
     } finally {
@@ -217,10 +234,13 @@
 
   async function moveCardToGroup(row: NotesPage, group: NotesDataSourceBoardGroup): Promise<void> {
     if (!canMoveCards || mutating) return;
+    const resource = databaseResource("board", dataSourceId, viewScope());
+    const epoch = notesDatabaseSession.epoch;
     mutating = true;
     error = null;
     try {
       board = await moveNotesDataSourceBoardRow(dataSourceId, { page_id: row.id, group_id: group.id }, viewScope());
+      notesDatabaseSession.write(resource, board, epoch);
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);
     } finally {
@@ -640,7 +660,7 @@
 
 
   {#if board}
-    <div class="grid gap-2 @container">
+    <div use:rememberDatabaseScroll={databaseResource("board", dataSourceId, viewScope()).key} class="grid gap-2 @container">
       <CollectionBoard groups={visibleGroups} items={(group) => group.rows} label={(group) => group.name}
         emptyLabel={t("notes.databaseRowsEmpty")} dragLabel={(row) => t("notes.databaseBoardDragCard", rowTitle(row))}
         canMove={() => canMoveCards} disabled={mutating} onmove={moveCardToGroup}>

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { untrack } from "svelte";
+  import { databaseResource, notesDatabaseSession, rememberDatabaseScroll } from "$lib/notes/database-session.svelte";
   import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
   import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import {
@@ -83,7 +85,7 @@
     "unchecked",
   ];
 
-  let timeline = $state<NotesDataSourceTimelineView | null>(null);
+  let timeline = $state<NotesDataSourceTimelineView | null>(untrack(() => notesDatabaseSession.read(databaseResource("timeline", dataSourceId, viewScope()))));
   let loading = $state(false);
   let loadingMore = $state(false);
   let requestId = 0;
@@ -97,6 +99,7 @@
   let draftTitle = $state("");
   let selectedPanelRowId = $state<string | null>(null);
   let lastLoadSignature = $state("");
+  let lastReloadKey = untrack(() => reloadKey);
 
   const columns = $derived(timeline ? notesDatabaseTimelineColumns(timeline.data_source, timeline.view) : []);
   const configuration = $derived(
@@ -125,22 +128,30 @@
   const timelineGridStyle = $derived(`grid-template-columns: repeat(${dates.length}, minmax(5.5rem, 5.5rem));`);
 
   $effect(() => {
-    const signature = `${dataSourceId}:${databaseId ?? ""}:${viewId ?? ""}:${reloadKey}`;
+    const revision = notesDatabaseSession.revision;
+    if (mutating) return;
+    const signature = `${dataSourceId}:${databaseId ?? ""}:${viewId ?? ""}:${reloadKey}:${revision}`;
     if (signature === lastLoadSignature) return;
+    const force = reloadKey !== lastReloadKey;
+    lastReloadKey = reloadKey;
     lastLoadSignature = signature;
-    void loadTimeline();
+    void loadTimeline(force);
   });
 
   function viewScope(): NotesDatabaseViewScope {
     return { databaseId, viewId };
   }
 
-  async function loadTimeline(): Promise<NotesDataSourceTimelineView | null> {
+  async function loadTimeline(force = true): Promise<NotesDataSourceTimelineView | null> {
     const currentRequest = ++requestId;
-    loading = true;
+    loading = !timeline;
+    loadingMore = false;
     error = null;
     try {
-      const loaded = await getNotesDataSourceTimelineView(dataSourceId, viewScope());
+      const sourceId = dataSourceId;
+      const scope = viewScope();
+      const resource = databaseResource("timeline", sourceId, scope);
+      const loaded = await notesDatabaseSession.load(resource, () => getNotesDataSourceTimelineView(sourceId, scope), force);
       if (currentRequest !== requestId) return null;
       timeline = loaded;
       if (selectedPanelRowId && !loaded.rows.some((row) => row.id === selectedPanelRowId)) {
@@ -148,10 +159,11 @@
       }
       return loaded;
     } catch (caught) {
+      if (currentRequest !== requestId) return null;
       error = caught instanceof Error ? caught.message : String(caught);
       return null;
     } finally {
-      loading = false;
+      if (currentRequest === requestId) loading = false;
     }
   }
 
@@ -159,6 +171,7 @@
     const current = timeline;
     if (!current?.has_more || !current.next_cursor || loadingMore) return;
     const currentRequest = requestId;
+    const revision = notesDatabaseSession.revision;
     loadingMore = true;
     try {
       const loaded = await getNotesDataSourceTimelineView(dataSourceId, viewScope(), {
@@ -166,8 +179,9 @@
         range_start: configuration.range_start,
         range_end: configuration.range_end,
       });
-      if (currentRequest !== requestId || timeline !== current) return;
+      if (currentRequest !== requestId || timeline !== current || revision !== notesDatabaseSession.revision) return;
       timeline = { ...loaded, rows: mergeNotesDatabaseRows(current.rows, loaded.rows) };
+      notesDatabaseSession.write(databaseResource("timeline", dataSourceId, viewScope()), timeline);
     } catch (caught) {
       if (currentRequest === requestId) error = caught instanceof Error ? caught.message : String(caught);
     } finally {
@@ -182,6 +196,8 @@
     nextSorts = sorts,
   ): Promise<void> {
     if (!timeline) return;
+    const resource = databaseResource("timeline", dataSourceId, viewScope());
+    const epoch = notesDatabaseSession.epoch;
     mutating = true;
     error = null;
     try {
@@ -190,6 +206,7 @@
         notesDatabaseTimelineUpdate(nextConfiguration, nextVisibleColumns, nextFilters, nextSorts),
         viewScope(),
       );
+      notesDatabaseSession.write(resource, timeline, epoch);
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);
     } finally {
@@ -759,7 +776,7 @@
           </CollectionMenu>
         </div>
 
-        <div class="overflow-x-auto rounded-md border border-border">
+        <div use:rememberDatabaseScroll={databaseResource("timeline", dataSourceId, viewScope()).key} class="overflow-x-auto rounded-md border border-border">
           <div class="min-w-max">
             <div class="grid border-b border-border bg-muted text-[0.733333rem] text-muted-foreground" style={timelineGridStyle}>
               {#each dates as date (date)}

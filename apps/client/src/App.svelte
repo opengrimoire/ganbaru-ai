@@ -88,6 +88,7 @@
   import { onMount } from "svelte";
   import { getNotesProjectHistoryScheduler } from "$lib/notes/project-history-scheduler";
   import { onActiveVaultIdentityChange } from "$lib/vault/active-vault";
+  import { listenForNotesDatabaseChanges } from "$lib/notes/database-window-sync";
   import { doomscrollingObservationPlan } from "$lib/stores/doomscrolling-observation-policy";
   import type { ProjectChatIntegration } from "$lib/projects/types";
 
@@ -293,6 +294,11 @@
   onMount(() => {
     perfMark("boot.app-mount");
     let disposed = false;
+    let unlistenDatabaseChanges: (() => void) | null = null;
+    void listenForNotesDatabaseChanges().then((unlisten) => {
+      if (disposed) unlisten();
+      else unlistenDatabaseChanges = unlisten;
+    }).catch((error: unknown) => console.error("Failed to listen for Notes database changes", error));
     const automaticUpdateCheckTimerId = isMainWindow
       ? setTimeout(() => {
         void updates.checkAutomatically({ kind: "startup" });
@@ -467,6 +473,7 @@
 
     return () => {
       disposed = true;
+      unlistenDatabaseChanges?.();
       unlistenCalendarNotificationOpen?.();
       unlistenCalendarNotificationOpen = null;
       unlistenNotesNotificationOpen?.();

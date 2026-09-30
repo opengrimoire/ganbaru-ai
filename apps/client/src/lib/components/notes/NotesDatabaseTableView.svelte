@@ -7,7 +7,8 @@
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
   import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
-  import { onDestroy, tick } from "svelte";
+  import { onDestroy, tick, untrack } from "svelte";
+  import { databaseResource, notesDatabaseSession, rememberDatabaseScroll } from "$lib/notes/database-session.svelte";
   import { createNotesDatabaseRowCreation } from "$lib/notes/database-row-creation.svelte";
   import CollectionSettings from "$lib/components/collections/CollectionSettings.svelte";
   import {
@@ -153,13 +154,14 @@
   } satisfies Record<NotesDataSourcePropertyType, typeof AlignLeft>;
 
   let tableRoot: HTMLDivElement | null = $state(null);
-  let table = $state<NotesDataSourceTableView | null>(null);
-  let templates = $state<NotesDataSourceTemplate[]>([]);
+  let table = $state<NotesDataSourceTableView | null>(untrack(() => notesDatabaseSession.read(databaseResource("table", dataSourceId, viewScope()))));
+  let templates = $state<NotesDataSourceTemplate[]>(untrack(() => notesDatabaseSession.read(databaseResource("templates", dataSourceId)) ?? []));
   let loading = $state(false);
   let loadingMore = $state(false);
   let loadMoreSentinel: HTMLDivElement | null = $state(null);
   let tableRequestId = 0;
   let mutating = $state(false);
+  let editingCell = $state(false);
 
   let viewOpen = true;
   const rowCreation = createNotesDatabaseRowCreation(() => viewOpen ? loadTable(false) : Promise.resolve(null));
@@ -214,6 +216,7 @@
   let createTemplateAsDefault = $state(false);
   let selectedPanelRowId = $state<string | null>(null);
   let lastLoadSignature = $state("");
+  let lastReloadKey = untrack(() => reloadKey);
   let pendingFocusRowId = $state<string | null>(null);
   let csvPanelOpen = $state<"database-csv-import" | "database-csv-export" | null>(null);
   let csvPanelLoadState = $state<LazyComponentLoadState<
@@ -326,26 +329,32 @@
   }
 
   $effect(() => {
-    const signature = `${dataSourceId}:${databaseId ?? ""}:${viewId ?? ""}:${reloadKey}`;
+    const revision = notesDatabaseSession.revision;
+    if (mutating || editingCell || rowCreation.isSaving(dataSourceId)) return;
+    const signature = `${dataSourceId}:${databaseId ?? ""}:${viewId ?? ""}:${reloadKey}:${revision}`;
     if (signature === lastLoadSignature) return;
+    const force = reloadKey !== lastReloadKey;
+    lastReloadKey = reloadKey;
     lastLoadSignature = signature;
-    void loadTable();
+    void loadTable(true, force);
   });
 
   function viewScope(): NotesDatabaseViewScope {
     return { databaseId, viewId };
   }
 
-  async function loadTable(refreshTemplates = true): Promise<NotesDataSourceTableView | null> {
+  async function loadTable(refreshTemplates = true, force = true): Promise<NotesDataSourceTableView | null> {
     const requestId = ++tableRequestId;
     const settledIds = rowCreation.settledIds(dataSourceId);
-    loading = true;
+    loading = !table;
     loadingMore = false;
     error = null;
     try {
+      const sourceId = dataSourceId;
+      const scope = viewScope();
       const [loaded, loadedTemplates] = await Promise.all([
-        getNotesDataSourceTableView(dataSourceId, viewScope()),
-        refreshTemplates ? listNotesDataSourceTemplates(dataSourceId) : Promise.resolve(templates),
+        notesDatabaseSession.load(databaseResource("table", sourceId, scope), () => getNotesDataSourceTableView(sourceId, scope), force),
+        refreshTemplates ? notesDatabaseSession.load(databaseResource("templates", sourceId), () => listNotesDataSourceTemplates(sourceId), force) : Promise.resolve(templates),
       ]);
       if (requestId !== tableRequestId) return null;
       const focusedId = document.activeElement?.closest<HTMLElement>("[data-database-row-id]")?.dataset.databaseRowId ?? null;
@@ -379,15 +388,17 @@
     const current = table;
     if (!current?.has_more || !current.next_cursor || loadingMore) return;
     const requestId = tableRequestId;
+    const revision = notesDatabaseSession.revision;
     loadingMore = true;
     try {
       const loaded = await getNotesDataSourceTableView(dataSourceId, viewScope(), {
         start_cursor: current.next_cursor,
       });
-      if (requestId !== tableRequestId || table !== current) return;
+      if (requestId !== tableRequestId || table !== current || revision !== notesDatabaseSession.revision) return;
       const rows = new Map(current.rows.map((row) => [row.id, row]));
       for (const row of loaded.rows) rows.set(row.id, row);
       table = { ...loaded, rows: [...rows.values()] };
+      notesDatabaseSession.write(databaseResource("table", dataSourceId, viewScope()), table);
     } catch (caught) {
       if (requestId === tableRequestId) error = caught instanceof Error ? caught.message : String(caught);
     } finally {
@@ -422,6 +433,8 @@
     nextSorts: NotesDatabaseTableSort[],
   ): Promise<void> {
     const settledIds = rowCreation.settledIds(dataSourceId);
+    const resource = databaseResource("table", dataSourceId, viewScope());
+    const epoch = notesDatabaseSession.epoch;
     mutating = true;
     error = null;
     try {
@@ -433,6 +446,7 @@
       const focusedId = document.activeElement?.closest<HTMLElement>("[data-database-row-id]")?.dataset.databaseRowId ?? null;
       rowCreation.acceptWindow(dataSourceId, focusedId, settledIds);
       table = loaded;
+      notesDatabaseSession.write(resource, loaded, epoch);
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);
     } finally {
@@ -1021,7 +1035,7 @@
         <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={retryCsvPanel}>{t("common.retry")}</button>
       {/if}
 
-      <div bind:this={tableRoot} class="min-w-0 overflow-x-auto overflow-y-hidden">
+      <div bind:this={tableRoot} use:rememberDatabaseScroll={databaseResource("table", dataSourceId, viewScope()).key} class="min-w-0 overflow-x-auto overflow-y-hidden">
         <div role="table" aria-label={t("notes.databaseViewTable")} class="min-w-max">
           <CollectionRow template={gridTemplate} header role="row">
             <div role="columnheader"><span class="sr-only">{t("notes.databaseTableRowActions")}</span></div>
@@ -1173,8 +1187,10 @@
                         inputmode={column.type === "number" ? "decimal" : "text"}
                         aria-label={column.name}
                         disabled={mutating || (column.type !== "title" && rowCreation.blocked(row.id))}
+                        onfocus={() => { editingCell = true; }}
                         oninput={(event) => { if (column.type === "title") rowCreation.draft(row.id, column.id, event.currentTarget.value); }}
                         onblur={(event) => {
+                          editingCell = false;
                           void saveCell(row, column, event.currentTarget.value);
                         }}
                         onkeydown={(event) => handleCellKeydown(event, rowIndex, columnIndex)}
