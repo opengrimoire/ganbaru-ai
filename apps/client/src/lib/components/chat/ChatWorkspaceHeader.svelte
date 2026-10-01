@@ -68,10 +68,6 @@
   const selectedProjectChannels = $derived(
     selectedProject ? chat.channelsForProject(selectedProject.id) : [],
   );
-  const channelNavigatorPanelHeight = $derived(Math.min(
-    navigatorPanelMaxHeight,
-    Math.max(124, selectedProjectChannels.length * 32 + 84),
-  ));
   const selectedFolder = $derived(chat.selectedWorkingFolder);
   const showChannelBreadcrumb = $derived(!explorerExpanded || (editingTitle && !!selectedChannel && !selectedChannel.isDefault));
 
@@ -230,7 +226,7 @@
             <ChatChannelPickerPanel
               channels={selectedProjectChannels}
               selectedChannelId={selectedChannel?.id ?? null}
-              frameStyle={`width:100%;height:${channelNavigatorPanelHeight}px;max-height:${channelNavigatorPanelHeight}px`}
+              frameStyle={`width:100%;max-height:${navigatorPanelMaxHeight}px`}
               iconStrokeWidth={identityIconStrokeWidth}
               onChannelSelected={(channel) => selectChannel(channel.id)}
               onCreateChannel={createChannel}

@@ -4,7 +4,7 @@ import { NOTES_DATABASE_VIEW_KINDS, type NotesDatabaseView, type NotesDatabaseVi
 export const NOTES_HIERARCHY_PANEL_ROW_HEIGHT = 32;
 export const NOTES_HIERARCHY_PANEL_LIST_PADDING = 8;
 export const NOTES_HIERARCHY_PANEL_CHROME_HEIGHT = 84;
-export const NOTES_HIERARCHY_VIEW_PANEL_CHROME_HEIGHT = 44;
+export const NOTES_HIERARCHY_VIEW_PANEL_CHROME_HEIGHT = 40;
 
 export type NotesHierarchyParent =
   | { kind: "root" }
@@ -20,9 +20,10 @@ export type NotesHierarchyPickerNode = NotesHierarchyNode
   | { kind: "database"; key: string; database: NotesNavigationDatabase; hasChildren: true }
   | { kind: "view"; key: string; database: NotesNavigationDatabase; view: NotesDatabaseView; hasChildren: false };
 
-/** Database view menus only select existing views and do not offer creation actions. */
-export function notesHierarchyPanelChromeHeight(parent: NotesHierarchyParent): number {
-  return parent.kind === "database" ? NOTES_HIERARCHY_VIEW_PANEL_CHROME_HEIGHT : NOTES_HIERARCHY_PANEL_CHROME_HEIGHT;
+/** Estimate menu chrome before layout, omitting search in cascading submenus. */
+export function notesHierarchyPanelChromeHeight(parent: NotesHierarchyParent, showSearch = true): number {
+  const chromeHeight = parent.kind === "database" ? NOTES_HIERARCHY_VIEW_PANEL_CHROME_HEIGHT : NOTES_HIERARCHY_PANEL_CHROME_HEIGHT;
+  return chromeHeight - (showSearch ? 0 : NOTES_HIERARCHY_VIEW_PANEL_CHROME_HEIGHT);
 }
 
 /** Return the localized display title for any hierarchy picker row. */

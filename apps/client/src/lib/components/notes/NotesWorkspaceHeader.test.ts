@@ -44,6 +44,17 @@ vi.mock("$lib/stores/viewport.svelte", () => ({
   getViewport: () => ({ width: 1200, height: 800 }),
 }));
 
+vi.mock("$lib/stores/projects.svelte", () => ({
+  getProjects: () => ({
+    customEmojis: [],
+    visibleGroups: () => [group],
+    projectsForGroup: () => [project],
+    projectsForGroupIncludingInactive: () => [project],
+    projectById: (id: string | null) => id === project.id ? project : undefined,
+    groupById: (id: string | null) => id === group.id ? group : undefined,
+  }),
+}));
+
 const group = {
   id: "group-1",
   name: "Routine",
@@ -241,17 +252,42 @@ describe("NotesWorkspaceHeader", () => {
     await tick();
     header.querySelector<HTMLButtonElement>('button[aria-label="Reading"]')!.dispatchEvent(new Event("pointerenter"));
     await vi.waitFor(() => expect(header.querySelector('[role="dialog"] button[aria-label="Reading"]')).not.toBeNull());
+    expect(header.querySelectorAll('[role="dialog"] input')).toHaveLength(1);
     const noteRows = header.querySelectorAll<HTMLButtonElement>('button[aria-label="Reading"]');
     noteRows[noteRows.length - 1].dispatchEvent(new Event("pointerenter"));
     await vi.waitFor(() => expect(header.querySelector('button[aria-label="Book list"]')).not.toBeNull());
+    expect(header.querySelectorAll('[role="dialog"] input')).toHaveLength(1);
     header.querySelector<HTMLButtonElement>('button[aria-label="Book list"]')!.dispatchEvent(new Event("pointerenter"));
     await vi.waitFor(() => expect(header.querySelector('button[aria-label="By category"]')).not.toBeNull());
+    expect(header.querySelectorAll('[role="dialog"] input')).toHaveLength(1);
+    expect(header.querySelectorAll('.project-picker-panel.fixed input')).toHaveLength(0);
     header.querySelector<HTMLButtonElement>('button[aria-label="By category"]')!.click();
     await vi.waitFor(() => expect(notesState.store.openDatabase).toHaveBeenCalledWith(
       { pageId: owner.id, blockId: database.id }, { followSource: false, viewId: "board" },
     ));
     expect(header.querySelector("[data-notes-database-breadcrumb]")).toBeNull();
     await vi.waitFor(() => expect(header.querySelector("[role='dialog']")).toBeNull());
+  });
+
+  it("keeps search in the directly opened project panel while cascading into notes", async () => {
+    const owner = createProvisionalNotesPage({
+      id: page.id, title: "Reading", first_block_id: "body", folder_id: null,
+      parent: page.parent, properties: page.properties,
+    }).page;
+    const header = setup(true, owner);
+    await tick();
+    const projectTrigger = Array.from(header.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent?.trim() === "Learning");
+    expect(projectTrigger).toBeDefined();
+    projectTrigger!.dispatchEvent(new Event("pointerenter"));
+    await vi.waitFor(() => expect(header.querySelector('[role="dialog"] input')).not.toBeNull());
+    const projectRow = Array.from(header.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'))
+      .find((button) => button.textContent?.trim() === "Learning");
+    expect(projectRow).toBeDefined();
+    projectRow!.focus();
+    await vi.waitFor(() => expect(header.querySelector('[role="dialog"] button[aria-label="Reading"]')).not.toBeNull());
+    expect(header.querySelectorAll('[role="dialog"] input')).toHaveLength(1);
+    expect(header.querySelector('.project-picker-panel.fixed input')).toBeNull();
   });
 
   it("opens saved views when hovering the database breadcrumb and has no creation button", async () => {
@@ -277,6 +313,7 @@ describe("NotesWorkspaceHeader", () => {
     header.querySelector<HTMLButtonElement>("[data-notes-database-breadcrumb]")!.dispatchEvent(new Event("pointerenter"));
     await vi.waitFor(() => expect(databaseViews).toHaveBeenCalledWith("database"));
     await vi.waitFor(() => expect(header.querySelector('button[aria-label="Reading queue"]')).not.toBeNull());
+    expect(header.querySelectorAll('[role="dialog"] input')).toHaveLength(1);
     expect(header.querySelectorAll("[data-notes-context-chevron]")).toHaveLength(1);
     expect(header.querySelector('[data-workspace-breadcrumb-terminal-icon="plus"]')).toBeNull();
     expect(header.querySelector('button[aria-keyshortcuts="Control+N Meta+N"]')).toBeNull();

@@ -24,6 +24,7 @@
     onCreateChannel,
     onLayoutChange = undefined,
     onPointerLeave = undefined,
+    showSearch = true,
     mobileLayout = false,
     title = undefined,
     onBack = undefined,
@@ -40,6 +41,7 @@
     onCreateChannel: () => MaybePromise<void>;
     onLayoutChange?: () => void;
     onPointerLeave?: (event: PointerEvent) => void;
+    showSearch?: boolean;
     mobileLayout?: boolean;
     title?: string;
     onBack?: () => void;
@@ -51,7 +53,7 @@
   const iconSize = $derived(mobileLayout ? 18 : 13);
   let search = $state("");
   let scrollElement = $state<HTMLElement | undefined>();
-  const normalizedSearch = $derived(search.trim().toLocaleLowerCase());
+  const normalizedSearch = $derived(showSearch ? search.trim().toLocaleLowerCase() : "");
   const visibleChannels = $derived(channels.filter((channel) => (
     !normalizedSearch
     || channel.name.toLocaleLowerCase().includes(normalizedSearch)
@@ -75,6 +77,13 @@
     if (!mobileLayout || !onBack) return;
     return mobileBackStack.activate({ handle: handleMobileBack });
   });
+
+  $effect(() => {
+    if (mobileLayout || !rootElement || !onLayoutChange) return;
+    const observer = new ResizeObserver(() => onLayoutChange?.());
+    observer.observe(rootElement);
+    return () => observer.disconnect();
+  });
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -86,11 +95,12 @@
     className,
     zIndexClass,
   )}
-  style={frameStyle}
+  style={mobileLayout ? frameStyle : `${frameStyle}; height: auto`}
   data-chat-channel-picker
   onpointerleave={onPointerLeave}
 >
-  <div class={cn("shrink-0", mobileLayout ? "border-b border-border/70 p-2" : "px-1.5 pb-0.5 pt-1.5")}>
+  {#if mobileLayout || showSearch}
+  <div class={cn("shrink-0", mobileLayout ? "border-b border-border/70 p-2" : "px-1.5 pt-1.5")}>
     {#if mobileLayout}
       <div class="flex min-h-14 items-center gap-1">
         {#if onBack}
@@ -117,6 +127,7 @@
         {/if}
       </div>
     {/if}
+    {#if showSearch}
     <div class={cn(
       "flex items-center gap-1.5 border border-border/70 bg-muted/20",
       mobileLayout ? "min-h-12 rounded-xl px-3" : "min-h-8 rounded-md px-2",
@@ -142,10 +153,12 @@
         </button>
       {/if}
     </div>
+    {/if}
   </div>
+  {/if}
 
-  <div class="relative min-h-0 flex-1">
-    <div bind:this={scrollElement} class={cn("hide-scrollbar h-full min-h-0 overflow-y-auto", mobileLayout ? "overscroll-contain px-2 py-2" : "p-1")}>
+  <div class="relative flex min-h-0 flex-auto flex-col">
+    <div bind:this={scrollElement} class={cn("hide-scrollbar min-h-0 flex-auto overflow-y-auto", mobileLayout ? "overscroll-contain px-2 py-2" : "p-1")}>
       {#if visibleChannels.length === 0}
         <p class="px-3 py-2 text-[0.8rem] text-popover-foreground/60">
           {normalizedSearch ? t("chat.channels.noResults") : t("chat.channels.empty")}

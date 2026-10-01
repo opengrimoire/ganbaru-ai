@@ -162,6 +162,7 @@ export function projectPickerSubpanelAimOrigin(anchorRect: ProjectPickerPanelRec
   };
 }
 
+/** Place a submenu within its bounds, using its rendered height when available. */
 export function projectPickerSubpanelGeometry(input: {
   anchorRect: ProjectPickerPanelRect;
   panelRect: ProjectPickerPanelRect;
@@ -170,6 +171,7 @@ export function projectPickerSubpanelGeometry(input: {
   footerHeight: number;
   projectCount: number;
   visibleRows: number | null;
+  panelHeight?: number;
   listHeight?: number;
   listPadding: number;
   rowHeight: number;
@@ -191,7 +193,9 @@ export function projectPickerSubpanelGeometry(input: {
   const fallbackVisibleRows = projectPickerSubpanelFallbackVisibleRows(input.projectCount, input.visibleRows);
   const fallbackListHeight = input.listPadding + input.rowHeight * fallbackVisibleRows;
   const listHeight = input.listHeight ?? fallbackListHeight;
-  const naturalHeight = Math.ceil(listHeight + input.footerHeight);
+  const naturalHeight = Math.ceil(
+    boundedProjectPickerNumber(input.panelHeight ?? null) ?? listHeight + input.footerHeight,
+  );
   const rowCapHeight = input.visibleRows === null
     ? null
     : input.listPadding + input.rowHeight * input.visibleRows + input.footerHeight;

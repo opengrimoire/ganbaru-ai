@@ -61,7 +61,7 @@
   const panelGap = 4;
   const panelListPadding = 8;
   const panelRowHeight = 32;
-  const panelChromeHeight = 84;
+  const panelFooterHeight = 44;
   const zIndexClass = "z-81";
 
   let projectSearch = $state("");
@@ -120,7 +120,8 @@
       panelRect: activeProjectPanelElement.getBoundingClientRect(),
       bounds: currentBounds(),
       gap: panelGap,
-      footerHeight: panelChromeHeight,
+      footerHeight: panelFooterHeight,
+      panelHeight: channelPanelElement?.getBoundingClientRect().height || undefined,
       projectCount: Math.max(1, activeProjectChannels.length),
       visibleRows: null,
       listPadding: panelListPadding,
@@ -254,6 +255,7 @@
     bind:rootElement={channelPanelElement}
     channels={activeProjectChannels}
     selectedChannelId={chat.selectedChannelId}
+    showSearch={false}
     frameStyle={channelPanelStyle}
     className="fixed"
     {zIndexClass}

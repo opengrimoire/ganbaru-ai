@@ -17,6 +17,8 @@ The sidebar exposes project channels, personal sections, and search. Custom sect
 
 Archive hides a conversation from normal navigation without destroying its messages, links, drafts, or review history. Restoring returns it to the appropriate project. Permanent deletion is explicit and includes a cleanup plan for owned execution resources.
 
+The top-bar group, project, and channel panels put search in the panel opened directly from the breadcrumb. Cascading project and channel panels omit search. Opening the channel segment directly includes search across that project's channels. Panel height follows the rendered rows and controls, with scrolling when the available height requires it, using the same sizing convention as Notes.
+
 Search uses bounded, paginated reads and includes active and archived conversations according to the selected filter. Opening a result restores the relevant conversation and position without loading its complete history.
 
 ## Messages and replies

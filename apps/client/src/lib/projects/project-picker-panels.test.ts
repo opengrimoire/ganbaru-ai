@@ -172,6 +172,30 @@ describe("project picker panel helpers", () => {
     });
   });
 
+  it.each([
+    { panelHeight: 97.5, height: 98, top: 302 },
+    { panelHeight: 800, height: 400, top: 0 },
+  ])("fits a rendered submenu of height $panelHeight within the viewport", ({ panelHeight, height, top }) => {
+    const geometry = projectPickerSubpanelGeometry({
+      anchorRect: rect({ left: 100, right: 140, top: 310, bottom: 340, width: 40, height: 30 }),
+      panelRect: rect({ left: 20, right: 220, top: 20, bottom: 380, width: 200, height: 360 }),
+      bounds: { left: 0, right: 500, top: 0, bottom: 400 },
+      gap: 4,
+      footerHeight: 84,
+      projectCount: 3,
+      visibleRows: null,
+      listPadding: 8,
+      rowHeight: 32,
+      panelHeight,
+    });
+
+    expect(geometry.panel.height).toBe(height);
+    expect(geometry.panel.top).toBe(top);
+    expect(geometry.panel.top + geometry.panel.height).toBe(400);
+    expect(geometry.bridge.top).toBe(top);
+    expect(geometry.bridge.height).toBe(height);
+  });
+
   it("formats panel and bridge frames for inline styles", () => {
     expect(projectPickerPanelFrameStyle({
       left: 10.4,

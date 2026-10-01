@@ -60,6 +60,7 @@
     onLayoutChange = undefined,
     onItemCountChange = undefined,
     onPointerLeave = undefined,
+    showSearch = true,
     mobileLayout = false,
     title = undefined,
     initialMobileAncestors = [],
@@ -76,6 +77,7 @@
     onLayoutChange?: () => void;
     onItemCountChange?: (count: number) => void;
     onPointerLeave?: (event: PointerEvent) => void;
+    showSearch?: boolean;
     mobileLayout?: boolean;
     title?: string;
     initialMobileAncestors?: NotesMobileHierarchyLevel[];
@@ -122,7 +124,7 @@
 
   const projectPages = $derived.by(() => notesPagesForProject(notes.allPages, projectId));
   const projectFolders = $derived.by(() => notesFoldersForProject(notes.folders, projectId));
-  const normalizedSearch = $derived(search.trim().toLocaleLowerCase());
+  const normalizedSearch = $derived(showSearch ? search.trim().toLocaleLowerCase() : "");
   const allItems = $derived(notesHierarchyPickerChildren(
     projectPages,
     projectFolders,
@@ -178,7 +180,8 @@
       panelRect: rootElement.getBoundingClientRect(),
       bounds: currentBounds(),
       gap: panelGap,
-      footerHeight: notesHierarchyPanelChromeHeight(childParent),
+      footerHeight: notesHierarchyPanelChromeHeight(childParent, false),
+      panelHeight: childPanelElement?.getBoundingClientRect().height || undefined,
       projectCount: Math.max(1, childItemCount),
       visibleRows: null,
       listPadding: panelListPadding,
@@ -400,6 +403,13 @@
       updateChildGeometry();
     });
   });
+
+  $effect(() => {
+    if (mobileLayout || !rootElement || !onLayoutChange) return;
+    const observer = new ResizeObserver(() => onLayoutChange?.());
+    observer.observe(rootElement);
+    return () => observer.disconnect();
+  });
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -411,10 +421,11 @@
     className,
     zIndexClass,
   )}
-  style={frameStyle}
+  style={mobileLayout ? frameStyle : `${frameStyle}; height: auto`}
   onpointerleave={handleBoundaryLeave}
 >
-  <div class={cn("shrink-0", mobileLayout ? "border-b border-border/70 p-2" : "px-1.5 pb-0.5 pt-1.5")}>
+  {#if mobileLayout || showSearch}
+  <div class={cn("shrink-0", mobileLayout ? "border-b border-border/70 p-2" : "px-1.5 pt-1.5")}>
     {#if mobileLayout}
       <div class="flex min-h-14 items-center gap-1">
         {#if onBack || mobileAncestors.length > 0}
@@ -441,6 +452,7 @@
         {/if}
       </div>
     {/if}
+    {#if showSearch}
     <div class={cn(
       "flex items-center gap-1.5 border border-border/70 bg-muted/20",
       mobileLayout ? "min-h-12 rounded-xl px-3" : "min-h-8 rounded-md pl-2 pr-1",
@@ -466,9 +478,11 @@
         </button>
       {/if}
     </div>
+    {/if}
   </div>
-  <div class="relative min-h-0 flex-1">
-    <div bind:this={scrollElement} class={cn("hide-scrollbar h-full min-h-0 overflow-y-auto", mobileLayout ? "overscroll-contain px-2 py-2" : "p-1")}>
+  {/if}
+  <div class="relative flex min-h-0 flex-auto flex-col">
+    <div bind:this={scrollElement} class={cn("hide-scrollbar min-h-0 flex-auto overflow-y-auto", mobileLayout ? "overscroll-contain px-2 py-2" : "p-1")}>
       {#if navigationError || viewError}
         <div class="px-3 py-2 text-[0.8rem] text-destructive" role="alert">
           {navigationError ?? viewError}
@@ -664,6 +678,7 @@
     bind:rootElement={childPanelElement}
     {projectId}
     parent={childParent}
+    showSearch={false}
     frameStyle={childPanelStyle}
     {zIndexClass}
     {onPageSelected}

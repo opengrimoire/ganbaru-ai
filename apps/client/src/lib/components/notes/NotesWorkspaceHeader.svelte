@@ -17,10 +17,6 @@
   import { formatShortcut } from "$lib/keyboard-shortcuts";
   import { NOTES_PAGE_CHROME_EMOJI_SCALE } from "$lib/notes/page-icon";
   import {
-    notesHierarchyPickerChildren,
-    notesHierarchyPanelChromeHeight,
-    NOTES_HIERARCHY_PANEL_ROW_HEIGHT,
-    NOTES_HIERARCHY_PANEL_LIST_PADDING,
     notesHierarchyNodeParent,
     notesHierarchyPath,
     type NotesHierarchyNode,
@@ -107,7 +103,6 @@
     title: string;
   }>>([]);
   let notesNavigatorSourceKey = $state("root");
-  let notesNavigatorMeasuredItemCount = $state<number | null>(null);
   let notesHeaderElement = $state<HTMLDivElement | null>(null);
   let notesIdentityElement = $state<HTMLDivElement | null>(null);
   let navigatorAnchorElement = $state<HTMLButtonElement | null>(null);
@@ -165,19 +160,6 @@
   const showSelectedPagePath = $derived(
     (databaseSelected || mobileLayout || explorerCollapsed) && selectedPagePath.length > 0,
   );
-  const notesNavigatorItemCount = $derived(notesNavigatorMeasuredItemCount ?? notesHierarchyPickerChildren(
-    selectedProjectPages,
-    selectedProjectFolders,
-    notes.navigationDatabases,
-    notesNavigatorParent,
-    t("notes.untitled"),
-    notes.sidebarPageIdsWithChildren,
-  ).length);
-  const notesNavigatorPanelHeight = $derived(Math.min(
-    navigatorPanelMaxHeight,
-    notesHierarchyPanelChromeHeight(notesNavigatorParent) + NOTES_HIERARCHY_PANEL_LIST_PADDING
-      + Math.max(1, notesNavigatorItemCount) * NOTES_HIERARCHY_PANEL_ROW_HEIGHT,
-  ));
 
   function toolbarIconButtonClass(active = false, open = false, primary = false): string {
     return cn(
@@ -268,7 +250,6 @@
     node: NotesHierarchyNode,
     anchor: EventTarget | null,
   ): void {
-    notesNavigatorMeasuredItemCount = null;
     notesNavigatorParent = notesHierarchyNodeParent(node);
     const nodeIndex = selectedPagePath.findIndex((candidate) => candidate.key === node.key);
     const precedingNodes = nodeIndex < 0 ? [] : selectedPagePath.slice(0, nodeIndex);
@@ -302,7 +283,6 @@
       navigatorOpen = false;
       return;
     }
-    notesNavigatorMeasuredItemCount = null;
     notesNavigatorParent = { kind: "database", id };
     notesNavigatorTitle = selectedDatabaseTitle;
     notesNavigatorAncestors = [
@@ -692,7 +672,6 @@
                 mobileLayout
                 title={notesNavigatorTitle || selectedProject?.name}
                 initialMobileAncestors={notesNavigatorAncestors}
-                onItemCountChange={(count) => { notesNavigatorMeasuredItemCount = count; }}
                 onBack={() => { navigatorMode = "projects"; }}
                 onClose={() => { navigatorOpen = false; }}
                 onPageSelected={() => { navigatorOpen = false; }}
@@ -728,10 +707,9 @@
             <NotesHierarchyPickerPanel
               projectId={selectedProjectId}
               parent={notesNavigatorParent}
-              frameStyle={`width: 100%; height: ${notesNavigatorPanelHeight}px; max-height: ${notesNavigatorPanelHeight}px;`}
+              frameStyle={`width: 100%; max-height: ${navigatorPanelMaxHeight}px;`}
               className="relative"
               zIndexClass=""
-              onItemCountChange={(count) => { notesNavigatorMeasuredItemCount = count; }}
               onPageSelected={() => {
                 navigatorOpen = false;
               }}

@@ -323,7 +323,8 @@
       panelRect,
       bounds,
       gap: subpanelGap,
-      footerHeight: 84,
+      footerHeight: subpanelFallbackFooterHeight,
+      panelHeight: noteSubpanelElement?.getBoundingClientRect().height || undefined,
       projectCount: Math.max(1, activeProjectRootItems.length),
       visibleRows: null,
       listPadding: subpanelListPadding,
@@ -1008,6 +1009,7 @@
     bind:rootElement={noteSubpanelElement}
     projectId={activeProjectId}
     parent={{ kind: "root" }}
+    showSearch={false}
     frameStyle={noteSubpanelStyle}
     className="fixed"
     {zIndexClass}

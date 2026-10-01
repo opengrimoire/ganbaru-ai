@@ -22,6 +22,8 @@ Open the group/project/note selector and choose a note in another project and an
 
 Hover a note containing only a database, a note with sub-pages and databases, and a note with a database inside a collapsed toggle. Confirm their hierarchy branches list the appropriate databases. Hover a database row and the database breadcrumb to reveal saved views; selecting one must open or update that database with the chosen view without adding a view breadcrumb. A linked shell must use its own view names and configuration. Database view panels and the database breadcrumb must have no creation button. Repeat the drilldown on touch layouts, and check a failed view read can be retried without loading database rows for the picker.
 
+Open each top-bar level directly and confirm only its main panel has search. Cascade through group, project, folder, note, database, and views; subsequent panels must omit search. Repeat the group, project, and channel hierarchy in Chat. Check equal padding around short lists, including views without creation actions, empty and filtered states, larger font settings, and panels near the bottom of the window. Tall panels must scroll within the available height while keeping their controls visible.
+
 ## Rich-text acceptance
 
 Using a scratch page with other pages and relevant project objects available, verify:
