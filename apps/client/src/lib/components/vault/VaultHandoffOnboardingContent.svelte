@@ -8,6 +8,7 @@
     markIndependentVaultUsed,
   } from "$lib/vault/handoff-onboarding";
   import VaultHandoffPanel from "./VaultHandoffPanel.svelte";
+  import { onboardingPrimaryAction } from "./onboarding-primary-action";
 
   let {
     platform,
@@ -120,6 +121,7 @@
     <div class="flex flex-col gap-2">
       {#if readyToContinue}
         <button
+          use:onboardingPrimaryAction
           type="button"
           class="min-h-11 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
           onclick={() => void leave(true)}
@@ -129,6 +131,7 @@
       {/if}
       {#if status?.linked !== true}
         <button
+          use:onboardingPrimaryAction
           type="button"
           class="min-h-11 self-center rounded-md px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
           onclick={() => void leave(false)}

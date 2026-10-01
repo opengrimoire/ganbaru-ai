@@ -29,6 +29,7 @@
   } from "$lib/vault/state";
   import VaultSetupContent from "./VaultSetupContent.svelte";
   import VaultWelcomeContent from "./VaultWelcomeContent.svelte";
+  import { onboardingPrimaryAction } from "./onboarding-primary-action";
 
   let {
     initialError = null,
@@ -156,6 +157,7 @@
 {#snippet setupActions()}
   <div class="grid gap-2">
     <button
+      use:onboardingPrimaryAction
       type="button"
       onclick={() => void chooseDataFolder("default")}
       disabled={busy !== null}
