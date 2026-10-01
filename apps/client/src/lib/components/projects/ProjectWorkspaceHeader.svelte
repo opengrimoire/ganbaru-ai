@@ -517,7 +517,7 @@
     <div class="flex-1"></div>
     <nav class="flex shrink-0 items-center gap-0.5" aria-label={t("projects.toolbar.views")}>
       {#each PROJECT_VIEW_IDS as view}
-        <CollectionViewButton label={viewLabel(view)} title={viewShortcutTitle(view)} active={projects.activeView === view} onclick={() => { projects.activeView = view; }} />
+        <CollectionViewButton class="text-xs" label={viewLabel(view)} title={viewShortcutTitle(view)} active={projects.activeView === view} onclick={() => { projects.activeView = view; }} />
       {/each}
     </nav>
     <div class="flex shrink-0 items-center gap-1">
