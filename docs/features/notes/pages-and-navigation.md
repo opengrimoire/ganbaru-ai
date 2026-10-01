@@ -24,6 +24,8 @@ While a page loads, a lightweight skeleton follows the editor's content width an
 
 Folders organize workspace-parented pages inside a project. They are navigation containers, not page blocks and not Markdown directories. Moving a page into a folder changes local placement without changing the page's canonical content.
 
+Page and folder action menus use a light shadow, compact text and icons, and contiguous rows with highlights inset from both panel edges. Pointer targets stay compact, while coarse pointers receive larger targets. This treatment matches the [shared collection panels](../collections.md).
+
 Folders can nest within practical bounds. Moving a folder or page rejects self-parenting, descendant cycles, inactive destinations, and destinations outside the effective project scope.
 Dragging onto a folder highlights its subtree. Dragging onto the project root highlights the explorer area without adding a separate drop row.
 

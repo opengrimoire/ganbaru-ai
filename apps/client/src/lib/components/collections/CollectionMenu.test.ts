@@ -14,6 +14,7 @@ afterEach(async () => {
   nested = undefined;
   document.body.replaceChildren();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 /** Create a clipped collection inside a page preview's floating boundary. */
@@ -37,6 +38,81 @@ async function open(row: HTMLElement): Promise<HTMLButtonElement> {
 }
 
 describe("Shared collection menus", () => {
+  it.each([
+    { borderHeight: 2, top: "84px" },
+    { borderHeight: 2.5, top: "83px" },
+  ])("positions fractional content including $borderHeight px of borders and constrains longer menus", async ({ borderHeight, top }) => {
+    vi.stubGlobal("innerHeight", 230);
+    let contentHeight = 80.25;
+    const borderStyle = document.createElement("div").style;
+    borderStyle.borderTopWidth = `${borderHeight / 2}px`;
+    borderStyle.borderBottomWidth = `${borderHeight / 2}px`;
+    const getComputedStyle = window.getComputedStyle.bind(window);
+    vi.spyOn(window, "getComputedStyle").mockImplementation((element) => element.classList.contains("collection-panel")
+      ? borderStyle : getComputedStyle(element));
+    const { dialog, row } = host();
+    const children = createRawSnippet(() => ({ render: () => '<div><button type="button">Duplicate</button></div>' }));
+    component = mount(CollectionMenu, { target: row, props: { label: "Actions", kind: "actions", children } });
+    const trigger = row.querySelector<HTMLButtonElement>("button")!;
+    vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue(new DOMRect(40, 170, 32, 28));
+    await open(row);
+    const panel = dialog.querySelector<HTMLElement>('[role="dialog"]')!;
+    vi.spyOn(panel.querySelector<HTMLElement>("[data-collection-menu-content]")!, "getBoundingClientRect")
+      .mockImplementation(() => new DOMRect(0, 0, 240, contentHeight));
+    window.dispatchEvent(new Event("resize"));
+    expect(panel.style.maxHeight).toBe("158px");
+    expect(panel.style.top).toBe(top);
+
+    contentHeight = 1_000;
+    window.dispatchEvent(new Event("resize"));
+    expect(panel.style.maxHeight).toBe("158px");
+    expect(panel.style.top).toBe("8px");
+    expect(panel.querySelector("button")?.textContent).toBe("Duplicate");
+  });
+
+  it("measures at the final width and keeps repeated opens and resize notifications stable", async () => {
+    vi.stubGlobal("innerHeight", 230);
+    const callbacks: (() => void)[] = [];
+    vi.stubGlobal("ResizeObserver", class implements ResizeObserver {
+      constructor(callback: ResizeObserverCallback) { callbacks.push(() => callback([], this)); }
+      observe = vi.fn<(target: Element) => void>();
+      unobserve = vi.fn<(target: Element) => void>();
+      disconnect = vi.fn<() => void>();
+    });
+    const measuredWidths: string[] = [];
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.hasAttribute("data-collection-menu-content")) {
+        const width = this.closest<HTMLElement>('[role="dialog"]')?.style.width ?? "";
+        measuredWidths.push(width);
+        return new DOMRect(0, 0, 240, width === "240px" ? 80.25 : 400);
+      }
+      return new DOMRect(40, 170, 32, 28);
+    });
+    vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(400);
+    const { dialog, row } = host();
+    const children = createRawSnippet(() => ({ render: () => '<div><button type="button">Calculate</button></div>' }));
+    component = mount(CollectionMenu, { target: row, props: { label: "Name", kind: "property", children } });
+    const trigger = await open(row);
+    const first = dialog.querySelector<HTMLElement>('[role="dialog"]')!;
+    const initialStyle = first.style.cssText;
+    const mutations = new MutationObserver(() => {});
+    mutations.observe(first, { attributes: true, attributeFilter: ["style"] });
+    for (let index = 0; index < 5; index += 1) callbacks[0]?.();
+    expect(first.style.top).toBe("86px");
+    expect(first.style.maxHeight).toBe("158px");
+    expect(first.style.cssText).toBe(initialStyle);
+    expect(mutations.takeRecords()).toHaveLength(0);
+    mutations.disconnect();
+
+    trigger.click();
+    await tick();
+    await open(row);
+    const second = dialog.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(second.style.cssText).toBe(initialStyle);
+    expect(measuredWidths.length).toBeGreaterThan(1);
+    expect(measuredWidths.every((width) => width === "240px")).toBe(true);
+  });
+
   it("escapes clipped content, focuses the first field and dismisses without stealing outside focus", async () => {
     const { dialog, row } = host();
     const children = createRawSnippet(() => ({ render: () => '<div><input aria-label="Filter value" /></div>' }));

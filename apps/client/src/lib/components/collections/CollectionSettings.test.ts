@@ -10,6 +10,7 @@ afterEach(async () => {
   component = undefined;
   document.body.replaceChildren();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 /** Mount settings inside a clipped page preview and wait for initial focus. */
@@ -40,6 +41,64 @@ async function key(key: string): Promise<void> {
 }
 
 describe("Collection settings navigation", () => {
+  it("includes fractional header height and borders when fitting content and retains scrolling in small viewports", async () => {
+    vi.stubGlobal("innerHeight", 230);
+    let contentHeight = 80.25;
+    const borderStyle = document.createElement("div").style;
+    borderStyle.borderTopWidth = "1.25px";
+    borderStyle.borderBottomWidth = "1.25px";
+    const getComputedStyle = window.getComputedStyle.bind(window);
+    vi.spyOn(window, "getComputedStyle").mockImplementation((element) => element.classList.contains("collection-panel")
+      ? borderStyle : getComputedStyle(element));
+    const { panel, anchor } = await openSettings();
+    vi.spyOn(anchor, "getBoundingClientRect").mockReturnValue(new DOMRect(800, 170, 32, 28));
+    vi.spyOn(panel.querySelector<HTMLElement>("[data-collection-settings-header]")!, "getBoundingClientRect")
+      .mockReturnValue(new DOMRect(0, 0, 320, 40.25));
+    const content = panel.querySelector<HTMLElement>("[data-collection-settings-content]")!;
+    vi.spyOn(content, "getBoundingClientRect").mockImplementation(() => new DOMRect(0, 0, 320, contentHeight));
+    window.dispatchEvent(new Event("resize"));
+    expect(panel.style.maxHeight).toBe("158px");
+    expect(panel.style.top).toBe("43px");
+
+    contentHeight = 1_000;
+    vi.spyOn(anchor, "getBoundingClientRect").mockReturnValue(new DOMRect(800, 32, 32, 32));
+    vi.stubGlobal("innerHeight", 160);
+    window.dispatchEvent(new Event("resize"));
+    expect(panel.style.maxHeight).toBe("84px");
+    expect(panel.style.top).toBe("68px");
+    expect(panel.querySelector('[aria-label="View name"]')).not.toBeNull();
+  });
+
+  it("shrinks to a shorter settings page without reusing the previous scroll viewport height", async () => {
+    vi.stubGlobal("innerHeight", 600);
+    const { panel, anchor } = await openSettings();
+    vi.spyOn(anchor, "getBoundingClientRect").mockReturnValue(new DOMRect(800, 550, 32, 32));
+    vi.spyOn(panel.querySelector<HTMLElement>("[data-collection-settings-header]")!, "getBoundingClientRect")
+      .mockReturnValue(new DOMRect(0, 0, 320, 40.25));
+    const content = panel.querySelector<HTMLElement>("[data-collection-settings-content]")!;
+    vi.spyOn(content, "scrollHeight", "get").mockReturnValue(1_000);
+    vi.spyOn(content, "getBoundingClientRect").mockImplementation(() => {
+      const page = content.querySelector<HTMLElement>("[data-collection-settings-page]:not([hidden])");
+      return new DOMRect(0, 0, 320, page?.querySelector('[aria-label="Layout value"]') ? 80.25 : 1_000);
+    });
+    window.dispatchEvent(new Event("resize"));
+    expect(panel.style.top).toBe("66px");
+    expect(panel.style.maxHeight).toBe("480px");
+    expect(content.parentElement?.classList.contains("overflow-y-auto")).toBe(true);
+    expect(content.classList.contains("overflow-y-auto")).toBe(false);
+
+    panel.querySelector<HTMLButtonElement>('[aria-label="Layout"]')!.click();
+    await tick();
+    await tick();
+    expect(panel.style.top).toBe("426px");
+    expect(panel.style.maxHeight).toBe("480px");
+    const shortStyle = panel.style.cssText;
+    for (let index = 0; index < 5; index += 1) window.dispatchEvent(new Event("resize"));
+    expect(panel.style.cssText).toBe(shortStyle);
+    await key("Escape");
+    expect(panel.style.top).toBe("66px");
+  });
+
   it("anchors a nonmodal panel within its preview without a full-screen backdrop", async () => {
     const { preview, clipped, anchor, panel } = await openSettings();
     expect(panel.parentElement).toBe(preview);

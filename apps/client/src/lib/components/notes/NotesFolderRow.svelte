@@ -356,7 +356,7 @@
 
   {#if menuOpen}
     <div
-      class="notes-folder-action-menu fixed z-50 min-w-40 rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-lg"
+      class="notes-folder-action-menu fixed z-50 min-w-40 rounded-md border border-border bg-popover p-1.5 text-popover-foreground shadow-sm"
       style={menuStyle}
       role="menu"
       tabindex="-1"
@@ -492,7 +492,27 @@
   }
 
   .notes-folder-action-menu {
+    overflow-x: hidden;
     overflow-y: auto;
+  }
+
+  .notes-folder-action-menu > button {
+    min-height: 1.75rem;
+    padding: 0.25rem 0.5rem;
+    gap: 0.375rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+  }
+
+  .notes-folder-action-menu > button :global(svg) {
+    width: 0.875rem;
+    height: 0.875rem;
+    flex-shrink: 0;
+  }
+
+  @media (pointer: coarse) {
+    .notes-folder-action-menu > button { min-height: 2.75rem; }
   }
 
   .notes-folder-move-menu {

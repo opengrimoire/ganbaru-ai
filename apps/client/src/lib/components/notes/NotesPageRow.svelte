@@ -573,7 +573,7 @@
 
   {#if menuOpen}
     <div
-      class="notes-page-action-menu fixed z-50 min-w-36 rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-lg"
+      class="notes-page-action-menu fixed z-50 min-w-36 rounded-md border border-border bg-popover p-1.5 text-popover-foreground shadow-sm"
       style={menuStyle}
       role="menu"
       tabindex="-1"
@@ -811,7 +811,27 @@
   }
 
   .notes-page-action-menu {
+    overflow-x: hidden;
     overflow-y: auto;
+  }
+
+  .notes-page-action-menu > button {
+    min-height: 1.75rem;
+    padding: 0.25rem 0.5rem;
+    gap: 0.375rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+  }
+
+  .notes-page-action-menu > button :global(svg) {
+    width: 0.875rem;
+    height: 0.875rem;
+    flex-shrink: 0;
+  }
+
+  @media (pointer: coarse) {
+    .notes-page-action-menu > button { min-height: 2.75rem; }
   }
 
   .notes-page-move-menu {

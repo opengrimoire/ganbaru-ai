@@ -1254,7 +1254,7 @@
                   <CollectionMenu label={column.name} kind="property" fullWidth showHeader={false} dismissOnAction
                     triggerClass="h-9 justify-start rounded-sm px-2 text-[0.8rem] font-normal" disabled={mutating || editingLocked}>
                     {#snippet leading()}{@const Icon = propertyIcons[column.type]}<Icon class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />{/snippet}
-                    <div class="grid gap-0.5 font-normal">
+                    <div class="grid gap-0 font-normal">
                       <button type="button" class="flex min-h-8 items-center gap-2 rounded-sm px-2 text-left hover:bg-accent" disabled={mutating} onclick={() => onEditProperties(column.id)}>
                         <SlidersHorizontal class="size-3.5 shrink-0" aria-hidden="true" />{t("notes.databasePropertyEdit")}
                       </button>
@@ -1262,7 +1262,7 @@
                         {#each propertyInsertionSides(column) as side}
                           <CollectionMenu label={t(side === "left" ? "notes.databaseTablePresentation.insertLeft" : "notes.databaseTablePresentation.insertRight")} kind="new" fullWidth showHeader={false} dismissOnAction>
                             <input class="mb-1.5 h-8 w-full rounded border border-border bg-background px-2 text-[length:inherit] outline-none focus:border-ring" aria-label={t("notes.databaseSchemaName")} placeholder={t("notes.databasePropertyNamePlaceholder")} bind:value={propertyName} onkeydown={(event) => event.stopPropagation()} />
-                            <div class="grid max-h-64 gap-0.5 overflow-y-auto">
+                            <div class="grid gap-0">
                               {#each propertyTypes as type}
                                 {@const Icon = propertyIcons[type]}
                                 <button type="button" class="flex min-h-8 items-center gap-2 rounded px-2 text-left hover:bg-accent" disabled={mutating} onclick={() => { void performPropertyAction({ type: "insert", propertyId: column.id, side, propertyType: type, name: propertyName }); }}><Icon class="size-3.5 shrink-0" />{propertyTypeLabel(type)}</button>
@@ -1329,7 +1329,7 @@
                 <CollectionMenu label={t("notes.databaseSchemaAddProperty")} kind="new" showHeader={false} dismissOnAction disabled={mutating || editingLocked}>
                   <input class="mb-1.5 h-8 w-full rounded border border-border bg-background px-2 text-[length:inherit] outline-none focus:border-ring" aria-label={t("notes.databaseSchemaName")} placeholder={t("notes.databasePropertyNamePlaceholder")} bind:value={propertyName} onkeydown={(event) => event.stopPropagation()} />
                   <input class="mb-1.5 h-8 w-full rounded border border-border bg-background px-2 text-[length:inherit] outline-none focus:border-ring" aria-label={t("notes.databasePropertySearchType")} placeholder={t("notes.databasePropertySearchType")} bind:value={propertySearch} onkeydown={(event) => event.stopPropagation()} />
-                  <div class="grid max-h-64 gap-0.5 overflow-y-auto">
+                  <div class="grid gap-0">
                     {#each propertyTypes as type}
                       {@const Icon = propertyIcons[type]}
                       <button type="button" class="flex min-h-8 items-center gap-2 rounded px-2 text-left text-foreground hover:bg-accent" onclick={() => { void addNewProperty(type); }}><Icon class="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />{propertyTypeLabel(type)}</button>
@@ -1356,7 +1356,7 @@
               <CollectionRow template={gridTemplate} role="row" data-database-row-id={row.id} data-database-row-depth={hierarchy?.depth ?? 0} style={conditionalColorStyle(row, null)}>
                 <div role="cell" class="flex justify-center">
                   <CollectionMenu iconOnly kind="actions" label={t("notes.databaseTableRowActions")}>
-                    <div class="grid gap-1">
+                    <div class="grid gap-0">
                       <button
                         type="button"
                         class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[length:inherit] text-muted-foreground hover:bg-accent hover:text-foreground"

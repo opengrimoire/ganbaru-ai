@@ -488,7 +488,7 @@
                     <CollectionCell data-collection-secondary><NotesDatabasePropertyValue {row} {column} /></CollectionCell>
                   {/each}
                   <CollectionMenu iconOnly kind="actions" label={t("notes.databaseTableRowActions")}>
-                    <div class="grid gap-1">
+                    <div class="grid gap-0">
                       <button
                         type="button"
                         class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[length:inherit] text-muted-foreground hover:bg-accent hover:text-foreground"

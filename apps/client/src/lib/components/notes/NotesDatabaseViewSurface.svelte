@@ -487,15 +487,17 @@
       {#if sourceError}<p class="text-destructive" role="alert">{sourceError}</p>{/if}
       {#if sourcesLoading}<p class="text-muted-foreground" role="status">{t("notes.databaseSourcesLoading")}</p>{/if}
       <p class="text-muted-foreground">{t("notes.databaseSourcesAttached")}</p>
-      {#each attachedSources as source (source.id)}
-        <button type="button" class="flex min-h-8 min-w-0 items-center gap-2 rounded-sm px-2 text-left hover:bg-accent" disabled={selectionDisabled}
-          aria-pressed={source.id === activeSourceId} onclick={() => {
-            const view = supportedViews.find((candidate) => candidate.data_source_id === source.id && candidate.type === activeView)
-              ?? supportedViews.find((candidate) => candidate.data_source_id === source.id);
-            if (view) selectViewFromToolbar(view.id);
-          }}><Database class="size-3.5 shrink-0 text-muted-foreground" /><span class="min-w-0 flex-1 truncate">{source.title || t("notes.databaseSourcesUnnamed")}</span>
-          <span class="shrink-0 text-muted-foreground">{t(source.parent.database_id === databaseId ? "notes.databaseSourceOwned" : "notes.databaseSourceLinked")}</span></button>
-      {/each}
+      <div class="grid gap-0">
+        {#each attachedSources as source (source.id)}
+          <button type="button" class="flex min-h-8 min-w-0 items-center gap-2 rounded-sm px-2 text-left hover:bg-accent" disabled={selectionDisabled}
+            aria-pressed={source.id === activeSourceId} onclick={() => {
+              const view = supportedViews.find((candidate) => candidate.data_source_id === source.id && candidate.type === activeView)
+                ?? supportedViews.find((candidate) => candidate.data_source_id === source.id);
+              if (view) selectViewFromToolbar(view.id);
+            }}><Database class="size-3.5 shrink-0 text-muted-foreground" /><span class="min-w-0 flex-1 truncate">{source.title || t("notes.databaseSourcesUnnamed")}</span>
+            <span class="shrink-0 text-muted-foreground">{t(source.parent.database_id === databaseId ? "notes.databaseSourceOwned" : "notes.databaseSourceLinked")}</span></button>
+        {/each}
+      </div>
       <div class="grid gap-1.5 border-t border-border pt-2">
         <label class="grid gap-1 text-muted-foreground">{t("notes.databaseSourceName")}
           <input class="h-8 min-w-0 rounded-sm border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring" aria-label={t("notes.databaseSourceName")} bind:value={sourceName} disabled={selectionDisabled || editingLocked} />
@@ -503,7 +505,7 @@
         <button type="button" class="min-h-8 rounded-sm px-2 text-left hover:bg-accent" disabled={selectionDisabled || editingLocked || !sourceName.trim()}
           onclick={() => { void manageSource(); }}>{t("notes.databaseSourceCreate")}</button>
       </div>
-      <div class="grid gap-1 border-t border-border pt-2">
+      <div class="grid gap-0 border-t border-border pt-2">
         <p class="text-muted-foreground">{t("notes.databaseSourceAttach")}</p>
         {#each otherSources as source (source.id)}
           <button type="button" class="min-h-8 truncate rounded-sm px-2 text-left hover:bg-accent" disabled={selectionDisabled || editingLocked}
@@ -533,7 +535,7 @@
     {#if overflowCount > 0}
       <CollectionMenu label={t("notes.databaseMoreViews", overflowCount)} kind="actions" showHeader={false} dismissOnAction disabled={selectionDisabled}>
         <input class="mb-1.5 h-8 w-full rounded border border-border bg-background px-2 text-[length:inherit] outline-none focus:border-ring" aria-label={t("notes.databaseSearchViews")} placeholder={t("notes.databaseSearchViews")} bind:value={viewSearch} />
-        <div class="grid gap-0.5">
+        <div class="grid gap-0">
           {#each searchableViews as view (view.id)}
             {@const Icon = viewIcons[view.type as NotesDatabaseViewKind]}
             <button type="button" class="flex min-h-8 items-center gap-2 rounded px-2 text-left hover:bg-accent" disabled={selectionDisabled} onclick={() => selectViewFromToolbar(view.id)}>
@@ -545,7 +547,7 @@
     {/if}
     <CollectionMenu label={t("notes.databaseAddView")} kind="new" iconOnly showHeader={false} dismissOnAction disabled={selectionDisabled || editingLocked}>
       <p class="mb-2 text-muted-foreground">{t("notes.databaseAddView")}</p>
-      <div class="grid grid-cols-2 gap-1">
+      <div class="grid gap-0">
         {#each NOTES_DATABASE_VIEW_KINDS as kind}
           {@const Icon = viewIcons[kind]}
           <button type="button" class="flex min-h-9 items-center gap-2 rounded px-2 text-left text-foreground hover:bg-accent" disabled={selectionDisabled || editingLocked} onclick={() => { void addView(kind); }}>
@@ -553,7 +555,7 @@
           </button>
         {/each}
       </div>
-      <div class="mt-3 border-t border-border pt-2">
+      <div class="mt-1 border-t border-border pt-1">
         <button type="button" class="flex min-h-9 w-full items-center rounded-md px-2 text-left hover:bg-accent" onclick={onCreateLinkedDatabaseView}>{t("notes.databaseLinkedViewCreate")}</button>
       </div>
     </CollectionMenu>
@@ -562,7 +564,7 @@
         {#if editingName}
           <input bind:this={nameInput} class="h-9 w-full rounded-md border border-border bg-background px-2 outline-none focus:border-ring" aria-label={t("notes.databaseViewName")} bind:value={nameDraft} onkeydown={(event) => { event.stopPropagation(); if (event.key === "Enter") void saveName(); if (event.key === "Escape") { nameDraft = selectedView?.name ?? ""; editingName = false; } }} onblur={() => { if (editingName) void saveName(); }} />
         {:else}
-          <div class="grid gap-0.5">
+          <div class="grid gap-0">
             <button data-collection-menu-keep-open type="button" class="flex min-h-9 items-center gap-2 rounded-md px-2 text-left hover:bg-accent" disabled={editingLocked} onclick={beginRename}><Pencil class="size-4" />{t("notes.databaseViewRename")}</button>
             <button type="button" class="flex min-h-9 items-center gap-2 rounded-md px-2 text-left hover:bg-accent" disabled={editingLocked} onclick={() => { void duplicateView(); }}><Copy class="size-4" />{t("notes.databaseViewDuplicate")}</button>
             <button type="button" class="flex min-h-9 items-center gap-2 rounded-md px-2 text-left text-destructive hover:bg-destructive/10" disabled={editingLocked || supportedViews.length < 2 || (selectedView.type === "table" && supportedViews.filter((view) => view.data_source_id === activeSourceId && view.type === "table").length < 2)} onclick={() => { pendingDeleteView = selectedView; }}><Trash2 class="size-4" />{t("notes.databaseViewDelete")}</button>
@@ -581,7 +583,7 @@
       {#if templates.length === 0}
         <p class="mb-2 text-[0.8rem] text-muted-foreground">{t("notes.databaseTemplatesEmpty")}</p>
       {:else}
-        <div class="grid gap-0.5">
+        <div class="grid gap-0">
           {#each templates as template (template.id)}
             <button type="button" class="min-h-9 rounded-md px-2 text-left hover:bg-accent" disabled={busy} onclick={() => { void createFromTemplate(template.id); }}>{template.name}</button>
           {/each}

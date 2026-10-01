@@ -3,7 +3,7 @@
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import X from "@lucide/svelte/icons/x";
   import { portal } from "$lib/utils/portal";
-  import { anchoredPanelStyle } from "$lib/utils/anchored-panel";
+  import { anchoredPanelContentHeight, anchoredPanelStyle, anchoredPanelWidth } from "$lib/utils/anchored-panel";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import CollectionPanel from "./CollectionPanel.svelte";
   import { setCollectionSettingsNavigation, type CollectionSettingsPage } from "./collection-settings-context";
@@ -72,22 +72,28 @@
     let dismissed = false;
     let restoreFocus = true;
     let lastOwnedFocus: HTMLElement | null = null;
+    let previousStyle = "";
     const place = () => {
       if (disposed) return;
       const rect = owner?.getBoundingClientRect() ?? {
         top: 8, bottom: 8, left: window.innerWidth - preferredWidth - 8, right: window.innerWidth - 8,
       };
-      node.style.cssText = anchoredPanelStyle({
+      const input = {
         triggerRect: rect,
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight,
         preferredWidth,
-        preferredMaxHeight: Math.min(
-          (content?.scrollHeight ?? node.scrollHeight) + (header?.offsetHeight ?? 0),
-          window.innerHeight * VIEWPORT_HEIGHT_FRACTION,
-        ),
-        horizontalAlign: "end",
-      });
+        preferredMaxHeight: window.innerHeight * VIEWPORT_HEIGHT_FRACTION,
+        horizontalAlign: "end" as const,
+      };
+      const width = `${Math.round(anchoredPanelWidth(input))}px`;
+      if (node.style.width !== width) node.style.width = width;
+      const measured = [header, content].filter((element): element is HTMLElement => element !== null);
+      const style = anchoredPanelStyle({ ...input, contentHeight: anchoredPanelContentHeight(node, measured) });
+      if (style !== previousStyle) {
+        node.style.cssText = style;
+        previousStyle = style;
+      }
     };
     const outside = (event: Event) => {
       if (!dismissed && event.target instanceof Node && !node.contains(event.target) && !owner?.contains(event.target)) {
@@ -170,7 +176,7 @@
   }
 </script>
 
-<CollectionPanel bind:element={panel} label={activePage?.label ?? label} class="z-80">
+<CollectionPanel bind:element={panel} label={activePage?.label ?? label} class="fixed z-80">
   <div data-collection-settings-header class="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1.5">
     {#if activePage}
       <button type="button" class="collection-settings-control flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={t("common.back")} onclick={back}><ArrowLeft class="size-3.5" /></button>
@@ -178,20 +184,16 @@
     <h3 class="min-w-0 flex-1 truncate px-1 text-[0.8125rem] font-medium">{activePage?.label ?? label}</h3>
     <button type="button" class="collection-settings-control flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={t("common.close")} onclick={close}><X class="size-3.5" /></button>
   </div>
-  <div data-collection-settings-content class="@container min-h-0 overflow-y-auto p-1.5">
-    <div data-collection-settings-page hidden={pages.length > 0} inert={pages.length > 0}>
-      {@render children()}
-    </div>
-    {#each pages as page, index (page.trigger)}
-      <div data-collection-settings-page hidden={index !== pages.length - 1} inert={index !== pages.length - 1} class="p-1">
-        {@render page.children()}
+  <div class="min-h-0 overflow-x-hidden overflow-y-auto">
+    <div data-collection-settings-content class="@container flow-root h-max p-1.5">
+      <div data-collection-settings-page hidden={pages.length > 0} inert={pages.length > 0}>
+        {@render children()}
       </div>
-    {/each}
+      {#each pages as page, index (page.trigger)}
+        <div data-collection-settings-page hidden={index !== pages.length - 1} inert={index !== pages.length - 1} class="p-1">
+          {@render page.children()}
+        </div>
+      {/each}
+    </div>
   </div>
 </CollectionPanel>
-
-<style>
-  @media (pointer: coarse) {
-    .collection-settings-control { min-height: 2.75rem; min-width: 2.75rem; }
-  }
-</style>
