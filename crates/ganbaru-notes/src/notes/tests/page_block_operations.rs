@@ -591,6 +591,7 @@ fn move_blocks_moves_subtrees_updates_comment_pages_and_rejects_cycles() {
                 parent: block_parent(BLOCK_C),
                 after: None,
                 before: None,
+                include_trashed_sources: None,
             },
         )
         .await;
@@ -606,6 +607,7 @@ fn move_blocks_moves_subtrees_updates_comment_pages_and_rejects_cycles() {
                 parent: page_parent(PAGE_B),
                 after: Some(BLOCK_F.to_string()),
                 before: None,
+                include_trashed_sources: None,
             },
         )
         .await

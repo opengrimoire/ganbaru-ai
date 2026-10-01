@@ -1,6 +1,6 @@
 use super::models::{
-    NoteFolderDto, NoteFolderRow, NotePageSummaryDto, NoteWorkspaceShellDto,
-    NoteWorkspaceShellRequest,
+    NoteFolderDto, NoteFolderRow, NoteNavigationDatabaseDto, NotePageSummaryDto,
+    NoteWorkspaceShellDto, NoteWorkspaceShellRequest,
 };
 use super::validation::{require_uuid, validate_folder_project_id};
 use serde::{Deserialize, Serialize};
@@ -146,6 +146,15 @@ pub async fn load_workspace_shell(
     } else {
         Vec::new()
     };
+    let navigation_databases = if request.include_navigation_index && navigation_pages.is_empty() {
+        Vec::new()
+    } else {
+        fetch_navigation_databases(
+            &mut transaction,
+            (!request.include_navigation_index).then_some(loaded_ids.as_slice()),
+        )
+        .await?
+    };
 
     transaction
         .commit()
@@ -167,6 +176,7 @@ pub async fn load_workspace_shell(
         navigation_pages,
         navigation_folders,
         navigation_page_ids_with_children,
+        navigation_databases,
         page_ids_with_children,
         missing_parent_page_ids,
         trashed_parent_page_ids,
@@ -176,6 +186,42 @@ pub async fn load_workspace_shell(
         next_page_cursor,
         next_folder_cursor,
     ))
+}
+
+/// Read database shell metadata for the navigation index or one bounded page window.
+async fn fetch_navigation_databases(
+    transaction: &mut sqlx::Transaction<'_, Sqlite>,
+    page_ids: Option<&[String]>,
+) -> Result<Vec<NoteNavigationDatabaseDto>, String> {
+    if page_ids.is_some_and(|ids| ids.is_empty()) {
+        return Ok(Vec::new());
+    }
+    let mut query = QueryBuilder::<Sqlite>::new(
+        "SELECT database.id, block.page_id, database.title, source.id AS data_source_id
+         FROM notes_databases AS database
+         JOIN notes_blocks AS block ON block.id = database.id
+         JOIN notes_pages AS page ON page.id = block.page_id
+         JOIN notes_data_sources AS source ON source.id = json_extract(block.payload, '$.data_source_id')
+         WHERE database.in_trash = 0 AND block.in_trash = 0
+           AND block.type = 'child_database' AND page.in_trash = 0 AND page.archived = 0
+           AND source.in_trash = 0",
+    );
+    if let Some(ids) = page_ids {
+        query.push(" AND page.id IN (");
+        let mut separated = query.separated(", ");
+        for id in ids {
+            separated.push_bind(id);
+        }
+        separated.push_unseparated(")");
+    } else {
+        query.push(" AND page.parent_type <> 'data_source_id'");
+    }
+    query.push(" ORDER BY block.page_id, database.title COLLATE NOCASE, database.id");
+    query
+        .build_query_as()
+        .fetch_all(&mut **transaction)
+        .await
+        .map_err(|error| format!("list Notes navigation databases: {error}"))
 }
 
 async fn fetch_navigation_pages(

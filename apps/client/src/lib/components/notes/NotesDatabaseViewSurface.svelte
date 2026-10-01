@@ -87,6 +87,7 @@
   };
   let views = $state<NotesDatabaseView[]>(untrack(() => notesDatabaseSession.read(databaseResource("views", dataSourceId, { databaseId })) ?? []));
   let selectedViewId = $state<string | null>(untrack(() => notesDatabaseSession.recall(databaseId ?? dataSourceId)?.viewId ?? initialViewId));
+  let selectionKey = untrack(() => databaseId ?? dataSourceId);
   let viewError = $state<string | null>(null);
   let busy = $state(false);
   let layoutSaving = $state(false);
@@ -138,14 +139,22 @@
     void reloadViews(selectedViewId ?? initialViewId, false);
   });
 
+  /** Follow live preselection while retaining the mounted view if its cached entry expires. */
   $effect(() => {
-    const id = selectedViewId;
-    if (!id) return;
-    untrack(() => {
-      const key = databaseId ?? dataSourceId;
-      notesDatabaseSession.remember(key, { viewId: id, scrollLeft: notesDatabaseSession.recall(key)?.scrollLeft ?? 0 });
-    });
+    const key = databaseId ?? dataSourceId;
+    const remembered = notesDatabaseSession.recall(key)?.viewId;
+    if (selectionKey !== key) {
+      selectionKey = key;
+      selectedViewId = remembered ?? initialViewId;
+    } else if (remembered && remembered !== selectedViewId) selectedViewId = remembered;
   });
+
+  /** Select a view locally and synchronize other renderers of the same database. */
+  function selectView(viewId: string, closeSettings = true): void {
+    selectedViewId = viewId;
+    notesDatabaseSession.selectView(databaseId ?? dataSourceId, viewId);
+    if (closeSettings) viewSettingsOpen = false;
+  }
 
   $effect(() => {
     activeView;
@@ -182,11 +191,12 @@
       if (request !== metadataRequest) return;
       views = loaded;
       const preferred = selectedViewId !== previousSelection ? selectedViewId : preferredId;
-      selectedViewId = loaded.some((view) => view.id === preferred)
+      const nextViewId = loaded.some((view) => view.id === preferred)
         ? preferred
         : loaded.some((view) => view.id === selectedViewId)
           ? selectedViewId
           : loaded[0]?.id ?? null;
+      if (nextViewId) selectView(nextViewId, false);
       viewError = null;
     } catch (caught) {
       if (request !== metadataRequest) return;
@@ -352,7 +362,7 @@
   function openTemplateSettings(): void {
     const tableView = supportedViews.find((view) => view.type === "table");
     if (!tableView) return;
-    selectedViewId = tableView.id;
+    selectView(tableView.id);
     viewSettingsOpen = true;
   }
 </script>
@@ -361,7 +371,7 @@
   <div class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
     {#each shownViews as view (view.id)}
       {@const Icon = viewIcons[view.type as NotesDatabaseViewKind]}
-      <CollectionViewButton label={view.name} active={activeViewId === view.id} onclick={() => { selectedViewId = view.id; viewSettingsOpen = false; }}>
+      <CollectionViewButton label={view.name} active={activeViewId === view.id} onclick={() => selectView(view.id)}>
         <Icon class="size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
       </CollectionViewButton>
     {/each}
@@ -371,7 +381,7 @@
         <div class="grid gap-0.5">
           {#each searchableViews as view (view.id)}
             {@const Icon = viewIcons[view.type as NotesDatabaseViewKind]}
-            <button type="button" class="flex min-h-9 items-center gap-2 rounded-md px-2 text-left hover:bg-accent" onclick={() => { selectedViewId = view.id; viewSettingsOpen = false; }}>
+            <button type="button" class="flex min-h-9 items-center gap-2 rounded-md px-2 text-left hover:bg-accent" onclick={() => selectView(view.id)}>
               <Icon class="size-4 shrink-0" aria-hidden="true" /><span class="min-w-0 flex-1 truncate">{view.name}</span>
             </button>
           {/each}

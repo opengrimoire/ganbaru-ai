@@ -1,12 +1,17 @@
 import {
+  getNotesDatabaseReference,
   getNotesPageBreadcrumb,
   hydrateNotesBlocks,
   openNotesPage,
 } from "$lib/api/notes";
-import { blockPlainText } from "$lib/notes/block-factory";
+import { blockPlainText, isTextEditableBlock } from "$lib/notes/block-factory";
+import { getLocalization } from "$lib/i18n/translator.svelte";
 import type { NotesBlockLinkTarget, NotesPageLinkTarget } from "$lib/notes/block-link";
+import { parseNotesLinkHash } from "$lib/notes/block-link";
+import { notesDatabaseSession } from "$lib/notes/database-session.svelte";
 import {
   notesIndentationContextIds,
+  blockChildrenAreVisible,
   parentIdForBlock,
   type NotesTreeState,
 } from "$lib/notes/block-tree";
@@ -37,6 +42,7 @@ import {
 } from "$lib/notes/post-mutation";
 import { createNotesSidebarRefreshCoordinator } from "$lib/notes/sidebar-refresh-coordinator";
 import { createNotesBlockActions } from "./notes-store-block-actions";
+import { createNotesDatabaseDeletionController } from "./notes-database-deletion.svelte";
 import { createNotesArchiveController } from "./notes-store-archive.svelte";
 import { createNotesSearchController } from "./notes-store-search.svelte";
 import { createNotesLinksController } from "./notes-store-links.svelte";
@@ -84,6 +90,7 @@ import type {
   NotesColumnBlockItems,
   NotesBlockTreeItem,
   NotesBlockType,
+  NotesChildDatabaseBlock,
   NotesLoadedPage,
   NotesPage,
   NotesPageBreadcrumbItem,
@@ -92,12 +99,21 @@ import type {
   NotesTabBlockItems,
   NotesTableRowBlock,
   NotesWorkspaceShell,
+  NotesNavigationDatabase,
 } from "$lib/notes/types";
 
 type NotesViewMode = "pages" | "archive" | "trash";
 export interface NotesSelectPageOptions {
   openMode?: NotesPageOpenMode;
   focusBlockId?: string | null;
+  /** Open only this database while retaining its owner's editor session. */
+  databaseBlockId?: string;
+}
+
+export interface NotesOpenDatabaseOptions {
+  /** Hierarchy navigation opens this shell; links normally follow its canonical source. */
+  followSource?: boolean;
+  viewId?: string;
 }
 
 interface NotesLoadPageTreeOptions {
@@ -109,6 +125,7 @@ const BLOCK_SAVE_DEBOUNCE_MS = 350;
 
 let pages = $state<NotesPage[]>([]);
 let allPages = $state<NotesPage[]>([]);
+let navigationDatabases = $state<NotesNavigationDatabase[]>([]);
 let pendingPageRemovals = $state<Record<string, string[]>>({});
 const pendingPageRemovalIds = $derived(new Set(Object.values(pendingPageRemovals).flat()));
 let trashActionError = $state<string | null>(null);
@@ -154,6 +171,9 @@ export interface NotesEditorNavigation {
 /** Own one live editor's document, history, hydration, drafts, and ordered save queue. */
 export function createNotesEditorStore(navigation: NotesEditorNavigation, restoreSelection = false) {
   let editorScrollTop = 0;
+  let selectedDatabaseBlockId = $state<string | null>(null);
+  let databaseNavigationRequest = 0;
+  let pageSelectionRequest = 0;
   let documentSelectionRestore = $state<{ pageId: string; selection: NotesDocumentSelection | null } | null>(null);
   let focusRequest = $state<NotesFocusRequest>({
     blockId: null,
@@ -214,6 +234,11 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
   }
 
   function saveSelectedPageId(pageId: string | null): void {
+    if (pageId !== pageSession.selectedPageId) {
+      blockActions.databasePaste.dismiss();
+      databaseDeletion.cancel();
+    }
+    resetDatabaseSelection();
     pageSession.select(pageId);
   }
 
@@ -222,6 +247,11 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
   }
 
   function openSelectedPage(pageId: string, openMode: NotesPageOpenMode): void {
+    if (pageId !== pageSession.selectedPageId) {
+      blockActions.databasePaste.dismiss();
+      databaseDeletion.cancel();
+    }
+    resetDatabaseSelection();
     if (pageId !== pageSession.selectedPageId) editorScrollTop = 0;
     viewMode = "pages";
     pageSession.open(pageId, openMode);
@@ -280,6 +310,7 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
   function removePagesFromActiveCollections(pageIds: ReadonlySet<string>): void {
     pages = pages.filter((page) => !pageIds.has(page.id));
     allPages = allPages.filter((page) => !pageIds.has(page.id));
+    navigationDatabases = navigationDatabases.filter((database) => !pageIds.has(database.page_id));
     navigationMutationRevision += 1;
     invalidateNotesNotificationSchedule();
   }
@@ -376,10 +407,20 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
 
   async function loadNavigationChildren(pageId: string): Promise<void> {
     const expandedPageIds = [pageId];
-    await workspaceController.reloadPages(pageSession.selectedPageId, expandedPageIds);
+    await workspaceController.reloadPages(pageId, expandedPageIds);
+  }
+
+  /** Replace metadata for refreshed notes while retaining the rest of the navigation index. */
+  function mergeNavigationDatabases(shell: NotesWorkspaceShell): void {
+    const refreshed = new Set(shell.pages.map((page) => page.id));
+    navigationDatabases = [
+      ...navigationDatabases.filter((database) => !refreshed.has(database.page_id)),
+      ...shell.navigation_databases,
+    ];
   }
 
   function mergeReloadedWorkspaceShell(shell: NotesWorkspaceShell): void {
+    mergeNavigationDatabases(shell);
     const mergedPages = [...new Map([...allPages, ...shell.pages].map((page) => [page.id, page])).values()];
     replacePages(mergedPages);
     replaceAllPages(mergedPages);
@@ -408,6 +449,7 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
     requestedSelection: string | null,
   ): string | null {
     workspaceLoaded = true;
+    navigationDatabases = shell.navigation_databases;
     replacePages(shell.pages);
     replaceAllPages([...new Map(
       [...shell.navigation_pages, ...shell.pages].map((page) => [page.id, page]),
@@ -430,6 +472,7 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
   }
 
   function applyAdditionalWorkspaceShell(shell: NotesWorkspaceShell): void {
+    mergeNavigationDatabases(shell);
     const mergedPages = [...new Map([...allPages, ...shell.pages].map((page) => [page.id, page])).values()];
     replaceAllPages(mergedPages);
     replacePages(mergedPages);
@@ -442,6 +485,7 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
   }
 
   function clearSelectedPageState(): void {
+    resetDatabaseSelection();
     treeProjection.clearLoadedTree();
     pageSession.breadcrumbs = [];
     pageHistoryController.resetPageState();
@@ -459,6 +503,22 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
   ): void {
     if (!options.preserveCreatedPreview) pageCreationController.markChanged(pageSession.selectedPageId);
     treeProjection.applyPostMutation(result);
+    for (const block of result.blocks ?? []) {
+      if (block.type !== "child_database" || block.in_trash || block.archived || !block.child_database.data_source_id) continue;
+      const pageId = block.parent.type === "page_id" ? block.parent.page_id
+        : treeProjection.blockOutlines.find((outline) => outline.id === block.id)?.page_id ?? treeProjection.loadedPage?.id;
+      if (!pageId) continue;
+      const database: NotesNavigationDatabase = { id: block.id, page_id: pageId, title: block.child_database.title, data_source_id: block.child_database.data_source_id };
+      navigationDatabases = [...navigationDatabases.filter((item) => item.id !== block.id), database];
+    }
+    if (result.removedBlockIds?.length || result.removedPageIds?.length) {
+      const removedBlocks = new Set(result.removedBlockIds ?? []);
+      const removedPages = new Set(result.removedPageIds ?? []);
+      navigationDatabases = navigationDatabases.filter((database) => !removedBlocks.has(database.id) && !removedPages.has(database.page_id));
+    }
+    if (selectedDatabaseBlockId && (result.removedBlockIds?.includes(selectedDatabaseBlockId)
+      || result.blocks?.some((block) => block.id === selectedDatabaseBlockId
+        && (block.type !== "child_database" || block.in_trash || block.archived)))) closeDatabase();
     if (result.pages?.length || result.removedPageIds?.length) {
       for (const session of sessions) {
         if (session !== facade) session.receivePageMetadata(result.pages ?? [], result.removedPageIds ?? []);
@@ -591,9 +651,10 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
     pageId: string | null,
     options: NotesSelectPageOptions,
   ): Promise<void> {
+    const selectionRequest = ++pageSelectionRequest;
     if (pageId && pendingPageRemovalIds.has(pageId)) return;
     const alreadyLoaded = pageSession.selectedPageId === pageId && (!pageId || treeProjection.loadedPage?.id === pageId);
-    if (!alreadyLoaded) {
+    if (!alreadyLoaded || options.databaseBlockId) {
       try {
         await flushPendingWrites();
       } catch {
@@ -601,7 +662,8 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
         return;
       }
     }
-    if (pageId && pendingPageRemovalIds.has(pageId)) return;
+    if (selectionRequest !== pageSelectionRequest || (pageId && pendingPageRemovalIds.has(pageId))) return;
+    if (!options.databaseBlockId) closeDatabase();
     const openMode = notesPageOpenModeForSelection({
       requestedOpenMode: options.openMode,
       currentOpenMode: pageSession.pageOpenMode,
@@ -610,12 +672,20 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
         : defaultNotesPageOpenMode(),
       hasOpenPage: pageSession.selectedPageId !== null,
     });
-    if (pageId) {
+    if (pageId && alreadyLoaded && options.databaseBlockId) {
+      resetDatabaseSelection();
+      pageSession.pageOpenMode = openMode;
+    } else if (pageId) {
       openSelectedPage(pageId, openMode);
     } else {
       saveSelectedPageId(null);
     }
+    selectedDatabaseBlockId = options.databaseBlockId ?? null;
     if (alreadyLoaded) {
+      if (options.databaseBlockId) {
+        await selectDatabaseBlock(pageId, options.databaseBlockId);
+        return;
+      }
       if (options.focusBlockId) requestPageLoadFocus(options.focusBlockId);
       return;
     }
@@ -642,7 +712,7 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
     if (preview) {
       const currentPage = allPages.find((page) => page.id === pageId) ?? preview.loaded.page;
       const loaded = { ...preview.loaded, page: currentPage };
-      requestLoadedPageFocus(loaded, options.focusBlockId ?? null);
+      if (!options.databaseBlockId) requestLoadedPageFocus(loaded, options.focusBlockId ?? null);
       treeProjection.applyPostMutation({ loadedPage: loaded });
       pageSession.breadcrumbs = [];
       pageSession.recordRecentIfCurrent(pageSession.generation, pageId);
@@ -652,18 +722,21 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
           console.error("load Notes page breadcrumb failed", error);
         });
       }
+      if (options.databaseBlockId) await selectDatabaseBlock(pageId, options.databaseBlockId);
       return;
     }
     const load = loadPageTree(pageId, {
-      focusOnLoad: true,
+      focusOnLoad: !options.databaseBlockId,
       focusBlockId: options.focusBlockId ?? null,
     });
     const loadGeneration = pageSession.generation;
     try {
       const applied = await load;
       if (applied) pageSession.recordRecentIfCurrent(pageSession.generation, pageId);
+      if (applied && options.databaseBlockId) await selectDatabaseBlock(pageId, options.databaseBlockId);
     } catch (error) {
       if (!pageSession.isCurrent(loadGeneration, pageId) || pendingPageRemovalIds.has(pageId)) return;
+      if (options.databaseBlockId) closeDatabase();
       workspaceController.setError(error instanceof Error ? error.message : String(error));
       throw error;
     } finally {
@@ -1015,6 +1088,8 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
   });
 
   const blockActions = createNotesBlockActions({
+    retryEditorMutations,
+    reconcileDatabaseIdentity: undoController.reconcileDatabaseIdentity,
     readPageGeneration: () => pageSession.generation,
     prepareBlockDeletion: async (blockId) => {
       const pageId = pageSession.selectedPageId;
@@ -1079,25 +1154,81 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
     recordUndo: undoController.record,
   });
 
-  /** Load affected descendants before a document edit so unselected children survive. */
-  async function replaceDocumentRange(ids: readonly string[], start: number, end: number, text: string, html?: string, documentSelection?: NotesDocumentSelection): Promise<void> {
+  const databaseDeletion = createNotesDatabaseDeletionController({
+    readPageId: () => pageSession.selectedPageId,
+    blockById,
+  });
+
+  /** Confirm one deleted block while allowing its surviving descendants to be reparented. */
+  async function deleteBlock(blockId: string): Promise<boolean> {
+    const pageId = pageSession.selectedPageId;
+    const generation = pageSession.generation;
+    if (!pageId) return false;
+    if (!blockById(blockId)) await hydrateBlockRange([blockId], generation);
+    if (!pageSession.isCurrent(generation, pageId) || !blockById(blockId)) return false;
+    if (!await databaseDeletion.request([blockId]) || !pageSession.isCurrent(generation, pageId)) return false;
+    await blockActions.deleteBlock(blockId);
+    return true;
+  }
+
+  /** Inspect the complete removed subtree before deleting a block selection. */
+  async function deleteBlockSelection(ids: readonly string[]): Promise<boolean> {
+    const pageId = pageSession.selectedPageId;
+    const generation = pageSession.generation;
+    if (!pageId || !ids.length) return false;
+    if (pendingPageOutline && pageSession.isCurrent(pendingPageOutline.generation, pendingPageOutline.pageId)) {
+      await pendingPageOutline.promise;
+    }
+    if (!pageSession.isCurrent(generation, pageId)) return false;
+    const required = [...new Set([...ids, ...outlineSubtreeIds(ids)])];
+    if (required.some((id) => !blockById(id))) await hydrateBlockRange(required, generation);
+    if (!pageSession.isCurrent(generation, pageId)) return false;
+    if (required.some((id) => !blockById(id))) throw new Error("Notes deletion descendants could not be loaded");
+    if (!await databaseDeletion.request(required) || !pageSession.isCurrent(generation, pageId)) return false;
+    await blockActions.deleteBlockSelection(ids);
+    return true;
+  }
+
+  /** Preserve database source identities instead of turning their shells into unrelated blocks. */
+  async function convertBlock(...args: Parameters<typeof blockActions.convertBlock>): Promise<void> {
+    if (blockById(args[0])?.type === "child_database" && args[1] !== "child_database") {
+      throw new Error(getLocalization().t("notes.databaseCannotConvert"));
+    }
+    await blockActions.convertBlock(...args);
+  }
+
+  /** Load affected descendants and confirm removed databases before changing a document range. */
+  async function replaceDocumentRange(ids: readonly string[], start: number, end: number, text: string, html?: string, documentSelection?: NotesDocumentSelection): Promise<boolean> {
     const pageId = pageSession.selectedPageId;
     const generation = pageSession.generation;
     if (pendingPageOutline && pageSession.isCurrent(pendingPageOutline.generation, pendingPageOutline.pageId)) {
       await pendingPageOutline.promise;
     }
-    if (pageId !== pageSession.selectedPageId || generation !== pageSession.generation) return;
+    if (!pageId || !ids.length || !pageSession.isCurrent(generation, pageId)) return false;
+    if (ids.some((id) => !blockById(id))) await hydrateBlockRange(ids, generation);
+    if (!pageSession.isCurrent(generation, pageId)) return false;
     const first = blockById(ids[0]);
     const firstIsFullySelected = first && start === 0
-      && (ids.length > 1 || end >= blockPlainText(first).length);
+      && (ids.length > 1 || end >= (isTextEditableBlock(first.type) ? blockPlainText(first).length : 1));
     const required = [...new Set([
       ...ids,
       ...outlineSubtreeIds(firstIsFullySelected ? ids : ids.slice(1)),
     ])];
     if (required.some((id) => !blockById(id))) await hydrateBlockRange(required);
-    if (pageId !== pageSession.selectedPageId || generation !== pageSession.generation) return;
+    if (!pageSession.isCurrent(generation, pageId)) return false;
     if (required.some((id) => !blockById(id))) throw new Error("Notes selection content could not be loaded");
+    const selectedIds = ids.filter((_id, index) => (index > 0 || start === 0)
+      && (index < ids.length - 1 || end > 0));
+    const removedCollapsedRoots = ids.filter((id, index) => {
+      const block = blockById(id);
+      if (!block || blockChildrenAreVisible(block)) return false;
+      const length = isTextEditableBlock(block.type) ? blockPlainText(block).length : 1;
+      return (index > 0 || start === 0) && (index < ids.length - 1 || (end > 0 && end >= length));
+    });
+    const removedIds = [...new Set([...selectedIds, ...outlineSubtreeIds(removedCollapsedRoots)])];
+    if (!await databaseDeletion.request(removedIds) || !pageSession.isCurrent(generation, pageId)) return false;
     await blockActions.replaceDocumentRange(ids, start, end, text, html, documentSelection);
+    return true;
   }
 
   const collaborationController = createNotesCollaborationController({
@@ -1116,7 +1247,9 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
     readBlockOutlines: () => treeProjection.blockOutlines,
     readFlatBlockOutlines: () => treeProjection.flatBlockOutlines,
     readBlocksById: () => treeProjection.blocksById,
-    readFocusRequest: () => focusRequest,
+    readFocusRequest: () => selectedDatabaseBlockId
+      ? { ...focusRequest, blockId: selectedDatabaseBlockId }
+      : focusRequest,
     mergeBlockOutlines,
     replaceHydratedBlocks: (nextBlocksById, nextChildIdsByParentId) => {
       treeProjection.replaceHydratedBlocks(nextBlocksById, nextChildIdsByParentId);
@@ -1161,7 +1294,6 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
     removeTab,
     moveTab,
     moveBlockToTab,
-    convertBlock,
     toggleTodo,
     updateCodeLanguage,
     updateBlockColor,
@@ -1174,8 +1306,6 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
     pastePlainTextIntoBlock,
     pasteRichHtmlIntoBlock,
     pasteBlockSelection,
-    deleteBlock,
-    deleteBlockSelection,
     mergeBlockWithPrevious,
     indentBlockSelection,
     nestBlock,
@@ -1234,6 +1364,77 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
     return openNotesLink(target);
   }
 
+  /** Cancel pending database navigation without discarding the owner's document. */
+  function resetDatabaseSelection(): void {
+    databaseNavigationRequest += 1;
+    selectedDatabaseBlockId = null;
+  }
+
+  /** Return to the containing note without reloading blocks or database snapshots. */
+  function closeDatabase(): void {
+    const blockId = selectedDatabaseBlockId;
+    pageSelectionRequest += 1;
+    resetDatabaseSelection();
+    if (typeof window === "undefined" || !blockId) return;
+    const target = parseNotesLinkHash(window.location.hash);
+    if (target?.pageId !== pageSession.selectedPageId || target.blockId !== blockId) return;
+    const url = new URL(window.location.href);
+    url.hash = `notes?${new URLSearchParams({ page: target.pageId }).toString()}`;
+    window.history.replaceState(window.history.state, "", url);
+  }
+
+  /** Hydrate a database reference under its owner and ignore late navigation results. */
+  async function selectDatabaseBlock(pageId: string | null, blockId: string): Promise<void> {
+    if (!pageId || treeProjection.loadedPage?.id !== pageId) return;
+    const generation = pageSession.generation;
+    const request = databaseNavigationRequest;
+    const cached = treeProjection.blocksById[blockId];
+    let block: NotesBlock | undefined;
+    try {
+      block = cached ?? (await hydrateNotesBlocks({ page_id: pageId, block_ids: [blockId] }))
+        .find((candidate) => candidate.id === blockId);
+    } catch (error: unknown) {
+      if (pageSession.isCurrent(generation, pageId) && request === databaseNavigationRequest) closeDatabase();
+      throw error;
+    }
+    if (!pageSession.isCurrent(generation, pageId) || request !== databaseNavigationRequest) return;
+    if (block?.type !== "child_database" || block.in_trash || block.archived) {
+      closeDatabase();
+      return;
+    }
+    if (!cached) replaceBlock(block);
+    selectedDatabaseBlockId = block.id;
+  }
+
+  /** Open a database alone in the owning pane after its pending note writes settle. */
+  async function openDatabase(target: string | NotesBlockLinkTarget, options: NotesOpenDatabaseOptions = {}): Promise<boolean> {
+    const blockId = typeof target === "string" ? target : target.blockId;
+    const request = ++databaseNavigationRequest;
+    const generation = pageSession.generation;
+    const reference = await getNotesDatabaseReference(blockId);
+    if (!pageSession.isCurrent(generation) || request !== databaseNavigationRequest) return false;
+    if (typeof target !== "string" && reference.page_id !== target.pageId) return false;
+    const pageId = options.followSource === false ? reference.page_id : reference.source_page_id;
+    const databaseBlockId = options.followSource === false ? reference.block_id : reference.source_block_id;
+    if (pendingPageRemovalIds.has(pageId)) return false;
+    viewMode = "pages";
+    if (options.viewId) notesDatabaseSession.selectView(databaseBlockId, options.viewId);
+    await navigation.select(pageId, {
+      databaseBlockId,
+    });
+    const opened = [...sessions].some((session) => session.selectedPageId === pageId
+      && session.selectedDatabaseBlock?.id === databaseBlockId);
+    if (opened && typeof window !== "undefined") {
+      const hashTarget = parseNotesLinkHash(window.location.hash);
+      if (hashTarget?.pageId === reference.page_id && hashTarget.blockId === reference.block_id) {
+        const url = new URL(window.location.href);
+        url.hash = `notes?${new URLSearchParams({ page: pageId, block: databaseBlockId }).toString()}`;
+        window.history.replaceState(window.history.state, "", url);
+      }
+    }
+    return opened;
+  }
+
   async function openNotesLink(target: NotesPageLinkTarget): Promise<boolean> {
     viewMode = "pages";
     if (!workspaceLoaded) await workspaceController.ensureLoaded();
@@ -1241,16 +1442,32 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
       await reloadPages(target.pageId);
     }
     if (!allPages.some((page) => page.id === target.pageId)) return false;
+    if (target.blockId) {
+      const generation = pageSession.generation;
+      const request = ++databaseNavigationRequest;
+      const cached = treeProjection.loadedPage?.id === target.pageId
+        ? treeProjection.blocksById[target.blockId] : undefined;
+      const block = cached ?? (await hydrateNotesBlocks({
+        page_id: target.pageId,
+        block_ids: [target.blockId],
+      })).find((candidate) => candidate.id === target.blockId);
+      if (!pageSession.isCurrent(generation) || request !== databaseNavigationRequest) return false;
+      if (!block || block.in_trash || block.archived) return false;
+      if (block.type === "child_database") return openDatabase({ pageId: target.pageId, blockId: block.id });
+    }
     if (treeProjection.loadedPage?.id !== target.pageId) {
       await selectPage(target.pageId, { focusBlockId: target.blockId ?? null });
       return [...sessions].some((session) => session.selectedPageId === target.pageId
         && (!target.blockId || session.blockById(target.blockId)));
     }
     if (!target.blockId) {
-      requestPageLoadFocus();
+      const wasDatabase = selectedDatabaseBlockId !== null;
+      closeDatabase();
+      if (!wasDatabase) requestPageLoadFocus();
       return true;
     }
     if (!treeProjection.blocksById[target.blockId] || !visibleBlockIds().includes(target.blockId)) return false;
+    closeDatabase();
     requestBlockFocus(planNotesPageLoadFocus(visibleBlockIds(), target.blockId));
     return true;
   }
@@ -1276,6 +1493,9 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
       linksController.reconcileDestinationPages(changedPages, removedPageIds);
     },
     clearRemovedPage: (): void => {
+      blockActions.databasePaste.dismiss();
+      databaseDeletion.cancel();
+      resetDatabaseSelection();
       discardPendingEditorWrites();
       pageSession.select(null);
       hydrationController.invalidate();
@@ -1288,6 +1508,9 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
       if (undoController.canUndo() || undoController.canRedo()) await undoController.persist();
     },
     dispose: (): void => {
+      blockActions.databasePaste.dismiss();
+      databaseDeletion.cancel();
+      resetDatabaseSelection();
       pageSession.invalidate();
       hydrationController.invalidate();
       sidebarRefreshCoordinator.cancel();
@@ -1315,6 +1538,19 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
     },
     get navigationPages(): NotesPage[] {
       return navigationPages;
+    },
+    /** Overlay live database identities and titles on the compact navigation metadata. */
+    get navigationDatabases(): NotesNavigationDatabase[] {
+      const byId = new Map(navigationDatabases.map((database) => [database.id, database]));
+      const pageId = treeProjection.loadedPage?.id;
+      if (pageId) {
+        for (const block of Object.values(treeProjection.blocksById)) {
+          if (block.type !== "child_database" || block.in_trash || block.archived || !block.child_database.data_source_id) continue;
+          byId.set(block.id, { id: block.id, page_id: pageId, title: block.child_database.title, data_source_id: block.child_database.data_source_id });
+        }
+      }
+      const activePageIds = new Set(allPages.filter((page) => !page.in_trash && !page.archived).map((page) => page.id));
+      return [...byId.values()].filter((database) => activePageIds.has(database.page_id));
     },
     get folders() {
       return foldersController.folders;
@@ -1357,6 +1593,16 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
     },
     get selectedPageId(): string | null {
       return pageSession.selectedPageId;
+    },
+    /** Database destination, including the brief interval while its owner loads. */
+    get selectedDatabaseBlockId(): string | null {
+      return selectedDatabaseBlockId;
+    },
+    /** The live database reference selected within this pane's owner note. */
+    get selectedDatabaseBlock(): NotesChildDatabaseBlock | null {
+      if (treeProjection.loadedPage?.id !== pageSession.selectedPageId) return null;
+      const block = selectedDatabaseBlockId ? treeProjection.blocksById[selectedDatabaseBlockId] : undefined;
+      return block?.type === "child_database" && !block.in_trash && !block.archived ? block : null;
     },
     isPagePendingRemoval: (pageId: string): boolean => pendingPageRemovalIds.has(pageId),
     get pageOpenMode(): NotesPageOpenMode {
@@ -1553,7 +1799,7 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
       return pageHistoryController.actionError;
     },
     get focusBlockId(): string | null {
-      return focusRequest.blockId;
+      return selectedDatabaseBlockId ? null : focusRequest.blockId;
     },
     get documentSelectionRestore() { return documentSelectionRestore; },
     get focusRequestId(): number {
@@ -1685,6 +1931,8 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
     updatePageCover: pageActions.updatePageCover,
     openBlockLink,
     openNotesLink,
+    openDatabase,
+    closeDatabase,
     undoNotesEdit,
     redoNotesEdit,
     setPageTitleDraft,
@@ -1700,6 +1948,8 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
     flushBlockSave,
     flushPendingWrites,
     convertBlock,
+    databasePaste: blockActions.databasePaste,
+    databaseDeletion,
     isDatabaseCreationPending: blockActions.isDatabaseCreationPending,
     toggleTodo,
     updateCodeLanguage,

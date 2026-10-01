@@ -540,6 +540,7 @@ pub struct NoteMoveBlocks {
     pub parent: NoteParent,
     pub after: Option<String>,
     pub before: Option<String>,
+    pub include_trashed_sources: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -632,6 +633,19 @@ pub struct NoteLinkedDatabaseCreate {
     pub view_id: String,
     pub source_block_id: String,
     pub title: Option<String>,
+    pub parent: Option<NoteParent>,
+    pub after_block_id: Option<String>,
+    pub replace_block_id: Option<String>,
+}
+
+/// Copy a database graph into a caller-reserved block identity.
+#[derive(Deserialize)]
+pub struct NoteDatabaseDuplicate {
+    pub source_block_id: String,
+    pub id: String,
+    pub parent: Option<NoteParent>,
+    pub after_block_id: Option<String>,
+    pub replace_block_id: Option<String>,
 }
 
 #[derive(Deserialize)]

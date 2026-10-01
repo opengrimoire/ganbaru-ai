@@ -701,6 +701,28 @@ export interface NotesLinkedDatabaseCreateRequest {
   view_id: string;
   source_block_id: string;
   title?: string | null;
+  parent?: NotesParent;
+  after_block_id?: string | null;
+  replace_block_id?: string | null;
+}
+
+export interface NotesDatabaseDuplicateRequest {
+  id: string;
+  source_block_id: string;
+  parent?: NotesParent;
+  after_block_id?: string | null;
+  replace_block_id?: string | null;
+}
+
+/** Minimal database ownership metadata without loading row pages or view contents. */
+export interface NotesDatabaseReference {
+  block_id: string;
+  page_id: string;
+  source_block_id: string;
+  source_page_id: string;
+  title: string;
+  owned_data_source_count: number;
+  is_linked: boolean;
 }
 
 export interface NotesCreatedDatabase {

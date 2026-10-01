@@ -21,7 +21,7 @@ interface DocumentSelectionOptions {
   isHiddenCalloutLabel: (id: string) => boolean;
   outlineSubtreeIds: (rootBlockIds: readonly string[]) => readonly string[];
   hydrate: (ids: readonly string[]) => Promise<void>;
-  replace: (ids: readonly string[], start: number, end: number, text: string, html?: string, documentSelection?: NotesDocumentSelection) => Promise<void>;
+  replace: (ids: readonly string[], start: number, end: number, text: string, html?: string, documentSelection?: NotesDocumentSelection) => Promise<void | boolean>;
   indent?: (ids: readonly string[], direction: "nest" | "outdent", selection?: NotesDocumentSelection) => Promise<void>;
   format: (ids: readonly string[], start: number, end: number, annotation: NotesRichTextAnnotationName, documentSelection?: NotesDocumentSelection) => Promise<void>;
   link?: (ids: readonly string[], start: number, end: number, url: string, documentSelection?: NotesDocumentSelection) => Promise<void>;
@@ -264,7 +264,8 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     try {
       if (selected.blockIds.some((id) => !options.readBlock(id))) await hydrateSelection(selected.blockIds);
       if (!alive || token !== request || page !== options.readPageId()) return;
-      await options.replace(selected.blockIds, selected.start.offset, selected.end.offset, replacementText ?? value, html, selection ?? undefined);
+      const applied = await options.replace(selected.blockIds, selected.start.offset, selected.end.offset, replacementText ?? value, html, selection ?? undefined);
+      if (applied === false) return;
       if (!alive || token !== request || page !== options.readPageId()) return;
       clear();
       options.restoreFocusAfterEdit?.();
@@ -659,7 +660,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
           const plainText = event.clipboardData?.getData("text/plain") ?? "";
           const html = plainOnly ? undefined : notesClipboardPasteHtml(plainText, event.clipboardData?.getData("text/html") ?? "") || undefined;
           event.preventDefault(); event.stopPropagation();
-          if (plainText || html) void run(() => options.replace([id], 1, 1, plainText, html));
+          if (plainText || html) void run(async () => { await options.replace([id], 1, 1, plainText, html); });
           return;
         }
         selection = { anchor: { blockId: id, offset: 0 }, focus: { blockId: id, offset: 1 } };

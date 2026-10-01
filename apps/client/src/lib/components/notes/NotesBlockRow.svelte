@@ -663,6 +663,7 @@
     <NotesBlockHandle
       {contextMenuRequest}
       onTurnInto={openTurnIntoMenu}
+      canTurnInto={block.type !== "child_database"}
       canSetColor={blockSupportsColor}
       currentColor={currentColor}
       currentBackgroundColor={calloutColorTarget?.color ?? currentColor}
@@ -785,6 +786,8 @@
                 <NotesChildDatabaseBlock
                   onReady={() => { readyDatabaseIdentity = databaseIdentity; }}
                   onTitleSaved={(databaseId, title) => notes.reconcileDatabaseTitle(block.id, databaseId, title)}
+                  onOpenDatabase={notes.openDatabase}
+                  onDeleteDatabase={notes.deleteBlock}
                   {block}
                   {focusBlockId}
                   {focusRequestId}

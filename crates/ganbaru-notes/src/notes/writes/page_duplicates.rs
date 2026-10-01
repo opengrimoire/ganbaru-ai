@@ -2,6 +2,7 @@ use super::block_tree::{
     load_child_page_block_row, load_page_block_subtree_rows, load_page_block_subtree_rows_for_copy,
     refresh_duplicated_has_children,
 };
+use super::database_copy::{DatabaseCopy, insert_database_copy, plan_database_copy};
 use super::ids::new_note_id;
 use super::pages::load_page_row;
 use super::parents::{parent_target_from_block_row, refresh_parent_has_children, touch_page};
@@ -27,13 +28,113 @@ pub(super) struct DuplicatePagePlan {
 }
 
 /// A complete page graph captured before inserting anything into its possible descendants.
-pub(super) struct DuplicatePageGraph {
+pub(crate) struct DuplicatePageGraph {
     plans: Vec<DuplicatePagePlan>,
     block_ids: HashMap<String, String>,
+    databases: Vec<DatabaseCopy>,
+}
+
+impl DuplicatePageGraph {
+    pub(super) fn collect_identities(
+        &self,
+        identities: &mut HashMap<String, String>,
+        schemas: &mut HashMap<String, HashMap<String, String>>,
+    ) {
+        identities.extend(self.block_ids.clone());
+        for plan in &self.plans {
+            identities.insert(plan.source_page.id.clone(), plan.duplicate_id.clone());
+        }
+        for database in &self.databases {
+            database.collect_identities(identities, schemas);
+        }
+    }
+
+    pub(super) fn extend_identities(&self, identities: &mut HashMap<String, String>) {
+        self.collect_identities(identities, &mut HashMap::new());
+    }
+
+    pub(super) async fn finalize(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        inherited: &HashMap<String, String>,
+        schemas: &HashMap<String, HashMap<String, String>>,
+        copied_sources: &mut HashSet<String>,
+    ) -> Result<(), String> {
+        let mut identities = inherited.clone();
+        let mut schemas = schemas.clone();
+        self.collect_identities(&mut identities, &mut schemas);
+        for plan in &self.plans {
+            let mut scoped = identities.clone();
+            if let Some(ids) = plan
+                .source_page
+                .parent_data_source_id
+                .as_ref()
+                .and_then(|source| schemas.get(source))
+            {
+                scoped.extend(ids.clone());
+            }
+            super::database_copy::remap_column(
+                tx,
+                "notes_pages",
+                "properties",
+                &plan.duplicate_id,
+                &scoped,
+            )
+            .await?;
+            let icon = plan
+                .source_page
+                .icon
+                .as_deref()
+                .map(serde_json::from_str)
+                .transpose()
+                .map_err(|e| format!("parse copied page icon: {e}"))?;
+            let cover = plan
+                .source_page
+                .cover
+                .as_deref()
+                .map(serde_json::from_str)
+                .transpose()
+                .map_err(|e| format!("parse copied page cover: {e}"))?;
+            assets::sync_page_asset_references_tx(
+                tx,
+                &plan.duplicate_id,
+                true,
+                icon.as_ref(),
+                true,
+                cover.as_ref(),
+            )
+            .await?;
+            for row in &plan.blocks {
+                let id = &self.block_ids[&row.id];
+                super::database_copy::remap_column(tx, "notes_blocks", "payload", id, &identities)
+                    .await?;
+                let raw: String =
+                    sqlx::query_scalar("SELECT payload FROM notes_blocks WHERE id = ?")
+                        .bind(id)
+                        .fetch_one(&mut **tx)
+                        .await
+                        .map_err(|e| format!("read copied block assets: {e}"))?;
+                let payload = serde_json::from_str(&raw)
+                    .map_err(|e| format!("parse copied block assets: {e}"))?;
+                assets::sync_block_asset_reference_tx(
+                    tx,
+                    id,
+                    &plan.duplicate_id,
+                    &row.block_type,
+                    &payload,
+                )
+                .await?;
+            }
+        }
+        for database in &self.databases {
+            Box::pin(database.finalize(tx, &identities, &schemas, copied_sources)).await?;
+        }
+        Ok(())
+    }
 }
 
 /// Plan a child-note copy with fresh identities while retaining the caller's root identity.
-pub(super) async fn plan_child_page_copy(
+pub(crate) async fn plan_child_page_copy(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     source_id: &str,
     duplicate_id: &str,
@@ -45,13 +146,14 @@ pub(super) async fn plan_child_page_copy(
     let mut plans = Vec::new();
     let mut block_ids = HashMap::new();
     let mut visited = HashSet::new();
+    let mut databases = Vec::new();
     let mut queue = VecDeque::from([(source_id.to_string(), duplicate_id.to_string(), parent)]);
     while let Some((source_page_id, duplicate_id, parent)) = queue.pop_front() {
         if !visited.insert(source_page_id.clone()) {
             return Err("child page graph contains a cycle".to_string());
         }
         let mut source_page = sqlx::query_as::<_, NotePageRow>(
-            "SELECT * FROM notes_pages WHERE id = ? AND (? OR in_trash = 0) AND archived = 0",
+            "SELECT * FROM notes_pages WHERE id = ? AND (? OR in_trash = 0)",
         )
         .bind(&source_page_id)
         .bind(include_trashed)
@@ -63,6 +165,8 @@ pub(super) async fn plan_child_page_copy(
             serde_json::from_str(&source_page.properties)
                 .map_err(|e| format!("parse copied note properties: {e}"))?;
         properties.remove("__ganbaru_project_id");
+        properties.remove("__ganbaru_trash");
+        properties.remove("__ganbaru_trash_owner");
         if let Some(project_id) = destination_project_id {
             properties.insert("__ganbaru_project_id".to_string(), project_id.into());
         }
@@ -75,6 +179,20 @@ pub(super) async fn plan_child_page_copy(
             if row.block_type == "child_page" {
                 let parent = duplicate_page_parent_for_child_block(row, &duplicate_id, &block_ids)?;
                 queue.push_back((row.id.clone(), id, parent));
+            } else if row.block_type == "child_database"
+                && super::database_copy::has_database_graph(row)?
+            {
+                databases.push(
+                    Box::pin(plan_database_copy(
+                        tx,
+                        row,
+                        &id,
+                        reserved_ids,
+                        destination_project_id,
+                        include_trashed,
+                    ))
+                    .await?,
+                );
             }
         }
         plans.push(DuplicatePagePlan {
@@ -86,11 +204,15 @@ pub(super) async fn plan_child_page_copy(
             is_root: false,
         });
     }
-    Ok(DuplicatePageGraph { plans, block_ids })
+    Ok(DuplicatePageGraph {
+        plans,
+        block_ids,
+        databases,
+    })
 }
 
 /// Insert a planned child-note graph in the same transaction as its paired block.
-pub(super) async fn insert_child_page_copy(
+pub(crate) async fn insert_child_page_copy(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     graph: &DuplicatePageGraph,
 ) -> Result<(), String> {
@@ -150,6 +272,15 @@ pub(super) async fn insert_child_page_copy(
             .collect();
         super::block_comments::duplicate_block_comment_threads(tx, &block_ids, &plan.duplicate_id)
             .await?;
+    }
+    for database in &graph.databases {
+        sqlx::query("UPDATE notes_blocks SET payload = ? WHERE id = ?")
+            .bind(database.payload.to_string())
+            .bind(&database.id)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| format!("set copied database identities: {e}"))?;
+        Box::pin(insert_database_copy(tx, database)).await?;
     }
     refresh_duplicated_has_children(tx, &inserted).await
 }
@@ -236,6 +367,30 @@ pub async fn duplicate_page(
         .map(|plan| (plan.source_page.id.clone(), plan.duplicate_title.clone()))
         .collect::<HashMap<_, _>>();
     let mut inserted_block_ids = HashSet::new();
+    let mut databases = Vec::new();
+    let destination_project_id =
+        project_history::resolve_project_id_for_page_tx(&mut tx, page_id).await?;
+    for plan in &plans {
+        for row in plan
+            .blocks
+            .iter()
+            .filter(|row| row.block_type == "child_database")
+        {
+            if super::database_copy::has_database_graph(row)? {
+                databases.push(
+                    plan_database_copy(
+                        &mut tx,
+                        row,
+                        &block_ids[&row.id],
+                        &mut reserved_ids,
+                        destination_project_id.as_deref(),
+                        false,
+                    )
+                    .await?,
+                );
+            }
+        }
+    }
     for plan in &plans {
         insert_duplicated_page(&mut tx, plan).await?;
         if plan.is_root {
@@ -250,7 +405,22 @@ pub async fn duplicate_page(
         )
         .await?;
     }
+    for database in &databases {
+        sqlx::query("UPDATE notes_blocks SET payload = ? WHERE id = ?")
+            .bind(database.payload.to_string())
+            .bind(&database.id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("set duplicated page database identities: {e}"))?;
+        insert_database_copy(&mut tx, database).await?;
+    }
     refresh_duplicated_has_children(&mut tx, &inserted_block_ids).await?;
+    let graph = DuplicatePageGraph {
+        plans,
+        block_ids,
+        databases,
+    };
+    super::database_copy::finalize_copies(&mut tx, &[], &[graph], &HashMap::new()).await?;
     tx.commit()
         .await
         .map_err(|e| format!("commit duplicate notes page: {e}"))?;
@@ -332,9 +502,10 @@ pub(super) async fn insert_duplicated_page(
             title,
             properties,
             icon,
-            cover
+            cover,
+            archived
          )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&plan.duplicate_id)
     .bind(parent_type)
@@ -346,6 +517,7 @@ pub(super) async fn insert_duplicated_page(
     .bind(properties)
     .bind(&plan.source_page.icon)
     .bind(&plan.source_page.cover)
+    .bind(plan.source_page.archived)
     .execute(&mut **tx)
     .await
     .map_err(|e| format!("duplicate notes page: {e}"))?;
@@ -430,7 +602,10 @@ pub(super) async fn insert_duplicated_page_blocks(
                 plain_text_from_payload("child_page", &payload),
             )
         } else {
-            (row.payload.clone(), row.plain_text.clone())
+            let mut payload: serde_json::Value = serde_json::from_str(&row.payload)
+                .map_err(|e| format!("parse copied block: {e}"))?;
+            super::database_copy::strip_trash_metadata(&mut payload);
+            (payload.to_string(), row.plain_text.clone())
         };
         validate_sort_order(row.sort_order)?;
         sqlx::query(

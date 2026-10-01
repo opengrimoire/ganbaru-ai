@@ -59,6 +59,30 @@ import type {
   NotesPage,
 } from "$lib/notes/types";
 import { invokeNotesMutation } from "./mutation";
+import { isNotesUuid } from "$lib/notes/block-link";
+import type { NotesDatabaseDuplicateRequest, NotesDatabaseReference } from "$lib/notes/types";
+
+/** Read a database reference's destination and ownership without fetching its rows. */
+export async function getNotesDatabaseReference(blockId: string): Promise<NotesDatabaseReference> {
+  const dbUrl = await ensureDbUrl();
+  const value: unknown = await invoke("notes_database_reference", { dbUrl, blockId });
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid Notes database reference");
+  const dto = value as Record<string, unknown>;
+  if (!isNotesUuid(dto.source_block_id) || !isNotesUuid(dto.page_id)
+    || !isNotesUuid(dto.canonical_source_block_id) || !isNotesUuid(dto.canonical_source_page_id)
+    || typeof dto.title !== "string" || typeof dto.is_linked !== "boolean"
+    || typeof dto.owned_data_source_count !== "number" || !Number.isSafeInteger(dto.owned_data_source_count)
+    || dto.owned_data_source_count < 0) throw new Error("Invalid Notes database reference metadata");
+  return { block_id: dto.source_block_id, page_id: dto.page_id,
+    source_block_id: dto.canonical_source_block_id, source_page_id: dto.canonical_source_page_id,
+    title: dto.title, is_linked: dto.is_linked, owned_data_source_count: dto.owned_data_source_count };
+}
+
+/** Copy a database's source data and presentation into independent local identities. */
+export async function duplicateNotesDatabase(request: NotesDatabaseDuplicateRequest): Promise<NotesCreatedDatabase> {
+  const dbUrl = await ensureDbUrl();
+  return mapNotesCreatedDatabaseDto(await invokeNotesMutation("notes_duplicate_database", { dbUrl, request }));
+}
 
 function databaseViewScopeArgs(scope?: NotesDatabaseViewScope | null): {
   databaseId: string | null;

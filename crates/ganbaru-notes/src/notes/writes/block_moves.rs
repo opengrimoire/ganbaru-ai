@@ -112,6 +112,11 @@ pub async fn move_block(
         .await
         .map_err(|e| format!("move notes child page parent: {e}"))?;
     }
+    refresh_moved_database_parents(&mut tx, block_id).await?;
+    let project_id =
+        project_history::resolve_project_id_for_page_tx(&mut tx, &new_parent.page_id).await?;
+    super::database_lifecycle::adopt_block_project(&mut tx, block_id, project_id.as_deref())
+        .await?;
     refresh_parent_has_children(&mut tx, &old_parent).await?;
     refresh_parent_has_children(&mut tx, &new_parent).await?;
     touch_page(&mut tx, &new_parent.page_id).await?;
@@ -124,6 +129,7 @@ pub async fn move_block(
     reads::get_block(pool, block_id, false).await
 }
 
+/// Move existing identities, optionally restoring their cut-owned graph in the same transaction.
 pub async fn move_blocks(
     pool: &SqlitePool,
     request: NoteMoveBlocks,
@@ -138,11 +144,16 @@ pub async fn move_blocks(
         .begin()
         .await
         .map_err(|e| format!("begin move notes blocks: {e}"))?;
-    let root_ids = normalize_selection_root_ids(&mut tx, &request.block_ids, false).await?;
+    let include_trashed = request.include_trashed_sources.unwrap_or(false);
+    let root_ids =
+        normalize_selection_root_ids(&mut tx, &request.block_ids, include_trashed).await?;
     let mut root_rows = Vec::with_capacity(root_ids.len());
     let mut old_parents = Vec::with_capacity(root_ids.len());
     for block_id in &root_ids {
-        let row = load_block_row_in_tx(&mut tx, block_id, false).await?;
+        let row = load_block_row_in_tx(&mut tx, block_id, include_trashed).await?;
+        if row.in_trash != 0 {
+            super::database_lifecycle::set_block_trash(&mut tx, block_id, false).await?;
+        }
         old_parents.push(parent_target_from_block_row(&row));
         root_rows.push(row);
     }
@@ -242,6 +253,13 @@ pub async fn move_blocks(
             touch_page(&mut tx, &parent.page_id).await?;
         }
     }
+    let project_id =
+        project_history::resolve_project_id_for_page_tx(&mut tx, &new_parent.page_id).await?;
+    for root in &root_ids {
+        refresh_moved_database_parents(&mut tx, root).await?;
+        super::database_lifecycle::adopt_block_project(&mut tx, root, project_id.as_deref())
+            .await?;
+    }
     refresh_parent_has_children(&mut tx, &new_parent).await?;
     touch_page(&mut tx, &new_parent.page_id).await?;
     tx.commit()
@@ -320,14 +338,22 @@ pub(super) async fn ensure_not_moving_into_subtree_page(
     destination_page_id: &str,
 ) -> Result<(), String> {
     let is_subtree_page: Option<i64> = sqlx::query_scalar(
-        "WITH RECURSIVE subtree(id) AS (
-            SELECT id FROM notes_blocks WHERE id = ?
-            UNION ALL
-            SELECT notes_blocks.id
-            FROM notes_blocks
-            JOIN subtree ON notes_blocks.parent_block_id = subtree.id
+        "WITH RECURSIVE subtree(kind, id) AS (
+            SELECT 'block', id FROM notes_blocks WHERE id = ?
+            UNION
+            SELECT 'block', block.id FROM notes_blocks AS block JOIN subtree AS parent
+                ON (parent.kind = 'block' AND block.parent_block_id = parent.id)
+                OR (parent.kind = 'page' AND block.page_id = parent.id)
+            UNION
+            SELECT 'page', page.id FROM notes_pages AS page JOIN subtree AS parent
+                ON (parent.kind = 'block' AND (page.id = parent.id OR page.parent_block_id = parent.id))
+                OR (parent.kind = 'page' AND page.parent_page_id = parent.id)
+                OR (parent.kind = 'source' AND page.parent_data_source_id = parent.id)
+            UNION
+            SELECT 'source', source.id FROM notes_data_sources AS source JOIN subtree AS parent
+                ON parent.kind = 'block' AND source.database_id = parent.id
          )
-         SELECT 1 FROM subtree WHERE id = ? LIMIT 1",
+         SELECT 1 FROM subtree WHERE kind = 'page' AND id = ? LIMIT 1",
     )
     .bind(block_id)
     .bind(destination_page_id)
@@ -337,5 +363,22 @@ pub(super) async fn ensure_not_moving_into_subtree_page(
     if is_subtree_page.is_some() {
         return Err("block cannot be moved into a page contained by its subtree".to_string());
     }
+    Ok(())
+}
+
+async fn refresh_moved_database_parents(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    root_id: &str,
+) -> Result<(), String> {
+    sqlx::query("WITH RECURSIVE subtree(id) AS (
+        SELECT id FROM notes_blocks WHERE id = ? UNION
+        SELECT block.id FROM notes_blocks AS block JOIN subtree ON block.parent_block_id = subtree.id
+    ) UPDATE notes_databases SET
+        parent_type = (SELECT parent_type FROM notes_blocks WHERE id = notes_databases.id),
+        parent_page_id = (SELECT parent_page_id FROM notes_blocks WHERE id = notes_databases.id),
+        parent_block_id = (SELECT parent_block_id FROM notes_blocks WHERE id = notes_databases.id),
+        last_edited_time = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        WHERE id IN (SELECT id FROM subtree)")
+        .bind(root_id).execute(&mut **tx).await.map_err(|e| format!("refresh moved Notes database placement: {e}"))?;
     Ok(())
 }

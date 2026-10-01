@@ -82,6 +82,7 @@ pub struct NoteWorkspaceShellDto {
     navigation_pages: Vec<NotePageSummaryDto>,
     navigation_folders: Vec<NoteFolderDto>,
     navigation_page_ids_with_children: Vec<String>,
+    navigation_databases: Vec<NoteNavigationDatabaseDto>,
     page_ids_with_children: Vec<String>,
     missing_parent_page_ids: Vec<String>,
     trashed_parent_page_ids: Vec<String>,
@@ -100,6 +101,7 @@ impl NoteWorkspaceShellDto {
         navigation_pages: Vec<NotePageSummaryDto>,
         navigation_folders: Vec<NoteFolderDto>,
         navigation_page_ids_with_children: Vec<String>,
+        navigation_databases: Vec<NoteNavigationDatabaseDto>,
         page_ids_with_children: Vec<String>,
         missing_parent_page_ids: Vec<String>,
         trashed_parent_page_ids: Vec<String>,
@@ -115,6 +117,7 @@ impl NoteWorkspaceShellDto {
             navigation_pages,
             navigation_folders,
             navigation_page_ids_with_children,
+            navigation_databases,
             page_ids_with_children,
             missing_parent_page_ids,
             trashed_parent_page_ids,
@@ -125,6 +128,15 @@ impl NoteWorkspaceShellDto {
             next_folder_cursor,
         }
     }
+}
+
+/// Compact database identities for Notes hierarchy navigation, without row content.
+#[derive(Serialize, sqlx::FromRow)]
+pub struct NoteNavigationDatabaseDto {
+    pub id: String,
+    pub page_id: String,
+    pub title: String,
+    pub data_source_id: String,
 }
 
 #[derive(Serialize)]

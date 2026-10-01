@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { notesFloatingPanelPlacement } from "./floating-panel";
+import { notesFloatingPanelContentHeight, notesFloatingPanelPlacement } from "./floating-panel";
+
+describe("floating panel content height", () => {
+  it("includes borders when fitting a panel to its content", () => {
+    expect(notesFloatingPanelContentHeight({ scrollHeight: 120, clientHeight: 120, offsetHeight: 122 })).toBe(122);
+  });
+
+  it("measures full content after a small viewport has constrained its current height", () => {
+    expect(notesFloatingPanelContentHeight({ scrollHeight: 210, clientHeight: 98, offsetHeight: 100 })).toBe(212);
+  });
+});
 
 describe("notesFloatingPanelPlacement", () => {
   it("opens from the title action and keeps its full size when space allows", () => {

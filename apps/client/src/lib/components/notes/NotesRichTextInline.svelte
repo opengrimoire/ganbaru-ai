@@ -5,6 +5,7 @@
   import type { NotesResolvedSuggestionAnchor } from "$lib/notes/suggestions";
   import type { NotesRichText } from "$lib/notes/types";
   import { normalizeNotesTextLinkUrl, openNotesTextLink } from "$lib/notes/link-navigation";
+  import NotesLocalReference, { isNotesLocalReference } from "./NotesLocalReference.svelte";
 
   let {
     richText,
@@ -217,25 +218,45 @@
       {#each line.parts as part}
         {@const url = linkUrl(part.item)}
         {#if part.item.type === "mention"}
-          <svelte:element this={url ? "a" : "span"}
-            href={url ?? undefined}
-            role={url ? "link" : undefined}
-            onclick={activateReadOnlyLink}
-            onkeydown={handleLinkKeydown}
-            class={`notes-rich-text-segment inline-flex max-w-full items-center rounded bg-accent px-1 text-accent-foreground${commentAnchorClass(part.start, part.end)}${suggestionAnchorClass(part.start, part.end)}`}
-            style={notesRichTextColorStyle(part.item.annotations.color)}
-            data-notes-bold={part.item.annotations.bold ? "true" : undefined}
-            data-notes-italic={part.item.annotations.italic ? "true" : undefined}
-            data-notes-underline={part.item.annotations.underline ? "true" : undefined}
-            data-notes-strikethrough={part.item.annotations.strikethrough ? "true" : undefined}
-            data-notes-code={part.item.annotations.code ? "true" : undefined}
-            data-notes-rich-text-color={part.item.annotations.color === "default" ? undefined : part.item.annotations.color}
-            data-notes-link-url={linkUrl(part.item) ?? undefined}
-            data-notes-comment-anchor={anchorIdsForRange(part.start, part.end)}
-            data-notes-suggestion-anchor={suggestionAnchorIdsForRange(part.start, part.end)}
-          >
-            {part.text}
-          </svelte:element>
+          {#if isNotesLocalReference(part.item)}
+            <NotesLocalReference
+              reference={part.item}
+              text={part.text}
+              showIcon={part.start === visibleRuns.find((run) => run.item === part.item)?.start}
+              attributes={{
+                class: `${textClass(part.item)}${commentAnchorClass(part.start, part.end)}${suggestionAnchorClass(part.start, part.end)}`,
+                style: notesRichTextColorStyle(part.item.annotations.color),
+                "data-notes-bold": part.item.annotations.bold ? "true" : undefined,
+                "data-notes-italic": part.item.annotations.italic ? "true" : undefined,
+                "data-notes-underline": part.item.annotations.underline ? "true" : undefined,
+                "data-notes-strikethrough": part.item.annotations.strikethrough ? "true" : undefined,
+                "data-notes-code": part.item.annotations.code ? "true" : undefined,
+                "data-notes-rich-text-color": part.item.annotations.color === "default" ? undefined : part.item.annotations.color,
+                "data-notes-comment-anchor": anchorIdsForRange(part.start, part.end),
+                "data-notes-suggestion-anchor": suggestionAnchorIdsForRange(part.start, part.end),
+              }}
+            />
+          {:else}
+            <svelte:element this={url ? "a" : "span"}
+              href={url ?? undefined}
+              role={url ? "link" : undefined}
+              onclick={activateReadOnlyLink}
+              onkeydown={handleLinkKeydown}
+              class={`notes-rich-text-segment inline-flex max-w-full items-center rounded bg-accent px-1 text-accent-foreground${commentAnchorClass(part.start, part.end)}${suggestionAnchorClass(part.start, part.end)}`}
+              style={notesRichTextColorStyle(part.item.annotations.color)}
+              data-notes-bold={part.item.annotations.bold ? "true" : undefined}
+              data-notes-italic={part.item.annotations.italic ? "true" : undefined}
+              data-notes-underline={part.item.annotations.underline ? "true" : undefined}
+              data-notes-strikethrough={part.item.annotations.strikethrough ? "true" : undefined}
+              data-notes-code={part.item.annotations.code ? "true" : undefined}
+              data-notes-rich-text-color={part.item.annotations.color === "default" ? undefined : part.item.annotations.color}
+              data-notes-link-url={linkUrl(part.item) ?? undefined}
+              data-notes-comment-anchor={anchorIdsForRange(part.start, part.end)}
+              data-notes-suggestion-anchor={suggestionAnchorIdsForRange(part.start, part.end)}
+            >
+              {part.text}
+            </svelte:element>
+          {/if}
         {:else if part.item.type === "equation"}
           <svelte:element this={url ? "a" : "span"}
             href={url ?? undefined}

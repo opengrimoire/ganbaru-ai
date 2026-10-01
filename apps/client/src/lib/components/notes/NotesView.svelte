@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { hasOnlyShortcutModifier } from "$lib/keyboard-shortcuts";
   import {
@@ -28,6 +28,7 @@
     type NotesSurfaceKind,
   } from "./notes-component-registry";
   import NotesEditor from "./NotesEditor.svelte";
+  import NotesDatabasePage from "./NotesDatabasePage.svelte";
   import NotesLoadingSkeleton from "./NotesLoadingSkeleton.svelte";
   import NotesProjectHome from "./NotesProjectHome.svelte";
   import NotesProjectSettingsPanel from "$lib/components/notes/NotesProjectSettingsPanel.svelte";
@@ -71,6 +72,7 @@
   let selectedWorkingMarkdownFile = $state<NotesWorkingMarkdownFileRef | null>(null);
   let workingMarkdownDirty = $state(false);
   let workingMarkdownProjectId = $state<string | null>(null);
+  let retainedEditorPages = $state<Record<string, string>>({});
   let surfaceLoadStates = $state<Partial<Record<
     NotesSurfaceKind,
     LazyComponentLoadState<NotesSurfaceKind, LoadedNotesSurface>
@@ -79,6 +81,10 @@
     NotesOptionalComponentKind,
     LazyComponentLoadState<NotesOptionalComponentKind, LoadedNotesOptionalComponent>
   >>>({});
+  let databaseDeletionDialogLoadState = $state<LazyComponentLoadState<
+    "database-deletion",
+    typeof import("./NotesDatabaseDeletionDialog.svelte").default
+  > | null>(null);
   const selectedProject = $derived(projects.selectedProject);
   const selectedGroup = $derived(projects.selectedGroup);
   const selectedProjectId = $derived(selectedProject?.id ?? null);
@@ -96,6 +102,7 @@
       ?? notes.linkResolutionPages.find((page) => page.id === notes.selectedPageId)
       ?? null;
   });
+  const showDatabasePage = $derived(notes.viewMode === "pages" && notes.selectedDatabaseBlockId != null);
   const contextualPane = $derived(notes.previewPane
     ?? notes.editorPanes.find((pane) => pane.store.pageOpenMode !== "full") ?? null);
   const hasContextualSelection = $derived(
@@ -128,6 +135,23 @@
   const showPrimaryContent = $derived(!mobileLayout || activeSurfaceKind !== "home");
   const projectHistoryLoadState = $derived(optionalLoadStates["project-history"] ?? null);
   const confirmDialogLoadState = $derived(optionalLoadStates["confirm-dialog"] ?? null);
+  const databaseDeletionPanes = $derived(notes.editorPanes.filter(({ store }) => store.databaseDeletion.prompt));
+
+  $effect(() => {
+    const previous = untrack(() => retainedEditorPages);
+    const retained = Object.fromEntries(notes.editorPanes.flatMap(({ id, store }) => {
+      const pageId = store.selectedPageId;
+      if (!pageId) return [];
+      if (!store.selectedDatabaseBlockId && store.loadedPage?.id === pageId && store.primaryContentReady) {
+        return [[id, pageId]];
+      }
+      return previous[id] === pageId ? [[id, pageId]] : [];
+    }));
+    if (Object.keys(retained).length !== Object.keys(previous).length
+      || Object.entries(retained).some(([id, pageId]) => previous[id] !== pageId)) {
+      retainedEditorPages = retained;
+    }
+  });
 
   function requestNotesSurface(kind: NotesSurfaceKind, retry = false): void {
     const current = surfaceLoadStates[kind] ?? null;
@@ -182,11 +206,38 @@
     });
   }
 
+  /** Load the shared database confirmation only after a pane requests deletion. */
+  function requestDatabaseDeletionDialog(retry = false): void {
+    if (!retry && databaseDeletionDialogLoadState) return;
+    const loading = beginLazyComponentLoad(databaseDeletionDialogLoadState, "database-deletion");
+    databaseDeletionDialogLoadState = loading;
+    void import("./NotesDatabaseDeletionDialog.svelte").then((module) => {
+      if (!databaseDeletionDialogLoadState) return;
+      databaseDeletionDialogLoadState = resolveLazyComponentLoad(
+        databaseDeletionDialogLoadState, "database-deletion", loading.requestId, module.default,
+      );
+    }).catch((error: unknown) => {
+      if (!databaseDeletionDialogLoadState) return;
+      databaseDeletionDialogLoadState = rejectLazyComponentLoad(
+        databaseDeletionDialogLoadState, "database-deletion", loading.requestId, error,
+      );
+      console.error("Load Notes database deletion confirmation failed", error);
+    });
+  }
+
+  $effect(() => {
+    if (databaseDeletionPanes.length) untrack(() => requestDatabaseDeletionDialog());
+  });
+
   $effect(() => {
     if (!mobileLayout || notes.selectedPageId === null) return;
     return mobileBackStack.activate({
       handle: () => {
         if (!beforeDocumentNavigation()) return;
+        if (notes.selectedDatabaseBlockId) {
+          notes.closeDatabase();
+          return;
+        }
         closePagePeek();
       },
     });
@@ -575,6 +626,24 @@
       </div>
     {/if}
   {/if}
+  {#each databaseDeletionPanes as pane (pane.id)}
+    {#if databaseDeletionDialogLoadState?.status === "ready"}
+      {@const DatabaseDeletionDialog = databaseDeletionDialogLoadState.component}
+      <DatabaseDeletionDialog controller={pane.store.databaseDeletion} />
+    {:else}
+      <div class="fixed inset-0 z-100 flex items-center justify-center bg-black/45 p-4" role="dialog" aria-modal="true" aria-busy={databaseDeletionDialogLoadState?.status !== "failed"}>
+        <div class="rounded-md border border-border bg-popover p-4 text-sm text-popover-foreground shadow-lg">
+          {#if databaseDeletionDialogLoadState?.status === "failed"}
+            <p role="alert">{t("common.viewLoadFailed", t("notes.databaseDelete"))}</p>
+            <button type="button" class="mt-3 min-h-9 rounded-md border border-border px-3 hover:bg-accent" onclick={() => requestDatabaseDeletionDialog(true)}>{t("common.retry")}</button>
+          {:else}
+            <p>{t("common.loading")}</p>
+          {/if}
+          <button type="button" class="mt-3 min-h-9 rounded-md border border-border px-3 hover:bg-accent" onclick={pane.store.databaseDeletion.cancel}>{t("common.cancel")}</button>
+        </div>
+      </div>
+    {/if}
+  {/each}
   <div class="notes-view-layout relative flex min-h-0 flex-1 overflow-hidden">
     {#if showProjectExplorer}
       <NotesProjectHome
@@ -628,17 +697,19 @@
           {#each notes.editorPanes as pane (pane.id)}
             {@const store = pane.store}
             {@const isContextual = contextualPane?.id === pane.id}
-            {@const center = isContextual && showCenterPeek}
-            {@const side = isContextual && showSidePeek}
-            {@const hidden = !isContextual && peekPromotesToFullPage}
+            {@const center = !showDatabasePage && isContextual && showCenterPeek}
+            {@const side = !showDatabasePage && isContextual && showSidePeek}
+            {@const hidden = showDatabasePage
+              ? notes.activePaneId !== pane.id
+              : !isContextual && peekPromotesToFullPage}
             {@const selected = store.selectedPageId !== null && !store.isPagePendingRemoval(store.selectedPageId)}
             <div
               class={hidden ? "hidden" : center
                 ? "fixed inset-x-0 bottom-0 z-50 flex items-center justify-center bg-black/45 px-3 py-4 sm:px-6 sm:py-8"
                 : side ? "ml-auto flex min-w-0 basis-1/2 overflow-hidden"
-                  : showSidePeek ? "flex min-w-0 basis-1/2 overflow-hidden" : "flex min-w-0 flex-1 overflow-hidden"}
+                  : !showDatabasePage && showSidePeek ? "flex min-w-0 basis-1/2 overflow-hidden" : "flex min-w-0 flex-1 overflow-hidden"}
               style={center ? "top: calc(var(--titlebar-h) + var(--cal-header-row-h));" : undefined}
-              inert={!isContextual && showCenterPeek}
+              inert={hidden || (!showDatabasePage && !isContextual && showCenterPeek)}
               data-notes-pane={pane.id}
               data-notes-main-page={pane.id === notes.mainPaneId ? store.selectedPageId : undefined}
               role="presentation"
@@ -653,11 +724,25 @@
                   ? "notes-center-peek-panel flex min-w-0 overflow-hidden rounded-lg border border-border"
                   : side ? "flex min-w-0 flex-1 overflow-hidden border-l border-border" : "flex min-w-0 flex-1 overflow-hidden"}
                 style="background-color: var(--cal-bg);"
-                role={isContextual && showPagePeek ? "dialog" : undefined}
-                aria-modal={isContextual && showPagePeek ? center : undefined}
-                data-notes-page-peek={isContextual && showPagePeek || undefined}
+                role={!showDatabasePage && isContextual && showPagePeek ? "dialog" : undefined}
+                aria-modal={!showDatabasePage && isContextual && showPagePeek ? center : undefined}
+                data-notes-page-peek={!showDatabasePage && isContextual && showPagePeek || undefined}
               >
                 {#if selected}
+                  {#if store.selectedDatabaseBlockId}
+                    {#key store.selectedDatabaseBlockId}
+                      <NotesDatabasePage
+                        editorStore={store}
+                        {mobileLayout}
+                        pageActionsTarget={notes.activePaneId === pane.id ? pageActionsTarget : null}
+                      />
+                    {/key}
+                  {/if}
+                  <div
+                    class={store.selectedDatabaseBlockId ? "hidden" : "flex min-h-0 min-w-0 flex-1 overflow-hidden"}
+                    inert={store.selectedDatabaseBlockId != null}
+                    data-notes-editor-container
+                  >
                   {#key store.selectedPageId}
                     <NotesLoadingSkeleton
                       ready={store.loadedPage?.id === store.selectedPageId && store.primaryContentReady || !!store.loadError}
@@ -665,13 +750,14 @@
                       openMode={isContextual && showPagePeek ? store.pageOpenMode : "full"}
                     >
                       {#snippet children()}
-                        {#if store.loadedPage?.id === store.selectedPageId && store.primaryContentReady}
+                        {#if store.loadedPage?.id === store.selectedPageId && store.primaryContentReady
+                          && (!store.selectedDatabaseBlockId || retainedEditorPages[pane.id] === store.selectedPageId)}
                           <NotesEditor
                             projectId={selectedProjectId}
                             editorStore={store}
-                            active={notes.activePaneId === pane.id}
+                            active={!store.selectedDatabaseBlockId && notes.activePaneId === pane.id}
                             openMode={isContextual && showPagePeek ? store.pageOpenMode : "full"}
-                            pageActionsTarget={notes.activePaneId === pane.id ? pageActionsTarget : null}
+                            pageActionsTarget={!store.selectedDatabaseBlockId && notes.activePaneId === pane.id ? pageActionsTarget : null}
                             onClose={() => { void notes.closePane(pane.id).catch((error: unknown) => console.warn("Close Notes pane failed", error)); }}
                             onOpenModeChange={(mode) => { void notes.showPaneAs(pane.id, mode).catch((error: unknown) => console.warn("Change Notes pane mode failed", error)); }}
                             {musicMentionContext}
@@ -688,6 +774,7 @@
                       {/snippet}
                     </NotesLoadingSkeleton>
                   {/key}
+                  </div>
                 {/if}
               </div>
             </div>

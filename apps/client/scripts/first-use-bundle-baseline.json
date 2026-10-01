@@ -215,6 +215,8 @@
       "src/lib/components/notes/NotesHierarchyPickerPanel.svelte"
     ],
     "forbiddenModules": [
+      "src/lib/components/notes/NotesDatabaseDeletionDialog.svelte",
+      "src/lib/components/notes/NotesDatabasePastePrompt.svelte",
       "src/lib/components/notes/NotesDatabaseTableView.svelte",
       "src/lib/components/notes/NotesDatabaseBoardView.svelte",
       "src/lib/components/notes/NotesDatabaseGalleryView.svelte",
@@ -242,6 +244,8 @@
       "src/lib/components/notes/NotesTextBlockEditor.svelte"
     ],
     "forbiddenModules": [
+      "src/lib/components/notes/NotesDatabaseDeletionDialog.svelte",
+      "src/lib/components/notes/NotesDatabasePastePrompt.svelte",
       "src/lib/components/notes/NotesMediaBlock.svelte",
       "src/lib/components/notes/NotesChildDatabaseBlock.svelte",
       "src/lib/components/notes/NotesTableBlock.svelte",

@@ -144,71 +144,14 @@ pub async fn trash_page(
     } else {
         repair_page_parent_for_active_restore(&mut tx, page_id).await?
     };
-    let trash_value = if in_trash { 1_i64 } else { 0_i64 };
-    let result = sqlx::query(
-        "WITH RECURSIVE page_subtree(id) AS (
-            SELECT id FROM notes_pages WHERE id = ?
-            UNION
-            SELECT child.id
-            FROM notes_pages AS child
-            JOIN page_subtree AS parent ON child.parent_page_id = parent.id
-            UNION
-            SELECT child.id
-            FROM notes_pages AS child
-            JOIN notes_blocks AS parent_block ON child.parent_block_id = parent_block.id
-            JOIN page_subtree AS parent ON parent_block.page_id = parent.id
-            UNION
-            SELECT child_block.id
-            FROM notes_blocks AS child_block
-            JOIN page_subtree AS parent ON child_block.page_id = parent.id
-            WHERE child_block.type = 'child_page'
-         )
-         UPDATE notes_pages
-         SET in_trash = ?,
-             archived = 0,
-             trashed_time = CASE
-                 WHEN ? = 1 AND in_trash = 0 THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                 WHEN ? = 1 THEN COALESCE(trashed_time, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-                 ELSE NULL
-             END,
-             last_edited_time = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-         WHERE id IN (SELECT id FROM page_subtree)",
-    )
-    .bind(page_id)
-    .bind(trash_value)
-    .bind(trash_value)
-    .bind(trash_value)
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| format!("trash notes page subtree: {e}"))?;
-    sqlx::query(
-        "WITH RECURSIVE page_subtree(id) AS (
-            SELECT id FROM notes_pages WHERE id = ?
-            UNION
-            SELECT child.id
-            FROM notes_pages AS child
-            JOIN page_subtree AS parent ON child.parent_page_id = parent.id
-            UNION
-            SELECT child.id
-            FROM notes_pages AS child
-            JOIN notes_blocks AS parent_block ON child.parent_block_id = parent_block.id
-            JOIN page_subtree AS parent ON parent_block.page_id = parent.id
-            UNION
-            SELECT child_block.id
-            FROM notes_blocks AS child_block
-            JOIN page_subtree AS parent ON child_block.page_id = parent.id
-            WHERE child_block.type = 'child_page'
-         )
-         UPDATE notes_blocks
-         SET in_trash = ?,
-             last_edited_time = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-         WHERE id IN (SELECT id FROM page_subtree) AND type = 'child_page'",
-    )
-    .bind(page_id)
-    .bind(if in_trash { 1_i64 } else { 0_i64 })
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| format!("trash notes child page blocks: {e}"))?;
+    super::database_lifecycle::set_page_trash(&mut tx, page_id, in_trash).await?;
+    if in_trash {
+        sqlx::query("UPDATE notes_pages SET archived = 0 WHERE id = ?")
+            .bind(page_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("clear trashed Notes page archive state: {e}"))?;
+    }
     set_root_child_page_block_visibility(&mut tx, page_id, root_child_page_block_visible).await?;
     for parent in child_parents {
         refresh_parent_has_children(&mut tx, &parent).await?;
@@ -218,9 +161,6 @@ pub async fn trash_page(
     tx.commit()
         .await
         .map_err(|e| format!("commit trash notes page: {e}"))?;
-    if result.rows_affected() == 0 {
-        return Err("notes page not found".to_string());
-    }
     reads::get_page(pool, page_id, true).await
 }
 

@@ -98,48 +98,7 @@ pub(super) async fn set_block_subtree_trash(
     block_id: &str,
     in_trash: bool,
 ) -> Result<(), String> {
-    sqlx::query(
-        "WITH RECURSIVE subtree(id) AS (
-            SELECT id FROM notes_blocks WHERE id = ?
-            UNION ALL
-            SELECT notes_blocks.id
-            FROM notes_blocks
-            JOIN subtree ON notes_blocks.parent_block_id = subtree.id
-         )
-         UPDATE notes_blocks
-         SET in_trash = ?,
-             last_edited_time = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-         WHERE id IN (SELECT id FROM subtree)",
-    )
-    .bind(block_id)
-    .bind(if in_trash { 1_i64 } else { 0_i64 })
-    .execute(&mut **tx)
-    .await
-    .map_err(|e| format!("trash notes block subtree: {e}"))?;
-    sqlx::query(
-        "WITH RECURSIVE subtree(id) AS (
-            SELECT id FROM notes_blocks WHERE id = ?
-            UNION ALL
-            SELECT notes_blocks.id
-            FROM notes_blocks
-            JOIN subtree ON notes_blocks.parent_block_id = subtree.id
-         )
-         UPDATE notes_pages
-         SET in_trash = ?,
-             last_edited_time = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-         WHERE id IN (
-             SELECT notes_blocks.id
-             FROM notes_blocks
-             JOIN subtree ON subtree.id = notes_blocks.id
-             WHERE notes_blocks.type = 'child_page'
-         )",
-    )
-    .bind(block_id)
-    .bind(if in_trash { 1_i64 } else { 0_i64 })
-    .execute(&mut **tx)
-    .await
-    .map_err(|e| format!("trash notes child pages: {e}"))?;
-    Ok(())
+    super::database_lifecycle::set_block_trash(tx, block_id, in_trash).await
 }
 
 pub(super) async fn load_block_subtree_rows(
@@ -211,12 +170,18 @@ pub(super) async fn load_page_block_subtree_rows_for_copy(
         "WITH RECURSIVE eligible AS (
             SELECT block.* FROM notes_blocks AS block
             WHERE block.page_id = ? AND (block.in_trash = 0 OR (
-                ? AND block.type = 'child_page' AND EXISTS (
+                ? AND EXISTS (
                     SELECT 1 FROM notes_pages AS child
                     JOIN notes_pages AS parent ON parent.id = block.page_id
                     WHERE child.id = block.id AND parent.in_trash = 1
                       AND child.trashed_time = parent.trashed_time
+                      AND json_extract(block.payload, '$.__ganbaru_trash_owner') IS NULL
+                      AND json_extract(parent.properties, '$.__ganbaru_trash_owner') IS NULL
                 )
+            ) OR (
+                ? AND EXISTS (SELECT 1 FROM notes_pages AS parent WHERE parent.id = block.page_id
+                    AND parent.in_trash = 1
+                    AND json_extract(block.payload, '$.__ganbaru_trash_owner') = json_extract(parent.properties, '$.__ganbaru_trash_owner'))
             ))
          ), subtree(id, path) AS (
             SELECT id, printf('%020.6f:%s', sort_order, id)
@@ -249,6 +214,7 @@ pub(super) async fn load_page_block_subtree_rows_for_copy(
          ORDER BY subtree.path ASC",
     )
     .bind(page_id)
+    .bind(include_trashed)
     .bind(include_trashed)
     .bind(page_id)
     .fetch_all(&mut **tx)

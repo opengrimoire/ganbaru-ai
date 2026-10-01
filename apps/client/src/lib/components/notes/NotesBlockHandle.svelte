@@ -43,6 +43,7 @@
 
   let {
     onTurnInto,
+    canTurnInto = true,
     canSetColor,
     currentColor,
     currentBackgroundColor = currentColor,
@@ -62,6 +63,7 @@
     onMenuOpenChange,
   }: {
     onTurnInto: () => void;
+    canTurnInto?: boolean;
     canSetColor: boolean;
     currentColor: NotesColor;
     currentBackgroundColor?: NotesColor;
@@ -289,6 +291,7 @@
         if (!(target instanceof HTMLInputElement)) event.preventDefault();
       }}
     >
+      {#if canTurnInto}
       <button
         class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent hover:text-accent-foreground"
         type="button"
@@ -298,6 +301,7 @@
         <Pilcrow class="size-4 shrink-0" />
         <span class="min-w-0 truncate">{t("notes.turnInto")}</span>
       </button>
+      {/if}
       {#if canSetColor}
         <div class="my-1 border-t border-border"></div>
         <div class="px-2.5 pb-1 pt-1 text-[0.7rem] font-medium text-muted-foreground">

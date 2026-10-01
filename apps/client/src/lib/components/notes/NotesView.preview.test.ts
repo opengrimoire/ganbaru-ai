@@ -4,13 +4,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyBlockUpdate, blockPlainText, createBlockUpdate } from "$lib/notes/block-factory";
 import { notesBlockOutlineFromBlock } from "$lib/notes/block-outline";
 import { createProvisionalNotesPage } from "$lib/notes/page-creation";
-import type { NotesBlockHydrationRequest, NotesBlockUpdate, NotesChildPageFromBlockCreate, NotesDataSourceTableView, NotesDatabaseCreateRequest, NotesLocalUser, NotesPageCreate, NotesPageOpenResponse, NotesWorkspaceShell, NotesWorkspaceShellRequest } from "$lib/notes/types";
+import { parseNotesLinkHash } from "$lib/notes/block-link";
+import type { NotesBlockHydrationRequest, NotesBlockUpdate, NotesChildPageFromBlockCreate, NotesDataSourceTableView, NotesDatabaseCreateRequest, NotesDatabaseReference, NotesLocalUser, NotesPageCreate, NotesPageOpenResponse, NotesWorkspaceShell, NotesWorkspaceShellRequest } from "$lib/notes/types";
 import type { NotesPageOpenMode } from "$lib/notes/page-open-mode";
 
 const backend = vi.hoisted(() => ({
   pages: new Map<string, NotesPageOpenResponse>(),
   open: vi.fn(), createChild: vi.fn(), createPage: vi.fn(), saveBlock: vi.fn(),
   createDatabase: vi.fn(), databaseViews: vi.fn(), databaseTable: vi.fn(),
+  databaseReference: vi.fn(async (_blockId: string): Promise<NotesDatabaseReference> => { throw new Error("Missing database fixture"); }),
   renameDatabase: vi.fn(async (_databaseId: string, title: string) => title),
   mentionSources: vi.fn(async () => []),
   destinations: vi.fn(async () => ({ pages: [], next_page_cursor: null })),
@@ -30,6 +32,7 @@ vi.mock("$lib/api/notes", async (importOriginal) => ({
   renameNotesDatabase: backend.renameDatabase,
   listNotesDatabaseViews: backend.databaseViews,
   getNotesDataSourceTableView: backend.databaseTable,
+  getNotesDatabaseReference: backend.databaseReference,
   listNotesDataSourceTemplates: async () => [],
   loadNotesWorkspaceShell: async (request: NotesWorkspaceShellRequest): Promise<NotesWorkspaceShell> => {
     backend.workspaceRequests.push(request);
@@ -38,6 +41,7 @@ vi.mock("$lib/api/notes", async (importOriginal) => ({
     return {
       pages, folders: [], navigation_pages: request.include_navigation_index ? allPages : [],
       navigation_folders: [], navigation_page_ids_with_children: [],
+      navigation_databases: [],
       page_ids_with_children: [], missing_parent_page_ids: [], trashed_parent_page_ids: [],
       resolved_selected_page_id: null, total_page_count: pages.length, total_folder_count: 0,
       next_page_cursor: request.project_id === "other-project" && !request.page_cursor ? backend.otherProjectCursor : null,
@@ -133,6 +137,27 @@ function emptyDatabaseTable(request: NotesDatabaseCreateRequest): NotesDataSourc
   };
 }
 
+/** Give a note an existing database without running a creation mutation. */
+function databaseInPage(owner: NotesPageOpenResponse, title = "Planning") {
+  const blockId = owner.blocks.results[0].id;
+  const request: NotesDatabaseCreateRequest = {
+    id: crypto.randomUUID(), data_source_id: crypto.randomUUID(), view_id: crypto.randomUUID(),
+    parent: { type: "page_id", page_id: owner.page.id }, title,
+  };
+  const table = emptyDatabaseTable(request);
+  const block = applyBlockUpdate(owner.blocks.results[0], {
+    type: "child_database", child_database: {
+      title, database_id: request.id, data_source_id: request.data_source_id, view_id: request.view_id,
+    },
+  });
+  if (block.type !== "child_database") throw new Error("Expected a database fixture");
+  owner.blocks.results[0] = block;
+  owner.outlines = owner.blocks.results.map((item, index) => notesBlockOutlineFromBlock(item, owner.page.id, index));
+  backend.databaseViews.mockResolvedValue([table.view]);
+  backend.databaseTable.mockResolvedValue(table);
+  return { blockId, block, table };
+}
+
 describe("Notes preview ownership", () => {
   let component: ReturnType<typeof mount> | undefined;
   afterEach(async () => {
@@ -148,16 +173,18 @@ describe("Notes preview ownership", () => {
     backend.otherProjectCursor = null;
     backend.projectsLoaded = true;
     backend.projectsReady.mockResolvedValue(undefined);
+    backend.databaseReference.mockReset();
+    window.history.replaceState(null, "", window.location.pathname);
   });
 
-  async function setup(openMode: NotesPageOpenMode = "full", emptyChildWithCover = false, parentBodyId?: string) {
+  async function setup(openMode: NotesPageOpenMode = "full", emptyChildWithCover = false, parentBodyId?: string, parentPageId = "parent") {
     const { getProjects } = await import("$lib/stores/projects.svelte");
     getProjects().selectedProjectId = "project";
     vi.stubGlobal("CSS", { escape: (value: string) => value });
     vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0));
     vi.stubGlobal("cancelAnimationFrame", (id: number) => window.clearTimeout(id));
-    const parent = page("parent", "Main note");
+    const parent = page(parentPageId, "Main note");
     if (parentBodyId) parent.blocks.results[0] = { ...parent.blocks.results[0], id: parentBodyId };
     const child = page("child", "Sub-note", parent.page.id);
     if (emptyChildWithCover) {
@@ -192,6 +219,16 @@ describe("Notes preview ownership", () => {
       const next = applyBlockUpdate(owner.blocks.results[index], update);
       owner.blocks.results[index] = next;
       return next;
+    });
+    backend.databaseReference.mockImplementation(async (blockId: string) => {
+      const owner = [...backend.pages.values()].find((loaded) => loaded.blocks.results.some((block) => block.id === blockId));
+      const block = owner?.blocks.results.find((candidate) => candidate.id === blockId);
+      if (!owner || block?.type !== "child_database" || block.in_trash || block.archived) throw new Error("Missing database fixture");
+      return {
+        block_id: blockId, page_id: owner.page.id, title: block.child_database.title,
+        source_block_id: blockId, source_page_id: owner.page.id,
+        is_linked: false, owned_data_source_count: 1,
+      };
     });
     const { getNotes } = await import("$lib/stores/notes.svelte");
     const notes = getNotes();
@@ -317,6 +354,203 @@ describe("Notes preview ownership", () => {
     });
     expect(backend.open.mock.calls.filter(([id]) => id === other.page.id)).toHaveLength(1);
   }, 15_000);
+
+  it("shows floating paste choices beside an atomic database row and keeps the copy when dismissed", async () => {
+    const { notes, child } = await setup();
+    const { blockId } = databaseInPage(child);
+    await notes.selectPage(child.page.id);
+    await vi.waitFor(() => expect(document.querySelector('input[aria-label="Database title"]')).not.toBeNull());
+    notes.databasePaste.beginCopies({ [blockId]: crypto.randomUUID() }, false);
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"][aria-label="Paste as"]')).not.toBeNull());
+    const panel = document.querySelector('[role="dialog"][aria-label="Paste as"]')!;
+    expect(panel.closest(".notes-block-list")).toBeNull();
+    const dismiss = [...panel.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Dismiss")!;
+    dismiss.click();
+    await tick();
+    expect(document.querySelector('[role="dialog"][aria-label="Paste as"]')).toBeNull();
+    expect(notes.blockById(blockId)?.type).toBe("child_database");
+    expect(document.querySelector(`[data-notes-selectable-block-id="${blockId}"] input[aria-label="Database title"]`)).not.toBeNull();
+  }, 15_000);
+
+  it.each(["center", "side"] as const)("retains both editor panes and cached rows while a %s preview opens its database fullwidth", async (mode) => {
+    const { notes, parent, child } = await setup();
+    const { blockId } = databaseInPage(child);
+    await notes.selectPage(child.page.id, { openMode: mode });
+    await vi.waitFor(() => expect(backend.databaseTable).toHaveBeenCalled(), { timeout: 5_000 });
+    await tick(); await tick();
+    const mainViewport = document.querySelector("[data-notes-main-page] [data-notes-editor-scroll]");
+    const previewViewport = document.querySelector("[data-notes-page-peek] [data-notes-editor-scroll]");
+    const paneIds = notes.editorPanes.map((pane) => pane.id);
+    const rowReads = backend.databaseTable.mock.calls.length;
+    const preview = notes.previewPane;
+    const noteFocusBlockId = notes.focusBlockId;
+    const noteFocusRequestId = notes.focusRequestId;
+    expect(await notes.openDatabase(blockId)).toBe(true);
+    await vi.waitFor(() => expect(document.querySelector("[data-notes-database-page] input[aria-label='Database title']")).not.toBeNull());
+    expect(notes.editorPanes.map((pane) => pane.id)).toEqual(paneIds);
+    expect(notes.previewPane).toBe(preview);
+    expect(notes.pageOpenMode).toBe(mode);
+    for (const element of document.querySelectorAll<HTMLElement>("[data-notes-pane]")) {
+      const hidden = element.dataset.notesPane !== notes.activePaneId;
+      expect(element.classList.contains("hidden")).toBe(hidden);
+      expect(element.inert).toBe(hidden);
+    }
+    expect(document.querySelector("[data-notes-database-page]")?.closest("[data-notes-page-peek]")).toBeNull();
+    expect(document.querySelector("[data-notes-main-page] [data-notes-editor-scroll]")).toBe(mainViewport);
+    expect(document.querySelector(`[data-notes-pane='${notes.activePaneId}'] [data-notes-editor-scroll]`)).toBe(previewViewport);
+    expect(backend.databaseTable).toHaveBeenCalledTimes(rowReads);
+    expect(notes.focusBlockId).toBeNull();
+    const title = document.querySelector<HTMLInputElement>("[data-notes-database-page] input[aria-label='Database title']")!;
+    title.focus();
+    expect(document.activeElement).toBe(title);
+    expect(notes.focusRequestId).toBe(noteFocusRequestId);
+    title.value = "Planning queue";
+    title.dispatchEvent(new Event("input", { bubbles: true }));
+    title.blur();
+    await vi.waitFor(() => expect(document.querySelector("[data-notes-database-breadcrumb]")?.textContent).toContain("Planning queue"));
+    const breadcrumb = document.querySelector<HTMLButtonElement>('[data-notes-workspace-header] button[aria-label="Sub-note"]')!;
+    breadcrumb.click();
+    await tick(); await tick();
+    expect(notes.selectedDatabaseBlock).toBeNull();
+    expect(notes.focusBlockId).toBe(noteFocusBlockId);
+    expect(document.querySelector("[data-notes-database-page]")).toBeNull();
+    expect(notes.previewPane).toBe(preview);
+    expect(notes.pageOpenMode).toBe(mode);
+    expect(document.querySelector("[data-notes-page-peek] [data-notes-editor-scroll]")).toBe(previewViewport);
+    expect(backend.open.mock.calls.filter(([id]) => id === parent.page.id)).toHaveLength(1);
+    expect(backend.open.mock.calls.filter(([id]) => id === child.page.id)).toHaveLength(1);
+  }, 15_000);
+
+  it("acknowledges a pending database rename after returning to the retained note", async () => {
+    const { notes, parent } = await setup();
+    const { blockId } = databaseInPage(parent);
+    await notes.selectPageLocally(null);
+    await notes.selectPage(parent.page.id);
+    expect(await notes.openDatabase(blockId)).toBe(true);
+    await vi.waitFor(() => expect(document.querySelector("[data-notes-database-page] input[aria-label='Database title']")).not.toBeNull());
+    let finishRename!: (title: string) => void;
+    backend.renameDatabase.mockImplementationOnce(() => new Promise<string>((resolve) => { finishRename = resolve; }));
+    const title = document.querySelector<HTMLInputElement>("[data-notes-database-page] input[aria-label='Database title']")!;
+    title.focus();
+    title.value = "Planning queue";
+    title.dispatchEvent(new Event("input", { bubbles: true }));
+    title.blur();
+    await vi.waitFor(() => expect(backend.renameDatabase).toHaveBeenCalled());
+    notes.closeDatabase();
+    await tick(); await tick();
+    expect(document.querySelector("[data-notes-database-page]")).toBeNull();
+    finishRename("Planning queue");
+    await vi.waitFor(() => expect(blockPlainText(notes.blockById(blockId)!)).toBe("Planning queue"));
+    const retainedTitle = document.querySelector<HTMLInputElement>("[data-notes-editor-container] input[aria-label='Database title']");
+    await vi.waitFor(() => expect(retainedTitle?.value).toBe("Planning queue"));
+  }, 15_000);
+
+  it("retains the dedicated database behind a row peek and restores it when the peek closes", async () => {
+    const { notes, parent, child } = await setup();
+    const { blockId } = databaseInPage(parent);
+    await notes.selectPageLocally(null);
+    await notes.selectPage(parent.page.id);
+    expect(await notes.openDatabase(blockId)).toBe(true);
+    await vi.waitFor(() => expect(document.querySelector("[data-notes-database-page] input[aria-label='Database title']")).not.toBeNull());
+    const databaseSurface = document.querySelector("[data-notes-database-page]");
+    await notes.openPageContextually(child.page.id);
+    await tick(); await tick();
+    expect(document.querySelector("[data-notes-main-page] [data-notes-database-page]")).toBe(databaseSurface);
+    expect(document.querySelector("[data-notes-page-peek] [data-notes-editor-scroll]")).not.toBeNull();
+    await notes.closeContextualPage();
+    await tick(); await tick();
+    expect(notes.selectedDatabaseBlock?.id).toBe(blockId);
+    expect(document.querySelector("[data-notes-database-page]")).toBe(databaseSurface);
+    expect(document.querySelector("[data-notes-page-peek]")).toBeNull();
+  }, 15_000);
+
+  it("opens a database hash as a dedicated surface and returns to the note without a second page read", async () => {
+    const { notes, parent } = await setup("full", false, crypto.randomUUID(), crypto.randomUUID());
+    await notes.selectPage(null);
+    const { blockId } = databaseInPage(parent);
+    const hash = `#notes?page=${parent.page.id}&block=${blockId}`;
+    window.history.replaceState(null, "", hash);
+    const target = parseNotesLinkHash(hash);
+    if (!target) throw new Error("Expected a Notes database link");
+    const pageReads = backend.open.mock.calls.length;
+    expect(await notes.openNotesLink(target)).toBe(true);
+    await vi.waitFor(() => expect(document.querySelector("[data-notes-database-page] input[aria-label='Database title']")).not.toBeNull());
+    expect(document.querySelector("[data-notes-editor-scroll]")).toBeNull();
+    expect(backend.open).toHaveBeenCalledTimes(pageReads + 1);
+    const header = document.querySelector("[data-notes-workspace-header]")!;
+    expect(header.textContent).toContain("Planning");
+    header.querySelector<HTMLButtonElement>('button[aria-label="Main note"]')!.click();
+    await vi.waitFor(() => expect(document.querySelector("[data-notes-editor-scroll]")).not.toBeNull());
+    expect(backend.open).toHaveBeenCalledTimes(pageReads + 1);
+    expect(parseNotesLinkHash(window.location.hash)).toEqual({ pageId: parent.page.id });
+  }, 15_000);
+
+  it("settles pending owner writes before database navigation and retains the draft if saving fails", async () => {
+    const { notes, parent } = await setup();
+    const draft = { ...parent.blocks.results[0], id: crypto.randomUUID() };
+    parent.blocks.results.push(draft);
+    const { blockId } = databaseInPage(parent);
+    await notes.selectPageLocally(null);
+    await notes.selectPage(parent.page.id);
+    const draftId = draft.id;
+    await notes.updateBlockText(draftId, "Unsaved body");
+    let finishSave!: () => void;
+    const saving = new Promise<void>((resolve) => { finishSave = resolve; });
+    const saveBlock = backend.saveBlock.getMockImplementation()!;
+    backend.saveBlock.mockImplementation(async (id: string, update: NotesBlockUpdate) => {
+      await saving;
+      return saveBlock(id, update);
+    });
+    const opening = notes.openDatabase(blockId);
+    await vi.waitFor(() => expect(backend.saveBlock).toHaveBeenCalled());
+    expect(notes.selectedDatabaseBlockId).toBeNull();
+    finishSave();
+    expect(await opening).toBe(true);
+    notes.closeDatabase();
+    await notes.updateBlockText(draftId, "Retained body");
+    backend.saveBlock.mockRejectedValueOnce(new Error("Save failed"));
+    expect(await notes.openDatabase(blockId)).toBe(false);
+    expect(notes.selectedDatabaseBlockId).toBeNull();
+    expect(blockPlainText(notes.blockById(draftId)!)).toBe("Retained body");
+    expect(notes.editorSaveError).toBe("Save failed");
+    backend.saveBlock.mockImplementation(saveBlock);
+    await notes.retryEditorMutations();
+  });
+
+  it("ignores late database metadata after the owner note has changed", async () => {
+    const { notes, parent, child } = await setup();
+    const { blockId } = databaseInPage(parent);
+    const reference = await backend.databaseReference(blockId);
+    let finishReference!: (value: NotesDatabaseReference) => void;
+    backend.databaseReference.mockImplementationOnce(() => new Promise<NotesDatabaseReference>((resolve) => { finishReference = resolve; }));
+    const opening = notes.openDatabase(blockId);
+    await notes.selectPage(child.page.id, { openMode: "full" });
+    finishReference(reference);
+    expect(await opening).toBe(false);
+    expect(notes.selectedPageId).toBe(child.page.id);
+    expect(notes.selectedDatabaseBlockId).toBeNull();
+  });
+
+  it("redirects a linked database to its canonical owner while retaining the original note", async () => {
+    const { notes, parent, other } = await setup();
+    const { blockId } = databaseInPage(other, "Shared planning");
+    backend.databaseReference.mockResolvedValueOnce({
+      block_id: parent.blocks.results[0].id, page_id: parent.page.id, title: "Linked planning",
+      source_block_id: blockId, source_page_id: other.page.id, is_linked: true, owned_data_source_count: 0,
+    });
+    const mainStore = notes.editorPanes[0].store;
+    expect(await notes.openDatabase(parent.blocks.results[0].id)).toBe(true);
+    expect(notes.editorPanes[0].store).toBe(mainStore);
+    expect(mainStore.selectedPageId).toBe(parent.page.id);
+    expect(notes.selectedPageId).toBe(other.page.id);
+    expect(notes.selectedDatabaseBlock?.id).toBe(blockId);
+    const { getProjects } = await import("$lib/stores/projects.svelte");
+    expect(getProjects().selectedProjectId).toBe("other-project");
+    await vi.waitFor(() => expect(document.querySelector("[data-notes-database-breadcrumb]")?.textContent).toContain("Shared planning"));
+    notes.closeDatabase();
+    expect(notes.selectedPageId).toBe(other.page.id);
+    expect(notes.editorPanes[0].store).toBe(mainStore);
+  });
 
   it("restores each pane's project context on focus and preview close without reopening either document", async () => {
     const { notes, parent, other } = await setup();

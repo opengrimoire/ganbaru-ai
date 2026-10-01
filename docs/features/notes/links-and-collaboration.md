@@ -12,6 +12,10 @@ Link panels use 80% of the rendered Notes paragraph font size and inherit it thr
 
 Local text links persist as `#notes?page=UUID` with an optional `block=UUID`. Links copied from the current app origin normalize to this portable form. Rust validates these identities before saving; navigation still checks whether the target is available. This does not register an operating-system URL scheme or create a public sharing URL.
 
+Page and database mentions render as compact inline references with a destination icon. Hovering opens a small floating card with the current destination title and containing path. Database cards include a schematic table preview without fetching rows or mounting a database view. Metadata loads only after hover intent or when activation needs to resolve a database owner. Clicking or Ctrl/Cmd-clicking a database mention opens its dedicated database surface. Native text selection and dragging remain available. Rich clipboard paste inside Notes retains local mention identities; external consumers receive readable text and an available local hyperlink.
+
+Inline clipboard references carry a validated page or database identity independently of their hyperlink. A database mention without a known owner remains an inline reference when pasted into Notes; copying it reads no target metadata, rows, or schema. Nested text annotations and selected label text survive the round trip. Missing or invalid reference metadata leaves readable text or a valid ordinary hyperlink. Inline references never request the independent page or database copies used by block clipboard operations. Target availability is checked during navigation rather than by clipboard serialization.
+
 External activation uses a Notes-owned native command on desktop and Android. It validates the existing rich-text URL bounds, allows only HTTP, HTTPS, and email destinations, and rejects embedded credentials before invoking the system handler. Local references stay within Notes navigation. The command does not fetch content or widen the generic opener allowlist.
 
 ## Stable links and aliases

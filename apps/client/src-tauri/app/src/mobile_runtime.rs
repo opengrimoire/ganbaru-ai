@@ -321,6 +321,8 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             notes::notes_create_page,
             notes::notes_create_child_page_from_block,
             notes::notes_create_database,
+            notes::notes_database_reference,
+            notes::notes_duplicate_database,
             notes::notes_create_linked_database_view,
             notes::notes_rename_database,
             notes::notes_list_database_views,

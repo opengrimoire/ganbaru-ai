@@ -19,7 +19,8 @@ function harness(count = 3, type: NotesBlock["type"] = "paragraph", hiddenCallou
   const list = document.createElement("div");
   list.innerHTML = ids.map((id) => `<div data-notes-selectable-block-id="${id}"><div role="textbox" contenteditable="true" data-notes-block-id="${id}">${id}</div></div>`).join("");
   document.body.append(list);
-  const replace = vi.fn(async () => undefined);
+  const replace = vi.fn(async (): Promise<void | boolean> => undefined);
+  const deleteBlocks = vi.fn(async (): Promise<void | boolean> => undefined);
   const hydrate = vi.fn(async () => undefined);
   const outlineSubtreeIds = vi.fn((rootBlockIds: readonly string[]) => [...rootBlockIds]);
   const focus = vi.fn();
@@ -40,7 +41,7 @@ function harness(count = 3, type: NotesBlock["type"] = "paragraph", hiddenCallou
     targetIsSelectionZone: navigation.targetIsSelectionZone, focusTextEditorAtEnd: navigation.focusTextEditorAtEnd,
     focusRow, handleNavigationKeydown: navigation.handleKeydown,
     pasteBlocks: async () => null, duplicateBlocks: async () => null,
-    moveBlocks: async () => undefined, deleteBlocks: async () => undefined,
+    moveBlocks: async () => undefined, deleteBlocks,
   });
   const blockDelegates = blockSelection.delegation(list);
   const controller = createNotesDocumentSelectionController({
@@ -56,7 +57,7 @@ function harness(count = 3, type: NotesBlock["type"] = "paragraph", hiddenCallou
     editor(index).dispatchEvent(event);
     return event;
   };
-  return { controller, blockSelection, hydrateSubtrees, outlineSubtreeIds, focusRow, replace, indent, link, hydrate, focus, blocks, ids, editor, key,
+  return { controller, blockSelection, hydrateSubtrees, outlineSubtreeIds, focusRow, replace, deleteBlocks, indent, link, hydrate, focus, blocks, ids, editor, key,
     destroy() { attached.destroy(); blockDelegates.destroy(); },
   };
 }
@@ -368,6 +369,32 @@ describe("Notes document selection", () => {
     expect(h.hydrateSubtrees).toHaveBeenCalledExactlyOnceWith([h.ids[0]]);
     expect(writeText).toHaveBeenCalledExactlyOnceWith("block-0\n\nblock-1");
     expect(h.blockSelection.clipboard?.subtreeBlockIds).toEqual([h.ids[0], child.id]);
+    h.destroy();
+  });
+
+  it("preserves document selection when database deletion is cancelled", async () => {
+    const h = harness();
+    h.replace.mockResolvedValue(false);
+    const selection = { anchor: { blockId: h.ids[0], offset: 2 }, focus: { blockId: h.ids[2], offset: 4 } };
+    await h.controller.select(selection);
+    await h.controller.replace("");
+    expect(h.controller.selection).toEqual(selection);
+    expect(h.editor(0).textContent).toBe("block-0");
+    expect(h.editor(2).textContent).toBe("block-2");
+    h.destroy();
+  });
+
+  it("keeps cancelled block cuts as reusable copies without clearing the selected blocks", async () => {
+    const h = harness();
+    vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn(async () => undefined) } });
+    h.deleteBlocks.mockResolvedValue(false);
+    const selected = { anchorBlockId: h.ids[0], focusBlockId: h.ids[2], selectedBlockIds: h.ids };
+    h.blockSelection.setSelection(selected);
+    await h.blockSelection.copy("cut");
+    expect(h.blockSelection.selection).toEqual(selected);
+    expect(h.blockSelection.clipboard).toMatchObject({ mode: "copy", subtreeBlockIds: h.ids });
+    await h.blockSelection.remove();
+    expect(h.blockSelection.selection).toEqual(selected);
     h.destroy();
   });
 

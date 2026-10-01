@@ -15,6 +15,7 @@ import type {
 import { invokeNotesMutation } from "./mutation";
 import {
   mapPageSummary,
+  mapNavigationDatabase,
   notesWorkspaceShellRecord,
   shellNullableString,
   shellNumber,
@@ -34,7 +35,7 @@ export async function loadNotesWorkspaceShell(
   const dbUrl = await ensureDbUrl();
   const value = await invoke<unknown>("notes_load_workspace_shell", { dbUrl, request });
   const record = notesWorkspaceShellRecord(value);
-  if (!Array.isArray(record.pages) || !Array.isArray(record.folders)) {
+  if (!Array.isArray(record.pages) || !Array.isArray(record.folders) || !Array.isArray(record.navigation_databases)) {
     throw new Error("notes_load_workspace_shell returned invalid collections");
   }
   return {
@@ -50,6 +51,7 @@ export async function loadNotesWorkspaceShell(
       record.navigation_page_ids_with_children ?? [],
       "navigation_page_ids_with_children",
     ),
+    navigation_databases: record.navigation_databases.map(mapNavigationDatabase),
     page_ids_with_children: shellStringArray(record.page_ids_with_children, "page_ids_with_children"),
     missing_parent_page_ids: shellStringArray(record.missing_parent_page_ids, "missing_parent_page_ids"),
     trashed_parent_page_ids: shellStringArray(record.trashed_parent_page_ids, "trashed_parent_page_ids"),

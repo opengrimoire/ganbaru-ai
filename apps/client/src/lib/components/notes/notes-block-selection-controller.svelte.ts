@@ -48,7 +48,7 @@ export interface NotesBlockSelectionControllerOptions {
   pasteBlocks: (rootIds: readonly string[], subtreeIds: readonly string[], targetId: string, includeTrashed: boolean) => Promise<string | null>;
   duplicateBlocks: (ids: readonly string[]) => Promise<string | null>;
   moveBlocks: (ids: readonly string[], direction: "up" | "down") => Promise<void>;
-  deleteBlocks: (ids: readonly string[]) => Promise<void>;
+  deleteBlocks: (ids: readonly string[]) => Promise<void | boolean>;
 }
 
 /** Attach and symmetrically remove delegated Notes block-list listeners. */
@@ -174,7 +174,12 @@ export function createNotesBlockSelectionController(options: NotesBlockSelection
     if (pageId !== options.readPageId() || !sameSelection(selected, selection)) return;
     const plainText = content.plainText;
     clipboard = { mode, pageId, rootBlockIds: roots, subtreeBlockIds: subtree, plainText };
-    if (mode === "cut") { await options.deleteBlocks(selectedIds); setSelection(null); }
+    if (mode === "cut") {
+      const written = clipboard;
+      if (await options.deleteBlocks(selectedIds) === false) {
+        if (clipboard === written) clipboard.mode = "copy";
+      } else setSelection(null);
+    }
   }
 
   async function paste(targetId: string | null): Promise<void> {
@@ -196,7 +201,7 @@ export function createNotesBlockSelectionController(options: NotesBlockSelection
 
   async function duplicate(): Promise<void> { if (selection) { await options.duplicateBlocks(selection.selectedBlockIds); setSelection(null); } }
   async function move(direction: "up" | "down"): Promise<void> { if (selection) await options.moveBlocks(selection.selectedBlockIds, direction); }
-  async function remove(): Promise<void> { if (selection) { await options.deleteBlocks(selection.selectedBlockIds); setSelection(null); } }
+  async function remove(): Promise<void> { if (selection && await options.deleteBlocks(selection.selectedBlockIds) !== false) setSelection(null); }
 
   function keydown(event: KeyboardEvent): void {
     if (event.defaultPrevented) return;

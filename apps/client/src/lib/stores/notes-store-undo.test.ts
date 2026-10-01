@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   blockPlainText,
   createBlockWrite,
@@ -9,7 +9,7 @@ import {
   createNotesUndoSnapshotForBlocks,
   type NotesUndoSnapshot,
 } from "$lib/notes/undo-history";
-import type { NotesBlock, NotesParent } from "$lib/notes/types";
+import type { NotesBlock, NotesChildDatabaseBlock, NotesParent } from "$lib/notes/types";
 import { createNotesUndoController } from "./notes-store-undo";
 
 const notesApi = vi.hoisted(() => ({
@@ -63,6 +63,30 @@ function treeFromBlocks(blocks: readonly NotesBlock[]): NotesTreeState {
 }
 
 describe("notes undo controller", () => {
+  beforeEach(() => vi.clearAllMocks());
+  it("restores canonical database identities even when undo and redo were queued before creation finished", async () => {
+    notesApi.updateNotesBlock.mockClear();
+    const optimistic: NotesChildDatabaseBlock = { ...paragraph("", secondBlockId), type: "child_database", child_database: { title: "Historical title" } };
+    const canonical: NotesChildDatabaseBlock = { ...optimistic, child_database: { title: "Saved title", database_id: secondBlockId, data_source_id: "source", view_id: "view" } };
+    const before = createNotesUndoSnapshotForBlocks(pageId, treeFromBlocks([paragraph("")]), blockId, [blockId, secondBlockId]);
+    const after = createNotesUndoSnapshotForBlocks(pageId, treeFromBlocks([paragraph(""), optimistic]), secondBlockId, [blockId, secondBlockId]);
+    const queued: Array<() => Promise<void>> = [];
+    const controller = createNotesUndoController({
+      enqueueEditorMutation: (mutation) => { queued.push(mutation); return Promise.resolve(); },
+      readSelectedPageId: () => pageId, readTreeState: () => treeFromBlocks([paragraph(""), optimistic]),
+      loadPageTreeForUndo: async () => undefined, requestBlockFocus: () => undefined,
+      flushPendingMutations: async () => undefined, applyLocalSnapshot: () => undefined,
+    });
+    controller.record({ kind: "paste", before, after });
+    await controller.undo();
+    await controller.redo();
+    controller.reconcileDatabaseIdentity(canonical);
+    for (const mutation of queued) await mutation();
+    expect(notesApi.updateNotesBlock).toHaveBeenCalledWith(secondBlockId, {
+      type: "child_database", child_database: { title: "Historical title", database_id: secondBlockId, data_source_id: "source", view_id: "view" },
+    });
+    controller.dispose();
+  });
   it("applies typing undo locally before background persistence", async () => {
     let currentTree = tree(paragraph("ab"));
     let locallyAppliedText: string | null = null;

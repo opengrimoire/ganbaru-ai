@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { NotesFolder, NotesPage } from "./types";
+import { createRichText } from "./block-factory";
+import type { NotesDatabaseView, NotesFolder, NotesNavigationDatabase, NotesPage } from "./types";
 import {
   notesHierarchyChildren,
   notesHierarchyNodeParent,
   notesHierarchyPath,
+  notesHierarchyPickerChildren,
   notesPageContainingFolderId,
 } from "./hierarchy-navigation";
 
@@ -34,7 +36,7 @@ function page(
     in_trash: false,
     icon: null,
     cover: null,
-    properties: { title: id },
+    properties: { title: { id: "title", type: "title", title: [createRichText(id)] } },
     url: null,
     public_url: null,
     source_provider: null,
@@ -45,6 +47,34 @@ function page(
 }
 
 describe("notes hierarchy navigation", () => {
+  it("branches notes containing databases while keeping databases out of folder and project roots", () => {
+    const notes = [page("parent"), page("child", { type: "page_id", page_id: "parent" })];
+    const databases: NotesNavigationDatabase[] = [
+      { id: "database", page_id: "parent", title: "Planning", data_source_id: "source" },
+      { id: "other", page_id: "unrelated", title: "Other", data_source_id: "source" },
+    ];
+    const root = notesHierarchyPickerChildren(notes, [], databases, { kind: "root" }, "Untitled");
+    expect(root).toMatchObject([{ key: "page:parent", hasChildren: true }]);
+    const children = notesHierarchyPickerChildren(notes, [], databases, { kind: "page", id: "parent" }, "Untitled");
+    expect(children.map((item) => item.key)).toEqual(["page:child", "database:database"]);
+    expect(notesHierarchyPickerChildren([page("parent")], [], databases, { kind: "root" }, "Untitled"))
+      .toMatchObject([{ key: "page:parent", hasChildren: true }]);
+  });
+
+  it("keeps saved view order and limits preselection to supported views belonging to the chosen shell", () => {
+    const database: NotesNavigationDatabase = { id: "database", page_id: "page", title: "", data_source_id: "source" };
+    const view = (id: string, shell = database.id, type: NotesDatabaseView["type"] = "table"): NotesDatabaseView => ({
+      object: "view", id, parent: { type: "database_id", database_id: shell }, data_source_id: "source",
+      name: id, type, filter: {}, sorts: [], url: null, configuration: null,
+      created_time: "2026-09-30T00:00:00Z", last_edited_time: "2026-09-30T00:00:00Z",
+      source_provider: null, source_object_id: null, source_workspace_id: null, source_last_edited_time: null,
+    });
+    const children = notesHierarchyPickerChildren([], [], [database], { kind: "database", id: database.id }, "Untitled", [], [
+      view("Second"), view("Unrelated", "other"), view("Unavailable", database.id, "form"), view("First"),
+    ]);
+    expect(children.map((item) => item.key)).toEqual(["view:Second", "view:First"]);
+    expect(children.every((item) => !item.hasChildren)).toBe(true);
+  });
   it("returns only direct children at each folder and page level", () => {
     const folders = [folder("root-folder"), folder("child-folder", "root-folder")];
     const pages = [

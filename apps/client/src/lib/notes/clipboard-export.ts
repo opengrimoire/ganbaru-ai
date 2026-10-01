@@ -104,7 +104,7 @@ function escapeHtml(value: string): string {
     .replace(/"/gu, "&quot;").replace(/'/gu, "&#39;");
 }
 
-/** Emit portable inline semantics without editor classes or collaboration metadata. */
+/** Emit readable inline content and validated local reference identities without loading targets. */
 function richTextHtml(items: readonly NotesRichText[]): string {
   return items.map((item) => {
     let html = escapeHtml(item.plain_text).replace(/\n/gu, "<br>");
@@ -120,6 +120,13 @@ function richTextHtml(items: readonly NotesRichText[]): string {
     }
     const rawUrl = item.type === "text" ? item.text.link?.url ?? item.href : item.href;
     const url = notesClipboardLinkUrl(rawUrl);
+    if (item.type === "mention" && (item.mention.type === "page" || item.mention.type === "database")) {
+      const id = item.mention.type === "page" ? item.mention.page.id : item.mention.database.id;
+      if (!isNotesUuid(id)) return html;
+      const metadata = ` data-notes-reference-type="${item.mention.type}" data-notes-reference-id="${escapeHtml(id)}"`;
+      const destination = item.mention.type === "page" ? `#notes?page=${id}` : url;
+      return destination ? `<a href="${escapeHtml(destination)}"${metadata}>${html}</a>` : `<span${metadata}>${html}</span>`;
+    }
     return url ? `<a href="${escapeHtml(url)}">${html}</a>` : html;
   }).join("");
 }
@@ -185,7 +192,9 @@ function renderNode({ entry, children, databaseReference }: ClipboardNode): stri
       return `<p data-notes-child-page-id="${escapeHtml(block.id)}"><a href="#notes?page=${encodeURIComponent(block.id)}">${escapeHtml(block.child_page.title)}</a></p>`;
     case "child_database": {
       const label = escapeHtml(databaseReference?.title ?? block.child_database.title);
-      return `<p>${databaseReference?.url ? `<a href="${escapeHtml(databaseReference.url)}">${label}</a>` : label}</p>`;
+      const identity = isNotesUuid(block.child_database.database_id) && databaseReference?.url
+        ? ` data-notes-child-database-id="${escapeHtml(block.id)}"` : "";
+      return `<p${identity}>${databaseReference?.url ? `<a href="${escapeHtml(databaseReference.url)}">${label}</a>` : label}</p>`;
     }
     case "table":
       return `<table><tbody>${children.map((node, rowIndex) => {

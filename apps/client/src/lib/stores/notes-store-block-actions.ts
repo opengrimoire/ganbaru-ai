@@ -1,4 +1,4 @@
-import { createBlockWrite } from "$lib/notes/block-factory";
+import { blockWithRichText, createBlockWrite } from "$lib/notes/block-factory";
 import type { NotesRichTextAnnotationName } from "$lib/notes/rich-text";
 import { createNotesDocumentEdit, createNotesDocumentFormatting, createNotesDocumentLinks } from "./notes-store-document-edit";
 import {
@@ -32,6 +32,7 @@ import type {
   NotesParent,
   NotesTabBlockItems,
   NotesTableRowBlock,
+  NotesChildDatabaseBlock,
 } from "$lib/notes/types";
 import {
   createNotesColumnActions,
@@ -82,6 +83,7 @@ import {
   type NotesPostMutationResult,
 } from "$lib/notes/post-mutation";
 import { createNotesOptimisticWriteTracker } from "./notes-store-optimistic-writes";
+import { createNotesDatabasePasteController, type NotesDatabasePasteController } from "./notes-database-paste.svelte";
 
 export interface NotesBlockReadCapabilities {
   readPageGeneration?: () => number;
@@ -120,6 +122,7 @@ export interface NotesBlockLocalMutationCapabilities {
 }
 
 export interface NotesBlockPersistenceCapabilities {
+  retryEditorMutations?: () => Promise<void>;
   enqueueEditorMutation: (mutation: () => Promise<void>) => Promise<void>;
   awaitSelectedPageReady: () => Promise<void>;
   saveBlockNow: (blockId: string, update: NotesBlockUpdate) => Promise<void>;
@@ -129,6 +132,7 @@ export interface NotesBlockPersistenceCapabilities {
 }
 
 export interface NotesBlockUndoCapabilities {
+  reconcileDatabaseIdentity?: (block: NotesChildDatabaseBlock) => void;
   createUndoSnapshot: (
     focusBlockId: string | null,
     extraBlocks?: readonly NotesBlock[],
@@ -166,6 +170,7 @@ export interface NotesBlockActions
   replaceDocumentRange: (ids: readonly string[], start: number, end: number, text: string, html?: string, documentSelection?: NotesDocumentSelection) => Promise<void>;
   flushOptimisticBlockWrites: () => Promise<void>;
   ensurePageBody: (pageId: string) => string | null;
+  databasePaste: NotesDatabasePasteController;
 }
 
 /**
@@ -265,6 +270,23 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
     enqueueEditorMutation,
     hasPendingOptimisticWrite: optimisticWrites.has,
   });
+  const databasePaste = createNotesDatabasePasteController({
+    readPageId: context.readSelectedPageId,
+    blockById: context.blockById,
+    enqueue: enqueueEditorMutation,
+    retry: () => context.retryEditorMutations?.() ?? Promise.resolve(),
+    apply: context.applyPostMutation,
+    updateLocal: (id, richText) => {
+      const block = context.blockById(id);
+      if (block) context.localApplyBlockUpdate(id, blockWithRichText(block, richText));
+    },
+    optimisticBlock: optimisticBlockFromWrite,
+    requestFocus: (id) => context.requestBlockFocus(id),
+    updateRichText: richTextActions.updateBlockRichText,
+    snapshot: (focusId) => context.createUndoSnapshot(focusId),
+    recordUndo: (before, after) => context.recordUndo({ kind: "paste", before, after }),
+    reconcileIdentity: context.reconcileDatabaseIdentity,
+  });
   const tableActions = createNotesTableBlockActions({
     ...context,
     appendAndApply,
@@ -309,6 +331,7 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
     optimisticBlockFromWrite,
     undoSnapshotForBlocks,
     recordUndo,
+    databasePaste,
   });
   const structuralActions = createNotesStructuralBlockActions({
     ...context,
@@ -390,6 +413,7 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
     after: string | null;
     before?: string | null;
     includeTrashedSources?: boolean;
+    showDatabasePasteChoices?: boolean;
   }): Promise<NotesBlock[]> {
     await context.awaitSelectedPageReady();
     const request = {
@@ -408,13 +432,22 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
       ...notesPostMoveManyResult(request, response),
       sidebarImpact: response.results.some((block) => block.type === "child_page") ? "hierarchy" : "none",
     });
+    if (input.showDatabasePasteChoices) {
+      const sources = new Map<string, string>(request.duplicated_block_ids.map((pair) => [pair.duplicate_id, pair.source_id]));
+      const copies = Object.fromEntries(response.results.flatMap((block) => {
+        const sourceId = sources.get(block.id);
+        return block.type === "child_database" && block.child_database.database_id && sourceId ? [[block.id, sourceId]] : [];
+      }));
+      databasePaste.beginCopies(copies, false);
+    }
     return response.results;
   }
 
   return {
     formatDocumentRange: createNotesDocumentFormatting(context),
     linkDocumentRange: createNotesDocumentLinks(context),
-    replaceDocumentRange: createNotesDocumentEdit(context, optimisticBlockFromWrite),
+    replaceDocumentRange: createNotesDocumentEdit(context, optimisticBlockFromWrite, databasePaste),
+    databasePaste,
     flushOptimisticBlockWrites,
     ensurePageBody,
     ...richTextActions,
@@ -427,5 +460,6 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
     ...duplicationActions,
     ...movementActions,
     ...templateActions,
+    isDatabaseCreationPending: (id) => structuralActions.isDatabaseCreationPending(id) || databasePaste.isCreating(id),
   };
 }

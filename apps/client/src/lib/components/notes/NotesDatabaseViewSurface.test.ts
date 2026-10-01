@@ -2,7 +2,7 @@
 import { mount, tick, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { listNotesDatabaseViews, listNotesDataSourceTemplates } from "$lib/api/notes";
-import { databaseResource, notesDatabaseSession } from "$lib/notes/database-session.svelte";
+import { databaseResource, MAX_DATABASE_SESSION_RESOURCES, notesDatabaseSession } from "$lib/notes/database-session.svelte";
 import type { NotesDatabaseView } from "$lib/notes/types";
 import NotesDatabaseViewSurface from "./NotesDatabaseViewSurface.svelte";
 
@@ -56,6 +56,42 @@ function chooseSecond(): void {
 }
 
 describe("Notes database view sessions", () => {
+  it("keeps a mounted database's chosen view when unrelated presentation entries evict its cached preference", async () => {
+    vi.mocked(listNotesDatabaseViews).mockResolvedValue(views());
+    vi.mocked(listNotesDataSourceTemplates).mockResolvedValue([]);
+    open();
+    await vi.waitFor(() => expect(document.querySelector("[data-session-view]")?.getAttribute("data-session-view")).toBe("First"));
+    chooseSecond();
+    await tick();
+    for (let index = 0; index < MAX_DATABASE_SESSION_RESOURCES; index += 1) {
+      notesDatabaseSession.remember(`other-${index}`, { viewId: null, scrollLeft: 0 });
+    }
+    expect(notesDatabaseSession.recall("database")).toBeUndefined();
+    await tick();
+    expect(document.querySelector("[data-session-view]")?.getAttribute("data-session-view")).toBe("Second");
+    notesDatabaseSession.selectView("database", "First");
+    await tick();
+    expect(document.querySelector("[data-session-view]")?.getAttribute("data-session-view")).toBe("First");
+  });
+  it("applies top-bar preselection to an already mounted database without reloading its metadata", async () => {
+    vi.mocked(listNotesDatabaseViews).mockResolvedValue(views());
+    vi.mocked(listNotesDataSourceTemplates).mockResolvedValue([]);
+    open();
+    await vi.waitFor(() => expect(document.querySelector("[data-session-view]")?.getAttribute("data-session-view")).toBe("First"));
+    notesDatabaseSession.selectView("database", "Second");
+    await tick();
+    expect(document.querySelector("[data-session-view]")?.getAttribute("data-session-view")).toBe("Second");
+    expect(listNotesDatabaseViews).toHaveBeenCalledOnce();
+  });
+
+  it("falls back to a saved view when a preselected view has since been deleted", async () => {
+    vi.mocked(listNotesDatabaseViews).mockResolvedValue(views());
+    vi.mocked(listNotesDataSourceTemplates).mockResolvedValue([]);
+    notesDatabaseSession.selectView("database", "Removed");
+    open();
+    await vi.waitFor(() => expect(document.querySelector("[data-session-view]")?.getAttribute("data-session-view")).toBe("First"));
+    expect(notesDatabaseSession.recall("database")?.viewId).toBe("First");
+  });
   it("reports readiness after rows are ready, without reporting metadata alone", async () => {
     const onReady = vi.fn();
     vi.mocked(listNotesDatabaseViews).mockResolvedValue(views());

@@ -8,17 +8,30 @@
   import Search from "@lucide/svelte/icons/search";
   import SquarePen from "@lucide/svelte/icons/square-pen";
   import X from "@lucide/svelte/icons/x";
+  import Database from "@lucide/svelte/icons/database";
+  import Table2 from "@lucide/svelte/icons/table-2";
+  import Columns3 from "@lucide/svelte/icons/columns-3";
+  import LayoutGrid from "@lucide/svelte/icons/layout-grid";
+  import List from "@lucide/svelte/icons/list";
+  import CalendarDays from "@lucide/svelte/icons/calendar-days";
+  import ChartGantt from "@lucide/svelte/icons/chart-gantt";
   import CalendarScrollbar from "$lib/components/calendar/CalendarScrollbar.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
-    notesHierarchyChildren,
-    type NotesHierarchyNode,
+    notesHierarchyPickerChildren,
+    notesHierarchyPickerTitle,
+    notesHierarchyPanelChromeHeight,
+    NOTES_HIERARCHY_PANEL_LIST_PADDING,
+    NOTES_HIERARCHY_PANEL_ROW_HEIGHT,
+    type NotesHierarchyPickerNode,
     type NotesHierarchyParent,
   } from "$lib/notes/hierarchy-navigation";
   import { NOTES_PAGE_CHROME_EMOJI_SCALE } from "$lib/notes/page-icon";
-  import { notesPageTitle } from "$lib/notes/page-title";
   import { notesFoldersForProject } from "$lib/notes/navigation-tree";
   import { notesPagesForProject } from "$lib/notes/project-membership";
+  import { listNotesDatabaseViews } from "$lib/api/notes";
+  import { databaseResource, notesDatabaseSession } from "$lib/notes/database-session.svelte";
+  import type { NotesDatabaseView, NotesDatabaseViewKind } from "$lib/notes/types";
   import {
     projectPickerBridgeFrameStyle,
     projectPickerPanelFrameStyle,
@@ -45,6 +58,7 @@
     rootElement = $bindable<HTMLDivElement | undefined>(),
     onPageSelected,
     onLayoutChange = undefined,
+    onItemCountChange = undefined,
     onPointerLeave = undefined,
     mobileLayout = false,
     title = undefined,
@@ -60,6 +74,7 @@
     rootElement?: HTMLDivElement | undefined;
     onPageSelected: () => MaybePromise<void>;
     onLayoutChange?: () => void;
+    onItemCountChange?: (count: number) => void;
     onPointerLeave?: (event: PointerEvent) => void;
     mobileLayout?: boolean;
     title?: string;
@@ -76,9 +91,9 @@
   const iconSize = $derived(mobileLayout ? 18 : 13);
   const iconStrokeWidth = 1.6;
   const panelGap = 4;
-  const panelListPadding = 8;
-  const panelRowHeight = 32;
-  const panelChromeHeight = 84;
+  const panelListPadding = NOTES_HIERARCHY_PANEL_LIST_PADDING;
+  const panelRowHeight = NOTES_HIERARCHY_PANEL_ROW_HEIGHT;
+  const viewIcons = { table: Table2, board: Columns3, gallery: LayoutGrid, list: List, calendar: CalendarDays, timeline: ChartGantt };
 
   let search = $state("");
   let creatingFolder = $state(false);
@@ -92,6 +107,12 @@
   let childPanelStyle = $state("");
   let childBridgeStyle = $state("");
   let scrollElement = $state<HTMLElement | undefined>();
+  let views = $state<NotesDatabaseView[]>([]);
+  let viewsLoading = $state(false);
+  let viewError = $state<string | null>(null);
+  let navigationError = $state<string | null>(null);
+  let viewRetry = $state(0);
+  let childMeasuredItemCount = $state<number | null>(null);
   let mobileParent = $state<NotesHierarchyParent>(untrack(() => parent));
   let mobileTitle = $state(untrack(() => title ?? t("notes.noteNavigatorLabel")));
   let mobileAncestors = $state<NotesMobileHierarchyLevel[]>(untrack(() => [...initialMobileAncestors]));
@@ -102,36 +123,35 @@
   const projectPages = $derived.by(() => notesPagesForProject(notes.allPages, projectId));
   const projectFolders = $derived.by(() => notesFoldersForProject(notes.folders, projectId));
   const normalizedSearch = $derived(search.trim().toLocaleLowerCase());
-  const allItems = $derived(notesHierarchyChildren(
+  const allItems = $derived(notesHierarchyPickerChildren(
     projectPages,
     projectFolders,
+    notes.navigationDatabases,
     effectiveParent,
     t("notes.untitled"),
     notes.sidebarPageIdsWithChildren,
+    views,
   ));
   const items = $derived(allItems.filter((item) => {
     if (!normalizedSearch) return true;
-    const title = item.kind === "folder"
-      ? item.folder.name
-      : notesPageTitle(item.page, t("notes.untitled"));
+    const title = notesHierarchyPickerTitle(item, t("notes.untitled"));
     return title.toLocaleLowerCase().includes(normalizedSearch);
   }));
   const activeNode = $derived(items.find((item) => item.key === activeNodeKey) ?? null);
   const childParent = $derived.by((): NotesHierarchyParent | null => {
     if (!activeNode?.hasChildren) return null;
-    return activeNode.kind === "folder"
-      ? { kind: "folder", id: activeNode.folder.id }
-      : { kind: "page", id: activeNode.page.id };
+    return nodeParent(activeNode);
   });
-  const childItemCount = $derived(childParent
-    ? notesHierarchyChildren(
+  const childItemCount = $derived(childMeasuredItemCount ?? (childParent
+    ? notesHierarchyPickerChildren(
         projectPages,
         projectFolders,
+        notes.navigationDatabases,
         childParent,
         t("notes.untitled"),
         notes.sidebarPageIdsWithChildren,
       ).length
-    : 0);
+    : 0));
 
   function currentBounds() {
     const margin = 8;
@@ -158,7 +178,7 @@
       panelRect: rootElement.getBoundingClientRect(),
       bounds: currentBounds(),
       gap: panelGap,
-      footerHeight: panelChromeHeight,
+      footerHeight: notesHierarchyPanelChromeHeight(childParent),
       projectCount: Math.max(1, childItemCount),
       visibleRows: null,
       listPadding: panelListPadding,
@@ -168,12 +188,13 @@
     childBridgeStyle = projectPickerBridgeFrameStyle(geometry.bridge);
   }
 
-  function activateNode(node: NotesHierarchyNode, target: EventTarget | null): void {
+  function activateNode(node: NotesHierarchyPickerNode, target: EventTarget | null): void {
     if (!node.hasChildren) {
       activeNodeKey = null;
       activeNodeAnchor = null;
       return;
     }
+    if (activeNodeKey !== node.key) childMeasuredItemCount = null;
     activeNodeKey = node.key;
     activeNodeAnchor = target instanceof HTMLElement ? target : null;
     if (node.kind === "page" && !requestedPageIds.has(node.page.id)) {
@@ -187,19 +208,17 @@
     void tick().then(updateChildGeometry);
   }
 
-  function nodeParent(node: NotesHierarchyNode): NotesHierarchyParent {
-    return node.kind === "folder"
-      ? { kind: "folder", id: node.folder.id }
-      : { kind: "page", id: node.page.id };
+  function nodeParent(node: NotesHierarchyPickerNode): NotesHierarchyParent {
+    if (node.kind === "folder") return { kind: "folder", id: node.folder.id };
+    if (node.kind === "page") return { kind: "page", id: node.page.id };
+    return { kind: "database", id: node.database.id };
   }
 
-  function nodeTitle(node: NotesHierarchyNode): string {
-    return node.kind === "folder"
-      ? node.folder.name
-      : notesPageTitle(node.page, t("notes.untitled"));
+  function nodeTitle(node: NotesHierarchyPickerNode): string {
+    return notesHierarchyPickerTitle(node, t("notes.untitled"));
   }
 
-  function openMobileChildren(node: NotesHierarchyNode): void {
+  function openMobileChildren(node: NotesHierarchyPickerNode): void {
     if (!node.hasChildren && node.kind !== "folder") return;
     if (node.kind === "page" && !requestedPageIds.has(node.page.id)) {
       requestedPageIds.add(node.page.id);
@@ -261,7 +280,26 @@
     await onPageSelected();
   }
 
+  /** Open a database shell or preselect a saved view without adding a view destination. */
+  async function selectNode(node: NotesHierarchyPickerNode): Promise<void> {
+    navigationError = null;
+    try {
+      if (node.kind === "page") await selectPage(node.page.id);
+      else if (node.kind === "database" || node.kind === "view") {
+        const opened = await notes.openDatabase({ pageId: node.database.page_id, blockId: node.database.id }, {
+          followSource: false,
+          ...(node.kind === "view" ? { viewId: node.view.id } : {}),
+        });
+        if (opened) await onPageSelected();
+        else navigationError = t("notes.databaseUnavailable");
+      }
+    } catch (error: unknown) {
+      navigationError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
   async function createPage(): Promise<void> {
+    if (effectiveParent.kind === "database") return;
     if (effectiveParent.kind === "page") {
       await notes.createSubpage(effectiveParent.id, "", { openMode: "full" });
     } else {
@@ -299,7 +337,7 @@
   }
 
   async function createFolder(): Promise<void> {
-    if (!projectId || effectiveParent.kind === "page") return;
+    if (!projectId || (effectiveParent.kind !== "root" && effectiveParent.kind !== "folder")) return;
     const name = folderDraft.trim();
     if (!name) return;
     folderCreationError = null;
@@ -317,6 +355,29 @@
   }
 
   $effect(() => {
+    const database = effectiveParent.kind === "database"
+      ? notes.navigationDatabases.find((item) => item.id === effectiveParent.id)
+      : null;
+    notesDatabaseSession.revision;
+    viewRetry;
+    views = [];
+    viewError = null;
+    viewsLoading = false;
+    if (!database) return;
+    const resource = databaseResource("views", database.data_source_id, { databaseId: database.id });
+    const cached = untrack(() => notesDatabaseSession.read(resource));
+    views = cached ?? [];
+    viewsLoading = cached === null;
+    let cancelled = false;
+    void untrack(() => notesDatabaseSession.load(resource, () => listNotesDatabaseViews(database.id))).then((loaded) => {
+      if (!cancelled) views = loaded;
+    }).catch((error: unknown) => {
+      if (!cancelled) viewError = error instanceof Error ? error.message : String(error);
+    }).finally(() => { if (!cancelled) viewsLoading = false; });
+    return () => { cancelled = true; };
+  });
+
+  $effect(() => {
     if (!normalizedSearch) return;
     activeNodeKey = null;
     activeNodeAnchor = null;
@@ -332,7 +393,8 @@
 
   $effect(() => {
     const itemCount = items.length;
-    void itemCount;
+    onItemCountChange?.(itemCount);
+    childItemCount;
     requestAnimationFrame(() => {
       onLayoutChange?.();
       updateChildGeometry();
@@ -386,8 +448,8 @@
       <Search size={iconSize} strokeWidth={iconStrokeWidth} class="shrink-0 text-popover-foreground/60" />
       <input
         bind:value={search}
-        placeholder={t("notes.searchPlaceholder")}
-        aria-label={t("notes.searchLabel")}
+        placeholder={t(effectiveParent.kind === "database" ? "notes.databaseSearchViews" : "notes.searchPlaceholder")}
+        aria-label={t(effectiveParent.kind === "database" ? "notes.databaseSearchViews" : "notes.searchLabel")}
         class={cn(
           "min-w-0 flex-1 bg-transparent text-popover-foreground placeholder:text-popover-foreground/45",
           mobileLayout ? "h-12 text-base" : "text-[0.8rem]",
@@ -407,18 +469,23 @@
   </div>
   <div class="relative min-h-0 flex-1">
     <div bind:this={scrollElement} class={cn("hide-scrollbar h-full min-h-0 overflow-y-auto", mobileLayout ? "overscroll-contain px-2 py-2" : "p-1")}>
-      {#if notes.loading && projectPages.length === 0 && projectFolders.length === 0}
+      {#if navigationError || viewError}
+        <div class="px-3 py-2 text-[0.8rem] text-destructive" role="alert">
+          {navigationError ?? viewError}
+          {#if viewError}<button type="button" class="mt-1 block rounded px-1 py-1 text-popover-foreground hover:bg-accent" onclick={() => { viewRetry += 1; }}>{t("common.retry")}</button>{/if}
+        </div>
+      {:else if viewsLoading || (notes.loading && projectPages.length === 0 && projectFolders.length === 0)}
         <div class="px-3 py-2 text-[0.8rem] text-popover-foreground/60">{t("notes.loading")}</div>
       {:else if notes.loadError}
         <div class="px-3 py-2 text-[0.8rem] text-destructive">{t("notes.loadFailed", notes.loadError)}</div>
       {:else if items.length === 0}
         <div class="px-3 py-2 text-[0.8rem] text-popover-foreground/60">
-          {normalizedSearch ? t("notes.noSearchResults") : t("notes.noPages")}
+          {normalizedSearch ? t("notes.noSearchResults") : t(effectiveParent.kind === "database" ? "notes.databaseNoViews" : "notes.noPages")}
         </div>
       {:else}
         <div class="grid">
           {#each items as item (item.key)}
-            {@const title = item.kind === "folder" ? item.folder.name : notesPageTitle(item.page, t("notes.untitled"))}
+            {@const title = nodeTitle(item)}
             {#if mobileLayout}
               <div class={cn("flex min-h-12 items-stretch rounded-md", activeNodeKey === item.key && "bg-accent text-accent-foreground")}>
                 <button
@@ -426,12 +493,17 @@
                   class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 text-left text-sm text-popover-foreground active:bg-accent"
                   aria-label={title}
                   onclick={() => {
-                    if (item.kind === "page") void selectPage(item.page.id);
-                    else openMobileChildren(item);
+                    if (item.kind === "folder") openMobileChildren(item);
+                    else void selectNode(item);
                   }}
                 >
                   {#if item.kind === "folder"}
                     <Folder size={iconSize} strokeWidth={iconStrokeWidth} class="shrink-0" />
+                  {:else if item.kind === "database"}
+                    <Database size={iconSize} strokeWidth={iconStrokeWidth} class="shrink-0" />
+                  {:else if item.kind === "view"}
+                    {@const Icon = viewIcons[item.view.type as NotesDatabaseViewKind]}
+                    <Icon size={iconSize} strokeWidth={iconStrokeWidth} class="shrink-0" />
                   {:else if item.page.icon}
                     <NotesPageIcon
                       icon={item.page.icon}
@@ -448,7 +520,7 @@
                     <ChevronRight size={iconSize} strokeWidth={iconStrokeWidth} class="shrink-0 text-popover-foreground/45" />
                   {/if}
                 </button>
-                {#if item.kind === "page" && item.hasChildren}
+                {#if item.kind !== "folder" && item.hasChildren}
                   <button
                     type="button"
                     class="flex w-12 shrink-0 items-center justify-center rounded-md text-popover-foreground/60 active:bg-accent"
@@ -470,12 +542,17 @@
                 onpointerenter={(event) => activateNode(item, event.currentTarget)}
                 onfocus={(event) => activateNode(item, event.currentTarget)}
                 onclick={(event) => {
-                  if (item.kind === "page") void selectPage(item.page.id);
-                  else activateNode(item, event.currentTarget);
+                  if (item.kind === "folder") activateNode(item, event.currentTarget);
+                  else void selectNode(item);
                 }}
               >
                 {#if item.kind === "folder"}
                   <Folder size={iconSize} strokeWidth={iconStrokeWidth} class="shrink-0" />
+                {:else if item.kind === "database"}
+                  <Database size={iconSize} strokeWidth={iconStrokeWidth} class="shrink-0" />
+                {:else if item.kind === "view"}
+                  {@const Icon = viewIcons[item.view.type as NotesDatabaseViewKind]}
+                  <Icon size={iconSize} strokeWidth={iconStrokeWidth} class="shrink-0" />
                 {:else if item.page.icon}
                   <NotesPageIcon
                     icon={item.page.icon}
@@ -507,6 +584,7 @@
     {/if}
   </div>
 
+  {#if effectiveParent.kind !== "database"}
   <div class={cn("relative z-10 shrink-0 bg-popover", mobileLayout ? "p-2" : "p-1.5")}>
     <div class="pointer-events-none absolute left-1.5 right-1.5 top-0 border-t border-border/70"></div>
     {#if creatingFolder && effectiveParent.kind !== "page"}
@@ -570,6 +648,7 @@
       </div>
     {/if}
   </div>
+  {/if}
 </div>
 
 {#if !mobileLayout && childParent && activeNodeAnchor}
@@ -588,6 +667,8 @@
     frameStyle={childPanelStyle}
     {zIndexClass}
     {onPageSelected}
+    onItemCountChange={(count) => { childMeasuredItemCount = count; }}
+    onLayoutChange={updateChildGeometry}
     onPointerLeave={handleBoundaryLeave}
   />
 {/if}

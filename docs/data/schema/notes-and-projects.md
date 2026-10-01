@@ -24,6 +24,8 @@ The single-placement rule is invariant 8 in [Data invariants](../invariants.md).
 
 Notes databases define stable property identities, types, options, views, filters, sorts, groups, and row values. A page may participate as a database row without losing its page identity.
 
+A database shell owns its data sources; a linked shell has independent view settings and references another shell's sources. Independent database copying assigns new source, property, view, row, nested-content, and template identities in one transaction. Internal references are remapped, while unrelated external references remain intact. Trash follows owned sources and row graphs, never a linked shell's shared source. Reserved trash journal metadata in block payloads and page properties records which active objects a deletion changed. Restore uses that ownership token to avoid reviving previously trashed or subsequently deleted objects. This metadata is local lifecycle bookkeeping and does not replace canonical row and source ownership.
+
 Relations point to stable database or page identities. Rollups and formulas are derived from canonical values and validated expressions. Computed values may be cached for performance only when their dependency revision and rebuild path are explicit.
 
 Property type changes require a conversion policy. The application must not reinterpret incompatible stored values merely because a column was renamed or its presentation changed. Deleting a property handles relation, formula, rollup, view, and row dependencies explicitly.

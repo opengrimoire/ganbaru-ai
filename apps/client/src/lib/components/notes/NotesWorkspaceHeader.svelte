@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Database from "@lucide/svelte/icons/database";
   import Folder from "@lucide/svelte/icons/folder";
   import Settings2 from "@lucide/svelte/icons/settings-2";
   import { getLocalization } from "$lib/i18n/translator.svelte";
@@ -16,7 +17,10 @@
   import { formatShortcut } from "$lib/keyboard-shortcuts";
   import { NOTES_PAGE_CHROME_EMOJI_SCALE } from "$lib/notes/page-icon";
   import {
-    notesHierarchyChildren,
+    notesHierarchyPickerChildren,
+    notesHierarchyPanelChromeHeight,
+    NOTES_HIERARCHY_PANEL_ROW_HEIGHT,
+    NOTES_HIERARCHY_PANEL_LIST_PADDING,
     notesHierarchyNodeParent,
     notesHierarchyPath,
     type NotesHierarchyNode,
@@ -103,6 +107,7 @@
     title: string;
   }>>([]);
   let notesNavigatorSourceKey = $state("root");
+  let notesNavigatorMeasuredItemCount = $state<number | null>(null);
   let notesHeaderElement = $state<HTMLDivElement | null>(null);
   let notesIdentityElement = $state<HTMLDivElement | null>(null);
   let navigatorAnchorElement = $state<HTMLButtonElement | null>(null);
@@ -135,6 +140,9 @@
     return notesPageTitle(selectedPage, t("notes.untitled"));
   });
   const selectedPageId = $derived(selectedPage?.id ?? null);
+  const selectedDatabaseBlock = $derived(notes.selectedDatabaseBlock);
+  const databaseSelected = $derived(notes.viewMode === "pages" && notes.selectedDatabaseBlockId != null);
+  const selectedDatabaseTitle = $derived(selectedDatabaseBlock?.child_database.title.trim() || t("notes.untitled"));
   const selectedProjectPages = $derived.by(() => notesPagesForProject(
     selectedPage ? [...notes.navigationPages.filter((page) => page.id !== selectedPage.id), selectedPage] : notes.navigationPages,
     selectedProjectId,
@@ -150,23 +158,25 @@
     notes.sidebarPageIdsWithChildren,
   ));
   const visibleSelectedPagePath = $derived(
-    mobileLayout && selectedPagePath.length > 1
+    mobileLayout && !databaseSelected && selectedPagePath.length > 1
       ? selectedPagePath.slice(-1)
       : selectedPagePath,
   );
   const showSelectedPagePath = $derived(
-    (mobileLayout || explorerCollapsed) && selectedPagePath.length > 0,
+    (databaseSelected || mobileLayout || explorerCollapsed) && selectedPagePath.length > 0,
   );
-  const notesNavigatorItemCount = $derived(notesHierarchyChildren(
+  const notesNavigatorItemCount = $derived(notesNavigatorMeasuredItemCount ?? notesHierarchyPickerChildren(
     selectedProjectPages,
     selectedProjectFolders,
+    notes.navigationDatabases,
     notesNavigatorParent,
     t("notes.untitled"),
     notes.sidebarPageIdsWithChildren,
   ).length);
   const notesNavigatorPanelHeight = $derived(Math.min(
     navigatorPanelMaxHeight,
-    Math.max(124, notesNavigatorItemCount * 32 + 92),
+    notesHierarchyPanelChromeHeight(notesNavigatorParent) + NOTES_HIERARCHY_PANEL_LIST_PADDING
+      + Math.max(1, notesNavigatorItemCount) * NOTES_HIERARCHY_PANEL_ROW_HEIGHT,
   ));
 
   function toolbarIconButtonClass(active = false, open = false, primary = false): string {
@@ -258,6 +268,7 @@
     node: NotesHierarchyNode,
     anchor: EventTarget | null,
   ): void {
+    notesNavigatorMeasuredItemCount = null;
     notesNavigatorParent = notesHierarchyNodeParent(node);
     const nodeIndex = selectedPagePath.findIndex((candidate) => candidate.key === node.key);
     const precedingNodes = nodeIndex < 0 ? [] : selectedPagePath.slice(0, nodeIndex);
@@ -282,6 +293,29 @@
     openNavigator("notes", anchor instanceof HTMLButtonElement ? anchor : null);
   }
 
+  /** Offer the selected database's saved views without adding a view breadcrumb. */
+  function openDatabaseNavigator(anchor: EventTarget | null, toggle = false): void {
+    const id = notes.selectedDatabaseBlockId;
+    if (!id) return;
+    const key = `database:${id}`;
+    if (toggle && navigatorOpen && navigatorMode === "notes" && notesNavigatorSourceKey === key) {
+      navigatorOpen = false;
+      return;
+    }
+    notesNavigatorMeasuredItemCount = null;
+    notesNavigatorParent = { kind: "database", id };
+    notesNavigatorTitle = selectedDatabaseTitle;
+    notesNavigatorAncestors = [
+      { parent: { kind: "root" }, title: selectedProject?.name ?? t("notes.noteNavigatorLabel") },
+      ...selectedPagePath.map((node) => ({
+        parent: node.kind === "folder" ? { kind: "folder" as const, id: node.folder.id } : { kind: "page" as const, id: node.page.id },
+        title: hierarchyNodeTitle(node),
+      })),
+    ];
+    notesNavigatorSourceKey = key;
+    openNavigator("notes", anchor instanceof HTMLButtonElement ? anchor : null);
+  }
+
   function hierarchyNodeTitle(node: NotesHierarchyNode): string {
     return node.kind === "folder"
       ? node.folder.name
@@ -297,6 +331,22 @@
       return;
     }
     openHierarchyNavigator(node, anchor);
+  }
+
+  /** Return a database breadcrumb's note ancestor to its existing editor pane. */
+  function openNoteAncestor(node: NotesHierarchyNode, anchor: EventTarget | null): void {
+    if (!databaseSelected || node.kind !== "page") {
+      toggleHierarchyNavigator(node, anchor);
+      return;
+    }
+    navigatorOpen = false;
+    if (node.page.id === selectedPageId) {
+      notes.closeDatabase();
+      return;
+    }
+    void notes.selectPage(node.page.id).catch((error: unknown) => {
+      console.warn("Open Notes breadcrumb ancestor failed", error);
+    });
   }
 
   function toggleNavigator(mode: NotesNavigatorMode): void {
@@ -395,6 +445,25 @@
   });
 </script>
 
+{#snippet databaseBreadcrumb()}
+  <span class="shrink-0 px-0.5 text-muted-foreground">/</span>
+  <button
+    type="button"
+    class={cn("flex min-w-0 shrink-0 items-center gap-1.5 rounded-md px-1.5 text-left hover:bg-accent", mobileLayout ? "h-12" : "h-7",
+      navigatorOpen && navigatorMode === "notes" && notesNavigatorSourceKey === `database:${notes.selectedDatabaseBlockId}` && "bg-accent")}
+    aria-current="page"
+    aria-label={selectedDatabaseTitle}
+    aria-expanded={navigatorOpen && navigatorMode === "notes" && notesNavigatorSourceKey === `database:${notes.selectedDatabaseBlockId}`}
+    data-notes-database-breadcrumb
+    onpointerenter={(event) => { if (!mobileLayout) openDatabaseNavigator(event.currentTarget); }}
+    onclick={(event) => openDatabaseNavigator(event.currentTarget, true)}
+  >
+    <Database size={identityIconSize} strokeWidth={identityIconStrokeWidth} class="shrink-0" />
+    <span class="max-w-48 truncate text-foreground">{selectedDatabaseTitle}</span>
+    <WorkspaceBreadcrumbTerminalIcon kind="chevron" context="notes" class="shrink-0 text-muted-foreground" />
+  </button>
+{/snippet}
+
 <svelte:window onpointerdown={handleWindowPointerDown} />
 
 <div
@@ -411,13 +480,14 @@
     bind:this={notesIdentityElement}
     class={cn(
       "relative",
-      mobileLayout
+      mobileLayout || databaseSelected
         ? "min-w-0 flex-1 overflow-hidden"
         : "min-w-36 min-[760px]:max-w-xl",
     )}
   >
     <div class={cn(
-      "flex min-w-0 max-w-full items-center gap-0.5 overflow-hidden text-identity font-medium",
+      "flex min-w-0 max-w-full items-center gap-0.5 text-identity font-medium",
+      databaseSelected ? "overflow-x-auto" : "overflow-hidden",
       mobileLayout ? "h-12" : "h-7",
     )}>
       {#if selectedProject && selectedGroup}
@@ -426,6 +496,7 @@
           type="button"
           class={cn(
             "flex min-w-0 items-center gap-1.5 rounded-md px-1.5 text-left hover:bg-accent",
+            databaseSelected && "shrink-0",
             mobileLayout ? "h-12" : "h-7",
             navigatorOpen && navigatorMode === "groups" && "bg-accent",
           )}
@@ -453,6 +524,7 @@
           type="button"
           class={cn(
             "flex min-w-0 items-center gap-1.5 rounded-md pl-1.5 text-left hover:bg-accent",
+            databaseSelected && "shrink-0",
             mobileLayout ? "h-12" : "h-7",
             selectedPageTitle ? "pr-1.5" : "pr-0.5",
             navigatorOpen && navigatorMode === "projects" && "bg-accent",
@@ -507,6 +579,7 @@
               type="button"
               class={cn(
                 "flex min-w-0 items-center gap-1.5 rounded-md px-1.5 text-left hover:bg-accent",
+                databaseSelected && "shrink-0",
                 mobileLayout ? "h-12" : "h-7",
                 navigatorOpen
                   && navigatorMode === "notes"
@@ -518,7 +591,7 @@
               onpointerenter={(event) => {
                 if (!mobileLayout) openHierarchyNavigator(node, event.currentTarget);
               }}
-              onclick={(event) => toggleHierarchyNavigator(node, event.currentTarget)}
+              onclick={(event) => openNoteAncestor(node, event.currentTarget)}
             >
               {#if !mobileLayout}
                 {#if node.kind === "folder"}
@@ -538,11 +611,14 @@
                 {/if}
               {/if}
               <span class="min-w-0 truncate text-foreground">{pathTitle}</span>
-              {#if nodeIndex === visibleSelectedPagePath.length - 1}
+              {#if !databaseSelected && nodeIndex === visibleSelectedPagePath.length - 1}
                 <WorkspaceBreadcrumbTerminalIcon kind="chevron" context="notes" class="shrink-0 text-muted-foreground" />
               {/if}
             </button>
           {/each}
+          {#if databaseSelected}
+            {@render databaseBreadcrumb()}
+          {:else}
           <button
             type="button"
             class={inlineNewPageButtonClass()}
@@ -553,6 +629,7 @@
           >
             <WorkspaceBreadcrumbTerminalIcon kind="plus" />
           </button>
+          {/if}
         {/if}
       {:else}
         <button
@@ -579,6 +656,9 @@
           <span class="min-w-0 truncate text-foreground">{selectedPageTitle ?? t("notes.title")}</span>
           <WorkspaceBreadcrumbTerminalIcon kind="chevron" class="shrink-0 text-muted-foreground" />
         </button>
+        {#if databaseSelected}
+          {@render databaseBreadcrumb()}
+        {:else}
         <button
           type="button"
           class={inlineNewPageButtonClass()}
@@ -589,6 +669,7 @@
         >
           <WorkspaceBreadcrumbTerminalIcon kind="plus" />
         </button>
+        {/if}
       {/if}
     </div>
     {#if navigatorOpen}
@@ -611,6 +692,7 @@
                 mobileLayout
                 title={notesNavigatorTitle || selectedProject?.name}
                 initialMobileAncestors={notesNavigatorAncestors}
+                onItemCountChange={(count) => { notesNavigatorMeasuredItemCount = count; }}
                 onBack={() => { navigatorMode = "projects"; }}
                 onClose={() => { navigatorOpen = false; }}
                 onPageSelected={() => { navigatorOpen = false; }}
@@ -649,6 +731,7 @@
               frameStyle={`width: 100%; height: ${notesNavigatorPanelHeight}px; max-height: ${notesNavigatorPanelHeight}px;`}
               className="relative"
               zIndexClass=""
+              onItemCountChange={(count) => { notesNavigatorMeasuredItemCount = count; }}
               onPageSelected={() => {
                 navigatorOpen = false;
               }}

@@ -1,5 +1,6 @@
 import { onActiveVaultIdentityChange } from "$lib/vault/active-vault";
 import { tick } from "svelte";
+import { SvelteMap } from "svelte/reactivity";
 import type {
   NotesDatabaseView, NotesDatabaseViewScope, NotesDataSourceBoardView,
   NotesDataSourceCalendarView, NotesDataSourceGalleryView, NotesDataSourceListView,
@@ -45,7 +46,7 @@ export function createNotesDatabaseSession(
   maxBytes = MAX_DATABASE_SESSION_BYTES,
 ) {
   const entries = new Map<string, ResourceEntry>();
-  const presentation = new Map<string, { viewId: string | null; scrollLeft: number }>();
+  const presentation = new SvelteMap<string, { viewId: string | null; scrollLeft: number }>();
   let generation = $state(0);
   let epoch = 0;
 
@@ -125,6 +126,12 @@ export function createNotesDatabaseSession(
 
   return {
     read, write, load, remember,
+    /** Preselect a saved view for every renderer of this database without invalidating rows. */
+    selectView(key: string, viewId: string): void {
+      const current = presentation.get(key);
+      if (current?.viewId === viewId) return;
+      remember(key, { viewId, scrollLeft: current?.scrollLeft ?? 0 });
+    },
     recall: (key: string) => presentation.get(key),
     get revision(): number { return generation; },
     get epoch(): number { return epoch; },

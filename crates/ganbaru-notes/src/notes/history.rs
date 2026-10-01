@@ -248,6 +248,24 @@ async fn replace_page_from_snapshot(
     snapshot: &NotePageHistorySnapshotRow,
 ) -> Result<(), String> {
     let blocks = parse_snapshot_blocks(snapshot)?;
+    let owns_database: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM notes_databases AS database
+        JOIN notes_blocks AS block ON block.id = database.id WHERE block.page_id = ?)",
+    )
+    .bind(page_id)
+    .fetch_one(&mut **tx)
+    .await
+    .map_err(|e| format!("check database ownership before page history restore: {e}"))?;
+    let snapshot_has_database = blocks
+        .iter()
+        .filter(|block| block.block_type == "child_database")
+        .map(super::writes::database_copy::has_database_graph)
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .any(|has_graph| has_graph);
+    if owns_database || snapshot_has_database {
+        return Err("This page contains database content. Restore a project version to recover its complete database graph.".to_string());
+    }
     trash_current_child_pages(tx, page_id).await?;
     sqlx::query("DELETE FROM notes_blocks WHERE page_id = ?")
         .bind(page_id)
@@ -324,6 +342,30 @@ async fn insert_snapshot_blocks(
         };
         reserved_ids.insert(next_id.clone());
         id_map.insert(block.id.clone(), next_id);
+    }
+
+    let mut databases = Vec::new();
+    if matches!(mode, SnapshotInsertMode::CopyWithFreshIds) {
+        let project_id =
+            super::project_history::resolve_project_id_for_page_tx(tx, page_id).await?;
+        for block in blocks
+            .iter()
+            .filter(|block| block.block_type == "child_database")
+        {
+            if super::writes::database_copy::has_database_graph(block)? {
+                databases.push(
+                    super::writes::database_copy::plan_database_copy(
+                        tx,
+                        block,
+                        &id_map[&block.id],
+                        &mut reserved_ids,
+                        project_id.as_deref(),
+                        false,
+                    )
+                    .await?,
+                );
+            }
+        }
     }
 
     let mut root_ids = Vec::with_capacity(root_blocks.len());
@@ -407,6 +449,16 @@ async fn insert_snapshot_blocks(
             .await?;
         }
     }
+    for database in &databases {
+        sqlx::query("UPDATE notes_blocks SET payload = ? WHERE id = ?")
+            .bind(database.payload.to_string())
+            .bind(&database.id)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| format!("set copied history database references: {e}"))?;
+        super::writes::database_copy::insert_database_copy(tx, database).await?;
+    }
+    super::writes::database_copy::finalize_copies(tx, &databases, &[], &id_map).await?;
     Ok(root_ids)
 }
 

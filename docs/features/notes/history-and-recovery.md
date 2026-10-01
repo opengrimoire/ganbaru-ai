@@ -16,6 +16,8 @@ Version history renders the selected snapshot without live editing controls and 
 
 Copy creates fresh block IDs and valid paired child pages where needed. Restore saves the current page first when history is enabled, then replaces page details and body through one transaction. It does not move the page to an old parent, which prevents a content restore from unexpectedly changing current navigation and access.
 
+Copying a database block from page history creates an independent copy of its currently available database graph. A page snapshot does not contain historical database source and row graphs. Page-history restore therefore refuses pages or snapshots with local database content and directs users to project versions, preventing block replacement from deleting canonical database data.
+
 ## Project versions
 
 A project version captures the complete project Notes closure: folders and placement, active, archived, and trashed pages, nested pages, blocks, databases, data sources, row properties, views, database templates, comments, suggestions, notifications, aliases, and managed asset references.
@@ -51,6 +53,8 @@ Archive is reversible organization. Archived pages retain canonical content and 
 ## Trash and permanent deletion
 
 Trash is the recovery surface for deleted pages. Page subtrees move together, paired child blocks hide or restore consistently, and retained history and asset pins remain valid.
+
+Trashing a database block, containing block subtree, or containing note also trashes its owned database shells, sources, row pages, and nested row content in the same transaction. Trashing a linked shell leaves the shared source graph intact. The deletion records which active objects it changed. Restore recovers only objects still owned by that deletion, preserving rows and blocks individually trashed before it, as well as objects restored and deleted again afterward. Restoring an individual row or nested note uses the same ownership boundary and validates its placement.
 
 Permanent deletion requires confirmation or retention expiry. It removes canonical page closure transactionally. Asset bytes are collected only when no live record, history version, import record, comment, property, or other owner references them.
 

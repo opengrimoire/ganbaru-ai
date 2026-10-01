@@ -20,9 +20,9 @@ pub use transfers::{
 };
 mod workspace;
 pub use workspace::{
-    NoteDataSourceTemplateDto, NotePageBreadcrumbItemDto, NotePageSummaryWindowDto,
-    NotePageSummaryWindowRequest, NotePageTemplateDto, NoteSidebarPageList,
-    NoteSidebarPagesRequest, NoteWorkspaceShellDto, NoteWorkspaceShellRequest,
+    NoteDataSourceTemplateDto, NoteNavigationDatabaseDto, NotePageBreadcrumbItemDto,
+    NotePageSummaryWindowDto, NotePageSummaryWindowRequest, NotePageTemplateDto,
+    NoteSidebarPageList, NoteSidebarPagesRequest, NoteWorkspaceShellDto, NoteWorkspaceShellRequest,
 };
 mod history_knowledge;
 pub use history_knowledge::{
@@ -54,9 +54,9 @@ pub use write_requests::{
     NoteDataSourceTemplateCreateFromRow, NoteDataSourceTemplateDuplicate,
     NoteDataSourceTemplateUpdate, NoteDataSourceTimelineConfigurationUpdate,
     NoteDataSourceTimelineViewUpdate, NoteDataSourceViewWindowRequest, NoteDatabaseCreate,
-    NoteDatabaseRename, NoteDatabaseViewDuplicate, NoteDatabaseViewRename, NoteDuplicateBlock,
-    NoteDuplicateBlocks, NoteDuplicatePage, NoteDuplicatedBlockId, NoteFolderCreate,
-    NoteFolderUpdate, NoteLinkedDatabaseCreate, NoteLocalUserUpdate,
+    NoteDatabaseDuplicate, NoteDatabaseRename, NoteDatabaseViewDuplicate, NoteDatabaseViewRename,
+    NoteDuplicateBlock, NoteDuplicateBlocks, NoteDuplicatePage, NoteDuplicatedBlockId,
+    NoteFolderCreate, NoteFolderUpdate, NoteLinkedDatabaseCreate, NoteLocalUserUpdate,
     NoteMentionNotificationDeliveryUpdate, NoteMoveBlock, NoteMoveBlocks, NoteMovePage,
     NotePageCreate, NotePageHistoryCopyBlocks, NotePageHistorySettingsUpdate,
     NotePageTemplateApply, NotePageTemplateCreateFromPage, NotePageTemplateDuplicate,
@@ -69,7 +69,7 @@ pub use database::{
     NoteDataSourceCalendarViewDto, NoteDataSourceDto, NoteDataSourceGalleryViewDto,
     NoteDataSourceListViewDto, NoteDataSourceParentDto, NoteDataSourceSchemaDto,
     NoteDataSourceTableViewDto, NoteDataSourceTimelineViewDto, NoteDatabaseDataSourceSummaryDto,
-    NoteDatabaseDto, NoteDatabaseViewDto, NoteDatabaseViewParentDto,
+    NoteDatabaseDto, NoteDatabaseReferenceDto, NoteDatabaseViewDto, NoteDatabaseViewParentDto,
 };
 mod rows;
 pub use history_knowledge::NoteBacklinkIndexedInput;

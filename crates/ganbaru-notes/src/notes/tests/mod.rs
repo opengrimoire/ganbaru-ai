@@ -14,6 +14,7 @@ mod comment_files;
 mod comments;
 mod database_board;
 mod database_calendar;
+mod database_copy;
 mod database_creation;
 mod database_csv_export;
 mod database_csv_import;

@@ -2,7 +2,7 @@ use super::models::{
     NoteBlockRow, NoteDataSourceTemplateApply, NoteDataSourceTemplateBlockRow,
     NoteDataSourceTemplateCreateFromRow, NoteDataSourceTemplateDto,
     NoteDataSourceTemplateDuplicate, NoteDataSourceTemplateRow, NoteDataSourceTemplateUpdate,
-    NoteLoadedPage, NotePageRow,
+    NoteLoadedPage, NotePageRow, NoteParent,
 };
 use super::validation::{plain_text_from_payload, require_uuid, validate_block_payload};
 use super::{
@@ -564,6 +564,11 @@ async fn insert_source_block_snapshot(
     template_id: &str,
     block: &NoteBlockRow,
 ) -> Result<(), String> {
+    let mut payload: Value = serde_json::from_str(&block.payload)
+        .map_err(|e| format!("parse template source block: {e}"))?;
+    if block.block_type == "child_page" {
+        payload[writes::database_copy::TEMPLATE_PAGE_REFERENCE] = block.id.clone().into();
+    }
     let (parent_type, parent_block_id): (&str, Option<&str>) = if block.parent_type == "page_id" {
         ("template", None)
     } else {
@@ -597,7 +602,7 @@ async fn insert_source_block_snapshot(
     .bind(parent_block_id)
     .bind(block.has_children)
     .bind(&block.block_type)
-    .bind(&block.payload)
+    .bind(payload.to_string())
     .bind(&block.plain_text)
     .bind(block.sort_order)
     .execute(&mut **tx)
@@ -679,6 +684,66 @@ async fn insert_template_blocks_as_page_blocks(
         let duplicate_id = next_reserved_uuid(tx, reserved_ids).await?;
         block_ids.insert(block.id.clone(), duplicate_id);
     }
+    let project_id =
+        crate::notes::project_history::resolve_project_id_for_page_tx(tx, page_id).await?;
+    let mut databases = Vec::new();
+    let mut page_copies = Vec::new();
+    let mut copied_child_pages = HashSet::new();
+    for block in blocks {
+        let id = &block_ids[&block.id];
+        let payload: Value = serde_json::from_str(&block.payload)
+            .map_err(|e| format!("parse applied template graph: {e}"))?;
+        if block.block_type == "child_database" && payload.get("database_id").is_some() {
+            let source = writes::database_copy::load_reference_source(tx, &payload).await?;
+            databases.push(
+                writes::database_copy::plan_database_copy(
+                    tx,
+                    &source,
+                    id,
+                    reserved_ids,
+                    project_id.as_deref(),
+                    false,
+                )
+                .await?,
+            );
+        } else if block.block_type == "child_page" {
+            if let Some(source) = payload
+                .get(writes::database_copy::TEMPLATE_PAGE_REFERENCE)
+                .and_then(Value::as_str)
+            {
+                let parent = if block.parent_type == "template" {
+                    NoteParent::PageId {
+                        page_id: page_id.to_string(),
+                    }
+                } else {
+                    NoteParent::BlockId {
+                        block_id: block_ids
+                            .get(
+                                block
+                                    .parent_block_id
+                                    .as_deref()
+                                    .ok_or("template note has no parent")?,
+                            )
+                            .cloned()
+                            .ok_or("template note parent was not copied")?,
+                    }
+                };
+                page_copies.push(
+                    writes::plan_child_page_copy(
+                        tx,
+                        source,
+                        id,
+                        parent,
+                        false,
+                        reserved_ids,
+                        project_id.as_deref(),
+                    )
+                    .await?,
+                );
+                copied_child_pages.insert(id.clone());
+            }
+        }
+    }
     for block in blocks {
         let duplicate_id = block_ids
             .get(&block.id)
@@ -725,7 +790,7 @@ async fn insert_template_blocks_as_page_blocks(
         .execute(&mut **tx)
         .await
         .map_err(|e| format!("apply notes data source template block: {e}"))?;
-        if block.block_type == "child_page" {
+        if block.block_type == "child_page" && !copied_child_pages.contains(&duplicate_id) {
             insert_applied_child_page(
                 tx,
                 &duplicate_id,
@@ -738,6 +803,19 @@ async fn insert_template_blocks_as_page_blocks(
             .await?;
         }
     }
+    for graph in &page_copies {
+        writes::insert_child_page_copy(tx, graph).await?;
+    }
+    for database in &databases {
+        sqlx::query("UPDATE notes_blocks SET payload = ? WHERE id = ?")
+            .bind(database.payload.to_string())
+            .bind(&database.id)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| format!("set applied template database identities: {e}"))?;
+        writes::database_copy::insert_database_copy(tx, database).await?;
+    }
+    writes::database_copy::finalize_copies(tx, &databases, &page_copies, &block_ids).await?;
     Ok(())
 }
 

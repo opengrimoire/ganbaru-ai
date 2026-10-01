@@ -2,6 +2,109 @@ use super::helpers::*;
 use crate::notes::models::NotePageSummaryWindowRequest;
 
 #[test]
+fn workspace_shell_indexes_nested_and_linked_databases_without_loading_their_content() {
+    crate::test_block_on(async {
+        let pool = migrated_memory_pool().await;
+        create_page(&pool, PAGE_A, BLOCK_A).await;
+        create_page(&pool, PAGE_B, BLOCK_B).await;
+        create_database(
+            &pool,
+            DATABASE_A,
+            DATA_SOURCE_A,
+            DATABASE_VIEW_A,
+            "Planning",
+            BLOCK_A,
+        )
+        .await;
+        writes::update_block(
+            &pool,
+            BLOCK_A,
+            block_update("toggle", paragraph_payload("Details")),
+        )
+        .await
+        .unwrap();
+        writes::move_block(
+            &pool,
+            DATABASE_A,
+            NoteMoveBlock {
+                parent: block_parent(BLOCK_A),
+                after: None,
+                before: None,
+            },
+        )
+        .await
+        .unwrap();
+        databases::create_linked_database_view(
+            &pool,
+            NoteLinkedDatabaseCreate {
+                id: LINKED_DATABASE_A.to_string(),
+                view_id: LINKED_DATABASE_VIEW_A.to_string(),
+                source_block_id: DATABASE_A.to_string(),
+                title: Some("Shared planning".to_string()),
+                parent: Some(page_parent(PAGE_B)),
+                after_block_id: Some(BLOCK_B.to_string()),
+                replace_block_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let request = |include_navigation_index| NoteWorkspaceShellRequest {
+            project_id: None,
+            expanded_page_ids: Vec::new(),
+            seed_page_ids: Vec::new(),
+            selected_page_id: Some(PAGE_B.to_string()),
+            page_cursor: Some("end".to_string()),
+            folder_cursor: Some("end".to_string()),
+            destination_candidates: false,
+            page_query: None,
+            include_navigation_index,
+        };
+        let indexed = serde_json::to_value(
+            workspace_shell::load_workspace_shell(&pool, request(true))
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            indexed["navigation_databases"],
+            json!([
+                { "id": DATABASE_A, "page_id": PAGE_A, "title": "Planning", "data_source_id": DATA_SOURCE_A },
+                { "id": LINKED_DATABASE_A, "page_id": PAGE_B, "title": "Shared planning", "data_source_id": DATA_SOURCE_A },
+            ])
+        );
+        let scoped = serde_json::to_value(
+            workspace_shell::load_workspace_shell(&pool, request(false))
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            scoped["navigation_databases"],
+            json!([
+                { "id": LINKED_DATABASE_A, "page_id": PAGE_B, "title": "Shared planning", "data_source_id": DATA_SOURCE_A },
+            ])
+        );
+
+        writes::trash_block(&pool, LINKED_DATABASE_A, true)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE notes_pages SET archived = 1 WHERE id = ?")
+            .bind(PAGE_A)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let inactive = serde_json::to_value(
+            workspace_shell::load_workspace_shell(&pool, request(true))
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(inactive["navigation_databases"], json!([]));
+    });
+}
+
+#[test]
 fn empty_workspace_shell_contains_summaries_only() {
     crate::test_block_on(async {
         let pool = migrated_memory_pool().await;

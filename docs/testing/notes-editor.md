@@ -20,6 +20,8 @@ For child-note previews, create two sibling notes and collapse the sidebar. View
 
 Open the group/project/note selector and choose a note in another project and another group. Confirm the header names, sidebar roots, selected row, creation location, and project settings all follow the destination. Repeat with a nested note and with the sidebar collapsed. Open a note from another project in a side preview, switch focus between panes, and close the preview: each active pane must restore its owning context without reloading its document. Delay sidebar reads while switching projects and confirm late results cannot restore old pagination or roots.
 
+Hover a note containing only a database, a note with sub-pages and databases, and a note with a database inside a collapsed toggle. Confirm their hierarchy branches list the appropriate databases. Hover a database row and the database breadcrumb to reveal saved views; selecting one must open or update that database with the chosen view without adding a view breadcrumb. A linked shell must use its own view names and configuration. Database view panels and the database breadcrumb must have no creation button. Repeat the drilldown on touch layouts, and check a failed view read can be retried without loading database rows for the picker.
+
 ## Rich-text acceptance
 
 Using a scratch page with other pages and relevant project objects available, verify:
@@ -121,6 +123,9 @@ For table, board, gallery, list, calendar, and timeline:
 
 - Create rows, edit supported properties, filter, sort, paginate, and open row pages.
 - Confirm linked views share rows and schema but retain independent view settings.
+- Copy an embedded database between notes, with text before and after it. Confirm the default paste owns an independent schema, views, rows, row bodies, nested notes, and templates. Dismiss keeps that copy. Paste and sync replaces it in the same document position and shares row edits with the original. Repeat a failed paste or replacement through Retry and confirm it creates no duplicate shell or trailing text. Paste the same copy into another application and check its readable title and local hyperlink.
+- Paste a copied database URL at a caret and between words. Check Mention, Linked database view, and URL, including Cancel or outside dismissal, undo, and redo. Mention previews must show a title and path without reading row data. Selecting mention text must not navigate. Database activation and the linked source arrow must open the appropriate full-width database surface and extend the workspace breadcrumb; returning through the containing note must retain its editor and scroll. Repeat from side and center previews.
+- Delete an owned database, a linked view, a selection containing several databases, and a collapsed parent containing one. Confirm owned-source counts and Trash copy, preserve content and selection on Cancel, and retain shared data when removing a linked view. Fail the ownership read and verify it prevents confirmation until retried. Undo and Trash restore must recover the owned graph, preserve earlier individual Trash items, and retain independent deletion made after an individual item was restored.
 - Exercise relation target validation and inverse links.
 - Recompute rollups and formulas after source, target, schema, Trash, and restore changes.
 - Create, apply, update, duplicate, default, and delete database templates.
@@ -129,7 +134,7 @@ For table, board, gallery, list, calendar, and timeline:
 
 ## History and transfer acceptance
 
-- Restore and copy page versions without moving current page placement.
+- Restore text-only page versions and copy page versions without moving current page placement. Page-history restore must reject a page or snapshot containing local database graphs without changing canonical content. Use a project version for complete graph recovery; copying a database from page history creates an independent copy of its currently available graph.
 - Preview and restore a project version, including pages now moved to another project.
 - Confirm a safety version exists before destructive restore or import.
 - Exercise Markdown, HTML, Notion, export-folder, CSV, graph, and agent-bridge transfers with supported and unsupported data.
@@ -213,7 +218,7 @@ Automated coverage exercises both clipboard parsers and the real editor projecti
 - Copy text, a toggle with three child paragraphs, and following text, first with the toggle expanded and then collapsed. Use Ctrl/Cmd+A, a full-range drag selection, and a whole-block selection. In a plain-text editor, expect an indented bullet with all three child paragraphs in both states. In Notion, check that rich paste retains the toggle and its complete body when copied closed. In Obsidian, check whether it chooses HTML or the plain-text bullet and whether paragraphs or adjacent titles merge. Also test a page containing only one collapsed toggle, copying before and after its children are hydrated. Paste back into Notes with HTML and plain-text-only clipboard data; HTML should restore a closed toggle, while plain text should remain a nested list. The surrounding words must stay outside the pasted structure. Record any external-app difference rather than assuming syntax guarantees acceptance.
 - Copy a callout with an emoji, a heading, paragraphs, and another callout inside it. Confirm HTML uses `<aside>` and plain text uses an `<aside>` wrapper, without quote markers. Paste back into Notes from both representations and from the Notion-style raw example, checking icon, child hierarchy, and surrounding paragraphs. Paste into Notion and record how that version reads each clipboard representation.
 - Delete a closed toggle with its row Delete action and check that its hidden children become siblings. Delete it through a whole-block selection or a full text-range selection and check that its body is removed too. Repeat immediately after editing the toggle and before its save completes. Confirm there is no save error, stray child outline, or reappearing block after save and reopen.
-- Paste copied headings, formatted text, links, and nested lists back into Notes. App-specific objects, media bytes, and embedded databases are outside the portable text-copy contract.
+- Paste copied headings, formatted text, links, and nested lists back into Notes. Page and database mentions retain their local identities through rich in-app paste; embedded databases use the dedicated source-copy flow. Other app-specific objects and media bytes remain outside the portable text-copy contract.
 
 Automated coverage verifies model serialization, standard clipboard MIME types, semantic HTML paste, partial ranges, and native single-editor copy/cut events. Cross-application behavior still requires manual desktop acceptance.
 

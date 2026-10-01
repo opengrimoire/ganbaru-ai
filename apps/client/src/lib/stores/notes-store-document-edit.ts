@@ -1,5 +1,6 @@
 import { notesPasteAppendRequests, planNotesPlainTextPaste } from "$lib/notes/block-clipboard";
 import { createNotesPastePersistence } from "./notes-store-paste-persistence";
+import type { NotesDatabasePasteController } from "./notes-database-paste.svelte";
 import type { NotesDocumentSelection } from "$lib/notes/editor-selection";
 import { planNotesRichHtmlPaste } from "$lib/notes/rich-text-paste";
 import { appendNotesBlockChildren, moveNotesBlock, trashNotesBlock, updateNotesBlock } from "$lib/api/notes";
@@ -14,19 +15,19 @@ import { notesEnterSiblingBlockType } from "$lib/notes/block-enter";
 import type { NotesBlock, NotesBlockUpdate, NotesBlockWrite, NotesParent } from "$lib/notes/types";
 
 /** Replace a document range as one local edit and one undo entry. */
-export function createNotesDocumentEdit(context: NotesBlockActionsContext, optimisticBlockFromWrite: (write: NotesBlockWrite, parent: NotesParent) => NotesBlock) {
+export function createNotesDocumentEdit(context: NotesBlockActionsContext, optimisticBlockFromWrite: (write: NotesBlockWrite, parent: NotesParent) => NotesBlock, databasePaste?: NotesDatabasePasteController) {
   return async function replaceDocumentRange(
     blockIds: readonly string[], start: number, end: number, text: string, html?: string, documentSelection?: NotesDocumentSelection,
   ): Promise<void> {
     const blocks = blockIds.map((id) => context.blockById(id));
     if (!blocks.length || blocks.some((block) => !block)) throw new Error("Notes selection content is not loaded");
     const originalFirst = blocks[0]!;
-    const replacement = originalFirst.type === "child_page"
+    const replacement = originalFirst.type === "child_page" || originalFirst.type === "child_database"
       ? createBlockWrite(crypto.randomUUID(), "paragraph", "") : null;
     const first = replacement ? optimisticBlockFromWrite(replacement, originalFirst.parent) : originalFirst;
     const last = blocks[blocks.length - 1]!;
     const prefix = splitRichTextForBlock(blockEditableRichText(first), start, blockPlainText(first).length).before;
-    const suffix = last.type === "child_page" ? [] : splitRichTextForBlock(blockEditableRichText(last), 0, end).after;
+    const suffix = last.type === "child_page" || last.type === "child_database" ? [] : splitRichTextForBlock(blockEditableRichText(last), 0, end).after;
     const lines = text.replace(/\r\n?/gu, "\n").split("\n");
     const richText = [...prefix, createTextRichText(lines[0]), ...(lines.length === 1 ? suffix : [])];
     let update = isTextEditableBlock(first.type)
@@ -86,15 +87,16 @@ export function createNotesDocumentEdit(context: NotesBlockActionsContext, optim
     if (before) before.documentSelection = documentSelection ?? { anchor: { blockId: originalFirst.id, offset: start }, focus: { blockId: last.id, offset: end } };
     const removed = new Set(blockIds.slice(1));
     if (replacement && start === 0 && (originalFirst.id !== last.id || end > 0)) removed.add(originalFirst.id);
-    if (last.type === "child_page" && end === 0) removed.delete(last.id);
+    if ((last.type === "child_page" || last.type === "child_database") && end === 0) removed.delete(last.id);
     for (const descendantId of context.outlineSubtreeIds(fullySelectedHiddenRoots)) {
       if (descendantId !== first.id) removed.add(descendantId);
     }
     const tree = context.treeState();
+    const removedIdsInOrder = [...new Set([...blockIds, ...removed])].filter((id) => removed.has(id));
     const moved: NotesBlock[] = [];
     const placements: NotesBlockPlacement[] = [];
     // Descendants outside the text range must survive deletion of their parent.
-    for (const id of removed) {
+    for (const id of removedIdsInOrder) {
       for (const childId of tree.childIdsByParentId[id] ?? []) {
         if (removed.has(childId)) continue;
         const child = context.blockById(childId);
@@ -124,7 +126,8 @@ export function createNotesDocumentEdit(context: NotesBlockActionsContext, optim
     const selection = { start: offset, end: offset };
     context.requestBlockFocus(focusId, selection);
     context.recordUndo({ kind: "delete", before, after: context.createUndoSnapshot(focusId, [], selection) });
-    const persistPaste = createNotesPastePersistence(requests, richPastePlan?.copiedPageIds);
+    if (richPastePlan?.copiedDatabaseIds) databasePaste?.beginCopies(richPastePlan.copiedDatabaseIds);
+    const persistPaste = createNotesPastePersistence(requests, richPastePlan?.copiedPageIds, richPastePlan?.copiedDatabaseIds, databasePaste?.acceptCopy);
     const mutations: Array<() => Promise<unknown>> = [];
     if (replacement) {
       mutations.push(() => appendNotesBlockChildren({ parent: first.parent, after: originalFirst.id, children: [{ id: first.id, ...update }] }));
@@ -134,8 +137,12 @@ export function createNotesDocumentEdit(context: NotesBlockActionsContext, optim
     for (const placement of placements) {
       mutations.push(() => moveNotesBlock(placement.blockId, { parent: placement.parent, after: placement.after, before: null }));
     }
-    // Children first avoids trashing surviving descendants through a removed ancestor.
-    for (const id of [...removed].reverse()) mutations.push(() => trashNotesBlock(id, true));
+    // Survivors have already moved. One trash journal per removed root preserves undo ownership.
+    for (const id of removedIdsInOrder) {
+      const parent = context.blockById(id)?.parent ?? tree.blocksById[id]?.parent;
+      if (parent?.type === "block_id" && removed.has(parent.block_id)) continue;
+      mutations.push(() => trashNotesBlock(id, true));
+    }
     let completed = 0;
     void context.enqueueEditorMutation(async () => {
       await context.awaitSelectedPageReady();

@@ -136,6 +136,47 @@ function editor(
 afterEach(() => { vi.clearAllMocks(); });
 
 describe("Notes editing with delayed persistence", () => {
+  it("replaces a selected database with a fresh paragraph and restores its original identity on undo", async () => {
+    const sourceId = "00000000-0000-4000-8000-000000000004";
+    const viewId = "00000000-0000-4000-8000-000000000005";
+    const database = fromWrite({ id: firstId, type: "child_database", child_database: {
+      title: "Tasks", database_id: firstId, data_source_id: sourceId, view_id: viewId,
+    } });
+    if (database.type !== "child_database") throw new Error("Expected a database fixture");
+    const h = editor([database]);
+    await h.actions.replaceDocumentRange([firstId], 0, 1, "Replacement");
+    const replacementId = h.projection.childIdsByParentId[pageId][0];
+    expect(replacementId).not.toBe(firstId);
+    expect(h.projection.blocksById[firstId]).toBeUndefined();
+    expect(blockPlainText(h.projection.blocksById[replacementId])).toBe("Replacement");
+    expect(h.stored.get(firstId)?.type).toBe("child_database");
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(api.trashNotesBlock).toHaveBeenCalledWith(firstId, true);
+    expect(api.updateNotesBlock).not.toHaveBeenCalledWith(firstId, expect.objectContaining({ type: "paragraph" }));
+    await h.undo.undo();
+    await h.persistence.flushPendingBlockSaves();
+    expect(h.projection.blocksById[firstId]).toMatchObject({ type: "child_database", child_database: database.child_database });
+    expect(h.stored.get(firstId)?.in_trash).toBe(false);
+    h.undo.dispose();
+  });
+
+  it("trashes a removed nested graph through its root after moving unselected children", async () => {
+    const childId = "00000000-0000-4000-8000-000000000004";
+    const nestedId = "00000000-0000-4000-8000-000000000005";
+    const collapsed = fromWrite(createBlockWrite(lastId, "toggle", "Details"));
+    if (collapsed.type !== "toggle") throw new Error("Expected toggle");
+    collapsed.toggle.ganbaru_open = false;
+    const child = { ...fromWrite(createBlockWrite(childId, "toggle", "Nested")), parent: { type: "block_id" as const, block_id: lastId } };
+    const nested = { ...fromWrite(createBlockWrite(nestedId, "child_database", "Tasks")), parent: { type: "block_id" as const, block_id: childId } };
+    const h = editor([fromWrite(createBlockWrite(firstId, "paragraph", "Before")), collapsed, child, nested]);
+    await h.actions.replaceDocumentRange([firstId, lastId], 0, Number.MAX_SAFE_INTEGER, "After");
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(api.trashNotesBlock).toHaveBeenCalledExactlyOnceWith(lastId, true);
+    expect(h.projection.blocksById[nestedId]).toBeUndefined();
+    h.undo.dispose();
+  });
   it("links partial document text immediately, preserves code and databases, and undoes it in one step", async () => {
     const codeId = "00000000-0000-4000-8000-000000000004";
     const databaseId = "00000000-0000-4000-8000-000000000005";

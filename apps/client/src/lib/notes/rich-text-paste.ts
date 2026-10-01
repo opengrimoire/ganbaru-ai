@@ -11,6 +11,7 @@ import {
 } from "./block-factory";
 import {
   createLinkedTextRichText,
+  createDatabaseMentionRichText,
   createPageMentionRichText,
   createTextRichText,
   defaultRichTextAnnotations,
@@ -54,6 +55,7 @@ type NotesRichHtmlPasteBlockType =
   | "table"
   | "table_row"
   | "child_page"
+  | "child_database"
   | "code";
 
 interface NotesRichHtmlPasteSegment {
@@ -68,12 +70,20 @@ interface NotesRichHtmlPasteSegment {
   icon?: NotesIcon | null;
   color?: NotesColor;
   sourcePageId?: string;
+  sourceDatabaseId?: string;
+}
+
+interface NotesRichHtmlInlineReference {
+  type: "page" | "database";
+  id: string;
+  href: string | null;
 }
 
 interface NotesRichHtmlInlineContext {
   annotations: NotesRichTextAnnotations;
   linkUrl: string | null;
   preformatted: boolean;
+  reference?: NotesRichHtmlInlineReference | null;
 }
 
 export interface NotesRichHtmlPastePlan {
@@ -84,6 +94,8 @@ export interface NotesRichHtmlPastePlan {
   focusOffset: number;
   /** New paired block identities mapped to local source notes for canonical duplication. */
   copiedPageIds?: Readonly<Record<string, string>>;
+  /** New database block identities mapped to local sources for canonical graph duplication. */
+  copiedDatabaseIds?: Readonly<Record<string, string>>;
 }
 
 export interface NotesRichHtmlPastePlanInput {
@@ -249,11 +261,33 @@ function appendText(
   context: NotesRichHtmlInlineContext,
 ): void {
   if (!content) return;
-  const item = context.linkUrl
-    ? createLinkedTextRichText(content, context.linkUrl)
-    : createTextRichText(content);
+  const reference = context.reference;
+  const item = reference
+    ? reference.type === "page" ? createPageMentionRichText(reference.id, content, reference.href)
+      : createDatabaseMentionRichText(reference.id, content)
+    : context.linkUrl ? createLinkedTextRichText(content, context.linkUrl) : createTextRichText(content);
+  if (reference) {
+    item.plain_text = content;
+    item.href = reference.href;
+  }
   item.annotations = cloneAnnotations(context.annotations);
   appendRichTextItem(output, item);
+}
+
+/** Keep one reference's line breaks in the same run without merging separate mention elements. */
+function appendInlineReferenceRuns(output: NotesRichText[], items: readonly NotesRichText[]): void {
+  let previous: NotesRichText | undefined;
+  for (const item of items) {
+    if (item.type === "mention" && previous?.type === "mention"
+      && item.href === previous.href && annotationsEqual(item.annotations, previous.annotations)
+      && ((item.mention.type === "page" && previous.mention.type === "page" && item.mention.page.id === previous.mention.page.id)
+        || (item.mention.type === "database" && previous.mention.type === "database" && item.mention.database.id === previous.mention.database.id))) {
+      previous.plain_text += item.plain_text;
+      continue;
+    }
+    output.push(item);
+    previous = item;
+  }
 }
 
 function normalizeHtmlText(text: string, preformatted: boolean): string {
@@ -299,6 +333,26 @@ function applyStyleAnnotations(
   if (decoration.includes("line-through")) annotations.strikethrough = true;
 }
 
+/** Treat reference metadata as untrusted input; retain legacy page hyperlinks when no markers exist. */
+function inlineReferenceForElement(
+  element: Element,
+  linkUrl: string | null,
+  inherited: NotesRichHtmlInlineReference | null | undefined,
+): NotesRichHtmlInlineReference | null {
+  const type = element.getAttribute("data-notes-reference-type");
+  const id = element.getAttribute("data-notes-reference-id");
+  const target = linkUrl?.startsWith("#notes?") ? parseNotesLinkHash(linkUrl) : null;
+  if (type !== null || id !== null) {
+    if ((type !== "page" && type !== "database") || !isNotesUuid(id)) return null;
+    return { type, id, href: type === "page" ? `#notes?page=${id}`
+      : target ? target.blockId === id ? linkUrl : null : linkUrl };
+  }
+  if (normalizedTagName(element) === "a") {
+    return target && !target.blockId ? { type: "page", id: target.pageId, href: linkUrl } : null;
+  }
+  return inherited ?? null;
+}
+
 function contextForElement(
   element: Element,
   context: NotesRichHtmlInlineContext,
@@ -330,6 +384,7 @@ function contextForElement(
   return {
     annotations,
     linkUrl,
+    reference: inlineReferenceForElement(element, linkUrl, context.reference),
     preformatted: context.preformatted || tagName === "pre"
       || (element instanceof HTMLElement && ["pre", "pre-wrap", "break-spaces"].includes(element.style.whiteSpace)),
   };
@@ -384,16 +439,6 @@ function collectInline(
   }
   if (!(node instanceof Element)) return;
   const tagName = normalizedTagName(node);
-  if (tagName === "a") {
-    const href = node.getAttribute("href") ?? "";
-    const target = href.startsWith("#notes?") ? parseNotesLinkHash(href) : null;
-    if (target && !target.blockId) {
-      const mention = createPageMentionRichText(target.pageId, node.textContent ?? "", href);
-      mention.annotations = { ...contextForElement(node, context).annotations };
-      output.push(mention);
-      return;
-    }
-  }
   if (tagName === "br") {
     appendText(output, "\n", context);
     return;
@@ -416,12 +461,15 @@ function collectInline(
     appendText(output, "\n", context);
   }
   const childContext = contextForElement(node, context);
+  const referenceItems: NotesRichText[] | null = childContext.reference && childContext.reference !== context.reference ? [] : null;
   for (const child of node.childNodes) {
-    collectInline(child, childContext, output);
+    collectInline(child, childContext, referenceItems ?? output);
   }
+  if (referenceItems) appendInlineReferenceRuns(output, referenceItems);
   if (tagName === "a") {
     const href = node.getAttribute("href");
-    if (href && !notesClipboardLinkUrl(href) && !/^[a-z][a-z0-9+.-]*:/iu.test(href)) {
+    const markedReference = node.hasAttribute("data-notes-reference-type") || node.hasAttribute("data-notes-reference-id");
+    if (href && !markedReference && !href.startsWith("#notes?") && !notesClipboardLinkUrl(href) && !/^[a-z][a-z0-9+.-]*:/iu.test(href)) {
       appendText(output, ` (${href})`, context);
     }
   }
@@ -519,6 +567,12 @@ function collectSegments(
     }
     const tagName = normalizedTagName(child);
     const sourcePageId = child.getAttribute("data-notes-child-page-id");
+    const sourceDatabaseId = child.getAttribute("data-notes-child-database-id");
+    if (tagName === "p" && isNotesUuid(sourceDatabaseId)) {
+      flushInline();
+      segments.push({ type: "child_database", richText: [createTextRichText(child.textContent ?? "")], sourceDatabaseId, depth });
+      continue;
+    }
     if (tagName === "p" && isNotesUuid(sourcePageId)) {
       flushInline();
       segments.push({ type: "child_page", richText: [createTextRichText(child.textContent ?? "")], sourcePageId, depth });
@@ -738,6 +792,8 @@ function richTextOrEmptyText(richText: readonly NotesRichText[]): NotesRichText[
 
 function createUpdateForSegment(segment: NotesRichHtmlPasteSegment): NotesBlockUpdate {
   switch (segment.type) {
+    case "child_database":
+      return { type: "child_database", child_database: { title: richTextPlainText(segment.richText) } };
     case "child_page":
       return { type: "child_page", child_page: { title: richTextPlainText(segment.richText) } };
     case "table": {
@@ -874,13 +930,13 @@ export function planNotesRichHtmlPaste(
   );
   const prefix = richTextRangeSlice(currentRichText, 0, start);
   const suffix = richTextRangeSlice(currentRichText, end, currentPlainText.length);
-  if (segments[0].type === "child_page" || (["table", "divider", "toggle", "callout"].includes(segments[0].type)
+  if (["child_page", "child_database"].includes(segments[0].type) || (["table", "divider", "toggle", "callout"].includes(segments[0].type)
     && (richTextPlainText(prefix).length > 0
       || (input.currentBlock.type !== "paragraph" && end !== currentPlainText.length)))) {
     segments.unshift({ type: "paragraph", richText: [], depth: 0 });
   }
   if (segments.at(-1)?.type === "table_row" || segments.at(-1)?.type === "table"
-    || segments.at(-1)?.type === "child_page"
+    || ["child_page", "child_database"].includes(segments.at(-1)?.type ?? "")
     || (segments.at(-1)?.type === "divider" && richTextPlainText(suffix))
     || (segments.some((segment) => segment.type === "toggle" || segment.type === "callout")
       && richTextPlainText(suffix)
@@ -930,6 +986,8 @@ export function planNotesRichHtmlPaste(
   });
   const copiedPageIds = Object.fromEntries(appendedSegments.flatMap((segment, index) =>
     segment.sourcePageId ? [[appendedBlocks[index].id, segment.sourcePageId]] : []));
+  const copiedDatabaseIds = Object.fromEntries(appendedSegments.flatMap((segment, index) =>
+    segment.sourceDatabaseId ? [[appendedBlocks[index].id, segment.sourceDatabaseId]] : []));
   const visibleIndex = lastVisibleSegmentIndex(segments);
   const visibleSegment = segments[visibleIndex];
   return {
@@ -938,6 +996,7 @@ export function planNotesRichHtmlPaste(
       : blockWithRichText(input.currentBlock, currentSegment.richText),
     appendedBlocks,
     ...(Object.keys(copiedPageIds).length ? { copiedPageIds } : {}),
+    ...(Object.keys(copiedDatabaseIds).length ? { copiedDatabaseIds } : {}),
     blockDepths: segments.map((segment) => segment.depth ?? 0),
     focusBlockId: visibleIndex === 0 ? input.currentBlock.id : appendedBlocks[visibleIndex - 1].id,
     focusOffset: visibleIndex === segments.length - 1 && lastSegment

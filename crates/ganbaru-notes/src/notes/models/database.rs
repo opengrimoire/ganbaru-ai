@@ -1,5 +1,17 @@
 use super::*;
 
+/// Destination and canonical ownership metadata for a database block.
+#[derive(Serialize)]
+pub struct NoteDatabaseReferenceDto {
+    pub source_block_id: String,
+    pub page_id: String,
+    pub canonical_source_block_id: String,
+    pub canonical_source_page_id: String,
+    pub title: String,
+    pub owned_data_source_count: i64,
+    pub is_linked: bool,
+}
+
 #[derive(Serialize)]
 pub struct NoteCreatedDatabaseDto {
     database: NoteDatabaseDto,

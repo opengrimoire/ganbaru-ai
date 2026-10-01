@@ -1,7 +1,8 @@
 import { createRichText } from "$lib/notes/block-factory";
 import { NOTES_PAGE_PROJECT_ID_PROPERTY } from "$lib/notes/project-membership";
 import { mapNotesPageDto } from "$lib/notes/notion-mappers";
-import type { NotesPage } from "$lib/notes/types";
+import type { NotesNavigationDatabase, NotesPage } from "$lib/notes/types";
+import { isNotesUuid } from "$lib/notes/block-link";
 
 /** Require an object payload from a Notes workspace or summary command. */
 export function notesWorkspaceShellRecord(value: unknown): Record<string, unknown> {
@@ -14,6 +15,20 @@ export function notesWorkspaceShellRecord(value: unknown): Record<string, unknow
 function shellString(value: unknown, field: string): string {
   if (typeof value !== "string") throw new Error(`${field} must be a string`);
   return value;
+}
+
+/** Validate the compact identities used to open database hierarchy branches. */
+export function mapNavigationDatabase(value: unknown): NotesNavigationDatabase {
+  const record = notesWorkspaceShellRecord(value);
+  if (!isNotesUuid(record.id) || !isNotesUuid(record.page_id) || !isNotesUuid(record.data_source_id)) {
+    throw new Error("navigation database identities must be UUIDs");
+  }
+  return {
+    id: record.id,
+    page_id: record.page_id,
+    title: shellString(record.title, "navigation database.title"),
+    data_source_id: record.data_source_id,
+  };
 }
 
 /** Require a nullable string field from a Notes workspace payload. */

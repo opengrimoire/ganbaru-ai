@@ -36,9 +36,11 @@ First-use contracts are deterministic structural budgets, not elapsed-time bench
 
 | Surface | Critical IPC calls | SQL reads | SQL writes | Serialized response bytes | Source-module ceiling |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Projects | 1 | 6 | 0 | 13,142 | 360 |
-| Notes | 1 | 7 | 0 | 323 | 360 |
-| Chat | Not baselined | Not baselined | Not baselined | Not baselined | 360 |
+| Projects | 1 | 6 | 0 | 13,142 | 365 |
+| Notes | 1 | 7 | 0 | 349 | 365 |
+| Chat | Not baselined | Not baselined | Not baselined | Not baselined | 365 |
+
+Database navigation adds 26 response bytes for an empty metadata list. The empty Notes shell retains its seven reads and avoids block, database, source, and view queries. Database shell metadata is read when navigation contains notes, while saved views load on demand.
 
 The machine-readable frontend ceiling is authoritative in `apps/client/scripts/first-use-bundle-baseline.json`. Rust tests own backend call, statement, and payload limits. Bundle contracts own route closures, required resident modules, and forbidden platform imports.
 

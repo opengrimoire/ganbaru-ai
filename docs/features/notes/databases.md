@@ -6,6 +6,8 @@ Local databases are structured views over Notes row pages. They follow useful pu
 
 Status: partial, with real desktop and Android visual acceptance pending.
 
+Database links and mentions open a dedicated database surface across the available Notes width. The workspace path extends through the containing note to the database. Returning through the note breadcrumb preserves its current editor session and scroll position. Opening a row still uses the normal Notes page and preview behavior. A linked database's source arrow opens its canonical database; its own view remains a separate presentation over shared rows.
+
 One skeleton spans an inline database's initial renderer, saved-view metadata, and row reads. Its name, tabs, and rows become visible together once the active view's row window is ready, without resetting the placeholder between loading stages. Database titles initialize from the block immediately, avoiding an incorrect temporary title. Template reads run concurrently; ready table rows do not wait for templates, while creation retains its existing template readiness rules. Read failures release the placeholder so recovery controls remain accessible.
 
 Pending content stays outside layout flow and cannot stretch the visible placeholder or add scroll overflow as its renderer, controls, and rows mount. The fading placeholder preserves its intrinsic height and outer spacing when ready content takes over layout. This keeps loading geometry stable without measuring content, delaying readiness, or retaining previous documents.
@@ -40,7 +42,21 @@ Each view owns independent presentation settings such as filters, sorts, visible
 
 Renaming a local database updates its block, database shell, and owned data source title together. Renaming a linked database changes only that linked shell and block, leaving the shared source title intact.
 
+Database copies own independent local sources, schemas, saved views, row properties, row bodies, nested notes and databases, and item templates. Copying a containing note or block tree follows the same rule. References within the copied graph point to its new identities, including self-relations; references to unrelated data remain external. Managed file bytes can be shared while copied pages and properties retain their own asset references. Planning captures the source graph before insertion, so a destination inside a source row cannot expand the copy recursively.
+
+Copying a cut block includes only the source objects that were live before that cut. Older Trash remains excluded, and unavailable relation references remain preserved in canonical properties without becoming live relation links. Identity-preserving paste can atomically restore the cut-owned graph and move it to the destination, retaining its source and row identities. Moving a database also updates its shell placement and project scope, and rejects destinations inside its own row graph.
+
+Linked creation can target another note or a compatible block container, with an explicit insertion position. It shares source data while retaining its own shell and view settings. Replacing a plain block is atomic, preserves its identity and position, and rejects blocks with owned content. Ownership metadata identifies the requested block, its containing note, its canonical source block and note, and the number of sources the requested shell owns without reading rows.
+
 Imported title-only child databases remain visible preservation placeholders until they can be connected to local data.
+
+## Copy, paste, and removal
+
+Copying an embedded database provides its readable title and local hyperlink to other applications. Rich paste inside the same vault creates an independent database and offers a floating Dismiss or Paste and sync choice. Dismiss keeps the copy. Paste and sync replaces it with a linked view of the original data. Pasted local database URLs offer Mention, Linked database view, or URL. Mention keeps an inline reference; the linked option inserts an actual database view while preserving surrounding text. The URL option keeps its ordinary hyperlink. These choices do not load source rows until copying or displaying a database requires them.
+
+Deleting a database or a selection containing one confirms before the local document changes. The confirmation counts owned data sources and explains that their pages move to Trash. Removing a linked view confirms separately and retains its shared source and pages. Cancelling keeps the selection and content. A failed ownership read prevents confirmation until it can be retried. Undo and restore recover the affected owned graph while preserving items that were already individually trashed.
+
+Database blocks do not offer conversion into unrelated block types. Replacing one uses the confirmed deletion path and a fresh text block, preserving the original database identity for recovery.
 
 ## Row pages
 

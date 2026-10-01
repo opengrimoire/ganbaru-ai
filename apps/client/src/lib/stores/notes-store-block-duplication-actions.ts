@@ -11,6 +11,7 @@ interface DuplicateSubtreesInput {
   after: string | null;
   before?: string | null;
   includeTrashedSources?: boolean;
+  showDatabasePasteChoices?: boolean;
 }
 
 interface NotesBlockDuplicationActionsContext {
@@ -70,6 +71,7 @@ export function createNotesBlockDuplicationActions(
       after: targetBlockId,
       before: null,
       includeTrashedSources,
+      showDatabasePasteChoices: !includeTrashedSources,
     });
     const focusBlockId = planNotesInsertedBlockFocus([duplicates[0]?.id], targetBlockId);
     context.requestBlockFocus(focusBlockId);

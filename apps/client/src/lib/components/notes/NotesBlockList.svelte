@@ -45,6 +45,7 @@
   import { notesCalloutLayers, notesCalloutOwnTextHidden } from "$lib/notes/callout-layout";
   import NotesBlockRow from "./NotesBlockRow.svelte";
   import type NotesSelectionContextMenu from "./NotesSelectionContextMenu.svelte";
+  import type NotesDatabasePastePrompt from "./NotesDatabasePastePrompt.svelte";
   import { createNotesDocumentSelectionController } from "./notes-document-selection-controller.svelte";
   import NotesVirtualBlock from "./NotesVirtualBlock.svelte";
   import NotesVisibleBlockRenderer from "./NotesVisibleBlockRenderer.svelte";
@@ -97,6 +98,18 @@
   const projects = getProjects();
   const { t } = getLocalization();
   let blockListElement: HTMLDivElement | null = $state(null);
+  let DatabasePastePrompt = $state<typeof NotesDatabasePastePrompt | null>(null);
+  let pastePromptLoading = $state(false);
+  let pastePromptError = $state<string | null>(null);
+  let pastePromptAnchor = $state<HTMLElement | null>(null);
+  const databasePastePrompt = $derived(notes.databasePaste.prompt?.pageId === pageId ? notes.databasePaste.prompt : null);
+  $effect(() => {
+    if (!databasePastePrompt || DatabasePastePrompt || pastePromptLoading || pastePromptError) return;
+    pastePromptLoading = true;
+    void import("./NotesDatabasePastePrompt.svelte").then((module) => { DatabasePastePrompt = module.default; })
+      .catch((caught: unknown) => { pastePromptError = caught instanceof Error ? caught.message : String(caught); })
+      .finally(() => { pastePromptLoading = false; });
+  });
   const blockHandle = createNotesBlockHandleController();
   const blockSelectionController = createNotesBlockSelectionController({
     undo: notes.undoNotesEdit,
@@ -227,6 +240,7 @@
       blockDrag.draggingBlockId,
       blockHandle.openMenuBlockId,
       notes.focusBlockId,
+      databasePastePrompt?.blockId ?? null,
       ...(blockSelection?.selectedBlockIds ?? []),
     ].filter((blockId): blockId is string => blockId !== null),
     readFocusRequest: () => ({
@@ -241,6 +255,25 @@
   const calloutLayersById = $derived(notesCalloutLayers(notes.flatBlockOutlines, notes.blockById));
   const hydratedItemsById = $derived(virtualizer.hydratedItemsById);
   const measureVirtualBlock = virtualizer.measureBlock;
+  $effect(() => {
+    const blockId = databasePastePrompt?.blockId;
+    const list = blockListElement;
+    void visibleOutlines;
+    void hydratedItemsById;
+    if (!blockId || !list) {
+      pastePromptAnchor = null;
+      return;
+    }
+    const previousAnchor = untrack(() => pastePromptAnchor);
+    if (!previousAnchor?.isConnected || previousAnchor.dataset.notesSelectableBlockId !== blockId) pastePromptAnchor = null;
+    let cancelled = false;
+    void tick().then(() => {
+      if (!cancelled) {
+        pastePromptAnchor = list.querySelector<HTMLElement>(`[data-notes-selectable-block-id="${blockId}"]`);
+      }
+    });
+    return () => { cancelled = true; };
+  });
   $effect(() => {
     void visibleOutlines;
     void hydratedItemsById;
@@ -752,6 +785,15 @@
     <div aria-hidden="true" style:height={`${visibleRange.bottomHeight}px`}></div>
   {/if}
 </div>
+
+{#if databasePastePrompt && DatabasePastePrompt}
+  {#key databasePastePrompt.blockId}
+    <DatabasePastePrompt controller={notes.databasePaste} anchor={pastePromptAnchor} />
+  {/key}
+{:else if databasePastePrompt && pastePromptError}
+  <p role="alert" class="text-sm text-destructive">{t("notes.databasePasteFailed", pastePromptError)}</p>
+  <button type="button" class="text-sm hover:underline" onclick={() => { pastePromptError = null; }}>{t("common.retry")}</button>
+{/if}
 
 <style>
   :global(.notes-block-list[data-notes-document-selection]:not([data-notes-document-selection-composing]) [contenteditable='true'][data-notes-block-id]) {

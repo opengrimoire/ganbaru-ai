@@ -1,18 +1,289 @@
 use super::models::{
     NoteBlockRow, NoteCreatedDatabaseDto, NoteDataSourceRow, NoteDatabaseCreate,
-    NoteDatabaseRename, NoteDatabaseRow, NoteDatabaseViewRow, NoteLinkedDatabaseCreate,
+    NoteDatabaseDuplicate, NoteDatabaseReferenceDto, NoteDatabaseRename, NoteDatabaseRow,
+    NoteDatabaseViewRow, NoteLinkedDatabaseCreate, NoteParent,
 };
 use super::validation::{
     plain_text_from_payload, require_uuid, validate_block_payload, validate_database_create,
-    validate_sort_order,
+    validate_parent, validate_sort_order,
 };
 use super::{history, project_history, writes};
 use serde_json::{Value, json};
 use sqlx::{Sqlite, SqlitePool, Transaction};
+use std::collections::{HashMap, HashSet};
 
 const DEFAULT_DATABASE_TITLE: &str = "Untitled database";
 const DEFAULT_TITLE_PROPERTY_NAME: &str = "Name";
 const DEFAULT_TABLE_VIEW_NAME: &str = "Table";
+
+/// Resolve the owning database without hydrating row pages or view data.
+pub async fn database_reference(
+    pool: &SqlitePool,
+    block_id: &str,
+) -> Result<NoteDatabaseReferenceDto, String> {
+    require_uuid(block_id, "block_id")?;
+    let block = super::reads::get_block_row(pool, block_id.trim(), true).await?;
+    if block.block_type != "child_database" {
+        return Err("database block not found".to_string());
+    }
+    let (source_id, _) = source_database_refs(&block)?;
+    let owner: (String, String) = sqlx::query_as(
+        "SELECT source.database_id, block.page_id FROM notes_data_sources AS source
+         JOIN notes_blocks AS block ON block.id = source.database_id
+         WHERE source.id = ?",
+    )
+    .bind(source_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| format!("resolve Notes database owner: {e}"))?
+    .ok_or_else(|| "database source not found".to_string())?;
+    let owned_data_source_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM notes_data_sources WHERE database_id = ? AND in_trash = 0",
+    )
+    .bind(&block.id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| format!("count owned Notes database sources: {e}"))?;
+    let title: String = sqlx::query_scalar("SELECT title FROM notes_databases WHERE id = ?")
+        .bind(&block.id)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("read Notes database title: {e}"))?;
+    Ok(NoteDatabaseReferenceDto {
+        is_linked: owner.0 != block.id,
+        source_block_id: block.id,
+        page_id: block.page_id,
+        canonical_source_block_id: owner.0,
+        canonical_source_page_id: owner.1,
+        title,
+        owned_data_source_count,
+    })
+}
+
+/// Copy a database and its complete local data graph to a fresh destination.
+pub async fn duplicate_database(
+    pool: &SqlitePool,
+    request: NoteDatabaseDuplicate,
+) -> Result<NoteCreatedDatabaseDto, String> {
+    validate_database_destination(
+        &request.id,
+        &request.source_block_id,
+        request.parent.as_ref(),
+        request.after_block_id.as_deref(),
+        request.replace_block_id.as_deref(),
+    )?;
+    ensure_destination_baseline(
+        pool,
+        &request.source_block_id,
+        request.parent.as_ref(),
+        request.replace_block_id.as_deref(),
+    )
+    .await?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| format!("begin Notes database copy: {e}"))?;
+    let source = load_block_row_tx(&mut tx, &request.source_block_id).await?;
+    if source.block_type != "child_database" {
+        return Err("database source must be a local database block".to_string());
+    }
+    let placement = resolve_database_destination(
+        &mut tx,
+        &source,
+        request.parent.as_ref(),
+        request.after_block_id.as_deref(),
+        request.replace_block_id.as_deref(),
+    )
+    .await?;
+    let project_id =
+        project_history::resolve_project_id_for_page_tx(&mut tx, &placement.parent.page_id).await?;
+    let mut reserved = HashSet::from([request.id.clone()]);
+    let copy = writes::database_copy::plan_database_copy(
+        &mut tx,
+        &source,
+        &request.id,
+        &mut reserved,
+        project_id.as_deref(),
+        false,
+    )
+    .await?;
+    history::record_page_snapshot_tx(&mut tx, &placement.parent.page_id, "duplicate_database")
+        .await?;
+    place_database_block(&mut tx, &placement, &request.id, &copy.payload).await?;
+    writes::database_copy::insert_database_copy(&mut tx, &copy).await?;
+    writes::database_copy::finalize_copies(
+        &mut tx,
+        std::slice::from_ref(&copy),
+        &[],
+        &HashMap::new(),
+    )
+    .await?;
+    writes::refresh_parent_has_children(&mut tx, &placement.parent).await?;
+    writes::touch_page(&mut tx, &placement.parent.page_id).await?;
+    let (source_id, view_id) =
+        source_database_refs(&load_block_row_tx(&mut tx, &request.id).await?)?;
+    let created =
+        load_created_linked_database_tx(&mut tx, &request.id, &source_id, &view_id).await?;
+    tx.commit()
+        .await
+        .map_err(|e| format!("commit Notes database copy: {e}"))?;
+    Ok(created)
+}
+
+struct DatabasePlacement {
+    parent: writes::ParentTarget,
+    sort_order: f64,
+    replacing: bool,
+}
+
+fn validate_database_destination(
+    id: &str,
+    source_id: &str,
+    parent: Option<&NoteParent>,
+    after: Option<&str>,
+    replacement: Option<&str>,
+) -> Result<(), String> {
+    require_uuid(id, "id")?;
+    require_uuid(source_id, "source_block_id")?;
+    if id.trim() == source_id.trim() {
+        return Err("database id must differ from source block id".to_string());
+    }
+    if let Some(replacement) = replacement {
+        require_uuid(replacement, "replace_block_id")?;
+        if replacement.trim() != id.trim() || parent.is_some() || after.is_some() {
+            return Err(
+                "replacement must match id and cannot include parent or after_block_id".to_string(),
+            );
+        }
+    }
+    if let Some(parent) = parent {
+        validate_parent(parent)?;
+    }
+    if let Some(after) = after {
+        require_uuid(after, "after_block_id")?;
+    }
+    Ok(())
+}
+
+async fn ensure_destination_baseline(
+    pool: &SqlitePool,
+    source: &str,
+    parent: Option<&NoteParent>,
+    replacement: Option<&str>,
+) -> Result<(), String> {
+    if let Some(replacement) = replacement {
+        project_history::ensure_blocks_baseline_for_mutation(pool, &[replacement.to_string()]).await
+    } else if let Some(parent) = parent {
+        project_history::ensure_parent_baseline_for_mutation(pool, parent).await
+    } else {
+        project_history::ensure_blocks_baseline_for_mutation(pool, &[source.to_string()]).await
+    }
+}
+
+async fn resolve_database_destination(
+    tx: &mut Transaction<'_, Sqlite>,
+    source: &NoteBlockRow,
+    parent: Option<&NoteParent>,
+    after: Option<&str>,
+    replacement: Option<&str>,
+) -> Result<DatabasePlacement, String> {
+    if let Some(replacement) = replacement {
+        let current = load_block_row_tx(tx, replacement).await?;
+        validate_replacement_block(&current)?;
+        let has_children: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM notes_blocks WHERE parent_block_id = ?)",
+        )
+        .bind(&current.id)
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(|e| format!("check database replacement children: {e}"))?;
+        if current.block_type == "child_database" || has_children {
+            return Err("database replacement requires a block without owned content".to_string());
+        }
+        let parent = active_database_parent(tx, &current).await?;
+        writes::validate_block_for_parent(&parent, "child_database", &json!({}))?;
+        return Ok(DatabasePlacement {
+            parent,
+            sort_order: current.sort_order,
+            replacing: true,
+        });
+    }
+    let destination = match parent {
+        Some(parent) => writes::resolve_block_parent(tx, parent).await?,
+        None => active_database_parent(tx, source).await?,
+    };
+    writes::validate_page_parent_exists(
+        tx,
+        &NoteParent::PageId {
+            page_id: destination.page_id.clone(),
+        },
+    )
+    .await?;
+    writes::validate_block_for_parent(&destination, "child_database", &json!({}))?;
+    let after = after.or_else(|| parent.is_none().then_some(source.id.as_str()));
+    let sort_order = writes::next_sort_orders(tx, &destination, after, 1).await?[0];
+    validate_sort_order(sort_order)?;
+    Ok(DatabasePlacement {
+        parent: destination,
+        sort_order,
+        replacing: false,
+    })
+}
+
+async fn active_database_parent(
+    tx: &mut Transaction<'_, Sqlite>,
+    block: &NoteBlockRow,
+) -> Result<writes::ParentTarget, String> {
+    let parent = match block.parent_block_id.as_ref() {
+        Some(block_id) => NoteParent::BlockId {
+            block_id: block_id.clone(),
+        },
+        None => NoteParent::PageId {
+            page_id: block.page_id.clone(),
+        },
+    };
+    let target = writes::resolve_block_parent(tx, &parent).await?;
+    writes::validate_page_parent_exists(
+        tx,
+        &NoteParent::PageId {
+            page_id: target.page_id.clone(),
+        },
+    )
+    .await?;
+    Ok(target)
+}
+
+async fn place_database_block(
+    tx: &mut Transaction<'_, Sqlite>,
+    placement: &DatabasePlacement,
+    id: &str,
+    payload: &Value,
+) -> Result<(), String> {
+    validate_block_payload("child_database", payload)?;
+    let plain_text = plain_text_from_payload("child_database", payload);
+    if placement.replacing {
+        sqlx::query("UPDATE notes_blocks SET type = 'child_database', payload = ?, plain_text = ?, has_children = 0,
+            last_edited_time = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND in_trash = 0")
+            .bind(payload.to_string()).bind(plain_text).bind(id.trim()).execute(&mut **tx).await
+            .map_err(|e| format!("replace Notes block with database: {e}"))?;
+    } else {
+        sqlx::query("INSERT INTO notes_blocks (id, page_id, parent_type, parent_page_id, parent_block_id, type, payload, plain_text, sort_order)
+            VALUES (?, ?, ?, ?, ?, 'child_database', ?, ?, ?)")
+            .bind(id.trim()).bind(&placement.parent.page_id).bind(placement.parent.parent_type)
+            .bind(&placement.parent.parent_page_id).bind(&placement.parent.parent_block_id)
+            .bind(payload.to_string()).bind(plain_text).bind(placement.sort_order).execute(&mut **tx).await
+            .map_err(|e| format!("insert Notes database destination: {e}"))?;
+    }
+    super::assets::sync_block_asset_reference_tx(
+        tx,
+        id.trim(),
+        &placement.parent.page_id,
+        "child_database",
+        payload,
+    )
+    .await?;
+    Ok(())
+}
 
 /// Rename the database and its owned data source, allowing an intentionally empty title.
 pub async fn rename_database(
@@ -130,14 +401,17 @@ pub async fn create_database(
     Ok(created)
 }
 
+/// Place a linked shell at the requested destination while sharing its source data.
 pub async fn create_linked_database_view(
     pool: &SqlitePool,
     request: NoteLinkedDatabaseCreate,
 ) -> Result<NoteCreatedDatabaseDto, String> {
     validate_linked_database_create(&request)?;
-    project_history::ensure_blocks_baseline_for_mutation(
+    ensure_destination_baseline(
         pool,
-        std::slice::from_ref(&request.source_block_id),
+        &request.source_block_id,
+        request.parent.as_ref(),
+        request.replace_block_id.as_deref(),
     )
     .await?;
     let mut tx = pool
@@ -150,34 +424,29 @@ pub async fn create_linked_database_view(
     }
     let (source_data_source_id, source_view_id) = source_database_refs(&source_block)?;
     let source = load_active_data_source_tx(&mut tx, &source_data_source_id).await?;
-    let parent = writes::parent_target_from_block_row(&source_block);
-    let title = linked_database_title(&request.title, &source_block, &source);
-    let sort_order = writes::next_sort_orders(&mut tx, &parent, Some(&source_block.id), 1)
-        .await?
-        .into_iter()
-        .next()
-        .ok_or_else(|| "linked database sort order was not prepared".to_string())?;
-    validate_sort_order(sort_order)?;
-    history::record_page_snapshot_tx(&mut tx, &parent.page_id, "create_linked_database").await?;
-    insert_linked_database_block(
+    let placement = resolve_database_destination(
         &mut tx,
-        &parent,
-        &request,
-        &title,
-        &source_data_source_id,
-        sort_order,
+        &source_block,
+        request.parent.as_ref(),
+        request.after_block_id.as_deref(),
+        request.replace_block_id.as_deref(),
     )
     .await?;
+    let parent = &placement.parent;
+    let title = linked_database_title(&request.title, &source_block, &source);
+    history::record_page_snapshot_tx(&mut tx, &parent.page_id, "create_linked_database").await?;
+    let payload = linked_child_database_payload(&request, &title, &source_data_source_id);
+    place_database_block(&mut tx, &placement, &request.id, &payload).await?;
     insert_linked_database_objects(
         &mut tx,
-        &parent,
+        parent,
         &request,
         &title,
         &source_data_source_id,
         &source_view_id,
     )
     .await?;
-    writes::refresh_parent_has_children(&mut tx, &parent).await?;
+    writes::refresh_parent_has_children(&mut tx, parent).await?;
     writes::touch_page(&mut tx, &parent.page_id).await?;
     let created = load_created_linked_database_tx(
         &mut tx,
@@ -460,45 +729,6 @@ fn linked_child_database_payload(
     })
 }
 
-async fn insert_linked_database_block(
-    tx: &mut Transaction<'_, Sqlite>,
-    parent: &writes::ParentTarget,
-    request: &NoteLinkedDatabaseCreate,
-    title: &str,
-    data_source_id: &str,
-    sort_order: f64,
-) -> Result<(), String> {
-    let payload = linked_child_database_payload(request, title, data_source_id);
-    validate_block_payload("child_database", &payload)?;
-    let plain_text = plain_text_from_payload("child_database", &payload);
-    sqlx::query(
-        "INSERT INTO notes_blocks (
-            id,
-            page_id,
-            parent_type,
-            parent_page_id,
-            parent_block_id,
-            type,
-            payload,
-            plain_text,
-            sort_order
-         )
-         VALUES (?, ?, ?, ?, ?, 'child_database', ?, ?, ?)",
-    )
-    .bind(request.id.trim())
-    .bind(&parent.page_id)
-    .bind(parent.parent_type)
-    .bind(&parent.parent_page_id)
-    .bind(&parent.parent_block_id)
-    .bind(payload.to_string())
-    .bind(plain_text)
-    .bind(sort_order)
-    .execute(&mut **tx)
-    .await
-    .map_err(|e| format!("insert linked notes database block: {e}"))?;
-    Ok(())
-}
-
 async fn insert_linked_database_objects(
     tx: &mut Transaction<'_, Sqlite>,
     parent: &writes::ParentTarget,
@@ -533,7 +763,7 @@ async fn insert_linked_database_objects(
     .await
     .map_err(|e| format!("insert linked notes database: {e}"))?;
 
-    let source_view = load_source_table_view_tx(tx, data_source_id, source_view_id).await?;
+    let source_view = load_source_view_tx(tx, data_source_id, source_view_id).await?;
     sqlx::query(
         "INSERT INTO notes_database_views (
             id,
@@ -545,12 +775,13 @@ async fn insert_linked_database_objects(
             sorts,
             configuration
          )
-         VALUES (?, ?, ?, ?, 'table', ?, ?, ?)",
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(request.view_id.trim())
     .bind(request.id.trim())
     .bind(data_source_id.trim())
-    .bind(DEFAULT_TABLE_VIEW_NAME)
+    .bind(source_view.name)
+    .bind(source_view.view_type)
     .bind(source_view.filter)
     .bind(source_view.sorts)
     .bind(source_view.configuration)
@@ -560,7 +791,7 @@ async fn insert_linked_database_objects(
     Ok(())
 }
 
-async fn load_source_table_view_tx(
+async fn load_source_view_tx(
     tx: &mut Transaction<'_, Sqlite>,
     data_source_id: &str,
     source_view_id: &str,
@@ -582,7 +813,7 @@ async fn load_source_table_view_tx(
                 created_time,
                 last_edited_time
          FROM notes_database_views
-         WHERE id = ? AND data_source_id = ? AND type = 'table'",
+         WHERE id = ? AND data_source_id = ?",
     )
     .bind(source_view_id.trim())
     .bind(data_source_id.trim())
@@ -684,6 +915,13 @@ async fn load_created_linked_database_tx(
 }
 
 fn validate_linked_database_create(request: &NoteLinkedDatabaseCreate) -> Result<(), String> {
+    validate_database_destination(
+        &request.id,
+        &request.source_block_id,
+        request.parent.as_ref(),
+        request.after_block_id.as_deref(),
+        request.replace_block_id.as_deref(),
+    )?;
     require_uuid(&request.id, "id")?;
     require_uuid(&request.view_id, "view_id")?;
     require_uuid(&request.source_block_id, "source_block_id")?;

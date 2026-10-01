@@ -22,7 +22,7 @@ import {
   type NotesUndoSnapshot,
   type NotesUndoState,
 } from "$lib/notes/undo-history";
-import type { NotesBlock } from "$lib/notes/types";
+import type { NotesBlock, NotesChildDatabaseBlock } from "$lib/notes/types";
 
 const EMPTY_UNDO_STATE: NotesUndoState = { undo: [], redo: [] };
 
@@ -57,6 +57,7 @@ export interface NotesUndoController {
     focusSelection?: NotesTextSelection | null,
   ) => NotesUndoSnapshot | null;
   record: (options: Omit<NotesUndoRecordOptions, "id">) => void;
+  reconcileDatabaseIdentity: (block: NotesChildDatabaseBlock) => void;
   undo: () => Promise<boolean>;
   redo: () => Promise<boolean>;
   canUndo: () => boolean;
@@ -253,6 +254,24 @@ export function createNotesUndoController(
       });
   }
 
+  /** Attach canonical database identities without changing historical titles. */
+  function reconcileDatabaseIdentity(database: NotesChildDatabaseBlock): void {
+    const reconcile = (snapshot: NotesUndoSnapshot): void => {
+      snapshot.blocks = snapshot.blocks.map((block) => block.id === database.id && block.type === "child_database"
+        ? { ...block, child_database: { ...block.child_database,
+          database_id: database.child_database.database_id,
+          data_source_id: database.child_database.data_source_id,
+          view_id: database.child_database.view_id,
+        } } : block);
+    };
+    // Queued undo writes reference these internal snapshots until persistence finishes.
+    for (const entry of [...state.undo, ...state.redo]) {
+      reconcile(entry.before);
+      reconcile(entry.after);
+    }
+    schedulePersist();
+  }
+
   async function undo(): Promise<boolean> {
     const entry = state.undo.at(-1);
     if (!entry) return false;
@@ -287,6 +306,7 @@ export function createNotesUndoController(
     snapshot,
     snapshotBlocks,
     record,
+    reconcileDatabaseIdentity,
     undo,
     redo,
     canUndo: () => state.undo.length > 0,

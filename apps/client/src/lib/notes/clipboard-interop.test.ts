@@ -64,6 +64,41 @@ describe("Notes portable clipboard interoperability", () => {
     expect(notesClipboardContent([{ block: database }]).plainText).toBe("Tasks");
   });
 
+  it("keeps portable database links while planning an independent in-app database copy", () => {
+    const pageId = "10000000-0000-4000-8000-000000000001";
+    const databaseId = "10000000-0000-4000-8000-000000000002";
+    const database = block("child_database", "Tasks", databaseId);
+    database.parent = { type: "page_id", page_id: pageId };
+    if (database.type !== "child_database") throw new Error("Expected database");
+    database.child_database = { title: "Tasks", database_id: databaseId,
+      data_source_id: "10000000-0000-4000-8000-000000000003", view_id: "10000000-0000-4000-8000-000000000004" };
+    const clipboard = notesClipboardContent([{ block: database }], { pageId, unnamedDatabaseTitle: "New database" });
+    expect(clipboard.plainText).toBe(`[Tasks](#notes?page=${pageId}&block=${databaseId})`);
+    const template = document.createElement("template");
+    template.innerHTML = clipboard.html;
+    expect(template.content.querySelector("p")?.dataset.notesChildDatabaseId).toBe(databaseId);
+    expect(template.content.querySelector("a")?.textContent).toBe("Tasks");
+    expect(template.content.querySelector("table")).toBeNull();
+    const result = pasted(clipboard.plainText, clipboard.html, "BeforeAfter", 6);
+    expect(result.blocks.map((entry) => entry.type)).toEqual(["paragraph", "child_database", "paragraph"]);
+    expect(result.blocks.map(blockPlainText)).toEqual(["Before", "Tasks", "After"]);
+    expect(result.plan?.copiedDatabaseIds).toEqual({ "new-1": databaseId });
+    const portable = pasted(clipboard.plainText);
+    expect(portable.plan?.copiedDatabaseIds).toBeUndefined();
+    expect(blockEditableRichText(portable.blocks[0])[0].href).toContain(`block=${databaseId}`);
+  });
+
+  it("preserves a copied database between surrounding paragraphs and ignores invalid database markers", () => {
+    const databaseId = "10000000-0000-4000-8000-000000000002";
+    const { plan, blocks } = pasted("Before\n\nTasks\n\nAfter",
+      `<p>Before</p><p data-notes-child-database-id="${databaseId}"><a href="#notes?page=10000000-0000-4000-8000-000000000001&block=${databaseId}">Tasks</a></p><p>After</p>`);
+    expect(blocks.map((entry) => entry.type)).toEqual(["paragraph", "child_database", "paragraph"]);
+    expect(plan?.copiedDatabaseIds).toEqual({ "new-1": databaseId });
+    const invalid = pasted("Tasks", '<p data-notes-child-database-id="invalid">Tasks</p>');
+    expect(invalid.plan?.copiedDatabaseIds).toBeUndefined();
+    expect(invalid.blocks.map((entry) => entry.type)).toEqual(["paragraph"]);
+  });
+
   it("copies child notes as readable local references and pastes independent page copies between text", () => {
     const noteId = "10000000-0000-4000-8000-000000000001";
     const entries = [block("paragraph", "Before", "first"), block("child_page", "A [note]", noteId), block("paragraph", "After", "last")];

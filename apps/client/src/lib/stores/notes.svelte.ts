@@ -170,6 +170,16 @@ function createNotesWorkspace() {
       return;
     }
     const source = paneById(sourceId);
+    if (options.databaseBlockId) {
+      const existing = panes.find((pane) => pane.store.selectedPageId === pageId);
+      const target = existing ?? await destination(sourceId, pageId, "side");
+      await target.store.selectPageLocally(pageId, {
+        ...options,
+        openMode: target.store.pageOpenMode,
+      });
+      if (target.store.selectedDatabaseBlockId === options.databaseBlockId) activatePane(target.id);
+      return;
+    }
     const mode = options.openMode ?? (source.store.selectedPageId ? source.store.pageOpenMode : source.store.defaultOpenMode());
     const target = await destination(sourceId, pageId, mode);
     await target.store.selectPageLocally(pageId, { ...options, openMode: target === main && preview ? "full" : mode });

@@ -3,6 +3,7 @@ use super::block_tree::{
     load_block_subtree_rows, load_block_subtree_rows_with_trash, load_blocks_by_ids,
     normalize_selection_root_ids, refresh_duplicated_has_children,
 };
+use super::database_copy::{insert_database_copy, plan_database_copy};
 use super::page_duplicates::{insert_child_page_copy, plan_child_page_copy};
 use super::parents::{
     ParentTarget, refresh_parent_has_children, resolve_block_parent, touch_page,
@@ -137,6 +138,25 @@ pub async fn duplicate_block(
             .await?,
         );
     }
+    let mut databases = Vec::new();
+    for row in source_rows
+        .iter()
+        .filter(|row| row.block_type == "child_database")
+    {
+        if super::database_copy::has_database_graph(row)? {
+            databases.push(
+                plan_database_copy(
+                    &mut tx,
+                    row,
+                    &duplicate_ids[&row.id],
+                    &mut reserved_ids,
+                    destination_project_id.as_deref(),
+                    false,
+                )
+                .await?,
+            );
+        }
+    }
     for row in &source_rows {
         let duplicate_id = duplicate_ids.get(&row.id).ok_or_else(|| {
             "duplicated_block_ids must match the source block subtree".to_string()
@@ -164,6 +184,9 @@ pub async fn duplicate_block(
                 )
             };
         validate_sort_order(sort_order)?;
+        let mut payload: Value = serde_json::from_str(&row.payload)
+            .map_err(|e| format!("parse copied block payload: {e}"))?;
+        super::database_copy::strip_trash_metadata(&mut payload);
         sqlx::query(
             "INSERT INTO notes_blocks (
                 id,
@@ -186,7 +209,7 @@ pub async fn duplicate_block(
         .bind(parent_block_id)
         .bind(row.has_children)
         .bind(&row.block_type)
-        .bind(&row.payload)
+        .bind(payload.to_string())
         .bind(&row.plain_text)
         .bind(sort_order)
         .execute(&mut *tx)
@@ -196,6 +219,17 @@ pub async fn duplicate_block(
     for copy in &page_copies {
         insert_child_page_copy(&mut tx, copy).await?;
     }
+    for database in &databases {
+        sqlx::query("UPDATE notes_blocks SET payload = ? WHERE id = ?")
+            .bind(database.payload.to_string())
+            .bind(&database.id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("set duplicated database identities: {e}"))?;
+        insert_database_copy(&mut tx, database).await?;
+    }
+    super::database_copy::finalize_copies(&mut tx, &databases, &page_copies, &duplicate_ids)
+        .await?;
     refresh_duplicated_has_children(&mut tx, &seen_duplicate_ids).await?;
     duplicate_block_comment_threads(&mut tx, &duplicate_ids, &source_root.page_id).await?;
     touch_page(&mut tx, &source_root.page_id).await?;
@@ -311,6 +345,25 @@ pub async fn duplicate_blocks(
             .await?,
         );
     }
+    let mut databases = Vec::new();
+    for row in source_rows
+        .iter()
+        .filter(|row| row.block_type == "child_database")
+    {
+        if super::database_copy::has_database_graph(row)? {
+            databases.push(
+                plan_database_copy(
+                    &mut tx,
+                    row,
+                    &duplicate_ids[&row.id],
+                    &mut reserved_ids,
+                    destination_project_id.as_deref(),
+                    include_trashed_sources,
+                )
+                .await?,
+            );
+        }
+    }
     for row in &source_rows {
         let duplicate_id = duplicate_ids.get(&row.id).ok_or_else(|| {
             "duplicated_block_ids must match the source block subtrees".to_string()
@@ -340,6 +393,9 @@ pub async fn duplicate_blocks(
                 )
             };
         validate_sort_order(sort_order)?;
+        let mut payload: Value = serde_json::from_str(&row.payload)
+            .map_err(|e| format!("parse pasted block payload: {e}"))?;
+        super::database_copy::strip_trash_metadata(&mut payload);
         sqlx::query(
             "INSERT INTO notes_blocks (
                 id,
@@ -362,7 +418,7 @@ pub async fn duplicate_blocks(
         .bind(parent_block_id)
         .bind(row.has_children)
         .bind(&row.block_type)
-        .bind(&row.payload)
+        .bind(payload.to_string())
         .bind(&row.plain_text)
         .bind(sort_order)
         .execute(&mut *tx)
@@ -372,6 +428,17 @@ pub async fn duplicate_blocks(
     for copy in &page_copies {
         insert_child_page_copy(&mut tx, copy).await?;
     }
+    for database in &databases {
+        sqlx::query("UPDATE notes_blocks SET payload = ? WHERE id = ?")
+            .bind(database.payload.to_string())
+            .bind(&database.id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("set pasted database identities: {e}"))?;
+        insert_database_copy(&mut tx, database).await?;
+    }
+    super::database_copy::finalize_copies(&mut tx, &databases, &page_copies, &duplicate_ids)
+        .await?;
     refresh_duplicated_has_children(&mut tx, &seen_duplicate_ids).await?;
     duplicate_block_comment_threads(&mut tx, &duplicate_ids, &destination_parent.page_id).await?;
     refresh_parent_has_children(&mut tx, &destination_parent).await?;

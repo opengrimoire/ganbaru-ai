@@ -1,5 +1,7 @@
 import { appendNotesBlockChildren, moveNotesBlock, updateNotesBlock } from "$lib/api/notes";
 import { createNotesPastePersistence } from "./notes-store-paste-persistence";
+import type { NotesDatabasePasteController } from "./notes-database-paste.svelte";
+import { normalizeRichTextLinkUrl } from "$lib/notes/rich-text";
 import { cloneNotesJson } from "$lib/notes/json-clone";
 import { notesPasteAppendRequests, planNotesPlainTextPaste } from "$lib/notes/block-clipboard";
 import { planNotesRichHtmlPaste } from "$lib/notes/rich-text-paste";
@@ -46,9 +48,11 @@ interface OptimisticPastePlan {
   focusBlockId: string;
   focusOffset: number;
   copiedPageIds?: Readonly<Record<string, string>>;
+  copiedDatabaseIds?: Readonly<Record<string, string>>;
 }
 
 interface NotesBlockPasteActionsContext {
+  databasePaste?: NotesDatabasePasteController;
   applyPostMutation: (result: NotesPostMutationResult) => void;
   enqueueEditorMutation: (mutation: () => Promise<void>) => Promise<void>;
   readSelectedPageId: () => string | null;
@@ -253,7 +257,8 @@ export function createNotesBlockPasteActions(
       before,
       context.undoSnapshotForBlocks(affectedIds, plan.focusBlockId, focusSelection),
     );
-    const persistPaste = createNotesPastePersistence(requests, plan.copiedPageIds);
+    if (plan.copiedDatabaseIds) context.databasePaste?.beginCopies(plan.copiedDatabaseIds);
+    const persistPaste = createNotesPastePersistence(requests, plan.copiedPageIds, plan.copiedDatabaseIds, context.databasePaste?.acceptCopy);
     const persistence = context.enqueueEditorMutation(async () => {
       await updateNotesBlock(currentBlock.id, currentUpdate);
       await persistPaste();
@@ -261,6 +266,15 @@ export function createNotesBlockPasteActions(
     });
     context.trackOptimisticBlockWrites(affectedIds, persistence);
     void persistence;
+  }
+
+  /** Inspect a single pasted destination without blocking the immediate text insertion. */
+  function inspectPastedLink(blockId: string, start: number, end: number): void {
+    const current = context.blockById(blockId);
+    if (!current || !context.databasePaste) return;
+    const value = blockPlainText(current).slice(start, end);
+    const url = normalizeRichTextLinkUrl(value);
+    if (url) void context.databasePaste.inspectLink(blockId, start, end, url);
   }
 
   async function pastePlainTextIntoBlock(
@@ -286,6 +300,7 @@ export function createNotesBlockPasteActions(
       start: Math.min(selectionStart, selectionEnd),
       end: Math.max(selectionStart, selectionEnd),
     });
+    if (!plan.appendedBlocks.length) inspectPastedLink(blockId, Math.min(selectionStart, selectionEnd), plan.focusOffset);
     return true;
   }
 
@@ -310,6 +325,7 @@ export function createNotesBlockPasteActions(
       start: Math.min(selectionStart, selectionEnd),
       end: Math.max(selectionStart, selectionEnd),
     });
+    if (!plan.appendedBlocks.length) inspectPastedLink(blockId, Math.min(selectionStart, selectionEnd), plan.focusOffset);
     return true;
   }
 

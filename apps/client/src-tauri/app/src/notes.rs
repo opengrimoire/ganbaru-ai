@@ -720,6 +720,27 @@ pub async fn notes_create_database<R: Runtime>(
 }
 
 #[tauri::command]
+pub async fn notes_database_reference<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    block_id: String,
+) -> Result<NoteDatabaseReferenceDto, String> {
+    let pool = connect_sqlite(app, db_url).await?;
+    databases::database_reference(&pool, &block_id).await
+}
+
+#[tauri::command]
+pub async fn notes_duplicate_database<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    request: NoteDatabaseDuplicate,
+) -> Result<project_history::NotesMutationResultDto<NoteCreatedDatabaseDto>, String> {
+    let pool = connect_sqlite(app, db_url).await?;
+    let value = databases::duplicate_database(&pool, request).await?;
+    project_history::mutation_result(&pool, value).await
+}
+
+#[tauri::command]
 pub async fn notes_create_linked_database_view<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,

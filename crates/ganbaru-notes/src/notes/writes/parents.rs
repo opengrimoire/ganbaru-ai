@@ -148,7 +148,7 @@ pub(super) fn validate_children_for_parent(
     Ok(())
 }
 
-pub(super) fn validate_block_for_parent(
+pub(crate) fn validate_block_for_parent(
     parent: &ParentTarget,
     block_type: &str,
     payload: &Value,

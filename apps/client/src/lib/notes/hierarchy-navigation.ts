@@ -1,14 +1,65 @@
 import { notesPageTitle } from "./page-title";
-import type { NotesFolder, NotesPage } from "./types";
+import { NOTES_DATABASE_VIEW_KINDS, type NotesDatabaseView, type NotesDatabaseViewKind, type NotesFolder, type NotesNavigationDatabase, type NotesPage } from "./types";
+
+export const NOTES_HIERARCHY_PANEL_ROW_HEIGHT = 32;
+export const NOTES_HIERARCHY_PANEL_LIST_PADDING = 8;
+export const NOTES_HIERARCHY_PANEL_CHROME_HEIGHT = 84;
+export const NOTES_HIERARCHY_VIEW_PANEL_CHROME_HEIGHT = 44;
 
 export type NotesHierarchyParent =
   | { kind: "root" }
   | { kind: "folder"; id: string }
-  | { kind: "page"; id: string };
+  | { kind: "page"; id: string }
+  | { kind: "database"; id: string };
 
 export type NotesHierarchyNode =
   | { kind: "folder"; key: string; folder: NotesFolder; hasChildren: boolean }
   | { kind: "page"; key: string; page: NotesPage; hasChildren: boolean };
+
+export type NotesHierarchyPickerNode = NotesHierarchyNode
+  | { kind: "database"; key: string; database: NotesNavigationDatabase; hasChildren: true }
+  | { kind: "view"; key: string; database: NotesNavigationDatabase; view: NotesDatabaseView; hasChildren: false };
+
+/** Database view menus only select existing views and do not offer creation actions. */
+export function notesHierarchyPanelChromeHeight(parent: NotesHierarchyParent): number {
+  return parent.kind === "database" ? NOTES_HIERARCHY_VIEW_PANEL_CHROME_HEIGHT : NOTES_HIERARCHY_PANEL_CHROME_HEIGHT;
+}
+
+/** Return the localized display title for any hierarchy picker row. */
+export function notesHierarchyPickerTitle(node: NotesHierarchyPickerNode, untitledTitle: string): string {
+  if (node.kind === "folder") return node.folder.name;
+  if (node.kind === "page") return notesPageTitle(node.page, untitledTitle);
+  return node.kind === "view" ? node.view.name : node.database.title.trim() || untitledTitle;
+}
+
+/** Mix database shells into their note's children and expose saved views beneath each shell. */
+export function notesHierarchyPickerChildren(
+  pages: readonly NotesPage[],
+  folders: readonly NotesFolder[],
+  databases: readonly NotesNavigationDatabase[],
+  parent: NotesHierarchyParent,
+  untitledTitle: string,
+  pageIdsWithChildren: readonly string[] = [],
+  views: readonly NotesDatabaseView[] = [],
+): NotesHierarchyPickerNode[] {
+  if (parent.kind === "database") {
+    const database = databases.find((item) => item.id === parent.id);
+    if (!database) return [];
+    return views.filter((view) => view.parent.database_id === database.id
+      && NOTES_DATABASE_VIEW_KINDS.includes(view.type as NotesDatabaseViewKind))
+      .map((view) => ({ kind: "view", key: `view:${view.id}`, database, view, hasChildren: false }));
+  }
+  const items: NotesHierarchyPickerNode[] = notesHierarchyChildren(
+    pages, folders, parent, untitledTitle,
+    [...pageIdsWithChildren, ...databases.map((database) => database.page_id)],
+  );
+  if (parent.kind !== "page") return items;
+  items.push(...databases.filter((database) => database.page_id === parent.id)
+    .map((database): NotesHierarchyPickerNode => ({ kind: "database", key: `database:${database.id}`, database, hasChildren: true })));
+  return items.sort((left, right) => notesHierarchyPickerTitle(left, untitledTitle).localeCompare(
+    notesHierarchyPickerTitle(right, untitledTitle), undefined, { numeric: true, sensitivity: "base" },
+  ));
+}
 
 function pageBelongsToParent(page: NotesPage, parent: NotesHierarchyParent): boolean {
   if (parent.kind === "page") {
@@ -44,6 +95,7 @@ export function notesHierarchyChildren(
   untitledTitle = "Untitled",
   pageIdsWithChildren: readonly string[] = [],
 ): NotesHierarchyNode[] {
+  if (parent.kind === "database") return [];
   const pageIdsWithChildrenSet = new Set(pageIdsWithChildren);
   const folderNodes: NotesHierarchyNode[] = folders
     .filter((folder) => folderBelongsToParent(folder, parent))

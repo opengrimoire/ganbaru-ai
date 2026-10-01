@@ -300,6 +300,9 @@ fn renaming_linked_database_does_not_rename_shared_source() {
                 view_id: LINKED_DATABASE_VIEW_A.to_string(),
                 source_block_id: DATABASE_A.to_string(),
                 title: Some("Linked tasks".to_string()),
+                parent: None,
+                after_block_id: None,
+                replace_block_id: None,
             },
         )
         .await
@@ -419,6 +422,9 @@ fn linked_database_view_shares_source_and_keeps_view_settings_independent() {
                 view_id: LINKED_DATABASE_VIEW_A.to_string(),
                 source_block_id: DATABASE_A.to_string(),
                 title: Some("Task mirror".to_string()),
+                parent: None,
+                after_block_id: None,
+                replace_block_id: None,
             },
         )
         .await

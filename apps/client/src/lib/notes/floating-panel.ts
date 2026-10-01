@@ -12,6 +12,13 @@ export interface NotesFloatingPanelPlacement {
   maxHeight: number;
 }
 
+/** Measure unclipped panel content and its borders so fitted panels do not scroll by a few pixels. */
+export function notesFloatingPanelContentHeight(
+  panel: Pick<HTMLElement, "scrollHeight" | "clientHeight" | "offsetHeight">,
+): number {
+  return Math.ceil(panel.scrollHeight + Math.max(0, panel.offsetHeight - panel.clientHeight));
+}
+
 /** Place a Notes title panel next to its trigger within the visible viewport. */
 export function notesFloatingPanelPlacement(
   trigger: NotesFloatingPanelRect,

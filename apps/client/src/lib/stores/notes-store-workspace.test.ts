@@ -20,6 +20,7 @@ function shell(cursor: string): NotesWorkspaceShell {
     navigation_pages: [],
     navigation_folders: [],
     navigation_page_ids_with_children: [],
+    navigation_databases: [],
     page_ids_with_children: [],
     missing_parent_page_ids: [],
     trashed_parent_page_ids: [],

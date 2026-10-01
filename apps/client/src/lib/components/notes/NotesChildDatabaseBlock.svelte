@@ -1,11 +1,13 @@
 <script lang="ts">
   import CollectionSaveIndicator from "$lib/components/collections/CollectionSaveIndicator.svelte";
+  import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
   import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import { tick, untrack } from "svelte";
   import { portal } from "$lib/utils/portal";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
     getNotesDataSourceSchema,
+    getNotesDatabaseReference,
     listNotesDatabaseViews,
     listNotesDataSources,
     renameNotesDatabase,
@@ -40,6 +42,7 @@
     type NotesDataSourceSchema,
     type NotesDataSourceSelectColor,
     type NotesDataSourceStatusGroup,
+    type NotesDatabaseReference,
   } from "$lib/notes/types";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
@@ -51,6 +54,9 @@
   import Save from "@lucide/svelte/icons/save";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import X from "@lucide/svelte/icons/x";
+  import ArrowUpRight from "@lucide/svelte/icons/arrow-up-right";
+  import Copy from "@lucide/svelte/icons/copy";
+  import { buildNotesBlockLink } from "$lib/notes/block-link";
 
   let {
     block,
@@ -62,6 +68,8 @@
     onCreateLinkedDatabaseView,
     onReady = () => {},
     onTitleSaved = () => {},
+    onOpenDatabase,
+    onDeleteDatabase,
   }: {
     block: NotesChildDatabaseBlock;
     focusBlockId: string | null;
@@ -72,6 +80,8 @@
     onCreateLinkedDatabaseView: (blockId: string) => Promise<void> | void;
     onReady?: () => void;
     onTitleSaved?: (databaseId: string, title: string) => void;
+    onOpenDatabase?: (blockId: string) => Promise<void | boolean> | void;
+    onDeleteDatabase?: (blockId: string) => Promise<void | boolean> | void;
   } = $props();
 
   const localization = getLocalization();
@@ -85,6 +95,7 @@
   let viewSaving = $state(false);
   let contentReady = $state(false);
   let titleError = $state<string | null>(null);
+  let reference = $state<NotesDatabaseReference | null>(null);
   let selectedPropertyId = $state<string | null>(null);
   let loading = $state(false);
   let saving = $state(false);
@@ -126,10 +137,45 @@
   $effect(() => { if (!localDatabase || !dataSourceId) reportReady(); });
 
   $effect(() => {
+    const incoming = block.child_database.title;
+    if (titleSaving || incoming === savedTitle
+      || (titleInput === document.activeElement && titleDraft.trim() !== savedTitle)) return;
+    savedTitle = incoming;
+    titleDraft = incoming;
+  });
+
+  $effect(() => {
+    const id = block.id;
+    if (!localDatabase) return;
+    let cancelled = false;
+    void getNotesDatabaseReference(id).then((value) => { if (!cancelled) reference = value; })
+      .catch((caught: unknown) => { if (!cancelled) console.warn("Load database source reference failed", caught); });
+    return () => { cancelled = true; };
+  });
+
+  async function openDatabase(id: string): Promise<void> {
+    try { await onOpenDatabase?.(id); }
+    catch (caught: unknown) { titleError = caught instanceof Error ? caught.message : String(caught); }
+  }
+
+  async function deleteDatabase(): Promise<void> {
+    try { await onDeleteDatabase?.(block.id); }
+    catch (caught: unknown) { titleError = caught instanceof Error ? caught.message : String(caught); }
+  }
+
+  async function copyDatabaseLink(): Promise<void> {
+    try {
+      const destination = reference ?? await getNotesDatabaseReference(block.id);
+      await navigator.clipboard.writeText(buildNotesBlockLink(window.location.href, { pageId: destination.page_id, blockId: destination.block_id }));
+    } catch (caught: unknown) { titleError = caught instanceof Error ? caught.message : String(caught); }
+  }
+
+  $effect(() => {
     const _focusRequestId = focusRequestId;
     if (!contentReady || focusBlockId !== block.id) return;
     void tick().then(() => {
-      if (focusBlockId === block.id && _focusRequestId === focusRequestId) titleInput?.focus({ preventScroll: true });
+      if (focusBlockId === block.id && _focusRequestId === focusRequestId
+        && !titleInput?.closest("[inert], [hidden]")) titleInput?.focus({ preventScroll: true });
     });
   });
 
@@ -198,6 +244,7 @@
 
   async function saveTitle(): Promise<void> {
     const renamedDatabaseId = databaseId;
+    const acknowledgeTitle = onTitleSaved;
     if (!renamedDatabaseId || titleSaving) return;
     const nextTitle = titleDraft.trim();
     if (nextTitle === savedTitle) return;
@@ -206,7 +253,7 @@
     try {
       titleDraft = await renameNotesDatabase(renamedDatabaseId, nextTitle);
       savedTitle = titleDraft;
-      onTitleSaved(renamedDatabaseId, savedTitle);
+      acknowledgeTitle(renamedDatabaseId, savedTitle);
     } catch (caught) {
       titleDraft = savedTitle;
       titleError = caught instanceof Error ? caught.message : String(caught);
@@ -552,6 +599,12 @@
   aria-label={t("notes.blockType.childDatabase")}
 >
   <div class="flex min-w-0 items-center gap-2 px-1">
+    {#if reference?.is_linked && onOpenDatabase}
+      <button type="button" class="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+        aria-label={t("notes.databaseOpenSource")} title={t("notes.databaseOpenSource")} onclick={() => void openDatabase(reference!.source_block_id)}>
+        <ArrowUpRight class="size-5" strokeWidth={1.75} aria-hidden="true" />
+      </button>
+    {/if}
     {#if localDatabase}
       <input
         bind:this={titleInput}
@@ -577,6 +630,22 @@
     {/if}
     {#if localDatabase}
       <CollectionSaveIndicator pending={saving || titleSaving || linking || viewSaving} label={t("notes.databaseSaving")} />
+      <CollectionMenu label={t("notes.databaseMore")} kind="actions" iconOnly showHeader={false}>
+        {#if onOpenDatabase}
+          <button type="button" class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent" onclick={() => void openDatabase(block.id)}>
+            <ArrowUpRight class="size-4" aria-hidden="true" />{t("notes.databaseOpen")}
+          </button>
+        {/if}
+        <button type="button" class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent" onclick={() => void copyDatabaseLink()}>
+          <Copy class="size-4" aria-hidden="true" />{t("notes.databaseCopyLink")}
+        </button>
+        {#if onDeleteDatabase}
+          <div class="mx-2 my-1 border-t border-border"></div>
+          <button type="button" class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-destructive hover:bg-accent" onclick={() => void deleteDatabase()}>
+            <Trash2 class="size-4" aria-hidden="true" />{t("notes.databaseMoveToTrash")}
+          </button>
+        {/if}
+      </CollectionMenu>
     {/if}
   </div>
   {#if titleError}

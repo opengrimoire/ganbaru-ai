@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
 
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { applyBlockUpdate, createBlockWrite } from "$lib/notes/block-factory";
+import { applyBlockUpdate, createBlockUpdate, createBlockWrite } from "$lib/notes/block-factory";
+import { notesDatabaseSession } from "$lib/notes/database-session.svelte";
 import type {
   NotesBlock,
   NotesBlockUpdate,
   NotesMoveBlockRequest,
   NotesAppendBlockChildrenRequest,
   NotesBlockFrontier,
+  NotesDatabaseReference,
   NotesPage,
   NotesPageOpenResponse,
   NotesWorkspaceShell,
@@ -18,6 +20,7 @@ const backend = vi.hoisted(() => ({
   pages: new Map<string, NotesPageOpenResponse>(),
   hydrated: new Map<string, NotesBlock>(),
   frontier: async (_ids: readonly string[]): Promise<NotesBlockFrontier> => ({ blocks: [] }),
+  databaseReference: async (_id: string): Promise<NotesDatabaseReference> => { throw new Error("Missing database fixture"); },
   record(name: string, ids?: readonly string[]): void {
     this.calls.push({ name, ids });
   },
@@ -42,6 +45,10 @@ vi.mock("$lib/api/notes", async (importOriginal) => {
   };
   return {
     ...actual,
+    getNotesDatabaseReference: async (id: string) => {
+      backend.record("database-reference", [id]);
+      return backend.databaseReference(id);
+    },
     updateNotesBlock: async (id: string, update: NotesBlockUpdate) => {
       const block = backend.hydrated.get(id);
       if (!block) throw new Error("Missing block fixture");
@@ -63,6 +70,7 @@ vi.mock("$lib/api/notes", async (importOriginal) => {
       navigation_pages: [],
       navigation_folders: [],
       navigation_page_ids_with_children: [],
+      navigation_databases: [],
       page_ids_with_children: [],
       missing_parent_page_ids: [],
       trashed_parent_page_ids: [],
@@ -328,6 +336,165 @@ describe("Notes critical page opening", () => {
       [topAId, 2], [childAId, 1], [topBId, 0],
     ]);
     await notes.flushPendingWrites();
+  });
+
+  it("opens a database in its existing owner pane without closing the other pane or reading either note again", async () => {
+    await notes.selectPage(null);
+    backend.frontier = async () => ({ blocks: [] });
+    const database = applyBlockUpdate(paragraph(topAId, { type: "page_id", page_id: pageAId }), {
+      type: "child_database", child_database: { title: "Planning", database_id: topAId },
+    });
+    backend.pages.set(pageAId, response(pageAId, [database]));
+    backend.databaseReference = async () => ({
+      block_id: topAId, page_id: pageAId, title: "Planning",
+      source_block_id: topAId, source_page_id: pageAId, is_linked: false, owned_data_source_count: 1,
+    });
+    await notes.selectPage(pageAId, { openMode: "full" });
+    const owner = notes.editorPanes[0];
+    const focusBlockId = owner.store.focusBlockId;
+    const focusRequestId = owner.store.focusRequestId;
+    await notes.selectPage(pageBId, { openMode: "side" });
+    const preview = notes.previewPane;
+    backend.clear();
+    expect(await notes.openNotesLink({ pageId: pageAId, blockId: topAId })).toBe(true);
+    expect(notes.activePaneId).toBe(owner.id);
+    expect(notes.editorPanes[0]).toBe(owner);
+    expect(notes.previewPane).toBe(preview);
+    expect(notes.selectedDatabaseBlock?.id).toBe(topAId);
+    expect(owner.store.focusBlockId).toBeNull();
+    expect(owner.store.focusRequestId).toBe(focusRequestId);
+    expect(backend.count("database-reference")).toBe(1);
+    expect(backend.count("open")).toBe(0);
+    notes.closeDatabase();
+    expect(notes.selectedPageId).toBe(pageAId);
+    expect(notes.selectedDatabaseBlockId).toBeNull();
+    expect(owner.store.focusBlockId).toBe(focusBlockId);
+    expect(notes.previewPane).toBe(preview);
+  });
+
+  it("rejects a database link that names a different owner and preserves the active document", async () => {
+    const owner = notes.selectedPageId;
+    backend.clear();
+    expect(await notes.openNotesLink({ pageId: pageBId, blockId: topAId })).toBe(false);
+    expect(notes.selectedPageId).toBe(owner);
+    expect(notes.selectedDatabaseBlockId).toBeNull();
+    expect(backend.count("open")).toBe(0);
+  });
+
+  it.each(["single block", "block selection", "atomic document range"])("leaves a database unchanged when deleting its %s is cancelled", async (kind) => {
+    await notes.selectPage(pageAId);
+    const database = notes.blockById(topAId);
+    const deletion = kind === "single block" ? notes.deleteBlock(topAId)
+      : kind === "block selection" ? notes.deleteBlockSelection([topAId])
+        : notes.replaceDocumentRange([topAId], 0, 1, "");
+    await vi.waitFor(() => expect(notes.databaseDeletion.prompt?.loading).toBe(false));
+    expect(notes.databaseDeletion.prompt?.databaseIds).toEqual([topAId]);
+    expect(notes.blockById(topAId)).toBe(database);
+    notes.databaseDeletion.cancel();
+    expect(await deletion).toBe(false);
+    expect(notes.blockById(topAId)).toBe(database);
+    expect(notes.blockById(topAId)?.type).toBe("child_database");
+    expect(notes.databaseDeletion.prompt).toBeNull();
+  });
+
+  it("refuses database conversion while preserving its source identities", async () => {
+    const database = notes.blockById(topAId);
+    await expect(notes.convertBlock(topAId, "paragraph")).rejects.toThrow();
+    expect(notes.blockById(topAId)).toBe(database);
+    expect(notes.blockById(topAId)?.type).toBe("child_database");
+  });
+
+  it("keeps a dismissed database closed when its metadata arrives later", async () => {
+    const readReference = backend.databaseReference;
+    const reference = await readReference(topAId);
+    let finish!: (value: NotesDatabaseReference) => void;
+    backend.databaseReference = () => new Promise((resolve) => { finish = resolve; });
+    const opening = notes.openDatabase(topAId);
+    notes.closeDatabase();
+    finish(reference);
+    expect(await opening).toBe(false);
+    expect(notes.selectedDatabaseBlockId).toBeNull();
+    backend.databaseReference = readReference;
+    await notes.selectPage(null);
+  });
+
+  it("opens a linked shell's own saved view from hierarchy navigation while retaining its owner", async () => {
+    await notes.selectPage(null);
+    const previousReference = backend.databaseReference;
+    const previousPage = backend.pages.get(pageBId);
+    const linked = applyBlockUpdate(paragraph(topBId, { type: "page_id", page_id: pageBId }), {
+      type: "child_database", child_database: { title: "Shared planning", database_id: topBId, data_source_id: childAId },
+    });
+    backend.pages.set(pageBId, response(pageBId, [linked]));
+    backend.databaseReference = async () => ({
+      block_id: topBId, page_id: pageBId, title: "Shared planning", source_block_id: topAId,
+      source_page_id: pageAId, is_linked: true, owned_data_source_count: 0,
+    });
+    await notes.selectPage(pageBId, { openMode: "full" });
+    const owner = notes.editorPanes[0];
+    backend.clear();
+    const revision = notesDatabaseSession.revision;
+    expect(await notes.openDatabase({ pageId: pageBId, blockId: topBId }, { followSource: false, viewId: childBId })).toBe(true);
+    expect(notes.selectedPageId).toBe(pageBId);
+    expect(notes.selectedDatabaseBlockId).toBe(topBId);
+    expect(notes.editorPanes[0]).toBe(owner);
+    expect(notesDatabaseSession.recall(topBId)?.viewId).toBe(childBId);
+    expect(notesDatabaseSession.revision).toBe(revision);
+    expect(backend.count("open")).toBe(0);
+    expect(notes.navigationDatabases).toContainEqual({ id: topBId, page_id: pageBId, title: "Shared planning", data_source_id: childAId });
+    notes.closeDatabase();
+    await notes.selectPage(null);
+    backend.databaseReference = previousReference;
+    if (previousPage) backend.pages.set(pageBId, previousPage);
+    notesDatabaseSession.clear();
+  });
+
+  /** Load a collapsed parent while leaving its database descendant to bounded hydration. */
+  async function openCollapsedDatabaseParent(): Promise<void> {
+    await notes.selectPage(null);
+    const toggle = applyBlockUpdate(paragraph(topBId, { type: "page_id", page_id: pageAId }, true), createBlockUpdate("toggle", "Details"));
+    if (toggle.type !== "toggle") throw new Error("Expected a toggle fixture");
+    toggle.toggle.ganbaru_open = false;
+    const database = applyBlockUpdate(paragraph(childAId, { type: "block_id", block_id: topBId }), {
+      type: "child_database", child_database: { title: "Nested planning", database_id: childAId },
+    });
+    const loaded = response(pageAId, [toggle, database]);
+    loaded.blocks.results = [toggle];
+    backend.pages.set(pageAId, loaded);
+    backend.databaseReference = async (id) => ({
+      block_id: id, page_id: pageAId, title: "Nested planning", source_block_id: id,
+      source_page_id: pageAId, is_linked: false, owned_data_source_count: 1,
+    });
+    await notes.selectPage(pageAId);
+    backend.clear();
+  }
+
+  it.each(["block selection", "collapsed document range"])("hydrates and confirms an unseen descendant database before removing its %s", async (kind) => {
+    await openCollapsedDatabaseParent();
+    expect(notes.blockById(childAId)).toBeUndefined();
+    const deletion = kind === "block selection" ? notes.deleteBlockSelection([topBId])
+      : notes.replaceDocumentRange([topBId], 0, "Details".length, "");
+    await vi.waitFor(() => expect(notes.databaseDeletion.prompt?.loading).toBe(false));
+    expect(notes.databaseDeletion.prompt?.databaseIds).toEqual([childAId]);
+    expect(notes.blockById(childAId)?.type).toBe("child_database");
+    notes.databaseDeletion.cancel();
+    expect(await deletion).toBe(false);
+    expect(notes.blockById(topBId)?.type).toBe("toggle");
+    expect(notes.blockById(childAId)?.type).toBe("child_database");
+    await notes.selectPage(null);
+  });
+
+  it("preserves a collapsed database descendant without confirmation when only part of the parent's text changes", async () => {
+    await openCollapsedDatabaseParent();
+    const descendant = backend.hydrated.get(childAId);
+    expect(descendant?.type).toBe("child_database");
+    expect(await notes.replaceDocumentRange([topBId], 1, "Details".length, "")).toBe(true);
+    expect(notes.databaseDeletion.prompt).toBeNull();
+    expect(backend.count("database-reference")).toBe(0);
+    expect(notes.blockById(childAId)).toBeUndefined();
+    expect(backend.hydrated.get(childAId)).toBe(descendant);
+    await notes.flushPendingWrites();
+    await notes.selectPage(null);
   });
 
 });
