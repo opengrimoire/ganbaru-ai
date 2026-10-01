@@ -179,6 +179,7 @@ fn link_facts_rebuild_database_relations_and_property_urls() {
             &pool,
             DATA_SOURCE_A,
             None,
+            None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
                     "Name": {
@@ -202,12 +203,6 @@ fn link_facts_rebuild_database_relations_and_property_urls() {
                         "url": {}
                     }
                 }),
-                property_order: vec![
-                    "title".to_string(),
-                    "project_relation".to_string(),
-                    "url".to_string(),
-                ],
-                hidden_property_ids: vec![],
             },
         )
         .await

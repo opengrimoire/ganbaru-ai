@@ -172,6 +172,7 @@ async fn csv_import_pool() -> SqlitePool {
         &pool,
         DATA_SOURCE_A,
         None,
+        None,
         NoteDataSourceSchemaUpdate {
             properties: json!({
                 "Name": {
@@ -216,15 +217,6 @@ async fn csv_import_pool() -> SqlitePool {
                     "unique_id": { "prefix": "G-" }
                 }
             }),
-            property_order: vec![
-                "title".to_string(),
-                "details".to_string(),
-                "estimate".to_string(),
-                "priority".to_string(),
-                "done".to_string(),
-                "ticket".to_string(),
-            ],
-            hidden_property_ids: vec![],
         },
     )
     .await

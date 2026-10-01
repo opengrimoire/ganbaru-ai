@@ -3,6 +3,7 @@ use super::*;
 /// Destination and canonical ownership metadata for a database block.
 #[derive(Serialize)]
 pub struct NoteDatabaseReferenceDto {
+    pub editing_locked: bool,
     pub source_block_id: String,
     pub page_id: String,
     pub canonical_source_block_id: String,
@@ -67,6 +68,12 @@ pub struct NoteDataSourceTableViewDto {
     total_row_count: i64,
     next_cursor: Option<String>,
     has_more: bool,
+    group_counts: std::collections::HashMap<String, i64>,
+    calculations: Value,
+    row_hierarchy: std::collections::HashMap<
+        String,
+        super::super::data_source_row_hierarchy::NoteDataSourceRowHierarchyMetadata,
+    >,
 }
 
 impl NoteDataSourceTableViewDto {
@@ -75,6 +82,11 @@ impl NoteDataSourceTableViewDto {
         database: NoteDatabaseRow,
         view: NoteDatabaseViewRow,
         window: NoteDataSourceRowWindow,
+        calculations: Value,
+        row_hierarchy: std::collections::HashMap<
+            String,
+            super::super::data_source_row_hierarchy::NoteDataSourceRowHierarchyMetadata,
+        >,
     ) -> Result<Self, String> {
         Ok(Self {
             data_source: NoteDataSourceDto::new(
@@ -90,6 +102,9 @@ impl NoteDataSourceTableViewDto {
             total_row_count: window.total_row_count,
             next_cursor: window.next_cursor,
             has_more: window.has_more,
+            group_counts: window.group_counts,
+            calculations,
+            row_hierarchy,
         })
     }
 }

@@ -3,6 +3,8 @@ use tauri::{AppHandle, Runtime};
 
 mod agent_bridge_export;
 mod data_source_csv_export;
+mod data_source_row_hierarchy;
+mod database_management;
 pub(crate) mod external_links;
 mod file_assets;
 mod html_export;
@@ -24,6 +26,8 @@ use ganbaru_notes::notes::{
     search, suggestions, templates, undo_state, workspace_shell, writes,
 };
 
+pub use data_source_row_hierarchy::*;
+pub use database_management::*;
 pub use file_assets::*;
 pub use ganbaru_notes::notes::models::*;
 pub use page_cover_assets::*;
@@ -826,10 +830,17 @@ pub async fn notes_get_data_source_schema<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     data_source_id: String,
+    database_id: Option<String>,
     view_id: Option<String>,
 ) -> Result<NoteDataSourceSchemaDto, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    data_source_schema::get_data_source_schema(&pool, &data_source_id, view_id.as_deref()).await
+    data_source_schema::get_data_source_schema(
+        &pool,
+        &data_source_id,
+        database_id.as_deref(),
+        view_id.as_deref(),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -837,6 +848,7 @@ pub async fn notes_update_data_source_schema<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     data_source_id: String,
+    database_id: Option<String>,
     view_id: Option<String>,
     update: NoteDataSourceSchemaUpdate,
 ) -> Result<project_history::NotesMutationResultDto<NoteDataSourceSchemaDto>, String> {
@@ -844,6 +856,7 @@ pub async fn notes_update_data_source_schema<R: Runtime>(
     let value = data_source_schema::update_data_source_schema(
         &pool,
         &data_source_id,
+        database_id.as_deref(),
         view_id.as_deref(),
         update,
     )

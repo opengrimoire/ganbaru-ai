@@ -720,6 +720,7 @@ pub struct ProjectTaskViewPage {
     pub(in crate::projects) next_cursor: Option<String>,
     pub(in crate::projects) column_counts: Vec<ProjectTaskColumnCount>,
     pub(in crate::projects) aggregates: Option<ProjectDashboardTaskAggregates>,
+    pub(in crate::projects) column_calculations: Vec<ProjectTaskColumnCalculations>,
     pub(in crate::projects) matched_event_ids: Vec<String>,
     pub(in crate::projects) task_tag_links: Vec<ProjectTaskTagLinkRow>,
     pub(in crate::projects) custom_field_values: Vec<ProjectCustomFieldValueRow>,
@@ -729,6 +730,18 @@ pub struct ProjectTaskViewPage {
     pub(in crate::projects) tags: Vec<ProjectTagRow>,
     pub(in crate::projects) custom_fields: Vec<ProjectCustomFieldRow>,
     pub(in crate::projects) custom_field_options: Vec<ProjectCustomFieldOptionRow>,
+}
+
+/// Property reductions over the complete matched task set, excluding pagination and parent context.
+#[derive(Serialize)]
+pub struct ProjectTaskColumnCalculations {
+    pub(in crate::projects) column: String,
+    pub(in crate::projects) total: i64,
+    pub(in crate::projects) filled: i64,
+    pub(in crate::projects) sum: Option<f64>,
+    pub(in crate::projects) average: Option<f64>,
+    pub(in crate::projects) minimum: Option<f64>,
+    pub(in crate::projects) maximum: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -1019,6 +1032,8 @@ pub struct ProjectCustomFieldCreate {
     pub(in crate::projects) name: String,
     pub(in crate::projects) field_type: String,
     pub(in crate::projects) sort_order: i64,
+    #[serde(default)]
+    pub(in crate::projects) duplicate_source_id: Option<String>,
 }
 
 #[derive(Deserialize)]

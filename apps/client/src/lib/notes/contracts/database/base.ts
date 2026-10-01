@@ -189,8 +189,30 @@ export interface NotesDatabaseViewScope {
 
 export interface NotesDataSourceSchemaUpdate {
   properties: Record<string, unknown>;
-  property_order: string[];
-  hidden_property_ids: string[];
+}
+
+export interface NotesDataSourceCreateRequest {
+  id: string;
+  database_id: string;
+  view_id: string;
+  title: string;
+  view_name: string;
+}
+
+export interface NotesDataSourceAttachRequest {
+  data_source_id: string;
+  database_id: string;
+  view_id: string;
+  view_name: string;
+}
+
+export type NotesDataSourcePropertyAction =
+  | { type: "insert"; property_id: string; side: "left" | "right"; property: Record<string, unknown> }
+  | { type: "duplicate"; property_id: string; name: string };
+
+export interface NotesDataSourcePropertyActionResult {
+  property_id: string;
+  schema: NotesDataSourceSchema;
 }
 
 export interface NotesDataSourceRowPageCreateRequest {

@@ -27,6 +27,7 @@ fn database_relations_persist_links_backlinks_and_search() {
             &pool,
             DATA_SOURCE_A,
             None,
+            None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
                     "Name": {
@@ -44,8 +45,6 @@ fn database_relations_persist_links_backlinks_and_search() {
                         }
                     }
                 }),
-                property_order: vec!["title".to_string(), "project_relation".to_string()],
-                hidden_property_ids: vec![],
             },
         )
         .await
@@ -176,6 +175,7 @@ fn database_relations_sync_two_way_when_inverse_property_is_configured() {
             &pool,
             DATA_SOURCE_B,
             None,
+            None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
                     "Name": {
@@ -193,8 +193,6 @@ fn database_relations_sync_two_way_when_inverse_property_is_configured() {
                         }
                     }
                 }),
-                property_order: vec!["title".to_string(), "tasks_relation".to_string()],
-                hidden_property_ids: vec![],
             },
         )
         .await
@@ -202,6 +200,7 @@ fn database_relations_sync_two_way_when_inverse_property_is_configured() {
         data_source_schema::update_data_source_schema(
             &pool,
             DATA_SOURCE_A,
+            None,
             None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
@@ -224,8 +223,6 @@ fn database_relations_sync_two_way_when_inverse_property_is_configured() {
                         }
                     }
                 }),
-                property_order: vec!["title".to_string(), "project_relation".to_string()],
-                hidden_property_ids: vec![],
             },
         )
         .await

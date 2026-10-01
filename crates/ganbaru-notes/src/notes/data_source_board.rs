@@ -24,15 +24,6 @@ const MAX_BOARD_CONFIGURATION_BYTES: usize = 50 * 1024;
 const BOARD_EMPTY_GROUP_ID: &str = "__empty__";
 const BOARD_UNGROUPED_ID: &str = "__ungrouped__";
 const BOARD_ROW_OPEN_MODES: &[&str] = &["full_page", "side_panel"];
-const BOARD_GROUP_PROPERTY_TYPES: &[&str] = &[
-    "status",
-    "select",
-    "multi_select",
-    "checkbox",
-    "people",
-    "relation",
-    "date",
-];
 
 pub async fn get_data_source_board_view(
     pool: &SqlitePool,
@@ -99,11 +90,16 @@ pub async fn update_data_source_board_view(
         "data source properties",
     )?)?;
     let property_ids: HashSet<String> = schema.iter().map(|property| property.id.clone()).collect();
-    let filter = canonical_filter(&update.filter, &property_ids, "board")?;
+    let property_types = schema
+        .iter()
+        .map(|property| (property.id.as_str(), property.property_type.as_str()))
+        .collect();
+    let filter = canonical_filter(&update.filter, &property_types, "board")?;
     let sorts = canonical_sorts(&update.sorts, &property_ids, "board")?;
     let configuration = canonical_board_configuration(&update.configuration, &schema)?;
     let view =
         ensure_board_view_row_tx(&mut tx, &data_source, database_id, view_id, &schema).await?;
+    data_source_views::prepare_view_mutation_tx(&mut tx, &view, "Board view").await?;
     sqlx::query(
         "UPDATE notes_database_views
          SET filter = ?,
@@ -251,6 +247,7 @@ async fn ensure_board_view_row_tx(
         return Ok(view);
     }
     let database_id = data_source_views::scoped_database_id(data_source, database_id);
+    super::database_editing_lock::ensure_unlocked_tx(tx, database_id).await?;
     let id = generated_uuid_tx(tx, "generate board view id", "generated_board_view_id").await?;
     let sort_order = data_source_views::next_view_sort_order_tx(tx, database_id).await?;
     sqlx::query(
@@ -331,7 +328,7 @@ fn canonical_board_configuration(
                 .iter()
                 .find(|property| property.id == id)
                 .ok_or_else(|| "board group property references an unknown property".to_string())?;
-            if !BOARD_GROUP_PROPERTY_TYPES.contains(&property.property_type.as_str()) {
+            if !data_source_views::GROUP_PROPERTY_TYPES.contains(&property.property_type.as_str()) {
                 return Err("board group property type is not supported".to_string());
             }
             Some(id.to_string())
@@ -401,12 +398,14 @@ fn board_configuration(
 }
 
 fn default_group_property_id(schema: &[BoardProperty]) -> Option<String> {
-    BOARD_GROUP_PROPERTY_TYPES.iter().find_map(|property_type| {
-        schema
-            .iter()
-            .find(|property| property.property_type == *property_type)
-            .map(|property| property.id.clone())
-    })
+    data_source_views::GROUP_PROPERTY_TYPES
+        .iter()
+        .find_map(|property_type| {
+            schema
+                .iter()
+                .find(|property| property.property_type == *property_type)
+                .map(|property| property.id.clone())
+        })
 }
 
 fn visible_board_property_ids(

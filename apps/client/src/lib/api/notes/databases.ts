@@ -44,6 +44,10 @@ import type {
   NotesDataSourceRowPropertyUpdate,
   NotesDataSourceSchema,
   NotesDataSourceSchemaUpdate,
+  NotesDataSourceCreateRequest,
+  NotesDataSourceAttachRequest,
+  NotesDataSourcePropertyAction,
+  NotesDataSourcePropertyActionResult,
   NotesDataSourceTableView,
   NotesDataSourceTableViewUpdate,
   NotesDataSourceViewWindowRequest,
@@ -66,16 +70,48 @@ import type { NotesDatabaseDuplicateRequest, NotesDatabaseReference } from "$lib
 export async function getNotesDatabaseReference(blockId: string): Promise<NotesDatabaseReference> {
   const dbUrl = await ensureDbUrl();
   const value: unknown = await invoke("notes_database_reference", { dbUrl, blockId });
+  return parseDatabaseReference(value);
+}
+
+/** Persist shell-local protection from accidental structural changes. */
+export async function setNotesDatabaseEditingLock(databaseId: string, locked: boolean): Promise<NotesDatabaseReference> {
+  const dbUrl = await ensureDbUrl();
+  return parseDatabaseReference(await invokeNotesMutation("notes_set_database_editing_lock", { dbUrl, databaseId, locked }));
+}
+
+/** Create an independent source in an existing database shell. */
+export async function createNotesDataSource(request: NotesDataSourceCreateRequest): Promise<NotesDataSourceSchema> {
+  const dbUrl = await ensureDbUrl();
+  return mapNotesDataSourceSchemaDto(await invokeNotesMutation("notes_create_data_source", { dbUrl, request }));
+}
+
+/** Show an existing source through a new table view while retaining its owner and rows. */
+export async function attachNotesDataSource(request: NotesDataSourceAttachRequest): Promise<NotesDataSourceSchema> {
+  const dbUrl = await ensureDbUrl();
+  return mapNotesDataSourceSchemaDto(await invokeNotesMutation("notes_attach_data_source", { dbUrl, request }));
+}
+
+/** Apply contextual property creation and table placement as one native transaction. */
+export async function applyNotesDataSourcePropertyAction(dataSourceId: string, databaseId: string, viewId: string, action: NotesDataSourcePropertyAction): Promise<NotesDataSourcePropertyActionResult> {
+  const dbUrl = await ensureDbUrl();
+  const value: unknown = await invokeNotesMutation("notes_apply_data_source_property_action", { dbUrl, dataSourceId, databaseId, viewId, action });
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("Invalid database property action response");
+  const record = value as Record<string, unknown>;
+  if (typeof record.property_id !== "string" || !record.property_id.trim()) throw new Error("Database property action returned no property identity");
+  return { property_id: record.property_id, schema: mapNotesDataSourceSchemaDto(record.schema) };
+}
+
+function parseDatabaseReference(value: unknown): NotesDatabaseReference {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid Notes database reference");
   const dto = value as Record<string, unknown>;
   if (!isNotesUuid(dto.source_block_id) || !isNotesUuid(dto.page_id)
     || !isNotesUuid(dto.canonical_source_block_id) || !isNotesUuid(dto.canonical_source_page_id)
-    || typeof dto.title !== "string" || typeof dto.is_linked !== "boolean"
+    || typeof dto.title !== "string" || typeof dto.is_linked !== "boolean" || typeof dto.editing_locked !== "boolean"
     || typeof dto.owned_data_source_count !== "number" || !Number.isSafeInteger(dto.owned_data_source_count)
     || dto.owned_data_source_count < 0) throw new Error("Invalid Notes database reference metadata");
   return { block_id: dto.source_block_id, page_id: dto.page_id,
     source_block_id: dto.canonical_source_block_id, source_page_id: dto.canonical_source_page_id,
-    title: dto.title, is_linked: dto.is_linked, owned_data_source_count: dto.owned_data_source_count };
+    title: dto.title, is_linked: dto.is_linked, editing_locked: dto.editing_locked, owned_data_source_count: dto.owned_data_source_count };
 }
 
 /** Copy a database's source data and presentation into independent local identities. */
@@ -92,10 +128,6 @@ function databaseViewScopeArgs(scope?: NotesDatabaseViewScope | null): {
     databaseId: scope?.databaseId ?? null,
     viewId: scope?.viewId ?? null,
   };
-}
-
-function schemaViewScopeArgs(scope?: NotesDatabaseViewScope | null): { viewId: string | null } {
-  return { viewId: scope?.viewId ?? null };
 }
 
 export async function createNotesDatabase(
@@ -175,7 +207,7 @@ export async function getNotesDataSourceSchema(
     await invoke<unknown>("notes_get_data_source_schema", {
       dbUrl,
       dataSourceId,
-      ...schemaViewScopeArgs(scope),
+      ...databaseViewScopeArgs(scope),
     }),
   );
 }
@@ -191,7 +223,7 @@ export async function updateNotesDataSourceSchema(
       dbUrl,
       dataSourceId,
       update,
-      ...schemaViewScopeArgs(scope),
+      ...databaseViewScopeArgs(scope),
     }),
   );
 }

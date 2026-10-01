@@ -20,6 +20,7 @@ const DATABASE_METADATA: NotesDatabaseReference = {
   source_page_id: SOURCE_PAGE_ID,
   is_linked: true,
   owned_data_source_count: 0,
+  editing_locked: false,
 };
 const PAGE_PATH: NotesPageBreadcrumbItem[] = [
   { id: null, title: "Notes", status: "workspace", current: false },

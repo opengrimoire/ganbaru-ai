@@ -2,20 +2,27 @@
   import type { Snippet } from "svelte";
   import CollectionCell from "./CollectionCell.svelte";
 
-  let { label, resizeLabel, disabled = false, icon, onpointerdown, ondblclick, onkeydown }: {
+  let { label, resizeLabel, disabled = false, icon, actions, class: className = "", style, onpointerdown, ondblclick, onkeydown }: {
     label: string;
     resizeLabel: string;
     disabled?: boolean;
     icon?: Snippet;
+    actions?: Snippet;
+    class?: string;
+    style?: string;
     onpointerdown: (event: PointerEvent) => void;
     ondblclick?: (event: MouseEvent) => void;
     onkeydown: (event: KeyboardEvent) => void;
   } = $props();
 </script>
 
-<CollectionCell role="columnheader" class="gap-1.5">
-  {@render icon?.()}
-  <span class="relative z-10 truncate">{label}</span>
+<CollectionCell role="columnheader" class={`${actions ? "gap-0 px-0" : "gap-1.5"} ${className}`} {style}>
+  {#if actions}
+    {@render actions()}
+  {:else}
+    {@render icon?.()}
+    <span class="relative z-10 truncate">{label}</span>
+  {/if}
   <button type="button" class="collection-resize" aria-label={resizeLabel} data-app-tooltip-disabled="true" {disabled} {onpointerdown} {ondblclick} {onkeydown}></button>
 </CollectionCell>
 

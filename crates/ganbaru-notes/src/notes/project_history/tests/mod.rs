@@ -107,4 +107,5 @@ mod contracts;
 mod read_projection;
 mod restore_adapter;
 mod retention;
+mod row_hierarchy;
 mod schedule;

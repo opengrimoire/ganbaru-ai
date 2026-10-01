@@ -1,13 +1,16 @@
 // @vitest-environment jsdom
 import { mount, tick, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { listNotesDatabaseViews, listNotesDataSourceTemplates } from "$lib/api/notes";
+import { duplicateNotesDatabaseView, listNotesDatabaseViews, listNotesDataSourceTemplates, listNotesDataSources, setNotesDatabaseEditingLock, createNotesDataSource, attachNotesDataSource } from "$lib/api/notes";
 import { databaseResource, MAX_DATABASE_SESSION_RESOURCES, notesDatabaseSession } from "$lib/notes/database-session.svelte";
-import type { NotesDatabaseView } from "$lib/notes/types";
+import type { NotesDatabaseView, NotesDataSourcePropertyType, NotesDataSource } from "$lib/notes/types";
+import type { NotesDatabaseSourceEditingScope } from "$lib/notes/data-source-schema";
 import NotesDatabaseViewSurface from "./NotesDatabaseViewSurface.svelte";
 
 vi.mock("$lib/api/notes", () => ({
   listNotesDatabaseViews: vi.fn(), listNotesDataSourceTemplates: vi.fn(async () => []),
+  duplicateNotesDatabaseView: vi.fn(),
+  listNotesDataSources: vi.fn(async () => []), setNotesDatabaseEditingLock: vi.fn(), createNotesDataSource: vi.fn(), attachNotesDataSource: vi.fn(),
 }));
 vi.mock("./notes-editor-component-registry", async () => {
   const { default: component } = await import("./NotesDatabaseViewSessionHarness.svelte");
@@ -21,13 +24,22 @@ vi.mock("./notes-editor-component-registry", async () => {
 function views(): NotesDatabaseView[] {
   return ["First", "Second"].map((name) => ({
     object: "view", id: name, parent: { type: "database_id", database_id: "database" },
-    data_source_id: "source", name, type: "table", filter: {}, sorts: [], url: null,
+    data_source_id: "source", name, type: "table", filter: null, sorts: [], url: null,
     configuration: { type: "table", table: {
       property_order: [], hidden_property_ids: [], column_widths: {}, row_open_mode: "full_page",
     } },
     created_time: "2026-09-29T00:00:00Z", last_edited_time: "2026-09-29T00:00:00Z",
     source_provider: null, source_object_id: null, source_workspace_id: null, source_last_edited_time: null,
   }));
+}
+
+/** Describe a local source independently of the shell that presents it. */
+function source(id: string, title: string, databaseId: string): NotesDataSource {
+  return { object: "data_source", id, title, title_rich_text: [], description: [], icon: null, in_trash: false,
+    parent: { type: "database_id", database_id: databaseId }, database_parent: { type: "page_id", page_id: "page" },
+    properties: { Name: { id: "title", name: "Name", type: "title", title: {} } },
+    created_time: "2026-10-01T00:00:00Z", last_edited_time: "2026-10-01T00:00:00Z",
+    source_provider: null, source_object_id: null, source_workspace_id: null, source_last_edited_time: null };
 }
 
 let component: ReturnType<typeof mount> | undefined;
@@ -39,12 +51,21 @@ afterEach(async () => {
   vi.resetAllMocks();
 });
 
-function open(onReady = () => {}): void {
+function open(onReady = () => {}, options: {
+  onAddProperty?: (type: NotesDataSourcePropertyType, name: string, scope?: NotesDatabaseSourceEditingScope) => Promise<void>;
+  onSavingChange?: (saving: boolean) => void;
+  editingLocked?: boolean;
+  onEditingLockChange?: (locked: boolean) => void;
+} = {}): void {
   component = mount(NotesDatabaseViewSurface, { target: document.body, props: {
     dataSourceId: "source", databaseId: "database", initialViewId: "First",
     onReady,
     reloadKeys: { table: 0, board: 0, gallery: 0, list: 0, calendar: 0, timeline: 0 },
-    onSelectPage: vi.fn(), onEditProperties: vi.fn(), onCreateLinkedDatabaseView: vi.fn(), onAddProperty: vi.fn(),
+    onSelectPage: vi.fn(), onEditProperties: vi.fn(), onCreateLinkedDatabaseView: vi.fn(),
+    onAddProperty: options.onAddProperty ?? vi.fn(async () => {}),
+    onSavingChange: options.onSavingChange,
+    editingLocked: options.editingLocked,
+    onEditingLockChange: options.onEditingLockChange,
   } });
 }
 
@@ -56,6 +77,185 @@ function chooseSecond(): void {
 }
 
 describe("Notes database view sessions", () => {
+  it.each(["create", "attach"] as const)("selects the new table and its source after %s from Data sources", async (operation) => {
+    let savedViews = views();
+    let available = [source("source", "Tasks", "database"), source("foreign-source", "Workout", "other-database")];
+    let resultView: NotesDatabaseView | null = null;
+    vi.mocked(listNotesDatabaseViews).mockImplementation(async () => savedViews);
+    vi.mocked(listNotesDataSources).mockImplementation(async () => available);
+    vi.mocked(listNotesDataSourceTemplates).mockResolvedValue([]);
+    vi.mocked(createNotesDataSource).mockImplementation(async (request) => {
+      const created = source(request.id, request.title, request.database_id);
+      available = [...available, created];
+      resultView = { ...savedViews[0], id: request.view_id, data_source_id: request.id, name: request.view_name };
+      savedViews = [...savedViews, resultView];
+      return { data_source: created, view: resultView };
+    });
+    vi.mocked(attachNotesDataSource).mockImplementation(async (request) => {
+      resultView = { ...savedViews[0], id: request.view_id, data_source_id: request.data_source_id, name: request.view_name };
+      savedViews = [...savedViews, resultView];
+      return { data_source: available[1], view: resultView };
+    });
+    open();
+    await vi.waitFor(() => expect(document.querySelector("[data-session-view]")).not.toBeNull());
+    document.querySelector<HTMLButtonElement>('button[aria-label="View settings"]')!.click();
+    await tick();
+    document.querySelector<HTMLButtonElement>('button[aria-label="Data sources"]')!.click();
+    await vi.waitFor(() => expect(document.querySelector<HTMLInputElement>('input[aria-label="Source name"]')).not.toBeNull());
+    if (operation === "create") {
+      const name = document.querySelector<HTMLInputElement>('input[aria-label="Source name"]')!;
+      name.value = "Study";
+      name.dispatchEvent(new Event("input", { bubbles: true }));
+      await tick();
+      Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.trim() === "Create source")!.click();
+      await vi.waitFor(() => expect(createNotesDataSource).toHaveBeenCalledWith(expect.objectContaining({ database_id: "database", title: "Study", view_name: "Table" })));
+    } else {
+      await vi.waitFor(() => expect(Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.trim() === "Workout")).toBeDefined());
+      Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.trim() === "Workout")!.click();
+      await vi.waitFor(() => expect(attachNotesDataSource).toHaveBeenCalledWith(expect.objectContaining({ data_source_id: "foreign-source", database_id: "database", view_name: "Table" })));
+    }
+    await vi.waitFor(() => {
+      expect(resultView).not.toBeNull();
+      expect(document.querySelector("[data-session-view]")?.getAttribute("data-session-view")).toBe(resultView?.id);
+      expect(document.querySelector("[data-session-view]")?.getAttribute("data-source-id")).toBe(resultView?.data_source_id);
+    });
+  });
+  it("blocks toolbar switching during a layout write and resets local state only after a saved-view switch", async () => {
+    vi.mocked(listNotesDatabaseViews).mockResolvedValue(views());
+    vi.mocked(listNotesDataSourceTemplates).mockResolvedValue([]);
+    let finishSave: () => void = () => {};
+    open(() => {}, { onAddProperty: () => new Promise((resolve) => { finishSave = resolve; }) });
+    await vi.waitFor(() => expect(document.querySelector("[data-session-view]")?.getAttribute("data-session-view")).toBe("First"));
+    const firstLayout = document.querySelector("[data-session-view]");
+    const draft = document.querySelector<HTMLInputElement>('input[aria-label="Layout draft"]')!;
+    draft.value = "Local draft";
+    draft.dispatchEvent(new Event("input", { bubbles: true }));
+    document.querySelector<HTMLButtonElement>("[data-start-save]")!.click();
+    await tick();
+    const secondTab = document.querySelector<HTMLButtonElement>('button[aria-label="Second"]')!;
+    expect(secondTab.disabled).toBe(true);
+    chooseSecond();
+    await tick();
+    expect(document.querySelector("[data-session-view]")).toBe(firstLayout);
+    expect(draft.value).toBe("Local draft");
+    const newRow = Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent?.trim() === "New")!;
+    expect(newRow.disabled).toBe(false);
+    newRow.click();
+    newRow.click();
+    await tick();
+    expect(firstLayout?.getAttribute("data-new-row-request")).toBe("2");
+    finishSave();
+    await vi.waitFor(() => expect(secondTab.disabled).toBe(false));
+    chooseSecond();
+    await tick();
+    expect(document.querySelector("[data-session-view]")).not.toBe(firstLayout);
+    expect(document.querySelector("[data-session-view]")?.getAttribute("data-layout-snapshot")).toBe("Second");
+    expect(document.querySelector<HTMLInputElement>('input[aria-label="Layout draft"]')?.value).toBe("Second");
+    expect(document.querySelector("[data-session-view]")?.getAttribute("data-new-row-request")).toBe("0");
+    document.querySelector<HTMLButtonElement>('button[aria-label="First"]')!.click();
+    await tick();
+    expect(document.querySelector("[data-session-view]")?.getAttribute("data-new-row-request")).toBe("0");
+  });
+
+  it("uses the selected view's source for its layout, templates, and scoped property requests", async () => {
+    const savedViews = views();
+    savedViews[1] = { ...savedViews[1], data_source_id: "second-source" };
+    vi.mocked(listNotesDatabaseViews).mockResolvedValue(savedViews);
+    vi.mocked(listNotesDataSourceTemplates).mockResolvedValue([]);
+    const addProperty = vi.fn(async (_type: NotesDataSourcePropertyType, _name: string, _scope?: NotesDatabaseSourceEditingScope) => {});
+    open(() => {}, { onAddProperty: addProperty });
+    await vi.waitFor(() => expect(document.querySelector("[data-session-view]")?.getAttribute("data-source-id")).toBe("source"));
+    chooseSecond();
+    await vi.waitFor(() => expect(document.querySelector("[data-session-view]")?.getAttribute("data-source-id")).toBe("second-source"));
+    document.querySelector<HTMLButtonElement>("[data-start-save]")!.click();
+    await vi.waitFor(() => expect(addProperty).toHaveBeenCalledWith("rich_text", "Second", { dataSourceId: "second-source", databaseId: "database", viewId: "Second" }));
+    const newOptions = document.querySelector<HTMLButtonElement>('button[aria-label="New page options"]')!;
+    newOptions.click();
+    await vi.waitFor(() => expect(listNotesDataSourceTemplates).toHaveBeenCalledWith("second-source"));
+  });
+
+  it("keeps saved-view selection and New available while the persisted layout is locked", async () => {
+    vi.mocked(listNotesDatabaseViews).mockResolvedValue(views());
+    vi.mocked(listNotesDataSourceTemplates).mockResolvedValue([]);
+    vi.mocked(listNotesDataSources).mockResolvedValue([]);
+    const changeLock = vi.fn<(locked: boolean) => void>();
+    vi.mocked(setNotesDatabaseEditingLock).mockResolvedValue({ block_id: "database", page_id: "page", source_block_id: "database", source_page_id: "page", title: "Tasks", is_linked: false, owned_data_source_count: 1, editing_locked: false });
+    open(() => {}, { editingLocked: true, onEditingLockChange: changeLock });
+    await vi.waitFor(() => expect(document.querySelector("[data-session-view]")?.getAttribute("data-editing-locked")).toBe("true"));
+    expect(document.querySelector<HTMLButtonElement>('button[aria-label="Add a new view"]')?.disabled).toBe(true);
+    chooseSecond();
+    await vi.waitFor(() => expect(document.querySelector("[data-session-view]")?.getAttribute("data-session-view")).toBe("Second"));
+    const newRow = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.trim() === "New")!;
+    expect(newRow.disabled).toBe(false);
+    document.querySelector<HTMLButtonElement>('button[aria-label="View settings"]')!.click();
+    await tick();
+    const viewName = document.querySelector<HTMLInputElement>('input[aria-label="View name"]')!;
+    expect(viewName.disabled).toBe(true);
+    document.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Database layout lock"]')!.click();
+    await vi.waitFor(() => expect(setNotesDatabaseEditingLock).toHaveBeenCalledWith("database", false));
+    await vi.waitFor(() => expect(changeLock).toHaveBeenCalledWith(false));
+  });
+
+  it("isolates external preselection from old writes and ignores stale saving callbacks after a remount", async () => {
+    vi.mocked(listNotesDatabaseViews).mockResolvedValue(views());
+    vi.mocked(listNotesDataSourceTemplates).mockResolvedValue([]);
+    let finishFirst: () => void = () => {};
+    let finishSecond: () => void = () => {};
+    const onSavingChange = vi.fn<(saving: boolean) => void>();
+    open(() => {}, {
+      onSavingChange,
+      onAddProperty: (_type, viewId) => new Promise((resolve) => {
+        if (viewId === "First") finishFirst = resolve;
+        else finishSecond = resolve;
+      }),
+    });
+    await vi.waitFor(() => expect(document.querySelector("[data-session-view]")?.getAttribute("data-session-view")).toBe("First"));
+    const firstLayout = document.querySelector("[data-session-view]");
+    document.querySelector<HTMLButtonElement>("[data-start-save]")!.click();
+    await tick();
+    notesDatabaseSession.selectView("database", "Second");
+    await tick();
+    const secondLayout = document.querySelector("[data-session-view]");
+    expect(secondLayout).not.toBe(firstLayout);
+    expect(secondLayout?.getAttribute("data-layout-snapshot")).toBe("Second");
+    document.querySelector<HTMLButtonElement>("[data-start-save]")!.click();
+    await tick();
+    finishFirst();
+    await tick();
+    await tick();
+    expect(document.querySelector("[data-session-view]")).toBe(secondLayout);
+    expect(secondLayout?.getAttribute("data-layout-snapshot")).toBe("Second");
+    expect(document.querySelector<HTMLButtonElement>('button[aria-label="First"]')?.disabled).toBe(true);
+    expect(onSavingChange).toHaveBeenLastCalledWith(true);
+    finishSecond();
+    await vi.waitFor(() => expect(document.querySelector<HTMLButtonElement>('button[aria-label="First"]')?.disabled).toBe(false));
+    expect(secondLayout?.getAttribute("data-layout-snapshot")).toBe("Saved Second");
+    expect(onSavingChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("selects the newly copied saved view after an internal write while toolbar selection is disabled", async () => {
+    const copied = { ...views()[0], id: "Copied", name: "Copied" };
+    vi.mocked(listNotesDatabaseViews).mockResolvedValueOnce(views()).mockResolvedValue([...views(), copied]);
+    vi.mocked(listNotesDataSourceTemplates).mockResolvedValue([]);
+    let finishCopy: (view: NotesDatabaseView) => void = () => {};
+    vi.mocked(duplicateNotesDatabaseView).mockImplementation(() => new Promise((resolve) => { finishCopy = resolve; }));
+    open();
+    await vi.waitFor(() => expect(document.querySelector("[data-session-view]")?.getAttribute("data-session-view")).toBe("First"));
+    document.querySelector<HTMLButtonElement>('button[aria-label="View options"]')!.click();
+    await tick();
+    await tick();
+    const duplicate = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'))
+      .find((button) => button.textContent?.trim() === "Duplicate view");
+    expect(duplicate).toBeDefined();
+    duplicate!.click();
+    await vi.waitFor(() => expect(duplicateNotesDatabaseView).toHaveBeenCalledOnce());
+    expect(document.querySelector<HTMLButtonElement>('button[aria-label="Second"]')?.disabled).toBe(true);
+    finishCopy(copied);
+    await vi.waitFor(() => expect(document.querySelector("[data-session-view]")?.getAttribute("data-session-view")).toBe("Copied"));
+    expect(notesDatabaseSession.recall("database")?.viewId).toBe("Copied");
+  });
+
   it("keeps a mounted database's chosen view when unrelated presentation entries evict its cached preference", async () => {
     vi.mocked(listNotesDatabaseViews).mockResolvedValue(views());
     vi.mocked(listNotesDataSourceTemplates).mockResolvedValue([]);

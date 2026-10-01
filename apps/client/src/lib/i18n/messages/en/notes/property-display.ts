@@ -1,0 +1,15 @@
+export const propertyDisplay = {
+  databaseDisplayRange: (start: string, end: string) => `${start} to ${end}`,
+  databaseDateStart: "Start",
+  databaseDateEnd: "End",
+  databaseDateTimeZone: "Time zone",
+  databaseDateBoundaryHint: "YYYY-MM-DD or ISO date and time",
+  databaseDateZoneHint: "IANA time zone, optional",
+  databaseDateApply: "Apply date",
+  databaseDateClear: "Clear date",
+  databaseDateInvalidStart: "Enter a valid ISO start date or date and time.",
+  databaseDateInvalidEnd: "Enter a valid ISO end date or date and time.",
+  databaseDateReversedRange: "The end must be on or after the start.",
+  databaseDateInvalidZone: "Enter a valid IANA time zone or leave it empty.",
+  databaseDateSaveFailed: "The date could not be saved. Your edits are retained.",
+} as const;

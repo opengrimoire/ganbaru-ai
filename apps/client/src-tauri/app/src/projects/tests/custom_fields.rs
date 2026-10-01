@@ -1,5 +1,68 @@
 use super::*;
-use crate::projects::custom_fields::update_custom_field_value_with_history;
+use crate::projects::custom_fields::{
+    create_custom_field_in_pool, update_custom_field_value_with_history,
+};
+
+#[test]
+fn duplicate_custom_property_copies_option_schema_with_fresh_ids_and_empty_values() {
+    tauri::async_runtime::block_on(async {
+        let pool = migrated_memory_pool().await;
+        insert_project_graph_fixture(&pool).await;
+        sqlx::raw_sql("INSERT INTO project_custom_fields (id, project_id, name, field_type, sort_order) VALUES ('source', 'project-a', 'Phase', 'select', 100);
+            INSERT INTO project_custom_field_options (id, field_id, name, sort_order) VALUES ('option-one', 'source', 'Planning', 100), ('option-two', 'source', 'Done', 200);
+            INSERT INTO project_custom_field_option_values (task_id, field_id, option_id) VALUES ('task-a', 'source', 'option-one');")
+            .execute(&pool).await.unwrap();
+        let result = create_custom_field_in_pool(
+            &pool,
+            &ProjectCustomFieldCreate {
+                id: "copy".to_string(),
+                project_id: "project-a".to_string(),
+                name: "Phase copy".to_string(),
+                field_type: "select".to_string(),
+                sort_order: 200,
+                duplicate_source_id: Some("source".to_string()),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.custom_fields[0].id, "copy");
+        assert_eq!(result.custom_field_options.len(), 2);
+        assert_eq!(result.custom_field_options[0].name, "Planning");
+        assert_eq!(result.custom_field_options[1].name, "Done");
+        assert!(
+            result
+                .custom_field_options
+                .iter()
+                .all(|option| option.field_id == "copy"
+                    && !["option-one", "option-two"].contains(&option.id.as_str()))
+        );
+        let values: (i64, i64) = sqlx::query_as("SELECT (SELECT COUNT(*) FROM project_custom_field_option_values WHERE field_id = 'copy'), (SELECT COUNT(*) FROM project_custom_field_option_values WHERE field_id = 'source')")
+            .fetch_one(&pool).await.unwrap();
+        assert_eq!(values, (0, 1));
+        let invalid = create_custom_field_in_pool(
+            &pool,
+            &ProjectCustomFieldCreate {
+                id: "invalid-copy".to_string(),
+                project_id: "project-a".to_string(),
+                name: "Invalid".to_string(),
+                field_type: "text".to_string(),
+                sort_order: 300,
+                duplicate_source_id: Some("source".to_string()),
+            },
+        )
+        .await;
+        assert!(invalid.is_err());
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM project_custom_fields WHERE id = 'invalid-copy'"
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+            0
+        );
+    });
+}
 
 #[test]
 fn custom_field_value_rejects_fields_from_another_project() {

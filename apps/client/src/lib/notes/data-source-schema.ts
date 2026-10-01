@@ -16,6 +16,21 @@ import {
 
 type UnknownRecord = Record<string, unknown>;
 
+/** Match the native schema property's Unicode character limit. */
+export const NOTES_DATA_SOURCE_PROPERTY_NAME_MAX_CHARACTERS = 120;
+
+/** Contextual schema action requested by a property header in the active table. */
+export type NotesDatabasePropertyActionRequest =
+  | { type: "insert"; propertyId: string; side: "left" | "right"; propertyType: NotesDataSourcePropertyType; name: string }
+  | { type: "duplicate"; propertyId: string };
+
+/** Source and saved view that originated a nonmodal property action. */
+export interface NotesDatabaseSourceEditingScope {
+  dataSourceId: string;
+  databaseId: string | null;
+  viewId: string | null;
+}
+
 export interface NotesDataSourceSchemaOptionDraft {
   id: string;
   name: string;
@@ -28,7 +43,6 @@ export interface NotesDataSourceSchemaPropertyDraft {
   name: string;
   description: string;
   type: NotesDataSourcePropertyType;
-  hidden: boolean;
   numberFormat: NotesDataSourceNumberFormat;
   uniquePrefix: string;
   relationDataSourceId: string;
@@ -347,10 +361,6 @@ function viewPropertyOrder(view: NotesDatabaseView): string[] {
   return readStringArray(tableConfiguration(view).property_order);
 }
 
-function viewHiddenPropertyIds(view: NotesDatabaseView): Set<string> {
-  return new Set(readStringArray(tableConfiguration(view).hidden_property_ids));
-}
-
 function optionDrafts(value: unknown): NotesDataSourceSchemaOptionDraft[] {
   const options = isRecord(value) && Array.isArray(value.options) ? value.options : [];
   return options.filter(isRecord).map((option, index) => {
@@ -480,9 +490,8 @@ function buttonActionValueForType(
 }
 
 function propertyDraftFromRecord(
-  key: string,
-  value: unknown,
-  hiddenIds: Set<string>,
+    key: string,
+    value: unknown,
 ): NotesDataSourceSchemaPropertyDraft | null {
   if (!isRecord(value)) return null;
   const typeValue = readString(value.type, "rich_text");
@@ -517,7 +526,6 @@ function propertyDraftFromRecord(
     name: readString(value.name, key),
     description: readString(value.description, ""),
     type,
-    hidden: type === "title" ? false : hiddenIds.has(id),
     numberFormat: isNumberFormat(numberFormat) ? numberFormat : "number",
     uniquePrefix,
     relationDataSourceId,
@@ -543,10 +551,9 @@ export function notesDataSourceSchemaDraftFromDto(
   dataSource: NotesDataSource,
   view: NotesDatabaseView,
 ): NotesDataSourceSchemaPropertyDraft[] {
-  const hiddenIds = viewHiddenPropertyIds(view);
   const byId = new Map<string, NotesDataSourceSchemaPropertyDraft>();
   for (const [key, value] of Object.entries(dataSource.properties)) {
-    const property = propertyDraftFromRecord(key, value, hiddenIds);
+    const property = propertyDraftFromRecord(key, value);
     if (property) byId.set(property.id, property);
   }
   const order = viewPropertyOrder(view);
@@ -573,6 +580,27 @@ export function defaultNotesDataSourcePropertyName(
     if (!existing.has(candidate.toLocaleLowerCase())) return candidate;
   }
   return `${baseName} ${crypto.randomUUID().slice(0, 8)}`;
+}
+
+/** Generate a localized copy name within native length and case-insensitive uniqueness bounds. */
+export function notesDataSourceDuplicatePropertyName(
+  originalName: string,
+  properties: readonly Pick<NotesDataSourceSchemaPropertyDraft, "name">[],
+  formatCopyName: (name: string) => string,
+): string {
+  const originalCharacters = Array.from(originalName.trim());
+  const existing = new Set(properties.map((property) => property.name.trim().toLowerCase()));
+  const copyDecorationLength = Array.from(formatCopyName("")).length;
+  for (let index = 1; index <= properties.length + 1; index += 1) {
+    const suffix = index === 1 ? "" : ` ${index}`;
+    const availableCharacters = NOTES_DATA_SOURCE_PROPERTY_NAME_MAX_CHARACTERS
+      - copyDecorationLength - Array.from(suffix).length;
+    if (availableCharacters <= 0) throw new Error("Copy name decoration exceeds the property name limit");
+    const base = originalCharacters.slice(0, availableCharacters).join("");
+    const candidate = `${formatCopyName(base).trim()}${suffix}`;
+    if (!existing.has(candidate.toLowerCase())) return candidate;
+  }
+  throw new Error("Could not generate a unique property copy name");
 }
 
 function defaultNameForType(type: NotesDataSourcePropertyType): string {
@@ -637,7 +665,6 @@ export function createNotesDataSourcePropertyDraft(
     name,
     description: "",
     type,
-    hidden: false,
     numberFormat: "number",
     uniquePrefix: "",
     relationDataSourceId: "",
@@ -783,9 +810,5 @@ export function notesDataSourceSchemaUpdateFromDraft(
   }
   return {
     properties: record,
-    property_order: properties.map((property) => property.id),
-    hidden_property_ids: properties
-      .filter((property) => property.hidden && property.type !== "title")
-      .map((property) => property.id),
   };
 }

@@ -62,6 +62,109 @@ fn list_task_view_request(page_size: i64) -> ProjectTaskViewRequest {
 }
 
 #[test]
+fn task_view_column_calculations_cover_filtered_results_before_pagination() {
+    tauri::async_runtime::block_on(async {
+        let pool = migrated_memory_pool().await;
+        insert_project_graph_fixture(&pool).await;
+        sqlx::raw_sql("UPDATE project_tasks SET estimate_minutes = CASE id WHEN 'task-a' THEN NULL WHEN 'task-b' THEN 20 ELSE 100 END;
+            UPDATE project_tasks SET archived_at = '2026-07-01' WHERE id = 'task-c';
+            INSERT INTO project_custom_fields (id, project_id, name, field_type, sort_order) VALUES ('number', 'project-a', 'Points', 'number', 100), ('choice', 'project-a', 'Phase', 'select', 200), ('empty', 'project-a', 'Empty', 'number', 300);
+            INSERT INTO project_custom_field_values (task_id, field_id, number_value) VALUES ('task-a', 'number', 0), ('task-b', 'number', 10), ('task-c', 'number', 100);
+            INSERT INTO project_custom_field_options (id, field_id, name, sort_order) VALUES ('choice-one', 'choice', 'Planning', 100);
+            INSERT INTO project_custom_field_option_values (task_id, field_id, option_id) VALUES ('task-b', 'choice', 'choice-one');")
+            .execute(&pool).await.unwrap();
+        let first = load_task_view(&pool, list_task_view_request(1))
+            .await
+            .unwrap();
+        assert_eq!(first.tasks.len(), 1);
+        let points = first
+            .column_calculations
+            .iter()
+            .find(|entry| entry.column == "custom:number")
+            .unwrap();
+        assert_eq!(
+            (
+                points.total,
+                points.filled,
+                points.sum,
+                points.average,
+                points.minimum,
+                points.maximum
+            ),
+            (2, 2, Some(10.0), Some(5.0), Some(0.0), Some(10.0))
+        );
+        let choices = first
+            .column_calculations
+            .iter()
+            .find(|entry| entry.column == "custom:choice")
+            .unwrap();
+        assert_eq!((choices.total, choices.filled), (2, 1));
+        let empty = first
+            .column_calculations
+            .iter()
+            .find(|entry| entry.column == "custom:empty")
+            .unwrap();
+        assert_eq!((empty.total, empty.filled, empty.sum), (2, 0, None));
+        let estimate = first
+            .column_calculations
+            .iter()
+            .find(|entry| entry.column == "estimate")
+            .unwrap();
+        assert_eq!(
+            (estimate.total, estimate.filled, estimate.sum),
+            (2, 1, Some(20.0))
+        );
+        let mut next = list_task_view_request(1);
+        next.cursor = first.next_cursor;
+        let second = load_task_view(&pool, next).await.unwrap();
+        let next_points = second
+            .column_calculations
+            .iter()
+            .find(|entry| entry.column == "custom:number")
+            .unwrap();
+        assert_eq!((next_points.total, next_points.sum), (2, Some(10.0)));
+        let mut filtered = list_task_view_request(1);
+        filtered.search = "task-b".to_string();
+        let filtered = load_task_view(&pool, filtered).await.unwrap();
+        let filtered_points = filtered
+            .column_calculations
+            .iter()
+            .find(|entry| entry.column == "custom:number")
+            .unwrap();
+        assert_eq!(
+            (filtered_points.total, filtered_points.sum),
+            (1, Some(10.0))
+        );
+    });
+}
+
+#[test]
+fn task_view_custom_column_sort_keeps_numeric_order_and_resolves_option_names() {
+    tauri::async_runtime::block_on(async {
+        let pool = migrated_memory_pool().await;
+        insert_project_graph_fixture(&pool).await;
+        sqlx::raw_sql("INSERT INTO project_custom_fields (id, project_id, name, field_type, sort_order) VALUES ('number', 'project-a', 'Points', 'number', 100), ('choice', 'project-a', 'Phase', 'select', 200);
+            INSERT INTO project_custom_field_values (task_id, field_id, number_value) VALUES ('task-a', 'number', 10), ('task-b', 'number', 2);
+            INSERT INTO project_custom_field_options (id, field_id, name, sort_order) VALUES ('choice-z', 'choice', 'Zebra', 100), ('choice-a', 'choice', 'Alpha', 200);
+            INSERT INTO project_custom_field_option_values (task_id, field_id, option_id) VALUES ('task-a', 'choice', 'choice-z'), ('task-b', 'choice', 'choice-a');")
+            .execute(&pool).await.unwrap();
+        for field in ["number", "choice"] {
+            let mut request = list_task_view_request(10);
+            request.sort_mode = format!("custom:{field}");
+            let result = load_task_view(&pool, request).await.unwrap();
+            assert_eq!(
+                result
+                    .tasks
+                    .iter()
+                    .map(|task| task.id.as_str())
+                    .collect::<Vec<_>>(),
+                vec!["task-b", "task-a", "task-c"]
+            );
+        }
+    });
+}
+
+#[test]
 fn task_view_list_is_keyset_paginated_and_body_bounded() {
     tauri::async_runtime::block_on(async {
         let pool = migrated_memory_pool().await;

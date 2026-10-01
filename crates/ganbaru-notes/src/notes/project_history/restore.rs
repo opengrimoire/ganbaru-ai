@@ -9,13 +9,14 @@ use serde_json::{Value, json};
 use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool, Transaction};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-const RESTORE_TABLE_ORDER: [&str; 16] = [
+const RESTORE_TABLE_ORDER: [&str; 17] = [
     "notes_assets",
     "notes_folders",
     "notes_pages",
     "notes_blocks",
     "notes_databases",
     "notes_data_sources",
+    "notes_data_source_row_hierarchy",
     "notes_database_views",
     "notes_data_source_templates",
     "notes_data_source_template_blocks",
@@ -164,6 +165,7 @@ pub(super) async fn restore_version(
     delete_current_project_pages_tx(&mut tx, &current_page_ids).await?;
     delete_current_project_folders_tx(&mut tx, &current_folder_ids).await?;
     insert_historical_rows_tx(&mut tx, &historical).await?;
+    validate_restored_hierarchy_tx(&mut tx, &historical).await?;
     restore_preserved_page_history_tx(&mut tx).await?;
     append_restore_operations_tx(&mut tx, &historical, version_id).await?;
     sqlx::query("DELETE FROM notes_project_history_dirty WHERE project_id = ?")
@@ -559,6 +561,7 @@ fn row_is_in_copy_scope(table: &str, row: &Value, scope: &CopyScope) -> bool {
         "notes_blocks" => value_in(row, "id", &scope.block_ids),
         "notes_databases" => value_in(row, "id", &scope.database_ids),
         "notes_data_sources" => value_in(row, "id", &scope.data_source_ids),
+        "notes_data_source_row_hierarchy" => value_in(row, "row_page_id", &scope.page_ids),
         "notes_database_views" => {
             value_in(row, "database_id", &scope.database_ids)
                 || value_in(row, "data_source_id", &scope.data_source_ids)
@@ -786,6 +789,34 @@ async fn insert_historical_rows_tx(
         }
     }
     Ok(())
+}
+
+/// Keep untrusted snapshot edges inside the graph being restored, then validate canonical ownership.
+async fn validate_restored_hierarchy_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    rows: &BTreeMap<String, Vec<Value>>,
+) -> Result<(), String> {
+    let page_ids = ids(rows, "notes_pages");
+    let source_ids = ids(rows, "notes_data_sources");
+    for edge in rows
+        .get("notes_data_source_row_hierarchy")
+        .into_iter()
+        .flatten()
+    {
+        if !value_in(edge, "data_source_id", &source_ids)
+            || !value_in(edge, "row_page_id", &page_ids)
+            || !value_in(edge, "parent_row_page_id", &page_ids)
+        {
+            return Err(
+                "Restored sub-items must stay within the restored project graph".to_string(),
+            );
+        }
+    }
+    crate::notes::data_source_row_hierarchy::validate_sources_tx(
+        tx,
+        &source_ids.into_iter().collect::<Vec<_>>(),
+    )
+    .await
 }
 
 fn folder_rows_in_restore_order(rows: &[Value]) -> Result<Vec<&Value>, String> {

@@ -387,6 +387,9 @@ function compareTasks(
   if (input.sortMode === "manual") {
     return withDirection(manualSectionCompare(a, b), input.sortDirection);
   }
+  if (input.sortMode === "title") return compareText(a.title, b.title, input.sortDirection) || manualSectionCompare(a, b);
+  if (input.sortMode === "start") return compareOptionalText(a.startDate, b.startDate, input.sortDirection)
+    || compareOptionalText(a.startTime, b.startTime, input.sortDirection) || manualSectionCompare(a, b);
   if (input.sortMode === "status") {
     return withDirection(
       (indexByStatusId.get(a.statusId) ?? Number.MAX_SAFE_INTEGER)

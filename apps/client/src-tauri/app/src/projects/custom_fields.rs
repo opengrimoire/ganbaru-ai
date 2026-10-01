@@ -529,7 +529,30 @@ pub async fn projects_create_custom_field<R: Runtime>(
 ) -> Result<ProjectsMutationRows, String> {
     validate_custom_field_create(&field)?;
     let pool = connect_sqlite(app, db_url).await?;
-    ensure_project_exists_in_pool(&pool, field.project_id.trim()).await?;
+    create_custom_field_in_pool(&pool, &field).await
+}
+
+/// Create a fresh property, optionally copying only another property's option schema atomically.
+pub(in crate::projects) async fn create_custom_field_in_pool(
+    pool: &sqlx::SqlitePool,
+    field: &ProjectCustomFieldCreate,
+) -> Result<ProjectsMutationRows, String> {
+    validate_custom_field_create(field)?;
+    ensure_project_exists_in_pool(pool, field.project_id.trim()).await?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| format!("begin custom field creation: {e}"))?;
+    if let Some(source_id) = field.duplicate_source_id.as_deref() {
+        let source = custom_field_by_id(&mut tx, source_id).await?;
+        if source.project_id != field.project_id.trim()
+            || source.field_type != field.field_type.trim()
+        {
+            return Err(
+                "duplicate property must match the source project and field type".to_string(),
+            );
+        }
+    }
     sqlx::query(
         "INSERT INTO project_custom_fields (id, project_id, name, field_type, sort_order)
          VALUES (?, ?, ?, ?, ?)",
@@ -539,10 +562,27 @@ pub async fn projects_create_custom_field<R: Runtime>(
     .bind(field.name.trim())
     .bind(field.field_type.trim())
     .bind(field.sort_order)
-    .execute(&pool)
+    .execute(&mut *tx)
     .await
     .map_err(|e| format!("create project custom field: {e}"))?;
-    custom_field_mutation(&pool, field.id.trim()).await
+    if let Some(source_id) = field.duplicate_source_id.as_deref() {
+        sqlx::query("INSERT INTO project_custom_field_options (id, field_id, name, sort_order)
+            SELECT lower(hex(randomblob(16))), ?, name, sort_order FROM project_custom_field_options WHERE field_id = ?")
+            .bind(field.id.trim()).bind(source_id.trim()).execute(&mut *tx).await
+            .map_err(|e| format!("copy duplicate property options: {e}"))?;
+    }
+    tx.commit()
+        .await
+        .map_err(|e| format!("commit custom field creation: {e}"))?;
+    let mut mutation = custom_field_mutation(pool, field.id.trim()).await?;
+    mutation.custom_field_options = sqlx::query_as::<_, ProjectCustomFieldOptionRow>(
+        "SELECT * FROM project_custom_field_options WHERE field_id = ? ORDER BY sort_order, id",
+    )
+    .bind(field.id.trim())
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("load created property options: {e}"))?;
+    Ok(mutation)
 }
 
 #[tauri::command]

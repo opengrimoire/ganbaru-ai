@@ -44,6 +44,15 @@ pub async fn export_csv(
             .await?;
     let schema_properties = parse_json(&data_source.properties, "data source properties")?;
     let schema = data_source_table::table_schema(&schema_properties)?;
+    let filters =
+        data_source_views::stored_filters(view.filter.as_deref(), "database view filter", "table")?;
+    if scope == CsvExportScope::View {
+        let property_types = schema
+            .iter()
+            .map(|property| (property.id.as_str(), property.property_type.as_str()))
+            .collect();
+        data_source_views::canonical_filter(&filters, &property_types, "table")?;
+    }
     let mut rows = data_source_table::load_active_row_pages_tx(&mut tx, data_source_id).await?;
     rows = rows
         .into_iter()
@@ -55,8 +64,6 @@ pub async fn export_csv(
     data_source_formulas::hydrate_formulas(&schema_properties, &mut rows)?;
     data_source_buttons::hydrate_buttons(&schema_properties, &mut rows)?;
 
-    let filters =
-        data_source_views::stored_filters(view.filter.as_deref(), "database view filter", "table")?;
     let sorts = data_source_views::stored_sorts(&view.sorts, "database view sorts", "table")?;
     if scope == CsvExportScope::View {
         rows.retain(|row| data_source_table::row_matches_filters(row, &schema, &filters));
@@ -297,7 +304,8 @@ fn property_plain_text(
             .and_then(Value::as_str)
             .unwrap_or_default()
             .to_string(),
-        "multi_select" | "files" | "people" | "relation" => payload
+        "relation" => data_source_table::row_property_plain_text(row, property),
+        "multi_select" | "files" | "people" => payload
             .and_then(Value::as_array)
             .map(|items| {
                 items

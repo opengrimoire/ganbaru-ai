@@ -101,7 +101,7 @@
 >
   <header class="sticky top-0 z-10 flex shrink-0 items-center gap-2 bg-card px-3 pb-1 pt-2">
     <div class="min-w-0 flex-1">
-      <div class="truncate text-[0.933333rem] font-semibold">{title}</div>
+      <div class="truncate text-[0.8125rem] font-medium">{title}</div>
     </div>
     <button
       type="button"
@@ -133,14 +133,14 @@
           bind:this={scrollElement}
           data-settings-content
           class={cn(
-            "project-settings-scroll-area hide-scrollbar h-full min-h-0 overflow-y-auto px-3 pb-8 pt-1",
+            "project-settings-scroll-area hide-scrollbar h-full min-h-0 overflow-y-auto px-3 pb-3 pt-1",
             scrollable && canScrollUp && canScrollDown && "project-settings-scroll-both",
             scrollable && canScrollUp && !canScrollDown && "project-settings-scroll-top",
             scrollable && !canScrollUp && canScrollDown && "project-settings-scroll-bottom",
           )}
           onscroll={refreshScrollState}
         >
-          <div bind:this={contentElement} class="flex flex-col gap-4">
+          <div bind:this={contentElement} class="flex flex-col gap-3">
             {@render children()}
           </div>
         </div>

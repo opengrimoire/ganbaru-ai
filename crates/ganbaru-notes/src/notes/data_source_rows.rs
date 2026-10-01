@@ -50,7 +50,26 @@ pub async fn create_data_source_row_page(
         .begin()
         .await
         .map_err(|e| format!("begin notes data source row create: {e}"))?;
-    let data_source = load_active_data_source_tx(&mut tx, data_source_id).await?;
+    create_data_source_row_page_tx(&mut tx, data_source_id, &request).await?;
+    tx.commit()
+        .await
+        .map_err(|e| format!("commit notes data source row create: {e}"))?;
+    reads::load_page(pool, request.id.trim()).await
+}
+
+/// Create a canonical row document inside an existing atomic source mutation.
+pub(crate) async fn create_data_source_row_page_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    data_source_id: &str,
+    request: &NoteDataSourceRowPageCreate,
+) -> Result<(), String> {
+    require_uuid(data_source_id, "data_source_id")?;
+    require_uuid(&request.id, "id")?;
+    require_uuid(&request.first_block_id, "first_block_id")?;
+    if request.id.trim() == request.first_block_id.trim() {
+        return Err("first_block_id must not match id".to_string());
+    }
+    let data_source = load_active_data_source_tx(tx, data_source_id).await?;
     let schema_properties = parse_json(&data_source.properties, "data source properties")?;
     let (title, properties) = row_page_properties(
         &schema_properties,
@@ -73,7 +92,7 @@ pub async fn create_data_source_row_page(
     .bind(data_source_id)
     .bind(&title)
     .bind(properties.to_string())
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await
     .map_err(|e| format!("create notes data source row page: {e}"))?;
     sqlx::query(
@@ -94,11 +113,11 @@ pub async fn create_data_source_row_page(
     .bind(request.id.trim())
     .bind(first_payload.to_string())
     .bind(first_plain_text)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await
     .map_err(|e| format!("create initial notes data source row block: {e}"))?;
     data_source_relations::replace_row_relation_links_tx(
-        &mut tx,
+        tx,
         data_source_id,
         request.id.trim(),
         &schema_properties,
@@ -106,19 +125,11 @@ pub async fn create_data_source_row_page(
         true,
     )
     .await?;
-    assets::sync_data_source_property_asset_references_tx(
-        &mut tx,
-        data_source_id,
-        &schema_properties,
-    )
-    .await?;
-    data_source_rollups::invalidate_rollup_cache_for_data_source_tx(&mut tx, data_source_id)
+    assets::sync_data_source_property_asset_references_tx(tx, data_source_id, &schema_properties)
         .await?;
-    touch_data_source_tx(&mut tx, data_source_id, &data_source.database_id).await?;
-    tx.commit()
-        .await
-        .map_err(|e| format!("commit notes data source row create: {e}"))?;
-    reads::load_page(pool, request.id.trim()).await
+    data_source_rollups::invalidate_rollup_cache_for_data_source_tx(tx, data_source_id).await?;
+    touch_data_source_tx(tx, data_source_id, &data_source.database_id).await?;
+    Ok(())
 }
 
 struct DataSourceRow {

@@ -424,6 +424,7 @@ pub(crate) async fn finalize_copies(
         page.finalize(tx, &identities, &schemas, &mut copied_sources)
             .await?;
     }
+    crate::notes::data_source_row_hierarchy::copy_edges_tx(tx, &identities).await?;
     for source in copied_sources {
         let raw: String =
             sqlx::query_scalar("SELECT properties FROM notes_data_sources WHERE id = ?")
@@ -649,7 +650,7 @@ fn remap_identity_fields(
                         &mut value,
                         identities,
                         child_ids,
-                        key == "column_widths",
+                        matches!(key.as_str(), "column_widths" | "columns"),
                     );
                 }
                 let new_key = if identity_keys {

@@ -1,3 +1,4 @@
+import { notesDatabaseSerializeFilters } from "./database-filters";
 import {
   notesDatabaseTableCellText,
   notesDatabaseTableColumns,
@@ -164,11 +165,7 @@ export function notesDatabaseBoardCanMoveCards(
 function notesDatabaseBoardFilters(
   filters: readonly NotesDatabaseTableFilter[],
 ): NotesDatabaseTableFilter[] {
-  return filters.map((filter) => ({
-    property_id: filter.property_id,
-    condition: filter.condition,
-    value: filter.value ?? null,
-  }));
+  return notesDatabaseSerializeFilters(filters);
 }
 
 function notesDatabaseBoardSorts(

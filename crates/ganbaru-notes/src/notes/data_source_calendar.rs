@@ -85,11 +85,16 @@ pub async fn update_data_source_calendar_view(
         "data source properties",
     )?)?;
     let property_ids: HashSet<String> = schema.iter().map(|property| property.id.clone()).collect();
-    let filter = canonical_filter(&update.filter, &property_ids, "board")?;
+    let property_types = schema
+        .iter()
+        .map(|property| (property.id.as_str(), property.property_type.as_str()))
+        .collect();
+    let filter = canonical_filter(&update.filter, &property_types, "calendar")?;
     let sorts = canonical_sorts(&update.sorts, &property_ids, "board")?;
     let configuration = canonical_calendar_configuration(&update.configuration, &schema)?;
     let view =
         ensure_calendar_view_row_tx(&mut tx, &data_source, database_id, view_id, &schema).await?;
+    data_source_views::prepare_view_mutation_tx(&mut tx, &view, "Calendar view").await?;
     sqlx::query(
         "UPDATE notes_database_views
          SET filter = ?,
@@ -199,6 +204,7 @@ async fn ensure_calendar_view_row_tx(
         return Ok(view);
     }
     let database_id = data_source_views::scoped_database_id(data_source, database_id);
+    super::database_editing_lock::ensure_unlocked_tx(tx, database_id).await?;
     let id = generated_uuid_tx(
         tx,
         "generate calendar view id",

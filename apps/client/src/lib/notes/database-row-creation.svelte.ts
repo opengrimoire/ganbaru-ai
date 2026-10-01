@@ -1,6 +1,7 @@
 import {
   applyNotesDataSourceTemplate,
   createNotesDataSourceRowPage,
+  createNotesDataSourceSubitem,
   loadNotesPage,
   updateNotesDataSourceRowProperty,
 } from "$lib/api/notes";
@@ -12,6 +13,7 @@ import {
   type NotesDatabaseTableEditValue,
 } from "./database-table";
 import type { NotesDataSourceRowPageCreateRequest, NotesPage } from "./types";
+import type { NotesDatabaseRowHierarchy } from "./database-row-hierarchy";
 
 interface RowEdit {
   value: NotesDatabaseTableEditValue;
@@ -22,6 +24,7 @@ interface RowEdit {
 interface CreatedRow {
   sourceId: string;
   templateId: string;
+  parentRowId: string | null;
   request: NotesDataSourceRowPageCreateRequest;
   page: NotesPage;
   persisted: boolean;
@@ -48,7 +51,9 @@ export function createNotesDatabaseRowCreation(onEdited: () => Promise<unknown>)
       if (!row.persisted) {
         let page: NotesPage;
         try {
-          const loaded = row.templateId
+          const loaded = row.parentRowId
+            ? await createNotesDataSourceSubitem(row.sourceId, row.parentRowId, row.request)
+            : row.templateId
             ? await applyNotesDataSourceTemplate(row.sourceId, row.templateId, {
                 id: row.request.id, title: row.request.title,
               })
@@ -93,13 +98,18 @@ export function createNotesDatabaseRowCreation(onEdited: () => Promise<unknown>)
     }
   }
 
-  function begin(sourceId: string, templateId = ""): string {
+  function begin(sourceId: string, templateId = "", initialValues: readonly { column: NotesDatabaseTableColumn; value: NotesDatabaseTableEditValue; payload: unknown }[] = [], parentRowId: string | null = null): string {
     const request = { id: crypto.randomUUID(), first_block_id: crypto.randomUUID(), title: "" };
     const provisional = createProvisionalNotesPage({
       ...request, parent: { type: "data_source_id", data_source_id: sourceId }, folder_id: null,
     });
-    rows.push({ sourceId, templateId, request, page: provisional.page,
-      persisted: false, pending: false, error: null, edits: {} });
+    const edits: Record<string, RowEdit> = {};
+    for (const { column, value, payload } of initialValues) {
+      provisional.page.properties = { ...provisional.page.properties, [column.name]: { id: column.id, type: column.type, [column.type]: payload } };
+      edits[column.id] = { value, revision: ++revision, submitted: true };
+    }
+    rows.push({ sourceId, templateId, parentRowId, request, page: provisional.page,
+      persisted: false, pending: false, error: null, edits });
     const row = find(request.id);
     if (row) void persist(row);
     return request.id;
@@ -139,6 +149,24 @@ export function createNotesDatabaseRowCreation(onEdited: () => Promise<unknown>)
       const local = rows.filter((row) => row.sourceId === sourceId);
       const localIds = new Set(local.map((row) => row.page.id));
       return [...canonical.filter((page) => !localIds.has(page.id)), ...local.map((row) => row.page)];
+    },
+    /** Preserve optimistic sub-item placement while creation or its title draft is pending. */
+    hierarchyFor(sourceId: string, canonical: NotesDatabaseRowHierarchy): NotesDatabaseRowHierarchy {
+      const result = { ...canonical };
+      for (const row of rows.filter((row) => row.sourceId === sourceId && row.parentRowId && !result[row.page.id])) {
+        const parentId = row.parentRowId;
+        if (!parentId) continue;
+        const ancestors = [parentId, ...(result[parentId]?.ancestor_row_page_ids ?? [])];
+        result[row.page.id] = { parent_row_page_id: parentId, ancestor_row_page_ids: ancestors, depth: ancestors.length, child_count: 0 };
+        const parent = result[parentId];
+        if (parent && !row.persisted) result[parentId] = { ...parent, child_count: parent.child_count + 1 };
+      }
+      return result;
+    },
+    /** Keep a retained local row's parent current after a canonical move. */
+    acceptParent(pageId: string, parentRowId: string | null): void {
+      const row = find(pageId);
+      if (row) row.parentRowId = parentRowId;
     },
     valueFor(page: NotesPage, column: NotesDatabaseTableColumn): NotesDatabaseTableEditValue {
       const edit = find(page.id)?.edits[column.id];

@@ -16,7 +16,7 @@ function database(id: string): NotesBlock {
 
 function reference(id: string, count: number): NotesDatabaseReference {
   return { block_id: id, page_id: "page", source_block_id: "original", source_page_id: "source-page",
-    title: "Tasks", owned_data_source_count: count, is_linked: count === 0 };
+    title: "Tasks", owned_data_source_count: count, is_linked: count === 0, editing_locked: false };
 }
 
 describe("Notes database deletion confirmation", () => {

@@ -24,7 +24,7 @@ fn gallery_database_view_persists_card_preview_filters_and_sorts() {
         data_source_schema::update_data_source_schema(
             &pool,
             DATA_SOURCE_A,
-            None,
+            None, None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
                     "Name": {
@@ -63,14 +63,6 @@ fn gallery_database_view_persists_card_preview_filters_and_sorts() {
                         "checkbox": {}
                     }
                 }),
-                property_order: vec![
-                    "title".to_string(),
-                    "cover_files".to_string(),
-                    "status".to_string(),
-                    "estimate".to_string(),
-                    "published".to_string(),
-                ],
-                hidden_property_ids: vec![],
             },
         )
         .await
@@ -188,11 +180,12 @@ fn gallery_database_view_persists_card_preview_filters_and_sorts() {
             None,
             None,
             NoteDataSourceGalleryViewUpdate {
-                filter: vec![NoteDataSourceTableFilter {
-                    property_id: "title".to_string(),
-                    condition: "contains".to_string(),
-                    value: Some(json!("a")),
-                }],
+                filter: vec![
+                    serde_json::from_value::<NoteDataSourceTableFilter>(json!({
+                        "property_id": "title", "condition": "contains", "value": "a"
+                    }))
+                    .unwrap(),
+                ],
                 sorts: vec![NoteDataSourceTableSort {
                     property_id: "estimate".to_string(),
                     direction: "descending".to_string(),

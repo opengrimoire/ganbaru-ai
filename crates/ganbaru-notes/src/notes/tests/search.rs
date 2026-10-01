@@ -490,6 +490,7 @@ fn property_search_indexes_database_values_cached_rollups_and_formulas() {
             &pool,
             DATA_SOURCE_B,
             None,
+            None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
                     "Name": {
@@ -507,8 +508,6 @@ fn property_search_indexes_database_values_cached_rollups_and_formulas() {
                         }
                     }
                 }),
-                property_order: vec!["title".to_string(), "budget".to_string()],
-                hidden_property_ids: vec![],
             },
         )
         .await
@@ -516,6 +515,7 @@ fn property_search_indexes_database_values_cached_rollups_and_formulas() {
         data_source_schema::update_data_source_schema(
             &pool,
             DATA_SOURCE_A,
+            None,
             None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
@@ -583,17 +583,6 @@ fn property_search_indexes_database_values_cached_rollups_and_formulas() {
                         }
                     }
                 }),
-                property_order: vec![
-                    "title".to_string(),
-                    "details".to_string(),
-                    "status".to_string(),
-                    "due".to_string(),
-                    "done".to_string(),
-                    "project_relation".to_string(),
-                    "project_budget".to_string(),
-                    "formula_state".to_string(),
-                ],
-                hidden_property_ids: vec![],
             },
         )
         .await

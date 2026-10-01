@@ -7,10 +7,21 @@
   import CollectionQuickAdd from "$lib/components/collections/CollectionQuickAdd.svelte";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
+  import NotesDatabaseFilterControls from "./NotesDatabaseFilterControls.svelte";
+  import NotesDatabaseSortControls from "./NotesDatabaseSortControls.svelte";
+  import NotesDatabaseQueryBar from "./NotesDatabaseQueryBar.svelte";
+  import NotesDatabaseDateCell from "./NotesDatabaseDateCell.svelte";
+  import NotesDatabaseNumberCell from "./NotesDatabaseNumberCell.svelte";
+  import NotesDatabasePropertyValue from "./NotesDatabasePropertyValue.svelte";
+  import NotesDatabaseRowParentControls from "./NotesDatabaseRowParentControls.svelte";
+  import { NOTES_DATABASE_MAX_COLLAPSED_ROWS, NOTES_DATABASE_ROW_MAX_DEPTH, notesDatabaseCollapsedRows, notesDatabaseHierarchyRows } from "$lib/notes/database-row-hierarchy";
+  import { NOTES_DATABASE_QUERY_MAX_SORTS, notesDatabaseFilterCount, notesDatabaseFilterConditions, notesDatabaseNewFilter, notesDatabaseRowMatchesFilters, notesDatabaseSortedColumn } from "$lib/notes/database-query-controls";
   import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
-  import { onDestroy, tick, untrack } from "svelte";
+  import { onDestroy, tick, untrack, type Snippet } from "svelte";
   import { databaseResource, notesDatabaseSession, rememberDatabaseScroll } from "$lib/notes/database-session.svelte";
   import { createNotesDatabaseRowCreation } from "$lib/notes/database-row-creation.svelte";
+  import type { NotesDatabasePropertyActionRequest } from "$lib/notes/data-source-schema";
+  import { notesTableColumnPresentation, notesTableCompatibleCalculations, notesTableFrozenOffset, notesTableGroupableColumns, notesTableGroups, notesTableViewSettings } from "$lib/notes/database-table-presentation";
   import CollectionSettings from "$lib/components/collections/CollectionSettings.svelte";
   import {
     beginLazyComponentLoad,
@@ -27,9 +38,11 @@
     listNotesDataSourceTemplates,
     trashNotesPage,
     updateNotesDataSourceRowProperty,
+    updateNotesDataSourceRowParent,
     updateNotesDataSourceTableView,
   } from "$lib/api/notes";
   import { getLocalization } from "$lib/i18n/translator.svelte";
+  import { formatList, formatNumber } from "$lib/i18n/formatters";
   import { BUILD_PLATFORM_PROFILE, platformHasCapability } from "$lib/platform";
   import {
     notesDatabaseTableEditValuesEqual,
@@ -55,7 +68,10 @@
   import { NOTES_DATA_SOURCE_PROPERTY_TYPES } from "$lib/notes/types";
   import type {
     NotesDatabaseTableFilter,
-    NotesDatabaseTableFilterCondition,
+    NotesDatabaseTableCalculation,
+    NotesDatabaseTableColorRule,
+    NotesDatabaseTableColumnPresentation,
+    NotesDatabaseTableConfiguration,
     NotesDatabaseTableRowOpenMode,
     NotesDatabaseTableSort,
     NotesDatabaseViewScope,
@@ -63,8 +79,13 @@
     NotesDataSourceTableView,
     NotesDataSourcePropertyType,
     NotesPage,
+    NotesColor,
   } from "$lib/notes/types";
   import Check from "@lucide/svelte/icons/check";
+  import ArrowDown from "@lucide/svelte/icons/arrow-down";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import ArrowRight from "@lucide/svelte/icons/arrow-right";
+  import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import AlignLeft from "@lucide/svelte/icons/align-left";
   import ArrowUpRight from "@lucide/svelte/icons/arrow-up-right";
   import AtSign from "@lucide/svelte/icons/at-sign";
@@ -84,6 +105,7 @@
   import Phone from "@lucide/svelte/icons/phone";
   import Plus from "@lucide/svelte/icons/plus";
   import Search from "@lucide/svelte/icons/search";
+  import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
   import Sigma from "@lucide/svelte/icons/sigma";
   import SquareCheck from "@lucide/svelte/icons/square-check";
   import Trash2 from "@lucide/svelte/icons/trash-2";
@@ -98,10 +120,14 @@
     onReady = () => {},
     onAddProperty,
     onEditProperties,
+    onPropertyAction,
     newRowRequest = 0,
     settingsOpen = false,
+    settingsAnchor = null,
+    settingsHeader,
     onCloseSettings,
     reloadKey = 0,
+    editingLocked = false,
   }: {
     dataSourceId: string;
     databaseId?: string | null;
@@ -110,26 +136,24 @@
     onSavingChange?: (saving: boolean) => void;
     onReady?: () => void;
     onAddProperty: (type: NotesDataSourcePropertyType, name: string) => Promise<void>;
-    onEditProperties: () => void;
+    onEditProperties: (propertyId?: string) => void;
+    onPropertyAction?: (request: NotesDatabasePropertyActionRequest) => Promise<void>;
     newRowRequest?: number;
     settingsOpen?: boolean;
+    settingsAnchor?: HTMLElement | null;
+    settingsHeader?: Snippet;
     onCloseSettings: () => void;
     reloadKey?: number;
+    editingLocked?: boolean;
   } = $props();
 
-  const { t } = getLocalization();
+  const localization = getLocalization();
+  const { t } = localization;
   const fileExportAvailable = platformHasCapability(
     BUILD_PLATFORM_PROFILE,
     "notes.file-export",
   );
-  const FILTER_CONDITIONS: NotesDatabaseTableFilterCondition[] = [
-    "contains",
-    "equals",
-    "is_empty",
-    "is_not_empty",
-    "checked",
-    "unchecked",
-  ];
+  const rowIndentPixels = 12;
   const propertyIcons = {
     title: AlignLeft,
     rich_text: AlignLeft,
@@ -157,6 +181,18 @@
   } satisfies Record<NotesDataSourcePropertyType, typeof AlignLeft>;
 
   let tableRoot: HTMLDivElement | null = $state(null);
+  let tableViewportWidth = $state<number | undefined>();
+
+  $effect(() => {
+    const root = tableRoot;
+    if (!root) return;
+    const measure = () => { tableViewportWidth = root.clientWidth || undefined; };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(root);
+    return () => observer.disconnect();
+  });
   let table = $state<NotesDataSourceTableView | null>(untrack(() => notesDatabaseSession.read(databaseResource("table", dataSourceId, viewScope()))));
   let templates = $state<NotesDataSourceTemplate[]>(untrack(() => notesDatabaseSession.read(databaseResource("templates", dataSourceId)) ?? []));
   let loading = $state(false);
@@ -183,7 +219,7 @@
   let pendingColumnWidth = $state<{ id: string; width: number } | null>(null);
 
   function startColumnResize(event: PointerEvent, column: NotesDatabaseTableColumn): void {
-    if (event.button !== 0 || mutating) return;
+    if (event.button !== 0 || mutating || editingLocked) return;
     event.preventDefault();
     event.stopPropagation();
     resizing = { id: column.id, pointerId: event.pointerId, startX: event.clientX, startWidth: column.width, width: column.width };
@@ -205,6 +241,7 @@
   }
 
   function resizeColumnKey(event: KeyboardEvent, column: NotesDatabaseTableColumn): void {
+    if (editingLocked || mutating) return;
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
     event.stopPropagation();
@@ -221,6 +258,15 @@
   let lastLoadSignature = $state("");
   let lastReloadKey = untrack(() => reloadKey);
   let pendingFocusRowId = $state<string | null>(null);
+  let temporarilyExpandedRowIds = $state<string[]>([]);
+  let temporarilyExpandedGroupIds = $state<string[]>([]);
+  $effect(() => {
+    dataSourceId;
+    databaseId;
+    viewId;
+    temporarilyExpandedGroupIds = [];
+    temporarilyExpandedRowIds = [];
+  });
   let csvPanelOpen = $state<"database-csv-import" | "database-csv-export" | null>(null);
   let csvPanelLoadState = $state<LazyComponentLoadState<
     "database-csv-import" | "database-csv-export",
@@ -231,6 +277,7 @@
     kind: "database-csv-import" | "database-csv-export",
     retry = false,
   ): void {
+    if (kind === "database-csv-import" && editingLocked) return;
     csvPanelOpen = kind;
     if (!retry && csvPanelLoadState?.key === kind) return;
     const loadingState = beginLazyComponentLoad(csvPanelLoadState, kind);
@@ -263,14 +310,40 @@
 
   const visibleRows = $derived(rowCreation.rowsFor(dataSourceId, table?.rows ?? []));
   const templateSourceRows = $derived(visibleRows.filter((row) => !rowCreation.blocked(row.id)));
-  const columns = $derived(table ? notesDatabaseTableColumns(table.data_source, table.view) : []);
+  const tableConfiguration = $derived(table ? { ...notesDatabaseTableConfigurationFromView(table.view), ...notesTableViewSettings(table.view) } : null);
+  const columns = $derived(table ? notesDatabaseTableColumns(table.data_source, table.view).map((column) => ({ ...column,
+    displayFormat: notesTableColumnPresentation(tableConfiguration?.presentation, column.id),
+  })) : []);
   const visibleColumns = $derived(notesDatabaseTableVisibleColumns(columns));
-  const gridTemplate = $derived(`1.5rem 1.75rem ${visibleColumns.map((column) => `${resizing?.id === column.id ? resizing.width : pendingColumnWidth?.id === column.id ? pendingColumnWidth.width : column.width}px`).join(" ")} minmax(10rem, 1fr)`);
+  const renderedColumns = $derived(visibleColumns.map((column) => ({ ...column,
+    width: resizing?.id === column.id ? resizing.width : pendingColumnWidth?.id === column.id ? pendingColumnWidth.width : column.width,
+  })));
+  function frozenOffset(columnId: string): number | null {
+    return notesTableFrozenOffset(renderedColumns, tableConfiguration?.presentation?.frozen_property_id, columnId, tableViewportWidth);
+  }
+  const gridTemplate = $derived(`1.5rem 1.75rem ${renderedColumns.map((column) => `${column.width}px`).join(" ")} minmax(10rem, 1fr)`);
   const filters = $derived(table ? notesDatabaseTableFiltersFromView(table.view) : []);
   const sorts = $derived(table ? notesDatabaseTableSortsFromView(table.view) : []);
   const rowOpenMode = $derived(
     table ? notesDatabaseTableConfigurationFromView(table.view).row_open_mode : "full_page",
   );
+  const groups = $derived(tableConfiguration ? notesTableGroups(visibleRows, columns, { ...tableConfiguration,
+    collapsed_group_ids: (tableConfiguration.collapsed_group_ids ?? []).filter((id) => !temporarilyExpandedGroupIds.includes(id)),
+  }, table?.group_counts ?? {}) : []);
+  const rowHierarchy = $derived(rowCreation.hierarchyFor(dataSourceId, table?.row_hierarchy ?? {}));
+  const collapsedRowIds = $derived((tableConfiguration?.collapsed_row_ids ?? []).filter((id) => !temporarilyExpandedRowIds.includes(id)));
+  type TableItem = { type: "group"; id: string; group: typeof groups[number] } | { type: "row"; id: string; row: NotesPage; rowIndex: number } | { type: "calculation"; id: string; groupId: string };
+  const tableItems = $derived.by((): TableItem[] => {
+    let rowIndex = 0;
+    const collapsed = collapsedRowIds;
+    if (!tableConfiguration?.group_property_id) return notesDatabaseHierarchyRows(visibleRows, rowHierarchy, collapsed).map((row) => ({ type: "row", id: row.id, row, rowIndex: rowIndex++ }));
+    return groups.flatMap((group): TableItem[] => [
+      { type: "group", id: `group:${group.id}`, group },
+      ...(group.collapsed ? [] : notesDatabaseHierarchyRows(group.rows, rowHierarchy, collapsed).map((row): TableItem => ({ type: "row", id: `${group.id}:${row.id}`, row, rowIndex: rowIndex++ }))),
+      ...(group.collapsed ? [] : [{ type: "calculation" as const, id: `calculation:${group.id}`, groupId: group.id }]),
+    ]);
+  });
+  const renderedRows = $derived(tableItems.flatMap((item) => item.type === "row" ? [item.row] : []));
   const selectedPanelRow = $derived(
     visibleRows.find((row) => row.id === selectedPanelRowId) ?? null,
   );
@@ -317,7 +390,7 @@
   });
 
   async function addNewProperty(type: NotesDataSourcePropertyType): Promise<void> {
-    if (mutating) return;
+    if (mutating || editingLocked) return;
     mutating = true;
     error = null;
     try {
@@ -329,6 +402,26 @@
     } finally {
       mutating = false;
     }
+  }
+
+  async function performPropertyAction(request: NotesDatabasePropertyActionRequest): Promise<void> {
+    if (mutating || editingLocked || !onPropertyAction) return;
+    mutating = true;
+    error = null;
+    try {
+      await onPropertyAction(request);
+      propertyName = "";
+      propertySearch = "";
+      await loadTable(false);
+    } catch (caught) {
+      error = caught instanceof Error ? caught.message : String(caught);
+    } finally {
+      mutating = false;
+    }
+  }
+
+  function propertyInsertionSides(column: NotesDatabaseTableColumn): readonly ("left" | "right")[] {
+    return column.type === "title" ? ["right"] : ["left", "right"];
   }
 
   $effect(() => {
@@ -409,7 +502,7 @@
       if (requestId !== tableRequestId || table !== current || revision !== notesDatabaseSession.revision) return;
       const rows = new Map(current.rows.map((row) => [row.id, row]));
       for (const row of loaded.rows) rows.set(row.id, row);
-      table = { ...loaded, rows: [...rows.values()] };
+      table = { ...loaded, rows: [...rows.values()], row_hierarchy: { ...current.row_hierarchy, ...loaded.row_hierarchy } };
       notesDatabaseSession.write(databaseResource("table", dataSourceId, viewScope()), table);
     } catch (caught) {
       if (requestId === tableRequestId) error = caught instanceof Error ? caught.message : String(caught);
@@ -432,7 +525,7 @@
     const rowId = pendingFocusRowId;
     pendingFocusRowId = null;
     if (!rowId) return;
-    const rowIndex = visibleRows.findIndex((row) => row.id === rowId);
+    const rowIndex = renderedRows.findIndex((row) => row.id === rowId);
     if (rowIndex < 0) return;
     await tick();
     focusCell(rowIndex, 0);
@@ -443,7 +536,9 @@
     nextRowOpenMode: NotesDatabaseTableRowOpenMode,
     nextFilters: NotesDatabaseTableFilter[],
     nextSorts: NotesDatabaseTableSort[],
+    nextConfiguration: Partial<NotesDatabaseTableConfiguration> = tableConfiguration ?? {},
   ): Promise<void> {
+    if (editingLocked || mutating) return;
     const settledIds = rowCreation.settledIds(dataSourceId);
     const resource = databaseResource("table", dataSourceId, viewScope());
     const epoch = notesDatabaseSession.epoch;
@@ -452,7 +547,7 @@
     try {
       const loaded = await updateNotesDataSourceTableView(
         dataSourceId,
-        notesDatabaseTableUpdate(nextColumns, nextRowOpenMode, nextFilters, nextSorts),
+        notesDatabaseTableUpdate(nextColumns, nextRowOpenMode, nextFilters, nextSorts, nextConfiguration),
         viewScope(),
       );
       const focusedId = document.activeElement?.closest<HTMLElement>("[data-database-row-id]")?.dataset.databaseRowId ?? null;
@@ -466,15 +561,94 @@
     }
   }
 
-  function createRow(): void {
+  /** Persist filter edits against the current saved table presentation. */
+  function saveFilters(nextFilters: NotesDatabaseTableFilter[]): void {
+    void persistTable(columns.map((column) => ({ ...column })), rowOpenMode, nextFilters, sorts);
+  }
+
+  /** Persist sort edits against the current saved table presentation. */
+  function saveSorts(nextSorts: NotesDatabaseTableSort[]): void {
+    void persistTable(columns.map((column) => ({ ...column })), rowOpenMode, filters, nextSorts);
+  }
+
+  async function createRow(groupId?: string): Promise<void> {
     if (mutating || loading || !table) return;
-    const pageId = rowCreation.begin(dataSourceId, selectedTemplateId);
+    if (groupId && tableConfiguration?.collapsed_group_ids?.includes(groupId)) {
+      if (editingLocked) temporarilyExpandedGroupIds = [...temporarilyExpandedGroupIds, groupId];
+      else {
+        await persistTable(columns, rowOpenMode, filters, sorts, { ...tableConfiguration,
+          collapsed_group_ids: tableConfiguration.collapsed_group_ids.filter((id) => id !== groupId),
+        });
+        if (error) return;
+      }
+    }
+    const groupColumn = columns.find((column) => column.id === tableConfiguration?.group_property_id);
+    const initial: { column: NotesDatabaseTableColumn; value: NotesDatabaseTableEditValue; payload: unknown }[] = [];
+    if (groupId && groupColumn) {
+      const option = groupColumn.options.find((candidate) => candidate.id === groupId);
+      if (groupColumn.type === "checkbox") initial.push({ column: groupColumn, value: groupId === "true", payload: groupId === "true" });
+      else if (option) initial.push({ column: groupColumn, value: groupColumn.type === "multi_select" ? [option.name] : option.name, payload: groupColumn.type === "multi_select" ? [option] : option });
+      else if (groupId === "__empty__" && ["select", "status", "multi_select", "date"].includes(groupColumn.type)) initial.push({ column: groupColumn, value: groupColumn.type === "multi_select" ? [] : null, payload: groupColumn.type === "multi_select" ? [] : null });
+      else if (groupColumn.type === "date" && groupId !== "__empty__") initial.push({ column: groupColumn, value: groupId, payload: { start: groupId, end: null, time_zone: null } });
+    }
+    const pageId = rowCreation.begin(dataSourceId, selectedTemplateId, initial);
     addRowKey = pageId;
     void tick().then(() => {
-      const rowIndex = visibleRows.findIndex((row) => row.id === pageId);
+      const rowIndex = renderedRows.findIndex((row) => row.id === pageId);
       const titleIndex = visibleColumns.findIndex((column) => column.type === "title");
       if (rowIndex >= 0 && titleIndex >= 0) focusCell(rowIndex, titleIndex);
     });
+  }
+
+  function toggleSubitems(rowId: string): void {
+    if (mutating || editingLocked || !tableConfiguration) return;
+    if (temporarilyExpandedRowIds.includes(rowId) && tableConfiguration.collapsed_row_ids?.includes(rowId)) {
+      temporarilyExpandedRowIds = temporarilyExpandedRowIds.filter((id) => id !== rowId);
+      return;
+    }
+    void persistTable(columns, rowOpenMode, filters, sorts, { ...tableConfiguration,
+      collapsed_row_ids: notesDatabaseCollapsedRows(tableConfiguration.collapsed_row_ids ?? [], rowId),
+    });
+  }
+
+  async function createSubitem(parent: NotesPage): Promise<void> {
+    if (mutating || loading || !table || rowCreation.blocked(parent.id)) return;
+    if ((rowHierarchy[parent.id]?.depth ?? 0) >= NOTES_DATABASE_ROW_MAX_DEPTH) return;
+    if (collapsedRowIds.includes(parent.id) && editingLocked) {
+      temporarilyExpandedRowIds = [...temporarilyExpandedRowIds, parent.id];
+    } else if (collapsedRowIds.includes(parent.id) && tableConfiguration?.collapsed_row_ids) {
+      await persistTable(columns, rowOpenMode, filters, sorts, { ...tableConfiguration,
+        collapsed_row_ids: tableConfiguration.collapsed_row_ids.filter((id) => id !== parent.id),
+      });
+      if (error) return;
+    }
+    const groupColumn = columns.find((column) => column.id === tableConfiguration?.group_property_id);
+    const property = groupColumn ? parent.properties[groupColumn.name] : null;
+    const payload = property && typeof property === "object" && !Array.isArray(property) && groupColumn
+      ? (property as Record<string, unknown>)[groupColumn.type] : null;
+    const initial = groupColumn && notesDatabaseTableColumnCanEdit(groupColumn) ? [{ column: groupColumn, value: notesDatabaseTableCellEditValue(parent, groupColumn), payload }] : [];
+    const pageId = rowCreation.begin(dataSourceId, "", initial, parent.id);
+    addRowKey = pageId;
+    await tick();
+    // Finish the invoking action menu's dismissal before moving focus to the new title.
+    await tick();
+    const rowIndex = renderedRows.findIndex((row) => row.id === pageId);
+    const titleIndex = visibleColumns.findIndex((column) => column.type === "title");
+    if (rowIndex >= 0 && titleIndex >= 0) focusCell(rowIndex, titleIndex);
+  }
+
+  async function moveSubitem(row: NotesPage, parentRowId: string | null): Promise<void> {
+    if (mutating || rowCreation.blocked(row.id)) return;
+    mutating = true;
+    error = null;
+    try {
+      await updateNotesDataSourceRowParent(dataSourceId, row.id, parentRowId);
+      rowCreation.acceptParent(row.id, parentRowId);
+      pendingFocusRowId = row.id;
+      await loadTable(false);
+    } catch (caught) {
+      error = caught instanceof Error ? caught.message : String(caught);
+    } finally { mutating = false; }
   }
 
   async function createTemplateFromRow(): Promise<void> {
@@ -572,10 +746,10 @@
     row: NotesPage,
     column: NotesDatabaseTableColumn,
     value: NotesDatabaseTableEditValue,
-  ): Promise<void> {
-    if (rowCreation.submit(row.id, column, value)) return;
+  ): Promise<boolean> {
+    if (rowCreation.submit(row.id, column, value)) return true;
     const current = notesDatabaseTableCellEditValue(row, column);
-    if (notesDatabaseTableEditValuesEqual(current, value)) return;
+    if (notesDatabaseTableEditValuesEqual(current, value)) return true;
     mutating = true;
     error = null;
     try {
@@ -585,18 +759,151 @@
         value,
       });
       await loadTable();
+      return true;
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);
+      return false;
     } finally {
       mutating = false;
     }
+  }
+
+  /** Keep wrapped text editable at its measured content height across column resizing. */
+  function fitWrappedCell(node: HTMLTextAreaElement, _value: string) {
+    let disposed = false;
+    let width = node.clientWidth;
+    const resize = () => {
+      if (disposed) return;
+      node.style.height = "auto";
+      node.style.height = `${node.scrollHeight}px`;
+    };
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => {
+      if (node.clientWidth === width) return;
+      width = node.clientWidth;
+      resize();
+    });
+    observer?.observe(node);
+    node.addEventListener("input", resize);
+    void tick().then(resize);
+    return {
+      update(_nextValue: string) { void tick().then(resize); },
+      destroy() { disposed = true; observer?.disconnect(); node.removeEventListener("input", resize); },
+    };
   }
 
   function updateColumnVisibility(columnId: string, hidden: boolean): void {
     const nextColumns = columns.map((column) =>
       column.id === columnId ? { ...column, hidden } : { ...column },
     );
+    const configuration = { ...tableConfiguration };
+    if (hidden && configuration.presentation?.frozen_property_id === columnId) configuration.presentation = { ...configuration.presentation, frozen_property_id: null };
+    void persistTable(nextColumns, rowOpenMode, filters, sorts, configuration);
+  }
+
+  /** Save a view-owned property presentation change. */
+  function updateColumnPresentation(columnId: string, change: Partial<NotesDatabaseTableColumnPresentation>): void {
+    const presentation = tableConfiguration?.presentation ?? { frozen_property_id: null, columns: {} };
+    void persistTable(columns, rowOpenMode, filters, sorts, { ...tableConfiguration,
+      presentation: { ...presentation, columns: { ...presentation.columns, [columnId]: { ...notesTableColumnPresentation(presentation, columnId), ...change } } },
+    });
+  }
+
+  function freezeThrough(columnId: string | null): void {
+    void persistTable(columns, rowOpenMode, filters, sorts, { ...tableConfiguration,
+      presentation: { ...(tableConfiguration?.presentation ?? { columns: {} }), frozen_property_id: columnId },
+    });
+  }
+
+  function updateGrouping(propertyId: string | null): void {
+    void persistTable(columns, rowOpenMode, filters, sorts, { ...tableConfiguration,
+      group_property_id: propertyId, group_order: [], collapsed_group_ids: [],
+    });
+  }
+
+  function toggleGroup(id: string): void {
+    if (editingLocked || mutating) return;
+    if (temporarilyExpandedGroupIds.includes(id) && tableConfiguration?.collapsed_group_ids?.includes(id)) {
+      temporarilyExpandedGroupIds = temporarilyExpandedGroupIds.filter((groupId) => groupId !== id);
+      return;
+    }
+    const collapsed = new Set(tableConfiguration?.collapsed_group_ids ?? []);
+    if (collapsed.has(id)) collapsed.delete(id); else collapsed.add(id);
+    void persistTable(columns, rowOpenMode, filters, sorts, { ...tableConfiguration, collapsed_group_ids: [...collapsed] });
+  }
+
+  function moveGroup(id: string, direction: -1 | 1): void {
+    const order = groups.map((group) => group.id);
+    const index = order.indexOf(id);
+    const neighbor = order[index + direction];
+    if (index < 0 || neighbor === undefined) return;
+    order[index + direction] = id;
+    order[index] = neighbor;
+    void persistTable(columns, rowOpenMode, filters, sorts, { ...tableConfiguration, group_order: order });
+  }
+
+  function calculationLabel(calculation: NotesDatabaseTableCalculation): string {
+    return t(`notes.databaseTablePresentation.calculation.${calculation}`);
+  }
+
+  function calculationText(groupId: string | null, column: NotesDatabaseTableColumn): string {
+    const calculation = notesTableColumnPresentation(tableConfiguration?.presentation, column.id).calculation;
+    const values = groupId === null ? table?.calculations?.overall
+      : table?.calculations?.groups && Object.hasOwn(table.calculations.groups, groupId) ? table.calculations.groups[groupId] : undefined;
+    const storedValue = values && Object.hasOwn(values, column.id) ? values[column.id] : undefined;
+    const emptyGroup = groupId !== null && (!table?.group_counts || !Object.hasOwn(table.group_counts, groupId) || table.group_counts[groupId] === 0);
+    const value = storedValue === undefined && emptyGroup && calculation && ["count_all", "count_values", "empty", "unique", "sum"].includes(calculation) ? 0 : storedValue;
+    return typeof value === "number" ? formatNumber(localization.locale, value, calculation === "percent_checked" ? { style: "percent", maximumFractionDigits: 1 } : { maximumFractionDigits: 3 }) : t("notes.databaseTableEmptyCell");
+  }
+
+  function groupName(group: typeof groups[number]): string {
+    if (group.id === "__empty__") return t("notes.databaseTablePresentation.noValue");
+    const column = columns.find((candidate) => candidate.id === tableConfiguration?.group_property_id);
+    if (column?.type === "checkbox") return t(group.id === "true" ? "notes.databaseTablePresentation.checked" : "notes.databaseTablePresentation.unchecked");
+    return group.name;
+  }
+
+  function saveColorRules(rules: NotesDatabaseTableColorRule[]): void {
+    void persistTable(columns, rowOpenMode, filters, sorts, { ...tableConfiguration,
+      presentation: { ...(tableConfiguration?.presentation ?? { columns: {}, frozen_property_id: null }), color_rules: rules },
+    });
+  }
+
+  function updateColorRule(id: string, change: Partial<NotesDatabaseTableColorRule>): void {
+    saveColorRules((tableConfiguration?.presentation?.color_rules ?? []).map((rule) => rule.id === id ? { ...rule, ...change } : rule));
+  }
+
+  function addColorRule(): void {
+    const property = columns.find((column) => notesDatabaseFilterConditions(column).length > 0);
+    if (property) saveColorRules([...(tableConfiguration?.presentation?.color_rules ?? []), { id: crypto.randomUUID(), property_id: null, color: "blue", filters: [notesDatabaseNewFilter(property)] }]);
+  }
+
+  function conditionalColorStyle(row: NotesPage, propertyId: string | null): string {
+    const rules = tableConfiguration?.presentation?.color_rules ?? [];
+    const matches = (candidate: NotesDatabaseTableColorRule) => notesDatabaseRowMatchesFilters(row, columns, candidate.filters);
+    const rule = rules.find((candidate) => candidate.property_id === propertyId && matches(candidate))
+      ?? (propertyId === null ? undefined : rules.find((candidate) => candidate.property_id === null && matches(candidate)));
+    return rule ? `${notesBlockColorStyle(`${rule.color}_background` as NotesColor)}; background-color: var(--notes-block-bg);` : "";
+  }
+
+  /** Reorder visible properties while keeping the required title first. */
+  function moveColumn(column: NotesDatabaseTableColumn, direction: -1 | 1): void {
+    const neighbor = visibleColumns[visibleColumns.findIndex((candidate) => candidate.id === column.id) + direction];
+    if (column.type === "title" || !neighbor || neighbor.type === "title") return;
+    const nextColumns = columns.map((candidate) => ({ ...candidate }));
+    const index = nextColumns.findIndex((candidate) => candidate.id === column.id);
+    const neighborIndex = nextColumns.findIndex((candidate) => candidate.id === neighbor.id);
+    const moved = nextColumns[index];
+    const displaced = nextColumns[neighborIndex];
+    if (!moved || !displaced) return;
+    nextColumns[index] = displaced;
+    nextColumns[neighborIndex] = moved;
     void persistTable(nextColumns, rowOpenMode, filters, sorts);
+  }
+
+  /** Change the chosen property sort while retaining its existing priority. */
+  function sortColumn(columnId: string, direction: NotesDatabaseTableSort["direction"]): void {
+    if (mutating || (sorts.length >= NOTES_DATABASE_QUERY_MAX_SORTS && !sorts.some((sort) => sort.property_id === columnId))) return;
+    saveSorts(notesDatabaseSortedColumn(sorts, columnId, direction));
   }
 
   function updateColumnWidth(columnId: string, delta: number): void {
@@ -618,53 +925,6 @@
     void persistTable(columns.map((column) => ({ ...column })), mode, filters, sorts);
   }
 
-  function addSort(): void {
-    const firstColumn = columns[0];
-    if (!firstColumn) return;
-    const nextSorts = [
-      ...sorts,
-      { property_id: firstColumn.id, direction: "ascending" as const },
-    ];
-    void persistTable(columns.map((column) => ({ ...column })), rowOpenMode, filters, nextSorts);
-  }
-
-  function updateSort(index: number, patch: Partial<NotesDatabaseTableSort>): void {
-    const nextSorts = sorts.map((sort, sortIndex) =>
-      sortIndex === index ? { ...sort, ...patch } : sort,
-    );
-    void persistTable(columns.map((column) => ({ ...column })), rowOpenMode, filters, nextSorts);
-  }
-
-  function removeSort(index: number): void {
-    const nextSorts = sorts.filter((_, sortIndex) => sortIndex !== index);
-    void persistTable(columns.map((column) => ({ ...column })), rowOpenMode, filters, nextSorts);
-  }
-
-  function addFilter(): void {
-    const firstColumn = columns[0];
-    if (!firstColumn) return;
-    const nextFilters = [
-      ...filters,
-      { property_id: firstColumn.id, condition: "contains" as const, value: "" },
-    ];
-    void persistTable(columns.map((column) => ({ ...column })), rowOpenMode, nextFilters, sorts);
-  }
-
-  function updateFilter(index: number, patch: Partial<NotesDatabaseTableFilter>): void {
-    const nextFilters = filters.map((filter, filterIndex) => {
-      if (filterIndex !== index) return filter;
-      const next = { ...filter, ...patch };
-      if (!filterConditionNeedsValue(next.condition)) next.value = null;
-      return next;
-    });
-    void persistTable(columns.map((column) => ({ ...column })), rowOpenMode, nextFilters, sorts);
-  }
-
-  function removeFilter(index: number): void {
-    const nextFilters = filters.filter((_, filterIndex) => filterIndex !== index);
-    void persistTable(columns.map((column) => ({ ...column })), rowOpenMode, nextFilters, sorts);
-  }
-
   function openRow(row: NotesPage): void {
     if (rowOpenMode === "side_panel") {
       selectedPanelRowId = row.id;
@@ -677,27 +937,6 @@
     const titleColumn = columns.find((column) => column.type === "title");
     const title = titleColumn ? notesDatabaseTableCellText(row, titleColumn).trim() : "";
     return title || t("notes.untitled");
-  }
-
-  function filterConditionNeedsValue(condition: NotesDatabaseTableFilterCondition): boolean {
-    return condition === "contains" || condition === "equals";
-  }
-
-  function filterConditionLabel(condition: NotesDatabaseTableFilterCondition): string {
-    switch (condition) {
-      case "contains":
-        return t("notes.databaseTableFilterCondition.contains");
-      case "equals":
-        return t("notes.databaseTableFilterCondition.equals");
-      case "is_empty":
-        return t("notes.databaseTableFilterCondition.isEmpty");
-      case "is_not_empty":
-        return t("notes.databaseTableFilterCondition.isNotEmpty");
-      case "checked":
-        return t("notes.databaseTableFilterCondition.checked");
-      case "unchecked":
-        return t("notes.databaseTableFilterCondition.unchecked");
-    }
   }
 
   function rowOpenModeLabel(mode: NotesDatabaseTableRowOpenMode): string {
@@ -714,7 +953,7 @@
     event.stopPropagation();
     if (shouldKeepInputArrow(event)) return;
     if (event.defaultPrevented || (event.currentTarget instanceof HTMLElement && event.currentTarget.hasAttribute("aria-haspopup"))) return;
-    const maxRowIndex = Math.max(0, visibleRows.length - 1);
+    const maxRowIndex = Math.max(0, renderedRows.length - 1);
     const maxColumnIndex = Math.max(0, visibleColumns.length - 1);
     let nextRowIndex = rowIndex;
     let nextColumnIndex = columnIndex;
@@ -733,11 +972,16 @@
 
   function shouldKeepInputArrow(event: KeyboardEvent): boolean {
     const target = event.currentTarget;
-    if (!(target instanceof HTMLInputElement) || target.type === "checkbox") return false;
+    if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) || target.type === "checkbox") return false;
     const start = target.selectionStart ?? 0;
     const end = target.selectionEnd ?? start;
     if (event.key === "ArrowLeft") return start > 0 || end > 0;
     if (event.key === "ArrowRight") return start < target.value.length || end < target.value.length;
+    if (target instanceof HTMLTextAreaElement) {
+      if (event.key === "Enter" && event.shiftKey) return true;
+      if (event.key === "ArrowUp") return start > 0 || end > 0;
+      if (event.key === "ArrowDown") return start < target.value.length || end < target.value.length;
+    }
     return false;
   }
 
@@ -748,9 +992,26 @@
   }
 </script>
 
+{#snippet calculationRow(groupId: string | null)}
+  {#if visibleColumns.some((column) => notesTableColumnPresentation(tableConfiguration?.presentation, column.id).calculation)}
+    <CollectionRow template={gridTemplate} role="row" data-table-calculation-group={groupId ?? "__all__"} class="border-t border-border bg-muted/20 text-muted-foreground">
+      <div role="cell"></div><div role="cell"></div>
+      {#each visibleColumns as column (column.id)}
+        {@const calculation = notesTableColumnPresentation(tableConfiguration?.presentation, column.id).calculation}
+        <CollectionCell role="cell" class={frozenOffset(column.id) !== null ? "sticky z-20 bg-background" : ""} style={frozenOffset(column.id) !== null ? `left: ${frozenOffset(column.id)}px` : undefined}>
+          {#if calculation}<span class="min-w-0 truncate text-[0.75rem]" title={calculationLabel(calculation)}>{calculationLabel(calculation)} <span class="text-foreground">{calculationText(groupId, column)}</span></span>{/if}
+        </CollectionCell>
+      {/each}
+      <div role="cell"></div>
+    </CollectionRow>
+  {/if}
+{/snippet}
+
 <svelte:window onpointermove={moveColumnResize} onpointerup={(event) => finishColumnResize(event, true)} onpointercancel={(event) => finishColumnResize(event, false)} onkeydown={(event) => { if (event.key === "Escape") resizing = null; }} />
 
 <section class="space-y-3 pt-2" aria-label={t("notes.databaseTableTitle")}>
+
+  <NotesDatabaseQueryBar properties={columns} {filters} {sorts} pending={mutating || editingLocked} onFiltersChange={saveFilters} onSortsChange={saveSorts} />
   {#if table}<span class="sr-only" role="status">{t("notes.databaseRowsCount", visibleRows.length)}</span>{/if}
 
   {#if error}
@@ -766,15 +1027,35 @@
   {#if table}
     <div class="grid gap-2 @container">
       {#if settingsOpen}
-        <CollectionSettings label={t("notes.databaseViewSettings")} onclose={onCloseSettings}>
+        <CollectionSettings label={t("notes.databaseViewSettings")} anchor={settingsAnchor} onclose={onCloseSettings}>
+              {@render settingsHeader?.()}
+              {#if editingLocked}
+                <p class="px-2 py-2 text-muted-foreground">{t("notes.databaseEditingLockDescription")}</p>
+              {:else}
               <div class="flex flex-col items-stretch gap-0.5">
-              <CollectionMenu label={t("notes.databaseLayout")} fullWidth>
+              <CollectionMenu label={t("notes.databaseLayout")} summary={t("notes.databaseViewTable")} fullWidth>
                 <div class="grid gap-2">
                   <span>{t("notes.databaseTableOpenMode")}</span>
                   <CustomSelect inline appearance="quiet" contentAlign="start" class="w-full min-w-0" ariaLabel={t("notes.databaseTableOpenMode")} value={String(rowOpenMode ?? "")} disabled={loading || mutating || !table} options={[{ value: "full_page", label: String(rowOpenModeLabel("full_page")) }, { value: "side_panel", label: String(rowOpenModeLabel("side_panel")) }]} onChange={(nextValue) => updateRowOpenMode(nextValue as NotesDatabaseTableRowOpenMode)} triggerProps={{ "onkeydown": (event) => event.stopPropagation() }} />
                 </div>
               </CollectionMenu>
-                <CollectionMenu label={t("notes.databaseTableColumns")} kind="properties" fullWidth>
+              <CollectionMenu label={t("notes.databaseTablePresentation.groupBy")} kind="group" summary={columns.find((column) => column.id === tableConfiguration?.group_property_id)?.name ?? t("notes.databaseTablePresentation.noGroup")} fullWidth>
+                <div class="grid gap-2">
+                  <CustomSelect inline appearance="quiet" contentAlign="start" class="w-full min-w-0" ariaLabel={t("notes.databaseTablePresentation.groupBy")} value={tableConfiguration?.group_property_id ?? ""} disabled={mutating}
+                    options={[{ value: "", label: t("notes.databaseTablePresentation.noGroup") }, ...notesTableGroupableColumns(columns).map((column) => ({ value: column.id, label: column.name }))]}
+                    onChange={(id) => updateGrouping(id || null)} />
+                  <label class="flex min-h-8 items-center gap-2"><input type="checkbox" checked={tableConfiguration?.hide_empty_groups ?? false} disabled={mutating} onchange={(event) => { void persistTable(columns, rowOpenMode, filters, sorts, { ...tableConfiguration, hide_empty_groups: event.currentTarget.checked }); }} />{t("notes.databaseTablePresentation.hideEmptyGroups")}</label>
+                  {#if tableConfiguration?.group_property_id}
+                    {#each groups as group, index (group.id)}
+                      <div class="flex min-h-8 items-center gap-2"><span class="min-w-0 flex-1 truncate">{groupName(group)}</span><span class="text-muted-foreground">{formatNumber(localization.locale, group.count)}</span>
+                        <button type="button" class="flex size-7 items-center justify-center rounded hover:bg-accent disabled:text-muted-foreground/50" aria-label={t("notes.databaseTablePresentation.moveGroupUp", groupName(group))} disabled={mutating || index === 0} onclick={() => moveGroup(group.id, -1)}><ArrowUp class="size-3.5" /></button>
+                        <button type="button" class="flex size-7 items-center justify-center rounded hover:bg-accent disabled:text-muted-foreground/50" aria-label={t("notes.databaseTablePresentation.moveGroupDown", groupName(group))} disabled={mutating || index === groups.length - 1} onclick={() => moveGroup(group.id, 1)}><ArrowDown class="size-3.5" /></button>
+                      </div>
+                    {/each}
+                  {/if}
+                </div>
+              </CollectionMenu>
+                <CollectionMenu label={t("notes.databaseTableColumns")} kind="properties" summary={formatNumber(localization.locale, visibleColumns.length)} fullWidth>
 
           <div class="mt-2 grid gap-1">
             {#each columns as column (column.id)}
@@ -797,122 +1078,36 @@
           </div>
         </CollectionMenu>
 
-        <CollectionMenu label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length} fullWidth>
+        <CollectionMenu label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length}
+          summary={formatList(localization.locale, sorts.flatMap((sort) => {
+            const column = columns.find((candidate) => candidate.id === sort.property_id);
+            return column ? [column.name] : [];
+          }))} fullWidth>
 
-          <div class="mt-2 grid gap-2">
-            {#each sorts as sort, index}
-              <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1">
-                <CustomSelect
-                  inline
-                  appearance="quiet"
-                  contentAlign="start"
-                  class="w-full min-w-0"
-                  ariaLabel={t("notes.databaseTableSortProperty")}
-                  value={String(sort.property_id ?? "")}
-                  disabled={mutating}
-                  options={[...(columns).map((column) => ({ value: String(column.id), label: String(column.name) }))]}
-                  onChange={(nextValue) => updateSort(index, { property_id: nextValue })}
-                  triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
-                />
-                <CustomSelect
-                  inline
-                  appearance="quiet"
-                  contentAlign="start"
-                  class="w-full min-w-0"
-                  ariaLabel={t("notes.databaseTableSortDirection")}
-                  value={String(sort.direction ?? "")}
-                  disabled={mutating}
-                  options={[{ value: "ascending", label: t("notes.databaseTableSortAscending") },
-                    { value: "descending", label: t("notes.databaseTableSortDescending") }]}
-                  onChange={(nextValue) => updateSort(index, {
-                    direction: nextValue === "descending" ? "descending" : "ascending",
-                  })}
-                  triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
-                />
-                <button
-                  type="button"
-                  class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none"
-                  disabled={mutating}
-                  aria-label={t("notes.databaseTableRemoveSort")}
-                  title={t("notes.databaseTableRemoveSort")}
-                  onclick={() => removeSort(index)}
-                >
-                  <Trash2 class="size-3.5" aria-hidden="true" />
-                </button>
-              </div>
-            {/each}
-            <button
-              type="button"
-              class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none"
-              disabled={mutating || columns.length === 0}
-              onclick={addSort}
-            >
-              <Plus class="size-3.5" aria-hidden="true" />
-              <span>{t("notes.databaseTableAddSort")}</span>
-            </button>
-          </div>
+          <NotesDatabaseSortControls properties={columns} {sorts} pending={mutating} onchange={saveSorts} />
         </CollectionMenu>
 
-        <CollectionMenu label={t("notes.databaseTableFilters")} kind="filter" activeCount={filters.length} fullWidth>
+        <CollectionMenu label={t("notes.databaseTableFilters")} kind="filter" activeCount={notesDatabaseFilterCount(filters)} summary={notesDatabaseFilterCount(filters) > 0 ? formatNumber(localization.locale, notesDatabaseFilterCount(filters)) : ""} fullWidth>
 
-          <div class="mt-2 grid gap-2">
-            {#each filters as filter, index}
-              <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-1">
-                <CustomSelect
-                  inline
-                  appearance="quiet"
-                  contentAlign="start"
-                  class="w-full min-w-0"
-                  ariaLabel={t("notes.databaseTableFilterProperty")}
-                  value={String(filter.property_id ?? "")}
-                  disabled={mutating}
-                  options={[...(columns).map((column) => ({ value: String(column.id), label: String(column.name) }))]}
-                  onChange={(nextValue) => updateFilter(index, { property_id: nextValue })}
-                  triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
-                />
-                <CustomSelect
-                  inline
-                  appearance="quiet"
-                  contentAlign="start"
-                  class="w-full min-w-0"
-                  ariaLabel={t("notes.databaseTableFilterConditionLabel")}
-                  value={String(filter.condition ?? "")}
-                  disabled={mutating}
-                  options={[...(FILTER_CONDITIONS).map((condition) => ({ value: String(condition), label: String(filterConditionLabel(condition)) }))]}
-                  onChange={(nextValue) => updateFilter(index, {
-                    condition: nextValue as NotesDatabaseTableFilterCondition,
-                  })}
-                  triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
-                />
-                <input
-                  class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={String(filter.value ?? "")}
-                  disabled={mutating || !filterConditionNeedsValue(filter.condition)}
-                  aria-label={t("notes.databaseTableFilterValue")}
-                  onblur={(event) => updateFilter(index, { value: event.currentTarget.value })}
-                  onkeydown={(event) => event.stopPropagation()}
-                />
-                <button
-                  type="button"
-                  class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none"
-                  disabled={mutating}
-                  aria-label={t("notes.databaseTableRemoveFilter")}
-                  title={t("notes.databaseTableRemoveFilter")}
-                  onclick={() => removeFilter(index)}
-                >
-                  <Trash2 class="size-3.5" aria-hidden="true" />
-                </button>
+          <NotesDatabaseFilterControls properties={columns} {filters} pending={mutating} onchange={saveFilters} />
+        </CollectionMenu>
+        <CollectionMenu label={t("notes.databaseTablePresentation.conditionalColor")} summary={formatNumber(localization.locale, tableConfiguration?.presentation?.color_rules?.length ?? 0)} fullWidth>
+          <div class="grid gap-3">
+            {#each tableConfiguration?.presentation?.color_rules ?? [] as rule (rule.id)}
+              <div class="grid gap-2 rounded border border-border p-2">
+                <div class="flex items-center gap-2">
+                  <CustomSelect inline appearance="quiet" class="min-w-0 flex-1" ariaLabel={t("notes.databaseTablePresentation.target")} value={rule.property_id ?? ""} disabled={mutating}
+                    options={[{ value: "", label: t("notes.databaseTablePresentation.rowColor") }, ...columns.map((column) => ({ value: column.id, label: column.name }))]}
+                    onChange={(value) => updateColorRule(rule.id, { property_id: value || null })} />
+                  <button type="button" class="flex size-7 items-center justify-center rounded text-muted-foreground hover:bg-accent" aria-label={t("notes.databaseTablePresentation.removeColorRule")} disabled={mutating} onclick={() => saveColorRules((tableConfiguration?.presentation?.color_rules ?? []).filter((candidate) => candidate.id !== rule.id))}><Trash2 class="size-3.5" /></button>
+                </div>
+                <CustomSelect inline appearance="quiet" class="w-full" ariaLabel={t("notes.databaseTablePresentation.color")} value={rule.color} disabled={mutating}
+                  options={NOTES_TEXT_COLORS.filter((color) => color !== "default").map((color) => ({ value: color, label: t(`notes.blockColor.${color}`) }))}
+                  onChange={(value) => updateColorRule(rule.id, { color: value as NotesDatabaseTableColorRule["color"] })} />
+                <NotesDatabaseFilterControls properties={columns} filters={rule.filters} pending={mutating} onchange={(next) => { if (next.length) updateColorRule(rule.id, { filters: next }); }} />
               </div>
             {/each}
-            <button
-              type="button"
-              class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none"
-              disabled={mutating || columns.length === 0}
-              onclick={addFilter}
-            >
-              <Plus class="size-3.5" aria-hidden="true" />
-              <span>{t("notes.databaseTableAddFilter")}</span>
-            </button>
+            <button type="button" class="flex min-h-8 items-center gap-2 rounded px-2 text-left hover:bg-accent" disabled={mutating || (tableConfiguration?.presentation?.color_rules?.length ?? 0) >= 16} onclick={addColorRule}><Plus class="size-3.5" />{t("notes.databaseTablePresentation.addColorRule")}</button>
           </div>
         </CollectionMenu>
         <CollectionMenu label={t("notes.databaseTemplatesTitle")} kind="layout" fullWidth>
@@ -1006,8 +1201,8 @@
           </div>
         </CollectionMenu>
 
-        <div class="my-2 border-t border-border"></div>
-        <button type="button" class="min-h-9 w-full rounded-md px-2 text-left text-[0.8rem] text-muted-foreground hover:bg-accent hover:text-foreground" onclick={() => { onCloseSettings(); onEditProperties(); }}>{t("notes.databaseViewEditProperties")}</button>
+        <p class="mt-2 border-t border-border px-2 pt-2 text-[0.8rem] text-muted-foreground">{t("notes.databaseDataSourceSettings")}</p>
+        <button data-collection-settings-row type="button" class="min-h-8 w-full rounded-md px-2 text-left hover:bg-accent" onclick={() => { onCloseSettings(); onEditProperties(); }}>{t("notes.databaseViewEditProperties")}</button>
         <CollectionMenu label={t("notes.databaseMore")} kind="actions" fullWidth>
           <div class="grid gap-1">
             <button class="min-h-8 rounded-md px-2 text-left text-[0.8rem] hover:bg-accent" type="button" onclick={() => requestCsvPanel("database-csv-import")}>{t("notes.databaseCsvImportTitle")}</button>
@@ -1017,11 +1212,12 @@
           </div>
         </CollectionMenu>
               </div>
-              <button type="button" class="min-h-9 w-full rounded-md px-2 text-left hover:bg-accent" disabled={loading || mutating} onclick={() => { void loadTable(); }}>{t("notes.databaseTableReload")}</button>
+              {/if}
+              <button data-collection-settings-row type="button" class="min-h-8 w-full rounded-md px-2 text-left text-muted-foreground hover:bg-accent" disabled={loading || mutating} onclick={() => { void loadTable(); }}>{t("notes.databaseTableReload")}</button>
         </CollectionSettings>
       {/if}
 
-      {#if csvPanelOpen === "database-csv-import" && csvPanelLoadState?.status === "ready" && csvPanelLoadState.component.kind === "database-csv-import"}
+      {#if !editingLocked && csvPanelOpen === "database-csv-import" && csvPanelLoadState?.status === "ready" && csvPanelLoadState.component.kind === "database-csv-import"}
         {@const NotesDatabaseCsvImportPanel = csvPanelLoadState.component.component}
         <NotesDatabaseCsvImportPanel
           {dataSourceId}
@@ -1048,33 +1244,122 @@
             <div role="columnheader"><span class="sr-only">{t("notes.databaseTableRowActions")}</span></div>
             <div role="columnheader"></div>
             {#each visibleColumns as column (column.id)}
-              <CollectionColumnHeader label={column.name} resizeLabel={t("notes.databaseTableResizeColumn", column.name)} disabled={mutating}
+              {@const columnIndex = visibleColumns.findIndex((candidate) => candidate.id === column.id)}
+              {@const sortUnavailable = mutating || editingLocked || (sorts.length >= NOTES_DATABASE_QUERY_MAX_SORTS && !sorts.some((sort) => sort.property_id === column.id))}
+              <CollectionColumnHeader label={column.name} resizeLabel={t("notes.databaseTableResizeColumn", column.name)} disabled={mutating || editingLocked}
+                class={frozenOffset(column.id) !== null ? "sticky z-30 bg-background" : ""}
+                style={frozenOffset(column.id) !== null ? `left: ${frozenOffset(column.id)}px` : undefined}
                 onpointerdown={(event) => startColumnResize(event, column)} onkeydown={(event) => resizeColumnKey(event, column)}>
-                {#snippet icon()}{@const Icon = propertyIcons[column.type]}<Icon class="size-3.5 shrink-0 text-muted-foreground" />{/snippet}
+                {#snippet actions()}
+                  <CollectionMenu label={column.name} kind="property" fullWidth showHeader={false} dismissOnAction
+                    triggerClass="h-9 justify-start rounded-sm px-2 text-[0.8rem] font-normal" disabled={mutating || editingLocked}>
+                    {#snippet leading()}{@const Icon = propertyIcons[column.type]}<Icon class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />{/snippet}
+                    <div class="grid gap-0.5 font-normal">
+                      <button type="button" class="flex min-h-8 items-center gap-2 rounded-sm px-2 text-left hover:bg-accent" disabled={mutating} onclick={() => onEditProperties(column.id)}>
+                        <SlidersHorizontal class="size-3.5 shrink-0" aria-hidden="true" />{t("notes.databasePropertyEdit")}
+                      </button>
+                      {#if onPropertyAction}
+                        {#each propertyInsertionSides(column) as side}
+                          <CollectionMenu label={t(side === "left" ? "notes.databaseTablePresentation.insertLeft" : "notes.databaseTablePresentation.insertRight")} kind="new" fullWidth showHeader={false} dismissOnAction>
+                            <input class="mb-1.5 h-8 w-full rounded border border-border bg-background px-2 text-[length:inherit] outline-none focus:border-ring" aria-label={t("notes.databaseSchemaName")} placeholder={t("notes.databasePropertyNamePlaceholder")} bind:value={propertyName} onkeydown={(event) => event.stopPropagation()} />
+                            <div class="grid max-h-64 gap-0.5 overflow-y-auto">
+                              {#each propertyTypes as type}
+                                {@const Icon = propertyIcons[type]}
+                                <button type="button" class="flex min-h-8 items-center gap-2 rounded px-2 text-left hover:bg-accent" disabled={mutating} onclick={() => { void performPropertyAction({ type: "insert", propertyId: column.id, side, propertyType: type, name: propertyName }); }}><Icon class="size-3.5 shrink-0" />{propertyTypeLabel(type)}</button>
+                              {/each}
+                            </div>
+                          </CollectionMenu>
+                        {/each}
+                        {#if column.type !== "title"}<button type="button" class="flex min-h-8 items-center gap-2 rounded-sm px-2 text-left hover:bg-accent" disabled={mutating} onclick={() => { void performPropertyAction({ type: "duplicate", propertyId: column.id }); }}><Copy class="size-3.5" />{t("notes.databaseTablePresentation.duplicateEmpty")}</button>{/if}
+                      {/if}
+                      <div class="mx-1 my-1 border-t border-border"></div>
+                      <label class="flex min-h-8 items-center gap-2 rounded-sm px-2 hover:bg-accent"><input type="checkbox" checked={notesTableColumnPresentation(tableConfiguration?.presentation, column.id).wrap} disabled={mutating} onchange={(event) => updateColumnPresentation(column.id, { wrap: event.currentTarget.checked })} />{t("notes.databaseTablePresentation.wrap")}</label>
+                      <button type="button" class="flex min-h-8 items-center gap-2 rounded-sm px-2 text-left hover:bg-accent" disabled={mutating} onclick={() => freezeThrough(tableConfiguration?.presentation?.frozen_property_id === column.id ? null : column.id)}>{t(tableConfiguration?.presentation?.frozen_property_id === column.id ? "notes.databaseTablePresentation.unfreeze" : "notes.databaseTablePresentation.freeze")}</button>
+                      <CollectionMenu label={t("notes.databaseTablePresentation.calculate")} summary={notesTableColumnPresentation(tableConfiguration?.presentation, column.id).calculation ? calculationLabel(notesTableColumnPresentation(tableConfiguration?.presentation, column.id).calculation!) : t("notes.databaseTablePresentation.none")} fullWidth>
+                        <CustomSelect inline appearance="quiet" class="w-full" ariaLabel={t("notes.databaseTablePresentation.calculate")} disabled={mutating} value={notesTableColumnPresentation(tableConfiguration?.presentation, column.id).calculation ?? ""}
+                          options={[{ value: "", label: t("notes.databaseTablePresentation.none") }, ...notesTableCompatibleCalculations(column).map((calculation) => ({ value: calculation, label: calculationLabel(calculation) }))]}
+                          onChange={(value) => updateColumnPresentation(column.id, { calculation: value ? value as NotesDatabaseTableCalculation : null })} />
+                      </CollectionMenu>
+                      {#if ["date", "created_time", "last_edited_time"].includes(column.type)}
+                        <CollectionMenu label={t("notes.databaseTablePresentation.dateFormat")} fullWidth>
+                          <div class="grid gap-2">
+                            <CustomSelect inline appearance="quiet" class="w-full" ariaLabel={t("notes.databaseTablePresentation.dateFormat")} disabled={mutating} value={notesTableColumnPresentation(tableConfiguration?.presentation, column.id).date_format}
+                              options={[{ value: "locale", label: t("notes.databaseTablePresentation.locale") }, { value: "iso", label: t("notes.databaseTablePresentation.iso") }, { value: "relative", label: t("notes.databaseTablePresentation.relative") }]}
+                              onChange={(value) => updateColumnPresentation(column.id, { date_format: value as NotesDatabaseTableColumnPresentation["date_format"] })} />
+                            <CustomSelect inline appearance="quiet" class="w-full" ariaLabel={t("notes.databaseTablePresentation.timeFormat")} disabled={mutating} value={notesTableColumnPresentation(tableConfiguration?.presentation, column.id).time_format}
+                              options={[{ value: "locale", label: t("notes.databaseTablePresentation.locale") }, { value: "12_hour", label: t("notes.databaseTablePresentation.hour12") }, { value: "24_hour", label: t("notes.databaseTablePresentation.hour24") }, { value: "hidden", label: t("notes.databaseTablePresentation.hiddenTime") }]}
+                              onChange={(value) => updateColumnPresentation(column.id, { time_format: value as NotesDatabaseTableColumnPresentation["time_format"] })} />
+                          </div>
+                        </CollectionMenu>
+                      {/if}
+                      <div class="mx-1 my-1 border-t border-border"></div>
+                      {#if notesDatabaseFilterConditions(column).length > 0}
+                      <CollectionMenu label={t("notes.databasePropertyFilter")} kind="filter" fullWidth
+                        activeCount={notesDatabaseFilterCount(filters, column.id)}>
+
+                        <NotesDatabaseFilterControls properties={columns} {filters} propertyId={column.id} pending={mutating} onchange={saveFilters} />
+        </CollectionMenu>
+                      {/if}
+                      <button type="button" class="flex min-h-8 items-center gap-2 rounded-sm px-2 text-left hover:bg-accent" disabled={sortUnavailable} onclick={() => sortColumn(column.id, "ascending")}>
+                        <ArrowUp class="size-3.5 shrink-0" aria-hidden="true" />{t("notes.databasePropertySortAscending")}
+                        {#if sorts.some((sort) => sort.property_id === column.id && sort.direction === "ascending")}<Check class="ml-auto size-3.5 shrink-0" aria-hidden="true" />{/if}
+                      </button>
+                      <button type="button" class="flex min-h-8 items-center gap-2 rounded-sm px-2 text-left hover:bg-accent" disabled={sortUnavailable} onclick={() => sortColumn(column.id, "descending")}>
+                        <ArrowDown class="size-3.5 shrink-0" aria-hidden="true" />{t("notes.databasePropertySortDescending")}
+                        {#if sorts.some((sort) => sort.property_id === column.id && sort.direction === "descending")}<Check class="ml-auto size-3.5 shrink-0" aria-hidden="true" />{/if}
+                      </button>
+                      {#if column.type !== "title"}
+                        <div class="mx-1 my-1 border-t border-border"></div>
+                        <button type="button" class="flex min-h-8 items-center gap-2 rounded-sm px-2 text-left text-muted-foreground hover:bg-accent hover:text-foreground disabled:text-muted-foreground/50" disabled={mutating || columnIndex < 2} onclick={() => moveColumn(column, -1)}>
+                          <ArrowLeft class="size-3.5 shrink-0" aria-hidden="true" />{t("notes.databasePropertyMoveLeft")}
+                        </button>
+                        <button type="button" class="flex min-h-8 items-center gap-2 rounded-sm px-2 text-left text-muted-foreground hover:bg-accent hover:text-foreground disabled:text-muted-foreground/50" disabled={mutating || columnIndex === visibleColumns.length - 1} onclick={() => moveColumn(column, 1)}>
+                          <ArrowRight class="size-3.5 shrink-0" aria-hidden="true" />{t("notes.databasePropertyMoveRight")}
+                        </button>
+                        <button type="button" class="flex min-h-8 items-center gap-2 rounded-sm px-2 text-left hover:bg-accent" disabled={mutating} onclick={() => updateColumnVisibility(column.id, true)}>
+                          <EyeOff class="size-3.5 shrink-0" aria-hidden="true" />{t("notes.databasePropertyHide")}
+                        </button>
+                      {/if}
+                    </div>
+                  </CollectionMenu>
+                {/snippet}
               </CollectionColumnHeader>
             {/each}
             <div role="columnheader" class="min-w-0 font-normal">
-                <CollectionMenu label={t("notes.databaseSchemaAddProperty")} kind="new" showHeader={false} dismissOnAction>
-                  <input class="mb-2 h-9 w-full rounded-md border border-border bg-background px-2 text-sm outline-none focus:border-ring" aria-label={t("notes.databaseSchemaName")} placeholder={t("notes.databasePropertyNamePlaceholder")} bind:value={propertyName} onkeydown={(event) => event.stopPropagation()} />
-                  <input class="mb-2 h-8 w-full rounded-md border border-border bg-background px-2 text-sm outline-none focus:border-ring" aria-label={t("notes.databasePropertySearchType")} placeholder={t("notes.databasePropertySearchType")} bind:value={propertySearch} onkeydown={(event) => event.stopPropagation()} />
-                  <div class="grid max-h-64 grid-cols-2 gap-1 overflow-y-auto">
+                <CollectionMenu label={t("notes.databaseSchemaAddProperty")} kind="new" showHeader={false} dismissOnAction disabled={mutating || editingLocked}>
+                  <input class="mb-1.5 h-8 w-full rounded border border-border bg-background px-2 text-[length:inherit] outline-none focus:border-ring" aria-label={t("notes.databaseSchemaName")} placeholder={t("notes.databasePropertyNamePlaceholder")} bind:value={propertyName} onkeydown={(event) => event.stopPropagation()} />
+                  <input class="mb-1.5 h-8 w-full rounded border border-border bg-background px-2 text-[length:inherit] outline-none focus:border-ring" aria-label={t("notes.databasePropertySearchType")} placeholder={t("notes.databasePropertySearchType")} bind:value={propertySearch} onkeydown={(event) => event.stopPropagation()} />
+                  <div class="grid max-h-64 gap-0.5 overflow-y-auto">
                     {#each propertyTypes as type}
                       {@const Icon = propertyIcons[type]}
-                      <button type="button" class="flex min-h-9 items-center gap-2 rounded-md px-2 text-left text-sm text-foreground hover:bg-accent" onclick={() => { void addNewProperty(type); }}><Icon class="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />{propertyTypeLabel(type)}</button>
+                      <button type="button" class="flex min-h-8 items-center gap-2 rounded px-2 text-left text-foreground hover:bg-accent" onclick={() => { void addNewProperty(type); }}><Icon class="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />{propertyTypeLabel(type)}</button>
                     {/each}
                   </div>
                 </CollectionMenu>
             </div>
           </CollectionRow>
-            {#each visibleRows as row, rowIndex (row.id)}
+            {#each tableItems as item (item.id)}
+              {#if item.type === "group"}
+                <div role="row" data-table-group-id={item.group.id} class="flex min-h-10 items-center gap-2 border-t border-border px-2 text-[0.8rem]">
+                  <button type="button" class="flex min-h-8 min-w-0 items-center gap-2 rounded px-1 text-left hover:bg-accent" disabled={mutating || editingLocked} aria-expanded={!item.group.collapsed} onclick={() => toggleGroup(item.group.id)}><ChevronRight class={`size-3.5 shrink-0 ${item.group.collapsed ? "" : "rotate-90"}`} /><span>{groupName(item.group)}</span><span class="text-muted-foreground">{formatNumber(localization.locale, item.group.count)}</span></button>
+                  {#if ["select", "multi_select", "status", "checkbox", "date"].includes(columns.find((column) => column.id === tableConfiguration?.group_property_id)?.type ?? "")}
+                    <button type="button" class="ml-auto flex size-7 items-center justify-center rounded text-muted-foreground hover:bg-accent" aria-label={t("notes.databaseNewPage")} disabled={mutating || loading} onclick={() => createRow(item.group.id)}><Plus class="size-3.5" /></button>
+                  {/if}
+                </div>
+              {:else if item.type === "calculation"}
+                {@render calculationRow(item.groupId)}
+              {:else}
+              {@const row = item.row}
+              {@const rowIndex = item.rowIndex}
               {@const title = rowTitle(row)}
-              <CollectionRow template={gridTemplate} role="row" data-database-row-id={row.id}>
+              {@const hierarchy = rowHierarchy[row.id]}
+              <CollectionRow template={gridTemplate} role="row" data-database-row-id={row.id} data-database-row-depth={hierarchy?.depth ?? 0} style={conditionalColorStyle(row, null)}>
                 <div role="cell" class="flex justify-center">
                   <CollectionMenu iconOnly kind="actions" label={t("notes.databaseTableRowActions")}>
                     <div class="grid gap-1">
                       <button
                         type="button"
-                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[length:inherit] text-muted-foreground hover:bg-accent hover:text-foreground"
                         aria-label={t("notes.databaseRowsOpen", title)}
                         title={t("notes.databaseRowsOpen", title)}
                         disabled={mutating || rowCreation.blocked(row.id)} onclick={() => openRow(row)}
@@ -1082,9 +1367,19 @@
                         <FileText class="size-3.5" aria-hidden="true" />
                         <span class="truncate">{t("notes.databaseRowsOpen", title)}</span>
                       </button>
+                      <button type="button" class="flex min-h-8 items-center gap-2 rounded px-2 text-left hover:bg-accent"
+                        disabled={mutating || rowCreation.blocked(row.id) || (hierarchy?.depth ?? 0) >= NOTES_DATABASE_ROW_MAX_DEPTH}
+                        onclick={() => { void createSubitem(row); }}><Plus class="size-3.5" />{t("notes.databaseSubitemCreate")}</button>
+                      <CollectionMenu label={t("notes.databaseSubitemMove")} kind="property" fullWidth disabled={mutating || rowCreation.blocked(row.id)}>
+                        <NotesDatabaseRowParentControls rowId={row.id} rows={visibleRows} hierarchy={rowHierarchy} titleFor={rowTitle} pending={mutating} onSave={(parentId) => moveSubitem(row, parentId)} />
+                      </CollectionMenu>
+                      {#if hierarchy?.parent_row_page_id}
+                        <button type="button" class="flex min-h-8 items-center gap-2 rounded px-2 text-left hover:bg-accent" disabled={mutating || rowCreation.blocked(row.id)}
+                          onclick={() => { void moveSubitem(row, null); }}><ArrowUp class="size-3.5" />{t("notes.databaseSubitemMoveToRoot")}</button>
+                      {/if}
                       <button
                         type="button"
-                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[length:inherit] text-muted-foreground hover:bg-accent hover:text-foreground"
                         disabled={mutating || rowCreation.blocked(row.id)}
                         aria-label={t("notes.databaseRowsDuplicate", title)}
                         title={t("notes.databaseRowsDuplicate", title)}
@@ -1097,7 +1392,7 @@
                       </button>
                       <button
                         type="button"
-                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+                        class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[length:inherit] text-muted-foreground hover:bg-accent hover:text-foreground"
                         disabled={mutating || rowCreation.blocked(row.id)}
                         aria-label={t("notes.databaseRowsTrash", title)}
                         title={t("notes.databaseRowsTrash", title)}
@@ -1114,7 +1409,19 @@
                 <div role="cell" class="flex justify-center"><button type="button" class="flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-100 hover:bg-accent hover:text-foreground [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/row:opacity-100 [@media(hover:hover)]:group-focus-within/row:opacity-100" aria-label={t("notes.databaseRowsOpen", title)} disabled={mutating || rowCreation.blocked(row.id)} onclick={() => openRow(row)}><ChevronRight class="size-3.5" /></button></div>
                 {#each visibleColumns as column, columnIndex (column.id)}
                   {@const editValue = rowCreation.valueFor(row, column)}
-                  <CollectionCell role="cell">
+                  <CollectionCell role="cell" class={`${frozenOffset(column.id) !== null ? "sticky z-20 bg-background" : ""} ${notesTableColumnPresentation(tableConfiguration?.presentation, column.id).wrap ? "notes-table-wrap" : ""}`}
+                    style={`${frozenOffset(column.id) !== null ? `left: ${frozenOffset(column.id)}px;` : ""} ${conditionalColorStyle(row, column.id)}`}>
+                    <div class={column.type === "title" ? "flex w-full min-w-0 items-start gap-0.5" : "contents"}
+                      style={column.type === "title" ? `padding-left: ${Math.min((hierarchy?.depth ?? 0) * rowIndentPixels, column.width / 2)}px;` : ""}>
+                    {#if column.type === "title" && (hierarchy?.child_count ?? 0) > 0}
+                      <button type="button" class="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent"
+                        aria-label={collapsedRowIds.includes(row.id) ? t("notes.databaseSubitemExpand", title) : t("notes.databaseSubitemCollapse", title)}
+                        aria-expanded={!collapsedRowIds.includes(row.id)}
+                        title={t("notes.databaseSubitemCount", formatNumber(localization.locale, hierarchy?.child_count ?? 0))}
+                        disabled={mutating || editingLocked || (!collapsedRowIds.includes(row.id) && !tableConfiguration?.collapsed_row_ids?.includes(row.id) && (tableConfiguration?.collapsed_row_ids?.length ?? 0) >= NOTES_DATABASE_MAX_COLLAPSED_ROWS)} onclick={() => toggleSubitems(row.id)}>
+                        <ChevronRight class={`size-3.5 ${collapsedRowIds.includes(row.id) ? "" : "rotate-90"}`} />
+                      </button>
+                    {/if}
                     {#if column.type === "checkbox"}
                       <label class="flex h-8 items-center justify-center">
                         <input
@@ -1159,9 +1466,17 @@
                         {rowIndex}
                         {columnIndex}
                         mutating={mutating || rowCreation.blocked(row.id)}
-                        onSave={(value) => saveCell(row, column, value)}
+                        onSave={async (value) => { await saveCell(row, column, value); }}
                         onNavigate={handleCellKeydown}
                       />
+                    {:else if column.type === "date"}
+                      <NotesDatabaseDateCell {row} {column} {rowIndex} {columnIndex}
+                        mutating={mutating || rowCreation.blocked(row.id)} onSave={(value) => saveCell(row, column, value)}
+                        onNavigate={handleCellKeydown} onEditingChange={(editing) => { editingCell = editing; }} />
+                    {:else if column.type === "number"}
+                      <NotesDatabaseNumberCell {row} {column} {rowIndex} {columnIndex}
+                        mutating={mutating || rowCreation.blocked(row.id)} onSave={(value) => saveCell(row, column, value)}
+                        onNavigate={handleCellKeydown} onEditingChange={(editing) => { editingCell = editing; }} />
                     {:else if column.type === "button"}
                       <button
                         data-table-cell="true"
@@ -1184,6 +1499,15 @@
                           {notesDatabaseTableCellText(row, column) || column.buttonLabel || column.name}
                         </span>
                       </button>
+                    {:else if notesDatabaseTableColumnCanEdit(column) && column.displayFormat?.wrap}
+                      <textarea use:fitWrappedCell={String(editValue)} data-table-cell="true" data-row-index={rowIndex} data-column-index={columnIndex} rows={1}
+                        class="min-h-8 w-full min-w-0 resize-none rounded-sm border border-transparent bg-transparent px-1 py-1.5 text-foreground outline-none hover:bg-accent/20 focus:bg-accent/20"
+                        style="field-sizing: content;" value={String(editValue)} aria-label={column.name}
+                        disabled={mutating || (column.type !== "title" && rowCreation.blocked(row.id))}
+                        onfocus={() => { editingCell = true; }}
+                        oninput={(event) => { if (column.type === "title") rowCreation.draft(row.id, column.id, event.currentTarget.value); }}
+                        onblur={(event) => { editingCell = false; void saveCell(row, column, event.currentTarget.value); }}
+                        onkeydown={(event) => handleCellKeydown(event, rowIndex, columnIndex)}></textarea>
                     {:else if notesDatabaseTableColumnCanEdit(column)}
                       <input
                         data-table-cell="true"
@@ -1191,7 +1515,7 @@
                         data-column-index={columnIndex}
                         class="h-8 w-full min-w-0 rounded-sm border border-transparent bg-transparent px-1 text-foreground outline-none hover:bg-accent/20 focus:bg-accent/20 focus:border-transparent focus-visible:ring-0"
                         value={String(editValue)}
-                        inputmode={column.type === "number" ? "decimal" : "text"}
+                        inputmode="text"
                         aria-label={column.name}
                         disabled={mutating || (column.type !== "title" && rowCreation.blocked(row.id))}
                         onfocus={() => { editingCell = true; }}
@@ -1208,15 +1532,16 @@
                         data-row-index={rowIndex}
                         data-column-index={columnIndex}
                         type="button"
-                        class="flex h-8 w-full min-w-0 items-center rounded-sm px-1 text-left text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        class={`flex ${column.displayFormat?.wrap ? "min-h-8 py-1.5" : "h-8"} w-full min-w-0 items-center rounded-sm px-1 text-left text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring`}
                         title={t("notes.databaseTableReadonly")}
                         onkeydown={(event) => handleCellKeydown(event, rowIndex, columnIndex)}
                       >
-                        <span class="min-w-0 truncate">
-                          {notesDatabaseTableCellText(row, column) || t("notes.databaseTableEmptyCell")}
+                        <span class={`min-w-0 ${column.displayFormat?.wrap ? "whitespace-pre-wrap wrap-break-word" : "truncate"}`}>
+                          <NotesDatabasePropertyValue {row} {column} />
                         </span>
                       </button>
                     {/if}
+                    </div>
                   </CollectionCell>
                 {/each}
                 <div role="cell"></div>
@@ -1227,12 +1552,14 @@
                   </div>
                 {/if}
               </CollectionRow>
+              {/if}
             {/each}
+            {@render calculationRow(null)}
 
           {#key addRowKey}
             <CollectionRow template={gridTemplate}>
               <div class="col-span-2"></div>
-              <div data-database-new-row style={`grid-column: 3 / -1;`}><CollectionQuickAdd label={t("notes.databaseNewPage")} disabled={mutating || loading} oncreate={createRow} /></div>
+              <div data-database-new-row style={`grid-column: 3 / -1;`}><CollectionQuickAdd label={t("notes.databaseNewPage")} disabled={mutating || loading} oncreate={() => { void createRow(); }} /></div>
             </CollectionRow>
           {/key}
         </div>

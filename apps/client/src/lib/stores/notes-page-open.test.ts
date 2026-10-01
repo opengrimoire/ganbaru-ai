@@ -347,7 +347,7 @@ describe("Notes critical page opening", () => {
     backend.pages.set(pageAId, response(pageAId, [database]));
     backend.databaseReference = async () => ({
       block_id: topAId, page_id: pageAId, title: "Planning",
-      source_block_id: topAId, source_page_id: pageAId, is_linked: false, owned_data_source_count: 1,
+      source_block_id: topAId, source_page_id: pageAId, is_linked: false, owned_data_source_count: 1, editing_locked: false,
     });
     await notes.selectPage(pageAId, { openMode: "full" });
     const owner = notes.editorPanes[0];
@@ -428,7 +428,7 @@ describe("Notes critical page opening", () => {
     backend.pages.set(pageBId, response(pageBId, [linked]));
     backend.databaseReference = async () => ({
       block_id: topBId, page_id: pageBId, title: "Shared planning", source_block_id: topAId,
-      source_page_id: pageAId, is_linked: true, owned_data_source_count: 0,
+      source_page_id: pageAId, is_linked: true, owned_data_source_count: 0, editing_locked: false,
     });
     await notes.selectPage(pageBId, { openMode: "full" });
     const owner = notes.editorPanes[0];
@@ -463,7 +463,7 @@ describe("Notes critical page opening", () => {
     backend.pages.set(pageAId, loaded);
     backend.databaseReference = async (id) => ({
       block_id: id, page_id: pageAId, title: "Nested planning", source_block_id: id,
-      source_page_id: pageAId, is_linked: false, owned_data_source_count: 1,
+      source_page_id: pageAId, is_linked: false, owned_data_source_count: 1, editing_locked: false,
     });
     await notes.selectPage(pageAId);
     backend.clear();

@@ -77,11 +77,12 @@ async fn configure_filtered_table_view(pool: &SqlitePool) {
         None,
         None,
         NoteDataSourceTableViewUpdate {
-            filter: vec![NoteDataSourceTableFilter {
-                property_id: "done".to_string(),
-                condition: "checked".to_string(),
-                value: None,
-            }],
+            filter: vec![
+                serde_json::from_value::<NoteDataSourceTableFilter>(json!({
+                    "property_id": "done", "condition": "checked", "value": null
+                }))
+                .unwrap(),
+            ],
             sorts: vec![NoteDataSourceTableSort {
                 property_id: "estimate".to_string(),
                 direction: "descending".to_string(),
@@ -97,6 +98,7 @@ async fn configure_filtered_table_view(pool: &SqlitePool) {
                 hidden_property_ids: vec!["done".to_string(), "files".to_string()],
                 column_widths: json!({}),
                 row_open_mode: "full_page".to_string(),
+                ..Default::default()
             },
         },
     )
@@ -119,6 +121,7 @@ async fn csv_export_pool() -> SqlitePool {
     data_source_schema::update_data_source_schema(
         &pool,
         DATA_SOURCE_A,
+        None,
         None,
         NoteDataSourceSchemaUpdate {
             properties: json!({
@@ -153,14 +156,6 @@ async fn csv_export_pool() -> SqlitePool {
                     "files": {}
                 }
             }),
-            property_order: vec![
-                "title".to_string(),
-                "details".to_string(),
-                "estimate".to_string(),
-                "done".to_string(),
-                "files".to_string(),
-            ],
-            hidden_property_ids: vec![],
         },
     )
     .await

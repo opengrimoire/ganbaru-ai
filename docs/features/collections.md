@@ -20,7 +20,11 @@ Projects card windows use measured card heights so wrapped titles and extra meta
 
 ## View controls and settings
 
-Both features share active view buttons and panel styling. Projects uses text-only view labels, with horizontal scrolling when the labels do not fit, and retains its project filters. Notes keeps saved-view creation, renaming, duplication, templates, and property editing. Table, board, gallery, list, and calendar settings open outside the document content. Nested pickers stay inside their owning floating panel.
+Both features share active view buttons and panel styling. Projects uses text-only view labels, with horizontal scrolling when the labels do not fit, and retains its project filters. Notes keeps saved-view creation, renaming, duplication, templates, and property editing. All six Notes layouts and Projects view controls use compact floating panels anchored to the invoking toolbar control. Opening settings leaves the collection visible and interactive. Panels fit the viewport and remain inside an owning page preview when applicable.
+
+Settings rows use an icon, a label, the current value or count, and a disclosure chevron. Selecting a row opens its detail page in the same popover. Back returns to the row while retaining drafts; Escape first closes a nested dropdown, then returns through settings pages, then closes the panel. Explicit dismissal restores the invoking control's focus. Clicking or focusing outside dismisses without taking focus away from the destination. Arrow keys navigate settings rows. Pointer controls stay compact, while coarse pointers retain larger targets.
+
+The shared column header accepts a domain-owned action snippet beside its resize handle, plus presentation attributes for saved frozen columns. Notes supplies property editing, filtering, sorting, visibility, visible column order, wrapping, freezing, formatting, and calculations. Projects retains its own task-column contracts. Shared components never infer unsupported property operations. Each domain owns complete-result summaries and conditional rules; neither derives totals from a hydrated row window.
 
 ## Domain boundaries
 

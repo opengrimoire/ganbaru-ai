@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createNotesDataSourcePropertyDraft,
+  NOTES_DATA_SOURCE_PROPERTY_NAME_MAX_CHARACTERS,
+  notesDataSourceDuplicatePropertyName,
   notesDataSourceButtonTargetOptions,
   notesDataSourceDefaultButtonPatch,
   notesDataSourceSchemaDraftFromDto,
@@ -137,6 +139,34 @@ const view: NotesDatabaseView = {
 };
 
 describe("data source schema helpers", () => {
+  it("generates copy names with the native case-insensitive collision semantics", () => {
+    const properties = [{ name: "Priority" }, { name: " Priority (Copy) " }, { name: "PRIORITY (COPY) 2" }];
+    expect(notesDataSourceDuplicatePropertyName("Priority", properties, (name) => `${name} (copy)`)).toBe("Priority (copy) 3");
+    expect(properties[1].name).toBe(" Priority (Copy) ");
+    expect(notesDataSourceDuplicatePropertyName("Árbol", [{ name: "ÁRBOL (COPIA)" }], (name) => `${name} (copia)`)).toBe("Árbol (copia) 2");
+  });
+
+  it("preserves localized copy decorations when a maximum-length name needs shortening", () => {
+    const original = "a".repeat(NOTES_DATA_SOURCE_PROPERTY_NAME_MAX_CHARACTERS);
+    const copy = notesDataSourceDuplicatePropertyName(original, [], (name) => `${name} (copy)`);
+    expect(copy).toBe(`${"a".repeat(NOTES_DATA_SOURCE_PROPERTY_NAME_MAX_CHARACTERS - " (copy)".length)} (copy)`);
+    const next = notesDataSourceDuplicatePropertyName(original, [{ name: copy.toUpperCase() }], (name) => `${name} (copy)`);
+    expect(next.endsWith(" (copy) 2")).toBe(true);
+    expect(Array.from(next)).toHaveLength(NOTES_DATA_SOURCE_PROPERTY_NAME_MAX_CHARACTERS);
+  });
+
+  it("counts Unicode scalar characters rather than UTF-16 units and adjusts for larger suffixes", () => {
+    const original = "\u{10400}".repeat(NOTES_DATA_SOURCE_PROPERTY_NAME_MAX_CHARACTERS);
+    const formatCopy = (name: string) => `${name} (copia)`;
+    const copies: { name: string }[] = [];
+    for (let index = 1; index <= 12; index += 1) {
+      const name = notesDataSourceDuplicatePropertyName(original, copies, formatCopy);
+      expect(Array.from(name)).toHaveLength(NOTES_DATA_SOURCE_PROPERTY_NAME_MAX_CHARACTERS);
+      expect(name.endsWith(index === 1 ? " (copia)" : ` (copia) ${index}`)).toBe(true);
+      copies.push({ name });
+    }
+    expect(new Set(copies.map((property) => property.name)).size).toBe(12);
+  });
   it("loads schema draft properties in table order with visibility state", () => {
     const draft = notesDataSourceSchemaDraftFromDto(dataSource, view);
 
@@ -149,7 +179,6 @@ describe("data source schema helpers", () => {
       "score_formula",
     ]);
     expect(draft[1]?.numberFormat).toBe("percent");
-    expect(draft[2]?.hidden).toBe(true);
     expect(draft[2]?.options[1]?.name).toBe("High");
     expect(draft[3]?.relationDataSourceId).toBe("66666666-6666-4666-8666-666666666666");
     expect(draft[3]?.relationSyncedPropertyId).toBe("tasks_relation");
@@ -159,7 +188,7 @@ describe("data source schema helpers", () => {
     expect(draft[5]?.formulaExpression).toBe('prop("Estimate") * 2');
   });
 
-  it("serializes renamed, hidden, and configured properties for Tauri", () => {
+  it("serializes source definitions independently of draft presentation", () => {
     const draft: NotesDataSourceSchemaPropertyDraft[] = [
       ...notesDataSourceSchemaDraftFromDto(dataSource, view),
       {
@@ -174,21 +203,12 @@ describe("data source schema helpers", () => {
         uniquePrefix: "TASK",
       },
     ];
-    draft[1] = { ...draft[1]!, name: "Effort", hidden: true };
+    draft[1] = { ...draft[1]!, name: "Effort" };
 
     const update = notesDataSourceSchemaUpdateFromDraft(draft);
 
-    expect(update.property_order).toEqual([
-      "title",
-      "estimate",
-      "priority",
-      "project_relation",
-      "project_budget",
-      "score_formula",
-      "status",
-      "task_id",
-    ]);
-    expect(update.hidden_property_ids).toEqual(["estimate", "priority"]);
+    expect(Object.keys(update)).toEqual(["properties"]);
+    expect(notesDataSourceSchemaUpdateFromDraft([...draft].reverse())).toEqual(update);
     expect(update.properties.Effort).toMatchObject({
       id: "estimate",
       name: "Effort",
@@ -277,7 +297,7 @@ describe("data source schema helpers", () => {
     );
     const update = notesDataSourceSchemaUpdateFromDraft(synced);
 
-    expect(update.property_order).toEqual(["title", "done", "finish_button"]);
+    expect(Object.keys(update)).toEqual(["properties"]);
     expect(update.properties.Finish).toMatchObject({
       id: "finish_button",
       name: "Finish",

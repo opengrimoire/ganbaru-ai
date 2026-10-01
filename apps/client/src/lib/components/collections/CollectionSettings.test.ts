@@ -1,0 +1,221 @@
+// @vitest-environment jsdom
+import { mount, tick, unmount } from "svelte";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import SettingsFixture from "./CollectionSettings.test.svelte";
+
+let component: ReturnType<typeof mount> | undefined;
+
+afterEach(async () => {
+  if (component) await unmount(component);
+  component = undefined;
+  document.body.replaceChildren();
+  vi.restoreAllMocks();
+});
+
+/** Mount settings inside a clipped page preview and wait for initial focus. */
+async function openSettings(onclose = vi.fn(), oncommit = vi.fn()) {
+  const preview = document.createElement("div");
+  preview.dataset.floatingRoot = "";
+  const clipped = document.createElement("div");
+  clipped.style.overflow = "hidden";
+  preview.append(clipped);
+  document.body.append(preview);
+  component = mount(SettingsFixture, { target: clipped, props: { onclose, oncommit } });
+  const anchor = clipped.querySelector<HTMLButtonElement>("button")!;
+  vi.spyOn(anchor, "getBoundingClientRect").mockReturnValue(new DOMRect(800, 32, 32, 32));
+  anchor.focus();
+  anchor.click();
+  await tick();
+  await tick();
+  await tick();
+  const panel = preview.querySelector<HTMLDivElement>('[role="dialog"]')!;
+  return { preview, clipped, anchor, panel, onclose, oncommit };
+}
+
+/** Press a key at the focused element as a browser would. */
+async function key(key: string): Promise<void> {
+  document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  await tick();
+  await tick();
+}
+
+describe("Collection settings navigation", () => {
+  it("anchors a nonmodal panel within its preview without a full-screen backdrop", async () => {
+    const { preview, clipped, anchor, panel } = await openSettings();
+    expect(panel.parentElement).toBe(preview);
+    expect(clipped.querySelector('[role="dialog"]')).toBeNull();
+    expect(panel.style.position).toBe("fixed");
+    expect(panel.style.width).toBe("320px");
+    expect(panel.style.left).toBe("512px");
+    expect(panel.style.top).toBe("68px");
+    expect(panel.getAttribute("aria-modal")).toBeNull();
+    expect(preview.querySelectorAll("[data-app-floating-surface]")).toHaveLength(1);
+    expect(document.activeElement).toBe(panel.querySelector('[aria-label="View name"]'));
+    await key("Escape");
+    expect(panel.isConnected).toBe(false);
+    expect(document.activeElement).toBe(anchor);
+  });
+
+  it("shows details in the same panel, keeps root drafts mounted, and returns one level on Back or Escape", async () => {
+    const { preview, panel, anchor } = await openSettings();
+    const draft = panel.querySelector<HTMLInputElement>('[aria-label="View name"]')!;
+    draft.value = "Weekly plan";
+    draft.dispatchEvent(new Event("input", { bubbles: true }));
+    const layout = panel.querySelector<HTMLButtonElement>('[aria-label="Layout"]')!;
+    expect(layout.textContent).toContain("Table");
+    layout.click();
+    await tick();
+    await tick();
+    expect(preview.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(panel.getAttribute("aria-label")).toBe("Layout");
+    expect(draft.isConnected).toBe(true);
+    expect(draft.closest<HTMLElement>("[data-collection-settings-page]")?.hidden).toBe(true);
+    expect(document.activeElement).toBe(panel.querySelector('[aria-label="Layout value"]'));
+
+    panel.querySelector<HTMLButtonElement>('[aria-label="Advanced layout"]')!.click();
+    await tick();
+    await tick();
+    expect(panel.getAttribute("aria-label")).toBe("Advanced layout");
+    await key("Escape");
+    expect(panel.getAttribute("aria-label")).toBe("Layout");
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Advanced layout");
+    panel.querySelector<HTMLButtonElement>('[aria-label="Back"]')!.click();
+    await tick();
+    await tick();
+    expect(panel.getAttribute("aria-label")).toBe("View settings");
+    expect(document.activeElement).toBe(layout);
+    expect(panel.querySelector('[aria-label="View name"]')).toBe(draft);
+    expect(draft.value).toBe("Weekly plan");
+    await key("Escape");
+    expect(panel.isConnected).toBe(false);
+    expect(document.activeElement).toBe(anchor);
+  });
+
+  it("lets nested selects own the first Escape and selection before returning from the detail page", async () => {
+    const { panel } = await openSettings();
+    const filter = panel.querySelector<HTMLButtonElement>('[aria-label="Filter"]')!;
+    filter.click();
+    await tick();
+    await tick();
+    const select = panel.querySelector<HTMLButtonElement>('[aria-haspopup="listbox"]')!;
+    select.click();
+    await vi.waitFor(() => expect(document.activeElement?.getAttribute("role")).toBe("option"));
+    expect(panel.querySelector('[role="listbox"]')?.parentElement).toBe(panel);
+    await key("Escape");
+    expect(panel.getAttribute("aria-label")).toBe("Filter");
+    expect(panel.querySelector('[role="listbox"]')).toBeNull();
+    expect(document.activeElement).toBe(select);
+
+    select.click();
+    await vi.waitFor(() => expect(document.activeElement?.getAttribute("role")).toBe("option"));
+    panel.querySelector<HTMLButtonElement>('[role="option"][aria-selected="false"]')!.click();
+    await tick();
+    expect(select.textContent).toContain("Done");
+    expect(panel.getAttribute("aria-label")).toBe("Filter");
+    await key("Escape");
+    expect(panel.getAttribute("aria-label")).toBe("View settings");
+    expect(document.activeElement).toBe(filter);
+  });
+
+  it("dismisses when outside focus moves and preserves that focus", async () => {
+    const { panel, onclose } = await openSettings();
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    outside.focus();
+    await tick();
+    expect(panel.isConnected).toBe(false);
+    expect(document.activeElement).toBe(outside);
+    expect(onclose).toHaveBeenCalledOnce();
+  });
+
+  it("dismisses on outside pointer without restoring focus over the target", async () => {
+    const { panel, onclose } = await openSettings();
+    const outside = document.createElement("input");
+    document.body.append(outside);
+    outside.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    outside.focus();
+    await tick();
+    expect(panel.isConnected).toBe(false);
+    expect(document.activeElement).toBe(outside);
+    expect(onclose).toHaveBeenCalledOnce();
+  });
+
+  it("commits a focused draft before outside background dismissal without restoring anchor focus", async () => {
+    const { panel, anchor, onclose, oncommit } = await openSettings();
+    const anchorFocus = vi.spyOn(anchor, "focus");
+    const input = panel.querySelector<HTMLInputElement>('[aria-label="View name"]')!;
+    input.value = "Weekly plan";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    const background = document.createElement("div");
+    document.body.append(background);
+    background.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    expect(oncommit).toHaveBeenCalledExactlyOnceWith("Weekly plan");
+    expect(input.isConnected).toBe(true);
+    background.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    await tick();
+    expect(panel.isConnected).toBe(false);
+    expect(onclose).toHaveBeenCalledOnce();
+    expect(oncommit).toHaveBeenCalledOnce();
+    expect(anchorFocus).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("handles Escape after a focused Save control becomes disabled by its fieldset", async () => {
+    const { panel, anchor } = await openSettings();
+    const save = [...panel.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Save")!;
+    save.focus();
+    save.click();
+    // Emulate Chromium's focus loss before jsdom applies disabled attributes.
+    save.blur();
+    await tick();
+    expect(save.matches(":disabled")).toBe(true);
+    expect(document.activeElement).toBe(document.body);
+    await key("Escape");
+    expect(panel.isConnected).toBe(false);
+    expect(document.activeElement).toBe(anchor);
+  });
+
+  it("ignores Escape from an enabled blurred input and from an unrelated control", async () => {
+    const { panel } = await openSettings();
+    const input = panel.querySelector<HTMLInputElement>('[aria-label="View name"]')!;
+    input.blur();
+    const bodyEscape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    document.body.dispatchEvent(bodyEscape);
+    await tick();
+    expect(bodyEscape.defaultPrevented).toBe(false);
+    expect(panel.isConnected).toBe(true);
+
+    input.focus();
+    input.blur();
+    input.disabled = true;
+    const unrelated = document.createElement("input");
+    document.body.append(unrelated);
+    const unrelatedEscape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    unrelated.dispatchEvent(unrelatedEscape);
+    await tick();
+    expect(unrelatedEscape.defaultPrevented).toBe(false);
+    expect(panel.isConnected).toBe(true);
+    unrelated.focus();
+    await tick();
+    expect(panel.isConnected).toBe(false);
+    expect(document.activeElement).toBe(unrelated);
+  });
+
+  it("navigates settings rows with arrows and removes listeners when unmounted", async () => {
+    const { panel, onclose } = await openSettings();
+    const layout = panel.querySelector<HTMLButtonElement>('[aria-label="Layout"]')!;
+    const filter = panel.querySelector<HTMLButtonElement>('[aria-label="Filter"]')!;
+    layout.focus();
+    await key("ArrowDown");
+    expect(document.activeElement).toBe(filter);
+    await key("Home");
+    expect(document.activeElement).toBe(layout);
+    await unmount(component!);
+    component = undefined;
+    expect(panel.isConnected).toBe(false);
+    expect(panel.contains(document.activeElement)).toBe(false);
+    document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(onclose).not.toHaveBeenCalled();
+  });
+});

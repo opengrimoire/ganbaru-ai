@@ -69,6 +69,7 @@ import type {
   ProjectTaskUpdate,
   ProjectTaskViewRequest,
   ProjectTaskViewPage,
+  ProjectTaskListColumn,
   ProjectTaskDetailData,
   ProjectViewPreference,
   ProjectViewPreferenceUpsert,
@@ -346,6 +347,7 @@ interface ProjectTaskViewPageRows {
   total_count: number;
   matched_count: number;
   archived_count: number;
+  column_calculations?: Array<{ column: "name" | ProjectTaskListColumn; total: number; filled: number; sum: number | null; average: number | null; minimum: number | null; maximum: number | null }>;
   next_cursor: string | null;
   column_counts: Array<{ status_id: string; count: number; next_cursor: string | null }>;
   aggregates: null | {
@@ -774,6 +776,11 @@ function mapTaskViewPage(rows: ProjectTaskViewPageRows): ProjectTaskViewPage {
     totalCount: rows.total_count,
     matchedCount: rows.matched_count,
     archivedCount: rows.archived_count,
+    columnCalculations: rows.column_calculations?.map((column) => ({
+      column: column.column, total: column.total, filled: column.filled,
+      sum: column.sum ?? undefined, average: column.average ?? undefined,
+      minimum: column.minimum ?? undefined, maximum: column.maximum ?? undefined,
+    })),
     nextCursor: optionalText(rows.next_cursor),
     columnCounts: rows.column_counts.map((column) => ({
       statusId: column.status_id,

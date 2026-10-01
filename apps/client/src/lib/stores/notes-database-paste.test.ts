@@ -18,7 +18,7 @@ const PAGE = "10000000-0000-4000-8000-000000000001";
 const SOURCE = "10000000-0000-4000-8000-000000000002";
 const LINK = `#notes?page=${PAGE}&block=${SOURCE}`;
 const REFERENCE: NotesDatabaseReference = { block_id: SOURCE, page_id: PAGE, source_block_id: SOURCE,
-  source_page_id: PAGE, title: "Tasks", owned_data_source_count: 1, is_linked: false };
+  source_page_id: PAGE, title: "Tasks", owned_data_source_count: 1, is_linked: false, editing_locked: false };
 
 /** Build editor blocks without fetching a source schema or rows. */
 function model(write: NotesBlockWrite, parent: NotesParent = { type: "page_id", page_id: PAGE }): NotesBlock {

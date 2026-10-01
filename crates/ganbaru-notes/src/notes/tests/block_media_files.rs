@@ -209,6 +209,7 @@ fn database_file_property_asset_references_follow_local_file_values() {
             &pool,
             DATA_SOURCE_A,
             None,
+            None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
                     "Name": {
@@ -224,8 +225,6 @@ fn database_file_property_asset_references_follow_local_file_values() {
                         "files": {}
                     }
                 }),
-                property_order: vec!["title".to_string(), "files".to_string()],
-                hidden_property_ids: vec![],
             },
         )
         .await
@@ -281,6 +280,7 @@ fn database_file_property_asset_references_follow_local_file_values() {
             &pool,
             DATA_SOURCE_A,
             None,
+            None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
                     "Name": {
@@ -290,8 +290,6 @@ fn database_file_property_asset_references_follow_local_file_values() {
                         "title": {}
                     }
                 }),
-                property_order: vec!["title".to_string()],
-                hidden_property_ids: vec![],
             },
         )
         .await

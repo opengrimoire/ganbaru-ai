@@ -50,6 +50,10 @@ pub async fn database_reference(
         .await
         .map_err(|e| format!("read Notes database title: {e}"))?;
     Ok(NoteDatabaseReferenceDto {
+        editing_locked: super::database_editing_lock::payload_locked(
+            &serde_json::from_str(&block.payload)
+                .map_err(|error| format!("read database editing preference: {error}"))?,
+        )?,
         is_linked: owner.0 != block.id,
         source_block_id: block.id,
         page_id: block.page_id,
@@ -285,7 +289,7 @@ async fn place_database_block(
     Ok(())
 }
 
-/// Rename the database and its owned data source, allowing an intentionally empty title.
+/// Rename a shell and synchronize its sole owned source, preserving independent source names.
 pub async fn rename_database(
     pool: &SqlitePool,
     database_id: &str,
@@ -300,6 +304,7 @@ pub async fn rename_database(
         .begin()
         .await
         .map_err(|error| format!("begin Notes database rename: {error}"))?;
+    super::database_editing_lock::ensure_unlocked_tx(&mut tx, database_id).await?;
     let block = load_block_row_tx(&mut tx, database_id).await?;
     if block.block_type != "child_database" {
         return Err("database block not found".to_string());
@@ -334,9 +339,10 @@ pub async fn rename_database(
         .execute(&mut *tx)
         .await
         .map_err(|error| format!("rename Notes database: {error}"))?;
-    sqlx::query("UPDATE notes_data_sources SET title = ?, title_rich_text = ?, last_edited_time = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE database_id = ? AND in_trash = 0")
+    sqlx::query("UPDATE notes_data_sources SET title = ?, title_rich_text = ?, last_edited_time = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE database_id = ? AND in_trash = 0 AND (SELECT COUNT(*) FROM notes_data_sources WHERE database_id = ? AND in_trash = 0) = 1")
         .bind(title)
         .bind(rich_text_array(title).to_string())
+        .bind(database_id)
         .bind(database_id)
         .execute(&mut *tx)
         .await
@@ -972,7 +978,7 @@ fn linked_database_title(
         .unwrap_or_else(|| DEFAULT_DATABASE_TITLE.to_string())
 }
 
-fn default_data_source_properties() -> Value {
+pub(super) fn default_data_source_properties() -> Value {
     let mut properties = serde_json::Map::new();
     properties.insert(
         DEFAULT_TITLE_PROPERTY_NAME.to_string(),
@@ -998,7 +1004,7 @@ fn default_table_view_configuration() -> Value {
     })
 }
 
-fn rich_text_array(text: &str) -> Value {
+pub(super) fn rich_text_array(text: &str) -> Value {
     json!([{
         "type": "text",
         "text": {

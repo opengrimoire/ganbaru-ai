@@ -14,6 +14,7 @@ The current repository has a substantial local desktop and Android foundation:
 - Pomodoro rhythms, persisted runs and segments, idle and suspend handling, adaptive decision foundations, progress surfaces, and desktop or Android scheduling.
 - SQLite-backed Projects with groups, planning views, tasks, dependencies, tags, custom fields, templates, scheduling links, and history.
 - SQLite-backed Notes pages, blocks, databases, templates, links, comments, suggestions, assets, history, import, export, and working-folder Markdown editing.
+- Saved Notes table grouping, complete filtered calculations, typed advanced queries, column presentation, row sub-items, multiple sources, and shell editing locks. Projects List has contextual custom-property actions and saved wrapping, freezing, formatting, colors, and complete-result calculation footers. Real Tauri visual and touch acceptance for these database controls is pending.
 - Quick notes, typed English and Spanish localization, profiles, and customizable themes.
 - Project channels over durable native coding-agent sessions, with provider-neutral history, local provider transports, workspace tools, terminals, checkpoints, review, teammate identity, and explicit access profiles.
 - Local Music library and playlist workflows, desktop audio playback and media controls, Android Media3 playback, and YouTube IFrame integration with a known interaction-compliance redesign requirement.

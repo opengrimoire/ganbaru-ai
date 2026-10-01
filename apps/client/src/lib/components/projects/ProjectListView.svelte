@@ -1,8 +1,14 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getCalendar } from "$lib/stores/calendar.svelte";
   import { getProjects } from "$lib/stores/projects.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
+  import { getEventColor } from "$lib/components/calendar/utils";
+  import { projectListFrozenOffsets, projectListRowColor } from "$lib/projects/project-list-presentation";
+  import { setProjectListTableContext } from "./project-list-table-context";
+  import type { ProjectTaskQueryController } from "./project-task-query-controller.svelte";
+  import ProjectListCalculationFooter from "./ProjectListCalculationFooter.svelte";
   import { projectPriorityDisplayLabel } from "$lib/projects/project-display";
   import {
     projectCustomFieldDisplayText,
@@ -14,6 +20,7 @@
     projectTaskListLeadingGridTemplate,
     type ProjectTaskListColumnWidths,
     type ProjectTaskListGridInput,
+    type ProjectTaskListResizableColumn,
   } from "$lib/projects/project-list-view";
   import {
     projectListDueDateEditPlan,
@@ -55,6 +62,7 @@
 
   let {
     mobileLayout = false,
+    taskQuery,
     selectedProjectId,
     sections,
     statuses,
@@ -78,6 +86,7 @@
     onNeedMore,
   }: {
     mobileLayout?: boolean;
+    taskQuery?: ProjectTaskQueryController;
     selectedProjectId: string | null;
     sections: ProjectSection[];
     statuses: ProjectStatus[];
@@ -105,8 +114,11 @@
   const calendar = getCalendar();
   const theme = getTheme();
   const { t } = getLocalization();
+  const tableQuery = untrack(() => taskQuery);
 
   let sectionNameDrafts = $state<Record<string, string>>({});
+  let listViewportWidth = $state(0);
+  let listViewportWidthRem = $state<number | undefined>(undefined);
   const interaction = new ProjectListInteractionController({
     getSelectedTaskIds: () => selectedTaskIds,
     selectedTaskIdsChanged: (taskIds) => onSelectedTaskIdsChange(taskIds),
@@ -162,6 +174,36 @@
   const taskListGridMinWidth = $derived(projectTaskListGridMinWidth(taskListGridInput));
   const taskListLeadingGridTemplate = $derived(projectTaskListLeadingGridTemplate(taskListGridInput));
   const listRangeDateColumnsVisible = $derived(taskListColumns.includes("start") && taskListColumns.includes("due"));
+  const frozenOffsets: Partial<Record<ProjectTaskListResizableColumn | "selection" | "open", number>> = $derived(taskQuery ? projectListFrozenOffsets(taskQuery.listPresentation, taskListGridInput, listViewportWidthRem) : {});
+  $effect(() => {
+    sections.length;
+    listTaskGroups.length;
+    const container = viewport.container;
+    if (!container || listViewportWidth <= 0) return;
+    const content = container.firstElementChild;
+    const row = container.querySelector<HTMLElement>(".collection-row");
+    const rootFontSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+    if (!(content instanceof HTMLElement) || !row || !Number.isFinite(rootFontSize) || rootFontSize <= 0) return;
+    const contentStyle = getComputedStyle(content);
+    const rowStyle = getComputedStyle(row);
+    const padding = [contentStyle.paddingLeft, contentStyle.paddingRight, rowStyle.paddingLeft, rowStyle.paddingRight]
+      .reduce((sum, value) => sum + (Number.parseFloat(value) || 0), 0);
+    listViewportWidthRem = Math.max(0, listViewportWidth - padding) / rootFontSize;
+  });
+  if (tableQuery) setProjectListTableContext({
+    query: tableQuery,
+    cellClass: (column) => [
+      frozenOffsets[column] !== undefined ? "project-list-frozen-cell" : "",
+      column !== "selection" && column !== "open" && tableQuery.listPresentation.wrappedColumns.includes(column) ? "project-list-wrap-cell" : "",
+    ].join(" "),
+    cellStyle: (column) => frozenOffsets[column] === undefined ? "" : `left: calc(var(--project-list-content-inset) + ${frozenOffsets[column]}rem);`,
+    rowStyle: (task, selected) => {
+      const color = projectListRowColor(task, tableQuery.listPresentation.colorRules);
+      const background = selected ? "color-mix(in srgb, var(--accent) 40%, var(--cal-bg))"
+        : color === undefined ? "var(--cal-bg)" : `color-mix(in srgb, ${getEventColor(color, theme.current).bg} 15%, var(--cal-bg))`;
+      return `--project-list-row-bg: ${background}; background-color: ${background};`;
+    },
+  });
 
   $effect(() => {
     if (!mobileLayout && viewport.container) viewport.syncCounterScroll();
@@ -463,6 +505,7 @@
 
 <div
   bind:this={viewport.container}
+  bind:clientWidth={listViewportWidth}
   class="project-list-scroll h-full min-h-0 overflow-auto overscroll-contain"
   data-mobile-layout={mobileLayout}
   onscroll={handleProjectListScroll}
@@ -471,6 +514,15 @@
     {#if viewport.resizeError}
       <p role="alert" class="text-sm text-destructive">{viewport.resizeError}</p>
     {/if}
+    {#if taskQuery?.loadError}
+      <div class="flex flex-wrap items-center gap-2 text-xs">
+        <p role="alert" class="text-destructive">{t("projects.tasks.loadFailed", taskQuery.loadError)}</p>
+        <button class="min-h-8 rounded px-2 hover:bg-accent" disabled={taskQuery.loading} onclick={() => taskQuery?.retryCurrent(selectedTaskIds, selectedTaskId)}>{t("common.retry")}</button>
+      </div>
+    {/if}
+    {#if taskQuery?.presentationError}<p role="alert" class="text-xs text-destructive">{taskQuery.presentationError}</p>{/if}
+    {#if taskQuery?.propertyError}<p role="alert" class="text-xs text-destructive">{taskQuery.propertyError}</p>{/if}
+    {#if taskQuery?.listColumnsError}<p role="alert" class="text-xs text-destructive">{taskQuery.listColumnsError}</p>{/if}
     {#if taskGroupBy === "section"}
       {#each sections as section (section.id)}
         {@const sectionTasks = drag.tasksForSection(section)}
@@ -732,6 +784,9 @@
         {t("projects.filters.noMatchingTasks")}
       </div>
     {/if}
+    {#if taskQuery}
+      <ProjectListCalculationFooter query={taskQuery} gridTemplate={taskListGridTemplate} gridMinWidth={taskListGridMinWidth} columns={taskListColumns} columnLabel={taskListColumnLabel} />
+    {/if}
   </div>
 </div>
 <ProjectListScrollbars
@@ -805,11 +860,30 @@
   }
 
   .project-list-scroll {
+    --project-list-content-inset: 1rem;
     overflow-x: hidden;
     overflow-y: auto;
     padding-right: 0.5rem;
     padding-bottom: 0.5rem;
     scrollbar-width: none;
+  }
+
+  :global(.project-list-scroll .project-list-frozen-cell) {
+    position: sticky;
+    z-index: 3;
+    border-radius: 0;
+    background-color: var(--project-list-row-bg, var(--cal-bg));
+  }
+
+  :global(.project-list-scroll .project-list-frozen-cell:focus-within),
+  :global(.project-list-scroll .project-list-frozen-cell:has([aria-expanded="true"])) {
+    z-index: 10;
+  }
+
+  :global(.project-list-scroll .project-list-wrap-cell .truncate) {
+    overflow: visible;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .project-list-scroll[data-mobile-layout="true"] {

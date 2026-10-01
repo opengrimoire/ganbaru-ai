@@ -27,6 +27,7 @@ fn database_rollups_compute_from_relations_and_invalidate_cache() {
             &pool,
             DATA_SOURCE_B,
             None,
+            None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
                     "Name": {
@@ -44,8 +45,6 @@ fn database_rollups_compute_from_relations_and_invalidate_cache() {
                         }
                     }
                 }),
-                property_order: vec!["title".to_string(), "budget".to_string()],
-                hidden_property_ids: vec![],
             },
         )
         .await
@@ -53,6 +52,7 @@ fn database_rollups_compute_from_relations_and_invalidate_cache() {
         data_source_schema::update_data_source_schema(
             &pool,
             DATA_SOURCE_A,
+            None,
             None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
@@ -83,12 +83,6 @@ fn database_rollups_compute_from_relations_and_invalidate_cache() {
                         }
                     }
                 }),
-                property_order: vec![
-                    "title".to_string(),
-                    "project_relation".to_string(),
-                    "project_budget".to_string(),
-                ],
-                hidden_property_ids: vec![],
             },
         )
         .await
@@ -219,6 +213,7 @@ fn database_rollups_reject_incompatible_schema_configuration() {
             &pool,
             DATA_SOURCE_A,
             None,
+            None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
                     "Name": {
@@ -248,12 +243,6 @@ fn database_rollups_reject_incompatible_schema_configuration() {
                         }
                     }
                 }),
-                property_order: vec![
-                    "title".to_string(),
-                    "project_relation".to_string(),
-                    "bad_rollup".to_string(),
-                ],
-                hidden_property_ids: vec![],
             },
         )
         .await;
@@ -281,6 +270,7 @@ fn database_formulas_compute_without_persisting_stale_values() {
         data_source_schema::update_data_source_schema(
             &pool,
             DATA_SOURCE_A,
+            None,
             None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
@@ -337,16 +327,6 @@ fn database_formulas_compute_without_persisting_stale_values() {
                         }
                     }
                 }),
-                property_order: vec![
-                    "title".to_string(),
-                    "estimate".to_string(),
-                    "done".to_string(),
-                    "score_formula".to_string(),
-                    "score_label_formula".to_string(),
-                    "state_formula".to_string(),
-                    "broken_formula".to_string(),
-                ],
-                hidden_property_ids: vec![],
             },
         )
         .await
@@ -448,6 +428,7 @@ fn database_formulas_reject_unknown_dependencies_cycles_and_dynamic_prop_calls()
             &pool,
             DATA_SOURCE_A,
             None,
+            None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
                     "Name": {
@@ -465,8 +446,6 @@ fn database_formulas_reject_unknown_dependencies_cycles_and_dynamic_prop_calls()
                         }
                     }
                 }),
-                property_order: vec!["title".to_string(), "bad_formula".to_string()],
-                hidden_property_ids: vec![],
             },
         )
         .await;
@@ -478,6 +457,7 @@ fn database_formulas_reject_unknown_dependencies_cycles_and_dynamic_prop_calls()
         let cycle = data_source_schema::update_data_source_schema(
             &pool,
             DATA_SOURCE_A,
+            None,
             None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
@@ -504,12 +484,6 @@ fn database_formulas_reject_unknown_dependencies_cycles_and_dynamic_prop_calls()
                         }
                     }
                 }),
-                property_order: vec![
-                    "title".to_string(),
-                    "alpha_formula".to_string(),
-                    "beta_formula".to_string(),
-                ],
-                hidden_property_ids: vec![],
             },
         )
         .await;
@@ -521,6 +495,7 @@ fn database_formulas_reject_unknown_dependencies_cycles_and_dynamic_prop_calls()
         let dynamic_prop = data_source_schema::update_data_source_schema(
             &pool,
             DATA_SOURCE_A,
+            None,
             None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
@@ -539,8 +514,6 @@ fn database_formulas_reject_unknown_dependencies_cycles_and_dynamic_prop_calls()
                         }
                     }
                 }),
-                property_order: vec!["title".to_string(), "bad_formula".to_string()],
-                hidden_property_ids: vec![],
             },
         )
         .await;

@@ -8,6 +8,8 @@ import { advancedBlocks } from "./advanced-blocks";
 import { pageActions } from "./page-actions";
 import { diagnostics } from "./diagnostics";
 import { workingMarkdown } from "./working-markdown";
+import { propertyDisplay } from "./property-display";
+import { rowHierarchy } from "./row-hierarchy";
 
 export const notes = {
   ...navigationAndSearch,
@@ -20,4 +22,6 @@ export const notes = {
   ...pageActions,
   ...diagnostics,
   ...workingMarkdown,
+  ...propertyDisplay,
+  ...rowHierarchy,
 } as const;

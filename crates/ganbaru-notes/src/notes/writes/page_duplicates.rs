@@ -298,6 +298,17 @@ pub async fn duplicate_page(
         .await
         .map_err(|e| format!("begin duplicate notes page: {e}"))?;
     let root_page = load_page_row(&mut tx, page_id).await?;
+    if let Some(source_id) = root_page
+        .parent_data_source_id
+        .as_ref()
+        .filter(|_| root_page.parent_type == "data_source_id")
+    {
+        crate::notes::data_source_row_hierarchy::validate_sources_tx(
+            &mut tx,
+            std::slice::from_ref(source_id),
+        )
+        .await?;
+    }
     if matches!(root_page.parent_type.as_str(), "page_id" | "block_id") {
         let source_block = load_child_page_block_row(&mut tx, page_id).await?;
         history::record_page_snapshot_tx(&mut tx, &source_block.page_id, "duplicate_page").await?;
@@ -325,6 +336,36 @@ pub async fn duplicate_page(
     {
         let source_page = load_page_row(&mut tx, &source_page_id).await?;
         let blocks = load_page_block_subtree_rows(&mut tx, &source_page_id).await?;
+        if let Some(source_id) = source_page
+            .parent_data_source_id
+            .as_ref()
+            .filter(|_| source_page.parent_type == "data_source_id")
+        {
+            let children = sqlx::query_as::<_, NotePageRow>(
+                "SELECT page.* FROM notes_data_source_row_hierarchy AS hierarchy JOIN notes_pages AS page ON page.id = hierarchy.row_page_id
+                 WHERE hierarchy.parent_row_page_id = ? AND hierarchy.data_source_id = ?
+                   AND page.parent_type = 'data_source_id' AND page.parent_data_source_id = ? AND page.in_trash = 0 AND page.archived = 0
+                 ORDER BY page.id LIMIT ?",
+            ).bind(&source_page_id).bind(source_id).bind(source_id)
+                .bind((super::database_copy::MAX_COPY_OBJECTS + 1) as i64).fetch_all(&mut *tx).await
+                .map_err(|error| format!("load duplicated row sub-items: {error}"))?;
+            for child in children {
+                if plans.len() + queue.len() >= super::database_copy::MAX_COPY_OBJECTS {
+                    return Err("row sub-items exceed the database copy limit".to_string());
+                }
+                let child_duplicate_id = new_note_id(&mut tx, &mut reserved_ids).await?;
+                block_ids.insert(child.id.clone(), child_duplicate_id.clone());
+                queue.push_back((
+                    child.id,
+                    child_duplicate_id,
+                    child.title,
+                    Some(NoteParent::DataSourceId {
+                        data_source_id: source_id.clone(),
+                    }),
+                    false,
+                ));
+            }
+        }
         for row in &blocks {
             if row.block_type == "child_page" {
                 let child_page = load_page_row(&mut tx, &row.id).await?;

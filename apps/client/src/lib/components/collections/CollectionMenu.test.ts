@@ -101,6 +101,70 @@ describe("Shared collection menus", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  it("commits a scalar field before outside background dismissal without stealing focus", async () => {
+    const { dialog, row } = host();
+    const commit = vi.fn();
+    const connectedAtCommit: boolean[] = [];
+    const children = createRawSnippet(() => ({
+      render: () => '<div><input aria-label="Filter value" /></div>',
+      setup: (element) => {
+        const input = element.querySelector<HTMLInputElement>("input")!;
+        input.addEventListener("blur", () => {
+          connectedAtCommit.push(input.isConnected);
+          commit(input.value);
+        });
+      },
+    }));
+    component = mount(CollectionMenu, { target: row, props: { label: "Filter", kind: "filter", children } });
+    const trigger = await open(row);
+    const triggerFocus = vi.spyOn(trigger, "focus");
+    const panel = dialog.querySelector<HTMLElement>('[role="dialog"]')!;
+    panel.querySelector<HTMLInputElement>("input")!.value = "High";
+    const background = document.createElement("div");
+    document.body.append(background);
+    background.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    background.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    expect(commit).toHaveBeenCalledExactlyOnceWith("High");
+    expect(connectedAtCommit).toEqual([true]);
+    await tick();
+    expect(panel.isConnected).toBe(false);
+    expect(triggerFocus).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("handles Escape after its last focused field becomes disabled and rejects unrelated Escape", async () => {
+    const { dialog, row } = host();
+    const children = createRawSnippet(() => ({ render: () => '<div><fieldset><input aria-label="Filter value" /></fieldset></div>' }));
+    component = mount(CollectionMenu, { target: row, props: { label: "Filter", kind: "filter", children } });
+    const trigger = await open(row);
+    const panel = dialog.querySelector<HTMLElement>('[role="dialog"]')!;
+    const input = panel.querySelector<HTMLInputElement>("input")!;
+    input.blur();
+    const enabledEscape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    document.body.dispatchEvent(enabledEscape);
+    await tick();
+    expect(enabledEscape.defaultPrevented).toBe(false);
+    expect(panel.isConnected).toBe(true);
+
+    input.focus();
+    input.blur();
+    panel.querySelector<HTMLFieldSetElement>("fieldset")!.disabled = true;
+    expect(input.matches(":disabled")).toBe(true);
+    const unrelated = document.createElement("input");
+    document.body.append(unrelated);
+    const unrelatedEscape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    unrelated.dispatchEvent(unrelatedEscape);
+    expect(unrelatedEscape.defaultPrevented).toBe(false);
+    expect(panel.isConnected).toBe(true);
+
+    const disabledEscape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    document.body.dispatchEvent(disabledEscape);
+    await tick();
+    expect(disabledEscape.defaultPrevented).toBe(true);
+    expect(panel.isConnected).toBe(false);
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it("runs an action before dismissing and removes the floating panel when unmounted", async () => {
     const { dialog, row } = host();
     const action = vi.fn();
@@ -133,6 +197,48 @@ describe("Shared collection menus", () => {
     dialog.querySelector<HTMLButtonElement>("[data-collection-menu-keep-open]")?.click();
     await tick();
     expect(dialog.querySelector('[role="dialog"]')).not.toBeNull();
+  });
+
+  it("dismisses immediate property actions while keeping nested filter actions inside their owner", async () => {
+    const { dialog, row } = host();
+    const move = vi.fn();
+    const addFilter = vi.fn();
+    const filterChildren = createRawSnippet(() => ({
+      render: () => '<div><button type="button">Add filter</button></div>',
+      setup: (element) => { element.querySelector("button")?.addEventListener("click", addFilter); },
+    }));
+    const children = createRawSnippet(() => ({
+      render: () => '<div><button type="button">Move right</button><div data-filter-target></div></div>',
+      setup: (element) => {
+        element.querySelector("button")?.addEventListener("click", move);
+        nested = mount(CollectionMenu, { target: element.querySelector("[data-filter-target]")!, props: {
+          label: "Filter", kind: "filter", children: filterChildren,
+        } });
+      },
+    }));
+    component = mount(CollectionMenu, { target: row, props: {
+      label: "Priority", kind: "property", dismissOnAction: true, children,
+    } });
+    const trigger = await open(row);
+    const property = dialog.querySelector<HTMLElement>('[role="dialog"][aria-label="Priority"]')!;
+    property.querySelector<HTMLButtonElement>('[aria-label="Filter"]')!.click();
+    await vi.waitFor(() => expect(property.querySelector('[role="dialog"][aria-label="Filter"]')).not.toBeNull());
+    const filter = property.querySelector<HTMLElement>('[role="dialog"][aria-label="Filter"]')!;
+    filter.querySelector<HTMLButtonElement>("[data-collection-menu-body] button")!.click();
+    await tick();
+    expect(addFilter).toHaveBeenCalledOnce();
+    expect(filter.isConnected).toBe(true);
+    expect(property.isConnected).toBe(true);
+    filter.focus();
+    filter.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    await tick();
+    expect(filter.isConnected).toBe(false);
+    property.querySelector<HTMLButtonElement>("[data-collection-menu-body] button")!.click();
+    await tick();
+    await tick();
+    expect(move).toHaveBeenCalledOnce();
+    expect(property.isConnected).toBe(false);
+    expect(document.activeElement).toBe(trigger);
   });
 
   it("closes the New template picker after a template is chosen", async () => {

@@ -28,7 +28,19 @@ List is the default view. It presents section or computed groups, configurable c
 
 Its rows, cells, resize handles, and inline task creation use the [shared collection components](../collections.md) also used by Notes. Task property editors, automatic width fitting, section controls, subtasks, selection, and manual ordering remain project-specific.
 
-Columns can include status, dates, priority, assignee, reviewer, estimate, schedule, dependencies, tags, and compatible custom fields. Users can show, hide, reorder, and resize columns per project. Long values truncate with accessible full text.
+Columns can include status, dates, priority, assignee, reviewer, estimate, schedule, dependencies, tags, and compatible custom fields. Users can show, hide, reorder, and resize columns per project. Column headers expose contextual sorting, compatible filters, visibility, wrapping, and freezing through a selected column. Frozen offsets use the rendered column widths, including resized tracks and preceding selection controls. Narrow tables limit the effective frozen prefix to leave room for a scrollable data column, while preserving the configured frozen-through property for a wider viewport. Wrapping and freezing persist by stable property identity in the project's List preferences.
+
+Date columns offer local, ISO, and relative display. Start and due times offer local, 12-hour, 24-hour, or hidden time. Numeric custom properties offer plain, grouped, or percent display; editing always uses the canonical numeric value. These display choices persist per column without changing task values, query predicates, or sorting.
+
+Headers can insert a custom property next to the current column and edit its name and options. Duplicate property with empty values creates a new schema and fresh option identities in one native transaction. It copies the property's type and option configuration, leaves source values intact, and creates no task values for the duplicate. A failed visibility write leaves a successfully created property available in Columns, with a visible retryable error.
+
+Property creation reserves column visibility and ordering until its schema and visibility writes finish. Header name drafts refresh after canonical renames when pristine, preserve active or rejected edits, and reset for a different property. Numeric cell edits keep failed or invalid drafts when refocused for correction, and prevent a second edit while their value write is pending.
+
+Each column can show a calculation over all tasks matched by the native query, including rows beyond the loaded page and excluding unmatched parent context. All properties support count, filled, and empty counts. Estimate and numeric custom properties also support sum, average, minimum, and maximum. Custom property counts include zero and explicitly unchecked values as filled. Missing numeric values do not contribute to reductions; an empty sum displays zero, while an empty average, minimum, or maximum displays Empty. Calculations wait for the current query and do not display totals from an older filter. Failed reads show a retryable error and hide calculations until the query succeeds.
+
+Conditional row colors use ordered project-local status or priority rules. The first matching rule sets the row tint; selection remains visible. Rule identities, conditions, palette colors, and order persist in List preferences. Failed presentation writes restore the saved state and report the failure while retaining schema drafts.
+
+Grouping, filters, sorting, columns, and saved views use the shared compact floating settings shell. Its root summarizes the current configuration, and detail pages retain the same owning popover and keyboard navigation. Column changes disable competing writes while saving; a failed preference write restores the previous columns and displays a retryable error beside their controls.
 
 Rows can group by section, status, priority, due-date bucket, or scheduled state. Computed groups are projections over the same tasks. Quick creation pre-fills a group value only when it maps safely to canonical fields.
 

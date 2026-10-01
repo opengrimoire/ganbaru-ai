@@ -1,5 +1,6 @@
 <script lang="ts">
-  import CirclePlus from "@lucide/svelte/icons/circle-plus";
+  import ProjectListPropertyMenu from "./ProjectListPropertyMenu.svelte";
+  import { getProjectListTableContext } from "./project-list-table-context";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type {
     ProjectTaskListColumn,
@@ -31,27 +32,28 @@
   } = $props();
 
   const { t } = getLocalization();
+  const context = getProjectListTableContext();
 </script>
 
 {#snippet columnHeaderCell(label: string, column: ProjectTaskListResizableColumn)}
   <CollectionColumnHeader {label} resizeLabel={t("projects.columns.resizeColumn", label)}
+    class={context?.cellClass(column)} style={context?.cellStyle(column)}
     onpointerdown={(event) => onResizePointerDown(event, column)}
     ondblclick={(event) => onResizeDoubleClick(event, column)}
-    onkeydown={(event) => onResizeKeydown(event, column)} />
+    onkeydown={(event) => onResizeKeydown(event, column)}>
+    {#snippet actions()}<ProjectListPropertyMenu {column} {label} />{/snippet}
+  </CollectionColumnHeader>
 {/snippet}
 
 <CollectionRow template={gridTemplate} minWidth={gridMinWidth} header divider={false} role="row"
   class={mode === "section" ? "project-list-divider group/column-header" : "project-list-divider group/list-column-header"}>
-  <div></div>
-  <div></div>
+  <div class={context?.cellClass("selection")} style={context?.cellStyle("selection")}></div>
+  <div class={context?.cellClass("open")} style={context?.cellStyle("open")}></div>
   {@render columnHeaderCell(t("projects.list.name"), "name")}
   {#each taskListColumns as column (column)}
     {@render columnHeaderCell(taskListColumnLabel(column), column)}
   {/each}
-  <div
-    class="flex min-h-11 min-w-0 items-center justify-center self-stretch rounded-md text-muted-foreground"
-    aria-hidden="true"
-  >
-    <CirclePlus size={15} strokeWidth={1.75} />
+  <div class="flex min-h-11 min-w-0 items-center justify-center self-stretch text-muted-foreground">
+    <ProjectListPropertyMenu column={taskListColumns.at(-1) ?? "name"} label={t("projects.columns.insertProperty")} addOnly />
   </div>
 </CollectionRow>

@@ -29,10 +29,12 @@ export type ProjectTaskTagFilter = string | "all" | "none";
 export type ProjectCustomFieldReference = `custom:${string}`;
 export const PROJECT_TASK_SORT_MODES = [
   "manual",
+  "title",
   "status",
   "section",
   "priority",
   "due",
+  "start",
   "scheduled",
   "created",
   "updated",
@@ -368,6 +370,7 @@ export interface ProjectTaskViewPage {
   nextCursor?: string;
   columnCounts: ProjectTaskColumnCount[];
   aggregates?: ProjectDashboardTaskAggregates;
+  columnCalculations?: ProjectTaskColumnCalculations[];
   matchedEventIds: string[];
   taskTagLinks: ProjectTaskTagLink[];
   customFieldValues: ProjectCustomFieldValue[];
@@ -377,6 +380,17 @@ export interface ProjectTaskViewPage {
   tags: ProjectTag[];
   customFields: ProjectCustomField[];
   customFieldOptions: ProjectCustomFieldOption[];
+}
+
+/** Reductions over the complete filtered task set, independent of visible pages. */
+export interface ProjectTaskColumnCalculations {
+  column: "name" | ProjectTaskListColumn;
+  total: number;
+  filled: number;
+  sum?: number;
+  average?: number;
+  minimum?: number;
+  maximum?: number;
 }
 
 export interface ProjectTaskDetailData {
@@ -623,6 +637,7 @@ export interface ProjectCustomFieldCreate {
   name: string;
   fieldType: ProjectCustomFieldType;
   sortOrder: number;
+  duplicateSourceId?: string;
 }
 
 export interface ProjectCustomFieldUpdate {

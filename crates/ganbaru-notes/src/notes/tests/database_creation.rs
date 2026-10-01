@@ -358,6 +358,7 @@ fn linked_database_view_shares_source_and_keeps_view_settings_independent() {
             &pool,
             DATA_SOURCE_A,
             None,
+            None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
                     "Name": {
@@ -379,12 +380,6 @@ fn linked_database_view_shares_source_and_keeps_view_settings_independent() {
                         "number": { "format": "number" }
                     }
                 }),
-                property_order: vec![
-                    "title".to_string(),
-                    "details".to_string(),
-                    "estimate".to_string(),
-                ],
-                hidden_property_ids: vec!["details".to_string()],
             },
         )
         .await
@@ -409,6 +404,7 @@ fn linked_database_view_shares_source_and_keeps_view_settings_independent() {
                     hidden_property_ids: vec!["details".to_string()],
                     column_widths: json!({ "title": 260, "details": 180, "estimate": 120 }),
                     row_open_mode: "side_panel".to_string(),
+                    ..Default::default()
                 },
             },
         )
@@ -477,6 +473,7 @@ fn linked_database_view_shares_source_and_keeps_view_settings_independent() {
                     hidden_property_ids: vec!["estimate".to_string()],
                     column_widths: json!({ "title": 320, "details": 180, "estimate": 120 }),
                     row_open_mode: "full_page".to_string(),
+                    ..Default::default()
                 },
             },
         )
@@ -527,6 +524,7 @@ fn linked_database_view_shares_source_and_keeps_view_settings_independent() {
         data_source_schema::update_data_source_schema(
             &pool,
             DATA_SOURCE_A,
+            None,
             Some(LINKED_DATABASE_VIEW_A),
             NoteDataSourceSchemaUpdate {
                 properties: json!({
@@ -555,13 +553,6 @@ fn linked_database_view_shares_source_and_keeps_view_settings_independent() {
                         "date": {}
                     }
                 }),
-                property_order: vec![
-                    "title".to_string(),
-                    "estimate".to_string(),
-                    "details".to_string(),
-                    "due".to_string(),
-                ],
-                hidden_property_ids: vec!["estimate".to_string()],
             },
         )
         .await

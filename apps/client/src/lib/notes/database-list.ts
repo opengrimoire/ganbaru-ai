@@ -1,3 +1,4 @@
+import { notesDatabaseSerializeFilters } from "./database-filters";
 import {
   notesDatabaseTableCellText,
   notesDatabaseTableColumns,
@@ -27,6 +28,7 @@ const LIST_GROUP_PROPERTY_TYPES = new Set<string>([
   "status",
   "checkbox",
   "people",
+  "relation",
   "date",
 ]);
 
@@ -145,11 +147,7 @@ export function notesDatabaseListUpdate(
   sorts: readonly NotesDatabaseTableSort[],
 ): NotesDataSourceListViewUpdate {
   return {
-    filter: filters.map((filter) => ({
-      property_id: filter.property_id,
-      condition: filter.condition,
-      value: filter.value ?? null,
-    })),
+    filter: notesDatabaseSerializeFilters(filters),
     sorts: sorts.map((sort) => ({
       property_id: sort.property_id,
       direction: sort.direction,
@@ -254,6 +252,7 @@ function rowGroupIds(row: NotesPage, groupColumn: NotesDatabaseTableColumn): str
         ? [payload.start]
         : [LIST_EMPTY_GROUP_ID];
     case "people":
+    case "relation":
       if (!Array.isArray(payload)) return [LIST_EMPTY_GROUP_ID];
       return nonEmptyGroupIds(payload
         .filter(isRecord)
@@ -265,7 +264,7 @@ function rowGroupIds(row: NotesPage, groupColumn: NotesDatabaseTableColumn): str
 }
 
 function nonEmptyGroupIds(groupIds: string[]): string[] {
-  return groupIds.length > 0 ? groupIds : [LIST_EMPTY_GROUP_ID];
+  return groupIds.length > 0 ? [...new Set(groupIds)] : [LIST_EMPTY_GROUP_ID];
 }
 
 function dynamicGroup(

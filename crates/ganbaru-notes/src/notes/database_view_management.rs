@@ -90,6 +90,7 @@ pub async fn duplicate_database_view(
         .await
         .map_err(|error| format!("begin Notes view duplicate: {error}"))?;
     let page_id = page_id_tx(&mut tx, &request.database_id).await?;
+    super::database_editing_lock::ensure_unlocked_tx(&mut tx, &request.database_id).await?;
     let source = view_tx(&mut tx, &request.database_id, &request.source_view_id).await?;
     history::record_page_snapshot_tx(&mut tx, &page_id, "duplicate_database_view").await?;
     project_history::mark_page_dirty_tx(&mut tx, &page_id, "Duplicate database view", false)
@@ -138,6 +139,7 @@ pub async fn rename_database_view(
         .await
         .map_err(|error| format!("begin Notes view rename: {error}"))?;
     let page_id = page_id_tx(&mut tx, database_id).await?;
+    super::database_editing_lock::ensure_unlocked_tx(&mut tx, database_id).await?;
     let current = view_tx(&mut tx, database_id, view_id).await?;
     if current.name != name {
         history::record_page_snapshot_tx(&mut tx, &page_id, "rename_database_view").await?;
@@ -173,6 +175,7 @@ pub async fn delete_database_view(
         .map_err(|error| format!("begin Notes view delete: {error}"))?;
     let page_id = page_id_tx(&mut tx, database_id).await?;
     let current = view_tx(&mut tx, database_id, view_id).await?;
+    super::database_editing_lock::ensure_unlocked_tx(&mut tx, database_id).await?;
     if current.view_type == "table" {
         let other_tables: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM notes_database_views WHERE data_source_id = ? AND type = 'table' AND id <> ?",
@@ -186,8 +189,8 @@ pub async fn delete_database_view(
             return Err("a data source needs a table view to edit its properties".to_string());
         }
     }
-    let replacement: Option<String> = sqlx::query_scalar(
-        "SELECT id FROM notes_database_views WHERE database_id = ? AND id <> ? ORDER BY CASE WHEN type = 'table' THEN 0 ELSE 1 END, sort_order ASC, created_time ASC, id ASC LIMIT 1",
+    let replacement: Option<(String, String)> = sqlx::query_as(
+        "SELECT id, data_source_id FROM notes_database_views WHERE database_id = ? AND id <> ? ORDER BY CASE WHEN type = 'table' THEN 0 ELSE 1 END, sort_order ASC, created_time ASC, id ASC LIMIT 1",
     )
     .bind(database_id)
     .bind(view_id)
@@ -206,7 +209,8 @@ pub async fn delete_database_view(
     let mut payload: Value = serde_json::from_str(&payload)
         .map_err(|error| format!("parse Notes database block: {error}"))?;
     if payload.get("view_id").and_then(Value::as_str) == Some(view_id) {
-        payload["view_id"] = Value::String(replacement);
+        payload["view_id"] = Value::String(replacement.0);
+        payload["data_source_id"] = Value::String(replacement.1);
         sqlx::query("UPDATE notes_blocks SET payload = ?, last_edited_time = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
             .bind(payload.to_string())
             .bind(database_id)

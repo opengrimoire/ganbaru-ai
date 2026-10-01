@@ -47,6 +47,8 @@
   import { cn } from "$lib/utils";
   import PriorityFlagIcon from "./PriorityFlagIcon.svelte";
   import ProjectStatusBadge from "./ProjectStatusBadge.svelte";
+  import { getProjectListTableContext } from "./project-list-table-context";
+  import { projectListDateLabel, projectListNumberLabel, projectListTimeLabel } from "$lib/projects/project-list-presentation";
 
   let {
     column,
@@ -126,9 +128,11 @@
     onClearDueTime: () => void;
   } = $props();
 
-  const { t } = getLocalization();
+  const localization = getLocalization();
+  const { t } = localization;
   const theme = getTheme();
   const preferences = getPreferences();
+  const context = getProjectListTableContext();
   const FLOATING_PANEL_GAP = 6;
   const FLOATING_PANEL_MARGIN = 8;
   const DATE_PICKER_PANEL_WIDTH = 240;
@@ -144,6 +148,9 @@
   let customFieldPanelOpen = $state(false);
   let customFieldRootEl: HTMLDivElement | undefined = $state();
   let customFieldTriggerEl: HTMLButtonElement | undefined = $state();
+  let valueSaveError = $state<string | null>(null);
+  let numericDraft = $state<string | null>(null);
+  let numericSaving = $state(false);
 
   const todayDate = $derived.by(() => {
     const now = new Date();
@@ -174,8 +181,10 @@
 
   function dateButtonText(dateValue: string | undefined, timeValue: string | undefined, emptyDateLabel: string): string {
     if (!dateValue) return emptyDateLabel;
-    if (!timeValue) return dateValue;
-    return `${dateValue} ${formatTimeLabel(timeValue, preferences.calendarTimeFormat)}`;
+    const date = projectListDateLabel(dateValue, context?.query.listPresentation.dateFormats[column] ?? "locale", localization.locale, todayDate);
+    if (!timeValue || (column !== "start" && column !== "due")) return date;
+    const time = projectListTimeLabel(timeValue, context?.query.listPresentation.timeFormats[column] ?? "locale", localization.locale);
+    return time ? `${date} ${time}` : date;
   }
 
   function emptyCustomFieldPayload(): Omit<ProjectCustomFieldValueUpdate, "taskId" | "fieldId"> {
@@ -198,7 +207,7 @@
   async function saveCustomFieldText(
     field: ProjectCustomField,
     nextValue: string,
-    input?: HTMLInputElement,
+    input?: HTMLInputElement | HTMLTextAreaElement,
   ): Promise<void> {
     const value = customFieldValue(task, field);
     const previousValue = projectCustomFieldTextValue(value);
@@ -227,10 +236,27 @@
     }
     input?.setCustomValidity("");
     if ((current === undefined && nextNumber === null) || current === nextNumber) return;
+    numericSaving = true;
     await onSaveCustomFieldValue(task, field, {
       ...emptyCustomFieldPayload(),
       numberValue: nextNumber,
     });
+  }
+
+  /** Keep an unsuccessful numeric draft visible and format only a committed canonical value. */
+  async function saveFormattedNumber(field: ProjectCustomField, input: HTMLInputElement): Promise<void> {
+    if (numericSaving) return;
+    numericDraft = input.value;
+    valueSaveError = null;
+    try {
+      await saveCustomFieldNumber(field, numericDraft, input);
+      if (!input.validity.valid) return;
+      numericDraft = null;
+    } catch (error: unknown) {
+      valueSaveError = t("projects.customFields.valueSaveFailed", error instanceof Error ? error.message : String(error));
+    } finally {
+      numericSaving = false;
+    }
   }
 
   async function saveCustomFieldDate(field: ProjectCustomField, nextValue: string | null): Promise<void> {
@@ -266,11 +292,12 @@
   }
 
   function handleCustomFieldInputKeydown(
-    event: KeyboardEvent & { currentTarget: HTMLInputElement },
+    event: KeyboardEvent & { currentTarget: HTMLInputElement | HTMLTextAreaElement },
     field: ProjectCustomField,
     value: ProjectCustomFieldValue | undefined,
   ): void {
     if (event.key === "Enter") {
+      if (event.currentTarget instanceof HTMLTextAreaElement && !event.ctrlKey && !event.metaKey) return;
       event.preventDefault();
       event.currentTarget.blur();
       return;
@@ -435,6 +462,7 @@
 </script>
 
 <CollectionCell
+  class={context?.cellClass(column)} style={context?.cellStyle(column)}
   data-list-status-menu-root={column === "status" ? "true" : undefined}
   data-list-priority-menu-root={column === "priority" ? "true" : undefined}
   data-list-date-menu-root={column === "start" || column === "due" ? "true" : undefined}
@@ -691,7 +719,17 @@
           {#if FieldIcon}
             <FieldIcon size={13} strokeWidth={1.75} class="shrink-0 text-muted-foreground" />
           {/if}
-          <input
+          {#if context?.query.listPresentation.wrappedColumns.includes(column)}
+            <textarea
+              value={customFieldInputValue(customField, customValue)}
+              class="min-h-9 min-w-0 flex-1 resize-y rounded border border-transparent bg-transparent px-1 py-1 text-[0.8rem] outline-none hover:bg-background focus:bg-background"
+              aria-label={customField.name}
+              placeholder={t("projects.customFields.emptyValue")}
+              disabled={Boolean(task.archivedAt)}
+              onblur={(event) => { void saveCustomFieldText(customField, event.currentTarget.value, event.currentTarget); }}
+              onkeydown={(event) => handleCustomFieldInputKeydown(event, customField, customValue)}
+            ></textarea>
+          {:else}<input
             type={projectCustomFieldInputType(customField.fieldType)}
             inputmode={projectCustomFieldTextInputMode(customField.fieldType)}
             value={customFieldInputValue(customField, customValue)}
@@ -702,19 +740,28 @@
             onblur={(event) => { void saveCustomFieldText(customField, event.currentTarget.value, event.currentTarget); }}
             onkeydown={(event) => handleCustomFieldInputKeydown(event, customField, customValue)}
           />
+          {/if}
         </div>
       {:else if customField.fieldType === "number"}
         <input
           type="text"
           inputmode="decimal"
-          value={customFieldInputValue(customField, customValue)}
+          value={numericDraft ?? (customValue?.numberValue === undefined ? "" : projectListNumberLabel(customValue.numberValue, context?.query.listPresentation.numberFormats[column] ?? "number", localization.locale))}
+          onfocus={() => { numericDraft ??= customFieldInputValue(customField, customValue); }}
+          oninput={(event) => {
+            numericDraft = event.currentTarget.value;
+            event.currentTarget.setCustomValidity("");
+            valueSaveError = null;
+          }}
           class="relative z-10 h-7 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 text-[0.8rem] text-foreground outline-none transition-colors placeholder:text-muted-foreground hover:border-border hover:bg-background focus:border-ring focus:bg-background disabled:cursor-not-allowed disabled:opacity-60"
           placeholder={t("projects.customFields.emptyValue")}
           title={customDisplayValue}
-          disabled={Boolean(task.archivedAt)}
-          onblur={(event) => { void saveCustomFieldNumber(customField, event.currentTarget.value, event.currentTarget); }}
+          disabled={Boolean(task.archivedAt) || numericSaving}
+          aria-busy={numericSaving}
+          onblur={(event) => { void saveFormattedNumber(customField, event.currentTarget); }}
           onkeydown={(event) => handleCustomFieldInputKeydown(event, customField, customValue)}
         />
+        {#if valueSaveError}<span role="alert" class="text-xs text-destructive">{valueSaveError}</span>{/if}
       {:else if customField.fieldType === "checkbox"}
         {@const checked = customValue?.checkboxValue ?? false}
         <button
@@ -745,7 +792,7 @@
             onclick={() => { customFieldPanelOpen = !customFieldPanelOpen; }}
           >
             <CalendarDays size={13} strokeWidth={1.75} class="shrink-0" />
-            <span class="min-w-0 truncate">{customValue?.dateValue ?? t("projects.customFields.emptyValue")}</span>
+            <span class="min-w-0 truncate">{customValue?.dateValue ? projectListDateLabel(customValue.dateValue, context?.query.listPresentation.dateFormats[column] ?? "locale", localization.locale, todayDate) : t("projects.customFields.emptyValue")}</span>
           </button>
           {#if customValue?.dateValue}
             <button

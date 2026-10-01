@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { applyNotesDataSourceTemplate, createNotesDataSourceRowPage, loadNotesPage, updateNotesDataSourceRowProperty } from "$lib/api/notes";
+import { applyNotesDataSourceTemplate, createNotesDataSourceRowPage, createNotesDataSourceSubitem, loadNotesPage, updateNotesDataSourceRowProperty } from "$lib/api/notes";
 import { createNotesDatabaseRowCreation } from "./database-row-creation.svelte";
 import { createProvisionalNotesPage } from "./page-creation";
 import type { NotesDatabaseTableColumn } from "./database-table";
@@ -7,6 +7,7 @@ import type { NotesPage } from "./types";
 
 vi.mock("$lib/api/notes", () => ({
   applyNotesDataSourceTemplate: vi.fn(), createNotesDataSourceRowPage: vi.fn(),
+  createNotesDataSourceSubitem: vi.fn(),
   loadNotesPage: vi.fn(), updateNotesDataSourceRowProperty: vi.fn(),
 }));
 
@@ -27,6 +28,26 @@ beforeEach(() => {
 });
 
 describe("Notes database creation persistence", () => {
+  it("creates a source-owned sub-item atomically and retains its queued title and ancestry on retry", async () => {
+    vi.mocked(createNotesDataSourceSubitem).mockRejectedValueOnce(new Error("Cannot create sub-item"))
+      .mockImplementation(async (_source, _parent, request) => loaded(request.id));
+    vi.mocked(updateNotesDataSourceRowProperty).mockImplementation(async (_source, id, update) => loaded(id, String(update.value)).page);
+    const controller = createNotesDatabaseRowCreation(async () => {});
+    const id = controller.begin("source", "", [], "parent");
+    controller.draft(id, "title", "Child draft");
+    controller.submit(id, title, "Child draft");
+    await vi.waitFor(() => expect(controller.errorFor(id)).toBe("Cannot create sub-item"));
+    expect(controller.hierarchyFor("source", { parent: {
+      parent_row_page_id: "ancestor", ancestor_row_page_ids: ["ancestor"], depth: 1, child_count: 0,
+    } })[id]).toMatchObject({ parent_row_page_id: "parent", ancestor_row_page_ids: ["parent", "ancestor"], depth: 2 });
+    expect(controller.rowsFor("source", [])[0].parent).toEqual({ type: "data_source_id", data_source_id: "source" });
+    controller.retry(id);
+    await vi.waitFor(() => expect(controller.isSaving("source")).toBe(false));
+    expect(createNotesDataSourceSubitem).toHaveBeenLastCalledWith("source", "parent", expect.objectContaining({ id }));
+    expect(createNotesDataSourceRowPage).not.toHaveBeenCalled();
+    expect(updateNotesDataSourceRowProperty).toHaveBeenCalledWith("source", id, { property_id: "title", value: "Child draft" });
+    expect(controller.errorFor(id)).toBeNull();
+  });
   it("serializes queued titles and keeps a newer draft when an earlier save returns", async () => {
     let finish: (page: NotesPage) => void = () => {};
     vi.mocked(updateNotesDataSourceRowProperty).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));

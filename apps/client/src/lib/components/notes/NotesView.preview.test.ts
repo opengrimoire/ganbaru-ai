@@ -128,7 +128,7 @@ function emptyDatabaseTable(request: NotesDatabaseCreateRequest): NotesDataSourc
     view: {
       ...source, object: "view", id: request.view_id,
       parent: { type: "database_id", database_id: request.id }, data_source_id: request.data_source_id,
-      name: "Table", type: "table", filter: {}, sorts: [], url: null,
+      name: "Table", type: "table", filter: null, sorts: [], url: null,
       configuration: { type: "table", table: {
         property_order: ["title"], hidden_property_ids: [], column_widths: {}, row_open_mode: "full_page",
       } },
@@ -227,7 +227,7 @@ describe("Notes preview ownership", () => {
       return {
         block_id: blockId, page_id: owner.page.id, title: block.child_database.title,
         source_block_id: blockId, source_page_id: owner.page.id,
-        is_linked: false, owned_data_source_count: 1,
+        is_linked: false, owned_data_source_count: 1, editing_locked: false,
       };
     });
     const { getNotes } = await import("$lib/stores/notes.svelte");
@@ -370,6 +370,44 @@ describe("Notes preview ownership", () => {
     expect(document.querySelector('[role="dialog"][aria-label="Paste as"]')).toBeNull();
     expect(notes.blockById(blockId)?.type).toBe("child_database");
     expect(document.querySelector(`[data-notes-selectable-block-id="${blockId}"] input[aria-label="Database title"]`)).not.toBeNull();
+  }, 15_000);
+
+  it.each(["center", "side"] as const)("keeps a database collection menu inside its %s preview when another pane opens a database", async (mode) => {
+    const { notes, parent, child } = await setup();
+    const { blockId: parentDatabaseId } = databaseInPage(parent);
+    await notes.selectPageLocally(null);
+    await notes.selectPage(parent.page.id);
+    await vi.waitFor(() => expect(backend.databaseTable).toHaveBeenCalled(), { timeout: 5_000 });
+    const { blockId: childDatabaseId } = databaseInPage(child);
+    await notes.selectPage(child.page.id, { openMode: mode });
+    await vi.waitFor(() => expect(document.querySelector('[data-notes-page-peek] input[aria-label="Database title"]')).not.toBeNull());
+    const peek = document.querySelector<HTMLElement>("[data-notes-page-peek]")!;
+    const owner = peek.closest<HTMLElement>("[data-notes-pane]")!;
+    const title = peek.querySelector<HTMLInputElement>('input[aria-label="Database title"]')!;
+    await vi.waitFor(() => expect(document.activeElement).toBe(title));
+    const trigger = peek.querySelector<HTMLButtonElement>(`[data-notes-selectable-block-id="${childDatabaseId}"] button[aria-label="More"]`)!;
+    trigger.click();
+    await vi.waitFor(() => expect(owner.querySelector('[data-app-floating-surface][aria-label="More"]')).not.toBeNull());
+    const menu = owner.querySelector<HTMLElement>('[data-app-floating-surface][aria-label="More"]')!;
+    await vi.waitFor(() => expect(menu.contains(document.activeElement)).toBe(true));
+    expect(menu.parentElement).toBe(owner);
+    expect(menu.closest("[data-notes-pane]")).toBe(owner);
+    expect(owner.inert).toBe(false);
+
+    const main = notes.editorPanes.find((pane) => pane.id === notes.mainPaneId)!;
+    expect(await main.store.openDatabase(parentDatabaseId)).toBe(true);
+    await vi.waitFor(() => {
+      expect(owner.classList.contains("hidden")).toBe(true);
+      expect(owner.inert).toBe(true);
+    });
+    const remainingMenus = [...document.querySelectorAll<HTMLElement>('[data-app-floating-surface][aria-label="More"]')];
+    expect(remainingMenus.filter((surface) => !owner.contains(surface))).toEqual([]);
+    if (menu.isConnected) {
+      expect(menu.closest("[data-notes-pane]")).toBe(owner);
+      expect(owner.contains(menu)).toBe(true);
+    } else {
+      expect(remainingMenus).toEqual([]);
+    }
   }, 15_000);
 
   it.each(["center", "side"] as const)("retains both editor panes and cached rows while a %s preview opens its database fullwidth", async (mode) => {
@@ -536,7 +574,7 @@ describe("Notes preview ownership", () => {
     const { blockId } = databaseInPage(other, "Shared planning");
     backend.databaseReference.mockResolvedValueOnce({
       block_id: parent.blocks.results[0].id, page_id: parent.page.id, title: "Linked planning",
-      source_block_id: blockId, source_page_id: other.page.id, is_linked: true, owned_data_source_count: 0,
+      source_block_id: blockId, source_page_id: other.page.id, is_linked: true, owned_data_source_count: 0, editing_locked: false,
     });
     const mainStore = notes.editorPanes[0].store;
     expect(await notes.openDatabase(parent.blocks.results[0].id)).toBe(true);

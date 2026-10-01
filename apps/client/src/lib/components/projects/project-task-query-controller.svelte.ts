@@ -50,6 +50,8 @@ import {
 import { projectCalendarEventRootId } from "$lib/projects/project-scheduling";
 import type { Translate } from "$lib/i18n/translator.svelte";
 import type { ProjectCustomFieldValue } from "$lib/projects/types";
+import { defaultProjectListPresentation, parseProjectListPresentation, projectListPresentationForProject, type ProjectListPresentation } from "$lib/projects/project-list-presentation";
+import type { ProjectCustomField, ProjectCustomFieldType } from "$lib/projects/types";
 
 type ProjectsStore = ReturnType<typeof getProjects>;
 type CalendarStore = ReturnType<typeof getCalendar>;
@@ -65,6 +67,18 @@ export class ProjectTaskQueryController {
   readonly #projects: ProjectsStore;
   readonly #calendar: CalendarStore;
   readonly #translate: ProjectTaskQueryControllerInput["translate"];
+  #calculationRequestKey = $state<string | null>(null);
+  #calculationRequestGeneration = 0;
+  #lastTaskViewLoadKey: string | null = null;
+  #presentationWriteGeneration = 0;
+  #presentationWriteProjectId = $state<string | null>(null);
+  #presentationWriteError = $state<{ projectId: string; message: string } | null>(null);
+  #propertyWriteGeneration = 0;
+  #propertyWriteProjectId = $state<string | null>(null);
+  #propertyWriteError = $state<{ projectId: string; message: string } | null>(null);
+  #listColumnWriteGeneration = 0;
+  #listColumnWriteProjectId = $state<string | null>(null);
+  #listColumnWriteError = $state<{ projectId: string; message: string } | null>(null);
 
   showInactiveSections = $state(false);
   showArchivedTasks = $state(false);
@@ -84,6 +98,7 @@ export class ProjectTaskQueryController {
   sortDirection = $state<ProjectTaskSortDirection>("asc");
   listColumns = $state<ProjectTaskListColumn[]>([...DEFAULT_TASK_LIST_COLUMNS]);
   listColumnWidths = $state<ProjectTaskListColumnWidths>({});
+  listPresentation = $state<ProjectListPresentation>(defaultProjectListPresentation());
   savedViewNameDraft = $state("");
   savedViewSaving = $state(false);
   savedViewError = $state<string | null>(null);
@@ -98,6 +113,20 @@ export class ProjectTaskQueryController {
   get projectId(): string | null {
     return this.#projects.selectedProject?.id ?? null;
   }
+
+  get listColumnsSaving(): boolean {
+    return this.projectId !== null && this.#listColumnWriteProjectId === this.projectId;
+  }
+
+  get listColumnsError(): string | null {
+    return this.#listColumnWriteError?.projectId === this.projectId
+      ? this.#listColumnWriteError.message : null;
+  }
+
+  get presentationSaving(): boolean { return this.projectId !== null && this.#presentationWriteProjectId === this.projectId; }
+  get presentationError(): string | null { return this.#presentationWriteError?.projectId === this.projectId ? this.#presentationWriteError.message : null; }
+  get propertySaving(): boolean { return this.projectId !== null && this.#propertyWriteProjectId === this.projectId; }
+  get propertyError(): string | null { return this.#propertyWriteError?.projectId === this.projectId ? this.#propertyWriteError.message : null; }
 
   get allSections() {
     return this.#projects.sectionsForProjectIncludingInactive(this.projectId);
@@ -149,6 +178,18 @@ export class ProjectTaskQueryController {
     return this.#projects.taskViewPage?.archivedCount
       ?? this.tasksIncludingArchived.filter((task) => Boolean(task.archivedAt)).length;
   }
+
+  /** Expose complete-result reductions only after the current query finishes successfully. */
+  get columnCalculations() {
+    const request = this.request();
+    const page = this.#projects.taskViewPage;
+    return request?.view === "list" && page?.projectId === request.projectId && page.view === "list"
+      && !this.#projects.taskViewLoading && !this.#projects.taskViewError
+      && this.#calculationRequestKey === this.#taskQueryRevisionKey(request) ? page.columnCalculations : undefined;
+  }
+
+  get loadError(): string | null { return this.#projects.taskViewError ?? null; }
+  get loading(): boolean { return this.#projects.taskViewLoading; }
 
   get taskIds(): Set<string> {
     return new Set(this.allTasks.map((task) => task.id));
@@ -299,7 +340,8 @@ export class ProjectTaskQueryController {
   }
 
   get customizeActive(): boolean {
-    return !taskListColumnsMatch(this.listColumns, DEFAULT_TASK_LIST_COLUMNS);
+    return !taskListColumnsMatch(this.listColumns, DEFAULT_TASK_LIST_COLUMNS)
+      || JSON.stringify(this.listPresentation) !== JSON.stringify(defaultProjectListPresentation());
   }
 
   get dataFiltersActive(): boolean {
@@ -380,13 +422,34 @@ export class ProjectTaskQueryController {
     };
   }
 
+  /** Distinguish committed writes from page merges, which must not trigger another identical query. */
+  #taskQueryRevisionKey(request: ProjectTaskViewRequest): string {
+    return JSON.stringify([request, this.#projects.taskMutationRevision ?? 0]);
+  }
+
+  /** Reload changed queries and committed mutations once while keeping selected details retained. */
   loadCurrent(selectedTaskIds: readonly string[], selectedTaskId: string | null): void {
     const request = this.request();
     if (!request || !this.#projects.projectDataLoaded(request.projectId)) return;
     const retained = selectedTaskId ? [...selectedTaskIds, selectedTaskId] : [...selectedTaskIds];
-    void this.#projects.loadTaskView(request, false, retained).catch((error) => {
+    const queryKey = this.#taskQueryRevisionKey(request);
+    const loadKey = JSON.stringify([queryKey, [...new Set(retained)].sort()]);
+    if (this.#lastTaskViewLoadKey === loadKey) return;
+    this.#lastTaskViewLoadKey = loadKey;
+    const generation = ++this.#calculationRequestGeneration;
+    void this.#projects.loadTaskView(request, false, retained).then(() => {
+      if (generation === this.#calculationRequestGeneration) this.#calculationRequestKey = queryKey;
+    }).catch((error) => {
+      if (generation === this.#calculationRequestGeneration) this.#lastTaskViewLoadKey = null;
       console.error(`load Project ${request.view} task window failed`, error);
     });
+  }
+
+  /** Retry an explicit failed read even when its canonical query is unchanged. */
+  retryCurrent(selectedTaskIds: readonly string[], selectedTaskId: string | null): void {
+    if (this.loading) return;
+    this.#lastTaskViewLoadKey = null;
+    this.loadCurrent(selectedTaskIds, selectedTaskId);
   }
 
   loadNextList(selectedTaskIds: readonly string[]): void {
@@ -449,6 +512,8 @@ export class ProjectTaskQueryController {
     }));
     if (!taskListColumnsMatch(current.columns, columns)) this.listColumns = columns;
     if (!projectColumnWidthsMatch(current.widths, widths)) this.listColumnWidths = widths;
+    const presentation = projectListPresentationForProject(this.#projects.viewPreferences, this.projectId, this.customFields);
+    if (JSON.stringify(untrack(() => this.listPresentation)) !== JSON.stringify(presentation)) this.listPresentation = presentation;
   }
 
   applyFilterState(state: ProjectTaskFilterState): void {
@@ -476,11 +541,87 @@ export class ProjectTaskQueryController {
     this.customFieldFilters = this.customFieldFilters.filter((filter) => filter.fieldId !== fieldId);
   }
 
+  /** Persist optimistic columns and report failures without overwriting a newer project or edit. */
+  async #persistListColumns(projectId: string, nextColumns: ProjectTaskListColumn[]): Promise<string | null> {
+    const request = ++this.#listColumnWriteGeneration;
+    const previousColumns = [...this.listColumns];
+    this.#listColumnWriteProjectId = projectId;
+    this.#listColumnWriteError = null;
+    this.listColumns = nextColumns;
+    try {
+      await this.#projects.saveTaskListColumns(projectId, nextColumns);
+      return null;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (request === this.#listColumnWriteGeneration && this.projectId === projectId) {
+        if (taskListColumnsMatch(this.listColumns, nextColumns)) this.listColumns = previousColumns;
+        this.#listColumnWriteError = {
+          projectId,
+          message: this.#translate("projects.columns.saveFailed", message),
+        };
+      }
+      return message;
+    } finally {
+      if (request === this.#listColumnWriteGeneration) this.#listColumnWriteProjectId = null;
+    }
+  }
+
+  /** Retain the saved presentation if a visibility preference cannot be written. */
   async toggleColumn(column: ProjectTaskListColumn): Promise<void> {
     const projectId = this.projectId;
-    if (!projectId) return;
-    this.listColumns = toggleProjectListColumn(this.listColumns, column);
-    await this.#projects.saveTaskListColumns(projectId, this.listColumns);
+    if (!projectId || this.listColumnsSaving || this.propertySaving) return;
+    await this.#persistListColumns(projectId, toggleProjectListColumn(this.listColumns, column));
+  }
+
+  /** Reorder only presentation columns, preserving task order. */
+  async moveColumn(column: ProjectTaskListColumn, direction: -1 | 1): Promise<void> {
+    const projectId = this.projectId;
+    const index = this.listColumns.indexOf(column);
+    const target = index + direction;
+    if (!projectId || this.listColumnsSaving || this.propertySaving || index < 0 || target < 0 || target >= this.listColumns.length) return;
+    const next = [...this.listColumns];
+    [next[index], next[target]] = [next[target], next[index]];
+    await this.#persistListColumns(projectId, next);
+  }
+
+  /** Save bounded presentation with rollback and visible errors. */
+  async savePresentation(value: ProjectListPresentation): Promise<void> {
+    const projectId = this.projectId;
+    if (!projectId || this.presentationSaving) return;
+    const previous = this.listPresentation;
+    const generation = ++this.#presentationWriteGeneration;
+    const next = parseProjectListPresentation(value, this.customFields);
+    this.listPresentation = next;
+    this.#presentationWriteProjectId = projectId;
+    this.#presentationWriteError = null;
+    try { await this.#projects.saveTaskListPresentation(projectId, next); }
+    catch (error: unknown) {
+      if (generation === this.#presentationWriteGeneration && this.projectId === projectId) {
+        if (JSON.stringify(this.listPresentation) === JSON.stringify(next)) this.listPresentation = previous;
+        this.#presentationWriteError = {projectId, message: this.#translate("projects.columns.presentationFailed", error instanceof Error ? error.message : String(error))};
+      }
+    } finally { if (generation === this.#presentationWriteGeneration) this.#presentationWriteProjectId = null; }
+  }
+
+  /** Create or duplicate schema, then insert its new stable column beside the invoking property. */
+  async addColumnProperty(name: string, fieldType: ProjectCustomFieldType, after: "name" | ProjectTaskListColumn, source?: ProjectCustomField): Promise<void> {
+    const projectId = this.projectId;
+    if (!projectId || this.propertySaving || this.listColumnsSaving) return;
+    const generation = ++this.#propertyWriteGeneration;
+    this.#propertyWriteProjectId = projectId;
+    this.#propertyWriteError = null;
+    try {
+      if (!name.trim()) throw new Error(this.#translate("projects.columns.nameRequired"));
+      if (this.customFields.some((field) => field.name.toLocaleLowerCase() === name.trim().toLocaleLowerCase())) throw new Error(this.#translate("projects.columns.nameExists"));
+      const created = source ? await this.#projects.duplicateCustomField(source, name) : await this.#projects.addCustomField(projectId, name, fieldType);
+      if (!created || this.projectId !== projectId || generation !== this.#propertyWriteGeneration) return;
+      const column = customTaskListColumn(created.id);
+      const next = this.listColumns.filter((entry) => entry !== column);
+      next.splice(after === "name" ? 0 : Math.max(0, next.indexOf(after) + 1), 0, column);
+      await this.#persistListColumns(projectId, next);
+    } catch (error: unknown) {
+      if (this.projectId === projectId && generation === this.#propertyWriteGeneration) this.#propertyWriteError = {projectId, message: this.#translate("projects.columns.propertyFailed", error instanceof Error ? error.message : String(error))};
+    } finally { if (generation === this.#propertyWriteGeneration) this.#propertyWriteProjectId = null; }
   }
 
   async updateColumnWidths(
@@ -495,6 +636,7 @@ export class ProjectTaskQueryController {
   }
 
   async saveCurrentView(): Promise<void> {
+    if (this.listColumnsSaving || this.propertySaving) return;
     const name = this.savedViewNameDraft.trim();
     if (!name) {
       this.savedViewError = this.#translate("projects.savedViews.nameRequired");
@@ -519,21 +661,30 @@ export class ProjectTaskQueryController {
   }
 
   async applySavedView(view: ProjectSavedTaskView): Promise<void> {
+    if (this.listColumnsSaving || this.propertySaving || this.savedViewSaving) return;
+    const projectId = this.projectId;
     this.#projects.activeView = view.viewId;
     this.applyFilterState(projectTaskFilterStateFromSavedTaskView(view));
     this.showArchivedTasks = view.showArchivedTasks;
-    this.listColumns = [...view.visibleColumns];
-    if (this.projectId) void this.#projects.saveTaskListColumns(this.projectId, view.visibleColumns);
     this.savedViewError = null;
     try {
+      if (projectId) {
+        const columnError = await this.#persistListColumns(projectId, [...view.visibleColumns]);
+        if (columnError !== null) throw new Error(columnError);
+        if (this.projectId !== projectId) return;
+      } else {
+        this.listColumns = [...view.visibleColumns];
+      }
       if (view.groupBy === "section") {
         await this.#projects.applySectionCollapseState(view.projectId, view.collapsedSectionIds);
       }
     } catch (error) {
-      this.savedViewError = this.#translate(
-        "projects.savedViews.applyFailed",
-        error instanceof Error ? error.message : String(error),
-      );
+      if (this.projectId === projectId) {
+        this.savedViewError = this.#translate(
+          "projects.savedViews.applyFailed",
+          error instanceof Error ? error.message : String(error),
+        );
+      }
     }
   }
 

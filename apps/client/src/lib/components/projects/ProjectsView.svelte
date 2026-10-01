@@ -316,6 +316,7 @@
           {#if toolbarDataReady && toolbarLoadState?.status === "ready" && toolbarLoadState.component.kind === "toolbar"}
             {@const ProjectToolbarPanels = toolbarLoadState.component.component}
             <ProjectToolbarPanels
+              {taskQuery}
               {mobileLayout}
               panel={routeUi.toolbarPanel}
               projectId={selectedProjectId}
@@ -330,6 +331,8 @@
               {taskFiltersActive}
               savedViewSaving={taskQuery.savedViewSaving}
               savedViewError={taskQuery.savedViewError}
+              listColumnsSaving={taskQuery.listColumnsSaving || taskQuery.propertySaving}
+              listColumnsError={taskQuery.listColumnsError}
               bind:taskStatusFilter={taskQuery.statusFilter}
               bind:taskSectionFilter={taskQuery.sectionFilter}
               bind:taskPriorityFilter={taskQuery.priorityFilter}
@@ -437,6 +440,7 @@
             {@const ProjectListView = viewComponents?.list ?? null}
             {#if ProjectListView}
             <ProjectListView
+              {taskQuery}
               {mobileLayout}
               {selectedProjectId}
               {sections}

@@ -1,6 +1,6 @@
 <script lang="ts">
   import NotesLoadingSkeleton from "./NotesLoadingSkeleton.svelte";
-  import { untrack } from "svelte";
+  import { untrack, type Snippet } from "svelte";
   import { databaseResource, notesDatabaseSession, rememberDatabaseScroll } from "$lib/notes/database-session.svelte";
   import NotesDatabaseOptionBadge from "./NotesDatabaseOptionBadge.svelte";
   import NotesDatabasePropertyValue from "./NotesDatabasePropertyValue.svelte";
@@ -8,8 +8,12 @@
   import CollectionBoard from "$lib/components/collections/CollectionBoard.svelte";
   import CollectionCard from "$lib/components/collections/CollectionCard.svelte";
   import CollectionQuickAdd from "$lib/components/collections/CollectionQuickAdd.svelte";
-  import { formatNumber } from "$lib/i18n/formatters";
+  import { formatList, formatNumber } from "$lib/i18n/formatters";
   import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
+  import NotesDatabaseFilterControls from "./NotesDatabaseFilterControls.svelte";
+  import { notesDatabaseFilterCount } from "$lib/notes/database-query-controls";
+  import NotesDatabaseSortControls from "./NotesDatabaseSortControls.svelte";
+  import NotesDatabaseQueryBar from "./NotesDatabaseQueryBar.svelte";
   import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import {
     createNotesDataSourceRowPage,
@@ -39,7 +43,6 @@
     NotesDatabaseBoardConfiguration,
     NotesDatabaseBoardRowOpenMode,
     NotesDatabaseTableFilter,
-    NotesDatabaseTableFilterCondition,
     NotesDatabaseTableSort,
     NotesDatabaseViewScope,
     NotesDataSourceBoardGroup,
@@ -64,6 +67,9 @@
     onReady = () => {},
     reloadKey = 0,
     settingsOpen = false,
+    editingLocked = false,
+    settingsAnchor = null,
+    settingsHeader,
     onCloseSettings,
     onEditProperties,
   }: {
@@ -75,20 +81,15 @@
     onReady?: () => void;
     reloadKey?: number;
     settingsOpen?: boolean;
+    editingLocked?: boolean;
+    settingsAnchor?: HTMLElement | null;
+    settingsHeader?: Snippet;
     onCloseSettings: () => void;
     onEditProperties: () => void;
   } = $props();
 
   const localization = getLocalization();
   const { t } = localization;
-  const FILTER_CONDITIONS: NotesDatabaseTableFilterCondition[] = [
-    "contains",
-    "equals",
-    "is_empty",
-    "is_not_empty",
-    "checked",
-    "unchecked",
-  ];
 
   let board = $state<NotesDataSourceBoardView | null>(untrack(() => notesDatabaseSession.read(databaseResource("board", dataSourceId, viewScope()))));
   let loading = $state(false);
@@ -192,7 +193,7 @@
     nextFilters = filters,
     nextSorts = sorts,
   ): Promise<void> {
-    if (!board) return;
+    if (editingLocked || mutating || !board) return;
     const resource = databaseResource("board", dataSourceId, viewScope());
     const epoch = notesDatabaseSession.epoch;
     mutating = true;
@@ -215,6 +216,16 @@
     } finally {
       mutating = false;
     }
+  }
+
+  /** Persist filter edits without replacing the current layout configuration. */
+  function saveFilters(nextFilters: NotesDatabaseTableFilter[]): void {
+    void persistBoard(configuration, visibleColumns, nextFilters, sorts);
+  }
+
+  /** Persist sort edits without replacing the current layout configuration. */
+  function saveSorts(nextSorts: NotesDatabaseTableSort[]): void {
+    void persistBoard(configuration, visibleColumns, filters, nextSorts);
   }
 
   async function createCard(group: NotesDataSourceBoardGroup, title: string): Promise<boolean> {
@@ -316,59 +327,6 @@
     void persistBoard({ ...configuration, hidden_group_ids: Array.from(new Set(hiddenIds)) });
   }
 
-  function addSort(): void {
-    const firstColumn = columns[0];
-    if (!firstColumn) return;
-    void persistBoard(configuration, visibleColumns, filters, [
-      ...sorts,
-      { property_id: firstColumn.id, direction: "ascending" },
-    ]);
-  }
-
-  function updateSort(index: number, patch: Partial<NotesDatabaseTableSort>): void {
-    const nextSorts = sorts.map((sort, sortIndex) =>
-      sortIndex === index ? { ...sort, ...patch } : sort,
-    );
-    void persistBoard(configuration, visibleColumns, filters, nextSorts);
-  }
-
-  function removeSort(index: number): void {
-    void persistBoard(
-      configuration,
-      visibleColumns,
-      filters,
-      sorts.filter((_, sortIndex) => sortIndex !== index),
-    );
-  }
-
-  function addFilter(): void {
-    const firstColumn = columns[0];
-    if (!firstColumn) return;
-    void persistBoard(configuration, visibleColumns, [
-      ...filters,
-      { property_id: firstColumn.id, condition: "contains", value: "" },
-    ], sorts);
-  }
-
-  function updateFilter(index: number, patch: Partial<NotesDatabaseTableFilter>): void {
-    const nextFilters = filters.map((filter, filterIndex) => {
-      if (filterIndex !== index) return filter;
-      const next = { ...filter, ...patch };
-      if (!filterConditionNeedsValue(next.condition)) next.value = null;
-      return next;
-    });
-    void persistBoard(configuration, visibleColumns, nextFilters, sorts);
-  }
-
-  function removeFilter(index: number): void {
-    void persistBoard(
-      configuration,
-      visibleColumns,
-      filters.filter((_, filterIndex) => filterIndex !== index),
-      sorts,
-    );
-  }
-
   function openCard(row: NotesPage): void {
     if (configuration.row_open_mode === "side_panel") {
       selectedPanelRowId = row.id;
@@ -394,27 +352,6 @@
     return groups.some((group) => group.rows.some((row) => row.id === rowId));
   }
 
-  function filterConditionNeedsValue(condition: NotesDatabaseTableFilterCondition): boolean {
-    return condition === "contains" || condition === "equals";
-  }
-
-  function filterConditionLabel(condition: NotesDatabaseTableFilterCondition): string {
-    switch (condition) {
-      case "contains":
-        return t("notes.databaseTableFilterCondition.contains");
-      case "equals":
-        return t("notes.databaseTableFilterCondition.equals");
-      case "is_empty":
-        return t("notes.databaseTableFilterCondition.isEmpty");
-      case "is_not_empty":
-        return t("notes.databaseTableFilterCondition.isNotEmpty");
-      case "checked":
-        return t("notes.databaseTableFilterCondition.checked");
-      case "unchecked":
-        return t("notes.databaseTableFilterCondition.unchecked");
-    }
-  }
-
   function defaultConfiguration(): NotesDatabaseBoardConfiguration {
     return {
       group_property_id: null,
@@ -427,7 +364,7 @@
 </script>
 {#snippet viewControls()}
   <div class="flex min-w-0 flex-col items-stretch gap-1 text-[0.8rem]">
-    <span class="min-w-0 flex-1 truncate" role="status">
+    <span class="sr-only" role="status">
       {#if loading}
         {t("notes.databaseBoardLoading")}
       {:else if error}
@@ -436,24 +373,8 @@
         {t("notes.databaseBoardCardsCount", cardCount)}
       {/if}
     </span>
-    <CollectionMenu fullWidth label={t("notes.databaseLayout")}>
+    <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseLayout")} summary={t("notes.databaseViewBoard")}>
       <div class="grid gap-3">
-        <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
-          <span>{t("notes.databaseBoardGroupBy")}</span>
-          <CustomSelect
-            inline
-            appearance="quiet"
-            contentAlign="start"
-            class="w-full min-w-0"
-            ariaLabel={t("notes.databaseBoardGroupBy")}
-            value={String(configuration.group_property_id ?? "")}
-            disabled={loading || mutating || !board}
-            options={[{ value: "", label: t("notes.databaseBoardNoGroupProperty") },
-              ...(groupableColumns).map((column) => ({ value: String(column.id), label: String(column.name) }))]}
-            onChange={(nextValue) => updateGroupProperty(nextValue)}
-            triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
-          />
-        </div>
         <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
           <span>{t("notes.databaseTableOpenMode")}</span>
           <CustomSelect
@@ -463,7 +384,7 @@
             class="w-full min-w-0"
             ariaLabel={t("notes.databaseTableOpenMode")}
             value={String(configuration.row_open_mode ?? "")}
-            disabled={loading || mutating || !board}
+            disabled={editingLocked || loading || mutating || !board}
             options={[{ value: "full_page", label: t("notes.databaseTableOpenFullPage") },
               { value: "side_panel", label: t("notes.databaseTableOpenSidePanel") }]}
             onChange={(nextValue) => updateRowOpenMode(nextValue as NotesDatabaseBoardRowOpenMode)}
@@ -472,25 +393,33 @@
         </div>
       </div>
     </CollectionMenu>
+    <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseGroup")} kind="group" summary={groupColumn?.name ?? t("common.none")}>
+      <div class="grid gap-2">
+        <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
+          <span>{t("notes.databaseBoardGroupBy")}</span>
+          <CustomSelect
+            inline
+            appearance="quiet"
+            contentAlign="start"
+            class="w-full min-w-0"
+            ariaLabel={t("notes.databaseBoardGroupBy")}
+            value={String(configuration.group_property_id ?? "")}
+            disabled={editingLocked || loading || mutating || !board}
+            options={[{ value: "", label: t("notes.databaseBoardNoGroupProperty") },
+              ...(groupableColumns).map((column) => ({ value: String(column.id), label: String(column.name) }))]}
+            onChange={(nextValue) => updateGroupProperty(nextValue)}
+            triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
+          />
+        </div>
+      </div>
+    </CollectionMenu>
 
-    <button
-      type="button"
-      class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:pointer-events-none"
-      disabled={loading || mutating}
-      aria-label={t("notes.databaseBoardReload")}
-      title={t("notes.databaseBoardReload")}
-      onclick={() => {
-        void loadBoard();
-      }}
-    >
-      <RefreshCw class="size-3.5" aria-hidden="true" />
-    </button>
   </div>
 {/snippet}
 
 {#snippet propertyControls()}
       <div class="flex flex-col items-stretch gap-1">
-        <CollectionMenu fullWidth label={t("notes.databaseBoardCardProperties")} kind="properties">
+        <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseTableColumns")} kind="properties" summary={formatNumber(localization.locale, visibleColumns.length)}>
 
           <div class="mt-2 grid gap-1">
             {#each columns.filter((column) => column.type !== "title" && column.id !== configuration.group_property_id) as column (column.id)}
@@ -498,7 +427,7 @@
                 <input
                   type="checkbox"
                   checked={visibleColumns.some((visibleColumn) => visibleColumn.id === column.id)}
-                  disabled={mutating}
+                  disabled={mutating || editingLocked}
                   onchange={(event) => updateCardProperty(column.id, event.currentTarget.checked)}
                   onkeydown={(event) => event.stopPropagation()}
                 />
@@ -508,135 +437,26 @@
           </div>
         </CollectionMenu>
 
-        <CollectionMenu fullWidth label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length}>
+        <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length} summary={formatList(localization.locale, sorts.map((sort) => columns.find((column) => column.id === sort.property_id)?.name ?? ""))}>
 
-          <div class="mt-2 grid gap-2">
-            {#each sorts as sort, index}
-              <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1">
-                <CustomSelect
-                  inline
-                  appearance="quiet"
-                  contentAlign="start"
-                  class="w-full min-w-0"
-                  ariaLabel={t("notes.databaseTableSortProperty")}
-                  value={String(sort.property_id ?? "")}
-                  disabled={mutating}
-                  options={[...(columns).map((column) => ({ value: String(column.id), label: String(column.name) }))]}
-                  onChange={(nextValue) => updateSort(index, { property_id: nextValue })}
-                  triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
-                />
-                <CustomSelect
-                  inline
-                  appearance="quiet"
-                  contentAlign="start"
-                  class="w-full min-w-0"
-                  ariaLabel={t("notes.databaseTableSortDirection")}
-                  value={String(sort.direction ?? "")}
-                  disabled={mutating}
-                  options={[{ value: "ascending", label: t("notes.databaseTableSortAscending") },
-                    { value: "descending", label: t("notes.databaseTableSortDescending") }]}
-                  onChange={(nextValue) => updateSort(index, {
-                    direction: nextValue === "descending" ? "descending" : "ascending",
-                  })}
-                  triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
-                />
-                <button
-                  type="button"
-                  class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none"
-                  disabled={mutating}
-                  aria-label={t("notes.databaseTableRemoveSort")}
-                  title={t("notes.databaseTableRemoveSort")}
-                  onclick={() => removeSort(index)}
-                >
-                  <Trash2 class="size-3.5" aria-hidden="true" />
-                </button>
-              </div>
-            {/each}
-            <button
-              type="button"
-              class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none"
-              disabled={mutating || columns.length === 0}
-              onclick={addSort}
-            >
-              <Plus class="size-3.5" aria-hidden="true" />
-              <span>{t("notes.databaseTableAddSort")}</span>
-            </button>
-          </div>
+          <NotesDatabaseSortControls properties={columns} {sorts} pending={mutating || editingLocked} onchange={saveSorts} />
         </CollectionMenu>
 
-        <CollectionMenu fullWidth label={t("notes.databaseTableFilters")} kind="filter" activeCount={filters.length}>
+        <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseTableFilters")} kind="filter" activeCount={notesDatabaseFilterCount(filters)} summary={notesDatabaseFilterCount(filters) ? formatNumber(localization.locale, notesDatabaseFilterCount(filters)) : ""}>
 
-          <div class="mt-2 grid gap-2">
-            {#each filters as filter, index}
-              <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-1">
-                <CustomSelect
-                  inline
-                  appearance="quiet"
-                  contentAlign="start"
-                  class="w-full min-w-0"
-                  ariaLabel={t("notes.databaseTableFilterProperty")}
-                  value={String(filter.property_id ?? "")}
-                  disabled={mutating}
-                  options={[...(columns).map((column) => ({ value: String(column.id), label: String(column.name) }))]}
-                  onChange={(nextValue) => updateFilter(index, { property_id: nextValue })}
-                  triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
-                />
-                <CustomSelect
-                  inline
-                  appearance="quiet"
-                  contentAlign="start"
-                  class="w-full min-w-0"
-                  ariaLabel={t("notes.databaseTableFilterConditionLabel")}
-                  value={String(filter.condition ?? "")}
-                  disabled={mutating}
-                  options={[...(FILTER_CONDITIONS).map((condition) => ({ value: String(condition), label: String(filterConditionLabel(condition)) }))]}
-                  onChange={(nextValue) => updateFilter(index, {
-                    condition: nextValue as NotesDatabaseTableFilterCondition,
-                  })}
-                  triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
-                />
-                <input
-                  class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={String(filter.value ?? "")}
-                  disabled={mutating || !filterConditionNeedsValue(filter.condition)}
-                  aria-label={t("notes.databaseTableFilterValue")}
-                  onblur={(event) => updateFilter(index, { value: event.currentTarget.value })}
-                  onkeydown={(event) => event.stopPropagation()}
-                />
-                <button
-                  type="button"
-                  class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none"
-                  disabled={mutating}
-                  aria-label={t("notes.databaseTableRemoveFilter")}
-                  title={t("notes.databaseTableRemoveFilter")}
-                  onclick={() => removeFilter(index)}
-                >
-                  <Trash2 class="size-3.5" aria-hidden="true" />
-                </button>
-              </div>
-            {/each}
-            <button
-              type="button"
-              class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none"
-              disabled={mutating || columns.length === 0}
-              onclick={addFilter}
-            >
-              <Plus class="size-3.5" aria-hidden="true" />
-              <span>{t("notes.databaseTableAddFilter")}</span>
-            </button>
-          </div>
+          <NotesDatabaseFilterControls properties={columns} {filters} pending={mutating || editingLocked} onchange={saveFilters} />
         </CollectionMenu>
       </div>
 
       {#if hiddenGroups.length > 0}
-        <CollectionMenu fullWidth label={t("notes.databaseBoardHiddenGroups")} kind="layout">
+        <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseBoardHiddenGroups")} kind="layout">
 
           <div class="mt-2 flex min-w-0 flex-wrap gap-1">
             {#each hiddenGroups as group (group.id)}
               <button
                 type="button"
                 class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none"
-                disabled={mutating}
+                disabled={mutating || editingLocked}
                 aria-label={t("notes.databaseBoardShowGroup", group.name)}
                 onclick={() => updateGroupHidden(group, false)}
               >
@@ -648,20 +468,22 @@
         </CollectionMenu>
       {/if}
 
-
 {/snippet}
 
-
 <section class="space-y-3 pt-2" aria-label={t("notes.databaseBoardTitle")}>
+
+  <NotesDatabaseQueryBar properties={columns} {filters} {sorts} pending={mutating || editingLocked} onFiltersChange={saveFilters} onSortsChange={saveSorts} />
   {#if error}<p class="text-[0.8rem] text-destructive" role="alert">{error}</p>{/if}
   {#if settingsOpen}
-    <CollectionSettings label={t("notes.databaseViewSettings")} onclose={onCloseSettings}>
+    <CollectionSettings label={t("notes.databaseViewSettings")} anchor={settingsAnchor} onclose={onCloseSettings}>
+      {@render settingsHeader?.()}
       {@render viewControls()}
       {#if board}{@render propertyControls()}{/if}
-      <button type="button" class="mt-2 min-h-9 w-full rounded-md px-2 text-left text-sm hover:bg-accent" onclick={() => { onCloseSettings(); onEditProperties(); }}>{t("notes.databaseViewEditProperties")}</button>
+      <p class="mt-2 border-t border-border px-2 pt-2 text-[0.8rem] text-muted-foreground">{t("notes.databaseDataSourceSettings")}</p>
+      <button data-collection-settings-row type="button" disabled={editingLocked} class="min-h-8 w-full rounded-md px-2 text-left hover:bg-accent" onclick={() => { onCloseSettings(); onEditProperties(); }}>{t("notes.databaseViewEditProperties")}</button>
+      <button data-collection-settings-row type="button" class="flex min-h-8 w-full items-center gap-2 rounded px-2 text-left text-muted-foreground hover:bg-accent hover:text-foreground" disabled={loading || mutating} onclick={() => { void loadBoard(); }}><RefreshCw class="size-3.5 shrink-0" aria-hidden="true" />{t("notes.databaseBoardReload")}</button>
     </CollectionSettings>
   {/if}
-
 
   {#if !board && !error}<NotesLoadingSkeleton kind="board" />{/if}
   {#if board}
@@ -673,7 +495,7 @@
           <div class="min-w-0 flex-1"><NotesDatabaseOptionBadge label={group.name} color={group.color} /></div>
           <span class="text-[0.8rem] tabular-nums text-muted-foreground">{formatNumber(localization.locale, board?.group_counts[group.id] ?? group.rows.length)}</span>
           <CollectionMenu kind="actions" iconOnly showHeader={false} label={group.name}>
-            <button type="button" class="flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left hover:bg-accent" disabled={mutating} onclick={() => updateGroupHidden(group, true)}><EyeOff class="size-4" />{t("notes.databaseBoardHideGroup", group.name)}</button>
+            <button type="button" class="flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left hover:bg-accent" disabled={mutating || editingLocked} onclick={() => updateGroupHidden(group, true)}><EyeOff class="size-4" />{t("notes.databaseBoardHideGroup", group.name)}</button>
           </CollectionMenu>
         {/snippet}
         {#snippet card(row, group, dragHandle)}

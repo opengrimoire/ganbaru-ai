@@ -14,13 +14,13 @@ async fn seed_database(pool: &SqlitePool) {
         BLOCK_A,
     )
     .await;
-    data_source_schema::update_data_source_schema(pool, DATA_SOURCE_A, None, NoteDataSourceSchemaUpdate {
+    data_source_schema::update_data_source_schema(pool, DATA_SOURCE_A, None, None, NoteDataSourceSchemaUpdate {
         properties: json!({
             "Name": {"id": "title", "name": "Name", "type": "title", "title": {}},
             "Priority": {"id": "priority", "name": "Priority", "type": "select", "select": {
                 "options": [{"id": "high", "name": "High", "color": "red"}]}},
             "Related": {"id": "related", "name": "Related", "type": "relation", "relation": {"data_source_id": DATA_SOURCE_A}}
-        }), property_order: vec!["title".into(), "priority".into(), "related".into()], hidden_property_ids: vec![],
+        }),
     }).await.unwrap();
     data_source_rows::create_data_source_row_page(
         pool,
@@ -95,7 +95,9 @@ fn database_copy_across_notes_keeps_schema_views_rows_templates_and_self_relatio
         .unwrap();
         sqlx::query("UPDATE notes_database_views SET configuration = ?, filter = ?, sorts = ? WHERE id = ?")
             .bind(json!({"type": "table", "table": {"property_order": ["title", "priority", "related"],
-                "hidden_property_ids": ["related"], "column_widths": {"priority": 220}, "row_open_mode": "full_page"}}).to_string())
+                "hidden_property_ids": ["related"], "column_widths": {"priority": 220}, "row_open_mode": "full_page",
+                "presentation": { "frozen_property_id": "priority", "columns": { "priority": { "wrap": true, "calculation": "unique" } }, "color_rules": [{ "id": "rule", "property_id": "priority", "color": "red", "filters": [{ "property_id": "priority", "condition": "equals", "value": "High" }] }] }
+            }}).to_string())
             .bind(json!({"filters": [{"property_id": "priority", "condition": "is", "value": "high"}]}).to_string())
             .bind(json!([{"property_id": "priority", "direction": "ascending"}]).to_string())
             .bind(DATABASE_VIEW_A).execute(&pool).await.unwrap();
@@ -139,6 +141,28 @@ fn database_copy_across_notes_keeps_schema_views_rows_templates_and_self_relatio
         assert_eq!(
             copied["view"]["configuration"]["table"]["column_widths"][priority],
             220
+        );
+        assert_eq!(
+            copied["view"]["configuration"]["table"]["presentation"]["frozen_property_id"],
+            priority
+        );
+        assert_eq!(
+            copied["view"]["configuration"]["table"]["presentation"]["columns"][priority]["wrap"],
+            true
+        );
+        assert!(
+            copied["view"]["configuration"]["table"]["presentation"]["columns"]
+                .get("priority")
+                .is_none()
+        );
+        assert_eq!(
+            copied["view"]["configuration"]["table"]["presentation"]["color_rules"][0]["property_id"],
+            priority
+        );
+        assert_eq!(
+            copied["view"]["configuration"]["table"]["presentation"]["color_rules"][0]["filters"]
+                [0]["property_id"],
+            priority
         );
         assert_eq!(
             copied["view"]["filter"]["filters"][0]["property_id"],
@@ -523,7 +547,7 @@ fn database_trash_and_restore_cascade_nested_graphs_without_resurrecting_individ
             assert!(reads::get_page(&pool, id, false).await.is_err());
         }
         assert!(
-            data_source_schema::get_data_source_schema(&pool, DATA_SOURCE_A, None)
+            data_source_schema::get_data_source_schema(&pool, DATA_SOURCE_A, None, None)
                 .await
                 .is_err()
         );
@@ -534,7 +558,7 @@ fn database_trash_and_restore_cascade_nested_graphs_without_resurrecting_individ
         }
         assert!(reads::get_block(&pool, BLOCK_F, false).await.is_ok());
         assert!(
-            data_source_schema::get_data_source_schema(&pool, DATA_SOURCE_A, None)
+            data_source_schema::get_data_source_schema(&pool, DATA_SOURCE_A, None, None)
                 .await
                 .is_ok()
         );
@@ -569,7 +593,7 @@ fn page_trash_cascades_owned_databases_and_respects_rows_deleted_again_during_re
         assert!(reads::get_block(&pool, BLOCK_B, false).await.is_err());
         assert!(reads::get_block(&pool, DATABASE_A, false).await.is_ok());
         assert!(
-            data_source_schema::get_data_source_schema(&pool, DATA_SOURCE_A, None)
+            data_source_schema::get_data_source_schema(&pool, DATA_SOURCE_A, None, None)
                 .await
                 .is_ok()
         );
@@ -980,7 +1004,7 @@ fn page_history_restore_refuses_to_delete_database_graphs() {
         assert!(error.contains("project version"));
         assert!(reads::get_page(&pool, PAGE_B, false).await.is_ok());
         assert!(
-            data_source_schema::get_data_source_schema(&pool, DATA_SOURCE_A, None)
+            data_source_schema::get_data_source_schema(&pool, DATA_SOURCE_A, None, None)
                 .await
                 .is_ok()
         );

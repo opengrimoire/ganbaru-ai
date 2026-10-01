@@ -18,15 +18,6 @@ use std::collections::HashSet;
 const DEFAULT_LIST_VIEW_NAME: &str = "List";
 const MAX_LIST_CONFIGURATION_BYTES: usize = 50 * 1024;
 const LIST_ROW_OPEN_MODES: &[&str] = &["full_page", "side_panel"];
-const LIST_GROUP_PROPERTY_TYPES: &[&str] = &[
-    "status",
-    "select",
-    "multi_select",
-    "checkbox",
-    "people",
-    "relation",
-    "date",
-];
 
 #[cfg(test)]
 pub async fn get_data_source_list_view(
@@ -92,11 +83,16 @@ pub async fn update_data_source_list_view(
         "data source properties",
     )?)?;
     let property_ids: HashSet<String> = schema.iter().map(|property| property.id.clone()).collect();
-    let filter = canonical_filter(&update.filter, &property_ids, "board")?;
+    let property_types = schema
+        .iter()
+        .map(|property| (property.id.as_str(), property.property_type.as_str()))
+        .collect();
+    let filter = canonical_filter(&update.filter, &property_types, "list")?;
     let sorts = canonical_sorts(&update.sorts, &property_ids, "board")?;
     let configuration = canonical_list_configuration(&update.configuration, &schema)?;
     let view =
         ensure_list_view_row_tx(&mut tx, &data_source, database_id, view_id, &schema).await?;
+    data_source_views::prepare_view_mutation_tx(&mut tx, &view, "List view").await?;
     sqlx::query(
         "UPDATE notes_database_views
          SET filter = ?,
@@ -193,6 +189,7 @@ async fn ensure_list_view_row_tx(
         return Ok(view);
     }
     let database_id = data_source_views::scoped_database_id(data_source, database_id);
+    super::database_editing_lock::ensure_unlocked_tx(tx, database_id).await?;
     let id = generated_uuid_tx(tx, "generate list view id", "generated_list_view_id").await?;
     let sort_order = data_source_views::next_view_sort_order_tx(tx, database_id).await?;
     sqlx::query(
@@ -313,7 +310,7 @@ fn canonical_group_property_id(
         .iter()
         .find(|property| property.id == property_id)
         .ok_or_else(|| "list group property references an unknown property".to_string())?;
-    if !LIST_GROUP_PROPERTY_TYPES.contains(&property.property_type.as_str()) {
+    if !data_source_views::GROUP_PROPERTY_TYPES.contains(&property.property_type.as_str()) {
         return Err("list group property type is not supported".to_string());
     }
     Ok(Some(property_id.to_string()))

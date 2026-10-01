@@ -7,6 +7,7 @@ use super::models::{
 use super::validation::require_uuid;
 use super::{
     data_source_buttons, data_source_formulas, data_source_relations, data_source_rollups,
+    data_source_table_presentation,
     data_source_views::{
         self, canonical_filter, canonical_sorts, load_active_data_source_and_database_tx,
         parse_json, read_string_field, rich_text_plain_text, stored_filters, stored_sorts,
@@ -14,6 +15,7 @@ use super::{
     },
     data_source_window, history, writes,
 };
+use chrono::{DateTime, NaiveDate, NaiveDateTime};
 use serde_json::{Map, Value, json};
 use sqlx::{Sqlite, SqlitePool, Transaction};
 use std::cmp::Ordering;
@@ -89,10 +91,16 @@ pub async fn update_data_source_table_view(
         "data source properties",
     )?)?;
     let property_ids: HashSet<String> = schema.iter().map(|property| property.id.clone()).collect();
-    let filter = canonical_filter(&update.filter, &property_ids, "table")?;
+    let property_types = schema
+        .iter()
+        .map(|property| (property.id.as_str(), property.property_type.as_str()))
+        .collect();
+    let filter = canonical_filter(&update.filter, &property_types, "table")?;
     let sorts = canonical_sorts(&update.sorts, &property_ids, "table")?;
-    let configuration = canonical_table_configuration(&update.configuration, &property_ids)?;
+    let configuration =
+        canonical_table_configuration(&update.configuration, &schema, &property_ids)?;
     let view = ensure_table_view_row_tx(&mut tx, &data_source, database_id, view_id).await?;
+    data_source_views::prepare_view_mutation_tx(&mut tx, &view, "Table view").await?;
     sqlx::query(
         "UPDATE notes_database_views
          SET filter = ?,
@@ -151,7 +159,10 @@ pub async fn update_data_source_row_property(
     let current_properties = parse_json(&row.properties, "row page properties")?;
     let (mut title, mut properties) =
         normalized_row_properties(&schema, &current_properties, &row.title)?;
-    let next_value = property_value_from_edit(property, &update.value)?;
+    let previous_date = properties
+        .get(&property.key)
+        .and_then(|value| value.get("date"));
+    let next_value = property_value_from_edit(property, &update.value, previous_date)?;
     if property.property_type == "title" {
         title = title_from_property_value(&next_value).unwrap_or_default();
     }
@@ -215,6 +226,25 @@ async fn load_table_view_tx(
     let schema = table_schema(&schema_properties)?;
     let filters = stored_filters(view.filter.as_deref(), "database view filter", "table")?;
     let sorts = stored_sorts(&view.sorts, "database view sorts", "table")?;
+    let configuration = parse_json(
+        view.configuration.as_deref().unwrap_or("{}"),
+        "table view configuration",
+    )?;
+    let table_configuration = configuration
+        .get("table")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    let group_property = table_configuration
+        .get("group_property_id")
+        .and_then(Value::as_str)
+        .and_then(|id| schema.iter().find(|property| property.id == id));
+    let presentation = serde_json::from_value::<data_source_table_presentation::TablePresentation>(
+        table_configuration
+            .get("presentation")
+            .cloned()
+            .unwrap_or_else(|| json!({})),
+    )
+    .map_err(|error| format!("parse table presentation: {error}"))?;
     let mut window = data_source_window::load_row_window_tx(
         tx,
         data_source_id,
@@ -224,7 +254,7 @@ async fn load_table_view_tx(
             sorts: &sorts,
             request: window_request,
             date_property: None,
-            group_property: None,
+            group_property,
         },
     )
     .await?;
@@ -243,7 +273,31 @@ async fn load_table_view_tx(
     .await?;
     data_source_formulas::hydrate_formulas(&schema_properties, &mut window.rows)?;
     data_source_buttons::hydrate_buttons(&schema_properties, &mut window.rows)?;
-    NoteDataSourceTableViewDto::new(data_source, database, view, window)
+    let calculations = data_source_table_presentation::calculations_tx(
+        tx,
+        data_source_id,
+        &schema,
+        &schema_properties,
+        &filters,
+        &presentation,
+        group_property,
+    )
+    .await?;
+    let row_ids = window
+        .rows
+        .iter()
+        .map(|row| row.id.clone())
+        .collect::<Vec<_>>();
+    let row_hierarchy =
+        super::data_source_row_hierarchy::row_metadata_tx(tx, data_source_id, &row_ids).await?;
+    NoteDataSourceTableViewDto::new(
+        data_source,
+        database,
+        view,
+        window,
+        calculations,
+        row_hierarchy,
+    )
 }
 
 pub(super) async fn ensure_table_view_row_tx(
@@ -264,6 +318,7 @@ pub(super) async fn ensure_table_view_row_tx(
         return Ok(view);
     }
     let database_id = data_source_views::scoped_database_id(data_source, database_id);
+    super::database_editing_lock::ensure_unlocked_tx(tx, database_id).await?;
     let id = data_source_views::generated_uuid_tx(
         tx,
         "generate database view id",
@@ -404,12 +459,40 @@ pub(super) fn table_schema(properties: &Value) -> Result<Vec<TableProperty>, Str
 
 fn canonical_table_configuration(
     update: &NoteDataSourceTableConfigurationUpdate,
+    schema: &[TableProperty],
     property_ids: &HashSet<String>,
 ) -> Result<Value, String> {
     let property_order = canonical_property_order(&update.property_order, property_ids)?;
     let hidden_property_ids =
         canonical_hidden_property_ids(&update.hidden_property_ids, property_ids)?;
     let column_widths = canonical_column_widths(&update.column_widths, property_ids)?;
+    let presentation = update
+        .presentation
+        .canonical(schema, &hidden_property_ids)?;
+    if let Some(id) = &update.group_property_id {
+        let property = schema
+            .iter()
+            .find(|property| &property.id == id)
+            .ok_or_else(|| "table grouping references an unknown property".to_string())?;
+        if !data_source_views::GROUP_PROPERTY_TYPES.contains(&property.property_type.as_str()) {
+            return Err("table grouping requires a supported group property".to_string());
+        }
+    }
+    for ids in [&update.group_order, &update.collapsed_group_ids] {
+        if ids.len() > 500
+            || ids
+                .iter()
+                .any(|id| id.is_empty() || id.chars().count() > MAX_PROPERTY_TEXT_CHARS)
+        {
+            return Err("table group identities exceed the supported bounds".to_string());
+        }
+    }
+    if update.collapsed_row_ids.len() > 500 {
+        return Err("collapsed row identities exceed the supported bounds".to_string());
+    }
+    for id in &update.collapsed_row_ids {
+        require_uuid(id, "collapsed_row_id")?;
+    }
     let row_open_mode = update.row_open_mode.trim();
     if !ROW_OPEN_MODES.contains(&row_open_mode) {
         return Err("row_open_mode is not supported".to_string());
@@ -420,7 +503,13 @@ fn canonical_table_configuration(
             "property_order": property_order,
             "hidden_property_ids": hidden_property_ids,
             "column_widths": column_widths,
-            "row_open_mode": row_open_mode
+            "row_open_mode": row_open_mode,
+            "group_property_id": update.group_property_id,
+            "group_order": update.group_order,
+            "collapsed_group_ids": update.collapsed_group_ids,
+            "collapsed_row_ids": update.collapsed_row_ids,
+            "hide_empty_groups": update.hide_empty_groups,
+            "presentation": presentation
         }
     });
     if value.to_string().len() > MAX_TABLE_CONFIGURATION_BYTES {
@@ -429,7 +518,7 @@ fn canonical_table_configuration(
     Ok(value)
 }
 
-fn default_table_configuration(properties: &Value) -> Result<Value, String> {
+pub(super) fn default_table_configuration(properties: &Value) -> Result<Value, String> {
     let schema = table_schema(properties)?;
     let property_ids: HashSet<String> = schema.iter().map(|property| property.id.clone()).collect();
     let property_order = canonical_property_order(&[], &property_ids)?;
@@ -641,7 +730,11 @@ fn default_property_value(property: &TableProperty, title: &str) -> Value {
     })
 }
 
-fn property_value_from_edit(property: &TableProperty, value: &Value) -> Result<Value, String> {
+fn property_value_from_edit(
+    property: &TableProperty,
+    value: &Value,
+    previous_date: Option<&Value>,
+) -> Result<Value, String> {
     let payload = match property.property_type.as_str() {
         "title" | "rich_text" => {
             let text = scalar_text(value, &property.name, MAX_PROPERTY_TEXT_CHARS)?;
@@ -656,7 +749,7 @@ fn property_value_from_edit(property: &TableProperty, value: &Value) -> Result<V
         "select" | "status" => edit_single_option_payload(property, value)?,
         "multi_select" => edit_multi_option_payload(property, value)?,
         "relation" => data_source_relations::canonical_relation_payload(value)?,
-        "date" => edit_date_payload(value)?,
+        "date" => edit_date_payload(value, previous_date)?,
         "url" | "email" | "phone_number" => edit_nullable_text_payload(value, &property.name)?,
         "place" => edit_place_payload(value)?,
         "files" | "people" | "created_time" | "created_by" | "last_edited_time"
@@ -763,25 +856,89 @@ fn edit_nullable_text_payload(value: &Value, label: &str) -> Result<Value, Strin
     }
 }
 
-fn edit_date_payload(value: &Value) -> Result<Value, String> {
+/// Preserve the canonical range and zone when a scalar edit changes only its start.
+fn edit_date_payload(value: &Value, previous: Option<&Value>) -> Result<Value, String> {
     if value.is_null() {
         return Ok(Value::Null);
     }
     if value.is_object() {
-        return canonical_property_payload("date", value);
+        return checked_date_payload(value);
     }
     let text = scalar_text(value, "date", 64)?;
     if text.trim().is_empty() {
         return Ok(Value::Null);
     }
-    if !looks_like_date_or_datetime(&text) {
-        return Err("date cell value must be an ISO date or datetime".to_string());
+    let mut date = previous
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    date.insert("start".to_string(), Value::String(text.trim().to_string()));
+    date.entry("end").or_insert(Value::Null);
+    date.entry("time_zone").or_insert(Value::Null);
+    checked_date_payload(&Value::Object(date))
+}
+
+fn checked_date_payload(value: &Value) -> Result<Value, String> {
+    let date = value
+        .as_object()
+        .ok_or_else(|| "date cell value must be an object".to_string())?;
+    let start = date
+        .get("start")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "date.start must be an ISO date or datetime".to_string())?;
+    let start_order = date_boundary_order(start)?;
+    if let Some(end) = date.get("end").filter(|value| !value.is_null()) {
+        let end = end
+            .as_str()
+            .ok_or_else(|| "date.end must be an ISO date or datetime or null".to_string())?;
+        if date_boundary_order(end)? < start_order {
+            return Err("date.end must not precede date.start".to_string());
+        }
     }
-    Ok(json!({
-        "start": text,
-        "end": null,
-        "time_zone": null
-    }))
+    if let Some(zone) = date.get("time_zone").filter(|value| !value.is_null()) {
+        let zone = zone
+            .as_str()
+            .ok_or_else(|| "date.time_zone must be text or null".to_string())?;
+        if zone.trim().is_empty()
+            || zone.chars().count() > 100
+            || zone.chars().any(char::is_control)
+        {
+            return Err(
+                "date.time_zone must be nonempty bounded text without control characters"
+                    .to_string(),
+            );
+        }
+    }
+    Ok(value.clone())
+}
+
+fn date_boundary_order(value: &str) -> Result<i64, String> {
+    if value.len() == 10 {
+        if let Ok(date) = NaiveDate::parse_from_str(value, "%Y-%m-%d") {
+            return Ok(date
+                .and_hms_opt(0, 0, 0)
+                .expect("midnight is valid")
+                .and_utc()
+                .timestamp_millis());
+        }
+    } else if let Ok(date) = DateTime::parse_from_rfc3339(value) {
+        return Ok(date.timestamp_millis());
+    } else {
+        if let Ok(date) = DateTime::parse_from_str(value, "%Y-%m-%dT%H:%M%:z") {
+            return Ok(date.timestamp_millis());
+        }
+        if let Some(utc) = value.strip_suffix('Z') {
+            if let Ok(date) = NaiveDateTime::parse_from_str(utc, "%Y-%m-%dT%H:%M") {
+                return Ok(date.and_utc().timestamp_millis());
+            }
+        }
+        for pattern in ["%Y-%m-%dT%H:%M:%S%.f", "%Y-%m-%dT%H:%M"] {
+            if let Ok(date) = NaiveDateTime::parse_from_str(value, pattern) {
+                return Ok(date.and_utc().timestamp_millis());
+            }
+        }
+    }
+    Err("date cell value must be a valid ISO date or datetime".to_string())
 }
 
 fn edit_place_payload(value: &Value) -> Result<Value, String> {
@@ -898,33 +1055,7 @@ pub(super) fn row_matches_filters(
     schema: &[TableProperty],
     filters: &[NoteDataSourceTableFilter],
 ) -> bool {
-    filters.iter().all(|filter| {
-        let Some(property) = schema
-            .iter()
-            .find(|property| property.id == filter.property_id)
-        else {
-            return true;
-        };
-        let text = row_property_plain_text(row, property);
-        match filter.condition.as_str() {
-            "contains" => filter
-                .value
-                .as_ref()
-                .and_then(Value::as_str)
-                .map(|value| text.to_lowercase().contains(&value.to_lowercase()))
-                .unwrap_or(true),
-            "equals" => filter
-                .value
-                .as_ref()
-                .map(|value| scalar_filter_text(value).to_lowercase() == text.to_lowercase())
-                .unwrap_or_else(|| text.is_empty()),
-            "is_empty" => text.trim().is_empty(),
-            "is_not_empty" => !text.trim().is_empty(),
-            "checked" => row_property_checked(row, property) == Some(true),
-            "unchecked" => row_property_checked(row, property) == Some(false),
-            _ => true,
-        }
-    })
+    super::data_source_window::row_matches_filters(row, schema, filters)
 }
 
 pub(super) fn sort_rows(
@@ -950,8 +1081,8 @@ pub(super) fn sort_rows(
             }
         }
         left.title
-            .to_lowercase()
-            .cmp(&right.title.to_lowercase())
+            .to_ascii_lowercase()
+            .cmp(&right.title.to_ascii_lowercase())
             .then_with(|| left.id.cmp(&right.id))
     });
 }
@@ -974,16 +1105,16 @@ fn compare_row_property(
                 compare_optional_f64(Some(left_number), Some(right_number))
             }
             _ => row_property_plain_text(left, property)
-                .to_lowercase()
-                .cmp(&row_property_plain_text(right, property).to_lowercase()),
+                .to_ascii_lowercase()
+                .cmp(&row_property_plain_text(right, property).to_ascii_lowercase()),
         },
         "checkbox" => compare_optional_bool(
             row_property_checked(left, property),
             row_property_checked(right, property),
         ),
         _ => row_property_plain_text(left, property)
-            .to_lowercase()
-            .cmp(&row_property_plain_text(right, property).to_lowercase()),
+            .to_ascii_lowercase()
+            .cmp(&row_property_plain_text(right, property).to_ascii_lowercase()),
     }
 }
 
@@ -1054,6 +1185,7 @@ pub(super) fn row_property_plain_text(row: &NotePageRow, property: &TablePropert
                     .filter_map(|item| {
                         item.get("title")
                             .and_then(Value::as_str)
+                            .filter(|title| !title.is_empty())
                             .or_else(|| item.get("id").and_then(Value::as_str))
                     })
                     .collect::<Vec<_>>()
@@ -1101,6 +1233,31 @@ pub(super) fn row_property_plain_text(row: &NotePageRow, property: &TablePropert
                     .map(str::to_string)
             })
             .unwrap_or_default(),
+        "people" | "files" => row_property_payload(row, property)
+            .and_then(|payload| payload.as_array().cloned())
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| {
+                        item.get("name")
+                            .and_then(Value::as_str)
+                            .filter(|name| !name.is_empty())
+                            .or_else(|| item.get("id").and_then(Value::as_str))
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_default(),
+        "created_by" | "last_edited_by" => row_property_payload(row, property)
+            .and_then(|payload| {
+                payload
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .filter(|name| !name.is_empty())
+                    .or_else(|| payload.get("id").and_then(Value::as_str))
+                    .map(str::to_string)
+            })
+            .unwrap_or_default(),
         _ => String::new(),
     }
 }
@@ -1130,28 +1287,6 @@ fn scalar_text(value: &Value, label: &str, max_chars: usize) -> Result<String, S
         _ => return Err(format!("{label} cell value must be text")),
     };
     validate_text(text, label, max_chars)
-}
-
-fn scalar_filter_text(value: &Value) -> String {
-    match value {
-        Value::Null => String::new(),
-        Value::Bool(value) => value.to_string(),
-        Value::Number(value) => value.to_string(),
-        Value::String(value) => value.clone(),
-        _ => String::new(),
-    }
-}
-
-fn looks_like_date_or_datetime(value: &str) -> bool {
-    let bytes = value.as_bytes();
-    bytes.len() >= 10
-        && bytes[4] == b'-'
-        && bytes[7] == b'-'
-        && bytes
-            .iter()
-            .take(10)
-            .enumerate()
-            .all(|(index, byte)| index == 4 || index == 7 || byte.is_ascii_digit())
 }
 
 fn validate_text(value: &str, label: &str, max_chars: usize) -> Result<String, String> {

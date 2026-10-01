@@ -84,6 +84,7 @@ let optionalDataVersion = $state(0);
 let taskViewPage = $state<ProjectTaskViewPage | null>(null);
 let taskViewLoading = $state(false);
 let taskViewError = $state<string | null>(null);
+let taskMutationRevision = $state(0);
 const taskViewRequestGate = new ProjectTaskViewRequestGate();
 const taskDetailCache = new ProjectTaskDetailCache(4 * 1024 * 1024);
 const taskDetailRequests = new Map<string, Promise<ProjectTaskDetailData>>();
@@ -465,6 +466,7 @@ function projectOptionalDataLoaded(
 
 function updateSnapshot(updater: (current: ProjectsSnapshot) => ProjectsSnapshot): void {
   snapshot = updater(snapshot);
+  taskMutationRevision += 1;
 }
 
 const actions = createProjectStoreActions({
@@ -625,6 +627,9 @@ export function getProjects() {
     },
     get taskViewError(): string | null {
       return taskViewError;
+    },
+    get taskMutationRevision(): number {
+      return taskMutationRevision;
     },
     load: reload,
     ensureLoaded,

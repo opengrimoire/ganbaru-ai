@@ -242,6 +242,7 @@ export interface NotesChildPageBlockPayload extends NotesBlockLayout {
 }
 
 export interface NotesChildDatabaseBlockPayload extends NotesBlockLayout {
+  editing_locked?: boolean;
   title: string;
   database_id?: string;
   data_source_id?: string;
@@ -716,6 +717,7 @@ export interface NotesDatabaseDuplicateRequest {
 
 /** Minimal database ownership metadata without loading row pages or view contents. */
 export interface NotesDatabaseReference {
+  editing_locked: boolean;
   block_id: string;
   page_id: string;
   source_block_id: string;

@@ -4,7 +4,16 @@ use sqlx::Row;
 
 const BASELINE_SCHEMA: &str =
     include_str!("../../../../apps/client/src-tauri/migrations/20260830173211_baseline_schema.sql");
-const EXPECTED_MIGRATION_COUNT: i64 = 3;
+/// Count the embedded forward migrations so fresh-install checks follow the actual registry.
+fn expected_migration_count() -> i64 {
+    i64::try_from(
+        crate::MIGRATOR
+            .iter()
+            .filter(|migration| !migration.migration_type.is_down_migration())
+            .count(),
+    )
+    .unwrap()
+}
 
 #[test]
 fn fresh_database_applies_clean_baseline() {
@@ -15,7 +24,7 @@ fn fresh_database_applies_clean_baseline() {
                 .fetch_one(&pool)
                 .await
                 .unwrap();
-        assert_eq!(migration_count, EXPECTED_MIGRATION_COUNT);
+        assert_eq!(migration_count, expected_migration_count());
         let integrity: String = sqlx::query_scalar("PRAGMA integrity_check")
             .fetch_one(&pool)
             .await
@@ -75,6 +84,9 @@ fn fresh_database_applies_clean_baseline() {
             "music_search_fts",
             "notes_pages",
             "notes_blocks",
+            "notes_data_source_row_hierarchy",
+            "notes_row_hierarchy_source_parent",
+            "notes_row_hierarchy_detach_moved_page",
             "notes_search_fts",
             "notes_folders_validate_parent_insert",
             "idx_notes_project_history_dirty_deadlines",
@@ -157,7 +169,7 @@ fn fresh_file_database_applies_clean_baseline() {
                 .fetch_one(&pool)
                 .await
                 .unwrap();
-        assert_eq!(migration_count, EXPECTED_MIGRATION_COUNT);
+        assert_eq!(migration_count, expected_migration_count());
         pool.close().await;
         std::fs::remove_file(path).unwrap();
     });

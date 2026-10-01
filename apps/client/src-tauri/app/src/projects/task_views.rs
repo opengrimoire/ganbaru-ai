@@ -53,6 +53,8 @@ fn validate_task_view_request(request: &ProjectTaskViewRequest) -> Result<(), St
     )?;
     let core_sort = [
         "manual",
+        "title",
+        "start",
         "status",
         "section",
         "priority",
@@ -327,6 +329,8 @@ fn push_order<'a>(
         return;
     }
     let expression = match request.sort_mode.as_str() {
+        "title" => "LOWER(t.title)",
+        "start" => "t.start_date",
         "status" => "(SELECT sort_order FROM project_statuses ps WHERE ps.id = t.status_id)",
         "section" => "t.section_sort_order",
         "priority" => {
@@ -342,13 +346,11 @@ fn push_order<'a>(
         _ => "NULL",
     };
     if let Some(field_id) = request.sort_mode.strip_prefix("custom:") {
-        query
-            .push("((SELECT COALESCE(fv.text_value, CAST(fv.number_value AS TEXT), fv.date_value, CAST(fv.checkbox_value AS TEXT)) FROM project_custom_field_values fv WHERE fv.task_id = t.id AND fv.field_id = ")
-            .push_bind(field_id)
-            .push(" LIMIT 1)) IS NULL ASC, (SELECT COALESCE(fv.text_value, CAST(fv.number_value AS TEXT), fv.date_value, CAST(fv.checkbox_value AS TEXT)) FROM project_custom_field_values fv WHERE fv.task_id = t.id AND fv.field_id = ")
-            .push_bind(field_id)
-            .push(" LIMIT 1)")
-            .push(direction);
+        query.push("(");
+        push_custom_column_sort(query, field_id);
+        query.push(") IS NULL ASC, ");
+        push_custom_column_sort(query, field_id);
+        query.push(direction);
     } else {
         query
             .push("(")
@@ -361,6 +363,11 @@ fn push_order<'a>(
                 .push(", t.due_time IS NULL ASC, t.due_time")
                 .push(direction);
         }
+        if request.sort_mode == "start" {
+            query
+                .push(", t.start_time IS NULL ASC, t.start_time")
+                .push(direction);
+        }
     }
     if request.sort_mode == "status" {
         query.push(", t.status_sort_order ASC, t.section_sort_order ASC");
@@ -368,6 +375,17 @@ fn push_order<'a>(
         query.push(", t.section_sort_order ASC, t.status_sort_order ASC");
     }
     query.push(", t.created_at ASC, t.title ASC, t.id ASC");
+}
+
+/// Preserve numeric ordering and use option names when sorting a custom property.
+fn push_custom_column_sort<'a>(
+    query: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
+    field_id: &'a str,
+) {
+    query.push("COALESCE((SELECT COALESCE(fv.number_value, fv.checkbox_value, NULLIF(fv.date_value, ''), NULLIF(LOWER(fv.text_value), '')) FROM project_custom_field_values fv WHERE fv.task_id = t.id AND fv.field_id = ")
+        .push_bind(field_id)
+        .push(" LIMIT 1), (SELECT GROUP_CONCAT(name, ', ') FROM (SELECT LOWER(o.name) AS name FROM project_custom_field_option_values ov JOIN project_custom_field_options o ON o.id = ov.option_id WHERE ov.task_id = t.id AND ov.field_id = ")
+        .push_bind(field_id).push(" ORDER BY o.sort_order, o.id)))");
 }
 
 async fn count_tasks(
@@ -575,6 +593,105 @@ async fn dashboard_aggregates(
     })
 }
 
+/// Complete-result counts and numeric reductions for built-in list columns.
+#[derive(sqlx::FromRow)]
+struct ListColumnAggregateRow {
+    total: i64,
+    name_filled: i64,
+    start_filled: i64,
+    due_filled: i64,
+    estimate_filled: i64,
+    estimate_sum: Option<f64>,
+    estimate_average: Option<f64>,
+    estimate_minimum: Option<f64>,
+    estimate_maximum: Option<f64>,
+    scheduled_filled: i64,
+    dependencies_filled: i64,
+}
+
+/// Complete-result reductions for one custom field, including empty filtered results.
+#[derive(sqlx::FromRow)]
+struct CustomColumnAggregateRow {
+    field_id: String,
+    filled: i64,
+    sum: Option<f64>,
+    average: Option<f64>,
+    minimum: Option<f64>,
+    maximum: Option<f64>,
+}
+
+/// Compute footer reductions with the same filters as the query, before any cursor or task cap.
+async fn list_column_calculations(
+    pool: &sqlx::SqlitePool,
+    request: &ProjectTaskViewRequest,
+) -> Result<Vec<ProjectTaskColumnCalculations>, String> {
+    let mut query = sqlx::QueryBuilder::<sqlx::Sqlite>::new("");
+    push_filtered_cte(&mut query, request, None);
+    query.push(" SELECT COUNT(*) AS total, COUNT(NULLIF(TRIM(title), '')) AS name_filled, COUNT(start_date) AS start_filled, COUNT(due_date) AS due_filled,
+        COUNT(estimate_minutes) AS estimate_filled, CAST(SUM(estimate_minutes) AS REAL) AS estimate_sum, CAST(AVG(estimate_minutes) AS REAL) AS estimate_average, CAST(MIN(estimate_minutes) AS REAL) AS estimate_minimum, CAST(MAX(estimate_minutes) AS REAL) AS estimate_maximum,
+        COALESCE(SUM(EXISTS(SELECT 1 FROM project_task_event_links el WHERE el.task_id = matched.id AND el.link_kind = 'scheduled')), 0) AS scheduled_filled,
+        COALESCE(SUM(EXISTS(SELECT 1 FROM project_task_dependencies d WHERE d.blocking_task_id = matched.id OR d.blocked_task_id = matched.id)), 0) AS dependencies_filled
+        FROM matched");
+    let row = query
+        .build_query_as::<ListColumnAggregateRow>()
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("calculate project columns: {e}"))?;
+    let mut result = Vec::new();
+    for (column, filled) in [
+        ("name", row.name_filled),
+        ("status", row.total),
+        ("priority", row.total),
+        ("start", row.start_filled),
+        ("due", row.due_filled),
+        ("estimate", row.estimate_filled),
+        ("scheduled", row.scheduled_filled),
+        ("dependencies", row.dependencies_filled),
+        ("assignee", row.total),
+        ("reviewer", row.total),
+    ] {
+        let numeric = column == "estimate";
+        result.push(ProjectTaskColumnCalculations {
+            column: column.to_string(),
+            total: row.total,
+            filled,
+            sum: numeric.then_some(row.estimate_sum).flatten(),
+            average: numeric.then_some(row.estimate_average).flatten(),
+            minimum: numeric.then_some(row.estimate_minimum).flatten(),
+            maximum: numeric.then_some(row.estimate_maximum).flatten(),
+        });
+    }
+    let mut fields = sqlx::QueryBuilder::<sqlx::Sqlite>::new("");
+    push_filtered_cte(&mut fields, request, None);
+    fields.push(" SELECT f.id AS field_id,
+        COUNT(DISTINCT CASE WHEN v.number_value IS NOT NULL OR v.checkbox_value IS NOT NULL
+          OR NULLIF(TRIM(v.text_value), '') IS NOT NULL OR NULLIF(TRIM(v.date_value), '') IS NOT NULL
+          OR EXISTS(SELECT 1 FROM project_custom_field_option_values ov WHERE ov.task_id = m.id AND ov.field_id = f.id)
+          THEN m.id END) AS filled, CAST(SUM(v.number_value) AS REAL) AS sum, CAST(AVG(v.number_value) AS REAL) AS average, CAST(MIN(v.number_value) AS REAL) AS minimum, CAST(MAX(v.number_value) AS REAL) AS maximum
+        FROM project_custom_fields f LEFT JOIN matched m ON 1 = 1
+        LEFT JOIN project_custom_field_values v ON v.task_id = m.id AND v.field_id = f.id
+        WHERE f.project_id = ").push_bind(&request.project_id).push(" GROUP BY f.id ORDER BY f.sort_order, f.id");
+    let custom = fields
+        .build_query_as::<CustomColumnAggregateRow>()
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("calculate project custom columns: {e}"))?;
+    result.extend(
+        custom
+            .into_iter()
+            .map(|custom| ProjectTaskColumnCalculations {
+                column: format!("custom:{}", custom.field_id),
+                total: row.total,
+                filled: custom.filled,
+                sum: custom.sum,
+                average: custom.average,
+                minimum: custom.minimum,
+                maximum: custom.maximum,
+            }),
+    );
+    Ok(result)
+}
+
 pub(super) async fn load_task_view(
     pool: &sqlx::SqlitePool,
     request: ProjectTaskViewRequest,
@@ -599,6 +716,7 @@ pub(super) async fn load_task_view(
         next_cursor: None,
         column_counts: Vec::new(),
         aggregates: None,
+        column_calculations: Vec::new(),
         matched_event_ids: Vec::new(),
         task_tag_links: Vec::new(),
         custom_field_values: Vec::new(),
@@ -704,6 +822,7 @@ pub(super) async fn load_task_view(
             page.tasks = rows;
         }
         ProjectViewId::List => {
+            page.column_calculations = list_column_calculations(pool, &request).await?;
             let page_size = request.page_size.min(LIST_PAGE_SIZE_MAX);
             let mut rows = load_summary_page(
                 pool,

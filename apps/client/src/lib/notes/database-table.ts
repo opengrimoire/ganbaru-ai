@@ -1,7 +1,6 @@
 import type {
   NotesDatabaseTableConfiguration,
   NotesDatabaseTableFilter,
-  NotesDatabaseTableFilterCondition,
   NotesDatabaseTableRowOpenMode,
   NotesDatabaseTableSort,
   NotesDatabaseTableSortDirection,
@@ -9,7 +8,12 @@ import type {
   NotesDataSource,
   NotesDataSourcePropertyType,
   NotesPage,
+  NotesDataSourceNumberFormat,
 } from "./types";
+import { notesDatabaseParseFilters, notesDatabaseSerializeFilters } from "./database-filters";
+import { NOTES_DATA_SOURCE_NUMBER_FORMATS } from "./types";
+import { notesDatabaseDateValue, type NotesDatabaseDateValue } from "./database-date";
+import type { NotesDatabasePropertyDisplayFormat } from "./database-property-display";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -23,6 +27,8 @@ export interface NotesDatabaseTableColumn {
   relationDataSourceId: string | null;
   buttonLabel: string;
   buttonRequiresConfirmation: boolean;
+  numberFormat?: NotesDataSourceNumberFormat;
+  displayFormat?: NotesDatabasePropertyDisplayFormat;
 }
 
 export interface NotesDatabaseTableOption {
@@ -36,20 +42,12 @@ export interface NotesDatabaseTableRelationItem {
   title: string;
 }
 
-export type NotesDatabaseTableEditValue = string | boolean | string[] | null;
+export type NotesDatabaseTableEditValue = string | boolean | string[] | NotesDatabaseDateValue | null;
 
 const DEFAULT_COLUMN_WIDTH = 180;
 const TITLE_COLUMN_WIDTH = 220;
 const MIN_COLUMN_WIDTH = 96;
 const MAX_COLUMN_WIDTH = 480;
-const TABLE_FILTER_CONDITIONS = new Set<NotesDatabaseTableFilterCondition>([
-  "contains",
-  "equals",
-  "is_empty",
-  "is_not_empty",
-  "checked",
-  "unchecked",
-]);
 const TABLE_SORT_DIRECTIONS = new Set<NotesDatabaseTableSortDirection>([
   "ascending",
   "descending",
@@ -91,6 +89,7 @@ export function notesDatabaseTableConfigurationFromView(
     hidden_property_ids: readStringArray(table.hidden_property_ids).filter((id) => id !== "title"),
     column_widths,
     row_open_mode: rowOpenMode,
+    collapsed_row_ids: readStringArray(table.collapsed_row_ids),
   };
 }
 
@@ -115,6 +114,7 @@ export function notesDatabaseTableColumns(
       relationDataSourceId: relationDataSourceId(rawProperty, type),
       buttonLabel: buttonLabel(rawProperty, type),
       buttonRequiresConfirmation: buttonRequiresConfirmation(rawProperty, type),
+      numberFormat: numberFormat(rawProperty, type),
     });
   }
   const columns: NotesDatabaseTableColumn[] = [];
@@ -135,21 +135,7 @@ export function notesDatabaseTableVisibleColumns(
 }
 
 export function notesDatabaseTableFiltersFromView(view: NotesDatabaseView): NotesDatabaseTableFilter[] {
-  const filter = view.filter;
-  if (!isRecord(filter) || !Array.isArray(filter.filters)) return [];
-  return filter.filters.filter(isRecord).flatMap((item) => {
-    const propertyId = readString(item.property_id);
-    const condition = item.condition;
-    if (!propertyId || !TABLE_FILTER_CONDITIONS.has(condition as NotesDatabaseTableFilterCondition)) {
-      return [];
-    }
-    const value = item.value;
-    return [{
-      property_id: propertyId,
-      condition: condition as NotesDatabaseTableFilterCondition,
-      value: isScalarFilterValue(value) ? value : null,
-    }];
-  });
+  return notesDatabaseParseFilters(view.filter);
 }
 
 export function notesDatabaseTableSortsFromView(view: NotesDatabaseView): NotesDatabaseTableSort[] {
@@ -171,6 +157,7 @@ export function notesDatabaseTableUpdate(
   rowOpenMode: NotesDatabaseTableRowOpenMode,
   filters: readonly NotesDatabaseTableFilter[],
   sorts: readonly NotesDatabaseTableSort[],
+  settings?: Partial<NotesDatabaseTableConfiguration>,
 ): {
   filter: NotesDatabaseTableFilter[];
   sorts: NotesDatabaseTableSort[];
@@ -182,16 +169,13 @@ export function notesDatabaseTableUpdate(
     columnWidths[column.id] = clampColumnWidth(column.width);
   }
   return {
-    filter: filters.map((filter) => ({
-      property_id: filter.property_id,
-      condition: filter.condition,
-      value: filter.value ?? null,
-    })),
+    filter: notesDatabaseSerializeFilters(filters),
     sorts: sorts.map((sort) => ({
       property_id: sort.property_id,
       direction: sort.direction,
     })),
     configuration: {
+      ...settings,
       property_order: propertyOrder,
       hidden_property_ids: columns
         .filter((column) => column.hidden && column.type !== "title")
@@ -246,12 +230,14 @@ export function notesDatabaseTableCellText(
     case "place":
       return isRecord(payload) ? readString(payload.name) : "";
     case "created_time":
-    case "created_by":
     case "last_edited_time":
+      return readString(payload, column.type === "created_time" ? page.created_time : page.last_edited_time);
+    case "created_by":
     case "last_edited_by":
+      return isRecord(payload) ? readString(payload.name) || readString(payload.id) : "";
     case "files":
     case "people":
-      return "";
+      return Array.isArray(payload) ? payload.filter(isRecord).map((item) => readString(item.name) || readString(item.id)).filter(Boolean).join(", ") : "";
   }
 }
 
@@ -277,7 +263,14 @@ export function notesDatabaseTableCellEditValue(
   if (column.type === "relation") {
     return notesDatabaseTableRelationItems(page, column).map((item) => item.id);
   }
+  if (column.type === "date") return notesDatabaseTableDateValue(page, column);
   return notesDatabaseTableCellText(page, column);
+}
+
+/** Read a row's complete date range for editing without losing its timezone. */
+export function notesDatabaseTableDateValue(page: NotesPage, column: NotesDatabaseTableColumn): NotesDatabaseDateValue | null {
+  const property = Object.values(page.properties).find((value) => propertyMatchesColumn(value, column));
+  return isRecord(property) ? notesDatabaseDateValue(property.date) : null;
 }
 
 export function notesDatabaseTableColumnCanEdit(column: NotesDatabaseTableColumn): boolean {
@@ -329,7 +322,16 @@ export function notesDatabaseTableEditValuesEqual(
     if (left.length !== right.length) return false;
     return left.every((item, index) => item === right[index]);
   }
+  if (typeof left === "object" && left !== null || typeof right === "object" && right !== null) {
+    if (typeof left !== "object" || left === null || typeof right !== "object" || right === null) return false;
+    return left.start === right.start && left.end === right.end && left.time_zone === right.time_zone;
+  }
   return left === right;
+}
+
+function numberFormat(property: UnknownRecord, type: NotesDataSourcePropertyType): NotesDataSourceNumberFormat {
+  const config = type === "number" && isRecord(property.number) ? property.number : {};
+  return NOTES_DATA_SOURCE_NUMBER_FORMATS.find((format) => format === config.format) ?? "number";
 }
 
 function clampColumnWidth(width: number): number {
@@ -478,11 +480,4 @@ function datePlainText(value: unknown): string {
   const start = readString(value.start);
   const end = readString(value.end);
   return end && end !== start ? `${start} to ${end}` : start;
-}
-
-function isScalarFilterValue(value: unknown): value is string | number | boolean | null {
-  return value === null
-    || typeof value === "string"
-    || typeof value === "number"
-    || typeof value === "boolean";
 }

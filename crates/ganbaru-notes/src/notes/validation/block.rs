@@ -108,6 +108,12 @@ pub fn validate_child_page_payload(payload: &Value) -> Result<(), String> {
 }
 
 pub fn validate_child_database_payload(payload: &Value) -> Result<(), String> {
+    if payload
+        .get("editing_locked")
+        .is_some_and(|value| !value.is_boolean())
+    {
+        return Err("child_database.editing_locked must be a boolean".to_string());
+    }
     match payload.get("title") {
         Some(Value::String(title)) if !contains_control_characters(title) => {}
         Some(Value::String(_)) => {

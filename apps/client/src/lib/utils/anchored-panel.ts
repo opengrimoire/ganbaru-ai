@@ -5,6 +5,7 @@ export interface AnchoredPanelInput {
   viewportHeight: number;
   preferredWidth?: number;
   preferredMaxHeight?: number;
+  horizontalAlign?: "start" | "end";
   margin?: number;
   gap?: number;
 }
@@ -19,7 +20,10 @@ export function anchoredPanelStyle(
   const preferredMaxHeight = input.preferredMaxHeight ?? 448;
   const width = Math.max(0, Math.min(preferredWidth, input.viewportWidth - margin * 2));
   const maxLeft = Math.max(margin, input.viewportWidth - margin - width);
-  const left = clamp(input.triggerRect.left, margin, maxLeft);
+  const anchorLeft = input.horizontalAlign === "end"
+    ? input.triggerRect.right - width
+    : input.triggerRect.left;
+  const left = clamp(anchorLeft, margin, maxLeft);
   const belowTop = input.triggerRect.bottom + gap;
   const aboveAvailable = Math.max(0, input.triggerRect.top - margin - gap);
   const belowAvailable = Math.max(0, input.viewportHeight - belowTop - margin);

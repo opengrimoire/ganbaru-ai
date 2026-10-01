@@ -3,7 +3,8 @@ use super::data_source_table::{
 };
 use super::data_source_views::ViewProperty as BoardProperty;
 use super::models::{
-    NoteDataSourceRowWindow, NoteDataSourceTableFilter, NoteDataSourceTableSort,
+    NoteDataSourceFilterCondition, NoteDataSourceFilterOperator, NoteDataSourceRowWindow,
+    NoteDataSourceTableFilter, NoteDataSourceTableFilterPredicate, NoteDataSourceTableSort,
     NoteDataSourceViewWindowRequest, NotePageRow,
 };
 use serde::{Deserialize, Serialize};
@@ -12,8 +13,12 @@ use sqlx::{QueryBuilder, Sqlite, Transaction};
 use std::collections::HashMap;
 
 const DEFAULT_WINDOW_SIZE: i64 = 80;
-const MAX_WINDOW_SIZE: i64 = 200;
+pub(super) const MAX_WINDOW_SIZE: i64 = 200;
+// Unicode White_Space, shared with the frontend filter evaluator. BOM and
+// zero-width space are populated text. SQLite trim needs this explicit set.
+const FILTER_WHITESPACE: &str = "\u{0009}\u{000a}\u{000b}\u{000c}\u{000d}\u{0020}\u{0085}\u{00a0}\u{1680}\u{2000}\u{2001}\u{2002}\u{2003}\u{2004}\u{2005}\u{2006}\u{2007}\u{2008}\u{2009}\u{200a}\u{2028}\u{2029}\u{202f}\u{205f}\u{3000}";
 
+#[derive(Clone, Copy)]
 pub(super) struct RowWindowQuery<'a> {
     pub schema: &'a [TableProperty],
     pub filters: &'a [NoteDataSourceTableFilter],
@@ -63,14 +68,73 @@ pub(super) async fn load_row_window_tx(
     data_source_id: &str,
     query_options: RowWindowQuery<'_>,
 ) -> Result<NoteDataSourceRowWindow, String> {
+    let page = load_row_page_tx(tx, data_source_id, query_options).await?;
+    let RowWindowQuery {
+        schema,
+        filters,
+        request,
+        date_property,
+        group_property,
+        ..
+    } = query_options;
+    let mut count_query = QueryBuilder::<Sqlite>::new(
+        "SELECT COUNT(*) FROM notes_pages AS page \
+         WHERE page.parent_type = 'data_source_id' AND page.parent_data_source_id = ",
+    );
+    count_query.push_bind(data_source_id);
+    count_query.push(" AND page.in_trash = 0 AND page.archived = 0");
+    push_filters(&mut count_query, schema, filters);
+    push_date_range(&mut count_query, request, date_property);
+    let total_row_count: i64 = count_query
+        .build_query_scalar()
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(|error| format!("count notes database view rows: {error}"))?;
+    let group_counts = load_group_counts_tx(
+        tx,
+        data_source_id,
+        schema,
+        filters,
+        group_property,
+        request,
+        date_property,
+    )
+    .await?;
+    Ok(NoteDataSourceRowWindow {
+        rows: page.rows,
+        total_row_count,
+        next_cursor: page.next_cursor,
+        has_more: page.has_more,
+        group_counts,
+    })
+}
+
+/// Bounded rows and keyset continuation without complete-source count queries.
+pub(super) struct RowPage {
+    pub rows: Vec<NotePageRow>,
+    pub next_cursor: Option<String>,
+    pub has_more: bool,
+}
+
+/// Read one filtered page for streaming consumers that do not need repeated totals.
+pub(super) async fn load_row_page_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    data_source_id: &str,
+    query_options: RowWindowQuery<'_>,
+) -> Result<RowPage, String> {
     let RowWindowQuery {
         schema,
         filters,
         sorts,
         request,
         date_property,
-        group_property,
+        group_property: _,
     } = query_options;
+    let property_types = schema
+        .iter()
+        .map(|property| (property.id.as_str(), property.property_type.as_str()))
+        .collect();
+    super::data_source_views::canonical_filter(filters, &property_types, "database view")?;
     let page_size = request.page_size.unwrap_or(DEFAULT_WINDOW_SIZE);
     if !(1..=MAX_WINDOW_SIZE).contains(&page_size) {
         return Err(format!(
@@ -91,20 +155,6 @@ pub(super) async fn load_row_window_tx(
             return Err("database view cursor does not match the active sort".to_string());
         }
     }
-
-    let mut count_query = QueryBuilder::<Sqlite>::new(
-        "SELECT COUNT(*) FROM notes_pages AS page \
-         WHERE page.parent_type = 'data_source_id' AND page.parent_data_source_id = ",
-    );
-    count_query.push_bind(data_source_id);
-    count_query.push(" AND page.in_trash = 0 AND page.archived = 0");
-    push_filters(&mut count_query, schema, filters);
-    push_date_range(&mut count_query, request, date_property);
-    let total_row_count: i64 = count_query
-        .build_query_scalar()
-        .fetch_one(&mut **tx)
-        .await
-        .map_err(|e| format!("count notes database view rows: {e}"))?;
 
     let mut query = QueryBuilder::<Sqlite>::new(
         "SELECT page.* FROM notes_pages AS page \
@@ -156,14 +206,10 @@ pub(super) async fn load_row_window_tx(
     } else {
         None
     };
-    let group_counts =
-        load_group_counts_tx(tx, data_source_id, schema, filters, group_property).await?;
-    Ok(NoteDataSourceRowWindow {
+    Ok(RowPage {
         rows,
-        total_row_count,
         next_cursor,
         has_more,
-        group_counts,
     })
 }
 
@@ -173,6 +219,8 @@ async fn load_group_counts_tx(
     schema: &[TableProperty],
     filters: &[NoteDataSourceTableFilter],
     property: Option<&TableProperty>,
+    request: &NoteDataSourceViewWindowRequest,
+    date_property: Option<&TableProperty>,
 ) -> Result<HashMap<String, i64>, String> {
     let Some(property) = property else {
         return Ok(HashMap::new());
@@ -183,7 +231,7 @@ async fn load_group_counts_tx(
         property.property_type.as_str(),
         "multi_select" | "people" | "relation"
     ) {
-        query.push("COALESCE(json_extract(item.value, '$.id'), '__empty__') AS group_id, COUNT(*) AS row_count ");
+        query.push("COALESCE(json_extract(item.value, '$.id'), '__empty__') AS group_id, COUNT(DISTINCT page.id) AS row_count ");
         query
             .push("FROM notes_pages AS page LEFT JOIN json_each(")
             .push(&payload)
@@ -205,6 +253,7 @@ async fn load_group_counts_tx(
     query.push_bind(data_source_id);
     query.push(" AND page.in_trash = 0 AND page.archived = 0");
     push_filters(&mut query, schema, filters);
+    push_date_range(&mut query, request, date_property);
     query.push(" GROUP BY group_id");
     let rows = query
         .build()
@@ -273,53 +322,269 @@ fn push_filters(
     schema: &[TableProperty],
     filters: &[NoteDataSourceTableFilter],
 ) {
-    for filter in filters {
-        let Some(property) = schema
-            .iter()
-            .find(|property| property.id == filter.property_id)
-        else {
-            continue;
-        };
-        let expression = property_text_expression(property);
-        match filter.condition.as_str() {
-            "contains" => {
-                if let Some(value) = filter.value.as_ref().and_then(Value::as_str) {
-                    query
-                        .push(" AND instr(lower(")
-                        .push(&expression)
-                        .push("), lower(");
-                    query.push_bind(value.to_string());
-                    query.push(")) > 0");
-                }
+    if !filters.is_empty() {
+        query.push(" AND ");
+        push_filter_nodes(query, schema, filters, NoteDataSourceFilterOperator::And);
+    }
+}
+
+fn push_filter_nodes(
+    query: &mut QueryBuilder<'_, Sqlite>,
+    schema: &[TableProperty],
+    filters: &[NoteDataSourceTableFilter],
+    operator: NoteDataSourceFilterOperator,
+) {
+    query.push("(");
+    for (index, filter) in filters.iter().enumerate() {
+        if index > 0 {
+            query.push(if operator == NoteDataSourceFilterOperator::And {
+                " AND "
+            } else {
+                " OR "
+            });
+        }
+        match filter {
+            NoteDataSourceTableFilter::Group(group) => {
+                push_filter_nodes(query, schema, &group.filters, group.operator)
             }
-            "equals" => {
-                let value = filter
-                    .value
-                    .as_ref()
-                    .map(scalar_filter_text)
-                    .unwrap_or_default();
-                query
-                    .push(" AND lower(")
-                    .push(&expression)
-                    .push(") = lower(");
-                query.push_bind(value);
-                query.push(")");
+            NoteDataSourceTableFilter::Predicate(predicate) => {
+                let Some(property) = schema
+                    .iter()
+                    .find(|property| property.id == predicate.property_id)
+                else {
+                    query.push("0");
+                    continue;
+                };
+                push_filter_predicate(query, property, predicate);
             }
-            "is_empty" => {
-                query.push(" AND trim(").push(&expression).push(") = ''");
-            }
-            "is_not_empty" => {
-                query.push(" AND trim(").push(&expression).push(") <> ''");
-            }
-            "checked" | "unchecked" => {
-                query
-                    .push(" AND ")
-                    .push(property_value_expression(property));
-                query.push(" = ").push_bind(filter.condition == "checked");
-            }
-            _ => {}
         }
     }
+    query.push(")");
+}
+
+fn comparison_operator(condition: NoteDataSourceFilterCondition) -> &'static str {
+    use NoteDataSourceFilterCondition::*;
+    match condition {
+        NotEquals => " <> ",
+        GreaterThan | After => " > ",
+        GreaterThanOrEqual | OnOrAfter => " >= ",
+        LessThan | Before => " < ",
+        LessThanOrEqual | OnOrBefore => " <= ",
+        _ => " = ",
+    }
+}
+
+fn push_filter_predicate(
+    query: &mut QueryBuilder<'_, Sqlite>,
+    property: &TableProperty,
+    predicate: &NoteDataSourceTableFilterPredicate,
+) {
+    use NoteDataSourceFilterCondition::*;
+    let expression = property_text_expression(property);
+    match predicate.condition {
+        Contains => {
+            query
+                .push("instr(lower(")
+                .push(&expression)
+                .push("), lower(");
+            query
+                .push_bind(
+                    predicate
+                        .value
+                        .as_ref()
+                        .map(scalar_filter_text)
+                        .unwrap_or_default(),
+                )
+                .push(")) > 0");
+        }
+        IsEmpty | IsNotEmpty => {
+            query
+                .push("trim(")
+                .push(&expression)
+                .push(", ")
+                .push_bind(FILTER_WHITESPACE)
+                .push(")");
+            query.push(if predicate.condition == IsEmpty {
+                " = ''"
+            } else {
+                " <> ''"
+            });
+        }
+        Checked | Unchecked => {
+            query
+                .push(property_value_expression(property))
+                .push(" = ")
+                .push_bind(predicate.condition == Checked);
+        }
+        condition if property.property_type == "number" => {
+            let payload = property_value_expression(property);
+            query
+                .push("(CASE WHEN json_type(page.properties, '")
+                .push(sql_string(&json_path(
+                    &property.key,
+                    &property.property_type,
+                )))
+                .push("') IN ('integer', 'real') THEN CAST(")
+                .push(payload)
+                .push(" AS REAL) END)")
+                .push(comparison_operator(condition))
+                .push_bind(predicate.value.as_ref().and_then(Value::as_f64));
+        }
+        condition
+            if matches!(
+                property.property_type.as_str(),
+                "date" | "created_time" | "last_edited_time"
+            ) =>
+        {
+            let value = predicate
+                .value
+                .as_ref()
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let day_only = value.len() == 10;
+            query
+                .push(if day_only {
+                    "julianday(date("
+                } else {
+                    "julianday("
+                })
+                .push(&expression)
+                .push(if day_only { "))" } else { ")" })
+                .push(comparison_operator(condition))
+                .push("julianday(")
+                .push_bind(value.to_string())
+                .push(")");
+        }
+        condition => {
+            query
+                .push("lower(")
+                .push(&expression)
+                .push(")")
+                .push(comparison_operator(condition))
+                .push("lower(");
+            query
+                .push_bind(
+                    predicate
+                        .value
+                        .as_ref()
+                        .map(scalar_filter_text)
+                        .unwrap_or_default(),
+                )
+                .push(")");
+        }
+    }
+}
+
+/// Evaluate export predicates with the same Boolean and scalar semantics as row-window SQL.
+pub(super) fn row_matches_filters(
+    row: &NotePageRow,
+    schema: &[TableProperty],
+    filters: &[NoteDataSourceTableFilter],
+) -> bool {
+    filters
+        .iter()
+        .all(|filter| row_matches_filter(row, schema, filter))
+}
+
+fn row_matches_filter(
+    row: &NotePageRow,
+    schema: &[TableProperty],
+    filter: &NoteDataSourceTableFilter,
+) -> bool {
+    use NoteDataSourceFilterCondition::*;
+    let predicate = match filter {
+        NoteDataSourceTableFilter::Group(group) => {
+            return match group.operator {
+                NoteDataSourceFilterOperator::And => group
+                    .filters
+                    .iter()
+                    .all(|node| row_matches_filter(row, schema, node)),
+                NoteDataSourceFilterOperator::Or => group
+                    .filters
+                    .iter()
+                    .any(|node| row_matches_filter(row, schema, node)),
+            };
+        }
+        NoteDataSourceTableFilter::Predicate(predicate) => predicate,
+    };
+    let Some(property) = schema
+        .iter()
+        .find(|property| property.id == predicate.property_id)
+    else {
+        return false;
+    };
+    if !super::data_source_views::filter_condition_supported(
+        &property.property_type,
+        predicate.condition,
+    ) {
+        return false;
+    }
+    let text = row_property_plain_text(row, property);
+    let value = predicate
+        .value
+        .as_ref()
+        .map(scalar_filter_text)
+        .unwrap_or_default();
+    match predicate.condition {
+        Contains => text
+            .to_ascii_lowercase()
+            .contains(&value.to_ascii_lowercase()),
+        IsEmpty => text
+            .chars()
+            .all(|character| FILTER_WHITESPACE.contains(character)),
+        IsNotEmpty => text
+            .chars()
+            .any(|character| !FILTER_WHITESPACE.contains(character)),
+        Checked => row_property_checked(row, property) == Some(true),
+        Unchecked => row_property_checked(row, property) == Some(false),
+        condition => {
+            let ordering = if property.property_type == "number" {
+                row_property_number(row, property)
+                    .zip(predicate.value.as_ref().and_then(Value::as_f64))
+                    .and_then(|(left, right)| left.partial_cmp(&right))
+            } else if matches!(
+                property.property_type.as_str(),
+                "date" | "created_time" | "last_edited_time"
+            ) {
+                filter_date_number(&text, value.len() == 10)
+                    .zip(filter_date_number(&value, value.len() == 10))
+                    .map(|(left, right)| left.cmp(&right))
+            } else {
+                Some(text.to_ascii_lowercase().cmp(&value.to_ascii_lowercase()))
+            };
+            ordering.is_some_and(|ordering| match condition {
+                Equals => ordering.is_eq(),
+                NotEquals => !ordering.is_eq(),
+                GreaterThan | After => ordering.is_gt(),
+                GreaterThanOrEqual | OnOrAfter => !ordering.is_lt(),
+                LessThan | Before => ordering.is_lt(),
+                LessThanOrEqual | OnOrBefore => !ordering.is_gt(),
+                _ => false,
+            })
+        }
+    }
+}
+
+fn filter_date_number(value: &str, day_only: bool) -> Option<i64> {
+    let timestamp = if value.len() == 10 {
+        chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d")
+            .ok()?
+            .and_hms_opt(0, 0, 0)?
+            .and_utc()
+            .timestamp_millis()
+    } else if let Ok(date) = chrono::DateTime::parse_from_rfc3339(value) {
+        date.timestamp_millis()
+    } else {
+        chrono::NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S%.f")
+            .ok()?
+            .and_utc()
+            .timestamp_millis()
+    };
+    Some(if day_only {
+        timestamp.div_euclid(86_400_000)
+    } else {
+        timestamp
+    })
 }
 
 fn push_cursor_condition(
@@ -431,14 +696,7 @@ fn cursor_value(row: &NotePageRow, property: &TableProperty) -> CursorValue {
         "checkbox" => row_property_checked(row, property)
             .map(CursorValue::Boolean)
             .unwrap_or(CursorValue::Null),
-        _ => {
-            let text = row_property_plain_text(row, property).to_lowercase();
-            if text.is_empty() {
-                CursorValue::Null
-            } else {
-                CursorValue::Text(text)
-            }
-        }
+        _ => CursorValue::Text(row_property_plain_text(row, property).to_ascii_lowercase()),
     }
 }
 
@@ -461,11 +719,14 @@ fn property_text_expression(property: &TableProperty) -> String {
             format!("COALESCE(CAST({payload} AS TEXT), '')")
         }
         "select" | "status" | "place" => format!("COALESCE(json_extract({payload}, '$.name'), '')"),
-        "multi_select" | "people" => format!(
+        "multi_select" => format!(
             "COALESCE((SELECT group_concat(COALESCE(json_extract(item.value, '$.name'), ''), ', ') FROM json_each({payload}) AS item), '')"
         ),
+        "people" | "files" => format!(
+            "COALESCE((SELECT group_concat(COALESCE(NULLIF(json_extract(item.value, '$.name'), ''), json_extract(item.value, '$.id'), ''), ', ') FROM json_each({payload}) AS item), '')"
+        ),
         "relation" => format!(
-            "COALESCE((SELECT group_concat(target.title, ', ') \
+            "COALESCE((SELECT group_concat(COALESCE(NULLIF(target.title, ''), target.id), ', ') \
               FROM notes_data_source_relation_links AS relation \
               JOIN notes_pages AS target ON target.id = relation.target_page_id \
               WHERE relation.source_page_id = page.id \
@@ -482,6 +743,12 @@ fn property_text_expression(property: &TableProperty) -> String {
         "date" => format!("COALESCE(json_extract({payload}, '$.start'), '')"),
         "created_time" => "page.created_time".to_string(),
         "last_edited_time" => "page.last_edited_time".to_string(),
+        "created_by" | "last_edited_by" => format!(
+            "COALESCE(NULLIF(json_extract({payload}, '$.name'), ''), json_extract({payload}, '$.id'), '')"
+        ),
+        "unique_id" => format!(
+            "COALESCE(json_extract({payload}, '$.prefix'), '') || COALESCE(CAST(json_extract({payload}, '$.number') AS TEXT), '')"
+        ),
         _ => format!("COALESCE(CAST({payload} AS TEXT), '')"),
     }
 }
@@ -493,7 +760,7 @@ fn sql_string(value: &str) -> String {
 fn property_value_expression(property: &TableProperty) -> String {
     format!(
         "json_extract(page.properties, '{}')",
-        json_path(&property.key, &property.property_type),
+        sql_string(&json_path(&property.key, &property.property_type)),
     )
 }
 

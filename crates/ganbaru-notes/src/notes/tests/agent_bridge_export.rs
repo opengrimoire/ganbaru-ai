@@ -150,6 +150,7 @@ async fn seed_database_view(pool: &SqlitePool) {
         pool,
         DATA_SOURCE_A,
         None,
+        None,
         NoteDataSourceSchemaUpdate {
             properties: json!({
                 "Name": {
@@ -165,8 +166,6 @@ async fn seed_database_view(pool: &SqlitePool) {
                     "rich_text": {}
                 }
             }),
-            property_order: vec!["title".to_string(), "status".to_string()],
-            hidden_property_ids: Vec::new(),
         },
     )
     .await

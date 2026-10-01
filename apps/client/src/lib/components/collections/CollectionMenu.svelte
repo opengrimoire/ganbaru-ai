@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick, type Snippet } from "svelte";
+  import { tick, type Component, type Snippet } from "svelte";
   import { portal } from "$lib/utils/portal";
   import { anchoredPanelStyle } from "$lib/utils/anchored-panel";
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
@@ -9,33 +9,64 @@
   import Ellipsis from "@lucide/svelte/icons/ellipsis";
   import Plus from "@lucide/svelte/icons/plus";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import Group from "@lucide/svelte/icons/group";
   import X from "@lucide/svelte/icons/x";
   import { formatNumber } from "$lib/i18n/formatters";
   import { getLocalization } from "$lib/i18n/translator.svelte";
+  import { cn } from "$lib/utils";
+  import CollectionPanel from "./CollectionPanel.svelte";
+  import { getCollectionSettingsNavigation } from "./collection-settings-context";
 
-  let { label, kind = "layout", iconOnly = false, fullWidth = false, primary = false, showHeader = true, activeCount = 0, dismissOnAction = false, children }: {
+  let { label, ariaLabel, kind = "layout", iconOnly = false, fullWidth = false, primary = false, showHeader = true, activeCount = 0, dismissOnAction = false, summary, leading, icon, triggerClass, disabled = false, children }: {
     label: string;
-    kind?: "layout" | "filter" | "sort" | "properties" | "actions" | "new" | "new-options";
+    ariaLabel?: string;
+    kind?: "layout" | "filter" | "sort" | "properties" | "property" | "group" | "actions" | "new" | "new-options";
     iconOnly?: boolean;
     fullWidth?: boolean;
     primary?: boolean;
     showHeader?: boolean;
     activeCount?: number;
     dismissOnAction?: boolean;
+    summary?: string;
+    leading?: Snippet;
+    icon?: Component;
+    triggerClass?: string;
+    disabled?: boolean;
     children: Snippet;
   } = $props();
 
   const localization = getLocalization();
   const { t } = localization;
+  const navigation = getCollectionSettingsNavigation();
+  const settingsRow = $derived(fullWidth && navigation !== undefined);
   const countLabel = $derived(activeCount > 0 ? formatNumber(localization.locale, activeCount) : "");
   const id = $props.id();
-  const PANEL_WIDTH = 384;
+  const PANEL_WIDTH = 320;
   const ACTION_PANEL_WIDTH = 256;
   const VIEWPORT_HEIGHT_FRACTION = 0.7;
-  const icons = { layout: SlidersHorizontal, filter: ListFilter, sort: ArrowDownUp, properties: Columns3, actions: Ellipsis, new: Plus, "new-options": ChevronDown };
-  const Icon = $derived(icons[kind]);
+  const icons = { layout: SlidersHorizontal, filter: ListFilter, sort: ArrowDownUp, properties: Columns3, property: Columns3, group: Group, actions: Ellipsis, new: Plus, "new-options": ChevronDown };
+  const Icon = $derived(icon ?? icons[kind]);
   let open = $state(false);
   let trigger: HTMLButtonElement | undefined = $state();
+  let panel: HTMLDivElement | null = $state(null);
+  const expanded = $derived(settingsRow ? navigation?.isActive(trigger) ?? false : open);
+
+  $effect(() => {
+    if (!panel) return;
+    const floating = floatPanel(panel);
+    return () => floating.destroy();
+  });
+
+  /** Open a detail page within settings or a separate toolbar popover. */
+  function toggle(): void {
+    if (disabled) return;
+    if (settingsRow && navigation && trigger) {
+      navigation.navigate({ label, children, trigger });
+      return;
+    }
+    open = !open;
+  }
 
   /** Close the panel and return keyboard focus to the invoking control. */
   function close(): void {
@@ -48,29 +79,60 @@
     const moved = portal(node, trigger?.closest<HTMLElement>("[data-floating-root]") ?? "body");
     const content = node.querySelector<HTMLElement>("[data-collection-menu-content]");
     let disposed = false;
+    let dismissed = false;
+    let restoreFocus = true;
+    let lastOwnedFocus: HTMLElement | null = null;
     const place = () => {
       if (disposed || !trigger) return;
       node.style.cssText = anchoredPanelStyle({
         triggerRect: trigger.getBoundingClientRect(),
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight,
-        preferredWidth: kind === "actions" || kind === "new-options" ? ACTION_PANEL_WIDTH : PANEL_WIDTH,
+        preferredWidth: kind === "actions" || kind === "property" || kind === "new-options" ? ACTION_PANEL_WIDTH : PANEL_WIDTH,
         preferredMaxHeight: Math.min(content?.scrollHeight ?? node.scrollHeight, window.innerHeight * VIEWPORT_HEIGHT_FRACTION),
       });
     };
     const outside = (event: Event) => {
-      if (event.target instanceof Node && !node.contains(event.target) && !trigger?.contains(event.target)) open = false;
+      if (!dismissed && event.target instanceof Node && !node.contains(event.target) && !trigger?.contains(event.target)) {
+        dismissed = true;
+        restoreFocus = false;
+        const focused = document.activeElement;
+        if (focused instanceof HTMLElement && node.contains(focused)) focused.blur();
+        open = false;
+      }
     };
-    const escape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || !(event.target instanceof Element)) return;
+    const focusin = (event: FocusEvent) => {
+      if (event.target instanceof HTMLElement && event.target.closest("[data-app-floating-surface]") === node) lastOwnedFocus = event.target;
+      outside(event);
+    };
+    const keydown = (event: KeyboardEvent) => {
+      if (dismissed || !(event.target instanceof Element)) return;
       // Nested dropdowns own their first Escape press.
-      if (event.target.closest("[data-app-floating-surface]") !== node) return;
+      const lostDisabledFocus = event.key === "Escape"
+        && (event.target === document.body || event.target === document.documentElement)
+        && (document.activeElement === document.body || document.activeElement === document.documentElement)
+        && lastOwnedFocus?.isConnected && node.contains(lastOwnedFocus) && lastOwnedFocus.matches(":disabled")
+        && !node.querySelector("[data-app-floating-surface]");
+      if (event.target.closest("[data-app-floating-surface]") !== node && !lostDisabledFocus) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        close();
+        return;
+      }
+      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key) || !(event.target instanceof HTMLButtonElement)) return;
+      if (event.target.hasAttribute("aria-haspopup")) return;
+      const buttons = [...node.querySelectorAll<HTMLButtonElement>("[data-collection-menu-body] button:not(:disabled)")];
+      const index = buttons.indexOf(event.target);
+      if (index < 0 || !buttons.length) return;
       event.preventDefault();
-      event.stopPropagation();
-      close();
+      const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
+        : event.key === "ArrowDown" ? (index + 1) % buttons.length : (index + buttons.length - 1) % buttons.length;
+      buttons[next]?.focus({ preventScroll: true });
     };
     const action = (event: MouseEvent) => {
       if ((kind !== "actions" && !dismissOnAction) || !(event.target instanceof Element)) return;
+      if (event.target.closest("[data-app-floating-surface]") !== node) return;
       const button = event.target.closest("button");
       if (!button || button.disabled || button.hasAttribute("aria-haspopup") || button.hasAttribute("data-collection-menu-keep-open")) return;
       // Let delegated action handlers run before their panel is removed.
@@ -85,11 +147,11 @@
     };
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(place);
     if (content) observer?.observe(content);
-    window.addEventListener("mousedown", outside, true);
-    window.addEventListener("keydown", escape, true);
+    window.addEventListener("pointerdown", outside, true);
+    window.addEventListener("keydown", keydown, true);
     window.addEventListener("resize", place);
     window.addEventListener("scroll", scroll, true);
-    document.addEventListener("focusin", outside);
+    document.addEventListener("focusin", focusin);
     node.addEventListener("click", action);
     void tick().then(() => {
       if (disposed) return;
@@ -101,12 +163,13 @@
       destroy() {
         disposed = true;
         observer?.disconnect();
-        window.removeEventListener("mousedown", outside, true);
-        window.removeEventListener("keydown", escape, true);
+        window.removeEventListener("pointerdown", outside, true);
+        window.removeEventListener("keydown", keydown, true);
         window.removeEventListener("resize", place);
         window.removeEventListener("scroll", scroll, true);
-        document.removeEventListener("focusin", outside);
+        document.removeEventListener("focusin", focusin);
         node.removeEventListener("click", action);
+        if (restoreFocus && node.contains(document.activeElement) && trigger?.isConnected) trigger.focus({ preventScroll: true });
         moved.destroy();
       },
     };
@@ -117,41 +180,52 @@
   <button
     bind:this={trigger}
     type="button"
-    class={`collection-menu-trigger inline-flex h-8 min-w-0 items-center gap-1.5 rounded-md px-2 text-[0.8rem] font-medium transition-colors focus-visible:outline-none focus-visible:bg-accent ${primary ? "bg-primary text-primary-foreground hover:bg-primary/90" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"}`}
+    {disabled}
+    class={cn("collection-menu-trigger inline-flex h-8 min-w-0 items-center gap-1.5 rounded px-2 text-[0.8125rem] font-normal transition-colors focus-visible:outline-none focus-visible:bg-accent disabled:cursor-not-allowed disabled:text-muted-foreground", primary ? "bg-primary text-primary-foreground hover:bg-primary/90" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground", settingsRow && "justify-start text-foreground", triggerClass)}
     class:w-full={fullWidth}
-    class:bg-accent={open && !primary}
-    class:text-foreground={!primary && (open || activeCount > 0)}
-    aria-label={countLabel ? `${label} (${countLabel})` : label}
-    aria-expanded={open}
-    aria-controls={open ? id : undefined}
+    class:bg-accent={expanded && !primary}
+    class:text-foreground={!primary && (expanded || activeCount > 0)}
+    data-collection-settings-row={settingsRow ? "" : undefined}
+    aria-label={ariaLabel ?? (countLabel ? `${label} (${countLabel})` : label)}
+    aria-expanded={expanded}
+    aria-controls={open && !settingsRow ? id : undefined}
     aria-haspopup="dialog"
-    onclick={() => { open = !open; }}
+    onclick={toggle}
+    onkeydown={(event) => {
+      if (!expanded && (event.key === "ArrowDown" || event.key === "ArrowUp") && !settingsRow) {
+        event.preventDefault();
+        toggle();
+      }
+    }}
   >
-    <Icon class="size-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+    {#if leading}{@render leading()}{:else}<Icon class="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />{/if}
     {#if !iconOnly}<span class="truncate">{label}</span>{/if}
-    {#if countLabel}<span class="rounded bg-accent px-1 text-[0.733333rem] tabular-nums">{countLabel}</span>{/if}
+    {#if settingsRow}
+      <span class="min-w-0 flex-1 truncate text-right text-[0.75rem] text-muted-foreground">{summary ?? countLabel}</span>
+      <ChevronRight class="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.5} aria-hidden="true" />
+    {:else if countLabel}<span class="rounded bg-accent px-1 text-[0.733333rem] tabular-nums">{countLabel}</span>{/if}
   </button>
-  {#if open}
-    <div use:floatPanel id={id} role="dialog" aria-label={label} tabindex="-1" data-app-floating-surface data-floating-root class="z-50 max-w-[calc(100vw-1rem)] rounded-xl border border-border bg-popover text-sm text-popover-foreground shadow-lg">
-      <div class="max-h-[inherit] overflow-auto rounded-xl">
-        <div data-collection-menu-content class="@container p-3">
+  {#if open && !settingsRow}
+    <CollectionPanel bind:element={panel} {label} id={id} class="z-80 max-w-[calc(100vw-1rem)]">
+      <div class="min-h-0 overflow-auto">
+        <div data-collection-menu-content class="@container p-2">
           {#if showHeader}
-            <div class="mb-3 flex items-center justify-between gap-2">
+            <div class="mb-1.5 flex items-center justify-between gap-2 px-1">
               <span class="font-medium">{label}</span>
-              <button type="button" class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={t("common.close")} onclick={close}>
-                <X class="size-4" aria-hidden="true" />
+              <button type="button" class="collection-menu-control inline-flex size-7 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={t("common.close")} onclick={close}>
+                <X class="size-3.5" aria-hidden="true" />
               </button>
             </div>
           {/if}
           <div data-collection-menu-body>{@render children()}</div>
         </div>
       </div>
-    </div>
+    </CollectionPanel>
   {/if}
 </div>
 
 <style>
   @media (pointer: coarse) {
-    .collection-menu-trigger { min-height: 2.75rem; min-width: 2.75rem; }
+    .collection-menu-trigger, .collection-menu-control { min-height: 2.75rem; min-width: 2.75rem; }
   }
 </style>

@@ -17,7 +17,6 @@ const MAX_PROPERTY_DESCRIPTION_LEN: usize = 2000;
 const MAX_OPTIONS: usize = 100;
 const MAX_OPTION_NAME_LEN: usize = 120;
 const MAX_UNIQUE_ID_PREFIX_LEN: usize = 32;
-const TABLE_ROW_OPEN_MODES: &[&str] = &["full_page", "side_panel"];
 
 const SUPPORTED_PROPERTY_TYPES: &[&str] = &[
     "title",
@@ -87,12 +86,6 @@ const NUMBER_FORMATS: &[&str] = &[
 
 const STATUS_GROUPS: &[&str] = &["To-do", "In progress", "Complete"];
 
-struct PreparedSchemaUpdate {
-    properties: Value,
-    property_order: Vec<String>,
-    hidden_property_ids: Vec<String>,
-}
-
 pub async fn list_data_sources(pool: &SqlitePool) -> Result<Vec<NoteDataSourceDto>, String> {
     let rows = sqlx::query_as::<_, NoteDataSourceRow>(
         "SELECT data_source.*
@@ -123,16 +116,17 @@ pub async fn list_data_sources(pool: &SqlitePool) -> Result<Vec<NoteDataSourceDt
 pub async fn get_data_source_schema(
     pool: &SqlitePool,
     data_source_id: &str,
+    database_id: Option<&str>,
     view_id: Option<&str>,
 ) -> Result<NoteDataSourceSchemaDto, String> {
-    data_source_views::validate_view_scope(data_source_id, None, view_id)?;
+    data_source_views::validate_view_scope(data_source_id, database_id, view_id)?;
     crate::notes::project_history::ensure_data_source_baseline_for_mutation(pool, data_source_id)
         .await?;
     let mut tx = pool
         .begin()
         .await
         .map_err(|e| format!("begin notes data source schema read: {e}"))?;
-    let dto = load_data_source_schema_tx(&mut tx, data_source_id, view_id).await?;
+    let dto = load_data_source_schema_tx(&mut tx, data_source_id, database_id, view_id).await?;
     tx.commit()
         .await
         .map_err(|e| format!("commit notes data source schema read: {e}"))?;
@@ -142,105 +136,87 @@ pub async fn get_data_source_schema(
 pub async fn update_data_source_schema(
     pool: &SqlitePool,
     data_source_id: &str,
+    database_id: Option<&str>,
     view_id: Option<&str>,
     update: NoteDataSourceSchemaUpdate,
 ) -> Result<NoteDataSourceSchemaDto, String> {
-    data_source_views::validate_view_scope(data_source_id, None, view_id)?;
+    data_source_views::validate_view_scope(data_source_id, database_id, view_id)?;
     let prepared = prepare_schema_update(&update)?;
     let mut tx = pool
         .begin()
         .await
         .map_err(|e| format!("begin notes data source schema update: {e}"))?;
-    crate::notes::project_history::mark_data_source_dirty_tx(
-        &mut tx,
-        data_source_id,
-        "Database schema",
-        false,
-    )
-    .await?;
-    let current = load_data_source_row_tx(&mut tx, data_source_id).await?;
-    let current_properties = parse_json(&current.properties, "data source properties")?;
-    ensure_title_property_preserved(&current_properties, &prepared.properties)?;
-    data_source_relations::ensure_relation_schema_targets_tx(
-        &mut tx,
-        data_source_id.trim(),
-        &prepared.properties,
-    )
-    .await?;
-    data_source_rollups::ensure_rollup_schema_targets_tx(
-        &mut tx,
-        data_source_id.trim(),
-        &prepared.properties,
-    )
-    .await?;
-    data_source_formulas::ensure_formula_schema(&prepared.properties)?;
-    data_source_buttons::ensure_button_schema(&prepared.properties)?;
-    let target_view = load_table_view_for_schema_tx(&mut tx, data_source_id, view_id).await?;
-    let configuration = table_view_configuration(
-        &prepared.property_order,
-        &prepared.hidden_property_ids,
-        target_view.configuration.as_deref(),
-    )?;
-    sqlx::query(
-        "UPDATE notes_data_sources
-         SET properties = ?,
-             last_edited_time = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-         WHERE id = ? AND in_trash = 0",
-    )
-    .bind(prepared.properties.to_string())
-    .bind(data_source_id.trim())
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| format!("update notes data source properties: {e}"))?;
-    sqlx::query(
-        "UPDATE notes_database_views
-         SET configuration = ?,
-             last_edited_time = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-         WHERE id = ?",
-    )
-    .bind(configuration.to_string())
-    .bind(&target_view.id)
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| format!("update notes table view schema configuration: {e}"))?;
-    data_source_relations::rebuild_data_source_relation_links_tx(
-        &mut tx,
-        data_source_id.trim(),
-        &prepared.properties,
-    )
-    .await?;
-    assets::sync_data_source_property_asset_references_tx(
-        &mut tx,
-        data_source_id.trim(),
-        &prepared.properties,
-    )
-    .await?;
-    data_source_rollups::invalidate_rollup_cache_for_data_source_tx(&mut tx, data_source_id.trim())
-        .await?;
-    let dto = load_data_source_schema_tx(&mut tx, data_source_id, Some(&target_view.id)).await?;
+    let target_view =
+        update_data_source_schema_tx(&mut tx, data_source_id, database_id, view_id, prepared)
+            .await?;
+    let dto =
+        load_data_source_schema_tx(&mut tx, data_source_id, database_id, Some(&target_view.id))
+            .await?;
     tx.commit()
         .await
         .map_err(|e| format!("commit notes data source schema update: {e}"))?;
     Ok(dto)
 }
 
-fn prepare_schema_update(
-    update: &NoteDataSourceSchemaUpdate,
-) -> Result<PreparedSchemaUpdate, String> {
+/// Apply the existing schema invariants and view reconciliation in a caller's transaction.
+pub(super) async fn update_data_source_schema_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    data_source_id: &str,
+    database_id: Option<&str>,
+    view_id: Option<&str>,
+    prepared: Value,
+) -> Result<NoteDatabaseViewRow, String> {
+    let target_view =
+        load_table_view_for_schema_tx(tx, data_source_id, database_id, view_id).await?;
+    super::database_editing_lock::ensure_unlocked_tx(tx, &target_view.database_id).await?;
+    crate::notes::project_history::mark_data_source_dirty_tx(
+        tx,
+        data_source_id,
+        "Database schema",
+        false,
+    )
+    .await?;
+    let current = load_data_source_row_tx(tx, data_source_id).await?;
+    let current_properties = parse_json(&current.properties, "data source properties")?;
+    ensure_title_property_preserved(&current_properties, &prepared)?;
+    data_source_relations::ensure_relation_schema_targets_tx(tx, data_source_id.trim(), &prepared)
+        .await?;
+    data_source_rollups::ensure_rollup_schema_targets_tx(tx, data_source_id.trim(), &prepared)
+        .await?;
+    data_source_formulas::ensure_formula_schema(&prepared)?;
+    data_source_buttons::ensure_button_schema(&prepared)?;
+    sqlx::query(
+        "UPDATE notes_data_sources
+         SET properties = ?,
+             last_edited_time = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+         WHERE id = ? AND in_trash = 0",
+    )
+    .bind(prepared.to_string())
+    .bind(data_source_id.trim())
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| format!("update notes data source properties: {e}"))?;
+    reconcile_saved_views_tx(tx, data_source_id, &prepared).await?;
+    data_source_relations::rebuild_data_source_relation_links_tx(
+        tx,
+        data_source_id.trim(),
+        &prepared,
+    )
+    .await?;
+    assets::sync_data_source_property_asset_references_tx(tx, data_source_id.trim(), &prepared)
+        .await?;
+    data_source_rollups::invalidate_rollup_cache_for_data_source_tx(tx, data_source_id.trim())
+        .await?;
+    Ok(target_view)
+}
+
+pub(super) fn prepare_schema_update(update: &NoteDataSourceSchemaUpdate) -> Result<Value, String> {
     let properties = canonical_properties(&update.properties)?;
-    let property_ids = property_ids_by_name(&properties)?;
-    let property_order = canonical_property_order(&update.property_order, &property_ids)?;
-    let hidden_property_ids =
-        canonical_hidden_property_ids(&update.hidden_property_ids, &property_ids)?;
     let schema_bytes = properties.to_string().len();
     if schema_bytes > MAX_SCHEMA_BYTES {
         return Err("data source schema must not exceed 50KB".to_string());
     }
-    Ok(PreparedSchemaUpdate {
-        properties,
-        property_order,
-        hidden_property_ids,
-    })
+    Ok(properties)
 }
 
 fn canonical_properties(value: &Value) -> Result<Value, String> {
@@ -587,75 +563,6 @@ fn default_option_color(index: usize) -> &'static str {
         .unwrap_or("default")
 }
 
-fn property_ids_by_name(properties: &Value) -> Result<HashSet<String>, String> {
-    let mut ids = HashSet::new();
-    for property in properties
-        .as_object()
-        .ok_or_else(|| "properties must be an object".to_string())?
-        .values()
-    {
-        let object = property
-            .as_object()
-            .ok_or_else(|| "property must be an object".to_string())?;
-        ids.insert(read_string_field(object, "id", "property.id")?.to_string());
-    }
-    Ok(ids)
-}
-
-fn canonical_property_order(
-    requested: &[String],
-    property_ids: &HashSet<String>,
-) -> Result<Vec<String>, String> {
-    let mut seen = HashSet::new();
-    let mut order = vec!["title".to_string()];
-    seen.insert("title".to_string());
-    for id in requested {
-        let id = id.trim();
-        if id.is_empty() || id == "title" {
-            continue;
-        }
-        if !property_ids.contains(id) {
-            return Err("property_order contains an unknown property id".to_string());
-        }
-        if !seen.insert(id.to_string()) {
-            return Err("property_order must not contain duplicates".to_string());
-        }
-        order.push(id.to_string());
-    }
-    let mut remaining: Vec<String> = property_ids
-        .iter()
-        .filter(|id| !seen.contains(*id))
-        .cloned()
-        .collect();
-    remaining.sort();
-    order.extend(remaining);
-    Ok(order)
-}
-
-fn canonical_hidden_property_ids(
-    requested: &[String],
-    property_ids: &HashSet<String>,
-) -> Result<Vec<String>, String> {
-    let mut seen = HashSet::new();
-    let mut hidden = Vec::new();
-    for id in requested {
-        let id = id.trim();
-        if id.is_empty() {
-            continue;
-        }
-        if id == "title" {
-            return Err("title property cannot be hidden".to_string());
-        }
-        if !property_ids.contains(id) {
-            return Err("hidden_property_ids contains an unknown property id".to_string());
-        }
-        if seen.insert(id.to_string()) {
-            hidden.push(id.to_string());
-        }
-    }
-    Ok(hidden)
-}
-
 fn ensure_title_property_preserved(current: &Value, next: &Value) -> Result<(), String> {
     let current_title = title_property_name(current)?;
     let next_title = title_property_name(next)?
@@ -688,50 +595,216 @@ fn title_property_name(properties: &Value) -> Result<Option<String>, String> {
     Ok(None)
 }
 
-fn table_view_configuration(
-    property_order: &[String],
-    hidden_property_ids: &[String],
-    current_configuration: Option<&str>,
-) -> Result<Value, String> {
-    let current_table = current_configuration
-        .map(|configuration| parse_json(configuration, "table view configuration"))
-        .transpose()?
-        .and_then(|configuration| configuration.get("table").cloned())
-        .and_then(|table| table.as_object().cloned())
-        .unwrap_or_default();
-    let property_ids: HashSet<String> = property_order.iter().cloned().collect();
-    let column_widths = current_table
-        .get("column_widths")
-        .and_then(Value::as_object)
-        .map(|widths| {
-            let mut kept = Map::new();
-            for (property_id, width) in widths {
-                if property_ids.contains(property_id) && width.as_i64().is_some() {
-                    kept.insert(property_id.clone(), width.clone());
-                }
-            }
-            Value::Object(kept)
-        })
-        .unwrap_or_else(|| json!({}));
-    let row_open_mode = current_table
-        .get("row_open_mode")
-        .and_then(Value::as_str)
-        .filter(|mode| TABLE_ROW_OPEN_MODES.contains(mode))
-        .unwrap_or("full_page");
-    Ok(json!({
-        "type": "table",
-        "table": {
-            "property_order": property_order,
-            "hidden_property_ids": hidden_property_ids,
-            "column_widths": column_widths,
-            "row_open_mode": row_open_mode
-        }
-    }))
-}
-
-async fn load_data_source_schema_tx(
+/// Reconcile source references using each view's current persisted presentation.
+async fn reconcile_saved_views_tx(
     tx: &mut Transaction<'_, Sqlite>,
     data_source_id: &str,
+    properties: &Value,
+) -> Result<(), String> {
+    let schema = data_source_views::view_schema(properties)?;
+    let property_ids: HashSet<String> = schema.iter().map(|property| property.id.clone()).collect();
+    let property_types: HashMap<&str, &str> = schema
+        .iter()
+        .map(|property| (property.id.as_str(), property.property_type.as_str()))
+        .collect();
+    let views = sqlx::query_as::<_, NoteDatabaseViewRow>(
+        "SELECT *, type AS view_type FROM notes_database_views WHERE data_source_id = ?",
+    )
+    .bind(data_source_id.trim())
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(|e| format!("load notes views for schema reconciliation: {e}"))?;
+    for view in views {
+        let mut filters = data_source_views::stored_filters(
+            view.filter.as_deref(),
+            "saved view filters",
+            &view.view_type,
+        )?;
+        data_source_views::reconcile_filters(&mut filters, &property_types);
+        let filter =
+            data_source_views::canonical_filter(&filters, &property_types, &view.view_type)?;
+        let mut sorts =
+            data_source_views::stored_sorts(&view.sorts, "saved view sorts", &view.view_type)?;
+        sorts.retain(|sort| property_ids.contains(sort.property_id.as_str()));
+        let sorts = data_source_views::canonical_sorts(&sorts, &property_ids, &view.view_type)?;
+        let configuration = reconcile_view_configuration(&view, &property_ids, &property_types)?;
+        let filter = filter.map(|value| value.to_string());
+        let sorts = sorts.to_string();
+        let configuration = configuration.map(|value| value.to_string());
+        if filter == view.filter && sorts == view.sorts && configuration == view.configuration {
+            continue;
+        }
+        sqlx::query(
+            "UPDATE notes_database_views
+             SET filter = ?, sorts = ?, configuration = ?,
+                 last_edited_time = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE id = ?",
+        )
+        .bind(filter)
+        .bind(sorts)
+        .bind(configuration)
+        .bind(&view.id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| format!("reconcile notes saved view {}: {e}", view.id))?;
+    }
+    Ok(())
+}
+
+/// Preserve display choices while removing references to deleted properties.
+fn reconcile_view_configuration(
+    view: &NoteDatabaseViewRow,
+    property_ids: &HashSet<String>,
+    property_types: &HashMap<&str, &str>,
+) -> Result<Option<Value>, String> {
+    let Some(configuration) = view.configuration.as_deref() else {
+        return Ok(None);
+    };
+    let mut configuration = parse_json(configuration, "saved view configuration")?;
+    let Some(settings) = configuration
+        .get_mut(&view.view_type)
+        .and_then(Value::as_object_mut)
+    else {
+        return Ok(Some(configuration));
+    };
+    if view.view_type == "table" {
+        let mut order = vec![Value::String("title".to_string())];
+        let mut seen = HashSet::from(["title".to_string()]);
+        if let Some(current) = settings.get("property_order").and_then(Value::as_array) {
+            for value in current {
+                if let Some(id) = value.as_str()
+                    && property_ids.contains(id)
+                    && seen.insert(id.to_string())
+                {
+                    order.push(value.clone());
+                }
+            }
+        }
+        let mut added: Vec<&String> = property_ids
+            .iter()
+            .filter(|id| !seen.contains(*id))
+            .collect();
+        added.sort();
+        order.extend(added.into_iter().map(|id| Value::String(id.clone())));
+        settings.insert("property_order".to_string(), Value::Array(order));
+    }
+    for key in ["hidden_property_ids", "visible_property_ids"] {
+        if let Some(ids) = settings.get_mut(key).and_then(Value::as_array_mut) {
+            ids.retain(|value| {
+                value
+                    .as_str()
+                    .is_some_and(|id| id != "title" && property_ids.contains(id))
+            });
+        }
+    }
+    if let Some(widths) = settings
+        .get_mut("column_widths")
+        .and_then(Value::as_object_mut)
+    {
+        widths.retain(|id, _| property_ids.contains(id));
+    }
+    if view.view_type == "table" {
+        if let Some(presentation) = settings
+            .get_mut("presentation")
+            .and_then(Value::as_object_mut)
+        {
+            if presentation
+                .get("frozen_property_id")
+                .and_then(Value::as_str)
+                .is_some_and(|id| !property_ids.contains(id))
+            {
+                presentation.insert("frozen_property_id".to_string(), Value::Null);
+            }
+            if let Some(columns) = presentation
+                .get_mut("columns")
+                .and_then(Value::as_object_mut)
+            {
+                columns.retain(|id, _| property_ids.contains(id));
+                for (id, column) in columns {
+                    let Some(column) = column.as_object_mut() else {
+                        continue;
+                    };
+                    let calculation = column.get("calculation").and_then(Value::as_str);
+                    let property_type = property_types.get(id.as_str()).copied().unwrap_or("");
+                    let incompatible = match calculation {
+                        Some("sum" | "average" | "min" | "max") => {
+                            !matches!(property_type, "number" | "formula" | "rollup")
+                        }
+                        Some("percent_checked") => property_type != "checkbox",
+                        _ => false,
+                    };
+                    if incompatible {
+                        column.insert("calculation".to_string(), Value::Null);
+                    }
+                }
+            }
+            if let Some(rules) = presentation
+                .get_mut("color_rules")
+                .and_then(Value::as_array_mut)
+            {
+                rules.retain_mut(|rule| {
+                    if rule
+                        .get("property_id")
+                        .and_then(Value::as_str)
+                        .is_some_and(|id| !property_ids.contains(id))
+                    {
+                        return false;
+                    }
+                    let Some(filters) = rule.get("filters") else {
+                        return false;
+                    };
+                    let Ok(mut filters) = serde_json::from_value::<
+                        Vec<super::models::NoteDataSourceTableFilter>,
+                    >(filters.clone()) else {
+                        return false;
+                    };
+                    data_source_views::reconcile_filters(&mut filters, property_types);
+                    if filters.is_empty() {
+                        return false;
+                    }
+                    if let Some(rule) = rule.as_object_mut() {
+                        rule.insert("filters".to_string(), json!(filters));
+                    }
+                    true
+                });
+            }
+        }
+    }
+    for key in ["group_property_id", "date_property_id", "cover_property_id"] {
+        let invalid = settings.get(key).and_then(Value::as_str).is_some_and(|id| {
+            match property_types.get(id) {
+                Some(property_type) => match key {
+                    "group_property_id" => {
+                        !data_source_views::GROUP_PROPERTY_TYPES.contains(property_type)
+                    }
+                    "date_property_id" => *property_type != "date",
+                    "cover_property_id" => *property_type != "files",
+                    _ => false,
+                },
+                None => true,
+            }
+        });
+        if !invalid {
+            continue;
+        }
+        settings.insert(key.to_string(), Value::Null);
+        if key == "group_property_id" {
+            settings.insert("group_order".to_string(), json!([]));
+            settings.insert("hidden_group_ids".to_string(), json!([]));
+            if view.view_type == "table" {
+                settings.insert("collapsed_group_ids".to_string(), json!([]));
+            }
+        } else if key == "cover_property_id" {
+            settings.insert("cover_source".to_string(), json!("none"));
+        }
+    }
+    Ok(Some(configuration))
+}
+
+pub(super) async fn load_data_source_schema_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    data_source_id: &str,
+    database_id: Option<&str>,
     view_id: Option<&str>,
 ) -> Result<NoteDataSourceSchemaDto, String> {
     let data_source = load_data_source_row_tx(tx, data_source_id).await?;
@@ -741,20 +814,28 @@ async fn load_data_source_schema_tx(
             .fetch_one(&mut **tx)
             .await
             .map_err(|e| format!("load notes data source database: {e}"))?;
-    let view = load_table_view_for_schema_tx(tx, data_source_id, view_id).await?;
+    let view = load_table_view_for_schema_tx(tx, data_source_id, database_id, view_id).await?;
     NoteDataSourceSchemaDto::new(data_source, database, view)
 }
 
 async fn load_table_view_for_schema_tx(
     tx: &mut Transaction<'_, Sqlite>,
     data_source_id: &str,
+    database_id: Option<&str>,
     view_id: Option<&str>,
 ) -> Result<NoteDatabaseViewRow, String> {
     let view = if let Some(view_id) = view_id {
-        data_source_views::load_scoped_view_row_tx(tx, data_source_id, "table", None, Some(view_id))
-            .await?
+        data_source_views::load_scoped_view_row_tx(
+            tx,
+            data_source_id,
+            "table",
+            database_id,
+            Some(view_id),
+        )
+        .await?
     } else {
-        data_source_views::load_scoped_view_row_tx(tx, data_source_id, "table", None, None).await?
+        data_source_views::load_scoped_view_row_tx(tx, data_source_id, "table", database_id, None)
+            .await?
     };
     view.ok_or_else(|| "data source table view not found".to_string())
 }

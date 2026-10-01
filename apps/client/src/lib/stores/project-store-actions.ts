@@ -54,6 +54,7 @@ import {
   type ProjectTaskListColumnWidths,
 } from "$lib/projects/project-list-view";
 import { normalizeProjectName } from "$lib/projects/project-text";
+import { PROJECT_LIST_PRESENTATION_KEY, type ProjectListPresentation } from "$lib/projects/project-list-presentation";
 import { applyProjectMutation } from "$lib/projects/project-snapshot-mutations";
 import { parseProjectIcon } from "$lib/projects/project-icons";
 import {
@@ -648,6 +649,16 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
       updateProjectCustomField(customFieldUpdatePayload(field, { ...patch, name: nextName })));
   }
 
+  /** Duplicate a property's schema and options with fresh identities and empty task values. */
+  async function duplicateCustomField(field: ProjectCustomField, name: string): Promise<ProjectCustomField> {
+    const fieldId = crypto.randomUUID();
+    const mutation = await commitMutation(`field:${fieldId}`, () => createProjectCustomField({
+      id: fieldId, projectId: field.projectId, name: normalizeProjectName(name), fieldType: field.fieldType,
+      sortOrder: selectors.nextCustomFieldSortOrder(field.projectId), duplicateSourceId: field.id,
+    }));
+    return changedById(mutation.changed.customFields, fieldId, "duplicated custom field");
+  }
+
   async function moveCustomField(field: ProjectCustomField, direction: -1 | 1): Promise<void> {
     const ordered = selectors.customFieldsForProject(field.projectId);
     const index = ordered.findIndex((entry) => entry.id === field.id);
@@ -958,6 +969,13 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
     }));
   }
 
+  /** Persist table presentation independently of task data and manual order. */
+  async function saveTaskListPresentation(projectId: string, presentation: ProjectListPresentation): Promise<void> {
+    await commitMutation(`preference:${projectId}:list:${PROJECT_LIST_PRESENTATION_KEY}`, () => upsertProjectViewPreference({
+      projectId, viewId: "list", preferenceKey: PROJECT_LIST_PRESENTATION_KEY, preferenceValue: JSON.stringify(presentation),
+    }));
+  }
+
   return {
     addGroup,
     setGroupCollapsed,
@@ -999,6 +1017,7 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
     removeCustomEmoji,
     addCustomField,
     updateCustomField,
+    duplicateCustomField,
     moveCustomField,
     removeCustomField,
     addCustomFieldOption,
@@ -1031,6 +1050,7 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
     deleteTaskView,
     saveTaskListColumns,
     saveTaskListColumnWidths,
+    saveTaskListPresentation,
   };
 }
 

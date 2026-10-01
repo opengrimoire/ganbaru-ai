@@ -186,11 +186,54 @@ pub struct NoteDataSourceButtonClick {
     pub confirmed: Option<bool>,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
-pub struct NoteDataSourceTableFilter {
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum NoteDataSourceTableFilter {
+    Predicate(NoteDataSourceTableFilterPredicate),
+    Group(NoteDataSourceTableFilterGroup),
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct NoteDataSourceTableFilterPredicate {
     pub property_id: String,
-    pub condition: String,
+    pub condition: NoteDataSourceFilterCondition,
     pub value: Option<Value>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct NoteDataSourceTableFilterGroup {
+    #[serde(rename = "type")]
+    pub operator: NoteDataSourceFilterOperator,
+    pub filters: Vec<NoteDataSourceTableFilter>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum NoteDataSourceFilterOperator {
+    And,
+    Or,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum NoteDataSourceFilterCondition {
+    Contains,
+    Equals,
+    NotEquals,
+    GreaterThan,
+    GreaterThanOrEqual,
+    LessThan,
+    LessThanOrEqual,
+    Before,
+    OnOrBefore,
+    After,
+    OnOrAfter,
+    IsEmpty,
+    IsNotEmpty,
+    Checked,
+    Unchecked,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -199,12 +242,24 @@ pub struct NoteDataSourceTableSort {
     pub direction: String,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Default, Deserialize)]
 pub struct NoteDataSourceTableConfigurationUpdate {
     pub property_order: Vec<String>,
     pub hidden_property_ids: Vec<String>,
     pub column_widths: Value,
     pub row_open_mode: String,
+    #[serde(default)]
+    pub group_property_id: Option<String>,
+    #[serde(default)]
+    pub group_order: Vec<String>,
+    #[serde(default)]
+    pub collapsed_group_ids: Vec<String>,
+    #[serde(default)]
+    pub collapsed_row_ids: Vec<String>,
+    #[serde(default)]
+    pub hide_empty_groups: bool,
+    #[serde(default)]
+    pub presentation: super::super::data_source_table_presentation::TablePresentation,
 }
 
 #[derive(Deserialize)]
@@ -667,8 +722,47 @@ pub struct NoteDatabaseRename {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct NoteDataSourceSchemaUpdate {
     pub properties: Value,
-    pub property_order: Vec<String>,
-    pub hidden_property_ids: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum NoteDataSourcePropertyAction {
+    Insert {
+        property_id: String,
+        side: NoteDataSourcePropertyInsertionSide,
+        property: Value,
+    },
+    Duplicate {
+        property_id: String,
+        name: String,
+    },
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NoteDataSourcePropertyInsertionSide {
+    Left,
+    Right,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NoteDataSourceCreate {
+    pub id: String,
+    pub database_id: String,
+    pub view_id: String,
+    pub title: String,
+    pub view_name: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NoteDataSourceAttach {
+    pub data_source_id: String,
+    pub database_id: String,
+    pub view_id: String,
+    pub view_name: String,
 }

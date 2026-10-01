@@ -18,6 +18,7 @@ fn database_templates_create_row_pages_with_properties_and_body_blocks() {
             &pool,
             DATA_SOURCE_A,
             None,
+            None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
                     "Name": {
@@ -43,12 +44,6 @@ fn database_templates_create_row_pages_with_properties_and_body_blocks() {
                         "checkbox": {}
                     }
                 }),
-                property_order: vec![
-                    "title".to_string(),
-                    "priority".to_string(),
-                    "done".to_string(),
-                ],
-                hidden_property_ids: vec![],
             },
         )
         .await
@@ -224,6 +219,7 @@ fn database_buttons_require_confirmation_and_update_current_row_properties() {
             &pool,
             DATA_SOURCE_A,
             None,
+            None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
                     "Name": {
@@ -255,12 +251,6 @@ fn database_buttons_require_confirmation_and_update_current_row_properties() {
                         }
                     }
                 }),
-                property_order: vec![
-                    "title".to_string(),
-                    "done".to_string(),
-                    "finish_button".to_string(),
-                ],
-                hidden_property_ids: vec![],
             },
         )
         .await
@@ -329,6 +319,7 @@ fn database_buttons_require_confirmation_and_update_current_row_properties() {
             &pool,
             DATA_SOURCE_A,
             None,
+            None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
                     "Name": {
@@ -350,8 +341,6 @@ fn database_buttons_require_confirmation_and_update_current_row_properties() {
                         }
                     }
                 }),
-                property_order: vec!["title".to_string(), "finish_button".to_string()],
-                hidden_property_ids: vec![],
             },
         )
         .await;

@@ -25,6 +25,7 @@
   import { cn } from "$lib/utils";
   import ProjectListColumnCell from "./ProjectListColumnCell.svelte";
   import ProjectListSubtaskRows from "./ProjectListSubtaskRows.svelte";
+  import { getProjectListTableContext } from "./project-list-table-context";
 
   let {
     task,
@@ -151,6 +152,7 @@
   } = $props();
 
   const { t } = getLocalization();
+  const context = getProjectListTableContext();
 </script>
 
 <div
@@ -161,7 +163,7 @@
     dragging && "opacity-50",
     dropPending && "opacity-60",
   )}
-  style={`min-width: ${gridMinWidth};`}
+  style={`min-width: ${gridMinWidth}; ${context?.rowStyle(task, selectedTaskId === task.id) ?? ""}`}
 >
   <CollectionRow template={gridTemplate} minWidth={gridMinWidth} divider={false} selected={selectedTaskId === task.id}
     role="group"
@@ -175,7 +177,7 @@
     ondragover={(event) => onDragOver?.(event)}
     ondrop={(event) => onDrop?.(event)}
   >
-    <div class="flex h-full items-center justify-center">
+    <div class={`flex h-full items-center justify-center ${context?.cellClass("selection") ?? ""}`} style={context?.cellStyle("selection")}>
       <button
         type="button"
         class={cn(
@@ -192,7 +194,7 @@
         {/if}
       </button>
     </div>
-    <div class="flex h-full items-center justify-center">
+    <div class={`flex h-full items-center justify-center ${context?.cellClass("open") ?? ""}`} style={context?.cellStyle("open")}>
       <button
         type="button"
         class="project-list-open-control flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 hover:bg-accent hover:text-foreground group-hover/row:opacity-100 group-focus-within/row:opacity-100"
@@ -202,7 +204,7 @@
         <ChevronRight size={14} strokeWidth={1.75} />
       </button>
     </div>
-    <CollectionCell>
+    <CollectionCell class={context?.cellClass("name")} style={context?.cellStyle("name")}>
     <button
       type="button"
       data-list-row-drag-source="true"

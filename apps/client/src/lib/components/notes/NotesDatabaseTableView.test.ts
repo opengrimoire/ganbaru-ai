@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NotesDataSourceTableView } from "$lib/notes/types";
 import {
   createNotesDataSourceRowPage, getNotesDataSourceTableView, listNotesDataSourceTemplates, loadNotesPage,
+  createNotesDataSourceSubitem,
   updateNotesDataSourceRowProperty, updateNotesDataSourceTableView,
 } from "$lib/api/notes";
 import { createProvisionalNotesPage } from "$lib/notes/page-creation";
@@ -15,6 +16,8 @@ vi.mock("$lib/api/notes", () => ({
   listNotesDataSourceTemplates: vi.fn(async () => []),
   updateNotesDataSourceTableView: vi.fn(),
   createNotesDataSourceRowPage: vi.fn(),
+  createNotesDataSourceSubitem: vi.fn(),
+  updateNotesDataSourceRowParent: vi.fn(),
   updateNotesDataSourceRowProperty: vi.fn(),
   applyNotesDataSourceTemplate: vi.fn(),
   loadNotesPage: vi.fn(),
@@ -34,9 +37,11 @@ function table(width: number): NotesDataSourceTableView {
     },
     view: {
       ...source, object: "view", id: "view", parent: { type: "database_id", database_id: "database" },
-      data_source_id: "source", name: "Table", type: "table", filter: {}, sorts: [], url: null,
+      data_source_id: "source", name: "Table", type: "table", filter: null, sorts: [], url: null,
       configuration: { type: "table", table: {
         property_order: ["title"], hidden_property_ids: [], column_widths: { title: width }, row_open_mode: "full_page",
+        group_property_id: null, group_order: [], collapsed_group_ids: [], hide_empty_groups: false,
+        presentation: { frozen_property_id: null, columns: {} },
       } },
     },
     rows: [], total_row_count: 0, has_more: false, next_cursor: null,
@@ -59,12 +64,17 @@ function pointer(target: EventTarget, type: string, x: number): void {
   target.dispatchEvent(event);
 }
 
-async function open(onSavingChange = vi.fn<(saving: boolean) => void>(), initialTable = table(240)) {
+async function open(
+  onSavingChange = vi.fn<(saving: boolean) => void>(),
+  initialTable = table(240),
+  onEditProperties = vi.fn<(propertyId?: string) => void>(),
+  editingLocked = false,
+) {
   vi.mocked(getNotesDataSourceTableView).mockResolvedValue(initialTable);
   vi.mocked(listNotesDataSourceTemplates).mockResolvedValue([]);
   vi.mocked(loadNotesPage).mockRejectedValue(new Error("Page not found"));
   component = mount(NotesDatabaseTableView, { target: document.body, props: {
-    dataSourceId: "source", onSavingChange, onSelectPage: vi.fn(), onAddProperty: vi.fn(), onEditProperties: vi.fn(), onCloseSettings: vi.fn(),
+    dataSourceId: "source", onSavingChange, onSelectPage: vi.fn(), onAddProperty: vi.fn(), onEditProperties, onCloseSettings: vi.fn(), editingLocked,
   } });
   await tick();
   await tick();
@@ -72,8 +82,215 @@ async function open(onSavingChange = vi.fn<(saving: boolean) => void>(), initial
   const handle = document.querySelector<HTMLButtonElement>(".collection-resize")!;
   handle.setPointerCapture = vi.fn();
   const row = document.querySelector<HTMLElement>('[role="row"]')!;
-  return { handle, onSavingChange, width: () => row.style.getPropertyValue("--collection-columns") };
+  return { handle, onSavingChange, onEditProperties, width: () => row.style.getPropertyValue("--collection-columns") };
 }
+
+/** Include a hidden property between visible properties to exercise saved presentation. */
+function configuredTable(): NotesDataSourceTableView {
+  const initial = table(240);
+  return {
+    ...initial,
+    data_source: { ...initial.data_source, properties: {
+      ...initial.data_source.properties,
+      Status: { id: "status", name: "Status", type: "status", status: { options: [] } },
+      Internal: { id: "internal", name: "Internal", type: "rich_text", rich_text: {} },
+      Done: { id: "done", name: "Done", type: "checkbox", checkbox: {} },
+    } },
+    view: { ...initial.view,
+      filter: { type: "and", filters: [{ property_id: "title", condition: "contains", value: "Active" }] },
+      sorts: [{ property_id: "title", direction: "ascending" }, { property_id: "status", direction: "ascending" }],
+      configuration: { type: "table", table: {
+        property_order: ["title", "status", "internal", "done"], hidden_property_ids: ["internal"],
+        column_widths: { title: 240, status: 160, internal: 180, done: 120 }, row_open_mode: "full_page",
+        group_property_id: null, group_order: [], collapsed_group_ids: [], hide_empty_groups: false,
+        presentation: { frozen_property_id: null, columns: {} },
+      } },
+    },
+  };
+}
+
+/** Open a property menu through its real table header control. */
+async function propertyMenu(name: string): Promise<HTMLElement> {
+  document.querySelector<HTMLButtonElement>(`[role="columnheader"] button[aria-label="${name}"]`)!.click();
+  await tick();
+  await tick();
+  const panel = document.querySelector<HTMLElement>(`[role="dialog"][aria-label="${name}"]`);
+  expect(panel).not.toBeNull();
+  return panel!;
+}
+
+/** Find an action by its visible label within one floating panel. */
+function action(panel: ParentNode, label: string): HTMLButtonElement {
+  const button = Array.from(panel.querySelectorAll<HTMLButtonElement>("button"))
+    .find((candidate) => candidate.textContent?.trim() === label);
+  expect(button).toBeDefined();
+  return button!;
+}
+
+describe("Notes table sub-items", () => {
+  it("uses distinct keyboard indexes for the same row rendered in multiple groups", async () => {
+    const initial = table(240);
+    const options = [{ id: "first", name: "First", color: "default" }, { id: "second", name: "Second", color: "default" }];
+    initial.data_source.properties.Tags = { id: "tags", name: "Tags", type: "multi_select", multi_select: { options } };
+    const both = createProvisionalNotesPage({ id: "both", first_block_id: "block-both", title: "Both", parent: { type: "data_source_id", data_source_id: "source" }, folder_id: null }).page;
+    const second = createProvisionalNotesPage({ id: "second-only", first_block_id: "block-second", title: "Second only", parent: { type: "data_source_id", data_source_id: "source" }, folder_id: null }).page;
+    both.properties.Tags = { id: "tags", type: "multi_select", multi_select: options };
+    second.properties.Tags = { id: "tags", type: "multi_select", multi_select: [options[1]] };
+    initial.rows = [second, both];
+    initial.view.configuration = { type: "table", table: { ...initial.view.configuration!.table as Record<string, unknown>,
+      property_order: ["title", "tags"], group_property_id: "tags", group_order: ["first", "second"], hide_empty_groups: true,
+    } };
+    await open(vi.fn(), initial);
+    const inputs = Array.from(document.querySelectorAll<HTMLInputElement>('[data-table-cell="true"][data-column-index="0"]'));
+    expect(inputs.map((input) => input.value)).toEqual(["Both", "Second only", "Both"]);
+    expect(inputs.map((input) => input.dataset.rowIndex)).toEqual(["0", "1", "2"]);
+    inputs[1].focus();
+    inputs[1].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(inputs[2]);
+    inputs[2].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(inputs[1]);
+  });
+  it("temporarily reveals a sub-item created under a collapsed locked parent without writing view settings", async () => {
+    const parentId = "11111111-1111-4111-8111-111111111111";
+    const initial = table(240);
+    initial.rows = [createProvisionalNotesPage({ id: parentId, first_block_id: "block", title: "Parent", parent: { type: "data_source_id", data_source_id: "source" }, folder_id: null }).page];
+    initial.row_hierarchy = { [parentId]: { parent_row_page_id: null, ancestor_row_page_ids: [], depth: 0, child_count: 1 } };
+    initial.view.configuration = { type: "table", table: { ...initial.view.configuration!.table as Record<string, unknown>, collapsed_row_ids: [parentId] } };
+    vi.mocked(createNotesDataSourceSubitem).mockImplementation(() => new Promise(() => {}));
+    await open(vi.fn(), initial, vi.fn(), true);
+    expect(document.querySelector<HTMLButtonElement>('[aria-label="Expand sub-items of Parent"]')!.disabled).toBe(true);
+    document.querySelector<HTMLButtonElement>(`[data-database-row-id="${parentId}"] button[aria-label="Row actions"]`)!.click();
+    await tick(); await tick();
+    action(document.querySelector('[role="dialog"][aria-label="Row actions"]')!, "Add sub-item").click();
+    await vi.waitFor(() => expect(createNotesDataSourceSubitem).toHaveBeenCalledOnce());
+    const id = vi.mocked(createNotesDataSourceSubitem).mock.calls[0][2].id;
+    const input = document.querySelector<HTMLInputElement>(`[data-database-row-id="${id}"] input[aria-label="Name"]`);
+    expect(input).not.toBeNull();
+    await vi.waitFor(() => expect(document.activeElement).toBe(input));
+    expect(updateNotesDataSourceTableView).not.toHaveBeenCalled();
+    expect(initial.view.configuration!.table).toMatchObject({ collapsed_row_ids: [parentId] });
+  });
+  it("renders children below their parent, navigates visible rows, and persists collapse per saved view", async () => {
+    const parentId = "11111111-1111-4111-8111-111111111111";
+    const childId = "22222222-2222-4222-8222-222222222222";
+    const otherId = "33333333-3333-4333-8333-333333333333";
+    const initial = table(240);
+    initial.rows = [createProvisionalNotesPage({ id: childId, first_block_id: "block-child", title: "Child", parent: { type: "data_source_id", data_source_id: "source" }, folder_id: null }).page,
+      createProvisionalNotesPage({ id: parentId, first_block_id: "block-parent", title: "Parent", parent: { type: "data_source_id", data_source_id: "source" }, folder_id: null }).page,
+      createProvisionalNotesPage({ id: otherId, first_block_id: "block-other", title: "Other", parent: { type: "data_source_id", data_source_id: "source" }, folder_id: null }).page];
+    initial.row_hierarchy = {
+      [parentId]: { parent_row_page_id: null, ancestor_row_page_ids: [], depth: 0, child_count: 1 },
+      [childId]: { parent_row_page_id: parentId, ancestor_row_page_ids: [parentId], depth: 1, child_count: 0 },
+      [otherId]: { parent_row_page_id: null, ancestor_row_page_ids: [], depth: 0, child_count: 0 },
+    };
+    vi.mocked(updateNotesDataSourceTableView).mockImplementation(async (_source, update) => ({ ...initial,
+      view: { ...initial.view, configuration: { type: "table", table: { ...update.configuration } } },
+    }));
+    await open(vi.fn(), initial);
+    const inputs = () => Array.from(document.querySelectorAll<HTMLInputElement>('[data-table-cell="true"][data-column-index="0"]'));
+    expect(inputs().map((input) => input.value)).toEqual(["Parent", "Child", "Other"]);
+    inputs()[0].focus();
+    inputs()[0].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(inputs()[1]);
+    document.querySelector<HTMLButtonElement>('[aria-label="Collapse sub-items of Parent"]')!.click();
+    await vi.waitFor(() => expect(inputs().map((input) => input.value)).toEqual(["Parent", "Other"]));
+    expect(updateNotesDataSourceTableView).toHaveBeenLastCalledWith("source", expect.objectContaining({
+      configuration: expect.objectContaining({ collapsed_row_ids: [parentId] }),
+    }), { databaseId: null, viewId: null });
+    inputs()[0].focus();
+    inputs()[0].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(inputs()[1]);
+  });
+
+  it("adds a real sub-item through the row menu and focuses its optimistic title without creating a root row", async () => {
+    const initial = table(240);
+    const parent = createProvisionalNotesPage({ id: "parent", first_block_id: "block", title: "Parent", parent: { type: "data_source_id", data_source_id: "source" }, folder_id: null }).page;
+    initial.rows = [parent];
+    initial.row_hierarchy = { parent: { parent_row_page_id: null, ancestor_row_page_ids: [], depth: 0, child_count: 0 } };
+    vi.mocked(createNotesDataSourceSubitem).mockImplementation(() => new Promise(() => {}));
+    await open(vi.fn(), initial);
+    document.querySelector<HTMLButtonElement>('[data-database-row-id="parent"] button[aria-label="Row actions"]')!.click();
+    await tick(); await tick();
+    action(document.querySelector('[role="dialog"][aria-label="Row actions"]')!, "Add sub-item").click();
+    await vi.waitFor(() => expect(createNotesDataSourceSubitem).toHaveBeenCalledOnce());
+    const request = vi.mocked(createNotesDataSourceSubitem).mock.calls[0][2];
+    const child = document.querySelector<HTMLElement>(`[data-database-row-id="${request.id}"]`)!;
+    expect(child.dataset.databaseRowDepth).toBe("1");
+    await vi.waitFor(() => expect(document.activeElement).toBe(child.querySelector('input[aria-label="Name"]')));
+    expect(createNotesDataSourceRowPage).not.toHaveBeenCalled();
+  });
+});
+
+describe("Notes table property actions", () => {
+  it("changes an existing sort without duplicating it or resetting the saved view", async () => {
+    const initial = configuredTable();
+    vi.mocked(updateNotesDataSourceTableView).mockResolvedValue(initial);
+    await open(vi.fn(), initial);
+    action(await propertyMenu("Status"), "Sort descending").click();
+    await vi.waitFor(() => expect(updateNotesDataSourceTableView).toHaveBeenCalledOnce());
+    const update = vi.mocked(updateNotesDataSourceTableView).mock.calls[0][1];
+    expect(update.sorts).toEqual([
+      { property_id: "title", direction: "ascending" },
+      { property_id: "status", direction: "descending" },
+    ]);
+    expect(update.filter).toEqual([{ property_id: "title", condition: "contains", value: "Active" }]);
+    const original = initial.view.configuration!.table;
+    if (typeof original !== "object" || original === null || Array.isArray(original)) throw new Error("Table fixture must include an object configuration");
+    expect(update.configuration).toMatchObject(original);
+  });
+
+  it("moves visible properties around hidden properties and keeps title first", async () => {
+    const initial = configuredTable();
+    vi.mocked(updateNotesDataSourceTableView).mockResolvedValue(initial);
+    await open(vi.fn(), initial);
+    action(await propertyMenu("Done"), "Move left").click();
+    await vi.waitFor(() => expect(updateNotesDataSourceTableView).toHaveBeenCalledOnce());
+    expect(vi.mocked(updateNotesDataSourceTableView).mock.calls[0][1].configuration).toMatchObject({
+      property_order: ["title", "done", "internal", "status"], hidden_property_ids: ["internal"],
+    });
+  });
+
+  it("keeps the required title visible and targets the property editor", async () => {
+    const { onEditProperties } = await open(vi.fn(), configuredTable());
+    const panel = await propertyMenu("Name");
+    expect(panel.textContent).not.toContain("Move left");
+    expect(panel.textContent).not.toContain("Move right");
+    expect(panel.textContent).not.toContain("Hide");
+    action(panel, "Edit property").click();
+    expect(onEditProperties).toHaveBeenCalledWith("title");
+    expect(updateNotesDataSourceTableView).not.toHaveBeenCalled();
+  });
+
+  it("passes the chosen property to the editor and hides only that view column", async () => {
+    const initial = configuredTable();
+    vi.mocked(updateNotesDataSourceTableView).mockResolvedValue(initial);
+    const { onEditProperties } = await open(vi.fn(), initial);
+    const panel = await propertyMenu("Status");
+    action(panel, "Edit property").click();
+    expect(onEditProperties).toHaveBeenCalledWith("status");
+    action(panel, "Hide").click();
+    await vi.waitFor(() => expect(updateNotesDataSourceTableView).toHaveBeenCalledOnce());
+    expect(vi.mocked(updateNotesDataSourceTableView).mock.calls[0][1].configuration.hidden_property_ids)
+      .toEqual(["status", "internal"]);
+  });
+
+  it("adds a checkbox filter for the chosen property without replacing existing filters", async () => {
+    const initial = configuredTable();
+    vi.mocked(updateNotesDataSourceTableView).mockResolvedValue(initial);
+    await open(vi.fn(), initial);
+    const panel = await propertyMenu("Done");
+    action(panel, "Filter").click();
+    await tick();
+    await tick();
+    const filterPanel = document.querySelector<HTMLElement>('[role="dialog"][aria-label="Filter"]')!;
+    action(filterPanel, "Add filter").click();
+    await vi.waitFor(() => expect(updateNotesDataSourceTableView).toHaveBeenCalledOnce());
+    expect(vi.mocked(updateNotesDataSourceTableView).mock.calls[0][1].filter).toEqual([
+      { property_id: "title", condition: "contains", value: "Active" },
+      { property_id: "done", condition: "checked", value: null },
+    ]);
+  });
+});
 
 describe("Notes table width handoff", () => {
   it("reveals ready rows before an unrelated template read finishes", async () => {
@@ -200,6 +417,109 @@ function created(request: { id: string; first_block_id: string; title: string })
   return createProvisionalNotesPage({ ...request,
     parent: { type: "data_source_id", data_source_id: "source" }, folder_id: null });
 }
+
+describe("saved grouped table presentation", () => {
+  it("keeps frozen offsets aligned with the live resized tracks while a save is pending", async () => {
+    const initial = configuredTable();
+    initial.view.configuration = { type: "table", table: { ...initial.view.configuration!.table as Record<string, unknown>, presentation: { frozen_property_id: "status", columns: {} } } };
+    vi.mocked(updateNotesDataSourceTableView).mockImplementation(() => new Promise(() => {}));
+    const { handle } = await open(vi.fn(), initial);
+    const statusHeader = document.querySelector<HTMLElement>('[role="columnheader"] button[aria-label="Status"]')!.closest<HTMLElement>('[role="columnheader"]')!;
+    expect(statusHeader.style.left).toBe("240px");
+    pointer(handle, "pointerdown", 200);
+    pointer(window, "pointermove", 240);
+    await tick();
+    expect(statusHeader.style.left).toBe("280px");
+    pointer(window, "pointerup", 240);
+    await tick();
+    expect(statusHeader.style.left).toBe("280px");
+    expect(updateNotesDataSourceTableView).toHaveBeenCalledOnce();
+  });
+
+  it("allows wrapped read-only values to expand their row naturally", async () => {
+    const initial = table(240);
+    initial.data_source.properties.Summary = { id: "summary", name: "Summary", type: "formula", formula: { expression: "\"Summary\"" } };
+    const page = created({ id: "row", first_block_id: "block", title: "Task" }).page;
+    page.properties.Summary = { id: "summary", type: "formula", formula: { type: "string", string: "First line\nSecond line" } };
+    initial.rows = [page];
+    initial.view.configuration = { type: "table", table: { property_order: ["title", "summary"], hidden_property_ids: [], column_widths: {}, row_open_mode: "full_page", presentation: { columns: { summary: { wrap: true } } } } };
+    await open(vi.fn(), initial);
+    const cell = document.querySelector<HTMLElement>('[data-database-row-id="row"] button[data-column-index="1"]')!;
+    expect(cell.textContent).toContain("First line\nSecond line");
+    expect(cell.classList.contains("h-8")).toBe(false);
+    expect(cell.classList.contains("min-h-8")).toBe(true);
+    expect(cell.querySelector(".truncate")).toBeNull();
+  });
+
+  it("protects view settings while revealing a new row in a collapsed locked group", async () => {
+    const initial = table(240);
+    initial.data_source.properties.Status = { id: "status", name: "Status", type: "status", status: { options: [{ id: "todo", name: "To do", color: "blue" }] } };
+    initial.group_counts = { todo: 3 };
+    initial.view.configuration = { type: "table", table: {
+      property_order: ["title", "status"], hidden_property_ids: [], column_widths: {}, row_open_mode: "full_page",
+      group_property_id: "status", group_order: [], collapsed_group_ids: ["todo"], hide_empty_groups: true,
+    } };
+    vi.mocked(createNotesDataSourceRowPage).mockImplementation(() => new Promise(() => {}));
+    const { handle } = await open(vi.fn(), initial, vi.fn(), true);
+    expect(handle.disabled).toBe(true);
+    expect(document.querySelector<HTMLButtonElement>('[role="columnheader"] button[aria-label="Name"]')!.disabled).toBe(true);
+    const group = document.querySelector<HTMLElement>('[data-table-group-id="todo"]')!;
+    expect(group.querySelector<HTMLButtonElement>("button[aria-expanded]")!.disabled).toBe(true);
+    group.querySelector<HTMLButtonElement>('button[aria-label="New page"]')!.click();
+    await vi.waitFor(() => expect(createNotesDataSourceRowPage).toHaveBeenCalledOnce());
+    const id = vi.mocked(createNotesDataSourceRowPage).mock.calls[0][1].id;
+    const input = document.querySelector<HTMLInputElement>(`[data-database-row-id="${id}"] input[aria-label="Name"]`);
+    expect(input).not.toBeNull();
+    await vi.waitFor(() => expect(document.activeElement).toBe(input));
+    expect(updateNotesDataSourceTableView).not.toHaveBeenCalled();
+  });
+
+  it("shows unloaded group counts and complete-source calculations and saves collapse independently", async () => {
+    const initial = table(240);
+    initial.data_source.properties.Status = { id: "status", name: "Status", type: "status", status: { options: [
+      { id: "todo", name: "To do", color: "blue" }, { id: "done", name: "Done", color: "green" },
+    ] } };
+    const page = created({ id: "row", first_block_id: "block", title: "Loaded row" }).page;
+    page.properties.Status = { id: "status", type: "status", status: { id: "done", name: "Done", color: "green" } };
+    initial.rows = [page]; initial.total_row_count = 8; initial.group_counts = { todo: 5, done: 3 };
+    initial.calculations = { overall: { title: 8 }, groups: { todo: { title: 5 }, done: { title: 3 } } };
+    initial.view.configuration = { type: "table", table: { property_order: ["title", "status"], hidden_property_ids: [], column_widths: { title: 240, status: 180 }, row_open_mode: "full_page",
+      group_property_id: "status", group_order: ["todo", "done"], collapsed_group_ids: [], hide_empty_groups: true,
+      presentation: { frozen_property_id: "title", columns: { title: { wrap: true, calculation: "count_all" } } },
+    } };
+    vi.mocked(updateNotesDataSourceTableView).mockResolvedValue(initial);
+    await open(vi.fn(), initial);
+    expect(document.querySelector('[data-table-group-id="todo"]')?.textContent).toContain("5");
+    expect(document.querySelector('[data-table-group-id="done"]')?.textContent).toContain("3");
+    expect(document.querySelector('[data-table-calculation-group="__all__"]')?.textContent).toContain("Count all 8");
+    expect(document.querySelectorAll('[data-database-row-id]')).toHaveLength(1);
+    expect(document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Name"]')?.value).toBe("Loaded row");
+    const frozenCell = document.querySelector<HTMLElement>('[data-database-row-id] .collection-cell');
+    expect(frozenCell?.style.left).toBe("0px");
+    document.querySelector<HTMLButtonElement>('[data-table-group-id="todo"] button[aria-expanded]')!.click();
+    await vi.waitFor(() => expect(updateNotesDataSourceTableView).toHaveBeenCalledOnce());
+    expect(vi.mocked(updateNotesDataSourceTableView).mock.calls[0][1].configuration).toMatchObject({
+      collapsed_group_ids: ["todo"], group_property_id: "status", presentation: { frozen_property_id: "title", columns: { title: { wrap: true, calculation: "count_all" } } },
+    });
+  });
+
+  it("applies typed conditional row colors without changing row values", async () => {
+    const initial = table(240);
+    initial.data_source.properties.Estimate = { id: "estimate", name: "Estimate", type: "number", number: { format: "number" } };
+    const low = created({ id: "low", first_block_id: "low-block", title: "Low" }).page;
+    const high = created({ id: "high", first_block_id: "high-block", title: "High" }).page;
+    low.properties.Estimate = { id: "estimate", type: "number", number: 2 };
+    high.properties.Estimate = { id: "estimate", type: "number", number: 12 };
+    initial.rows = [low, high]; initial.total_row_count = 2;
+    initial.view.configuration = { type: "table", table: { property_order: ["title", "estimate"], hidden_property_ids: [], column_widths: {}, row_open_mode: "full_page",
+      presentation: { columns: {}, frozen_property_id: null, color_rules: [{ id: "large", property_id: null, color: "red", filters: [{ property_id: "estimate", condition: "greater_than", value: 10 }] }] },
+    } };
+    await open(vi.fn(), initial);
+    expect(document.querySelector<HTMLElement>('[data-database-row-id="low"]')?.style.getPropertyValue("--notes-block-bg")).toBe("");
+    expect(document.querySelector<HTMLElement>('[data-database-row-id="high"]')?.style.getPropertyValue("--notes-block-bg")).not.toBe("");
+    expect(updateNotesDataSourceRowProperty).not.toHaveBeenCalled();
+  });
+});
 
 function newPage(): HTMLButtonElement {
   return document.querySelector<HTMLButtonElement>("[data-database-new-row] button")!;

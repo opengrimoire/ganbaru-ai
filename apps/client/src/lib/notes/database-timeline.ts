@@ -1,4 +1,5 @@
 import { Temporal } from "@js-temporal/polyfill";
+import { notesDatabaseSerializeFilters } from "./database-filters";
 import {
   notesDatabaseTableCellText,
   notesDatabaseTableColumns,
@@ -244,11 +245,7 @@ export function notesDatabaseTimelineUpdate(
   sorts: readonly NotesDatabaseTableSort[],
 ): NotesDataSourceTimelineViewUpdate {
   return {
-    filter: filters.map((filter) => ({
-      property_id: filter.property_id,
-      condition: filter.condition,
-      value: filter.value ?? null,
-    })),
+    filter: notesDatabaseSerializeFilters(filters),
     sorts: sorts.map((sort) => ({
       property_id: sort.property_id,
       direction: sort.direction,

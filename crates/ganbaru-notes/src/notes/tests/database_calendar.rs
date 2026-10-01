@@ -25,6 +25,7 @@ fn calendar_database_view_uses_date_ranges_filters_sorts_and_configuration() {
             &pool,
             DATA_SOURCE_A,
             None,
+            None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
                     "Name": {
@@ -57,13 +58,6 @@ fn calendar_database_view_uses_date_ranges_filters_sorts_and_configuration() {
                         }
                     }
                 }),
-                property_order: vec![
-                    "title".to_string(),
-                    "due".to_string(),
-                    "estimate".to_string(),
-                    "status".to_string(),
-                ],
-                hidden_property_ids: vec![],
             },
         )
         .await
@@ -186,11 +180,12 @@ fn calendar_database_view_uses_date_ranges_filters_sorts_and_configuration() {
             None,
             None,
             NoteDataSourceCalendarViewUpdate {
-                filter: vec![NoteDataSourceTableFilter {
-                    property_id: "title".to_string(),
-                    condition: "contains".to_string(),
-                    value: Some(json!("a")),
-                }],
+                filter: vec![
+                    serde_json::from_value::<NoteDataSourceTableFilter>(json!({
+                        "property_id": "title", "condition": "contains", "value": "a"
+                    }))
+                    .unwrap(),
+                ],
                 sorts: vec![NoteDataSourceTableSort {
                     property_id: "estimate".to_string(),
                     direction: "descending".to_string(),

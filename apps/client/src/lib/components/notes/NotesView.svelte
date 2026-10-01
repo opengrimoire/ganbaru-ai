@@ -711,6 +711,7 @@
               style={center ? "top: calc(var(--titlebar-h) + var(--cal-header-row-h));" : undefined}
               inert={hidden || (!showDatabasePage && !isContextual && showCenterPeek)}
               data-notes-pane={pane.id}
+              data-floating-root
               data-notes-main-page={pane.id === notes.mainPaneId ? store.selectedPageId : undefined}
               role="presentation"
               onpointerdowncapture={(event) => {

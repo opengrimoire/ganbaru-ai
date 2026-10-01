@@ -1,23 +1,27 @@
 use super::models::{
-    NoteDataSourceRow, NoteDataSourceTableFilter, NoteDataSourceTableSort, NoteDatabaseRow,
-    NoteDatabaseViewRow, NotePageRow,
+    NoteDataSourceFilterCondition, NoteDataSourceFilterOperator, NoteDataSourceRow,
+    NoteDataSourceTableFilter, NoteDataSourceTableFilterPredicate, NoteDataSourceTableSort,
+    NoteDatabaseRow, NoteDatabaseViewRow, NotePageRow,
 };
 use super::validation::require_uuid;
 use super::{data_source_relations, writes};
 use serde_json::{Map, Value, json};
 use sqlx::{Sqlite, Transaction};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 const MAX_FILTERS: usize = 10;
+const MAX_FILTER_GROUPS: usize = 8;
+const MAX_FILTER_DEPTH: usize = 3;
 const MAX_SORTS: usize = 5;
 const MAX_FILTER_TEXT_CHARS: usize = 200;
-const FILTER_CONDITIONS: &[&str] = &[
-    "contains",
-    "equals",
-    "is_empty",
-    "is_not_empty",
-    "checked",
-    "unchecked",
+pub(super) const GROUP_PROPERTY_TYPES: &[&str] = &[
+    "status",
+    "select",
+    "multi_select",
+    "checkbox",
+    "people",
+    "relation",
+    "date",
 ];
 
 #[derive(Clone)]
@@ -48,6 +52,22 @@ pub(super) fn scoped_database_id<'a>(
     database_id: Option<&'a str>,
 ) -> &'a str {
     database_id.unwrap_or(&data_source.database_id)
+}
+
+/// Guard the resolved shell and schedule history for its own project in the write transaction.
+pub(super) async fn prepare_view_mutation_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    view: &NoteDatabaseViewRow,
+    summary: &str,
+) -> Result<(), String> {
+    super::database_editing_lock::ensure_unlocked_tx(tx, &view.database_id).await?;
+    let page_id: String =
+        sqlx::query_scalar("SELECT page_id FROM notes_blocks WHERE id = ? AND in_trash = 0")
+            .bind(&view.database_id)
+            .fetch_one(&mut **tx)
+            .await
+            .map_err(|error| format!("load database view history parent: {error}"))?;
+    super::project_history::mark_page_dirty_tx(tx, &page_id, summary, false).await
 }
 
 pub(super) async fn next_view_sort_order_tx(
@@ -133,32 +153,11 @@ pub(super) fn view_schema(properties: &Value) -> Result<Vec<ViewProperty>, Strin
 
 pub(super) fn canonical_filter(
     filters: &[NoteDataSourceTableFilter],
-    property_ids: &HashSet<String>,
+    property_types: &HashMap<&str, &str>,
     view_kind: &str,
 ) -> Result<Option<Value>, String> {
-    if filters.len() > MAX_FILTERS {
-        return Err(format!("{view_kind} filters are limited to 10"));
-    }
-    let mut canonical = Vec::new();
-    for filter in filters {
-        let property_id = filter.property_id.trim();
-        if property_id.is_empty() {
-            continue;
-        }
-        if !property_ids.contains(property_id) {
-            return Err(format!("{view_kind} filter references an unknown property"));
-        }
-        let condition = filter.condition.trim();
-        if !FILTER_CONDITIONS.contains(&condition) {
-            return Err(format!("{view_kind} filter condition is not supported"));
-        }
-        let value = canonical_filter_value(condition, filter.value.as_ref(), view_kind)?;
-        canonical.push(json!({
-            "property_id": property_id,
-            "condition": condition,
-            "value": value
-        }));
-    }
+    validate_filter_bounds(filters, 0, &mut (0, 0), view_kind)?;
+    let canonical = canonical_filter_nodes(filters, property_types, view_kind)?;
     if canonical.is_empty() {
         Ok(None)
     } else {
@@ -169,20 +168,124 @@ pub(super) fn canonical_filter(
     }
 }
 
+fn validate_filter_bounds(
+    filters: &[NoteDataSourceTableFilter],
+    depth: usize,
+    counts: &mut (usize, usize),
+    view_kind: &str,
+) -> Result<(), String> {
+    for filter in filters {
+        match filter {
+            NoteDataSourceTableFilter::Predicate(_) => counts.0 += 1,
+            NoteDataSourceTableFilter::Group(group) => {
+                counts.1 += 1;
+                if depth >= MAX_FILTER_DEPTH || group.filters.is_empty() {
+                    return Err(format!(
+                        "{view_kind} filter groups must be nonempty and at most {MAX_FILTER_DEPTH} levels deep"
+                    ));
+                }
+                validate_filter_bounds(&group.filters, depth + 1, counts, view_kind)?;
+            }
+        }
+        if counts.0 > MAX_FILTERS || counts.1 > MAX_FILTER_GROUPS {
+            return Err(format!(
+                "{view_kind} filters are limited to {MAX_FILTERS} predicates and {MAX_FILTER_GROUPS} groups"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn canonical_filter_nodes(
+    filters: &[NoteDataSourceTableFilter],
+    property_types: &HashMap<&str, &str>,
+    view_kind: &str,
+) -> Result<Vec<Value>, String> {
+    filters
+        .iter()
+        .map(|filter| match filter {
+            NoteDataSourceTableFilter::Group(group) => Ok(json!({
+                "type": group.operator,
+                "filters": canonical_filter_nodes(&group.filters, property_types, view_kind)?
+            })),
+            NoteDataSourceTableFilter::Predicate(predicate) => {
+                let property_id = predicate.property_id.trim();
+                let property_type = property_types
+                    .get(property_id)
+                    .ok_or_else(|| format!("{view_kind} filter references an unknown property"))?;
+                if !filter_condition_supported(property_type, predicate.condition) {
+                    return Err(format!(
+                        "{view_kind} filter condition is not supported for {property_type}"
+                    ));
+                }
+                Ok(
+                    json!({"property_id": property_id, "condition": predicate.condition,
+                "value": canonical_filter_value(predicate, property_type, view_kind)?}),
+                )
+            }
+        })
+        .collect()
+}
+
+pub(super) fn filter_condition_supported(
+    property_type: &str,
+    condition: NoteDataSourceFilterCondition,
+) -> bool {
+    use NoteDataSourceFilterCondition::*;
+    if matches!(property_type, "formula" | "rollup" | "button") {
+        return false;
+    }
+    if matches!(condition, IsEmpty | IsNotEmpty) {
+        return true;
+    }
+    match property_type {
+        "checkbox" => matches!(condition, Checked | Unchecked),
+        "number" => matches!(
+            condition,
+            Equals | NotEquals | GreaterThan | GreaterThanOrEqual | LessThan | LessThanOrEqual
+        ),
+        "date" | "created_time" | "last_edited_time" => matches!(
+            condition,
+            Equals | NotEquals | Before | OnOrBefore | After | OnOrAfter
+        ),
+        _ => matches!(condition, Contains | Equals | NotEquals),
+    }
+}
+
 fn canonical_filter_value(
-    condition: &str,
-    value: Option<&Value>,
+    predicate: &NoteDataSourceTableFilterPredicate,
+    property_type: &str,
     view_kind: &str,
 ) -> Result<Value, String> {
+    use NoteDataSourceFilterCondition::*;
     if matches!(
-        condition,
-        "is_empty" | "is_not_empty" | "checked" | "unchecked"
+        predicate.condition,
+        IsEmpty | IsNotEmpty | Checked | Unchecked
     ) {
         return Ok(Value::Null);
     }
-    let Some(value) = value else {
-        return Ok(Value::Null);
-    };
+    let value = predicate.value.as_ref().unwrap_or(&Value::Null);
+    if property_type == "number" {
+        value
+            .as_f64()
+            .filter(|number| number.is_finite())
+            .ok_or_else(|| format!("{view_kind} numeric filter value must be a finite number"))?;
+        return Ok(value.clone());
+    }
+    if matches!(property_type, "date" | "created_time" | "last_edited_time") {
+        let text = value.as_str().map(str::trim).ok_or_else(|| {
+            format!("{view_kind} date filter value must be an ISO date or RFC 3339 timestamp")
+        })?;
+        let valid = (text.len() == 10
+            && chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").is_ok())
+            || chrono::DateTime::parse_from_rfc3339(text).is_ok();
+        if !valid {
+            return Err(format!(
+                "{view_kind} date filter value must be an ISO date or RFC 3339 timestamp"
+            ));
+        }
+        return Ok(Value::String(text.to_string()));
+    }
     match value {
         Value::Null | Value::Bool(_) | Value::Number(_) => Ok(value.clone()),
         Value::String(text) => Ok(Value::String(validate_text(
@@ -192,6 +295,25 @@ fn canonical_filter_value(
         )?)),
         _ => Err(format!("{view_kind} filter value must be a scalar")),
     }
+}
+
+/// Remove invalid source references without changing the remaining Boolean structure.
+pub(super) fn reconcile_filters(
+    filters: &mut Vec<NoteDataSourceTableFilter>,
+    property_types: &HashMap<&str, &str>,
+) {
+    filters.retain_mut(|filter| match filter {
+        NoteDataSourceTableFilter::Predicate(predicate) => property_types
+            .get(predicate.property_id.as_str())
+            .is_some_and(|property_type| {
+                filter_condition_supported(property_type, predicate.condition)
+                    && canonical_filter_value(predicate, property_type, "saved view").is_ok()
+            }),
+        NoteDataSourceTableFilter::Group(group) => {
+            reconcile_filters(&mut group.filters, property_types);
+            !group.filters.is_empty()
+        }
+    });
 }
 
 pub(super) fn canonical_sorts(
@@ -235,12 +357,19 @@ pub(super) fn stored_filters(
     let Some(filter) = filter else {
         return Ok(Vec::new());
     };
-    let value = parse_json(filter, storage_label)?;
-    let filters = value
-        .get("filters")
-        .cloned()
-        .unwrap_or_else(|| Value::Array(Vec::new()));
-    serde_json::from_value(filters).map_err(|e| format!("parse {view_kind} filters: {e}"))
+    let mut value = parse_json(filter, storage_label)?;
+    if let Some(root) = value.as_object_mut() {
+        root.entry("type").or_insert_with(|| json!("and"));
+    }
+    let root: super::models::NoteDataSourceTableFilterGroup =
+        serde_json::from_value(value).map_err(|e| format!("parse {view_kind} filters: {e}"))?;
+    let filters = if root.operator == NoteDataSourceFilterOperator::And {
+        root.filters
+    } else {
+        vec![NoteDataSourceTableFilter::Group(root)]
+    };
+    validate_filter_bounds(&filters, 0, &mut (0, 0), view_kind)?;
+    Ok(filters)
 }
 
 pub(super) fn stored_sorts(
@@ -553,5 +682,11 @@ pub(super) async fn load_scoped_view_row_tx(
         .fetch_optional(&mut **tx)
         .await
     };
-    row.map_err(|e| format!("load notes {view_type} view: {e}"))
+    let row = row.map_err(|e| format!("load notes {view_type} view: {e}"))?;
+    if let (Some(database_id), Some(view)) = (database_id, row.as_ref()) {
+        if view.database_id != database_id.trim() {
+            return Err("view does not belong to the requesting database".to_string());
+        }
+    }
+    Ok(row)
 }

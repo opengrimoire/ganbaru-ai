@@ -21,6 +21,7 @@ export function parseChildDatabasePayload(
   const viewId = readOptionalUuidString(record.view_id, `${label}.view_id`);
   return {
     title,
+    ...(record.editing_locked === undefined ? {} : { editing_locked: readBoolean(record.editing_locked, `${label}.editing_locked`) }),
     ...(databaseId === undefined ? {} : { database_id: databaseId }),
     ...(dataSourceId === undefined ? {} : { data_source_id: dataSourceId }),
     ...(viewId === undefined ? {} : { view_id: viewId }),

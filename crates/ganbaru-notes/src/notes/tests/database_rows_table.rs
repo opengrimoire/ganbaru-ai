@@ -1,6 +1,126 @@
 use super::helpers::*;
 
 #[test]
+fn database_date_edits_preserve_ranges_and_zones_and_reject_invalid_ranges_atomically() {
+    crate::test_block_on(async {
+        let pool = migrated_memory_pool().await;
+        create_page(&pool, PAGE_A, BLOCK_A).await;
+        databases::create_database(
+            &pool,
+            NoteDatabaseCreate {
+                id: DATABASE_A.to_string(),
+                data_source_id: DATA_SOURCE_A.to_string(),
+                view_id: DATABASE_VIEW_A.to_string(),
+                title: "Dates".to_string(),
+                parent: Some(page_parent(PAGE_A)),
+                after_block_id: Some(BLOCK_A.to_string()),
+                replace_block_id: None,
+                icon: None,
+                cover: None,
+            },
+        )
+        .await
+        .unwrap();
+        data_source_schema::update_data_source_schema(
+            &pool,
+            DATA_SOURCE_A,
+            None,
+            None,
+            NoteDataSourceSchemaUpdate {
+                properties: json!({
+                    "Name": { "id": "title", "name": "Name", "type": "title", "title": {} },
+                    "When": { "id": "when", "name": "When", "type": "date", "date": {} }
+                }),
+            },
+        )
+        .await
+        .unwrap();
+        data_source_rows::create_data_source_row_page(
+            &pool,
+            DATA_SOURCE_A,
+            NoteDataSourceRowPageCreate {
+                id: PAGE_B.to_string(),
+                first_block_id: BLOCK_B.to_string(),
+                title: "Meeting".to_string(),
+                properties: None,
+            },
+        )
+        .await
+        .unwrap();
+        let original = json!({ "start": "2026-10-01T09:00:00", "end": "2026-10-01T11:00:00", "time_zone": "America/Monterrey" });
+        data_source_table::update_data_source_row_property(
+            &pool,
+            DATA_SOURCE_A,
+            PAGE_B,
+            NoteDataSourceRowPropertyUpdate {
+                property_id: "when".to_string(),
+                value: original.clone(),
+            },
+        )
+        .await
+        .unwrap();
+        let updated = data_source_table::update_data_source_row_property(
+            &pool,
+            DATA_SOURCE_A,
+            PAGE_B,
+            NoteDataSourceRowPropertyUpdate {
+                property_id: "when".to_string(),
+                value: json!("2026-10-01T10:00:00"),
+            },
+        )
+        .await
+        .unwrap();
+        let updated = serde_json::to_value(updated).unwrap();
+        assert_eq!(
+            updated["properties"]["When"]["date"],
+            json!({
+                "start": "2026-10-01T10:00:00", "end": original["end"], "time_zone": original["time_zone"]
+            })
+        );
+        for invalid in [
+            json!("2026-10-02"),
+            json!({ "start": "2026-02-30", "end": null, "time_zone": null }),
+            json!({ "start": "2026-10-01", "end": false, "time_zone": null }),
+            json!({ "start": "2026-10-01", "end": null, "time_zone": 123 }),
+        ] {
+            assert!(
+                data_source_table::update_data_source_row_property(
+                    &pool,
+                    DATA_SOURCE_A,
+                    PAGE_B,
+                    NoteDataSourceRowPropertyUpdate {
+                        property_id: "when".to_string(),
+                        value: invalid,
+                    }
+                )
+                .await
+                .is_err()
+            );
+        }
+        let table = data_source_table::get_data_source_table_view(&pool, DATA_SOURCE_A, None, None)
+            .await
+            .unwrap();
+        let table = serde_json::to_value(table).unwrap();
+        assert_eq!(
+            table["rows"][0]["properties"]["When"]["date"],
+            updated["properties"]["When"]["date"]
+        );
+        let cleared = data_source_table::update_data_source_row_property(
+            &pool,
+            DATA_SOURCE_A,
+            PAGE_B,
+            NoteDataSourceRowPropertyUpdate {
+                property_id: "when".to_string(),
+                value: json!(null),
+            },
+        )
+        .await
+        .unwrap();
+        assert!(serde_json::to_value(cleared).unwrap()["properties"]["When"]["date"].is_null());
+    });
+}
+
+#[test]
 fn database_view_window_keyset_pages_ten_thousand_rows_with_bounded_payloads() {
     crate::test_block_on(async {
         let pool = migrated_memory_pool().await;
@@ -181,6 +301,7 @@ fn database_row_pages_are_real_pages_with_page_lifecycle() {
             &pool,
             DATA_SOURCE_A,
             None,
+            None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
                     "Name": {
@@ -202,12 +323,6 @@ fn database_row_pages_are_real_pages_with_page_lifecycle() {
                         "checkbox": {}
                     }
                 }),
-                property_order: vec![
-                    "title".to_string(),
-                    "details".to_string(),
-                    "done_checkbox".to_string(),
-                ],
-                hidden_property_ids: vec![],
             },
         )
         .await
@@ -377,6 +492,7 @@ fn editable_database_table_view_persists_cells_configuration_filters_and_sorts()
             &pool,
             DATA_SOURCE_A,
             None,
+            None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
                     "Name": {
@@ -415,14 +531,6 @@ fn editable_database_table_view_persists_cells_configuration_filters_and_sorts()
                         "checkbox": {}
                     }
                 }),
-                property_order: vec![
-                    "title".to_string(),
-                    "details".to_string(),
-                    "estimate".to_string(),
-                    "priority".to_string(),
-                    "done_checkbox".to_string(),
-                ],
-                hidden_property_ids: vec![],
             },
         )
         .await
@@ -537,11 +645,12 @@ fn editable_database_table_view_persists_cells_configuration_filters_and_sorts()
             None,
             None,
             NoteDataSourceTableViewUpdate {
-                filter: vec![NoteDataSourceTableFilter {
-                    property_id: "title".to_string(),
-                    condition: "contains".to_string(),
-                    value: Some(json!("a")),
-                }],
+                filter: vec![
+                    serde_json::from_value::<NoteDataSourceTableFilter>(json!({
+                        "property_id": "title", "condition": "contains", "value": "a"
+                    }))
+                    .unwrap(),
+                ],
                 sorts: vec![NoteDataSourceTableSort {
                     property_id: "estimate".to_string(),
                     direction: "descending".to_string(),
@@ -563,6 +672,7 @@ fn editable_database_table_view_persists_cells_configuration_filters_and_sorts()
                         "details": 240
                     }),
                     row_open_mode: "side_panel".to_string(),
+                    ..Default::default()
                 },
             },
         )
@@ -605,11 +715,12 @@ fn editable_database_table_view_persists_cells_configuration_filters_and_sorts()
             None,
             None,
             NoteDataSourceTableViewUpdate {
-                filter: vec![NoteDataSourceTableFilter {
-                    property_id: "done_checkbox".to_string(),
-                    condition: "checked".to_string(),
-                    value: None,
-                }],
+                filter: vec![
+                    serde_json::from_value::<NoteDataSourceTableFilter>(json!({
+                        "property_id": "done_checkbox", "condition": "checked", "value": null
+                    }))
+                    .unwrap(),
+                ],
                 sorts: vec![],
                 configuration: NoteDataSourceTableConfigurationUpdate {
                     property_order: vec![
@@ -628,6 +739,7 @@ fn editable_database_table_view_persists_cells_configuration_filters_and_sorts()
                         "details": 240
                     }),
                     row_open_mode: "side_panel".to_string(),
+                    ..Default::default()
                 },
             },
         )

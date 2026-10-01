@@ -24,7 +24,7 @@ fn board_database_view_groups_filters_sorts_and_moves_rows() {
         data_source_schema::update_data_source_schema(
             &pool,
             DATA_SOURCE_A,
-            None,
+            None, None,
             NoteDataSourceSchemaUpdate {
                 properties: json!({
                     "Name": {
@@ -75,15 +75,6 @@ fn board_database_view_groups_filters_sorts_and_moves_rows() {
                         "people": {}
                     }
                 }),
-                property_order: vec![
-                    "title".to_string(),
-                    "status".to_string(),
-                    "priority".to_string(),
-                    "done_checkbox".to_string(),
-                    "due".to_string(),
-                    "owner".to_string(),
-                ],
-                hidden_property_ids: vec![],
             },
         )
         .await
@@ -208,11 +199,12 @@ fn board_database_view_groups_filters_sorts_and_moves_rows() {
             None,
             None,
             NoteDataSourceBoardViewUpdate {
-                filter: vec![NoteDataSourceTableFilter {
-                    property_id: "title".to_string(),
-                    condition: "contains".to_string(),
-                    value: Some(json!("a")),
-                }],
+                filter: vec![
+                    serde_json::from_value::<NoteDataSourceTableFilter>(json!({
+                        "property_id": "title", "condition": "contains", "value": "a"
+                    }))
+                    .unwrap(),
+                ],
                 sorts: vec![NoteDataSourceTableSort {
                     property_id: "title".to_string(),
                     direction: "ascending".to_string(),

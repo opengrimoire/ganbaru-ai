@@ -4,5 +4,6 @@ export * from "./notes/collaboration";
 export * from "./notes/templates-history";
 export * from "./notes/transfer";
 export * from "./notes/databases";
+export * from "./notes/row-hierarchy";
 export * from "./notes/content";
 export * from "./notes/working-markdown";

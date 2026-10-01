@@ -5,6 +5,7 @@ export const common = {
   appName: "Ganbaru AI",
   cancel: "Cancelar",
   close: "Cerrar",
+  back: "Atrás",
   confirm: "Confirmar",
   save: "Guardar",
   reset: "Restablecer",
