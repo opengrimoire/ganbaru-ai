@@ -32,6 +32,7 @@ export const database = {
   databaseNewOptions: "New page options",
   databaseMore: "More",
   databaseTitle: "Database title",
+  databaseTitlePlaceholder: "Database name",
   databaseNewTitle: "New database",
   databaseOpen: "View database",
   databaseOpenContainingNote: "Open containing note",

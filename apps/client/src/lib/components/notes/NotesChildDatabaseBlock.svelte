@@ -740,7 +740,7 @@
         data-notes-database-title
         class="min-h-10 min-w-0 flex-1 border-0 bg-transparent px-0 text-[1.4rem] font-semibold leading-tight text-foreground outline-none placeholder:text-muted-foreground/50 focus:ring-0"
         aria-label={t("notes.databaseTitle")}
-        placeholder={t("notes.databaseNewTitle")}
+        placeholder={t("notes.databaseTitlePlaceholder")}
         bind:value={titleDraft}
         disabled={titleSaving || editingLocked}
         onfocus={() => onFocusBlock(block.id)}

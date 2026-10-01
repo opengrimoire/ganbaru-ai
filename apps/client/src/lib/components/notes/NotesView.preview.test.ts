@@ -292,7 +292,7 @@ describe("Notes preview ownership", () => {
       await vi.waitFor(() => expect(document.querySelector('[data-notes-skeleton="database"]')).toBeNull());
       const title = document.querySelector<HTMLInputElement>('input[aria-label="Database title"]')!;
       expect(title.value).toBe("");
-      expect(title.placeholder).toBe("New database");
+      expect(title.placeholder).toBe("Database name");
       await vi.waitFor(() => expect(document.activeElement).toBe(title));
       const down = new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true });
       title.dispatchEvent(down);
