@@ -63,6 +63,22 @@ function translate(): ReturnType<typeof getLocalization>["t"] {
 }
 
 describe("project settings session", () => {
+  it("validates all fields before committing folder or structural changes", async () => {
+    const commit = vi.fn(async () => {});
+    const updateProject = vi.fn(async () => {});
+    const session = createProjectSettingsSession({ projects: { projectsForGroupIncludingInactive: () => [], updateProject } as unknown as ReturnType<typeof getProjects>, translate: translate(), onRevealInactive: () => {} });
+    const current = project();
+    session.load(current, emptyCollections);
+    session.state.projectDraft.name = " ";
+    expect(await session.save(current, new Set(["group-1"]), emptyCollections, undefined, commit)).toBe(false);
+    expect(commit).not.toHaveBeenCalled();
+    expect(updateProject).not.toHaveBeenCalled();
+    session.state.projectDraft.name = "Renamed";
+    expect(await session.save(current, new Set(["group-1"]), emptyCollections, undefined, commit)).toBe(true);
+    expect(commit).toHaveBeenCalledOnce();
+    expect(commit.mock.invocationCallOrder[0]).toBeLessThan(updateProject.mock.invocationCallOrder[0]);
+  });
+
   it("reloads and discards one owning draft without retaining stale project state", () => {
     const projects = {} as ReturnType<typeof getProjects>;
     const session = createProjectSettingsSession({

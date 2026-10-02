@@ -31,6 +31,13 @@ export interface CreateProjectWorkingFolderRequest {
   displayName: string;
 }
 
+/** Device-local preview authorized by the native picker and applied only when settings saves. */
+export interface ProjectWorkingFolderSelectionRead {
+  selectionId: string;
+  canonicalPath: string;
+  displayName: string;
+}
+
 export interface ProjectWorkingFolderRead {
   workingFolder: ProjectWorkingFolder;
   bindingStatus: WorkingFolderBindingStatus;

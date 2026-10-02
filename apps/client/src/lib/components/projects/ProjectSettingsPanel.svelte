@@ -32,6 +32,7 @@
   import { createProjectSettingsColorAllocator } from "$lib/projects/project-settings-color-controller";
   import { createProjectSettingsReorderController } from "$lib/projects/project-settings-reorder-controller.svelte";
   import { createProjectSettingsSession } from "$lib/projects/project-settings-session.svelte";
+  import { createProjectSettingsStructureDraft } from "$lib/projects/project-settings-structure-draft.svelte";
   import {
     nextProjectSettingsPaletteColor,
     scrollProjectSettingsRowIntoView,
@@ -111,6 +112,10 @@
     onRevealInactive: () => onRevealInactive(),
   });
   const sessionState = session.state;
+  const structure = createProjectSettingsStructureDraft(projects);
+  let workingFoldersSection = $state<{ saveDraft: () => Promise<void>; discardDraft: () => void }>();
+  let workingFoldersDirty = $state(false);
+  let workingFoldersBusy = $state(false);
   let pendingDeleteStatusId = $state<string | null>(null);
   let pendingDeletePriorityId = $state<string | null>(null);
   let pendingDeleteTagId = $state<string | null>(null);
@@ -133,10 +138,10 @@
     selectedProject ? projectHasLockedSystemIdentity(selectedProject) : false,
   );
   const visibleProjectGroups = $derived.by(() => projects.visibleGroups());
-  const statuses = $derived(projects.statusesForProject(selectedProjectId));
-  const priorities = $derived(projects.prioritiesForProject(selectedProjectId));
-  const projectTags = $derived(projects.tagsForProject(selectedProjectId));
-  const projectCustomFields = $derived(projects.customFieldsForProject(selectedProjectId));
+  const statuses = $derived(structure.statuses);
+  const priorities = $derived(structure.priorities);
+  const projectTags = $derived(structure.tags);
+  const projectCustomFields = $derived(structure.customFields);
   const projectGroupOptions = $derived<SelectOption[]>(
     visibleProjectGroups.map((group) => ({ value: group.id, label: group.name })),
   );
@@ -169,12 +174,12 @@
       && !musicAssignmentDraftsEqual(musicAssignments, savedMusicAssignments),
   );
   const projectSettingsDirty = $derived.by(() => selectedProject
-    ? session.dirty(selectedProject, sessionCollections()) || musicAssignmentsDirty
+    ? session.dirty(selectedProject, sessionCollections()) || musicAssignmentsDirty || structure.dirty || workingFoldersDirty
     : false);
   const customFields = createProjectSettingsCustomFieldController({
     state: sessionState,
     fields: () => projectCustomFields,
-    projects,
+    collections: structure,
     translate: t,
     setDraftError: session.setCustomFieldDraftError,
     afterCreateDraft: () => { void scrollToNewCustomFieldRow(); },
@@ -185,7 +190,7 @@
   const statusReorder = createProjectSettingsReorderController({
     dataType: PROJECT_STATUS_DRAG_DATA_TYPE,
     getEntries: () => statuses,
-    moveEntry: projects.moveStatus,
+    moveEntry: structure.moveStatus,
     setError: (error) => { sessionState.projectSettingsError = error; },
     reorderFailedMessage: () => t("projects.settings.statusReorderFailed"),
     saveFailedMessage: (message) => t("projects.settings.statusSaveFailed", message),
@@ -193,7 +198,7 @@
   const priorityReorder = createProjectSettingsReorderController({
     dataType: PROJECT_PRIORITY_DRAG_DATA_TYPE,
     getEntries: () => priorities,
-    moveEntry: projects.movePriority,
+    moveEntry: structure.movePriority,
     setError: (error) => { sessionState.projectSettingsError = error; },
     reorderFailedMessage: () => t("projects.settings.priorityReorderFailed"),
     saveFailedMessage: (message) => t("projects.settings.prioritySaveFailed", message),
@@ -201,7 +206,7 @@
   const tagReorder = createProjectSettingsReorderController({
     dataType: PROJECT_TAG_DRAG_DATA_TYPE,
     getEntries: () => projectTags,
-    moveEntry: projects.moveTag,
+    moveEntry: structure.moveTag,
     setError: (error) => { sessionState.projectSettingsError = error; },
     reorderFailedMessage: () => t("projects.settings.tagReorderFailed"),
     saveFailedMessage: (message) => t("projects.settings.tagSaveFailed", message),
@@ -209,7 +214,7 @@
   const customFieldReorder = createProjectSettingsReorderController({
     dataType: PROJECT_CUSTOM_FIELD_DRAG_DATA_TYPE,
     getEntries: () => projectCustomFields,
-    moveEntry: projects.moveCustomField,
+    moveEntry: structure.moveCustomField,
     setError: (error) => { sessionState.projectSettingsError = error; },
     reorderFailedMessage: () => t("projects.customFields.reorderFailed"),
     saveFailedMessage: (message) => t("projects.customFields.saveFailed", message),
@@ -217,8 +222,8 @@
   const customFieldOptionReorder = createProjectSettingsReorderController({
     dataType: PROJECT_CUSTOM_FIELD_OPTION_DRAG_DATA_TYPE,
     getEntries: () => projectCustomFields.flatMap(customFieldOptions),
-    getEntriesForEntry: (option) => projects.customFieldOptionsForField(option.fieldId),
-    moveEntry: projects.moveCustomFieldOption,
+    getEntriesForEntry: (option) => structure.optionsForField(option.fieldId),
+    moveEntry: structure.moveCustomFieldOption,
     setError: (error) => { sessionState.projectSettingsError = error; },
     reorderFailedMessage: () => t("projects.customFields.optionReorderFailed"),
     saveFailedMessage: (message) => t("projects.customFields.optionSaveFailed", message),
@@ -226,7 +231,7 @@
   });
 
   $effect(() => {
-    if (!selectedProject) return;
+    if (!selectedProject || sessionState.projectSettingsSaving) return;
     if (
       sessionState.projectDraftId !== selectedProject.id
       || (!projectSettingsDirty && sessionState.projectDraftUpdatedAt !== selectedProject.updatedAt)
@@ -250,6 +255,7 @@
   });
 
   function loadProjectSettingsDraft(project: Project): void {
+    structure.load(canonicalCollections(project.id));
     session.load(project, sessionCollections(), initialCreateColors());
     pendingDeleteStatusId = null;
     pendingDeletePriorityId = null;
@@ -297,6 +303,17 @@
       priorities,
       tags: projectTags,
       customFields: projectCustomFields,
+      optionsForField: structure.optionsForField,
+    };
+  }
+
+  /** Read canonical collections only when opening, discarding, or completing Save. */
+  function canonicalCollections(id: string) {
+    return {
+      statuses: projects.statusesForProject(id),
+      priorities: projects.prioritiesForProject(id),
+      tags: projects.tagsForProject(id),
+      customFields: projects.customFieldsForProject(id),
       optionsForField: projects.customFieldOptionsForField,
     };
   }
@@ -314,9 +331,21 @@
   }
 
   function discardProjectSettings(): void {
+    if (sessionState.projectSettingsSaving) return;
     if (selectedProject) {
+      structure.load(canonicalCollections(selectedProject.id));
       session.discard(selectedProject, sessionCollections(), initialCreateColors());
       musicAssignments = completeMusicAssignmentDrafts(savedMusicAssignments);
+      workingFoldersSection?.discardDraft();
+      customFields.resetTransientState();
+      pendingDeleteStatusId = null;
+      pendingDeletePriorityId = null;
+      pendingDeleteTagId = null;
+      statusReorder.clear();
+      priorityReorder.clear();
+      tagReorder.clear();
+      customFieldReorder.clear();
+      customFieldOptionReorder.clear();
     }
   }
 
@@ -507,7 +536,7 @@
     pendingDeleteStatusId = null;
     sessionState.projectSettingsError = null;
     try {
-      await projects.removeStatus(status.id);
+      structure.removeStatus(status.id);
       const remainingNames = { ...sessionState.statusNameDrafts };
       const remainingCategories = { ...sessionState.statusCategoryDrafts };
       const remainingColors = { ...sessionState.statusColorDrafts };
@@ -577,7 +606,7 @@
     pendingDeletePriorityId = null;
     sessionState.projectSettingsError = null;
     try {
-      await projects.removePriority(priority);
+      structure.removePriority(priority.id);
       const remainingNames = { ...sessionState.priorityNameDrafts };
       const remainingColors = { ...sessionState.priorityColorDrafts };
       delete remainingNames[priority.id];
@@ -602,7 +631,7 @@
     }
     sessionState.projectSettingsError = null;
     try {
-      await projects.addPriority(selectedProjectId, name, createdColor);
+      structure.addPriority(selectedProjectId, name, createdColor);
       sessionState.newPriorityName = "";
       sessionState.newPriorityColor = nextUnusedPriorityColor(
         nextProjectSettingsPaletteColor(createdColor, NEW_PRIORITY_FIRST_COLOR),
@@ -627,7 +656,7 @@
     }
     sessionState.projectSettingsError = null;
     try {
-      await projects.addStatus(selectedProjectId, name, sessionState.newStatusCategory, createdColor);
+      structure.addStatus(selectedProjectId, name, sessionState.newStatusCategory, createdColor);
       sessionState.newStatusName = "";
       sessionState.newStatusCategory = "active";
       sessionState.newStatusColor = nextUnusedStatusColor(
@@ -669,7 +698,7 @@
     }
     sessionState.projectSettingsError = null;
     try {
-      await projects.addTag(selectedProjectId, name, createdColor);
+      structure.addTag(selectedProjectId, name, createdColor);
       sessionState.newTagName = "";
       sessionState.newTagColor = nextUnusedTagColor(
         nextProjectSettingsPaletteColor(createdColor, NEW_TAG_FIRST_COLOR),
@@ -687,7 +716,7 @@
   async function moveTagByDirection(tag: ProjectTag, direction: -1 | 1): Promise<void> {
     sessionState.projectSettingsError = null;
     try {
-      await projects.moveTag(tag, direction);
+      await structure.moveTag(tag, direction);
     } catch (error) {
       sessionState.projectSettingsError = t(
         "projects.settings.tagSaveFailed",
@@ -710,7 +739,7 @@
     pendingDeleteTagId = null;
     sessionState.projectSettingsError = null;
     try {
-      await projects.removeTag(tag.id);
+      structure.removeTag(tag.id);
       const remainingNames = { ...sessionState.tagNameDrafts };
       const remainingColors = { ...sessionState.tagColorDrafts };
       delete remainingNames[tag.id];
@@ -734,7 +763,7 @@
   async function moveProjectCustomField(field: ProjectCustomField, direction: -1 | 1): Promise<void> {
     sessionState.projectSettingsError = null;
     try {
-      await projects.moveCustomField(field, direction);
+      await structure.moveCustomField(field, direction);
     } catch (error) {
       sessionState.projectSettingsError = t(
         "projects.customFields.saveFailed",
@@ -751,7 +780,7 @@
   async function moveProjectCustomFieldOption(option: ProjectCustomFieldOption, direction: -1 | 1): Promise<void> {
     sessionState.projectSettingsError = null;
     try {
-      await projects.moveCustomFieldOption(option, direction);
+      await structure.moveCustomFieldOption(option, direction);
     } catch (error) {
       sessionState.projectSettingsError = t(
         "projects.customFields.optionSaveFailed",
@@ -767,7 +796,7 @@
   async function moveStatusByDirection(status: ProjectStatus, direction: -1 | 1): Promise<void> {
     sessionState.projectSettingsError = null;
     try {
-      await projects.moveStatus(status, direction);
+      await structure.moveStatus(status, direction);
     } catch (error) {
       sessionState.projectSettingsError = t(
         "projects.settings.statusSaveFailed",
@@ -779,7 +808,7 @@
   async function movePriorityByDirection(priority: ProjectPriorityConfig, direction: -1 | 1): Promise<void> {
     sessionState.projectSettingsError = null;
     try {
-      await projects.movePriority(priority, direction);
+      await structure.movePriority(priority, direction);
     } catch (error) {
       sessionState.projectSettingsError = t(
         "projects.settings.prioritySaveFailed",
@@ -789,7 +818,9 @@
   }
 
   async function saveProjectSettings(): Promise<void> {
-    if (!selectedProject) return;
+    if (!selectedProject || sessionState.projectSettingsSaving || settingsOperationsBusy()) return;
+    const savingProjectId = selectedProject.id;
+    const folderDraft = workingFoldersSection;
     const musicUpdate = musicAssignmentsDirty
       ? { assignments: persistedMusicAssignmentDrafts(musicAssignments), updatedAt: Date.now() }
       : undefined;
@@ -798,8 +829,27 @@
       new Set(visibleProjectGroups.map((group) => group.id)),
       sessionCollections(),
       musicUpdate,
+      async () => {
+        await structure.save(sessionState);
+        await folderDraft?.saveDraft();
+      },
+      () => {
+        if (musicUpdate) savedMusicAssignments = completeMusicAssignmentDrafts(musicAssignments);
+      },
     );
-    if (saved && musicUpdate) savedMusicAssignments = completeMusicAssignmentDrafts(musicAssignments);
+    if (saved) {
+      const project = projects.projectById(savingProjectId);
+      if (project) {
+        structure.load(canonicalCollections(project.id));
+        session.load(project, sessionCollections(), initialCreateColors());
+      }
+    }
+  }
+
+  /** Finish pending native selection and row moves before committing the settings snapshot. */
+  function settingsOperationsBusy(): boolean {
+    return workingFoldersBusy || statusReorder.pending || priorityReorder.pending || tagReorder.pending
+      || customFieldReorder.pending || customFieldOptionReorder.pending;
   }
 
 </script>
@@ -810,6 +860,7 @@
   draftReady={projectSettingsDraftReady}
   dirty={projectSettingsDirty}
   saving={sessionState.projectSettingsSaving}
+  busy={settingsOperationsBusy()}
   error={sessionState.projectSettingsError}
   title={t("projects.settings.title")}
   discardLabel={t("projects.settings.discard")}
@@ -834,7 +885,13 @@
           <div class="h-px bg-border/70" aria-hidden="true"></div>
 
           {#if workingFoldersAvailable}
-            <ProjectSettingsWorkingFoldersSection projectId={selectedProject.id} />
+            <ProjectSettingsWorkingFoldersSection
+              bind:this={workingFoldersSection}
+              projectId={selectedProject.id}
+              saving={sessionState.projectSettingsSaving}
+              onDirtyChange={(dirty) => { workingFoldersDirty = dirty; }}
+              onBusyChange={(busy) => { workingFoldersBusy = busy; }}
+            />
 
             <div class="h-px bg-border/70" aria-hidden="true"></div>
           {/if}
@@ -862,7 +919,7 @@
             onMusicAssignmentsChange={(assignments) => { musicAssignments = assignments; }}
             loadingMusicPlaylists={musicAssignmentsLoading}
             {musicAssignmentsError}
-            musicAssignmentsDisabled={musicAssignmentsProjectId !== selectedProject.id}
+            musicAssignmentsDisabled={sessionState.projectSettingsSaving || musicAssignmentsProjectId !== selectedProject.id}
             {musicAssignmentsAvailable}
             {idleDetectionAvailable}
             onRetryMusicAssignments={() => {

@@ -267,11 +267,14 @@ export function createProjectSettingsSession(options: ProjectSettingsSessionOpti
     ) + 1000;
   }
 
+  /** Validate the complete draft before committing folder, collection, project, and playlist changes. */
   async function save(
     project: Project,
     visibleGroupIds: ReadonlySet<string>,
     collections: ProjectSettingsSessionCollections,
     musicUpdate?: ProjectSettingsMusicUpdate,
+    commitDraft?: () => Promise<void>,
+    onProjectSaved?: () => void,
   ): Promise<boolean> {
     const shouldUpdateProject = projectSettingsProjectDraftDirty(project, state.projectDraft)
       || Boolean(musicUpdate);
@@ -341,6 +344,7 @@ export function createProjectSettingsSession(options: ProjectSettingsSessionOpti
     state.projectSettingsSaving = true;
     state.projectSettingsError = null;
     try {
+      await commitDraft?.();
       if (projectUpdateResult?.ok) {
         await projects.updateProject({
           ...projectUpdateResult.value,
@@ -349,6 +353,7 @@ export function createProjectSettingsSession(options: ProjectSettingsSessionOpti
             musicAssignmentsUpdatedAt: musicUpdate.updatedAt,
           } : {}),
         });
+        onProjectSaved?.();
       }
       for (const draft of statusResult.drafts) {
         await projects.updateStatus(draft.status, {

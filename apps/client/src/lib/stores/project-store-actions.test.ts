@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { linkProjectTaskEvent, updateProjectTask } from "$lib/api/projects";
+import { createProjectPriority, createProjectStatus, createProjectTag, linkProjectTaskEvent, updateProjectTask } from "$lib/api/projects";
 import { createProjectStoreActions } from "$lib/stores/project-store-actions";
 import { createProjectStoreSelectors } from "$lib/stores/project-store-selectors";
 import actionSource from "$lib/stores/project-store-actions.ts?raw";
@@ -14,6 +14,9 @@ vi.mock("$lib/api/projects", async (importOriginal) => ({
   ...await importOriginal<typeof import("$lib/api/projects")>(),
   updateProjectTask: vi.fn(),
   linkProjectTaskEvent: vi.fn(),
+  createProjectStatus: vi.fn(),
+  createProjectPriority: vi.fn(),
+  createProjectTag: vi.fn(),
 }));
 
 function emptySnapshot(): ProjectsSnapshot {
@@ -81,6 +84,24 @@ describe("createProjectStoreActions", () => {
     });
     return { actions, readSnapshot: () => snapshot, reload, applyCalendarEventProjectAssignments };
   }
+
+  it("preserves settings draft identities and ranks when creating collection rows", async () => {
+    const dates = { createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z" };
+    vi.mocked(createProjectStatus).mockImplementation(async (entry) => ({ changed: { ...emptySnapshot(), statuses: [{ ...entry, ...dates }] }, removals: [], calendarEventProjectAssignments: [] }));
+    vi.mocked(createProjectPriority).mockImplementation(async (entry) => ({ changed: { ...emptySnapshot(), priorities: [{ ...entry, ...dates }] }, removals: [], calendarEventProjectAssignments: [] }));
+    vi.mocked(createProjectTag).mockImplementation(async (entry) => ({ changed: { ...emptySnapshot(), tags: [{ ...entry, ...dates, color: 8 as const }] }, removals: [], calendarEventProjectAssignments: [] }));
+    const { actions, readSnapshot } = setup();
+    await actions.addStatus("project-1", "Ready", "active", 8, { id: "draft-status", sortOrder: 4 });
+    await actions.addPriority("project-1", "Medium", 8, { id: "draft-priority", sortOrder: 5 });
+    await actions.addTag("project-1", "Work", 8, { id: "draft-tag", sortOrder: 6 });
+    expect(createProjectStatus).toHaveBeenCalledWith(expect.objectContaining({ id: "draft-status", sortOrder: 4 }));
+    expect(createProjectPriority).toHaveBeenCalledWith(expect.objectContaining({ id: "draft-priority", sortOrder: 5 }));
+    expect(createProjectTag).toHaveBeenCalledWith(expect.objectContaining({ id: "draft-tag", sortOrder: 6 }));
+    expect(readSnapshot().tags[0].id).toBe("draft-tag");
+    await expect(actions.addTag("project-1", "Work", 8, { id: "another-draft", sortOrder: 7 })).rejects.toThrow("A tag with this name already exists");
+    expect(createProjectTag).toHaveBeenCalledOnce();
+    expect((await actions.addTag("project-1", "Work"))?.id).toBe("draft-tag");
+  });
 
   it("patches an authoritative task result with no follow-up snapshot load", async () => {
     vi.mocked(updateProjectTask).mockImplementation(async (update: ProjectTaskUpdate) =>

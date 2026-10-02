@@ -1,5 +1,4 @@
 import type { getLocalization } from "$lib/i18n/translator.svelte";
-import type { getProjects } from "$lib/stores/projects.svelte";
 import { projectCustomFieldUsesOptions } from "./custom-fields";
 import {
   projectSettingsCustomFieldNameDraftValue,
@@ -22,7 +21,11 @@ import type { ProjectCustomField, ProjectCustomFieldOption } from "./types";
 export interface ProjectSettingsCustomFieldControllerOptions {
   state: ProjectSettingsSessionState;
   fields: () => readonly ProjectCustomField[];
-  projects: ReturnType<typeof getProjects>;
+  collections: {
+    optionsForField: (fieldId: string) => ProjectCustomFieldOption[];
+    removeCustomField: (fieldId: string) => void;
+    removeCustomFieldOption: (optionId: string) => void;
+  };
   translate: ReturnType<typeof getLocalization>["t"];
   setDraftError: (error: "name_required" | "name_exists" | "option_name_required" | "option_name_exists") => void;
   afterCreateDraft: () => void;
@@ -33,14 +36,14 @@ export interface ProjectSettingsCustomFieldControllerOptions {
 export function createProjectSettingsCustomFieldController(
   options: ProjectSettingsCustomFieldControllerOptions,
 ) {
-  const { state, projects } = options;
+  const { state, collections } = options;
   const createId = options.createId ?? (() => crypto.randomUUID());
   let pendingDeleteFieldId = $state<string | null>(null);
   let pendingDeleteOptionId = $state<string | null>(null);
 
   const fields = () => options.fields();
   const fieldOptions = (field: ProjectCustomField): ProjectCustomFieldOption[] =>
-    projects.customFieldOptionsForField(field.id);
+    collections.optionsForField(field.id);
   const fieldName = (field: ProjectCustomField): string =>
     projectSettingsCustomFieldNameDraftValue(field, state.customFieldNameDrafts);
   const optionName = (option: ProjectCustomFieldOption): string =>
@@ -65,7 +68,7 @@ export function createProjectSettingsCustomFieldController(
 
   function optionNameExists(fieldId: string, name: string, ignoredId?: string): boolean {
     const value = normalized(name);
-    return value.length > 0 && projects.customFieldOptionsForField(fieldId).some(
+    return value.length > 0 && collections.optionsForField(fieldId).some(
       (option) => option.id !== ignoredId && normalized(optionName(option)) === value,
     );
   }
@@ -205,7 +208,7 @@ export function createProjectSettingsCustomFieldController(
     if (!field) return;
     pendingDeleteFieldId = null;
     state.projectSettingsError = null;
-    try { await projects.removeCustomField(field.id); cleanupField(field.id); }
+    try { collections.removeCustomField(field.id); cleanupField(field.id); }
     catch (error) { state.projectSettingsError = options.translate("projects.customFields.deleteFailed", error instanceof Error ? error.message : String(error)); }
   }
 
@@ -214,7 +217,7 @@ export function createProjectSettingsCustomFieldController(
     if (!option) return;
     pendingDeleteOptionId = null;
     state.projectSettingsError = null;
-    try { await projects.removeCustomFieldOption(option.id); cleanupOption(option.id); }
+    try { collections.removeCustomFieldOption(option.id); cleanupOption(option.id); }
     catch (error) { state.projectSettingsError = options.translate("projects.customFields.optionDeleteFailed", error instanceof Error ? error.message : String(error)); }
   }
 
@@ -222,7 +225,7 @@ export function createProjectSettingsCustomFieldController(
     return fields().find((field) => field.id === pendingDeleteFieldId);
   }
   function pendingDeleteOption(): ProjectCustomFieldOption | undefined {
-    return projects.customFieldOptions.find((option) => option.id === pendingDeleteOptionId);
+    return fields().flatMap(fieldOptions).find((option) => option.id === pendingDeleteOptionId);
   }
   function resetTransientState(): void { pendingDeleteFieldId = null; pendingDeleteOptionId = null; }
 

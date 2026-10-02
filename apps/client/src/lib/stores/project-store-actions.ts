@@ -345,22 +345,24 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
     }
   }
 
+  /** Create a status, optionally retaining an identity allocated by a settings draft. */
   async function addStatus(
     projectId: string,
     name: string,
     category: ProjectStatusCategory,
     color: EventColor,
+    identity?: { id: string; sortOrder: number },
   ): Promise<void> {
     const displayName = normalizeProjectName(name);
     if (!displayName) return;
-    const id = crypto.randomUUID();
+    const id = identity?.id ?? crypto.randomUUID();
     await commitMutation(`status:${id}`, () => createProjectStatus({
       id,
       projectId,
       name: displayName,
       category,
       color,
-      sortOrder: selectors.nextStatusSortOrder(projectId),
+      sortOrder: identity?.sortOrder ?? selectors.nextStatusSortOrder(projectId),
       terminal: category === "done",
     }));
   }
@@ -409,20 +411,22 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
     await commitMutation(`status:${statusId}`, () => deleteProjectStatus(statusId));
   }
 
+  /** Create a priority, optionally retaining an identity allocated by a settings draft. */
   async function addPriority(
     projectId: string,
     name: string,
     color: EventColor,
+    identity?: { id: string; sortOrder: number },
   ): Promise<void> {
     const displayName = normalizeProjectName(name);
     if (!displayName) return;
-    const id = crypto.randomUUID();
+    const id = identity?.id ?? crypto.randomUUID();
     await commitMutation(`priority:${id}`, () => createProjectPriority({
       id,
       projectId,
       name: displayName,
       color,
-      sortOrder: selectors.nextPrioritySortOrder(projectId),
+      sortOrder: identity?.sortOrder ?? selectors.nextPrioritySortOrder(projectId),
     }));
   }
 
@@ -540,22 +544,27 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
     await commitMutation(`checklist:${itemId}`, () => deleteProjectChecklistItem(itemId));
   }
 
+  /** Create or reuse a tag, preserving explicit draft identities across the save boundary. */
   async function addTag(
     projectId: string,
     name: string,
     color: ProjectTag["color"] | null = PROJECT_TAG_DEFAULT_COLOR,
+    identity?: { id: string; sortOrder: number },
   ): Promise<ProjectTag | undefined> {
     const displayName = normalizeProjectName(name);
     if (!displayName) return undefined;
     const existingTag = selectors.projectTagByName(projectId, displayName);
-    if (existingTag) return existingTag;
-    const tagId = crypto.randomUUID();
+    if (existingTag) {
+      if (identity && existingTag.id !== identity.id) throw new Error("A tag with this name already exists");
+      return existingTag;
+    }
+    const tagId = identity?.id ?? crypto.randomUUID();
     const mutation = await commitMutation(`tag:${tagId}`, () => createProjectTag({
       id: tagId,
       projectId,
       name: displayName,
       color: color ?? PROJECT_TAG_DEFAULT_COLOR,
-      sortOrder: selectors.nextTagSortOrder(projectId),
+      sortOrder: identity?.sortOrder ?? selectors.nextTagSortOrder(projectId),
     }));
     return changedById(mutation.changed.tags, tagId, "created tag");
   }

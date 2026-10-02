@@ -105,6 +105,62 @@ describe("CustomSelect floating interaction", () => {
     expect(onSearchChange).toHaveBeenCalledWith("another tag");
     expect(root.querySelectorAll('[role="option"]')).toHaveLength(1);
   });
+
+  it("skips unavailable options when opening and navigating a selected unavailable value", async () => {
+    const form = createHost();
+    const onChange = vi.fn();
+    component = mount(CustomSelect, {
+      target: form,
+      props: {
+        inline: true, ariaLabel: "Provider", value: "unavailable", onChange,
+        options: [
+          { value: "automatic", label: "Automatic" },
+          { value: "unavailable", label: "Unconfigured", disabled: true },
+          { value: "ready", label: "Ready" },
+          { value: "last", label: "Unavailable", disabled: true },
+        ],
+      },
+    });
+    form.querySelector<HTMLButtonElement>("button")?.click();
+    await vi.waitFor(() => expect(document.activeElement?.textContent).toContain("Automatic"));
+    const unavailable = root.querySelector<HTMLButtonElement>('[aria-selected="true"]')!;
+    expect(unavailable.disabled).toBe(true);
+    unavailable.click();
+    expect(onChange).not.toHaveBeenCalled();
+    document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+    expect(document.activeElement?.textContent).toContain("Ready");
+    document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+    expect(document.activeElement?.textContent).toContain("Automatic");
+    document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true }));
+    expect(document.activeElement?.textContent).toContain("Ready");
+    document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true, cancelable: true }));
+    expect(document.activeElement?.textContent).toContain("Automatic");
+  });
+
+  it("does not select an unavailable search result with Enter", async () => {
+    const form = createHost();
+    const onChange = vi.fn();
+    component = mount(CustomSelect, {
+      target: form,
+      props: {
+        inline: true, ariaLabel: "Provider", value: "automatic", onChange,
+        searchPlaceholder: "Search providers",
+        options: [
+          { value: "automatic", label: "Automatic" },
+          { value: "unavailable", label: "Unconfigured", disabled: true },
+        ],
+      },
+    });
+    form.querySelector<HTMLButtonElement>("button")?.click();
+    await vi.waitFor(() => expect(document.activeElement?.tagName).toBe("INPUT"));
+    const search = root.querySelector<HTMLInputElement>("input")!;
+    search.value = "Unconfigured";
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+    await tick();
+    search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(root.querySelector('[role="listbox"]')).not.toBeNull();
+  });
   it("preserves grid metadata and label association while opening from the keyboard", async () => {
     const form = createHost();
     const onfocus = vi.fn();

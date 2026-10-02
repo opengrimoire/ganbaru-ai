@@ -28,6 +28,8 @@ Runtime resolution reports the winning source and availability. Current preceden
 
 Project defaults are real playlist selectors. They are not placeholder `None` fields.
 
+The implemented Project settings UI exposes only Focus playlist, Short break playlist, and Long break playlist under Event defaults. Playlist choices play automatically and empty choices mean silence; each phase boundary starts a fresh track, avoiding the previous track when alternatives exist. Editing these defaults replaces older playback actions and independent background assignments. The broader assignment record and event override controls still support the behaviors listed above. Configuring background sounds within playlists is planned and is not part of Project settings.
+
 ## Calendar behavior
 
 When a scheduled event becomes active, Calendar resolves its phase assignment and prepares or plays the selected context. Editing a project later does not silently rewrite an existing event snapshot. An explicit event override always remains distinguishable from inherited intent.

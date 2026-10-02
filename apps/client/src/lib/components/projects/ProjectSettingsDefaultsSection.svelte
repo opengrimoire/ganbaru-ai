@@ -39,7 +39,8 @@
     type FocusIdleThresholdMinutes,
   } from "$lib/stores/preferences";
   import type { Theme } from "$lib/stores/themes";
-  import MusicSoundtrackAssignmentEditor from "$lib/components/music/MusicSoundtrackAssignmentEditor.svelte";
+  import ProjectSettingsSectionHeading from "./ProjectSettingsSectionHeading.svelte";
+  import ProjectSettingsPlaylistRows from "./ProjectSettingsPlaylistRows.svelte";
   import type { MusicPlaylistSummary } from "$lib/music/library-contracts";
   import type { MusicContextAssignmentDraft } from "$lib/music/music-context-assignment";
 
@@ -459,7 +460,7 @@
 </script>
 
 <section class="flex flex-col gap-1.5">
-  <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("projects.settings.defaults")}</h2>
+  <ProjectSettingsSectionHeading label={t("projects.settings.defaults")} />
   <div class="flex flex-col gap-1.5">
     <div class="flex items-center justify-between gap-4 px-1 py-1 max-[480px]:flex-col max-[480px]:items-stretch max-[480px]:gap-2">
       <span class="min-w-0 flex-1 text-[0.866667rem] text-foreground">{t("projects.settings.defaultEventName")}</span>
@@ -584,21 +585,19 @@
     {/if}
 
     {#if musicAssignmentsAvailable}
-      <div class="mt-2 rounded-xl border border-border/65 bg-secondary/20 p-2.5">
+      <div class="flex min-w-0 flex-col gap-1.5">
         {#if musicAssignmentsError}
-          <div class="mb-2 flex items-start justify-between gap-3 rounded-lg border border-destructive/25 bg-destructive/8 px-3 py-2 text-[0.68rem]" role="alert">
+          <div class="flex items-start justify-between gap-3 px-1 py-1 text-[0.75rem]" role="alert">
             <span class="min-w-0 leading-relaxed text-destructive">{musicAssignmentsError}</span>
-            <button type="button" onclick={onRetryMusicAssignments} class="shrink-0 font-semibold text-primary hover:underline">{t("common.retry")}</button>
+            <button type="button" onclick={onRetryMusicAssignments} class="shrink-0 text-primary hover:underline">{t("common.retry")}</button>
           </div>
         {/if}
-        <MusicSoundtrackAssignmentEditor
+        <ProjectSettingsPlaylistRows
           assignments={musicAssignments}
           playlists={musicPlaylists}
           onChange={onMusicAssignmentsChange}
           loadingPlaylists={loadingMusicPlaylists}
           disabled={musicAssignmentsDisabled}
-          title={t("projects.settings.soundtrackDefaults")}
-          description={t("projects.settings.soundtrackDefaultsDescription")}
         />
       </div>
     {/if}

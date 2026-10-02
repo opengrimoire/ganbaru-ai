@@ -13,6 +13,7 @@
     draftReady,
     dirty,
     saving,
+    busy = false,
     error,
     title,
     discardLabel,
@@ -28,6 +29,7 @@
     draftReady: boolean;
     dirty: boolean;
     saving: boolean;
+    busy?: boolean;
     error: string | null;
     title: string;
     discardLabel: string;
@@ -108,7 +110,7 @@
       class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
       aria-label={discardLabel}
       title={discardLabel}
-      disabled={!draftReady || !dirty}
+      disabled={!draftReady || !dirty || saving}
       onclick={() => {
         if (dirty) discardConfirmOpen = true;
       }}
@@ -120,6 +122,7 @@
       class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
       aria-label={closeLabel}
       title={closeLabel}
+      disabled={saving}
       onclick={onClose}
     >
       <X size={15} strokeWidth={1.75} />
@@ -140,9 +143,9 @@
           )}
           onscroll={refreshScrollState}
         >
-          <div bind:this={contentElement} class="flex flex-col gap-3">
+          <fieldset bind:this={contentElement} disabled={saving} inert={saving} class="flex min-w-0 flex-col gap-3 border-0 p-0">
             {@render children()}
-          </div>
+          </fieldset>
         </div>
         <CalendarScrollbar
           scrollContainer={scrollElement}
@@ -166,7 +169,7 @@
             "flex min-h-8 shrink-0 items-center gap-1.5 rounded-md bg-primary px-2 text-[0.8rem] font-medium text-primary-foreground disabled:cursor-not-allowed",
             dirty || saving ? "hover:bg-primary/90" : "opacity-60",
           )}
-          disabled={saving || !dirty}
+          disabled={saving || busy || !dirty}
           onclick={onSave}
         >
           <Save size={14} strokeWidth={1.75} />

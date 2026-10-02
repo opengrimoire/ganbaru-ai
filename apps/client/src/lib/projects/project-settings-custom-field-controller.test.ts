@@ -19,23 +19,22 @@ function translate(): ReturnType<typeof getLocalization>["t"] {
 }
 
 function setup(overrides: Record<string, unknown> = {}) {
-  const projects = {
-    customFieldOptions: [option],
-    customFieldOptionsForField: () => [option],
-    removeCustomField: vi.fn(async () => undefined),
-    removeCustomFieldOption: vi.fn(async () => undefined),
+  const collections = {
+    optionsForField: () => [option],
+    removeCustomField: vi.fn(() => undefined),
+    removeCustomFieldOption: vi.fn(() => undefined),
     ...overrides,
-  } as unknown as ReturnType<typeof getProjects>;
-  const session = createProjectSettingsSession({ projects, translate: translate(), onRevealInactive: () => undefined });
+  };
+  const session = createProjectSettingsSession({ projects: {} as ReturnType<typeof getProjects>, translate: translate(), onRevealInactive: () => undefined });
   session.state.customFieldNameDrafts = { [field.id]: field.name };
   session.state.customFieldOptionNameDrafts = { [option.id]: option.name };
   let id = 0;
   const controller = createProjectSettingsCustomFieldController({
-    state: session.state, fields: () => [field], projects, translate: translate(),
+    state: session.state, fields: () => [field], collections, translate: translate(),
     setDraftError: session.setCustomFieldDraftError, afterCreateDraft: () => undefined,
     createId: () => `draft-${++id}`,
   });
-  return { controller, session, projects };
+  return { controller, session, collections };
 }
 
 describe("project settings custom field controller", () => {
@@ -54,9 +53,9 @@ describe("project settings custom field controller", () => {
     expect(session.state.projectSettingsError).toBe("projects.customFields.optionNameExists");
   });
 
-  it("keeps option drafts when dependency-aware deletion is rejected", async () => {
+  it("keeps option drafts when staging deletion is rejected", async () => {
     const { controller, session } = setup({
-      removeCustomFieldOption: vi.fn(async () => { throw new Error("option is used by tasks"); }),
+      removeCustomFieldOption: vi.fn(() => { throw new Error("option is used by tasks"); }),
     });
     session.state.customFieldOptionNameDrafts[option.id] = "Renamed";
     controller.requestDeleteOption(option);
@@ -65,14 +64,14 @@ describe("project settings custom field controller", () => {
     expect(session.state.projectSettingsError).toContain("option is used by tasks");
   });
 
-  it("cleans every field-scoped draft only after deletion succeeds", async () => {
-    const { controller, session, projects } = setup();
+  it("cleans every field-scoped draft when deletion is staged", async () => {
+    const { controller, session, collections } = setup();
     session.state.customFieldNameDrafts[field.id] = "Renamed";
     session.state.newCustomFieldOptionDrafts[field.id] = "Pending";
     session.state.customFieldOptionDraftRowsByField[field.id] = [{ id: "draft", name: "Draft" }];
     controller.requestDeleteField(field);
     await controller.removeField();
-    expect(projects.removeCustomField).toHaveBeenCalledWith(field.id);
+    expect(collections.removeCustomField).toHaveBeenCalledWith(field.id);
     expect(session.state.customFieldNameDrafts[field.id]).toBeUndefined();
     expect(session.state.newCustomFieldOptionDrafts[field.id]).toBeUndefined();
     expect(session.state.customFieldOptionDraftRowsByField[field.id]).toBeUndefined();

@@ -2,57 +2,155 @@
   import ArchiveRestore from "@lucide/svelte/icons/archive-restore";
   import Archive from "@lucide/svelte/icons/archive";
   import ExternalLink from "@lucide/svelte/icons/external-link";
-  import FolderGit2 from "@lucide/svelte/icons/folder-git-2";
   import FolderPlus from "@lucide/svelte/icons/folder-plus";
-  import HardDrive from "@lucide/svelte/icons/hard-drive";
   import Link2 from "@lucide/svelte/icons/link-2";
   import Pencil from "@lucide/svelte/icons/pencil";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import Star from "@lucide/svelte/icons/star";
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Unplug from "@lucide/svelte/icons/unplug";
+  import WandSparkles from "@lucide/svelte/icons/wand-sparkles";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type { ProjectWorkingFolderRead } from "$lib/chat/contracts";
+  import { onDestroy } from "svelte";
   import { getChat } from "$lib/stores/chat.svelte";
   import * as chatApi from "$lib/api/chat";
-  import type { ChatProjectPrimaryWorkingFolderRead } from "$lib/chat/contracts";
+  import * as folderApi from "$lib/api/project-working-folders";
+  import { createProjectSettingsWorkingFoldersDraft } from "$lib/projects/project-settings-working-folders-draft.svelte";
   import { orderProjectWorkingFolders } from "$lib/projects/working-folder-order";
   import { cn } from "$lib/utils";
+  import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
+  import ChatProviderIcon from "$lib/components/chat/ChatProviderIcon.svelte";
+  import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
   import ProjectSettingsSectionHeading from "./ProjectSettingsSectionHeading.svelte";
 
-  let { projectId }: { projectId: string } = $props();
+  let { projectId, saving = false, onDirtyChange = () => {}, onBusyChange = () => {} }: {
+    projectId: string;
+    saving?: boolean;
+    onDirtyChange?: (dirty: boolean) => void;
+    onBusyChange?: (busy: boolean) => void;
+  } = $props();
+
+  type ProviderOption = {
+    value: string;
+    label: string;
+    familyId: string | null;
+    summary?: string;
+    disabled?: boolean;
+  };
+
   const chat = getChat();
   const { t } = getLocalization();
   let operationId = $state<string | null>(null);
   let error = $state<string | null>(null);
-  let primaryFolder = $state<ChatProjectPrimaryWorkingFolderRead | null>(null);
-  const folders = $derived(orderProjectWorkingFolders(
-    chat.workingFolders.filter((entry) => entry.workingFolder.projectId === projectId),
-  ));
-  const providers = $derived(chat.settings?.providerInstances ?? []);
+  let loading = $state(true);
+  let initializedProjectId: string | null = null;
+  let operationGeneration = 0;
+  const draft = createProjectSettingsWorkingFoldersDraft({
+    pick: (id) => folderApi.pickProjectWorkingFolder(projectId, t("projects.settings.workingFolders.pickerTitle"), id),
+    add: (request, selection) => persist(folderApi.addSelectedProjectWorkingFolder(request, selection)),
+    bind: (id, selection) => persist(folderApi.bindSelectedProjectWorkingFolder(id, selection)),
+    rename: (id, name, revision) => persist(folderApi.renameProjectWorkingFolder(id, name, revision)),
+    archive: (id, revision) => persist(folderApi.archiveProjectWorkingFolder(id, revision)),
+    restore: (id, revision) => persist(folderApi.restoreProjectWorkingFolder(id, revision)),
+    recreate: (id) => persist(folderApi.recreateManagedProjectWorkingFolder(id)),
+    remove: (id) => chat.removeWorkingFolder(id),
+    provider: (id, value) => chat.setWorkingFolderProviderPreference(id, value),
+    primary: async (id, folderId, revision) => {
+      const primary = await chatApi.setChatProjectPrimaryWorkingFolder(id, folderId, revision);
+      if (chat.selectedChannel?.projectId === id) {
+        chat.primaryWorkingFolder = primary;
+        chat.selectedWorkingFolderId = folderId;
+      }
+      return primary;
+    },
+  });
+  const folders = $derived(orderProjectWorkingFolders(draft.folders));
+  const providerOptions = $derived.by(() => {
+    const providers = chat.settings?.providerInstances ?? [];
+    const families = chat.settings?.providerFamilies ?? [];
+    const options: ProviderOption[] = [
+      { value: "", label: t("projects.settings.workingFolders.providerAutomatic"), familyId: null },
+      ...providers.map((provider): ProviderOption => ({
+        value: provider.configuration.instanceId,
+        label: provider.configuration.label,
+        familyId: provider.configuration.familyId,
+      })),
+    ];
+    for (const family of families) {
+      if (providers.some((provider) => provider.configuration.familyId === family.familyId)) continue;
+      options.push({
+        value: `unconfigured-family:${family.familyId}`,
+        label: family.displayName,
+        familyId: family.familyId,
+        summary: family.implementationStatus === "available"
+          ? t("settings.chat.providers.notConfigured")
+          : t("settings.chat.providers.notAvailable"),
+        disabled: true,
+      });
+    }
+    return options;
+  });
 
   $effect(() => {
     const selectedProjectId = projectId;
-    void selectedProjectId;
-    void chat.ensureLoaded().catch((reason) => {
-      error = errorMessage(reason);
-    });
-    void chatApi.readChatProjectPrimaryWorkingFolder(selectedProjectId)
-      .then((primary) => { if (projectId === selectedProjectId) primaryFolder = primary; })
-      .catch((reason: unknown) => { error = errorMessage(reason); });
+    if (saving || initializedProjectId === selectedProjectId) return;
+    initializedProjectId = selectedProjectId;
+    operationGeneration += 1;
+    draft.clear(selectedProjectId);
+    let current = true;
+    loading = true;
+    error = null;
+    void (async () => {
+      try {
+        await chat.ensureLoaded();
+        const primary = await chatApi.readChatProjectPrimaryWorkingFolder(selectedProjectId);
+        if (current) draft.load(selectedProjectId, chat.workingFolders, primary, chat.settings?.configuration.workingFolderProviderPreferences ?? {});
+      } catch (reason) {
+        if (current) error = errorMessage(reason);
+      } finally {
+        if (current) loading = false;
+      }
+    })();
+    return () => { current = false; draft.invalidate(); };
   });
 
+  $effect(() => { onDirtyChange(draft.dirty); });
+  $effect(() => { onBusyChange(loading || operationId !== null); });
+  onDestroy(() => { operationGeneration += 1; draft.invalidate(); onDirtyChange(false); onBusyChange(false); });
+
+  /** Publish only successful Save commands to canonical Chat state. */
+  async function persist(operation: Promise<ProjectWorkingFolderRead>): Promise<ProjectWorkingFolderRead> {
+    const result = await operation;
+    chat.workingFolders = [...chat.workingFolders.filter((entry) => entry.workingFolder.id !== result.workingFolder.id), result];
+    return result;
+  }
+
+  /** Expose the folder draft to the parent panel's explicit Save boundary. */
+  export async function saveDraft(): Promise<void> {
+    if (loading || operationId !== null) throw new Error(t("projects.settings.workingFolders.primaryUnavailable"));
+    await draft.save();
+  }
+
+  /** Restore pending folder edits together with the rest of Project settings. */
+  export function discardDraft(): void { operationGeneration += 1; draft.discard(); error = null; }
+
+  /** Serialize native preview and Open operations and surface their failures. */
   async function run(id: string, operation: () => Promise<void>): Promise<void> {
+    if (operationId !== null || saving || loading || !draft.primaryReady) return;
     operationId = id;
+    const generation = operationGeneration;
     error = null;
     try {
       await operation();
     } catch (reason) {
-      error = errorMessage(reason);
+      if (generation === operationGeneration) error = errorMessage(reason);
     } finally {
       operationId = null;
     }
   }
 
+  /** Describe binding problems without repeating healthy status on every row. */
   function statusLabel(folder: ProjectWorkingFolderRead): string {
     if (folder.bindingStatus === "available") return t("projects.settings.workingFolders.statusAvailable");
     if (folder.bindingStatus === "missing") return t("projects.settings.workingFolders.statusMissing");
@@ -60,169 +158,207 @@
     return t("projects.settings.workingFolders.statusUnbound");
   }
 
+  /** Distinguish a repository mismatch from a missing device binding. */
   function statusClass(folder: ProjectWorkingFolderRead): string {
     if (folder.bindingStatus === "available") return "text-success";
     if (folder.bindingStatus === "repository_mismatch") return "text-destructive";
     return "text-warning";
   }
 
+  /** Resolve the pending device-local provider preference. */
   function providerPreference(folder: ProjectWorkingFolderRead): string {
-    return chat.settings?.configuration.workingFolderProviderPreferences[folder.workingFolder.id] ?? "";
+    return draft.preference(folder.workingFolder.id);
   }
 
+  /** Keep a missing preference recognizable only in its own folder's picker. */
+  function providerOptionsForFolder(folder: ProjectWorkingFolderRead): ProviderOption[] {
+    const preference = providerPreference(folder);
+    if (!preference || providerOptions.some((option) => option.value === preference)) return providerOptions;
+    return [...providerOptions, {
+      value: preference,
+      label: t("projects.settings.workingFolders.providerUnavailable"),
+      familyId: null,
+      disabled: true,
+    }];
+  }
+
+  /** Stage only configured provider instances or the automatic preference. */
+  function selectProvider(folder: ProjectWorkingFolderRead, value: string): void {
+    const option = providerOptions.find((entry) => entry.value === value);
+    if (!option || option.disabled) return;
+    draft.setPreference(folder.workingFolder.id, value);
+  }
+
+  /** Show the full device path when a folder has a local binding. */
   function pathLabel(folder: ProjectWorkingFolderRead): string {
-    return folder.workingFolder.managedRelativePath
-      ?? folder.canonicalPath
-      ?? t("projects.settings.workingFolders.noLocalPath");
+    return folder.canonicalPath ?? t("projects.settings.workingFolders.noLocalPath");
   }
 
+  /** Recover a managed folder or select a new external device binding. */
+  function changeFolderLocation(folder: ProjectWorkingFolderRead): void {
+    if (folder.workingFolder.archivedAt) return;
+    if (folder.workingFolder.kind === "managed" && folder.bindingStatus === "available") return;
+    void run(folder.workingFolder.id, () => {
+      if (folder.workingFolder.kind === "managed") {
+        draft.recreate(folder);
+        return Promise.resolve();
+      }
+      return draft.choose(folder);
+    });
+  }
+
+  /** Rename an external folder after collecting a nonempty display name. */
   function rename(folder: ProjectWorkingFolderRead): void {
     const name = window.prompt(
       t("projects.settings.workingFolders.renamePrompt"),
       folder.workingFolder.displayName,
     );
     if (!name?.trim() || name.trim() === folder.workingFolder.displayName) return;
-    void run(folder.workingFolder.id, () => chat.renameWorkingFolder(folder.workingFolder.id, name.trim()));
+    draft.rename(folder, name.trim());
   }
 
+  /** Confirm removal of the project association while keeping files on disk. */
   function remove(folder: ProjectWorkingFolderRead): void {
     if (!window.confirm(t("projects.settings.workingFolders.removeConfirm", folder.workingFolder.displayName))) return;
-    void run(folder.workingFolder.id, () => chat.removeWorkingFolder(folder.workingFolder.id));
+    draft.remove(folder);
   }
 
-  async function makePrimary(folder: ProjectWorkingFolderRead): Promise<void> {
-    if (!primaryFolder) throw new Error(t("projects.settings.workingFolders.primaryUnavailable"));
-    primaryFolder = await chatApi.setChatProjectPrimaryWorkingFolder(
-      projectId,
-      folder.workingFolder.id,
-      primaryFolder.revision,
-    );
-    if (chat.selectedChannel?.projectId === projectId) {
-      chat.primaryWorkingFolder = primaryFolder;
-      chat.selectedWorkingFolderId = folder.workingFolder.id;
-    }
-  }
-
+  /** Preserve useful error details from native folder operations. */
   function errorMessage(reason: unknown): string {
     return reason instanceof Error ? reason.message : String(reason);
   }
 </script>
 
 <section class="flex flex-col gap-2" data-project-working-folders>
-  <ProjectSettingsSectionHeading label={t("projects.settings.workingFolders.title")} />
-  <p class="px-1 text-[0.75rem] leading-5 text-muted-foreground">
-    {t("projects.settings.workingFolders.description")}
-  </p>
+  <div class="flex items-center justify-between gap-2">
+    <ProjectSettingsSectionHeading label={t("projects.settings.workingFolders.title")} />
+    <button
+      type="button"
+      class="flex min-h-7 shrink-0 items-center gap-1.5 rounded-md px-1.5 text-[0.733333rem] text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+      disabled={saving || operationId !== null || loading || !draft.primaryReady}
+      onclick={() => { void run("add", () => draft.choose()); }}
+    >
+      <FolderPlus size={14} strokeWidth={1.75} />
+      {t("projects.settings.workingFolders.addExisting")}
+    </button>
+  </div>
   {#if error}
-    <div class="rounded-md border border-destructive/30 px-2 py-1.5 text-[0.75rem] text-destructive" role="alert">{error}</div>
+    <p class="px-1 text-[0.75rem] text-destructive" role="alert">{error}</p>
   {/if}
-  <div class="flex flex-col gap-2">
+  <div class="flex flex-col gap-1.5">
     {#each folders as folder (folder.workingFolder.id)}
-      {@const busy = operationId === folder.workingFolder.id}
-      <article class="rounded-lg border border-border bg-card/40 p-2.5">
-        <div class="flex min-w-0 items-start gap-2">
-          {#if folder.workingFolder.kind === "managed"}
-            <HardDrive class="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-          {:else}
-            <FolderGit2 class="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-          {/if}
-          <div class="min-w-0 flex-1">
-            <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-              <strong class="truncate text-[0.82rem]">{folder.workingFolder.displayName}</strong>
-              <span class="rounded border border-border px-1.5 py-0.5 text-[0.65rem] text-muted-foreground">
-                {folder.workingFolder.kind === "managed"
-                  ? t("projects.settings.workingFolders.managed")
-                  : t("projects.settings.workingFolders.external")}
-              </span>
-              {#if folder.workingFolder.archivedAt}
-                <span class="rounded border border-border px-1.5 py-0.5 text-[0.65rem] text-muted-foreground">{t("projects.settings.workingFolders.archived")}</span>
-              {/if}
-              {#if primaryFolder?.workingFolderId === folder.workingFolder.id}
-                <span class="rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-[0.65rem] text-primary">{t("projects.settings.workingFolders.primary")}</span>
-              {/if}
-            </div>
-            <p class="mt-1 truncate font-mono text-[0.68rem] text-muted-foreground" title={pathLabel(folder)}>{pathLabel(folder)}</p>
-            <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[0.68rem] text-muted-foreground">
-              <span class={cn("font-medium", statusClass(folder))}>{statusLabel(folder)}</span>
-              <span>{folder.workingFolder.repositoryKind === "git"
-                ? folder.currentBranch
-                  ? t("projects.settings.workingFolders.gitBranch", folder.currentBranch)
-                  : t("projects.settings.workingFolders.gitRepository")
-                : t("projects.settings.workingFolders.noRepository")}</span>
-              {#if folder.lastVerifiedAt}<span>{t("projects.settings.workingFolders.verified")}</span>{/if}
-            </div>
-          </div>
-        </div>
-        <div class="mt-2 flex flex-wrap items-center gap-1.5">
-          <label class="mr-auto flex min-w-44 items-center gap-1.5 text-[0.7rem] text-muted-foreground">
-            <span>{t("projects.settings.workingFolders.provider")}</span>
-            <select
-              class="h-7 min-w-0 flex-1 rounded border border-border bg-background px-1.5 text-[0.7rem] text-foreground"
-              value={providerPreference(folder)}
-              disabled={busy}
-              onchange={(event) => {
-                const value = event.currentTarget.value;
-                void run(folder.workingFolder.id, () => chat.setWorkingFolderProviderPreference(folder.workingFolder.id, value || null));
-              }}
-            >
-              <option value="">{t("projects.settings.workingFolders.providerAutomatic")}</option>
-              {#each providers as provider (provider.configuration.instanceId)}
-                <option value={provider.configuration.instanceId}>{provider.configuration.label}</option>
-              {/each}
-            </select>
-          </label>
-          {#if folder.bindingStatus === "available"}
-            <button type="button" class="working-folder-action" disabled={busy} onclick={() => { void run(folder.workingFolder.id, () => chat.openWorkingFolder(folder.workingFolder.id)); }}><ExternalLink class="size-3.5" />{t("projects.settings.workingFolders.open")}</button>
-          {/if}
-          {#if !folder.workingFolder.archivedAt && primaryFolder?.workingFolderId !== folder.workingFolder.id}
-            <button type="button" class="working-folder-action" disabled={busy || !primaryFolder} onclick={() => { void run(folder.workingFolder.id, () => makePrimary(folder)); }}><Star class="size-3.5" />{t("projects.settings.workingFolders.makePrimary")}</button>
-          {/if}
-          {#if folder.workingFolder.kind === "managed" && folder.bindingStatus !== "available"}
-            <button type="button" class="working-folder-action" disabled={busy} onclick={() => { void run(folder.workingFolder.id, () => chat.recreateManagedWorkingFolder(folder.workingFolder.id)); }}><RefreshCw class="size-3.5" />{t("projects.settings.workingFolders.recreate")}</button>
-          {:else if folder.workingFolder.kind === "external" && !folder.workingFolder.archivedAt}
-            <button type="button" class="working-folder-action" disabled={busy} onclick={() => { void run(folder.workingFolder.id, () => folder.bindingStatus === "unbound" || folder.bindingStatus === "missing" ? chat.locateWorkingFolder(folder.workingFolder.id, t("projects.settings.workingFolders.pickerTitle")) : chat.rebindWorkingFolder(folder.workingFolder.id, t("projects.settings.workingFolders.pickerTitle"))); }}><Link2 class="size-3.5" />{folder.bindingStatus === "unbound" || folder.bindingStatus === "missing" ? t("projects.settings.workingFolders.locate") : t("projects.settings.workingFolders.rebind")}</button>
-          {/if}
-          {#if folder.workingFolder.kind === "external"}
-            <button type="button" class="working-folder-action" disabled={busy} onclick={() => rename(folder)}><Pencil class="size-3.5" />{t("projects.settings.workingFolders.rename")}</button>
+      {@const busy = saving || operationId !== null || loading}
+      {@const primary = draft.primaryId === folder.workingFolder.id}
+      {@const external = folder.workingFolder.kind === "external"}
+      {@const needsRecreate = !external && folder.bindingStatus !== "available"}
+      <div
+        class="flex min-w-0 items-center justify-between gap-4 px-1 py-1 max-[480px]:flex-col max-[480px]:items-stretch max-[480px]:gap-2"
+        role="group"
+        aria-label={folder.workingFolder.displayName}
+      >
+        <div class="flex min-w-0 flex-1 items-center gap-1.5">
+          <div class="min-w-0">
+            <span class="block truncate text-[0.866667rem] text-foreground" title={folder.workingFolder.displayName}>{folder.workingFolder.displayName}</span>
             {#if folder.workingFolder.archivedAt}
-              <button type="button" class="working-folder-action" disabled={busy} onclick={() => { void run(folder.workingFolder.id, () => chat.restoreWorkingFolder(folder.workingFolder.id)); }}><ArchiveRestore class="size-3.5" />{t("projects.settings.workingFolders.restore")}</button>
-            {:else}
-              <button type="button" class="working-folder-action" disabled={busy} onclick={() => { void run(folder.workingFolder.id, () => chat.archiveWorkingFolder(folder.workingFolder.id)); }}><Archive class="size-3.5" />{t("projects.settings.workingFolders.archive")}</button>
+              <span class="text-[0.733333rem] text-muted-foreground">{t("projects.settings.workingFolders.archived")}</span>
             {/if}
-            <button type="button" class="working-folder-action text-destructive" disabled={busy} onclick={() => remove(folder)}><Trash2 class="size-3.5" />{t("projects.settings.workingFolders.remove")}</button>
-          {/if}
+            {#if folder.bindingStatus !== "available"}
+              <p class={cn("mt-0.5 text-[0.733333rem]", statusClass(folder))}>{statusLabel(folder)}</p>
+            {/if}
+          </div>
+          <CollectionMenu
+            kind="actions"
+            iconOnly
+            label={t("projects.settings.workingFolders.actions", folder.workingFolder.displayName)}
+            disabled={busy}
+            triggerClass="size-6 h-6 shrink-0 justify-center px-0"
+          >
+            <div class="flex flex-col gap-1 px-2 py-1.5 text-[0.733333rem] text-muted-foreground">
+              <p class="break-all">{pathLabel(folder)}</p>
+              {#if folder.workingFolder.repositoryKind === "git"}
+                <p>{folder.currentBranch ? t("projects.settings.workingFolders.gitBranch", folder.currentBranch) : t("projects.settings.workingFolders.gitRepository")}</p>
+              {/if}
+            </div>
+            <div class="my-1 h-px bg-border/70" aria-hidden="true"></div>
+            <button
+              type="button"
+              class="working-folder-action"
+              aria-label={t("projects.settings.workingFolders.openFolder", folder.workingFolder.displayName)}
+              disabled={busy || !draft.canOpen(folder)}
+              onclick={() => { void run(folder.workingFolder.id, () => chat.openWorkingFolder(folder.workingFolder.id)); }}
+            ><ExternalLink size={14} /><span>{t("projects.settings.workingFolders.open")}</span></button>
+            <button
+              type="button"
+              class="working-folder-action"
+              data-collection-menu-keep-open
+              aria-pressed={primary}
+              disabled={busy || !draft.primaryReady || primary || Boolean(folder.workingFolder.archivedAt)}
+              onclick={() => draft.makePrimary(folder)}
+            ><Star size={14} fill={primary ? "currentColor" : "none"} /><span>{primary ? t("projects.settings.workingFolders.primary") : t("projects.settings.workingFolders.makePrimary")}</span></button>
+            <button
+              type="button"
+              class="working-folder-action"
+              disabled={busy || (!external && !needsRecreate) || Boolean(folder.workingFolder.archivedAt)}
+              onclick={() => changeFolderLocation(folder)}
+            >
+              {#if needsRecreate}<RefreshCw size={14} />{:else}<Link2 size={14} />{/if}
+              <span>{needsRecreate ? t("projects.settings.workingFolders.recreate") : folder.bindingStatus === "unbound" || folder.bindingStatus === "missing" ? t("projects.settings.workingFolders.locate") : t("projects.settings.workingFolders.rebind")}</span>
+            </button>
+            <button type="button" class="working-folder-action" disabled={busy || !external} onclick={() => rename(folder)}><Pencil size={14} /><span>{t("projects.settings.workingFolders.rename")}</span></button>
+            {#if folder.workingFolder.archivedAt}
+              <button type="button" class="working-folder-action" disabled={busy || !external} onclick={() => draft.setArchived(folder, false)}><ArchiveRestore size={14} /><span>{t("projects.settings.workingFolders.restore")}</span></button>
+            {:else}
+              <button type="button" class="working-folder-action" disabled={busy || !external} onclick={() => draft.setArchived(folder, true)}><Archive size={14} /><span>{t("projects.settings.workingFolders.archive")}</span></button>
+            {/if}
+            <div class="my-1 h-px bg-border/70" aria-hidden="true"></div>
+            <button type="button" class="working-folder-action working-folder-remove" disabled={busy || !external} onclick={() => remove(folder)}><Trash2 size={14} /><span>{t("projects.settings.workingFolders.remove")}</span></button>
+          </CollectionMenu>
         </div>
-      </article>
+        <CustomSelect
+          inline
+          ariaLabel={t("projects.settings.workingFolders.providerForFolder", folder.workingFolder.displayName)}
+          value={providerPreference(folder)}
+          options={providerOptionsForFolder(folder)}
+          disabled={busy}
+          showSelectedSummary={false}
+          class="w-44 shrink-0 max-[480px]:w-full"
+          triggerProps={{ "data-app-tooltip": t("projects.settings.workingFolders.provider") }}
+          onChange={(value) => selectProvider(folder, value)}
+        >
+          {#snippet leading(value: string)}
+            {@const option = providerOptions.find((entry) => entry.value === value)}
+            {#if value === ""}
+              <WandSparkles size={14} strokeWidth={1.75} class="shrink-0 text-muted-foreground" />
+            {:else if option?.familyId}
+              <ChatProviderIcon familyId={option.familyId} label={option.label} size={14} monochrome />
+            {:else}
+              <Unplug size={14} strokeWidth={1.75} class="shrink-0 text-muted-foreground" />
+            {/if}
+          {/snippet}
+        </CustomSelect>
+      </div>
     {/each}
   </div>
-  <button
-    type="button"
-    class="mt-1 flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-dashed border-border text-[0.78rem] text-muted-foreground hover:bg-accent hover:text-foreground"
-    disabled={operationId !== null || chat.loading}
-    onclick={() => {
-      void run("add", async () => {
-        await chat.addExternalWorkingFolder({
-          id: `working-folder:${crypto.randomUUID()}`,
-          projectId,
-          displayName: "",
-        }, t("projects.settings.workingFolders.pickerTitle"));
-      });
-    }}
-  >
-    <FolderPlus class="size-4" />{t("projects.settings.workingFolders.addExisting")}
-  </button>
 </section>
 
 <style>
   .working-folder-action {
-    display: inline-flex;
-    min-height: 1.75rem;
+    display: flex;
+    width: 100%;
+    min-height: 2rem;
     align-items: center;
-    gap: 0.25rem;
-    border-radius: 0.375rem;
-    padding-inline: 0.45rem;
-    font-size: calc(0.7rem * var(--type-scale));
-    color: var(--muted-foreground);
+    gap: 0.5rem;
+    border-radius: 0.25rem;
+    padding-inline: 0.5rem;
+    font-size: calc(0.8rem * var(--type-scale));
+    text-align: left;
+    color: var(--foreground);
+  }
+
+  .working-folder-action > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .working-folder-action:hover:not(:disabled) {
@@ -232,6 +368,16 @@
 
   .working-folder-action:disabled {
     cursor: not-allowed;
+    color: var(--muted-foreground);
+  }
+
+  .working-folder-action:disabled > span,
+  .working-folder-action:disabled > :global(svg) {
     opacity: 0.5;
+  }
+
+  .working-folder-remove,
+  .working-folder-remove:hover:not(:disabled) {
+    color: var(--destructive);
   }
 </style>

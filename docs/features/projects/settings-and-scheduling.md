@@ -17,6 +17,8 @@ New projects default to no event name, an adaptive Pomodoro choice, global focus
 
 Playlist selectors load real Music playlists. They are not placeholder `None` controls. A missing or deleted playlist remains an explicit unavailable assignment with a repair path.
 
+The implemented settings panel uses the same compact headings, label and control rows, and control sizes as general settings. Event defaults do not repeat "default" in every field label. They contain three direct playlist rows: Focus playlist, Short break playlist, and Long break playlist. Each uses a standard settings dropdown button and the Music panel's playlist picker menu. The None choice has a silence icon in both the menu and the selected button. Selecting playlists records automatic playback for selected phases and silence for empty phases. Each boundary selects a fresh track, avoiding the previous track when another eligible track exists, even when consecutive phases use the same playlist. There are no separate soundtrack headings, phase tabs, playback-action controls, or background-sound controls. Editing playlist defaults replaces legacy phase actions and independent background assignments with these playlist-only choices.
+
 Work-environment and Doomscrolling defaults remain planned and must not appear as functional selectors until their storage and runtime behavior exist.
 
 ## Default application
@@ -71,8 +73,16 @@ A project can own a managed working folder and a device-local binding to an exte
 
 Working-folder files remain filesystem-canonical. Project settings store identity and policy, not file contents. Mobile omits local coding execution and desktop path selection.
 
+The implemented desktop panel uses the same label and control rows as the surrounding settings. Each row shows a folder name on the left and its AI provider dropdown on the right. The dropdown uses the shared Chat provider icons and includes every configured instance and unconfigured provider family from Chat settings. Unconfigured families remain visible with their setup status and cannot be saved as a folder preference. A removed provider remains visibly unavailable until the user chooses a replacement or Automatic.
+
+Add folder sits beside the section heading. Options beside each folder name contain the full device path when locally bound, Git branch when applicable, Open, primary selection, and maintenance actions. Managed and external folders share the same action rows. Actions protected by the managed folder's lifecycle stay visible with muted styling and a not-allowed cursor. A missing managed folder offers Recreate in the location action row. Selecting the primary folder keeps the menu open and updates the same button without changing its height. Missing bindings and repository mismatches remain visible on the folder row. Healthy availability and verification do not add status badges.
+
+Folder configuration belongs to the settings draft. Adding, renaming, rebinding, recreating, archiving, restoring, removing, provider preferences, and primary selection require Save settings. Native path selection previews the full route without creating an association, changing a device binding, or stopping terminals. Save applies the native selection only to its authorized project, target, and active vault, and checks that the selected folder has not been replaced. Removing an external folder requires confirmation before staging the removal and preserves its files when saved. Open remains an immediate action for an already saved, available binding.
+
 ## Settings lifecycle
 
-The settings surface keeps one draft and uses Save, Cancel, outside-click, and Escape behavior consistently. Destructive schema actions receive separate confirmation and cannot hide inside ordinary Save.
+The implemented settings panel tracks all configuration changes until Save settings, including playlists, folder configuration, collection additions and deletions, and ordering of statuses, priorities, tags, fields, and options. Discard restores the last saved state. Confirming a deletion stages it for Save rather than persisting it immediately. The surrounding surface handles closing, outside-click, and Escape consistently with its unsaved-changes prompt.
+
+Save validates editable settings before issuing mutations and locks editing while those mutations run. Persistence remains sequential across Projects, Chat, and device settings. A failed Save reports the error and keeps remaining changes available for retry or Discard. Successfully completed mutations remain saved, and completed draft creations are acknowledged so a retry does not create duplicates.
 
 Settings remain accessible on narrow layouts and do not require hover or drag as the only operation.

@@ -780,6 +780,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
         .manage(chat::review_engine::ChatReviewRegistry::default())
         .manage(chat::terminal::ChatTerminalRegistry::default())
         .manage(chat::workspace_mutation::ChatWorkspaceMutationRegistry::default())
+        .manage(chat::workspace_commands::ProjectWorkingFolderSelections::default())
         .manage(chat::workspace_observer::ChatWorkspaceObserverRegistry::default())
         .plugin(tauri_plugin_dialog::init())
         .on_window_event(|window, event| {
@@ -795,6 +796,9 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             chat::workspace_commands::projects_list_working_folders,
             chat::workspace_commands::projects_list_working_folders_cached,
             chat::workspace_commands::projects_add_external_working_folder,
+            chat::workspace_commands::projects_pick_working_folder,
+            chat::workspace_commands::projects_add_selected_working_folder,
+            chat::workspace_commands::projects_bind_selected_working_folder,
             chat::workspace_commands::projects_rename_working_folder,
             chat::workspace_commands::projects_locate_working_folder,
             chat::workspace_commands::projects_rebind_working_folder,

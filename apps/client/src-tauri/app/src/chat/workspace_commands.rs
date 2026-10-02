@@ -16,9 +16,196 @@ use crate::projects::working_folders::{
 };
 use chrono::{SecondsFormat, Utc};
 use sqlx::SqlitePool;
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use tauri::{Manager, Runtime};
 use tauri_plugin_dialog::{DialogExt, FilePath};
+
+const MAX_PENDING_FOLDER_SELECTIONS: usize = 64;
+
+#[derive(Clone)]
+struct FolderSelectionReceipt {
+    id: String,
+    project_id: String,
+    working_folder_id: Option<ProjectWorkingFolderId>,
+    vault_root: PathBuf,
+    path: PathBuf,
+    filesystem_identity: String,
+}
+
+/// Retain bounded, device-local native selections until settings explicitly applies them.
+#[derive(Default)]
+pub struct ProjectWorkingFolderSelections(Mutex<VecDeque<FolderSelectionReceipt>>);
+
+impl ProjectWorkingFolderSelections {
+    /// Keep native receipts bounded without persisting them in the vault or device config.
+    fn insert(&self, receipt: FolderSelectionReceipt) -> ChatResult<()> {
+        let mut selections = self.0.lock().map_err(|_| selection_registry_error())?;
+        while selections.len() >= MAX_PENDING_FOLDER_SELECTIONS {
+            selections.pop_front();
+        }
+        selections.push_back(receipt);
+        Ok(())
+    }
+
+    /// Resolve only receipts authorized for this project, target, and active vault.
+    fn read(
+        &self,
+        selection_id: &str,
+        project_id: &str,
+        working_folder_id: Option<&ProjectWorkingFolderId>,
+        vault_root: &Path,
+    ) -> ChatResult<FolderSelectionReceipt> {
+        let selections = self.0.lock().map_err(|_| selection_registry_error())?;
+        selections
+            .iter()
+            .find(|receipt| receipt.id == selection_id)
+            .filter(|receipt| {
+                receipt.project_id == project_id
+                    && receipt.working_folder_id.as_ref() == working_folder_id
+                    && receipt.vault_root == vault_root
+            })
+            .cloned()
+            .ok_or_else(|| {
+                ChatError::validation(
+                    "selectionId",
+                    "Choose this working folder again before saving",
+                )
+            })
+    }
+}
+
+fn selection_registry_error() -> ChatError {
+    ChatError::new(
+        ChatErrorCode::Internal,
+        "Pending project working-folder selections could not be accessed",
+        true,
+    )
+}
+
+/// A preview contains an opaque native authorization receipt, never a persisted binding.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectWorkingFolderSelectionRead {
+    selection_id: String,
+    canonical_path: String,
+    display_name: String,
+}
+
+/// Select an external path without changing project configuration, bindings, or terminals.
+#[tauri::command]
+pub async fn projects_pick_working_folder(
+    app: tauri::AppHandle,
+    db_url: String,
+    project_id: String,
+    working_folder_id: Option<ProjectWorkingFolderId>,
+    title: String,
+) -> ChatResult<Option<ProjectWorkingFolderSelectionRead>> {
+    let pool = chat_pool(app.clone(), db_url).await?;
+    let vault_root = crate::vault::active_vault_path(&app).map_err(device_state_error)?;
+    if let Some(id) = &working_folder_id {
+        let workspace = repository::read_workspace(&pool, id).await?;
+        if workspace.project_id != project_id || workspace.kind != WorkingFolderKind::External {
+            return Err(ChatError::validation(
+                "workingFolderId",
+                "Only this project's external folders can be rebound",
+            ));
+        }
+    }
+    let start = working_folder_id
+        .as_ref()
+        .and_then(|id| workspace_picker_start_directory(&app, id));
+    let Some(selection) = pick_workspace_folder(&app, &title, start).await? else {
+        return Ok(None);
+    };
+    validate_external_folder_outside_vault(&app, &selection)?;
+    let path = std::fs::canonicalize(selection).map_err(|_| {
+        ChatError::validation(
+            "workingFolderPath",
+            "Selected working folder is unavailable",
+        )
+    })?;
+    let canonical_path = path
+        .to_str()
+        .ok_or_else(|| {
+            ChatError::validation("workingFolderPath", "Selected path is not valid UTF-8")
+        })?
+        .to_string();
+    let display_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or("External folder")
+        .to_string();
+    let id = super::internal_mcp::generate_opaque_handle("working-folder-selection")?;
+    let receipt = FolderSelectionReceipt {
+        id: id.clone(),
+        project_id,
+        working_folder_id,
+        path,
+        vault_root,
+        filesystem_identity: filesystem_identity(Path::new(&canonical_path), b"working-folder")?,
+    };
+    let registry = app.state::<ProjectWorkingFolderSelections>();
+    registry.insert(receipt)?;
+    Ok(Some(ProjectWorkingFolderSelectionRead {
+        selection_id: id,
+        canonical_path,
+        display_name,
+    }))
+}
+
+/// Apply a native selection only to the project and folder for which it was authorized.
+fn selected_folder_path(
+    app: &tauri::AppHandle,
+    selection_id: &str,
+    project_id: &str,
+    working_folder_id: Option<&ProjectWorkingFolderId>,
+) -> ChatResult<PathBuf> {
+    let vault_root = crate::vault::active_vault_path(app).map_err(device_state_error)?;
+    let registry = app.state::<ProjectWorkingFolderSelections>();
+    let receipt = registry.read(selection_id, project_id, working_folder_id, &vault_root)?;
+    if filesystem_identity(&receipt.path, b"working-folder")? != receipt.filesystem_identity {
+        return Err(ChatError::validation(
+            "workingFolderPath",
+            "The selected folder changed before Save. Choose it again",
+        ));
+    }
+    Ok(receipt.path)
+}
+
+/// Create an external association from a staged native selection, retaining its draft identity.
+#[tauri::command]
+pub async fn projects_add_selected_working_folder(
+    app: tauri::AppHandle,
+    db_url: String,
+    request: CreateProjectWorkingFolderRequest,
+    selection_id: String,
+) -> ChatResult<ProjectWorkingFolderRead> {
+    let pool = chat_pool(app.clone(), db_url).await?;
+    let selection = selected_folder_path(&app, &selection_id, &request.project_id, None)?;
+    add_external_workspace(&app, &pool, request, &selection).await
+}
+
+/// Rebind an existing external folder only when Save applies its staged native selection.
+#[tauri::command]
+pub async fn projects_bind_selected_working_folder(
+    app: tauri::AppHandle,
+    db_url: String,
+    working_folder_id: ProjectWorkingFolderId,
+    selection_id: String,
+) -> ChatResult<ProjectWorkingFolderRead> {
+    let pool = chat_pool(app.clone(), db_url).await?;
+    let workspace = repository::read_workspace(&pool, &working_folder_id).await?;
+    let selection = selected_folder_path(
+        &app,
+        &selection_id,
+        &workspace.project_id,
+        Some(&working_folder_id),
+    )?;
+    bind_workspace(&app, &pool, workspace, &selection).await
+}
 
 #[tauri::command]
 pub async fn projects_list_working_folders(
@@ -134,13 +321,25 @@ async fn reconcile_working_folder_binding<R: Runtime>(
 pub async fn projects_add_external_working_folder(
     app: tauri::AppHandle,
     db_url: String,
-    mut request: CreateProjectWorkingFolderRequest,
+    request: CreateProjectWorkingFolderRequest,
     title: String,
 ) -> ChatResult<Option<ProjectWorkingFolderRead>> {
     let pool = chat_pool(app.clone(), db_url).await?;
     let Some(selection) = pick_workspace_folder(&app, &title, None).await? else {
         return Ok(None);
     };
+    add_external_workspace(&app, &pool, request, &selection)
+        .await
+        .map(Some)
+}
+
+/// Validate an external selection again at Save and resume incomplete creation by stable identity.
+async fn add_external_workspace(
+    app: &tauri::AppHandle,
+    pool: &SqlitePool,
+    mut request: CreateProjectWorkingFolderRequest,
+    selection: &Path,
+) -> ChatResult<ProjectWorkingFolderRead> {
     if request.display_name.trim().is_empty() {
         request.display_name = selection
             .file_name()
@@ -149,13 +348,31 @@ pub async fn projects_add_external_working_folder(
             .unwrap_or("External folder")
             .to_string();
     }
-    validate_external_folder_outside_vault(&app, &selection)?;
-    ensure_unique_project_path(&pool, &app, &request.project_id, None, &selection).await?;
-    let workspace = repository::create_workspace(&pool, &request, &now_timestamp()?).await?;
-    let (probe, binding) = prepare_workspace_binding(&workspace, &selection)?;
+    validate_external_folder_outside_vault(app, selection)?;
+    ensure_unique_project_path(pool, app, &request.project_id, Some(&request.id), selection)
+        .await?;
+    let existing = repository::list_workspaces(pool)
+        .await?
+        .into_iter()
+        .find(|workspace| workspace.id == request.id);
+    let workspace = if let Some(workspace) = existing {
+        if workspace.project_id != request.project_id
+            || workspace.kind != WorkingFolderKind::External
+            || workspace.archived_at.is_some()
+        {
+            return Err(ChatError::validation(
+                "workingFolderId",
+                "Working folder identity belongs to another association",
+            ));
+        }
+        workspace
+    } else {
+        repository::create_workspace(pool, &request, &now_timestamp()?).await?
+    };
+    let (probe, binding) = prepare_workspace_binding(&workspace, selection)?;
     let workspace = if probe.kind == super::models::RepositoryKind::Git {
         repository::set_workspace_repository(
-            &pool,
+            pool,
             &workspace.id,
             probe.kind,
             probe.compatibility_identity.as_deref(),
@@ -165,8 +382,8 @@ pub async fn projects_add_external_working_folder(
     } else {
         workspace
     };
-    store_active_device_binding(&app, &workspace.id, binding)?;
-    read_workspace(&app, workspace).map(Some)
+    store_active_device_binding(app, &workspace.id, binding)?;
+    read_workspace(app, workspace)
 }
 
 #[tauri::command]
@@ -381,23 +598,42 @@ async fn pick_and_bind_workspace(
     let Some(selection) = pick_workspace_folder(app, title, start_directory).await? else {
         return Ok(None);
     };
-    validate_external_folder_outside_vault(app, &selection)?;
+    bind_workspace(app, &pool, workspace, &selection)
+        .await
+        .map(Some)
+}
+
+/// Share binding validation between immediate workflows and explicit settings Save.
+async fn bind_workspace(
+    app: &tauri::AppHandle,
+    pool: &SqlitePool,
+    workspace: ProjectWorkingFolder,
+    selection: &Path,
+) -> ChatResult<ProjectWorkingFolderRead> {
+    if workspace.kind != WorkingFolderKind::External || workspace.archived_at.is_some() {
+        return Err(ChatError::validation(
+            "workingFolderId",
+            "Only active external folders can be rebound",
+        ));
+    }
+    let working_folder_id = &workspace.id;
+    validate_external_folder_outside_vault(app, selection)?;
     ensure_unique_project_path(
-        &pool,
+        pool,
         app,
         &workspace.project_id,
         Some(&workspace.id),
-        &selection,
+        selection,
     )
     .await?;
     app.state::<super::terminal::ChatTerminalRegistry>()
         .shutdown_workspace(working_folder_id)?;
-    let (probe, binding) = prepare_workspace_binding(&workspace, &selection)?;
+    let (probe, binding) = prepare_workspace_binding(&workspace, selection)?;
     let workspace = if workspace.repository_kind == super::models::RepositoryKind::None
         && probe.kind == super::models::RepositoryKind::Git
     {
         repository::set_workspace_repository(
-            &pool,
+            pool,
             working_folder_id,
             probe.kind,
             probe.compatibility_identity.as_deref(),
@@ -407,8 +643,8 @@ async fn pick_and_bind_workspace(
     } else {
         workspace
     };
-    store_active_device_binding(app, working_folder_id, binding)?;
-    read_workspace(app, workspace).map(Some)
+    store_active_device_binding(app, &workspace.id, binding)?;
+    read_workspace(app, workspace)
 }
 
 async fn ensure_unique_project_path(
@@ -541,8 +777,110 @@ fn device_state_error(_error: String) -> ChatError {
 
 #[cfg(test)]
 mod tests {
-    use super::preferred_workspace_picker_directory;
+    use super::super::models::ProjectWorkingFolderId;
+    use super::{
+        FolderSelectionReceipt, MAX_PENDING_FOLDER_SELECTIONS, ProjectWorkingFolderSelections,
+        preferred_workspace_picker_directory,
+    };
     use std::path::Path;
+
+    #[test]
+    fn staged_folder_selections_are_bound_to_the_project_target_and_vault() {
+        let selections = ProjectWorkingFolderSelections::default();
+        let target = ProjectWorkingFolderId::new("external-folder").unwrap();
+        selections
+            .insert(FolderSelectionReceipt {
+                id: "selection".to_string(),
+                project_id: "project".to_string(),
+                working_folder_id: Some(target.clone()),
+                vault_root: "vault".into(),
+                path: "chosen".into(),
+                filesystem_identity: "identity".to_string(),
+            })
+            .unwrap();
+        assert!(
+            selections
+                .read("selection", "project", Some(&target), Path::new("vault"))
+                .is_ok()
+        );
+        assert!(
+            selections
+                .read("unknown", "project", Some(&target), Path::new("vault"))
+                .is_err()
+        );
+        assert!(
+            selections
+                .read(
+                    "selection",
+                    "another-project",
+                    Some(&target),
+                    Path::new("vault")
+                )
+                .is_err()
+        );
+        assert!(
+            selections
+                .read("selection", "project", None, Path::new("vault"))
+                .is_err()
+        );
+        assert!(
+            selections
+                .read(
+                    "selection",
+                    "project",
+                    Some(&ProjectWorkingFolderId::new("other").unwrap()),
+                    Path::new("vault")
+                )
+                .is_err()
+        );
+        assert!(
+            selections
+                .read(
+                    "selection",
+                    "project",
+                    Some(&target),
+                    Path::new("another-vault")
+                )
+                .is_err()
+        );
+        assert!(
+            selections
+                .read("selection", "project", Some(&target), Path::new("vault"))
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn native_selection_receipts_are_bounded_and_oldest_selections_expire() {
+        let selections = ProjectWorkingFolderSelections::default();
+        for index in 0..=MAX_PENDING_FOLDER_SELECTIONS {
+            selections
+                .insert(FolderSelectionReceipt {
+                    id: index.to_string(),
+                    project_id: "project".to_string(),
+                    working_folder_id: None,
+                    vault_root: "vault".into(),
+                    path: "chosen".into(),
+                    filesystem_identity: "identity".to_string(),
+                })
+                .unwrap();
+        }
+        assert!(
+            selections
+                .read("0", "project", None, Path::new("vault"))
+                .is_err()
+        );
+        assert!(
+            selections
+                .read(
+                    &MAX_PENDING_FOLDER_SELECTIONS.to_string(),
+                    "project",
+                    None,
+                    Path::new("vault")
+                )
+                .is_ok()
+        );
+    }
 
     #[test]
     fn workspace_picker_prefers_the_existing_bound_folder() {

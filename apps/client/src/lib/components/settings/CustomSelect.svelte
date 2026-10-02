@@ -19,6 +19,8 @@
     value: string;
     label: string;
     summary?: string;
+    /** Keep unavailable choices visible without allowing selection. */
+    disabled?: boolean;
     /** Optional inline style applied to the option label (e.g. for font previews). */
     style?: string;
   }
@@ -195,13 +197,14 @@
     if (!open) return;
     const focusTarget = searchPlaceholder
       ? popoverEl?.querySelector<HTMLInputElement>("input")
-      : popoverEl?.querySelector<HTMLButtonElement>('[aria-selected="true"]')
-        ?? popoverEl?.querySelector<HTMLButtonElement>('[role="option"]');
+      : popoverEl?.querySelector<HTMLButtonElement>('[aria-selected="true"]:not(:disabled)')
+        ?? popoverEl?.querySelector<HTMLButtonElement>('[role="option"]:not(:disabled)');
     focusTarget?.focus({ preventScroll: true });
   }
 
   /** Select a value and return keyboard focus to its trigger. */
   function select(next: string): void {
+    if (disabled || options.find((option) => option.value === next)?.disabled) return;
     onChange(next);
     open = false;
     triggerEl?.focus({ preventScroll: true });
@@ -220,7 +223,7 @@
       triggerEl?.focus({ preventScroll: true });
       return;
     }
-    const buttons = [...(popoverEl?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? [])];
+    const buttons = [...(popoverEl?.querySelectorAll<HTMLButtonElement>('[role="option"]:not(:disabled)') ?? [])];
     const index = buttons.findIndex((button) => button === document.activeElement);
     const inSearch = e.target instanceof HTMLInputElement;
     if (inSearch && (e.key === "Home" || e.key === "End")) return;
@@ -356,9 +359,10 @@
             type="button"
             role="option"
             aria-selected={isActive}
+            disabled={option.disabled}
             onclick={() => select(option.value)}
             class={cn(
-              "flex w-full items-center justify-between gap-3 px-2.5 py-1.5 text-left text-[0.8rem] transition-colors",
+              "flex w-full items-center justify-between gap-3 px-2.5 py-1.5 text-left text-[0.8rem] transition-colors disabled:cursor-not-allowed disabled:text-muted-foreground disabled:hover:bg-transparent",
               isActive
                 ? "bg-accent/60 text-foreground"
                 : "text-foreground hover:bg-accent/40",
