@@ -4,8 +4,8 @@ Ganbaru AI is an anti-procrastination + anti-burnout productivity app. Free, loc
 
 Features are highly interconnected. Current status:
 
-- Calendar (work in progress; native recurrence, scoped mutations, deletion and Undo are implemented, with real desktop and Android acceptance pending)
-- Pomodoro (work in progress; native transactional execution, adaptive decisions, recovery and explicit idle-source failures are implemented, with real platform acceptance pending)
+- Calendar (work in progress; native recurrence, scoped mutations, deletion and Undo are implemented)
+- Pomodoro (work in progress; native transactional execution, adaptive decisions, recovery and explicit idle-source failures are implemented)
 - Quick notes and themes
 - Doomscrolling (work in progress; browser, desktop, and selected Android application enforcement exist)
 - Music player (work in progress; desktop and Android local playback, playlists, source parsing, controls, and platform integrations exist)
