@@ -30,7 +30,6 @@ pub mod process;
 pub mod provider_files;
 pub mod providers;
 pub use ganbaru_chat::chat::repository;
-pub mod resource_commands;
 pub mod restore_commands;
 pub mod review_commands;
 pub mod review_engine;

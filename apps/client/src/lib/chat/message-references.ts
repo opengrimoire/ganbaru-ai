@@ -1,6 +1,5 @@
 import type {
   ChatMessageReference,
-  ChatReferenceMetadata,
 } from "$lib/chat/contracts";
 import {
   chatComposerMarkdown,
@@ -33,11 +32,6 @@ export interface ChatReferenceTrigger {
 export type ChatReferenceTextSegment =
   | { kind: "text"; text: string }
   | { kind: "reference"; text: string; reference: ChatMessageReference };
-
-/** Returns the immutable visible-text metadata shared by every reference kind. */
-export function chatReferenceMetadata(reference: ChatMessageReference): ChatReferenceMetadata {
-  return reference.metadata;
-}
 
 /** Returns the stable semantic identity used to prevent duplicate references in one message. */
 export function chatReferenceSemanticKey(reference: ChatMessageReference): string {

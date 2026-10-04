@@ -137,29 +137,7 @@ pub(crate) async fn assignments(
     rows.into_iter().map(decode).collect()
 }
 
-pub(crate) async fn assignments_for_playlists(
-    pool: &SqlitePool,
-    playlist_ids: Vec<String>,
-) -> MusicLibraryResult<Vec<MusicContextAssignment>> {
-    validate_bounded_unique_ids(&playlist_ids, "playlistIds")?;
-    let mut query = sqlx::QueryBuilder::<Sqlite>::new(
-        "SELECT owner_kind, owner_id, phase, behavior, playlist_id, soundscape_id, soundscape_behavior,
-                provenance_kind, provenance_id, updated_at, version
-         FROM music_context_assignments WHERE playlist_id IN (",
-    );
-    let mut separated = query.separated(", ");
-    for playlist_id in &playlist_ids {
-        separated.push_bind(playlist_id);
-    }
-    separated.push_unseparated(") ORDER BY owner_kind, owner_id, phase");
-    let rows = query
-        .build_query_as::<AssignmentRow>()
-        .fetch_all(pool)
-        .await
-        .map_err(|error| MusicLibraryError::database("load exported music assignments", error))?;
-    rows.into_iter().map(decode).collect()
-}
-
+#[cfg(test)]
 pub(crate) async fn replace_assignments(
     pool: &SqlitePool,
     request: MusicContextAssignmentSet,
@@ -311,33 +289,6 @@ fn validate_id(value: &str, field: &str) -> MusicLibraryResult<()> {
             field,
             format!("exceeds the {MAX_ID_BYTES} byte limit"),
         ));
-    }
-    Ok(())
-}
-
-fn validate_bounded_unique_ids(values: &[String], field: &str) -> MusicLibraryResult<()> {
-    const MAX_IDS: usize = 500;
-    if values.is_empty() {
-        return Err(MusicLibraryError::validation(
-            field,
-            "must contain at least one id",
-        ));
-    }
-    if values.len() > MAX_IDS {
-        return Err(MusicLibraryError::validation(
-            field,
-            format!("exceeds the {MAX_IDS} item limit"),
-        ));
-    }
-    let mut unique = HashSet::new();
-    for value in values {
-        validate_id(value, field)?;
-        if !unique.insert(value.as_str()) {
-            return Err(MusicLibraryError::validation(
-                field,
-                format!("contains duplicate id '{value}'"),
-            ));
-        }
     }
     Ok(())
 }

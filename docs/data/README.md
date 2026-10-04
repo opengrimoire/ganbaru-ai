@@ -30,6 +30,6 @@ Feature documents own user-visible behavior. Algorithm documents own pure decisi
 
 ## Change discipline
 
-Any change to SQLite, persisted JSON, config keys, import or export formats, asset paths, or generated vault data must consider existing installs, stale rows, old exports, seed data, cleanup, and fallback behavior. Applied migrations are immutable. New schema work uses a new timestamped migration and updates the smallest relevant domain document.
+The app has no external users yet. Old development vaults, internal exports, and device state are unsupported when their contracts change; they do not justify parallel readers or migration shims. Use the current internal format and an explicit development reset. Preserve current crash recovery, rollback, external standards, and platform behavior. SQLx migrations still construct fresh vaults and validate their schema. See [Migration policy](schema/README.md#migration-policy).
 
 Do not document routine fields merely to mirror DDL. Preserve the rationale for non-obvious identity, ownership, deletion, ordering, history, portability, and security decisions.

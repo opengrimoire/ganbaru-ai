@@ -1387,14 +1387,5 @@ describe("Notes editing with delayed persistence", () => {
     expect(e.projection.flatBlockOutlines.map((item) => item.outline.id)).toEqual([firstId, inserted.id, unloaded.id, lastId]);
     e.release();
   });
-  it("preserves position when reading older typing snapshots without sibling order", () => {
-    const e = editor();
-    const before = e.undo.snapshotBlocks(firstId, [firstId]);
-    if (!before) throw new Error("Expected snapshot");
-    const legacy = { ...before, childIdsByParentId: {} };
-    e.projection.applyLocalUndoSnapshot(legacy, legacy);
-    expect(e.projection.childIdsByParentId[pageId]).toEqual([firstId, lastId]);
-    e.release();
-  });
 
 });

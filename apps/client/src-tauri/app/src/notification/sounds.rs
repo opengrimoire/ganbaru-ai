@@ -30,21 +30,6 @@ pub(crate) enum AppSound {
 }
 
 impl AppSound {
-    pub(crate) fn from_id(id: &str) -> Result<Self, String> {
-        match id {
-            "event-notification" => Ok(Self::EventNotification),
-            "idle-alert" => Ok(Self::IdleAlert),
-            "focus-session-failed-long-idle" => Ok(Self::FocusSessionFailedLongIdle),
-            "focus-ending-warning" => Ok(Self::FocusEndingWarning),
-            "break-start" => Ok(Self::BreakStart),
-            "break-finished" => Ok(Self::BreakFinished),
-            "event-finished" => Ok(Self::EventFinished),
-            "pomodoro-day-complete" => Ok(Self::PomodoroDayComplete),
-            "pomodoro-workweek-complete" => Ok(Self::PomodoroWorkweekComplete),
-            _ => Err(format!("unknown app sound: {id}")),
-        }
-    }
-
     fn id(self) -> &'static str {
         match self {
             Self::EventNotification => "event-notification",

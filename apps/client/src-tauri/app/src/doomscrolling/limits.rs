@@ -97,7 +97,7 @@ fn valid_id(id: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
 }
 
-/// Read legacy optional fields while rejecting ambiguous identities and oversized work.
+/// Read selected package identities and manually entered names with bounded matching work.
 pub(super) fn parse_config(root: &Value) -> Result<LimitsConfig, String> {
     let branch = root
         .pointer("/doomscrolling/limits")

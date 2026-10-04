@@ -1,4 +1,4 @@
-import type { PersistedPlaybackState, PlaybackStatus } from "$lib/music/playback";
+import type { PlaybackStatus } from "$lib/music/playback";
 import type { YouTubePlaylistSource, YouTubeVideoSource } from "$lib/music/sources";
 import { isPlaybackStatus } from "./music-player-settings";
 
@@ -66,7 +66,7 @@ interface YouTubeHostUrlInput {
   baseUrl: string;
   generation: number;
   source: YouTubeSource;
-  persisted: PersistedPlaybackState | null;
+  positionMs: number | null;
   autoplay: boolean;
   volume: number;
   rate: number;
@@ -92,7 +92,7 @@ export function buildYouTubeHostUrl(input: YouTubeHostUrlInput): URL {
   }
   url.searchParams.set(
     "resumeMs",
-    String(input.persisted?.positionMs ?? input.source.startMs ?? 0),
+    String(input.positionMs ?? input.source.startMs ?? 0),
   );
   url.searchParams.set(
     "volume",

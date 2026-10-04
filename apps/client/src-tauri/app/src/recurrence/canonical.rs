@@ -262,7 +262,7 @@ impl Template {
             .filter(|value| !value.is_empty())
             .map(rule::parse)
             .transpose()?;
-        // Legacy rows store an unlimited rule's termination in a separate column.
+        // Calendar imports can store rule termination in a separate column.
         if let Some(rule) = &mut rule {
             if rule.count.is_none() && rule.until.is_none() {
                 rule.until = repeat_until

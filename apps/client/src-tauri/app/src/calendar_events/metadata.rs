@@ -207,8 +207,8 @@ pub(super) fn revision(value: &impl Serialize) -> Result<String, String> {
     Ok(format!("{:x}", writer.0.finalize()))
 }
 
-/// Preserve editable metadata when legacy callers create a new event. The native
-/// semantic commit will use the same captured rows for its planned identities.
+/// Exercise metadata copying in isolated transaction and protection fixtures.
+/// Production commits use the reviewed native semantic operation.
 #[cfg(test)]
 pub(super) async fn copy_event_metadata(
     connection: &mut SqliteConnection,

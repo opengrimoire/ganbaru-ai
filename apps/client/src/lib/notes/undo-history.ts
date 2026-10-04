@@ -397,7 +397,7 @@ export function notesUndoShortcutAction(
   return null;
 }
 
-/** Read an optional document range from persisted history, including older histories without it. */
+/** Read the optional document range; block-local edits need no document selection. */
 function parseDocumentSelection(value: unknown): NotesDocumentSelection | null {
   if (value === undefined || value === null) return null;
   if (!isRecord(value)) throw new Error("documentSelection must be an object");

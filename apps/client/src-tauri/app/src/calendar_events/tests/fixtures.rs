@@ -1,13 +1,11 @@
 pub(super) use super::super::{
-    CalendarDetachInstance, CalendarEventCreate, CalendarEventMutationContext,
-    CalendarEventMutationTarget, CalendarEventUpdate, CalendarEventUpdateField,
-    CalendarGuestPermissions, CalendarPomodoroConfig, CalendarPomodoroConfigPatch,
-    CalendarPomodoroRhythm, CalendarPomodoroSequenceStep, CalendarSplitSeries, apply_update_field,
-    archive_calendar_event_tx, delete_calendar_event_tx, filter_excluded_dates,
-    insert_calendar_event_row, insert_pomodoro_config, protected_active_event_end_update_allowed,
-    replace_pomodoro_config, restore_archived_calendar_event_tx, sanitize_stored_event_description,
-    split_calendar_series_tx, update_calendar_event_tx, validate_color, validate_event_create,
-    validate_non_negative, validate_positive, validate_priority, validate_update_field,
+    CalendarEventCreate, CalendarEventMutationTarget, CalendarEventUpdateField,
+    CalendarPomodoroConfig, CalendarPomodoroRhythm, CalendarPomodoroSequenceStep,
+    apply_update_field, archive_calendar_event_tx, delete_calendar_event_tx,
+    insert_calendar_event_row, insert_pomodoro_config, replace_pomodoro_config,
+    restore_archived_calendar_event_tx, sanitize_stored_event_description, validate_color,
+    validate_event_create, validate_non_negative, validate_positive, validate_priority,
+    validate_update_field,
 };
 
 pub(super) fn event_create() -> CalendarEventCreate {
@@ -180,28 +178,6 @@ pub(super) async fn insert_test_active_pomodoro_segment(pool: &sqlx::SqlitePool)
                  '2026-05-09T10:00:00Z', '2026-05-09T10:40:00Z',
                  '2026-05-09T10:00:00Z', 'active')",
     )
-    .execute(pool)
-    .await
-    .unwrap();
-}
-
-pub(super) async fn insert_test_pomodoro_config(pool: &sqlx::SqlitePool, event_id: &str) {
-    sqlx::query(
-        "INSERT INTO pomodoro_configs
-            (event_id, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes)
-         VALUES (?, 'count', 'preset', 'adaptive', 3)",
-    )
-    .bind(event_id)
-    .execute(pool)
-    .await
-    .unwrap();
-    sqlx::query(
-        "INSERT INTO pomodoro_config_count_rhythms
-            (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes,
-             long_break_after_focus_count)
-         VALUES (?, 40, 5, 10, 4)",
-    )
-    .bind(event_id)
     .execute(pool)
     .await
     .unwrap();

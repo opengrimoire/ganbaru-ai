@@ -25,10 +25,6 @@ export function clearPanelEventCache(): void {
   panelEventCache.clear();
 }
 
-export function deletePanelEventCacheEntry(id: string): void {
-  panelEventCache.delete(id);
-}
-
 export async function loadPanelEvent(id: string): Promise<CalendarEvent | undefined> {
   const cached = panelEventCache.get(id);
   if (cached) return cached;

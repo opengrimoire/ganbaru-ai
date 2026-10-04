@@ -1,8 +1,5 @@
 #[cfg(test)]
-use super::types::{
-    CalendarDetachInstance, CalendarEventCreate, CalendarEventUpdate, CalendarPomodoroConfigPatch,
-    CalendarSplitSeries,
-};
+use super::types::CalendarEventCreate;
 use super::types::{
     CalendarEventAlarm, CalendarEventAttendee, CalendarEventUpdateField, CalendarPomodoroConfig,
     CalendarPomodoroRhythm,
@@ -60,103 +57,6 @@ pub(super) fn validate_event_create(event: &CalendarEventCreate) -> Result<(), S
         validate_attendee(attendee)?;
     }
     Ok(())
-}
-#[cfg(test)]
-pub(super) fn validate_event_update(patch: &CalendarEventUpdate) -> Result<(), String> {
-    require_non_empty(&patch.id, "id")?;
-    require_non_empty(&patch.updated_at, "updated_at")?;
-    for field in &patch.fields {
-        validate_update_field(field)?;
-    }
-    if let Some(attendees) = &patch.attendees {
-        for attendee in attendees {
-            validate_attendee(attendee)?;
-        }
-    }
-    if let Some(alarms) = &patch.alarms {
-        for alarm in alarms {
-            validate_alarm(alarm)?;
-        }
-    }
-    if let Some(CalendarPomodoroConfigPatch::Set(config)) = &patch.pomodoro_config {
-        validate_pomodoro_config(config)?;
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-pub(super) fn validate_detach_instance(input: &CalendarDetachInstance) -> Result<(), String> {
-    require_non_empty(&input.parent_id, "parent_id")?;
-    require_non_empty(&input.instance_date, "instance_date")?;
-    require_non_empty(&input.new_id, "new_id")?;
-    require_non_empty(&input.start_time, "start_time")?;
-    require_non_empty(&input.end_time, "end_time")?;
-    require_non_empty(&input.timezone, "timezone")?;
-    require_non_empty(&input.calendar_id, "calendar_id")?;
-    if let Some(project_id) = &input.project_id {
-        require_non_empty(project_id, "project_id")?;
-    }
-    if let Some(environment_id) = &input.environment_id {
-        require_non_empty(environment_id, "environment_id")?;
-    }
-    if let Some(playlist_id) = &input.playlist_id {
-        require_non_empty(playlist_id, "playlist_id")?;
-    }
-    require_non_empty(&input.now, "now")?;
-    validate_json_option(&Some(input.exceptions.clone()), "exceptions")?;
-    validate_color(input.color, "color")?;
-    validate_json_option(&input.notifications, "notifications")?;
-    validate_enum(
-        &input.transparency,
-        "transparency",
-        &["opaque", "transparent"],
-    )?;
-    validate_enum(
-        &input.status,
-        "status",
-        &["confirmed", "tentative", "cancelled"],
-    )
-}
-
-#[cfg(test)]
-pub(super) fn validate_split_series(input: &CalendarSplitSeries) -> Result<(), String> {
-    require_non_empty(&input.parent_id, "parent_id")?;
-    require_non_empty(&input.day_before, "day_before")?;
-    require_non_empty(&input.new_id, "new_id")?;
-    require_non_empty(&input.start_time, "start_time")?;
-    require_non_empty(&input.end_time, "end_time")?;
-    require_non_empty(&input.timezone, "timezone")?;
-    require_non_empty(&input.calendar_id, "calendar_id")?;
-    if let Some(project_id) = &input.project_id {
-        require_non_empty(project_id, "project_id")?;
-    }
-    if let Some(environment_id) = &input.environment_id {
-        require_non_empty(environment_id, "environment_id")?;
-    }
-    if let Some(playlist_id) = &input.playlist_id {
-        require_non_empty(playlist_id, "playlist_id")?;
-    }
-    require_non_empty(&input.now, "now")?;
-    validate_color(input.color, "color")?;
-    validate_json_option(&input.notifications, "notifications")?;
-    validate_json_option(&input.exceptions, "exceptions")?;
-    if input.all_day && (input.copy_pomodoro_config || input.pomodoro_config.is_some()) {
-        return Err("all-day events cannot have a pomodoro config".to_string());
-    }
-    if let Some(config) = &input.pomodoro_config {
-        validate_pomodoro_config(config)?;
-    }
-    validate_optional_attendee_status(&input.local_rsvp_status, "local_rsvp_status")?;
-    validate_enum(
-        &input.transparency,
-        "transparency",
-        &["opaque", "transparent"],
-    )?;
-    validate_enum(
-        &input.status,
-        "status",
-        &["confirmed", "tentative", "cancelled"],
-    )
 }
 
 pub(super) fn validate_update_field(field: &CalendarEventUpdateField) -> Result<(), String> {

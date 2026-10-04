@@ -109,7 +109,7 @@ apps/
           block-factory.ts, block-payloads.ts, block-queries.ts, block-updates.ts: stable block API and separate payload creation, inspection, and edit operations
           contracts/: typed Notes DTO families and view models
           validation/: split validation helpers
-        pomodoro/: adaptive rhythm and Pomodoro domain logic
+        pomodoro/: Focus command contracts, native projections, and presentation helpers
         profile/: local profile identity helpers
         projects/: project planning, view, settings, icon, and task domain logic
         quick-notes/: Quick notes contracts, rich-text operations, masonry, persistence, and window sync
@@ -338,8 +338,8 @@ After the relevant gate passes, finish the task without extra dev-server, Tauri 
 
 ### Data handling and migrations
 
-- Treat stored user data as durable. Any change to SQLite schema, persisted JSON, config keys, theme tokens, import/export formats, or generated Ganbaru AI folder data must consider existing installs, older exports, stale rows, removed fields, renamed keys, seed/reset data, and rollback or fallback behavior.
-- Do not leave dead persistent data behind. If a field, row key, config key, or JSON property becomes obsolete, add an explicit migration, cleanup path, or validator drop rule, then document it in the relevant data or feature spec.
+- There are no external users yet. Old development vaults, internal exports, and device state do not require compatibility, migration shims, or fallback readers. Maintain one current internal format and require an explicit development reset for unsupported state. Preserve current crash recovery, transaction rollback, external standards support, and platform-specific behavior.
+- Remove obsolete internal readers, writers, and unused code together. Keep fresh-vault schema construction and current schema invariants covered. Do not delete or reset local vaults automatically as part of source cleanup.
 - SQLite migrations live in `apps/client/src-tauri/migrations/` and are embedded by `ganbaru-db` through `sqlx::migrate!`. Use SQLx file names with a UTC timestamp prefix, `YYYYMMDDHHMMSS_description.sql`, such as `20260601103000_add_project_tables.sql`. Do not manually register migration files; the SQLx macro discovers them at compile time.
 - `20260830173211_baseline_schema.sql` is the fresh-start schema for the final pre-user reset. Earlier development databases are intentionally unsupported and must be recreated. Once a user-capable release can apply this baseline, never edit it. Add a new timestamped migration file instead.
 - Keep `crates/ganbaru-db/src/lib.rs` focused on pool and migration services. Put schema and migration invariant tests in `crates/ganbaru-db/src/tests/`. Keep active-folder path authorization in `apps/client/src-tauri/app/src/db.rs`.

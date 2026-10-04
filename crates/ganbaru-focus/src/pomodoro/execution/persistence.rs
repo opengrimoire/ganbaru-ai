@@ -144,8 +144,8 @@ pub(super) async fn load_run(
         COALESCE(current_event_date, event_date) AS current_date,
         COALESCE(current_event_title, event_title_snapshot) AS current_title,
         started_at, planned_start, planned_end, ended_at, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes,
-        COALESCE(inherited_focus_milliseconds, inherited_focus_minutes * 60000) AS inherited_focus_ms,
-        COALESCE(inherited_phase_milliseconds, inherited_focus_minutes * 60000) AS inherited_phase_ms
+        inherited_focus_milliseconds AS inherited_focus_ms,
+        inherited_phase_milliseconds AS inherited_phase_ms
         FROM pomodoro_runs WHERE id = ?")
         .bind(id).fetch_one(&mut **tx).await.map_err(|error| format!("Read canonical Focus run: {error}"))?;
     let kind: String = row
@@ -213,11 +213,17 @@ pub(super) async fn load_run(
         planned_end_ms: milliseconds(&planned_end)?,
         ended_at_ms: ended_at.as_deref().map(milliseconds).transpose()?,
         inherited_focus_ms: row
-            .try_get("inherited_focus_ms")
-            .map_err(|error| error.to_string())?,
+            .try_get::<Option<i64>, _>("inherited_focus_ms")
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| {
+                super::decisions::invalid_state("Focus run is missing inherited focus duration")
+            })?,
         inherited_phase_ms: row
-            .try_get("inherited_phase_ms")
-            .map_err(|error| error.to_string())?,
+            .try_get::<Option<i64>, _>("inherited_phase_ms")
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| {
+                super::decisions::invalid_state("Focus run is missing inherited phase duration")
+            })?,
         configuration: FocusConfiguration {
             rhythm,
             rhythm_source: row
@@ -331,7 +337,9 @@ pub(super) async fn load_segment(
         chosen_duration_ms: row
             .try_get::<Option<i64>, _>("chosen_duration_ms")
             .map_err(|error| error.to_string())?
-            .unwrap_or_else(|| planned_end_ms.saturating_sub(planned_start_ms)),
+            .ok_or_else(|| {
+                super::decisions::invalid_state("Focus segment is missing its accepted duration")
+            })?,
         status: row.try_get("status").map_err(|error| error.to_string())?,
         end_reason: row
             .try_get("end_reason")

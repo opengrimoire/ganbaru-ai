@@ -171,13 +171,6 @@ export function parseChatConversationMembership(
   };
 }
 
-export function parseChatConversationMemberships(
-  value: unknown,
-  label = "Chat conversation memberships",
-): ChatConversationMembershipRead[] {
-  return readArray(value, label, parseChatConversationMembership);
-}
-
 function parseChatHistoryBoundary(value: unknown, label: string): ChatHistoryBoundary {
   const record = readRecord(value, label);
   const kind = readEnum(record.kind, ["entire", "fromGrant"] as const, `${label}.kind`);

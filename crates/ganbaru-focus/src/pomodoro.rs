@@ -1,12 +1,9 @@
-mod commands;
-pub use commands::*;
 pub mod adaptive;
 mod execution;
 pub use execution::*;
 mod reads;
 pub use reads::*;
 mod read_budget;
-mod recovery;
 #[cfg(test)]
 mod tests;
 mod time;
@@ -19,9 +16,8 @@ use serde::{Deserialize, Serialize};
 use reads::{load_adaptive_history_from_pool, load_adaptive_replay_dataset_from_pool};
 #[cfg(test)]
 use validation::{
-    canonical_event_id, normalize_segment_update, validate_adaptive_decision_envelope_for_segment,
-    validate_event_type, validate_pause_reason, validate_phase, validate_run_end_reason,
-    validate_run_rhythm, validate_run_window_update, validate_segment_end_reason, validate_status,
+    canonical_event_id, validate_adaptive_decision_envelope_for_segment, validate_event_type,
+    validate_pause_reason, validate_phase, validate_run_rhythm,
 };
 #[cfg(test)]
 use writes::{
@@ -31,7 +27,6 @@ use writes::{
 };
 
 const MAX_ADAPTIVE_PLANNED_BLOCKS_PER_SNAPSHOT: usize = 512;
-const DEFAULT_ADAPTIVE_REPLAY_HISTORY_SEGMENT_LIMIT: i64 = 120;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -241,29 +236,6 @@ pub struct PomodoroRunClosure {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PomodoroRunWindowUpdate {
-    run_id: String,
-    planned_end: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PomodoroActiveEventReferenceTransfer {
-    new_event_id: String,
-    new_event_date: Option<String>,
-    planned_end: Option<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PomodoroTransitionRunWrite {
-    closure: PomodoroRunClosure,
-    run: PomodoroRunWrite,
-    segment: PomodoroSegmentWrite,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct PomodoroSegmentWrite {
     id: String,
     event_id: String,
@@ -280,37 +252,12 @@ pub struct PomodoroSegmentWrite {
     end_reason: Option<String>,
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PomodoroSegmentUpdate {
-    id: String,
-    status: String,
-    planned_end: String,
-    actual_start: Option<String>,
-    actual_end: Option<String>,
-    end_reason: Option<String>,
-    occurred_at: Option<String>,
-    pauses: Vec<PomodoroPauseWrite>,
-}
-
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroPauseWrite {
     started_at: String,
     ended_at: Option<String>,
     reason: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PomodoroRunEventWrite {
-    run_id: String,
-    segment_id: Option<String>,
-    event_type: String,
-    occurred_at: String,
-    phase: Option<String>,
-    reason: Option<String>,
-    duration_seconds: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -327,64 +274,6 @@ pub struct PomodoroSegmentRead {
     actual_end: Option<String>,
     status: String,
     pauses: Vec<PomodoroPauseWrite>,
-}
-
-#[derive(Serialize)]
-#[serde(
-    tag = "kind",
-    rename_all = "snake_case",
-    rename_all_fields = "camelCase"
-)]
-pub enum PomodoroMobileRecoveryRead {
-    None,
-    Closed {
-        reason: String,
-        closed_run_ids: Vec<String>,
-    },
-    Resumed {
-        run: Box<PomodoroRecoveredRunRead>,
-    },
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PomodoroRecoveredRunRead {
-    run_id: String,
-    block_id: String,
-    event_title: Option<String>,
-    event_date: String,
-    planned_end: String,
-    started_at: String,
-    recovered_at: String,
-    rhythm: PomodoroRunRhythm,
-    rhythm_source: String,
-    preset_key: Option<String>,
-    idle_timeout_minutes: Option<i64>,
-    segment: PomodoroRecoveredSegmentRead,
-    completed_focus_count: i64,
-    phase_elapsed_seconds: i64,
-    phase_work_duration_seconds: i64,
-    remaining_seconds: i64,
-    is_running: bool,
-    focus_extension_used: bool,
-    open_pause_reason: Option<String>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PomodoroRecoveredSegmentRead {
-    id: String,
-    event_id: String,
-    event_date: String,
-    run_id: String,
-    rhythm_position: i64,
-    phase: String,
-    planned_start: String,
-    planned_end: String,
-    actual_start: String,
-    actual_end: Option<String>,
-    status: String,
-    pause_log: Vec<PomodoroPauseWrite>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

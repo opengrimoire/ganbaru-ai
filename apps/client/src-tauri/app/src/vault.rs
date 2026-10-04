@@ -583,23 +583,6 @@ fn pick_mobile_vault(app: &tauri::AppHandle) -> Result<Option<VaultInfo>, String
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
-pub async fn vault_select_recent(app: tauri::AppHandle, path: String) -> Result<VaultInfo, String> {
-    let state = read_app_state(&app)?;
-    if !state
-        .recent_vault_paths
-        .iter()
-        .any(|recent| recent == &path)
-    {
-        return Err("folder is not in the recent Ganbaru AI folder list".to_string());
-    }
-    let info = vault_info_from_path(&PathBuf::from(path))?;
-    ensure_vault_skeleton(&PathBuf::from(&info.path))?;
-    select_vault(&app, &info).await?;
-    Ok(info)
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-#[tauri::command]
 pub fn vault_reveal_active(app: tauri::AppHandle) -> Result<(), String> {
     let path = active_vault_path(&app)?;
     reveal_vault_folder(&path)

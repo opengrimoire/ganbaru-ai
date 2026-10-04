@@ -12,7 +12,6 @@ import type {
 } from "$lib/music/library-contracts";
 import {
   stableStatusDuringYouTubeBuffering,
-  type PersistedPlaybackState,
   type PlaybackSnapshot,
 } from "$lib/music/playback";
 import {
@@ -56,7 +55,6 @@ interface MusicYouTubeAdapterContext {
   resolvePlaylist(sources: MusicSource[], selectedIndex: number | null, autoplay: boolean): Promise<void>;
   persist(force?: boolean): Promise<void>;
   updateExternalControls(): void;
-  updateTray(): void;
   onDurationKnown(videoId: string, durationMs: number): void;
   setPlaybackStarting(starting: boolean): void;
   getHostUrl?: typeof getYouTubeHostUrl;
@@ -70,7 +68,7 @@ export interface MusicYouTubeAdapter {
   registerFrame(frame: HTMLIFrameElement | null): void;
   load(
     source: YouTubeSource,
-    persisted: PersistedPlaybackState | null,
+    positionMs: number | null,
     generation: number,
     autoplay: boolean,
   ): Promise<void>;
@@ -167,7 +165,6 @@ export function createMusicYouTubeAdapter(
       status: "error",
       error: state.playerError,
     };
-    context.updateTray();
     void context.persist();
   }
 
@@ -185,7 +182,7 @@ export function createMusicYouTubeAdapter(
   async function ensureHostFrame(
     generation: number,
     source: YouTubeSource,
-    persisted: PersistedPlaybackState | null,
+    positionMs: number | null,
     autoplay: boolean,
   ): Promise<void> {
     if (!hostBaseUrl) hostBaseUrl = await getHostUrl();
@@ -194,7 +191,7 @@ export function createMusicYouTubeAdapter(
       baseUrl: hostBaseUrl,
       generation,
       source,
-      persisted,
+      positionMs,
       autoplay,
       volume: context.effectiveVolume(),
       rate: state.snapshot.rate,
@@ -208,7 +205,7 @@ export function createMusicYouTubeAdapter(
 
   async function load(
     source: YouTubeSource,
-    persisted: PersistedPlaybackState | null,
+    positionMs: number | null,
     generation: number,
     autoplay: boolean,
   ): Promise<void> {
@@ -237,7 +234,7 @@ export function createMusicYouTubeAdapter(
       });
     }
     try {
-      await ensureHostFrame(generation, source, persisted, autoplay);
+      await ensureHostFrame(generation, source, positionMs, autoplay);
     } catch (error) {
       if (!context.loadRuntime.isCurrent(generation)) return;
       context.setPlaybackStarting(false);
@@ -248,7 +245,6 @@ export function createMusicYouTubeAdapter(
         status: "error",
         error: state.playerError,
       };
-      context.updateTray();
     }
   }
 
@@ -351,7 +347,6 @@ export function createMusicYouTubeAdapter(
         error: state.playerError,
       };
       void context.persist();
-      context.updateTray();
       return;
     }
     if (message.type === "ganbaru-ai-youtube-playlist") {
@@ -399,7 +394,6 @@ export function createMusicYouTubeAdapter(
     };
     context.updateExternalControls();
     void context.persist();
-    context.updateTray();
   }
 
   function beginOptimisticPause(): void {

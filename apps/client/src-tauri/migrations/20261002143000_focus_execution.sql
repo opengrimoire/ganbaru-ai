@@ -34,6 +34,6 @@ ALTER TABLE pomodoro_runs ADD COLUMN inherited_phase_milliseconds INTEGER
     CHECK (inherited_phase_milliseconds IS NULL OR inherited_phase_milliseconds >= 0);
 
 -- The accepted work budget is distinct from a deadline clipped by the event window.
--- Old rows derive their budget from the original planned interval.
+-- Native execution fills this value before committing a new segment.
 ALTER TABLE pomodoro_segments ADD COLUMN chosen_duration_ms INTEGER
     CHECK (chosen_duration_ms IS NULL OR chosen_duration_ms > 0);

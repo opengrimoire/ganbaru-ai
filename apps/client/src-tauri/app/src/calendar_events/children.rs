@@ -74,52 +74,6 @@ pub(super) async fn insert_calendar_event_row(
     Ok(())
 }
 #[cfg(test)]
-pub(super) async fn copy_pomodoro_config(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    source_event_id: &str,
-    target_event_id: &str,
-) -> Result<(), String> {
-    sqlx::query(
-        "INSERT INTO pomodoro_configs
-           (event_id, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes)
-         SELECT ?, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes
-         FROM pomodoro_configs WHERE event_id = ?",
-    )
-    .bind(target_event_id)
-    .bind(source_event_id)
-    .execute(&mut **tx)
-    .await
-    .map_err(|e| format!("copy pomodoro config: {e}"))?;
-
-    sqlx::query(
-        "INSERT INTO pomodoro_config_count_rhythms
-           (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes,
-            long_break_after_focus_count)
-         SELECT ?, focus_duration_minutes, short_break_minutes, long_break_minutes,
-                long_break_after_focus_count
-         FROM pomodoro_config_count_rhythms WHERE event_id = ?",
-    )
-    .bind(target_event_id)
-    .bind(source_event_id)
-    .execute(&mut **tx)
-    .await
-    .map_err(|e| format!("copy count pomodoro rhythm: {e}"))?;
-
-    sqlx::query(
-        "INSERT INTO pomodoro_config_sequence_steps
-           (event_id, step_index, focus_duration_minutes, break_phase, break_duration_minutes)
-         SELECT ?, step_index, focus_duration_minutes, break_phase, break_duration_minutes
-         FROM pomodoro_config_sequence_steps WHERE event_id = ?
-         ORDER BY step_index ASC",
-    )
-    .bind(target_event_id)
-    .bind(source_event_id)
-    .execute(&mut **tx)
-    .await
-    .map_err(|e| format!("copy sequence pomodoro rhythm: {e}"))?;
-    Ok(())
-}
-#[cfg(test)]
 pub(super) async fn replace_pomodoro_config(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     event_id: &str,
@@ -199,14 +153,6 @@ pub(super) async fn insert_pomodoro_config(
         }
     }
     Ok(())
-}
-#[cfg(test)]
-pub(super) async fn copy_calendar_metadata(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    source_event_id: &str,
-    target_event_id: &str,
-) -> Result<(), String> {
-    super::metadata::copy_event_metadata(tx, source_event_id, target_event_id).await
 }
 #[cfg(test)]
 pub(super) async fn apply_update_field(

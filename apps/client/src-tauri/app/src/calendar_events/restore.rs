@@ -38,7 +38,12 @@ pub(super) async fn restore_archived_calendar_event_tx(
     let original_id: Option<String> = row
         .try_get("original_occurrence_id")
         .map_err(|error| format!("read archived original identity: {error}"))?;
-    let original_id = original_id.as_deref().unwrap_or(&target.id);
+    let original_id = original_id.as_deref().ok_or_else(|| {
+        format!(
+            "archived calendar event '{}' has no original occurrence identity",
+            target.id
+        )
+    })?;
     let recurrence_date: Option<String> = row
         .try_get("recurrence_date")
         .map_err(|error| format!("read archived recurrence date: {error}"))?;
@@ -65,8 +70,8 @@ pub(super) async fn restore_archived_calendar_event_tx(
 }
 
 /// Release only independent objects owned by this archive and no longer used by
-/// a live or archived projection. Older shared import graphs have no ownership
-/// records here and are retained. Scope Undo can then archive the same ID again.
+/// a live or archived projection. Shared import graphs remain owned by their
+/// current projections. Scope Undo can then archive the same ID again.
 pub(super) async fn remove_restored_archive(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     id: &str,

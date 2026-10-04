@@ -337,8 +337,6 @@ export interface DoomscrollingLimitTotal {
   exhausted: boolean;
 }
 
-export type DoomscrollingDailyLimitTotal = DoomscrollingLimitTotal;
-
 export interface DoomscrollingDailyLimitEntryTotal {
   entryId: string;
   usedSeconds: number;

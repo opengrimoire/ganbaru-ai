@@ -64,11 +64,6 @@ export interface CalendarWindowRows {
   total_event_count: number | null;
 }
 
-export interface CalendarPomodoroSchedulerRows {
-  events: DbCalendarEvent[];
-  overrides: DbOverride[];
-}
-
 export interface CalendarNotificationSchedulerRows {
   events: DbCalendarEvent[];
   overrides: DbOverride[];

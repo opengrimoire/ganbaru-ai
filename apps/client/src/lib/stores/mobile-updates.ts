@@ -25,16 +25,6 @@ type RawReleasePayload = Record<string, unknown>;
 
 export type MobileUpdateStatus = "idle" | "checking" | "current" | "available" | "error";
 
-export interface MobileUpdateState {
-  readonly status: MobileUpdateStatus;
-  readonly installedVersion: string | null;
-  readonly latestVersion: string | null;
-  readonly latestReleaseUrl: string | null;
-  readonly publishedAt: string | null;
-  readonly errorMessage: string | null;
-  readonly statusCopy: string;
-}
-
 interface CheckOptions {
   force?: boolean;
 }

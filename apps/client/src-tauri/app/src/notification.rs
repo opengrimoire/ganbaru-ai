@@ -1363,25 +1363,6 @@ mod tests {
     }
 
     #[test]
-    fn app_sound_ids_cover_wired_sounds() {
-        for id in [
-            "event-notification",
-            "idle-alert",
-            "focus-session-failed-long-idle",
-            "focus-ending-warning",
-            "break-start",
-            "break-finished",
-            "event-finished",
-            "pomodoro-day-complete",
-            "pomodoro-workweek-complete",
-        ] {
-            assert!(AppSound::from_id(id).is_ok(), "{id} should be wired");
-        }
-
-        assert!(AppSound::from_id("ai-response-finished").is_err());
-    }
-
-    #[test]
     fn pomodoro_overlay_visual_states_have_expected_backgrounds() {
         assert_eq!(
             PomodoroOverlayVisualState::from_id("idle")

@@ -24,8 +24,7 @@ fn string_reservation(value: &str) -> usize {
 
 // A retained archive envelope is storage custody, not an active import. Include
 // shared envelopes while a live projection uses them and standalone imports
-// with no archive owner. Older archives can identify their envelope only through
-// component pointers, so ownership rows alone are insufficient here.
+// with no archive owner. Native archival records every retained object owner.
 const EXPORT_OBJECT_SCOPE: &str = r#"
 WITH RECURSIVE export_objects(id) AS (
     SELECT object.id FROM icalendar_objects object WHERE object.calendar_id = ?1 AND (
@@ -38,14 +37,6 @@ WITH RECURSIVE export_objects(id) AS (
             WHERE component.object_id = object.id AND event.calendar_id = ?1)
         OR (
             NOT EXISTS(SELECT 1 FROM calendar_event_archive_import_objects owner WHERE owner.object_id = object.id)
-            AND NOT EXISTS(SELECT 1 FROM icalendar_components component JOIN calendar_events_archive archive
-                ON archive.icalendar_component_id = component.id WHERE component.object_id = object.id)
-            AND NOT EXISTS(SELECT 1 FROM icalendar_components component JOIN calendar_event_archive_alarms archive
-                ON archive.icalendar_component_id = component.id WHERE component.object_id = object.id)
-            AND NOT EXISTS(SELECT 1 FROM icalendar_components component JOIN calendar_event_archive_attendees archive
-                ON archive.icalendar_component_id = component.id WHERE component.object_id = object.id)
-            AND NOT EXISTS(SELECT 1 FROM icalendar_components component JOIN calendar_event_archive_overrides archive
-                ON archive.icalendar_component_id = component.id WHERE component.object_id = object.id)
         )
     )
 )

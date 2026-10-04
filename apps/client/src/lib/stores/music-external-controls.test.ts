@@ -2,10 +2,7 @@ import { listen } from "@tauri-apps/api/event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_PLAYBACK_SNAPSHOT } from "$lib/music/playback";
 import { localFileSourceFromPath } from "$lib/music/sources";
-import { updateMediaControls } from "$lib/api/media-controls";
 import { createMusicExternalControls } from "./music-external-controls";
-
-vi.mock("$lib/api/media-controls", () => ({ updateMediaControls: vi.fn(async () => undefined) }));
 
 function createContext() {
   const unlisten = vi.fn();
@@ -59,15 +56,6 @@ describe("Music external controls", () => {
     controls.destroy();
     expect(unlisten).toHaveBeenCalledTimes(1);
     expect(controls.isInitialized()).toBe(false);
-  });
-
-  it("leaves native transport and canonical metadata with the native owner", () => {
-    const { context } = createContext();
-    context.currentSource = () => localFileSourceFromPath("/music/local.flac", "Local");
-    const controls = createMusicExternalControls(context);
-
-    controls.updateNative();
-    expect(updateMediaControls).not.toHaveBeenCalled();
   });
 
   it("releases browser metadata and handlers when its decoder no longer owns the source", () => {

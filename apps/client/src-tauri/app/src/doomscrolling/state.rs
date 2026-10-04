@@ -380,20 +380,6 @@ pub(super) fn write_text_file_atomically(
 }
 
 #[tauri::command]
-pub fn doomscrolling_write_state<R: Runtime>(
-    app: tauri::AppHandle<R>,
-    state: DoomscrollingRuntimeState,
-) -> Result<(), String> {
-    let generation = runtime::publication_token(&app)?;
-    validate_state(&state)?;
-    let path = state_path(&app)?;
-    let json = serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?;
-    runtime::publish(&app, generation, || {
-        write_text_file_atomically(&path, &json)
-    })
-}
-
-#[tauri::command]
 pub fn doomscrolling_get_extension_status<R: Runtime>(
     app: tauri::AppHandle<R>,
     fresh_after: Option<String>,

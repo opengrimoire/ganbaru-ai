@@ -5,7 +5,6 @@ import type {
   ProjectWorkingFolderDirectoryRead,
   ProjectWorkingFolderFilePreview,
   ChatTerminalCloseResult,
-  ChatTerminalContextRead,
   ChatTerminalRead,
   ChatTerminalLayoutRead,
   ChatTerminalPanelLayout,
@@ -25,9 +24,6 @@ import type {
   ChatThreadId,
   ProjectWorkingFolderId,
   GitStatusRead,
-  GitRemoteRead,
-  GitBranchRead,
-  GitWorktreeRead,
   PreviewBounds,
   PreviewTabRead,
   HostedChangeRequestRead,
@@ -39,7 +35,6 @@ import {
   parseProjectWorkingFolderDirectory,
   parseProjectWorkingFolderFilePreview,
   parseChatTerminalCloseResult,
-  parseChatTerminalContext,
   parseChatTerminalLayout,
   parseChatTerminalSnapshot,
   parseChatTerminals,
@@ -52,9 +47,6 @@ import {
   parseChatRestorePreview,
   parseChatRestoreResult,
   parseGitStatus,
-  parseGitRemotes,
-  parseGitBranches,
-  parseGitWorktrees,
   parsePreviewTabRead,
   parsePreviewTabs,
   parseHostedSourceControls,
@@ -366,21 +358,6 @@ export async function readGitStatus(workingFolderId: ProjectWorkingFolderId, exe
   }));
 }
 
-export async function readGitDiff(
-  workingFolderId: ProjectWorkingFolderId,
-  staged: boolean,
-  relativePath: string | null,
-  executionEnvironmentId: string | null = null,
-): Promise<string> {
-  return await invoke<string>("chat_git_diff", {
-    dbUrl: await ensureDbUrl(),
-    workingFolderId,
-    staged,
-    relativePath,
-    executionEnvironmentId,
-  });
-}
-
 export async function stageGitPaths(
   workingFolderId: ProjectWorkingFolderId,
   paths: string[],
@@ -455,24 +432,6 @@ export async function pushGitBranch(
   }));
 }
 
-export async function listGitRemotes(workingFolderId: ProjectWorkingFolderId, executionEnvironmentId: string | null = null): Promise<GitRemoteRead[]> {
-  return parseGitRemotes(await invoke<unknown>("chat_git_remotes", {
-    dbUrl: await ensureDbUrl(), workingFolderId, executionEnvironmentId,
-  }));
-}
-
-export async function listGitBranches(workingFolderId: ProjectWorkingFolderId, executionEnvironmentId: string | null = null): Promise<GitBranchRead[]> {
-  return parseGitBranches(await invoke<unknown>("chat_git_branches", {
-    dbUrl: await ensureDbUrl(), workingFolderId, executionEnvironmentId,
-  }));
-}
-
-export async function listGitWorktrees(workingFolderId: ProjectWorkingFolderId, executionEnvironmentId: string | null = null): Promise<GitWorktreeRead[]> {
-  return parseGitWorktrees(await invoke<unknown>("chat_git_worktrees", {
-    dbUrl: await ensureDbUrl(), workingFolderId, executionEnvironmentId,
-  }));
-}
-
 export async function initializeGitRepository(
   workingFolderId: ProjectWorkingFolderId,
   initialBranch: string | null,
@@ -502,18 +461,6 @@ export async function discardGitPaths(
 ): Promise<GitStatusRead> {
   return parseGitStatus(await invoke<unknown>("chat_git_discard", {
     dbUrl: await ensureDbUrl(), workingFolderId, paths, destructiveConfirmed, executionEnvironmentId,
-  }));
-}
-
-export async function deleteGitBranch(
-  workingFolderId: ProjectWorkingFolderId,
-  branch: string,
-  force: boolean,
-  destructiveConfirmed: boolean,
-  executionEnvironmentId: string | null = null,
-): Promise<GitBranchRead[]> {
-  return parseGitBranches(await invoke<unknown>("chat_git_delete_branch", {
-    dbUrl: await ensureDbUrl(), workingFolderId, branch, force, destructiveConfirmed, executionEnvironmentId,
   }));
 }
 
@@ -681,23 +628,6 @@ export async function closeChatTerminal(
     threadId,
     workingFolderId,
     confirmed,
-  }));
-}
-
-export async function importChatTerminalContext(request: {
-  terminalId: string;
-  threadId: ChatThreadId;
-  workingFolderId: ProjectWorkingFolderId;
-  attachmentId: string;
-  sourceKind: "selection" | "last_command_output";
-  text: string;
-  startOutputSequence: number | null;
-  endOutputSequence: number | null;
-  truncated: boolean;
-}): Promise<ChatTerminalContextRead> {
-  return parseChatTerminalContext(await invoke<unknown>("chat_terminal_import_context", {
-    dbUrl: await ensureDbUrl(),
-    request,
   }));
 }
 

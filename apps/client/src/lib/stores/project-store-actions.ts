@@ -1109,5 +1109,3 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
     saveTaskListPresentation,
   };
 }
-
-export type ProjectStoreActions = ReturnType<typeof createProjectStoreActions>;

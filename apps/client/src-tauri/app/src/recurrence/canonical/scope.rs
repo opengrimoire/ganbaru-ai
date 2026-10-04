@@ -139,6 +139,7 @@ impl Template {
 
     /// Plan protection from a native clock and complete persisted history. All
     /// exact lookups, historical expansion, and future search share one budget.
+    #[cfg(test)]
     pub(crate) fn plan_scope(
         &self,
         selected_date: NaiveDate,

@@ -5,9 +5,7 @@ use ganbaru_db::impl_sqlite_from_row;
 use sqlx::Row;
 use sqlx::SqlitePool;
 
-use super::validation::{
-    require_non_empty, validate_adaptive_history_limit, validate_adaptive_replay_limit,
-};
+use super::validation::require_non_empty;
 use super::*;
 
 const MAX_ADAPTIVE_EVIDENCE_ROWS: usize = 4096;
@@ -208,37 +206,7 @@ pub async fn pomodoro_load_segments_for_events(
         .collect())
 }
 
-/// Read bounded local execution history for an adaptive policy decision.
-pub async fn pomodoro_load_adaptive_history(
-    pool: SqlitePool,
-    before: String,
-    policy_id: String,
-    segment_limit: i64,
-) -> Result<PomodoroAdaptiveHistoryRead, String> {
-    require_non_empty(&before, "before")?;
-    require_non_empty(&policy_id, "policy_id")?;
-    validate_adaptive_history_limit(segment_limit)?;
-    load_adaptive_history_from_pool(&pool, &before, &policy_id, segment_limit).await
-}
-
-/// Read a bounded replay dataset with the policy history needed for each decision.
-pub async fn pomodoro_load_adaptive_replay_dataset(
-    pool: SqlitePool,
-    before: String,
-    policy_id: String,
-    limit: i64,
-    history_segment_limit: Option<i64>,
-) -> Result<PomodoroAdaptiveReplayDatasetRead, String> {
-    require_non_empty(&before, "before")?;
-    require_non_empty(&policy_id, "policy_id")?;
-    validate_adaptive_replay_limit(limit)?;
-    let history_segment_limit =
-        history_segment_limit.unwrap_or(DEFAULT_ADAPTIVE_REPLAY_HISTORY_SEGMENT_LIMIT);
-    validate_adaptive_history_limit(history_segment_limit)?;
-    load_adaptive_replay_dataset_from_pool(&pool, &before, &policy_id, limit, history_segment_limit)
-        .await
-}
-
+#[cfg(test)]
 pub(super) async fn load_adaptive_replay_dataset_from_pool(
     pool: &sqlx::SqlitePool,
     before: &str,
@@ -259,6 +227,7 @@ pub(super) async fn load_adaptive_replay_dataset_from_pool(
     Ok(result)
 }
 
+#[cfg(test)]
 pub(super) async fn load_adaptive_history_from_pool(
     pool: &sqlx::SqlitePool,
     before: &str,

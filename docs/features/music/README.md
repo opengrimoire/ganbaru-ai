@@ -23,6 +23,8 @@ Ganbaru AI supports local media selected by the user and YouTube through an embe
 
 Spotify is unsupported because the available integration model does not fit this local open-source product. This is a product boundary, not a promise tied to volatile quota numbers.
 
+Native JSON playlist imports require the current exported fields, including `mixEnabled`. Earlier development exports that omit it are unsupported. M3U8 support and diagnostics for unsupported membership kinds remain part of the current import contract.
+
 ## Player model
 
 Playback belongs to one app-level host rather than the visible Music panel. Closing the panel keeps the current queue, source, position, volume, and appropriate background playback alive. Opening the panel reconnects to that same state.

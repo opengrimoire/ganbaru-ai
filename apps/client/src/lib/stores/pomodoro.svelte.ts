@@ -3,7 +3,6 @@ import { BUILD_PLATFORM_PROFILE } from "$lib/platform";
 import { focusDisplayElapsedSeconds, focusDisplayRemainingSeconds, focusSegmentForRail, type FocusIntent, type FocusProjection } from "$lib/pomodoro/native-focus";
 import { DEFAULT_POMODORO_CONFIG, rhythmPositionCount, type PomodoroConfig } from "$lib/pomodoro/rhythm";
 import type { PersistedSegment } from "$lib/components/calendar/types";
-import type { PomodoroAdaptivePlannedBlockWrite } from "$lib/pomodoro/adaptive/persistence";
 
 const VISUAL_INTERVAL_MS = 180;
 const MAX_PRESENTATION_SEGMENTS = 128;
@@ -124,15 +123,6 @@ export function getPomodoro() {
     get segments() { return segments; },
     get segmentVersion() { return segmentVersion; },
     get blockExpired() { return projection?.snapshot?.mode === "expired"; },
-    /** Read the canonical transfer already committed by Calendar. */
-    async transferBlockId(newBlockId: string, _newEndTime?: string) {
-      const next = await client.refresh();
-      if (next.snapshot?.run?.occurrenceId !== newBlockId) throw new Error("Calendar did not commit the native Focus transfer");
-    },
-    async adoptTransferredBlockId(newBlockId: string, _newEndTime?: string) {
-      const next = await client.refresh();
-      if (next.snapshot?.run?.occurrenceId !== newBlockId) throw new Error("Calendar did not commit the native Focus transfer");
-    },
     get suspendedAway() {
       const snapshot = projection?.snapshot;
       return snapshot?.mode === "suspended" ? { awaySeconds: Math.floor(Math.max(0, (snapshot.suspendReturnedAtMs ?? snapshot.observedAtMs) - (snapshot.suspendStartedAtMs ?? snapshot.observedAtMs)) / 1000) } : null;
@@ -163,13 +153,8 @@ export function getPomodoro() {
     },
     /** Native Calendar resolves configuration; editor drafts cannot become execution input. */
     async startScheduledSession() { await command({ kind: "start_scheduled", occurrenceId: null }); },
-    async startFromBlock(blockId: string, _config: PomodoroConfig, _title?: string | null, _end?: string, _date?: string, _idleTimeout?: number | null, _syncIdle?: boolean, _plannedBlocks?: PomodoroAdaptivePlannedBlockWrite[]) {
-      if (active() && projection?.snapshot?.run?.occurrenceId === blockId) { await client.refresh(); return; }
-      await command({ kind: "start_scheduled", occurrenceId: blockId });
-    },
     setActiveIdleThresholdMinutes(minutes: number) { dispatch({ kind: "set_idle_timeout", minutes }); },
     async stopSession() { await command({ kind: "stop" }); },
-    async completeActiveBlockAt(_endIso: string) { await client.refresh(); },
     pause() { dispatch({ kind: "pause" }); },
     start() { dispatch({ kind: projection?.snapshot?.mode === "manual_pause" ? "resume" : "advance" }); },
     skip() { dispatch({ kind: "advance" }); },

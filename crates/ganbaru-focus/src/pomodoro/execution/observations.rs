@@ -470,34 +470,6 @@ impl Session {
     ) -> Result<bool, FocusExecutionError> {
         // Visibility belongs to the live controller, never a previous process or device.
         self.state.idle_overlay_visible_at_ms = None;
-        // Legacy execution has canonical history but no native control row yet.
-        if self.state.run_id.is_none() {
-            let run_id = sqlx::query_scalar::<_, String>("SELECT id FROM pomodoro_runs WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1")
-                .fetch_optional(&mut **tx).await.map_err(|error| format!("Find recoverable Focus run: {error}"))?;
-            let Some(run_id) = run_id else {
-                return Ok(false);
-            };
-            let segment_id = sqlx::query_scalar::<_, String>("SELECT id FROM pomodoro_segments WHERE run_id = ? AND status = 'active' ORDER BY planned_start DESC LIMIT 1")
-                .bind(&run_id).fetch_optional(&mut **tx).await.map_err(|error| format!("Find recoverable Focus phase: {error}"))?;
-            self.state.run_id = Some(run_id.clone());
-            self.state.segment_id = segment_id.clone();
-            self.run = Some(load_run(tx, &run_id).await?);
-            self.segment = match segment_id {
-                Some(id) => Some(load_segment(tx, &id).await?),
-                None => None,
-            };
-            self.state.mode = match self.segment.as_ref().and_then(|segment| {
-                segment
-                    .pauses
-                    .iter()
-                    .find(|pause| pause.ended_at_ms.is_none())
-            }) {
-                Some(pause) if pause.reason == "idle" => FocusMode::IdlePause,
-                Some(pause) if pause.reason == "suspend" => FocusMode::Suspended,
-                Some(_) => FocusMode::ManualPause,
-                None => FocusMode::Running,
-            };
-        }
         let Some(run) = self.run.as_ref().filter(|run| run.ended_at_ms.is_none()) else {
             return Ok(false);
         };

@@ -362,12 +362,6 @@ export async function importDataFolder(): Promise<DataFolderInfo | null> {
   return pickOpenVault();
 }
 
-export async function selectRecentVault(path: string): Promise<VaultInfo> {
-  return activateVaultInfo(
-    parseVaultInfo(await invoke<unknown>("vault_select_recent", { path })),
-  );
-}
-
 export async function revealActiveVault(): Promise<void> {
   await invoke("vault_reveal_active");
 }

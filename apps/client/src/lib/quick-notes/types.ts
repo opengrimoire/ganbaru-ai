@@ -2,7 +2,6 @@ import type { EventColor } from "$lib/components/calendar/types";
 
 export const QUICK_NOTE_TITLE_MAX_CHARS = 200;
 export const QUICK_NOTE_BODY_MAX_CHARS = 65_536;
-export const QUICK_NOTES_PAGE_SIZE = 60;
 export const QUICK_NOTE_TAG_LIMIT = 9;
 export const QUICK_NOTE_TAG_NAME_MAX_CHARS = 40;
 

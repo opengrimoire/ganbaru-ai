@@ -65,7 +65,7 @@ pub(super) fn document_bytes<T: serde::Serialize>(value: &T) -> MusicLibraryResu
     Ok(output.0)
 }
 
-/// Parses supported legacy JSON while retaining diagnostics for unknown membership kinds.
+/// Parses the current JSON format while retaining diagnostics for unknown membership kinds.
 pub(super) fn parse_json(contents: &str) -> MusicLibraryResult<MusicInterchangeDocument> {
     check_contents(contents)?;
     let mut value: Value = serde_json::from_str(contents.trim_start_matches(|character: char| {

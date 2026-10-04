@@ -57,7 +57,7 @@ async fn seed(pool: &SqlitePool) {
 #[test]
 fn archive_storage_custody_does_not_publish_its_components_or_method_in_local_exports() {
     tauri::async_runtime::block_on(async {
-        for legacy_archive in [false, true] {
+        {
             let pool = pool().await;
             sqlx::raw_sql(r#"
                 INSERT INTO calendar_events_archive
@@ -72,12 +72,6 @@ fn archive_storage_custody_does_not_publish_its_components_or_method_in_local_ex
                     VALUES ('standalone-root', 'standalone', NULL, 'local', 'vcalendar', 'lossless', 'now', 'now'),
                            ('standalone-journal', 'standalone', 'standalone-root', 'local', 'vjournal', 'unsupported', 'now', 'now');
             "#).execute(&pool).await.unwrap();
-            if legacy_archive {
-                sqlx::query("DELETE FROM calendar_event_archive_import_objects")
-                    .execute(&pool)
-                    .await
-                    .unwrap();
-            }
             let mut tx = pool.begin().await.unwrap();
             crate::calendars::retain_archived_imports_tx(&mut tx, "export")
                 .await

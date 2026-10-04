@@ -10,6 +10,12 @@ function occurrence(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
 }
 
 describe("native occurrence presentation identity", () => {
+  it("does not invent occurrence provenance from a draft's displayed date", () => {
+    const draft = occurrence({ id: "draft", recurrenceDate: undefined });
+    expect(exactOccurrenceId(draft)).toBe("draft");
+    expect(eventMatchesActiveOccurrence(draft, { blockId: "source::2026-06-01" })).toBe(false);
+  });
+
   it("matches a moved occurrence by its accepted original identity and rejects displayed-day substitutes", () => {
     const event = occurrence();
     expect(exactOccurrenceId(event)).toBe("source::2026-05-20");

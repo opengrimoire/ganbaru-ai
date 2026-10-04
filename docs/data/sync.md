@@ -38,6 +38,8 @@ Doomscrolling is the only inactive-device write exception. Browser, desktop-appl
 
 This handoff is deliberately not the planned concurrent synchronization system. It has no domain operation journal, CRDT, conflict resolution, cloud delivery, or automatic bidirectional editing.
 
+Pairing persistence accepts the current membership schema only. Scanned invitations use the compact binary QR format; the explicit manual invitation input continues to accept the complete textual invitation. Earlier development pairing files and textual QR payloads are unsupported.
+
 ## Target concurrent synchronization architecture
 
 SQLite remains the durable local store. Replicas exchange validated domain operations and immutable assets, never raw database pages, arbitrary SQL, or unclassified application configuration. Foreground saves do not wait for a network.

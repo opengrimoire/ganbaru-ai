@@ -9,7 +9,9 @@ use sqlx::SqliteConnection;
 use tauri::{AppHandle, Runtime};
 
 use crate::db_path::connect_sqlite;
-use crate::recurrence::canonical::{EditScope, ScopeClock, ScopeEvidence, ScopePlan, parse_date};
+#[cfg(test)]
+use crate::recurrence::canonical::ScopePlan;
+use crate::recurrence::canonical::{EditScope, ScopeClock, ScopeEvidence, parse_date};
 
 use super::occurrence::{Geometry, ReadBudget, read_geometry};
 
@@ -286,6 +288,7 @@ pub(super) struct ScopeSnapshot {
 impl ScopeSnapshot {
     /// Pure planning can run after releasing a preview read snapshot, or inside
     /// a retained commit transaction before any of its writes are performed.
+    #[cfg(test)]
     pub(super) fn plan(
         self,
         selected: NaiveDate,
@@ -345,37 +348,6 @@ pub(super) async fn read_snapshot(
         evidence,
         metadata,
     })
-}
-
-/// Produce native scope decisions without mutating the source. Save must repeat
-/// this analysis in its own authorized transaction, never trust a returned plan.
-#[tauri::command]
-pub(crate) async fn calendar_plan_edit_scope<R: Runtime>(
-    app: AppHandle<R>,
-    db_url: String,
-    request: ScopeRequest,
-) -> Result<ScopePlan, String> {
-    prepare_request(app, db_url, request, |snapshot, selected, scope, clock| {
-        snapshot.plan(selected, scope, clock)
-    })
-    .await
-}
-
-/// Scope and full-draft preparation share admission, snapshot and worker limits.
-pub(super) async fn prepare_request<R, T, F>(
-    app: AppHandle<R>,
-    db_url: String,
-    request: ScopeRequest,
-    prepare: F,
-) -> Result<T, String>
-where
-    R: Runtime,
-    T: Send + 'static,
-    F: FnOnce(ScopeSnapshot, NaiveDate, EditScope, ScopeClock) -> Result<T, String>
-        + Send
-        + 'static,
-{
-    prepare_request_with_clock(app, db_url, request, 0, prepare).await
 }
 
 /// Release SQLite and the Focus owner before doing preview CPU work. A clock

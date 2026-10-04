@@ -394,10 +394,6 @@ export function composerModeCommand(text: string): ComposerModeCommand | null {
   };
 }
 
-export function replaceComposerToken(text: string, trigger: ComposerTokenTrigger, value: string): string {
-  return `${text.slice(0, trigger.start)}${value} ${text.slice(trigger.end)}`;
-}
-
 export function filterPromptCatalog(
   entries: ChatPromptCatalogEntry[],
   kind: "skill" | "command",

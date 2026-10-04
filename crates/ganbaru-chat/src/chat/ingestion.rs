@@ -1,6 +1,6 @@
 use crate::chat::events::{CanonicalEvent, CanonicalRuntimeEvent};
 use crate::chat::models::{
-    ChatChangeNotification, ChatError, ChatErrorCode, ChatResult, ContentStreamKind, UtcTimestamp,
+    ChatChangeNotification, ChatError, ChatErrorCode, ChatResult, ContentStreamKind,
 };
 use crate::chat::repository::events::{AppendCanonicalEventRequest, append_canonical_event};
 use serde_json::Value;
@@ -220,11 +220,6 @@ fn truncate_utf8(value: &str, maximum_bytes: usize) -> &str {
         boundary -= 1;
     }
     &value[..boundary]
-}
-
-pub fn ingestion_timestamp(value: &str) -> ChatResult<UtcTimestamp> {
-    UtcTimestamp::new(value.to_string())
-        .map_err(|_| ChatError::validation("ingestedAt", "Chat ingestion timestamp is invalid"))
 }
 
 #[cfg(test)]

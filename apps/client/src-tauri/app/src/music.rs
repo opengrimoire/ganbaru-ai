@@ -18,8 +18,6 @@ use tauri::Manager;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tauri_plugin_dialog::{DialogExt, FilePath};
 
-use crate::db_path::connect_sqlite;
-
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod artwork;
 pub(crate) mod host;
@@ -35,10 +33,6 @@ pub(crate) use host::setup_youtube_host;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use artwork::{extract_embedded_artwork, find_track_artwork};
 
-const VALID_SOURCE_KINDS: &[&str] = &["local-file", "youtube-video", "youtube-playlist"];
-const VALID_PLAYBACK_STATUSES: &[&str] = &[
-    "idle", "loading", "ready", "playing", "paused", "ended", "error",
-];
 const MAX_MEDIA_FOLDER_FILES: usize = 5_000;
 const MAX_ARTWORK_BYTES: u64 = 12 * 1024 * 1024;
 #[cfg(not(target_os = "ios"))]
@@ -105,90 +99,6 @@ pub struct MediaFolderSelection {
     pub display_name: Option<String>,
     pub tracks: Vec<MediaFolderTrack>,
     pub truncated: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PlaybackStateRead {
-    pub source_identity: String,
-    pub source_kind: String,
-    pub position_ms: i64,
-    pub duration_ms: Option<i64>,
-    pub status: String,
-    pub updated_at: i64,
-}
-
-impl_sqlite_from_row!(PlaybackStateRead {
-    source_identity,
-    source_kind,
-    position_ms,
-    duration_ms,
-    status,
-    updated_at
-});
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PlaybackStateWrite {
-    pub source_identity: String,
-    pub source_kind: String,
-    pub position_ms: i64,
-    pub duration_ms: Option<i64>,
-    pub status: String,
-    pub updated_at: i64,
-}
-
-#[tauri::command]
-pub async fn music_get_playback_state(
-    app: tauri::AppHandle,
-    db_url: String,
-    source_identity: String,
-) -> Result<Option<PlaybackStateRead>, String> {
-    if source_identity.trim().is_empty() {
-        return Err("source identity is required".to_string());
-    }
-    let pool = connect_sqlite(app, db_url).await?;
-    sqlx::query_as::<_, PlaybackStateRead>(
-        "SELECT source_identity, source_kind, position_ms, duration_ms, status, updated_at
-         FROM music_playback_states
-         WHERE source_identity = ?",
-    )
-    .bind(source_identity)
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| format!("load music playback state: {e}"))
-}
-
-#[tauri::command]
-pub async fn music_save_playback_state(
-    app: tauri::AppHandle,
-    db_url: String,
-    state: PlaybackStateWrite,
-) -> Result<(), String> {
-    validate_playback_state(&state)?;
-    let pool = connect_sqlite(app, db_url).await?;
-    sqlx::query(
-        "INSERT INTO music_playback_states
-            (source_identity, source_kind, position_ms, duration_ms, status, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)
-         ON CONFLICT(source_identity) DO UPDATE SET
-            source_kind = excluded.source_kind,
-            position_ms = excluded.position_ms,
-            duration_ms = excluded.duration_ms,
-            status = excluded.status,
-            updated_at = excluded.updated_at
-         WHERE excluded.updated_at >= music_playback_states.updated_at",
-    )
-    .bind(state.source_identity)
-    .bind(state.source_kind)
-    .bind(state.position_ms)
-    .bind(state.duration_ms)
-    .bind(state.status)
-    .bind(state.updated_at)
-    .execute(&pool)
-    .await
-    .map_err(|e| format!("save music playback state: {e}"))?;
-    Ok(())
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -842,31 +752,6 @@ fn media_title_from_path(path: &Path) -> String {
         .to_string()
 }
 
-fn validate_playback_state(state: &PlaybackStateWrite) -> Result<(), String> {
-    if state.source_identity.trim().is_empty() {
-        return Err("source identity is required".to_string());
-    }
-    if !VALID_SOURCE_KINDS.contains(&state.source_kind.as_str()) {
-        return Err(format!(
-            "unsupported music source kind '{}'",
-            state.source_kind
-        ));
-    }
-    if state.position_ms < 0 {
-        return Err("position must be zero or greater".to_string());
-    }
-    if state.duration_ms.is_some_and(|duration| duration < 0) {
-        return Err("duration must be zero or greater".to_string());
-    }
-    if !VALID_PLAYBACK_STATUSES.contains(&state.status.as_str()) {
-        return Err(format!("unsupported playback status '{}'", state.status));
-    }
-    if state.updated_at <= 0 {
-        return Err("updated_at must be a positive Unix epoch millisecond value".to_string());
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::artwork::{
@@ -877,30 +762,6 @@ mod tests {
     use super::youtube_host::youtube_host_html;
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn valid_state() -> PlaybackStateWrite {
-        PlaybackStateWrite {
-            source_identity: "youtube:video:dQw4w9WgXcQ".to_string(),
-            source_kind: "youtube-video".to_string(),
-            position_ms: 1_000,
-            duration_ms: Some(120_000),
-            status: "playing".to_string(),
-            updated_at: 1_700_000_000_000,
-        }
-    }
-
-    #[test]
-    fn playback_state_validation_accepts_known_shapes() {
-        validate_playback_state(&valid_state()).unwrap();
-    }
-
-    #[test]
-    fn playback_state_validation_rejects_unknown_status() {
-        let mut state = valid_state();
-        state.status = "buffering-hard".to_string();
-
-        assert!(validate_playback_state(&state).is_err());
-    }
 
     #[test]
     fn youtube_host_uses_supported_minimal_chrome_parameters() {

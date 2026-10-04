@@ -81,14 +81,8 @@ export class NotesTreeProjectionController {
     }
     for (const blockId of affectedIds) this.markLocallyChanged(blockId);
     this.blocksById = nextBlocksById;
-    const targetById = new Map(target.blocks.map((block) => [block.id, block]));
     const children = Object.fromEntries(Object.entries(this.childIdsByParentId)
-      .map(([parentId, ids]) => [parentId, ids.filter((id) => {
-        if (!placementIds.has(id)) return true;
-        const targetBlock = targetById.get(id);
-        return !target.childIdsByParentId[parentId] && targetBlock !== undefined
-          && parentIdForBlock(targetBlock) === parentId;
-      })]));
+      .map(([parentId, ids]) => [parentId, ids.filter((id) => !placementIds.has(id))]));
     for (const [parentId, ids] of Object.entries(target.childIdsByParentId)) {
       const siblings = children[parentId] ?? [];
       for (let index = ids.length - 1; index >= 0; index -= 1) {
@@ -97,14 +91,6 @@ export class NotesTreeProjectionController {
         const nextIndex = siblings.indexOf(ids[index + 1]);
         siblings.splice(nextIndex < 0 ? siblings.length : nextIndex, 0, id);
       }
-      children[parentId] = siblings;
-    }
-    // Older recovery snapshots may not carry sibling order.
-    for (const block of target.blocks) {
-      if (!placementIds.has(block.id)) continue;
-      const parentId = parentIdForBlock(block);
-      const siblings = children[parentId] ?? [];
-      if (!siblings.includes(block.id)) siblings.push(block.id);
       children[parentId] = siblings;
     }
     this.childIdsByParentId = children;

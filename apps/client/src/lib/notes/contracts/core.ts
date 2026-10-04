@@ -67,20 +67,6 @@ export const NOTES_COLORS = [
 
 export type NotesColor = (typeof NOTES_COLORS)[number];
 
-export type NotesTextBlockType =
-  | "paragraph"
-  | "heading_1"
-  | "heading_2"
-  | "heading_3"
-  | "heading_4"
-  | "heading_5"
-  | "heading_6"
-  | "bulleted_list_item"
-  | "numbered_list_item"
-  | "toggle"
-  | "callout"
-  | "quote";
-
 export type NotesParent =
   | { type: "workspace"; workspace: true }
   | { type: "page_id"; page_id: string }

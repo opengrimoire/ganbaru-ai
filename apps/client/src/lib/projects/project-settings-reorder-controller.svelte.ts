@@ -138,7 +138,3 @@ export function createProjectSettingsReorderController<T extends ReorderEntry>(
     moveToIndex,
   };
 }
-
-export type ProjectSettingsReorderController<T extends ReorderEntry> = ReturnType<
-  typeof createProjectSettingsReorderController<T>
->;

@@ -8,7 +8,6 @@ import {
 
 export const TASK_LIST_COLUMNS_PREFERENCE_KEY = "list-visible-columns";
 export const CUSTOM_FIELD_REFERENCE_PREFIX = "custom:";
-export const CUSTOM_TASK_LIST_COLUMN_PREFIX = CUSTOM_FIELD_REFERENCE_PREFIX;
 
 export const DEFAULT_TASK_LIST_COLUMNS: ProjectCoreTaskListColumn[] = [
   "status",

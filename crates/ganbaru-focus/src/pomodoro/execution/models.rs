@@ -309,8 +309,7 @@ pub struct FocusExecutionSnapshot {
     pub paused_prompts_dismissed: bool,
     pub idle_started_at_ms: Option<i64>,
     pub idle_detected_at_ms: Option<i64>,
-    /// Missing on older command receipts; unseen warnings cannot trigger idle failure.
-    #[serde(default)]
+    /// Visibility acknowledged by the current controller; unseen warnings cannot trigger idle failure.
     pub idle_overlay_visible_at_ms: Option<i64>,
     pub focus_failed_at_ms: Option<i64>,
     pub suspend_started_at_ms: Option<i64>,

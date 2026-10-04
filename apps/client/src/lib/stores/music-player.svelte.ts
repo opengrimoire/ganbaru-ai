@@ -119,7 +119,6 @@ class MusicPlayerStore {
   savedQueueSkipBreakdown = $state<Record<MusicPlaylistSkipReason, number>>(emptyMusicSkipBreakdown());
   online = $state(typeof navigator === "undefined" || navigator.onLine);
 
-
   private native = $state<NativeMusicSnapshot | null>(null);
   /** Identifies native background state for a read-only presentation refresh. */
   get soundscapeVersion(): number | null { return this.native?.soundscapeVersion ?? null; }
@@ -143,14 +142,13 @@ class MusicPlayerStore {
   private readonly youtubeAdapter = createMusicYouTubeAdapter({
     state: this, loadRuntime: this.loadRuntime, effectiveVolume: () => this.effectiveVolume(),
     resolvePlaylist: (sources, selectedIndex, autoplay) => this.start({ kind: "sources", sources, selectedIndex, name: sources[0]?.title ?? "YouTube" }, autoplay, false).then(() => undefined),
-    persist: () => this.observeBrowser(), updateExternalControls: () => this.externalControls.updateBrowser(), updateTray: () => undefined,
+    persist: () => this.observeBrowser(), updateExternalControls: () => this.externalControls.updateBrowser(),
     onDurationKnown: (id, duration) => { this.youtubeKnownDurations = { ...this.youtubeKnownDurations, [id]: duration }; },
     setPlaybackStarting: (starting) => { this.youtubePlaybackStarting = starting; },
   });
   private readonly webviewLocalAdapter = createMusicWebviewLocalAdapter({
     state: this, effectiveVolume: () => this.effectiveVolume(), updateExternalControls: () => this.externalControls.updateBrowser(),
-    updateNativeControls: () => undefined, updateTray: () => undefined, persist: () => this.observeBrowser(),
-    playNext: async () => undefined, handlePosition: () => undefined,
+    persist: () => this.observeBrowser(),
   });
   private readonly externalControls = createMusicExternalControls({
     currentSource: () => this.browserSessionId === this.native?.sessionId && this.native?.backend === "browser" ? this.currentSource : null,
@@ -256,7 +254,6 @@ class MusicPlayerStore {
   get isYouTubeActive(): boolean {
     return this.currentSource ? isYouTubeSource(this.currentSource) : false;
   }
-
 
   init(): void {
     if (this.initialized) return;
@@ -400,8 +397,7 @@ class MusicPlayerStore {
       this.currentSource = effect.source; this.muted = effect.muted;
       this.snapshot = { ...this.snapshot, status: "loading", positionMs: effect.positionMs, volume: effect.volume, rate: effect.rate, error: null };
       if (isYouTubeSource(effect.source)) {
-        await this.youtubeAdapter.load(effect.source, { sourceIdentity: effect.source.identity, sourceKind: effect.source.kind,
-          positionMs: effect.positionMs, durationMs: null, status: "paused", updatedAt: Date.now() }, load, effect.autoplay);
+        await this.youtubeAdapter.load(effect.source, effect.positionMs, load, effect.autoplay);
       } else {
         const source = effect.source;
         const hostedGeneration = this.hostedMediaController.nextGeneration();

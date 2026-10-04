@@ -116,7 +116,6 @@ mod composition_tests {
             "quick_notes::quick_notes_list",
             "themes::theme_load_all",
             "music::session::runtime::music_session_command",
-            "music::music_get_playback_state",
             "music::library::commands::music_library_playlist_summaries",
             "music::root_bindings::music_get_local_root_bindings",
             "profile_images::profile_image_asset_data_url",

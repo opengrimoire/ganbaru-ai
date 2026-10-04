@@ -1,6 +1,6 @@
 # Pomodoro state machine
 
-The Pomodoro state machine separates pure decisions from persistence, native effects, and presentation. A decision receives a complete snapshot and current time, then returns one semantic action. The target controller boundary applies that action in one transaction before native effects. Initial starts now wait for persistence; complete atomic transition orchestration still requires migration from Svelte to Rust. See [Focus authority](focus-authority.md).
+The Rust Pomodoro owner separates decisions from persistence, native effects, and presentation. A decision receives a complete snapshot and current time, then returns one semantic action. The native controller applies that action in one transaction before publishing effects. Svelte sends intents and paints committed projections. The duplicate TypeScript adaptive engine has been removed; frozen conformance fixtures remain exercised by Rust tests. See [Focus authority](focus-authority.md).
 
 ## Why decisions are pure
 
@@ -49,7 +49,7 @@ After a focus phase:
 
 After a short or long break, the rhythm advances to the next focus position. Count rhythms use their long-break cadence. Sequence rhythms use their normalized bounded position sequence.
 
-The outgoing segment closes before the incoming segment starts. The target Rust transition service must commit the transition, run event, adaptive decision and incoming segment together. Current Svelte phase transitions still use separate persistence calls.
+The outgoing segment closes before the incoming segment starts. The Rust transition service commits the transition, run event, adaptive decision, and incoming segment together. Recovery uses native execution state and does not adopt unreferenced runs from earlier development implementations.
 
 Break completion enters the user-visible return or overtime flow. Another focus interval requires acceptance. The pure phase decision still identifies the next logical focus position.
 

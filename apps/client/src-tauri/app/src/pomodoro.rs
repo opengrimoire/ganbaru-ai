@@ -13,7 +13,7 @@ pub(crate) use native_runtime::{
     invalidate_calendar, resume_after_vault_handoff, setup, stop_for_vault_handoff,
 };
 
-/// Read canonical accepted and legacy history for the Calendar rail.
+/// Read canonical execution history, resolving current occurrence aliases for the Calendar rail.
 #[tauri::command]
 pub async fn pomodoro_load_segments_for_events<R: Runtime>(
     app: AppHandle<R>,

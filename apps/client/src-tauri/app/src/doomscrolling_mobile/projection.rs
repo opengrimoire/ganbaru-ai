@@ -381,7 +381,7 @@ mod tests {
                 {"id": "one", "mobileAppPackage": "com.example.video"},
                 {"id": "duplicate", "mobileAppPackage": "com.example.video"},
                 {"id": "browser", "websiteHost": "video.example"}]},
-            {"id": "legacy", "minutesPerDay": 10, "entries": [{"id": "name", "mobileAppName": "Video"}]}]}}})
+            {"id": "manual-name", "minutesPerDay": 10, "entries": [{"id": "name", "mobileAppName": "Video"}]}]}}})
     }
 
     #[test]

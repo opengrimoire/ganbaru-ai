@@ -29,5 +29,5 @@ export function createMusicExternalControls(context: DesktopMusicExternalControl
   }
 
   return { init, destroy, isInitialized: () => initialized, update: browser.update,
-    updateBrowser: browser.update, updateNative: () => undefined };
+    updateBrowser: browser.update };
 }

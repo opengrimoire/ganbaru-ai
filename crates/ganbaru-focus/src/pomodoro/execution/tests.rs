@@ -159,6 +159,32 @@ async fn start(pool: &SqlitePool) -> FocusExecutionSnapshot {
 }
 
 #[test]
+fn canonical_execution_rejects_missing_accepted_durations() {
+    block_on(async {
+        for query in [
+            "UPDATE pomodoro_segments SET chosen_duration_ms = NULL",
+            "UPDATE pomodoro_runs SET inherited_focus_milliseconds = NULL",
+            "UPDATE pomodoro_runs SET inherited_phase_milliseconds = NULL",
+        ] {
+            let pool = pool().await;
+            let initial = start(&pool).await;
+            assert!(initial.segment.unwrap().chosen_duration_ms > 0);
+            sqlx::query(query).execute(&pool).await.unwrap();
+
+            let error = focus_read_execution_snapshot(&pool, START)
+                .await
+                .unwrap_err();
+            assert_eq!(error.code, FocusErrorCode::InvalidState);
+            let revision: i64 = sqlx::query_scalar("SELECT revision FROM focus_execution_state")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            assert_eq!(revision, initial.revision);
+        }
+    });
+}
+
+#[test]
 fn receipt_recovery_does_not_require_current_calendar_or_clock_inputs() {
     block_on(async {
         let pool = pool().await;
@@ -709,26 +735,18 @@ fn execution_idle_visibility_failure_rolls_back_and_retry_keeps_first_accepted_t
 }
 
 #[test]
-fn execution_reads_older_receipts_without_idle_visibility_evidence() {
+fn recovery_does_not_adopt_runs_without_native_execution_state() {
     block_on(async {
         let pool = pool().await;
-        let started = start(&pool).await;
-        sqlx::query("UPDATE focus_execution_receipts SET result_json = json_remove(result_json, '$.idleOverlayVisibleAtMs')")
-            .execute(&pool).await.unwrap();
-        let mut tx = pool.begin().await.unwrap();
-        let request = command(
-            "start",
-            0,
-            FocusIntent::StartScheduled {
-                occurrence_id: None,
-            },
-        );
-        let receipt = focus_read_command_receipt_tx(&mut tx, &request)
+        start(&pool).await;
+        sqlx::query("UPDATE focus_execution_state SET state_json = ?")
+            .bind(sqlx::types::Json(ExecutionState::default()))
+            .execute(&pool)
             .await
-            .unwrap()
             .unwrap();
-        assert_eq!(receipt.revision, started.revision);
-        assert_eq!(receipt.idle_overlay_visible_at_ms, None);
+        let recovered = observe(&pool, FocusObservation::Recover, &context(START + MINUTE)).await;
+        assert!(recovered.run.is_none());
+        assert!(recovered.segment.is_none());
     });
 }
 

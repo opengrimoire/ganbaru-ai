@@ -1,16 +1,4 @@
 import { invoke } from "@tauri-apps/api/core";
-import { dbUrl } from "$lib/api/db";
-import type { PlaybackStatus } from "$lib/music/playback";
-import type { MusicSourceKind } from "$lib/music/sources";
-
-export interface PlaybackStateRow {
-  sourceIdentity: string;
-  sourceKind: MusicSourceKind;
-  positionMs: number;
-  durationMs: number | null;
-  status: PlaybackStatus;
-  updatedAt: number;
-}
 
 export interface MediaFolderTrack {
   path: string;
@@ -35,13 +23,6 @@ export interface MusicYouTubeMetadataResponse {
   playlist: MusicYouTubeMetadataItem | null;
   videos: MusicYouTubeMetadataItem[];
   truncated: boolean;
-}
-
-export async function getPlaybackState(sourceIdentity: string): Promise<PlaybackStateRow | null> {
-  return invoke("music_get_playback_state", {
-    dbUrl: dbUrl(),
-    sourceIdentity,
-  });
 }
 
 export async function pickMediaFolder(): Promise<MediaFolderSelection | null> {
@@ -126,11 +107,4 @@ export async function getYouTubeMetadata(
 /** Loads a validated YouTube thumbnail from the device-local image cache. */
 export async function getYouTubeThumbnail(videoId: string): Promise<string | null> {
   return invoke("music_youtube_thumbnail", { videoId });
-}
-
-export async function savePlaybackState(state: PlaybackStateRow): Promise<void> {
-  await invoke("music_save_playback_state", {
-    dbUrl: dbUrl(),
-    state,
-  });
 }

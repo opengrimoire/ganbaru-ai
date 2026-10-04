@@ -17,10 +17,8 @@ export function exactOccurrenceId(event: CalendarEvent, template?: CalendarEvent
     ?? (event.recurrence || event.rdate?.length ? rootIdForEvent(event) : undefined);
   if (!root) return event.id;
   const qualifiedDate = event.id.match(/::(\d{4}-\d{2}-\d{2})$/)?.[1];
-  // Legacy presentation drafts can omit native provenance; persisted projections
-  // always supply recurrenceDate and must take precedence over displayed dates.
-  const date = event.recurrenceDate ?? qualifiedDate ?? event.start.split(" ")[0];
-  return `${root}::${date}`;
+  const date = event.recurrenceDate ?? qualifiedDate;
+  return date ? `${root}::${date}` : event.id;
 }
 
 /** Highlight only the accepted native occurrence, never a segment's device day. */

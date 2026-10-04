@@ -8,7 +8,7 @@ use super::providers::{
     DriverCancellation, DriverOperationContext, ProviderDriverFactory, ProviderDriverRegistry,
 };
 use super::repository::provider_lifecycle::{
-    self, EnqueueProviderLifecycleFailure, ProviderLifecycleJobRead, ProviderLifecycleOperation,
+    self, EnqueueProviderLifecycleFailure, ProviderLifecycleOperation,
 };
 use super::repository::{lifecycle, reads};
 use super::workspace::WorkingFolderAuthorizationOperation;
@@ -37,29 +37,6 @@ pub struct ForkChatThreadCommand {
 }
 
 #[tauri::command]
-pub async fn chat_list_project_shells(
-    app: tauri::AppHandle,
-    db_url: String,
-) -> ChatResult<Vec<reads::ChatProjectShellRead>> {
-    reads::read_project_shells(&chat_pool(app, db_url).await?).await
-}
-
-#[tauri::command]
-pub async fn chat_list_threads(
-    app: tauri::AppHandle,
-    db_url: String,
-    working_folder_id: Option<ProjectWorkingFolderId>,
-    archived: bool,
-) -> ChatResult<Vec<ChatThreadShellRead>> {
-    reads::read_thread_shells(
-        &chat_pool(app, db_url).await?,
-        working_folder_id.as_ref(),
-        archived,
-    )
-    .await
-}
-
-#[tauri::command]
 pub async fn chat_list_thread_window(
     app: tauri::AppHandle,
     db_url: String,
@@ -83,17 +60,6 @@ pub async fn chat_read_thread_shell(
     thread_id: ChatThreadId,
 ) -> ChatResult<ChatThreadShellRead> {
     reads::read_thread_shell(&chat_pool(app, db_url).await?, &thread_id).await
-}
-
-#[tauri::command]
-pub async fn chat_search_thread_titles(
-    app: tauri::AppHandle,
-    db_url: String,
-    query: String,
-    archived: Option<bool>,
-    limit: u32,
-) -> ChatResult<Vec<ChatThreadShellRead>> {
-    reads::search_thread_titles(&chat_pool(app, db_url).await?, &query, archived, limit).await
 }
 
 #[tauri::command]
@@ -461,15 +427,6 @@ pub async fn chat_delete_thread_permanently(
     )
     .await?;
     Ok(())
-}
-
-#[tauri::command]
-pub async fn chat_list_provider_cleanup_jobs(
-    app: tauri::AppHandle,
-    db_url: String,
-    thread_id: Option<ChatThreadId>,
-) -> ChatResult<Vec<ProviderLifecycleJobRead>> {
-    provider_lifecycle::list_retryable(&chat_pool(app, db_url).await?, thread_id.as_ref()).await
 }
 
 async fn set_thread_archived(

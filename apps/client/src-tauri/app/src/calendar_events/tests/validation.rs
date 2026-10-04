@@ -45,16 +45,3 @@ fn rejects_confidential_event_visibility() {
         .is_err()
     );
 }
-
-#[test]
-fn filters_excluded_progress_dates() {
-    let dates = vec![
-        "2026-05-07".to_string(),
-        "2026-05-08".to_string(),
-        "2026-05-09".to_string(),
-    ];
-    assert_eq!(
-        filter_excluded_dates(dates, Some("2026-05-08")),
-        vec!["2026-05-07".to_string(), "2026-05-09".to_string()]
-    );
-}

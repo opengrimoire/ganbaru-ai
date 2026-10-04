@@ -117,21 +117,6 @@ fn notification_summary(value: &str) -> String {
 }
 
 #[tauri::command]
-pub fn play_app_sound(
-    sound_id: String,
-    app_sounds: State<'_, AppSoundState>,
-) -> Result<(), String> {
-    let sound = AppSound::from_id(&sound_id)?;
-    app_sounds.play(sound);
-    Ok(())
-}
-
-#[tauri::command]
-pub fn play_alert_sound(app_sounds: State<'_, AppSoundState>) {
-    app_sounds.play(AppSound::EventNotification);
-}
-
-#[tauri::command]
 pub fn show_event_notification(
     app: tauri::AppHandle,
     title: String,

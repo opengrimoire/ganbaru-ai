@@ -2,12 +2,11 @@
 
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
-use tauri::AppHandle;
 
 use crate::recurrence::canonical::{DeletePlan, EditScope, ScopeClock};
 
 use super::metadata::revision;
-use super::scope::{ScopeRequest, ScopeSnapshot, prepare_request_with_clock};
+use super::scope::{ScopeRequest, ScopeSnapshot};
 
 mod undo;
 mod write;
@@ -102,6 +101,7 @@ pub(crate) struct PreparedDelete {
 
 /// Read-only preparation accepts neither browser clocks nor mutation operations.
 /// Complete metadata contributes to the review digest even when geometry matches.
+#[cfg(test)]
 pub(super) fn prepare(
     snapshot: ScopeSnapshot,
     selected: NaiveDate,
@@ -167,57 +167,4 @@ pub(super) fn prepare_commit(
         valid_until,
         clock.floating_today,
     ))
-}
-
-/// Review deletion with native time, original recurrence identities and complete
-/// source evidence. This command never accepts a client-authored deletion plan.
-#[tauri::command]
-pub(crate) async fn calendar_prepare_delete(
-    app: AppHandle,
-    db_url: String,
-    request: ScopeRequest,
-) -> Result<DeleteReviewResponse, String> {
-    let (vault_id, vault_generation, floor) =
-        crate::pomodoro::native_runtime::calendar_review_context(&app).await?;
-    let expected_vault = vault_id.clone();
-    let verify_app = app.clone();
-    let review = prepare_request_with_clock(
-        app.clone(),
-        db_url,
-        request,
-        floor,
-        move |snapshot, selected, scope, clock| {
-            let review = prepare(snapshot, selected, scope, clock)?;
-            if crate::vault::active_vault_id(&verify_app)? != expected_vault {
-                return Err("Calendar vault changed while reviewing deletion".into());
-            }
-            Ok(review)
-        },
-    )
-    .await?;
-    let (current_vault, current_generation, current_clock) =
-        crate::pomodoro::native_runtime::calendar_review_context(&app).await?;
-    if current_vault != vault_id
-        || current_generation != vault_generation
-        || review
-            .plan
-            .valid_until_ms
-            .is_some_and(|deadline| current_clock >= deadline)
-    {
-        return Err("Calendar vault or protection changed while reviewing deletion".into());
-    }
-    Ok(DeleteReviewResponse {
-        vault_id,
-        vault_generation,
-        review,
-    })
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct DeleteReviewResponse {
-    vault_id: String,
-    vault_generation: u64,
-    #[serde(flatten)]
-    review: PreparedDelete,
 }

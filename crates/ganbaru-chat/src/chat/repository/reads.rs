@@ -179,32 +179,6 @@ pub async fn read_thread_shell(
     .ok_or_else(not_found)
 }
 
-pub async fn read_thread_shells_by_ids(
-    pool: &SqlitePool,
-    thread_ids: &BTreeSet<String>,
-) -> ChatResult<Vec<ChatThreadShellRead>> {
-    if thread_ids.is_empty() {
-        return Ok(Vec::new());
-    }
-    let encoded_ids = serde_json::to_string(thread_ids).map_err(serialization_error)?;
-    let rows = sqlx::query(
-        "SELECT id, working_folder_id, execution_environment_id, scratch_generation_id,
-                project_id, title, provider_family_id,
-                provider_instance_id, provider_thread_id, model_selection_data,
-                safety_mode, interaction_mode, state, latest_turn_state,
-                latest_preview, message_count, revision, last_event_sequence,
-                last_activity_at, unread_at, archived_at
-         FROM chat_threads
-         WHERE id IN (SELECT value FROM json_each(?))
-         ORDER BY id",
-    )
-    .bind(encoded_ids)
-    .fetch_all(pool)
-    .await
-    .map_err(persistence_error)?;
-    rows.into_iter().map(row_to_thread_shell).collect()
-}
-
 pub async fn search_thread_titles(
     pool: &SqlitePool,
     query: &str,

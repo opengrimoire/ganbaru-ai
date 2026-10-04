@@ -14,7 +14,6 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 import {
-  HELD_NAVIGATION_DURATION_MS,
   HARNESS_VERSION,
   DENSE_DATASET_VERSION,
   resolveBenchmarkAnchorDate,
@@ -291,10 +290,4 @@ async function discardStaleArtifacts(): Promise<void> {
 
 export async function clearPersistedState(): Promise<void> {
   await invoke("clear_benchmark_state");
-}
-
-/** Confirm that a stress duration was within the expected window. */
-export function withinStressBudget(actual: number): boolean {
-  // Allow 10% slack either way for jitter.
-  return Math.abs(actual - HELD_NAVIGATION_DURATION_MS) <= HELD_NAVIGATION_DURATION_MS * 0.1;
 }

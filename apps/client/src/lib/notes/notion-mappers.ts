@@ -7,7 +7,6 @@ import {
   parseNotesDatabaseView,
   parseNotesDataSourceBoardView,
   parseNotesDataSourceCalendarView,
-  parseNotesDataSourceCsvExportResult,
   parseNotesDataSourceCsvExportSaveResult,
   parseNotesDataSourceCsvImportResult,
   parseNotesDataSourceGalleryView,
@@ -18,11 +17,8 @@ import {
   parseNotesDataSourceTimelineView,
   parseNotesFolder,
   parseNotesHtmlArchiveSaveResult,
-  parseNotesHtmlExportResult,
   parseNotesHtmlImportResult,
-  parseNotesAgentBridgeExportResult,
   parseNotesAgentBridgeExportSaveResult,
-  parseNotesJsonGraphExportResult,
   parseNotesJsonGraphExportSaveResult,
   parseNotesLocalUser,
   parseNotesLoadedPage,
@@ -31,8 +27,6 @@ import {
   parseNotesBlockOutline,
   parseNotesNotionApiImportResult,
   parseNotesNotionExportImportResult,
-  parseNotesMarkdownExportResult,
-  parseNotesMarkdownImportResult,
   parseNotesMentionNotification,
   parseNotesPage,
   parseNotesPageAlias,
@@ -54,7 +48,6 @@ import type {
   NotesDatabaseView,
   NotesDataSourceBoardView,
   NotesDataSourceCalendarView,
-  NotesDataSourceCsvExportResult,
   NotesDataSourceCsvExportSaveResult,
   NotesDataSourceCsvImportResult,
   NotesDataSourceGalleryView,
@@ -65,11 +58,8 @@ import type {
   NotesDataSourceTimelineView,
   NotesFolder,
   NotesHtmlArchiveSaveResult,
-  NotesHtmlExportResult,
   NotesHtmlImportResult,
-  NotesAgentBridgeExportResult,
   NotesAgentBridgeExportSaveResult,
-  NotesJsonGraphExportResult,
   NotesJsonGraphExportSaveResult,
   NotesLocalUser,
   NotesLoadedPage,
@@ -78,8 +68,6 @@ import type {
   NotesBlockOutline,
   NotesNotionApiImportResult,
   NotesNotionExportImportResult,
-  NotesMarkdownExportResult,
-  NotesMarkdownImportResult,
   NotesMentionNotification,
   NotesPage,
   NotesPageAlias,
@@ -133,11 +121,6 @@ export function mapNotesBlockOutlineDto(value: unknown): NotesBlockOutline {
   return parseNotesBlockOutline(value);
 }
 
-/** Validate and map an unknown markdown import DTO from the Tauri boundary. */
-export function mapNotesMarkdownImportDto(value: unknown): NotesMarkdownImportResult {
-  return parseNotesMarkdownImportResult(value);
-}
-
 /** Validate and map an unknown HTML import DTO from the Tauri boundary. */
 export function mapNotesHtmlImportDto(value: unknown): NotesHtmlImportResult {
   return parseNotesHtmlImportResult(value);
@@ -153,19 +136,9 @@ export function mapNotesNotionExportImportDto(value: unknown): NotesNotionExport
   return parseNotesNotionExportImportResult(value);
 }
 
-/** Validate and map an unknown HTML export DTO from the Tauri boundary. */
-export function mapNotesHtmlExportDto(value: unknown): NotesHtmlExportResult {
-  return parseNotesHtmlExportResult(value);
-}
-
 /** Validate and map an unknown HTML archive save DTO from the Tauri boundary. */
 export function mapNotesHtmlArchiveSaveDto(value: unknown): NotesHtmlArchiveSaveResult {
   return parseNotesHtmlArchiveSaveResult(value);
-}
-
-/** Validate and map an unknown JSON graph export DTO from the Tauri boundary. */
-export function mapNotesJsonGraphExportDto(value: unknown): NotesJsonGraphExportResult {
-  return parseNotesJsonGraphExportResult(value);
 }
 
 /** Validate and map an unknown JSON graph export save DTO from the Tauri boundary. */
@@ -173,21 +146,11 @@ export function mapNotesJsonGraphExportSaveDto(value: unknown): NotesJsonGraphEx
   return parseNotesJsonGraphExportSaveResult(value);
 }
 
-/** Validate and map an unknown agent bridge export DTO from the Tauri boundary. */
-export function mapNotesAgentBridgeExportDto(value: unknown): NotesAgentBridgeExportResult {
-  return parseNotesAgentBridgeExportResult(value);
-}
-
 /** Validate and map an unknown agent bridge export save DTO from the Tauri boundary. */
 export function mapNotesAgentBridgeExportSaveDto(
   value: unknown,
 ): NotesAgentBridgeExportSaveResult {
   return parseNotesAgentBridgeExportSaveResult(value);
-}
-
-/** Validate and map an unknown markdown export DTO from the Tauri boundary. */
-export function mapNotesMarkdownExportDto(value: unknown): NotesMarkdownExportResult {
-  return parseNotesMarkdownExportResult(value);
 }
 
 /** Validate and map an unknown page breadcrumb item DTO from the Tauri boundary. */
@@ -278,11 +241,6 @@ export function mapNotesDataSourceTableViewDto(value: unknown): NotesDataSourceT
 /** Validate and map an unknown local data source CSV import DTO from the Tauri boundary. */
 export function mapNotesDataSourceCsvImportDto(value: unknown): NotesDataSourceCsvImportResult {
   return parseNotesDataSourceCsvImportResult(value);
-}
-
-/** Validate and map an unknown local data source CSV export DTO from the Tauri boundary. */
-export function mapNotesDataSourceCsvExportDto(value: unknown): NotesDataSourceCsvExportResult {
-  return parseNotesDataSourceCsvExportResult(value);
 }
 
 /** Validate and map an unknown local data source CSV export save DTO from the Tauri boundary. */

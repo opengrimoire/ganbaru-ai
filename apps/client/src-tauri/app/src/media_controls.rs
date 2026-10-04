@@ -35,7 +35,6 @@ struct MusicHardwareControlPayload {
     shuffle_enabled: Option<bool>,
 }
 
-#[tauri::command]
 pub fn update_media_controls(update: MediaControlsUpdate) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     linux::update_mpris_state(update);

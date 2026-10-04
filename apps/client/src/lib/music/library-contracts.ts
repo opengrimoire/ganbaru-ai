@@ -179,7 +179,6 @@ export interface MusicSnoozeWrite {
   reason: string;
   createdAt: number;
 }
-export interface MusicStatisticsReset { itemIds: string[]; resetAggregates: boolean; resetRecentSelections: boolean }
 export interface MusicInterchangeImportResult { playlistCount: number; itemCount: number; membershipCount: number; assignmentCount: number }
 export interface MusicItemSignalsWrite { itemIds: string[]; signals: MusicItemSignal[]; updatedAt: number }
 export interface MusicCollectionWrite {
@@ -189,37 +188,6 @@ export interface MusicCollectionWrite {
   name: string;
   localRootId: string | null;
   youtubePlaylistId: string | null;
-  updatedAt: number;
-}
-export interface MusicLibraryItemWrite {
-  id: string;
-  identityKey: string;
-  sourceKind: MusicLibrarySourceKind;
-  mediaKind: MusicMediaKind;
-  youtubeVideoId: string | null;
-  originalTitle: string;
-  originalArtist: string;
-  originalAlbum: string;
-  originalTrackNumber: number | null;
-  originalArtworkIdentity: string | null;
-  youtubeResolutionState: MusicYouTubeResolutionState | null;
-  durationMs: number | null;
-  availability: MusicItemAvailability;
-  discoveredAt: number;
-  updatedAt: number;
-}
-export interface MusicLocalLocationWrite {
-  id: string;
-  itemId: string;
-  rootId: string;
-  relativePath: string;
-  fileSizeBytes: number | null;
-  modifiedAtMs: number | null;
-  lightweightFingerprint: string | null;
-  strongFingerprint: string | null;
-  availability: MusicLocationAvailability;
-  lastSeenGeneration: number | null;
-  firstSeenAt: number;
   updatedAt: number;
 }
 export interface MusicLocalRootCreate {
@@ -758,7 +726,6 @@ export const parseRoots = (value: unknown): MusicLocalRoot[] => array(value, par
 function parseCollection(value: unknown, label: string): MusicSourceCollection { const row = object(value, label); return { id: string(row.id, `${label}.id`), kind: enumeration(row.kind, collectionKinds, `${label}.kind`), identityKey: string(row.identityKey, `${label}.identityKey`), name: string(row.name, `${label}.name`), localRootId: nullable(row.localRootId, string, `${label}.localRootId`), youtubePlaylistId: nullable(row.youtubePlaylistId, string, `${label}.youtubePlaylistId`), refreshState: enumeration(row.refreshState, refreshStates, `${label}.refreshState`), lastSuccessfulRefreshAt: nullable(row.lastSuccessfulRefreshAt, number, `${label}.lastSuccessfulRefreshAt`), previousSuccessfulRefreshAt: nullable(row.previousSuccessfulRefreshAt, number, `${label}.previousSuccessfulRefreshAt`), lastRefreshErrorCode: nullable(row.lastRefreshErrorCode, string, `${label}.lastRefreshErrorCode`), snapshotGeneration: number(row.snapshotGeneration, `${label}.snapshotGeneration`), createdAt: number(row.createdAt, `${label}.createdAt`), updatedAt: number(row.updatedAt, `${label}.updatedAt`), version: number(row.version, `${label}.version`), discoveryEnabled: boolean(row.discoveryEnabled, `${label}.discoveryEnabled`), removedAt: nullable(row.removedAt, number, `${label}.removedAt`) }; }
 export const parseCollections = (value: unknown): MusicSourceCollection[] => array(value, parseCollection, "music collections");
 export function parsePlaylist(value: unknown): MusicPlaylist { const row = object(value, "music playlist"); return { id: string(row.id, "music playlist.id"), name: string(row.name, "music playlist.name"), icon: string(row.icon, "music playlist.icon"), shuffleEnabled: boolean(row.shuffleEnabled, "music playlist.shuffleEnabled"), mixEnabled: boolean(row.mixEnabled, "music playlist.mixEnabled"), repeatMode: enumeration(row.repeatMode, repeatModes, "music playlist.repeatMode"), intendedUses: array(row.intendedUses, (entry, label) => enumeration(entry, intendedUses, label), "music playlist.intendedUses"), sortOrder: number(row.sortOrder, "music playlist.sortOrder"), createdAt: number(row.createdAt, "music playlist.createdAt"), updatedAt: number(row.updatedAt, "music playlist.updatedAt"), version: number(row.version, "music playlist.version") }; }
-export function parseSearchRebuild(value: unknown): MusicSearchRebuildResult { const row = object(value, "music search rebuild"); return { indexedItemCount: number(row.indexedItemCount, "music search rebuild.indexedItemCount"), schemaVersion: number(row.schemaVersion, "music search rebuild.schemaVersion"), fingerprint: string(row.fingerprint, "music search rebuild.fingerprint"), rebuiltAt: number(row.rebuiltAt, "music search rebuild.rebuiltAt") }; }
 function parseBinding(value: unknown, label: string): LocalRootBinding { const row = object(value, label); return { rootId: string(row.rootId, `${label}.rootId`), folderPath: nullable(row.folderPath, string, `${label}.folderPath`), status: enumeration(row.status, rootStatuses, `${label}.status`) }; }
 export const parseBindings = (value: unknown): LocalRootBinding[] => array(value, parseBinding, "music root bindings");
 export const parseBindingResult = (value: unknown): LocalRootBinding => parseBinding(value, "music root binding");
@@ -791,10 +758,6 @@ function parsePlaylistPlaybackEntry(value: unknown, label: string): MusicPlaylis
   };
 }
 export const parsePlaylistPlaybackEntries = (value: unknown): MusicPlaylistPlaybackEntry[] => array(value, parsePlaylistPlaybackEntry, "playlist playback entries");
-export const parseRecentSelections = (value: unknown): MusicRecentSelection[] => array(value, (entry, label) => {
-  const row = object(entry, label);
-  return { itemId: string(row.itemId, `${label}.itemId`), selectedAt: number(row.selectedAt, `${label}.selectedAt`) };
-}, "recent music selections");
 export function parseRelinkPlanSummary(value: unknown): MusicRelinkPlanSummary {
   const row = object(value, "music relink plan");
   return {

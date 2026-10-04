@@ -104,7 +104,7 @@ Mechanically obvious prose, copy, or link changes need no code validation unless
 
 Backend persistence, SQLite, import, export, migrations, membership, note saving, and other data-loss-sensitive changes require focused tests during implementation and a broader completion gate proportional to risk.
 
-Tests must consider existing installs, stale rows, unknown values, older exports, rollback, partial failure, idempotency, and cleanup of obsolete data.
+Tests must cover current-format state, stale rows, unknown values, supported external imports, rollback, partial failure, and idempotency. Unsupported pre-user internal formats should be rejected explicitly, not maintained through compatibility fixtures. Preserve regression fixtures that exercise current production behavior.
 
 ### Pull requests and releases
 

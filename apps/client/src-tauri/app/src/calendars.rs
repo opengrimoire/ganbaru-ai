@@ -211,11 +211,7 @@ pub(crate) async fn retain_archived_imports_tx(
     let mut budget = crate::calendar_events::ReadBudget::default();
     let objects = budget.read::<(String,)>(tx, calendar_id,
         "SELECT object.id FROM icalendar_objects object WHERE object.calendar_id=?1 AND (
-            EXISTS(SELECT 1 FROM calendar_event_archive_import_objects owner WHERE owner.object_id=object.id)
-            OR EXISTS(SELECT 1 FROM icalendar_components component JOIN calendar_events_archive archive ON archive.icalendar_component_id=component.id WHERE component.object_id=object.id)
-            OR EXISTS(SELECT 1 FROM icalendar_components component JOIN calendar_event_archive_alarms archive ON archive.icalendar_component_id=component.id WHERE component.object_id=object.id)
-            OR EXISTS(SELECT 1 FROM icalendar_components component JOIN calendar_event_archive_attendees archive ON archive.icalendar_component_id=component.id WHERE component.object_id=object.id)
-            OR EXISTS(SELECT 1 FROM icalendar_components component JOIN calendar_event_archive_overrides archive ON archive.icalendar_component_id=component.id WHERE component.object_id=object.id))",
+            EXISTS(SELECT 1 FROM calendar_event_archive_import_objects owner WHERE owner.object_id=object.id))",
         &["id"]).await?;
     if objects.is_empty() {
         return Ok(());
@@ -223,7 +219,7 @@ pub(crate) async fn retain_archived_imports_tx(
     let objects = serde_json::to_string(&objects.into_iter().map(|row| row.0).collect::<Vec<_>>())
         .map_err(|error| format!("encode archived calendar imports: {error}"))?;
     // This shares the complete object/component allocation allowance. A large
-    // legacy graph fails before calendar deletion can cascade away its history.
+    // retained graph fails before calendar deletion can cascade away its history.
     budget.read::<(String,)>(tx, &objects,
         "SELECT id FROM icalendar_components WHERE object_id IN (SELECT value FROM json_each(?1))", &["id"]).await?;
     sqlx::query("UPDATE icalendar_components SET calendar_id=?1 WHERE object_id IN (SELECT value FROM json_each(?2))")

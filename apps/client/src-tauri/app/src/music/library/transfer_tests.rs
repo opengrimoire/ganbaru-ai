@@ -49,13 +49,14 @@ fn music_transfer_m3u_preserves_titles_unicode_and_rejects_external_urls() {
 }
 
 #[test]
-fn music_transfer_json_keeps_legacy_mix_and_unknown_record_diagnostics() {
+fn music_transfer_json_requires_mix_and_retains_unknown_record_diagnostics() {
     let mut document: serde_json::Value = serde_json::from_str(&source().contents).unwrap();
     document["playlists"][0]
         .as_object_mut()
         .unwrap()
         .remove("mixEnabled");
-    assert!(!codec::parse_json(&document.to_string()).unwrap().playlists[0].mix_enabled);
+    assert!(codec::parse_json(&document.to_string()).is_err());
+    document["playlists"][0]["mixEnabled"] = serde_json::json!(false);
     document["playlists"][0]["memberships"][0]["item"]["sourceKind"] =
         serde_json::json!("future-source");
     let parsed = codec::parse_json(&document.to_string()).unwrap();

@@ -73,12 +73,7 @@ internal class DoomscrollingJournal(context: Context) : SQLiteOpenHelper(
   }
 
   override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-    require(oldVersion == 1 && newVersion == 2) {
-      "Unsupported Doomscrolling journal schema change from $oldVersion to $newVersion"
-    }
-    db.execSQL("ALTER TABLE journal_events ADD COLUMN exported INTEGER NOT NULL DEFAULT 0")
-    // Legacy identities may already be accepted by an owner after a lost response.
-    db.execSQL("UPDATE journal_events SET exported = 1")
+    error("Unsupported development Doomscrolling journal schema $oldVersion; reset application data for schema $newVersion")
   }
 
   fun recordUsageBatch(

@@ -5,7 +5,6 @@ use std::io::{self, Write};
 
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Runtime};
 
 use crate::calendar_description::sanitize_calendar_description_html;
 use crate::recurrence::canonical::{
@@ -16,7 +15,7 @@ use crate::recurrence::canonical::{
 use super::children::{
     parse_geo, parse_i64_list, parse_organizer, parse_string_list, parse_string_map,
 };
-use super::scope::{ScopeRequest, ScopeSnapshot, prepare_request};
+use super::scope::{ScopeRequest, ScopeSnapshot};
 use super::types::{
     CalendarEventAlarm, CalendarEventAttendee, CalendarEventUpdateField,
     CalendarPomodoroConfigPatch,
@@ -374,32 +373,6 @@ pub(super) fn prepare_action(
         source_anchor: template.anchor_date(),
         source_id: snapshot.geometry.source.id,
     })
-}
-
-/// Prepare user intent and native protection without accepting mutation batches.
-#[tauri::command]
-pub(crate) async fn calendar_prepare_edit<R: Runtime>(
-    app: AppHandle<R>,
-    db_url: String,
-    request: EditRequest,
-) -> Result<PreparedEdit, String> {
-    request.draft.check_limits()?;
-    prepare_request(
-        app,
-        db_url,
-        request.selection,
-        move |snapshot, selected, scope, clock| {
-            prepare_action(
-                snapshot,
-                selected,
-                scope,
-                clock,
-                request.draft,
-                request.action,
-            )
-        },
-    )
-    .await
 }
 
 #[cfg(test)]

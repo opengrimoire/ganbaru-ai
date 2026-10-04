@@ -237,30 +237,6 @@ fn built_in_music_playlists_are_protected_localizable_and_repaired() {
 }
 
 #[test]
-fn library_items_require_source_specific_identity() {
-    let item = MusicLibraryItemWrite {
-        id: "item-1".to_string(),
-        identity_key: "youtube:item-1".to_string(),
-        source_kind: MusicLibrarySourceKind::YouTubeVideo,
-        media_kind: MusicMediaKind::Video,
-        youtube_video_id: None,
-        original_title: "Video".to_string(),
-        original_artist: String::new(),
-        original_album: String::new(),
-        original_track_number: None,
-        original_artwork_identity: None,
-        youtube_resolution_state: None,
-        duration_ms: None,
-        availability: MusicItemAvailability::Unknown,
-        discovered_at: 1_700_000_000_000,
-        updated_at: 1_700_000_000_000,
-    };
-
-    let error = validate_library_item_write(&item).unwrap_err();
-    assert_eq!(error.field.as_deref(), Some("youtubeVideoId"));
-}
-
-#[test]
 fn local_root_creation_is_atomic_and_rejects_duplicate_identity() {
     tauri::async_runtime::block_on(async {
         let pool = pool().await;
@@ -355,107 +331,6 @@ fn item_location_repair_requires_weak_match_confirmation_and_can_be_undone() {
 }
 
 #[test]
-fn item_and_location_upserts_preserve_canonical_identity_and_refresh_search() {
-    tauri::async_runtime::block_on(async {
-        let pool = pool().await;
-        sqlx::query(
-            "INSERT INTO music_local_roots (id, name, created_at, updated_at)
-             VALUES ('root-1', 'Soundtracks', 1700000000000, 1700000000000)",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
-        let item = MusicLibraryItemWrite {
-            id: "item-1".to_string(),
-            identity_key: "local:fingerprint-1".to_string(),
-            source_kind: MusicLibrarySourceKind::LocalFile,
-            media_kind: MusicMediaKind::Audio,
-            youtube_video_id: None,
-            original_title: "First title".to_string(),
-            original_artist: "Composer".to_string(),
-            original_album: "Album".to_string(),
-            original_track_number: Some(3),
-            original_artwork_identity: None,
-            youtube_resolution_state: None,
-            duration_ms: Some(120_000),
-            availability: MusicItemAvailability::Available,
-            discovered_at: 1_700_000_000_000,
-            updated_at: 1_700_000_000_000,
-        };
-        let created = writes::upsert_library_item(&pool, item.clone())
-            .await
-            .unwrap();
-        assert_eq!(created.version, 1);
-
-        let mut updated = item.clone();
-        updated.original_title = "Updated title".to_string();
-        updated.updated_at += 1;
-        let receipt = writes::upsert_library_item(&pool, updated).await.unwrap();
-        assert_eq!(receipt.version, 2);
-        let stored_review: String =
-            sqlx::query_scalar("SELECT review_state FROM music_library_items WHERE id = 'item-1'")
-                .fetch_one(&pool)
-                .await
-                .unwrap();
-        assert_eq!(stored_review, "unreviewed");
-
-        writes::upsert_local_location(
-            &pool,
-            MusicLocalLocationWrite {
-                id: "location-1".to_string(),
-                item_id: "item-1".to_string(),
-                root_id: "root-1".to_string(),
-                relative_path: "Album/Updated title.flac".to_string(),
-                file_size_bytes: Some(2_000_000),
-                modified_at_ms: Some(1_700_000_000_000),
-                lightweight_fingerprint: Some("light-1".to_string()),
-                strong_fingerprint: None,
-                availability: MusicLocationAvailability::Available,
-                last_seen_generation: Some(1),
-                first_seen_at: 1_700_000_000_000,
-                updated_at: 1_700_000_000_001,
-            },
-        )
-        .await
-        .unwrap();
-        let search_title: String =
-            sqlx::query_scalar("SELECT title FROM music_search_fts WHERE item_id = 'item-1'")
-                .fetch_one(&pool)
-                .await
-                .unwrap();
-        assert_eq!(search_title, "Updated title");
-
-        let mut conflicting = item;
-        conflicting.identity_key = "local:different".to_string();
-        let error = writes::upsert_library_item(&pool, conflicting)
-            .await
-            .unwrap_err();
-        assert_eq!(error.code, MusicLibraryErrorCode::Conflict);
-    });
-}
-
-#[test]
-fn local_locations_reject_paths_that_escape_their_root() {
-    let location = MusicLocalLocationWrite {
-        id: "location-1".to_string(),
-        item_id: "item-1".to_string(),
-        root_id: "root-1".to_string(),
-        relative_path: "../outside.mp3".to_string(),
-        file_size_bytes: Some(100),
-        modified_at_ms: None,
-        lightweight_fingerprint: None,
-        strong_fingerprint: None,
-        availability: MusicLocationAvailability::Available,
-        last_seen_generation: Some(1),
-        first_seen_at: 1_700_000_000_000,
-        updated_at: 1_700_000_000_000,
-    };
-
-    let error = validate_local_location_write(&location).unwrap_err();
-    assert_eq!(error.field.as_deref(), Some("relativePath"));
-}
-
-#[test]
 fn memberships_reject_invalid_ranges_and_duplicate_bulk_identity() {
     let mut invalid = membership(0);
     invalid.start_ms = Some(5_000);
@@ -485,22 +360,6 @@ fn bulk_memberships_have_an_explicit_request_bound() {
     };
     let error = validate_bulk_membership_write(&request).unwrap_err();
     assert!(error.message.contains("500 item limit"));
-}
-
-#[test]
-fn snooze_scope_and_timestamp_are_validated_together() {
-    let snooze = MusicSnoozeWrite {
-        id: "snooze-1".to_string(),
-        item_id: "item-1".to_string(),
-        scope: MusicSnoozeScope::Playlist,
-        playlist_id: None,
-        starts_at: 1_700_000_000_000,
-        ends_at: Some(1_699_999_999_999),
-        reason: String::new(),
-        created_at: 1_700_000_000_000,
-    };
-    let error = validate_snooze_write(&snooze).unwrap_err();
-    assert_eq!(error.field.as_deref(), Some("endsAt"));
 }
 
 #[test]
@@ -1644,11 +1503,11 @@ fn overlapping_snoozes_expire_and_resume_independently() {
                 None,
             ),
         ] {
-            super::writes::upsert_snooze(
+            super::playlist_edits::bulk_snooze(
                 &pool,
-                MusicSnoozeWrite {
-                    id: id.to_string(),
-                    item_id: "item-1".to_string(),
+                MusicBulkSnoozeWrite {
+                    action_id: id.to_string(),
+                    item_ids: vec!["item-1".to_string()],
                     scope,
                     playlist_id,
                     starts_at: 1_700_000_000_000,
@@ -1667,10 +1526,16 @@ fn overlapping_snoozes_expire_and_resume_independently() {
         assert!(active[0].snoozed);
         assert!(active[0].snoozed_indefinitely);
 
+        let playlist_snooze_id: String = sqlx::query_scalar(
+            "SELECT id FROM music_snoozes WHERE item_id = 'item-1' AND playlist_id = 'playlist-1'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
         super::writes::remove_snooze(
             &pool,
             MusicSnoozeRemove {
-                snooze_id: "snooze-playlist".to_string(),
+                snooze_id: playlist_snooze_id,
             },
         )
         .await

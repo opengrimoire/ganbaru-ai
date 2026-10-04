@@ -6,30 +6,6 @@ fn connection_error(error: String) -> MusicLibraryError {
 }
 
 #[tauri::command]
-pub async fn music_library_upsert_item(
-    app: tauri::AppHandle,
-    db_url: String,
-    request: MusicLibraryItemWrite,
-) -> MusicLibraryResult<MusicWriteReceipt> {
-    let pool = connect_sqlite(app, db_url)
-        .await
-        .map_err(connection_error)?;
-    super::writes::upsert_library_item(&pool, request).await
-}
-
-#[tauri::command]
-pub async fn music_library_upsert_local_location(
-    app: tauri::AppHandle,
-    db_url: String,
-    request: MusicLocalLocationWrite,
-) -> MusicLibraryResult<()> {
-    let pool = connect_sqlite(app, db_url)
-        .await
-        .map_err(connection_error)?;
-    super::writes::upsert_local_location(&pool, request).await
-}
-
-#[tauri::command]
 pub async fn music_library_start_local_refresh(
     app: tauri::AppHandle,
     db_url: String,
@@ -213,21 +189,6 @@ pub async fn music_library_remove_source(
 }
 
 #[tauri::command]
-pub async fn music_library_restore_source(
-    app: tauri::AppHandle,
-    db_url: String,
-    collection_id: String,
-    expected_version: i64,
-    restored_at: i64,
-) -> MusicLibraryResult<MusicWriteReceipt> {
-    let pool = connect_sqlite(app, db_url)
-        .await
-        .map_err(connection_error)?;
-    super::source_lifecycle::restore_source(&pool, &collection_id, expected_version, restored_at)
-        .await
-}
-
-#[tauri::command]
 pub async fn music_library_create_playlist(
     app: tauri::AppHandle,
     db_url: String,
@@ -397,31 +358,6 @@ pub async fn music_library_playlist_playback_entries(
 }
 
 #[tauri::command]
-pub async fn music_library_record_listening(
-    app: tauri::AppHandle,
-    db_url: String,
-    request: MusicListeningUpdate,
-) -> MusicLibraryResult<()> {
-    let pool = connect_sqlite(app, db_url)
-        .await
-        .map_err(connection_error)?;
-    super::playback::record_listening(&pool, request).await
-}
-
-#[tauri::command]
-pub async fn music_library_recent_selections(
-    app: tauri::AppHandle,
-    db_url: String,
-    playlist_id: Option<String>,
-    limit: i64,
-) -> MusicLibraryResult<Vec<MusicRecentSelection>> {
-    let pool = connect_sqlite(app, db_url)
-        .await
-        .map_err(connection_error)?;
-    super::playback::recent_selections(&pool, playlist_id, limit).await
-}
-
-#[tauri::command]
 pub async fn music_library_context_assignments(
     app: tauri::AppHandle,
     db_url: String,
@@ -432,30 +368,6 @@ pub async fn music_library_context_assignments(
         .await
         .map_err(connection_error)?;
     super::contexts::assignments(&pool, owner_kind, &owner_id).await
-}
-
-#[tauri::command]
-pub async fn music_library_context_assignments_for_playlists(
-    app: tauri::AppHandle,
-    db_url: String,
-    playlist_ids: Vec<String>,
-) -> MusicLibraryResult<Vec<MusicContextAssignment>> {
-    let pool = connect_sqlite(app, db_url)
-        .await
-        .map_err(connection_error)?;
-    super::contexts::assignments_for_playlists(&pool, playlist_ids).await
-}
-
-#[tauri::command]
-pub async fn music_library_replace_context_assignments(
-    app: tauri::AppHandle,
-    db_url: String,
-    request: MusicContextAssignmentSet,
-) -> MusicLibraryResult<Vec<MusicContextAssignment>> {
-    let pool = connect_sqlite(app, db_url)
-        .await
-        .map_err(connection_error)?;
-    super::contexts::replace_assignments(&pool, request).await
 }
 
 #[tauri::command]
@@ -519,18 +431,6 @@ pub async fn music_library_remove_memberships(
 }
 
 #[tauri::command]
-pub async fn music_library_upsert_snooze(
-    app: tauri::AppHandle,
-    db_url: String,
-    request: MusicSnoozeWrite,
-) -> MusicLibraryResult<()> {
-    let pool = connect_sqlite(app, db_url)
-        .await
-        .map_err(connection_error)?;
-    super::writes::upsert_snooze(&pool, request).await
-}
-
-#[tauri::command]
 pub async fn music_library_remove_snooze(
     app: tauri::AppHandle,
     db_url: String,
@@ -540,18 +440,6 @@ pub async fn music_library_remove_snooze(
         .await
         .map_err(connection_error)?;
     super::writes::remove_snooze(&pool, request).await
-}
-
-#[tauri::command]
-pub async fn music_library_reset_statistics(
-    app: tauri::AppHandle,
-    db_url: String,
-    request: MusicStatisticsReset,
-) -> MusicLibraryResult<()> {
-    let pool = connect_sqlite(app, db_url)
-        .await
-        .map_err(connection_error)?;
-    super::writes::reset_statistics(&pool, request).await
 }
 
 // Parsing and serialization run on one bounded native worker, never on a WebView thread.
@@ -716,18 +604,6 @@ pub async fn music_library_inspector_detail(
         .await
         .map_err(connection_error)?;
     super::queries::inspector_detail(&pool, &item_id).await
-}
-
-#[tauri::command]
-pub async fn music_library_rebuild_search_index(
-    app: tauri::AppHandle,
-    db_url: String,
-    rebuilt_at: i64,
-) -> MusicLibraryResult<MusicSearchRebuildResult> {
-    let pool = connect_sqlite(app, db_url)
-        .await
-        .map_err(connection_error)?;
-    super::search::rebuild(&pool, rebuilt_at).await
 }
 
 #[tauri::command]

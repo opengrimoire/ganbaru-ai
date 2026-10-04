@@ -14,7 +14,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const LOCAL_PARTICIPANT_ID: &str = "participant:local-owner";
 const MAX_CHANNEL_NAME_CHARS: usize = 80;
 const MAX_CHANNEL_TOPIC_CHARS: usize = 250;
-const MAX_CHANNEL_SEARCH_CHARS: usize = 240;
 const MAX_CHANNEL_RESULTS: u32 = 500;
 
 #[derive(Debug, Deserialize)]
@@ -60,32 +59,6 @@ pub async fn chat_list_navigation_channels(
     db_url: String,
 ) -> ChatResult<Vec<ChatChannelRead>> {
     read_channels(&chat_pool(app, db_url).await?, None, false, None).await
-}
-
-#[tauri::command]
-pub async fn chat_search_channels(
-    app: tauri::AppHandle,
-    db_url: String,
-    project_id: String,
-    query: String,
-    archived: bool,
-    limit: u32,
-) -> ChatResult<Vec<ChatChannelRead>> {
-    validate_project_id(&project_id)?;
-    let query = query.trim().to_lowercase();
-    if query.is_empty() || query.chars().count() > MAX_CHANNEL_SEARCH_CHARS {
-        return Err(ChatError::validation(
-            "query",
-            "Channel search query is invalid",
-        ));
-    }
-    read_channels(
-        &chat_pool(app, db_url).await?,
-        Some(&project_id),
-        archived,
-        Some((&query, limit.clamp(1, MAX_CHANNEL_RESULTS))),
-    )
-    .await
 }
 
 #[tauri::command]

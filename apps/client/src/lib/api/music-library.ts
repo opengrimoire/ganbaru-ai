@@ -5,7 +5,6 @@ import {
   parseMusicContextAssignments,
   type MusicAssignmentOwnerKind,
   type MusicContextAssignment,
-  type MusicContextAssignmentSet,
 } from "$lib/music/music-context-assignment";
 import {
   parseBindingResult,
@@ -20,12 +19,10 @@ import {
   parsePlaylist,
   parsePlaylistSummaries,
   parsePlaylistPlaybackEntries,
-  parseRecentSelections,
   parseRefreshJobProgress,
   parseRelinkPlanSummary,
   parseRelinkPlanWindow,
   parseRoots,
-  parseSearchRebuild,
   parseSourceSummaries,
   parseSourceRemovalImpact,
   parseWriteReceipt,
@@ -46,9 +43,7 @@ import {
   type MusicItemSignalsWrite,
   type MusicItemWindow,
   type MusicItemWindowRequest,
-  type MusicLibraryItemWrite,
   type MusicLocalRefreshRequest,
-  type MusicLocalLocationWrite,
   type MusicLocalRootCreate,
   type MusicLocalRoot,
   type MusicMetadataOverrideWrite,
@@ -62,11 +57,7 @@ import {
   type MusicPlaylistSummary,
   type MusicPlaylistUpdate,
   type MusicPlaylistsReorder,
-  type MusicPlaylistReorder,
-  type MusicPlaylistReorderResult,
   type MusicPlaylistPlaybackEntry,
-  type MusicListeningUpdate,
-  type MusicRecentSelection,
   type MusicReviewWrite,
   type MusicReviewSelectionResult,
   type MusicReviewSelectionWrite,
@@ -75,13 +66,10 @@ import {
   type MusicRelinkPlanSummary,
   type MusicRelinkPlanWindow,
   type MusicRefreshJobProgress,
-  type MusicSearchRebuildResult,
-  type MusicSnoozeWrite,
   type MusicSourceCollection,
   type MusicSourceSummary,
   type MusicSourceRemovalImpact,
   type MusicSourceRemovalRequest,
-  type MusicStatisticsReset,
   type MusicWriteReceipt,
   type MusicYouTubePlaylistSnapshotWrite,
   type MusicYouTubeSnapshotResult,
@@ -149,10 +137,6 @@ function databaseArgs(extra: Record<string, unknown> = {}): Record<string, unkno
 
 const parseVoid = (_value: unknown): void => undefined;
 
-export const upsertMusicLibraryItem = (request: MusicLibraryItemWrite): Promise<MusicWriteReceipt> =>
-  call("music_library_upsert_item", databaseArgs({ request }), parseWriteReceipt);
-export const upsertMusicLocalLocation = (request: MusicLocalLocationWrite): Promise<void> =>
-  call("music_library_upsert_local_location", databaseArgs({ request }), parseVoid);
 export const startMusicLocalRefresh = (request: MusicLocalRefreshRequest): Promise<MusicRefreshJobProgress> =>
   call("music_library_start_local_refresh", databaseArgs({ request }), parseRefreshJobProgress);
 export const getMusicRefreshProgress = (jobId: string): Promise<MusicRefreshJobProgress> =>
@@ -185,12 +169,6 @@ export const getMusicSourceRemovalImpact = (collectionId: string): Promise<Music
   call("music_library_source_removal_impact", databaseArgs({ collectionId }), parseSourceRemovalImpact);
 export const removeMusicSource = (request: MusicSourceRemovalRequest): Promise<MusicSourceRemovalImpact> =>
   call("music_library_remove_source", databaseArgs({ request }), parseSourceRemovalImpact);
-export const restoreMusicSource = (
-  collectionId: string,
-  expectedVersion: number,
-  restoredAt: number,
-): Promise<MusicWriteReceipt> =>
-  call("music_library_restore_source", databaseArgs({ collectionId, expectedVersion, restoredAt }), parseWriteReceipt);
 export const createMusicPlaylist = (request: MusicPlaylistCreate): Promise<MusicWriteReceipt> =>
   call("music_library_create_playlist", databaseArgs({ request }), parseWriteReceipt);
 export const updateMusicPlaylist = (request: MusicPlaylistUpdate): Promise<MusicWriteReceipt> =>
@@ -240,30 +218,13 @@ export const getMusicMembershipMatrix = (itemIds: string[]): Promise<MusicMember
       return { itemId: row.itemId, playlistId: row.playlistId, weight: row.weight as MusicMembershipMatrixEntry["weight"] };
     });
   });
-export const reorderMusicPlaylist = (request: MusicPlaylistReorder): Promise<MusicPlaylistReorderResult> =>
-  call("music_library_reorder_playlist", databaseArgs({ request }), (value) => {
-    if (typeof value !== "object" || value === null || !("itemIds" in value) || !Array.isArray(value.itemIds) || !value.itemIds.every((itemId) => typeof itemId === "string")) {
-      throw new Error("playlist reorder result must contain itemIds");
-    }
-    return { itemIds: value.itemIds };
-  });
 export const getMusicPlaylistPlaybackEntries = (playlistId: string, nowMs: number): Promise<MusicPlaylistPlaybackEntry[]> =>
   call("music_library_playlist_playback_entries", databaseArgs({ playlistId, nowMs }), parsePlaylistPlaybackEntries);
-export const recordMusicListening = (request: MusicListeningUpdate): Promise<void> =>
-  call("music_library_record_listening", databaseArgs({ request }), parseVoid);
-export const getMusicRecentSelections = (playlistId: string | null, limit = 32): Promise<MusicRecentSelection[]> =>
-  call("music_library_recent_selections", databaseArgs({ playlistId, limit }), parseRecentSelections);
 export const getMusicContextAssignments = (
   ownerKind: MusicAssignmentOwnerKind,
   ownerId: string,
 ): Promise<MusicContextAssignment[]> =>
   call("music_library_context_assignments", databaseArgs({ ownerKind, ownerId }), parseMusicContextAssignments);
-export const getMusicContextAssignmentsForPlaylists = (playlistIds: string[]): Promise<MusicContextAssignment[]> =>
-  call("music_library_context_assignments_for_playlists", databaseArgs({ playlistIds }), parseMusicContextAssignments);
-export const replaceMusicContextAssignments = (
-  request: MusicContextAssignmentSet,
-): Promise<MusicContextAssignment[]> =>
-  call("music_library_replace_context_assignments", databaseArgs({ request }), parseMusicContextAssignments);
 export const bulkSetMusicReviewState = (request: MusicBulkReviewWrite): Promise<MusicBulkMembershipResult> =>
   call("music_library_bulk_set_review_state", databaseArgs({ request }), (value) => {
     if (typeof value !== "object" || value === null || !("changedCount" in value) || typeof value.changedCount !== "number") throw new Error("bulk review result must contain changedCount");
@@ -299,12 +260,8 @@ export const saveMusicAdvancedMembership = (request: MusicAdvancedMembershipWrit
   call("music_library_save_advanced_membership", databaseArgs({ request }), parseWriteReceipt);
 export const removeMusicMemberships = (request: MusicMembershipRemove): Promise<void> =>
   call("music_library_remove_memberships", databaseArgs({ request }), parseVoid);
-export const upsertMusicSnooze = (request: MusicSnoozeWrite): Promise<void> =>
-  call("music_library_upsert_snooze", databaseArgs({ request }), parseVoid);
 export const removeMusicSnooze = (snoozeId: string): Promise<void> =>
   call("music_library_remove_snooze", databaseArgs({ request: { snoozeId } }), parseVoid);
-export const resetMusicStatistics = (request: MusicStatisticsReset): Promise<void> =>
-  call("music_library_reset_statistics", databaseArgs({ request }), parseVoid);
 export const previewMusicTransfer = (vaultId: string, source: MusicTransferSource) =>
   call("music_library_preview_transfer", databaseArgs({ vaultId, source }), parseMusicTransferPreview);
 export const commitMusicTransfer = (vaultId: string, request: MusicTransferCommit): Promise<MusicInterchangeImportResult> =>
@@ -324,8 +281,6 @@ export const getMusicIssues = (offset: number, limit: number): Promise<MusicIssu
   call("music_library_issues", databaseArgs({ offset, limit }), parseIssues);
 export const getMusicInspectorDetail = (itemId: string): Promise<MusicInspectorDetail> =>
   call("music_library_inspector_detail", databaseArgs({ itemId }), parseInspectorDetail);
-export const rebuildMusicSearchIndex = (rebuiltAt: number): Promise<MusicSearchRebuildResult> =>
-  call("music_library_rebuild_search_index", databaseArgs({ rebuiltAt }), parseSearchRebuild);
 export const getMusicLocalRoots = (offset: number, limit: number): Promise<MusicLocalRoot[]> =>
   call("music_library_local_roots", databaseArgs({ offset, limit }), parseRoots);
 export const createMusicLocalRoot = (request: MusicLocalRootCreate): Promise<MusicWriteReceipt> =>

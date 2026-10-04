@@ -1,34 +1,11 @@
 use std::collections::HashSet;
 
-use super::time::{iso_is_before, iso_seconds_between};
+use super::time::iso_seconds_between;
 use super::*;
 
 const MAX_FOCUS_DURATION_MINUTES: i64 = 120;
 const MAX_SHORT_BREAK_DURATION_MINUTES: i64 = 30;
 const MAX_LONG_BREAK_DURATION_MINUTES: i64 = 60;
-
-pub(super) fn validate_run_write(run: &PomodoroRunWrite) -> Result<(), String> {
-    require_non_empty(&run.id, "run.id")?;
-    canonical_event_id(&run.event_id)?;
-    require_non_empty(&run.event_date, "run.event_date")?;
-    require_non_empty(&run.planned_start, "run.planned_start")?;
-    require_non_empty(&run.planned_end, "run.planned_end")?;
-    require_non_empty(&run.started_at, "run.started_at")?;
-    validate_rhythm_source(&run.rhythm_source, run.preset_key.as_deref())?;
-    validate_run_rhythm(&run.rhythm)?;
-    if let Some(idle_timeout) = run.idle_timeout_minutes {
-        if idle_timeout <= 0 {
-            return Err("idle_timeout_minutes must be positive".to_string());
-        }
-    }
-    if run.inherited_focus_minutes < 0 {
-        return Err("inherited_focus_minutes cannot be negative".to_string());
-    }
-    if run.inherited_rhythm_position <= 0 {
-        return Err("inherited_rhythm_position must be positive".to_string());
-    }
-    validate_start_trigger(&run.start_trigger)
-}
 
 pub(super) fn validate_run_adaptive_snapshot_for_segment(
     run: &PomodoroRunWrite,
@@ -365,113 +342,10 @@ fn validate_adaptive_experiment(
     Ok(())
 }
 
-pub(super) fn validate_run_closure(closure: &PomodoroRunClosure) -> Result<(), String> {
-    require_non_empty(&closure.run_id, "closure.run_id")?;
-    require_non_empty(&closure.ended_at, "closure.ended_at")?;
-    validate_run_end_reason(&closure.end_reason)?;
-    validate_status(&closure.segment_status)?;
-    validate_segment_end_reason(&closure.segment_end_reason)?;
-    validate_event_type(&closure.event_type)
-}
-
-pub(super) fn validate_run_window_update(update: &PomodoroRunWindowUpdate) -> Result<(), String> {
-    require_non_empty(&update.run_id, "update.run_id")?;
-    require_non_empty(&update.planned_end, "update.planned_end")
-}
-
-pub(super) fn validate_active_event_reference_transfer(
-    transfer: &PomodoroActiveEventReferenceTransfer,
-) -> Result<(), String> {
-    canonical_event_id(&transfer.new_event_id)?;
-    if let Some(date) = &transfer.new_event_date {
-        require_non_empty(date, "transfer.new_event_date")?;
-    }
-    if let Some(planned_end) = &transfer.planned_end {
-        require_non_empty(planned_end, "transfer.planned_end")?;
-    }
-    Ok(())
-}
-
-pub(super) fn validate_segment_write(segment: &PomodoroSegmentWrite) -> Result<(), String> {
-    require_non_empty(&segment.id, "id")?;
-    canonical_event_id(&segment.event_id)?;
-    require_non_empty(&segment.event_date, "event_date")?;
-    require_non_empty(&segment.run_id, "run_id")?;
-    if segment.rhythm_position <= 0 {
-        return Err("rhythm_position must be positive".to_string());
-    }
-    validate_phase(&segment.phase)?;
-    require_non_empty(&segment.planned_start, "planned_start")?;
-    require_non_empty(&segment.planned_end, "planned_end")?;
-    if segment.actual_start.is_none() {
-        return Err("actual_start is required for persisted pomodoro segments".to_string());
-    }
-    validate_status(&segment.status)?;
-    if let Some(reason) = &segment.end_reason {
-        validate_segment_end_reason(reason)?;
-    }
-    for pause in &segment.pauses {
-        validate_pause(pause)?;
-    }
-    Ok(())
-}
-
-pub(super) fn validate_segment_update(segment: &PomodoroSegmentUpdate) -> Result<(), String> {
-    require_non_empty(&segment.id, "id")?;
-    require_non_empty(&segment.planned_end, "planned_end")?;
-    validate_status(&segment.status)?;
-    if let Some(reason) = &segment.end_reason {
-        validate_segment_end_reason(reason)?;
-    }
-    for pause in &segment.pauses {
-        validate_pause(pause)?;
-    }
-    Ok(())
-}
-
-pub(super) fn validate_run_event_write(event: &PomodoroRunEventWrite) -> Result<(), String> {
-    require_non_empty(&event.run_id, "event.run_id")?;
-    validate_event_type(&event.event_type)?;
-    require_non_empty(&event.occurred_at, "event.occurred_at")?;
-    if let Some(phase) = &event.phase {
-        validate_phase(phase)?;
-    }
-    Ok(())
-}
-
 pub(super) fn validate_phase(phase: &str) -> Result<(), String> {
     match phase {
         "focus" | "short_break" | "long_break" => Ok(()),
         _ => Err(format!("invalid pomodoro segment phase: {phase}")),
-    }
-}
-
-pub(super) fn validate_status(status: &str) -> Result<(), String> {
-    match status {
-        "active" | "completed" | "interrupted" => Ok(()),
-        _ => Err(format!("invalid pomodoro segment status: {status}")),
-    }
-}
-
-pub(super) fn validate_run_end_reason(reason: &str) -> Result<(), String> {
-    match reason {
-        "completed" | "stopped" | "interrupted" | "reconfigured" | "block_transition" => Ok(()),
-        _ => Err(format!("invalid pomodoro run end reason: {reason}")),
-    }
-}
-
-pub(super) fn validate_segment_end_reason(reason: &str) -> Result<(), String> {
-    match reason {
-        "completed" | "stopped" | "skipped_by_user" | "event_expired" | "focus_failed"
-        | "reconfigured" | "block_transition" | "crash_recovery" => Ok(()),
-        _ => Err(format!("invalid pomodoro segment end reason: {reason}")),
-    }
-}
-
-fn validate_start_trigger(trigger: &str) -> Result<(), String> {
-    match trigger {
-        "manual" | "block_auto" | "block_transition" | "reconfigure" | "crash_recovery" => Ok(()),
-        _ => Err(format!("invalid pomodoro start trigger: {trigger}")),
     }
 }
 
@@ -530,27 +404,6 @@ pub(super) fn validate_run_rhythm(rhythm: &PomodoroRunRhythm) -> Result<(), Stri
     }
 }
 
-fn validate_rhythm_source(source: &str, preset_key: Option<&str>) -> Result<(), String> {
-    match source {
-        "preset" => {
-            let Some(key) = preset_key else {
-                return Err("preset rhythm_source requires preset_key".to_string());
-            };
-            match key {
-                "adaptive" | "creative" | "balanced" | "deep" | "extended" => Ok(()),
-                _ => Err(format!("invalid preset_key: {key}")),
-            }
-        }
-        "custom" => {
-            if preset_key.is_some() {
-                return Err("custom rhythm_source cannot include preset_key".to_string());
-            }
-            Ok(())
-        }
-        _ => Err(format!("invalid rhythm_source: {source}")),
-    }
-}
-
 fn validate_rhythm_position_count(value: i64, field: &str) -> Result<(), String> {
     if !(1..=12).contains(&value) {
         Err(format!("{field} must be between 1 and 12"))
@@ -572,22 +425,6 @@ pub(super) fn validate_event_type(event_type: &str) -> Result<(), String> {
 fn validate_positive_version(value: i64, field: &str) -> Result<(), String> {
     if value <= 0 {
         Err(format!("{field} must be positive"))
-    } else {
-        Ok(())
-    }
-}
-
-pub(super) fn validate_adaptive_history_limit(value: i64) -> Result<(), String> {
-    if !(1..=240).contains(&value) {
-        Err("adaptive history segment_limit must be between 1 and 240".to_string())
-    } else {
-        Ok(())
-    }
-}
-
-pub(super) fn validate_adaptive_replay_limit(value: i64) -> Result<(), String> {
-    if !(1..=100).contains(&value) {
-        Err("adaptive replay limit must be between 1 and 100".to_string())
     } else {
         Ok(())
     }
@@ -925,44 +762,10 @@ pub(super) fn canonical_event_id(value: &str) -> Result<&str, String> {
     Ok(id)
 }
 
-pub(super) fn synthetic_event_date(value: &str) -> Option<&str> {
-    value
-        .split_once("::")
-        .map(|(_, date)| date)
-        .filter(|date| !date.trim().is_empty())
-}
-
 pub(super) fn require_non_empty(value: &str, field: &str) -> Result<(), String> {
     if value.trim().is_empty() {
         Err(format!("{field} cannot be empty"))
     } else {
         Ok(())
     }
-}
-
-fn normalize_pause_write(mut pause: PomodoroPauseWrite) -> PomodoroPauseWrite {
-    if pause
-        .ended_at
-        .as_deref()
-        .is_some_and(|ended_at| iso_is_before(ended_at, &pause.started_at))
-    {
-        pause.ended_at = Some(pause.started_at.clone());
-    }
-    pause
-}
-
-pub(super) fn normalize_segment_update(
-    mut segment: PomodoroSegmentUpdate,
-) -> PomodoroSegmentUpdate {
-    if let (Some(start), Some(end)) = (&segment.actual_start, &segment.actual_end) {
-        if iso_is_before(end, start) {
-            segment.actual_end = Some(start.clone());
-        }
-    }
-    segment.pauses = segment
-        .pauses
-        .into_iter()
-        .map(normalize_pause_write)
-        .collect();
-    segment
 }

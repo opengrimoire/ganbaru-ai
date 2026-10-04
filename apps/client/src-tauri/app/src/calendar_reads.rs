@@ -362,12 +362,6 @@ pub struct CalendarWindowRows {
     total_event_count: Option<i64>,
 }
 
-#[derive(Serialize)]
-pub struct CalendarPomodoroSchedulerRows {
-    events: Vec<DbCalendarEventRow>,
-    overrides: Vec<DbOverrideRow>,
-}
-
 #[cfg(any(test, target_os = "android", target_os = "ios"))]
 #[derive(Serialize)]
 pub struct CalendarNotificationSchedulerRows {
@@ -437,50 +431,6 @@ const WINDOW_EVENTS_SQL: &str = r#"
         )
       )
     ORDER BY ce.start_time ASC
-"#;
-
-const POMODORO_SCHEDULER_EVENTS_SQL: &str = r#"
-    SELECT ce.id, ce.title, ce.start_time, ce.end_time, ce.timezone,
-           ce.calendar_id, ce.project_id, ce.environment_id, ce.playlist_id, ce.color, ce.rrule,
-           NULL AS notifications, NULL AS exceptions, ce.repeat_until,
-           ce.all_day, ce.location, ce.transparency, ce.status,
-           CASE WHEN ce.url <> '' THEN 1 ELSE 0 END AS has_call_link,
-           ce.meeting_enabled, ce.local_rsvp_status, ce.created_at,
-           NULL AS rdate,
-           pc.rhythm_kind, pc.rhythm_source, pc.preset_key,
-           pcc.focus_duration_minutes AS count_focus_duration_minutes,
-           pcc.short_break_minutes AS count_short_break_minutes,
-           pcc.long_break_minutes AS count_long_break_minutes,
-           pcc.long_break_after_focus_count AS count_long_break_after_focus_count,
-           (
-             SELECT '[' || group_concat(step_json) || ']'
-             FROM (
-               SELECT json_object(
-                 'focusDurationMinutes', pcss.focus_duration_minutes,
-                 'breakPhase', pcss.break_phase,
-                 'breakDurationMinutes', pcss.break_duration_minutes
-               ) AS step_json
-               FROM pomodoro_config_sequence_steps pcss
-               WHERE pcss.event_id = ce.id
-               ORDER BY pcss.step_index ASC
-             )
-           ) AS sequence_steps,
-           pc.idle_timeout_minutes
-    FROM calendar_events ce
-    JOIN pomodoro_configs pc ON pc.event_id = ce.id
-    LEFT JOIN pomodoro_config_count_rhythms pcc ON pcc.event_id = ce.id
-    WHERE
-      (ce.rrule IS NOT NULL AND ce.rrule <> '')
-      OR EXISTS (SELECT 1 FROM calendar_event_rdates r WHERE r.event_id = ce.id)
-      OR (
-        (ce.rrule IS NULL OR ce.rrule = '')
-        AND NOT EXISTS (SELECT 1 FROM calendar_event_rdates r WHERE r.event_id = ce.id)
-        AND (
-          (ce.all_day = 1 AND substr(ce.end_time, 1, 10) >= ? AND substr(ce.start_time, 1, 10) <= ?)
-          OR (ce.all_day <> 1 AND ce.end_time >= ? AND ce.start_time < ?)
-        )
-      )
-    ORDER BY ce.start_time ASC, ce.created_at ASC
 "#;
 
 #[cfg(any(test, target_os = "android", target_os = "ios"))]
@@ -706,50 +656,6 @@ pub async fn calendar_load_window<R: Runtime>(
     })
 }
 
-#[tauri::command]
-pub async fn calendar_load_pomodoro_scheduler_window<R: Runtime>(
-    app: AppHandle<R>,
-    db_url: String,
-    window_start_date: String,
-    window_end_date: String,
-    window_start_utc: String,
-    window_end_exclusive_utc: String,
-) -> Result<CalendarPomodoroSchedulerRows, String> {
-    let pool = connect_sqlite(app, db_url).await?;
-    let mut transaction = pool
-        .begin()
-        .await
-        .map_err(|e| format!("begin pomodoro calendar window read: {e}"))?;
-    let mut events = sqlx::query_as::<_, DbCalendarEventRow>(POMODORO_SCHEDULER_EVENTS_SQL)
-        .bind(&window_start_date)
-        .bind(&window_end_date)
-        .bind(&window_start_utc)
-        .bind(&window_end_exclusive_utc)
-        .fetch_all(&mut *transaction)
-        .await
-        .map_err(|e| format!("load pomodoro scheduler events: {e}"))?;
-    hydrate_window_event_rows(&mut transaction, &mut events).await?;
-
-    let overrides = if events.is_empty() {
-        Vec::new()
-    } else {
-        sqlx::query_as::<_, DbOverrideRow>(WINDOW_OVERRIDES_SQL)
-            .bind(&window_start_date)
-            .bind(&window_end_date)
-            .bind(&window_start_utc)
-            .bind(&window_end_exclusive_utc)
-            .fetch_all(&mut *transaction)
-            .await
-            .map_err(|e| format!("load pomodoro scheduler overrides: {e}"))?
-    };
-
-    transaction
-        .commit()
-        .await
-        .map_err(|e| format!("commit pomodoro calendar window read: {e}"))?;
-    Ok(CalendarPomodoroSchedulerRows { events, overrides })
-}
-
 #[cfg(any(test, target_os = "android", target_os = "ios"))]
 #[tauri::command]
 pub async fn calendar_load_notification_scheduler_window<R: Runtime>(
@@ -961,7 +867,6 @@ mod tests {
     fn window_queries_do_not_load_icalendar_preservation_json() {
         for sql in [
             super::WINDOW_EVENTS_SQL,
-            super::POMODORO_SCHEDULER_EVENTS_SQL,
             super::NOTIFICATION_SCHEDULER_EVENTS_SQL,
             super::NOTIFICATION_SCHEDULER_OVERRIDES_SQL,
             super::WINDOW_OVERRIDES_SQL,
@@ -1038,13 +943,6 @@ mod tests {
                 );
             }
         });
-    }
-
-    #[test]
-    fn pomodoro_scheduler_query_is_pomodoro_scoped() {
-        let lower = super::POMODORO_SCHEDULER_EVENTS_SQL.to_ascii_lowercase();
-        assert!(lower.contains("join pomodoro_configs"));
-        assert!(!lower.contains("calendar_event_attendees"));
     }
 
     #[test]

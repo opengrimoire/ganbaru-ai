@@ -1,5 +1,9 @@
 import type {
-  CalendarEvent, EventColor, PomodoroConfig, RecurrenceConfig, RecurringScope,
+  CalendarEvent,
+  EventColor,
+  PomodoroConfig,
+  RecurrenceConfig,
+  RecurringScope,
 } from "./types";
 import { recurrenceConfigsEqual } from "./rrule";
 import { parseCalendarDate } from "./utils";
@@ -366,5 +370,3 @@ export function createEditSession(
     },
   };
 }
-
-export type EditSession = ReturnType<typeof createEditSession>;

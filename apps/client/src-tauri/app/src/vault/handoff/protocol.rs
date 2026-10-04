@@ -654,9 +654,7 @@ fn decode_pairing_qr_payload(
     now_unix_ms: i64,
 ) -> Result<PairingInvitation, String> {
     if !payload.starts_with(PAIRING_QR_MAGIC) {
-        let encoded = std::str::from_utf8(payload)
-            .map_err(|_| "pairing QR code has an unsupported format".to_string())?;
-        return decode_invitation(encoded, now_unix_ms);
+        return Err("pairing QR code has an unsupported format".to_string());
     }
 
     let mut position = PAIRING_QR_MAGIC.len();
@@ -884,14 +882,12 @@ mod tests {
     }
 
     #[test]
-    fn pairing_qr_decoder_accepts_legacy_full_invitations() {
+    fn pairing_qr_decoder_rejects_text_invitations() {
         let invitation = qr_invitation();
         let encoded = encode_invitation(&invitation).expect("manual invitation");
 
-        assert_eq!(
-            decode_pairing_qr_payload(encoded.as_bytes(), 1).expect("legacy QR"),
-            invitation
-        );
+        assert!(decode_pairing_qr_payload(encoded.as_bytes(), 1).is_err());
+        assert_eq!(decode_invitation(&encoded, 1).unwrap(), invitation);
     }
 
     #[test]

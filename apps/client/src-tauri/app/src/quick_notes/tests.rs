@@ -277,7 +277,7 @@ fn expired_trash_is_deleted_with_its_runs_and_search_projection() {
 }
 
 #[test]
-fn tag_filtering_and_deletion_preserve_revision_safety() {
+fn tag_filtering_returns_only_matching_notes() {
     tauri::async_runtime::block_on(async {
         let pool = pool().await;
         create(&pool, "tagged", "Tagged", "tagged body").await;
@@ -307,11 +307,5 @@ fn tag_filtering_and_deletion_preserve_revision_safety() {
         .unwrap();
         assert_eq!(tagged.notes.len(), 1);
         assert_eq!(tagged.notes[0].id, "tagged");
-
-        delete_tag_from_pool(&pool, "tag-1").await.unwrap();
-        let note = load_note_from_pool(&pool, "tagged").await.unwrap();
-        assert_eq!(note.tag_id, None);
-        assert_eq!(note.revision, 2);
-        assert!(delete_tag_from_pool(&pool, "tag-1").await.is_err());
     });
 }

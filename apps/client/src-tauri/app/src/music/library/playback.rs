@@ -1,9 +1,12 @@
 use super::*;
-use sqlx::{SqliteConnection, SqlitePool};
+use sqlx::SqliteConnection;
+#[cfg(test)]
+use sqlx::SqlitePool;
 
 const RECENT_SELECTIONS_PER_CONTEXT: i64 = 64;
 const RECENT_SELECTIONS_GLOBAL: i64 = 512;
 
+#[cfg(test)]
 pub(crate) async fn record_listening(
     pool: &SqlitePool,
     request: MusicListeningUpdate,
@@ -99,6 +102,7 @@ pub(crate) async fn record_listening_in_transaction(
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) async fn recent_selections(
     pool: &SqlitePool,
     playlist_id: Option<String>,

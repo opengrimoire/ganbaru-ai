@@ -235,18 +235,6 @@ export interface NotesDataSourceTemplateApplyRequest {
   title?: string | null;
 }
 
-export interface NotesDataSourceTemplateUpdateRequest {
-  name?: string;
-  source_page_id?: string;
-  is_default?: boolean;
-}
-
-export interface NotesDataSourceTemplateDuplicateRequest {
-  id: string;
-  name: string;
-  is_default?: boolean | null;
-}
-
 export interface NotesDataSourceButtonClickRequest {
   property_id: string;
   confirmed?: boolean | null;

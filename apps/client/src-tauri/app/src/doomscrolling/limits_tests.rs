@@ -70,9 +70,9 @@ fn disabled_limits_remain_visible_and_deleted_limits_leave_history_reusable() {
 }
 
 #[test]
-fn optional_legacy_package_and_process_aliases_use_explicit_fallbacks() {
+fn manually_entered_app_names_match_when_no_package_or_process_aliases_are_selected() {
     let value = serde_json::json!({"doomscrolling": {"limits": {"items": [{
-        "id": "legacy", "minutesPerDay": 1,
+        "id": "manual-name", "minutesPerDay": 1,
         "entries": [{"id": "source", "mobileAppName": "Video", "desktopAppName": "Game"}]
     }]}}});
     let config = parse_config(&value).unwrap();

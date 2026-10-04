@@ -30,7 +30,7 @@ User playlists and ordered memberships are independent of source collections. Re
 
 The domain also records:
 
-- legacy source resume rows and device-keyed native Music session checkpoints;
+- device-keyed native Music session checkpoints;
 - skip ranges and per-item behavior;
 - item signals, snoozes, statistics, and recent selections;
 - refresh issues and user-required actions;

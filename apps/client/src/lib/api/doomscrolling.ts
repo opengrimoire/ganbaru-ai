@@ -54,12 +54,6 @@ export interface DoomscrollingForegroundDesktopAppStatus {
   reason: string | null;
 }
 
-export async function writeDoomscrollingRuntimeState(
-  state: DoomscrollingRuntimeState,
-): Promise<void> {
-  await invoke("doomscrolling_write_state", { state });
-}
-
 export async function getDoomscrollingExtensionStatus(
   freshAfter?: string,
 ): Promise<DoomscrollingExtensionStatus> {

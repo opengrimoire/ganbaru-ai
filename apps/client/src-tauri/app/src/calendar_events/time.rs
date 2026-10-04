@@ -8,16 +8,6 @@ pub(super) async fn current_utc_iso(
         .await
         .map_err(|e| format!("read current time: {e}"))
 }
-#[cfg(test)]
-pub(super) fn calendar_timestamps_match(left: &str, right: &str) -> bool {
-    match (
-        calendar_timestamp_millis(left),
-        calendar_timestamp_millis(right),
-    ) {
-        (Some(left_ms), Some(right_ms)) => left_ms == right_ms,
-        _ => left == right,
-    }
-}
 pub(super) fn calendar_timestamp_millis(value: &str) -> Option<i64> {
     if let Ok(parsed) = DateTime::parse_from_rfc3339(value) {
         return Some(parsed.timestamp_millis());

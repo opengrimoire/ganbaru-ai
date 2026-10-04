@@ -5,7 +5,6 @@ import {
 import { isNotesTabKey } from "./block-keyboard";
 import {
   replacePlainTextPreservingRichText,
-  richTextPlainText,
 } from "./rich-text";
 import type {
   NotesBlockUpdate,
@@ -138,13 +137,6 @@ export function notesTableCellRichText(
   columnIndex: number,
 ): NotesRichText[] {
   return cloneRichTextArray(row.table_row.cells[columnIndex] ?? []);
-}
-
-export function notesTableCellPlainText(
-  row: NotesTableRowBlock,
-  columnIndex: number,
-): string {
-  return richTextPlainText(notesTableCellRichText(row, columnIndex));
 }
 
 export function notesTableCellRichTextFromPlainTextEdit(
