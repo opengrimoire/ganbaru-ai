@@ -42,7 +42,7 @@ Persisted document permissions are retained only for sources that require ongoin
 
 ## Other excluded permissions
 
-Current features do not request contacts, microphone, location, screen capture, system overlay, device-owner status, or VPN consent. Android exposes one camera permission for camera capture, so it cannot be narrowed to a separate still-photo-only permission. Ganbaru AI requests it only when the QR scanner is shown, requests no microphone access, processes preview frames in memory, and stops the stream after a code is decoded or the scanner closes. A future feature requires a new spec, localized disclosure, denial behavior, tests, and policy review before new authority enters the manifest.
+Current features do not request contacts, microphone, location, screen capture, system overlay, device-owner status, or VPN consent. The camera permission is requested only when the QR scanner is shown; preview frames are processed in memory and the stream stops once a code is decoded or the scanner closes. New authority enters the manifest only with a spec, localized disclosure, denial behavior, tests, and policy review.
 
 ## WebView and bridge
 

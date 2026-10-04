@@ -173,8 +173,7 @@ Check that the native host was registered with the exact extension id shown by t
 node apps/client/scripts/install-chrome-native-host.mjs <extension-id> <chrome|chromium|brave|edge> app
 ```
 
-If the dev app says the extension is not connected while the host is registered to `app`, that is expected. Register the host with `dev` only when the dev app is the one you are testing.
-If you need both apps connected at the same time, load both `extensions/chrome` and `extensions/chrome-dev`, then register each extension id with its matching target.
+If the dev app says the extension is not connected while the host is registered to `app`, that is expected. Register the host with `dev` only when the dev app is the one you are testing. If you need both apps connected at the same time, load both `extensions/chrome` and `extensions/chrome-dev`, then register each extension id with its matching target.
 
 **The extension is loaded but never blocks.**
 

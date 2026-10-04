@@ -7,11 +7,12 @@ This document is the command and gate-selection reference. Supporting documents 
 - [Validation infrastructure](validation-infrastructure.md): ordering, resource limits, caching, bundle contracts, and topology changes.
 - [Test authoring](test-authoring.md): useful frontend, Rust, SQLite, authorization, and UI tests.
 - [Android acceptance](android.md): physical-device, emulator, permission, lifecycle, and release cases.
-- [Local vault handoff](vault-handoff.md): concise physical desktop and Android round-trip acceptance and result record.
-- [Calendar recurrence](calendar-recurrence.md): recurrence editing and interoperability matrices.
-- [Notes editor](notes-editor.md): editor, database, transfer, and recovery matrices.
-- [Project dependency cascades](project-dependency-cascades.md): canonical previews, reviewed transactions, retries, and Gantt acceptance.
-- [Doomscrolling runtime](doomscrolling.md): desktop frontend absence, observation, vault invalidation, spool recovery, and remaining Android acceptance.
+- [Local vault handoff](vault-handoff.md): physical desktop and Android round-trip acceptance and result record.
+- [Calendar recurrence](calendar-recurrence.md): recurrence edit, protection, deletion, and Undo matrices.
+- [Notes editor](notes-editor.md): editor, database, transfer, clipboard, and recovery acceptance.
+- [Project dependency cascades](project-dependency-cascades.md): dependency date review, apply, retry, and Gantt acceptance.
+- [Doomscrolling runtime](doomscrolling.md): desktop and Android runtime acceptance without the WebView.
+- [Music desktop](music.md): real audio, lifecycle, and automation acceptance.
 - [Performance harness](../performance/harness.md): benchmark-only contracts outside normal validation.
 
 ## Goals
@@ -36,7 +37,7 @@ Always use the workspace flag for root scripts.
 
 | Command | Purpose |
 | --- | --- |
-| `pnpm -w run check` | Rust formatting and Clippy, then Svelte and TypeScript checks |
+| `pnpm -w run check` | Rust formatting and Clippy, then provider protocol snapshots, Svelte Check, and TypeScript |
 | `pnpm -w run test` | Rust tests, then normal frontend tests in four sequential shards |
 | `pnpm -w run test:benchmark-contracts` | Explicit benchmark fixture and harness contracts, excluded from normal validation |
 | `pnpm -w run editor-check` | Tailwind editor-style diagnostics |
@@ -48,7 +49,7 @@ Always use the workspace flag for root scripts.
 
 `validate` is the normal comprehensive gate. `validate:full` is required for dependency or lockfile changes, security-sensitive dependency work, releases, and explicit full-security requests.
 
-The hosted `linux validation` pull request workflow runs `validate:ci`, including the same static checks, tests, editor diagnostics, and bundle contracts as local `validate`. Only Cargo compilation uses two jobs instead of one. Rust tests still use one test thread, and the frontend shards remain sequential and single-worker. The independent Android job builds an ARM64 debug APK, while the Windows job checks Rust composition without producing an installer.
+The hosted `linux validation` job in `.github/workflows/check.yml` runs `validate:ci` for pull requests and the merge queue. It covers the same static checks, tests, editor diagnostics, and bundle contracts as local `validate`; only Cargo compilation uses two jobs instead of one. Rust tests still use one test thread, and the frontend shards remain sequential and single-worker. The independent Android job builds an ARM64 debug APK, while the Windows job runs `cargo check -p ganbaru-ai` without producing an installer.
 
 ## Choosing a gate
 

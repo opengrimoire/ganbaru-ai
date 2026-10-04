@@ -1,5 +1,7 @@
 # Notes import and export
 
+Status: implemented with documented loss diagnostics.
+
 All transfers preserve the source-of-truth boundary. Imports create canonical SQLite pages, blocks, rows, comments, and assets. Exports are derivative views or diagnostic snapshots and never become authoritative merely because a file exists.
 
 ## Shared safety rules
@@ -90,12 +92,10 @@ Transfer surfaces report object counts and categorized outcomes such as preserve
 
 Navigation links in diagnostics are convenience only. They do not make the source file, folder, archive, CSV, JSON, or derivative output authoritative.
 
-### Heading levels
+## Structure fidelity
 
-Markdown and HTML transfers preserve all six heading levels. Markdown emits the matching count of `#` characters. HTML body headings use matching `h1` through `h6` elements instead of shifting levels beneath the page title, which prevents level 6 from being flattened or emitted as an invalid `h7`. Exported HTML uses the editor's relative heading-size hierarchy. Older imports that already flattened deep headings to level 4 cannot recover their original level without reimporting the source.
+Markdown and HTML transfers preserve all six heading levels. HTML body headings use matching `h1` through `h6` elements rather than shifting levels beneath the page title, so deep headings are neither flattened nor emitted as an invalid `h7`.
 
-Explicit text indentation is preserved in JSON graph data and shown as relative margins in HTML export. Markdown export emits leading spaces for explicit indentation; Markdown readers may interpret deeply indented paragraphs as code according to their own syntax rules. Extremely large indentation values that exceed the bounded whitespace export budget produce a diagnostic while retaining the text.
+Explicit text indentation is kept in graph export, shown as relative margins in HTML, and emitted as leading spaces in Markdown, where readers may interpret deep indentation as code. Indentation beyond the bounded whitespace budget produces a diagnostic while keeping the text.
 
-## Page cover presentation
-
-HTML and Markdown exports omit page cover appearance and report `page_cover_omitted` when a page has a cover. Graph export retains the editable cover descriptor, including theme palette identity and image focal coordinates. Static visual cover export is planned separately. See [Page covers](page-covers.md).
+HTML and Markdown exports omit page cover appearance and report `page_cover_omitted`; graph export keeps the editable cover descriptor. See [Page covers](page-covers.md#persistence-and-transfer).

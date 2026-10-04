@@ -1,5 +1,7 @@
 # Notes history and recovery
 
+Status: implemented. Sync-aware restoration is planned.
+
 Notes provides page-local history, project-wide versions, reusable page templates, Archive, Trash, and safety versions. These surfaces recover canonical data without turning history snapshots into a second live graph.
 
 ## Retention

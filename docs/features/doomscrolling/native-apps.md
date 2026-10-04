@@ -27,7 +27,7 @@ A PID alone never authorizes termination because it can be reused. A process-nam
 
 ## Desktop usage limits
 
-Where foreground identity is available, limits count focused app time. On limited Wayland environments, selected process-open time may be used and is labeled honestly. An unavailable adapter never fabricates zero-precision focus data or closes a target based on an unproven observation.
+Limits count focused app time where foreground identity is available, and labeled open-app time on limited Wayland sessions. An unavailable adapter never fabricates usage or closes a target on an unproven observation. See [Usage limits](usage-limits.md#desktop-counting).
 
 ## Android observation and blocking
 
@@ -39,7 +39,7 @@ Ganbaru AI, Home, Settings, dialer, system UIDs, unknown packages, and stale pro
 
 ## Android lifecycle
 
-The lightweight guardian process receives signed, validated rule and phase projections and maintains a bounded journal while the main Activity is absent. Journal import accepts only the current vault identity. The projection is rebuildable device state, not canonical user configuration.
+The lightweight Guardian process receives validated rule and phase projections through a private, signature-protected boundary and maintains a bounded journal while the main Activity is absent. Journal import accepts only the current vault identity. The projection is rebuildable device state, not canonical user configuration.
 
 Usage Access and Accessibility require separate localized disclosures immediately before opening system settings. Returning from settings refreshes actual status. Revocation or denial leaves a useful read-only configuration surface and direct recovery action.
 

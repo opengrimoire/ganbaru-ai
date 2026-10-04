@@ -1,8 +1,8 @@
 # SQLite schema
 
-Ganbaru AI stores structured application data and document graphs in the active vault's ganbaru-ai.sqlite database. This directory explains durable domain relationships and non-obvious constraints. It is not a handwritten copy of every column or index.
+Ganbaru AI stores structured application data and document graphs in the active vault's `ganbaru-ai.sqlite` database. This directory explains durable domain relationships and non-obvious constraints. It is not a handwritten copy of every column or index.
 
-The authoritative schema is the ordered migration set in apps/client/src-tauri/migrations. The ganbaru-db crate embeds it with SQLx and owns pool and migration services. Schema invariant tests verify the resulting database.
+The authoritative schema is the ordered migration set in `apps/client/src-tauri/migrations/`. The `ganbaru-db` crate embeds it with SQLx and owns pool and migration services. Schema invariant tests verify the resulting database.
 
 ## Domain map
 
@@ -15,21 +15,16 @@ The authoritative schema is the ordered migration set in apps/client/src-tauri/m
 
 ## Migration policy
 
-The app has no external users yet. The baseline migration 20260830173211_baseline_schema.sql starts the current schema construction chain. Older development databases, internal exports, and device state are unsupported when their contracts change and must be explicitly recreated. Do not retain compatibility readers or upgrade shims solely for those formats. Current SQL migrations remain necessary to construct a fresh vault. Once a user-capable release can have applied a migration, it is immutable; subsequent schema changes use a new UTC timestamped migration named YYYYMMDDHHMMSS_description.sql.
+The app has no external users yet. `20260830173211_baseline_schema.sql` is the fresh-start schema, and later changes are additive migrations named `YYYYMMDDHHMMSS_description.sql` with a UTC timestamp. SQLx discovers them at compile time, so they are never registered manually. Older development databases, internal exports, and device state are unsupported when their contracts change and must be recreated explicitly; do not keep compatibility readers or upgrade shims for them, and never delete local vaults automatically. Once a user-capable release can have applied a migration, it is immutable. A schema squash requires explicit maintainer approval.
 
-Do not manually register migrations or silently delete local development vaults. Remove obsolete readers and writers together, document unsupported formats, and test current schema creation. A schema squash remains a separate explicit maintainer decision.
+Before changing persistent state, check:
 
-Before changing persistent state, inspect:
-
-- current-format partially populated rows;
-- supported external imports and current internal exports;
-- config and JSON validation;
-- seed and repair paths;
-- stale rows and derived indexes;
-- rollback or downgrade behavior where supported;
-- cleanup after interrupted filesystem work.
-
-SQLx tracks applied versions and checksums in its own migration metadata. That metadata is not application data.
+- Partially populated rows in the current format.
+- Supported external imports and current internal exports.
+- Config and JSON validation.
+- Seed and repair paths.
+- Stale rows and derived indexes.
+- Cleanup after interrupted filesystem work.
 
 ## Encoding rules
 

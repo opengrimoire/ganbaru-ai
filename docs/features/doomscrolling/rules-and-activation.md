@@ -2,7 +2,7 @@
 
 ## Current activation
 
-Current browser, desktop, and Android phase rules are global active-vault configuration. They can apply during focus, short break, or long break and can pause while a focus session is manually paused. Pomodoro publishes a short-lived phase snapshot to the adapters that need to enforce while the main UI is absent.
+Browser, desktop, and Android phase rules are global active-vault configuration. They can apply during focus, short break, or long break and can pause while a focus session is manually paused. The native Focus owner publishes a short-lived phase snapshot to adapters that enforce while the main UI is absent.
 
 Usage limits are a separate activation source and remain active outside Pomodoro phases.
 
@@ -28,7 +28,7 @@ User-authored URL patterns use a bounded application grammar, not arbitrary regu
 
 ## Deterministic precedence
 
-The matcher resolves conflicts in this order:
+The target matcher resolves conflicts in this order:
 
 1. Emergency and browser safety allowlist.
 2. Explicit session allow.
@@ -40,9 +40,9 @@ The matcher resolves conflicts in this order:
 8. Category block.
 9. Default policy for the selected mode.
 
-Within one level, the most specific path or host rule wins. User-authored rules win ties against built-in presets. Any recency tie-breaker must use durable rule ordering and be visible in the explanation.
+Within one level, the most specific path or host rule should win (target behavior; the current matcher takes the first matching rule). User-authored rules win ties against built-in presets. Any recency tie-breaker must use durable rule ordering and be visible in the explanation.
 
-Current implementations that do not yet expose every level skip unavailable levels without changing the relative precedence of implemented ones.
+Session, event, and environment levels are planned. The current matcher implements the safety allowlist, then (in blacklist mode) explicit exceptions, explicit blocked hosts, custom category stacks, and built-in categories, or (in whitelist mode) allowed hosts. Future levels must slot in without changing the relative order of these.
 
 ## URL normalization
 

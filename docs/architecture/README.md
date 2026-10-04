@@ -24,7 +24,7 @@ The desktop binary and mobile library entry points are intentionally thin. `ganb
 
 The frontend calls typed wrappers under `apps/client/src/lib/api/`. Tauri commands validate input and delegate to application or domain services. The frontend does not open the SQLite database directly and does not treat an IPC response as trusted merely because it came from the local process.
 
-Long-running or user-sized filesystem and platform work stays bounded and off asynchronous command executors. Database transactions remain on SQLx's asynchronous path. See [Native work](native-work.md).
+Long-running or user-sized filesystem and platform work stays bounded and off asynchronous command executors. Database transactions remain on SQLx's asynchronous path. See [Native backend](native-backend.md#asynchronous-and-blocking-work).
 
 ### Desktop and mobile
 

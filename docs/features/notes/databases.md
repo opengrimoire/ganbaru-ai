@@ -1,187 +1,99 @@
 # Notes databases
 
-Local databases are structured views over Notes row pages. They follow useful public Notion concepts while remaining an independent local SQLite implementation.
+Status: implemented with bounded action limits. Real desktop and Android visual and touch acceptance remains pending.
 
-## Database presentation
+Local databases are structured views over Notes row pages. They follow useful public Notion concepts while remaining an independent local SQLite implementation. Hosted permissions, arbitrary automation, and AI autofill would need separate product contracts and are not exposed as inactive menu actions.
 
-Status: partial, with real desktop and Android visual acceptance pending.
+## Design direction
 
-Database links and mentions open a dedicated database surface across the available Notes width. The workspace path extends through the containing note to the database. Returning through the note breadcrumb preserves its current editor session and scroll position. Opening a row still uses the normal Notes page and preview behavior. A linked database's source arrow opens its canonical database; its own view remains a separate presentation over shared rows.
+Database controls use progressive disclosure: rows and their values are the primary content, and controls stay compact. A view bar holds view tabs, compact utilities, and a split New button; an applied query strip shows active filters and sorts; property and row menus act on the item that opened them; settings show current values in concise rows and open detail pages only when needed. Colors communicate status and active query state rather than decorate every action. Touch layouts get larger targets without imposing that spacing on pointer layouts.
 
-One skeleton spans an inline database's initial renderer, saved-view metadata, and row reads. Its name, tabs, and rows become visible together once the active view's row window is ready, without resetting the placeholder between loading stages. Database titles initialize from the block immediately, avoiding an incorrect temporary title. Template reads run concurrently; ready table rows do not wait for templates, while creation retains its existing template readiness rules. Read failures release the placeholder so recovery controls remain accessible.
+This follows Notion's documented [views, filters, and sorts](https://www.notion.com/help/views-filters-and-sorts) and [table](https://www.notion.com/help/tables) controls as product references, not as a requirement to copy hosted features. Notes and Projects share [collection components and visual rules](../collections.md); shared components own presentation and interaction, while each domain adapter owns schema, persistence, query semantics, and record mutation.
 
-Pending content stays outside layout flow and cannot stretch the visible placeholder or add scroll overflow as its renderer, controls, and rows mount. The fading placeholder preserves its intrinsic height and outer spacing when ready content takes over layout. This keeps loading geometry stable without measuring content, delaying readiness, or retaining previous documents.
+## Data model
 
-Cold standalone database views show skeletons matching table, list, Kanban, gallery, calendar, and timeline. Inline databases share the page loading handoff: fast reads reveal directly, and a visible placeholder fades over ready content without delaying input. Previously loaded rows stay visible during background refreshes. Skeletons retain no extra row data or offscreen editors, and loading never speculatively imports a table renderer before the selected view is known.
+A child database creates a database shell, one canonical data source, an initial table view, and a visible `child_database` block in one transaction. A linked database view creates another shell and view over the same data source without duplicating rows or schema. Each view owns its presentation (filters, sorts, visible properties, grouping, date range, row-open mode); views never become separate sources of row data.
 
-Database blocks render their current view directly in the page. A new database starts with one table view, a title field, and a row creation line. The editor does not require expanding a block or editing its property schema before rows become visible. The database's controls remain separate from document block selection, so clicking a cell, menu, or unused table space does not select the whole database block.
+A shell can also create additional owned sources or attach an existing local source through a new table view. Attached sources share properties, row pages, and templates with their owner while keeping independent view presentation. The active saved view determines which source the layout, New, templates, and property actions use. A single owned source follows the shell title; once a shell owns several sources, they keep independent names. Renaming a linked database never renames shared sources.
 
-Selecting `/database` reserves its inline surface immediately. One placeholder covers queued document writes, native creation, renderer loading, view metadata, and rows without restarting its reveal timer between stages. Database reads begin only after creation succeeds. Failed creation stays in the editor's retryable write queue with the same reserved identities. The slash query is search text and never becomes the title: the title starts empty with a localized Database name placeholder. Converting existing text through the block menu retains that text as the title. Empty titles remain empty in storage and can be restored by clearing an existing title.
+Schema updates contain property definitions only and reconcile every referencing view in the same transaction: surviving order, visibility, widths, and query priorities are kept, new properties enter table views, and deleted or incompatible properties leave presentation, queries, grouping, and date or cover selections. Editing a schema therefore cannot restore an older view configuration captured when the editor opened.
 
-View tabs correspond to saved views in the database shell. The add-view picker creates one of the six implemented layouts: table, board, gallery, list, calendar, or timeline. A view can be renamed or duplicated with its own presentation settings. Deleting a view asks for confirmation and leaves rows and properties in its shared data source. The last view cannot be removed, and a data source retains a table view for property editing. Additional view types shown by Notion, including chart, dashboard, map, form, and feed, remain unimplemented.
+Imported title-only child databases stay visible as preservation placeholders until connected to local data.
 
-Data sources in view settings can create an independent source owned by this shell or attach an existing local source through a new table view. Attached sources share their properties, row pages, and templates with their owner while keeping independent view presentation. Switching saved views determines the source for the rendered layout, New, templates, and property actions. Switching a source selects its matching layout when available, otherwise its first saved view. Creating or attaching a source selects its new table. Deleting the shell's default view updates its source and view identities together. A single owned source follows the shell title; once the shell owns multiple sources, renaming the shell preserves their independent names.
+## Views and presentation
 
-The database layout lock is a durable convenience setting shared across this shell's saved views. A linked shell has its own lock. Locked shells disable view and source management, property changes, and saved presentation or query writes. Page creation, row value edits, and sub-items remain available. Native commands enforce the requesting shell's lock, and other renderers refresh it after mutations. The lock protects against accidental editing and is not an access-control boundary. Its changes and structural source operations participate in page and project history.
+Database blocks render their current view inline; a new database starts with one table view, an empty title, and a row creation line, without requiring the user to expand the block or edit its schema first. Database controls are separate from document block selection. Database links and mentions open a dedicated full-width database surface whose breadcrumb extends through the containing note.
 
-New stays beside the view tabs across layouts. Its split-button menu applies existing page templates and links to template management; creating a template still starts from an existing row. The table puts Add property in the column header. All six layouts open view settings in a compact floating popover beside the toolbar. The root shows the editable view name and setting summaries. Layout, property visibility, filters, sorts, and applicable grouping, template, and transfer controls open detail pages within that popover. Creation stays on the collection surface rather than occupying another settings page. Board and date views retain contextual creation.
+Saved views can use six layouts: table, board, gallery, list, calendar, and timeline. Views can be renamed, duplicated, and deleted with confirmation; the last view cannot be removed, and a data source keeps a table view for property editing. Chart, dashboard, map, form, and feed views are not implemented.
 
-The data source property editor opens in a separate floating popover and shows one property's fields at a time. Edit property from a table header selects that property, including when schema loading finishes later. Table header menus also expose property-specific filters, ascending and descending sort, hiding, and moving a visible column left or right. These presentation actions affect the current saved view. The required title cannot be hidden or moved behind other columns. Adding a header sort updates an existing sort for that property without duplicating it or discarding other sort priorities.
+- **Settings:** a floating popover beside the toolbar shows the view name and setting summaries, with detail pages for layout, property visibility, filters, sorts, grouping, templates, and transfer. The property editor is a separate popover showing one property at a time.
+- **Property headers:** edit, insert left or right, duplicate (empty values, fresh property and option identities), filter, sort, hide, move, resize, wrap, freeze, format, and calculate. The title property stays first and visible and cannot be duplicated. A duplicated reciprocal relation becomes a one-way relation so it cannot take over the original's reciprocal.
+- **Query strip:** all layouts show active filters and ordered sorts below the toolbar, editing the same saved query as view settings.
+- **Grouping:** select, status, multi-select, checkbox, people, relation, and date properties. Group order, collapse, and empty-group hiding belong to the saved view. Counts cover the complete filtered source; a multi-valued row appears in each distinct matching group and counts once per group.
+- **Formatting:** date and number formats change display only, never canonical values. Date editing offers explicit start, end, and time zone, and changing only the start keeps the existing end and zone.
+- **Wrap and freeze:** saved per view. Narrow viewports reduce the effective frozen prefix while preserving the saved boundary.
+- **Calculations:** footers summarize the complete filtered source and each group, independent of the loaded window. Empty means null, blank text, or empty arrays; zero and false are populated. Sums of empty input are zero, while average, minimum, maximum, and percent checked have no result. Unique counts use canonical identities. Results are derivative and never stored.
+- **Conditional colors:** ordered row or property color rules use the same typed predicates as filters. The first matching rule per target wins, and a cell rule overrides a row tint. Colors are presentation only.
 
-Property headers can insert a property to the left or right and duplicate a property's definition with empty row values. Insertion and its position in the requesting table commit together. Duplication assigns a new property identity and new option identities; a reciprocal relation becomes a single relation so it cannot take over the original reciprocal property. The title stays first and cannot be duplicated. Unsaved property editor drafts remain separate for each source and are preserved when contextual additions commit a fresh canonical schema.
+The **editing lock** is a reversible per-shell setting (a linked shell has its own). It blocks view, source, schema, and query changes while row creation and editing stay available. It protects against accidental layout edits and is not an access-control boundary; native commands enforce it.
 
-All six layouts show applied filters and ordered sorts beneath the toolbar. These controls edit the same query as view settings. Conditions follow the selected property type: text matching, checkbox state, numeric comparisons, and calendar-day or timestamp comparisons. Nested AND and OR groups retain their Boolean structure through save, reload, schema changes, and export. Queries permit ten predicates, eight groups, three group levels, and five sorts, with one sort per property. Formula, rollup, and button properties do not expose filtering because the query window does not evaluate those derived values before selecting rows.
+## Loading and session cache
 
-Table grouping supports select, status, multi-select, checkbox, people, relation, and date properties. Headers show the complete filtered source count, collapse state, and contextual creation where the property is editable. Group order, collapsed groups, and hiding empty groups belong to the saved view. Unloaded rows still contribute to group counts; they appear as later row windows load. A row with multiple group identities can appear in each distinct matching group while each group's count counts that row once.
+An inline database shows one placeholder until its view metadata and first row window are ready, so its name, tabs, and rows appear together. Fast loads appear directly, and previously loaded rows stay visible during background refreshes.
 
-Property header presentation includes wrapping, freezing through a visible column, compatible calculations, and date/time formatting. Frozen offsets use the rendered column widths, including live resize drafts; hiding the frozen boundary clears it. Narrow viewports reduce the effective frozen prefix to leave room for scrolling data, and widening the view restores the saved boundary. Wrapping expands editable text cells and read-only values. Formatting changes display without rewriting raw row values. Numeric cells honor the source property's number format while editing the canonical scalar. Date cells show the complete range and offer explicit start, end, and time-zone editing. Changing only a date start preserves its existing end and time zone; an invalid range leaves the previous value intact.
+Switching application tabs unmounts Notes but retains recent database row windows, view lists, templates, selected views, and scroll positions in a process-local session, so returning renders without another SQLite read when the data is current. The session holds at most 32 resources within a 4 MiB serialized-data budget, evicting least recently used entries; it keeps no inactive DOM. Successful Notes mutations, imports, and history restores invalidate it conservatively across the vault, other desktop windows publish invalidations, stale responses cannot become current, and switching vaults clears it. Tables defer automatic refresh while a text cell has focus so refreshes cannot replace active typing.
 
-Calculation footers summarize the complete filtered source and each group independently of the hydrated window. Count all, count values, count empty, and count unique work across property types; numeric and checkbox operations are offered only for compatible types. Formula and rollup calculations hydrate their derived values before aggregation. Null, blank text, and empty arrays are empty; zero and false are populated. Numeric summaries ignore nonnumeric derived values. Sum is zero for an empty input, while average, minimum, maximum, and percent checked are empty when no applicable input exists. Unique counts distinguish canonical row values, with option, actor, and relation identities normalized independently of display names and multivalue ordering. Calculation results are derivative and never become stored row values.
+## Creation and saving
 
-Ordered conditional color rules can tint an entire row or a selected property. They use the same bounded typed predicates as filters, retain stable rule identities, and live in the saved view. The first matching rule for a target wins; a cell-specific rule takes precedence over the matching row tint. Source changes remove invalid targets and predicates. Colors are presentation and do not alter status, schema, or permissions.
+Selecting `/database` reserves the inline surface immediately; failed creation stays in the editor's retryable write queue with the same identities. The slash query never becomes the title. Converting existing text into a database keeps that text as its title.
 
-Adding a property from the table header writes the current canonical source schema and preserves unsaved edits in an open property editor. A failed creation retains the picker name and editor drafts. Source controls disable while a save is pending.
-
-Table and list row actions use an overflow menu. Column width controls remain keyboard accessible and appear on header hover or focus on pointer devices. List properties align with their headers; secondary properties collapse on narrow layouts. A table preview appears only after a row is opened.
-
-Panels stay within the viewport and outside clipped database containers. Their nested dropdowns preserve the owning dialog's focus boundary. Escape closes the innermost dropdown first, then its settings panel, returning focus to the invoking control. Leaving a panel commits its focused blur-saved field before dismissal without pulling focus back. Each saved view has a separate layout instance; pending toolbar writes disable competing view selection, and external preselection cannot reuse another view's editing state or save feedback. These controls change the same existing view configuration and row operations described below.
-
-The separation of content, view settings, and property visibility follows [Notion's documented database controls](https://www.notion.com/help/views-filters-and-sorts). Notes and Projects use the same [collection components and visual rules](../collections.md), with domain-specific editors and actions. The [interaction comparison](database-interactions.md) records the implemented behavior and its product boundaries.
-
-Switching to another application tab unmounts the Notes UI but retains recently visited database row windows, view lists, templates, selected views, and horizontal scroll positions. Returning renders those snapshots immediately without another SQLite read when they remain current. The editor retains the note's vertical scroll separately. All six database layouts share this session behavior.
-
-Successful Notes mutations, including row-body edits, schema changes, imports, and history restoration, invalidate database snapshots conservatively across the active vault. Linked views therefore refresh together. Mounted views defer refresh during their own writes, and tables also defer automatic refresh while a text cell has focus so it cannot replace active typing. Existing rows remain visible while canonical data loads. Concurrent reads share their work, and a response that predates invalidation cannot become current. Other desktop windows publish vault-scoped invalidations even while Notes is inactive. Switching vaults clears snapshots and rejects requests from the previous vault.
-
-The session retains at most 32 resources with a combined serialized-data budget of 4 MiB, plus 32 small presentation entries. Least recently used resources are evicted first; an oversized response can render but is not retained. These limits bound cached data rather than measuring total JavaScript heap usage. No inactive database DOM or observers are retained, and eviction falls back to an ordinary load.
-
-## Data source and view model
-
-A child database creates a database shell, one canonical data source, an initial table view, and a visible `child_database` block in one transaction. A linked database view creates another shell and view that reference the same data source without duplicating rows or schema.
-
-Each view owns independent presentation settings such as filters, sorts, visible properties, grouping, date range, and row-open mode. Views never become separate sources of row data.
-
-Source schema updates contain property definitions only. They reconcile every referencing view in the same transaction, preserving surviving column order, visibility, widths, query priorities, and row-open modes. New properties enter each table view's property order; deleted properties leave its presentation and query. Group, date, and cover selections clear when their property is deleted or becomes incompatible. The required title stays first and visible. Editing a source therefore cannot restore an older view configuration captured when the property editor opened.
-
-Renaming a local database updates its block and database shell. Its sole owned source follows the shell title; multiple owned sources retain their independent names. Renaming a linked database leaves shared source titles intact.
-
-Database copies own independent local sources, schemas, saved views, row properties, row bodies, nested notes and databases, and item templates. Copying a containing note or block tree follows the same rule. References within the copied graph point to its new identities, including self-relations; references to unrelated data remain external. Managed file bytes can be shared while copied pages and properties retain their own asset references. Planning captures the source graph before insertion, so a destination inside a source row cannot expand the copy recursively.
-
-Copying a cut block includes only the source objects that were live before that cut. Older Trash remains excluded, and unavailable relation references remain preserved in canonical properties without becoming live relation links. Identity-preserving paste can atomically restore the cut-owned graph and move it to the destination, retaining its source and row identities. Moving a database also updates its shell placement and project scope, and rejects destinations inside its own row graph.
-
-Linked creation can target another note or a compatible block container, with an explicit insertion position. It shares source data while retaining its own shell and view settings. Replacing a plain block is atomic, preserves its identity and position, and rejects blocks with owned content. Ownership metadata identifies the requested block, its containing note, its canonical source block and note, and the number of sources the requested shell owns without reading rows.
-
-Imported title-only child databases remain visible preservation placeholders until they can be connected to local data.
+New row creation reserves a blank row and focuses its title without waiting for a name, and the next New line stays usable while earlier rows save. A failed creation shows Retry on the row, reuses its reserved page ID, and checks for an already committed page before reporting failure, so retries never duplicate rows. Templates accept a reserved page ID for the same reason. Save feedback stays beside the database title and appears only for slow saves.
 
 ## Copy, paste, and removal
 
-Copying an embedded database provides its readable title and local hyperlink to other applications. Rich paste inside the same vault creates an independent database and offers a floating Dismiss or Paste and sync choice. Dismiss keeps the copy. Paste and sync replaces it with a linked view of the original data. Pasted local database URLs offer Mention, Linked database view, or URL. Mention keeps an inline reference; the linked option inserts an actual database view while preserving surrounding text. The URL option keeps its ordinary hyperlink. These choices do not load source rows until copying or displaying a database requires them.
+Copying an embedded database gives other applications its title and local link. Rich paste in the same vault creates an independent database with new sources, schemas, views, rows, row bodies, nested content, and templates, then offers Dismiss or Paste and sync; Paste and sync replaces the copy with a linked view of the original. References inside the copied graph, including self-relations, point to the new identities, while references to unrelated data stay external. Copy planning captures the source graph first, so pasting into one of its own rows cannot expand recursively. Pasting a local database URL offers an inline mention, a linked view, or a plain URL. None of these choices load source rows until a copy or display requires them.
 
-Deleting a database or a selection containing one confirms before the local document changes. The confirmation counts owned data sources and explains that their pages move to Trash. Removing a linked view confirms separately and retains its shared source and pages. Cancelling keeps the selection and content. A failed ownership read prevents confirmation until it can be retried. Undo and restore recover the affected owned graph while preserving items that were already individually trashed.
+Copying a cut block includes only objects that were live before the cut. Identity-preserving paste moves the cut graph to the destination, keeping its identities, and rejects destinations inside its own row graph.
 
-Database blocks do not offer conversion into unrelated block types. Replacing one uses the confirmed deletion path and a fresh text block, preserving the original database identity for recovery.
+Deleting a database, or a selection containing one, asks for confirmation that names the owned sources whose pages move to Trash; removing a linked view confirms separately and keeps shared data. Undo and restore recover the owned graph while preserving items that were already trashed individually. Database blocks do not convert into unrelated block types.
 
-## Row pages
+## Row pages and sub-items
 
-Every row is a normal Notes page parented by its data source. It stores values matching the current property schema and a normal page body block tree.
+Every row is a normal Notes page parented by its data source, with property values matching the schema and an ordinary page body. Rows open as full pages or previews and use the same editor, history, comments, links, assets, and Trash behavior as other pages. They stay out of the ordinary project root because the database view owns their navigation, but they still participate in search, links, and history.
 
-Rows can open as full pages or responsive previews. Their body uses the same editor, history, comments, links, managed assets, Trash, and duplication behavior as other Notes pages.
-
-Row pages stay out of the ordinary project root because the database view owns their primary navigation.
+Table rows support sub-items within one source. Parents must be active rows in the same source; native commands reject self-parenting, cycles, and depths over 32. Filtered or unloaded parents do not hide matching children, and child counts cover the complete source. Collapse is saved per view (up to 500 collapsed rows). Trashing or archiving a parent shows its active children at the top level without discarding the relationship. Copies, duplication, graph export, and project history remap and validate these relationships before commit.
 
 ## Properties
 
-Supported schemas include title, rich text, text, number, select, multi-select, status, date, checkbox, URL, email, phone, files, people, place, created and edited metadata, unique ID, relation, rollup, formula, and typed button properties.
+Supported types are title, rich text, text, number, select, multi-select, status, date, checkbox, URL, email, phone, files, people, place, created and edited metadata, unique ID, relation, rollup, formula, and button. The title cannot be hidden, deleted, or converted. Select-like properties own stable option identities, labels, colors, and status groups. System metadata, computed values, and local people edits are read-only.
 
-The required title property cannot be hidden, deleted, or converted to another type. Select-like properties own stable option identities, labels, colors, and relevant status groups.
+## Layouts
 
-Writable cell types include ordinary text, number, boolean, select-like, date, contact, place, and relation values where the view can validate them. System metadata, computed values, and unsupported local people edits remain read-only.
+- **Table:** inline cell editing, keyboard navigation, column order and width (one saved update per resize gesture), visible and hidden columns, sub-items, and full-page or preview opening.
+- **Board:** groups by a compatible property and shares Kanban columns, cards, and inline creation with Projects. Card menus provide keyboard and touch move actions. Dragging writes only when the grouping property has a safe local representation; read-only or ambiguous types disable drag writes. Column counts come from the backend.
+- **Gallery:** responsive cards with a page cover, a files-property preview, or no image. Missing media is an explicit card state.
+- **List:** compact rows with optional grouping. Grouping never changes page hierarchy.
+- **Calendar:** month view over a date property. Ranges appear on every covered day, and creating from a day prefills the date. It does not create Ganbaru Calendar events.
+- **Timeline:** a bounded range over a date property with resize controls that write the same canonical date as table cells.
 
-## Table view
+## Relations, rollups, and formulas
 
-Table rows support source-scoped sub-items. Adding a sub-item creates its row page, initial document block, and parent relationship in one transaction. Moving a row under another row preserves its data-source page ownership; moving it to the top level removes only its sub-item relationship. Parents must be active rows in the same source. Native mutations reject self-parenting, cycles, and resulting subtree depths greater than 32.
+A relation targets one data source. Values are also normalized into link rows for validation, backlinks, and efficient reads; those are rebuildable projections. Targets outside the configured source are rejected, and an inverse relation synchronizes only when its schema is valid. Relation text uses the target title, falling back to the row ID.
 
-The table arranges loaded descendants below their closest loaded ancestor while preserving the query's sibling order. A filtered or unloaded parent does not remove a matching child: the child retains its canonical depth and ancestor identities. Collapse belongs to the saved view, with at most 500 collapsed row identities, and hides loaded descendants even when an intermediate ancestor is outside the current row window. Each row's child count covers the complete active source rather than only the loaded or filtered window. Grouped tables retain their group boundaries; a multi-select row can appear in more than one group, and keyboard navigation follows each rendered occurrence.
+Rollups compute from current related rows and may use a rebuildable cache; they are never stored as row values. Unsupported combinations and computed-property cycles are rejected.
 
-Trashing or archiving a parent temporarily presents its active children as top-level rows without discarding the durable relationship. Restoring the parent restores nesting. Moving either endpoint outside its source detaches incompatible relationships; deleting an endpoint removes its relationships. Database and containing-note copies remap row relationships to independent identities. Duplicating a row also copies its active sub-item subtree, while the duplicated root retains its existing same-source parent. Canonical graph export and project-history capture and restore include these relationships, including independent copies of graphs moved outside a restored project. Copy and restore validate same-source ownership, cycles, and depth before commit; invalid history edges leave current rows intact.
+Formulas are bounded expressions evaluated by a checked Rust engine (literals, property reads, arithmetic, comparison, boolean logic, conditionals, text and numeric helpers). They never use JavaScript evaluation. Unknown properties, cycles, type errors, and runtime failures produce typed errors, and results are read-only.
 
-Table supports row creation from its final New page line or toolbar, template selection, inline cell editing, adding a property from the header, visible and hidden columns, column order and width, filters, sorts, keyboard cell navigation, and full-page or preview opening. Column edges support dragging and keyboard resizing, with one saved width update when the gesture completes.
+## Templates and buttons
 
-Clicking New page or the table toolbar New immediately reserves a blank row and focuses its title. Creation starts without waiting for a name. The next New page line stays available, including while earlier rows are saving. Its hover highlight does not follow the control down when a new row takes its place. Empty titles remain empty in storage. Typing stays intact when creation returns; Enter or leaving the title saves it after creation. Enter on the last row moves focus to New page, and subsequent saves and refreshes preserve that control's focus. The creation response supplies canonical defaults and template values without a full table or template reload.
+Database item templates belong to one data source. Creating one snapshots a row's editable properties and body; applying one creates a new row with fresh block IDs and maps properties against the current schema. One template can be the default, blank creation stays available, and editing or deleting templates never changes existing rows. Creating a template starts from an existing row.
 
-Title remains visible. Existing cell edits and submitted new-row edits reload the affected filtered and sorted window. Active titles and failed drafts stay visible while editing or retrying. A refresh started before a row finished creating cannot discard that row. Failed creation exposes an error and retry on the row, reuses its reserved page ID, and checks for an already committed page before reporting failure. Closing the table submits pending title drafts. Templates also accept a reserved page ID so a failed response can be recovered without creating another page.
+Button properties are typed local row actions, not automation blobs. The implemented action updates a configured property on the current row, optionally with confirmation, after reloading current schema and row state. Broad edits, deletion, webhooks, mail, and third-party actions stay unavailable until they have explicit schemas and authority boundaries.
 
-## Board view
+## Queries
 
-Board groups rows by a compatible property, retains empty and hidden groups, exposes selected card properties, filters and sorts, and supports row creation.
+All views apply filters and sorts before bounded row hydration and page with stable cursors. A query allows ten predicates, eight nested AND/OR groups, three group levels, and five sorts with one sort per property. Conditions follow the property type: text matching, checkbox state, numeric comparison, and calendar-day or timestamp comparison (ISO dates compare days, RFC 3339 values compare instants). Empty stays distinct from zero and unchecked.
 
-Board shares its Kanban columns, cards, drag feedback, action menus, and inline creation with Projects. Move actions in each card's menu provide keyboard and touch alternatives. Column counts use the backend group counts rather than only the currently loaded cards.
+Text matching ignores ASCII letter case only, with no Unicode normalization; `%` and `_` are literal. Text made entirely of Unicode White_Space is empty (see the [schema contract](../../data/schema/notes-and-projects.md)). Queries, exports, and conditional colors share these rules.
 
-Dragging a card writes only when the grouping property has a safe local representation, such as select, status, checkbox, date, or supported multi-select behavior. Read-only or ambiguous group types disable drag writes.
-
-## Gallery view
-
-Gallery renders responsive cards with a page cover, selected files-property preview, or no image. It stores card size, fit behavior, visible properties, filters, sorts, and row-open mode.
-
-Missing or unavailable media remains an explicit card state and does not remove the row.
-
-## List view
-
-List shows compact rows with title first, selected properties, optional grouping, hidden groups, filters, sorts, creation, and full-page or preview opening.
-
-Grouping changes the view only and never changes page hierarchy.
-
-## Calendar view
-
-Calendar uses a selected date property, month range, visible properties, filters, and sorts. Date-range rows appear on every covered visible date. Creating from a day prefills the selected date property.
-
-Day creation opens on demand instead of showing a text field in every cell. Cards use the shared compact card treatment and action menu. The month grid scrolls horizontally in narrow containers to keep dates and row titles readable.
-
-This is a database view and does not create Ganbaru Calendar events automatically.
-
-## Timeline view
-
-Timeline uses a selected date property and a bounded visible range, with optional grouping, filters, sorts, row creation, and date-range resize controls. Resizing writes the same canonical date value used by table cells.
-
-## Relations
-
-A relation property targets one data source. Values reference rows from that source and are also normalized into link rows for validation, backlinks, and efficient reads. An optional inverse relation synchronizes only when its schema is valid. Relation text uses the target's title, falling back to its row ID when the title is empty; filters, conditional colors, and CSV exports use the same fallback.
-
-Targets outside the configured source are rejected. Schema changes and row lifecycle operations rebuild or remove derived link facts without making those projections canonical.
-
-## Rollups
-
-Rollups select a relation, target property, and compatible calculation. Values are computed from current related rows and can use a rebuildable cache. They are never saved as canonical row property values.
-
-Schema, relation, target-row, property, and lifecycle changes invalidate affected cached values. Unsupported combinations and computed-property cycles are rejected.
-
-## Formulas
-
-Formula properties store a bounded local expression and evaluate through a checked Rust expression engine. The language supports literals, property reads, arithmetic, comparisons, boolean logic, conditional and empty checks, formatting, length and containment, case conversion, and basic numeric helpers.
-
-Formulas never use JavaScript evaluation. Unknown properties, dependency cycles, invalid types, and runtime failures produce typed errors. Successful outputs are derived, read-only values.
-
-## Database templates
-
-Database item templates are implemented and scoped to one data source. Creating a template from a row snapshots editable properties and the row's loaded body block tree into canonical template records.
-
-Applying a template creates a new row page, maps stored property identities against the current schema, generates fresh block IDs, and copies the body. One template can be the default. Table row creation exposes template selection; blank creation remains available.
-
-Templates can be listed, created, renamed, updated, duplicated, marked default, and deleted without changing rows that previously used them.
-
-## Typed database buttons
-
-Button properties are typed local row actions, not arbitrary automation blobs. The implemented action updates a configured property on the current row and can require confirmation.
-
-The command reloads current schema and row state before applying the action. Broad edits, deletion, webhooks, mail, and third-party integrations remain unavailable until they have explicit schemas and authority boundaries.
-
-## Bounded reads
-
-All views apply filters and sorts before bounded row hydration and use stable cursors. Filters support nested AND and OR groups, with at most ten predicates, eight groups, and three group levels. Number predicates compare finite numeric values; date and created/edited timestamp predicates support before, after, inclusive comparisons, equality, and inequality. An ISO date compares calendar days, using UTC for timestamps with explicit offsets. An RFC 3339 value compares instants. Empty values stay distinct from zero and unchecked values. Filter chips retain grouped Boolean structure when edited, and scalar edits commit when the floating panel loses focus.
-
-Text containment, equality, and inequality ignore ASCII letter case only: `CAFÉ` matches `cafÉ` but does not match `café`. Other Unicode characters remain exact, with no normalization; `%` and `_` are literal characters. Null, empty text, and text made entirely from the Unicode White_Space characters listed in the [schema contract](../../data/schema/notes-and-projects.md) are empty. U+200B zero width space and U+FEFF byte order mark remain populated. Native queries, exports, and conditional color rules share these matching rules.
-
-Formula, rollup, and button predicates are unavailable in the current filter editor and rejected by native query validation. Those values hydrate after the bounded row query, so their evaluated results cannot yet participate in correct filtering, counts, or pagination. Relation titles, rollups, formulas, buttons, covers, and previews hydrate only for returned rows. A late response for an older view state cannot replace the active result.
-
-The exact table layout, query plans, and cache schema belong in [data documentation](../../data/README.md), not this feature contract.
-
-Save feedback stays beside the inline database title. Fast saves remain visually quiet; a save lasting at least 600 ms shows the standard loading spinner without inserting a status row or dimming the database. Save errors remain visible and pending writes retain their duplicate-submission guards.
+Formula, rollup, and button values are hydrated after the row query, so they cannot participate in filtering, counts, or pagination and are rejected as predicates. Relation titles, computed values, covers, and previews hydrate only for returned rows. Exact layout, query plans, and cache schema belong in the [data documentation](../../data/README.md).

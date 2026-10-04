@@ -1,13 +1,6 @@
 # Feature documentation
 
-Feature documents describe the intended product behavior and the reasons behind it. They are normative unless a section is explicitly labeled as current implementation status.
-
-Implementation status uses four terms:
-
-- **Implemented:** the current source provides the documented core behavior.
-- **Partial:** a useful slice exists, but a documented part remains incomplete or unvalidated.
-- **Planned:** the behavior is product direction and has no complete implementation yet.
-- **Deferred:** the behavior is intentionally outside the active delivery sequence.
+Feature documents describe intended product behavior and the reasons behind it. They are normative unless a section is explicitly labeled as current implementation status. Status labels (Implemented, Partial, Planned, Deferred) follow the [documentation status vocabulary](../README.md#status-language).
 
 Source paths, schema inventories, cache tuning, device test matrices, and delivery history belong in architecture, data, performance, testing, or roadmap documentation. Feature specs keep security bounds and limits when those bounds affect user expectations or protect durable data.
 
@@ -39,4 +32,4 @@ Source paths, schema inventories, cache tuning, device test matrices, and delive
 
 - [Gamification](gamification.md)
 
-Platform-specific behavior lives under [platform documentation](../platforms/README.md). Data ownership and persistence rules live under [data documentation](../data/README.md). Pure logic that can be specified independently of UI or persistence lives under `docs/algorithms/`.
+Platform-specific behavior lives under [platform documentation](../platforms/README.md). Data ownership and persistence rules live under [data documentation](../data/README.md). Pure logic that can be specified independently of UI or persistence lives under [algorithms](../algorithms/README.md).

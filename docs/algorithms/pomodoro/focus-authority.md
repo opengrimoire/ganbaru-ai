@@ -1,84 +1,74 @@
 # Focus authority and evidence
 
-**Status: Partial.** Native desktop and Android owners drive transactional execution, adaptive run/phase decisions, replay approval, recovery, and accepted-phase publication. Desktop automatic admission requires fresh local activity; Android commitment reminders cannot create execution. Cross-feature effects recheck native vault and phase authority before delivery. Broader integration gates and physical platform acceptance remain required. Linked-device ownership, remote commands, and live companion status remain planned.
+**Status: Partial.** A native owner on desktop and Android drives admission, transactional execution, adaptive decisions, recovery, and accepted-phase publication. Physical platform acceptance remains open. Linked-device ownership, remote commands, and live companion status are planned.
 
 ## Independent facts
 
 A commitment is a Calendar plan. An executing run is an accepted interval with persisted state. Activity is an observation from an authorized local source or an explicit user confirmation. Freshness describes when a remote response was received. None implies the others.
 
-A timer measures an accepted interval. It does not prove productive work. Calendar projections, phone backgrounding, screen-off time, and silence from another device are not activity evidence.
+A timer measures an accepted interval; it does not prove productive work. Calendar projections, phone backgrounding, screen-off time, and silence from another device are not activity evidence.
 
-## Current local admission and recovery
+## Admission
 
-Desktop automatic starts require an eligible Calendar event and a newly requested native activity observation. Input must occur at or after the relevant boundary and be no older than the typed 15-second activity limit. Missing, malformed, future or stale observations cannot authorize execution. The scheduler retries activity checks at bounded intervals only while an eligible commitment is waiting. Manual acceptance remains available when the observation source is unavailable.
+- Desktop automatic starts require an eligible Calendar event and a new native activity observation showing input at or after the event boundary and no older than 15 seconds. Missing, malformed, future, or stale observations cannot authorize execution. While a due commitment waits for activity, the owner rechecks every 15 seconds. Manual start remains available when the source is unavailable.
+- Android starts only through explicit user action. Calendar alarms carry reminder data only, never a run ID, phase plan, or running flag. Permission denial never starts a session.
+- A run publishes running state only after its initial write commits. A failed write leaves no executing timer. A late start uses its actual acceptance time.
+- A finished break waiting for return is not an accepted phase. Waiting for any duration cannot start focus; the user must accept the return ("Ready to return").
 
-Android starts scheduled sessions through explicit user action. Calendar alarms contain only reminder data. They cannot carry a run ID, phase plan, or running flag. Reminder receipts suppress repeated delivery through lifecycle reconciliation. Notification permission denial does not start a session.
+Rationale: without these rules, a phone alarm or a desktop that was off at event start could fabricate focus history and drive Doomscrolling or Music as if the user were working.
 
-A new session publishes running state and starts countdown effects after its initial database write succeeds. Failed initial persistence returns an error and leaves no executing timer. A late start uses its actual acceptance time.
+## Native owner
 
-Native Android notifications describe only the current accepted phase. At its deadline they remind the user to return to the app; they cannot advance into another focus interval or publish a later phase to Doomscrolling. Current accepted-phase storage uses a separate key from obsolete automatic activation projections.
+`ganbaru-focus` owns admission, transitions, pauses, recovery, history, and adaptive boundary decisions. The Tauri app runs one serialized native owner per active vault (`pomodoro/native_runtime`). Svelte never runs execution timers or writes runs, segments, pauses, or adaptive rows; it sends semantic commands and paints accepted snapshots. Android lifecycle observations come from Kotlin without needing a WebView.
 
-The Rust publisher also delivers a boundary reminder when canonical execution closes the previously published phase before its alarm fires. Alarm and committed completion delivery share a retained phase receipt. Retries cannot repeat the alert or clear a newer accepted phase. Historical closed phases and zero-duration phases do not produce new reminders.
+- Every command carries an ID. An accepted command stores an immutable receipt in the same transaction as its effects, so retries return the committed result instead of executing again. A later stopped run cannot be replaced by an earlier receipt.
+- User actions are bound to the revision shown when the user clicked. Stale revisions are rejected; they never postpone execution deadlines.
+- Outgoing and incoming phases, the adaptive decision, and the receipt commit in one transaction. Failed timezone resolution, evidence admission, or persistence rejects the operation without publishing execution.
+- The Calendar configuration and the adaptively selected rhythm stay separate, so a policy change cannot masquerade as a Calendar reconfiguration. Accepted phase durations are fixed; only a later boundary can select another rhythm.
+- Presentation subscriptions carry compact revision and availability notices, are bound to the invoking window, are limited to eight, and expire after 30 seconds without renewal. Reading presentation never admits a run.
 
-A finished break waiting for return is not a paused accepted phase. It cannot extend native phase validity to the event end. Outgoing and incoming native transitions share one transaction, including the adaptive decision and command receipt. New segment activation publishes after commit; insertion errors propagate and prevent countdown advancement.
+## Recovery
 
-Rust recovery consumes canonical SQLite state only. It may resume a valid previously committed phase and its pauses, or close it conservatively. It never accepts a native notification projection as evidence of a run or subsequent phases. If the entire event elapsed, recorded time is still bounded by the accepted phase deadline. Repeated recovery does not create history.
+Recovery reads canonical SQLite state only, never a notification projection, and repeated recovery creates no new history.
 
-Startup recovery admits its complete open-run closure before allocating canonical payloads or changing execution. Open runs, their segments and pauses, and sequence steps share a 10,000-record and 16 MiB allocation allowance. The same SQLite transaction performs bounded count and text-size probes, reads evidence, and accepts any recovery changes. This includes the history needed to calculate closure boundaries. Unrelated closed-run history does not consume admission. Excess state fails explicitly before writes; recovery never truncates evidence to fit a limit.
+- **Desktop:** an open run found at startup closes as interrupted at its last heartbeat, bounded by the event end. Heartbeats are written every 15 seconds while a run is open.
+- **Android:** a previously committed phase and its pauses resume when still valid. A phase whose deadline passed completes at that deadline and enters return wait. An elapsed event expires the run. Recorded time never exceeds the accepted phase deadline.
 
-Mobile recovery is serialized by the native owner with accepted commands. Closed or absent runs clear presentation without rewriting history. A resumed phase retains its accepted deadline across response latency; a response arriving after that deadline cannot reactivate it. Backgrounding stops JavaScript visual interpolation, and foreground interpolation runs only while an open run, idle counter, or break return counter can change. Native lifecycle observations and execution continue independently of that visual clock.
+Rationale: desktop crashes leave no trustworthy evidence of what happened after the last heartbeat, whereas Android routinely suspends JavaScript while the committed native phase remains valid.
 
-Break completion enters the return or overtime flow. Waiting for any duration cannot start focus. The former 30-minute automatic return is removed. Starting focus again requires acceptance. The UI labels the return prompt “Ready to return.”
+## Cross-feature effects
 
-## Target execution ownership
+Notifications, overlays, tray, sounds, Music, Doomscrolling, and Android Guardian are effects of committed state, never inputs to it.
 
-A linked vault has one explicitly selected focus controller, defaulting to the pairing desktop. This is separate from coordination among windows on one device. Disconnection never elects a replacement; the current controller may continue offline. An unlinked phone supports explicit local sessions.
+- Effects carry the Focus publication generation and the shared vault ownership generation, and are rechecked against current native authority immediately before delivery. Superseded, stopped, or different-run effects are dropped.
+- Effect validity is a monotonic lease (15 seconds) clipped to the accepted phase and event deadlines. Return wait, failed, stopped, and expired phases cannot authorize phase-dependent rules.
+- Effect delivery runs in a separate worker that coalesces to the latest request. A slow or failing platform operation never delays execution; it retries with its own backoff and reports a pending-delivery diagnostic.
+- Android notifications describe only the current accepted phase. At its deadline they remind the user to return; they cannot advance to another phase. Alarm and committed-completion delivery share one receipt so a boundary alert fires once.
+- On Android, the Guardian service accepts a phase only after checking current native authority through an app-private, read-only provider bound to the Rust process identity, so an old process cannot overwrite newer state.
 
-A live durable handoff must:
+## Vault lifecycle
+
+Vault selection, replacement, and handoff freeze the native owner before closing pools, using the shared [vault operation boundary](../../data/architecture.md). Freeze immediately revokes effect admission, waits up to ten seconds for the owner and five seconds for the delivery worker, and fails quiescence on timeout instead of abandoning work. Lifecycle revisions prevent an earlier freeze or resume from overriding a later one. After resume, idle warnings must be shown and acknowledged again.
+
+## Idle grace
+
+Idle failure is measured from the first committed visibility acknowledgement of the current warning, using the owner's monotonic clock. Missing visibility or a failed acknowledgement write cannot consume the user's grace period. See [Idle detection](idle-detection.md).
+
+## Planned: device controller ownership
+
+A linked vault will have one explicitly selected focus controller, defaulting to the pairing desktop. This is separate from coordination among windows on one device. Disconnection never elects a replacement; the current controller may continue offline. An unlinked phone supports explicit local sessions.
+
+A live handoff must:
 
 1. Commit final state and fence further execution under the old ownership epoch.
 2. Issue a transfer identifying the recipient and checkpoint.
 3. Persist the transfer on the recipient before it executes.
 4. Retry the same transfer after lost acknowledgements without reactivating the old controller.
 
-Lost-device recovery creates a new generation. Recovered records from the old generation remain historical evidence and receive overlap review. Remote commands require command ID, ownership epoch, expected run revision, and expiry. Only an acknowledged committed result is success; expired commands cannot run after reconnection.
+Lost-device recovery creates a new generation. Records recovered from the old generation remain historical evidence and receive overlap review. Remote commands require command ID, ownership epoch, expected run revision, and expiry. Only an acknowledged committed result is success; expired commands cannot run after reconnection. Replication must never cause native execution.
 
-The `ganbaru-focus` service owns admission, transitions, pauses, recovery, history, ownership, and adaptive boundary decisions. Its native execution service supports serialized semantic commands and atomic adaptive run-start and phase-boundary writes. Decisions read canonical evidence in the accepted transaction, use native historical timezone facts, and persist the selected rhythm, feature/context snapshot, experiment update or assignment, segment, and receipt together. Failed timezone resolution, aggregate admission, or snapshot persistence rejects the operation without publishing execution. Accepted retries return their committed result before resolving current evidence again.
+## Planned: companion freshness
 
-The durable Calendar configuration is separate from the selected adaptive rhythm. A native policy change cannot masquerade as a Calendar reconfiguration on the next observation or restart. Accepted phase durations remain fixed; only a subsequent boundary can select another rhythm. The application adapter supplies exact canonical day plans using the occurrence's device-local start date while preserving its home-zone recurrence identity. Acceptance after midnight can reread the complete original day plan in the same transaction.
+Live status uses a separate connection from durable replication. During an active companion connection, heartbeats run every 15 seconds and status expires after 45 seconds without a fresh response, measured with local monotonic time and connection generations rather than peer clocks.
 
-The desktop and mobile composition roots now start the native owner. The Svelte root store displays accepted snapshots and sends semantic commands. Both shells have stopped invoking frontend Calendar admission and transition schedulers, and the explicit-start menu requests native canonical admission. Raw run, segment, pause, event, and adaptive write commands are no longer registered. Kotlin supplies native lifecycle observations without requiring a WebView. The Android adapter publishes only the canonical accepted phase to notifications and Guardian; TypeScript supplies bounded localized copy through a separate command. WebViews cannot publish or cancel phase projections directly. Retained notification language is device-local presentation data and cannot recover execution.
-
-The native owner checks accepted receipts before startup recovery or current Calendar resolution. An action returns its immutable receipt separately from the current projection. A later stopped run cannot be replaced by an earlier running receipt. Unavailable clock or current projection data does not erase accepted success and cannot renew native effects. An older publication generation can retrieve an existing receipt in the same authorized vault; it cannot execute a new mutation. New actions still require successful startup recovery. Rejected user revisions and expired presentation subscriptions do not postpone execution deadlines.
-
-Presentation channels carry compact generation, revision, availability, and error notices rather than run or segment bodies. Subscriptions are bound to the invoking native window, limited to eight, and expire after 30 seconds without renewal, including while the owner is frozen. Reading or renewing presentation cannot admit a run. The frontend connection validates full projections, keeps user actions bound to the revision shown at click time, and retains uncertain receipt identities before sending another intent. Detached overlays additionally bind controls to the native publication generation, run, and segment that created them. Delayed responses cannot restore older vaults or revisions.
-
-Native cross-feature effects carry both the Focus publication generation and the shared vault ownership generation. Music and Doomscrolling validate the shared ownership fence rather than comparing independent runtime counters. A renewed owner lease cannot exceed the accepted running-phase or Calendar deadline. Paused work remains bounded by its run and owner lease; return-wait, failed, stopped, and expired phases cannot authorize a successor's rules. Desktop publication uses the native rule service. Android uses the private Guardian notification adapter, which bounds running validity by the accepted phase deadline and paused validity by the event end. Waiting, failed, closed and expired states revoke that projection. Real Android service and alarm acceptance remains pending.
-
-The native owner also publishes a bounded current-authority value immediately after accepting a canonical revision. Music rejects queued effects from an older revision and rechecks authority after preference reads and before committing a soundtrack assignment. Desktop rule publication rejects superseded effects; process-close authorization derives the current phase from this native value instead of the last filesystem projection. Freeze, context replacement, and execution failure clear current authority. Both the owner authority value and Music delivery leases have monotonic expiry, clipped to accepted phase and event deadlines. Duplicate or older delivery cannot restart Music's monotonic allowance. An active phase transition retains only the original bounded Music lease until its new assignment policy reconciles; a stopped or different run cannot retain it. Existing browser snapshots remain bounded derivative files and still require the independent delivery cutover for prompt replacement.
-
-Effect delivery failures have a separate monotonic retry deadline bound to the accepted publication generation and execution revision. That backoff cannot postpone an earlier execution wake, and a newer accepted revision attempts its own effects immediately. Overdue presentation alerts do not cause retry loops. Persistence failures retain their independent execution backoff. The owner keeps its pending wake through presentation traffic and checks a due timer before queued requests, so continuous subscription requests cannot prevent native ticks.
-
-Effect delivery now runs in one worker independently of the semantic owner. One retained latest request coalesces pending projections and preference changes while one platform operation is in flight. A slow platform reply cannot create another worker or delay the execution loop through effect delivery. Revision-bound delivery errors are returned through a compact status value. A stalled operation produces a pending-delivery diagnostic while canonical execution continues. Music is enqueued before window delivery. Native source reads required for execution retain their separate failure and work-budget obligations.
-
-Requesting freeze immediately revokes native callback admission, including while the semantic owner is processing earlier work. The outer request waits at most ten seconds for the owner's acknowledgement. Once handled, freeze replaces pending delivery with revocation and waits up to five seconds for the worker to release its captured pool and revoke platform state. Timeout fails vault quiescence without abandoning or restarting the operation. Resume is one retained lifecycle request, so a full command queue cannot drop it. Lifecycle revisions reject an earlier queued freeze after resume, and an earlier resume cannot reopen a later freeze. Resume remains pending until that same worker confirms quiescence. Recovery then clears earlier warning visibility evidence and requires a fresh paint acknowledgement. Heartbeat coalescing preserves at most one recent canonical phase closure; acknowledgement, expiry, stop, another run, or another vault clears it. Historical closures never become notification input merely because delivery was delayed. Ordinary vault selection and replacement now drain native owners before closing pools or changing the active pointer, using the shared [vault operation boundary](../../data/architecture.md). Execution input reads retain separate bounded-work obligations.
-
-Desktop window creation, recoloring, and tray updates recheck revision at main-thread execution. The tray retains the context belonging to its displayed snapshot. Native clicks may refresh heartbeat revisions only while the same vault, run, segment, phase, mode, and idle episode remain current. Shared Music tray refreshes coalesce and read current displayed Focus state on the main thread. Monitor repair retains phase identity across heartbeat revisions and rejects changed runs, phases, modes, and generations. Sound delivery rechecks current authority. Completion dismissal requires its retained generation, run, segment, completion surface, and native window. Other overlay closure follows committed native execution. The obsolete WebView commands for creating, recoloring, or indiscriminately closing phase overlays are removed.
-
-Android notification callbacks check current cached Rust authority through a private primitive JNI callback before calling Guardian. The Guardian handler checks again after entering its serialized publication lock, immediately before accepting a phase or completion. It reads the native source through an app-private, read-only provider in the Rust hosting process. Provider calls carry a native process identity, generation, and revision only, require the app UID, and cannot update execution. A process nonce prevents earlier envelopes from passing after restart even when publication counters coincide. Cancellation and language-copy updates check that same process identity at the Guardian boundary, independently of phase authority, so freeze can revoke presentation and old processes cannot clear or overwrite newer state. Absent or unavailable native authority rejects publication. Already accepted, deadline-bounded Guardian reminders retain their independent lifecycle. Release shrinker rules preserve both JNI names. Both exports were verified in the linked ARM64 library against the compiled Kotlin static signatures. Physical cross-process acceptance and displayed overlay keyboard integration remain required.
-
-Desktop tray controls send native commands with captured accepted revisions. Native overlay creation, recoloring, idle alerts, break warnings, repeated return alerts, and completion classification follow committed state. Visual countdown expiry cannot create return-wait or idle failure. Blocking preference reads and window work run in the independent delivery worker. Superseded frontend execution controllers and platform aliases have been removed. Localized notifications and native completion Music gain ownership are connected. Broader gates and real platform acceptance remain open.
-
-Idle failure uses the first committed visibility acknowledgement for the current warning, rather than elapsed time since detecting inactivity. Paint acknowledgement supplies episode identity only; Rust owns the grace clock and failure transition. Missing visibility or failed acknowledgement persistence cannot consume the user's grace period. See [Idle detection](idle-detection.md).
-
-## Target companion freshness
-
-Live status uses a separate connection from durable replication. During an active companion connection, send heartbeats every 15 seconds and expire status after 45 seconds without a fresh response. Use local monotonic time and connection generations, not peer clocks or a cached history row.
-
-When status expires, show last confirmed state and “Status unavailable.” Do not infer focus, idle, failure or completed phases. Cached deadlines may produce clearly labeled scheduled reminders only. Idle warnings require a fresh valid observation from the controller. Phone activity does not reset the desktop idle clock or override webcam suppression and source failures.
-
-Phase-dependent Music and Doomscrolling consume confirmed state with bounded validity. Independent local rules keep their own schedules. Android background restrictions must be visible as degraded connectivity.
-
-## Verification
-
-Protect PC-off event starts, late arrivals, missed break returns, source failure, future observations, exact deadlines, failed writes and repeated recovery. Controller work additionally requires stale generations, handoff interruption, lost acknowledgements, expired remote commands, overlapping recovered history, and proof that replication cannot cause native execution.
+When status expires, show the last confirmed state and "Status unavailable." Do not infer focus, idle, failure, or completed phases. Cached deadlines may produce clearly labeled scheduled reminders only. Phone activity does not reset the desktop idle clock or override webcam suppression and source failures. Phase-dependent Music and Doomscrolling consume confirmed state with bounded validity, and Android background restrictions appear as degraded connectivity.

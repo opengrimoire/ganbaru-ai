@@ -2,9 +2,7 @@
 
 Ganbaru AI is an anti-procrastination and anti-burnout productivity app. It combines planning, focus, knowledge, communication, and distraction control without requiring hosted Ganbaru infrastructure.
 
-The product is free, local-first, privacy-first, and licensed under AGPL 3.0. AI is optional. The app must remain useful when no provider is installed, configured, or reachable.
-
-The About acknowledgments are also available during onboarding. They credit bundled sound effects and the Lucide and vscode-icons sources used for interface and Chat file icons.
+The product is free, local-first, privacy-first, donation-funded, and licensed under AGPL 3.0. AI is optional. The app must remain useful when no provider is installed, configured, or reachable.
 
 ## Product principles
 
@@ -30,7 +28,7 @@ Installing a provider, joining a channel, mentioning an AI teammate, or possessi
 
 ### Self-hosted and donation-funded
 
-Ganbaru AI does not depend on a subscription or a hosted service operated by the project. Sync and external integrations must be user-provisioned. Development is donation-funded through community support.
+Ganbaru AI does not depend on a subscription or a hosted service operated by the project. Product infrastructure such as sync must be user-provisioned and self-hostable, with setup guidance that non-technical users can follow. Optional third-party integrations may use their documented external services.
 
 ### Platform-appropriate behavior
 
@@ -38,7 +36,7 @@ Linux and Windows are the primary desktop targets. Android is the first mobile i
 
 ### Text selection
 
-Interface labels, controls, and explanatory dialog text do not support text selection. User-authored content in reading or editing surfaces, editable fields, code, and terminal output remain selectable so people can copy and work with their data.
+Interface labels, controls, and explanatory dialog text are not selectable. User-authored content, editable fields, code, and terminal output remain selectable so people can copy and work with their data.
 
 ## Product areas
 

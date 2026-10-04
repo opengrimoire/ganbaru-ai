@@ -44,9 +44,11 @@ Normal productivity features work without network access. Network use is feature
 
 Loopback servers use random bearer tokens, bounded requests, narrow registries, and process-lifetime scope. A loopback address is not sufficient authentication by itself.
 
-## Planned sync and collaboration
+## Device linking, sync, and collaboration
 
-Typed domain operations, Yrs/Yjs collaborative text, secure local device linking, and an optional user-hosted Rust relay for encrypted records are planned. Multi-person collaboration follows personal device sync. They are not current runtime dependencies. The future transport must preserve local canonical storage and enforce resource visibility for derived data as well as direct reads.
+Private-LAN device linking with single-writer whole-vault handoff is implemented between one person's desktop and Android devices. It uses pinned, paired transport and moves one validated complete vault; it is not concurrent sync.
+
+Typed domain operations, Yrs/Yjs collaborative text, and an optional user-hosted Rust relay for encrypted records are planned, followed by multi-person collaboration. They are not current runtime dependencies. The future transport must preserve local canonical storage and enforce resource visibility for derived data as well as direct reads.
 
 See [Sync and collaboration](../data/sync.md).
 
