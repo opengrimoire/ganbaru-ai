@@ -25,6 +25,7 @@ const MAX_WINDOW_DAYS: i64 = 3_660;
 const MAX_ID_BYTES: usize = 1_024;
 
 /// One captured render window, with inclusive dates and an exclusive instant end.
+#[derive(Clone)]
 pub(crate) struct Window {
     pub start_date: NaiveDate,
     pub end_date: NaiveDate,

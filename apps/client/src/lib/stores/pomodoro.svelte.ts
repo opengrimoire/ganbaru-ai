@@ -1,6 +1,6 @@
 import { NativeFocusClient, reportIdleOverlayVisible, type FocusControlScope } from "$lib/api/focus";
 import { BUILD_PLATFORM_PROFILE } from "$lib/platform";
-import { focusDisplayElapsedSeconds, focusDisplayRemainingSeconds, focusSegmentForRail, type FocusIntent, type FocusProjection } from "$lib/pomodoro/native-focus";
+import { focusDisplayElapsedSeconds, focusDisplayRemainingSeconds, focusNeedsVisualClock, focusSegmentForRail, type FocusIntent, type FocusProjection } from "$lib/pomodoro/native-focus";
 import { DEFAULT_POMODORO_CONFIG, rhythmPositionCount, type PomodoroConfig } from "$lib/pomodoro/rhythm";
 import type { PersistedSegment } from "$lib/components/calendar/types";
 
@@ -13,6 +13,7 @@ let segments = $state<PersistedSegment[]>([]);
 let segmentVersion = $state(0);
 let visualNow = $state(0);
 let receivedAt = 0;
+let presentationActive = false;
 let visualTimer: ReturnType<typeof setInterval> | null = null;
 let connectionError = $state<string | null>(null);
 
@@ -37,12 +38,25 @@ function accept(next: FocusProjection): void {
     segments = [...mapped.values()].slice(-MAX_PRESENTATION_SEGMENTS);
   }
   if (previous?.vaultGeneration !== next.vaultGeneration || previous?.snapshot?.revision !== snapshot?.revision) segmentVersion += 1;
+  syncVisualClock();
 }
 const client = new NativeFocusClient(accept, failure);
+/** Tick only while counters can change, so idle sessions do not invalidate dependents several times per second. */
+function syncVisualClock(): void {
+  const needed = presentationActive && focusNeedsVisualClock(projection?.snapshot);
+  if (needed && visualTimer === null) {
+    visualNow = performance.now();
+    visualTimer = setInterval(() => { visualNow = performance.now(); }, VISUAL_INTERVAL_MS);
+  } else if (!needed && visualTimer !== null) {
+    clearInterval(visualTimer);
+    visualTimer = null;
+  }
+}
 function beginPresentation(): void {
-  if (visualTimer !== null) return;
+  if (presentationActive) return;
+  presentationActive = true;
   visualNow = performance.now();
-  visualTimer = setInterval(() => { visualNow = performance.now(); }, VISUAL_INTERVAL_MS);
+  syncVisualClock();
   void client.initialize().catch(failure);
 }
 function command(intent: FocusIntent): Promise<void> { return client.command(intent); }
@@ -161,7 +175,7 @@ export function getPomodoro() {
     addFocusTime(seconds: number = FOCUS_EXTENSION_SECONDS) { dispatch({ kind: "extend_focus", seconds }); },
     async cleanupOrphans() { await client.initialize(); await client.refresh(); },
     async recoverMobileRun() { beginPresentation(); await client.initialize(); return client.refresh(); },
-    prepareForMobileBackground() { if (visualTimer !== null) clearInterval(visualTimer); visualTimer = null; },
+    prepareForMobileBackground() { presentationActive = false; syncVisualClock(); },
     get nativeMode() { return projection?.snapshot?.mode ?? "stopped"; },
     get nativeSnapshot() { return projection?.snapshot ?? null; },
     async controlOverlay(intent: FocusIntent, scope: FocusControlScope) { await client.command(intent, scope); },

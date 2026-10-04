@@ -134,6 +134,23 @@ export function focusDisplayRemainingSeconds(snapshot: FocusSnapshot, visualElap
   return Math.ceil(Math.max(0, Math.min(phaseRemaining, eventRemaining)) / 1000);
 }
 
+/**
+ * Report whether presentation counters advance between native projections.
+ *
+ * Open runs clip their countdown by the event end, and idle or break-return
+ * prompts count elapsed time. Every other state renders identically until the
+ * next native projection, so no visual clock is needed.
+ *
+ * @param snapshot The latest accepted native snapshot, or null before the first projection.
+ * @returns True when a periodic visual clock changes visible output.
+ */
+export function focusNeedsVisualClock(snapshot: FocusSnapshot | null | undefined): boolean {
+  if (!snapshot) return false;
+  return (snapshot.run !== null && snapshot.run.endedAtMs === null)
+    || snapshot.idleStartedAtMs !== null
+    || snapshot.returnStartedAtMs !== null;
+}
+
 /** A delayed native reply cannot make the visual counter credit extra phase work. */
 export function focusDisplayElapsedSeconds(snapshot: FocusSnapshot, visualElapsedMs: number): number {
   return Math.floor(Math.min(snapshot.segment?.chosenDurationMs ?? 0,

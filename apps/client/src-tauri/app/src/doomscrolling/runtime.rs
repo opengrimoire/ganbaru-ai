@@ -84,11 +84,17 @@ impl Context {
         Ok(())
     }
 
+    /// Guard process-closing actions, which must act on a recent foreground and process scan.
     fn validate(&self, app: &tauri::AppHandle) -> Result<(), String> {
-        self.validate_binding(app)?;
         if Instant::now().saturating_duration_since(self.observation.monotonic) > MAX_ACTION_AGE {
             return Err("Doomscrolling observation is stale".into());
         }
+        self.validate_configuration(app)
+    }
+
+    /// Guard projection publication, which stays valid while the vault and rules are unchanged.
+    fn validate_configuration(&self, app: &tauri::AppHandle) -> Result<(), String> {
+        self.validate_binding(app)?;
         let config = limits_read::config_at(&self.root_path.join(VAULT_CONFIG_FILE))?;
         if config.get("doomscrolling") != self.config.get("doomscrolling") {
             return Err("Doomscrolling configuration changed".into());
@@ -502,7 +508,8 @@ impl Owner {
             *foreground = (context.observation.monotonic, context.foreground.clone());
         }
         let projection = limits_read::derive_usage_projection(self.app.clone()).await?;
-        context.validate(&self.app)?;
+        // A slow SQLite read must not discard accepted totals; close actions recheck their age.
+        context.validate_configuration(&self.app)?;
         publish(&self.app, Some(generation), || {
             let runtime = self.app.state::<RuntimeState>();
             let mut cached = runtime

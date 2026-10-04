@@ -26,7 +26,7 @@ Organizational Chat is also structured data. A project channel can outlive any p
 
 ### Device-local state
 
-The platform application config directory stores state that is meaningful only on one installation, including the active-vault pointer, device identity, external folder bindings, executable paths, provider homes, process state, probe caches, benchmark state, and transient runtime snapshots.
+The platform application config directory stores state that is meaningful only on one installation, including the active-vault pointer, device identity, external folder bindings, executable paths, provider homes, process state, probe caches, benchmark state, and transient runtime snapshots. When a vault is selected and every recent vault folder is reachable, settings scoped to vault IDs that none of those folders hold are forgotten, so deleted or replaced vaults do not leave device-local residue. While any recent folder is unreachable, such as a vault on a disconnected drive, nothing is forgotten.
 
 Portable rows may refer to a logical working-folder ID. Resolving that ID to an external absolute path requires a current device-local binding and filesystem identity check. A portable database must never acquire authority merely because it contains a path copied from another device.
 

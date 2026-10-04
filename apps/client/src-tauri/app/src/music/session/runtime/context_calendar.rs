@@ -48,6 +48,23 @@ impl Owner {
             return Ok(());
         }
         self.calendar.poll_at = Instant::now() + CALENDAR_REFRESH_INTERVAL;
+        // Resolve the local day before taking the shared write connection.
+        let captured_now = now_ms();
+        let window = tauri::async_runtime::spawn_blocking(move || {
+            let zone = time::system_zone()?;
+            let date = time::instant_to_local(captured_now, &zone)?
+                .date()
+                .to_string();
+            Window::new(&date, &date, &zone)
+        })
+        .await
+        .map_err(|error| MusicLibraryError::runtime("capture soundtrack day", error))?
+        .map_err(|error| MusicLibraryError::runtime("resolve soundtrack timezone", error))?;
+        // Most polls change nothing. Decide that from a released read snapshot so the
+        // periodic check neither takes the vault write permit nor holds SQLite's write lock.
+        if action.is_none() && !self.calendar_change_pending(&window, captured_now).await? {
+            return Ok(());
+        }
         let permit = self.write_permit().await?;
         let pool = self.pool.as_ref().expect("initialized music pool").clone();
         let mut transaction = pool.begin_with("BEGIN IMMEDIATE").await.map_err(|error| {
@@ -69,61 +86,14 @@ impl Owner {
             }
             return Ok(());
         }
-        let captured_now = now_ms();
-        let window = tauri::async_runtime::spawn_blocking(move || {
-            let zone = time::system_zone()?;
-            let date = time::instant_to_local(captured_now, &zone)?
-                .date()
-                .to_string();
-            Window::new(&date, &date, &zone)
-        })
-        .await
-        .map_err(|error| MusicLibraryError::runtime("capture soundtrack day", error))?
-        .map_err(|error| MusicLibraryError::runtime("resolve soundtrack timezone", error))?;
         let source = native_window::read(&mut transaction, &window, WindowPurpose::Music, false)
             .await
             .map_err(|error| {
                 MusicLibraryError::runtime("read Calendar soundtrack window", error)
             })?;
-        let worker_permit = CALENDAR_WORKER_GATE
-            .clone()
-            .try_acquire_owned()
-            .map_err(|_| {
-                MusicLibraryError::conflict(
-                    "An earlier Calendar soundtrack expansion is still draining",
-                )
-            })?;
-        let worker = tauri::async_runtime::spawn_blocking(move || {
-            let _permit = worker_permit;
-            source.expand(&window)
-        });
-        let projected = tokio::time::timeout(CALENDAR_EXPANSION_TIMEOUT, worker)
-            .await
-            .map_err(|_| {
-                MusicLibraryError::runtime(
-                    "Calendar soundtrack expansion",
-                    "native worker timed out; it must drain before another expansion",
-                )
-            })?
-            .map_err(|error| {
-                MusicLibraryError::runtime("expand Calendar soundtrack window", error)
-            })?
-            .map_err(|error| {
-                MusicLibraryError::runtime("resolve Calendar soundtrack occurrences", error)
-            })?;
+        let projected = expand(source, window).await?;
         let (activation, boundary) = select(&projected, captured_now)?;
-        if matches!(
-            self.state.context_error,
-            Some(super::super::super::policy::ContextFailure::Calendar(_))
-        ) {
-            self.state.context_error = None;
-            self.publish(false)?;
-        }
-        if let Some(boundary) = boundary {
-            let remaining = boundary.saturating_sub(now_ms()).max(1) as u64;
-            self.calendar.poll_at =
-                Instant::now() + CALENDAR_REFRESH_INTERVAL.min(Duration::from_millis(remaining));
-        }
+        self.accept_calendar_poll(boundary)?;
         let Some(activation) = activation else {
             self.calendar.key = None;
             if self.state.owner == SessionOwner::CalendarEvent && self.state.context.is_some() {
@@ -161,6 +131,101 @@ impl Owner {
         self.calendar.key = Some(key);
         Ok(())
     }
+
+    /// Report whether the locked decision could change the session.
+    ///
+    /// The snapshot is advisory: a pending change is decided again under the write
+    /// permit and an immediate transaction, so a concurrent edit is never committed
+    /// from this read.
+    async fn calendar_change_pending(
+        &mut self,
+        window: &Window,
+        now: i64,
+    ) -> MusicLibraryResult<bool> {
+        let pool = self.pool.as_ref().expect("initialized music pool").clone();
+        let mut transaction = pool.begin().await.map_err(|error| {
+            MusicLibraryError::database("begin Calendar soundtrack snapshot", error)
+        })?;
+        let open_focus: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pomodoro_runs WHERE ended_at IS NULL)")
+                .fetch_one(&mut *transaction)
+                .await
+                .map_err(|error| {
+                    MusicLibraryError::database("read soundtrack Focus priority", error)
+                })?;
+        if open_focus {
+            self.calendar.key = None;
+            return Ok(false);
+        }
+        let source = native_window::read(&mut transaction, window, WindowPurpose::Music, false)
+            .await
+            .map_err(|error| {
+                MusicLibraryError::runtime("read Calendar soundtrack window", error)
+            })?;
+        // Expansion is CPU work; release the shared connection before it starts.
+        drop(transaction);
+        let projected = expand(source, window.clone()).await?;
+        let (activation, boundary) = select(&projected, now)?;
+        let pending = match &activation {
+            Some(activation) => self.calendar.key.as_deref() != Some(&activation.key),
+            None => self.state.owner == SessionOwner::CalendarEvent && self.state.context.is_some(),
+        };
+        if !pending {
+            if activation.is_none() {
+                self.calendar.key = None;
+            }
+            self.accept_calendar_poll(boundary)?;
+        }
+        Ok(pending)
+    }
+
+    /// Clear a recovered Calendar failure and schedule the next poll before a known boundary.
+    fn accept_calendar_poll(&mut self, boundary: Option<i64>) -> MusicLibraryResult<()> {
+        if matches!(
+            self.state.context_error,
+            Some(super::super::super::policy::ContextFailure::Calendar(_))
+        ) {
+            self.state.context_error = None;
+            self.publish(false)?;
+        }
+        if let Some(boundary) = boundary {
+            let remaining = boundary.saturating_sub(now_ms()).max(1) as u64;
+            self.calendar.poll_at =
+                Instant::now() + CALENDAR_REFRESH_INTERVAL.min(Duration::from_millis(remaining));
+        }
+        Ok(())
+    }
+}
+
+/// Expand one Calendar source on a bounded worker that must drain before the next expansion.
+async fn expand(
+    source: native_window::WindowSource,
+    window: Window,
+) -> MusicLibraryResult<NativeCalendarWindow> {
+    let worker_permit = CALENDAR_WORKER_GATE
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| {
+            MusicLibraryError::conflict(
+                "An earlier Calendar soundtrack expansion is still draining",
+            )
+        })?;
+    let worker = tauri::async_runtime::spawn_blocking(move || {
+        let _permit = worker_permit;
+        source.expand(&window)
+    });
+    tokio::time::timeout(CALENDAR_EXPANSION_TIMEOUT, worker)
+        .await
+        .map_err(|_| {
+            MusicLibraryError::runtime(
+                "Calendar soundtrack expansion",
+                "native worker timed out; it must drain before another expansion",
+            )
+        })?
+        .map_err(|error| MusicLibraryError::runtime("expand Calendar soundtrack window", error))?
+        .map_err(|error| {
+            MusicLibraryError::runtime("resolve Calendar soundtrack occurrences", error)
+        })
 }
 
 /// Choose a deterministic timed winner and the next known boundary in canonical instants.

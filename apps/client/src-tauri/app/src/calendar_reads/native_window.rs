@@ -175,8 +175,9 @@ pub(super) async fn load(
 ) -> Result<NativeCalendarWindow, String> {
     let permit = WINDOW_GATE
         .clone()
-        .try_acquire_owned()
-        .map_err(|_| "A Calendar window is already being prepared; retry after it finishes")?;
+        .acquire_owned()
+        .await
+        .map_err(|_| "The Calendar window gate is closed")?;
     let window = Window::new(
         &request.window_start_date,
         &request.window_end_date,

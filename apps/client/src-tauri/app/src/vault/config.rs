@@ -88,6 +88,7 @@ pub(crate) fn mutate_active_vault_config<R: Runtime, T, E>(
     }
     #[cfg(not(target_os = "ios"))]
     let previous_doomscrolling = root.get("doomscrolling").cloned();
+    let previous_preferences = root.get("preferences").cloned();
     let result = mutate(&mut root)?;
     crate::chat::config::parse_chat_config_branch(&root)
         .map_err(|error| map_storage_error(format!("config Chat branch is invalid: {error}")))?;
@@ -109,7 +110,10 @@ pub(crate) fn mutate_active_vault_config<R: Runtime, T, E>(
     #[cfg(target_os = "ios")]
     let write_result = write();
     write_result.map_err(map_storage_error)?;
-    crate::pomodoro::invalidate_calendar(app);
+    // Native Focus reads only the preferences branch, so other patches leave it current.
+    if previous_preferences.as_ref() != root.get("preferences") {
+        crate::pomodoro::invalidate_calendar(app);
+    }
     Ok(result)
 }
 

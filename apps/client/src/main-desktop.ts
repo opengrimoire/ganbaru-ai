@@ -24,6 +24,7 @@ import {
 import { applyPlatformProfileToDocument } from "./lib/platform";
 import { installModalKeyboardRouter } from "./lib/modal-focus";
 import { finishDesktopReadiness } from "./lib/windows/desktop-readiness";
+import { mark as perfMark } from "./lib/stores/perflog.svelte";
 
 applyPlatformProfileToDocument();
 installModalKeyboardRouter();
@@ -197,6 +198,7 @@ const appPromise = (async () => {
     let transitionPromise: Promise<void> | null = null;
     const openApp = (): Promise<void> => {
       if (transitionPromise) return transitionPromise;
+      perfMark("boot.onboarding-continue");
       transitionPromise = Promise.all([
         appModulePromise,
         workspacePreparation.catch(prepareWorkspace),
@@ -220,6 +222,7 @@ const appPromise = (async () => {
         onComplete: openApp,
       },
     });
+    perfMark("boot.onboarding-mounted");
     return onboardingView;
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { focusDisplayElapsedSeconds, focusDisplayRemainingSeconds, focusProjectionIsCurrent, parseFocusCommandResult, parseFocusNotice, parseFocusProjection } from "./native-focus";
+import { focusDisplayElapsedSeconds, focusDisplayRemainingSeconds, focusNeedsVisualClock, focusProjectionIsCurrent, parseFocusCommandResult, parseFocusNotice, parseFocusProjection } from "./native-focus";
 import { DEFAULT_POMODORO_CONFIG } from "./rhythm";
 import { focusProjection } from "./native-focus.test-helpers";
 
@@ -94,5 +94,20 @@ describe("native Focus response boundaries", () => {
     expect(state.segment.status).toBe("active");
     state.mode = "manual_pause";
     expect(focusDisplayElapsedSeconds(state, 100_000)).toBe(50);
+  });
+
+  it("runs the visual clock only while visible counters can change", () => {
+    expect(focusNeedsVisualClock(null)).toBe(false);
+    const state = focusProjection().snapshot;
+    if (!state) throw new Error("Missing fixture state");
+    expect(focusNeedsVisualClock(state)).toBe(false);
+    state.run = { id: "run", eventId: "event", occurrenceId: "event", eventDate: "2026-10-02",
+      title: null, startedAtMs: 90_000, plannedStartMs: 80_000, plannedEndMs: 130_000, endedAtMs: null,
+      inheritedFocusMs: 0, inheritedPhaseMs: 0, configuration: DEFAULT_POMODORO_CONFIG };
+    expect(focusNeedsVisualClock(state)).toBe(true);
+    state.run = { ...state.run, endedAtMs: 120_000 };
+    expect(focusNeedsVisualClock(state)).toBe(false);
+    expect(focusNeedsVisualClock({ ...state, idleStartedAtMs: 95_000 })).toBe(true);
+    expect(focusNeedsVisualClock({ ...state, returnStartedAtMs: 95_000 })).toBe(true);
   });
 });

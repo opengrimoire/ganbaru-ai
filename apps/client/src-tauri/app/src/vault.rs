@@ -11,15 +11,16 @@
 use chrono::{DateTime, SecondsFormat, Utc};
 #[cfg(target_os = "android")]
 use ganbaru_mobile_documents::MobileDocumentsExt;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tauri::{Manager, Runtime};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tauri_plugin_dialog::{DialogExt, FilePath};
 
-static APP_STATE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+static APP_STATE: std::sync::Mutex<Option<CachedAppState>> = std::sync::Mutex::new(None);
 static CONFIG_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 mod config;
@@ -53,7 +54,7 @@ const MOBILE_VAULT_IMPORT_MAX_BYTES: u64 = 100 * 1024 * 1024 * 1024;
 #[cfg(target_os = "android")]
 const MOBILE_VAULT_IMPORT_MAX_DEPTH: u32 = 64;
 
-#[derive(Clone, Debug, Default, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VaultAppState {
     #[serde(deserialize_with = "required_nullable")]
@@ -80,6 +81,14 @@ pub(crate) fn vault_device_id<R: Runtime>(app: tauri::AppHandle<R>) -> Result<St
 }
 
 pub(crate) fn ensure_device_id<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<String, String> {
+    // Most calls find the identity already stored; avoid cloning device state for an update.
+    if let Some(device_id) = read_app_state(app)?
+        .device_id
+        .as_ref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        return Ok(device_id.clone());
+    }
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|error| format!("create device id timestamp: {error}"))?
@@ -141,34 +150,109 @@ fn read_app_state_from_path(path: &Path) -> Result<VaultAppState, String> {
     serde_json::from_str(&contents).map_err(|e| format!("parse app state: {e}"))
 }
 
+/// File identity used to detect app state changes made outside this process.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct AppStateStamp {
+    len: u64,
+    modified: std::time::SystemTime,
+}
+
+/// Parsed app state shared by readers until its file changes.
+struct CachedAppState {
+    path: PathBuf,
+    stamp: Option<AppStateStamp>,
+    state: Arc<VaultAppState>,
+}
+
+fn app_state_stamp(path: &Path) -> Result<Option<AppStateStamp>, String> {
+    let metadata = match fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(format!("inspect app state: {error}")),
+    };
+    let modified = metadata
+        .modified()
+        .map_err(|error| format!("inspect app state modification time: {error}"))?;
+    Ok(Some(AppStateStamp {
+        len: metadata.len(),
+        modified,
+    }))
+}
+
+/// Return the cached state, parsing the file only when it is new or changed.
+///
+/// Background owners resolve the active folder several times per second, so
+/// reparsing the whole device state on each lookup is not acceptable.
+fn cached_app_state(
+    cache: &mut Option<CachedAppState>,
+    path: &Path,
+) -> Result<Arc<VaultAppState>, String> {
+    // Stamp before reading so a concurrent external write is detected on the next lookup.
+    let stamp = app_state_stamp(path)?;
+    if let Some(cached) = cache
+        .as_ref()
+        .filter(|cached| cached.path == path && cached.stamp == stamp)
+    {
+        return Ok(Arc::clone(&cached.state));
+    }
+    let state = Arc::new(read_app_state_from_path(path)?);
+    *cache = Some(CachedAppState {
+        path: path.to_path_buf(),
+        stamp,
+        state: Arc::clone(&state),
+    });
+    Ok(state)
+}
+
+#[cfg(test)]
 fn write_app_state_to_path(path: &Path, state: &VaultAppState) -> Result<(), String> {
+    let json = serde_json::to_string_pretty(state).map_err(|e| e.to_string())?;
+    write_app_state_json(path, &json)
+}
+
+fn write_app_state_json(path: &Path, json: &str) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("create app config dir: {e}"))?;
     }
-    let json = serde_json::to_string_pretty(state).map_err(|e| e.to_string())?;
-    write_text_file_atomically(path, &json)
+    write_text_file_atomically(path, json)
 }
 
 pub(crate) fn read_app_state<R: Runtime>(
     app: &tauri::AppHandle<R>,
-) -> Result<VaultAppState, String> {
-    let _guard = APP_STATE_LOCK
+) -> Result<Arc<VaultAppState>, String> {
+    let mut cache = APP_STATE
         .lock()
         .map_err(|_| "app state lock is unavailable".to_string())?;
-    read_app_state_from_path(&app_state_path(app)?)
+    cached_app_state(&mut cache, &app_state_path(app)?)
 }
 
 pub(crate) fn update_app_state<R: Runtime, T>(
     app: &tauri::AppHandle<R>,
     update: impl FnOnce(&mut VaultAppState) -> Result<T, String>,
 ) -> Result<T, String> {
-    let _guard = APP_STATE_LOCK
+    let mut cache = APP_STATE
         .lock()
         .map_err(|_| "app state lock is unavailable".to_string())?;
     let path = app_state_path(app)?;
-    let mut state = read_app_state_from_path(&path)?;
+    let current = cached_app_state(&mut cache, &path)?;
+    let mut state = VaultAppState::clone(&current);
     let result = update(&mut state)?;
-    write_app_state_to_path(&path, &state)?;
+    // Idempotent updates must not rewrite and fsync the file.
+    let stored = cache.as_ref().is_some_and(|cached| cached.stamp.is_some());
+    if stored && state == *current {
+        return Ok(result);
+    }
+    let json = serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?;
+    write_app_state_json(&path, &json)?;
+    *cache = match app_state_stamp(&path) {
+        Ok(stamp) => Some(CachedAppState {
+            path,
+            stamp,
+            state: Arc::new(state),
+        }),
+        // The write succeeded; the next lookup reparses the file instead of trusting a stale stamp.
+        Err(_) => None,
+    };
     Ok(result)
 }
 
@@ -372,8 +456,48 @@ fn select_quiesced_vault<R: Runtime>(
             .retain(|path| path != &info.path && !path.trim().is_empty());
         state.recent_vault_paths.insert(0, info.path.clone());
         state.recent_vault_paths.truncate(MAX_RECENT_VAULTS);
+        if let Some(mut known) = recent_vault_ids(&state.recent_vault_paths) {
+            known.insert(info.vault_id.clone());
+            retain_vault_scopes(state, &known);
+        }
         Ok(())
     })
+}
+
+/// Collect the vault IDs found at recent folders, or `None` when any folder is unreachable.
+///
+/// A missing folder may be a vault on a disconnected drive, so its ID is unknown and
+/// no scope can safely be called stale. A reachable folder without a valid marker is
+/// no longer a vault and contributes no ID.
+fn recent_vault_ids(paths: &[String]) -> Option<BTreeSet<String>> {
+    let mut known = BTreeSet::new();
+    for path in paths.iter().map(Path::new) {
+        if !path.try_exists().unwrap_or(false) {
+            return None;
+        }
+        if let Ok(manifest) = read_vault_manifest(path) {
+            known.insert(manifest.vault_id);
+        }
+    }
+    Some(known)
+}
+
+/// Forget device-local settings for vaults that are known to be gone.
+///
+/// Scopes are keyed by vault ID, so a deleted or replaced vault would otherwise
+/// keep its folder bindings and Chat provider settings forever.
+fn retain_vault_scopes(state: &mut VaultAppState, known_vault_ids: &BTreeSet<String>) {
+    state
+        .music_root_bindings
+        .retain(|vault_id, _| known_vault_ids.contains(vault_id));
+    state
+        .project_working_folders
+        .vaults
+        .retain(|vault_id, _| known_vault_ids.contains(vault_id));
+    state
+        .chat
+        .vaults
+        .retain(|vault_id, _| known_vault_ids.contains(vault_id));
 }
 
 /// Reconciles native execution owners with the newly active, authorized vault.
@@ -461,9 +585,22 @@ async fn create_and_select_vault(
     Ok(info)
 }
 
+/// Folder selection fields exposed to the WebView. Device-local Chat, music, and
+/// working-folder state stays native.
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VaultAppStateSummary {
+    pub active_vault_path: Option<String>,
+    pub recent_vault_paths: Vec<String>,
+}
+
 #[tauri::command]
-pub fn vault_read_app_state(app: tauri::AppHandle) -> Result<VaultAppState, String> {
-    read_app_state(&app)
+pub fn vault_read_app_state(app: tauri::AppHandle) -> Result<VaultAppStateSummary, String> {
+    let state = read_app_state(&app)?;
+    Ok(VaultAppStateSummary {
+        active_vault_path: state.active_vault_path.clone(),
+        recent_vault_paths: state.recent_vault_paths.clone(),
+    })
 }
 
 #[tauri::command]
@@ -479,7 +616,7 @@ pub async fn vault_use_default_folder(app: tauri::AppHandle) -> Result<VaultInfo
 
 #[tauri::command]
 pub fn vault_active_info(app: tauri::AppHandle) -> Result<Option<VaultInfo>, String> {
-    let Some(path) = read_app_state(&app)?.active_vault_path else {
+    let Some(path) = read_app_state(&app)?.active_vault_path.clone() else {
         return Ok(None);
     };
     vault_info_from_path(&PathBuf::from(path)).map(Some)
@@ -589,12 +726,17 @@ pub fn vault_reveal_active(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 pub fn active_vault_path<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
-    let Some(path) = read_app_state(app)?.active_vault_path else {
+    active_vault(app).map(|(path, _)| path)
+}
+
+/// Resolve the active folder and its validated marker with one marker read.
+fn active_vault<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(PathBuf, VaultManifest), String> {
+    let Some(path) = read_app_state(app)?.active_vault_path.clone() else {
         return Err("no active Ganbaru AI folder selected".to_string());
     };
     let path = canonical_vault_path(PathBuf::from(path))?;
-    read_vault_manifest(&path)?;
-    Ok(path)
+    let manifest = read_vault_manifest(&path)?;
+    Ok((path, manifest))
 }
 
 /// Background observation waits during onboarding or after a selected folder was deleted.
@@ -603,7 +745,12 @@ pub fn active_vault_path<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBu
 pub(crate) fn available_active_vault_path<R: Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<Option<PathBuf>, String> {
-    available_vault_path(read_app_state(app)?.active_vault_path.map(PathBuf::from))
+    available_vault_path(
+        read_app_state(app)?
+            .active_vault_path
+            .as_ref()
+            .map(PathBuf::from),
+    )
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -649,8 +796,8 @@ impl AsRef<Path> for WritableVaultPath {
 pub(crate) fn active_writable_vault_path<R: Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<WritableVaultPath, String> {
-    let path = active_vault_path(app)?;
-    let vault_id = read_vault_manifest(&path)?.vault_id;
+    let (path, manifest) = active_vault(app)?;
+    let vault_id = manifest.vault_id;
     let permit = app
         .state::<ownership::VaultOwnershipManager>()
         .acquire_managed_write(&vault_id)?;
@@ -661,8 +808,7 @@ pub(crate) fn active_writable_vault_path<R: Runtime>(
 }
 
 pub(crate) fn active_vault_id<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<String, String> {
-    let path = active_vault_path(app)?;
-    Ok(read_vault_manifest(&path)?.vault_id)
+    active_vault(app).map(|(_, manifest)| manifest.vault_id)
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -863,6 +1009,67 @@ mod tests {
     }
 
     #[test]
+    fn recent_vault_ids_refuse_to_guess_while_a_folder_is_unreachable() {
+        let vault = unique_path("recent-vault");
+        fs::create_dir_all(&vault).expect("create vault folder");
+        let info = initialize_vault(&vault).expect("initialize vault");
+        let plain = unique_path("recent-plain");
+        fs::create_dir_all(&plain).expect("create plain folder");
+        let reachable = vec![
+            vault.to_string_lossy().into_owned(),
+            plain.to_string_lossy().into_owned(),
+        ];
+
+        assert_eq!(
+            recent_vault_ids(&reachable),
+            Some(BTreeSet::from([info.vault_id]))
+        );
+        let mut with_missing = reachable.clone();
+        with_missing.push(unique_path("recent-missing").to_string_lossy().into_owned());
+        assert_eq!(recent_vault_ids(&with_missing), None);
+        let _ = fs::remove_dir_all(&vault);
+        let _ = fs::remove_dir_all(&plain);
+    }
+
+    #[test]
+    fn vault_scopes_keep_only_known_vaults() {
+        let mut state = VaultAppState::default();
+        for vault_id in ["vault-live", "vault-deleted"] {
+            state
+                .music_root_bindings
+                .insert(vault_id.to_string(), BTreeMap::new());
+            state
+                .project_working_folders
+                .vaults
+                .insert(vault_id.to_string(), BTreeMap::new());
+            state
+                .chat
+                .vaults
+                .insert(vault_id.to_string(), BTreeMap::new());
+        }
+
+        retain_vault_scopes(&mut state, &BTreeSet::from(["vault-live".to_string()]));
+
+        let live = ["vault-live"];
+        assert_eq!(
+            state.music_root_bindings.keys().collect::<Vec<_>>(),
+            live.iter().collect::<Vec<_>>()
+        );
+        assert_eq!(
+            state
+                .project_working_folders
+                .vaults
+                .keys()
+                .collect::<Vec<_>>(),
+            live.iter().collect::<Vec<_>>()
+        );
+        assert_eq!(
+            state.chat.vaults.keys().collect::<Vec<_>>(),
+            live.iter().collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
     fn app_state_round_trips_active_and_recent_vault_paths() {
         let path = unique_path("app-state.json");
         let mut music_root_bindings = BTreeMap::new();
@@ -890,6 +1097,36 @@ mod tests {
         assert_eq!(saved.recent_vault_paths, state.recent_vault_paths);
         assert_eq!(saved.music_root_bindings, state.music_root_bindings);
         let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn app_state_cache_reuses_parse_until_the_file_changes() {
+        let path = unique_path("cached-app-state.json");
+        let mut cache = None;
+
+        let missing = cached_app_state(&mut cache, &path).expect("read missing app state");
+        assert_eq!(*missing, VaultAppState::default());
+
+        let mut state = VaultAppState {
+            device_id: Some("device-test".to_string()),
+            ..VaultAppState::default()
+        };
+        write_app_state_to_path(&path, &state).expect("write app state");
+        let first = cached_app_state(&mut cache, &path).expect("read written app state");
+        let second = cached_app_state(&mut cache, &path).expect("read cached app state");
+        assert_eq!(first.device_id.as_deref(), Some("device-test"));
+        assert!(Arc::ptr_eq(&first, &second));
+
+        // A different length changes the stamp even on coarse-timestamp filesystems.
+        state.active_vault_path = Some("/tmp/ganbaru-ai-external-vault".to_string());
+        write_app_state_to_path(&path, &state).expect("write external change");
+        let changed = cached_app_state(&mut cache, &path).expect("read changed app state");
+        assert_eq!(changed.active_vault_path, state.active_vault_path);
+        assert!(!Arc::ptr_eq(&first, &changed));
+
+        fs::remove_file(&path).expect("remove app state");
+        let removed = cached_app_state(&mut cache, &path).expect("read removed app state");
+        assert_eq!(*removed, VaultAppState::default());
     }
 
     #[test]

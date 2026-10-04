@@ -642,6 +642,8 @@ impl Owner {
             }
         }
         self.next_boundary_ms = next_boundary;
+        // The edit may create a current block; probe again until a heartbeat resolves it.
+        self.calendar_commitment = true;
         if let Err(error) = self.committed(snapshot, now).await {
             self.failed(error);
         }

@@ -241,6 +241,9 @@ struct Owner {
     next_heartbeat_ms: i64,
     next_activity_ms: i64,
     next_boundary_ms: Option<i64>,
+    /// Whether the last canonical Calendar resolution held a current commitment.
+    /// Unknown starts as true so the first tick still probes activity.
+    calendar_commitment: bool,
     next_retry_ms: Option<i64>,
     last_clock: Option<clock::ClockObservation>,
     calendar_undo: Option<calendar_edit::UndoSlot>,
@@ -348,6 +351,7 @@ pub(crate) fn setup(app: &tauri::AppHandle) {
             next_heartbeat_ms: 0,
             next_activity_ms: 0,
             next_boundary_ms: None,
+            calendar_commitment: true,
             next_retry_ms: None,
             last_clock: None,
             calendar_undo: None,
@@ -1140,6 +1144,7 @@ impl Owner {
             _ => None,
         };
         let calendar = calendar::resolve(&mut tx, now, requested).await?;
+        let calendar_commitment = calendar.commitment.is_some();
         let context = FocusExecutionContext {
             now_ms: now,
             platform: platform(),
@@ -1158,6 +1163,7 @@ impl Owner {
             .await
             .map_err(|error| format!("Commit native Focus action: {error}"))?;
         self.next_boundary_ms = calendar.next_boundary_ms;
+        self.calendar_commitment = calendar_commitment;
         self.committed(snapshot.clone(), now).await?;
         Ok(snapshot)
     }
@@ -1228,6 +1234,7 @@ impl Owner {
             .await
             .map_err(|error| error.to_string())?;
         let calendar = calendar::resolve(&mut tx, now, None).await?;
+        let calendar_commitment = calendar.commitment.is_some();
         let context = FocusExecutionContext {
             now_ms: now,
             platform: platform(),
@@ -1246,6 +1253,7 @@ impl Owner {
             .await
             .map_err(|error| format!("Commit native Focus observation: {error}"))?;
         self.next_boundary_ms = calendar.next_boundary_ms;
+        self.calendar_commitment = calendar_commitment;
         self.committed(snapshot, now).await
     }
 
@@ -1491,12 +1499,21 @@ impl Owner {
             )
             .await?;
         }
+        let mut heartbeat_due = now >= self.next_heartbeat_ms;
         if calendar_dirty
             || self
                 .next_boundary_ms
                 .is_some_and(|boundary| now >= boundary)
         {
-            self.observe(FocusObservation::CalendarChanged, now).await?;
+            // A heartbeat reconciles Calendar as well, so a due heartbeat replaces the
+            // separate Calendar observation instead of opening a second transaction.
+            if heartbeat_due {
+                self.observe(FocusObservation::Heartbeat, now).await?;
+                self.next_heartbeat_ms = now + HEARTBEAT_INTERVAL_MS;
+                heartbeat_due = false;
+            } else {
+                self.observe(FocusObservation::CalendarChanged, now).await?;
+            }
         }
         let due = self.projection.snapshot.as_ref().is_some_and(|snapshot| {
             snapshot
@@ -1519,18 +1536,25 @@ impl Owner {
         }) {
             self.observe(observation, now_ms()?).await?;
         }
-        if now >= self.next_heartbeat_ms {
+        if heartbeat_due {
             self.observe(FocusObservation::Heartbeat, now).await?;
             self.next_heartbeat_ms = now + HEARTBEAT_INTERVAL_MS;
         }
         if now >= self.next_activity_ms {
-            let activity = self.activity().await?;
             let active = self.projection.snapshot.as_ref().is_some_and(|snapshot| {
                 snapshot
                     .run
                     .as_ref()
                     .is_some_and(|run| run.ended_at_ms.is_none())
             });
+            // Automatic admission ignores activity without a current commitment, and
+            // the heartbeat already reconciled expiry and Calendar state this tick.
+            if !active && !self.calendar_commitment {
+                self.next_activity_ms = now + ACTIVITY_RETRY_INTERVAL_MS;
+                self.deliver_effects(now);
+                return Ok(());
+            }
+            let activity = self.activity().await?;
             self.observe(
                 if active {
                     FocusObservation::Activity(activity)

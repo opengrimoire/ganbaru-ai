@@ -11,7 +11,6 @@ use tauri::Manager;
 
 use crate::notification::{AppSound, AppSoundState, PomodoroOverlayState};
 
-const PREFERENCES_REFRESH_MS: i64 = 15_000;
 const MAX_PREFERENCES_BYTES: usize = 4 * 1024 * 1024;
 const IDLE_ALERT_INTERVAL_MS: i64 = 10_000;
 const FOCUS_WARNING_INTERVAL_MS: i64 = 60_000;
@@ -299,7 +298,8 @@ pub(super) struct DesktopPresentation {
     state: PresentationState,
     preferences: Preferences,
     preferences_generation: Option<u64>,
-    refresh_at_ms: i64,
+    /// Set when a vault config patch changed the preferences branch.
+    preferences_stale: bool,
     notification_copy: Option<DesktopNotificationCopy>,
 }
 
@@ -320,7 +320,7 @@ impl DesktopPresentation {
         now: i64,
         pool: Option<&SqlitePool>,
     ) -> Result<(), FocusExecutionError> {
-        if self.preferences_generation != Some(generation) || now >= self.refresh_at_ms {
+        if self.preferences_generation != Some(generation) || self.preferences_stale {
             let app = app.clone();
             self.preferences = tauri::async_runtime::spawn_blocking(move || {
                 let raw = crate::vault::read_active_config_bounded(&app, MAX_PREFERENCES_BYTES)?;
@@ -331,7 +331,7 @@ impl DesktopPresentation {
             .await
             .map_err(|error| format!("Read native Focus preferences: {error}"))??;
             self.preferences_generation = Some(generation);
-            self.refresh_at_ms = now.saturating_add(PREFERENCES_REFRESH_MS);
+            self.preferences_stale = false;
         }
         let plan = self
             .state
@@ -496,7 +496,7 @@ impl DesktopPresentation {
     }
 
     pub fn invalidate_preferences(&mut self) {
-        self.refresh_at_ms = 0;
+        self.preferences_stale = true;
     }
 
     pub async fn revoke(&mut self, app: &tauri::AppHandle) -> Result<(), FocusExecutionError> {

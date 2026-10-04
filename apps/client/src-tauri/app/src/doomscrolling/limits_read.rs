@@ -67,7 +67,11 @@ pub(super) async fn derive_usage_projection<R: Runtime>(
     let status = app
         .state::<vault::ownership::VaultOwnershipManager>()
         .status(&vault_id)?;
-    let sources = if status.can_write {
+    // Without budgets there is nothing to total. Spooled samples stay bounded and
+    // drain on the first read after a budget exists or during handoff.
+    let sources = if config.items.is_empty() {
+        Vec::new()
+    } else if status.can_write {
         let _write_permit = app
             .state::<vault::ownership::VaultOwnershipManager>()
             .acquire_managed_write(&vault_id)?;

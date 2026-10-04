@@ -787,7 +787,15 @@ impl Owner {
                 "Music is suspended while this vault is changing",
             ));
         }
-        self.ensure_context().await?;
+        // Browser host lease renewals arrive every second. When they already belong to the
+        // established vault context, revalidating device state and bindings adds nothing.
+        let renews_established_host = matches!(request, Request::Host { .. })
+            && self.pool.is_some()
+            && expected_vault.is_some()
+            && expected_vault == self.vault_id;
+        if !renews_established_host {
+            self.ensure_context().await?;
+        }
         if expected_vault.is_some() && expected_vault != self.vault_id {
             return Err(MusicLibraryError::conflict(
                 "Music request belongs to the previous vault",
@@ -1176,7 +1184,13 @@ impl Owner {
         action: Option<(&str, &str)>,
         durable: bool,
     ) -> MusicLibraryResult<()> {
-        let _permit = self.write_permit().await?;
+        // Non-durable observations carry no effects and write nothing, so the
+        // serialized owner does not need the vault write permit for them.
+        let _permit = if durable {
+            Some(self.write_permit().await?)
+        } else {
+            None
+        };
         if durable {
             if !persistence::commit(
                 self.pool.as_ref().expect("initialized pool"),
