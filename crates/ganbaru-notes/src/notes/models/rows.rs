@@ -233,6 +233,16 @@ pub struct NoteBlockRow {
     pub last_edited_time: String,
 }
 
+impl NoteBlockRow {
+    /// Fingerprint the exact canonical block state, including placement and lifecycle.
+    pub fn edit_revision(&self) -> Result<String, String> {
+        use sha2::{Digest, Sha256};
+        let bytes = serde_json::to_vec(self)
+            .map_err(|error| format!("encode Notes block revision: {error}"))?;
+        Ok(format!("{:x}", Sha256::digest(bytes)))
+    }
+}
+
 #[derive(Clone, Serialize, sqlx::FromRow)]
 pub struct NotePageTemplateBlockRow {
     pub template_id: String,

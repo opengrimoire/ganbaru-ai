@@ -4,6 +4,140 @@ use ganbaru_db::run_migrations;
 use sqlx::Row;
 
 #[test]
+fn recovery_rejects_oversized_closures_before_loading_or_mutating_execution() {
+    super::block_on(async {
+        use super::super::read_budget::{MAX_RECOVERY_BYTES, MAX_RECOVERY_RECORDS};
+        for domain in ["open runs", "segments", "pauses", "bytes"] {
+            let pool = migrated_pool_with_event().await;
+            let mut tx = pool.begin().await.unwrap();
+            insert_run_tx(
+                &mut tx,
+                &run_write(PomodoroRunRhythm::Count {
+                    focus_duration_minutes: 40,
+                    short_break_minutes: 5,
+                    long_break_minutes: 10,
+                    long_break_after_focus_count: 4,
+                }),
+                &initial_segment(),
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+            match domain {
+                "open runs" => {
+                    sqlx::query("DROP INDEX idx_pomodoro_runs_single_open")
+                        .execute(&pool)
+                        .await
+                        .unwrap();
+                    sqlx::query("WITH RECURSIVE numbers(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM numbers WHERE n < ?)
+                        INSERT INTO pomodoro_runs (id, event_id, original_event_id, event_date, planned_start, planned_end,
+                            started_at, rhythm_kind, rhythm_source, last_heartbeat, start_trigger)
+                        SELECT 'extra-' || n, event_id, original_event_id, event_date, planned_start, planned_end,
+                            started_at, rhythm_kind, rhythm_source, last_heartbeat, start_trigger
+                        FROM numbers CROSS JOIN pomodoro_runs WHERE id = 'run-1'")
+                        .bind(MAX_RECOVERY_RECORDS).execute(&pool).await.unwrap();
+                }
+                "segments" => {
+                    sqlx::query("WITH RECURSIVE numbers(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM numbers WHERE n < ?)
+                        INSERT INTO pomodoro_segments (id, event_id, event_date, run_id, rhythm_position, phase,
+                            planned_start, planned_end, actual_start, actual_end, status)
+                        SELECT 'extra-segment-' || n, event_id, event_date, run_id, n + 1, phase,
+                            planned_start, planned_end, actual_start, planned_end, 'completed'
+                        FROM numbers CROSS JOIN pomodoro_segments WHERE id = 'segment-1'")
+                        .bind(MAX_RECOVERY_RECORDS).execute(&pool).await.unwrap();
+                }
+                "pauses" => {
+                    sqlx::query("WITH RECURSIVE numbers(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM numbers WHERE n < ?)
+                        INSERT INTO pomodoro_pauses (id, segment_id, started_at, ended_at, reason)
+                        SELECT 'pause-' || n, 'segment-1', '2026-05-29T10:01:00Z', '2026-05-29T10:02:00Z', 'manual' FROM numbers")
+                        .bind(MAX_RECOVERY_RECORDS).execute(&pool).await.unwrap();
+                }
+                "bytes" => {
+                    sqlx::query(
+                        "UPDATE pomodoro_runs SET event_title_snapshot = ? WHERE id = 'run-1'",
+                    )
+                    .bind("x".repeat(usize::try_from(MAX_RECOVERY_BYTES).unwrap()))
+                    .execute(&pool)
+                    .await
+                    .unwrap();
+                }
+                _ => unreachable!("the fixture lists its recovery domains"),
+            }
+            let before: i64 = sqlx::query_scalar("SELECT total_changes()")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            let error =
+                super::super::recovery::recover_mobile_run_from_pool(&pool, "2026-05-29T10:10:00Z")
+                    .await
+                    .err()
+                    .expect("oversized recovery must be rejected");
+            assert!(
+                error.contains("Focus recovery") && error.contains("budget"),
+                "{domain}: {error}"
+            );
+            let after: i64 = sqlx::query_scalar("SELECT total_changes()")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            assert_eq!(
+                before, after,
+                "{domain} must fail before any recovery write"
+            );
+            let state: (Option<String>, String) = sqlx::query_as(
+                "SELECT r.ended_at, s.status FROM pomodoro_runs r
+                JOIN pomodoro_segments s ON s.run_id = r.id WHERE r.id = 'run-1' AND s.id = 'segment-1'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(state, (None, "active".into()));
+        }
+    });
+}
+
+#[test]
+fn recovery_admission_ignores_large_closed_history() {
+    super::block_on(async {
+        let pool = migrated_pool_with_event().await;
+        let mut tx = pool.begin().await.unwrap();
+        insert_run_tx(
+            &mut tx,
+            &run_write(PomodoroRunRhythm::Count {
+                focus_duration_minutes: 40,
+                short_break_minutes: 5,
+                long_break_minutes: 10,
+                long_break_after_focus_count: 4,
+            }),
+            &initial_segment(),
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        sqlx::raw_sql("INSERT INTO pomodoro_runs
+            (id, event_id, original_event_id, event_date, planned_start, planned_end, started_at, ended_at,
+             rhythm_kind, rhythm_source, last_heartbeat, start_trigger)
+            SELECT 'closed', event_id, original_event_id, event_date, planned_start, planned_end, started_at,
+                planned_end, rhythm_kind, rhythm_source, last_heartbeat, start_trigger FROM pomodoro_runs WHERE id = 'run-1';
+            INSERT INTO pomodoro_segments
+                (id, event_id, event_date, run_id, rhythm_position, phase, planned_start, planned_end, actual_start, actual_end, status)
+                SELECT 'closed-segment', event_id, event_date, 'closed', rhythm_position, phase,
+                    planned_start, planned_end, actual_start, planned_end, 'completed'
+                FROM pomodoro_segments WHERE id = 'segment-1';")
+            .execute(&pool).await.unwrap();
+        sqlx::query("WITH RECURSIVE numbers(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM numbers WHERE n < ?)
+            INSERT INTO pomodoro_pauses (id, segment_id, started_at, ended_at, reason)
+            SELECT 'closed-pause-' || n, 'closed-segment', '2026-05-29T10:01:00Z', '2026-05-29T10:02:00Z', 'manual' FROM numbers")
+            .bind(super::super::read_budget::MAX_RECOVERY_RECORDS + 1).execute(&pool).await.unwrap();
+        let result =
+            super::super::recovery::recover_mobile_run_from_pool(&pool, "2026-05-29T10:10:00Z")
+                .await
+                .unwrap();
+        assert!(matches!(result, PomodoroMobileRecoveryRead::Resumed { .. }));
+    });
+}
+
+#[test]
 fn close_run_clamps_end_to_the_latest_open_activity_boundary() {
     super::block_on(async {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()

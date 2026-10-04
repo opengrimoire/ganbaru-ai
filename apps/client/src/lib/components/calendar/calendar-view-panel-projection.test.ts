@@ -3,6 +3,7 @@ import type { CalendarEvent } from "./types";
 import type { EditSessionState } from "./edit-session.svelte";
 import {
   projectCalendarPanel,
+  resolvePersistedCalendarPanelEvent,
   snapshotCalendarPanel,
   type PanelEditProjection,
 } from "./calendar-view-panel-projection";
@@ -48,6 +49,39 @@ function editProjection(overrides: Partial<PanelEditProjection> = {}): PanelEdit
 }
 
 describe("calendar panel projection", () => {
+  it("does not open a proposed-only preview identity as a persisted event", () => {
+    expect(resolvePersistedCalendarPanelEvent("proposed-source::2026-07-13", [event("source")]))
+      .toBeUndefined();
+  });
+
+  it("opens persisted metadata and geometry after discarding a preview", () => {
+    const canonical = event("source");
+    const proposed = { ...canonical, title: "Unsaved title", start: "2026-07-12 11:00" };
+    expect(resolvePersistedCalendarPanelEvent(proposed.id, [canonical]))
+      .toEqual(canonical);
+  });
+
+  it("hydrates source details while retaining native occurrence geometry and identity", () => {
+    const canonical = {
+      ...event("source::2026-07-12"),
+      recurringParentId: "source",
+      recurrenceDate: "2026-07-12",
+      start: "2026-07-13 09:00",
+      end: "2026-07-13 10:00",
+      title: "Override title",
+    };
+    const full = { ...event("source"), description: "Persisted description" };
+    expect(resolvePersistedCalendarPanelEvent(canonical.id, [canonical], full))
+      .toEqual({ ...full, ...canonical });
+  });
+
+  it("rejects a stale full source and an occurrence removed during hydration", () => {
+    const canonical = event("source");
+    expect(resolvePersistedCalendarPanelEvent(canonical.id, [canonical], event("other")))
+      .toBeUndefined();
+    expect(resolvePersistedCalendarPanelEvent(canonical.id, [], canonical)).toBeUndefined();
+  });
+
   it("parks a create session without losing its draft or anchor", () => {
     const state: EditSessionState = {
       mode: "create",

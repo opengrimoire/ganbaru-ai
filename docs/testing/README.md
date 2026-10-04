@@ -10,6 +10,8 @@ This document is the command and gate-selection reference. Supporting documents 
 - [Local vault handoff](vault-handoff.md): concise physical desktop and Android round-trip acceptance and result record.
 - [Calendar recurrence](calendar-recurrence.md): recurrence editing and interoperability matrices.
 - [Notes editor](notes-editor.md): editor, database, transfer, and recovery matrices.
+- [Project dependency cascades](project-dependency-cascades.md): canonical previews, reviewed transactions, retries, and Gantt acceptance.
+- [Doomscrolling runtime](doomscrolling.md): desktop frontend absence, observation, vault invalidation, spool recovery, and remaining Android acceptance.
 - [Performance harness](../performance/harness.md): benchmark-only contracts outside normal validation.
 
 ## Goals

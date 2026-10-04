@@ -1,7 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_PLAYBACK_SNAPSHOT } from "$lib/music/playback";
-import { localFileSourceFromPath, youtubeVideoSourceFromId, type MusicSource } from "$lib/music/sources";
+import { localFileSourceFromPath } from "$lib/music/sources";
 import { updateMediaControls } from "$lib/api/media-controls";
 import { createMusicExternalControls } from "./music-external-controls";
 
@@ -45,6 +45,7 @@ function createContext() {
 }
 
 describe("Music external controls", () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
   it("owns one listener set and releases every listener on destroy", async () => {
     const { context, listenMock, unlisten } = createContext();
     const controls = createMusicExternalControls(context);
@@ -53,48 +54,67 @@ describe("Music external controls", () => {
     controls.init();
     await Promise.resolve();
 
-    expect(listenMock).toHaveBeenCalledTimes(5);
+    expect(listenMock).toHaveBeenCalledTimes(1);
+    expect(listenMock).toHaveBeenCalledWith("tray-music-inspect-assignment", expect.any(Function));
     controls.destroy();
-    expect(unlisten).toHaveBeenCalledTimes(5);
+    expect(unlisten).toHaveBeenCalledTimes(1);
     expect(controls.isInitialized()).toBe(false);
   });
 
-  it("publishes queue availability for local and YouTube saved items", async () => {
+  it("leaves native transport and canonical metadata with the native owner", () => {
     const { context } = createContext();
-    let source: MusicSource = localFileSourceFromPath("/music/local.flac", "Local");
-    let canPrevious = false;
-    let canNext = true;
-    context.currentSource = () => source;
-    context.canPrevious = () => canPrevious;
-    context.canNext = () => canNext;
+    context.currentSource = () => localFileSourceFromPath("/music/local.flac", "Local");
     const controls = createMusicExternalControls(context);
 
     controls.updateNative();
-    await vi.waitFor(() => expect(updateMediaControls).toHaveBeenLastCalledWith(
-      expect.objectContaining({ title: "Nothing loaded", canPrevious: false, canNext: true }),
-    ));
-    source = youtubeVideoSourceFromId("dQw4w9WgXcQ");
-    canPrevious = true;
-    canNext = false;
-    controls.updateNative();
-    await vi.waitFor(() => expect(updateMediaControls).toHaveBeenLastCalledWith(
-      expect.objectContaining({ canPrevious: true, canNext: false }),
-    ));
+    expect(updateMediaControls).not.toHaveBeenCalled();
   });
 
-  it("disables native navigation when unavailable or no item is eligible", async () => {
+  it("releases browser metadata and handlers when its decoder no longer owns the source", () => {
+    const handlers = new Map<string, unknown>();
+    const mediaSession = {
+      metadata: null as unknown,
+      playbackState: "none",
+      setActionHandler: vi.fn((action: string, handler: unknown) => { handlers.set(action, handler); }),
+    };
+    vi.stubGlobal("navigator", { mediaSession });
+    vi.stubGlobal("MediaMetadata", class { constructor(public value: unknown) {} });
     const { context } = createContext();
-    context.currentSource = () => localFileSourceFromPath("/music/only.flac", "Only");
+    context.currentSource = () => localFileSourceFromPath("/music/video.mp4", "Video");
+    context.snapshot = () => ({ ...DEFAULT_PLAYBACK_SNAPSHOT, status: "playing" });
     const controls = createMusicExternalControls(context);
-    controls.updateNative();
-    await vi.waitFor(() => expect(updateMediaControls).toHaveBeenLastCalledWith(
-      expect.objectContaining({ canPrevious: false, canNext: false }),
-    ));
-
+    controls.updateBrowser();
+    expect(mediaSession.metadata).not.toBeNull();
+    expect(mediaSession.playbackState).toBe("playing");
+    expect(handlers.get("play")).toBeTypeOf("function");
     context.currentSource = () => null;
-    controls.updateNative();
-    await vi.waitFor(() => expect(updateMediaControls).toHaveBeenLastCalledWith(
-      expect.objectContaining({ title: null, canPlayPause: false, canPrevious: false, canNext: false }),
-    ));
+    controls.updateBrowser();
+    expect(mediaSession.metadata).toBeNull();
+    expect(mediaSession.playbackState).toBe("none");
+    expect([...handlers.values()]).toEqual([null, null, null, null, null]);
   });
+
+  it("handles an unsupported browser media action without preventing decoder cleanup", () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const mediaSession = {
+      metadata: null as unknown,
+      playbackState: "none",
+      setActionHandler: vi.fn((action: string) => {
+        if (action === "stop") throw new Error("unsupported media action");
+      }),
+    };
+    vi.stubGlobal("navigator", { mediaSession });
+    vi.stubGlobal("MediaMetadata", class { constructor(public value: unknown) {} });
+    const { context } = createContext();
+    context.currentSource = () => localFileSourceFromPath("/music/video.mp4", "Video");
+    context.snapshot = () => ({ ...DEFAULT_PLAYBACK_SNAPSHOT, status: "playing" });
+    const controls = createMusicExternalControls(context);
+    controls.updateBrowser(); controls.updateBrowser();
+    context.currentSource = () => null;
+    expect(() => controls.updateBrowser()).not.toThrow();
+    expect(mediaSession.metadata).toBeNull();
+    expect(mediaSession.playbackState).toBe("none");
+    expect(warning).toHaveBeenCalledTimes(1);
+  });
+
 });

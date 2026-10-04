@@ -1,9 +1,10 @@
 import { notesPasteAppendRequests, planNotesPlainTextPaste } from "$lib/notes/block-clipboard";
-import { createNotesPastePersistence } from "./notes-store-paste-persistence";
+import { notesPasteOperations } from "./notes-store-paste-persistence";
+import { createNotesCompoundPersistence } from "./notes-store-compound-edits";
+import type { NotesEditOperation } from "$lib/api/notes/compound-edits";
 import type { NotesDatabasePasteController } from "./notes-database-paste.svelte";
 import type { NotesDocumentSelection } from "$lib/notes/editor-selection";
 import { planNotesRichHtmlPaste } from "$lib/notes/rich-text-paste";
-import { appendNotesBlockChildren, moveNotesBlock, trashNotesBlock, updateNotesBlock } from "$lib/api/notes";
 import { applyBlockUpdate, blockIndent, blockUpdateWithIndent, blockEditableRichText, blockPlainText, blockWithRichText, createBlockUpdate, createBlockWrite, isTextEditableBlock } from "$lib/notes/block-factory";
 import { blockChildrenAreVisible } from "$lib/notes/block-tree";
 import { applyRichTextAnnotations, applyRichTextLink, normalizeRichTextLinkUrl, replaceRichTextRange, createTextRichText, richTextAnnotationsForSelection, richTextPlainText, type NotesRichTextAnnotationName } from "$lib/notes/rich-text";
@@ -127,30 +128,23 @@ export function createNotesDocumentEdit(context: NotesBlockActionsContext, optim
     context.requestBlockFocus(focusId, selection);
     context.recordUndo({ kind: "delete", before, after: context.createUndoSnapshot(focusId, [], selection) });
     if (richPastePlan?.copiedDatabaseIds) databasePaste?.beginCopies(richPastePlan.copiedDatabaseIds);
-    const persistPaste = createNotesPastePersistence(requests, richPastePlan?.copiedPageIds, richPastePlan?.copiedDatabaseIds, databasePaste?.acceptCopy);
-    const mutations: Array<() => Promise<unknown>> = [];
+    const operations: NotesEditOperation[] = [];
     if (replacement) {
-      mutations.push(() => appendNotesBlockChildren({ parent: first.parent, after: originalFirst.id, children: [{ id: first.id, ...update }] }));
-      if (start === 0) mutations.push(() => moveNotesBlock(first.id, { parent: first.parent, after: null, before: originalFirst.id }));
-    } else mutations.push(() => updateNotesBlock(first.id, update));
-    mutations.push(persistPaste);
-    for (const placement of placements) {
-      mutations.push(() => moveNotesBlock(placement.blockId, { parent: placement.parent, after: placement.after, before: null }));
-    }
-    // Survivors have already moved. One trash journal per removed root preserves undo ownership.
+      operations.push({ type: "append", request: { parent: first.parent, after: originalFirst.id, children: [{ id: first.id, ...update }] } });
+      if (start === 0) operations.push({ type: "move", block_id: first.id, request: { parent: first.parent, after: null, before: originalFirst.id } });
+    } else operations.push({ type: "update", block_id: first.id, update });
+    operations.push(...notesPasteOperations(requests, richPastePlan?.copiedPageIds, richPastePlan?.copiedDatabaseIds));
+    for (const placement of placements) operations.push({ type: "move", block_id: placement.blockId, request: { parent: placement.parent, after: placement.after, before: null } });
     for (const id of removedIdsInOrder) {
-      const parent = context.blockById(id)?.parent ?? tree.blocksById[id]?.parent;
+      const parent = tree.blocksById[id]?.parent;
       if (parent?.type === "block_id" && removed.has(parent.block_id)) continue;
-      mutations.push(() => trashNotesBlock(id, true));
+      operations.push({ type: "trash", block_id: id, in_trash: true });
     }
-    let completed = 0;
+    const persist = createNotesCompoundPersistence(context, "replace_selection", operations, Object.values(tree.blocksById));
     void context.enqueueEditorMutation(async () => {
       await context.awaitSelectedPageReady();
-      // A retry must not use a removed note as an insertion anchor or duplicate completed writes.
-      while (completed < mutations.length) {
-        await mutations[completed]();
-        completed += 1;
-      }
+      const result = await persist();
+      for (const created of result.databases) databasePaste?.acceptCopy(created.block.id, created);
       if (richPastePlan?.copiedPageIds) context.applyPostMutation({ sidebarImpact: "hierarchy" });
     });
   };
@@ -182,9 +176,10 @@ function applyDocumentFormattingUpdates(
   const after = context.createUndoSnapshot(ids[0]);
   if (after) after.documentSelection = selected;
   context.recordUndo({ kind: "formatting", before, after });
+  const persist = createNotesCompoundPersistence(context, "format_selection", updates.map(({ id, update }) => ({ type: "update", block_id: id, update })));
   void context.enqueueEditorMutation(async () => {
     await context.awaitSelectedPageReady();
-    for (const { id, update } of updates) await updateNotesBlock(id, update);
+    await persist();
     if (refreshLinks) await context.refreshOpenLinks();
   }).catch((error: unknown) => console.warn("Notes document formatting persistence failed", error));
 }

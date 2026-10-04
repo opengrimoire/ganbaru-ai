@@ -82,7 +82,7 @@ let config = $state<DoomscrollingConfig>(loadSavedConfig());
 function persist(next: DoomscrollingConfig): void {
   config = next;
   setConfigKey(CONFIG_KEY, next);
-  void publishMobileDoomscrollingConfig(next).catch((error: unknown) => {
+  void publishMobileDoomscrollingConfig().catch((error: unknown) => {
     console.warn("Android Doomscrolling rules could not be published", error);
   });
 }
@@ -444,7 +444,7 @@ export function getDoomscrolling() {
       return config;
     },
     publishMobileRules(): Promise<void> {
-      return publishMobileDoomscrollingConfig(config);
+      return publishMobileDoomscrollingConfig();
     },
     setMode(mode: DoomscrollingMode): void {
       update({ mode });

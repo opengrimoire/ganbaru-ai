@@ -76,6 +76,7 @@ import type {
   ProjectViewId,
 } from "$lib/projects/types";
 import { translate } from "$lib/i18n/translator.svelte";
+import { PROJECT_CUSTOM_FIELD_TYPES } from "$lib/projects/types";
 import {
   systemProjectGroupName,
   systemProjectName,
@@ -159,6 +160,7 @@ interface ProjectPriorityRow {
 }
 
 interface ProjectTaskRow {
+  revision: number;
   id: string;
   project_id: string;
   section_id: string;
@@ -215,6 +217,7 @@ interface ProjectTaskTagLinkRow {
 }
 
 interface ProjectCustomFieldRow {
+  revision: number;
   id: string;
   project_id: string;
   name: string;
@@ -225,6 +228,7 @@ interface ProjectCustomFieldRow {
 }
 
 interface ProjectCustomFieldOptionRow {
+  revision: number;
   id: string;
   field_id: string;
   name: string;
@@ -550,6 +554,7 @@ function mapPriority(row: ProjectPriorityRow): ProjectPriorityConfig {
 
 function mapTask(row: ProjectTaskRow): ProjectTask {
   return {
+    revision: row.revision,
     id: row.id,
     projectId: row.project_id,
     sectionId: row.section_id,
@@ -619,6 +624,7 @@ function mapTaskTagLink(row: ProjectTaskTagLinkRow): ProjectTaskTagLink {
 
 function mapCustomField(row: ProjectCustomFieldRow): ProjectCustomField {
   return {
+    revision: row.revision,
     id: row.id,
     projectId: row.project_id,
     name: row.name,
@@ -631,6 +637,7 @@ function mapCustomField(row: ProjectCustomFieldRow): ProjectCustomField {
 
 function mapCustomFieldOption(row: ProjectCustomFieldOptionRow): ProjectCustomFieldOption {
   return {
+    revision: row.revision,
     id: row.id,
     fieldId: row.field_id,
     name: row.name,
@@ -1112,6 +1119,169 @@ export async function updateProjectCustomFieldValue(value: ProjectCustomFieldVal
 export async function updateProjectTask(task: ProjectTaskUpdate): Promise<ProjectMutation> {
   const dbUrl = await ensureDbUrl();
   return invokeProjectMutation("projects_update_task", { dbUrl, task });
+}
+
+/** A field-specific action whose expected values come from the user's displayed selection. */
+export type ProjectTaskBulkChange =
+  | { kind: "status"; statusId: string }
+  | { kind: "priority"; priority: string }
+  | { kind: "archive"; archived: boolean };
+
+export interface ProjectTaskBulkRequest {
+  operationId: string;
+  projectId: string;
+  tasks: { id: string; value: string | null }[];
+  change: ProjectTaskBulkChange;
+}
+
+/** Reuse the operation ID and payload to recover the committed result after a lost response. */
+export async function applyProjectTaskBulk(request: ProjectTaskBulkRequest): Promise<ProjectMutation> {
+  const dbUrl = await ensureDbUrl();
+  const response = await invoke<unknown>("projects_apply_task_bulk", { dbUrl, request });
+  return mapMutation(parseCompoundProjectRows(response, request.projectId, { kind: "task" }));
+}
+
+export type ProjectReorderItem =
+  | { kind: "task"; id: string; axis: "section" | "status"; groupId: string; parentTaskId: string | null; expectedOrder: number }
+  | { kind: "custom_field"; id: string; expectedOrder: number }
+  | { kind: "custom_field_option"; id: string; fieldId: string; expectedOrder: number };
+
+export interface ProjectReorderRequest {
+  operationId: string;
+  projectId: string;
+  direction: -1 | 1;
+  item: ProjectReorderItem;
+}
+
+/** Move within native siblings and reconcile only the validated committed result. */
+export async function reorderProjectItem(request: ProjectReorderRequest): Promise<ProjectMutation> {
+  const dbUrl = await ensureDbUrl();
+  const response = await invoke<unknown>("projects_reorder_item", { dbUrl, request });
+  return mapMutation(parseCompoundProjectRows(response, request.projectId, request.item));
+}
+
+/** Decode a bounded native task-only transaction result for its owning project. */
+export function parseProjectTaskMutation(value: unknown, projectId: string): ProjectMutation {
+  return mapMutation(parseCompoundProjectRows(value, projectId, { kind: "task" }));
+}
+
+/** Validate the command boundary before it can replace canonical frontend state. */
+function parseCompoundProjectRows(
+  value: unknown,
+  projectId: string,
+  scope: { kind: "task" | "custom_field" } | { kind: "custom_field_option"; fieldId: string },
+): ProjectsMutationRows {
+  const taskLimit = 10_000;
+  const historyPerTaskLimit = 32;
+  function object(value: unknown): Record<string, unknown> {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      throw new Error("Invalid project bulk result object");
+    }
+    return Object.fromEntries(Object.entries(value));
+  }
+  function text(row: Record<string, unknown>, key: string): string {
+    const value = row[key];
+    if (typeof value !== "string") throw new Error(`Invalid project bulk result ${key}`);
+    return value;
+  }
+  function optionalText(row: Record<string, unknown>, key: string): string | null {
+    return row[key] === null ? null : text(row, key);
+  }
+  function number(row: Record<string, unknown>, key: string): number {
+    const value = row[key];
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new Error(`Invalid project bulk result ${key}`);
+    }
+    return value;
+  }
+  function optionalNumber(row: Record<string, unknown>, key: string): number | null {
+    return row[key] === null ? null : number(row, key);
+  }
+  function array(value: unknown, maximum: number): unknown[] {
+    if (!Array.isArray(value) || value.length > maximum) throw new Error("Invalid project bulk result array");
+    return value;
+  }
+  const row = object(value);
+  const tasks = array(row.tasks, scope.kind === "task" ? taskLimit : 0).map((value): ProjectTaskRow => {
+    const task = object(value);
+    const revision = number(task, "revision");
+    const taskType = text(task, "task_type");
+    if (!Number.isSafeInteger(revision) || revision < 0
+      || ![0, 1].includes(number(task, "milestone"))
+      || text(task, "project_id") !== projectId
+      || (taskType !== "task" && taskType !== "milestone" && taskType !== "bug" && taskType !== "habit")) {
+      throw new Error("Invalid project bulk task identity, revision, or type");
+    }
+    return {
+      id: text(task, "id"), project_id: projectId, revision,
+      section_id: text(task, "section_id"), status_id: text(task, "status_id"),
+      parent_task_id: optionalText(task, "parent_task_id"), title: text(task, "title"),
+      description: text(task, "description"), priority: text(task, "priority"), task_type: taskType,
+      section_sort_order: number(task, "section_sort_order"), status_sort_order: number(task, "status_sort_order"),
+      estimate_minutes: optionalNumber(task, "estimate_minutes"), due_date: optionalText(task, "due_date"),
+      due_time: optionalText(task, "due_time"), start_date: optionalText(task, "start_date"),
+      start_time: optionalText(task, "start_time"), target_end_date: optionalText(task, "target_end_date"),
+      completed_at: optionalText(task, "completed_at"), archived_at: optionalText(task, "archived_at"),
+      blocker_reason: optionalText(task, "blocker_reason"), milestone: number(task, "milestone"),
+      created_at: text(task, "created_at"), updated_at: text(task, "updated_at"),
+    };
+  });
+  const taskIds = new Set(tasks.map((task) => task.id));
+  if (taskIds.size !== tasks.length) throw new Error("Duplicate project bulk result task");
+  const taskChangeEvents = array(row.task_change_events, taskLimit * historyPerTaskLimit).map((value): ProjectTaskChangeEventRow => {
+    const event = object(value);
+    const eventType = text(event, "event_type");
+    if (eventType !== "created" && eventType !== "updated" && eventType !== "status_changed"
+      && eventType !== "scheduled" && eventType !== "completed" && eventType !== "reopened"
+      && eventType !== "archived" && eventType !== "event_unlinked" && eventType !== "dependency_added"
+      && eventType !== "dependency_removed") throw new Error("Invalid project bulk history event");
+    const taskId = text(event, "task_id");
+    if (!taskIds.has(taskId)) throw new Error("Invalid project bulk history owner");
+    return {
+      id: text(event, "id"), task_id: taskId, event_type: eventType,
+      field_name: optionalText(event, "field_name"), old_value: optionalText(event, "old_value"),
+      new_value: optionalText(event, "new_value"), reason: optionalText(event, "reason"),
+      occurred_at: text(event, "occurred_at"),
+    };
+  });
+  function revision(row: Record<string, unknown>): number {
+    const value = number(row, "revision");
+    if (!Number.isSafeInteger(value) || value < 0) throw new Error("Invalid project schema revision");
+    return value;
+  }
+  function order(row: Record<string, unknown>): number {
+    const value = number(row, "sort_order");
+    if (!Number.isSafeInteger(value)) throw new Error("Invalid project schema order");
+    return value;
+  }
+  const customFields = array(row.custom_fields, scope.kind === "custom_field" ? taskLimit : 0).map((value): ProjectCustomFieldRow => {
+    const field = object(value);
+    const fieldType = PROJECT_CUSTOM_FIELD_TYPES.find((type) => type === field.field_type);
+    if (!fieldType || text(field, "project_id") !== projectId) throw new Error("Invalid reordered custom field owner or type");
+    return { id: text(field, "id"), revision: revision(field), project_id: projectId,
+      name: text(field, "name"), field_type: fieldType, sort_order: order(field),
+      created_at: text(field, "created_at"), updated_at: text(field, "updated_at") };
+  });
+  const customFieldOptions = array(row.custom_field_options, scope.kind === "custom_field_option" ? taskLimit : 0).map((value): ProjectCustomFieldOptionRow => {
+    const option = object(value);
+    if (scope.kind !== "custom_field_option" || text(option, "field_id") !== scope.fieldId) {
+      throw new Error("Invalid reordered option owner");
+    }
+    return { id: text(option, "id"), revision: revision(option), field_id: scope.fieldId,
+      name: text(option, "name"), sort_order: order(option),
+      created_at: text(option, "created_at"), updated_at: text(option, "updated_at") };
+  });
+  for (const rows of [customFields, customFieldOptions]) {
+    if (new Set(rows.map((entry) => entry.id)).size !== rows.length) throw new Error("Duplicate reordered schema identity");
+  }
+  const emptyCollections: Omit<ProjectsMutationRows, "tasks" | "task_change_events" | "custom_fields" | "custom_field_options"> = {
+    groups: [], projects: [], sections: [], statuses: [], priorities: [], checklist_items: [],
+    tags: [], task_tag_links: [], custom_field_values: [],
+    custom_field_option_values: [], dependencies: [], event_links: [], view_preferences: [], custom_emojis: [],
+    removals: [], calendar_event_project_assignments: [],
+  };
+  for (const key of Object.keys(emptyCollections)) array(row[key], 0);
+  return { ...emptyCollections, tasks, task_change_events: taskChangeEvents, custom_fields: customFields, custom_field_options: customFieldOptions };
 }
 
 export async function linkProjectTaskEvent(link: ProjectTaskEventLinkCreate): Promise<ProjectMutation> {

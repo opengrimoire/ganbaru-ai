@@ -15,6 +15,7 @@ fn state(phase: &str) -> DoomscrollingRuntimeState {
         active_block_id: None,
         remaining_seconds: Some(30),
         updated_at: "2026-05-26T00:00:00.000Z".to_string(),
+        valid_until_ms: None,
     }
 }
 

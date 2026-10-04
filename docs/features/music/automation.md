@@ -32,17 +32,21 @@ The implemented Project settings UI exposes only Focus playlist, Short break pla
 
 ## Calendar behavior
 
-When a scheduled event becomes active, Calendar resolves its phase assignment and prepares or plays the selected context. Editing a project later does not silently rewrite an existing event snapshot. An explicit event override always remains distinguishable from inherited intent.
+When a timed event without Pomodoro becomes active on desktop, the native Music owner reads canonical Calendar occurrences and resolves its assignment. The earliest-ending eligible event wins, with stable creation and identity tie-breakers. A committed open Focus run takes priority. Editing a project later does not silently rewrite an existing event snapshot. An explicit event override always remains distinguishable from inherited intent.
 
 An event without Pomodoro can use its applicable context assignment. Future work environments may add another inherited layer, but that feature is not currently the canonical owner of Music settings.
 
 ## Pomodoro behavior
 
-Phase transitions apply the corresponding assignment. Automation records enough context to explain why a playlist started, paused, or remained unchanged.
+Committed native Focus transitions apply the corresponding playlist assignment through the native Music owner. The effect includes vault generation, execution revision, run and segment identity, deadlines, and a bounded validity lease. Duplicate delivery cannot restart a track or extend its original monotonic allowance; an explicit revoked lease or an expired deadline pauses playback still owned by that effect. Delayed older effects cannot revive it. Scheduled Calendar projections alone do not authorize Pomodoro playlist playback.
+
+Music retains a separate manual-intent revision. An intervening manual action supersedes an earlier pause/resume token, and a later Focus phase can establish a new assignment. Assignment reads, playlist preparation and independent background intent use canonical native rows and the same accepted transaction. The frontend renders provenance and accepted background output, and hosts browser media adapters. It does not select automatic Calendar or Focus soundtracks.
 
 The user preference `Pause if the focus session is paused` pauses Music only when it was playing and records that Pomodoro caused the pause. Resume restarts Music only when that ownership still applies. Manual Music actions clear or supersede automation ownership as appropriate.
 
-Calendar or Pomodoro transitions can supersede temporary Review playback. The UI keeps the resulting queue visible and explains the active assignment source.
+Desktop Focus completion audio temporarily attenuates and pauses playing Music through its native owner, retaining the track position. Attenuation leaves persisted volume, mute, and playback rate intact. The audio source's actual completion releases attenuation; an interrupted output or a bounded timeout also requests restoration. Music resumes only when the original pause still owns the same session, track generation, manual revision, and Focus context. A manual control, replacement track, or changed Focus assignment supersedes that ownership and uses current settings. Restoration cannot restart a manually paused track or overwrite a newer volume choice. Completion audio therefore requires no frontend countdown or guessed asset duration. Physical desktop audio and browser-host acceptance remain pending.
+
+Temporary Review playback defers automatic Calendar and Focus takeover. Leaving Review lets the native owner reconcile eligible automation without treating the deferred activation as already consumed. The UI keeps the resulting queue visible and explains the active assignment source.
 
 ## Soundscapes
 

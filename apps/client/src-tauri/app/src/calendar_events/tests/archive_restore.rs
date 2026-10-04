@@ -16,8 +16,6 @@ fn archived_event_restore_relinks_pomodoro_history() {
 
         let target = CalendarEventMutationTarget {
             id: "event-1".to_string(),
-            occurrence_start: None,
-            occurrence_end: None,
         };
         let mut tx = pool.begin().await.unwrap();
         archive_calendar_event_tx(&mut tx, &target).await.unwrap();
@@ -105,8 +103,6 @@ fn archived_synthetic_restore_removes_exception_and_relinks_history() {
 
         let target = CalendarEventMutationTarget {
             id: "event-1::2000-05-10".to_string(),
-            occurrence_start: Some("2000-05-10T10:00:00Z".to_string()),
-            occurrence_end: Some("2000-05-10T11:00:00Z".to_string()),
         };
         let mut tx = pool.begin().await.unwrap();
         archive_calendar_event_tx(&mut tx, &target).await.unwrap();
@@ -196,8 +192,6 @@ fn synthetic_future_delete_adds_exception_without_deleting_parent() {
             &mut tx,
             &CalendarEventMutationTarget {
                 id: "event-1::2099-05-10".to_string(),
-                occurrence_start: Some("2099-05-10T10:00:00Z".to_string()),
-                occurrence_end: Some("2099-05-10T11:00:00Z".to_string()),
             },
         )
         .await
@@ -236,8 +230,6 @@ fn synthetic_archive_uses_id_date_when_utc_start_is_next_day() {
 
         let target = CalendarEventMutationTarget {
             id: "event-1::2099-05-10".to_string(),
-            occurrence_start: Some("2099-05-11T02:00:00Z".to_string()),
-            occurrence_end: Some("2099-05-11T03:00:00Z".to_string()),
         };
         let mut tx = pool.begin().await.unwrap();
         archive_calendar_event_tx(&mut tx, &target).await.unwrap();

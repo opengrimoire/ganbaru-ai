@@ -102,15 +102,12 @@
     starting = true;
     startMessage = "";
     try {
-      const [{ getCalendar }, { startScheduledPomodoro }] = await Promise.all([
-        import("$lib/stores/calendar.svelte"),
-        import("$lib/stores/pomodoro-calendar-scheduler"),
-      ]);
-      if (await startScheduledPomodoro(getCalendar(), pomodoro)) onDismiss();
-      else startMessage = t("pomodoroNotification.noCommitmentDue");
+      await pomodoro.startScheduledSession();
+      onDismiss();
     } catch (error) {
       console.warn("Failed to accept scheduled focus session:", error);
-      startMessage = t("pomodoroNotification.startFailed");
+      startMessage = typeof error === "object" && error !== null && "code" in error && error.code === "ineligible_commitment"
+        ? t("pomodoroNotification.noCommitmentDue") : t("pomodoroNotification.startFailed");
     } finally {
       starting = false;
     }

@@ -24,6 +24,7 @@ ganbaru-db = { path = "../../../../crates/ganbaru-db" }
 ganbaru-focus = { path = "../../../../crates/ganbaru-focus" }
 ganbaru-notes = { path = "../../../../crates/ganbaru-notes" }
 ganbaru-working-folders = { path = "../../../../crates/ganbaru-working-folders" }
+jiff = { workspace = true }
 reqwest = { workspace = true }
 rcgen = { workspace = true }
 rustls = { workspace = true }

@@ -9,6 +9,7 @@ interface PendingBlockSave {
 }
 
 export interface NotesBlockPersistenceContext {
+  reconcileCanonicalBlocks?: (blocks: readonly NotesBlock[]) => void;
   readBlock: (blockId: string) => NotesBlock | undefined;
   beforeSave: (blockId: string) => Promise<void>;
   replaceBlock: (block: NotesBlock) => void;
@@ -17,6 +18,8 @@ export interface NotesBlockPersistenceContext {
 }
 
 export interface NotesBlockPersistence {
+  readCanonicalRevision: (blockId: string) => string | undefined;
+  acknowledgeCanonicalBlocks: (blocks: readonly NotesBlock[]) => void;
   retryEditorMutations: () => Promise<void>;
   hasLocalChanges: (blockId: string) => boolean;
   localApplyBlockUpdate: (blockId: string, update: NotesBlockUpdate) => void;
@@ -36,6 +39,7 @@ export function createNotesBlockPersistence(
   context: NotesBlockPersistenceContext,
 ): NotesBlockPersistence {
   const pendingBlockSaves = new Map<string, PendingBlockSave>();
+  const canonicalRevisions = new Map<string, string>();
   const blockRevisions = new Map<string, number>();
   let mutationChain = Promise.resolve();
   let queueGeneration = 0;
@@ -43,6 +47,14 @@ export function createNotesBlockPersistence(
   const queuedMutations: Array<() => Promise<void>> = [];
   const dirtyBlocks = new Set<string>();
   const saveChains = new Map<string, Promise<void>>();
+
+  function readCanonicalRevision(blockId: string): string | undefined {
+    return context.readBlock(blockId)?.edit_revision ?? canonicalRevisions.get(blockId);
+  }
+
+  function acknowledgeCanonicalBlocks(blocks: readonly NotesBlock[]): void {
+    for (const block of blocks) if (block.edit_revision) canonicalRevisions.set(block.id, block.edit_revision);
+  }
 
   function markBlockLocallyChanged(blockId: string): void {
     dirtyBlocks.add(blockId);
@@ -67,9 +79,14 @@ export function createNotesBlockPersistence(
       if (saveGeneration !== queueGeneration) return;
       const saved = await updateNotesBlock(blockId, update);
       if (saveGeneration !== queueGeneration) return;
+      acknowledgeCanonicalBlocks([saved]);
+      context.reconcileCanonicalBlocks?.([saved]);
       if ((blockRevisions.get(blockId) ?? 0) === revision) {
         dirtyBlocks.delete(blockId);
         if (context.readBlock(blockId)) context.replaceBlock(saved);
+      } else {
+        const current = context.readBlock(blockId);
+        if (current) context.replaceBlock({ ...current, edit_revision: saved.edit_revision });
       }
     });
     saveChains.set(blockId, save);
@@ -155,6 +172,7 @@ export function createNotesBlockPersistence(
     queuedMutations.length = 0;
     dirtyBlocks.clear();
     blockRevisions.clear();
+    canonicalRevisions.clear();
     saveChains.clear();
     mutationChain = Promise.resolve();
     failed = false;
@@ -168,12 +186,14 @@ export function createNotesBlockPersistence(
     return enqueue(async () => {
       await mutation();
       for (const [id, revision] of revisions) {
-        if (context.readBlock(id) && blockRevisions.get(id) === revision) dirtyBlocks.delete(id);
+        if (blockRevisions.get(id) === revision) dirtyBlocks.delete(id);
       }
     });
   }
 
   return {
+    readCanonicalRevision,
+    acknowledgeCanonicalBlocks,
     retryEditorMutations,
     enqueueEditorMutation,
     hasLocalChanges,

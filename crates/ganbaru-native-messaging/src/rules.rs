@@ -164,6 +164,11 @@ fn decide_url_limit(
     let Some(limit_state) = limit_state else {
         return HostDecision::Allowed;
     };
+    if limit_state.configuration_digest.is_none()
+        || limit_state.configuration_digest != config.limit_configuration_digest
+    {
+        return HostDecision::Allowed;
+    }
     for limit in &config.limits.items {
         if !limit.enabled {
             continue;
@@ -175,7 +180,17 @@ fn decide_url_limit(
         else {
             continue;
         };
-        if total.used_seconds < total.limit_seconds {
+        let minutes = if total.period == "day" {
+            limit.minutes_per_day
+        } else if total.period == "week" {
+            limit.minutes_per_week
+        } else {
+            None
+        };
+        if total.used_seconds < total.limit_seconds
+            || total.remaining_seconds != 0
+            || !minutes.is_some_and(|minutes| minutes.checked_mul(60) == Some(total.limit_seconds))
+        {
             continue;
         }
         if limit

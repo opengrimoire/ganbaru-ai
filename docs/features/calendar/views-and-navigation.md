@@ -12,11 +12,17 @@
 
 Changing views never stops an active session. When the user returns to a detailed view, the event block and progress rail reconstruct from canonical timer history.
 
+Recorded Focus timelines are read for exact visible native occurrence identities. If history is unavailable or exceeds its admitted size, Calendar navigation continues and a localized notice explains that the timeline was not loaded. The user can retry or select a shorter range. Failed reads are never cached as successful empty history, and older failures cannot replace a newer loaded timeline.
+
 ## Navigation
 
 Users can move by the view's natural interval, jump to today, select a date, and use documented keyboard shortcuts when focus is not inside an editor, picker, or dialog. Held-key navigation is paced and cancellable; it does not replay missed ticks after a busy frame.
 
 Rapid navigation uses latest-request-wins semantics. Older data cannot replace a newer requested window. Prefetch may improve adjacent navigation but never blocks foreground movement or becomes the source of truth.
+
+Loaded windows contain native occurrences from a consistent SQLite snapshot. Covering-window reuse filters those occurrences without regenerating recurrence in the frontend. Committed edits invalidate older cached and in-flight reads before refreshing canonical state. A failed refresh remains retryable and does not report the previous window as current.
+
+Window selection retains offset-free stored times in their event's home zone, including explicitly authored DST-gap labels and legacy civil timestamps. The SQL prefilter admits every supported home-zone offset; canonical expansion then filters exact instants against the requested viewport. A home date can differ from the displayed date without losing the occurrence or changing its recurrence identity. Render, Focus, and notification reads share this rule.
 
 ## Scrolling and zoom
 
@@ -32,7 +38,7 @@ Active events protect their recorded start. Direct manipulation may extend or sh
 
 ## All-day events
 
-All-day events use inclusive visible dates and an exclusive stored end boundary. They render in the all-day band and month cells, not on the timed rail. Multi-day events retain one continuous identity across their span.
+All-day events use inclusive visible dates. The current vault representation also keeps inclusive floating endpoints, so a one-day event has equal start and end dates. The iCalendar codec converts the end to an exclusive `DTEND` on export and back to an inclusive date on import. They render in the all-day band and month cells, not on the timed rail. Multi-day events retain one continuous identity across their span.
 
 Turning a timed event into all-day removes wall-clock editing without converting it through the current device zone in a way that shifts intended dates. Turning an all-day event into timed requires an explicit local time and duration.
 

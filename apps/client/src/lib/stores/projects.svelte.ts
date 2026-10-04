@@ -478,7 +478,7 @@ const actions = createProjectStoreActions({
     if (assignments.length === 0) return;
     try {
       const { getCalendar } = await import("$lib/stores/calendar.svelte");
-      getCalendar().applyProjectAssignments(assignments);
+      await getCalendar().applyProjectAssignments(assignments);
     } catch (error) {
       console.error("Failed to apply committed calendar event project assignments", error);
     }

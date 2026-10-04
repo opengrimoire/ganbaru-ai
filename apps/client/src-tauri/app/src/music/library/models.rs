@@ -747,6 +747,8 @@ pub struct MusicSoundscapeGroupWrite {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicSoundscapeState {
+    /// An automatic selection requires fresh native phase admission after restart.
+    pub automatic_intent: bool,
     pub active_soundscape_id: Option<String>,
     pub active_ids: Vec<String>,
     pub multiple_enabled: bool,

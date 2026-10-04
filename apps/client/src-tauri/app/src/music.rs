@@ -25,6 +25,7 @@ mod artwork;
 pub(crate) mod host;
 pub(crate) mod library;
 pub(crate) mod root_bindings;
+pub(crate) mod session;
 mod youtube_host;
 pub(crate) mod youtube_metadata;
 pub(crate) mod youtube_thumbnail;
@@ -435,7 +436,15 @@ pub async fn music_pick_and_read_interchange_file(
         if metadata.len() > MAX_INTERCHANGE_BYTES {
             return Err("music import exceeds the 8 MB safety limit".to_string());
         }
-        fs::read_to_string(&path)
+        use std::io::Read;
+        let mut bytes = Vec::new();
+        fs::File::open(&path)
+            .and_then(|file| file.take(MAX_INTERCHANGE_BYTES + 1).read_to_end(&mut bytes))
+            .map_err(|error| format!("failed to read music import: {error}"))?;
+        if bytes.len() as u64 > MAX_INTERCHANGE_BYTES {
+            return Err("music import exceeds the 8 MB safety limit".to_string());
+        }
+        String::from_utf8(bytes)
             .map(Some)
             .map_err(|error| format!("failed to read UTF-8 music import: {error}"))
     })
@@ -464,7 +473,7 @@ pub async fn music_pick_and_read_interchange_file(
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-#[tauri::command]
+/// Writes a completed native Music snapshot after all SQLite reads have finished.
 pub async fn music_pick_and_write_interchange_file(
     app: tauri::AppHandle,
     default_name: String,
@@ -510,7 +519,7 @@ pub async fn music_pick_and_write_interchange_file(
 }
 
 #[cfg(target_os = "android")]
-#[tauri::command]
+/// Exports a completed native Music snapshot through the bounded Android adapter.
 pub async fn music_pick_and_write_interchange_file(
     app: tauri::AppHandle,
     default_name: String,

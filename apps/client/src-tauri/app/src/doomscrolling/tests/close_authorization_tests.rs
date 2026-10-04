@@ -125,6 +125,22 @@ fn close_process_rechecks_identity_before_kill_fallback() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn already_exited_process_does_not_report_an_accepted_close() {
+    let mut controller = MockDesktopProcessController {
+        observations: VecDeque::new(),
+        fallback: None,
+        signals: Vec::new(),
+        waits: 0,
+    };
+    let signalled =
+        super::close_desktop_process_with(&valid_close_request(), &mut controller, |_| Ok(()))
+            .unwrap();
+    assert!(!signalled);
+    assert!(controller.signals.is_empty());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn close_process_stops_when_process_exits_between_checks() {
     let mut controller = MockDesktopProcessController {
         observations: VecDeque::from([Some(valid_observed_process()), None]),
@@ -261,6 +277,7 @@ fn persisted_usage_rule_requires_exact_entry_and_exhausted_limit() {
                 "items": [{
                     "id": "games",
                     "enabled": true,
+                    "minutesPerDay": 10,
                     "entries": [{
                         "id": "steam-entry",
                         "desktopAppName": "Steam",
@@ -279,6 +296,7 @@ fn persisted_usage_rule_requires_exact_entry_and_exhausted_limit() {
         week_start_local_date: "2026-07-06".to_string(),
         updated_at: "2026-07-10T12:00:00.000Z".to_string(),
         database_path: Some("/tmp/vault/ganbaru-ai.sqlite".to_string()),
+        configuration_digest: Some(limits::configuration_digest(&config).unwrap()),
         limits: vec![DoomscrollingLimitStateItem {
             id: "games".to_string(),
             period: "day".to_string(),
@@ -293,6 +311,34 @@ fn persisted_usage_rule_requires_exact_entry_and_exhausted_limit() {
 
     assert!(
         super::configured_close_authorization(&config, None, Some(&limit_state), &identity).is_ok()
+    );
+    let mut changed_config = config.clone();
+    changed_config["doomscrolling"]["limits"]["items"][0]["minutesPerDay"] = serde_json::json!(20);
+    assert!(
+        super::configured_close_authorization(&changed_config, None, Some(&limit_state), &identity)
+            .is_err()
+    );
+    changed_config = config.clone();
+    changed_config["doomscrolling"]["limits"]["items"][0]["entries"][0]["desktopAppMatchNames"] =
+        serde_json::json!(["othergame"]);
+    assert!(
+        super::configured_close_authorization(&changed_config, None, Some(&limit_state), &identity)
+            .is_err()
+    );
+    let mut invalid = limit_state.clone();
+    invalid.configuration_digest = None;
+    assert!(
+        super::configured_close_authorization(&config, None, Some(&invalid), &identity).is_err()
+    );
+    invalid = limit_state.clone();
+    invalid.limits[0].used_seconds = 1;
+    assert!(
+        super::configured_close_authorization(&config, None, Some(&invalid), &identity).is_err()
+    );
+    invalid = limit_state.clone();
+    invalid.limits[0].window_end_local_date = "2026-07-11".into();
+    assert!(
+        super::configured_close_authorization(&config, None, Some(&invalid), &identity).is_err()
     );
     limit_state.limits[0].exhausted = false;
     assert!(

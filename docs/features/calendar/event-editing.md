@@ -24,6 +24,10 @@ The panel groups time, calendar, project, focus, music, meeting, description, re
 
 Editing an existing event opens from the rendered occurrence. Recurring events use the scoped behavior in [Recurrence editing](recurrence-editing.md).
 
+Existing-event Save, immediate drag saves, End now, and Enable Focus use native semantic commands. Calendar mutations and their Focus changes commit together. End now uses the native acceptance clock. A lost reply leaves an unresolved Save notice with Retry, retaining the original request even if the Calendar view closes. Retrying resolves that request; a newer draft cannot replace it. A failed visible-window refresh keeps the panel open and can reuse the accepted receipt.
+
+Pending saves disable mutation controls. Failed or deferred saves retain edited Music assignments instead of treating them as saved. Closing a panel or selecting another event does not authorize a delayed confirmation to save that newly selected event.
+
 ## Project and task linkage
 
 The project selector shows active groups and projects, not the project's entire task tree. Selecting a project can fill an empty title from the project's default event name and applies compatible defaults to a non-active draft. It never replaces an existing title.

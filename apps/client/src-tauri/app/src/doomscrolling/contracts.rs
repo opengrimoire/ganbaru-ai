@@ -11,6 +11,8 @@ pub struct DoomscrollingRuntimeState {
     pub(crate) active_block_id: Option<String>,
     pub(crate) remaining_seconds: Option<i64>,
     pub(crate) updated_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) valid_until_ms: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -78,6 +80,8 @@ pub struct DoomscrollingLimitState {
     pub(crate) updated_at: String,
     #[serde(default)]
     pub(crate) database_path: Option<String>,
+    #[serde(default)]
+    pub(crate) configuration_digest: Option<String>,
     pub(crate) limits: Vec<DoomscrollingLimitStateItem>,
 }
 
@@ -101,6 +105,8 @@ pub struct DoomscrollingForegroundDesktopAppStatus {
     pub(crate) app_name: Option<String>,
     pub(crate) process_name: Option<String>,
     pub(crate) process_id: Option<u32>,
+    #[serde(skip_serializing)]
+    pub(crate) process_identity: Option<String>,
     pub(crate) match_names: Vec<String>,
     pub(crate) reason: Option<String>,
 }
@@ -111,6 +117,8 @@ pub struct DoomscrollingForegroundDesktopAppExpectation {
     pub(crate) app_name: Option<String>,
     pub(crate) process_name: Option<String>,
     pub(crate) process_id: Option<u32>,
+    #[serde(default)]
+    pub(crate) process_identity: Option<String>,
     pub(crate) match_names: Vec<String>,
 }
 
@@ -158,13 +166,6 @@ pub struct DoomscrollingCloseDesktopAppRequest {
     pub(crate) process_id: u32,
     pub(crate) process_name: String,
     pub(crate) process_identity: String,
-    pub(crate) rule_identity: DoomscrollingDesktopRuleIdentity,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DoomscrollingCloseForegroundDesktopAppRequest {
-    pub(crate) expected: DoomscrollingForegroundDesktopAppExpectation,
     pub(crate) rule_identity: DoomscrollingDesktopRuleIdentity,
 }
 

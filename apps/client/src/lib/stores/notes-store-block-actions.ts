@@ -2,14 +2,6 @@ import { blockWithRichText, createBlockWrite } from "$lib/notes/block-factory";
 import type { NotesRichTextAnnotationName } from "$lib/notes/rich-text";
 import { createNotesDocumentEdit, createNotesDocumentFormatting, createNotesDocumentLinks } from "./notes-store-document-edit";
 import {
-  appendNotesBlockChildren,
-  duplicateNotesBlocks,
-  moveNotesBlock,
-  moveNotesBlocks,
-  trashNotesBlock,
-  trashNotesBlocks,
-} from "$lib/api/notes";
-import {
   collectLoadedBlockSubtreeIds,
 } from "$lib/notes/block-duplicate";
 import { cloneNotesJson } from "$lib/notes/json-clone";
@@ -76,7 +68,6 @@ import {
   type NotesStructuralBlockActions,
 } from "$lib/stores/notes-store-block-structural-actions";
 import {
-  notesPostAppendResult,
   notesPostMoveManyResult,
   notesPostMoveResult,
   notesPostTrashResult,
@@ -84,6 +75,8 @@ import {
 } from "$lib/notes/post-mutation";
 import { createNotesOptimisticWriteTracker } from "./notes-store-optimistic-writes";
 import { createNotesDatabasePasteController, type NotesDatabasePasteController } from "./notes-database-paste.svelte";
+import type { NotesCompoundEditResult, NotesEditOperation } from "$lib/api/notes/compound-edits";
+import { createNotesCompoundPersistence } from "./notes-store-compound-edits";
 
 export interface NotesBlockReadCapabilities {
   readPageGeneration?: () => number;
@@ -122,6 +115,7 @@ export interface NotesBlockLocalMutationCapabilities {
 }
 
 export interface NotesBlockPersistenceCapabilities {
+  readCanonicalRevision?: (id: string) => string | undefined;
   retryEditorMutations?: () => Promise<void>;
   enqueueEditorMutation: (mutation: () => Promise<void>) => Promise<void>;
   awaitSelectedPageReady: () => Promise<void>;
@@ -132,6 +126,8 @@ export interface NotesBlockPersistenceCapabilities {
 }
 
 export interface NotesBlockUndoCapabilities {
+  reconcileCompoundUndo?: (result: NotesCompoundEditResult) => void;
+  reconcileCanonicalBlocks?: (blocks: readonly NotesBlock[]) => void;
   reconcileDatabaseIdentity?: (block: NotesChildDatabaseBlock) => void;
   createUndoSnapshot: (
     focusBlockId: string | null,
@@ -207,17 +203,19 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
   }
 
   /** Keep an empty page writable immediately, without adding a separate undo step. */
-  function ensurePageBody(pageId: string): string | null {
+  function ensurePageBody(pageId: string, operations?: NotesEditOperation[]): string | null {
     if (context.readSelectedPageId() !== pageId) return null;
     const existing = context.readPageRootBlockIds()[0];
     if (existing) return existing;
     const write = createBlockWrite(crypto.randomUUID(), "paragraph", "");
     const parent: NotesParent = { type: "page_id", page_id: pageId };
     context.localInsertBlockAfter(optimisticBlockFromWrite(write, parent), null);
-    const persistence = enqueueEditorMutation(async () => {
-      // The local draft may already contain typing. Do not apply the stale append response.
-      await appendNotesBlockChildren({ parent, after: null, children: [write] });
-    });
+    if (operations) {
+      operations.push({ type: "append", request: { parent, after: null, children: [write] } });
+      return write.id;
+    }
+    const persist = createNotesCompoundPersistence(context, "convert", [{ type: "append", request: { parent, after: null, children: [write] } }]);
+    const persistence = enqueueEditorMutation(async () => { await persist(); });
     trackOptimisticBlockWrites([write.id], persistence);
     return write.id;
   }
@@ -286,6 +284,7 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
     snapshot: (focusId) => context.createUndoSnapshot(focusId),
     recordUndo: (before, after) => context.recordUndo({ kind: "paste", before, after }),
     reconcileIdentity: context.reconcileDatabaseIdentity,
+    reconcileCanonicalBlocks: context.reconcileCanonicalBlocks,
   });
   const tableActions = createNotesTableBlockActions({
     ...context,
@@ -353,9 +352,15 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
 
   async function appendAndApply(request: NotesAppendBlockChildrenRequest): Promise<NotesBlock[]> {
     await context.awaitSelectedPageReady();
-    const response = await appendNotesBlockChildren(request);
-    context.applyPostMutation(notesPostAppendResult(request, response));
-    return response.results;
+    const persist = createNotesCompoundPersistence(context, "convert", [{ type: "append", request }]);
+    let appended: NotesBlock[] = [];
+    await enqueueEditorMutation(async () => {
+      const result = await persist();
+      const ids = new Set(request.children.map((child) => child.id));
+      appended = result.blocks.filter((block) => ids.has(block.id));
+      context.applyPostMutation({ blocks: appended, placements: result.placements, canonical: true });
+    });
+    return appended;
   }
 
   async function moveAndApply(
@@ -364,9 +369,28 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
   ): Promise<NotesBlock> {
     await context.awaitSelectedPageReady();
     const hierarchyChanged = context.blockById(blockId)?.type === "child_page";
-    const block = await moveNotesBlock(blockId, request);
+    const pageId = context.readSelectedPageId();
+    if (!pageId) throw new Error("Notes move requires an active page");
+    const operation: NotesEditOperation = request.parent.type === "page_id" && request.parent.page_id !== pageId
+      ? { type: "move_between_pages", block_id: blockId, source_page_id: pageId, destination_page_id: request.parent.page_id, request }
+      : { type: "move", block_id: blockId, request };
+    const operations: NotesEditOperation[] = [operation];
+    const rootIds = context.readPageRootBlockIds();
+    const replacement = operation.type === "move_between_pages" && rootIds.length === 1 && rootIds[0] === blockId
+      ? createBlockWrite(crypto.randomUUID(), "paragraph", "") : null;
+    if (replacement) operations.push({ type: "append", request: { parent: { type: "page_id", page_id: pageId }, after: null, children: [replacement] } });
+    const persist = createNotesCompoundPersistence(context, "indent_selection", operations);
+    let moved: NotesBlock | undefined;
+    await enqueueEditorMutation(async () => {
+      const result = await persist();
+      moved = result.blocks.find((block) => block.id === blockId);
+      if (replacement) context.applyPostMutation({ blocks: result.blocks.filter((block) => block.id === replacement.id), placements: result.placements.filter((placement) => placement.blockId === replacement.id), canonical: true });
+    });
+    if (!moved) throw new Error("Notes move returned no canonical block");
+    const block = moved;
     context.applyPostMutation({
       ...notesPostMoveResult(block, request),
+      canonical: true,
       sidebarImpact: hierarchyChanged ? "hierarchy" : "none",
     });
     return block;
@@ -377,9 +401,23 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
     const hierarchyChanged = request.block_ids.some(
       (blockId) => context.blockById(blockId)?.type === "child_page",
     );
-    const response = await moveNotesBlocks(request);
+    const operations: NotesEditOperation[] = [];
+    let after = request.after ?? null;
+    for (const id of request.block_ids) {
+      operations.push({ type: "move", block_id: id, request: { parent: request.parent, after, before: after ? null : request.before ?? null } });
+      after = id;
+    }
+    const persist = createNotesCompoundPersistence(context, "indent_selection", operations);
+    let results: NotesBlock[] = [];
+    await enqueueEditorMutation(async () => {
+      const result = await persist();
+      const ids = new Set(request.block_ids);
+      results = result.blocks.filter((block) => ids.has(block.id));
+    });
+    const response = { object: "list" as const, type: "block" as const, block: {}, results, next_cursor: null, has_more: false };
     context.applyPostMutation({
       ...notesPostMoveManyResult(request, response),
+      canonical: true,
       sidebarImpact: hierarchyChanged ? "hierarchy" : "none",
     });
     return response.results;
@@ -393,20 +431,18 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
         (subtreeId) => before.blocksById[subtreeId]?.type === "child_page",
       )
     ));
-    if (rootBlockIds.length === 1) {
-      const blockId = rootBlockIds[0];
-      if (!blockId) return;
-      await trashNotesBlock(blockId, true);
-    } else {
-      await trashNotesBlocks({ block_ids: [...rootBlockIds], in_trash: true });
-    }
+    if (!rootBlockIds.length) return;
+    const persist = createNotesCompoundPersistence(context, "delete_selection", rootBlockIds.map((id) => ({ type: "trash", block_id: id, in_trash: true })));
+    await enqueueEditorMutation(async () => { await persist(); });
     context.applyPostMutation({
       ...notesPostTrashResult(before, rootBlockIds),
+      canonical: true,
       sidebarImpact: hierarchyChanged ? "hierarchy" : "none",
     });
   }
 
   async function duplicateSubtreesAndApply(input: {
+    sourceParentBlockId?: string;
     rootBlockIds: readonly string[];
     sourceSubtreeBlockIds: readonly string[];
     parent: NotesParent;
@@ -427,9 +463,23 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
       before: input.before ?? null,
       include_trashed_sources: input.includeTrashedSources ?? false,
     };
-    const response = await duplicateNotesBlocks(request);
+    const existing = new Set(Object.keys(context.readBlocksById()));
+    const operation: NotesEditOperation = input.sourceParentBlockId
+      ? { type: "duplicate_children", source_block_id: input.sourceParentBlockId, request }
+      : { type: "duplicate", request };
+    const persist = createNotesCompoundPersistence(context, input.sourceParentBlockId ? "template" : "paste", [operation]);
+    let results: NotesBlock[] = [];
+    await enqueueEditorMutation(async () => {
+      const copied = (await persist()).blocks.filter((block) => !existing.has(block.id));
+      const isRoot = (block: NotesBlock) => block.parent.type === input.parent.type
+        && (block.parent.type === "page_id" && input.parent.type === "page_id" ? block.parent.page_id === input.parent.page_id
+          : block.parent.type === "block_id" && input.parent.type === "block_id" && block.parent.block_id === input.parent.block_id);
+      results = [...copied.filter(isRoot), ...copied.filter((block) => !isRoot(block))];
+    });
+    const response = { object: "list" as const, type: "block" as const, block: {}, results, next_cursor: null, has_more: false };
     context.applyPostMutation({
       ...notesPostMoveManyResult(request, response),
+      canonical: true,
       sidebarImpact: response.results.some((block) => block.type === "child_page") ? "hierarchy" : "none",
     });
     if (input.showDatabasePasteChoices) {

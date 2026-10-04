@@ -12,6 +12,8 @@ Sections provide project-local organization. They can be created, renamed, reord
 
 Manual task order is meaningful only in views and groups that use it. Sorting or computed grouping does not rewrite canonical manual order.
 
+Adjacent moves use the complete current sibling order in native storage, including siblings outside the loaded view. Top-level tasks move within their selected section or status lane; subtasks move among all active children of their parent. Custom fields and their options follow the same atomic adjacent-move contract. The selected item's placement must still match the user's request. Unrelated changes, such as a newer title or completion state, are preserved. Tied ranks are normalized as part of the same transaction, and retrying an uncertain response cannot perform the move twice.
+
 ## Archive and restore
 
 Archive is preferred to deletion when a task has useful history, scheduled blocks, dependencies, subtasks, Notes, comments, or review context. Archiving a parent also archives descendants so active children do not become hidden under an inactive parent. Restore follows the same closure.
@@ -21,6 +23,8 @@ Archived tasks remain queryable through explicit filters and history surfaces.
 ## Selection and bulk actions
 
 List and Kanban support multi-select with bulk completion, reopening, priority, archive, and restore where valid. Bulk operations preview mixed or invalid states and apply one coherent command rather than silently skipping ambiguous items.
+
+Status, priority, archive, and restore changes commit the complete accepted selection and its history atomically. Missing tasks, mixed projects, or changed selected field values reject the operation with no partial writes. Archive and restore include descendants outside the loaded view. A failed or uncertain response keeps the visible state and can be retried with the same operation identity.
 
 ## List
 
@@ -64,7 +68,7 @@ Scheduling a task creates or links a Calendar block through the rules in [Settin
 
 Gantt renders dated tasks and milestones on a proportional timeline with sections, today, overdue, blocked, done, dependencies, and finish-to-start conflict signals.
 
-Dragging and resizing proposes valid date changes. Dependency repair can calculate affected tasks and reasons, but it applies changes only after explicit review. Locked, completed, archived, or otherwise protected dates remain unchanged unless the user deliberately includes them.
+Dragging and resizing proposes valid date changes. Dependency repair reads the complete canonical project graph, including tasks outside the current filter or loaded window, and applies its dated shifts only after explicit review. Completed and archived tasks and scheduled Calendar commitments remain protected; unresolved constraints prevent applying the proposal. Explicit date locks and protection overrides remain planned. See [Dependency date proposals](settings-and-scheduling.md#dependency-date-proposals).
 
 ## Dashboard
 

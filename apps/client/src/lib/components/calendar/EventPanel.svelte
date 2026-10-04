@@ -16,7 +16,7 @@
   import { cubicOut } from "svelte/easing";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { getProjects } from "$lib/stores/projects.svelte";
-  import { deleteActionForCalendarEvent } from "./occurrence-protection";
+  import type { CalendarDeleteOutcome } from "$lib/api/calendar-edit";
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
@@ -110,6 +110,7 @@
     allowPomodoroWhenReadOnly = false,
     skipInlineDeleteConfirm = false,
     inlineEndEventConfirm = false,
+    deletionOutcome,
     lockStartControls = false,
     openMusicSection = false,
     calendarIdentityEmail,
@@ -142,6 +143,7 @@
     allowPomodoroWhenReadOnly?: boolean;
     skipInlineDeleteConfirm?: boolean;
     inlineEndEventConfirm?: boolean;
+    deletionOutcome?: CalendarDeleteOutcome;
     lockStartControls?: boolean;
     openMusicSection?: boolean;
     calendarIdentityEmail?: string;
@@ -151,7 +153,7 @@
      * event. Normal edit opens preload details before mounting.
      */
     loadFullEvent?: (id: string) => Promise<CalendarEvent | undefined>;
-    onSave: (data: PanelSaveData, scope?: RecurringScope) => void | Promise<void>;
+    onSave: (data: PanelSaveData, scope?: RecurringScope) => boolean | Promise<boolean>;
     onDelete?: (id: string, scope?: RecurringScope) => void;
     onEndEvent?: (data: PanelSaveData, scope?: RecurringScope) => void;
     onClose: () => void;
@@ -161,15 +163,7 @@
     onSurfaceStatusChange?: (status: EventSurfaceStatus | undefined) => void;
   } = $props();
 
-  const controlsDisabled = $derived(readOnly || parked);
-  const startControlsDisabled = $derived(controlsDisabled || lockStartControls);
-  const deleteControlsDisabled = $derived(parked || (readOnly && !allowDeleteWhenReadOnly));
-  const scopeControlsDisabled = $derived(parked || (readOnly && !allowDeleteWhenReadOnly));
-  const endEventAction = $derived(mode === "edit" && !!event && !!onEndEvent);
-  const generalDisabledAffordance = $derived(parked);
-  const startDisabledAffordance = $derived(parked || (lockStartControls && !readOnly));
-
-  const session = new EventPanelSessionController({
+  const session: EventPanelSessionController = new EventPanelSessionController({
     projects,
     controlsDisabled: () => controlsDisabled,
     lockStartControls: () => lockStartControls,
@@ -181,10 +175,18 @@
     }),
     onChange: () => onChange,
   });
+  const controlsDisabled: boolean = $derived(readOnly || parked || session.savePending);
+  const startControlsDisabled = $derived(controlsDisabled || lockStartControls);
+  const deleteControlsDisabled = $derived(parked || session.savePending || (readOnly && !allowDeleteWhenReadOnly));
+  const scopeControlsDisabled = $derived(parked || session.savePending || (readOnly && !allowDeleteWhenReadOnly));
+  const endEventAction = $derived(mode === "edit" && !!event && !!onEndEvent);
+  const generalDisabledAffordance = $derived(parked);
+  const startDisabledAffordance = $derived(parked || (lockStartControls && !readOnly));
+
   const dateTime = session.dateTime;
   const timedSectionsVisible = $derived(session.timedSectionsVisible);
   const pomodoroControlsDisabled = $derived(
-    parked || !timedSectionsVisible || (readOnly && !allowPomodoroWhenReadOnly),
+    parked || session.savePending || !timedSectionsVisible || (readOnly && !allowPomodoroWhenReadOnly),
   );
   const pomodoroReadOnlyInteractive = $derived(
     readOnly && allowPomodoroWhenReadOnly && !parked && timedSectionsVisible,
@@ -193,13 +195,15 @@
   // ─── Inline delete confirmation ────────────────────────────────
   // Two-step delete: first click arms, second click confirms. Any other
   // click inside the panel disarms (see panel-root onclick below).
-  const deleteAction = $derived(event ? deleteActionForCalendarEvent(event) : "delete");
+  const deleteAction = $derived(deletionOutcome ?? "mixed");
   const deleteActionLabel = $derived(
     endEventAction
       ? t("calendar.eventPanel.deleteEndEvent")
       : deleteAction === "archive"
         ? t("calendar.eventPanel.deleteArchive")
-        : t("calendar.eventPanel.deleteDelete"),
+        : deleteAction === "delete"
+          ? t("calendar.eventPanel.deleteDelete")
+          : t("calendar.eventPanel.deleteRemove"),
   );
 
   const handleProjectSelect = (projectId: string | undefined): void => {
@@ -737,9 +741,10 @@
     const s = isRecurring ? session.scope : undefined;
     session.savePending = true;
     try {
-      await onSave(data, s);
-      savedMusicSnapshots = completeMusicAssignmentDrafts(musicSnapshots);
-      savedMusicOverrides = completeMusicAssignmentDrafts(musicOverrides);
+      if (await onSave(data, s)) {
+        savedMusicSnapshots = completeMusicAssignmentDrafts(musicSnapshots);
+        savedMusicOverrides = completeMusicAssignmentDrafts(musicOverrides);
+      }
     } finally {
       session.savePending = false;
     }
@@ -868,12 +873,17 @@
   const deleteActionVerb = $derived(
     endEventAction
       ? t("calendar.eventPanel.actionEndEvent")
-      : t("calendar.eventPanel.actionArchive"),
+      : deleteAction === "archive"
+        ? t("calendar.eventPanel.actionArchive")
+        : deleteAction === "delete"
+          ? t("calendar.eventPanel.actionDelete")
+          : t("calendar.eventPanel.actionRemove"),
   );
   const armedDeleteLabel = $derived.by(() => {
     const shortcut = formatShortcut("Mod + D");
     if (endEventAction) return t("calendar.eventPanel.pressAgainToEndEvent", shortcut);
     if (deleteAction === "archive") return t("calendar.eventPanel.pressAgainToArchive", shortcut);
+    if (deleteAction === "mixed") return t("calendar.eventPanel.pressAgainToRemove", shortcut);
     return t("calendar.eventPanel.pressAgainToDelete", shortcut);
   });
   let scopeFocusIndex = $state(0);

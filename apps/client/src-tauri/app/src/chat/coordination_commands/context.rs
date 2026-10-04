@@ -857,48 +857,6 @@ fn unique_referenced_execution_environment(
     }
 }
 
-#[cfg(test)]
-mod target_inference_tests {
-    use super::{
-        ChatErrorCode, ReferencedExecutionEnvironment, capability_can_select_native_target,
-        unique_referenced_execution_environment,
-    };
-
-    #[test]
-    fn only_command_capabilities_can_change_the_native_target() {
-        assert!(!capability_can_select_native_target("read"));
-        assert!(!capability_can_select_native_target("edit"));
-        assert!(capability_can_select_native_target("execute"));
-        assert!(capability_can_select_native_target("publish"));
-    }
-
-    #[test]
-    fn conflicting_execution_environment_references_are_rejected() {
-        let environment = |id: &str| ReferencedExecutionEnvironment {
-            execution_environment_id: id.to_string(),
-            working_folder_id: "folder:test".to_string(),
-        };
-        assert!(
-            unique_referenced_execution_environment(&[])
-                .unwrap()
-                .is_none()
-        );
-        assert_eq!(
-            unique_referenced_execution_environment(&[environment("environment:one")])
-                .unwrap()
-                .unwrap()
-                .execution_environment_id,
-            "environment:one"
-        );
-        let error = unique_referenced_execution_environment(&[
-            environment("environment:one"),
-            environment("environment:two"),
-        ])
-        .unwrap_err();
-        assert_eq!(error.code, ChatErrorCode::Validation);
-    }
-}
-
 async fn verify_explicit_scratch(
     transaction: &mut Transaction<'_, Sqlite>,
     reply_thread_id: &ChatReplyThreadId,
@@ -1296,5 +1254,47 @@ fn capability_for_rank(rank: u8) -> ChatResult<&'static str> {
             "A stored folder capability rank is invalid",
             false,
         )),
+    }
+}
+
+#[cfg(test)]
+mod target_inference_tests {
+    use super::{
+        ChatErrorCode, ReferencedExecutionEnvironment, capability_can_select_native_target,
+        unique_referenced_execution_environment,
+    };
+
+    #[test]
+    fn only_command_capabilities_can_change_the_native_target() {
+        assert!(!capability_can_select_native_target("read"));
+        assert!(!capability_can_select_native_target("edit"));
+        assert!(capability_can_select_native_target("execute"));
+        assert!(capability_can_select_native_target("publish"));
+    }
+
+    #[test]
+    fn conflicting_execution_environment_references_are_rejected() {
+        let environment = |id: &str| ReferencedExecutionEnvironment {
+            execution_environment_id: id.to_string(),
+            working_folder_id: "folder:test".to_string(),
+        };
+        assert!(
+            unique_referenced_execution_environment(&[])
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            unique_referenced_execution_environment(&[environment("environment:one")])
+                .unwrap()
+                .unwrap()
+                .execution_environment_id,
+            "environment:one"
+        );
+        let error = unique_referenced_execution_environment(&[
+            environment("environment:one"),
+            environment("environment:two"),
+        ])
+        .unwrap_err();
+        assert_eq!(error.code, ChatErrorCode::Validation);
     }
 }

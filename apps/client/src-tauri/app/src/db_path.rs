@@ -13,15 +13,10 @@ static VAULT_CONNECTION_GATE: LazyLock<Arc<tokio::sync::RwLock<()>>> =
     LazyLock::new(|| Arc::new(tokio::sync::RwLock::new(())));
 
 pub(crate) type VaultExclusiveGuard = tokio::sync::OwnedRwLockWriteGuard<()>;
-pub(crate) type VaultRestoreGuard = VaultExclusiveGuard;
 
 /// Prevent new SQLite connections while an active vault is being replaced.
 pub(crate) async fn begin_vault_exclusive() -> VaultExclusiveGuard {
     VAULT_CONNECTION_GATE.clone().write_owned().await
-}
-
-pub(crate) async fn begin_vault_restore() -> VaultRestoreGuard {
-    begin_vault_exclusive().await
 }
 
 fn resolve_sqlite_path<R: Runtime>(app: &AppHandle<R>, db_url: &str) -> Result<PathBuf, String> {
@@ -71,6 +66,29 @@ pub async fn connect_sqlite<R: Runtime>(
         }
         vault::ownership::VaultDatabaseAccess::ReadWrite => registry.connect_path(path).await,
     }
+}
+
+/// Open the authorized active vault without creation, migrations, or write access.
+/// Callers that retain the pool across a replacement boundary must also reserve
+/// the vault transition until their read and identity checks finish.
+/// The supplied admission permit stays with path IO after an awaiting caller times out.
+pub(crate) async fn connect_active_vault_read_only<R: Runtime>(
+    app: &AppHandle<R>,
+    work_permit: tokio::sync::OwnedSemaphorePermit,
+) -> Result<sqlx::SqlitePool, String> {
+    let _connection_guard = VAULT_CONNECTION_GATE.read().await;
+    let path_app = app.clone();
+    let path = tauri::async_runtime::spawn_blocking(move || {
+        let _work_permit = work_permit;
+        resolve_sqlite_path(&path_app, &format!("sqlite:{}", vault::APP_SQLITE_FILE))
+    })
+    .await
+    .map_err(|error| format!("Calendar read-only database path worker: {error}"))??;
+    app.state::<DatabaseState>()
+        .inner()
+        .clone()
+        .connect_path_read_only(path)
+        .await
 }
 
 pub(crate) async fn close_all_sqlite_pools_for_restore<R: Runtime>(

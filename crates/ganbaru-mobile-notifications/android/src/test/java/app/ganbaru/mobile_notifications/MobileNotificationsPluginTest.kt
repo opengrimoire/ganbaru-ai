@@ -107,6 +107,22 @@ class MobileNotificationsPluginTest {
   }
 
   @Test
+  fun completionReceiptsPreserveBothIdentitiesWithoutDelimiterCollisions() {
+    assertEquals(
+      PomodoroNotificationScheduler.completionReceipt("run", "phase"),
+      PomodoroNotificationScheduler.completionReceipt("run", "phase"),
+    )
+    assertFalse(
+      PomodoroNotificationScheduler.completionReceipt("a", "b:c") ==
+        PomodoroNotificationScheduler.completionReceipt("a:b", "c"),
+    )
+    assertFalse(
+      PomodoroNotificationScheduler.completionReceipt("run", "phase-1") ==
+        PomodoroNotificationScheduler.completionReceipt("run", "phase-2"),
+    )
+  }
+
+  @Test
   fun acceptedPhaseCannotAdvanceFromHistoryOrAStaleOrFutureProjection() {
     val current = projection()
     assertEquals("phase-a", acceptedPomodoroPhase(current, 2_000)?.id)

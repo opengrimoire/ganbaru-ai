@@ -65,6 +65,10 @@ Export may load preserved components for the selected calendar, but should:
 
 Export diagnostics should identify the component that caused a slowdown or warning.
 
+Current export snapshots use one IPC read and a fixed set of native batch query families, including normalized attendees, alarms, overrides, and preservation value nodes. A single read transaction fixes the source revision. Every query preflights its returned rows before allocating them against shared limits of 500,000 records and 64 MiB of text bytes plus per-row overhead. Preserved component and value trees are limited to 32 levels; reconstruction and serialized snapshot bytes also have a 64 MiB limit. These are whole-calendar limits, so several individually accepted imports can make a calendar too large to export in one snapshot. Limit violations reject the export without truncation. The existing native writer independently enforces its 25 MiB `.ics` output limit.
+
+Preservation indexing, reconstruction, and final serialized-size measurement run on a native blocking worker after the read transaction is released. Reconstruction reserves space for JSON escaping before cloning preserved strings, and each assembled event consumes a cumulative output budget. Native preparation admits one export at a time and rejects overlapping requests rather than queuing additional snapshots. A cancelled IPC waiter does not release admission while its bounded worker is still running. Frontend hydration and the existing iCalendar codec run only for an explicit export, never for startup or visible-window reads. Large valid snapshots can still require visible time to serialize; progress and streaming remain future improvements rather than additional background runtime owners.
+
 ## Recurrence budget
 
 Recurrence expansion must be protected by:

@@ -4,6 +4,8 @@ use tauri::{AppHandle, Runtime};
 use crate::calendar_events::archive_or_delete_calendar_events_for_calendar;
 use crate::db_path::connect_sqlite;
 
+const BUILTIN_LOCAL_CALENDAR_ID: &str = "local";
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CalendarWrite {
@@ -160,9 +162,34 @@ pub async fn calendar_remove_calendar<R: Runtime>(
     id: String,
 ) -> Result<(), String> {
     require_non_empty(&id, "id")?;
-    let pool = connect_sqlite(app, db_url).await?;
+    if id == BUILTIN_LOCAL_CALENDAR_ID {
+        return Err("The built-in local calendar cannot be removed".into());
+    }
+    let pool = connect_sqlite(app.clone(), db_url).await?;
+    let epoch_ms = jiff::Timestamp::now().as_millisecond();
+    let permit = crate::calendar_events::scope::SCOPE_GATE
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| "A Calendar operation is being reviewed; retry after it finishes")?;
+    let worker = tauri::async_runtime::spawn_blocking(move || {
+        let _permit = permit;
+        crate::calendar_events::scope::device_date(&app, epoch_ms)
+    });
+    let today = tokio::time::timeout(crate::calendar_events::scope::SCOPE_WORKER_TIMEOUT, worker)
+        .await
+        .map_err(|_| "Calendar removal device-date lookup timed out; retry after it finishes")?
+        .map_err(|error| format!("Calendar removal device-date worker: {error}"))??;
     let mut tx = pool.begin().await.map_err(|e| format!("begin: {e}"))?;
-    archive_or_delete_calendar_events_for_calendar(&mut tx, Some(&id)).await?;
+    archive_or_delete_calendar_events_for_calendar(
+        &mut tx,
+        Some(&id),
+        crate::recurrence::canonical::ScopeClock {
+            epoch_ms,
+            floating_today: Some(today),
+        },
+    )
+    .await?;
+    retain_archived_imports_tx(&mut tx, &id).await?;
     let result = sqlx::query("DELETE FROM calendars WHERE id = ?")
         .bind(id)
         .execute(&mut *tx)
@@ -172,6 +199,44 @@ pub async fn calendar_remove_calendar<R: Runtime>(
         return Err("calendar not found".to_string());
     }
     tx.commit().await.map_err(|e| format!("commit: {e}"))?;
+    Ok(())
+}
+
+/// Keep archived import graphs when their original calendar is removed. Local
+/// storage custody changes; the archive retains its original calendar identity.
+pub(crate) async fn retain_archived_imports_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    calendar_id: &str,
+) -> Result<(), String> {
+    let mut budget = crate::calendar_events::ReadBudget::default();
+    let objects = budget.read::<(String,)>(tx, calendar_id,
+        "SELECT object.id FROM icalendar_objects object WHERE object.calendar_id=?1 AND (
+            EXISTS(SELECT 1 FROM calendar_event_archive_import_objects owner WHERE owner.object_id=object.id)
+            OR EXISTS(SELECT 1 FROM icalendar_components component JOIN calendar_events_archive archive ON archive.icalendar_component_id=component.id WHERE component.object_id=object.id)
+            OR EXISTS(SELECT 1 FROM icalendar_components component JOIN calendar_event_archive_alarms archive ON archive.icalendar_component_id=component.id WHERE component.object_id=object.id)
+            OR EXISTS(SELECT 1 FROM icalendar_components component JOIN calendar_event_archive_attendees archive ON archive.icalendar_component_id=component.id WHERE component.object_id=object.id)
+            OR EXISTS(SELECT 1 FROM icalendar_components component JOIN calendar_event_archive_overrides archive ON archive.icalendar_component_id=component.id WHERE component.object_id=object.id))",
+        &["id"]).await?;
+    if objects.is_empty() {
+        return Ok(());
+    }
+    let objects = serde_json::to_string(&objects.into_iter().map(|row| row.0).collect::<Vec<_>>())
+        .map_err(|error| format!("encode archived calendar imports: {error}"))?;
+    // This shares the complete object/component allocation allowance. A large
+    // legacy graph fails before calendar deletion can cascade away its history.
+    budget.read::<(String,)>(tx, &objects,
+        "SELECT id FROM icalendar_components WHERE object_id IN (SELECT value FROM json_each(?1))", &["id"]).await?;
+    sqlx::query("UPDATE icalendar_components SET calendar_id=?1 WHERE object_id IN (SELECT value FROM json_each(?2))")
+        .bind(BUILTIN_LOCAL_CALENDAR_ID).bind(&objects).execute(&mut **tx).await
+        .map_err(|error| format!("retain archived calendar components: {error}"))?;
+    sqlx::query(
+        "UPDATE icalendar_objects SET calendar_id=?1 WHERE id IN (SELECT value FROM json_each(?2))",
+    )
+    .bind(BUILTIN_LOCAL_CALENDAR_ID)
+    .bind(objects)
+    .execute(&mut **tx)
+    .await
+    .map_err(|error| format!("retain archived calendar objects: {error}"))?;
     Ok(())
 }
 

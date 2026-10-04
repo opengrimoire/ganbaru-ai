@@ -476,7 +476,7 @@ pub struct NotePageUpdate {
     pub cover: OptionalJsonValue,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct NoteBlockWrite {
     pub id: String,
     #[serde(rename = "type")]
@@ -526,7 +526,7 @@ impl NoteBlockWrite {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct NoteBlockUpdate {
     #[serde(rename = "type")]
     pub block_type: Option<String>,
@@ -575,21 +575,21 @@ impl NoteBlockUpdate {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct NoteAppendBlockChildren {
     pub parent: NoteParent,
     pub after: Option<String>,
     pub children: Vec<NoteBlockWrite>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct NoteMoveBlock {
     pub parent: NoteParent,
     pub after: Option<String>,
     pub before: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct NoteMoveBlocks {
     pub block_ids: Vec<String>,
     pub parent: NoteParent,
@@ -598,7 +598,7 @@ pub struct NoteMoveBlocks {
     pub include_trashed_sources: Option<bool>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct NoteDuplicatedBlockId {
     pub source_id: String,
     pub duplicate_id: String,
@@ -609,7 +609,7 @@ pub struct NoteDuplicateBlock {
     pub duplicated_block_ids: Vec<NoteDuplicatedBlockId>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct NoteDuplicateBlocks {
     pub block_ids: Vec<String>,
     pub duplicated_block_ids: Vec<NoteDuplicatedBlockId>,
@@ -669,7 +669,7 @@ pub struct NoteLocalUserUpdate {
     pub display_name: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct NoteDatabaseCreate {
     pub id: String,
     pub data_source_id: String,
@@ -682,7 +682,7 @@ pub struct NoteDatabaseCreate {
     pub cover: Option<Value>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct NoteLinkedDatabaseCreate {
     pub id: String,
     pub view_id: String,
@@ -694,7 +694,7 @@ pub struct NoteLinkedDatabaseCreate {
 }
 
 /// Copy a database graph into a caller-reserved block identity.
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct NoteDatabaseDuplicate {
     pub source_block_id: String,
     pub id: String,

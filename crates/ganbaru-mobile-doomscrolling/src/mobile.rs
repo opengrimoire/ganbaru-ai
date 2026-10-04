@@ -59,6 +59,19 @@ struct AcknowledgeRequest<'a> {
     ids: &'a [String],
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AccountingVaultRequest<'a> {
+    vault_id: &'a str,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PendingEventsRequest<'a> {
+    vault_id: &'a str,
+    usage_only: bool,
+}
+
 pub(crate) fn init<R: Runtime, C: serde::de::DeserializeOwned>(
     _app: &AppHandle<R>,
     api: PluginApi<R, C>,
@@ -98,10 +111,45 @@ impl<R: Runtime> MobileDoomscrolling<R> {
             .map_err(|error| format!("apply mobile Doomscrolling rules: {error}"))
     }
 
-    pub fn pending_events(&self) -> Result<Vec<PendingEvent>, String> {
+    /// Revoke Guardian policy without deleting pending evidence or its vault attribution.
+    pub fn invalidate_rules(&self) -> Result<(), String> {
         self.0
-            .run_mobile_plugin("pendingEvents", ())
+            .run_mobile_plugin("invalidateRules", ())
+            .map_err(|error| format!("invalidate Guardian rules: {error}"))
+    }
+
+    /// Read a vault-scoped batch and mark its identities immutable before transport.
+    pub fn pending_events(
+        &self,
+        vault_id: &str,
+        usage_only: bool,
+    ) -> Result<Vec<PendingEvent>, String> {
+        self.0
+            .run_mobile_plugin(
+                "pendingEvents",
+                PendingEventsRequest {
+                    vault_id,
+                    usage_only,
+                },
+            )
             .map_err(|error| format!("read mobile Doomscrolling journal: {error}"))
+    }
+
+    /// Capture pending usage and local counter baselines in the serialized Guardian process.
+    pub fn accounting_snapshot(&self, vault_id: &str) -> Result<String, String> {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Response {
+            snapshot_json: String,
+        }
+        let response: Response = self
+            .0
+            .run_mobile_plugin("accountingSnapshot", AccountingVaultRequest { vault_id })
+            .map_err(|error| format!("read Guardian accounting snapshot: {error}"))?;
+        if response.snapshot_json.len() > 512 * 1024 {
+            return Err("Guardian accounting snapshot exceeds its byte limit".into());
+        }
+        Ok(response.snapshot_json)
     }
 
     pub fn acknowledge_events(&self, ids: &[String]) -> Result<(), String> {

@@ -5,7 +5,9 @@ fn main() {
         "openAccessibilitySettings",
         "listLaunchableApps",
         "applyRules",
+        "invalidateRules",
         "pendingEvents",
+        "accountingSnapshot",
         "acknowledgeEvents",
         "takeNotificationAction",
     ])

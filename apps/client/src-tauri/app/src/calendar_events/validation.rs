@@ -1,80 +1,16 @@
-use super::ids::split_synthetic_id;
+#[cfg(test)]
 use super::types::{
-    CalendarActiveEventReferenceTransfer, CalendarDeleteArchiveOperation, CalendarDetachInstance,
-    CalendarEventAlarm, CalendarEventAttendee, CalendarEventCreate, CalendarEventMutationTarget,
-    CalendarEventUpdate, CalendarEventUpdateField, CalendarPomodoroConfig,
-    CalendarPomodoroConfigPatch, CalendarPomodoroRhythm, CalendarRecurrenceCommitOperation,
+    CalendarDetachInstance, CalendarEventCreate, CalendarEventUpdate, CalendarPomodoroConfigPatch,
     CalendarSplitSeries,
+};
+use super::types::{
+    CalendarEventAlarm, CalendarEventAttendee, CalendarEventUpdateField, CalendarPomodoroConfig,
+    CalendarPomodoroRhythm,
 };
 
 const PALETTE_SIZE: i64 = 32;
 
-pub(super) fn validate_mutation_target(target: &CalendarEventMutationTarget) -> Result<(), String> {
-    require_non_empty(&target.id, "id")?;
-    if let Some(value) = &target.occurrence_start {
-        require_non_empty(value, "occurrence_start")?;
-    }
-    if let Some(value) = &target.occurrence_end {
-        require_non_empty(value, "occurrence_end")?;
-    }
-    Ok(())
-}
-pub(super) fn validate_delete_archive_operation(
-    operation: &CalendarDeleteArchiveOperation,
-) -> Result<(), String> {
-    match operation {
-        CalendarDeleteArchiveOperation::DeleteEvent { target }
-        | CalendarDeleteArchiveOperation::ArchiveEvent { target } => {
-            validate_mutation_target(target)
-        }
-        CalendarDeleteArchiveOperation::CapSeries {
-            event_id,
-            repeat_until,
-            rrule,
-        } => {
-            require_non_empty(event_id, "event_id")?;
-            require_non_empty(repeat_until, "repeat_until")?;
-            require_non_empty(rrule, "rrule")
-        }
-    }
-}
-pub(super) fn validate_active_event_reference_transfer(
-    transfer: &CalendarActiveEventReferenceTransfer,
-) -> Result<(), String> {
-    canonical_event_id(&transfer.new_event_id)?;
-    if let Some(date) = &transfer.new_event_date {
-        require_non_empty(date, "transfer.new_event_date")?;
-    }
-    if let Some(planned_end) = &transfer.planned_end {
-        require_non_empty(planned_end, "transfer.planned_end")?;
-    }
-    Ok(())
-}
-pub(super) fn validate_recurrence_commit_operation(
-    operation: &CalendarRecurrenceCommitOperation,
-) -> Result<(), String> {
-    match operation {
-        CalendarRecurrenceCommitOperation::UpdateEvent { patch } => validate_event_update(patch),
-        CalendarRecurrenceCommitOperation::DetachInstance { input } => {
-            validate_detach_instance(input)
-        }
-        CalendarRecurrenceCommitOperation::SplitSeries { input } => validate_split_series(input),
-        CalendarRecurrenceCommitOperation::TransferActiveEventReference { transfer } => {
-            validate_active_event_reference_transfer(transfer)
-        }
-    }
-}
-pub(super) fn canonical_event_id(value: &str) -> Result<&str, String> {
-    let (event_id, _) = split_synthetic_id(value);
-    require_non_empty(event_id, "event_id")?;
-    Ok(event_id)
-}
-pub(super) fn require_non_empty_option(value: &Option<String>, field: &str) -> Result<(), String> {
-    match value {
-        Some(value) => require_non_empty(value, field),
-        None => Err(format!("{field} cannot be empty")),
-    }
-}
+#[cfg(test)]
 pub(super) fn validate_event_create(event: &CalendarEventCreate) -> Result<(), String> {
     require_non_empty(&event.id, "id")?;
     require_non_empty(&event.start_time, "start_time")?;
@@ -125,6 +61,7 @@ pub(super) fn validate_event_create(event: &CalendarEventCreate) -> Result<(), S
     }
     Ok(())
 }
+#[cfg(test)]
 pub(super) fn validate_event_update(patch: &CalendarEventUpdate) -> Result<(), String> {
     require_non_empty(&patch.id, "id")?;
     require_non_empty(&patch.updated_at, "updated_at")?;
@@ -146,6 +83,8 @@ pub(super) fn validate_event_update(patch: &CalendarEventUpdate) -> Result<(), S
     }
     Ok(())
 }
+
+#[cfg(test)]
 pub(super) fn validate_detach_instance(input: &CalendarDetachInstance) -> Result<(), String> {
     require_non_empty(&input.parent_id, "parent_id")?;
     require_non_empty(&input.instance_date, "instance_date")?;
@@ -178,6 +117,8 @@ pub(super) fn validate_detach_instance(input: &CalendarDetachInstance) -> Result
         &["confirmed", "tentative", "cancelled"],
     )
 }
+
+#[cfg(test)]
 pub(super) fn validate_split_series(input: &CalendarSplitSeries) -> Result<(), String> {
     require_non_empty(&input.parent_id, "parent_id")?;
     require_non_empty(&input.day_before, "day_before")?;
@@ -217,6 +158,7 @@ pub(super) fn validate_split_series(input: &CalendarSplitSeries) -> Result<(), S
         &["confirmed", "tentative", "cancelled"],
     )
 }
+
 pub(super) fn validate_update_field(field: &CalendarEventUpdateField) -> Result<(), String> {
     match field {
         CalendarEventUpdateField::Title(_) => Ok(()),

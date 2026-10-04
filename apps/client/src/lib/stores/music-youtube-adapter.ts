@@ -11,7 +11,6 @@ import type {
   MusicYouTubeVideoWrite,
 } from "$lib/music/library-contracts";
 import {
-  initialQueueSelection,
   stableStatusDuringYouTubeBuffering,
   type PersistedPlaybackState,
   type PlaybackSnapshot,
@@ -54,13 +53,10 @@ interface MusicYouTubeAdapterContext {
   state: MusicYouTubeState;
   loadRuntime: MusicLoadRuntime;
   effectiveVolume(): number;
-  loadSource(source: MusicSource, autoplay: boolean): Promise<void>;
+  resolvePlaylist(sources: MusicSource[], selectedIndex: number | null, autoplay: boolean): Promise<void>;
   persist(force?: boolean): Promise<void>;
   updateExternalControls(): void;
   updateTray(): void;
-  canPlayNext(): boolean;
-  playNext(): Promise<void>;
-  handlePosition(positionMs: number): void;
   onDurationKnown(videoId: string, durationMs: number): void;
   setPlaybackStarting(starting: boolean): void;
   getHostUrl?: typeof getYouTubeHostUrl;
@@ -101,7 +97,6 @@ export function createMusicYouTubeAdapter(
   let resolvingPlaylist: ResolvingYouTubePlaylist | null = null;
   let playlistTimeoutId: number | null = null;
   let optimisticPauseUntil = 0;
-  let handlingEnded = false;
   let lastMetadataSignature = "";
 
   function playlistCollectionId(playlistId: string): string {
@@ -307,37 +302,12 @@ export function createMusicYouTubeAdapter(
     const preferredIndex = resolving.preferredVideoId
       ? message.videoIds.indexOf(resolving.preferredVideoId)
       : -1;
-    const selection = preferredIndex >= 0
-      ? { index: preferredIndex, remainingOrder: [] }
-      : initialQueueSelection(message.videoIds.length, state.shuffleEnabled);
-    const selectedIndex = selection.index ?? 0;
-    const queue = message.videoIds.map((videoId, index) =>
-      youtubeVideoSourceFromId(videoId, {
-        startMs: index === selectedIndex ? resolving.startMs : null,
-        endMs: index === selectedIndex ? resolving.endMs : null,
-      }));
-    state.queue = queue;
-    state.queueHistory = [];
-    state.shuffleOrder = selection.remainingOrder.filter(
-      (index) => index !== selectedIndex,
-    );
-    state.pendingQueueIndex = selectedIndex;
+    const sources = message.videoIds.map((videoId, index) => youtubeVideoSourceFromId(videoId, {
+      startMs: index === preferredIndex ? resolving.startMs : null,
+      endMs: index === preferredIndex ? resolving.endMs : null,
+    }));
     clearPlaylistResolution();
-    await context.loadSource(
-      queue[selectedIndex] ?? queue[0],
-      resolving.autoplay,
-    );
-  }
-
-  async function advanceEndedTrack(): Promise<void> {
-    if (handlingEnded || !context.canPlayNext()) return;
-    handlingEnded = true;
-    try {
-      await context.persist(true);
-      await context.playNext();
-    } finally {
-      handlingEnded = false;
-    }
+    await context.resolvePlaylist(sources, preferredIndex >= 0 ? preferredIndex : null, resolving.autoplay);
   }
 
   function handleMessage(event: MessageEvent<unknown>): void {
@@ -416,7 +386,6 @@ export function createMusicYouTubeAdapter(
       context.setPlaybackStarting(false);
     }
     if (message.status !== "playing") optimisticPauseUntil = 0;
-    const wasEnded = state.snapshot.status === "ended";
     const status = stableStatusDuringYouTubeBuffering(
       state.snapshot.status,
       message.status,
@@ -428,11 +397,9 @@ export function createMusicYouTubeAdapter(
       durationMs: message.durationMs,
       error: null,
     };
-    context.handlePosition(message.positionMs);
     context.updateExternalControls();
     void context.persist();
     context.updateTray();
-    if (status === "ended" && !wasEnded) void advanceEndedTrack();
   }
 
   function beginOptimisticPause(): void {

@@ -2,19 +2,20 @@
 
 Pomodoro turns a calendar commitment into an adaptive sequence of focus and recovery phases. It protects attention without rewarding exhaustion or treating one fixed interval as universally correct.
 
-**Status: Partial.** The local timer and platform surfaces are implemented. Focus persistence and recovery live in `ganbaru-focus`. Android reminders cannot create execution history, and desktop automatic starts require fresh local activity. The scheduler and Calendar rail share an active-first ownership selector. Full Rust transition orchestration, linked-device control, and idle-source failure visibility remain active work.
+**Status: Partial.** Focus persistence, semantic execution, recovery, and adaptive decisions live in `ganbaru-focus`. Desktop and mobile composition roots start the native owner, while Svelte displays accepted snapshots and sends commands. Android reminders cannot create execution history, and desktop automatic starts require fresh local activity. Desktop tray and overlay integration, visibility-based idle grace, notification presentation, independent effect delivery, and Android accepted-phase publication are connected. Linked-device control remains planned. Real platform acceptance remains active work.
 
 ## Current scope
 
 | Capability | Status |
 | --- | --- |
-| Manual and Calendar-linked runs | Implemented with shared Calendar ownership selection; Rust transition migration pending |
+| Manual and Calendar-linked runs | Native canonical admission and semantic transitions implemented; real platform acceptance pending |
 | Focus, short-break, long-break, pause, resume, stop, and recovery | Implemented |
 | Presets and custom count rhythms | Implemented |
 | Adaptive focus rhythm | Implemented with ongoing tuning |
-| Idle and suspend detection | Implemented with a source-failure visibility gap |
-| Break screen, title-bar ring, tray ring, Calendar rail, and Android notification | Implemented by platform |
-| Native notifications and deadline recovery | Implemented |
+| Idle and suspend detection | Implemented with explicit source failure and visibility-based grace |
+| Break screen, title-bar ring, tray ring, and Calendar rail | Native snapshot connection implemented; real desktop acceptance pending |
+| Android accepted-phase notification and Guardian publication | Native owner connected; real service and alarm acceptance pending |
+| Native notifications and deadline recovery | Implemented in source; real platform delivery acceptance pending |
 
 ## Philosophy
 
@@ -75,6 +76,8 @@ See [Progress displays](progress-displays.md).
 ## Notifications
 
 Native notifications identify the current transition and provide only actions that the platform and state can perform truthfully. Desktop delivery depends on the running app lifecycle; Android native scheduling delivers commitment and accepted-phase deadline reminders while the Activity is absent. It does not create later execution.
+
+Desktop ending warnings wake from the accepted Focus deadline, once per deadline. An extension changes that deadline and can rearm the warning. Manual-pause reminders repeat once per minute until the persisted dismissal, resume, stop, or event expiry. Delayed wakes coalesce rather than replaying missed alerts. Svelte supplies bounded localized text; Rust retains it and owns scheduling. Linux notification actions enter the native owner with the displayed run, phase, and vault identity, and expose extension only when it is still available. Platforms without those notification actions show the reminder without action buttons. Delivery failures do not change execution history.
 
 Notification permission denial does not prevent timer use. Exact-alarm denial on Android uses the documented less-precise fallback and explains the consequence.
 

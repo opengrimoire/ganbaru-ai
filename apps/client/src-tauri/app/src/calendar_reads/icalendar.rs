@@ -36,19 +36,6 @@ pub(super) async fn load_component_jcal(
         .map_err(|e| format!("serialize iCalendar component: {e}"))
 }
 
-pub(super) async fn load_component_jcals(
-    pool: &SqlitePool,
-    ids: Vec<String>,
-) -> Result<Vec<String>, String> {
-    let mut values = Vec::with_capacity(ids.len());
-    for id in ids {
-        if let Some(value) = load_component_jcal(pool, Some(&id)).await? {
-            values.push(value);
-        }
-    }
-    Ok(values)
-}
-
 pub(super) fn load_component_value<'a>(
     pool: &'a SqlitePool,
     component_id: &'a str,

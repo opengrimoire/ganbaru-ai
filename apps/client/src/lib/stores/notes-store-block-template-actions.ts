@@ -17,6 +17,7 @@ import type {
 import type { NotesUndoSnapshot } from "$lib/notes/undo-history";
 
 interface DuplicateSubtreesInput {
+  sourceParentBlockId?: string;
   rootBlockIds: readonly string[];
   sourceSubtreeBlockIds: readonly string[];
   parent: NotesParent;
@@ -71,31 +72,22 @@ export function createNotesTemplateBlockActions(
     });
   }
 
-  async function insertLoadedChildSubtrees(
+  async function insertCanonicalTemplateChildren(
+    sourceParentBlockId: string,
     childIds: readonly string[],
     target: { parent: NotesParent; after: string | null; before: string | null },
   ): Promise<string | null> {
     const state = context.treeState();
-    let after = target.after;
-    let before = target.before;
-    let firstDuplicateId: string | null = null;
-    for (const childId of childIds) {
-      const sourceSubtreeIds = collectLoadedBlockSubtreeIds(state, childId);
-      if (sourceSubtreeIds.length === 0) continue;
-      const duplicates = await context.duplicateSubtreesAndApply({
-        rootBlockIds: [childId],
-        sourceSubtreeBlockIds: sourceSubtreeIds,
-        parent: target.parent,
-        after,
-        before,
-      });
-      const duplicateId = duplicates[0]?.id;
-      if (!duplicateId) continue;
-      after = duplicateId;
-      before = null;
-      firstDuplicateId ??= duplicateId;
-    }
-    return firstDuplicateId;
+    const sourceSubtreeIds = [...new Set(childIds.flatMap((id) => collectLoadedBlockSubtreeIds(state, id)))];
+    const duplicates = await context.duplicateSubtreesAndApply({
+      sourceParentBlockId,
+      rootBlockIds: childIds,
+      sourceSubtreeBlockIds: sourceSubtreeIds,
+      parent: target.parent,
+      after: target.after,
+      before: target.before,
+    });
+    return duplicates[0]?.id ?? null;
   }
 
   async function useTemplateBlock(blockId: string): Promise<void> {
@@ -103,7 +95,7 @@ export function createNotesTemplateBlockActions(
     const template = context.blockById(blockId);
     if (!template || template.type !== "template") return;
     const childIds = activeChildIdsForBlock(blockId);
-    if (childIds.length === 0) return;
+    if (childIds.length === 0 && !template.has_children) return;
     const state = context.treeState();
     const containsChildPage = childIds.some((childId) =>
       collectLoadedBlockSubtreeIds(state, childId).some(
@@ -113,7 +105,7 @@ export function createNotesTemplateBlockActions(
     if (containsChildPage) return;
     await context.flushPendingBlockSaves();
     const before = context.undoSnapshot(blockId);
-    const firstDuplicateId = await insertLoadedChildSubtrees(childIds, {
+    const firstDuplicateId = await insertCanonicalTemplateChildren(blockId, childIds, {
       parent: template.parent,
       after: blockId,
       before: null,
@@ -169,7 +161,7 @@ export function createNotesTemplateBlockActions(
     const action = button.button.actions.find((candidate) => candidate.type === "insert_blocks");
     if (!action) return;
     const childIds = activeChildIdsForBlock(blockId);
-    if (childIds.length === 0) return;
+    if (childIds.length === 0 && !button.has_children) return;
     const state = context.treeState();
     if (childIds.some((childId) =>
       collectLoadedBlockSubtreeIds(state, childId).some(
@@ -180,7 +172,7 @@ export function createNotesTemplateBlockActions(
     if (!target) return;
     await context.flushPendingBlockSaves();
     const before = context.undoSnapshot(blockId);
-    const firstDuplicateId = await insertLoadedChildSubtrees(childIds, target);
+    const firstDuplicateId = await insertCanonicalTemplateChildren(blockId, childIds, target);
     const focusBlockId = planNotesInsertedBlockFocus([firstDuplicateId], blockId);
     context.requestBlockFocus(focusBlockId);
     context.recordUndoAfter("button", before, focusBlockId);

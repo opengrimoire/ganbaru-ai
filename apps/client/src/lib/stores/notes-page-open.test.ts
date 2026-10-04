@@ -3,6 +3,7 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { applyBlockUpdate, createBlockUpdate, createBlockWrite } from "$lib/notes/block-factory";
 import { notesDatabaseSession } from "$lib/notes/database-session.svelte";
+import type { NotesCompoundEdit, NotesCompoundEditResult } from "$lib/api/notes/compound-edits";
 import type {
   NotesBlock,
   NotesBlockUpdate,
@@ -29,6 +30,51 @@ const backend = vi.hoisted(() => ({
   },
   clear(): void {
     this.calls.length = 0;
+  },
+}));
+
+vi.mock("$lib/api/notes/compound-edits", () => ({
+  applyNotesCompoundEdit: async (request: NotesCompoundEdit): Promise<NotesCompoundEditResult> => {
+    backend.record("compound");
+    const api = await import("$lib/api/notes");
+    const before = Object.keys(request.expected_blocks).map((id) => {
+      const block = backend.hydrated.get(id);
+      if (!block) throw new Error("Missing canonical block fixture");
+      return block;
+    });
+    const blocks: NotesBlock[] = [];
+    const placements: NotesCompoundEditResult["placements"] = [];
+    for (const operation of request.operations) {
+      switch (operation.type) {
+        case "append": {
+          const appended = (await api.appendNotesBlockChildren(operation.request)).results;
+          blocks.push(...appended);
+          let after = operation.request.after;
+          for (const block of appended) {
+            placements.push({ blockId: block.id, parent: block.parent, after });
+            after = block.id;
+          }
+          break;
+        }
+        case "update": blocks.push(await api.updateNotesBlock(operation.block_id, operation.update)); break;
+        case "move": {
+          const block = await api.moveNotesBlock(operation.block_id, operation.request);
+          blocks.push(block);
+          placements.push({ blockId: block.id, ...operation.request });
+          break;
+        }
+        case "trash": {
+          const block = backend.hydrated.get(operation.block_id);
+          if (!block) throw new Error("Missing trash block fixture");
+          const saved = { ...block, in_trash: operation.in_trash };
+          backend.hydrated.set(saved.id, saved);
+          blocks.push(saved);
+          break;
+        }
+        default: throw new Error(`Unsupported page fixture operation ${operation.type}`);
+      }
+    }
+    return { operation_id: request.operation_id, page_id: request.page_id, blocks, placements, databases: [], before_blocks: before, before_placements: [] };
   },
 }));
 
@@ -64,6 +110,7 @@ vi.mock("$lib/api/notes", async (importOriginal) => {
       return saved;
     },
     saveNotesUndoState: async () => undefined,
+    clearNotesUndoState: async () => undefined,
     loadNotesWorkspaceShell: async (): Promise<NotesWorkspaceShell> => ({
       pages: [...backend.pages.values()].map((response) => response.page),
       folders: [],
@@ -118,9 +165,11 @@ vi.mock("$lib/api/notes", async (importOriginal) => {
         retained_height: 36,
       }));
     },
-    hydrateNotesBlocks: async (request: { block_ids: string[] }) => request.block_ids
-      .map((id) => backend.hydrated.get(id))
-      .filter((block): block is NotesBlock => block !== undefined),
+    hydrateNotesBlocks: async (request: { block_ids: string[] }) => {
+      const blocks = request.block_ids.map((id) => backend.hydrated.get(id))
+        .filter((block): block is NotesBlock => block !== undefined);
+      return blocks;
+    },
     getNotesBlockChildren: async () => ({
       object: "list",
       type: "block",
@@ -187,6 +236,7 @@ function paragraph(id: string, parent: NotesBlock["parent"], hasChildren = false
     source_provider: null,
     source_object_id: null,
     source_last_edited_time: null,
+    edit_revision: "1".padStart(64, "0"),
     type: "paragraph",
     paragraph: write.paragraph,
   };

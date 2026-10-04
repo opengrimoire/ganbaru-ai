@@ -7,7 +7,9 @@ Music provides persistent local and YouTube playback, playlist organization, rev
 | Capability | Status |
 | --- | --- |
 | Persistent app-level player, transport, queue, shuffle, repeat, volume, rate, and resume | Implemented |
+| Native queue progression, committed Focus/desktop Calendar automation and bounded WebView projections | Implemented; physical platform acceptance pending |
 | Canonical local and YouTube library, source refresh, repair, artwork, search, and import/export | Implemented |
+| Native bounded JSON/M3U8 previews, consistent export snapshots, and retry-safe transactional imports | Implemented |
 | Playlist membership settings, review, snooze, and playlist management | Implemented |
 | Desktop local audio, local video, YouTube, soundscapes, tray, title-bar, and hardware controls | Implemented with platform codec limits |
 | Android selected-folder local audio through Media3 | Implemented in source, broader release validation pending |

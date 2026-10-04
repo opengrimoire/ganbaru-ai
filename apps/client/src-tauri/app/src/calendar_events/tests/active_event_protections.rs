@@ -13,8 +13,6 @@ fn deleting_event_rejects_active_pomodoro_run() {
             &mut tx,
             &CalendarEventMutationTarget {
                 id: "event-1".to_string(),
-                occurrence_start: None,
-                occurrence_end: None,
             },
         )
         .await
@@ -408,6 +406,7 @@ fn active_non_pomodoro_end_permission_accepts_same_second_cut() {
     };
     let context = CalendarEventMutationContext {
         id: "event-1".to_string(),
+        canonical_id: "event-1".to_string(),
         source_event_id: "event-1".to_string(),
         occurrence_date: None,
         start_time: "2026-05-09T10:00:00Z".to_string(),

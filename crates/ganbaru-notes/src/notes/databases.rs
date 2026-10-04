@@ -87,12 +87,39 @@ pub async fn duplicate_database(
         .begin()
         .await
         .map_err(|e| format!("begin Notes database copy: {e}"))?;
-    let source = load_block_row_tx(&mut tx, &request.source_block_id).await?;
+    let created = duplicate_database_tx(
+        &mut tx,
+        request,
+        true,
+        &mut writes::copy_budget::CopyBudget::default(),
+    )
+    .await?;
+    tx.commit()
+        .await
+        .map_err(|e| format!("commit Notes database copy: {e}"))?;
+    Ok(created)
+}
+
+/// Execute this database graph mutation in its enclosing editor transaction.
+pub(crate) async fn duplicate_database_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    request: NoteDatabaseDuplicate,
+    record_history: bool,
+    budget: &mut writes::copy_budget::CopyBudget,
+) -> Result<NoteCreatedDatabaseDto, String> {
+    validate_database_destination(
+        &request.id,
+        &request.source_block_id,
+        request.parent.as_ref(),
+        request.after_block_id.as_deref(),
+        request.replace_block_id.as_deref(),
+    )?;
+    let source = load_block_row_tx(tx, &request.source_block_id).await?;
     if source.block_type != "child_database" {
         return Err("database source must be a local database block".to_string());
     }
     let placement = resolve_database_destination(
-        &mut tx,
+        tx,
         &source,
         request.parent.as_ref(),
         request.after_block_id.as_deref(),
@@ -100,37 +127,33 @@ pub async fn duplicate_database(
     )
     .await?;
     let project_id =
-        project_history::resolve_project_id_for_page_tx(&mut tx, &placement.parent.page_id).await?;
+        project_history::resolve_project_id_for_page_tx(tx, &placement.parent.page_id).await?;
     let mut reserved = HashSet::from([request.id.clone()]);
+    let mut context = writes::copy_budget::CopyContext {
+        reserved_ids: &mut reserved,
+        budget,
+    };
     let copy = writes::database_copy::plan_database_copy(
-        &mut tx,
+        tx,
         &source,
         &request.id,
-        &mut reserved,
+        &mut context,
         project_id.as_deref(),
         false,
     )
     .await?;
-    history::record_page_snapshot_tx(&mut tx, &placement.parent.page_id, "duplicate_database")
+    if record_history {
+        history::record_page_snapshot_tx(tx, &placement.parent.page_id, "duplicate_database")
+            .await?;
+    }
+    place_database_block(tx, &placement, &request.id, &copy.payload).await?;
+    writes::database_copy::insert_database_copy(tx, &copy).await?;
+    writes::database_copy::finalize_copies(tx, std::slice::from_ref(&copy), &[], &HashMap::new())
         .await?;
-    place_database_block(&mut tx, &placement, &request.id, &copy.payload).await?;
-    writes::database_copy::insert_database_copy(&mut tx, &copy).await?;
-    writes::database_copy::finalize_copies(
-        &mut tx,
-        std::slice::from_ref(&copy),
-        &[],
-        &HashMap::new(),
-    )
-    .await?;
-    writes::refresh_parent_has_children(&mut tx, &placement.parent).await?;
-    writes::touch_page(&mut tx, &placement.parent.page_id).await?;
-    let (source_id, view_id) =
-        source_database_refs(&load_block_row_tx(&mut tx, &request.id).await?)?;
-    let created =
-        load_created_linked_database_tx(&mut tx, &request.id, &source_id, &view_id).await?;
-    tx.commit()
-        .await
-        .map_err(|e| format!("commit Notes database copy: {e}"))?;
+    writes::refresh_parent_has_children(tx, &placement.parent).await?;
+    writes::touch_page(tx, &placement.parent.page_id).await?;
+    let (source_id, view_id) = source_database_refs(&load_block_row_tx(tx, &request.id).await?)?;
+    let created = load_created_linked_database_tx(tx, &request.id, &source_id, &view_id).await?;
     Ok(created)
 }
 
@@ -370,40 +393,55 @@ pub async fn create_database(
         .begin()
         .await
         .map_err(|e| format!("begin notes database create: {e}"))?;
+    let created = create_database_tx(&mut tx, request, true).await?;
+    tx.commit()
+        .await
+        .map_err(|e| format!("commit notes database create: {e}"))?;
+    Ok(created)
+}
+
+/// Execute this database graph mutation in its enclosing editor transaction.
+pub(crate) async fn create_database_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    request: NoteDatabaseCreate,
+    record_history: bool,
+) -> Result<NoteCreatedDatabaseDto, String> {
+    validate_database_create(&request)?;
     let (parent, title) = if let Some(replace_block_id) = &request.replace_block_id {
-        let current = load_block_row_tx(&mut tx, replace_block_id).await?;
+        let current = load_block_row_tx(tx, replace_block_id).await?;
         validate_replacement_block(&current)?;
         let parent = writes::parent_target_from_block_row(&current);
         let title = request.title.trim().to_string();
-        history::record_page_snapshot_tx(&mut tx, &current.page_id, "create_database_from_block")
-            .await?;
-        replace_block_with_database(&mut tx, &current, &request, &title).await?;
+        if record_history {
+            history::record_page_snapshot_tx(tx, &current.page_id, "create_database_from_block")
+                .await?;
+        }
+        replace_block_with_database(tx, &current, &request, &title).await?;
         (parent, title)
     } else {
         let request_parent = request
             .parent
             .as_ref()
             .ok_or_else(|| "parent is required".to_string())?;
-        let parent = writes::resolve_block_parent(&mut tx, request_parent).await?;
+        let parent = writes::resolve_block_parent(tx, request_parent).await?;
         let title = request.title.trim().to_string();
         let sort_order =
-            writes::next_sort_orders(&mut tx, &parent, request.after_block_id.as_deref(), 1)
+            writes::next_sort_orders(tx, &parent, request.after_block_id.as_deref(), 1)
                 .await?
                 .into_iter()
                 .next()
                 .ok_or_else(|| "database sort order was not prepared".to_string())?;
         validate_sort_order(sort_order)?;
-        history::record_page_snapshot_tx(&mut tx, &parent.page_id, "create_database").await?;
-        insert_database_block(&mut tx, &parent, &request, &title, sort_order).await?;
-        writes::refresh_parent_has_children(&mut tx, &parent).await?;
+        if record_history {
+            history::record_page_snapshot_tx(tx, &parent.page_id, "create_database").await?;
+        }
+        insert_database_block(tx, &parent, &request, &title, sort_order).await?;
+        writes::refresh_parent_has_children(tx, &parent).await?;
         (parent, title)
     };
-    insert_database_objects(&mut tx, &parent, &request, &title).await?;
-    writes::touch_page(&mut tx, &parent.page_id).await?;
-    let created = load_created_database_tx(&mut tx, &request.id).await?;
-    tx.commit()
-        .await
-        .map_err(|e| format!("commit notes database create: {e}"))?;
+    insert_database_objects(tx, &parent, &request, &title).await?;
+    writes::touch_page(tx, &parent.page_id).await?;
+    let created = load_created_database_tx(tx, &request.id).await?;
     Ok(created)
 }
 
@@ -424,14 +462,28 @@ pub async fn create_linked_database_view(
         .begin()
         .await
         .map_err(|e| format!("begin linked notes database create: {e}"))?;
-    let source_block = load_block_row_tx(&mut tx, &request.source_block_id).await?;
+    let created = create_linked_database_view_tx(&mut tx, request, true).await?;
+    tx.commit()
+        .await
+        .map_err(|e| format!("commit linked notes database create: {e}"))?;
+    Ok(created)
+}
+
+/// Execute this database graph mutation in its enclosing editor transaction.
+pub(crate) async fn create_linked_database_view_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    request: NoteLinkedDatabaseCreate,
+    record_history: bool,
+) -> Result<NoteCreatedDatabaseDto, String> {
+    validate_linked_database_create(&request)?;
+    let source_block = load_block_row_tx(tx, &request.source_block_id).await?;
     if source_block.block_type != "child_database" {
         return Err("linked database source must be a local database block".to_string());
     }
     let (source_data_source_id, source_view_id) = source_database_refs(&source_block)?;
-    let source = load_active_data_source_tx(&mut tx, &source_data_source_id).await?;
+    let source = load_active_data_source_tx(tx, &source_data_source_id).await?;
     let placement = resolve_database_destination(
-        &mut tx,
+        tx,
         &source_block,
         request.parent.as_ref(),
         request.after_block_id.as_deref(),
@@ -440,11 +492,13 @@ pub async fn create_linked_database_view(
     .await?;
     let parent = &placement.parent;
     let title = linked_database_title(&request.title, &source_block, &source);
-    history::record_page_snapshot_tx(&mut tx, &parent.page_id, "create_linked_database").await?;
+    if record_history {
+        history::record_page_snapshot_tx(tx, &parent.page_id, "create_linked_database").await?;
+    }
     let payload = linked_child_database_payload(&request, &title, &source_data_source_id);
-    place_database_block(&mut tx, &placement, &request.id, &payload).await?;
+    place_database_block(tx, &placement, &request.id, &payload).await?;
     insert_linked_database_objects(
-        &mut tx,
+        tx,
         parent,
         &request,
         &title,
@@ -452,18 +506,11 @@ pub async fn create_linked_database_view(
         &source_view_id,
     )
     .await?;
-    writes::refresh_parent_has_children(&mut tx, parent).await?;
-    writes::touch_page(&mut tx, &parent.page_id).await?;
-    let created = load_created_linked_database_tx(
-        &mut tx,
-        &request.id,
-        &source_data_source_id,
-        &request.view_id,
-    )
-    .await?;
-    tx.commit()
-        .await
-        .map_err(|e| format!("commit linked notes database create: {e}"))?;
+    writes::refresh_parent_has_children(tx, parent).await?;
+    writes::touch_page(tx, &parent.page_id).await?;
+    let created =
+        load_created_linked_database_tx(tx, &request.id, &source_data_source_id, &request.view_id)
+            .await?;
     Ok(created)
 }
 

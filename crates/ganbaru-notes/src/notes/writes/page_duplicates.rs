@@ -2,6 +2,7 @@ use super::block_tree::{
     load_child_page_block_row, load_page_block_subtree_rows, load_page_block_subtree_rows_for_copy,
     refresh_duplicated_has_children,
 };
+use super::copy_budget::{CopyBudget, CopyContext};
 use super::database_copy::{DatabaseCopy, insert_database_copy, plan_database_copy};
 use super::ids::new_note_id;
 use super::pages::load_page_row;
@@ -140,7 +141,7 @@ pub(crate) async fn plan_child_page_copy(
     duplicate_id: &str,
     parent: NoteParent,
     include_trashed: bool,
-    reserved_ids: &mut HashSet<String>,
+    context: &mut CopyContext<'_>,
     destination_project_id: Option<&str>,
 ) -> Result<DuplicatePageGraph, String> {
     let mut plans = Vec::new();
@@ -152,6 +153,7 @@ pub(crate) async fn plan_child_page_copy(
         if !visited.insert(source_page_id.clone()) {
             return Err("child page graph contains a cycle".to_string());
         }
+        context.budget.page(tx, &source_page_id).await?;
         let mut source_page = sqlx::query_as::<_, NotePageRow>(
             "SELECT * FROM notes_pages WHERE id = ? AND (? OR in_trash = 0)",
         )
@@ -171,10 +173,15 @@ pub(crate) async fn plan_child_page_copy(
             properties.insert("__ganbaru_project_id".to_string(), project_id.into());
         }
         source_page.properties = serde_json::Value::Object(properties).to_string();
-        let blocks =
-            load_page_block_subtree_rows_for_copy(tx, &source_page_id, include_trashed).await?;
+        let blocks = load_page_block_subtree_rows_for_copy(
+            tx,
+            &source_page_id,
+            include_trashed,
+            context.budget,
+        )
+        .await?;
         for row in &blocks {
-            let id = new_note_id(tx, reserved_ids).await?;
+            let id = new_note_id(tx, context.reserved_ids).await?;
             block_ids.insert(row.id.clone(), id.clone());
             if row.block_type == "child_page" {
                 let parent = duplicate_page_parent_for_child_block(row, &duplicate_id, &block_ids)?;
@@ -187,7 +194,7 @@ pub(crate) async fn plan_child_page_copy(
                         tx,
                         row,
                         &id,
-                        reserved_ids,
+                        context,
                         destination_project_id,
                         include_trashed,
                     ))
@@ -297,6 +304,8 @@ pub async fn duplicate_page(
         .begin()
         .await
         .map_err(|e| format!("begin duplicate notes page: {e}"))?;
+    let mut budget = CopyBudget::default();
+    budget.page(&mut tx, page_id).await?;
     let root_page = load_page_row(&mut tx, page_id).await?;
     if let Some(source_id) = root_page
         .parent_data_source_id
@@ -324,25 +333,32 @@ pub async fn duplicate_page(
     let mut block_ids = HashMap::new();
     let root_duplicate_id = new_note_id(&mut tx, &mut reserved_ids).await?;
     let mut plans = Vec::new();
+    let mut visited = HashSet::new();
     let mut queue = VecDeque::from([(
         page_id.to_string(),
         root_duplicate_id.clone(),
-        root_duplicate_title,
+        Some(root_duplicate_title),
         None::<NoteParent>,
         true,
     )]);
     while let Some((source_page_id, duplicate_id, title_override, parent_override, is_root)) =
         queue.pop_front()
     {
+        if !visited.insert(source_page_id.clone()) {
+            return Err("Notes page copy contains a cycle".to_string());
+        }
+        if !is_root {
+            budget.page(&mut tx, &source_page_id).await?;
+        }
         let source_page = load_page_row(&mut tx, &source_page_id).await?;
-        let blocks = load_page_block_subtree_rows(&mut tx, &source_page_id).await?;
+        let blocks = load_page_block_subtree_rows(&mut tx, &source_page_id, &mut budget).await?;
         if let Some(source_id) = source_page
             .parent_data_source_id
             .as_ref()
             .filter(|_| source_page.parent_type == "data_source_id")
         {
-            let children = sqlx::query_as::<_, NotePageRow>(
-                "SELECT page.* FROM notes_data_source_row_hierarchy AS hierarchy JOIN notes_pages AS page ON page.id = hierarchy.row_page_id
+            let children = sqlx::query_scalar::<_, String>(
+                "SELECT page.id FROM notes_data_source_row_hierarchy AS hierarchy JOIN notes_pages AS page ON page.id = hierarchy.row_page_id
                  WHERE hierarchy.parent_row_page_id = ? AND hierarchy.data_source_id = ?
                    AND page.parent_type = 'data_source_id' AND page.parent_data_source_id = ? AND page.in_trash = 0 AND page.archived = 0
                  ORDER BY page.id LIMIT ?",
@@ -354,11 +370,11 @@ pub async fn duplicate_page(
                     return Err("row sub-items exceed the database copy limit".to_string());
                 }
                 let child_duplicate_id = new_note_id(&mut tx, &mut reserved_ids).await?;
-                block_ids.insert(child.id.clone(), child_duplicate_id.clone());
+                block_ids.insert(child.clone(), child_duplicate_id.clone());
                 queue.push_back((
-                    child.id,
+                    child,
                     child_duplicate_id,
-                    child.title,
+                    None,
                     Some(NoteParent::DataSourceId {
                         data_source_id: source_id.clone(),
                     }),
@@ -368,15 +384,14 @@ pub async fn duplicate_page(
         }
         for row in &blocks {
             if row.block_type == "child_page" {
-                let child_page = load_page_row(&mut tx, &row.id).await?;
                 let child_duplicate_id = new_note_id(&mut tx, &mut reserved_ids).await?;
                 block_ids.insert(row.id.clone(), child_duplicate_id.clone());
                 let duplicate_parent =
                     duplicate_page_parent_for_child_block(row, &duplicate_id, &block_ids)?;
                 queue.push_back((
-                    child_page.id,
+                    row.id.clone(),
                     child_duplicate_id,
-                    child_page.title,
+                    None,
                     Some(duplicate_parent),
                     false,
                 ));
@@ -395,9 +410,9 @@ pub async fn duplicate_page(
             )?,
         };
         plans.push(DuplicatePagePlan {
+            duplicate_title: title_override.unwrap_or_else(|| source_page.title.clone()),
             source_page,
             duplicate_id,
-            duplicate_title: title_override,
             parent,
             blocks,
             is_root,
@@ -411,6 +426,10 @@ pub async fn duplicate_page(
     let mut databases = Vec::new();
     let destination_project_id =
         project_history::resolve_project_id_for_page_tx(&mut tx, page_id).await?;
+    let mut context = CopyContext {
+        reserved_ids: &mut reserved_ids,
+        budget: &mut budget,
+    };
     for plan in &plans {
         for row in plan
             .blocks
@@ -423,7 +442,7 @@ pub async fn duplicate_page(
                         &mut tx,
                         row,
                         &block_ids[&row.id],
-                        &mut reserved_ids,
+                        &mut context,
                         destination_project_id.as_deref(),
                         false,
                     )

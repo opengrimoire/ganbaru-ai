@@ -38,6 +38,10 @@ Production and development builds use separate default folders and separate plat
 
 Music bytes remain wherever the user stores them. The vault owns playlist definitions, canonical library metadata, source identities, and managed playback state, not the external music library itself. Backups are written to a user-selected location outside the active folder.
 
+Selection, whole-vault snapshots, ownership handoff, and replacement share one native operation guard. A concurrent request returns a retry error rather than queuing another operation. Before changing the active pointer, closing pools, or replacing active files, the operation drains Focus, Music, and the platform Doomscrolling owner, fences managed file writes, and excludes new SQLite connections. A stalled managed writer cancels the operation after ten seconds and leaves the active pointer unchanged. Database and file-write gates release before native reactivation. Awaited blocking workers retain those guards through cancellation until their work actually finishes.
+
+Android backup restore reserves the operation during document preparation, without keeping a managed write permit across the exclusive fence. It rechecks the original active path, vault identity, writable role, and ownership generation after quiescence and before replacement. Archive validation precedes creating any missing skeleton files. Reactivation and cleanup failures are explicit errors; a successful file replacement does not imply successful runtime reactivation. Physical switching and restore acceptance remains separate from automated guard and archive tests.
+
 ## Portable configuration
 
 Portable preferences that should follow the vault live in config.json. Writes use a Rust-owned read, validate, merge, and atomic-replace flow so independent windows do not overwrite unrelated settings. Unknown or obsolete fields are handled by explicit validation and migration rules, not silently preserved forever.
@@ -81,6 +85,8 @@ Search indexes, projections, thumbnails, diagnostic summaries, and exported Mark
 Chat projections and Notes search indexes may be persisted for speed, but canonical events and canonical Notes rows remain authoritative. Rebuilding a projection must preserve authorization and audience filtering.
 
 ## Storage decision checklist
+
+Domain records remain normalized in SQLite. Native command receipts and bounded runtime control checkpoints are explicit JSON-envelope exceptions: they retain typed retry results, accepted Focus control state or device-keyed Music queue state. They do not replace normalized event metadata, task graphs, Notes content, library relationships or execution history. Their owning services bound and validate encoding on reads and writes; immutable receipts bind the complete semantic request to its accepted transaction. The schema invariant test permits only the named envelope columns and continues to reject other JSON storage.
 
 Before adding persisted data, answer:
 

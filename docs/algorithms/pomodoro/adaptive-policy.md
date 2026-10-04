@@ -4,6 +4,8 @@ Adaptive Pomodoro is a local, explicit opt-in policy that adjusts bounded rhythm
 
 The policy is deterministic from persisted inputs, versioned, auditable, reversible, and applied only at safe run or phase boundaries.
 
+**Implementation status: Native authority implemented, final acceptance pending.** The Rust core owns the feature/state policy, all seven experiment lanes, bounded replay candidate approval, snapshot construction, and transactional run/phase decisions. The desktop and Android native owner invokes that service; Svelte displays accepted state and sends commands. Shared golden fixtures compare complete decisions and replay workflows across three device timezones and preserve the existing snapshot schema. Failure and retry tests cover accepted execution, experiment exposure, restart, atomic rollback, and harmful actual candidate exposure. Broader integration gates and physical platform acceptance remain required.
+
 ## Objective
 
 The policy balances:
@@ -37,6 +39,20 @@ Adaptation may occur:
 It never silently changes the duration of an already running phase. Once a segment starts, its selected duration and planned boundary remain persisted facts.
 
 Decision, assignment, and new run or segment state commit together. A crash cannot leave an unexplained selected duration.
+
+The initial run rhythm remains an immutable start snapshot. Later accepted boundary choices are separate persisted decisions. Recovery reads the latest accepted run-start or phase-start decision rather than rewriting the initial rhythm or silently reverting to it when accepted values are missing.
+
+## Replay approval
+
+Native run-start decisions can evaluate the established bounded candidate catalog against at most 50 historical opportunities. The opportunity inputs, historical evidence, observed outcomes, and current decision share the accepted transition's SQLite snapshot. Device-local timezone facts are resolved natively for both current and historical opportunities.
+
+Replay attributes an observed outcome to a candidate only when its selected rhythm matches the rhythm actually observed. Comparable contexts require sufficient matching outcomes and acceptable guardrail burden. Multi-parameter candidates are also compared with their individual component changes. Harmful actual candidate exposure or an antagonistic component comparison vetoes a candidate. Sparse direct exposure or component evidence remains inconclusive and does not independently overturn a passing context gate. Equal scores retain the established candidate order.
+
+Replay never overrides recovery, fallback, or guardrail decisions under the default candidate configuration. An accepted candidate retains its identity and reason code in the same transaction as the new run. Historical evidence excludes segments completed, events recorded, and outcomes measured after its observation cutoff. Oversized evidence collections fail explicitly instead of being truncated into an apparently complete score.
+
+Native input admission bounds SQL aggregation before grouping, in the same snapshot as the calculation. One history read admits at most 100,000 aggregate input rows. One replay read shares an allowance of 1,000,000 input rows across decision/value selection and every historical opportunity; each policy additionally admits at most 4,096 experiments. Indexed count probes stop at one excess row. A small number of result groups cannot hide an oversized input collection.
+
+The work allowance includes later outcomes attached to selected assignments and later context snapshots for the selected policy when their index scan is required. Their values remain excluded from historical decisions. Exceeding an allowance reports an error and rolls back the attempted execution, revision, and receipt. It never substitutes an empty aggregate, truncates canonical evidence, or deletes history. A narrower diagnostic replay can be retried independently. Increasing an allowance requires measured work and memory evidence.
 
 ## Context
 

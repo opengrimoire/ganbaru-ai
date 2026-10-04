@@ -46,8 +46,6 @@ fn future_untracked_event_hard_deletes() {
             &mut tx,
             &CalendarEventMutationTarget {
                 id: "event-1".to_string(),
-                occurrence_start: None,
-                occurrence_end: None,
             },
         )
         .await
@@ -80,8 +78,6 @@ fn past_event_delete_rejects_and_archive_succeeds() {
             &mut tx,
             &CalendarEventMutationTarget {
                 id: "event-1".to_string(),
-                occurrence_start: None,
-                occurrence_end: None,
             },
         )
         .await
@@ -94,8 +90,6 @@ fn past_event_delete_rejects_and_archive_succeeds() {
             &mut tx,
             &CalendarEventMutationTarget {
                 id: "event-1".to_string(),
-                occurrence_start: None,
-                occurrence_end: None,
             },
         )
         .await

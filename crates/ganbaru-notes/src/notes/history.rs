@@ -345,6 +345,11 @@ async fn insert_snapshot_blocks(
     }
 
     let mut databases = Vec::new();
+    let mut budget = super::writes::copy_budget::CopyBudget::default();
+    let mut copy_context = super::writes::copy_budget::CopyContext {
+        reserved_ids: &mut reserved_ids,
+        budget: &mut budget,
+    };
     if matches!(mode, SnapshotInsertMode::CopyWithFreshIds) {
         let project_id =
             super::project_history::resolve_project_id_for_page_tx(tx, page_id).await?;
@@ -358,7 +363,7 @@ async fn insert_snapshot_blocks(
                         tx,
                         block,
                         &id_map[&block.id],
-                        &mut reserved_ids,
+                        &mut copy_context,
                         project_id.as_deref(),
                         false,
                     )

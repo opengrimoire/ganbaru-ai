@@ -2,11 +2,12 @@
 
 #[cfg(target_os = "android")]
 use super::active_vault_path;
-use super::select_vault;
+use super::select_quiesced_vault;
 use super::{APP_SQLITE_FILE, CONFIG_LOCK, VaultInfo};
 use super::{database_path, vault_info_from_path};
 #[cfg(target_os = "android")]
 use super::{default_data_folder_path, ensure_vault_skeleton, path_to_string};
+#[cfg(target_os = "android")]
 use crate::db_path;
 #[cfg(target_os = "android")]
 use chrono::{SecondsFormat, Utc};
@@ -520,25 +521,33 @@ async fn activate_handoff_at_path<R: Runtime>(
     if rollback.exists() && staging.exists() {
         return Err("a previous handoff copy still requires recovery".to_string());
     }
-    let restore_guard = db_path::begin_vault_restore().await;
-    db_path::close_all_sqlite_pools_for_restore(app).await?;
-    let activation = if !staging.exists() {
-        Ok(())
-    } else if preserve_previous {
-        replace_vault_preserving_previous(staging, target, &rollback)
-    } else {
-        replace_vault(staging, target, &rollback)
-    };
-    let result = activation.and_then(|()| {
-        let info = vault_info_from_path(target)?;
+    let quiescence = super::quiescence::begin_snapshot_quiescence(app).await?;
+    let activation_app = app.clone();
+    let staging = staging.to_path_buf();
+    let target = target.to_path_buf();
+    let expected_vault_id = expected_vault_id.to_owned();
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        if super::active_vault_path(&activation_app)? != target {
+            return Err("active vault changed while preparing handoff activation".to_string());
+        }
+        if staging.exists() {
+            if preserve_previous {
+                replace_vault_preserving_previous(&staging, &target, &rollback)?;
+            } else {
+                replace_vault(&staging, &target, &rollback)?;
+            }
+        }
+        let info = vault_info_from_path(&target)?;
         if info.vault_id != expected_vault_id {
             return Err("activated handoff belongs to a different vault".to_string());
         }
-        select_vault(app, &info)?;
+        select_quiesced_vault(&activation_app, &info, &quiescence)?;
+        quiescence.finish()?;
         Ok(info)
-    });
-    drop(restore_guard);
-    result
+    })
+    .await
+    .map_err(|error| format!("handoff activation worker failed: {error}"))?
 }
 
 fn preserved_handoff_path(parent: &Path, target: &Path, transfer_id: &str) -> PathBuf {
@@ -638,57 +647,106 @@ pub async fn vault_backup_to_downloads(
 pub async fn vault_pick_and_restore_backup(
     app: tauri::AppHandle,
 ) -> Result<Option<VaultInfo>, String> {
-    let _write_permit = super::active_writable_vault_path(&app)?;
+    let transition = super::quiescence::reserve_vault_transition()?;
+    let expected_path = super::active_vault_path(&app)?;
+    let expected_vault_id = super::active_vault_id(&app)?;
+    let ownership_manager = app.state::<super::ownership::VaultOwnershipManager>();
+    ownership_manager.require_writable(&expected_vault_id)?;
+    let expected_ownership = ownership_manager.status(&expected_vault_id)?;
     let transfer = unique_transfer_directory(&app, "restore")?;
     let archive_path = transfer.join("selected.ganbaru-backup");
     let result = async {
         let target = default_data_folder_path(&app)?;
+        let preparation_app = app.clone();
+        let preparation_target = target.clone();
+        let preparation_transition = transition.clone();
+        let prepared = tauri::async_runtime::spawn_blocking(
+            move || -> Result<Option<(PathBuf, PathBuf)>, String> {
+                let _transition = preparation_transition;
+                let parent = preparation_target
+                    .parent()
+                    .ok_or_else(|| "Ganbaru AI folder has no parent directory".to_string())?;
+                fs::create_dir_all(parent)
+                    .map_err(|error| format!("create app data directory: {error}"))?;
+                let staging = parent.join(".ganbaru-ai.restore");
+                let rollback = parent.join(".ganbaru-ai.rollback");
+                recover_interrupted_restore(&preparation_target, &rollback)?;
+                if staging.exists() {
+                    fs::remove_dir_all(&staging)
+                        .map_err(|error| format!("remove stale restore staging: {error}"))?;
+                }
+                let archive_path_string = path_to_string(&archive_path, "selected backup")?;
+                let selected = preparation_app.mobile_documents().pick_document_to_path(
+                    &archive_path_string,
+                    BACKUP_MAX_BYTES,
+                    &[BACKUP_EXTENSION],
+                    &[BACKUP_MIME_TYPE, "application/octet-stream"],
+                    "Ganbaru AI backup",
+                )?;
+                if selected.is_none() {
+                    return Ok(None);
+                }
+                extract_backup_archive(&archive_path, &staging)?;
+                Ok(Some((staging, rollback)))
+            },
+        )
+        .await
+        .map_err(|error| format!("backup preparation worker failed: {error}"))??;
+        let Some((staging, rollback)) = prepared else {
+            return Ok(None);
+        };
+        validate_restored_vault(&staging).await?;
+        let quiescence =
+            super::quiescence::begin_reserved_quiescence(&app, transition.clone()).await?;
+        let activation_app = app.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let ownership_manager =
+                activation_app.state::<super::ownership::VaultOwnershipManager>();
+            ownership_manager.require_writable(&expected_vault_id)?;
+            let ownership = ownership_manager.status(&expected_vault_id)?;
+            if super::active_vault_path(&activation_app)? != expected_path
+                || super::active_vault_id(&activation_app)? != expected_vault_id
+                || ownership.generation != expected_ownership.generation
+            {
+                return Err(
+                    "active vault authority changed while preparing backup restore".to_string(),
+                );
+            }
+            ensure_vault_skeleton(&staging)?;
+            replace_vault(&staging, &target, &rollback)?;
+            let info = vault_info_from_path(&target)?;
+            select_quiesced_vault(&activation_app, &info, &quiescence)?;
+            quiescence.finish()?;
+            Ok(Some(info))
+        })
+        .await
+        .map_err(|error| format!("backup activation worker failed: {error}"))?
+    }
+    .await;
+    let cleanup = tauri::async_runtime::spawn_blocking(move || {
+        let _transition = transition;
+        let target = default_data_folder_path(&app)?;
         let parent = target
             .parent()
             .ok_or_else(|| "Ganbaru AI folder has no parent directory".to_string())?;
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("create app data directory: {error}"))?;
         let staging = parent.join(".ganbaru-ai.restore");
-        let rollback = parent.join(".ganbaru-ai.rollback");
-        recover_interrupted_restore(&target, &rollback)?;
         if staging.exists() {
-            fs::remove_dir_all(&staging)
-                .map_err(|error| format!("remove stale restore staging: {error}"))?;
+            fs::remove_dir_all(staging)
+                .map_err(|error| format!("remove backup restore staging: {error}"))?;
         }
-
-        let archive_path_string = path_to_string(&archive_path, "selected backup")?;
-        let selected = app.mobile_documents().pick_document_to_path(
-            &archive_path_string,
-            BACKUP_MAX_BYTES,
-            &[BACKUP_EXTENSION],
-            &[BACKUP_MIME_TYPE, "application/octet-stream"],
-            "Ganbaru AI backup",
-        )?;
-        if selected.is_none() {
-            return Ok(None);
-        }
-        extract_backup_archive(&archive_path, &staging)?;
-        validate_restored_vault(&staging).await?;
-        ensure_vault_skeleton(&staging)?;
-        let restore_guard = db_path::begin_vault_restore().await;
-        db_path::close_all_sqlite_pools_for_restore(&app).await?;
-        replace_vault(&staging, &target, &rollback)?;
-        let info = vault_info_from_path(&target)?;
-        select_vault(&app, &info)?;
-        drop(restore_guard);
-        Ok(Some(info))
-    }
-    .await;
-    if let Ok(target) = default_data_folder_path(&app) {
-        if let Some(parent) = target.parent() {
-            let staging = parent.join(".ganbaru-ai.restore");
-            if staging.exists() {
-                let _ = fs::remove_dir_all(staging);
-            }
+        fs::remove_dir_all(transfer)
+            .map_err(|error| format!("remove backup restore transfer: {error}"))
+    })
+    .await
+    .map_err(|error| format!("backup cleanup worker failed: {error}"))
+    .and_then(|cleanup| cleanup);
+    match (result, cleanup) {
+        (Ok(info), Ok(())) => Ok(info),
+        (Err(error), Ok(())) | (Ok(_), Err(error)) => Err(error),
+        (Err(error), Err(cleanup)) => {
+            Err(format!("{error}; backup cleanup also failed: {cleanup}"))
         }
     }
-    let _ = fs::remove_dir_all(&transfer);
-    result
 }
 
 #[cfg(all(not(target_os = "android"), any(test, target_os = "ios")))]

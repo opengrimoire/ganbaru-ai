@@ -4,7 +4,6 @@ use crate::notes::validation::{
 };
 use crate::notes::{assets, mention_notifications};
 use serde_json::Value;
-use sqlx::SqlitePool;
 
 pub struct ParentTarget {
     pub parent_type: &'static str,
@@ -201,7 +200,7 @@ pub(super) fn validate_block_type_for_parent(
 }
 
 pub(super) async fn validate_block_update_parent(
-    pool: &SqlitePool,
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     current: &NoteBlockRow,
     target_block_type: &str,
     target_payload: &Value,
@@ -211,7 +210,7 @@ pub(super) async fn validate_block_update_parent(
             "SELECT type FROM notes_blocks WHERE id = ? AND in_trash = 0",
         )
         .bind(parent_block_id)
-        .fetch_optional(pool)
+        .fetch_optional(&mut **tx)
         .await
         .map_err(|e| format!("load notes block parent type: {e}"))?
     } else {
@@ -232,20 +231,20 @@ pub(super) async fn validate_block_update_parent(
 }
 
 pub(super) async fn validate_block_update_children(
-    pool: &SqlitePool,
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     block_id: &str,
     current_block_type: &str,
     target_block_type: &str,
     target_payload: &Value,
 ) -> Result<(), String> {
     if target_block_type == "table" {
-        ensure_existing_children_have_type(pool, block_id, "table_row", "table").await?;
+        ensure_existing_children_have_type(tx, block_id, "table_row", "table").await?;
     }
     if target_block_type == "column_list" {
-        ensure_existing_children_have_type(pool, block_id, "column", "column_list").await?;
+        ensure_existing_children_have_type(tx, block_id, "column", "column_list").await?;
     }
     if target_block_type == "tab" {
-        ensure_existing_children_have_type(pool, block_id, "paragraph", "tab").await?;
+        ensure_existing_children_have_type(tx, block_id, "paragraph", "tab").await?;
     }
     if current_block_type == "table" && target_block_type != "table" {
         let child_count: i64 = sqlx::query_scalar(
@@ -254,7 +253,7 @@ pub(super) async fn validate_block_update_children(
              WHERE parent_block_id = ? AND in_trash = 0",
         )
         .bind(block_id)
-        .fetch_one(pool)
+        .fetch_one(&mut **tx)
         .await
         .map_err(|e| format!("count notes table rows: {e}"))?;
         if child_count > 0 {
@@ -270,7 +269,7 @@ pub(super) async fn validate_block_update_children(
              WHERE parent_block_id = ? AND in_trash = 0",
         )
         .bind(block_id)
-        .fetch_one(pool)
+        .fetch_one(&mut **tx)
         .await
         .map_err(|e| format!("count notes column children: {e}"))?;
         if child_count > 0 {
@@ -286,7 +285,7 @@ pub(super) async fn validate_block_update_children(
              WHERE parent_block_id = ? AND in_trash = 0",
         )
         .bind(block_id)
-        .fetch_one(pool)
+        .fetch_one(&mut **tx)
         .await
         .map_err(|e| format!("count notes tab children: {e}"))?;
         if child_count > 0 {
@@ -306,7 +305,7 @@ pub(super) async fn validate_block_update_children(
              WHERE parent_block_id = ? AND in_trash = 0",
         )
         .bind(block_id)
-        .fetch_one(pool)
+        .fetch_one(&mut **tx)
         .await
         .map_err(|e| format!("count notes heading children: {e}"))?;
         if child_count > 0 {
@@ -324,7 +323,7 @@ pub(super) async fn validate_block_update_children(
              WHERE parent_block_id = ? AND in_trash = 0",
         )
         .bind(block_id)
-        .fetch_one(pool)
+        .fetch_one(&mut **tx)
         .await
         .map_err(|e| format!("count notes synced block children: {e}"))?;
         if child_count > 0 {
@@ -335,7 +334,7 @@ pub(super) async fn validate_block_update_children(
 }
 
 pub(super) async fn ensure_existing_children_have_type(
-    pool: &SqlitePool,
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     block_id: &str,
     allowed_child_type: &str,
     parent_type: &str,
@@ -350,7 +349,7 @@ pub(super) async fn ensure_existing_children_have_type(
     )
     .bind(block_id)
     .bind(allowed_child_type)
-    .fetch_optional(pool)
+    .fetch_optional(&mut **tx)
     .await
     .map_err(|e| format!("load notes {parent_type} child type: {e}"))?;
     if invalid_child_type.is_some() {

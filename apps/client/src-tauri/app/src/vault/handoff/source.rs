@@ -4,7 +4,8 @@ use super::protocol::{BundleMetadata, BundlePurpose, PROTOCOL_VERSION};
 use super::state::{PairingManager, PendingAcknowledgement, StoredOutgoingTransfer};
 use crate::vault::ownership::{TransferPhase, VaultOwnershipManager};
 use crate::vault::quiescence::{
-    SnapshotQuiescence, SourceQuiescence, begin_snapshot_quiescence, begin_source_quiescence,
+    SnapshotQuiescence, SourceQuiescence, abort_source_preparation, begin_snapshot_quiescence,
+    begin_source_quiescence,
 };
 use std::fs;
 use std::sync::Arc;
@@ -147,19 +148,13 @@ async fn prepare(
     let (database_snapshot, archive_path) = match pairing.outgoing_snapshot_paths(&transfer_id) {
         Ok(paths) => paths,
         Err(error) => {
-            if let Some(quiescence) = ownership_quiescence {
-                let _ = quiescence.abort(app);
-            }
-            return Err(error);
+            return Err(abort_source_preparation(ownership_quiescence, error).await);
         }
     };
     let vault_root = match crate::vault::active_vault_path(app) {
         Ok(path) => path,
         Err(error) => {
-            if let Some(quiescence) = ownership_quiescence {
-                let _ = quiescence.abort(app);
-            }
-            return Err(error);
+            return Err(abort_source_preparation(ownership_quiescence, error).await);
         }
     };
     let snapshot = crate::vault::backup::create_handoff_archive(
@@ -171,11 +166,8 @@ async fn prepare(
     drop(snapshot_quiescence);
     let _ = fs::remove_file(&database_snapshot);
     if let Err(error) = snapshot {
-        if let Some(quiescence) = ownership_quiescence {
-            let _ = quiescence.abort(app);
-        }
         let _ = fs::remove_file(&archive_path);
-        return Err(error);
+        return Err(abort_source_preparation(ownership_quiescence, error).await);
     }
     let metadata_result: Result<BundleMetadata, String> = (|| {
         Ok(BundleMetadata {
@@ -195,11 +187,8 @@ async fn prepare(
     let metadata = match metadata_result {
         Ok(metadata) => metadata,
         Err(error) => {
-            if let Some(quiescence) = ownership_quiescence {
-                let _ = quiescence.abort(app);
-            }
             let _ = fs::remove_file(&archive_path);
-            return Err(error);
+            return Err(abort_source_preparation(ownership_quiescence, error).await);
         }
     };
     let transfer = StoredOutgoingTransfer {
@@ -208,21 +197,18 @@ async fn prepare(
         committed: false,
     };
     if let Err(error) = pairing.store_outgoing_transfer(transfer.clone()) {
-        if let Some(quiescence) = ownership_quiescence {
-            let _ = quiescence.abort(app);
-        }
         let _ = fs::remove_file(&archive_path);
-        return Err(error);
+        return Err(abort_source_preparation(ownership_quiescence, error).await);
     }
-    drop(ownership_quiescence);
+    if let Some(quiescence) = ownership_quiescence {
+        quiescence.retain_outgoing();
+    }
     Ok(transfer)
 }
 
 #[cfg(target_os = "android")]
 async fn prepare_local_state_for_snapshot(app: &tauri::AppHandle) -> Result<(), String> {
-    crate::doomscrolling_mobile::doomscrolling_mobile_sync_events(app.clone())
-        .await
-        .map(|_| ())
+    crate::doomscrolling_mobile::synchronize_for_snapshot(app.clone()).await
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

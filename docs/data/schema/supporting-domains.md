@@ -30,14 +30,20 @@ User playlists and ordered memberships are independent of source collections. Re
 
 The domain also records:
 
-- stable playback resume state by source identity;
+- legacy source resume rows and device-keyed native Music session checkpoints;
 - skip ranges and per-item behavior;
 - item signals, snoozes, statistics, and recent selections;
 - refresh issues and user-required actions;
 - bounded refresh and relink jobs;
 - context assignments, background-sound definitions, custom groups, and selected layers.
 
+Background playback state distinguishes manual intent from automatically selected intent. Native soundtrack acceptance commits the selected layer and this provenance flag with the Music session transition. Restart may display an automatic selection but cannot use its saved desired-playing flag as permission to start output. A fresh native phase decision is required. Explicit manual state writes clear that flag through the existing version check.
+
 These are related table families, not one denormalized playlist document. Refresh and relink use staged generations so a failed scan leaves the previous successful library usable. Relative local identities and platform document handles are revalidated before playback. Music bytes stay in the user's library and are never copied into the vault merely because an item was indexed.
+
+Music import receipts persist the accepted action identity, exact request hash, compact result, and native commit time alongside the imported rows in the same transaction. They survive database reopen so a lost command response cannot duplicate a playlist. Reusing an action identity with different input is rejected. A preview revision covers incoming data and relevant canonical state, including child rows and assignment-owner revisions that are not represented by playlist versions. Export assembly reads all selected row families from one bounded snapshot and releases that transaction before document output.
+
+Native session checkpoints contain portable item and membership IDs, playback settings, bounded navigation history, and queue-selection state, keyed by the originating device ID. Resolved paths, content URIs, browser URLs, and decoder handles are excluded. Copying the vault copies checkpoint records, not a live session or permission to resume another device's playback. Recovery reconstructs the local device's queue against canonical rows and current root bindings, and starts paused. Listening counters, checkpoint changes, and semantic action receipts share one transaction. A retained receipt suppresses a repeated action after an uncertain response without replaying a stale live projection.
 
 Playback hosts, media sessions, ephemeral loopback URLs, decoded artwork, and active queue transitions are runtime state. Only the durable definition or resumable state belongs in SQLite.
 
@@ -52,6 +58,16 @@ SQLite stores durable usage samples and journals needed for daily limits, report
 Browser rules, desktop application rules, and mobile app-rule snapshots have separate source identities and validation. Mobile foreground enforcement and launchable-app discovery are platform capabilities, not evidence that all rule surfaces share one native identifier.
 
 Runtime snapshots in the platform app config directory help recover current enforcement. They are device-local and do not replace the canonical portable policy or durable usage journal.
+
+Desktop budget snapshots are native derivatives of the current persisted limit branch and the active database's accepted usage window. Their configuration fingerprint, local day, Monday-based week, and internally consistent totals are admission checks, not portable policy. Older snapshots without the fingerprint expire open and are replaced by native reads. Linked accepted-cache replacement and acknowledgement of included pending samples use one device-local transaction, so failure cannot delete pending evidence without installing the corresponding accepted total. Accounting reads are separate from transport batching.
+
+The desktop native owner records captured interval batches in the device-local spool before publishing totals. Each batch shares a transaction with its retry receipt. Sent sample identities remain immutable until acknowledged, and only unsent samples can be compacted. The writable owner drains the complete bounded local spool before reading canonical budgets. The UI receives cached totals and adapter availability rather than individual intervals or execution requests. Desktop block events and their rule snapshots also share one transaction.
+
+Android's separate Guardian journal marks usage identities before returning them for exchange. Its schema upgrade conservatively treats old identities as sent, and compaction preserves every second by splitting aggregates into bounded samples. Usage insertion, daily totals, compaction, capacity admission, and the observation checkpoint share one transaction. A full journal rejects new evidence without advancing that checkpoint. Rows belonging to a previously active vault remain pending until that vault is active again. Read-only exchanges export usage without marking local block history as sent.
+
+Accepted linked snapshots and retained Guardian acknowledgement identities commit together in the Rust device cache. A failed Android acknowledgement leaves those identities durable, so an offline read excludes them from pending usage and the next synchronization retries deletion before sending new evidence. Cleanup follows confirmed Guardian deletion and remains scoped to the original vault and device. The Guardian accounting bridge captures local counters and complete pending evidence under the same lock. Rust excludes already committed or accepted identities before grouping pending usage. It publishes each shared total with that captured local baseline, so observations recorded between capture and application contribute only their later local delta. Captures with inconsistent identities, vault attribution, clock/date facts, oversized evidence, or overflowing aggregates cannot publish a truncated total.
+
+Guardian rule invalidation retains the journal's vault attribution and localized notification text, including text from an older rule snapshot. Retained peer acknowledgement identities also exclude pending evidence after that device becomes the writable owner, until Guardian confirms deletion. Configuration and vault changes revoke the old native publication before becoming visible. App exit stops the shared-total publisher while preserving the independent Guardian policy. Native transport reads return a complete accepted snapshot within the protocol limit, separately from the smaller pending exchange batch; an oversized accepted cache fails explicitly instead of silently truncating it.
 
 ## Profile and managed icons
 

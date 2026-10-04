@@ -3,6 +3,7 @@ use super::block_tree::{
     load_block_subtree_rows, load_block_subtree_rows_with_trash, load_blocks_by_ids,
     normalize_selection_root_ids, refresh_duplicated_has_children,
 };
+use super::copy_budget::{CopyBudget, CopyContext};
 use super::database_copy::{insert_database_copy, plan_database_copy};
 use super::page_duplicates::{insert_child_page_copy, plan_child_page_copy};
 use super::parents::{
@@ -54,7 +55,8 @@ pub async fn duplicate_block(
         .begin()
         .await
         .map_err(|e| format!("begin duplicate notes block: {e}"))?;
-    let source_rows = load_block_subtree_rows(&mut tx, block_id).await?;
+    let mut budget = CopyBudget::default();
+    let source_rows = load_block_subtree_rows(&mut tx, block_id, &mut budget).await?;
     if source_rows.is_empty() {
         return Err("notes block not found".to_string());
     }
@@ -93,6 +95,10 @@ pub async fn duplicate_block(
         next_sort_orders(&mut tx, &root_parent, Some(source_root.id.as_str()), 1).await?[0];
     history::record_page_snapshot_tx(&mut tx, &source_root.page_id, "duplicate_block").await?;
     let mut reserved_ids = seen_duplicate_ids.clone();
+    let mut context = CopyContext {
+        reserved_ids: &mut reserved_ids,
+        budget: &mut budget,
+    };
     let mut page_copies = Vec::new();
     let destination_project_id =
         project_history::resolve_project_id_for_page_tx(&mut tx, &source_root.page_id).await?;
@@ -132,7 +138,7 @@ pub async fn duplicate_block(
                 &duplicate_ids[&row.id],
                 parent,
                 false,
-                &mut reserved_ids,
+                &mut context,
                 destination_project_id.as_deref(),
             )
             .await?,
@@ -149,7 +155,7 @@ pub async fn duplicate_block(
                     &mut tx,
                     row,
                     &duplicate_ids[&row.id],
-                    &mut reserved_ids,
+                    &mut context,
                     destination_project_id.as_deref(),
                     false,
                 )
@@ -243,27 +249,42 @@ pub async fn duplicate_blocks(
     pool: &SqlitePool,
     request: NoteDuplicateBlocks,
 ) -> Result<NotePaginatedBlockList, String> {
-    validate_parent(&request.parent)?;
     project_history::ensure_blocks_baseline_for_mutation(pool, &request.block_ids).await?;
     project_history::ensure_parent_baseline_for_mutation(pool, &request.parent).await?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| format!("begin duplicate notes blocks: {e}"))?;
+    let ids = duplicate_blocks_tx(&mut tx, request, true, &mut CopyBudget::default()).await?;
+    tx.commit()
+        .await
+        .map_err(|e| format!("commit duplicate notes blocks: {e}"))?;
+    load_blocks_by_ids(pool, ids).await
+}
+
+/// Copy complete canonical page and database graphs in the caller's transaction.
+pub(super) async fn duplicate_blocks_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    request: NoteDuplicateBlocks,
+    record_history: bool,
+    budget: &mut CopyBudget,
+) -> Result<Vec<String>, String> {
+    validate_parent(&request.parent)?;
     if request.after.is_some() && request.before.is_some() {
         return Err("duplicate request cannot include both after and before".to_string());
     }
     validate_duplicate_block_count(request.duplicated_block_ids.len())?;
     let (duplicate_ids, seen_duplicate_ids) = duplicate_block_id_map(request.duplicated_block_ids)?;
     let include_trashed_sources = request.include_trashed_sources.unwrap_or(false);
-    let mut tx = pool
-        .begin()
-        .await
-        .map_err(|e| format!("begin duplicate notes blocks: {e}"))?;
     let root_ids =
-        normalize_selection_root_ids(&mut tx, &request.block_ids, include_trashed_sources).await?;
-    let destination_parent = resolve_block_parent(&mut tx, &request.parent).await?;
+        normalize_selection_root_ids(tx, &request.block_ids, include_trashed_sources).await?;
+    let destination_parent = resolve_block_parent(tx, &request.parent).await?;
     let mut source_rows = Vec::new();
     let mut root_rows = Vec::with_capacity(root_ids.len());
     for block_id in &root_ids {
         let subtree_rows =
-            load_block_subtree_rows_with_trash(&mut tx, block_id, include_trashed_sources).await?;
+            load_block_subtree_rows_with_trash(tx, block_id, include_trashed_sources, budget)
+                .await?;
         let source_root = subtree_rows
             .first()
             .ok_or_else(|| "notes block not found".to_string())?;
@@ -292,10 +313,10 @@ pub async fn duplicate_blocks(
     }
     let root_id_set = root_ids.iter().map(String::as_str).collect::<HashSet<_>>();
     let root_sort_orders = if let Some(before) = request.before.as_deref() {
-        sort_orders_before(&mut tx, &destination_parent, before, root_rows.len()).await?
+        sort_orders_before(tx, &destination_parent, before, root_rows.len()).await?
     } else {
         next_sort_orders(
-            &mut tx,
+            tx,
             &destination_parent,
             request.after.as_deref(),
             root_rows.len(),
@@ -307,13 +328,18 @@ pub async fn duplicate_blocks(
         .zip(root_sort_orders)
         .map(|(row, sort_order)| (row.id.as_str(), sort_order))
         .collect::<HashMap<_, _>>();
-    history::record_page_snapshot_tx(&mut tx, &destination_parent.page_id, "duplicate_blocks")
-        .await?;
+    if record_history {
+        history::record_page_snapshot_tx(tx, &destination_parent.page_id, "duplicate_blocks")
+            .await?;
+    }
     let mut reserved_ids = seen_duplicate_ids.clone();
+    let mut context = CopyContext {
+        reserved_ids: &mut reserved_ids,
+        budget,
+    };
     let mut page_copies = Vec::new();
     let destination_project_id =
-        project_history::resolve_project_id_for_page_tx(&mut tx, &destination_parent.page_id)
-            .await?;
+        project_history::resolve_project_id_for_page_tx(tx, &destination_parent.page_id).await?;
     for row in source_rows
         .iter()
         .filter(|row| row.block_type == "child_page")
@@ -334,12 +360,12 @@ pub async fn duplicate_blocks(
         };
         page_copies.push(
             plan_child_page_copy(
-                &mut tx,
+                tx,
                 &row.id,
                 &duplicate_ids[&row.id],
                 parent,
                 include_trashed_sources,
-                &mut reserved_ids,
+                &mut context,
                 destination_project_id.as_deref(),
             )
             .await?,
@@ -353,10 +379,10 @@ pub async fn duplicate_blocks(
         if super::database_copy::has_database_graph(row)? {
             databases.push(
                 plan_database_copy(
-                    &mut tx,
+                    tx,
                     row,
                     &duplicate_ids[&row.id],
-                    &mut reserved_ids,
+                    &mut context,
                     destination_project_id.as_deref(),
                     include_trashed_sources,
                 )
@@ -421,31 +447,27 @@ pub async fn duplicate_blocks(
         .bind(payload.to_string())
         .bind(&row.plain_text)
         .bind(sort_order)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await
         .map_err(|e| format!("duplicate notes block: {e}"))?;
     }
     for copy in &page_copies {
-        insert_child_page_copy(&mut tx, copy).await?;
+        insert_child_page_copy(tx, copy).await?;
     }
     for database in &databases {
         sqlx::query("UPDATE notes_blocks SET payload = ? WHERE id = ?")
             .bind(database.payload.to_string())
             .bind(&database.id)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await
             .map_err(|e| format!("set pasted database identities: {e}"))?;
-        insert_database_copy(&mut tx, database).await?;
+        insert_database_copy(tx, database).await?;
     }
-    super::database_copy::finalize_copies(&mut tx, &databases, &page_copies, &duplicate_ids)
-        .await?;
-    refresh_duplicated_has_children(&mut tx, &seen_duplicate_ids).await?;
-    duplicate_block_comment_threads(&mut tx, &duplicate_ids, &destination_parent.page_id).await?;
-    refresh_parent_has_children(&mut tx, &destination_parent).await?;
-    touch_page(&mut tx, &destination_parent.page_id).await?;
-    tx.commit()
-        .await
-        .map_err(|e| format!("commit duplicate notes blocks: {e}"))?;
+    super::database_copy::finalize_copies(tx, &databases, &page_copies, &duplicate_ids).await?;
+    refresh_duplicated_has_children(tx, &seen_duplicate_ids).await?;
+    duplicate_block_comment_threads(tx, &duplicate_ids, &destination_parent.page_id).await?;
+    refresh_parent_has_children(tx, &destination_parent).await?;
+    touch_page(tx, &destination_parent.page_id).await?;
     let all_duplicate_ids = source_rows
         .iter()
         .map(|row| {
@@ -455,7 +477,7 @@ pub async fn duplicate_blocks(
                 .ok_or_else(|| "duplicated block id is missing".to_string())
         })
         .collect::<Result<Vec<_>, _>>()?;
-    load_blocks_by_ids(pool, all_duplicate_ids).await
+    Ok(all_duplicate_ids)
 }
 
 pub(super) fn duplicate_block_id_map(

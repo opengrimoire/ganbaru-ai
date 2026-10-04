@@ -101,7 +101,8 @@ pub struct MusicContextAssignmentSet {
     pub updated_at: i64,
 }
 
-type AssignmentRow = (
+/// Canonical assignment fields shared by context reads and bounded transfers.
+pub(crate) type AssignmentRow = (
     String,
     String,
     String,
@@ -243,7 +244,7 @@ pub(crate) async fn replace_assignments_in_transaction(
     Ok(())
 }
 
-fn validate_set(request: &MusicContextAssignmentSet) -> MusicLibraryResult<()> {
+pub(crate) fn validate_set(request: &MusicContextAssignmentSet) -> MusicLibraryResult<()> {
     validate_id(&request.owner_id, "ownerId")?;
     if request.updated_at <= 0 {
         return Err(MusicLibraryError::validation(
@@ -251,14 +252,22 @@ fn validate_set(request: &MusicContextAssignmentSet) -> MusicLibraryResult<()> {
             "must be positive",
         ));
     }
-    if request.assignments.len() > 3 {
+    validate_drafts(request.owner_kind, &request.assignments)
+}
+
+/// Validate portable assignment intent before an owner or timestamp is allocated.
+pub(crate) fn validate_drafts(
+    owner_kind: MusicAssignmentOwnerKind,
+    assignments: &[MusicContextAssignmentDraft],
+) -> MusicLibraryResult<()> {
+    if assignments.len() > 3 {
         return Err(MusicLibraryError::validation(
             "assignments",
             "cannot contain more than three phases",
         ));
     }
     let mut phases = HashSet::new();
-    for assignment in &request.assignments {
+    for assignment in assignments {
         if !phases.insert(assignment.phase) {
             return Err(MusicLibraryError::validation(
                 "assignments",
@@ -268,7 +277,7 @@ fn validate_set(request: &MusicContextAssignmentSet) -> MusicLibraryResult<()> {
         validate_optional_id(&assignment.playlist_id, "playlistId")?;
         validate_optional_id(&assignment.soundscape_id, "soundscapeId")?;
         validate_optional_id(&assignment.provenance_id, "provenanceId")?;
-        let expected_provenance = match request.owner_kind {
+        let expected_provenance = match owner_kind {
             MusicAssignmentOwnerKind::EventSnapshot => MusicAssignmentProvenanceKind::CopiedProject,
             MusicAssignmentOwnerKind::WorkEnvironment => {
                 MusicAssignmentProvenanceKind::WorkEnvironment
@@ -282,7 +291,7 @@ fn validate_set(request: &MusicContextAssignmentSet) -> MusicLibraryResult<()> {
                 "provenanceKind",
                 format!(
                     "{} assignments require {} provenance",
-                    request.owner_kind.as_ref(),
+                    owner_kind.as_ref(),
                     expected_provenance.as_ref()
                 ),
             ));
@@ -340,7 +349,8 @@ fn validate_optional_id(value: &Option<String>, field: &str) -> MusicLibraryResu
     Ok(())
 }
 
-fn decode(row: AssignmentRow) -> MusicLibraryResult<MusicContextAssignment> {
+/// Decode persisted assignment variants consistently at both native boundaries.
+pub(crate) fn decode(row: AssignmentRow) -> MusicLibraryResult<MusicContextAssignment> {
     Ok(MusicContextAssignment {
         owner_kind: MusicAssignmentOwnerKind::try_from(row.0.as_str())
             .map_err(|message| MusicLibraryError::runtime("decode assignment owner", message))?,

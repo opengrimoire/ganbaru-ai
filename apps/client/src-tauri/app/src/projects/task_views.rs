@@ -13,13 +13,13 @@ const SUMMARY_SELECT: &str =
      t.estimate_minutes, t.due_date, t.due_time, t.start_date, t.start_time,
      t.target_end_date, t.completed_at, t.archived_at,
      CASE WHEN TRIM(COALESCE(t.blocker_reason, '')) <> '' THEN 1 ELSE 0 END AS blocker_reason_present,
-     t.milestone, t.created_at, t.updated_at";
+     t.milestone, t.created_at, t.updated_at, t.revision";
 const SUMMARY_COLUMNS: &str =
     "t.id, t.project_id, t.section_id, t.status_id, t.parent_task_id, t.title,
      t.priority, t.task_type, t.section_sort_order, t.status_sort_order,
      t.estimate_minutes, t.due_date, t.due_time, t.start_date, t.start_time,
      t.target_end_date, t.completed_at, t.archived_at, t.blocker_reason_present,
-     t.milestone, t.created_at, t.updated_at";
+     t.milestone, t.created_at, t.updated_at, t.revision";
 
 fn validate_task_view_request(request: &ProjectTaskViewRequest) -> Result<(), String> {
     require_non_empty(request.project_id.trim(), "project_id")?;

@@ -1,55 +1,13 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CalendarEventMutationTarget {
+pub(super) struct CalendarEventMutationTarget {
     pub(super) id: String,
-    pub(super) occurrence_start: Option<String>,
-    pub(super) occurrence_end: Option<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(tag = "type")]
-pub enum CalendarDeleteArchiveOperation {
-    #[serde(rename = "delete_event")]
-    DeleteEvent { target: CalendarEventMutationTarget },
-    #[serde(rename = "archive_event")]
-    ArchiveEvent { target: CalendarEventMutationTarget },
-    #[serde(rename = "cap_series")]
-    CapSeries {
-        #[serde(rename = "eventId")]
-        event_id: String,
-        #[serde(rename = "repeatUntil")]
-        repeat_until: String,
-        rrule: String,
-    },
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CalendarActiveEventReferenceTransfer {
-    pub(super) new_event_id: String,
-    pub(super) new_event_date: Option<String>,
-    pub(super) planned_end: Option<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(tag = "type")]
-pub enum CalendarRecurrenceCommitOperation {
-    #[serde(rename = "update_event")]
-    UpdateEvent { patch: Box<CalendarEventUpdate> },
-    #[serde(rename = "detach_instance")]
-    DetachInstance { input: Box<CalendarDetachInstance> },
-    #[serde(rename = "split_series")]
-    SplitSeries { input: Box<CalendarSplitSeries> },
-    #[serde(rename = "transfer_active_event_reference")]
-    TransferActiveEventReference {
-        transfer: CalendarActiveEventReferenceTransfer,
-    },
 }
 
 pub(super) struct CalendarEventMutationContext {
     pub(super) id: String,
+    /// Canonical alias can be the bare anchor even for a qualified selection.
+    pub(super) canonical_id: String,
     pub(super) source_event_id: String,
     pub(super) occurrence_date: Option<String>,
     pub(super) start_time: String,
@@ -61,6 +19,7 @@ pub(super) struct CalendarEventMutationContext {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg(test)]
 pub struct CalendarEventCreate {
     pub(super) id: String,
     pub(super) title: String,
@@ -100,11 +59,9 @@ pub struct CalendarEventCreate {
     pub(super) updated_at: String,
     pub(super) pomodoro_config: Option<CalendarPomodoroConfig>,
     pub(super) attendees: Vec<CalendarEventAttendee>,
-    pub(super) music_snapshot_assignments: Vec<crate::music_context::MusicContextAssignmentDraft>,
-    pub(super) music_override_assignments: Vec<crate::music_context::MusicContextAssignmentDraft>,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct CalendarPomodoroConfig {
     pub(super) rhythm: CalendarPomodoroRhythm,
@@ -113,7 +70,7 @@ pub(super) struct CalendarPomodoroConfig {
     pub(super) idle_timeout_minutes: Option<i64>,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(
     tag = "kind",
     rename_all = "snake_case",
@@ -131,7 +88,7 @@ pub(super) enum CalendarPomodoroRhythm {
     },
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct CalendarPomodoroSequenceStep {
     pub(super) focus_duration_minutes: i64,
@@ -139,7 +96,7 @@ pub(super) struct CalendarPomodoroSequenceStep {
     pub(super) break_duration_minutes: i64,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct CalendarEventAttendee {
     pub(super) id: String,
@@ -150,7 +107,7 @@ pub(super) struct CalendarEventAttendee {
     pub(super) rsvp: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct CalendarEventAlarm {
     pub(super) id: String,
@@ -162,6 +119,7 @@ pub(super) struct CalendarEventAlarm {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg(test)]
 pub struct CalendarEventUpdate {
     pub(super) id: String,
     pub(super) updated_at: String,
@@ -171,7 +129,7 @@ pub struct CalendarEventUpdate {
     pub(super) pomodoro_config: Option<CalendarPomodoroConfigPatch>,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(tag = "field", content = "value")]
 pub(super) enum CalendarEventUpdateField {
     #[serde(rename = "title")]
@@ -282,7 +240,7 @@ impl CalendarEventUpdateField {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct CalendarGuestPermissions {
     pub(super) guest_can_modify: bool,
@@ -302,7 +260,7 @@ pub(super) struct CalendarOrganizerPayload {
     pub(super) email: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(tag = "action", content = "value")]
 pub(super) enum CalendarPomodoroConfigPatch {
     #[serde(rename = "set")]
@@ -313,6 +271,7 @@ pub(super) enum CalendarPomodoroConfigPatch {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg(test)]
 pub struct CalendarDetachInstance {
     pub(super) parent_id: String,
     pub(super) instance_date: String,
@@ -339,6 +298,7 @@ pub struct CalendarDetachInstance {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg(test)]
 pub struct CalendarSplitSeries {
     pub(super) parent_id: String,
     pub(super) day_before: String,

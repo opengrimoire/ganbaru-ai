@@ -35,6 +35,19 @@ pub use page_icon_assets::*;
 #[allow(unused_imports)]
 pub use project_history::*;
 
+/// Commit one bounded editor operation with its durable retry receipt.
+#[tauri::command]
+pub async fn notes_apply_compound_edit<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    request: writes::compound::NoteCompoundEdit,
+) -> Result<project_history::NotesMutationResultDto<writes::compound::NoteCompoundEditResult>, String>
+{
+    let pool = connect_sqlite(app, db_url).await?;
+    let value = writes::compound::apply_compound_edit(&pool, request).await?;
+    project_history::mutation_result(&pool, value).await
+}
+
 #[tauri::command]
 pub async fn notes_load_workspace_shell<R: Runtime>(
     app: AppHandle<R>,

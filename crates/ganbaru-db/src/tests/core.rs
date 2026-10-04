@@ -176,7 +176,7 @@ fn fresh_file_database_applies_clean_baseline() {
 }
 
 #[test]
-fn schema_does_not_create_json_storage_columns() {
+fn schema_normalizes_domain_storage_with_explicit_receipt_and_runtime_envelopes() {
     super::block_on(async {
         let pool = migrated_memory_pool().await;
 
@@ -202,6 +202,26 @@ fn schema_does_not_create_json_storage_columns() {
             "organizer",
         ];
         let forbidden_tables = ["pomodoro_sessions"];
+        // These bounded native control envelopes are not authoritative Calendar,
+        // Notes, Project, Music library or Focus history records. Keep the
+        // exception explicit per column so unrelated JSON storage still fails.
+        let control_envelopes = [
+            ("music_transfer_receipts", "result_json"),
+            ("notes_edit_receipts", "result_json"),
+            ("project_task_bulk_receipts", "request_json"),
+            ("project_task_bulk_receipts", "response_json"),
+            ("project_reorder_receipts", "request_json"),
+            ("project_reorder_receipts", "response_json"),
+            ("project_dependency_cascade_receipts", "request_json"),
+            ("project_dependency_cascade_receipts", "response_json"),
+            ("focus_execution_state", "state_json"),
+            ("focus_execution_receipts", "request_json"),
+            ("focus_execution_receipts", "result_json"),
+            ("music_session_checkpoints", "checkpoint_json"),
+            ("music_session_receipts", "result_json"),
+            ("calendar_edit_receipts", "result_json"),
+        ];
+        let mut observed_envelopes = std::collections::BTreeSet::new();
         for row in rows {
             let table_name: String = row.try_get("table_name").unwrap();
             let column_name: String = row.try_get("column_name").unwrap();
@@ -209,11 +229,18 @@ fn schema_does_not_create_json_storage_columns() {
                 !forbidden_tables.contains(&table_name.as_str()),
                 "{table_name} should not be created as persisted storage",
             );
+            let is_control =
+                control_envelopes.contains(&(table_name.as_str(), column_name.as_str()));
+            if is_control {
+                observed_envelopes.insert((table_name.clone(), column_name.clone()));
+            }
             assert!(
-                !forbidden.contains(&column_name.as_str()) && !column_name.ends_with("_json"),
+                !forbidden.contains(&column_name.as_str())
+                    && (!column_name.ends_with("_json") || is_control),
                 "{table_name}.{column_name} should be normalized, not JSON storage",
             );
         }
+        assert_eq!(observed_envelopes.len(), control_envelopes.len());
     });
 }
 

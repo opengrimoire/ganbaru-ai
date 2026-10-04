@@ -37,7 +37,7 @@ Recurrence walks local civil dates, not fixed UTC durations. TypeScript uses Tem
 
 After selecting a civil occurrence date, the application combines it with the stored local time and home-zone policy to obtain instants where an instant is needed. Duration across a DST transition follows those instants. The recurrence date itself remains the local identity.
 
-All-day occurrences use date spans directly. Timed multi-day occurrences preserve the template's civil day span and local time components.
+All-day occurrences use date spans directly. Timed multi-day occurrences preserve the template's civil day span and local time components. A positive stored interval can cross a repeated-hour boundary with its end wall clock earlier than its start wall clock. Native expansion preserves that original interval and uses its positive elapsed duration for later occurrences, where those reversed civil endpoints would be invalid.
 
 ## Window semantics
 
@@ -98,7 +98,7 @@ Do not document sub-millisecond performance without a benchmark. The durable req
 
 ### Daily count
 
-A template beginning June 1 with a daily interval and count 3 has recurrence dates June 1, June 2, and June 3 before exclusions. A June 2 exception affects which concrete events are returned. The precise interaction between COUNT and EXDATE is an unresolved conformance issue described below.
+A template beginning June 1 with a daily interval and count 3 has recurrence dates June 1, June 2, and June 3 before exclusions. A June 2 exception leaves June 1 and June 3. It does not create a June 4 replacement.
 
 ### Multi-day overlap
 
@@ -112,24 +112,48 @@ A 09:00 event in America/New_York remains at 09:00 on each selected weekday. Its
 
 If template event-1 produces June 8, the concrete projection uses the deterministic event-1 plus June 8 identity regardless of whether the caller expanded June alone or the entire quarter.
 
-## Current implementation gaps
+## Native implementation and preservation limits
 
 ### Preserved but unsupported rule parts
 
-BYSETPOS, BYWEEKNO, BYYEARDAY, and WKST are not applied by either current expander. A TypeScript source comment previously claimed BYSETPOS support, but the algorithm does not implement it. Import and export may preserve these values; feature and interoperability documentation must not call them supported until both implementations and conformance fixtures agree.
+The native engine applies BYSETPOS, BYWEEKNO, BYYEARDAY and WKST, as described below. The superseded frontend and flattened DTO expanders did not apply these selectors and are removed. The frontend retains date-picker helpers and the iCalendar codec. Import/export preservation alone does not establish projection support; unsupported rules must retain their data and report a projection diagnostic.
 
 The current weekly walk effectively uses its built-in week convention rather than an imported WKST value.
 
 ### COUNT and EXDATE
 
-Generated excluded dates after the original currently advance the cursor without advancing the generated count. The original date is initialized as the first count position even when it is excluded. This is internally inconsistent and may differ from RFC recurrence-set semantics, where the rule produces its limited set before EXDATE subtraction.
-
-Choose the interoperability contract, update TypeScript and Rust together, and add fixtures covering an excluded original, an excluded later occurrence, and multiple exclusions near COUNT.
+COUNT limits the RRULE set before EXDATE subtraction, including an excluded original. Direct canonical shared fixtures cover an excluded original, excluded later occurrences, all limited occurrences excluded, and navigation after earlier exclusions. Nonexistent home-zone wall times are omitted before COUNT.
 
 ### RDATE and RRULE termination
 
-Current code applies the RRULE until date to additional RDATE values. In iCalendar recurrence-set semantics, RDATE is generally an independent inclusion. Confirm the intended interoperability behavior and update both expanders and fixtures together.
+RDATE is an independent inclusion after RRULE COUNT or UNTIL. The canonical engine retains distinct additional dates past the rule's termination, deduplicates them, and lets EXDATE remove them. Shared fixtures cover these combinations.
 
-### Dual implementation equivalence
+### Native migration status
 
-The two implementations use different date libraries and duplicated control flow. Equivalence is a required contract, not an assumption. Shared fixtures must cover fast-forward, multi-day overlap, exceptions, additional dates, overrides, cancellation, invalid month days, DST boundaries, and the hard guard.
+A native period-based engine now applies BYSETPOS, BYYEARDAY, BYWEEKNO, WKST, ordinal weekdays, and intersections of the supported date selectors. It skips invalid month/leap dates without drifting the original anchor, compares UTC UNTIL against instants, and expands in the event's home zone through native timezone data. Generated nonexistent wall times are skipped; repeated times use the first occurrence. Exact moved overrides are filtered after application and retain their original recurrence identity.
+
+Main Calendar windows, Pomodoro scheduler reads, and Android reminder preparation now consume bounded canonical native reads. The frontend caches concrete occurrences and filters covering windows without recurrence generation. Committed mutations refresh the native snapshot; invalidated in-flight reads cannot replace newer state. Focus admission reads canonical ownership and day-plan context inside its accepted transaction. Existing-event editing uses native semantic previews and Save; the TypeScript scoped planner and executor have been removed. Creation preview and parts of delete/archive interaction retain frontend recurrence helpers. Those helpers do not acquire support for the additional rule parts merely because the native engine implements them. Complete interoperability conformance and physical acceptance remain open.
+
+### Native recurrence partitions
+
+The read-only native scope planner now derives both source recurrence sets for a split before applying draft changes. Partition membership uses original recurrence dates, including when an override moves the displayed occurrence. Override references select complete original rows so later persistence can preserve their metadata.
+
+The historical side uses the generated prefix's COUNT, measured before exclusions and cancellation. This avoids an UNTIL rounding error for fractional stored timestamps. The following side preserves the original finite termination or unlimited rule. When a generated boundary can become the new anchor without changing period selection or civil duration, its COUNT subtracts the consumed prefix. Existing future exclusions and additional dates transfer to that side.
+
+An off-pattern RDATE, a week-number rule near a year boundary, or a fold/gap-sensitive interval can require retaining the original anchor. The following side can then retain an earlier DTSTART while prefix exceptions make the split boundary its first visible occurrence. Those exceptions cover cancelled and excluded generated members as well, preventing them from reappearing when earlier overrides stay with the historical side. Explicit RDATE gaps retain their civil date; later-fold RDATEs retain their selected instant.
+
+Both sides must reload through canonical expansion to reproduce exactly the original occurrence dates and geometry, with no overlap between sides. Prefix enumeration shares the request's work allowance and fails explicitly when it exceeds that allowance. Native scope analysis, visible edit preview, and reviewed Save use this partition implementation.
+
+### Native scoped draft geometry
+
+Native preparation now applies timing and recurrence intent to concrete source and edited sets. Metadata-only drafts retain the source geometry. An explicit endpoint edit uses the resolved selected interval, including its unchanged endpoint and complete civil day span, at the edited anchor. The anchor shifts by the selected start's civil-date difference. RRULE selectors remain as requested; changing DTSTART does not silently rewrite BYDAY or other selectors.
+
+An unchanged rule retains the partition's cadence and finite termination when possible. A date, home-zone, or rule change can require a new anchor. The new side then consumes the original generated prefix exactly once. Promoting an off-pattern RDATE to DTSTART accounts for its new explicit COUNT slot and removes its old additional-date entry, while other additional dates remain independent. Prefix exclusions used only to retain the old cadence are removed when that cadence is replaced; authored exclusions remain.
+
+EXDATE and retained override identities remain civil-date identities. Independent RDATEs retain their dates and adopt a changed shared clock. Explicit later-fold instants remain explicit when that clock and zone are unchanged. A reanchored selected override retains its original metadata reference while moving its recurrence identity to the new anchor. Date-kind and home-zone conversions preserve the authored meaning of other explicit override endpoints. Converting a timed rule to floating dates converts a timed UNTIL to the last admitted source home date, including a cutoff earlier than the source's daily time.
+
+The concrete result is decoded with the canonical engine. A changed rule cannot activate malformed override geometry. Scope analysis, partitioning, and these exact override checks share one work allowance. Native prepared metadata rows feed both visible preview and reviewed atomic Save. Existing-event frontend actions use this boundary; complete recurrence-family conformance remains a separate acceptance requirement.
+
+### Conformance and consumer boundaries
+
+Canonical geometry and native window/scoped transaction tests cover fast-forward, multi-day overlap, exceptions, additional dates, moved overrides, cancellation, invalid month days, DST boundaries and explicit work exhaustion. The retained shared recurrence-set fixture is consumed directly by the canonical engine. Frontend tests validate native identity/projection contracts and import parsing without retaining another expansion authority. Matching isolated CPU diagnostics were captured before retirement; see [Calendar migration measurements](../../performance/calendar-migration.md). Final broader gates and installed-app desktop/Android acceptance remain required.

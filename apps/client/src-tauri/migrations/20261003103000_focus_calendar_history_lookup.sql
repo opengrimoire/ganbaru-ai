@@ -1,0 +1,3 @@
+CREATE INDEX idx_pomodoro_runs_current_occurrence
+ON pomodoro_runs(current_occurrence_id)
+WHERE current_occurrence_id IS NOT NULL;

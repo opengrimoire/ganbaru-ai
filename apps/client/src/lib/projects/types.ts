@@ -290,6 +290,8 @@ export interface ProjectPriorityConfig {
 }
 
 export interface ProjectTask {
+  /** Native monotonic row version. Local drafts can exist before persistence. */
+  revision?: number;
   id: string;
   projectId: string;
   sectionId: string;
@@ -435,6 +437,8 @@ export interface ProjectTaskTagLink {
 }
 
 export interface ProjectCustomField {
+  /** Canonical revision is available after native persistence. */
+  revision?: number;
   id: string;
   projectId: string;
   name: string;
@@ -445,6 +449,8 @@ export interface ProjectCustomField {
 }
 
 export interface ProjectCustomFieldOption {
+  /** Canonical revision is available after native persistence. */
+  revision?: number;
   id: string;
   fieldId: string;
   name: string;

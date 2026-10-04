@@ -4,8 +4,8 @@ Ganbaru AI is an anti-procrastination + anti-burnout productivity app. Free, loc
 
 Features are highly interconnected. Current status:
 
-- Calendar (work in progress; the main views and workflows exist, while recurrence and Pomodoro transition persistence need correctness hardening)
-- Pomodoro (work in progress; the timer lifecycle and platform surfaces exist, while transition persistence and idle-source failure handling need hardening)
+- Calendar (work in progress; native recurrence, scoped mutations, deletion and Undo are implemented, with real desktop and Android acceptance pending)
+- Pomodoro (work in progress; native transactional execution, adaptive decisions, recovery and explicit idle-source failures are implemented, with real platform acceptance pending)
 - Quick notes and themes
 - Doomscrolling (work in progress; browser, desktop, and selected Android application enforcement exist)
 - Music player (work in progress; desktop and Android local playback, playlists, source parsing, controls, and platform integrations exist)
@@ -135,12 +135,21 @@ apps/
           desktop_runtime.rs, mobile_runtime.rs: platform-specific Tauri composition roots
           db.rs, db_path.rs, vault.rs, vault/: active-folder authorization, SQLite adapter boundary, and portable Android backup and restore
             config.rs, documents.rs: bounded vault config mutations and native Calendar/theme document transfer behind the vault command facade
+            runtime_lifecycle.rs: coalesced native owner freeze/resume intent and immediate admission revocation
             handoff/: local single-writer linking, ownership transfer, refresh, and recovery
               state/, state.rs: one pairing-state owner with split transfer operations, persistence validation, and restart tests
               coordinator/, coordinator.rs: serialized coordinator dispatch with separate outgoing and incoming transfer workflows
               transport/, transport.rs: pinned client and shared streaming transport, desktop server adapter, and transport tests
           calendar_events/, calendar_import/, calendar_reads/: split calendar persistence, import, and query services
+            calendar_events/edit.rs, calendar_events/edit/: typed Calendar draft preparation and validation tests
+            calendar_events/metadata.rs, calendar_events/metadata/: bounded canonical snapshots, draft application, prepared row writes, and independent imported metadata copies
+            calendar_events/commit.rs: reviewed semantic Calendar Save, native Focus coordination, and durable retry receipts
+            calendar_events/preview.rs: bounded visible projection of prepared Calendar edits through canonical window expansion
+            calendar_events/deletion.rs, calendar_events/deletion/: reviewed scoped deletion, complete archives, bounded process-local Undo and exact Focus reference restoration
           calendar_description.rs, calendar_import.rs, calendar_reads.rs, calendars.rs, recurrence.rs: calendar command roots and shared logic
+          recurrence/: bounded native rule selection, canonical home-zone occurrence expansion, and timezone conversion
+            canonical/: pure scope, recurrence partitioning, draft timing validation, and protected-history planning over original recurrence identities
+              edit_plan.rs, edit_plan/: concrete scoped recurrence plans, temporal application, preservation targets, and tests
           chat.rs, chat/: desktop Tauri Chat adapters, application command flows, and platform integrations
             coordination_commands/, send/, interaction/: messages, scheduling, turn orchestration, attachments, drafts, and follow-ups
             coordination_commands/access/: access-profile lifecycle, assignment targets, channel access resolution, and retained-reference disclosure checks
@@ -153,12 +162,17 @@ apps/
           chat_mobile.rs: mobile-compatible Chat configuration and vault contract surface
           notes.rs, notes/: Notes Tauri command adapters, working-Markdown composition, dialogs, and asset authorization
           pomodoro.rs: authorized Tauri focus command adapters over ganbaru-focus
+          pomodoro/native_runtime.rs, pomodoro/native_runtime/: native execution owner, canonical Calendar context, timezone facts, lifecycle observations, bounded presentation subscriptions, committed effects, and platform presentation
           projects.rs, projects/: project commands, DTOs, persistence, validation, history, custom fields, and templates
           quick_notes/: Quick notes commands, normalized text runs, lifecycle, search, and tests
           notification.rs, notification/: notification commands, scheduling, and platform delivery
           pomodoro_enforcement.rs, tray.rs: timer overlays and tray integration
           doomscrolling.rs, doomscrolling/: browser and desktop blocking commands, runtime helpers, and tests
-          media_player.rs, media_controls.rs, media_controls/, music.rs, music/: local playback, platform media-control adapters, metadata, and music commands
+            limits.rs, limits_store.rs: shared native budget matching and bounded source/day reads
+            runtime.rs, runtime/: serialized desktop observation and execution, monotonic interval accounting, and persisted-rule selection
+          doomscrolling_mobile.rs, doomscrolling_mobile/: native Guardian journal synchronization, captured counter validation, and shared Android budget publication
+          media_player.rs, media_player/, media_controls.rs, media_controls/, music.rs, music/: local playback, bounded decoder worker, platform media-control adapters, metadata, and music commands
+            session/: serialized native queue ownership, committed Focus and desktop Calendar soundtrack activation, device checkpoints, bounded decoder effects, and WebView projections
           project_icons.rs: managed project icon assets
           themes.rs, updates.rs: theme validation and application updates
           benchmark_seed.rs, first_use_contracts.rs: benchmark data and first-use query contracts
@@ -180,7 +194,7 @@ crates/
   ganbaru-mobile-notifications/: Android Calendar notification scheduling, channel, tap, exact-alarm, and settings adapter
   ganbaru-working-folders/: Tauri-free working-folder IDs, repository kinds, timestamps, bindings, and device-state operations
   ganbaru-db/: Tauri-free SQLite pool registry, connection configuration, migrations, row macro, and schema tests
-  ganbaru-focus/: Tauri-free focus persistence, history, validation, recovery, and local activity admission
+  ganbaru-focus/: Tauri-free focus persistence, history, validation, recovery, local activity admission, transactional execution, and adaptive policy
   ganbaru-chat-contracts/: stable provider-neutral Chat IDs, commands, events, DTOs, errors, and Serde contracts
   ganbaru-chat-providers/: provider processes, transports, drivers, event sinks, cancellation, and registry
   ganbaru-chat/: Chat persistence, runtime, Git workspaces, checkpoints, review, source control, and application services

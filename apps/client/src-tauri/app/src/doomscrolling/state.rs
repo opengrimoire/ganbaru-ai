@@ -1,7 +1,21 @@
 use super::*;
-use std::io::Write;
+use std::io::{Read, Write};
 
 static STATE_WRITE_GENERATION: AtomicU64 = AtomicU64::new(0);
+const MAX_DEVICE_STATE_BYTES: u64 = 1024 * 1024;
+
+fn read_bounded_state(path: &Path) -> Option<String> {
+    let mut bytes = Vec::new();
+    std::fs::File::open(path)
+        .ok()?
+        .take(MAX_DEVICE_STATE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    if bytes.len() as u64 > MAX_DEVICE_STATE_BYTES {
+        return None;
+    }
+    String::from_utf8(bytes).ok()
+}
 
 pub(super) fn state_path<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
     let mut path = app.path().app_config_dir().map_err(|e| e.to_string())?;
@@ -45,7 +59,7 @@ pub(super) fn clear_enforcement_state_files(
 pub fn clear_doomscrolling_enforcement_state<R: Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<(), String> {
-    clear_enforcement_state_files(&state_path(app)?, &limit_state_path(app)?)
+    runtime::stop_and_clear(app)
 }
 
 pub(super) fn validate_state(state: &DoomscrollingRuntimeState) -> Result<(), String> {
@@ -62,6 +76,9 @@ pub(super) fn validate_state(state: &DoomscrollingRuntimeState) -> Result<(), St
     if state.updated_at.trim().is_empty() {
         return Err("updated_at is required".to_string());
     }
+    if state.valid_until_ms.is_some_and(|deadline| deadline < 0) {
+        return Err("valid_until_ms must be non-negative".into());
+    }
     match state.pause_reason.as_deref() {
         None | Some("manual" | "idle" | "suspend") => {}
         Some(other) => return Err(format!("unsupported doomscrolling pause reason '{other}'")),
@@ -73,7 +90,7 @@ pub(super) fn read_fresh_runtime_state(
     path: &Path,
     checked_at: DateTime<Utc>,
 ) -> Option<DoomscrollingRuntimeState> {
-    let contents = std::fs::read_to_string(path).ok()?;
+    let contents = read_bounded_state(path)?;
     let state = serde_json::from_str::<DoomscrollingRuntimeState>(&contents).ok()?;
     if validate_state(&state).is_err() {
         return None;
@@ -81,11 +98,100 @@ pub(super) fn read_fresh_runtime_state(
     let updated_at = DateTime::parse_from_rfc3339(&state.updated_at)
         .ok()?
         .with_timezone(&Utc);
-    let age_seconds = (checked_at - updated_at).num_seconds().max(0);
-    if age_seconds > ACTIVE_STATE_STALE_SECONDS {
+    let age = checked_at - updated_at;
+    if age < chrono::Duration::zero() || age > chrono::Duration::seconds(ACTIVE_STATE_STALE_SECONDS)
+    {
+        return None;
+    }
+    if state
+        .valid_until_ms
+        .is_some_and(|deadline| checked_at.timestamp_millis() >= deadline)
+        || (state.active
+            && !state.paused
+            && state.remaining_seconds.is_some_and(|remaining| {
+                checked_at.timestamp_millis()
+                    >= updated_at
+                        .timestamp_millis()
+                        .saturating_add(remaining.saturating_mul(1000))
+            }))
+    {
         return None;
     }
     Some(state)
+}
+
+/// Build phase-dependent rules only from accepted native execution. Waiting,
+/// expired, and failed phases cannot authorize a successor phase's rules.
+pub(crate) fn committed_focus_state(
+    effect: &ganbaru_focus::CommittedFocusEffect,
+    now_ms: i64,
+) -> Result<DoomscrollingRuntimeState, String> {
+    use ganbaru_focus::{FocusMode, FocusPhase};
+    let paused = matches!(
+        effect.mode,
+        FocusMode::ManualPause | FocusMode::IdlePause | FocusMode::Suspended
+    );
+    let valid_until = effect.effective_valid_until_ms();
+    let active = matches!(
+        effect.mode,
+        FocusMode::Running | FocusMode::ManualPause | FocusMode::IdlePause | FocusMode::Suspended
+    ) && effect.run_id.is_some()
+        && effect.segment_id.is_some()
+        && effect.phase.is_some()
+        && valid_until > now_ms;
+    let phase = if active {
+        match effect.phase {
+            Some(FocusPhase::Focus) => "focus",
+            Some(FocusPhase::ShortBreak) => "short_break",
+            Some(FocusPhase::LongBreak) => "long_break",
+            None => "inactive",
+        }
+    } else {
+        "inactive"
+    };
+    let updated_at = DateTime::<Utc>::from_timestamp_millis(now_ms)
+        .ok_or("Native Focus clock is outside the supported range")?
+        .to_rfc3339_opts(SecondsFormat::Millis, true);
+    Ok(DoomscrollingRuntimeState {
+        active,
+        paused: active && paused,
+        pause_reason: if active {
+            match effect.mode {
+                FocusMode::ManualPause => Some("manual".into()),
+                FocusMode::IdlePause => Some("idle".into()),
+                FocusMode::Suspended => Some("suspend".into()),
+                _ => None,
+            }
+        } else {
+            None
+        },
+        phase: phase.into(),
+        active_run_id: effect.run_id.clone(),
+        active_block_id: effect.occurrence_id.clone(),
+        remaining_seconds: active.then(|| effect.remaining_ms.max(0).saturating_add(999) / 1000),
+        updated_at,
+        valid_until_ms: Some(valid_until.max(0)),
+    })
+}
+
+/// Publish a committed phase under the same native revocation fence as budgets.
+/// The caller runs this bounded filesystem work on a blocking worker.
+pub(crate) fn publish_committed_focus(
+    app: &tauri::AppHandle,
+    effect: &ganbaru_focus::CommittedFocusEffect,
+    publication_generation: Option<u64>,
+    now_ms: i64,
+) -> Result<(), String> {
+    let state = committed_focus_state(effect, now_ms)?;
+    let path = state_path(app)?;
+    let json = serde_json::to_string(&state)
+        .map_err(|error| format!("Encode native Focus rules: {error}"))?;
+    runtime::publish(app, publication_generation, || {
+        if !crate::pomodoro::native_runtime::effect_is_current(app, effect, now_ms)? {
+            return Err("Native Focus rule publication was superseded or expired".into());
+        }
+        write_text_file_atomically(&path, &json)
+    })
 }
 
 pub(super) fn block_event_phase_from_runtime(
@@ -116,6 +222,11 @@ pub(super) fn validate_limit_state(state: &DoomscrollingLimitState) -> Result<()
     if !validate_local_date(&state.week_start_local_date) {
         return Err("week_start_local_date must use yyyy-mm-dd".to_string());
     }
+    if state.week_start_local_date != limits::week_start(&state.local_date)?
+        || state.limits.len() > limits::MAX_LIMITS * 2
+    {
+        return Err("limit week start or item count is invalid".into());
+    }
     DateTime::parse_from_rfc3339(&state.updated_at)
         .map_err(|e| format!("parse updated_at: {e}"))?;
     if let Some(database_path) = &state.database_path {
@@ -127,12 +238,24 @@ pub(super) fn validate_limit_state(state: &DoomscrollingLimitState) -> Result<()
             return Err("database_path must point to ganbaru-ai.sqlite".to_string());
         }
     }
+    let mut identities = HashSet::new();
     for limit in &state.limits {
         if limit.id.trim().is_empty() {
             return Err("limit id is required".to_string());
         }
         if !matches!(limit.period.as_str(), "day" | "week") {
             return Err("limit period must be day or week".to_string());
+        }
+        let expected_start = if limit.period == "day" {
+            &state.local_date
+        } else {
+            &state.week_start_local_date
+        };
+        if &limit.window_start_local_date != expected_start
+            || limit.window_end_local_date != state.local_date
+            || !identities.insert((&limit.id, &limit.period))
+        {
+            return Err("limit window or identity is inconsistent".into());
         }
         if !validate_local_date(&limit.window_start_local_date)
             || !validate_local_date(&limit.window_end_local_date)
@@ -145,6 +268,11 @@ pub(super) fn validate_limit_state(state: &DoomscrollingLimitState) -> Result<()
         if limit.used_seconds < 0 || limit.limit_seconds <= 0 || limit.remaining_seconds < 0 {
             return Err("limit seconds must be non-negative".to_string());
         }
+        if limit.remaining_seconds != (limit.limit_seconds - limit.used_seconds).max(0)
+            || limit.exhausted != (limit.used_seconds >= limit.limit_seconds)
+        {
+            return Err("limit exhaustion is inconsistent with its totals".into());
+        }
     }
     Ok(())
 }
@@ -154,7 +282,7 @@ pub(super) fn read_fresh_limit_state(
     checked_at: DateTime<Utc>,
     expected_database_path: &Path,
 ) -> Option<DoomscrollingLimitState> {
-    let contents = std::fs::read_to_string(path).ok()?;
+    let contents = read_bounded_state(path)?;
     let state = serde_json::from_str::<DoomscrollingLimitState>(&contents).ok()?;
     if validate_limit_state(&state).is_err()
         || state.database_path.as_deref().map(Path::new) != Some(expected_database_path)
@@ -164,8 +292,9 @@ pub(super) fn read_fresh_limit_state(
     let updated_at = DateTime::parse_from_rfc3339(&state.updated_at)
         .ok()?
         .with_timezone(&Utc);
-    let age_seconds = (checked_at - updated_at).num_seconds().max(0);
-    (age_seconds <= LIMIT_STATE_STALE_SECONDS).then_some(state)
+    let age = checked_at - updated_at;
+    (age >= chrono::Duration::zero() && age <= chrono::Duration::seconds(LIMIT_STATE_STALE_SECONDS))
+        .then_some(state)
 }
 
 pub(super) fn disconnected_extension_status(
@@ -255,27 +384,13 @@ pub fn doomscrolling_write_state<R: Runtime>(
     app: tauri::AppHandle<R>,
     state: DoomscrollingRuntimeState,
 ) -> Result<(), String> {
+    let generation = runtime::publication_token(&app)?;
     validate_state(&state)?;
     let path = state_path(&app)?;
     let json = serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?;
-    write_text_file_atomically(&path, &json)
-}
-
-#[tauri::command]
-pub fn doomscrolling_write_limit_state<R: Runtime>(
-    app: tauri::AppHandle<R>,
-    mut state: DoomscrollingLimitState,
-) -> Result<(), String> {
-    validate_limit_state(&state)?;
-    state.database_path = Some(
-        vault::active_database_path(&app)?
-            .to_str()
-            .ok_or_else(|| "database path contains non-utf8 characters".to_string())?
-            .to_string(),
-    );
-    let path = limit_state_path(&app)?;
-    let json = serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?;
-    write_text_file_atomically(&path, &json)
+    runtime::publish(&app, generation, || {
+        write_text_file_atomically(&path, &json)
+    })
 }
 
 #[tauri::command]

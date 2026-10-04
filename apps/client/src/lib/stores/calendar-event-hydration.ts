@@ -185,6 +185,7 @@ export function slimEvent(e: CalendarEvent): CalendarEvent {
   if (e.notifications && e.notifications.length > 0) slim.notifications = e.notifications;
   if (e.exceptions && e.exceptions.length > 0) slim.exceptions = e.exceptions;
   if (e.recurringParentId) slim.recurringParentId = e.recurringParentId;
+  if (e.recurrenceDate) slim.recurrenceDate = e.recurrenceDate;
   if (e.allDay) slim.allDay = true;
   if (e.meetingEnabled) slim.meetingEnabled = true;
   if (e.hasCallLink || e.url) slim.hasCallLink = true;

@@ -54,11 +54,7 @@
   });
 
   async function initialize(): Promise<void> {
-    if (chat.loaded) {
-      initializing = false;
-      return;
-    }
-    initializing = true;
+    initializing = !chat.loaded;
     loadError = null;
     try {
       await chat.ensureLoaded();

@@ -4,121 +4,18 @@ use crate::calendar_description::sanitize_optional_calendar_description;
 
 use super::archive::{event_has_open_pomodoro_run, is_protected_event, load_mutation_context};
 use super::children::{
-    apply_update_field, copy_attendees, copy_calendar_metadata, copy_pomodoro_config,
-    insert_pomodoro_config, parse_i64_list, parse_string_list, replace_i64_list,
-    replace_pomodoro_config, replace_string_list, sanitize_stored_event_description,
+    apply_update_field, copy_calendar_metadata, copy_pomodoro_config, insert_pomodoro_config,
+    parse_i64_list, parse_string_list, replace_i64_list, replace_pomodoro_config,
+    replace_string_list, sanitize_stored_event_description,
 };
-use super::ids::split_synthetic_id;
 use super::time::{calendar_timestamp_millis, calendar_timestamps_match, current_utc_iso};
 use super::types::{
-    CalendarActiveEventReferenceTransfer, CalendarDetachInstance, CalendarEventMutationContext,
-    CalendarEventMutationTarget, CalendarEventUpdate, CalendarEventUpdateField,
-    CalendarPomodoroConfigPatch, CalendarRecurrenceCommitOperation, CalendarSplitSeries,
+    CalendarDetachInstance, CalendarEventMutationContext, CalendarEventMutationTarget,
+    CalendarEventUpdate, CalendarEventUpdateField, CalendarPomodoroConfigPatch,
+    CalendarSplitSeries,
 };
-use super::validation::{
-    canonical_event_id, validate_active_event_reference_transfer, validate_detach_instance,
-    validate_event_update, validate_recurrence_commit_operation, validate_split_series,
-};
+use super::validation::{validate_detach_instance, validate_event_update, validate_split_series};
 
-pub(super) async fn apply_recurrence_commit_operations_tx(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    operations: Vec<CalendarRecurrenceCommitOperation>,
-) -> Result<(), String> {
-    for operation in &operations {
-        validate_recurrence_commit_operation(operation)?;
-    }
-    for operation in operations {
-        match operation {
-            CalendarRecurrenceCommitOperation::UpdateEvent { patch } => {
-                update_calendar_event_unchecked_tx(tx, &patch).await?;
-            }
-            CalendarRecurrenceCommitOperation::DetachInstance { input } => {
-                detach_calendar_instance_tx(tx, &input).await?;
-            }
-            CalendarRecurrenceCommitOperation::SplitSeries { input } => {
-                split_calendar_series_tx(tx, &input).await?;
-            }
-            CalendarRecurrenceCommitOperation::TransferActiveEventReference { transfer } => {
-                transfer_active_event_reference_tx(tx, &transfer).await?;
-            }
-        }
-    }
-    Ok(())
-}
-pub(super) async fn cap_calendar_series_tx(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    event_id: &str,
-    repeat_until: &str,
-    rrule: &str,
-) -> Result<(), String> {
-    let now = current_utc_iso(tx).await?;
-    let result = sqlx::query(
-        "UPDATE calendar_events SET repeat_until = ?, rrule = ?, updated_at = ? WHERE id = ?",
-    )
-    .bind(repeat_until)
-    .bind(rrule)
-    .bind(&now)
-    .bind(event_id)
-    .execute(&mut **tx)
-    .await
-    .map_err(|e| format!("cap calendar series: {e}"))?;
-    if result.rows_affected() == 0 {
-        return Err(format!("calendar event '{event_id}' not found"));
-    }
-    Ok(())
-}
-pub(super) async fn transfer_active_event_reference_tx(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    transfer: &CalendarActiveEventReferenceTransfer,
-) -> Result<(), String> {
-    validate_active_event_reference_transfer(transfer)?;
-    let canonical_event_id = canonical_event_id(&transfer.new_event_id)?.to_string();
-    let synthetic_date = split_synthetic_id(&transfer.new_event_id)
-        .1
-        .map(str::to_string);
-    let event_date = transfer.new_event_date.clone().or(synthetic_date);
-
-    let run_id: Option<String> =
-        sqlx::query_scalar("SELECT id FROM pomodoro_runs WHERE ended_at IS NULL LIMIT 1")
-            .fetch_optional(&mut **tx)
-            .await
-            .map_err(|e| format!("load active pomodoro run: {e}"))?;
-    let Some(run_id) = run_id else {
-        return Ok(());
-    };
-
-    sqlx::query(
-        "UPDATE pomodoro_runs
-         SET event_id = ?,
-             original_event_id = ?,
-             event_date = COALESCE(?, event_date),
-             planned_end = COALESCE(?, planned_end)
-         WHERE id = ? AND ended_at IS NULL",
-    )
-    .bind(&canonical_event_id)
-    .bind(&transfer.new_event_id)
-    .bind(&event_date)
-    .bind(&transfer.planned_end)
-    .bind(&run_id)
-    .execute(&mut **tx)
-    .await
-    .map_err(|e| format!("transfer active pomodoro run reference: {e}"))?;
-
-    sqlx::query(
-        "UPDATE pomodoro_segments
-         SET event_id = ?,
-             event_date = COALESCE(?, event_date)
-         WHERE run_id = ?",
-    )
-    .bind(&canonical_event_id)
-    .bind(&event_date)
-    .bind(&run_id)
-    .execute(&mut **tx)
-    .await
-    .map_err(|e| format!("transfer active pomodoro segment references: {e}"))?;
-
-    Ok(())
-}
 pub(super) async fn update_calendar_event_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     patch: &CalendarEventUpdate,
@@ -317,8 +214,6 @@ pub(super) async fn ensure_calendar_event_update_allowed(
 ) -> Result<(), String> {
     let target = CalendarEventMutationTarget {
         id: patch.id.clone(),
-        occurrence_start: None,
-        occurrence_end: None,
     };
     let now = current_utc_iso(tx).await?;
     let context = load_mutation_context(tx, &target).await?;
@@ -567,7 +462,6 @@ pub(super) async fn detach_calendar_instance_tx(
     if !input.all_day {
         copy_pomodoro_config(tx, &input.parent_id, &input.new_id).await?;
     }
-    copy_attendees(tx, &input.parent_id, &input.new_id).await?;
     replace_event_music_assignments(
         tx,
         &input.new_id,
@@ -708,6 +602,5 @@ pub(super) async fn split_calendar_series_tx(
     } else if input.copy_pomodoro_config {
         copy_pomodoro_config(tx, &input.parent_id, &input.new_id).await?;
     }
-    copy_attendees(tx, &input.parent_id, &input.new_id).await?;
     Ok(())
 }

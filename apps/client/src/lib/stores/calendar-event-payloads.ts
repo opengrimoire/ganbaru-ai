@@ -137,19 +137,6 @@ export interface CalendarSplitSeriesPayload {
   musicOverrideAssignments: MusicContextAssignmentDraft[];
 }
 
-export type CalendarRecurrenceCommitOperationPayload =
-  | { type: "update_event"; patch: CalendarEventUpdatePayload }
-  | { type: "detach_instance"; input: CalendarDetachInstancePayload }
-  | { type: "split_series"; input: CalendarSplitSeriesPayload }
-  | {
-      type: "transfer_active_event_reference";
-      transfer: {
-        newEventId: string;
-        newEventDate: string | null;
-        plannedEnd: string | null;
-      };
-    };
-
 export function nowIso(): string {
   return new Date().toISOString();
 }

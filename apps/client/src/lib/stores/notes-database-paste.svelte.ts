@@ -1,5 +1,7 @@
 import { SvelteSet } from "svelte/reactivity";
-import { appendNotesBlockChildren, createNotesLinkedDatabaseView, getNotesDatabaseReference, trashNotesBlock, updateNotesBlock } from "$lib/api/notes";
+import { getNotesDatabaseReference } from "$lib/api/notes";
+import { createNotesCompoundPersistence } from "./notes-store-compound-edits";
+import type { NotesEditOperation } from "$lib/api/notes/compound-edits";
 import { blockEditableRichText, blockPlainText, blockWithRichText, createBlockWrite } from "$lib/notes/block-factory";
 import { notesLinkTarget } from "$lib/notes/link-navigation";
 import { createDatabaseMentionRichText, replaceRichTextRange, richTextRangeSlice } from "$lib/notes/rich-text";
@@ -20,6 +22,7 @@ interface DatabasePasteContext {
   snapshot: (focusId: string | null) => NotesUndoSnapshot | null;
   recordUndo: (before: NotesUndoSnapshot | null, after: NotesUndoSnapshot | null) => void;
   reconcileIdentity?: (block: NotesChildDatabaseBlock) => void;
+  reconcileCanonicalBlocks?: (blocks: readonly NotesBlock[]) => void;
 }
 
 export type NotesDatabasePastePrompt = {
@@ -46,6 +49,7 @@ export function createNotesDatabasePasteController(context: DatabasePasteContext
   let started = $state(false);
   let inspectGeneration = 0;
   const creating = new SvelteSet<string>();
+  const compoundContext = { readSelectedPageId: context.readPageId, blockById: context.blockById, applyPostMutation: context.apply, reconcileCanonicalBlocks: context.reconcileCanonicalBlocks };
 
   function dismiss(): void {
     prompt = null;
@@ -124,28 +128,21 @@ export function createNotesDatabasePasteController(context: DatabasePasteContext
 
   function syncCopies(current: Extract<NotesDatabasePastePrompt, { kind: "copy" }>): Promise<void> {
     started = true;
-    const items = Object.entries(current.copies).map(([copyId, sourceId]) => ({
-      copyId, sourceId, id: crypto.randomUUID(), viewId: crypto.randomUUID(), created: null as NotesCreatedDatabase | null,
-    }));
-    let completed = 0;
-    let before: NotesUndoSnapshot | null = null;
+    const before = context.snapshot(current.blockId);
+    const items = Object.entries(current.copies).map(([copyId, sourceId]) => {
+      const block = context.blockById(copyId);
+      if (!block || block.type !== "child_database") throw new Error("The pasted database is no longer available");
+      return { block, sourceId, id: crypto.randomUUID(), viewId: crypto.randomUUID() };
+    });
+    const operations = items.flatMap(({ block, sourceId, id, viewId }): NotesEditOperation[] => [
+      { type: "link_database", request: { id, view_id: viewId, source_block_id: sourceId, title: block.child_database.title, parent: block.parent, after_block_id: block.id } },
+      { type: "trash", block_id: block.id, in_trash: true },
+    ]);
+    const persist = createNotesCompoundPersistence(compoundContext, "paste", operations);
     return context.enqueue(async () => {
       if (context.readPageId() !== current.pageId) throw new Error("The destination note has changed");
-      before ??= context.snapshot(current.blockId);
-      while (completed < items.length) {
-        const item = items[completed];
-        const block = context.blockById(item.copyId);
-        if (!block || block.type !== "child_database") throw new Error("The pasted database is no longer available");
-        item.created ??= await createNotesLinkedDatabaseView({
-          id: item.id, view_id: item.viewId, source_block_id: item.sourceId,
-          title: block.child_database.title, parent: block.parent, after_block_id: block.id,
-        });
-        await trashNotesBlock(block.id, true);
-        // Insert before removing the anchor so its document position survives.
-        context.apply({ blocks: [item.created.block], placements: [{ blockId: item.id, parent: block.parent, after: block.id }] });
-        context.apply({ removedBlockIds: [block.id] });
-        completed += 1;
-      }
+      const result = await persist();
+      context.apply({ blocks: result.blocks.filter((block) => !block.in_trash), placements: result.placements, removedBlockIds: items.map((item) => item.block.id) });
       if (items.length) context.requestFocus(items[items.length - 1].id);
       context.recordUndo(before, context.snapshot(items.at(-1)?.id ?? null));
       if (prompt === current) dismiss();
@@ -172,21 +169,15 @@ export function createNotesDatabasePasteController(context: DatabasePasteContext
     current.blockId = id;
     context.requestFocus(id);
     context.recordUndo(before, context.snapshot(id));
-    const steps: Array<() => Promise<unknown>> = [];
-    if (!whole) steps.push(() => updateNotesBlock(block.id, blockWithRichText(block, prefix)));
-    steps.push(async () => {
-      const created = await createNotesLinkedDatabaseView({ id, view_id: viewId,
-        source_block_id: current.reference.block_id, parent: block.parent, after_block_id: block.id });
-      acceptCopy(id, created);
-    });
-    if (suffixWrite) steps.push(() => appendNotesBlockChildren({ parent: block.parent, after: id, children: [suffixWrite] }));
-    if (whole) steps.push(() => trashNotesBlock(block.id, true));
-    let completed = 0;
+    const operations: NotesEditOperation[] = [];
+    if (!whole) operations.push({ type: "update", block_id: block.id, update: blockWithRichText(block, prefix) });
+    operations.push({ type: "link_database", request: { id, view_id: viewId, source_block_id: current.reference.block_id, parent: block.parent, after_block_id: block.id } });
+    if (suffixWrite) operations.push({ type: "append", request: { parent: block.parent, after: id, children: [suffixWrite] } });
+    if (whole) operations.push({ type: "trash", block_id: block.id, in_trash: true });
+    const persist = createNotesCompoundPersistence(compoundContext, "paste", operations, [block]);
     return context.enqueue(async () => {
-      while (completed < steps.length) {
-        await steps[completed]();
-        completed += 1;
-      }
+      const result = await persist();
+      for (const created of result.databases) acceptCopy(created.block.id, created);
       if (prompt === current) dismiss();
     });
   }

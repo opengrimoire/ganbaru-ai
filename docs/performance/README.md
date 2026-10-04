@@ -4,6 +4,7 @@ Performance documentation separates repeatable methodology from historical evide
 
 - [Benchmark harness](harness.md): dataset versions, scenarios, state machine, and copied output contract.
 - [Performance records](results.md): immutable benchmark rows and package-size history.
+- [Calendar migration CPU measurements](calendar-migration.md): isolated pre-cutover engine evidence and its limits, separate from release interaction benchmarks.
 
 The latest recorded benchmark baseline is from 2026-06-02. It is historical evidence and should not be presented as the performance of the August 2026 repository head without a new comparable run.
 
@@ -65,6 +66,8 @@ Process buckets are:
 - Network: WebView network process where the platform exposes it.
 
 The frontend bucket includes the browser engine and cannot be cleanly divided into an engine baseline and Ganbaru code at runtime.
+
+The live Diagnostics chart also includes direct child processes on Linux. A temporary provider executable can therefore add a separate column and a startup spike. Desktop Chat prewarming leaves provider discovery dormant until Chat or its settings are opened. Native Calendar reads with no selected parent rows stop after the bounded parent preflight, plus the total count when requested, without preparing child queries. Idle desktop Doomscrolling observation does not create an absent device usage spool. These are structural reductions in startup work; RAM improvements require a comparable application measurement.
 
 ## Output rules
 

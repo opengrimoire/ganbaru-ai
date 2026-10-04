@@ -23,6 +23,8 @@ static APP_STATE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 static CONFIG_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 mod config;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub(crate) use config::read_active_config_bounded;
 mod documents;
 
 // Keep Tauri commands and their generated wrappers at the existing vault facade.
@@ -33,6 +35,7 @@ pub(crate) mod backup;
 pub(crate) mod handoff;
 pub(crate) mod ownership;
 pub(crate) mod quiescence;
+pub(crate) mod runtime_lifecycle;
 
 pub const APP_SQLITE_FILE: &str = "ganbaru-ai.sqlite";
 const PRODUCTION_DATA_FOLDER_NAME: &str = "Ganbaru AI";
@@ -234,7 +237,8 @@ fn manifest_path(path: &Path) -> PathBuf {
     path.join(VAULT_MANIFEST_FILE)
 }
 
-fn config_path(path: &Path) -> PathBuf {
+/// Resolve the portable configuration path beneath an already authorized vault root.
+pub(crate) fn config_path(path: &Path) -> PathBuf {
     path.join(CONFIG_FILE)
 }
 
@@ -329,7 +333,38 @@ fn initialize_vault(path: &Path) -> Result<VaultInfo, String> {
     vault_info_from_manifest(&path, manifest)
 }
 
-fn select_vault<R: Runtime>(app: &tauri::AppHandle<R>, info: &VaultInfo) -> Result<(), String> {
+/// Changes the active folder only after every native owner has drained.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+async fn select_vault<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    info: &VaultInfo,
+) -> Result<(), String> {
+    select_reserved_vault(app, info, quiescence::reserve_vault_transition()?).await
+}
+
+async fn select_reserved_vault<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    info: &VaultInfo,
+    transition: quiescence::VaultTransition,
+) -> Result<(), String> {
+    let quiescence = quiescence::begin_reserved_quiescence(app, transition).await?;
+    let selection_app = app.clone();
+    let info = info.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let selected = select_quiesced_vault(&selection_app, &info, &quiescence);
+        let resumed = quiescence.finish();
+        selected.and(resumed)
+    })
+    .await
+    .map_err(|error| format!("vault selection worker failed: {error}"))?
+}
+
+/// Persists selection while the caller retains the native and write barriers.
+fn select_quiesced_vault<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    info: &VaultInfo,
+    _quiescence: &quiescence::SnapshotQuiescence,
+) -> Result<(), String> {
     update_app_state(app, |state| {
         state.active_vault_path = Some(info.path.clone());
         state
@@ -339,6 +374,19 @@ fn select_vault<R: Runtime>(app: &tauri::AppHandle<R>, info: &VaultInfo) -> Resu
         state.recent_vault_paths.truncate(MAX_RECENT_VAULTS);
         Ok(())
     })
+}
+
+/// Reconciles native execution owners with the newly active, authorized vault.
+pub(crate) fn resume_native_runtimes<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
+    let focus = crate::pomodoro::resume_after_vault_handoff(app);
+    let music = crate::music::session::resume_after_vault_handoff(app);
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let doomscrolling = crate::doomscrolling::runtime::resume_after_vault_handoff(app);
+    #[cfg(target_os = "android")]
+    let doomscrolling = crate::doomscrolling_mobile::runtime::resume_after_vault_handoff(app);
+    #[cfg(target_os = "ios")]
+    let doomscrolling = Ok(());
+    focus.and(music).and(doomscrolling)
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -396,10 +444,20 @@ fn default_location_from_path(path: PathBuf) -> Result<VaultDefaultLocation, Str
     })
 }
 
-fn create_and_select_vault(app: &tauri::AppHandle, path: &Path) -> Result<VaultInfo, String> {
-    fs::create_dir_all(path).map_err(|e| format!("create Ganbaru AI folder: {e}"))?;
-    let info = initialize_vault(path)?;
-    select_vault(app, &info)?;
+async fn create_and_select_vault(
+    app: &tauri::AppHandle,
+    path: PathBuf,
+) -> Result<VaultInfo, String> {
+    let transition = quiescence::reserve_vault_transition()?;
+    let creation_transition = transition.clone();
+    let info = tauri::async_runtime::spawn_blocking(move || {
+        let _transition = creation_transition;
+        fs::create_dir_all(&path).map_err(|e| format!("create Ganbaru AI folder: {e}"))?;
+        initialize_vault(&path)
+    })
+    .await
+    .map_err(|error| format!("vault creation worker failed: {error}"))??;
+    select_reserved_vault(app, &info, transition).await?;
     Ok(info)
 }
 
@@ -414,9 +472,9 @@ pub fn vault_default_location(app: tauri::AppHandle) -> Result<VaultDefaultLocat
 }
 
 #[tauri::command]
-pub fn vault_use_default_folder(app: tauri::AppHandle) -> Result<VaultInfo, String> {
+pub async fn vault_use_default_folder(app: tauri::AppHandle) -> Result<VaultInfo, String> {
     let path = default_data_folder_path(&app)?;
-    create_and_select_vault(&app, &path)
+    create_and_select_vault(&app, path).await
 }
 
 #[tauri::command]
@@ -435,7 +493,7 @@ pub async fn vault_pick_create(app: tauri::AppHandle) -> Result<Option<VaultInfo
     else {
         return Ok(None);
     };
-    let info = create_and_select_vault(&app, &path)?;
+    let info = create_and_select_vault(&app, path).await?;
     Ok(Some(info))
 }
 
@@ -453,14 +511,31 @@ pub async fn vault_pick_open(app: tauri::AppHandle) -> Result<Option<VaultInfo>,
     };
     let info = vault_info_from_path(&path)?;
     ensure_vault_skeleton(&PathBuf::from(&info.path))?;
-    select_vault(&app, &info)?;
+    select_vault(&app, &info).await?;
     Ok(Some(info))
 }
 
 #[cfg(target_os = "android")]
 #[tauri::command]
-pub fn vault_pick_open(app: tauri::AppHandle) -> Result<Option<VaultInfo>, String> {
-    let target = default_data_folder_path(&app)?;
+pub async fn vault_pick_open(app: tauri::AppHandle) -> Result<Option<VaultInfo>, String> {
+    let transition = quiescence::reserve_vault_transition()?;
+    let import_transition = transition.clone();
+    let import_app = app.clone();
+    let info = tauri::async_runtime::spawn_blocking(move || {
+        let _transition = import_transition;
+        pick_mobile_vault(&import_app)
+    })
+    .await
+    .map_err(|error| format!("Android vault import worker failed: {error}"))??;
+    if let Some(info) = &info {
+        select_reserved_vault(&app, info, transition).await?;
+    }
+    Ok(info)
+}
+
+#[cfg(target_os = "android")]
+fn pick_mobile_vault(app: &tauri::AppHandle) -> Result<Option<VaultInfo>, String> {
+    let target = default_data_folder_path(app)?;
     let parent = target
         .parent()
         .ok_or_else(|| "Ganbaru AI folder has no parent directory".to_string())?;
@@ -498,7 +573,6 @@ pub fn vault_pick_open(app: tauri::AppHandle) -> Result<Option<VaultInfo>, Strin
         fs::rename(&staging, &target)
             .map_err(|error| format!("activate imported Ganbaru AI folder: {error}"))?;
         let info = vault_info_from_path(&target)?;
-        select_vault(&app, &info)?;
         Ok(Some(info))
     })();
     if result.is_err() && staging.exists() {
@@ -509,7 +583,7 @@ pub fn vault_pick_open(app: tauri::AppHandle) -> Result<Option<VaultInfo>, Strin
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
-pub fn vault_select_recent(app: tauri::AppHandle, path: String) -> Result<VaultInfo, String> {
+pub async fn vault_select_recent(app: tauri::AppHandle, path: String) -> Result<VaultInfo, String> {
     let state = read_app_state(&app)?;
     if !state
         .recent_vault_paths
@@ -520,7 +594,7 @@ pub fn vault_select_recent(app: tauri::AppHandle, path: String) -> Result<VaultI
     }
     let info = vault_info_from_path(&PathBuf::from(path))?;
     ensure_vault_skeleton(&PathBuf::from(&info.path))?;
-    select_vault(&app, &info)?;
+    select_vault(&app, &info).await?;
     Ok(info)
 }
 
@@ -538,6 +612,29 @@ pub fn active_vault_path<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBu
     let path = canonical_vault_path(PathBuf::from(path))?;
     read_vault_manifest(&path)?;
     Ok(path)
+}
+
+/// Background observation waits during onboarding or after a selected folder was deleted.
+/// Invalid manifests and filesystem access errors remain explicit failures.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub(crate) fn available_active_vault_path<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<Option<PathBuf>, String> {
+    available_vault_path(read_app_state(app)?.active_vault_path.map(PathBuf::from))
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn available_vault_path(path: Option<PathBuf>) -> Result<Option<PathBuf>, String> {
+    let Some(path) = path else { return Ok(None) };
+    if !path
+        .try_exists()
+        .map_err(|error| format!("inspect selected Ganbaru AI folder: {error}"))?
+    {
+        return Ok(None);
+    }
+    let path = canonical_vault_path(path)?;
+    read_vault_manifest(&path)?;
+    Ok(Some(path))
 }
 
 pub(crate) struct WritableVaultPath {
@@ -738,6 +835,24 @@ mod tests {
         assert!(path.join(".yjs").is_dir());
 
         let _ = fs::remove_dir_all(&path);
+    }
+
+    #[test]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn background_vault_resolution_waits_for_selection_but_rejects_invalid_manifests() {
+        let path = unique_path("background-vault");
+        assert_eq!(available_vault_path(None).unwrap(), None);
+        assert_eq!(available_vault_path(Some(path.clone())).unwrap(), None);
+        fs::create_dir_all(&path).unwrap();
+        assert!(available_vault_path(Some(path.clone())).is_err());
+        initialize_vault(&path).unwrap();
+        assert_eq!(
+            available_vault_path(Some(path.clone())).unwrap(),
+            Some(path.clone())
+        );
+        fs::write(path.join(VAULT_MANIFEST_FILE), "invalid json").unwrap();
+        assert!(available_vault_path(Some(path.clone())).is_err());
+        fs::remove_dir_all(path).unwrap();
     }
 
     #[test]

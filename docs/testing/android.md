@@ -58,6 +58,9 @@ Android testing distinguishes source checks, emulator coverage, physical-device 
 - Due commitment while the Activity is absent or the PC is off produces a reminder and no run or focus history.
 - A late explicit start records its actual start, not the Calendar boundary.
 - Native phase deadline, missed break return, and repeated recovery create no additional focus phases.
+- A committed phase close and its late alarm deliver one boundary reminder. Retry completion after the next phase starts; it must preserve that newer ongoing notification.
+- Delay a Guardian phase update or completion behind another provider operation, then stop the run or change vault ownership before it is admitted. Confirm the queued publication is rejected and cannot restore that phase or clear a newer notification. Repeat after the Rust hosting process dies and with a release build to verify the private JNI authority callback survives shrinking.
+- Change notification language during a run, pause, and process restart. Copy changes must not supply execution state, postpone commitment reminders, or recover a run from notification storage.
 - Denied notification access, process death, reboot, and clock changes preserve reminder versus execution semantics.
 - Foreground-service start, ongoing notification, pause, resume, stop, process recreation, and event deadline.
 - Tap routing validates identifiers and opens the correct context.
@@ -65,11 +68,19 @@ Android testing distinguishes source checks, emulator coverage, physical-device 
 
 ## Music
 
+- Suspend the WebView while native audio advances across several items. On return, confirm the UI receives the latest canonical queue and position without replaying intermediate browser effects or starting a second decoder.
+- While a browser source is selected, hide the app long enough for its host lease to expire. Return after the subscription expires as well. Confirm the selected source is prepared paused, and only explicit play resumes it. Repeat while a native source transitions to a browser source in the background.
+- During a slow browser load, seek, pause, change the selected item, and switch vaults. Confirm effects remain ordered, callbacks from the previous subscription are ignored, and the old decoder stops. Repeat disconnect and reconnect after an uncertain subscription response.
+
 - Select, retain, revoke, and reselect a Music document tree.
 - Scan supported audio outside the main thread and respect bounds.
 - Media3 playback while backgrounded, with audio focus, notification, lock-screen, headset, and trusted controller actions.
 - Queue, playlist, review, assignment, resume, missing item, and offline subset behavior.
+- Delay selected-document resolution, then pause, seek, stop, replace the item, or destroy the service. A late callback must use the newest pause/seek intent and cannot reload a stopped or destroyed decoder. Force service loss while playing, confirm the selected track and position remain retained, then use explicit Play from the foreground. The reloaded generation must ignore old observations and must not skip to another track. Repeat service-start failure and effect backpressure; transport errors must not become manual controls.
 - Confirm desktop audio, soundscape, path reveal, and loopback media capabilities are absent.
+- Stall main-thread Music effect consumption during a vault handoff. Handoff must wait for actual Stop or report a timeout; resuming the old vault must not execute old canceled playback. Repeat a Focus phase change and pause during a slow document lookup. The old phase cannot start after lookup completes. Confirm a failed delivery can recover after its queue entry is removed, while an executing SDK call retains the pending slot.
+- Keep a document provider blocked past the source-resolution deadline, including device sleep. Confirm the selection remains retained with an interruption and cannot start when the provider eventually responds. Destroy and recreate the service and submit replacement selections while the old lookup is still blocked; resolver work must remain bounded to one active worker and one latest queued source.
+- Connect a trusted media controller and verify play, pause, seek, volume, rate, and next/previous still enter the native owner. Attempt media-item replacement, prepare, repeat/shuffle mutation, and release; these direct decoder commands must be unavailable.
 
 ## Doomscrolling
 

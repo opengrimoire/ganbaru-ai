@@ -13,6 +13,94 @@ fn rejects_unknown_phase() {
 }
 
 #[test]
+fn accepted_focus_validity_expires_at_the_deadline_even_with_a_fresh_heartbeat() {
+    let dir = std::env::temp_dir().join(format!("ganbaru-phase-expiry-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("doomscrolling-state.json");
+    let updated = "2026-05-26T00:00:00Z".parse::<DateTime<Utc>>().unwrap();
+    let mut phase = state("focus");
+    phase.valid_until_ms = Some(updated.timestamp_millis() + 500);
+    std::fs::write(&path, serde_json::to_vec(&phase).unwrap()).unwrap();
+    assert!(
+        read_fresh_runtime_state(&path, updated + chrono::Duration::milliseconds(499)).is_some()
+    );
+    assert!(
+        read_fresh_runtime_state(&path, updated + chrono::Duration::milliseconds(500)).is_none()
+    );
+    phase.paused = true;
+    phase.pause_reason = Some("manual".into());
+    std::fs::write(&path, serde_json::to_vec(&phase).unwrap()).unwrap();
+    assert!(
+        read_fresh_runtime_state(&path, updated + chrono::Duration::milliseconds(500)).is_none()
+    );
+    phase.valid_until_ms = None;
+    phase.paused = false;
+    phase.pause_reason = None;
+    phase.remaining_seconds = Some(1);
+    std::fs::write(&path, serde_json::to_vec(&phase).unwrap()).unwrap();
+    assert!(
+        read_fresh_runtime_state(&path, updated + chrono::Duration::milliseconds(999)).is_some()
+    );
+    assert!(read_fresh_runtime_state(&path, updated + chrono::Duration::seconds(1)).is_none());
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn native_phase_rules_are_bounded_by_accepted_phase_event_and_owner_validity() {
+    use ganbaru_focus::{CommittedFocusEffect, FocusMode, FocusPhase};
+    let mut effect = CommittedFocusEffect {
+        vault_id: "vault".into(),
+        vault_generation: 47,
+        ownership_generation: 3,
+        execution_revision: 6,
+        run_id: Some("run".into()),
+        segment_id: Some("segment".into()),
+        event_id: Some("event".into()),
+        occurrence_id: Some("event::date".into()),
+        event_title: None,
+        phase: Some(FocusPhase::Focus),
+        mode: FocusMode::Running,
+        phase_deadline_ms: Some(1500),
+        event_deadline_ms: Some(2000),
+        remaining_ms: 500,
+        valid_until_ms: 16000,
+    };
+    let running = crate::doomscrolling::state::committed_focus_state(&effect, 1000).unwrap();
+    assert!(running.active);
+    assert_eq!(running.valid_until_ms, Some(1500));
+    assert!(
+        !crate::doomscrolling::state::committed_focus_state(&effect, 1500)
+            .unwrap()
+            .active
+    );
+    effect.mode = FocusMode::ManualPause;
+    effect.remaining_ms = 42_000;
+    let paused = crate::doomscrolling::state::committed_focus_state(&effect, 1000).unwrap();
+    assert!(paused.active && paused.paused);
+    assert_eq!(paused.pause_reason.as_deref(), Some("manual"));
+    assert_eq!(paused.remaining_seconds, Some(42));
+    assert_eq!(paused.valid_until_ms, Some(2000));
+    for mode in [
+        FocusMode::IdleFailed,
+        FocusMode::ReturnWait,
+        FocusMode::Expired,
+        FocusMode::Stopped,
+    ] {
+        effect.mode = mode;
+        let rules = crate::doomscrolling::state::committed_focus_state(&effect, 1000).unwrap();
+        assert!(!rules.active);
+        assert_eq!(rules.phase, "inactive");
+    }
+    effect.mode = FocusMode::Running;
+    effect.valid_until_ms = 0;
+    assert!(
+        !crate::doomscrolling::state::committed_focus_state(&effect, 1000)
+            .unwrap()
+            .active
+    );
+}
+
+#[test]
 fn rejects_negative_remaining_seconds() {
     let mut state = state("focus");
     state.remaining_seconds = Some(-1);
@@ -59,6 +147,28 @@ fn clears_shutdown_enforcement_state_files() {
     assert!(!limit_state_path.exists());
     clear_enforcement_state_files(&state_path, &limit_state_path).unwrap();
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn future_runtime_and_budget_snapshots_cannot_authorize_execution() {
+    let dir = std::env::temp_dir().join(format!(
+        "ganbaru-doomscrolling-future-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let runtime_path = dir.join("doomscrolling-state.json");
+    let limit_path = dir.join("doomscrolling-limit-state.json");
+    let database_path = dir.join("ganbaru-ai.sqlite");
+    std::fs::write(&runtime_path, serde_json::to_vec(&state("focus")).unwrap()).unwrap();
+    let value = serde_json::json!({"localDate": "2026-05-26", "weekStartLocalDate": "2026-05-25",
+        "updatedAt": "2026-05-26T00:00:00.000Z", "databasePath": database_path, "limits": []});
+    std::fs::write(&limit_path, serde_json::to_vec(&value).unwrap()).unwrap();
+    let before = DateTime::parse_from_rfc3339("2026-05-25T23:59:59.999Z")
+        .unwrap()
+        .with_timezone(&Utc);
+    assert!(read_fresh_runtime_state(&runtime_path, before).is_none());
+    assert!(read_fresh_limit_state(&limit_path, before, &database_path).is_none());
+    std::fs::remove_dir_all(dir).unwrap();
 }
 
 #[test]

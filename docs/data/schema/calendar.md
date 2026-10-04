@@ -22,6 +22,8 @@ A recurring series has three relevant identities:
 
 Pomodoro and project history retain both concrete event identity and original-series identity where needed. Editing an occurrence must not make earlier history point to a newly generated ID.
 
+Native semantic edit receipts live in the active vault and commit with the Calendar and Focus changes. A receipt binds a command identity to its complete intent and reviewed native result. Replay returns the accepted result even if the source was subsequently changed or removed. Current execution aliases can identify a preserved materialization while original run and segment provenance remains unchanged. Receipt cleanup is not implemented; retaining them preserves retry behavior across restart.
+
 Normalized recurrence data stores the supported rule components, exception dates, additional dates, and overrides needed by the app. Raw iCalendar preservation is kept separately for source fidelity. The normalized projection drives current behavior; preservation rows allow export or future conformance improvements without pretending unsupported properties were applied.
 
 Recurring edits use an explicit commit plan. Operations such as this occurrence, this and following, or entire series may create, update, split, archive, or detach several rows. The plan is validated completely before one transaction applies it.
@@ -51,5 +53,11 @@ Pomodoro configuration is attached to the calendar event, but each run snapshots
 ## Deletion and repair
 
 Hard deletion is allowed only when no protected relationship or preservation requirement remains. Domain services choose among hard delete, archive, recurrence detach, and relationship removal. Generic callers do not bypass that decision.
+
+Archives retain normalized children, Focus configuration and steps, task-link meaning and timestamps, and both Music assignment owners with their original versions. Historical task and Music identities do not cascade away when those referenced objects are later removed. Opaque archive keys distinguish operations; original occurrence identity and an optional scoped recurrence date identify the preserved selection independently of that key. Older archives retain their existing identity fallback.
+
+Imported archive snapshots own independent preservation graphs. Explicit archive-to-object ownership allows cleanup after successful restoration without deleting a graph still referenced by another live or archived projection. Removing an original calendar transfers archive-referenced graphs to the built-in local calendar's storage custody while preserving the archive's historical calendar identity. Archive-only custody does not publish its timezones, unknown components or METHOD in Local exports. Shared envelopes remain exportable while a live projection uses them; independent imports without archive owners retain passthrough export. Legacy archive component references receive the same exclusion even without ownership rows. The built-in calendar cannot be removed.
+
+Run archive pointers identify the exact preserved Calendar record. Deletion changes nullable Calendar references in the same transaction as an explicitly authorized Focus stop, recurrence writes and the immutable receipt; original execution facts remain unchanged. Short-lived native Undo keeps its complete preimage in process memory, restores only the captured Calendar rows and nullable references, and rejects changed post-deletion state. An accepted Undo receipt survives expiry without retaining an indefinite copy of hard-deleted data. Permanent archive restoration validates current source-calendar, recurrence and task relationships before consuming the archive.
 
 Repair routines may rebuild derived indexes and native schedules. They must not synthesize new event identity from mutable presentation fields or discard unknown imported data merely because the current UI does not expose it.

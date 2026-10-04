@@ -52,7 +52,11 @@ The event panel can post a real test reminder. If the result is silent, the app 
 
 An explicitly started run owns a special-use foreground service and silent ongoing progress notification. Native state describes only the currently accepted phase. Its alarm delivers a boundary reminder and ends the projection; it cannot advance to later focus or break phases while the WebView is absent.
 
+The Rust Focus owner prepares the accepted phase directly from canonical run and segment state. Its private plugin adapter updates the Guardian notification service and phase broadcast; the WebView has no permission to publish or cancel execution projections. The frontend supplies localized copy separately. Guardian retains that copy across phase revocation and process restart, including language recovered from older accepted-phase records. Notification language is never recovery evidence. Running phases expire at their accepted deadline; paused phases remain bounded by the event end. Return-wait, failed, stopped and expired state clears presentation and phase-dependent enforcement. Physical cross-process and alarm delivery acceptance remains pending.
+
 Opening the app invokes `ganbaru-focus` recovery against committed SQLite state. Notification projections cannot materialize a run or additional phases. Recovery resumes a valid accepted phase and its pauses, or closes it at its bounded deadline.
+
+When native execution closes the previously published phase, it can deliver the same boundary reminder before replacing or clearing the ongoing notification. Alarm and committed completion delivery share a device-local receipt; retries preserve a newer phase and suppress repeated alerts. That receipt is presentation state, never execution evidence.
 
 Calendar maintains separate durable commitment reminders. A due event while the Activity is absent creates no run, focus minutes, or phase-dependent blocking. The phone starts a due session from the explicit “Start scheduled session” action. Reconciliation preserves reminder receipts to avoid repeated alerts. Missing notification permission leaves local explicit starts available.
 
@@ -70,9 +74,11 @@ The shared library, playlist, review, assignment, and playback state remain SQLi
 
 Android selected-app rules use a private guardian process containing phase alarm handling, ongoing notification coordination, Usage Access reads, the opt-in Accessibility Service, validated rule projections, and a bounded native journal.
 
-Non-exported provider boundaries publish signed projections and import journal rows. The guardian is the only process opening its private runtime preferences and journal database.
+Non-exported provider boundaries validate rule projections and import journal rows. The guardian is the only process opening its private runtime preferences and journal database.
 
 Journal import accepts the current vault identity. The current owner writes normalized usage and block history to canonical SQLite. A non-owner keeps usage in the bounded private journal and exchanges stable sample IDs through the authenticated coordinator. The accepted combined total plus newer local usage drives disconnected enforcement, and acknowledgements remove only samples committed by the owner. Runtime rows are compacted and bounded. User configuration remains active-vault `config.json`.
+
+One serialized Rust publisher synchronizes the journal and derives shared budgets from native persisted configuration and complete window evidence. Guardian captures its local counter baseline with the pending journal under one lock, so observations made before a later rule application cannot count twice. The frontend supplies only localized notification copy and reads cached native budgets; its settings refresh has no accounting or enforcement authority. Configuration, vault, handoff, and failed-publication boundaries revoke obsolete rules. On application-process exit, Guardian retains its last accepted local policy. Fresh remote totals require the publisher process to return. Cross-process, restart, and background acceptance remain pending.
 
 ## Managed files
 

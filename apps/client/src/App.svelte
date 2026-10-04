@@ -9,10 +9,10 @@
   import { getCalendar } from "$lib/stores/calendar.svelte";
   import { getCalendars } from "$lib/stores/calendars.svelte";
   import { getDoomscrolling } from "$lib/stores/doomscrolling.svelte";
-  import { getDoomscrollingDesktopBlocker } from "$lib/stores/doomscrolling-desktop-blocker.svelte";
-  import { getDoomscrollingUsage } from "$lib/stores/doomscrolling-usage.svelte";
+  import { DOOMSCROLLING_USAGE_REFRESH_INTERVAL_MS, getDoomscrollingUsage } from "$lib/stores/doomscrolling-usage.svelte";
   import { getMusicPlayer } from "$lib/stores/music-player.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
+  import { buildDesktopFocusNotificationCopy, type DesktopFocusNotificationCopy } from "$lib/api/focus";
   import { getNotes } from "$lib/stores/notes.svelte";
   import { getProjects } from "$lib/stores/projects.svelte";
   import { getChat } from "$lib/stores/chat.svelte";
@@ -23,11 +23,6 @@
   import { UPDATE_AUTO_CHECK_INTERVAL_MS } from "$lib/stores/updates";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { getDetachedWindows } from "$lib/stores/detached-windows.svelte";
-  import { createPomodoroCalendarScheduler } from "$lib/stores/pomodoro-calendar-scheduler";
-  import {
-    classifyPomodoroCompletion,
-    type PomodoroCompletionKind,
-  } from "$lib/stores/pomodoro-completion";
   import { parseNotesLinkHash } from "$lib/notes/block-link";
   import {
     listPendingNotesMentionNotifications,
@@ -41,9 +36,7 @@
   import { detachableTabViewFromWindowLabel } from "$lib/windows/detached";
   import { ensureDbUrl } from "$lib/api/db";
   import { prepareDesktopWorkspace } from "$lib/windows/desktop-workspace-readiness";
-  import { APP_SOUND_IDS, playAppSound, type AppSoundId } from "$lib/app-sounds";
   import "$lib/stores/app-session";
-  import type { CalendarEvent } from "$lib/components/calendar/types";
   import { Temporal } from "@js-temporal/polyfill";
   import { invoke } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -53,9 +46,7 @@
   import { getAppCloseCoordinator } from "$lib/components/title-bar/title-bar-shortcut-controller.svelte";
   import WindowResizeHandles from "$lib/components/WindowResizeHandles.svelte";
   import CalendarView from "$lib/components/calendar/CalendarView.svelte";
-  import CompletionOverlay from "$lib/components/pomodoro/CompletionOverlay.svelte";
   import MusicPlaybackHost from "$lib/components/music/MusicPlaybackHost.svelte";
-  import MusicContextCoordinator from "$lib/components/music/MusicContextCoordinator.svelte";
   import MusicSoundscapeCoordinator from "$lib/components/music/MusicSoundscapeCoordinator.svelte";
   import NotesView from "$lib/components/notes/NotesView.svelte";
   import ProjectsView from "$lib/components/projects/ProjectsView.svelte";
@@ -79,7 +70,6 @@
   import { shouldUseKeyboardFocusIntent } from "$lib/utils";
   import {
     createLifecycleScheduler,
-    type SchedulerRunContext,
   } from "$lib/scheduling/lifecycle-scheduler";
   import {
     createEventNotificationScheduler,
@@ -89,7 +79,6 @@
   import { getNotesProjectHistoryScheduler } from "$lib/notes/project-history-scheduler";
   import { onActiveVaultIdentityChange } from "$lib/vault/active-vault";
   import { listenForNotesDatabaseChanges } from "$lib/notes/database-window-sync";
-  import { doomscrollingObservationPlan } from "$lib/stores/doomscrolling-observation-policy";
   import type { ProjectChatIntegration } from "$lib/projects/types";
 
   perfMark("boot.script-start");
@@ -104,7 +93,6 @@
   const calendar = getCalendar();
   const calendars = getCalendars();
   const doomscrolling = getDoomscrolling();
-  const desktopBlocker = getDoomscrollingDesktopBlocker();
   const doomscrollingUsage = getDoomscrollingUsage();
   const music = getMusicPlayer();
   const pomodoro = getPomodoro();
@@ -156,18 +144,8 @@
   let unlistenDoomscrollingDesktopSettingsOpen: UnlistenFn | null = null;
   let unlistenDoomscrollingLimitsSettingsOpen: UnlistenFn | null = null;
   const NOTES_NOTIFICATION_BODY_MAX_CHARS = 180;
-  const DESKTOP_BLOCKING_CHECK_INTERVAL_MS = 5_000;
   const AUTOMATIC_UPDATE_CHECK_DELAY_MS = 3_000;
-  const COMPLETION_MUSIC_FADE_OUT_MS = 1_200;
-  const COMPLETION_MUSIC_FADE_IN_MS = 1_800;
-  const COMPLETION_MUSIC_FADE_STEP_MS = 100;
-  const COMPLETION_MUSIC_PAUSE_SETTLE_MS = 150;
-  const COMPLETION_SOUND_RESUME_PAD_MS = 250;
-  const COMPLETION_SOUND_DURATION_MS: Record<PomodoroCompletionKind, number> = {
-    event: 15_714,
-    day: 12_000,
-    workweek: 11_455,
-  };
+  const FOCUS_NOTIFICATION_COPY_RETRY_MS = 1_000;
 
   interface NotesNotificationOpenPayload {
     page_id: string;
@@ -175,8 +153,6 @@
   }
 
   let isMaximized = $state(true);
-  let completionOverlay = $state<{ kind: PomodoroCompletionKind } | null>(null);
-  let completionMusicDuckingGeneration = 0;
   type BenchmarkOverlayComponent = typeof import("$lib/components/benchmark/BenchmarkOverlay.svelte").default;
   type IdleOverlayComponent = typeof import("$lib/components/pomodoro/IdleOverlay.svelte").default;
   let BenchmarkOverlay = $state<BenchmarkOverlayComponent | null>(null);
@@ -503,6 +479,53 @@
     };
   });
 
+  let pendingFocusNotificationCopy: DesktopFocusNotificationCopy | null = null;
+  let publishingFocusNotificationCopy = false;
+  let focusNotificationCopyActive = true;
+  let focusNotificationCopyRetry: ReturnType<typeof setTimeout> | null = null;
+
+  onMount(() => () => {
+    focusNotificationCopyActive = false;
+    pendingFocusNotificationCopy = null;
+    if (focusNotificationCopyRetry !== null) clearTimeout(focusNotificationCopyRetry);
+  });
+
+  async function publishFocusNotificationCopy(): Promise<void> {
+    if (publishingFocusNotificationCopy) return;
+    publishingFocusNotificationCopy = true;
+    try {
+      while (pendingFocusNotificationCopy && focusNotificationCopyActive) {
+        const copy = pendingFocusNotificationCopy;
+        pendingFocusNotificationCopy = null;
+        try {
+          await invoke("focus_notification_copy", { copy });
+        } catch (error) {
+          console.error("Failed to configure native Focus notification language:", error);
+          if (focusNotificationCopyActive) {
+            pendingFocusNotificationCopy ??= copy;
+            focusNotificationCopyRetry = setTimeout(() => {
+              focusNotificationCopyRetry = null;
+              void publishFocusNotificationCopy();
+            }, FOCUS_NOTIFICATION_COPY_RETRY_MS);
+          }
+          break;
+        }
+      }
+    } finally {
+      publishingFocusNotificationCopy = false;
+    }
+  }
+
+  $effect(() => {
+    if (!isMainWindow) return;
+    if (focusNotificationCopyRetry !== null) {
+      clearTimeout(focusNotificationCopyRetry);
+      focusNotificationCopyRetry = null;
+    }
+    pendingFocusNotificationCopy = buildDesktopFocusNotificationCopy(t);
+    void publishFocusNotificationCopy();
+  });
+
   $effect(() => {
     let cleanup: (() => void) | undefined;
     let disposed = false;
@@ -529,9 +552,6 @@
     return mainTabViews(detachedWindows.views);
   });
   const keyboardViews = $derived(visibleTabViews);
-  let showStopConfirm = $state(false);
-  let savedBlockState: CalendarEvent | null = null;
-  let reverting = false;
 
   function navigatePrev() {
     if (keyboardViews.length === 0) return;
@@ -561,84 +581,24 @@
     return t("focusDialog.awaySeconds", totalSeconds);
   }
 
-  function desktopAppBlockingActive(): boolean {
-    if (!isMainWindow || !pomodoro.isActive || !doomscrolling.desktopEnabled) return false;
-    const strictPause = pomodoro.idlePaused !== null || pomodoro.suspendedAway !== null;
-    if (!pomodoro.isRunning && !strictPause && doomscrolling.desktopPauseDuringFocusPause) return false;
-    if (pomodoro.phase === "focus") return doomscrolling.desktopBlockDuringFocus;
-    if (pomodoro.phase === "short_break") return doomscrolling.desktopBlockDuringShortBreaks;
-    if (pomodoro.phase === "long_break") return doomscrolling.desktopBlockDuringLongBreaks;
-    return false;
-  }
-
-  async function checkDesktopAppBlocking(context?: SchedulerRunContext): Promise<void> {
-    if (!desktopAppBlockingActive()) {
-      desktopBlocker.clear();
-      return;
-    }
-    await desktopBlocker.check(
-      doomscrolling.blockedApps,
-      () => context?.isCurrent() ?? desktopAppBlockingActive(),
-    );
-  }
-
-  const desktopBlockingScheduler = createLifecycleScheduler({
+  const doomscrollingUsageScheduler = createLifecycleScheduler({
     run: async (context) => {
-      await checkDesktopAppBlocking(context);
-      if (context.isCurrent()) await doomscrollingUsage.runOnce(context);
-      return context.isCurrent()
-        ? context.now() + DESKTOP_BLOCKING_CHECK_INTERVAL_MS
-        : null;
+      await doomscrollingUsage.refresh(context);
+      return context.isCurrent() ? context.now() + DOOMSCROLLING_USAGE_REFRESH_INTERVAL_MS : null;
     },
     onError: (error) => {
-      console.warn("Failed to check blocked desktop apps:", error);
+      console.warn("Failed to refresh desktop usage presentation:", error);
     },
   });
 
   $effect(() => {
-    const _active = pomodoro.isActive;
-    const _running = pomodoro.isRunning;
-    const _phase = pomodoro.phase;
-    const _idlePaused = pomodoro.idlePaused;
-    const _suspendedAway = pomodoro.suspendedAway;
-    const _enabled = doomscrolling.desktopEnabled;
-    const _focus = doomscrolling.desktopBlockDuringFocus;
-    const _shortBreaks = doomscrolling.desktopBlockDuringShortBreaks;
-    const _longBreaks = doomscrolling.desktopBlockDuringLongBreaks;
-    const _pause = doomscrolling.desktopPauseDuringFocusPause;
-    const _rules = doomscrolling.blockedApps;
-    const active = doomscrollingObservationPlan(
-      isMainWindow,
-      desktopAppBlockingActive(),
-      doomscrollingUsage.isEnabled(),
-    ).coordinatorEnabled;
-    const wasEnabled = desktopBlockingScheduler.isEnabled();
-    desktopBlockingScheduler.setEnabled(active);
-    if (!active) {
-      desktopBlocker.clear();
-    } else if (wasEnabled) {
-      desktopBlockingScheduler.invalidate();
-    }
-  });
-
-  $effect(() => {
-    const _limitsEnabled = doomscrolling.limitsEnabled;
     const _limits = doomscrolling.usageLimits;
     const enabled = isMainWindow
       && doomscrolling.limitsEnabled
       && doomscrolling.usageLimits.some((limit) => limit.enabled);
-    const wasEnabled = doomscrollingUsage.isEnabled();
-    doomscrollingUsage.setEnabled(enabled);
-    const coordinatorEnabled = doomscrollingObservationPlan(
-      isMainWindow,
-      desktopAppBlockingActive(),
-      enabled,
-    ).coordinatorEnabled;
-    const coordinatorWasEnabled = desktopBlockingScheduler.isEnabled();
-    desktopBlockingScheduler.setEnabled(coordinatorEnabled);
-    if (coordinatorEnabled && (wasEnabled || coordinatorWasEnabled)) {
-      desktopBlockingScheduler.invalidate();
-    }
+    const wasEnabled = doomscrollingUsageScheduler.isEnabled();
+    doomscrollingUsageScheduler.setEnabled(enabled);
+    if (enabled && wasEnabled) doomscrollingUsageScheduler.invalidate();
   });
 
   function toggleDevtools(): void {
@@ -667,7 +627,7 @@
 
     const action = appNavigationShortcut(e, visibleTabViews.length);
     if (!action) return;
-    if (action.type !== "settings" && (showStopConfirm || suspendInfo || idleInfo)) return;
+    if (action.type !== "settings" && (suspendInfo || idleInfo)) return;
     e.preventDefault();
     e.stopImmediatePropagation();
     if (action.type === "settings") {
@@ -681,185 +641,6 @@
       navigateNext();
     }
   }
-
-  function soundForCompletionKind(kind: PomodoroCompletionKind): AppSoundId {
-    if (kind === "workweek") return APP_SOUND_IDS.pomodoroWorkweekComplete;
-    if (kind === "day") return APP_SOUND_IDS.pomodoroDayComplete;
-    return APP_SOUND_IDS.eventFinished;
-  }
-
-  interface CompletionMusicDuck {
-    generation: number;
-    restoreVolume: number;
-    shouldResume: boolean;
-  }
-
-  function delayMs(ms: number): Promise<void> {
-    return new Promise((resolve) => {
-      window.setTimeout(resolve, Math.max(0, ms));
-    });
-  }
-
-  function completionSoundDurationMs(kind: PomodoroCompletionKind): number {
-    return COMPLETION_SOUND_DURATION_MS[kind];
-  }
-
-  function interpolateVolume(start: number, end: number, progress: number): number {
-    const clampedProgress = Math.min(1, Math.max(0, progress));
-    return start + (end - start) * clampedProgress;
-  }
-
-  async function fadeMusicVolume(
-    targetVolume: number,
-    durationMs: number,
-    generation: number,
-  ): Promise<boolean> {
-    const startVolume = music.volumeControlValue;
-    const steps = Math.max(1, Math.ceil(durationMs / COMPLETION_MUSIC_FADE_STEP_MS));
-    for (let step = 1; step <= steps; step++) {
-      await delayMs(durationMs / steps);
-      if (generation !== completionMusicDuckingGeneration) return false;
-      await music.setTransientVolume(
-        interpolateVolume(startVolume, targetVolume, step / steps),
-      );
-    }
-    return generation === completionMusicDuckingGeneration;
-  }
-
-  async function prepareMusicForCompletionSound(): Promise<CompletionMusicDuck | null> {
-    const generation = ++completionMusicDuckingGeneration;
-    if (!music.currentSource || !music.isPlaying || music.muted || music.volumeControlValue <= 0) {
-      return null;
-    }
-
-    const restoreVolume = music.volumeControlValue;
-    try {
-      const faded = await fadeMusicVolume(0, COMPLETION_MUSIC_FADE_OUT_MS, generation);
-      if (!faded) return null;
-
-      await music.pausePlayback("system");
-      await delayMs(COMPLETION_MUSIC_PAUSE_SETTLE_MS);
-      return {
-        generation,
-        restoreVolume,
-        shouldResume: true,
-      };
-    } catch (error) {
-      console.warn("Failed to duck music for pomodoro completion sound:", error);
-      await music.setTransientVolume(restoreVolume).catch(() => {});
-      return null;
-    }
-  }
-
-  async function playPomodoroCompletionSound(kind: PomodoroCompletionKind): Promise<void> {
-    try {
-      await playAppSound(soundForCompletionKind(kind));
-    } catch (error) {
-      console.warn("Failed to play pomodoro completion sound:", error);
-    }
-  }
-
-  function restoreMusicAfterCompletionSound(
-    duck: CompletionMusicDuck | null,
-    kind: PomodoroCompletionKind,
-  ): void {
-    if (!duck?.shouldResume) return;
-    void (async () => {
-      await delayMs(completionSoundDurationMs(kind) + COMPLETION_SOUND_RESUME_PAD_MS);
-      if (duck.generation !== completionMusicDuckingGeneration) return;
-      if (!music.currentSource) return;
-      await music.playPlayback("system");
-      await fadeMusicVolume(duck.restoreVolume, COMPLETION_MUSIC_FADE_IN_MS, duck.generation);
-      if (duck.generation === completionMusicDuckingGeneration) {
-        await music.setTransientVolume(duck.restoreVolume);
-      }
-    })().catch((error) => {
-      console.warn("Failed to restore music after pomodoro completion sound:", error);
-    });
-  }
-
-  async function showNaturalPomodoroCompletion(block: CalendarEvent | null): Promise<void> {
-    if (!block) return;
-    let kind: PomodoroCompletionKind = "event";
-    try {
-      const dateText = block.start.split(" ")[0];
-      const date = Temporal.PlainDate.from(dateText);
-      const events = await calendar.loadPomodoroSchedulerEvents(date, date);
-      kind = classifyPomodoroCompletion(block, events);
-    } catch (e) {
-      console.warn("Failed to classify pomodoro completion:", e);
-    }
-
-    const duck = await prepareMusicForCompletionSound();
-    try {
-      const nativeOverlay = await invoke<boolean>("show_pomodoro_completion_overlay", { kind });
-      if (nativeOverlay) {
-        await playPomodoroCompletionSound(kind);
-        restoreMusicAfterCompletionSound(duck, kind);
-        return;
-      }
-    } catch (e) {
-      console.warn("Failed to show native pomodoro completion overlay:", e);
-    }
-
-    completionOverlay = { kind };
-    await afterAnimationFrames(2);
-    await playPomodoroCompletionSound(kind);
-    restoreMusicAfterCompletionSound(duck, kind);
-  }
-
-  const activeBlockScheduler = createPomodoroCalendarScheduler({
-    calendar,
-    pomodoro,
-    canStartAutomatically: (boundaryEpochMs) => invoke<boolean>("pomodoro_can_start_automatically", {
-      boundaryEpochMs,
-    }),
-    isBlocked: () => showStopConfirm || reverting || Boolean(suspendInfo) || Boolean(idleInfo),
-    onBeforeNaturalCompletion: () => {
-      savedBlockState = null;
-    },
-    onNaturalCompletion: showNaturalPomodoroCompletion,
-    onError: (error) => {
-      console.warn("active pomodoro block check failed", error);
-    },
-  });
-
-  function confirmStop() {
-    showStopConfirm = false;
-    savedBlockState = null;
-    activeBlockScheduler.clearTrackedBlock();
-    pomodoro.stopSession();
-  }
-
-  function cancelStop() {
-    if (!savedBlockState) {
-      showStopConfirm = false;
-      return;
-    }
-    const blockToRestore = savedBlockState;
-    showStopConfirm = false;
-    savedBlockState = null;
-    reverting = true;
-    calendar.updateBlock(blockToRestore).then(() => {
-      reverting = false;
-    });
-  }
-
-  // React to calendar and timer state changes, then sleep until the exact
-  // next event boundary instead of scanning every second.
-  $effect(() => {
-    const _v = calendar.indexVersion;
-    const _expired = pomodoro.blockExpired;
-    const _suspended = suspendInfo;
-    const _idle = idleInfo;
-    const _suppressed = pomodoro.autoStartSuppressed;
-    const _confirming = showStopConfirm;
-    const _reverting = reverting;
-    const enabled = isMainWindow && calendar.loaded;
-    const wasEnabled = activeBlockScheduler.isEnabled();
-    activeBlockScheduler.setEnabled(enabled);
-    if (enabled && wasEnabled) activeBlockScheduler.invalidate();
-  });
 
   $effect(() => {
     if (detachedWindowView) {
@@ -1005,27 +786,19 @@
   });
 
   function resumeLifecycleSchedulers(): void {
-    activeBlockScheduler.resume();
     eventNotificationScheduler.resume();
     notesNotificationScheduler.resume();
     chatScheduledMessageScheduler.resume();
     notesProjectHistoryScheduler.resume();
-    desktopBlockingScheduler.resume();
-    doomscrollingUsage.resume();
+    doomscrollingUsageScheduler.resume();
     music.resumeSnapshotScheduler();
   }
 
   function disposeLifecycleSchedulers(): void {
-    activeBlockScheduler.dispose();
     eventNotificationScheduler.dispose();
     notesNotificationScheduler.dispose();
     chatScheduledMessageScheduler.dispose();
-    desktopBlockingScheduler.dispose();
-    doomscrollingUsage.setEnabled(false);
-    void doomscrollingUsage.flush().catch((error) => {
-      console.warn("Failed to flush doomscrolling usage on shutdown:", error);
-    });
-    desktopBlocker.clear();
+    doomscrollingUsageScheduler.dispose();
   }
 </script>
 
@@ -1053,17 +826,6 @@
     </main>
   </div>
 
-  {#if showStopConfirm}
-    <ConfirmDialog
-      title={t("focusDialog.stopTitle")}
-      message={t("focusDialog.stopMessage")}
-      confirmLabel={t("focusDialog.stopSession")}
-      cancelLabel={t("focusDialog.undoChanges")}
-      onConfirm={confirmStop}
-      onCancel={cancelStop}
-    />
-  {/if}
-
   {#if suspendInfo}
     <ConfirmDialog
       title={t("focusDialog.resumeTitle")}
@@ -1072,7 +834,7 @@
       cancelLabel={t("focusDialog.stopSessionCancel")}
       danger={false}
       onConfirm={() => { void pomodoro.dismissSuspend(true); }}
-      onCancel={() => { pomodoro.dismissedBlockId = pomodoro.activeBlockId; void pomodoro.dismissSuspend(false); }}
+      onCancel={() => { void pomodoro.dismissSuspend(false); }}
     />
   {/if}
 
@@ -1083,14 +845,7 @@
       nativeOverlay={idleInfo.nativeOverlay}
       focusFailed={idleInfo.focusFailed}
       onResume={() => pomodoro.dismissIdle(true)}
-      onFocusFailed={(failedAtMs) => pomodoro.markIdleFocusFailed(failedAtMs)}
-    />
-  {/if}
-
-  {#if completionOverlay}
-    <CompletionOverlay
-      kind={completionOverlay.kind}
-      onDismiss={() => { completionOverlay = null; }}
+      onVisible={() => pomodoro.reportIdleVisibility()}
     />
   {/if}
 
@@ -1116,7 +871,6 @@
 
   <MusicPlaybackHost />
   {#if isMainWindow}
-    <MusicContextCoordinator />
     <MusicSoundscapeCoordinator />
   {/if}
   <TooltipHost />

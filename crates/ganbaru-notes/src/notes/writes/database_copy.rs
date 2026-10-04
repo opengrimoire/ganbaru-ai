@@ -1,5 +1,6 @@
 //! Transactional database graph copying shared by database, block, and page commands.
 
+use super::copy_budget::CopyContext;
 use super::ids::new_note_id;
 use super::page_duplicates::{DuplicatePageGraph, insert_child_page_copy, plan_child_page_copy};
 use crate::notes::models::{NoteBlockRow, NoteDataSourceRow, NotePageRow, NoteParent};
@@ -8,7 +9,7 @@ use serde_json::Value;
 use sqlx::{Sqlite, Transaction};
 use std::collections::{HashMap, HashSet};
 
-pub(super) const MAX_COPY_OBJECTS: usize = 10_000;
+pub(super) use super::copy_budget::MAX_COPY_OBJECTS;
 const MAX_DATABASE_DEPTH: usize = 64;
 pub(crate) const TEMPLATE_PAGE_REFERENCE: &str = "__ganbaru_template_page_id";
 
@@ -47,17 +48,19 @@ pub(crate) async fn plan_database_copy(
     tx: &mut Transaction<'_, Sqlite>,
     block: &NoteBlockRow,
     id: &str,
-    reserved: &mut HashSet<String>,
+    context: &mut CopyContext<'_>,
     destination_project_id: Option<&str>,
     include_trashed: bool,
 ) -> Result<DatabaseCopy, String> {
+    context.budget.database(tx, &block.id).await?;
     let marker = format!("database:{}", block.id);
-    if reserved
+    if context
+        .reserved_ids
         .iter()
         .filter(|id| id.starts_with("database:"))
         .count()
         >= MAX_DATABASE_DEPTH
-        || !reserved.insert(marker.clone())
+        || !context.reserved_ids.insert(marker.clone())
     {
         return Err("database copy contains a cycle or exceeds the nesting limit".to_string());
     }
@@ -73,8 +76,16 @@ pub(crate) async fn plan_database_copy(
         .and_then(Value::as_str)
         .ok_or("database block has no view")?
         .to_string();
-    let sources = sqlx::query_as::<_, NoteDataSourceRow>(
-        "SELECT DISTINCT source.* FROM notes_data_sources AS source
+    let source_sizes = sqlx::query_as::<_, (String, i64)>(
+        "SELECT DISTINCT source.id,
+            length(CAST(source.title AS BLOB)) + length(CAST(source.title_rich_text AS BLOB))
+                + length(CAST(source.description AS BLOB)) + coalesce(length(CAST(source.icon AS BLOB)), 0)
+                + length(CAST(source.properties AS BLOB))
+                + coalesce(length(CAST(source.source_provider AS BLOB)), 0)
+                + coalesce(length(CAST(source.source_object_id AS BLOB)), 0)
+                + coalesce(length(CAST(source.source_workspace_id AS BLOB)), 0)
+                + coalesce(length(CAST(source.source_last_edited_time AS BLOB)), 0)
+         FROM notes_data_sources AS source
          JOIN notes_databases AS owner ON owner.id = source.database_id
          JOIN notes_blocks AS owner_block ON owner_block.id = owner.id
          WHERE ((source.in_trash = 0 AND owner.in_trash = 0) OR
@@ -92,15 +103,34 @@ pub(crate) async fn plan_database_copy(
     .fetch_all(&mut **tx)
     .await
     .map_err(|e| format!("load copied database sources: {e}"))?;
-    if sources.is_empty() || sources.len() > MAX_COPY_OBJECTS {
+    if source_sizes.is_empty() || source_sizes.len() > MAX_COPY_OBJECTS {
         return Err("database sources are missing or exceed the copy limit".to_string());
     }
+    let source_bytes = source_sizes.iter().try_fold(0_i64, |total, (_, bytes)| {
+        total
+            .checked_add(*bytes)
+            .ok_or("Notes copy byte count overflow")
+    })?;
+    context
+        .budget
+        .charge(source_sizes.len() as i64, source_bytes)?;
+    let source_keys =
+        serde_json::to_string(&source_sizes.iter().map(|(id, _)| id).collect::<Vec<_>>())
+            .map_err(|error| format!("encode copied source identities: {error}"))?;
+    let sources = sqlx::query_as::<_, NoteDataSourceRow>(
+        "SELECT source.* FROM notes_data_sources AS source
+         JOIN json_each(?) AS selected ON source.id = selected.value ORDER BY source.id",
+    )
+    .bind(source_keys)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(|error| format!("load admitted database sources: {error}"))?;
     let mut identities = HashMap::from([(block.id.clone(), id.to_string())]);
     let mut schema_ids = HashMap::new();
     let mut template_block_ids = HashMap::new();
     let mut source_ids = Vec::new();
     for source in &sources {
-        let new_id = new_note_id(tx, reserved).await?;
+        let new_id = new_note_id(tx, context.reserved_ids).await?;
         identities.insert(source.id.clone(), new_id.clone());
         source_ids.push((source.id.clone(), new_id));
         let schema: Value = serde_json::from_str(&source.properties)
@@ -113,7 +143,10 @@ pub(crate) async fn plan_database_copy(
         {
             if let Some(property_id) = property.get("id").and_then(Value::as_str) {
                 if property_id != "title" {
-                    property_ids.insert(property_id.to_string(), new_note_id(tx, reserved).await?);
+                    property_ids.insert(
+                        property_id.to_string(),
+                        new_note_id(tx, context.reserved_ids).await?,
+                    );
                 }
             }
             for kind in ["select", "multi_select", "status"] {
@@ -124,8 +157,10 @@ pub(crate) async fn plan_database_copy(
                 {
                     for option in options {
                         if let Some(option_id) = option.get("id").and_then(Value::as_str) {
-                            property_ids
-                                .insert(option_id.to_string(), new_note_id(tx, reserved).await?);
+                            property_ids.insert(
+                                option_id.to_string(),
+                                new_note_id(tx, context.reserved_ids).await?,
+                            );
                         }
                     }
                 }
@@ -143,7 +178,7 @@ pub(crate) async fn plan_database_copy(
     .map_err(|e| format!("load copied database views: {e}"))?;
     let mut views = Vec::new();
     for source in source_views {
-        let new_id = new_note_id(tx, reserved).await?;
+        let new_id = new_note_id(tx, context.reserved_ids).await?;
         identities.insert(source.clone(), new_id.clone());
         views.push((source, new_id));
     }
@@ -161,7 +196,7 @@ pub(crate) async fn plan_database_copy(
         ).bind(source).bind(include_trashed).bind((MAX_COPY_OBJECTS + 1) as i64).fetch_all(&mut **tx).await
             .map_err(|e| format!("load copied database rows: {e}"))?;
         for page_id in page_ids {
-            let new_page = new_note_id(tx, reserved).await?;
+            let new_page = new_note_id(tx, context.reserved_ids).await?;
             let graph = Box::pin(plan_child_page_copy(
                 tx,
                 &page_id,
@@ -170,7 +205,7 @@ pub(crate) async fn plan_database_copy(
                     data_source_id: new_source.clone(),
                 },
                 include_trashed,
-                reserved,
+                context,
                 destination_project_id,
             ))
             .await?;
@@ -182,7 +217,8 @@ pub(crate) async fn plan_database_copy(
         ).bind(source).bind((MAX_COPY_OBJECTS + 1) as i64).fetch_all(&mut **tx).await
             .map_err(|e| format!("load copied database templates: {e}"))?;
         for template in template_ids {
-            let new_template = new_note_id(tx, reserved).await?;
+            context.budget.template(tx, &template).await?;
+            let new_template = new_note_id(tx, context.reserved_ids).await?;
             identities.insert(template.clone(), new_template.clone());
             let blocks: Vec<String> = sqlx::query_scalar(
                 "SELECT id FROM notes_data_source_template_blocks WHERE template_id = ? LIMIT ?",
@@ -194,7 +230,7 @@ pub(crate) async fn plan_database_copy(
             .map_err(|e| format!("load copied template blocks: {e}"))?;
             let mut block_ids = HashMap::new();
             for block_id in blocks {
-                block_ids.insert(block_id, new_note_id(tx, reserved).await?);
+                block_ids.insert(block_id, new_note_id(tx, context.reserved_ids).await?);
             }
             template_block_ids.insert(template.clone(), block_ids);
             templates.push((template, new_template, new_source.clone()));
@@ -212,7 +248,7 @@ pub(crate) async fn plan_database_copy(
         .clone()
         .into();
     strip_trash_metadata(&mut payload);
-    reserved.remove(&marker);
+    context.reserved_ids.remove(&marker);
     Ok(DatabaseCopy {
         source_id: block.id.clone(),
         id: id.to_string(),

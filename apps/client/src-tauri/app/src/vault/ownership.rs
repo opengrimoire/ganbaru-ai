@@ -7,11 +7,13 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
+use std::time::{Duration, Instant};
 use tauri::{Manager, Runtime};
 
 const OWNERSHIP_STATE_FILE: &str = "vault-ownership.json";
 const OWNERSHIP_STATE_SCHEMA_VERSION: u32 = 1;
 const READ_ONLY_ERROR: &str = "This vault is read-only on this device";
+const MANAGED_WRITE_DRAIN_BUDGET: Duration = Duration::from_secs(10);
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase", tag = "kind")]
@@ -187,6 +189,24 @@ impl VaultOwnershipManager {
         })
     }
 
+    /// Read known committed authority without materializing a record or accessing storage.
+    pub(crate) fn cached_status(
+        &self,
+        vault_id: &str,
+    ) -> Result<Option<VaultOwnershipStatus>, String> {
+        let inner = self.inner.try_lock().map_err(|error| match error {
+            std::sync::TryLockError::WouldBlock => "vault ownership is busy".to_owned(),
+            std::sync::TryLockError::Poisoned(_) => {
+                "vault ownership lock is unavailable".to_owned()
+            }
+        })?;
+        let Some(record) = inner.state.vaults.get(vault_id) else {
+            return Ok(None);
+        };
+        let device_id = initialized_device_id(&inner)?;
+        Ok(Some(status_from_record(device_id, record)))
+    }
+
     pub(crate) fn database_access(&self, vault_id: &str) -> Result<VaultDatabaseAccess, String> {
         let status = self.status(vault_id)?;
         Ok(if status.can_write {
@@ -354,6 +374,14 @@ impl VaultOwnershipManager {
     }
 
     pub(crate) fn fence_managed_writes(&self) -> Result<ManagedVaultWriteFence, String> {
+        self.fence_managed_writes_with_budget(MANAGED_WRITE_DRAIN_BUDGET)
+    }
+
+    fn fence_managed_writes_with_budget(
+        &self,
+        budget: Duration,
+    ) -> Result<ManagedVaultWriteFence, String> {
+        let started = Instant::now();
         let mut state = self
             .write_fence
             .state
@@ -364,11 +392,19 @@ impl VaultOwnershipManager {
         }
         state.fenced = true;
         while state.active_writers != 0 {
-            state = self
+            let Some(remaining) = budget.checked_sub(started.elapsed()) else {
+                state.fenced = false;
+                self.write_fence.drained.notify_all();
+                return Err(
+                    "Managed vault writes have not drained; vault operation cancelled".to_string(),
+                );
+            };
+            let (next_state, _) = self
                 .write_fence
                 .drained
-                .wait(state)
+                .wait_timeout(state, remaining)
                 .map_err(|_| "managed vault write fence is unavailable".to_string())?;
+            state = next_state;
         }
         Ok(ManagedVaultWriteFence {
             control: Arc::clone(&self.write_fence),
@@ -941,6 +977,38 @@ mod tests {
     }
 
     #[test]
+    fn native_callback_fails_closed_without_waiting_behind_ownership_io() {
+        let manager = VaultOwnershipManager::default();
+        let _io = manager.inner.lock().unwrap();
+        assert_eq!(
+            manager.cached_status("vault").unwrap_err(),
+            "vault ownership is busy"
+        );
+    }
+
+    #[test]
+    fn native_callback_cached_authority_never_materializes_unknown_vaults_and_tracks_revocation() {
+        let path = test_path("cached-callback");
+        let manager = load_manager(&path, "desktop");
+        assert_eq!(manager.cached_status("unknown").unwrap(), None);
+        assert!(manager.inner.lock().unwrap().state.vaults.is_empty());
+        let accepted = manager.status("vault").unwrap();
+        fs::remove_file(&path).unwrap();
+        assert_eq!(manager.cached_status("vault").unwrap(), Some(accepted));
+        assert!(!path.exists());
+        manager
+            .begin_outgoing("vault", 0, "transfer".into(), "phone".into())
+            .unwrap();
+        assert!(!manager.cached_status("vault").unwrap().unwrap().can_write);
+        manager.inner.lock().unwrap().persistence_uncertain = Some("uncertain ownership".into());
+        assert_eq!(
+            manager.cached_status("vault").unwrap_err(),
+            "uncertain ownership"
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn failure_before_replacement_preserves_the_durable_owner() {
         let path = test_path("before-replacement");
         let manager = load_manager(&path, "desktop");
@@ -1175,6 +1243,25 @@ mod tests {
 
         drop(permit);
         let fence = waiter.join().unwrap();
+        assert!(manager.acquire_managed_write("vault").is_err());
+        drop(fence);
+        assert!(manager.acquire_managed_write("vault").is_ok());
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn stalled_managed_writer_cancels_transition_and_restores_admission() {
+        let path = test_path("write-fence-timeout");
+        let manager = load_manager(&path, "desktop");
+        let permit = manager.acquire_managed_write("vault").unwrap();
+        let error = manager
+            .fence_managed_writes_with_budget(Duration::from_millis(1))
+            .err()
+            .unwrap();
+        assert!(error.contains("have not drained"));
+        assert!(manager.acquire_managed_write("vault").is_ok());
+        drop(permit);
+        let fence = manager.fence_managed_writes().unwrap();
         assert!(manager.acquire_managed_write("vault").is_err());
         drop(fence);
         assert!(manager.acquire_managed_write("vault").is_ok());

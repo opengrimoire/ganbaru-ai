@@ -69,15 +69,9 @@ export async function pickArtworkFile(): Promise<string | null> {
 }
 
 export async function pickAndReadMusicInterchangeFile(): Promise<string | null> {
-  return invoke<string | null>("music_pick_and_read_interchange_file");
-}
-
-export async function pickAndWriteMusicInterchangeFile(
-  defaultName: string,
-  contents: string,
-  format: "json" | "m3u8",
-): Promise<boolean> {
-  return invoke<boolean>("music_pick_and_write_interchange_file", { defaultName, contents, format });
+  const contents = await invoke<unknown>("music_pick_and_read_interchange_file");
+  if (contents !== null && typeof contents !== "string") throw new Error("Invalid Music import file response");
+  return contents;
 }
 
 export async function loadArtworkDataUrl(path: string): Promise<string> {

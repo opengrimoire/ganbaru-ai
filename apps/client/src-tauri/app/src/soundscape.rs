@@ -269,7 +269,11 @@ struct ActiveOutput {
 }
 
 impl ActiveOutput {
-    fn open(request: SoundscapeStartRequest) -> Result<Self, SoundscapeError> {
+    fn open(
+        request: SoundscapeStartRequest,
+        guard: Option<&OutputGuard>,
+    ) -> Result<Self, SoundscapeError> {
+        check_output_guard(guard)?;
         let sample_rate = if let Some(path) = request.local_path.as_deref() {
             StreamingLoopSource::open(path)?.sample_rate()
         } else {
@@ -304,7 +308,7 @@ impl ActiveOutput {
             }
             players.push(player);
         }
-        ramp_players(&players, &layer_targets(&request));
+        check_output_guard(guard)?;
         Ok(Self {
             _sink: sink,
             players,
@@ -331,13 +335,25 @@ struct EngineCore {
 impl EngineCore {
     fn handle(&mut self, command: EngineCommand) -> Result<SoundscapeSnapshot, SoundscapeError> {
         match command {
-            EngineCommand::Start(request) => self.start(request),
+            EngineCommand::Automatic(request, guard) => {
+                check_output_guard(Some(&guard))?;
+                match request {
+                    Some(request) => self.start(request, Some(&guard)),
+                    None => Ok(self.pause()),
+                }
+            }
+            EngineCommand::ResumeGuarded(guard) => {
+                check_output_guard(Some(&guard))?;
+                self.resume(Some(&guard))
+            }
+            EngineCommand::RecoverGuarded(guard) => {
+                check_output_guard(Some(&guard))?;
+                self.recover(Some(&guard))
+            }
             EngineCommand::Pause => Ok(self.pause()),
-            EngineCommand::Resume => self.resume(),
             EngineCommand::Stop => Ok(self.stop()),
             EngineCommand::SetVolume(volume) => self.set_volume(volume),
             EngineCommand::SetLevels(levels) => self.set_levels(levels),
-            EngineCommand::Recover => self.recover(),
             EngineCommand::Snapshot => Ok(self.snapshot.clone()),
         }
     }
@@ -345,7 +361,9 @@ impl EngineCore {
     fn start(
         &mut self,
         mut request: SoundscapeStartRequest,
+        guard: Option<&OutputGuard>,
     ) -> Result<SoundscapeSnapshot, SoundscapeError> {
+        check_output_guard(guard)?;
         validate_request(&request)?;
         request.volume = clamp_volume(request.volume);
         for path in std::iter::once(request.local_path.as_deref())
@@ -359,9 +377,16 @@ impl EngineCore {
         {
             StreamingLoopSource::open(path)?;
         }
-        self.stop_output();
-        match ActiveOutput::open(request.clone()) {
+        check_output_guard(guard)?;
+        match ActiveOutput::open(request.clone(), guard) {
             Ok(output) => {
+                check_output_guard(guard)?;
+                self.stop_output();
+                if let Err(error) = check_output_guard(guard) {
+                    self.snapshot.status = SoundscapeStatus::Idle;
+                    return Err(error);
+                }
+                ramp_players(&output.players, &layer_targets(&request));
                 self.output = Some(output);
                 self.last_request = Some(request.clone());
                 self.snapshot = SoundscapeSnapshot {
@@ -392,7 +417,11 @@ impl EngineCore {
         self.snapshot.clone()
     }
 
-    fn resume(&mut self) -> Result<SoundscapeSnapshot, SoundscapeError> {
+    fn resume(
+        &mut self,
+        guard: Option<&OutputGuard>,
+    ) -> Result<SoundscapeSnapshot, SoundscapeError> {
+        check_output_guard(guard)?;
         if let Some(output) = self.output.as_ref() {
             for player in &output.players {
                 player.play();
@@ -404,7 +433,7 @@ impl EngineCore {
             self.snapshot.error_code = None;
             return Ok(self.snapshot.clone());
         }
-        self.recover()
+        self.recover(guard)
     }
 
     fn stop(&mut self) -> SoundscapeSnapshot {
@@ -468,12 +497,15 @@ impl EngineCore {
         Ok(self.snapshot.clone())
     }
 
-    fn recover(&mut self) -> Result<SoundscapeSnapshot, SoundscapeError> {
+    fn recover(
+        &mut self,
+        guard: Option<&OutputGuard>,
+    ) -> Result<SoundscapeSnapshot, SoundscapeError> {
         let request = self
             .last_request
             .clone()
             .ok_or_else(SoundscapeError::backend)?;
-        self.start(request)
+        self.start(request, guard)
     }
 
     fn stop_output(&mut self) {
@@ -484,13 +516,13 @@ impl EngineCore {
 }
 
 enum EngineCommand {
-    Start(SoundscapeStartRequest),
+    Automatic(Option<SoundscapeStartRequest>, OutputGuard),
     Pause,
-    Resume,
+    ResumeGuarded(OutputGuard),
     Stop,
     SetVolume(f64),
     SetLevels(Vec<f64>),
-    Recover,
+    RecoverGuarded(OutputGuard),
     Snapshot,
 }
 
@@ -564,12 +596,39 @@ pub(crate) struct SoundscapeEngineState {
     controller: EngineController,
 }
 
+type OutputGuard = Box<dyn Fn() -> bool + Send>;
+
+fn check_output_guard(guard: Option<&OutputGuard>) -> Result<(), SoundscapeError> {
+    if guard.is_some_and(|guard| !guard()) {
+        return Err(SoundscapeError::validation(
+            "The accepted background sound was superseded.",
+        ));
+    }
+    Ok(())
+}
+
+/// Execute a persisted automatic effect, checking its authority before audible output.
+pub(crate) fn apply_automatic(
+    state: State<'_, SoundscapeEngineState>,
+    request: Option<SoundscapeStartRequest>,
+    guard: OutputGuard,
+) -> Result<SoundscapeSnapshot, SoundscapeError> {
+    state
+        .controller
+        .dispatch(EngineCommand::Automatic(request, guard))
+}
+
 #[tauri::command]
 pub(crate) fn soundscape_start(
+    app: tauri::AppHandle,
     state: State<'_, SoundscapeEngineState>,
     request: SoundscapeStartRequest,
 ) -> Result<SoundscapeSnapshot, SoundscapeError> {
-    state.controller.dispatch(EngineCommand::Start(request))
+    let guard = crate::music::session::runtime::background_output_guard(&app)
+        .map_err(SoundscapeError::validation)?;
+    state
+        .controller
+        .dispatch(EngineCommand::Automatic(Some(request), guard))
 }
 
 #[tauri::command]
@@ -581,9 +640,14 @@ pub(crate) fn soundscape_pause(
 
 #[tauri::command]
 pub(crate) fn soundscape_resume(
+    app: tauri::AppHandle,
     state: State<'_, SoundscapeEngineState>,
 ) -> Result<SoundscapeSnapshot, SoundscapeError> {
-    state.controller.dispatch(EngineCommand::Resume)
+    let guard = crate::music::session::runtime::background_output_guard(&app)
+        .map_err(SoundscapeError::validation)?;
+    state
+        .controller
+        .dispatch(EngineCommand::ResumeGuarded(guard))
 }
 
 #[tauri::command]
@@ -611,9 +675,14 @@ pub(crate) fn soundscape_set_levels(
 
 #[tauri::command]
 pub(crate) fn soundscape_recover(
+    app: tauri::AppHandle,
     state: State<'_, SoundscapeEngineState>,
 ) -> Result<SoundscapeSnapshot, SoundscapeError> {
-    state.controller.dispatch(EngineCommand::Recover)
+    let guard = crate::music::session::runtime::background_output_guard(&app)
+        .map_err(SoundscapeError::validation)?;
+    state
+        .controller
+        .dispatch(EngineCommand::RecoverGuarded(guard))
 }
 
 #[tauri::command]
@@ -727,6 +796,25 @@ fn nonzero_channels(value: u16) -> ChannelCount {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_music_background_rejects_revoked_automatic_start_before_opening_an_audio_device() {
+        let mut core = EngineCore::default();
+        let request = SoundscapeStartRequest {
+            source_id: "generated-white".into(),
+            generated_kind: Some(GeneratedNoiseKind::White),
+            local_path: None,
+            level: 1.0,
+            extra_sources: Vec::new(),
+            volume: 0.1,
+        };
+        assert!(
+            core.handle(EngineCommand::Automatic(Some(request), Box::new(|| false)))
+                .is_err()
+        );
+        assert_eq!(core.snapshot.status, SoundscapeStatus::Idle);
+        assert!(core.output.is_none());
+    }
 
     fn mono_samples(kind: GeneratedNoiseKind, count: usize) -> Vec<f32> {
         NoiseSource::new(kind, 42)

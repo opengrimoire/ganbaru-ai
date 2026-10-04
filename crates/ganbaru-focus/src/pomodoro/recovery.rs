@@ -1,6 +1,7 @@
 use chrono::{DateTime, Duration, SecondsFormat, Utc};
 use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 
+use super::read_budget::RecoveryBudget;
 use super::writes::close_run_tx;
 use super::{
     PomodoroMobileRecoveryRead, PomodoroPauseWrite, PomodoroRecoveredRunRead,
@@ -58,6 +59,7 @@ pub(super) async fn recover_mobile_run_from_pool(
         .begin()
         .await
         .map_err(|error| format!("begin mobile pomodoro recovery: {error}"))?;
+    admit_recovery(&mut tx).await?;
     let open_runs = load_open_runs(&mut tx).await?;
 
     if open_runs.is_empty() {
@@ -107,6 +109,40 @@ pub(super) async fn recover_mobile_run_from_pool(
             })
         }
     }
+}
+
+/// Bound the complete recovery closure before loading or closing any run.
+/// Closed unrelated history never consumes startup recovery admission.
+async fn admit_recovery(tx: &mut Transaction<'_, Sqlite>) -> Result<(), String> {
+    let mut budget = RecoveryBudget::default();
+    budget.admit(tx,
+        "SELECT id, event_id, original_event_id, event_date, event_title_snapshot,
+            planned_start, planned_end, started_at, last_heartbeat, rhythm_kind, rhythm_source, preset_key
+         FROM pomodoro_runs WHERE ended_at IS NULL",
+        &["id", "event_id", "original_event_id", "event_date", "event_title_snapshot", "planned_start", "planned_end", "started_at", "last_heartbeat", "rhythm_kind", "rhythm_source", "preset_key"],
+        "open runs").await?;
+    budget.admit(tx,
+        "SELECT s.id, s.event_id, s.event_date, s.run_id, s.phase, s.planned_start, s.planned_end, s.actual_start
+         FROM pomodoro_runs r CROSS JOIN pomodoro_segments s ON s.run_id = r.id
+         WHERE r.ended_at IS NULL",
+        &["id", "event_id", "event_date", "run_id", "phase", "planned_start", "planned_end", "actual_start"],
+        "run segments").await?;
+    budget.admit(tx,
+        "SELECT p.id, p.segment_id, p.started_at, p.ended_at, p.reason
+         FROM pomodoro_runs r CROSS JOIN pomodoro_segments s ON s.run_id = r.id CROSS JOIN pomodoro_pauses p ON p.segment_id = s.id
+         WHERE r.ended_at IS NULL",
+        &["id", "segment_id", "started_at", "ended_at", "reason"],
+        "run pauses").await?;
+    budget
+        .admit(
+            tx,
+            "SELECT steps.run_id, steps.break_phase FROM pomodoro_runs r
+         CROSS JOIN pomodoro_run_sequence_steps steps ON steps.run_id = r.id WHERE r.ended_at IS NULL",
+            &["run_id", "break_phase"],
+            "sequence steps",
+        )
+        .await?;
+    Ok(())
 }
 
 async fn load_open_runs(tx: &mut Transaction<'_, Sqlite>) -> Result<Vec<OpenRunRow>, String> {

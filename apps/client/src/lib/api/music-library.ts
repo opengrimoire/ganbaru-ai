@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { dbUrl } from "$lib/api/db";
+import { parseMusicTransferPreview, parseMusicTransferResult, type MusicTransferCommit, type MusicTransferFormat, type MusicTransferSource } from "$lib/music/music-interchange";
 import {
   parseMusicContextAssignments,
   type MusicAssignmentOwnerKind,
@@ -304,18 +305,14 @@ export const removeMusicSnooze = (snoozeId: string): Promise<void> =>
   call("music_library_remove_snooze", databaseArgs({ request: { snoozeId } }), parseVoid);
 export const resetMusicStatistics = (request: MusicStatisticsReset): Promise<void> =>
   call("music_library_reset_statistics", databaseArgs({ request }), parseVoid);
-export const importMusicInterchange = (request: {
-  document: import("$lib/music/music-interchange").MusicInterchangeDocument;
-  playlistConflict: "keep-existing" | "import-copy" | "replace-existing";
-  replaceItemDescriptions: boolean;
-  importContextAssignments: boolean;
-  importedAt: number;
-}): Promise<MusicInterchangeImportResult> =>
-  call("music_library_import_interchange", databaseArgs({ request }), (value) => {
-    if (typeof value !== "object" || value === null) throw new Error("music import result must be an object");
-    const row = value as Record<string, unknown>;
-    if (![row.playlistCount, row.itemCount, row.membershipCount, row.assignmentCount].every((entry) => typeof entry === "number" && Number.isSafeInteger(entry))) throw new Error("music import result counts are invalid");
-    return { playlistCount: row.playlistCount as number, itemCount: row.itemCount as number, membershipCount: row.membershipCount as number, assignmentCount: row.assignmentCount as number };
+export const previewMusicTransfer = (vaultId: string, source: MusicTransferSource) =>
+  call("music_library_preview_transfer", databaseArgs({ vaultId, source }), parseMusicTransferPreview);
+export const commitMusicTransfer = (vaultId: string, request: MusicTransferCommit): Promise<MusicInterchangeImportResult> =>
+  call("music_library_commit_transfer", databaseArgs({ vaultId, request }), parseMusicTransferResult);
+export const exportMusicTransfer = (vaultId: string, playlistIds: string[], format: MusicTransferFormat): Promise<boolean> =>
+  call("music_library_export_transfer", databaseArgs({ vaultId, request: { playlistIds, format } }), (value) => {
+    if (typeof value !== "boolean") throw new Error("Invalid Music export result");
+    return value;
   });
 export const getMusicItemWindow = (request: MusicItemWindowRequest): Promise<MusicItemWindow> =>
   call("music_library_item_window", databaseArgs({ request }), parseItemWindow);

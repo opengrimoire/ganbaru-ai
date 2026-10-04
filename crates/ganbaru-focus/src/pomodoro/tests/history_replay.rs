@@ -108,6 +108,81 @@ fn load_adaptive_history_reads_recent_signals() {
 }
 
 #[test]
+fn adaptive_history_does_not_use_segments_or_events_observed_after_cutoff() {
+    super::block_on(async {
+        let pool = migrated_pool_with_event().await;
+        let mut tx = pool.begin().await.unwrap();
+        writes::insert_run_tx(
+            &mut tx,
+            &run_write(adaptive::models::CountRhythm::BASELINE.into_rhythm()),
+            &initial_segment(),
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        sqlx::query("UPDATE pomodoro_segments SET status = 'completed', actual_end = '2026-05-29T10:40:00Z', end_reason = 'completed'").execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO pomodoro_run_events (id, run_id, segment_id, event_type, occurred_at, phase) VALUES ('future-stop', 'run-1', 'segment-1', 'stop', '2026-05-29T12:00:00Z', 'focus')").execute(&pool).await.unwrap();
+        let during = load_adaptive_history_from_pool(
+            &pool,
+            "2026-05-29T10:20:00Z",
+            adaptive::decision::POLICY_ID,
+            80,
+        )
+        .await
+        .unwrap();
+        assert!(during.segments.is_empty());
+        let after = load_adaptive_history_from_pool(
+            &pool,
+            "2026-05-29T11:00:00Z",
+            adaptive::decision::POLICY_ID,
+            80,
+        )
+        .await
+        .unwrap();
+        assert_eq!(after.segments.len(), 1);
+        assert!(!after.run_events.is_empty());
+        assert!(
+            after
+                .run_events
+                .iter()
+                .all(|event| event.event_type != "stop")
+        );
+    });
+}
+
+#[test]
+fn adaptive_history_rejects_oversized_pause_evidence_without_truncating_it() {
+    super::block_on(async {
+        let pool = migrated_pool_with_event().await;
+        let mut tx = pool.begin().await.unwrap();
+        writes::insert_run_tx(
+            &mut tx,
+            &run_write(adaptive::models::CountRhythm::BASELINE.into_rhythm()),
+            &initial_segment(),
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        sqlx::query("UPDATE pomodoro_segments SET status = 'completed', actual_end = '2026-05-29T10:40:00Z', end_reason = 'completed'").execute(&pool).await.unwrap();
+        sqlx::query("WITH RECURSIVE indices(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM indices WHERE n < 4096) INSERT INTO pomodoro_pauses (id, segment_id, started_at, ended_at, reason) SELECT 'pause-' || n, 'segment-1', '2026-05-29T10:10:00Z', '2026-05-29T10:11:00Z', 'manual' FROM indices").execute(&pool).await.unwrap();
+        let error = load_adaptive_history_from_pool(
+            &pool,
+            "2026-05-29T11:00:00Z",
+            adaptive::decision::POLICY_ID,
+            80,
+        )
+        .await
+        .unwrap_err();
+        assert!(error.contains("pause evidence exceeds its row limit"));
+        let retained: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_pauses")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(retained, 4097);
+    });
+}
+
+#[test]
 fn load_adaptive_history_reads_experiment_outcome_summaries() {
     super::block_on(async {
         let pool = migrated_pool_with_event().await;
@@ -299,7 +374,7 @@ fn load_adaptive_history_reads_experiment_outcome_summaries() {
 }
 
 #[test]
-fn load_adaptive_replay_dataset_reads_run_start_decisions_and_outcomes() {
+fn load_adaptive_replay_dataset_reads_run_start_decisions_and_only_available_outcomes() {
     super::block_on(async {
         let pool = migrated_pool_with_event().await;
         sqlx::query(
@@ -408,7 +483,9 @@ fn load_adaptive_replay_dataset_reads_run_start_decisions_and_outcomes() {
                     ('outcome-clean', 'decision-1', 'run', 'clean_focus_seconds',
                      2700, NULL, '2026-05-29T10:45:00Z'),
                     ('outcome-completed', 'decision-1', 'run', 'run_completed',
-                     NULL, 1, '2026-05-29T10:45:00Z')",
+                     NULL, 1, '2026-05-29T10:45:00Z'),
+                    ('outcome-future-stop', 'decision-1', 'run', 'run_stopped',
+                     NULL, 1, '2026-05-31T10:45:00Z')",
         )
         .execute(&pool)
         .await

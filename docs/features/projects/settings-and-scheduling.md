@@ -57,15 +57,21 @@ Scheduling creates a Calendar event using the task title, project, color, durati
 
 The task and event are connected through an explicit link. Bulk quick scheduling creates separate events so every selected task remains independently visible and linked.
 
+Implemented bulk scheduling uses one native Calendar and Focus owner transaction for the complete selected batch. Rust reads current task titles, revisions, project defaults, and phase soundtrack assignments; creates independent events; adds scheduled links; patches task dates; records history; and stores a durable retry receipt. An archived, missing, foreign, or changed task rejects the entire batch. A changed project scheduling default or soundtrack between review and acceptance requires a new review. A failed write rolls back the complete batch, and an uncertain response retains the original request for Retry.
+
+The duration selected in the scheduling form takes precedence over the project duration default. Timed events run consecutively for that many elapsed minutes, including across daylight-saving transitions. The first authored civil start uses Calendar's native timezone rules. All-day project defaults put every selected task on the chosen day, with equal inclusive start and end dates and no Focus configuration. Task start and target end dates follow the scheduled start day. An existing due date, completion timestamp, status, and unrelated task fields remain intact. Project defaults are copied at creation, including phase soundtrack snapshots; later default changes do not alter the created events.
+
 Existing project events can also be linked from task detail. A link is valid only when task and event belong to the same project.
 
 Unlinking preserves both records. Archiving a task or event preserves the relationship as historical context according to each feature's lifecycle rules.
 
 ## Dependency date proposals
 
-When a scheduled or dated task conflicts with finish-to-start dependencies, Ganbaru AI can propose downstream shifts. The preview lists every affected task, old and new dates, dependency reason, locks, and conflicts.
+When dated tasks conflict with finish-to-start dependencies, the native service reads the complete canonical project graph and proposes downstream shifts. Gantt filters, collapsed sections, and paged rows do not limit the proposal. The preview lists every affected task, its original and proposed dates, and the dependencies requiring each change. Durations and the set of populated date fields are preserved; a milestone remains a single date.
 
-Applying is explicit and transactional. Tasks outside the project, archived tasks, protected dates, and ambiguous constraints are never moved silently.
+Archived tasks, completed tasks, and tasks with scheduled Calendar links are protected. Cycles, missing or foreign endpoints, undated dependencies, invalid dates, and unsupported date ranges produce explicit conflicts. A proposal with a conflict cannot be partially applied. Reference-only Calendar links do not reserve task dates. Explicit date locks and override selection remain planned because the current task schema has no date-lock field.
+
+Applying is explicit and transactional. The command checks the complete reviewed input digest after acquiring the SQLite writer. A changed task, dependency, completion state, or scheduling commitment requires a new preview and review; it cannot silently expand the accepted cascade. Only the task date fields change. Their history and durable retry receipt commit together, and retrying the same operation returns the original result after an uncertain response or restart. Native limits reject excessive graphs or payloads before mutation.
 
 ## Working folders
 

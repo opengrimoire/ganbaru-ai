@@ -42,6 +42,8 @@ const NOTES_UNDO_KINDS: readonly NotesUndoKind[] = [
 ];
 
 export interface NotesUndoSnapshot {
+  /** Associates one historical boundary with its bounded canonical editor receipt. */
+  nativeEditId?: string;
   pageId: string;
   blocks: NotesBlock[];
   childIdsByParentId: Record<string, string[]>;
@@ -137,6 +139,7 @@ function cloneBlock(block: NotesBlock): NotesBlock {
 
 function cloneSnapshot(snapshot: NotesUndoSnapshot): NotesUndoSnapshot {
   return {
+    ...(snapshot.nativeEditId ? { nativeEditId: snapshot.nativeEditId } : {}),
     pageId: snapshot.pageId,
     blocks: snapshot.blocks.map(cloneBlock),
     childIdsByParentId: Object.fromEntries(
@@ -431,6 +434,7 @@ function parseSnapshot(value: unknown, label: string): NotesUndoSnapshot {
     focusSelection = { start, end };
   }
   return {
+    ...(value.nativeEditId === undefined ? {} : { nativeEditId: readString(value.nativeEditId, `${label}.nativeEditId`) }),
     pageId: readString(value.pageId, `${label}.pageId`),
     blocks: blocksValue.map((block, index) =>
       parseSnapshotBlock(block, `${label}.blocks[${index}]`)

@@ -36,6 +36,8 @@ Opening Chat for the first time creates or resolves the selected project's durab
 
 Provider setup is explicit. Ganbaru AI discovers supported provider families, explains missing or invalid installations, stores only approved device-local configuration, and never claims a provider is ready before its probe succeeds.
 
+Native provider discovery owns model identities and capability options, including cached catalogs. The frontend validates that catalog without inferring capabilities from IDs or labels. Distinct routing aliases and custom IDs remain selectable even when they share a display name; a matching label does not establish identical routing or support. A stale catalog retains its reported options until native discovery refreshes it.
+
 Automatic provider discovery starts during workspace preparation but does not delay restoring local channels or reading saved history. Discovery results update provider settings without resetting the user's current conversation or draft. A failed probe leaves local history usable; provider execution still requires its normal readiness and authorization checks. Late discovery and fallback settings responses cannot replace settings from another vault or a newer load.
 
 ## Data ownership

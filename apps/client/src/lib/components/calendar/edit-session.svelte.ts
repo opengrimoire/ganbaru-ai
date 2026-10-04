@@ -204,6 +204,8 @@ export function isDirtyDiff(
   return false;
 }
 
+let nextSessionKey = 0;
+
 export function createEditSession(
   getFocusIdleDefaults: () => Partial<FocusIdleEventDefaults> = () => STATIC_FOCUS_IDLE_DEFAULTS,
 ) {
@@ -212,7 +214,6 @@ export function createEditSession(
   let baseline = $state<Partial<CalendarEvent>>({});
   let scope = $state<RecurringScope>("this");
   let createPreview = $state<CreatePreview | null>(null);
-  let nextSessionKey = 0;
 
   const dirty = $derived(isDirtyDiff(changes, baseline));
 
@@ -250,6 +251,7 @@ export function createEditSession(
   return {
     get state() { return state; },
     get changes() { return changes; },
+    get baseline() { return baseline; },
     get scope() { return scope; },
     get dirty() { return dirty; },
     get createPreview() { return createPreview; },

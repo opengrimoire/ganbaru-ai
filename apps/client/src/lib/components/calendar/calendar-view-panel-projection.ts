@@ -2,6 +2,19 @@ import type { CalendarEvent } from "./types";
 import type { EditSessionState, PanelAnchor } from "./edit-session.svelte";
 import type { ParkedPanelSnapshot } from "./calendar-view-panel-lifecycle.svelte";
 
+/** Resolve an editor baseline from persisted occurrences, preserving native geometry. */
+export function resolvePersistedCalendarPanelEvent(
+  displayedId: string,
+  canonicalEvents: readonly CalendarEvent[],
+  fullEvent?: CalendarEvent | null,
+): CalendarEvent | undefined {
+  const canonical = canonicalEvents.find((event) => event.id === displayedId);
+  if (!canonical) return undefined;
+  if (!fullEvent) return canonical;
+  if (fullEvent.id !== (canonical.recurringParentId ?? canonical.id)) return undefined;
+  return { ...fullEvent, ...canonical };
+}
+
 export type PanelRenderState =
   | {
       parked: boolean;

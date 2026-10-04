@@ -26,37 +26,49 @@ pub async fn append_block_children(
     pool: &SqlitePool,
     request: NoteAppendBlockChildren,
 ) -> Result<NotePaginatedBlockList, String> {
-    validate_parent(&request.parent)?;
-    validate_children_count(request.children.len())?;
-    for child in &request.children {
-        validate_block_write(child)?;
-    }
     project_history::ensure_parent_baseline_for_mutation(pool, &request.parent).await?;
     let mut tx = pool
         .begin()
         .await
         .map_err(|e| format!("begin append notes blocks: {e}"))?;
-    let parent = resolve_block_parent(&mut tx, &request.parent).await?;
+    let ids = append_block_children_tx(&mut tx, request, true).await?;
+    tx.commit()
+        .await
+        .map_err(|e| format!("commit append notes blocks: {e}"))?;
+    load_blocks_by_ids(pool, ids).await
+}
+
+/// Append validated children inside the caller's durable editor transaction.
+pub(super) async fn append_block_children_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    request: NoteAppendBlockChildren,
+    record_history: bool,
+) -> Result<Vec<String>, String> {
+    validate_parent(&request.parent)?;
+    validate_children_count(request.children.len())?;
+    for child in &request.children {
+        validate_block_write(child)?;
+    }
+    let parent = resolve_block_parent(tx, &request.parent).await?;
     validate_children_for_parent(&parent, &request.children)?;
     let sort_orders = next_sort_orders(
-        &mut tx,
+        tx,
         &parent,
         request.after.as_deref(),
         request.children.len(),
     )
     .await?;
-    history::record_page_snapshot_tx(&mut tx, &parent.page_id, "append_block_children").await?;
+    if record_history {
+        history::record_page_snapshot_tx(tx, &parent.page_id, "append_block_children").await?;
+    }
     let mut inserted_ids = Vec::with_capacity(request.children.len());
     for (child, sort_order) in request.children.iter().zip(sort_orders) {
-        insert_block(&mut tx, &parent, child, sort_order).await?;
+        insert_block(tx, &parent, child, sort_order).await?;
         inserted_ids.push(child.id.trim().to_string());
     }
-    refresh_parent_has_children(&mut tx, &parent).await?;
-    touch_page(&mut tx, &parent.page_id).await?;
-    tx.commit()
-        .await
-        .map_err(|e| format!("commit append notes blocks: {e}"))?;
-    load_blocks_by_ids(pool, inserted_ids).await
+    refresh_parent_has_children(tx, &parent).await?;
+    touch_page(tx, &parent.page_id).await?;
+    Ok(inserted_ids)
 }
 
 pub async fn update_block(
@@ -64,10 +76,28 @@ pub async fn update_block(
     block_id: &str,
     update: NoteBlockUpdate,
 ) -> Result<NoteBlockDto, String> {
-    let block_id = block_id.trim();
-    require_uuid(block_id, "block_id")?;
     let current = reads::get_block_row(pool, block_id, false).await?;
     project_history::ensure_page_baseline_for_mutation(pool, &current.page_id).await?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| format!("begin update notes block: {e}"))?;
+    update_block_tx(&mut tx, block_id, update, true).await?;
+    tx.commit()
+        .await
+        .map_err(|e| format!("commit update notes block: {e}"))?;
+    reads::get_block(pool, block_id, false).await
+}
+
+/// Validate and update one block using the transaction's current graph.
+pub(super) async fn update_block_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    block_id: &str,
+    update: NoteBlockUpdate,
+    record_history: bool,
+) -> Result<(), String> {
+    require_uuid(block_id, "block_id")?;
+    let current = load_block_row_in_tx(tx, block_id, false).await?;
     let (block_type, payload) = validate_block_update(&current.block_type, &update)?;
     if (current.block_type == "child_page") != (block_type == "child_page") {
         return Err(
@@ -75,15 +105,13 @@ pub async fn update_block(
                 .to_string(),
         );
     }
-    validate_block_update_parent(pool, &current, &block_type, &payload).await?;
-    validate_block_update_children(pool, block_id, &current.block_type, &block_type, &payload)
+    validate_block_update_parent(tx, &current, &block_type, &payload).await?;
+    validate_block_update_children(tx, block_id, &current.block_type, &block_type, &payload)
         .await?;
     let plain_text = plain_text_from_payload(&block_type, &payload);
-    let mut tx = pool
-        .begin()
-        .await
-        .map_err(|e| format!("begin update notes block: {e}"))?;
-    history::record_page_snapshot_tx(&mut tx, &current.page_id, "update_block").await?;
+    if record_history {
+        history::record_page_snapshot_tx(tx, &current.page_id, "update_block").await?;
+    }
     let result = sqlx::query(
         "UPDATE notes_blocks
          SET type = ?,
@@ -96,7 +124,7 @@ pub async fn update_block(
     .bind(payload.to_string())
     .bind(&plain_text)
     .bind(block_id)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await
     .map_err(|e| format!("update notes block: {e}"))?;
     if result.rows_affected() == 0 {
@@ -107,7 +135,7 @@ pub async fn update_block(
             .get("title")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        let page = load_page_row(&mut tx, block_id).await?;
+        let page = load_page_row(tx, block_id).await?;
         sqlx::query(
             "UPDATE notes_pages
              SET title = ?,
@@ -118,12 +146,12 @@ pub async fn update_block(
         .bind(title)
         .bind(page_row_properties_for_title(&page, title)?)
         .bind(block_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await
         .map_err(|e| format!("update child page title from block: {e}"))?;
     }
     mention_notifications::sync_block_tx(
-        &mut tx,
+        tx,
         block_id,
         &current.page_id,
         &block_type,
@@ -131,19 +159,10 @@ pub async fn update_block(
         &plain_text,
     )
     .await?;
-    assets::sync_block_asset_reference_tx(
-        &mut tx,
-        block_id,
-        &current.page_id,
-        &block_type,
-        &payload,
-    )
-    .await?;
-    touch_page(&mut tx, &current.page_id).await?;
-    tx.commit()
-        .await
-        .map_err(|e| format!("commit update notes block: {e}"))?;
-    reads::get_block(pool, block_id, false).await
+    assets::sync_block_asset_reference_tx(tx, block_id, &current.page_id, &block_type, &payload)
+        .await?;
+    touch_page(tx, &current.page_id).await?;
+    Ok(())
 }
 
 pub async fn trash_block(
@@ -151,16 +170,32 @@ pub async fn trash_block(
     block_id: &str,
     in_trash: bool,
 ) -> Result<NoteBlockDto, String> {
-    let block_id = block_id.trim();
-    require_uuid(block_id, "block_id")?;
     let current = reads::get_block_row(pool, block_id, true).await?;
     project_history::ensure_page_baseline_for_mutation(pool, &current.page_id).await?;
     let mut tx = pool
         .begin()
         .await
         .map_err(|e| format!("begin trash notes block: {e}"))?;
-    history::record_page_snapshot_tx(&mut tx, &current.page_id, "trash_block").await?;
-    set_block_subtree_trash(&mut tx, block_id, in_trash).await?;
+    trash_block_tx(&mut tx, block_id, in_trash, true).await?;
+    tx.commit()
+        .await
+        .map_err(|e| format!("commit trash notes block: {e}"))?;
+    reads::get_block(pool, block_id, true).await
+}
+
+/// Preserve the complete trash-owned graph inside a compound edit.
+pub(super) async fn trash_block_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    block_id: &str,
+    in_trash: bool,
+    record_history: bool,
+) -> Result<(), String> {
+    require_uuid(block_id, "block_id")?;
+    let current = load_block_row_in_tx(tx, block_id, true).await?;
+    if record_history {
+        history::record_page_snapshot_tx(tx, &current.page_id, "trash_block").await?;
+    }
+    set_block_subtree_trash(tx, block_id, in_trash).await?;
     let parent = ParentTarget {
         parent_type: if current.parent_type == "page_id" {
             "page_id"
@@ -172,12 +207,9 @@ pub async fn trash_block(
         parent_block_type: None,
         page_id: current.page_id.clone(),
     };
-    refresh_parent_has_children(&mut tx, &parent).await?;
-    touch_page(&mut tx, &current.page_id).await?;
-    tx.commit()
-        .await
-        .map_err(|e| format!("commit trash notes block: {e}"))?;
-    reads::get_block(pool, block_id, true).await
+    refresh_parent_has_children(tx, &parent).await?;
+    touch_page(tx, &current.page_id).await?;
+    Ok(())
 }
 
 pub async fn trash_blocks(

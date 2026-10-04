@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createProjectPriority, createProjectStatus, createProjectTag, linkProjectTaskEvent, updateProjectTask } from "$lib/api/projects";
+import { applyProjectDependencyCascade, type ProjectDependencyCascadePreview } from "$lib/api/project-cascade";
+import { applyProjectTaskBulk, createProjectPriority, createProjectStatus, createProjectTag, deleteProjectCustomField, linkProjectTaskEvent, reorderProjectItem, updateProjectTask } from "$lib/api/projects";
 import { createProjectStoreActions } from "$lib/stores/project-store-actions";
 import { createProjectStoreSelectors } from "$lib/stores/project-store-selectors";
 import actionSource from "$lib/stores/project-store-actions.ts?raw";
@@ -13,11 +14,15 @@ import type {
 vi.mock("$lib/api/projects", async (importOriginal) => ({
   ...await importOriginal<typeof import("$lib/api/projects")>(),
   updateProjectTask: vi.fn(),
+  applyProjectTaskBulk: vi.fn(),
+  reorderProjectItem: vi.fn(),
+  deleteProjectCustomField: vi.fn(),
   linkProjectTaskEvent: vi.fn(),
   createProjectStatus: vi.fn(),
   createProjectPriority: vi.fn(),
   createProjectTag: vi.fn(),
 }));
+vi.mock("$lib/api/project-cascade", () => ({ applyProjectDependencyCascade: vi.fn() }));
 
 function emptySnapshot(): ProjectsSnapshot {
   return {
@@ -103,6 +108,41 @@ describe("createProjectStoreActions", () => {
     expect((await actions.addTag("project-1", "Work"))?.id).toBe("draft-tag");
   });
 
+  it("applies the reviewed cascade once and reconciles tasks absent from the visible cache", async () => {
+    const context = setup();
+    const hidden = { ...task, id: "unloaded", startDate: "2026-06-13", revision: 3 };
+    vi.mocked(applyProjectDependencyCascade).mockResolvedValue(taskMutation(hidden));
+    const preview: ProjectDependencyCascadePreview = { projectId: task.projectId, digest: "1".repeat(64), items: [], conflicts: [] };
+    await context.actions.applyDependencyCascade(preview);
+    expect(applyProjectDependencyCascade).toHaveBeenCalledExactlyOnceWith({ operationId: expect.any(String), projectId: task.projectId, reviewedDigest: preview.digest });
+    expect(context.readSnapshot().tasks.find((row) => row.id === hidden.id)).toEqual(hidden);
+    expect(updateProjectTask).not.toHaveBeenCalled();
+  });
+
+  it("retains cascade retry identity while preserving a newer task revision", async () => {
+    const context = setup();
+    const preview: ProjectDependencyCascadePreview = { projectId: task.projectId, digest: "1".repeat(64), items: [], conflicts: [] };
+    vi.mocked(applyProjectDependencyCascade).mockRejectedValueOnce(new Error("lost response"));
+    await expect(context.actions.applyDependencyCascade(preview)).rejects.toThrow("lost response");
+    vi.mocked(updateProjectTask).mockResolvedValue(taskMutation({ ...task, title: "Newer", revision: 5 }));
+    await context.actions.updateTask(task, { title: "Newer" });
+    vi.mocked(applyProjectDependencyCascade).mockResolvedValue(taskMutation({ ...task, title: "Older receipt", revision: 3 }));
+    await context.actions.applyDependencyCascade(preview);
+    expect(vi.mocked(applyProjectDependencyCascade).mock.calls[0]).toEqual(vi.mocked(applyProjectDependencyCascade).mock.calls[1]);
+    expect(context.readSnapshot().tasks[0].title).toBe("Newer");
+  });
+
+  it("rejects a cascade when Project context changes while its command client loads", async () => {
+    const context = setup();
+    const preview: ProjectDependencyCascadePreview = { projectId: task.projectId, digest: "1".repeat(64), items: [], conflicts: [] };
+    const pending = context.actions.applyDependencyCascade(preview);
+    const failure = expect(pending).rejects.toThrow("Project context changed");
+    await context.reload();
+    await failure;
+    expect(applyProjectDependencyCascade).not.toHaveBeenCalled();
+    expect(context.readSnapshot().tasks[0].title).toBe("Forced");
+  });
+
   it("patches an authoritative task result with no follow-up snapshot load", async () => {
     vi.mocked(updateProjectTask).mockImplementation(async (update: ProjectTaskUpdate) =>
       taskMutation({ ...task, title: update.title, updatedAt: "server" }));
@@ -114,6 +154,36 @@ describe("createProjectStoreActions", () => {
     expect(context.reload).not.toHaveBeenCalled();
   });
 
+  it("reorders from one loaded task and reconciles an unloaded native sibling", async () => {
+    const sibling = { ...task, id: "task-hidden", sectionSortOrder: 1000, revision: 2 };
+    vi.mocked(reorderProjectItem).mockResolvedValue({ ...taskMutation(task), changed: {
+      ...emptySnapshot(), tasks: [{ ...task, sectionSortOrder: 2000, revision: 1 }, sibling],
+    } });
+    const context = setup();
+    await context.actions.moveTaskInSection(task, 1);
+    expect(reorderProjectItem).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      projectId: task.projectId, direction: 1,
+      item: { kind: "task", id: task.id, axis: "section", groupId: task.sectionId, parentTaskId: null, expectedOrder: 1000 },
+    }));
+    expect(context.readSnapshot().tasks.map((task) => task.id)).toEqual([task.id, sibling.id]);
+    expect(updateProjectTask).not.toHaveBeenCalled();
+  });
+
+  it("retains reorder identity after failure and does not resurrect a later deleted field", async () => {
+    const field = { id: "field-1", projectId: "project-1", name: "Field", fieldType: "text" as const,
+      sortOrder: 1000, revision: 0, createdAt: "created", updatedAt: "updated" };
+    const context = setup();
+    vi.mocked(reorderProjectItem).mockRejectedValueOnce(new Error("lost response"));
+    await expect(context.actions.moveCustomField(field, 1)).rejects.toThrow("lost response");
+    const first = vi.mocked(reorderProjectItem).mock.calls[0][0];
+    vi.mocked(deleteProjectCustomField).mockResolvedValue({ changed: emptySnapshot(), removals: [{ kind: "custom_field", id: field.id }], calendarEventProjectAssignments: [] });
+    await context.actions.removeCustomField(field.id);
+    vi.mocked(reorderProjectItem).mockResolvedValue({ changed: { ...emptySnapshot(), customFields: [{ ...field, sortOrder: 2000, revision: 1 }] }, removals: [], calendarEventProjectAssignments: [] });
+    await context.actions.moveCustomField(field, 1);
+    expect(vi.mocked(reorderProjectItem).mock.calls[1][0]).toEqual(first);
+    expect(context.readSnapshot().customFields).toEqual([]);
+  });
+
   it("keeps the snapshot unchanged when the command transaction fails", async () => {
     vi.mocked(updateProjectTask).mockRejectedValue(new Error("transaction rolled back"));
     const context = setup();
@@ -122,6 +192,54 @@ describe("createProjectStoreActions", () => {
 
     expect(context.readSnapshot().tasks[0]).toEqual(task);
     expect(context.reload).not.toHaveBeenCalled();
+  });
+
+  it("archives the selected roots once and reconciles native descendants outside the loaded page", async () => {
+    const context = setup();
+    const child = { ...task, id: "hidden-child", parentTaskId: task.id, archivedAt: "native-time" };
+    vi.mocked(applyProjectTaskBulk).mockResolvedValue({
+      ...taskMutation({ ...task, archivedAt: "native-time" }),
+      changed: { ...emptySnapshot(), tasks: [{ ...task, archivedAt: "native-time" }, child] },
+    });
+
+    await context.actions.archiveTasks([task]);
+
+    expect(applyProjectTaskBulk).toHaveBeenCalledExactlyOnceWith({
+      operationId: expect.any(String),
+      projectId: task.projectId,
+      change: { kind: "archive", archived: true },
+      tasks: [{ id: task.id, value: null }],
+    });
+    expect(context.readSnapshot().tasks).toContainEqual(child);
+    expect(updateProjectTask).not.toHaveBeenCalled();
+  });
+
+  it("retains bulk retry identity after a lost response without publishing unconfirmed state", async () => {
+    const context = setup();
+    vi.mocked(applyProjectTaskBulk)
+      .mockRejectedValueOnce(new Error("response lost"))
+      .mockResolvedValueOnce(taskMutation({ ...task, priority: "high" }));
+
+    await expect(context.actions.setTasksPriority([task], "high")).rejects.toThrow("response lost");
+    expect(context.readSnapshot().tasks[0]).toEqual(task);
+    await context.actions.setTasksPriority([task], "high");
+
+    const calls = vi.mocked(applyProjectTaskBulk).mock.calls;
+    expect(calls[0][0]).toEqual(calls[1][0]);
+    expect(calls[0][0]).toMatchObject({
+      change: { kind: "priority", priority: "high" },
+      tasks: [{ id: task.id, value: task.priority }],
+    });
+    expect(context.readSnapshot().tasks[0].priority).toBe("high");
+    expect(updateProjectTask).not.toHaveBeenCalled();
+  });
+
+  it("rejects a mixed project bulk selection before invoking persistence", async () => {
+    const context = setup();
+    await expect(context.actions.setTasksPriority([
+      task, { ...task, id: "other", projectId: "other-project" },
+    ], "high")).rejects.toThrow("same project");
+    expect(applyProjectTaskBulk).not.toHaveBeenCalled();
   });
 
   it("ignores an older response for the same entity", async () => {

@@ -116,56 +116,55 @@ pub(super) fn close_desktop_process_with<C, A>(
     request: &DoomscrollingCloseDesktopAppRequest,
     controller: &mut C,
     mut authorize: A,
-) -> Result<(), String>
+) -> Result<bool, String>
 where
     C: DesktopProcessController,
     A: FnMut(&ObservedDesktopProcess) -> Result<(), String>,
 {
     let Some(observed) = observe_exact_close_process(request, controller)? else {
-        return Ok(());
+        return Ok(false);
     };
     authorize(&observed)?;
     if let Err(error) = controller.signal(request.process_id, DesktopProcessSignal::Term) {
         if observe_exact_close_process(request, controller)?.is_none() {
-            return Ok(());
+            return Ok(false);
         }
         return Err(error);
     }
     for _ in 0..8 {
         controller.wait(std::time::Duration::from_millis(100));
         if observe_exact_close_process(request, controller)?.is_none() {
-            return Ok(());
+            return Ok(true);
         }
     }
     let Some(observed) = observe_exact_close_process(request, controller)? else {
-        return Ok(());
+        return Ok(true);
     };
     authorize(&observed)?;
-    controller.signal(request.process_id, DesktopProcessSignal::Kill)
+    controller.signal(request.process_id, DesktopProcessSignal::Kill)?;
+    Ok(true)
 }
 
+/// Recheck runtime authority immediately before each process signal.
 #[cfg(target_os = "linux")]
-pub(super) fn close_desktop_process<R: Runtime>(
+pub(super) fn close_desktop_process_checked<R: Runtime>(
     app: &tauri::AppHandle<R>,
     request: DoomscrollingCloseDesktopAppRequest,
-) -> Result<(), String> {
+    mut before_close: impl FnMut() -> Result<(), String>,
+) -> Result<bool, String> {
     let mut controller = SystemDesktopProcessController;
     close_desktop_process_with(&request, &mut controller, |observed| {
+        before_close()?;
         let authorization = load_close_authorization(app, &request.rule_identity)?;
         validate_names_authorized(observed.match_names.clone(), &authorization)
     })
 }
 
 #[cfg(not(target_os = "linux"))]
-pub(super) fn close_desktop_process<R: Runtime>(
+pub(super) fn close_desktop_process_checked<R: Runtime>(
     _app: &tauri::AppHandle<R>,
-    request: DoomscrollingCloseDesktopAppRequest,
-) -> Result<(), String> {
-    let _ = (
-        request.process_id,
-        request.process_name,
-        request.process_identity,
-        request.rule_identity,
-    );
+    _request: DoomscrollingCloseDesktopAppRequest,
+    _before_close: impl FnMut() -> Result<(), String>,
+) -> Result<bool, String> {
     Err("desktop app closing is only available on Linux for now".to_string())
 }

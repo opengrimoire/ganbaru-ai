@@ -8,8 +8,32 @@ import org.junit.Test
 class DoomscrollingEvaluatorTest {
   @Test
   fun acceptedCombinedUsageAddsOnlyNewOfflineLocalUsage() {
-    assertEquals(75, combinedUsageSinceAcceptance(60, 20, 35))
-    assertEquals(60, combinedUsageSinceAcceptance(60, 20, 10))
+    assertEquals(75L, combinedUsageSinceAcceptance(60, 20, 35))
+    assertEquals(60L, combinedUsageSinceAcceptance(60, 20, 10))
+  }
+
+  @Test
+  fun delayedPublicationKeepsUsageRecordedAfterSnapshotCapture() {
+    val accepted = AcceptedUsage("2026-10-02", "2026-10-02", 100, 20)
+    val localWhenPublished = 35L
+    assertEquals(115L, combinedUsageSinceAcceptance(
+      accepted.usedSeconds, checkNotNull(accepted.localUsedSecondsAtCapture), localWhenPublished,
+    ))
+  }
+
+  @Test
+  fun combinedCountersPreserveValuesAboveTheSignedIntRange() {
+    assertEquals(3_000_000_015L, combinedUsageSinceAcceptance(3_000_000_000, 20, 35))
+  }
+
+  @Test(expected = ArithmeticException::class)
+  fun combinedCountersRejectOverflowInsteadOfWrappingToAnAvailableBudget() {
+    combinedUsageSinceAcceptance(Long.MAX_VALUE, 0, 1)
+  }
+
+  @Test(expected = IllegalArgumentException::class)
+  fun combinedCountersRejectNegativeEvidence() {
+    combinedUsageSinceAcceptance(100, -1, 20)
   }
 
   private val schedule = MobileSchedule(

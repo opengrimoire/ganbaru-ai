@@ -383,6 +383,8 @@ export interface NotesPageTemplate {
 interface NotesBlockBase<Type extends NotesBlockType> {
   object: "block";
   id: string;
+  /** Opaque canonical revision. Optimistic blocks receive it after their first commit. */
+  edit_revision?: string;
   parent: NotesParent;
   created_time: string;
   last_edited_time: string;

@@ -175,9 +175,6 @@ export function createProjectStoreSelectors(
     savedTaskViewsForProject(projectId: string | null | undefined): ProjectSavedTaskView[] {
       return projectSnapshot.savedTaskViewsForProject(readSnapshot(), projectId);
     },
-    taskClosure(tasks: ProjectTask[]): ProjectTask[] {
-      return projectSnapshot.taskClosure(readSnapshot(), tasks);
-    },
     nextGroupSortOrder(): number {
       return projectSnapshot.nextGroupSortOrder(readSnapshot());
     },

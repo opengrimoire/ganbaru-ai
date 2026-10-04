@@ -738,6 +738,7 @@ export function blockUpdateFromBlock(block: NotesBlock): NotesBlockUpdate {
 export function applyBlockUpdate(block: NotesBlock, update: NotesBlockUpdate): NotesBlock {
   const base = {
     object: "block" as const,
+    edit_revision: block.edit_revision,
     id: block.id,
     parent: block.parent,
     created_time: block.created_time,

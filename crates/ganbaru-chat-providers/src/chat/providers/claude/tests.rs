@@ -287,16 +287,59 @@ fn native_model_metadata_resolves_names_and_supported_effort_levels() {
 
 #[test]
 fn custom_model_names_do_not_infer_fast_mode_support() {
-    let models =
-        provider_models(Vec::new(), &["claude-opus-9".to_string()], &BTreeMap::new()).unwrap();
+    let models = provider_models(
+        Vec::new(),
+        &["claude-opus-9".to_string()],
+        &BTreeMap::from([(
+            "claude-opus-9".to_string(),
+            "Default (研究用 Opus 9)".to_string(),
+        )]),
+    )
+    .unwrap();
 
     assert_eq!(models.len(), 1);
+    assert_eq!(models[0].display_name, "Default (研究用 Opus 9)");
     assert!(models[0].options.iter().all(|definition| {
         !matches!(
             definition,
             ModelOptionDefinition::Boolean { key, .. } if key == "fastMode"
         )
     }));
+}
+
+#[test]
+fn native_model_routes_keep_distinct_capabilities_despite_matching_labels() {
+    let input: Vec<ClaudeModel> = serde_json::from_value(json!([{
+        "value": "default",
+        "displayName": "Opus 9",
+        "supportsFastMode": true
+    }, {
+        "value": "opus",
+        "displayName": "Opus 9",
+        "supportsFastMode": false
+    }, {
+        "value": "claude-opus-9",
+        "displayName": "Opus 9"
+    }]))
+    .unwrap();
+    let models = provider_models(input, &[], &BTreeMap::new()).unwrap();
+
+    assert_eq!(
+        models
+            .iter()
+            .map(|model| model.id.as_str())
+            .collect::<Vec<_>>(),
+        ["default", "opus", "claude-opus-9"]
+    );
+    let fast_modes = models
+        .iter()
+        .map(|model| {
+            model.options.iter().any(|option| {
+                matches!(option, ModelOptionDefinition::Boolean { key, .. } if key == "fastMode")
+            })
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(fast_modes, [true, false, false]);
 }
 
 #[test]

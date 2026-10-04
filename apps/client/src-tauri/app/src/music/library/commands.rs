@@ -554,16 +554,103 @@ pub async fn music_library_reset_statistics(
     super::writes::reset_statistics(&pool, request).await
 }
 
+// Parsing and serialization run on one bounded native worker, never on a WebView thread.
+static MUSIC_TRANSFER_WORKERS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
+
+fn transfer_vault(app: &tauri::AppHandle, expected: &str) -> MusicLibraryResult<()> {
+    let actual = crate::vault::active_vault_id(app).map_err(connection_error)?;
+    if actual != expected {
+        return Err(MusicLibraryError::conflict(
+            "The active vault changed during Music transfer",
+        ));
+    }
+    Ok(())
+}
+
 #[tauri::command]
-pub async fn music_library_import_interchange(
+pub async fn music_library_preview_transfer(
     app: tauri::AppHandle,
     db_url: String,
-    request: MusicInterchangeImportRequest,
-) -> MusicLibraryResult<MusicInterchangeImportResult> {
-    let pool = connect_sqlite(app, db_url)
+    vault_id: String,
+    source: MusicTransferSource,
+) -> MusicLibraryResult<MusicTransferPreview> {
+    let permit = MUSIC_TRANSFER_WORKERS
+        .try_acquire()
+        .map_err(|_| MusicLibraryError::conflict("Another Music transfer is being prepared"))?;
+    transfer_vault(&app, &vault_id)?;
+    let pool = connect_sqlite(app.clone(), db_url)
         .await
         .map_err(connection_error)?;
-    super::interchange::import(&pool, request).await
+    tauri::async_runtime::spawn_blocking(move || {
+        let _permit = permit;
+        transfer_vault(&app, &vault_id)?;
+        let bindings = super::transfer::bindings(&app)?;
+        tauri::async_runtime::block_on(super::transfer::preview(&pool, &source, &bindings))
+    })
+    .await
+    .map_err(|error| MusicLibraryError::runtime("prepare Music transfer", error))?
+}
+
+#[tauri::command]
+pub async fn music_library_commit_transfer(
+    app: tauri::AppHandle,
+    db_url: String,
+    vault_id: String,
+    request: MusicTransferCommit,
+) -> MusicLibraryResult<MusicInterchangeImportResult> {
+    let permit = MUSIC_TRANSFER_WORKERS
+        .try_acquire()
+        .map_err(|_| MusicLibraryError::conflict("Another Music transfer is being prepared"))?;
+    transfer_vault(&app, &vault_id)?;
+    let pool = connect_sqlite(app.clone(), db_url)
+        .await
+        .map_err(connection_error)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let _permit = permit;
+        transfer_vault(&app, &vault_id)?;
+        let bindings = super::transfer::bindings(&app)?;
+        tauri::async_runtime::block_on(super::transfer::commit(&pool, request, &bindings))
+    })
+    .await
+    .map_err(|error| MusicLibraryError::runtime("commit Music transfer", error))?
+}
+
+#[tauri::command]
+pub async fn music_library_export_transfer(
+    app: tauri::AppHandle,
+    db_url: String,
+    vault_id: String,
+    request: MusicTransferExport,
+) -> MusicLibraryResult<bool> {
+    let permit = MUSIC_TRANSFER_WORKERS
+        .try_acquire()
+        .map_err(|_| MusicLibraryError::conflict("Another Music transfer is being prepared"))?;
+    transfer_vault(&app, &vault_id)?;
+    let pool = connect_sqlite(app.clone(), db_url)
+        .await
+        .map_err(connection_error)?;
+    let format = request.format;
+    let worker_app = app.clone();
+    let contents = tauri::async_runtime::spawn_blocking(move || {
+        let _permit = permit;
+        transfer_vault(&worker_app, &vault_id)?;
+        let bindings = super::transfer::bindings(&worker_app)?;
+        tauri::async_runtime::block_on(super::transfer::export(&pool, &request, &bindings))
+    })
+    .await
+    .map_err(|error| MusicLibraryError::runtime("prepare Music export", error))??;
+    let extension = match format {
+        MusicTransferFormat::Json => "json",
+        MusicTransferFormat::M3u8 => "m3u8",
+    };
+    crate::music::music_pick_and_write_interchange_file(
+        app,
+        "ganbaru-music-playlists".to_string(),
+        contents,
+        extension.to_string(),
+    )
+    .await
+    .map_err(|error| MusicLibraryError::runtime("save Music export", error))
 }
 
 #[tauri::command]

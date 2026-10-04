@@ -287,9 +287,14 @@ function parseNotesBlockContent(value: unknown): NotesBlock {
   if (record.object !== "block") throw new Error("block.object must be block");
   const type = readString(record.type, "block.type");
   if (!isNotesBlockType(type)) throw new Error(`unsupported block type: ${type}`);
+  const revision = record.edit_revision;
+  if (revision !== undefined && (typeof revision !== "string" || !/^[a-f0-9]{64}$/u.test(revision))) {
+    throw new Error("block.edit_revision must be a canonical revision");
+  }
   const base = {
     object: "block" as const,
     id: readString(record.id, "block.id"),
+    edit_revision: revision as string | undefined,
     parent: parseNotesParent(record.parent),
     created_time: readString(record.created_time, "block.created_time"),
     last_edited_time: readString(record.last_edited_time, "block.last_edited_time"),

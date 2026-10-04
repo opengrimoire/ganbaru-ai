@@ -199,6 +199,11 @@ export interface CalendarEvent {
   exceptions?: string[];
   /** Set on virtual recurring instances; points to the DB-backed template event. */
   recurringParentId?: string;
+  /** Native home-zone recurrence identity, independent of moved or rendered start dates. */
+  recurrenceDate?: string;
+  /** Canonical timed occurrence instants supplied by native reads, including fold disambiguation. */
+  startInstant?: string;
+  endInstant?: string;
   allDay?: boolean;
   /** Keeps the Meeting section enabled even when every meeting field is empty. */
   meetingEnabled?: boolean;

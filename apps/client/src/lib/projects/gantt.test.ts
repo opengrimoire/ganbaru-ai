@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildProjectDependencyCascadeProposal,
   buildProjectGanttDatePatch,
   buildProjectGanttTimeline,
 } from "./gantt";
@@ -183,89 +182,6 @@ describe("buildProjectGanttTimeline", () => {
     expect(timeline.rows).toEqual([]);
     expect(timeline.ticks).toEqual([]);
     expect(timeline.dependencyEdges).toEqual([]);
-  });
-});
-
-describe("buildProjectDependencyCascadeProposal", () => {
-  it("proposes shifting a blocked task after the blocking task finishes", () => {
-    const proposal = buildProjectDependencyCascadeProposal({
-      tasks: [
-        task({ id: "blocking", title: "Blocking", startDate: "2026-06-10", targetEndDate: "2026-06-12" }),
-        task({ id: "blocked", title: "Blocked", startDate: "2026-06-11", targetEndDate: "2026-06-13" }),
-      ],
-      dependencies: [
-        dependency({ blockingTaskId: "blocking", blockedTaskId: "blocked" }),
-      ],
-    });
-
-    expect(proposal.unresolvedDependencyIds).toEqual([]);
-    expect(proposal.items).toHaveLength(1);
-    expect(proposal.items[0]).toMatchObject({
-      taskId: "blocked",
-      shiftDays: 2,
-      originalRangeStart: "2026-06-11",
-      originalRangeEnd: "2026-06-13",
-      nextStartDate: "2026-06-13",
-      nextTargetEndDate: "2026-06-15",
-      nextRangeStart: "2026-06-13",
-      nextRangeEnd: "2026-06-15",
-    });
-    expect(proposal.items[0].reasons.map((reason) => reason.blockingTaskId)).toEqual(["blocking"]);
-  });
-
-  it("propagates shifts through chained dependencies", () => {
-    const proposal = buildProjectDependencyCascadeProposal({
-      tasks: [
-        task({ id: "a", title: "A", startDate: "2026-06-10", targetEndDate: "2026-06-12" }),
-        task({ id: "b", title: "B", startDate: "2026-06-11", targetEndDate: "2026-06-13" }),
-        task({ id: "c", title: "C", startDate: "2026-06-14", targetEndDate: "2026-06-15" }),
-      ],
-      dependencies: [
-        dependency({ blockingTaskId: "a", blockedTaskId: "b" }),
-        dependency({ blockingTaskId: "b", blockedTaskId: "c" }),
-      ],
-    });
-
-    expect(proposal.items.map((item) => [item.taskId, item.nextRangeStart, item.nextRangeEnd])).toEqual([
-      ["b", "2026-06-13", "2026-06-15"],
-      ["c", "2026-06-16", "2026-06-17"],
-    ]);
-  });
-
-  it("shifts only date fields the task already uses", () => {
-    const proposal = buildProjectDependencyCascadeProposal({
-      tasks: [
-        task({ id: "blocking", title: "Blocking", dueDate: "2026-06-12" }),
-        task({ id: "blocked", title: "Blocked", dueDate: "2026-06-12" }),
-      ],
-      dependencies: [
-        dependency({ blockingTaskId: "blocking", blockedTaskId: "blocked" }),
-      ],
-    });
-
-    expect(proposal.items[0]).toMatchObject({
-      taskId: "blocked",
-      nextStartDate: undefined,
-      nextDueDate: "2026-06-13",
-      nextTargetEndDate: undefined,
-      nextRangeStart: "2026-06-13",
-      nextRangeEnd: "2026-06-13",
-    });
-  });
-
-  it("does not propose dates for undated blocked tasks", () => {
-    const proposal = buildProjectDependencyCascadeProposal({
-      tasks: [
-        task({ id: "blocking", title: "Blocking", dueDate: "2026-06-12" }),
-        task({ id: "blocked", title: "Blocked" }),
-      ],
-      dependencies: [
-        dependency({ blockingTaskId: "blocking", blockedTaskId: "blocked" }),
-      ],
-    });
-
-    expect(proposal.items).toEqual([]);
-    expect(proposal.unresolvedDependencyIds).toEqual([]);
   });
 });
 

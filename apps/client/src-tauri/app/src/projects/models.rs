@@ -237,8 +237,10 @@ impl_sqlite_from_row!(ProjectPriorityRow {
     updated_at,
 });
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct ProjectTaskRow {
+    #[serde(default)]
+    pub(in crate::projects) revision: i64,
     pub(in crate::projects) id: String,
     pub(in crate::projects) project_id: String,
     pub(in crate::projects) section_id: String,
@@ -266,6 +268,7 @@ pub struct ProjectTaskRow {
 
 #[derive(Serialize)]
 pub struct ProjectTaskSummaryRow {
+    pub(in crate::projects) revision: i64,
     pub(in crate::projects) id: String,
     pub(in crate::projects) project_id: String,
     pub(in crate::projects) section_id: String,
@@ -290,6 +293,7 @@ pub struct ProjectTaskSummaryRow {
     pub(in crate::projects) updated_at: String,
 }
 impl_sqlite_from_row!(ProjectTaskSummaryRow {
+    revision,
     id,
     project_id,
     section_id,
@@ -314,6 +318,7 @@ impl_sqlite_from_row!(ProjectTaskSummaryRow {
     updated_at,
 });
 impl_sqlite_from_row!(ProjectTaskRow {
+    revision,
     id,
     project_id,
     section_id,
@@ -391,8 +396,9 @@ impl_sqlite_from_row!(ProjectTaskTagLinkRow {
     created_at,
 });
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct ProjectCustomFieldRow {
+    pub(in crate::projects) revision: i64,
     pub(in crate::projects) id: String,
     pub(in crate::projects) project_id: String,
     pub(in crate::projects) name: String,
@@ -402,6 +408,7 @@ pub struct ProjectCustomFieldRow {
     pub(in crate::projects) updated_at: String,
 }
 impl_sqlite_from_row!(ProjectCustomFieldRow {
+    revision,
     id,
     project_id,
     name,
@@ -411,8 +418,9 @@ impl_sqlite_from_row!(ProjectCustomFieldRow {
     updated_at,
 });
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct ProjectCustomFieldOptionRow {
+    pub(in crate::projects) revision: i64,
     pub(in crate::projects) id: String,
     pub(in crate::projects) field_id: String,
     pub(in crate::projects) name: String,
@@ -421,6 +429,7 @@ pub struct ProjectCustomFieldOptionRow {
     pub(in crate::projects) updated_at: String,
 }
 impl_sqlite_from_row!(ProjectCustomFieldOptionRow {
+    revision,
     id,
     field_id,
     name,
@@ -493,7 +502,7 @@ impl_sqlite_from_row!(ProjectTaskEventLinkRow {
     created_at,
 });
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct ProjectTaskChangeEventRow {
     pub(in crate::projects) id: String,
     pub(in crate::projects) task_id: String,

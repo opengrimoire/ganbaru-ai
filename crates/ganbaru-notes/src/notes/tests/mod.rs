@@ -12,6 +12,8 @@ mod breadcrumbs;
 mod collaboration;
 mod comment_files;
 mod comments;
+mod compound_edits;
+mod copy_limits;
 mod database_board;
 mod database_calendar;
 mod database_copy;

@@ -1,7 +1,11 @@
 mod commands;
 pub use commands::*;
+pub mod adaptive;
+mod execution;
+pub use execution::*;
 mod reads;
 pub use reads::*;
+mod read_budget;
 mod recovery;
 #[cfg(test)]
 mod tests;
@@ -50,7 +54,7 @@ pub struct PomodoroRunWrite {
     adaptive_snapshot: Option<PomodoroRunAdaptiveSnapshotWrite>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroRunAdaptiveSnapshotWrite {
     policy_id: String,
@@ -65,7 +69,7 @@ pub struct PomodoroRunAdaptiveSnapshotWrite {
     experiment_assignments: Vec<PomodoroAdaptiveExperimentAssignmentWrite>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroAdaptiveDecisionEnvelopeWrite {
     policy_id: String,
@@ -78,7 +82,7 @@ pub struct PomodoroAdaptiveDecisionEnvelopeWrite {
     experiment_assignments: Vec<PomodoroAdaptiveExperimentAssignmentWrite>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroAdaptiveContextSnapshotWrite {
     id: String,
@@ -95,7 +99,7 @@ pub struct PomodoroAdaptiveContextSnapshotWrite {
     data_quality_flags: Vec<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroAdaptiveFeatureWrite {
     feature_key: String,
@@ -106,7 +110,7 @@ pub struct PomodoroAdaptiveFeatureWrite {
     source_kind: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroAdaptiveDecisionWrite {
     id: String,
@@ -126,7 +130,7 @@ pub struct PomodoroAdaptiveDecisionWrite {
     state_scores: PomodoroAdaptiveStateScoresWrite,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroAdaptiveDecisionValueWrite {
     value_key: String,
@@ -135,25 +139,25 @@ pub struct PomodoroAdaptiveDecisionValueWrite {
     value_unit: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroAdaptiveExperimentAssignmentWrite {
     experiment: PomodoroAdaptiveExperimentWrite,
     assignment: PomodoroAdaptiveAssignmentWrite,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroAdaptivePlannedBlockWrite {
-    event_date: String,
-    event_id: Option<String>,
-    original_event_id: String,
-    planned_start: String,
-    planned_end: String,
-    source_kind: String,
+    pub event_date: String,
+    pub event_id: Option<String>,
+    pub original_event_id: String,
+    pub planned_start: String,
+    pub planned_end: String,
+    pub source_kind: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroAdaptiveExperimentWrite {
     id: String,
@@ -166,7 +170,7 @@ pub struct PomodoroAdaptiveExperimentWrite {
     variants: Vec<PomodoroAdaptiveExperimentVariantWrite>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroAdaptiveExperimentVariantWrite {
     variant_key: String,
@@ -174,7 +178,7 @@ pub struct PomodoroAdaptiveExperimentVariantWrite {
     is_control: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroAdaptiveAssignmentWrite {
     id: String,
@@ -187,7 +191,7 @@ pub struct PomodoroAdaptiveAssignmentWrite {
     assigned_at: String,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroAdaptiveStateScoresWrite {
     readiness: f64,
@@ -198,7 +202,7 @@ pub struct PomodoroAdaptiveStateScoresWrite {
     confidence: f64,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(
     tag = "kind",
     rename_all = "snake_case",
@@ -216,12 +220,12 @@ pub enum PomodoroRunRhythm {
     },
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroRunSequenceStep {
-    focus_duration_minutes: i64,
-    break_phase: String,
-    break_duration_minutes: i64,
+    pub focus_duration_minutes: i64,
+    pub break_phase: String,
+    pub break_duration_minutes: i64,
 }
 
 #[derive(Deserialize)]
@@ -289,7 +293,7 @@ pub struct PomodoroSegmentUpdate {
     pauses: Vec<PomodoroPauseWrite>,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroPauseWrite {
     started_at: String,
@@ -383,7 +387,7 @@ pub struct PomodoroRecoveredSegmentRead {
     pause_log: Vec<PomodoroPauseWrite>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroAdaptiveHistoryRead {
     segments: Vec<PomodoroAdaptiveHistorySegmentRead>,
@@ -395,7 +399,7 @@ pub struct PomodoroAdaptiveHistoryRead {
     experiment_assignments: Vec<PomodoroAdaptiveHistoryExperimentAssignmentRead>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroAdaptiveHistorySegmentRead {
     run_id: String,
@@ -410,7 +414,7 @@ pub struct PomodoroAdaptiveHistorySegmentRead {
     pause_log: Vec<PomodoroPauseWrite>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroAdaptiveHistoryRunEventRead {
     event_type: String,
@@ -420,7 +424,7 @@ pub struct PomodoroAdaptiveHistoryRunEventRead {
     duration_seconds: Option<i64>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroAdaptiveHistoryBlockEventRead {
     occurred_at: String,
@@ -430,7 +434,7 @@ pub struct PomodoroAdaptiveHistoryBlockEventRead {
     decision: String,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroAdaptiveHistoryContextStateRead {
     context_key: String,
@@ -442,7 +446,7 @@ pub struct PomodoroAdaptiveHistoryContextStateRead {
     confidence: f64,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroAdaptiveHistoryExperimentStateRead {
     experiment_id: String,
@@ -451,7 +455,7 @@ pub struct PomodoroAdaptiveHistoryExperimentStateRead {
     ended_at: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroAdaptiveHistoryExperimentAssignmentRead {
     experiment_id: String,
@@ -460,7 +464,7 @@ pub struct PomodoroAdaptiveHistoryExperimentAssignmentRead {
     assigned_at: String,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroAdaptiveHistoryExperimentOutcomeRead {
     experiment_id: String,
@@ -493,7 +497,7 @@ pub struct PomodoroAdaptiveHistoryExperimentOutcomeRead {
     next_day_blocked_attempt_count_sum: f64,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroAdaptiveReplayDatasetRead {
     opportunities: Vec<PomodoroAdaptiveReplayRunStartOpportunityRead>,
@@ -501,7 +505,7 @@ pub struct PomodoroAdaptiveReplayDatasetRead {
     histories: Vec<PomodoroAdaptiveReplayOpportunityHistoryRead>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroAdaptiveReplayRunStartOpportunityRead {
     id: String,
@@ -514,7 +518,7 @@ pub struct PomodoroAdaptiveReplayRunStartOpportunityRead {
     selected_rhythm: PomodoroRunRhythm,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroAdaptiveReplayOutcomeRowRead {
     opportunity_id: String,
@@ -525,7 +529,7 @@ pub struct PomodoroAdaptiveReplayOutcomeRowRead {
     categorical_value: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PomodoroAdaptiveReplayOpportunityHistoryRead {
     opportunity_id: String,

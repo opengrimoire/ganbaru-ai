@@ -3,46 +3,93 @@ use crate::db_path::connect_sqlite;
 use serde::Serialize;
 use tauri::{AppHandle, Runtime};
 
+mod export;
+mod export_preservation;
+pub(crate) mod focus_context;
 mod hydration;
 mod icalendar;
+pub(crate) mod native_window;
+
+/// Read and expand canonical Calendar data in one native request.
+#[tauri::command]
+pub async fn calendar_load_native_window<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    request: native_window::NativeWindowRequest,
+) -> Result<native_window::NativeCalendarWindow, String> {
+    let pool = connect_sqlite(app, db_url).await?;
+    native_window::load(&pool, request, native_window::WindowPurpose::Render).await
+}
+
+/// Return native occurrences only for commitments with a persisted Focus configuration.
+#[tauri::command]
+pub async fn calendar_load_native_focus_window<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    request: native_window::NativeWindowRequest,
+) -> Result<native_window::NativeCalendarWindow, String> {
+    let pool = connect_sqlite(app, db_url).await?;
+    native_window::load(&pool, request, native_window::WindowPurpose::Focus).await
+}
+
+/// Read only reminder-bearing canonical events and expand their home-zone occurrences.
+#[tauri::command]
+pub async fn calendar_load_native_notification_window<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    request: native_window::NativeWindowRequest,
+) -> Result<native_window::NativeCalendarWindow, String> {
+    let pool = connect_sqlite(app, db_url).await?;
+    native_window::load(&pool, request, native_window::WindowPurpose::Notifications).await
+}
+
+/// Return one bounded, consistent Calendar export snapshot from the active vault.
+#[tauri::command]
+pub async fn calendar_load_export_snapshot<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    calendar_id: String,
+) -> Result<export::CalendarExportSnapshot, String> {
+    let pool = connect_sqlite(app, db_url).await?;
+    export::load_export_snapshot(&pool, &calendar_id).await
+}
 
 use hydration::{hydrate_full_event_row, hydrate_full_override_rows, hydrate_window_event_rows};
-use icalendar::{calendar_icalendar_export_metadata, load_component_jcals};
 
 #[derive(Serialize)]
 pub struct DbCalendarEventRow {
-    id: String,
-    title: String,
-    start_time: String,
-    end_time: String,
-    timezone: String,
-    calendar_id: String,
-    project_id: Option<String>,
-    environment_id: Option<String>,
-    playlist_id: Option<String>,
-    color: Option<i64>,
-    rrule: Option<String>,
-    notifications: Option<String>,
-    exceptions: Option<String>,
-    repeat_until: Option<String>,
-    all_day: i64,
-    location: String,
-    has_call_link: i64,
-    meeting_enabled: i64,
-    transparency: String,
-    status: String,
-    local_rsvp_status: Option<String>,
-    created_at: String,
-    rdate: Option<String>,
-    rhythm_kind: Option<String>,
-    rhythm_source: Option<String>,
-    preset_key: Option<String>,
-    count_focus_duration_minutes: Option<i64>,
-    count_short_break_minutes: Option<i64>,
-    count_long_break_minutes: Option<i64>,
-    count_long_break_after_focus_count: Option<i64>,
-    sequence_steps: Option<String>,
-    idle_timeout_minutes: Option<i64>,
+    pub(crate) id: String,
+    pub(crate) title: String,
+    pub(crate) start_time: String,
+    pub(crate) end_time: String,
+    pub(crate) timezone: String,
+    pub(crate) calendar_id: String,
+    pub(crate) project_id: Option<String>,
+    pub(crate) environment_id: Option<String>,
+    pub(crate) playlist_id: Option<String>,
+    pub(crate) color: Option<i64>,
+    pub(crate) rrule: Option<String>,
+    pub(crate) notifications: Option<String>,
+    pub(crate) exceptions: Option<String>,
+    pub(crate) repeat_until: Option<String>,
+    pub(crate) all_day: i64,
+    pub(crate) location: String,
+    pub(crate) has_call_link: i64,
+    pub(crate) meeting_enabled: i64,
+    pub(crate) transparency: String,
+    pub(crate) status: String,
+    pub(crate) local_rsvp_status: Option<String>,
+    pub(crate) created_at: String,
+    pub(crate) rdate: Option<String>,
+    pub(crate) rhythm_kind: Option<String>,
+    pub(crate) rhythm_source: Option<String>,
+    pub(crate) preset_key: Option<String>,
+    pub(crate) count_focus_duration_minutes: Option<i64>,
+    pub(crate) count_short_break_minutes: Option<i64>,
+    pub(crate) count_long_break_minutes: Option<i64>,
+    pub(crate) count_long_break_after_focus_count: Option<i64>,
+    pub(crate) sequence_steps: Option<String>,
+    pub(crate) idle_timeout_minutes: Option<i64>,
 }
 impl_sqlite_from_row!(DbCalendarEventRow {
     id,
@@ -81,16 +128,16 @@ impl_sqlite_from_row!(DbCalendarEventRow {
 
 #[derive(Serialize)]
 pub struct DbOverrideRow {
-    id: String,
-    parent_event_id: String,
-    recurrence_id: String,
-    recurrence_range: Option<String>,
-    title: Option<String>,
-    start_time: Option<String>,
-    end_time: Option<String>,
-    color: Option<i64>,
-    status: Option<String>,
-    transparency: Option<String>,
+    pub(crate) id: String,
+    pub(crate) parent_event_id: String,
+    pub(crate) recurrence_id: String,
+    pub(crate) recurrence_range: Option<String>,
+    pub(crate) title: Option<String>,
+    pub(crate) start_time: Option<String>,
+    pub(crate) end_time: Option<String>,
+    pub(crate) color: Option<i64>,
+    pub(crate) status: Option<String>,
+    pub(crate) transparency: Option<String>,
 }
 impl_sqlite_from_row!(DbOverrideRow {
     id,
@@ -133,9 +180,9 @@ impl_sqlite_from_row!(DbAttendeeRow {
 
 #[derive(Serialize)]
 pub struct DbWindowAttendeeRow {
-    event_id: String,
-    email: String,
-    status: String,
+    pub(crate) event_id: String,
+    pub(crate) email: String,
+    pub(crate) status: String,
 }
 impl_sqlite_from_row!(DbWindowAttendeeRow {
     event_id,
@@ -542,7 +589,7 @@ const WINDOW_ATTENDEES_SQL: &str = r#"
     ORDER BY a.event_id ASC, a.sort_order ASC
 "#;
 
-const FULL_EVENT_SQL: &str = r#"
+const FULL_EVENT_SELECT_SQL: &str = r#"
     SELECT ce.id, ce.title, ce.start_time, ce.end_time, ce.timezone, ce.calendar_id,
            ce.project_id, ce.environment_id, ce.playlist_id, ce.color, ce.description, ce.rrule,
            NULL AS notifications, NULL AS exceptions, ce.repeat_until,
@@ -586,7 +633,6 @@ const FULL_EVENT_SQL: &str = r#"
     LEFT JOIN icalendar_components ic ON ic.id = ce.icalendar_component_id
     LEFT JOIN pomodoro_configs pc ON pc.event_id = ce.id
     LEFT JOIN pomodoro_config_count_rhythms pcc ON pcc.event_id = ce.id
-    WHERE ce.id = ?
 "#;
 
 #[tauri::command]
@@ -750,94 +796,14 @@ pub async fn calendar_load_notification_scheduler_window<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn calendar_list_event_ids_for_calendar<R: Runtime>(
-    app: AppHandle<R>,
-    db_url: String,
-    calendar_id: String,
-) -> Result<Vec<String>, String> {
-    let pool = connect_sqlite(app, db_url).await?;
-    sqlx::query_scalar::<_, String>(
-        "SELECT id FROM calendar_events WHERE calendar_id = ? ORDER BY start_time ASC",
-    )
-    .bind(&calendar_id)
-    .fetch_all(&pool)
-    .await
-    .map_err(|e| format!("list calendar event ids: {e}"))
-}
-
-#[tauri::command]
-pub async fn calendar_load_icalendar_timezones_for_calendar<R: Runtime>(
-    app: AppHandle<R>,
-    db_url: String,
-    calendar_id: String,
-) -> Result<Vec<String>, String> {
-    let pool = connect_sqlite(app, db_url).await?;
-    let ids = sqlx::query_scalar::<_, String>(
-        "SELECT id
-         FROM icalendar_components
-         WHERE calendar_id = ? AND component_type = 'vtimezone'
-         ORDER BY object_id, sort_order",
-    )
-    .bind(&calendar_id)
-    .fetch_all(&pool)
-    .await
-    .map_err(|e| format!("load iCalendar timezone components: {e}"))?;
-    load_component_jcals(&pool, ids).await
-}
-
-#[tauri::command]
-pub async fn calendar_load_icalendar_passthrough_components_for_calendar<R: Runtime>(
-    app: AppHandle<R>,
-    db_url: String,
-    calendar_id: String,
-) -> Result<Vec<String>, String> {
-    let pool = connect_sqlite(app, db_url).await?;
-    let ids = sqlx::query_scalar::<_, String>(
-        "SELECT child.id
-         FROM icalendar_components child
-         JOIN icalendar_components parent ON parent.id = child.parent_component_id
-         WHERE child.calendar_id = ?
-           AND parent.component_type = 'vcalendar'
-           AND child.component_type NOT IN ('vevent', 'vtimezone')
-         ORDER BY child.object_id, child.sort_order",
-    )
-    .bind(&calendar_id)
-    .fetch_all(&pool)
-    .await
-    .map_err(|e| format!("load iCalendar passthrough components: {e}"))?;
-    load_component_jcals(&pool, ids).await
-}
-
-#[tauri::command]
-pub async fn calendar_load_icalendar_export_metadata_for_calendar<R: Runtime>(
-    app: AppHandle<R>,
-    db_url: String,
-    calendar_id: String,
-) -> Result<CalendarIcalendarExportMetadata, String> {
-    let pool = connect_sqlite(app, db_url).await?;
-    let methods = sqlx::query_scalar::<_, String>(
-        "SELECT method
-         FROM icalendar_objects
-         WHERE calendar_id = ?
-           AND method IS NOT NULL
-           AND trim(method) <> ''",
-    )
-    .bind(&calendar_id)
-    .fetch_all(&pool)
-    .await
-    .map_err(|e| format!("load iCalendar export metadata: {e}"))?;
-
-    Ok(calendar_icalendar_export_metadata(methods))
-}
-
-#[tauri::command]
 pub async fn calendar_load_panel_event<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     id: String,
 ) -> Result<CalendarPanelEventRows, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    let mut event = sqlx::query_as::<_, DbFullEventRow>(FULL_EVENT_SQL)
+    let query = format!("{FULL_EVENT_SELECT_SQL} WHERE ce.id = ?");
+    let mut event = sqlx::query_as::<_, DbFullEventRow>(&query)
         .bind(&id)
         .fetch_optional(&pool)
         .await
@@ -862,7 +828,8 @@ pub async fn calendar_load_full_event<R: Runtime>(
     id: String,
 ) -> Result<CalendarFullEventRows, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    let mut event = sqlx::query_as::<_, DbFullEventRow>(FULL_EVENT_SQL)
+    let query = format!("{FULL_EVENT_SELECT_SQL} WHERE ce.id = ?");
+    let mut event = sqlx::query_as::<_, DbFullEventRow>(&query)
         .bind(&id)
         .fetch_optional(&pool)
         .await

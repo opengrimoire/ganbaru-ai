@@ -3,14 +3,14 @@ import type { Calendar, CalendarEvent } from "$lib/components/calendar/types";
 import type { IcsImportSummary, IcsPreservationPayload } from "$lib/calendar/ics/types";
 import { calendarDisplayName } from "$lib/calendar/calendar-display";
 import { dbUrl } from "$lib/api/db";
-import { safeJsonParse } from "./calendar-json";
 import {
   buildBulkImportPayload,
   type CalendarBulkImportResult,
   type CalendarImportSourceKind,
 } from "./calendar-bulk-import";
 import { localTimezone, nowIso } from "./calendar-event-payloads";
-import type { CalendarIcalendarExportMetadata } from "./calendar-event-hydration";
+import { hydrateFullEvent } from "./calendar-event-hydration";
+import { parseCalendarExportSnapshot } from "./calendar-export-snapshot";
 
 export interface CalendarBulkImportOptions {
   refreshWindow?: boolean;
@@ -63,53 +63,35 @@ export async function bulkImportCalendarEvents(
 
 export async function exportCalendarAsIcs(
   calendar: Calendar,
-  loadFullEvent: (id: string) => Promise<CalendarEvent | undefined>,
 ): Promise<string> {
-  const ids = await invoke<string[]>("calendar_list_event_ids_for_calendar", {
+  const renderZone = localTimezone();
+  const response = await invoke<unknown>("calendar_load_export_snapshot", {
     dbUrl: dbUrl(),
     calendarId: calendar.id,
   });
-  const full = await Promise.all(ids.map((id) => loadFullEvent(id)));
-  const calendarEvents = full.filter((event): event is CalendarEvent => event !== undefined);
-  const preservedTimezoneRows = await invoke<string[]>(
-    "calendar_load_icalendar_timezones_for_calendar",
-    {
-      dbUrl: dbUrl(),
-      calendarId: calendar.id,
-    },
-  );
-  const preservedTimezones = preservedTimezoneRows
-    .map((row) => safeJsonParse(row))
-    .filter((row): row is unknown => row !== undefined);
-  const preservedPassthroughRows = await invoke<string[]>(
-    "calendar_load_icalendar_passthrough_components_for_calendar",
-    {
-      dbUrl: dbUrl(),
-      calendarId: calendar.id,
-    },
-  );
-  const preservedPassthroughComponents = preservedPassthroughRows
-    .map((row) => safeJsonParse(row))
-    .filter((row): row is unknown => row !== undefined);
-  const preservedExportMetadata = await invoke<CalendarIcalendarExportMetadata>(
-    "calendar_load_icalendar_export_metadata_for_calendar",
-    {
-      dbUrl: dbUrl(),
-      calendarId: calendar.id,
-    },
-  );
-  if (preservedExportMetadata.mixed_methods) {
+  const snapshot = parseCalendarExportSnapshot(response, calendar.id);
+  const calendarEvents = snapshot.events.map((rows) => {
+    const event = hydrateFullEvent(rows, renderZone);
+    if (!event) throw new Error("Missing Calendar export event");
+    return event;
+  });
+  const currentCalendar = {
+    ...calendar,
+    ...snapshot.calendar,
+    sourceUrl: snapshot.calendar.source_url ?? undefined,
+  };
+  if (snapshot.metadata.mixed_methods) {
     console.warn(
       "iCalendar export used METHOD:PUBLISH because this calendar contains mixed preserved METHOD values.",
     );
   }
   const { serializeCalendarToIcs } = await import("$lib/calendar/ics/serializer");
   return serializeCalendarToIcs(
-    { ...calendar, name: calendarDisplayName(calendar) },
+    { ...currentCalendar, name: calendarDisplayName(currentCalendar) },
     calendarEvents,
-    undefined,
-    preservedTimezones,
-    preservedPassthroughComponents,
-    preservedExportMetadata.method ?? undefined,
+    renderZone,
+    snapshot.timezones,
+    snapshot.passthrough_components,
+    snapshot.metadata.method ?? undefined,
   );
 }

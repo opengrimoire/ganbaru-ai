@@ -24,6 +24,12 @@ internal class AcknowledgeEventsArgs {
   var ids: List<String> = listOf()
 }
 
+@InvokeArg
+internal class AccountingVaultArgs {
+  lateinit var vaultId: String
+  var usageOnly: Boolean = false
+}
+
 internal fun launchableAppResponse(name: String, packageName: String): Map<String, String> = mapOf(
   "name" to name,
   "packageName" to packageName,
@@ -133,13 +139,37 @@ class MobileDoomscrollingPlugin(private val activity: Activity) : Plugin(activit
   }
 
   @Command
+  fun invalidateRules(invoke: Invoke) {
+    try {
+      DoomscrollingGuardianClient(activity.applicationContext).invalidateRules()
+      invoke.resolve()
+    } catch (error: Exception) {
+      invoke.reject(error.message ?: "Failed to invalidate mobile Doomscrolling rules")
+    }
+  }
+
+  @Command
   fun pendingEvents(invoke: Invoke) {
+    val args = invoke.parseArgs(AccountingVaultArgs::class.java)
     Thread {
       try {
-        val events = DoomscrollingGuardianClient(activity).pendingEvents()
+        val events = DoomscrollingGuardianClient(activity).pendingEvents(args.vaultId, args.usageOnly)
         invoke.resolveObject(events.map(JournalEvent::toResponse))
       } catch (error: Exception) {
         invoke.reject(error.message ?: "Failed to read mobile Doomscrolling events")
+      }
+    }.start()
+  }
+
+  @Command
+  fun accountingSnapshot(invoke: Invoke) {
+    val args = invoke.parseArgs(AccountingVaultArgs::class.java)
+    Thread {
+      try {
+        val encoded = DoomscrollingGuardianClient(activity.applicationContext).accountingSnapshot(args.vaultId)
+        invoke.resolve(JSObject().apply { put("snapshotJson", encoded) })
+      } catch (error: Exception) {
+        invoke.reject(error.message ?: "Failed to read mobile Doomscrolling accounting")
       }
     }.start()
   }

@@ -1,8 +1,7 @@
+import { createNotesCompoundPersistence, enqueueNotesCompoundEdit } from "./notes-store-compound-edits";
+import { reconcileNotesCompoundUndo } from "$lib/notes/undo-compound";
 import {
-  appendNotesBlockChildren,
   moveNotesBlock,
-  moveNotesBlocks,
-  trashNotesBlock,
 } from "$lib/api/notes";
 import { collectLoadedBlockSubtreeIds } from "$lib/notes/block-duplicate";
 import {
@@ -29,14 +28,12 @@ import type {
 import type { NotesTreeState } from "$lib/notes/block-tree";
 import { createBlockWrite } from "$lib/notes/block-factory";
 import {
-  notesPostAppendResult,
-  notesPostMoveManyResult,
   notesPostMoveResult,
-  notesPostTrashResult,
   type NotesPostMutationResult,
 } from "$lib/notes/post-mutation";
 
 export interface NotesTabActionsContext {
+  enqueueEditorMutation: (mutation: () => Promise<void>) => Promise<void>;
   readSelectedPageId: () => string | null;
   readChildIdsByParentId: () => Record<string, string[]>;
   treeState: () => NotesTreeState;
@@ -159,19 +156,15 @@ export function createNotesTabActions(context: NotesTabActionsContext): NotesTab
       after: insertAfter,
       children: [createNotesTabLabelWrite(labelBlockId, `Tab ${tabs.length + 1}`)],
     } satisfies NotesAppendBlockChildrenRequest;
-    context.applyPostMutation(notesPostAppendResult(
-      labelRequest,
-      await appendNotesBlockChildren(labelRequest),
-    ));
     const contentRequest = {
       parent: { type: "block_id", block_id: labelBlockId },
       after: null,
       children: [createBlockWrite(contentBlockId, "paragraph")],
     } satisfies NotesAppendBlockChildrenRequest;
-    context.applyPostMutation(notesPostAppendResult(
-      contentRequest,
-      await appendNotesBlockChildren(contentRequest),
-    ));
+    await enqueueNotesCompoundEdit(context, "tab_layout", [
+      { type: "append", request: labelRequest },
+      { type: "append", request: contentRequest },
+    ]);
     context.requestBlockFocus(contentBlockId);
     recordUndoAfter("create", before, contentBlockId);
   }
@@ -191,22 +184,19 @@ export function createNotesTabActions(context: NotesTabActionsContext): NotesTab
     const before = undoSnapshot(tabBlockId);
     const movedChildIds = activeChildBlockIds(removed.label.id);
     const targetChildIds = activeChildBlockIds(target.label.id);
-    if (movedChildIds.length > 0) {
-      const moveRequest = {
-        block_ids: movedChildIds,
-        parent: { type: "block_id", block_id: target.label.id },
-        after: targetChildIds.at(-1) ?? null,
-      } as const;
-      context.applyPostMutation(notesPostMoveManyResult(
-        moveRequest,
-        await moveNotesBlocks(moveRequest),
-      ));
-    }
-    await trashNotesBlock(removed.label.id, true);
-    context.applyPostMutation(notesPostTrashResult(context.treeState(), [removed.label.id]));
+    const persist = createNotesCompoundPersistence(context, "tab_layout", [
+      { type: "move_children", source_block_id: removed.label.id, parent: { type: "block_id", block_id: target.label.id }, after: targetChildIds.at(-1) ?? null },
+      { type: "trash", block_id: removed.label.id, in_trash: true },
+    ], Object.values(context.treeState().blocksById));
+    await context.enqueueEditorMutation(async () => {
+      const result = await persist();
+      context.applyPostMutation({ blocks: result.blocks.filter((block) => !block.in_trash), placements: result.placements, removedBlockIds: [removed.label.id] });
+      const after = undoSnapshot(tabBlockId);
+      reconcileNotesCompoundUndo(before, after, result);
+      context.recordUndo({ kind: "delete", before, after });
+    });
     const focusBlockId = movedChildIds[0] ?? targetChildIds.at(-1) ?? target.label.id;
     context.requestBlockFocus(focusBlockId);
-    recordUndoAfter("delete", before, focusBlockId);
   }
 
   async function moveTab(

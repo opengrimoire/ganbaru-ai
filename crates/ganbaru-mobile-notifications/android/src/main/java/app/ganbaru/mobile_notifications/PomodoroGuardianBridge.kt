@@ -12,7 +12,11 @@ import org.json.JSONObject
 private const val GUARDIAN_AUTHORITY_SUFFIX = ".ganbaru.guardian.notifications"
 private const val METHOD_UPDATE = "updatePomodoro"
 private const val METHOD_CANCEL = "cancelPomodoro"
+private const val METHOD_COMPLETE = "completeFocus"
 private const val METHOD_CURRENT = "currentPomodoro"
+private const val METHOD_CONFIGURE_COPY = "configureFocusCopy"
+private const val METHOD_COPY = "focusCopy"
+private const val KEY_COPY = "copy"
 private const val METHOD_RECONCILE = "reconcilePomodoroSchedule"
 private const val KEY_PROJECTION = "projection"
 private const val KEY_SCHEDULE = "schedule"
@@ -20,14 +24,38 @@ private const val MAX_SCHEDULE_IPC_BYTES = 768 * 1024
 internal val POMODORO_GUARDIAN_LOCK = Any()
 
 internal class PomodoroGuardianClient(private val context: Context) {
-  fun update(projection: PomodoroNotificationProjection) {
-    call(METHOD_UPDATE, Bundle().apply {
-      putString(KEY_PROJECTION, PomodoroNotificationScheduler.encode(projection))
+  fun configureCopy(copy: PomodoroNotificationCopy, scope: NativeFocusProcessScope) {
+    call(METHOD_CONFIGURE_COPY, Bundle().apply {
+      putString(KEY_COPY, PomodoroNotificationScheduler.encodeCopy(copy).toString())
+      putLong(FOCUS_SCOPE_PROCESS, scope.processNonce)
     })
   }
 
-  fun cancel() {
-    call(METHOD_CANCEL)
+  fun copy(): PomodoroNotificationCopy? =
+    call(METHOD_COPY).getString(KEY_COPY)?.let { encoded ->
+      PomodoroNotificationScheduler.decodeCopy(JSONObject(encoded))
+    }
+
+  fun update(projection: PomodoroNotificationProjection, scope: NativeFocusDeliveryScope) {
+    call(METHOD_UPDATE, Bundle().apply {
+      putString(KEY_PROJECTION, PomodoroNotificationScheduler.encode(projection))
+      putLong(FOCUS_SCOPE_PROCESS, scope.processNonce)
+      putLong(FOCUS_SCOPE_GENERATION, scope.generation)
+      putLong(FOCUS_SCOPE_REVISION, scope.revision)
+    })
+  }
+
+  fun complete(projection: PomodoroNotificationProjection, scope: NativeFocusDeliveryScope) {
+    call(METHOD_COMPLETE, Bundle().apply {
+      putString(KEY_PROJECTION, PomodoroNotificationScheduler.encode(projection))
+      putLong(FOCUS_SCOPE_PROCESS, scope.processNonce)
+      putLong(FOCUS_SCOPE_GENERATION, scope.generation)
+      putLong(FOCUS_SCOPE_REVISION, scope.revision)
+    })
+  }
+
+  fun cancel(scope: NativeFocusProcessScope) {
+    call(METHOD_CANCEL, Bundle().apply { putLong(FOCUS_SCOPE_PROCESS, scope.processNonce) })
   }
 
   fun current(): PomodoroNotificationProjection? {
@@ -84,15 +112,39 @@ class PomodoroGuardianProvider : ContentProvider() {
     val appContext = requireNotNull(context).applicationContext
     return synchronized(POMODORO_GUARDIAN_LOCK) {
       when (method) {
+        METHOD_CONFIGURE_COPY -> {
+          val copy = PomodoroNotificationScheduler.decodeCopy(JSONObject(extras.requireString(KEY_COPY)))
+          NativeFocusAuthorityProvider.requireProcessScope(extras).publish(
+            { processNonce -> NativeFocusAuthorityProvider.processCurrent(appContext, processNonce) },
+          ) { PomodoroNotificationScheduler.configureCopy(appContext, copy) }
+          Bundle.EMPTY
+        }
+        METHOD_COPY -> Bundle().apply {
+          PomodoroNotificationScheduler.copy(appContext)?.let { copy ->
+            putString(KEY_COPY, PomodoroNotificationScheduler.encodeCopy(copy).toString())
+          }
+        }
         METHOD_UPDATE -> {
           val encoded = extras.requireString(KEY_PROJECTION)
           val projection = PomodoroNotificationScheduler.decode(encoded)
             ?: error("Pomodoro projection is invalid")
-          PomodoroNotificationScheduler.update(appContext, projection)
+          NativeFocusAuthorityProvider.requireScope(extras).publish(
+            { processNonce, generation, revision -> NativeFocusAuthorityProvider.current(appContext, processNonce, generation, revision) },
+          ) { PomodoroNotificationScheduler.update(appContext, projection) }
+          Bundle.EMPTY
+        }
+        METHOD_COMPLETE -> {
+          val projection = PomodoroNotificationScheduler.decode(extras.requireString(KEY_PROJECTION))
+            ?: error("Committed Focus completion projection is invalid")
+          NativeFocusAuthorityProvider.requireScope(extras).publish(
+            { processNonce, generation, revision -> NativeFocusAuthorityProvider.current(appContext, processNonce, generation, revision) },
+          ) { PomodoroNotificationScheduler.complete(appContext, projection) }
           Bundle.EMPTY
         }
         METHOD_CANCEL -> {
-          PomodoroNotificationScheduler.cancel(appContext)
+          NativeFocusAuthorityProvider.requireProcessScope(extras).publish(
+            { processNonce -> NativeFocusAuthorityProvider.processCurrent(appContext, processNonce) },
+          ) { PomodoroNotificationScheduler.cancel(appContext) }
           Bundle.EMPTY
         }
         METHOD_CURRENT -> Bundle().apply {

@@ -107,6 +107,17 @@ pub(super) fn configured_close_authorization(
             configured_desktop_process_names(rule)?
         }
         DoomscrollingDesktopRuleIdentity::UsageLimit { rule_id, entry_id } => {
+            let native_config = limits::parse_config(config)?;
+            let current_limit = native_config
+                .items
+                .iter()
+                .find(|limit| limit.id == *rule_id)
+                .ok_or_else(|| "usage limit rule is no longer configured".to_string())?;
+            if limit_state.and_then(|state| state.configuration_digest.as_deref())
+                != Some(limits::configuration_digest(config)?.as_str())
+            {
+                return Err("usage limit configuration changed after accounting".into());
+            }
             let limits = doomscrolling
                 .get("limits")
                 .ok_or_else(|| "persisted usage limit configuration is unavailable".to_string())?;
@@ -155,10 +166,18 @@ pub(super) fn configured_close_authorization(
                 return Err("usage limit desktop entry is not closeable".to_string());
             }
             if !limit_state.is_some_and(|state| {
-                state
-                    .limits
-                    .iter()
-                    .any(|limit| limit.id == *rule_id && limit.exhausted)
+                state.limits.iter().any(|limit| {
+                    let minutes = match limit.period.as_str() {
+                        "day" => current_limit.minutes_per_day,
+                        "week" => current_limit.minutes_per_week,
+                        _ => None,
+                    };
+                    limit.id == *rule_id
+                        && limit.exhausted
+                        && limit.used_seconds >= limit.limit_seconds
+                        && minutes.is_some_and(|minutes| minutes * 60 == limit.limit_seconds)
+                        && state::validate_limit_state(state).is_ok()
+                })
             }) {
                 return Err("usage limit is not currently exhausted".to_string());
             }
@@ -212,7 +231,12 @@ pub(super) fn load_close_authorization<R: Runtime>(
         rule_identity,
         DoomscrollingDesktopRuleIdentity::DesktopApp { .. }
     )
-    .then(|| read_fresh_runtime_state(&state_path(app).ok()?, checked_at))
+    .then(|| {
+        crate::pomodoro::native_runtime::current_effect(app, checked_at.timestamp_millis())?
+            .map(|effect| state::committed_focus_state(&effect, checked_at.timestamp_millis()))
+            .transpose()
+    })
+    .transpose()?
     .flatten();
     let limit_state = matches!(
         rule_identity,
@@ -226,6 +250,17 @@ pub(super) fn load_close_authorization<R: Runtime>(
         )
     })
     .flatten();
+    if let Some(state) = &limit_state {
+        let zone = crate::recurrence::time::system_zone()?;
+        let current_date =
+            crate::recurrence::time::instant_to_local(checked_at.timestamp_millis(), &zone)?
+                .date()
+                .format("%Y-%m-%d")
+                .to_string();
+        if state.local_date != current_date {
+            return Err("usage limit snapshot belongs to an earlier local day".into());
+        }
+    }
     configured_close_authorization(
         &config,
         runtime.as_ref(),

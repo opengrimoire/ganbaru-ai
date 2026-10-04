@@ -8,6 +8,7 @@ pub(super) async fn current_utc_iso(
         .await
         .map_err(|e| format!("read current time: {e}"))
 }
+#[cfg(test)]
 pub(super) fn calendar_timestamps_match(left: &str, right: &str) -> bool {
     match (
         calendar_timestamp_millis(left),

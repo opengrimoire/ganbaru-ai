@@ -26,6 +26,13 @@ describe("MusicTrackPreferences", () => {
 
   beforeEach(() => {
     const player = getMusicPlayer();
+    vi.spyOn(player, "currentQueueIndex", "get").mockReturnValue(0);
+    vi.spyOn(player, "setPlaybackMode").mockImplementation((mode) => {
+      player.shuffleEnabled = mode !== "in-order";
+      player.mixEnabled = mode === "mix";
+    });
+    vi.spyOn(player, "applyCurrentQueueSnooze").mockImplementation(() => undefined);
+    vi.spyOn(player, "clearCurrentQueueSnooze").mockImplementation(() => undefined);
     vi.spyOn(player, "playNextTrack").mockResolvedValue(undefined);
     vi.spyOn(player, "pausePlayback").mockResolvedValue(undefined);
   });
@@ -171,7 +178,7 @@ describe("MusicTrackPreferences", () => {
     });
   });
 
-  it("advances after snoozing the playing track, or pauses if there is no next track", async () => {
+  it("requests native queue reconciliation after snoozing without selecting the successor", async () => {
     const player = getMusicPlayer();
     const source = localFileSourceFromPath("/music/only.flac", "Only");
     player.currentSource = source;
@@ -188,8 +195,9 @@ describe("MusicTrackPreferences", () => {
     target.querySelector<HTMLButtonElement>("button[aria-label='Mix and snooze']")?.click();
     await vi.waitFor(() => expect(target?.querySelector("[data-music-weight='normal']")).not.toBeNull());
     target.querySelector<HTMLButtonElement>(".snooze-choice")?.click();
-    await vi.waitFor(() => expect(next).toHaveBeenCalledOnce());
-    await vi.waitFor(() => expect(pause).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(player.applyCurrentQueueSnooze).toHaveBeenCalledOnce());
+    expect(next).not.toHaveBeenCalled();
+    expect(pause).not.toHaveBeenCalled();
     expect(api.bulkSnoozeMusicItems.mock.calls[0][0]).toMatchObject({ itemIds: ["only"], scope: "all-playlists" });
     next.mockRestore();
     pause.mockRestore();

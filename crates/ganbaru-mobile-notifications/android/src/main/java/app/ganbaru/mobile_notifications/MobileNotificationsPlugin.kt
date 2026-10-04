@@ -20,6 +20,7 @@ import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
+import app.tauri.plugin.Channel
 import app.tauri.plugin.JSArray
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
@@ -89,6 +90,20 @@ internal class PomodoroNotificationStateArgs {
 @InvokeArg
 internal class PomodoroNotificationUpdateArgs {
   lateinit var state: PomodoroNotificationStateArgs
+  var processNonce: Long = 0
+  var generation: Long = 0
+  var revision: Long = -1
+}
+
+@InvokeArg
+internal class FocusNotificationProcessArgs {
+  var processNonce: Long = 0
+}
+
+@InvokeArg
+internal class FocusNotificationCopyArgs {
+  lateinit var copy: PomodoroNotificationCopyArgs
+  var processNonce: Long = 0
 }
 
 internal class PomodoroReminderArgs {
@@ -123,8 +138,52 @@ internal class BackgroundExecutionSettingsArgs {
   lateinit var destination: String
 }
 
+@InvokeArg
+internal class AttachFocusLifecycleArgs {
+  lateinit var channel: Channel
+}
+
+@InvokeArg
+internal class DeviceLocalTimeArgs {
+  var instants: List<Long> = listOf()
+}
+
 @TauriPlugin
 class MobileNotificationsPlugin(private val activity: Activity) : Plugin(activity) {
+  private val focusLifecycle = NativeFocusLifecycleBridge()
+
+  override fun onResume() {
+    super.onResume()
+    focusLifecycle.observe(true)
+  }
+
+  override fun onPause() {
+    focusLifecycle.observe(false)
+    super.onPause()
+  }
+
+  @Command
+  fun attachFocusLifecycle(invoke: Invoke) {
+    focusLifecycle.attach(invoke.parseArgs(AttachFocusLifecycleArgs::class.java).channel)
+    invoke.resolve()
+  }
+
+  @Command
+  fun deviceLocalTimeFacts(invoke: Invoke) {
+    try {
+      val args = invoke.parseArgs(DeviceLocalTimeArgs::class.java)
+      val facts = DeviceLocalTimeFacts.resolve(args.instants)
+      invoke.resolveObject(facts.map { fact -> JSObject().apply {
+        put("epochMs", fact.epochMs)
+        put("dateKey", fact.dateKey)
+        put("dateString", fact.dateString)
+        put("hour", fact.hour)
+      } })
+    } catch (error: Exception) {
+      invoke.reject("Read device local time facts: ${error.message}")
+    }
+  }
+
   override fun load(webView: WebView) {
     super.load(webView)
     CalendarNotificationScheduler.captureAction(activity, activity.intent)
@@ -227,12 +286,41 @@ class MobileNotificationsPlugin(private val activity: Activity) : Plugin(activit
   }
 
   @Command
+  fun configureFocusNotificationCopy(invoke: Invoke) {
+    try {
+      val args = invoke.parseArgs(FocusNotificationCopyArgs::class.java)
+      val copy = args.copy.toCopy()
+      ensurePomodoroChannels(copy)
+      val scope = NativeFocusProcessScope(args.processNonce)
+      scope.publish(NativeFocusAuthority::processOrUnavailable) {
+        PomodoroGuardianClient(activity).configureCopy(copy, scope)
+      }
+      invoke.resolve()
+    } catch (error: Exception) {
+      invoke.reject(error.message ?: "Failed to configure Focus notification language")
+    }
+  }
+
+  @Command
+  fun focusNotificationCopy(invoke: Invoke) {
+    try {
+      val copy = PomodoroGuardianClient(activity).copy()
+      invoke.resolveObject(JSObject().apply {
+        put("copy", copy?.let(PomodoroNotificationScheduler::encodeCopy))
+      })
+    } catch (error: Exception) {
+      invoke.reject(error.message ?: "Failed to read Focus notification language")
+    }
+  }
+
+  @Command
   fun updatePomodoroNotification(invoke: Invoke) {
     val args = invoke.parseArgs(PomodoroNotificationUpdateArgs::class.java)
     try {
       val projection = args.state.toProjection()
       ensurePomodoroChannels(projection.copy)
-      PomodoroGuardianClient(activity).update(projection)
+      NativeFocusAuthority.requireCurrent(args.processNonce, args.generation, args.revision)
+      PomodoroGuardianClient(activity).update(projection, NativeFocusDeliveryScope(args.processNonce, args.generation, args.revision))
       invoke.resolve()
     } catch (error: Exception) {
       invoke.reject(error.message ?: "Failed to update Pomodoro notification")
@@ -240,9 +328,27 @@ class MobileNotificationsPlugin(private val activity: Activity) : Plugin(activit
   }
 
   @Command
+  fun completeFocusNotification(invoke: Invoke) {
+    try {
+      val args = invoke.parseArgs(PomodoroNotificationUpdateArgs::class.java)
+      val projection = args.state.toProjection()
+      ensurePomodoroChannels(projection.copy)
+      NativeFocusAuthority.requireCurrent(args.processNonce, args.generation, args.revision)
+      PomodoroGuardianClient(activity).complete(projection, NativeFocusDeliveryScope(args.processNonce, args.generation, args.revision))
+      invoke.resolve()
+    } catch (error: Exception) {
+      invoke.reject(error.message ?: "Failed to deliver committed Focus boundary")
+    }
+  }
+
+  @Command
   fun cancelPomodoroNotification(invoke: Invoke) {
     try {
-      PomodoroGuardianClient(activity).cancel()
+      val args = invoke.parseArgs(FocusNotificationProcessArgs::class.java)
+      val scope = NativeFocusProcessScope(args.processNonce)
+      scope.publish(NativeFocusAuthority::processOrUnavailable) {
+        PomodoroGuardianClient(activity).cancel(scope)
+      }
       invoke.resolve()
     } catch (error: Exception) {
       invoke.reject(error.message ?: "Failed to cancel Pomodoro notification")
@@ -481,6 +587,13 @@ class MobileNotificationsPlugin(private val activity: Activity) : Plugin(activit
     Uri.parse("package:${activity.packageName}"),
   )
 }
+
+private fun PomodoroNotificationCopyArgs.toCopy(): PomodoroNotificationCopy =
+  PomodoroNotificationCopy(
+    channelName, channelDescription, alertsChannelName, alertsChannelDescription,
+    focusTitle, shortBreakTitle, longBreakTitle, pausedText,
+    focusCompleteTitle, breakCompleteTitle, sessionCompleteText,
+  )
 
 private fun PomodoroNotificationStateArgs.toProjection(): PomodoroNotificationProjection =
   PomodoroNotificationProjection(

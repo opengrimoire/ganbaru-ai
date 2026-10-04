@@ -175,23 +175,6 @@ function maxOrder(values: readonly number[]): number {
   return Math.max(0, ...values) + 1000;
 }
 
-function referenceTaskClosure(snapshot: ProjectsSnapshot, roots: ProjectTask[]): string[] {
-  const taskById = new Map(snapshot.tasks.map((value) => [value.id, value]));
-  const pending = roots.map((value) => value.id);
-  const visited = new Set<string>();
-  const result: string[] = [];
-  while (pending.length > 0) {
-    const taskId = pending.pop();
-    if (!taskId || visited.has(taskId)) continue;
-    visited.add(taskId);
-    const value = taskById.get(taskId);
-    if (!value) continue;
-    result.push(value.id);
-    for (const child of snapshot.tasks) if (child.parentTaskId === value.id) pending.push(child.id);
-  }
-  return result;
-}
-
 function compareEverySelector(snapshot: ProjectsSnapshot): void {
   const projectId = "project-a";
   const groupId = "group-a";
@@ -271,8 +254,6 @@ function compareEverySelector(snapshot: ProjectsSnapshot): void {
     .map((preference) => parseSavedTaskViewPreference(preference, customFieldIds, customOptionIds))
     .filter((view): view is ProjectSavedTaskView => view !== undefined);
   expect(indexed.savedTaskViewsForProject(snapshot, projectId)).toEqual(expectedViews.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.name.localeCompare(b.name)));
-  const roots = snapshot.tasks.filter((value) => value.id === taskId);
-  expect(ids(indexed.taskClosure(snapshot, roots))).toEqual(referenceTaskClosure(snapshot, roots));
   expect(indexed.nextGroupSortOrder(snapshot)).toBe(maxOrder(snapshot.groups.map((value) => value.sortOrder)));
   expect(indexed.nextProjectSortOrder(snapshot, groupId)).toBe(maxOrder(projects.map((value) => value.sortOrder)));
   expect(indexed.nextSectionSortOrder(snapshot, projectId)).toBe(maxOrder(activeSections.map((value) => value.sortOrder)));

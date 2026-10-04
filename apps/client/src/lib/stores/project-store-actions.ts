@@ -1,4 +1,9 @@
+import type { ProjectDependencyCascadePreview } from "$lib/api/project-cascade";
 import {
+  applyProjectTaskBulk,
+  reorderProjectItem,
+  type ProjectTaskBulkChange,
+  type ProjectReorderItem,
   createProjectChecklistItem,
   createProjectCustomEmoji,
   createProjectCustomField,
@@ -90,6 +95,7 @@ import {
   type ProjectGroup,
   type ProjectLinkableEvent,
   type ProjectMutation,
+  type ProjectMutationRemoval,
   type ProjectPriority,
   type ProjectPriorityConfig,
   type ProjectSavedTaskView,
@@ -138,6 +144,15 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
     updateSnapshot,
   } = context;
   const mutationGenerations = new Map<string, number>();
+  interface PendingProjectOperation {
+    operationId: string;
+    projectId: string;
+    removedProjects: Set<string>;
+    removedFields: Set<string>;
+    removedOptions: Set<string>;
+  }
+  const pendingBulkOperations = new Map<string, PendingProjectOperation>();
+  let bulkLoadGeneration = readLoadGeneration();
 
   async function taskForMutation(task: ProjectTask): Promise<ProjectTask> {
     if (task.detailLoaded) return task;
@@ -151,6 +166,7 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
     key: string,
     request: () => Promise<ProjectMutation>,
     originatingLoadGeneration = readLoadGeneration(),
+    pending?: PendingProjectOperation,
   ): Promise<ProjectMutation> {
     const generation = (mutationGenerations.get(key) ?? 0) + 1;
     mutationGenerations.set(key, generation);
@@ -159,10 +175,52 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
       mutationGenerations.get(key) === generation
       && readLoadGeneration() === originatingLoadGeneration
     ) {
-      updateSnapshot((current) => applyProjectMutation(current, mutation));
+      updateSnapshot((current) => {
+        rememberPendingRemovals(current, mutation.removals);
+        return applyProjectMutation(current, pending ? filterRemovedReceiptRows(mutation, pending) : mutation);
+      });
       await applyCalendarEventProjectAssignments(mutation.calendarEventProjectAssignments);
     }
     return mutation;
+  }
+
+  /** Retain deletion evidence only while an intent may still return an old receipt. */
+  function rememberPendingRemovals(current: ProjectsSnapshot, removals: ProjectMutationRemoval[]): void {
+    for (const pending of pendingBulkOperations.values()) {
+      for (const removal of removals) {
+        if (removal.kind === "project") pending.removedProjects.add(removal.id);
+        if (removal.kind === "group") {
+          for (const project of current.projects) {
+            if (project.groupId === removal.id) pending.removedProjects.add(project.id);
+          }
+        }
+        if (removal.kind === "custom_field") pending.removedFields.add(removal.id);
+        if (removal.kind === "custom_field_option") pending.removedOptions.add(removal.id);
+      }
+    }
+  }
+
+  /** Absence from a paginated view is not deletion evidence. */
+  function filterRemovedReceiptRows(mutation: ProjectMutation, pending: PendingProjectOperation): ProjectMutation {
+    const tasks = mutation.changed.tasks.filter((task) => !pending.removedProjects.has(task.projectId));
+    const taskIds = new Set(tasks.map((task) => task.id));
+    return { ...mutation, changed: { ...mutation.changed, tasks,
+      taskChangeEvents: mutation.changed.taskChangeEvents.filter((event) => taskIds.has(event.taskId)),
+      customFields: mutation.changed.customFields.filter((field) =>
+        !pending.removedFields.has(field.id) && !pending.removedProjects.has(field.projectId)),
+      customFieldOptions: mutation.changed.customFieldOptions.filter((option) =>
+        !pending.removedProjects.has(pending.projectId)
+        && !pending.removedOptions.has(option.id) && !pending.removedFields.has(option.fieldId)),
+    } };
+  }
+
+  function pendingOperation(key: string, projectId: string): PendingProjectOperation {
+    const existing = pendingBulkOperations.get(key);
+    if (existing) return existing;
+    const pending: PendingProjectOperation = { operationId: crypto.randomUUID(), projectId,
+      removedProjects: new Set(), removedFields: new Set(), removedOptions: new Set() };
+    pendingBulkOperations.set(key, pending);
+    return pending;
   }
 
   function changedById<T extends { id: string }>(
@@ -669,14 +727,7 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
   }
 
   async function moveCustomField(field: ProjectCustomField, direction: -1 | 1): Promise<void> {
-    const ordered = selectors.customFieldsForProject(field.projectId);
-    const index = ordered.findIndex((entry) => entry.id === field.id);
-    const target = ordered[index + direction];
-    if (index < 0 || !target) return;
-    await commitMutation(`field:${field.id}`, () =>
-      updateProjectCustomField(customFieldUpdatePayload(field, { sortOrder: target.sortOrder })));
-    await commitMutation(`field:${target.id}`, () =>
-      updateProjectCustomField(customFieldUpdatePayload(target, { sortOrder: field.sortOrder })));
+    await reorderItem(field.projectId, { kind: "custom_field", id: field.id, expectedOrder: field.sortOrder }, direction);
   }
 
   async function removeCustomField(fieldId: string): Promise<void> {
@@ -712,14 +763,11 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
   }
 
   async function moveCustomFieldOption(option: ProjectCustomFieldOption, direction: -1 | 1): Promise<void> {
-    const ordered = selectors.customFieldOptionsForField(option.fieldId);
-    const index = ordered.findIndex((entry) => entry.id === option.id);
-    const target = ordered[index + direction];
-    if (index < 0 || !target) return;
-    await commitMutation(`field-option:${option.id}`, () =>
-      updateProjectCustomFieldOption(customFieldOptionUpdatePayload(option, { sortOrder: target.sortOrder })));
-    await commitMutation(`field-option:${target.id}`, () =>
-      updateProjectCustomFieldOption(customFieldOptionUpdatePayload(target, { sortOrder: option.sortOrder })));
+    const field = selectors.customFieldById(option.fieldId);
+    if (!field) throw new Error("The custom field is no longer loaded");
+    await reorderItem(field.projectId, {
+      kind: "custom_field_option", id: option.id, fieldId: option.fieldId, expectedOrder: option.sortOrder,
+    }, direction);
   }
 
   async function removeCustomFieldOption(optionId: string): Promise<void> {
@@ -741,36 +789,32 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
     );
   }
 
-  async function updateTasks(
-    tasks: ProjectTask[],
-    patchForTask: (task: ProjectTask, index: number) => ProjectTaskUpdatePatch,
-  ): Promise<void> {
+  /** Apply exactly the reviewed native graph and retain its identity after uncertain responses. */
+  async function applyDependencyCascade(preview: ProjectDependencyCascadePreview): Promise<void> {
     const loadGeneration = readLoadGeneration();
-    for (const [index, task] of tasks.entries()) {
-      const hydrated = await taskForMutation(task);
-      await commitMutation(
-        `task:${task.id}`,
-        () => updateProjectTask(taskUpdatePayload(hydrated, patchForTask(hydrated, index))),
-        loadGeneration,
-      );
+    if (bulkLoadGeneration !== loadGeneration) {
+      pendingBulkOperations.clear();
+      bulkLoadGeneration = loadGeneration;
     }
+    const intent = { projectId: preview.projectId, reviewedDigest: preview.digest };
+    const key = `dependency-cascade:${JSON.stringify(intent)}`;
+    const pending = pendingOperation(key, preview.projectId);
+    await commitMutation(key, async () => {
+      const { applyProjectDependencyCascade } = await import("$lib/api/project-cascade");
+      if (readLoadGeneration() !== loadGeneration) {
+        throw new Error("Project context changed before applying the dependency review");
+      }
+      return applyProjectDependencyCascade({ ...intent, operationId: pending.operationId });
+    }, loadGeneration, pending);
+    pendingBulkOperations.delete(key);
   }
 
   async function setTaskStatus(task: ProjectTask, statusId: string): Promise<void> {
-    await updateTask(task, {
-      statusId,
-      statusSortOrder: selectors.nextTaskStatusSortOrder(task.projectId, statusId),
-    });
+    await setTasksStatus([task], statusId);
   }
 
   async function setTasksStatus(tasks: ProjectTask[], statusId: string): Promise<void> {
-    const firstTask = tasks[0];
-    if (!firstTask) return;
-    const startSortOrder = selectors.nextTaskStatusSortOrder(firstTask.projectId, statusId);
-    await updateTasks(tasks, (_task, index) => ({
-      statusId,
-      statusSortOrder: startSortOrder + index * 1000,
-    }));
+    await applyTaskBulk(tasks, { kind: "status", statusId });
   }
 
   async function toggleTaskDone(task: ProjectTask): Promise<void> {
@@ -783,20 +827,51 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
   }
 
   async function setTaskPriority(task: ProjectTask, priority: ProjectPriority): Promise<void> {
-    await updateTask(task, { priority });
+    await setTasksPriority([task], priority);
   }
 
   async function setTasksPriority(tasks: ProjectTask[], priority: ProjectPriority): Promise<void> {
-    await updateTasks(tasks, () => ({ priority }));
+    await applyTaskBulk(tasks, { kind: "priority", priority });
   }
 
   async function archiveTasks(tasks: ProjectTask[]): Promise<void> {
-    const archivedAt = new Date().toISOString();
-    await updateTasks(selectors.taskClosure(tasks), () => ({ archivedAt }));
+    await applyTaskBulk(tasks, { kind: "archive", archived: true });
   }
 
   async function restoreTasks(tasks: ProjectTask[]): Promise<void> {
-    await updateTasks(selectors.taskClosure(tasks), () => ({ archivedAt: undefined }));
+    await applyTaskBulk(tasks, { kind: "archive", archived: false });
+  }
+
+  /** Persist one semantic edit and retain its retry identity until its response is accepted. */
+  async function applyTaskBulk(tasks: ProjectTask[], change: ProjectTaskBulkChange): Promise<void> {
+    const first = tasks[0];
+    if (!first) return;
+    if (tasks.some((task) => task.projectId !== first.projectId)) {
+      throw new Error("Bulk tasks must belong to the same project");
+    }
+    const loadGeneration = readLoadGeneration();
+    if (bulkLoadGeneration !== loadGeneration) {
+      pendingBulkOperations.clear();
+      bulkLoadGeneration = loadGeneration;
+    }
+    const intent = {
+      projectId: first.projectId,
+      change,
+      tasks: tasks.map((task) => ({
+        id: task.id,
+        value: change.kind === "status" ? task.statusId
+          : change.kind === "priority" ? task.priority : task.archivedAt ?? null,
+      })),
+    };
+    const key = JSON.stringify(intent);
+    const pending = pendingOperation(key, intent.projectId);
+    await commitMutation(
+      `task-bulk:${key}`,
+      () => applyProjectTaskBulk({ ...intent, operationId: pending.operationId }),
+      loadGeneration,
+      pending,
+    );
+    pendingBulkOperations.delete(key);
   }
 
   async function setTaskType(task: ProjectTask, taskType: ProjectTaskType): Promise<void> {
@@ -805,50 +880,40 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
 
   async function moveTaskInSection(task: ProjectTask, direction: -1 | 1): Promise<void> {
     if (task.parentTaskId) return;
-    const ordered = selectors.topLevelTasksForSection(task.projectId, task.sectionId);
-    const index = ordered.findIndex((entry) => entry.id === task.id);
-    const target = ordered[index + direction];
-    if (index < 0 || !target) return;
-    const loadGeneration = readLoadGeneration();
-    const [hydratedTask, hydratedTarget] = await Promise.all([
-      taskForMutation(task), taskForMutation(target),
-    ]);
-    await commitMutation(`task:${task.id}`, () =>
-      updateProjectTask(taskUpdatePayload(hydratedTask, { sectionSortOrder: target.sectionSortOrder })), loadGeneration);
-    await commitMutation(`task:${target.id}`, () =>
-      updateProjectTask(taskUpdatePayload(hydratedTarget, { sectionSortOrder: task.sectionSortOrder })), loadGeneration);
+    await reorderTask(task, "section", direction);
   }
 
   async function moveTaskInStatus(task: ProjectTask, direction: -1 | 1): Promise<void> {
     if (task.parentTaskId) return;
-    const ordered = selectors.topLevelTasksForStatus(task.projectId, task.statusId);
-    const index = ordered.findIndex((entry) => entry.id === task.id);
-    const target = ordered[index + direction];
-    if (index < 0 || !target) return;
-    const loadGeneration = readLoadGeneration();
-    const [hydratedTask, hydratedTarget] = await Promise.all([
-      taskForMutation(task), taskForMutation(target),
-    ]);
-    await commitMutation(`task:${task.id}`, () =>
-      updateProjectTask(taskUpdatePayload(hydratedTask, { statusSortOrder: target.statusSortOrder })), loadGeneration);
-    await commitMutation(`task:${target.id}`, () =>
-      updateProjectTask(taskUpdatePayload(hydratedTarget, { statusSortOrder: task.statusSortOrder })), loadGeneration);
+    await reorderTask(task, "status", direction);
   }
 
   async function moveSubtask(task: ProjectTask, direction: -1 | 1): Promise<void> {
     if (!task.parentTaskId) return;
-    const ordered = selectors.subtasksForTask(task.parentTaskId);
-    const index = ordered.findIndex((entry) => entry.id === task.id);
-    const target = ordered[index + direction];
-    if (index < 0 || !target) return;
+    await reorderTask(task, "section", direction);
+  }
+
+  /** Native sibling selection includes rows outside the loaded view. */
+  async function reorderTask(task: ProjectTask, axis: "section" | "status", direction: -1 | 1): Promise<void> {
+    await reorderItem(task.projectId, {
+      kind: "task", id: task.id, axis, parentTaskId: task.parentTaskId ?? null,
+      groupId: axis === "section" ? task.sectionId : task.statusId,
+      expectedOrder: axis === "section" ? task.sectionSortOrder : task.statusSortOrder,
+    }, direction);
+  }
+
+  /** Preserve the accepted intent's identity until an uncertain response is recovered. */
+  async function reorderItem(projectId: string, item: ProjectReorderItem, direction: -1 | 1): Promise<void> {
     const loadGeneration = readLoadGeneration();
-    const [hydratedTask, hydratedTarget] = await Promise.all([
-      taskForMutation(task), taskForMutation(target),
-    ]);
-    await commitMutation(`task:${task.id}`, () =>
-      updateProjectTask(taskUpdatePayload(hydratedTask, { sectionSortOrder: target.sectionSortOrder })), loadGeneration);
-    await commitMutation(`task:${target.id}`, () =>
-      updateProjectTask(taskUpdatePayload(hydratedTarget, { sectionSortOrder: task.sectionSortOrder })), loadGeneration);
+    if (bulkLoadGeneration !== loadGeneration) {
+      pendingBulkOperations.clear();
+      bulkLoadGeneration = loadGeneration;
+    }
+    const intent = { projectId, item, direction };
+    const key = `reorder:${JSON.stringify(intent)}`;
+    const pending = pendingOperation(key, projectId);
+    await commitMutation(key, () => reorderProjectItem({ ...intent, operationId: pending.operationId }), loadGeneration, pending);
+    pendingBulkOperations.delete(key);
   }
 
   async function promoteSubtask(task: ProjectTask): Promise<void> {
@@ -883,23 +948,6 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
   async function unlinkTaskEvent(taskId: string, eventId: string): Promise<void> {
     await commitMutation(`event-link:${taskId}:${eventId}`, () =>
       unlinkProjectTaskEvent(taskId, eventId));
-  }
-
-  async function setEventTaskLinks(eventId: string, taskIds: readonly string[]): Promise<void> {
-    const desired = new Set(taskIds.filter((taskId) => taskId.trim().length > 0));
-    const existing = selectors.eventLinksForEvent(eventId);
-    const existingTaskIds = new Set(existing.map((link) => link.taskId));
-    for (const link of existing) {
-      if (desired.has(link.taskId)) continue;
-      await commitMutation(`event-link:${link.taskId}:${eventId}`, () =>
-        unlinkProjectTaskEvent(link.taskId, eventId));
-    }
-
-    for (const taskId of desired) {
-      if (existingTaskIds.has(taskId)) continue;
-      await commitMutation(`event-link:${taskId}:${eventId}`, () =>
-        linkProjectTaskEvent({ taskId, eventId, linkKind: "scheduled" }));
-    }
   }
 
   async function searchLinkableEvents(
@@ -1035,7 +1083,7 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
     removeCustomFieldOption,
     saveCustomFieldValue,
     updateTask,
-    updateTasks,
+    applyDependencyCascade,
     setTaskStatus,
     setTasksStatus,
     toggleTaskDone,
@@ -1051,7 +1099,6 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
     demoteTaskToSubtask,
     linkTaskEvent,
     unlinkTaskEvent,
-    setEventTaskLinks,
     searchLinkableEvents,
     addTaskDependency,
     removeTaskDependency,

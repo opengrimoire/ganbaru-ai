@@ -259,8 +259,6 @@
       if (itemId === targetItemId && player.activePlaylistId === activePlaylistId
         && (selectedPlaylistId === null || selectedPlaylistId === activePlaylistId)) {
         player.applyCurrentQueueSnooze(endsAt);
-        await player.playNextTrack();
-        if (itemId === targetItemId) await player.pausePlayback();
       }
       notifyMusicLibraryChanged();
       close(false);

@@ -3,7 +3,7 @@
 use crate::{
     calendar_events, calendar_import, calendar_reads, calendars, chat, db_path, media_player,
     mobile_notification_capabilities, music, notes, pomodoro, profile_images, project_icons,
-    projects, quick_notes, recurrence, themes, vault,
+    projects, quick_notes, themes, vault,
 };
 
 /// Run the mobile application without desktop-only processes or lifecycle hooks.
@@ -80,23 +80,22 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             chat::coordination_commands::chat_read_reply_thread_page,
             chat::coordination_commands::chat_search_messages,
             media_player::media_player_probe,
-            media_player::media_player_load,
-            media_player::media_player_play,
-            media_player::media_player_pause,
-            media_player::media_player_stop,
-            media_player::media_player_seek,
-            media_player::media_player_set_volume,
-            media_player::media_player_set_muted,
-            media_player::media_player_set_rate,
-            media_player::media_player_snapshot,
             music::music_get_playback_state,
             music::music_save_playback_state,
+            music::session::runtime::music_session_start,
+            music::session::runtime::music_session_command,
+            music::session::runtime::music_session_snapshot,
+            music::session::runtime::music_session_observe,
+            music::session::runtime::music_session_host,
+            music::session::runtime::music_session_subscribe,
+            music::session::runtime::music_session_read_frame,
+            music::session::runtime::music_session_acknowledge,
+            music::session::runtime::music_session_unsubscribe,
             music::music_pick_media_folder,
             music::music_detect_default_folder,
             music::music_pick_root_binding_folder,
             music::music_pick_artwork_file,
             music::music_pick_and_read_interchange_file,
-            music::music_pick_and_write_interchange_file,
             music::music_artwork_data_url,
             music::music_embedded_artwork_data_url,
             music::host::music_retain_hosted_media,
@@ -146,7 +145,9 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             music::library::commands::music_library_upsert_snooze,
             music::library::commands::music_library_remove_snooze,
             music::library::commands::music_library_reset_statistics,
-            music::library::commands::music_library_import_interchange,
+            music::library::commands::music_library_preview_transfer,
+            music::library::commands::music_library_commit_transfer,
+            music::library::commands::music_library_export_transfer,
             music::library::commands::music_library_item_window,
             music::library::commands::music_library_playlist_summaries,
             music::library::commands::music_library_source_summaries,
@@ -159,6 +160,9 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             music::library::commands::music_library_playlist_detail,
             music::library::commands::music_library_upsert_source_collection,
             calendar_reads::calendar_load_window,
+            calendar_reads::calendar_load_native_window,
+            calendar_reads::calendar_load_native_focus_window,
+            calendar_reads::calendar_load_native_notification_window,
             calendar_reads::calendar_load_pomodoro_scheduler_window,
             calendar_reads::calendar_load_notification_scheduler_window,
             mobile_notification_capabilities::mobile_notification_ensure_calendar_channel,
@@ -169,21 +173,13 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             mobile_notification_capabilities::mobile_notification_open_settings,
             calendar_reads::calendar_load_panel_event,
             calendar_reads::calendar_load_full_event,
-            calendar_reads::calendar_list_event_ids_for_calendar,
-            calendar_reads::calendar_load_icalendar_timezones_for_calendar,
-            calendar_reads::calendar_load_icalendar_passthrough_components_for_calendar,
-            calendar_reads::calendar_load_icalendar_export_metadata_for_calendar,
-            recurrence::calendar_expand_render_events,
-            calendar_events::commands::calendar_add_event,
-            calendar_events::commands::calendar_delete_event,
-            calendar_events::commands::calendar_archive_event,
-            calendar_events::commands::calendar_apply_delete_archive_plan,
-            calendar_events::commands::calendar_apply_recurrence_commit_plan,
-            calendar_events::commands::calendar_restore_archived_event,
-            calendar_events::commands::calendar_clear_events,
-            calendar_events::commands::calendar_update_event,
-            calendar_events::commands::calendar_detach_instance,
-            calendar_events::commands::calendar_split_series,
+            calendar_reads::calendar_load_export_snapshot,
+            calendar_events::scope::calendar_plan_edit_scope,
+            calendar_events::edit::calendar_prepare_edit,
+            calendar_events::deletion::calendar_prepare_delete,
+            calendar_events::preview::calendar_preview_edit,
+            calendar_events::commit::calendar_commit_edit,
+            pomodoro::native_runtime::calendar_edit::calendar_dismiss_delete_undo,
             calendar_events::progress::calendar_has_progress_segments,
             calendar_events::progress::calendar_progress_dates_before,
             calendar_import::calendar_bulk_import,
@@ -194,21 +190,14 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             calendars::calendar_set_visibility,
             calendars::calendar_remove_calendar,
             pomodoro::pomodoro_load_segments_for_events,
-            pomodoro::pomodoro_load_adaptive_history,
-            pomodoro::pomodoro_load_adaptive_replay_dataset,
-            pomodoro::pomodoro_start_run,
-            pomodoro::pomodoro_transition_run,
-            pomodoro::pomodoro_insert_segment_with_adaptive_decision,
-            pomodoro::pomodoro_insert_segments,
-            pomodoro::pomodoro_update_segments,
-            pomodoro::pomodoro_close_run,
-            pomodoro::pomodoro_update_run_window,
-            pomodoro::pomodoro_transfer_active_event_reference,
-            pomodoro::pomodoro_heartbeat,
-            pomodoro::pomodoro_record_run_event,
-            pomodoro::pomodoro_recover_mobile_run,
-            crate::doomscrolling_mobile::doomscrolling_mobile_sync_events,
-            crate::doomscrolling_mobile::doomscrolling_mobile_list_usage_samples,
+            pomodoro::native_runtime::focus_snapshot,
+            pomodoro::native_runtime::focus_command,
+            pomodoro::native_runtime::focus_notification_copy,
+            pomodoro::native_runtime::focus_subscribe,
+            pomodoro::native_runtime::focus_renew_subscription,
+            pomodoro::native_runtime::focus_unsubscribe,
+            crate::doomscrolling_mobile::doomscrolling_mobile_update_copy,
+            crate::doomscrolling_mobile::doomscrolling_mobile_load_usage_projection,
             projects::workspace::projects_load_workspace,
             projects::workspace::projects_refresh_workspace,
             projects::workspace::projects_load_task_view,
@@ -251,6 +240,10 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             projects::relationship_commands::projects_create_task_dependency,
             projects::relationship_commands::projects_delete_task_dependency,
             projects::task_commands::projects_update_task,
+            projects::task_bulk::projects_apply_task_bulk,
+            projects::reorder::projects_reorder_item,
+            projects::dependency_cascade::projects_preview_dependency_cascade,
+            projects::dependency_cascade::projects_apply_dependency_cascade,
             projects::preferences::projects_upsert_view_preference,
             projects::preferences::projects_delete_view_preference,
             projects::emojis::projects_create_custom_emoji,
@@ -382,6 +375,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             notes::notes_get_block_children,
             notes::notes_append_block_children,
             notes::notes_update_block,
+            notes::notes_apply_compound_edit,
             notes::notes_trash_block,
             notes::notes_trash_blocks,
             notes::notes_move_block,
@@ -436,6 +430,10 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             #[cfg(target_os = "android")]
             vault::backup::recover_interrupted_restore_for_app(app.handle())?;
             music::setup_youtube_host(app.handle())?;
+            music::session::setup(app.handle());
+            pomodoro::setup(app.handle());
+            #[cfg(target_os = "android")]
+            crate::doomscrolling_mobile::runtime::setup(app.handle());
             #[cfg(target_os = "android")]
             vault::handoff::receiver::start_reconnect_refresh(app.handle().clone());
             Ok(())
@@ -447,6 +445,11 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
         #[cfg(target_os = "android")]
         if matches!(_event, tauri::RunEvent::Resumed) {
             vault::handoff::receiver::trigger_coordinator_reconciliation(_app.clone());
+            crate::doomscrolling_mobile::runtime::wake(_app);
+        }
+        #[cfg(target_os = "android")]
+        if matches!(_event, tauri::RunEvent::Exit) {
+            crate::doomscrolling_mobile::runtime::stop(_app);
         }
     });
 }

@@ -1,7 +1,6 @@
 package app.ganbaru.mobile_media
 
 import android.app.Activity
-import android.content.ComponentName
 import android.content.Intent
 import android.media.MediaMetadataRetriever
 import android.net.Uri
@@ -9,30 +8,26 @@ import android.os.Environment
 import android.provider.DocumentsContract
 import android.util.Base64
 import androidx.activity.result.ActivityResult
-import androidx.core.content.ContextCompat
-import androidx.media3.common.C
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
-import androidx.media3.common.PlaybackException
-import androidx.media3.common.Player
-import androidx.media3.session.MediaController
-import androidx.media3.session.SessionToken
 import app.tauri.annotation.ActivityCallback
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
+import app.tauri.plugin.Channel
 import app.tauri.plugin.JSArray
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
-import com.google.common.util.concurrent.ListenableFuture
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
 
 private const val MAX_SCANNED_ENTRIES = 20_000
 private const val SAF_LOCATOR_PREFIX = "ganbaru-saf:"
 private const val EXTERNAL_STORAGE_DOCUMENTS_AUTHORITY = "com.android.externalstorage.documents"
+
+@InvokeArg
+internal class AttachSessionArgs {
+  lateinit var channel: Channel
+}
 
 private val supportedAudioExtensions = setOf(
   "aac", "aif", "aiff", "alac", "flac", "m4a", "mp3", "ogg", "opus", "wav", "wma",
@@ -45,41 +40,6 @@ private val embeddedArtworkExtensions = setOf(
 @InvokeArg
 internal class PathArgs {
   lateinit var path: String
-}
-
-@InvokeArg
-internal class LoadArgs {
-  lateinit var source: MediaSourceArgs
-  var startMs: Long? = null
-  var volume: Double? = null
-  var rate: Double? = null
-}
-
-internal class MediaSourceArgs {
-  lateinit var kind: String
-  lateinit var path: String
-  lateinit var identity: String
-  var title: String? = null
-}
-
-@InvokeArg
-internal class SeekArgs {
-  var positionMs: Long = 0
-}
-
-@InvokeArg
-internal class VolumeArgs {
-  var volume: Double = 0.8
-}
-
-@InvokeArg
-internal class MutedArgs {
-  var muted: Boolean = false
-}
-
-@InvokeArg
-internal class RateArgs {
-  var rate: Double = 1.0
 }
 
 @InvokeArg
@@ -126,40 +86,17 @@ private data class ScanBudget(
 
 @TauriPlugin
 class MobileMediaPlugin(private val activity: Activity) : Plugin(activity) {
-  private val mainExecutor = ContextCompat.getMainExecutor(activity)
-  private var controllerFuture: ListenableFuture<MediaController>? = null
+  @Command
+  fun attachSession(invoke: Invoke) {
+    try {
+      NativeMusicSession.attach(activity.applicationContext, invoke.parseArgs(AttachSessionArgs::class.java).channel)
+      invoke.resolve()
+    } catch (error: Exception) { invoke.reject("Attach native music session: ${error.message}") }
+  }
+
   private var pendingTreePick: PendingTreePick? = null
   @Volatile private var pendingTreeCache: Pair<String, JSObject>? = null
   private val pendingArtworkPick = AtomicBoolean(false)
-  private val loadGeneration = AtomicLong(0)
-  private var muted = false
-  private var intendedVolume = 0.8f
-  private var sourceIdentity: String? = null
-  private var sourceTitle: String? = null
-  private var sourceHasVideo = false
-  private var lastError: String? = null
-
-  private fun mediaController(): ListenableFuture<MediaController> {
-    controllerFuture?.let { return it }
-    val token = SessionToken(
-      activity,
-      ComponentName(activity, GanbaruPlaybackService::class.java),
-    )
-    return MediaController.Builder(activity, token).buildAsync().also {
-      controllerFuture = it
-    }
-  }
-
-  private fun withController(invoke: Invoke, action: (MediaController) -> Unit) {
-    val future = mediaController()
-    future.addListener({
-      try {
-        action(future.get())
-      } catch (error: Exception) {
-        invoke.reject(error.message ?: "Android media service is unavailable")
-      }
-    }, mainExecutor)
-  }
 
   @Command
   fun probe(invoke: Invoke) {
@@ -185,131 +122,6 @@ class MobileMediaPlugin(private val activity: Activity) : Plugin(activity) {
         invoke.reject(error.message ?: "Failed to inspect selected media")
       }
     }.start()
-  }
-
-  @Command
-  fun load(invoke: Invoke) {
-    val args = invoke.parseArgs(LoadArgs::class.java)
-    val generation = loadGeneration.incrementAndGet()
-    Thread {
-      try {
-        require(args.source.kind == "local-file") { "Android Media3 accepts local media sources only" }
-        require(args.source.identity.isNotBlank()) { "Media source identity is required" }
-        val uri = resolveMediaUri(args.source.path)
-        val document = documentMetadata(uri)
-        val title = args.source.title?.trim().takeUnless { it.isNullOrEmpty() }
-          ?: document.displayName.substringBeforeLast('.', document.displayName)
-        val probe = readMediaMetadata(
-          uri,
-          title,
-          extension(document.displayName) in embeddedArtworkExtensions,
-        )
-        mainExecutor.execute {
-          if (generation != loadGeneration.get()) {
-            invoke.reject("Media load was superseded by a newer request")
-            return@execute
-          }
-          sourceIdentity = args.source.identity
-          sourceTitle = title
-          sourceHasVideo = probe.hasVideo
-          intendedVolume = args.volume?.coerceIn(0.0, 1.0)?.toFloat() ?: intendedVolume
-          muted = false
-          lastError = null
-          withController(invoke) { controller ->
-            if (generation != loadGeneration.get()) {
-              invoke.reject("Media load was superseded by a newer request")
-              return@withController
-            }
-            val item = MediaItem.Builder()
-              .setUri(uri)
-              .setMediaId(args.source.identity)
-              .setMediaMetadata(
-                MediaMetadata.Builder()
-                  .setTitle(title)
-                  .setArtist(probe.artist.ifBlank { null })
-                  .setAlbumTitle(probe.album.ifBlank { null })
-                  .build(),
-              )
-              .build()
-            controller.setMediaItem(item, args.startMs?.coerceAtLeast(0L) ?: 0L)
-            controller.volume = intendedVolume
-            controller.setPlaybackSpeed(args.rate?.coerceIn(0.25, 2.0)?.toFloat() ?: 1.0f)
-            controller.prepare()
-            resolveSnapshot(invoke, controller)
-          }
-        }
-      } catch (error: Exception) {
-        invoke.reject(error.message ?: "Failed to load selected media")
-      }
-    }.start()
-  }
-
-  @Command
-  fun play(invoke: Invoke) = withController(invoke) { controller ->
-    controller.play()
-    resolveSnapshot(invoke, controller)
-  }
-
-  @Command
-  fun pause(invoke: Invoke) = withController(invoke) { controller ->
-    controller.pause()
-    resolveSnapshot(invoke, controller)
-  }
-
-  @Command
-  fun stop(invoke: Invoke) = withController(invoke) { controller ->
-    loadGeneration.incrementAndGet()
-    controller.stop()
-    controller.clearMediaItems()
-    sourceIdentity = null
-    sourceTitle = null
-    sourceHasVideo = false
-    lastError = null
-    resolveSnapshot(invoke, controller)
-  }
-
-  @Command
-  fun seek(invoke: Invoke) {
-    val args = invoke.parseArgs(SeekArgs::class.java)
-    withController(invoke) { controller ->
-      controller.seekTo(args.positionMs.coerceAtLeast(0L))
-      resolveSnapshot(invoke, controller)
-    }
-  }
-
-  @Command
-  fun setVolume(invoke: Invoke) {
-    val args = invoke.parseArgs(VolumeArgs::class.java)
-    intendedVolume = args.volume.coerceIn(0.0, 1.0).toFloat()
-    muted = false
-    withController(invoke) { controller ->
-      controller.volume = intendedVolume
-      resolveSnapshot(invoke, controller)
-    }
-  }
-
-  @Command
-  fun setMuted(invoke: Invoke) {
-    val args = invoke.parseArgs(MutedArgs::class.java)
-    muted = args.muted
-    withController(invoke) { controller ->
-      controller.volume = if (muted) 0f else intendedVolume
-      resolveSnapshot(invoke, controller)
-    }
-  }
-
-  @Command
-  fun setRate(invoke: Invoke) {
-    val args = invoke.parseArgs(RateArgs::class.java)
-    withController(invoke) { controller ->
-      controller.setPlaybackSpeed(args.rate.coerceIn(0.25, 2.0).toFloat())
-      resolveSnapshot(invoke, controller)
-    }
-  }
-
-  @Command
-  fun snapshot(invoke: Invoke) = withController(invoke) { controller ->
-    resolveSnapshot(invoke, controller)
   }
 
   @Command
@@ -459,51 +271,6 @@ class MobileMediaPlugin(private val activity: Activity) : Plugin(activity) {
       }
     }.start()
   }
-
-  @Suppress("OVERRIDE_DEPRECATION")
-  override fun onDestroy() {
-    controllerFuture?.let { MediaController.releaseFuture(it) }
-    controllerFuture = null
-  }
-
-  private fun resolveSnapshot(invoke: Invoke, controller: MediaController) {
-    val playerError = controller.playerError
-    if (playerError != null) lastError = playbackErrorMessage(playerError)
-    val duration = controller.duration.takeIf { it > 0 && it != C.TIME_UNSET }
-    invoke.resolve(JSObject().apply {
-      put("status", playbackStatus(controller))
-      put("sourceIdentity", controller.currentMediaItem?.mediaId?.takeUnless { it.isBlank() } ?: sourceIdentity)
-      put("title", controller.currentMediaItem?.mediaMetadata?.title?.toString() ?: sourceTitle)
-      put("positionMs", controller.currentPosition.coerceAtLeast(0L))
-      put("durationMs", duration)
-      put("volume", intendedVolume.toDouble())
-      put("muted", muted)
-      put("rate", controller.playbackParameters.speed.toDouble())
-      put(
-        "hasVideo",
-        controller.currentTracks.groups.any { group ->
-          group.type == C.TRACK_TYPE_VIDEO && group.isSelected
-        } || sourceHasVideo,
-      )
-      put("backendKind", "media3")
-      put("playableStartMs", null)
-      put("error", lastError)
-    })
-  }
-
-  private fun playbackStatus(controller: MediaController): String = when {
-    controller.playerError != null -> "error"
-    controller.playbackState == Player.STATE_ENDED -> "ended"
-    controller.isPlaying -> "playing"
-    controller.playbackState == Player.STATE_BUFFERING -> "loading"
-    controller.playbackState == Player.STATE_READY && controller.playWhenReady -> "playing"
-    controller.playbackState == Player.STATE_READY -> "paused"
-    controller.mediaItemCount > 0 -> "ready"
-    else -> "idle"
-  }
-
-  private fun playbackErrorMessage(error: PlaybackException): String =
-    error.message ?: "Android could not play this media file"
 
   private fun validateScanLimits(maxFiles: Int, maxDepth: Int) {
     require(maxFiles in 1..5_000) { "Music scan file limit must be between 1 and 5000" }
