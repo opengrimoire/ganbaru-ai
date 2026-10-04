@@ -53,42 +53,6 @@ export interface ProjectGanttTimeline {
   dependencyEdges: ProjectGanttDependencyEdge[];
 }
 
-export interface ProjectDependencyCascadeInput {
-  tasks: readonly ProjectTask[];
-  dependencies: readonly ProjectTaskDependency[];
-}
-
-export interface ProjectDependencyCascadeReason {
-  dependencyId: string;
-  blockingTaskId: string;
-  blockedTaskId: string;
-  blockingTitle: string;
-  blockedTitle: string;
-  requiredStartDate: string;
-}
-
-export interface ProjectDependencyCascadeItem {
-  taskId: string;
-  title: string;
-  shiftDays: number;
-  originalStartDate?: string;
-  originalDueDate?: string;
-  originalTargetEndDate?: string;
-  originalRangeStart: string;
-  originalRangeEnd: string;
-  nextStartDate?: string;
-  nextDueDate?: string;
-  nextTargetEndDate?: string;
-  nextRangeStart: string;
-  nextRangeEnd: string;
-  reasons: ProjectDependencyCascadeReason[];
-}
-
-export interface ProjectDependencyCascadeProposal {
-  items: ProjectDependencyCascadeItem[];
-  unresolvedDependencyIds: string[];
-}
-
 export type ProjectGanttDateInteraction = "move" | "resize-start" | "resize-end";
 
 export interface ProjectGanttDatePatch {
@@ -101,18 +65,6 @@ interface TaskDateRange {
   startDate: string;
   endDate: string;
   milestone: boolean;
-}
-
-interface CascadeTaskState {
-  task: ProjectTask;
-  originalStartDate?: string;
-  originalDueDate?: string;
-  originalTargetEndDate?: string;
-  startDate?: string;
-  dueDate?: string;
-  targetEndDate?: string;
-  originalRange: TaskDateRange;
-  reasonsByDependencyId: Map<string, ProjectDependencyCascadeReason>;
 }
 
 const MAX_TICKS = 8;
@@ -161,23 +113,8 @@ function taskDateRange(task: ProjectTask): TaskDateRange | undefined {
   };
 }
 
-function cascadeStateRange(state: CascadeTaskState): TaskDateRange {
-  return taskDateRange({
-    ...state.task,
-    startDate: state.startDate,
-    dueDate: state.dueDate,
-    targetEndDate: state.targetEndDate,
-  }) ?? state.originalRange;
-}
-
 function shiftOptionalDate(date: string | undefined, days: number): string | undefined {
   return date ? addDays(date, days) : undefined;
-}
-
-function shiftCascadeState(state: CascadeTaskState, days: number): void {
-  state.startDate = shiftOptionalDate(state.startDate, days);
-  state.dueDate = shiftOptionalDate(state.dueDate, days);
-  state.targetEndDate = shiftOptionalDate(state.targetEndDate, days);
 }
 
 function patchChanged(task: ProjectTask, patch: ProjectGanttDatePatch): boolean {
@@ -225,36 +162,6 @@ export function buildProjectGanttDatePatch(
     patch = rangeEndPatch(task, nextEnd);
   }
   return patchChanged(task, patch) ? patch : undefined;
-}
-
-function cascadeStateChanged(state: CascadeTaskState): boolean {
-  return state.startDate !== state.originalStartDate
-    || state.dueDate !== state.originalDueDate
-    || state.targetEndDate !== state.originalTargetEndDate;
-}
-
-function buildCascadeItem(state: CascadeTaskState): ProjectDependencyCascadeItem {
-  const nextRange = cascadeStateRange(state);
-  return {
-    taskId: state.task.id,
-    title: state.task.title,
-    shiftDays: daysBetween(state.originalRange.startDate, nextRange.startDate),
-    originalStartDate: state.originalStartDate,
-    originalDueDate: state.originalDueDate,
-    originalTargetEndDate: state.originalTargetEndDate,
-    originalRangeStart: state.originalRange.startDate,
-    originalRangeEnd: state.originalRange.endDate,
-    nextStartDate: state.startDate,
-    nextDueDate: state.dueDate,
-    nextTargetEndDate: state.targetEndDate,
-    nextRangeStart: nextRange.startDate,
-    nextRangeEnd: nextRange.endDate,
-    reasons: Array.from(state.reasonsByDependencyId.values()).sort((a, b) =>
-      a.blockingTitle.localeCompare(b.blockingTitle)
-      || a.blockedTitle.localeCompare(b.blockedTitle)
-      || a.dependencyId.localeCompare(b.dependencyId)
-    ),
-  };
 }
 
 function buildTicks(startDate: string, totalDays: number): ProjectGanttTick[] {
@@ -382,78 +289,5 @@ export function buildProjectGanttTimeline(input: ProjectGanttInput): ProjectGant
       : clampPercent(((todayOffset + 0.5) / totalDays) * 100),
     rows,
     dependencyEdges,
-  };
-}
-
-export function buildProjectDependencyCascadeProposal(
-  input: ProjectDependencyCascadeInput,
-): ProjectDependencyCascadeProposal {
-  const statesByTaskId = new Map<string, CascadeTaskState>();
-  for (const task of input.tasks) {
-    const range = taskDateRange(task);
-    if (!range) continue;
-    statesByTaskId.set(task.id, {
-      task,
-      originalStartDate: task.startDate,
-      originalDueDate: task.dueDate,
-      originalTargetEndDate: task.targetEndDate,
-      startDate: task.startDate,
-      dueDate: task.dueDate,
-      targetEndDate: task.targetEndDate,
-      originalRange: range,
-      reasonsByDependencyId: new Map(),
-    });
-  }
-
-  const relevantDependencies = input.dependencies.filter((dependency) =>
-    statesByTaskId.has(dependency.blockingTaskId) && statesByTaskId.has(dependency.blockedTaskId)
-  );
-  const unresolvedDependencyIds: string[] = [];
-  const maxPasses = Math.max(1, relevantDependencies.length * Math.max(1, statesByTaskId.size));
-
-  for (let pass = 0; pass < maxPasses; pass += 1) {
-    let changed = false;
-    for (const dependency of relevantDependencies) {
-      const blockingState = statesByTaskId.get(dependency.blockingTaskId);
-      const blockedState = statesByTaskId.get(dependency.blockedTaskId);
-      if (!blockingState || !blockedState) continue;
-      const blockingRange = cascadeStateRange(blockingState);
-      const blockedRange = cascadeStateRange(blockedState);
-      const requiredStartDate = addDays(blockingRange.endDate, 1);
-      if (blockedRange.startDate >= requiredStartDate) continue;
-
-      const shiftDays = daysBetween(blockedRange.startDate, requiredStartDate);
-      shiftCascadeState(blockedState, shiftDays);
-      blockedState.reasonsByDependencyId.set(dependency.id, {
-        dependencyId: dependency.id,
-        blockingTaskId: dependency.blockingTaskId,
-        blockedTaskId: dependency.blockedTaskId,
-        blockingTitle: blockingState.task.title,
-        blockedTitle: blockedState.task.title,
-        requiredStartDate,
-      });
-      changed = true;
-    }
-    if (!changed) {
-      return {
-        items: Array.from(statesByTaskId.values())
-          .filter(cascadeStateChanged)
-          .map(buildCascadeItem)
-          .sort((a, b) =>
-            a.nextRangeStart.localeCompare(b.nextRangeStart)
-            || a.title.localeCompare(b.title)
-            || a.taskId.localeCompare(b.taskId)
-          ),
-        unresolvedDependencyIds,
-      };
-    }
-  }
-
-  unresolvedDependencyIds.push(...relevantDependencies.map((dependency) => dependency.id));
-  return {
-    items: Array.from(statesByTaskId.values())
-      .filter(cascadeStateChanged)
-      .map(buildCascadeItem),
-    unresolvedDependencyIds,
   };
 }

@@ -1,3 +1,5 @@
+import { createNotesCompoundTestAdapter } from "./notes-compound-test-adapter";
+import type { NotesCompoundEdit } from "$lib/api/notes/compound-edits";
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { applyBlockUpdate, blockEditableRichText, blockPlainText, blockWithRichText, createBlockWrite } from "$lib/notes/block-factory";
@@ -13,6 +15,8 @@ const api = vi.hoisted(() => ({
   appendNotesBlockChildren: vi.fn(), trashNotesBlock: vi.fn(), updateNotesBlock: vi.fn(),
 }));
 vi.mock("$lib/api/notes", () => api);
+let compoundAdapter = createNotesCompoundTestAdapter(api);
+vi.mock("$lib/api/notes/compound-edits", () => ({ applyNotesCompoundEdit: (request: NotesCompoundEdit) => compoundAdapter(request) }));
 
 const PAGE = "10000000-0000-4000-8000-000000000001";
 const SOURCE = "10000000-0000-4000-8000-000000000002";
@@ -22,7 +26,7 @@ const REFERENCE: NotesDatabaseReference = { block_id: SOURCE, page_id: PAGE, sou
 
 /** Build editor blocks without fetching a source schema or rows. */
 function model(write: NotesBlockWrite, parent: NotesParent = { type: "page_id", page_id: PAGE }): NotesBlock {
-  return { ...write, object: "block", parent, created_time: "", last_edited_time: "", has_children: false, in_trash: false,
+  return { ...write, object: "block", edit_revision: "0".repeat(64), parent, created_time: "", last_edited_time: "", has_children: false, in_trash: false,
     source_provider: null, source_object_id: null, source_last_edited_time: null } as NotesBlock;
 }
 
@@ -37,6 +41,7 @@ function harness(blocks: readonly NotesBlock[]) {
   let page: string | null = PAGE;
   let tree: NotesTreeState = { blocksById: Object.fromEntries(blocks.map((block) => [block.id, block])),
     childIdsByParentId: { [PAGE]: blocks.map((block) => block.id) } };
+  compoundAdapter = createNotesCompoundTestAdapter(api, () => Object.values(tree.blocksById));
   let retained: (() => Promise<void>) | null = null;
   const recordUndo = vi.fn();
   const reconcileIdentity = vi.fn();
@@ -60,6 +65,7 @@ function harness(blocks: readonly NotesBlock[]) {
 describe("Notes database paste choices", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    compoundAdapter = createNotesCompoundTestAdapter(api);
     api.getNotesDatabaseReference.mockResolvedValue(REFERENCE);
     api.createNotesLinkedDatabaseView.mockImplementation(async (request) => created(request));
     api.trashNotesBlock.mockResolvedValue(undefined);
@@ -119,7 +125,7 @@ describe("Notes database paste choices", () => {
     expect(api.trashNotesBlock).not.toHaveBeenCalled();
   });
 
-  it("retries the failed copy replacement without creating a second linked shell", async () => {
+  it("retries the complete failed replacement with the same linked shell identity", async () => {
     api.trashNotesBlock.mockRejectedValueOnce(new Error("Unavailable")).mockResolvedValue(undefined);
     const h = harness([model(createBlockWrite("before", "paragraph", "Before")), model(createBlockWrite("copy", "child_database", "Tasks")), model(createBlockWrite("after", "paragraph", "After"))]);
     h.controller.beginCopies({ copy: SOURCE }, false);
@@ -127,7 +133,7 @@ describe("Notes database paste choices", () => {
     expect(h.controller.error).toBe("Unavailable");
     expect(h.read().childIdsByParentId[PAGE]).toEqual(["before", "copy", "after"]);
     await h.controller.linkedView();
-    expect(api.createNotesLinkedDatabaseView).toHaveBeenCalledOnce();
+    expect(api.createNotesLinkedDatabaseView).toHaveBeenCalledTimes(2);
     const databaseId = h.read().childIdsByParentId[PAGE][1];
     expect(databaseId).not.toBe("copy");
     expect(h.read().childIdsByParentId[PAGE]).toEqual(["before", databaseId, "after"]);

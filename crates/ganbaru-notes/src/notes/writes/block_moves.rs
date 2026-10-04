@@ -17,9 +17,6 @@ pub async fn move_block(
     block_id: &str,
     request: NoteMoveBlock,
 ) -> Result<NoteBlockDto, String> {
-    let block_id = block_id.trim();
-    require_uuid(block_id, "block_id")?;
-    validate_parent(&request.parent)?;
     let current = reads::get_block_row(pool, block_id, false).await?;
     project_history::ensure_page_baseline_for_mutation(pool, &current.page_id).await?;
     project_history::ensure_parent_baseline_for_mutation(pool, &request.parent).await?;
@@ -27,6 +24,23 @@ pub async fn move_block(
         .begin()
         .await
         .map_err(|e| format!("begin move notes block: {e}"))?;
+    move_block_tx(&mut tx, block_id, request, true).await?;
+    tx.commit()
+        .await
+        .map_err(|e| format!("commit move notes block: {e}"))?;
+    reads::get_block(pool, block_id, false).await
+}
+
+/// Move a canonical block and its graph within an existing editor transaction.
+pub(super) async fn move_block_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    block_id: &str,
+    request: NoteMoveBlock,
+    record_history: bool,
+) -> Result<(), String> {
+    require_uuid(block_id, "block_id")?;
+    validate_parent(&request.parent)?;
+    let current = load_block_row_in_tx(tx, block_id, false).await?;
     let old_parent = ParentTarget {
         parent_type: if current.parent_type == "page_id" {
             "page_id"
@@ -38,24 +52,28 @@ pub async fn move_block(
         parent_block_type: None,
         page_id: current.page_id.clone(),
     };
-    let new_parent = resolve_block_parent(&mut tx, &request.parent).await?;
+    let new_parent = resolve_block_parent(tx, &request.parent).await?;
     let current_payload: Value = serde_json::from_str(&current.payload)
         .map_err(|e| format!("parse moved block payload: {e}"))?;
     validate_block_for_parent(&new_parent, &current.block_type, &current_payload)?;
-    ensure_not_moving_into_self(&mut tx, block_id, &new_parent).await?;
-    ensure_not_moving_into_subtree_page(&mut tx, block_id, &new_parent.page_id).await?;
+    ensure_not_moving_into_self(tx, block_id, &new_parent).await?;
+    ensure_not_moving_into_subtree_page(tx, block_id, &new_parent.page_id).await?;
     if request.after.is_some() && request.before.is_some() {
         return Err("move request cannot include both after and before".to_string());
     }
     let sort_order = if let Some(before) = request.before.as_deref() {
-        sort_order_before(&mut tx, &new_parent, before).await?
+        sort_order_before(tx, &new_parent, before).await?
     } else {
-        next_sort_orders(&mut tx, &new_parent, request.after.as_deref(), 1).await?[0]
+        next_sort_orders(tx, &new_parent, request.after.as_deref(), 1).await?[0]
     };
     validate_sort_order(sort_order)?;
-    history::record_page_snapshot_tx(&mut tx, &current.page_id, "move_block").await?;
+    if record_history {
+        history::record_page_snapshot_tx(tx, &current.page_id, "move_block").await?;
+    }
     if current.page_id != new_parent.page_id {
-        history::record_page_snapshot_tx(&mut tx, &new_parent.page_id, "move_block").await?;
+        if record_history {
+            history::record_page_snapshot_tx(tx, &new_parent.page_id, "move_block").await?;
+        }
     }
     sqlx::query(
         "UPDATE notes_blocks
@@ -73,7 +91,7 @@ pub async fn move_block(
     .bind(&new_parent.parent_block_id)
     .bind(sort_order)
     .bind(block_id)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await
     .map_err(|e| format!("move notes block: {e}"))?;
     sqlx::query(
@@ -90,10 +108,10 @@ pub async fn move_block(
     )
     .bind(block_id)
     .bind(&new_parent.page_id)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await
     .map_err(|e| format!("move notes block descendants: {e}"))?;
-    update_block_comment_thread_pages(&mut tx, block_id, &new_parent.page_id).await?;
+    update_block_comment_thread_pages(tx, block_id, &new_parent.page_id).await?;
     if current.block_type == "child_page" {
         sqlx::query(
             "UPDATE notes_pages
@@ -108,25 +126,21 @@ pub async fn move_block(
         .bind(&new_parent.parent_page_id)
         .bind(&new_parent.parent_block_id)
         .bind(block_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await
         .map_err(|e| format!("move notes child page parent: {e}"))?;
     }
-    refresh_moved_database_parents(&mut tx, block_id).await?;
+    refresh_moved_database_parents(tx, block_id).await?;
     let project_id =
-        project_history::resolve_project_id_for_page_tx(&mut tx, &new_parent.page_id).await?;
-    super::database_lifecycle::adopt_block_project(&mut tx, block_id, project_id.as_deref())
-        .await?;
-    refresh_parent_has_children(&mut tx, &old_parent).await?;
-    refresh_parent_has_children(&mut tx, &new_parent).await?;
-    touch_page(&mut tx, &new_parent.page_id).await?;
+        project_history::resolve_project_id_for_page_tx(tx, &new_parent.page_id).await?;
+    super::database_lifecycle::adopt_block_project(tx, block_id, project_id.as_deref()).await?;
+    refresh_parent_has_children(tx, &old_parent).await?;
+    refresh_parent_has_children(tx, &new_parent).await?;
+    touch_page(tx, &new_parent.page_id).await?;
     if old_parent.page_id != new_parent.page_id {
-        touch_page(&mut tx, &old_parent.page_id).await?;
+        touch_page(tx, &old_parent.page_id).await?;
     }
-    tx.commit()
-        .await
-        .map_err(|e| format!("commit move notes block: {e}"))?;
-    reads::get_block(pool, block_id, false).await
+    Ok(())
 }
 
 /// Move existing identities, optionally restoring their cut-owned graph in the same transaction.

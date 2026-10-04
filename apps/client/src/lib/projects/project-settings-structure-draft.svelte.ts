@@ -187,5 +187,3 @@ export function createProjectSettingsStructureDraft(projects: Pick<ReturnType<ty
     moveCustomField: async (entry: ProjectCustomField, direction: -1 | 1) => { rows.customFields = moved(rows.customFields, entry, direction); },
   };
 }
-
-export type ProjectSettingsStructureDraft = ReturnType<typeof createProjectSettingsStructureDraft>;

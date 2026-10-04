@@ -1,8 +1,8 @@
 import { invalidateReplacedNotesMediaAsset } from "./notes-store-block-media-actions";
 import { SvelteSet } from "svelte/reactivity";
+import { createNotesCompoundPersistence, enqueueNotesCompoundEdit } from "./notes-store-compound-edits";
+import type { NotesEditOperation } from "$lib/api/notes/compound-edits";
 import {
-  updateNotesBlock,
-  createNotesDatabase,
   createNotesLinkedDatabaseView,
 } from "$lib/api/notes";
 import { blockColor, blockWithColor, canBlockHaveColor } from "$lib/notes/block-color";
@@ -48,7 +48,6 @@ import type {
   NotesTabBlockItems,
   NotesTableRowBlock,
   NotesParent,
-  NotesCreatedDatabase,
 } from "$lib/notes/types";
 import type { NotesTextSelection } from "$lib/notes/editor-selection";
 import type { NotesUndoKind, NotesUndoSnapshot } from "$lib/notes/undo-history";
@@ -110,9 +109,7 @@ export function createNotesStructuralBlockActions(
   context: NotesStructuralBlockActionsContext,
 ): NotesStructuralBlockActions {
   const pendingDatabaseCreations = new SvelteSet<string>();
-  const childIdsByParentId = context.readChildIdsByParentId;
   const {
-    appendAndApply,
     recordUndoAfter,
     replaceBlockWithUpdate,
     undoSnapshot,
@@ -121,8 +118,9 @@ export function createNotesStructuralBlockActions(
   function applyEditorUpdate(blockId: string, update: NotesBlockUpdate): void {
     const previous = context.blockById(blockId);
     context.localApplyBlockUpdate(blockId, update);
+    const persist = createNotesCompoundPersistence(context, "convert", [{ type: "update", block_id: blockId, update }]);
     void context.enqueueEditorMutation(async () => {
-      await updateNotesBlock(blockId, update);
+      await persist();
       invalidateReplacedNotesMediaAsset(previous, update);
     })
       .catch((error: unknown) => console.warn("Notes block update persistence failed", error));
@@ -210,10 +208,11 @@ export function createNotesStructuralBlockActions(
         view_id: request.view_id,
       },
     });
-    let created: NotesCreatedDatabase | null = null;
+    const persist = createNotesCompoundPersistence(context, "convert", [{ type: "create_database", request }]);
     return context.enqueueEditorMutation(async () => {
-      created ??= await createNotesDatabase(request);
-      context.applyPostMutation({ blocks: [created.block] });
+      const created = (await persist()).databases[0];
+      if (!created) throw new Error("Notes database edit returned no database");
+      context.applyPostMutation({ blocks: [created.block], canonical: true });
       pendingDatabaseCreations.delete(blockId);
       context.requestBlockFocus(created.block.id);
       recordUndoAfter("convert", before, created.block.id);
@@ -234,122 +233,44 @@ export function createNotesStructuralBlockActions(
     return block.type !== "child_database" || block.child_database.database_id === undefined;
   }
 
-  async function createTableFromBlock(blockId: string): Promise<void> {
-    const selectedPageId = context.readSelectedPageId();
-    if (!selectedPageId) return;
-    const block = context.blockById(blockId);
-    if (!block || block.type === "child_page" || block.type === "table_row") return;
-    if ((childIdsByParentId()[blockId] ?? []).length > 0 && block.type !== "table") return;
-    await replaceBlockWithUpdate(blockId, createBlockUpdate("table", ""));
-    if (context.tableRowsForBlock(blockId).length === 0) {
-    await appendAndApply({
-        parent: { type: "block_id", block_id: blockId },
-        after: null,
-        children: Array.from({ length: DEFAULT_TABLE_ROW_COUNT }, () => ({
-          id: crypto.randomUUID(),
-          type: "table_row" as const,
-          table_row: createEmptyTableRowPayload(DEFAULT_TABLE_WIDTH),
-        })),
-      });
-    }
-    context.requestBlockFocus(blockId);
+  /** Plan the initial editable children together with their structural parent. */
+  function initialStructure(blockId: string, type: "table" | "column_list" | "tab", firstLabel = "Tab 1"): { operations: NotesEditOperation[]; focusId: string } {
+    const parent: NotesParent = { type: "block_id", block_id: blockId };
+    if (type === "table") return {
+      focusId: blockId,
+      operations: [{ type: "append", request: { parent, after: null, children: Array.from({ length: DEFAULT_TABLE_ROW_COUNT }, () => ({
+        id: crypto.randomUUID(), type: "table_row" as const, table_row: createEmptyTableRowPayload(DEFAULT_TABLE_WIDTH),
+      })) } }],
+    };
+    const firstId = crypto.randomUUID();
+    const secondId = crypto.randomUUID();
+    const firstContentId = crypto.randomUUID();
+    const secondContentId = crypto.randomUUID();
+    const children: NotesBlockWrite[] = type === "column_list"
+      ? [{ id: firstId, type: "column", column: createColumnPayload(0.5) }, { id: secondId, type: "column", column: createColumnPayload(0.5) }]
+      : [createBlockWrite(firstId, "paragraph", firstLabel), createBlockWrite(secondId, "paragraph", "Tab 2")];
+    return { focusId: firstContentId, operations: [
+      { type: "append", request: { parent, after: null, children } },
+      { type: "append", request: { parent: { type: "block_id", block_id: firstId }, after: null, children: [createBlockWrite(firstContentId, "paragraph")] } },
+      { type: "append", request: { parent: { type: "block_id", block_id: secondId }, after: null, children: [createBlockWrite(secondContentId, "paragraph")] } },
+    ] };
   }
 
-  async function createColumnListFromBlock(blockId: string): Promise<void> {
-    const selectedPageId = context.readSelectedPageId();
-    if (!selectedPageId) return;
+  async function createStructureFromBlock(blockId: string, type: "table" | "column_list" | "tab"): Promise<void> {
     const block = context.blockById(blockId);
-    if (
-      !block
-      || block.type === "child_page"
-      || block.type === "table_row"
-      || block.type === "column"
-    ) {
+    if (!context.readSelectedPageId() || !block || block.type === "child_page" || block.type === "table_row" || block.type === "column") return;
+    if (block.has_children) {
+      if (block.type === type) context.requestBlockFocus(blockId);
       return;
     }
-    if ((childIdsByParentId()[blockId] ?? []).length > 0 && block.type !== "column_list") return;
-    await replaceBlockWithUpdate(blockId, createBlockUpdate("column_list", ""));
-    if (context.columnItemsForBlock(blockId).length === 0) {
-      const leftColumnId = crypto.randomUUID();
-      const rightColumnId = crypto.randomUUID();
-      const leftBlockId = crypto.randomUUID();
-      const rightBlockId = crypto.randomUUID();
-      const columns: NotesBlockWrite[] = [
-        {
-          id: leftColumnId,
-          type: "column",
-          column: createColumnPayload(0.5),
-        },
-        {
-          id: rightColumnId,
-          type: "column",
-          column: createColumnPayload(0.5),
-        },
-      ];
-    await appendAndApply({
-        parent: { type: "block_id", block_id: blockId },
-        after: null,
-        children: columns,
-      });
-    await appendAndApply({
-        parent: { type: "block_id", block_id: leftColumnId },
-        after: null,
-        children: [createBlockWrite(leftBlockId, "paragraph")],
-      });
-    await appendAndApply({
-        parent: { type: "block_id", block_id: rightColumnId },
-        after: null,
-        children: [createBlockWrite(rightBlockId, "paragraph")],
-      });
-      context.requestBlockFocus(leftBlockId);
-      return;
-    }
-    context.requestBlockFocus(blockId);
+    const initial = initialStructure(blockId, type, blockPlainText(block).trim() || "Tab 1");
+    await enqueueNotesCompoundEdit(context, "convert", [{ type: "update", block_id: blockId, update: createBlockUpdate(type, "") }, ...initial.operations]);
+    context.requestBlockFocus(initial.focusId);
   }
 
-  async function createTabFromBlock(blockId: string): Promise<void> {
-    const selectedPageId = context.readSelectedPageId();
-    if (!selectedPageId) return;
-    const block = context.blockById(blockId);
-    if (
-      !block
-      || block.type === "child_page"
-      || block.type === "table_row"
-      || block.type === "column"
-    ) {
-      return;
-    }
-    if ((childIdsByParentId()[blockId] ?? []).length > 0 && block.type !== "tab") return;
-    const firstLabel = blockPlainText(block).trim() || "Tab 1";
-    await replaceBlockWithUpdate(blockId, createBlockUpdate("tab", ""));
-    if (context.tabItemsForBlock(blockId).length === 0) {
-      const firstLabelId = crypto.randomUUID();
-      const secondLabelId = crypto.randomUUID();
-      const firstContentId = crypto.randomUUID();
-      const secondContentId = crypto.randomUUID();
-    await appendAndApply({
-        parent: { type: "block_id", block_id: blockId },
-        after: null,
-        children: [
-          createBlockWrite(firstLabelId, "paragraph", firstLabel),
-          createBlockWrite(secondLabelId, "paragraph", "Tab 2"),
-        ],
-      });
-    await appendAndApply({
-        parent: { type: "block_id", block_id: firstLabelId },
-        after: null,
-        children: [createBlockWrite(firstContentId, "paragraph")],
-      });
-    await appendAndApply({
-        parent: { type: "block_id", block_id: secondLabelId },
-        after: null,
-        children: [createBlockWrite(secondContentId, "paragraph")],
-      });
-      context.requestBlockFocus(firstContentId);
-      return;
-    }
-    context.requestBlockFocus(blockId);
-  }
+  const createTableFromBlock = (blockId: string) => createStructureFromBlock(blockId, "table");
+  const createColumnListFromBlock = (blockId: string) => createStructureFromBlock(blockId, "column_list");
+  const createTabFromBlock = (blockId: string) => createStructureFromBlock(blockId, "tab");
 
   async function toggleTodo(blockId: string, checked: boolean): Promise<void> {
     const block = context.blockById(blockId);
@@ -451,91 +372,14 @@ export function createNotesStructuralBlockActions(
     await context.flushBlockSave(blockId);
     const before = undoSnapshot(blockId);
     const newBlockId = crypto.randomUUID();
-    await appendAndApply({
-      parent: block.parent,
-      after: blockId,
-      children: [createBlockWriteFromInsertCommand(newBlockId, command)],
-    });
-    if (command.kind === "block" && command.blockType === "table") {
-    await appendAndApply({
-        parent: { type: "block_id", block_id: newBlockId },
-        after: null,
-        children: Array.from({ length: DEFAULT_TABLE_ROW_COUNT }, () => ({
-          id: crypto.randomUUID(),
-          type: "table_row" as const,
-          table_row: createEmptyTableRowPayload(DEFAULT_TABLE_WIDTH),
-        })),
-      });
-      const focusBlockId = planNotesInsertedBlockFocus([newBlockId], blockId);
-      context.requestBlockFocus(focusBlockId, START_OF_BLOCK_SELECTION);
-      recordUndoAfter("create", before, focusBlockId);
-      return;
-    }
-    if (command.kind === "block" && command.blockType === "column_list") {
-      const leftColumnId = crypto.randomUUID();
-      const rightColumnId = crypto.randomUUID();
-      const leftBlockId = crypto.randomUUID();
-      const rightBlockId = crypto.randomUUID();
-    await appendAndApply({
-        parent: { type: "block_id", block_id: newBlockId },
-        after: null,
-        children: [
-          {
-            id: leftColumnId,
-            type: "column",
-            column: createColumnPayload(0.5),
-          },
-          {
-            id: rightColumnId,
-            type: "column",
-            column: createColumnPayload(0.5),
-          },
-        ],
-      });
-    await appendAndApply({
-        parent: { type: "block_id", block_id: leftColumnId },
-        after: null,
-        children: [createBlockWrite(leftBlockId, "paragraph")],
-      });
-    await appendAndApply({
-        parent: { type: "block_id", block_id: rightColumnId },
-        after: null,
-        children: [createBlockWrite(rightBlockId, "paragraph")],
-      });
-      const focusBlockId = planNotesInsertedBlockFocus([leftBlockId], newBlockId);
-      context.requestBlockFocus(focusBlockId, START_OF_BLOCK_SELECTION);
-      recordUndoAfter("create", before, focusBlockId);
-      return;
-    }
-    if (command.kind === "block" && command.blockType === "tab") {
-      const firstLabelId = crypto.randomUUID();
-      const secondLabelId = crypto.randomUUID();
-      const firstContentId = crypto.randomUUID();
-      const secondContentId = crypto.randomUUID();
-    await appendAndApply({
-        parent: { type: "block_id", block_id: newBlockId },
-        after: null,
-        children: [
-          createBlockWrite(firstLabelId, "paragraph", "Tab 1"),
-          createBlockWrite(secondLabelId, "paragraph", "Tab 2"),
-        ],
-      });
-    await appendAndApply({
-        parent: { type: "block_id", block_id: firstLabelId },
-        after: null,
-        children: [createBlockWrite(firstContentId, "paragraph")],
-      });
-    await appendAndApply({
-        parent: { type: "block_id", block_id: secondLabelId },
-        after: null,
-        children: [createBlockWrite(secondContentId, "paragraph")],
-      });
-      const focusBlockId = planNotesInsertedBlockFocus([firstContentId], newBlockId);
-      context.requestBlockFocus(focusBlockId, START_OF_BLOCK_SELECTION);
-      recordUndoAfter("create", before, focusBlockId);
-      return;
-    }
-    const focusBlockId = planNotesInsertedBlockFocus([newBlockId], blockId) ?? newBlockId;
+    const operations: NotesEditOperation[] = [{ type: "append", request: {
+      parent: block.parent, after: blockId, children: [createBlockWriteFromInsertCommand(newBlockId, command)],
+    } }];
+    const initial = command.kind === "block" && (command.blockType === "table" || command.blockType === "column_list" || command.blockType === "tab")
+      ? initialStructure(newBlockId, command.blockType) : null;
+    if (initial) operations.push(...initial.operations);
+    await enqueueNotesCompoundEdit(context, "convert", operations);
+    const focusBlockId = planNotesInsertedBlockFocus([initial?.focusId ?? newBlockId], blockId) ?? newBlockId;
     context.requestBlockFocus(focusBlockId, START_OF_BLOCK_SELECTION);
     recordUndoAfter("create", before, focusBlockId);
   }
@@ -565,10 +409,11 @@ export function createNotesStructuralBlockActions(
         view_id: request.view_id,
       },
     }, block.parent), blockId);
-    let created: NotesCreatedDatabase | null = null;
+    const persist = createNotesCompoundPersistence(context, "convert", [{ type: "create_database", request }]);
     return context.enqueueEditorMutation(async () => {
-      created ??= await createNotesDatabase(request);
-      context.applyPostMutation({ blocks: [created.block] });
+      const created = (await persist()).databases[0];
+      if (!created) throw new Error("Notes database edit returned no database");
+      context.applyPostMutation({ blocks: [created.block], canonical: true });
       pendingDatabaseCreations.delete(request.id);
       context.requestBlockFocus(created.block.id);
       recordUndoAfter("create", before, created.block.id);

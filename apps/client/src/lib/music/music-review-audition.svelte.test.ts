@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MusicInspectorDetail } from "./library-contracts";
 import type { MusicReviewPlaybackCheckpoint } from "$lib/stores/music-player.svelte";
 
-const checkpoint = vi.hoisted(() => ({ id: "playlist-checkpoint" }) as unknown as MusicReviewPlaybackCheckpoint);
+const checkpoint = vi.hoisted((): MusicReviewPlaybackCheckpoint => ({ checkpointId: "playlist-checkpoint" }));
 const player = vi.hoisted(() => ({
   contextOwner: "manual" as "manual" | "review" | "calendar-event" | "pomodoro",
   snapshot: { positionMs: 0 },
   suspendForReview: vi.fn(async () => checkpoint),
   restoreAfterReview: vi.fn(async (_checkpoint: MusicReviewPlaybackCheckpoint): Promise<void> => undefined),
-  loadSource: vi.fn(async () => undefined),
+  loadReviewItem: vi.fn(async () => undefined),
   seekToMs: vi.fn(async () => undefined),
 }));
 
@@ -50,10 +50,7 @@ describe("MusicReviewAuditionController", () => {
 
     expect(await audition.preview(detail(), bindings, true)).toBe(true);
     expect(player.suspendForReview).toHaveBeenCalledOnce();
-    expect(player.loadSource).toHaveBeenCalledWith(
-      expect.objectContaining({ path: "/Music/review.flac" }),
-      { autoplay: true, resume: false, preserveQueue: true },
-    );
+    expect(player.loadReviewItem).toHaveBeenCalledWith("review-item", true);
 
     await audition.restore();
 

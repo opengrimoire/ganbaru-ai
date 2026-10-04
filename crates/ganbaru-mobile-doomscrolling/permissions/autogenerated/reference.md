@@ -36,6 +36,32 @@ Denies the accessStatus command without any pre-configured scope.
 <tr>
 <td>
 
+`ganbaru-mobile-doomscrolling:allow-accountingSnapshot`
+
+</td>
+<td>
+
+Enables the accountingSnapshot command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`ganbaru-mobile-doomscrolling:deny-accountingSnapshot`
+
+</td>
+<td>
+
+Denies the accountingSnapshot command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `ganbaru-mobile-doomscrolling:allow-acknowledgeEvents`
 
 </td>
@@ -81,6 +107,32 @@ Enables the applyRules command without any pre-configured scope.
 <td>
 
 Denies the applyRules command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`ganbaru-mobile-doomscrolling:allow-invalidateRules`
+
+</td>
+<td>
+
+Enables the invalidateRules command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`ganbaru-mobile-doomscrolling:deny-invalidateRules`
+
+</td>
+<td>
+
+Denies the invalidateRules command without any pre-configured scope.
 
 </td>
 </tr>

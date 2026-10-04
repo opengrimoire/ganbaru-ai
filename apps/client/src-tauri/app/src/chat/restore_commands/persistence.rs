@@ -454,31 +454,6 @@ pub(super) fn preview_state_after_failure(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn executing_preview_failures_never_remain_executing() {
-        assert_eq!(
-            preview_state_after_failure(false, RestoreFailurePhase::SafeRetry),
-            "ready"
-        );
-        assert_eq!(
-            preview_state_after_failure(false, RestoreFailurePhase::ProviderRollback),
-            "failed"
-        );
-        assert_eq!(
-            preview_state_after_failure(false, RestoreFailurePhase::WorkspaceRestore),
-            "failed"
-        );
-        assert_eq!(
-            preview_state_after_failure(true, RestoreFailurePhase::WorkspaceRestore),
-            "completed"
-        );
-    }
-}
-
 pub(super) async fn record_restore_operation(
     pool: &SqlitePool,
     request: &ExecuteChatRestoreRequest,
@@ -510,4 +485,29 @@ pub(super) async fn record_restore_operation(
     .await
     .map_err(persistence_error)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn executing_preview_failures_never_remain_executing() {
+        assert_eq!(
+            preview_state_after_failure(false, RestoreFailurePhase::SafeRetry),
+            "ready"
+        );
+        assert_eq!(
+            preview_state_after_failure(false, RestoreFailurePhase::ProviderRollback),
+            "failed"
+        );
+        assert_eq!(
+            preview_state_after_failure(false, RestoreFailurePhase::WorkspaceRestore),
+            "failed"
+        );
+        assert_eq!(
+            preview_state_after_failure(true, RestoreFailurePhase::WorkspaceRestore),
+            "completed"
+        );
+    }
 }

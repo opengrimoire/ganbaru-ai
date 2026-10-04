@@ -24,6 +24,18 @@
 
 The ownership tests cover failure before file replacement and injected directory-sync failure after replacement during initial registration, outgoing commit, and incoming activation. They verify that uncertain persistence cannot restore write authority, accept a retry, or grant database access in the same process, and that restart reloads the visible committed generation. These are filesystem-boundary failure tests, not proof of power-loss durability on every supported platform.
 
+The native quiescence tests also cover concurrent operation rejection, a retained cleanup worker's reservation, release of database and managed-write fences before reactivation, cancellation cleanup, and exactly-once reporting of reactivation failure. A stalled-writer test verifies that timeout restores admission and a subsequent operation can acquire the fence. Whole-vault archive and round-trip tests remain required after selection or activation changes.
+
+Outgoing preparation regressions cancel while waiting for the database drain and after acquiring its gate. They verify durable ownership rollback before reactivation, fence release, retained pre-commit state for stored transfers, and explicit rollback failure without repeating cleanup. These tests use the file-backed ownership manager and await retained cleanup rather than relying on sleeps.
+
+## Additional selection and restore acceptance
+
+- On desktop, switch between two vaults with different Focus history and Music selections. Repeat with an idle or break overlay visible. Confirm an old overlay, tray action, or delayed playback callback cannot control the new vault.
+- Delay native delivery, then request selection. Confirm a failed drain preserves the active folder and reports the failure. Retry after delivery drains. Attempt another folder action during the first operation and confirm it reports that the operation is busy.
+- On desktop, keep a local or mounted Music source blocked beyond the decoder deadline. Attempt repeated controls and vault selection. Confirm the selected track is retained as an interruption, pending work remains bounded, selection does not report successful drain, and an old load cannot play after the source becomes available. Retry after cleanup and verify explicit Play reloads the retained selection. Repeat while a Focus phase changes and while closing the application.
+- On Android, select a portable backup, cancel the document picker, and retry. Confirm cancellation preserves the active vault and runtime operation. Restore a valid backup with playback and accepted notifications present; confirm the old surfaces revoke before replacement and the restored vault loads.
+- Reject a corrupt or incomplete archive before changing the active vault. Confirm a failed preparation or stale ownership check preserves current files and a subsequent restore can proceed. Reboot and process-death recovery remain separate physical checks.
+
 ## Maintainer record
 
 | Field | Result |

@@ -1,5 +1,5 @@
-import { appendNotesBlockChildren, moveNotesBlock, updateNotesBlock } from "$lib/api/notes";
-import { createNotesPastePersistence } from "./notes-store-paste-persistence";
+import { createNotesCompoundPersistence } from "./notes-store-compound-edits";
+import { notesPasteOperations } from "./notes-store-paste-persistence";
 import type { NotesDatabasePasteController } from "./notes-database-paste.svelte";
 import { normalizeRichTextLinkUrl } from "$lib/notes/rich-text";
 import { cloneNotesJson } from "$lib/notes/json-clone";
@@ -120,14 +120,11 @@ export function createNotesBlockPasteActions(
     else context.localInsertBlockAfter(inserted, blockId);
     context.requestBlockFocus(write.id, START_OF_BLOCK_SELECTION);
     context.recordUndo("create", before, context.undoSnapshotForBlocks([blockId, write.id], write.id, START_OF_BLOCK_SELECTION));
-    let appended = false;
-    const persistence = context.enqueueEditorMutation(async () => {
-      if (!appended) {
-        await appendNotesBlockChildren({ parent, after: blockId, children: [write] });
-        appended = true;
-      }
-      if (direction === "previous") await moveNotesBlock(write.id, { parent, after: null, before: blockId });
-    });
+    const persist = createNotesCompoundPersistence(context, "split", [
+      { type: "append", request: { parent, after: blockId, children: [write] } },
+      ...(direction === "previous" ? [{ type: "move" as const, block_id: write.id, request: { parent, after: null, before: blockId } }] : []),
+    ]);
+    const persistence = context.enqueueEditorMutation(async () => { await persist(); });
     context.trackOptimisticBlockWrites([blockId, write.id], persistence);
   }
   async function splitTextBlockAtSelection(
@@ -166,14 +163,11 @@ export function createNotesBlockPasteActions(
         context.undoSnapshotForBlocks([blockId, beforeBlockId, newBlockId], newBlockId, START_OF_BLOCK_SELECTION),
         `create:enter:${parentIdForBlock(leadingBlock)}`,
       );
-      let appended = false;
-      const persistence = context.enqueueEditorMutation(async () => {
-        if (!appended) {
-          await appendNotesBlockChildren({ parent, after: beforeBlockId, children: [write] });
-          appended = true;
-        }
-        await moveNotesBlock(newBlockId, { parent, after: null, before: beforeBlockId });
-      });
+      const persist = createNotesCompoundPersistence(context, "split", [
+        { type: "append", request: { parent, after: beforeBlockId, children: [write] } },
+        { type: "move", block_id: newBlockId, request: { parent, after: null, before: beforeBlockId } },
+      ]);
+      const persistence = context.enqueueEditorMutation(async () => { await persist(); });
       context.trackOptimisticBlockWrites([blockId, beforeBlockId, newBlockId], persistence);
       return;
     }
@@ -216,10 +210,11 @@ export function createNotesBlockPasteActions(
       ),
       `create:enter:${isContainer ? block.id : parentIdForBlock(block)}`,
     );
-    const persistence = context.enqueueEditorMutation(async () => {
-      await updateNotesBlock(blockId, currentUpdate);
-      await appendNotesBlockChildren({ parent, after, children: [nextWrite] });
-    });
+    const persist = createNotesCompoundPersistence(context, "split", [
+      { type: "update", block_id: blockId, update: currentUpdate },
+      { type: "append", request: { parent, after, children: [nextWrite] } },
+    ]);
+    const persistence = context.enqueueEditorMutation(async () => { await persist(); });
     context.trackOptimisticBlockWrites([blockId, newBlockId], persistence);
   }
 
@@ -258,10 +253,13 @@ export function createNotesBlockPasteActions(
       context.undoSnapshotForBlocks(affectedIds, plan.focusBlockId, focusSelection),
     );
     if (plan.copiedDatabaseIds) context.databasePaste?.beginCopies(plan.copiedDatabaseIds);
-    const persistPaste = createNotesPastePersistence(requests, plan.copiedPageIds, plan.copiedDatabaseIds, context.databasePaste?.acceptCopy);
+    const persistPaste = createNotesCompoundPersistence(context, "paste", [
+      { type: "update", block_id: currentBlock.id, update: currentUpdate },
+      ...notesPasteOperations(requests, plan.copiedPageIds, plan.copiedDatabaseIds),
+    ]);
     const persistence = context.enqueueEditorMutation(async () => {
-      await updateNotesBlock(currentBlock.id, currentUpdate);
-      await persistPaste();
+      const result = await persistPaste();
+      for (const created of result.databases) context.databasePaste?.acceptCopy(created.block.id, created);
       if (plan.copiedPageIds) context.applyPostMutation({ sidebarImpact: "hierarchy" });
     });
     context.trackOptimisticBlockWrites(affectedIds, persistence);

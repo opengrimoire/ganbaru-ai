@@ -28,6 +28,7 @@ fn config() -> DoomscrollingConfig {
             enabled: true,
             items: Vec::new(),
         },
+        limit_configuration_digest: Some("native-test-digest".into()),
     }
 }
 
@@ -67,6 +68,7 @@ fn runtime_for_phase_updated_at(phase: &str, paused: bool, updated_at: String) -
         phase: phase.to_string(),
         remaining_seconds: Some(60),
         updated_at,
+        valid_until_ms: None,
     }
 }
 
@@ -466,6 +468,39 @@ fn active_runtime_state_fails_open_after_missed_heartbeat() {
 }
 
 #[test]
+fn fresh_heartbeat_cannot_extend_accepted_phase_or_owner_validity() {
+    let updated = "2026-05-26T00:00:00Z".parse::<DateTime<Utc>>().unwrap();
+    let mut snapshot = StateSnapshot {
+        config_dir: None,
+        vault_path: None,
+        config: config(),
+        limit_state: None,
+        runtime: Some(runtime_for_phase_updated_at(
+            "focus",
+            false,
+            updated.to_rfc3339(),
+        )),
+    };
+    snapshot.runtime.as_mut().unwrap().valid_until_ms = Some(updated.timestamp_millis() + 500);
+    assert!(runtime_status_at(&snapshot, updated + chrono::Duration::milliseconds(499)).0);
+    let expired = runtime_status_at(&snapshot, updated + chrono::Duration::milliseconds(500));
+    assert!(!expired.0);
+    assert_eq!(expired.1, "inactive");
+    assert_eq!(
+        expired.3.as_deref(),
+        Some("accepted phase validity expired")
+    );
+    snapshot.runtime.as_mut().unwrap().paused = true;
+    assert!(!runtime_status_at(&snapshot, updated + chrono::Duration::milliseconds(500)).0);
+    let runtime = snapshot.runtime.as_mut().unwrap();
+    runtime.valid_until_ms = None;
+    runtime.paused = false;
+    runtime.remaining_seconds = Some(1);
+    assert!(runtime_status_at(&snapshot, updated + chrono::Duration::milliseconds(999)).0);
+    assert!(!runtime_status_at(&snapshot, updated + chrono::Duration::seconds(1)).0);
+}
+
+#[test]
 fn extracts_host_from_url() {
     assert_eq!(
         host_from_url("https://old.reddit.com/r/all?x=1").as_deref(),
@@ -608,11 +643,12 @@ fn blocks_exhausted_daily_website_limits_without_active_pomodoro_rules() {
             desktop_app_name: None,
         }],
     }];
-    let limit_state = super::snapshot::LimitState {
+    let mut limit_state = super::snapshot::LimitState {
         local_date: "2026-05-28".to_string(),
         week_start_local_date: "2026-05-25".to_string(),
         updated_at: super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
         database_path: "/tmp/ganbaru-ai-vault/ganbaru-ai.sqlite".to_string(),
+        configuration_digest: Some("native-test-digest".into()),
         limits: vec![super::snapshot::LimitStateItem {
             id: "youtube".to_string(),
             period: "day".to_string(),
@@ -638,6 +674,40 @@ fn blocks_exhausted_daily_website_limits_without_active_pomodoro_rules() {
         decision.matched_rule_name().as_deref(),
         Some("daily limit: YouTube")
     );
+    let mut increased_budget = config.clone();
+    increased_budget.limits.items[0].minutes_per_day = Some(20);
+    assert!(
+        !super::rules::decide_url_with_limits(
+            "music.youtube.com",
+            None,
+            &increased_budget,
+            Some(&limit_state),
+            false
+        )
+        .blocked()
+    );
+    limit_state.configuration_digest = Some("obsolete-configuration".into());
+    assert!(
+        !super::rules::decide_url_with_limits(
+            "music.youtube.com",
+            None,
+            &config,
+            Some(&limit_state),
+            false
+        )
+        .blocked()
+    );
+    limit_state.configuration_digest = None;
+    assert!(
+        !super::rules::decide_url_with_limits(
+            "music.youtube.com",
+            None,
+            &config,
+            Some(&limit_state),
+            false
+        )
+        .blocked()
+    );
 }
 
 #[test]
@@ -662,6 +732,7 @@ fn active_focus_rules_win_over_limit_blocks() {
         week_start_local_date: "2026-05-25".to_string(),
         updated_at: super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
         database_path: "/tmp/ganbaru-ai-vault/ganbaru-ai.sqlite".to_string(),
+        configuration_digest: Some("native-test-digest".into()),
         limits: vec![super::snapshot::LimitStateItem {
             id: "reddit".to_string(),
             period: "day".to_string(),
@@ -697,6 +768,7 @@ fn uses_limit_state_database_path_for_usage_samples() {
         week_start_local_date: "2026-05-25".to_string(),
         updated_at: super::now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
         database_path: "/tmp/ganbaru-ai-vault/ganbaru-ai.sqlite".to_string(),
+        configuration_digest: Some("native-test-digest".into()),
         limits: Vec::new(),
     };
 

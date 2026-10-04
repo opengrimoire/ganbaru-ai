@@ -1,12 +1,28 @@
 use super::*;
+use sqlx::SqliteConnection;
+#[cfg(test)]
 use sqlx::SqlitePool;
 
 const RECENT_SELECTIONS_PER_CONTEXT: i64 = 64;
 const RECENT_SELECTIONS_GLOBAL: i64 = 512;
 
+#[cfg(test)]
 pub(crate) async fn record_listening(
     pool: &SqlitePool,
     request: MusicListeningUpdate,
+) -> MusicLibraryResult<()> {
+    let mut transaction = pool
+        .begin()
+        .await
+        .map_err(|error| MusicLibraryError::database("begin listening update", error))?;
+    record_listening_in_transaction(&mut transaction, &request).await?;
+    super::writes::commit(transaction, "commit listening update").await
+}
+
+/// Records a selection outcome in the same transaction as its session transition.
+pub(crate) async fn record_listening_in_transaction(
+    connection: &mut SqliteConnection,
+    request: &MusicListeningUpdate,
 ) -> MusicLibraryResult<()> {
     validate_id(&request.item_id, "itemId")?;
     if let Some(playlist_id) = &request.playlist_id {
@@ -18,10 +34,6 @@ pub(crate) async fn record_listening(
             "must be a positive Unix epoch millisecond value",
         ));
     }
-    let mut transaction = pool
-        .begin()
-        .await
-        .map_err(|error| MusicLibraryError::database("begin listening update", error))?;
     let (play_increment, completion_increment, skip_increment) = match request.outcome {
         MusicListeningOutcome::Started => (1_i64, 0_i64, 0_i64),
         MusicListeningOutcome::Completed => (0, 1, 0),
@@ -45,7 +57,7 @@ pub(crate) async fn record_listening(
     .bind(completion_increment)
     .bind(skip_increment)
     .bind(request.occurred_at)
-    .execute(&mut *transaction)
+    .execute(&mut *connection)
     .await
     .map_err(|error| MusicLibraryError::database("update listening statistics", error))?;
 
@@ -59,7 +71,7 @@ pub(crate) async fn record_listening(
         .bind(&request.item_id)
         .bind(request.selection_kind.as_ref())
         .bind(request.occurred_at)
-        .execute(&mut *transaction)
+        .execute(&mut *connection)
         .await
         .map_err(|error| MusicLibraryError::database("record recent music selection", error))?;
         sqlx::query(
@@ -73,7 +85,7 @@ pub(crate) async fn record_listening(
         .bind(&request.playlist_id)
         .bind(&request.playlist_id)
         .bind(RECENT_SELECTIONS_PER_CONTEXT)
-        .execute(&mut *transaction)
+        .execute(&mut *connection)
         .await
         .map_err(|error| MusicLibraryError::database("bound playlist recent selections", error))?;
         sqlx::query(
@@ -83,13 +95,14 @@ pub(crate) async fn record_listening(
              )",
         )
         .bind(RECENT_SELECTIONS_GLOBAL)
-        .execute(&mut *transaction)
+        .execute(&mut *connection)
         .await
         .map_err(|error| MusicLibraryError::database("bound global recent selections", error))?;
     }
-    super::writes::commit(transaction, "commit listening update").await
+    Ok(())
 }
 
+#[cfg(test)]
 pub(crate) async fn recent_selections(
     pool: &SqlitePool,
     playlist_id: Option<String>,

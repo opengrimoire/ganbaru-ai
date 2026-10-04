@@ -24,10 +24,13 @@ Groups organize projects. Projects own settings, task schemas, views, statuses, 
 | Groups, projects, sections, tasks, subtasks, checklists, archive, and restore | Implemented |
 | Dashboard, List, Kanban, Calendar, and Gantt views | Implemented |
 | Filters, sorting, grouping, saved views, selection, bulk actions, and custom columns | Implemented |
+| Native atomic bulk mutations and complete sibling/schema reorder | Implemented; real interaction acceptance pending |
 | Project defaults, statuses, priorities, tags, custom fields, icons, and templates | Implemented |
 | Task scheduling and task-event links | Implemented |
 | Real focus and break playlist assignment selectors | Implemented |
 | Task dependencies, milestones, date proposals, and history | Implemented |
+| Complete-graph dependency review and atomic date cascades | Implemented; physical interaction acceptance pending |
+| Explicit task date locks and cascade protection overrides | Planned |
 | Organizational assignments, reviews, and Chat linkage | Partial |
 | Guided AI planning and automatic reports | Planned or partial by workflow |
 | Work-environment and blocker defaults | Planned |

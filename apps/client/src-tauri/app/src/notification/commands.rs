@@ -7,11 +7,6 @@ use tauri::{Emitter, Manager, State};
 use super::{AppSound, AppSoundState};
 
 #[derive(Clone, Serialize)]
-struct AddTimePayload {
-    seconds: u32,
-}
-
-#[derive(Clone, Serialize)]
 struct NotesNotificationOpenPayload {
     page_id: String,
     block_id: Option<String>,
@@ -119,21 +114,6 @@ fn notification_summary(value: &str) -> String {
     } else {
         escape_notification_markup(summary)
     }
-}
-
-#[tauri::command]
-pub fn play_app_sound(
-    sound_id: String,
-    app_sounds: State<'_, AppSoundState>,
-) -> Result<(), String> {
-    let sound = AppSound::from_id(&sound_id)?;
-    app_sounds.play(sound);
-    Ok(())
-}
-
-#[tauri::command]
-pub fn play_alert_sound(app_sounds: State<'_, AppSoundState>) {
-    app_sounds.play(AppSound::EventNotification);
 }
 
 #[tauri::command]
@@ -356,65 +336,199 @@ pub fn show_doomscrolling_desktop_limit_notification(
     });
 }
 
-#[tauri::command]
-pub fn show_pomodoro_notification(
-    app: tauri::AppHandle,
-    remaining_seconds: u32,
-    allow_add_time: Option<bool>,
-    app_sounds: State<'_, AppSoundState>,
-) {
-    let timeout_ms = remaining_seconds * 1000;
-
-    app_sounds.play(AppSound::FocusEndingWarning);
-    std::thread::spawn(move || {
-        let mut notification = Notification::new();
-        notification.summary("Focus session ending in 1 minute");
-        if allow_add_time.unwrap_or(true) {
-            notification.action("add_time", "Extend focus 3 minutes");
-        }
-        notification.timeout(timeout_ms as i32).id(9001);
-        apply_linux_notification_hints(&mut notification, None, false, true);
-        show_notification_with_linux_action(
-            &notification,
-            "Failed to show notification",
-            |action| {
-                if action == "add_time" {
-                    let _ = app.emit("pomodoro-add-time", AddTimePayload { seconds: 180 });
-                }
-            },
-        );
-    });
+/// Desktop alerts are emitted only from an accepted native Focus presentation.
+pub(crate) enum NativeFocusAlert {
+    Ending {
+        title: String,
+        extend_label: Option<String>,
+        remaining_ms: i64,
+    },
+    Paused {
+        title: String,
+        body: String,
+        resume_label: String,
+        dismiss_label: String,
+    },
 }
 
-#[tauri::command]
-pub fn show_paused_focus_notification(app: tauri::AppHandle, app_sounds: State<'_, AppSoundState>) {
-    app_sounds.play(AppSound::EventNotification);
-    std::thread::spawn(move || {
-        let mut notification = Notification::new();
-        notification
-            .appname("Ganbaru AI")
-            .summary("Focus session is paused")
-            .body("Your focus session is still paused.")
-            .action("resume", "Resume focus")
-            .action("stop_asking", "Stop asking")
-            .timeout(15_000)
-            .id(9003);
-        apply_linux_notification_hints(&mut notification, Some("reminder"), true, true);
-        show_notification_with_linux_action(
-            &notification,
-            "Failed to show paused focus notification",
-            |action| match action {
-                "resume" => {
-                    let _ = app.emit("pomodoro-paused-focus-resume", ());
-                }
-                "stop_asking" => {
-                    let _ = app.emit("pomodoro-paused-focus-stop-asking", ());
-                }
-                "default" => {
+#[cfg(target_os = "linux")]
+static FOCUS_ALERT_ACTIONS: std::sync::LazyLock<std::sync::Arc<tokio::sync::Semaphore>> =
+    std::sync::LazyLock::new(|| std::sync::Arc::new(tokio::sync::Semaphore::new(2)));
+#[cfg(any(target_os = "linux", test))]
+const FOCUS_EXTENSION_SECONDS: i64 = 180;
+const PAUSED_ALERT_TIMEOUT_MS: i64 = 15_000;
+
+#[derive(Clone, Copy)]
+#[cfg(any(target_os = "linux", test))]
+enum NativeFocusAlertActions {
+    Ending { allow_extension: bool },
+    Paused,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl NativeFocusAlertActions {
+    fn intent(self, action: &str) -> Option<ganbaru_focus::FocusIntent> {
+        match (self, action) {
+            (
+                Self::Ending {
+                    allow_extension: true,
+                },
+                "add_time",
+            ) => Some(ganbaru_focus::FocusIntent::ExtendFocus {
+                seconds: FOCUS_EXTENSION_SECONDS,
+            }),
+            (Self::Paused, "resume") => Some(ganbaru_focus::FocusIntent::Resume),
+            (Self::Paused, "stop_asking") => Some(ganbaru_focus::FocusIntent::DismissPausedPrompts),
+            _ => None,
+        }
+    }
+}
+
+/// Show localized text and bind supported actions to the displayed native run and phase.
+pub(crate) fn show_native_focus_alert(
+    app: tauri::AppHandle,
+    context: crate::pomodoro::native_runtime::FocusNativeContext,
+    alert: NativeFocusAlert,
+) -> Result<(), String> {
+    if !crate::pomodoro::native_runtime::presentation_is_current(
+        &app,
+        context.vault_generation,
+        context.revision,
+    ) {
+        return Err("Native Focus alert was superseded or expired".into());
+    }
+    #[cfg(target_os = "linux")]
+    let action_slot = FOCUS_ALERT_ACTIONS
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| "Native Focus notification actions are still occupied".to_string())?;
+    #[cfg(target_os = "linux")]
+    let actions = match &alert {
+        NativeFocusAlert::Ending { extend_label, .. } => NativeFocusAlertActions::Ending {
+            allow_extension: extend_label.is_some(),
+        },
+        NativeFocusAlert::Paused { .. } => NativeFocusAlertActions::Paused,
+    };
+    let mut notification = Notification::new();
+    notification.appname("Ganbaru AI");
+    let timeout_ms = match alert {
+        NativeFocusAlert::Ending {
+            title,
+            extend_label,
+            remaining_ms,
+        } => {
+            notification.summary(&title).id(9001);
+            #[cfg(target_os = "linux")]
+            if let Some(label) = extend_label {
+                notification.action("add_time", &label);
+            }
+            #[cfg(not(target_os = "linux"))]
+            let _ = extend_label;
+            remaining_ms.clamp(1, i32::MAX as i64)
+        }
+        NativeFocusAlert::Paused {
+            title,
+            body,
+            resume_label,
+            dismiss_label,
+        } => {
+            notification.summary(&title).body(&body).id(9003);
+            #[cfg(target_os = "linux")]
+            notification
+                .action("resume", &resume_label)
+                .action("stop_asking", &dismiss_label);
+            #[cfg(not(target_os = "linux"))]
+            let _ = (resume_label, dismiss_label);
+            PAUSED_ALERT_TIMEOUT_MS
+        }
+    };
+    notification.timeout(timeout_ms as i32);
+    apply_linux_notification_hints(&mut notification, Some("reminder"), true, true);
+    if !crate::pomodoro::native_runtime::presentation_is_current(
+        &app,
+        context.vault_generation,
+        context.revision,
+    ) {
+        return Err("Native Focus alert context changed before publication".into());
+    }
+    let handle = notification
+        .show()
+        .map_err(|error| format!("Show native Focus alert: {error}"))?;
+    #[cfg(target_os = "linux")]
+    tauri::async_runtime::spawn(async move {
+        let _slot = action_slot;
+        let wait = handle.wait_for_action_async(|response| {
+            let notify_rust::ActionResponse::Custom(action) = response else {
+                return;
+            };
+            if *action == "default" {
+                if crate::pomodoro::native_runtime::presentation_is_current(
+                    &app,
+                    context.vault_generation,
+                    context.revision,
+                ) {
                     focus_main_window(app.clone());
                 }
-                _ => {}
-            },
-        );
+            }
+            let intent = actions.intent(action);
+            if let Some(intent) = intent
+                && let Err(error) = crate::pomodoro::native_runtime::native_control_in_context(
+                    &app,
+                    intent,
+                    context.clone(),
+                )
+            {
+                eprintln!("Native Focus notification action: {error}");
+            }
+        });
+        if tokio::time::timeout(std::time::Duration::from_millis(timeout_ms as u64), wait)
+            .await
+            .is_err()
+        {
+            handle.close_async().await;
+        }
     });
+    #[cfg(not(target_os = "linux"))]
+    let _ = handle;
+    Ok(())
+}
+
+#[cfg(test)]
+mod focus_alert_tests {
+    use super::*;
+
+    #[test]
+    fn alerts_admit_only_actions_offered_for_the_displayed_mode_and_extension_state() {
+        let warning = NativeFocusAlertActions::Ending {
+            allow_extension: true,
+        };
+        assert!(matches!(
+            warning.intent("add_time"),
+            Some(ganbaru_focus::FocusIntent::ExtendFocus {
+                seconds: FOCUS_EXTENSION_SECONDS
+            })
+        ));
+        assert!(warning.intent("resume").is_none());
+        assert!(warning.intent("stop_asking").is_none());
+        assert!(
+            NativeFocusAlertActions::Ending {
+                allow_extension: false
+            }
+            .intent("add_time")
+            .is_none()
+        );
+        assert!(matches!(
+            NativeFocusAlertActions::Paused.intent("resume"),
+            Some(ganbaru_focus::FocusIntent::Resume)
+        ));
+        assert!(matches!(
+            NativeFocusAlertActions::Paused.intent("stop_asking"),
+            Some(ganbaru_focus::FocusIntent::DismissPausedPrompts)
+        ));
+        assert!(NativeFocusAlertActions::Paused.intent("add_time").is_none());
+        for action in ["default", "unknown", "stop", ""] {
+            assert!(NativeFocusAlertActions::Paused.intent(action).is_none());
+            assert!(warning.intent(action).is_none());
+        }
+    }
 }

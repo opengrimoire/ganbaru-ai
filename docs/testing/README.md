@@ -10,6 +10,8 @@ This document is the command and gate-selection reference. Supporting documents 
 - [Local vault handoff](vault-handoff.md): concise physical desktop and Android round-trip acceptance and result record.
 - [Calendar recurrence](calendar-recurrence.md): recurrence editing and interoperability matrices.
 - [Notes editor](notes-editor.md): editor, database, transfer, and recovery matrices.
+- [Project dependency cascades](project-dependency-cascades.md): canonical previews, reviewed transactions, retries, and Gantt acceptance.
+- [Doomscrolling runtime](doomscrolling.md): desktop frontend absence, observation, vault invalidation, spool recovery, and remaining Android acceptance.
 - [Performance harness](../performance/harness.md): benchmark-only contracts outside normal validation.
 
 ## Goals
@@ -102,7 +104,7 @@ Mechanically obvious prose, copy, or link changes need no code validation unless
 
 Backend persistence, SQLite, import, export, migrations, membership, note saving, and other data-loss-sensitive changes require focused tests during implementation and a broader completion gate proportional to risk.
 
-Tests must consider existing installs, stale rows, unknown values, older exports, rollback, partial failure, idempotency, and cleanup of obsolete data.
+Tests must cover current-format state, stale rows, unknown values, supported external imports, rollback, partial failure, and idempotency. Unsupported pre-user internal formats should be rejected explicitly, not maintained through compatibility fixtures. Preserve regression fixtures that exercise current production behavior.
 
 ### Pull requests and releases
 

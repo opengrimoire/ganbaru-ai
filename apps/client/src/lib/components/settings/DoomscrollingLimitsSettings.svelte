@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import Check from "@lucide/svelte/icons/check";
   import CircleAlert from "@lucide/svelte/icons/circle-alert";
   import Pencil from "@lucide/svelte/icons/pencil";
@@ -9,7 +10,6 @@
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
-    computeDoomscrollingLimitEntryWindowTotals,
     doomscrollingLimitEntryKey,
     type DoomscrollingLimitEntry,
     type DoomscrollingLimitPeriod,
@@ -17,7 +17,8 @@
     type DoomscrollingUsageLimit,
   } from "$lib/doomscrolling";
   import { getDoomscrolling } from "$lib/stores/doomscrolling.svelte";
-  import { getDoomscrollingUsage } from "$lib/stores/doomscrolling-usage.svelte";
+  import { DOOMSCROLLING_USAGE_REFRESH_INTERVAL_MS, getDoomscrollingUsage } from "$lib/stores/doomscrolling-usage.svelte";
+  import { createLifecycleScheduler } from "$lib/scheduling/lifecycle-scheduler";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { cn } from "$lib/utils";
   import DoomscrollingBrowserConnectionStatus from "$lib/components/settings/doomscrolling-browser-connection";
@@ -40,10 +41,25 @@
   const theme = getTheme();
   const { t } = getLocalization();
 
+  onMount(() => {
+    if (__GANBARU_AI_BUILD_PLATFORM__ !== "android") {
+      void usage.refresh();
+      return;
+    }
+    const reader = createLifecycleScheduler({
+      run: async (context) => {
+        await usage.refresh(context);
+        return context.isCurrent() ? context.now() + DOOMSCROLLING_USAGE_REFRESH_INTERVAL_MS : null;
+      },
+    });
+    reader.setEnabled(true);
+    return () => reader.dispose();
+  });
+
   let pendingAction = $state<PendingLimitAction | null>(null);
 
   const desktopAvailabilityMessage = $derived(
-    usage.foregroundStatus.available
+    __GANBARU_AI_BUILD_PLATFORM__ === "android" || usage.foregroundStatus.available
       ? null
       : usage.foregroundStatus.reason?.toLowerCase().includes("wayland")
         ? null
@@ -94,12 +110,7 @@
     limit: DoomscrollingUsageLimit,
     total: DoomscrollingLimitTotal,
   ): LimitProgressSegment[] {
-    const entryTotals = computeDoomscrollingLimitEntryWindowTotals(
-      limit,
-      usage.samples,
-      total.windowStartLocalDate ?? usage.localDate,
-      total.windowEndLocalDate ?? usage.localDate,
-    );
+    const entryTotals = usage.entryTotalsFor(limit.id, totalPeriod(total));
     const usedSecondsByEntryId = new Map(
       entryTotals.map((entryTotal) => [entryTotal.entryId, entryTotal.usedSeconds] as const),
     );
@@ -122,33 +133,10 @@
   }
 
   function limitBudgetViews(limit: DoomscrollingUsageLimit): LimitBudgetView[] {
-    const storedTotals = usage.totalsFor(limit.id);
-    const storedTotalByPeriod = new Map(
-      storedTotals.map((total) => [totalPeriod(total), total] as const),
-    );
-    const totals = [
-        limit.minutesPerDay === null ? null : (storedTotalByPeriod.get("day") ?? {
-          limitId: limit.id,
-          period: "day" as const,
-          windowStartLocalDate: usage.localDate,
-          windowEndLocalDate: usage.localDate,
-          usedSeconds: 0,
-          limitSeconds: limit.minutesPerDay * 60,
-          remainingSeconds: limit.minutesPerDay * 60,
-          exhausted: false,
-        }),
-        limit.minutesPerWeek === null || limit.minutesPerWeek === undefined ? null : (storedTotalByPeriod.get("week") ?? {
-          limitId: limit.id,
-          period: "week" as const,
-          windowStartLocalDate: usage.weekStartLocalDate,
-          windowEndLocalDate: usage.localDate,
-          usedSeconds: 0,
-          limitSeconds: limit.minutesPerWeek * 60,
-          remainingSeconds: limit.minutesPerWeek * 60,
-          exhausted: false,
-        }),
-      ].filter((total): total is DoomscrollingLimitTotal => total !== null);
-    return totals
+    return usage.totalsFor(limit.id)
+      .filter((total) => totalPeriod(total) === "day"
+        ? limit.minutesPerDay !== null
+        : limit.minutesPerWeek !== null && limit.minutesPerWeek !== undefined)
       .map((total) => ({
         total,
         period: totalPeriod(total),
@@ -311,6 +299,10 @@
                         </span>
                       {/each}
                     </div>
+                  </div>
+                {:else}
+                  <div class="text-[0.8rem] text-muted-foreground">
+                    {t("settings.doomscrolling.limits.totalsUnavailable")}
                   </div>
                 {/each}
               </div>

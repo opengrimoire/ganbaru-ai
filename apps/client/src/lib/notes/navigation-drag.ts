@@ -1,8 +1,6 @@
 import { notesPageProjectId } from "./project-membership";
 import type { NotesFolder, NotesPage } from "./types";
 
-export const NOTES_NAVIGATION_DRAG_MIME = "application/x-ganbaru-notes-navigation";
-
 export type NotesNavigationDragItem =
   | { kind: "folder"; id: string }
   | { kind: "page"; id: string };

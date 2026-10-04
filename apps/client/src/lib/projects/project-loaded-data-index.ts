@@ -47,7 +47,6 @@ export interface ProjectLoadedDataIndex {
   readonly tasksByProject: ReadonlyMap<string, readonly ProjectTask[]>;
   readonly activeTasksByProject: ReadonlyMap<string, readonly ProjectTask[]>;
   readonly tasksByParent: ReadonlyMap<string, readonly ProjectTask[]>;
-  readonly tasksByParentSourceOrder: ReadonlyMap<string, readonly ProjectTask[]>;
   readonly activeTasksByParent: ReadonlyMap<string, readonly ProjectTask[]>;
   readonly activeTopLevelTasksBySection: ReadonlyMap<string, readonly ProjectTask[]>;
   readonly activeTopLevelTasksByStatus: ReadonlyMap<string, readonly ProjectTask[]>;
@@ -198,9 +197,6 @@ export function buildProjectLoadedDataIndex(source: ProjectsSnapshot): ProjectLo
       }
     }
   }
-  const tasksByParentSourceOrder = new Map(
-    [...tasksByParent].map(([parentId, tasks]) => [parentId, tasks.slice()]),
-  );
   sortGroups(tasksByProject, sortTasksBySectionOrder);
   sortGroups(activeTasksByProject, sortTasksBySectionOrder);
   sortGroups(tasksByParent, sortTasksBySectionOrder);
@@ -376,7 +372,6 @@ export function buildProjectLoadedDataIndex(source: ProjectsSnapshot): ProjectLo
     tasksByProject,
     activeTasksByProject,
     tasksByParent,
-    tasksByParentSourceOrder,
     activeTasksByParent,
     activeTopLevelTasksBySection,
     activeTopLevelTasksByStatus,

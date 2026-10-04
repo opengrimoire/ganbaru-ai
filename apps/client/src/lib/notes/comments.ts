@@ -53,13 +53,6 @@ export function notesCommentParentMatches(
   return notesCommentParentKey(left) === notesCommentParentKey(right);
 }
 
-export function notesCommentThreadsForParent(
-  threads: readonly NotesCommentThread[],
-  parent: NotesCommentParent,
-): NotesCommentThread[] {
-  return threads.filter((thread) => notesCommentParentMatches(thread.parent, parent));
-}
-
 export function notesCommentAnchorDraft(
   blockText: string,
   start: number,

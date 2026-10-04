@@ -212,44 +212,6 @@ pub async fn chat_create_worktree_environment(
 }
 
 #[tauri::command]
-pub async fn chat_select_thread_execution_environment(
-    app: tauri::AppHandle,
-    db_url: String,
-    thread_id: ChatThreadId,
-    environment_id: String,
-) -> ChatResult<()> {
-    validate_id(&environment_id)?;
-    let pool = chat_pool(&app, db_url).await?;
-    let result = sqlx::query(
-        "UPDATE chat_threads
-         SET execution_environment_id = ?, updated_at = ?, revision = revision + 1
-         WHERE id = ? AND state != 'closed'
-           AND NOT EXISTS (SELECT 1 FROM chat_turns WHERE thread_id = chat_threads.id)
-           AND EXISTS (
-             SELECT 1 FROM chat_execution_environments environment
-             WHERE environment.id = ?
-               AND environment.working_folder_id = chat_threads.working_folder_id
-               AND environment.lifecycle_state = 'available'
-           )",
-    )
-    .bind(&environment_id)
-    .bind(now_timestamp()?.as_str())
-    .bind(thread_id.as_str())
-    .bind(&environment_id)
-    .execute(&pool)
-    .await
-    .map_err(persistence_error)?;
-    if result.rows_affected() == 0 {
-        return Err(ChatError::new(
-            ChatErrorCode::Conflict,
-            "Execution environment can only change before the first turn",
-            true,
-        ));
-    }
-    Ok(())
-}
-
-#[tauri::command]
 pub async fn chat_read_thread_execution_environment(
     app: tauri::AppHandle,
     db_url: String,

@@ -31,6 +31,26 @@ function setup(state: EditSessionState = { mode: "closed" }, dirty = false) {
 }
 
 describe("CalendarViewDragController", () => {
+  it("applies a following draft occurrence drag to the authored anchor without persisting a pending ID", async () => {
+    const state: EditSessionState = { mode: "create", sessionKey: 1,
+      start: "2026-07-12 09:00", end: "2026-07-12 10:00", anchor: { x: 0, y: 0, width: 0, height: 0 } };
+    const anchor = event("__pending_create__");
+    const following = event("__pending_create__::native::2026-07-13", "2026-07-13 09:00", "2026-07-13 10:00");
+    const updateChanges = vi.fn();
+    const updateBlock = vi.fn();
+    const controller = new CalendarViewDragController({
+      session: { state, dirty: true, changes: { start: "2026-07-12 09:15", end: "2026-07-12 10:15" },
+        openEdit: vi.fn(), updateChanges },
+      isCommitHidden: () => false, editingId: () => anchor.id, visibleEvents: () => [anchor, following],
+      isRecurring: () => true, isActivePomodoroEvent: () => false,
+      panelAnchor: () => state.anchor, loadPanel: async () => undefined, confirmDiscard: vi.fn(),
+      getTemplate: () => undefined, updateBlock,
+    });
+    await controller.handle({ ...following, start: "2026-07-13 23:30", end: "2026-07-14 00:30" });
+    expect(updateChanges).toHaveBeenCalledWith({ start: "2026-07-12 23:45", end: "2026-07-13 00:45" });
+    expect(updateBlock).not.toHaveBeenCalled();
+  });
+
   it("routes an open edit drag through the session without persistence", async () => {
     const original = event("event-a");
     const state: EditSessionState = {

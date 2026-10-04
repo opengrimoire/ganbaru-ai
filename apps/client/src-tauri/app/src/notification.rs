@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::io::Read;
 use std::process::{Command, Stdio};
 use std::sync::{
@@ -129,7 +129,7 @@ fn screensaver_inhibit() -> Option<u32> {
 #[cfg(not(target_os = "linux"))]
 fn screensaver_uninhibit(_cookie: u32) {}
 
-const POMODORO_OVERLAY_MAIN_LABEL: &str = "pomodoro-overlay-main";
+pub(crate) const POMODORO_OVERLAY_MAIN_LABEL: &str = "pomodoro-overlay-main";
 #[cfg(target_os = "linux")]
 const POMODORO_OVERLAY_BLOCKER_ACTION_EVENT: &str = "pomodoro-overlay-blocker-action";
 const POMODORO_OVERLAY_STATE_CHANGED_EVENT: &str = "pomodoro-overlay-state-changed";
@@ -300,6 +300,7 @@ impl Default for PomodoroOverlayState {
 struct PomodoroOverlayCleanup {
     labels: Vec<String>,
     kind: PomodoroOverlayKind,
+    context: crate::pomodoro::FocusNativeContext,
     visual_state: PomodoroOverlayVisualState,
     monitor_signature: Option<MonitorSignature>,
     enforcement: OverlayEnforcementGuard,
@@ -310,6 +311,7 @@ struct PomodoroOverlayCleanup {
 struct PomodoroOverlaySnapshot {
     labels: Vec<String>,
     kind: PomodoroOverlayKind,
+    context: crate::pomodoro::FocusNativeContext,
     visual_state: PomodoroOverlayVisualState,
     monitor_signature: Option<MonitorSignature>,
 }
@@ -333,6 +335,7 @@ impl PomodoroOverlayState {
         app: &tauri::AppHandle,
         kind: PomodoroOverlayKind,
         visual_state: PomodoroOverlayVisualState,
+        context: crate::pomodoro::FocusNativeContext,
     ) -> Result<(), String> {
         if self.shutting_down.load(Ordering::SeqCst) {
             return Err("the application is shutting down".to_string());
@@ -364,6 +367,7 @@ impl PomodoroOverlayState {
         let cleanup = PomodoroOverlayCleanup {
             labels: Vec::new(),
             kind,
+            context,
             visual_state,
             monitor_signature: None,
             enforcement,
@@ -432,6 +436,7 @@ impl PomodoroOverlayState {
             .map(|cleanup| PomodoroOverlaySnapshot {
                 labels: cleanup.labels.clone(),
                 kind: cleanup.kind,
+                context: cleanup.context.clone(),
                 visual_state: cleanup.visual_state,
                 monitor_signature: cleanup.monitor_signature.clone(),
             })
@@ -460,10 +465,20 @@ impl PomodoroOverlayState {
         let Some(snapshot) = self.snapshot() else {
             return;
         };
+        if !crate::pomodoro::native_runtime::overlay_context_is_current(app, &snapshot.context) {
+            self.close_locked(app);
+            return;
+        }
         let existing_labels = snapshot.labels.clone();
         let app_for_setup = app.clone();
 
         let setup_result = run_main_thread_setup(app, move || {
+            if !crate::pomodoro::native_runtime::overlay_context_is_current(
+                &app_for_setup,
+                &snapshot.context,
+            ) {
+                return Err("Native Focus monitor repair was superseded or expired".to_owned());
+            }
             let monitors = app_for_setup
                 .available_monitors()
                 .map_err(|e| e.to_string())?;
@@ -486,6 +501,7 @@ impl PomodoroOverlayState {
                 &snapshot.labels,
                 &monitors,
                 primary_idx,
+                &snapshot.context,
             )?;
             Ok(Some((labels, signature)))
         });
@@ -581,7 +597,10 @@ fn restore_overlay_cleanup(mut cleanup: PomodoroOverlayCleanup) {
     cleanup.enforcement.stop();
 }
 
-fn overlay_url(kind: PomodoroOverlayKind) -> WebviewUrl {
+fn overlay_url(
+    kind: PomodoroOverlayKind,
+    context: &crate::pomodoro::FocusNativeContext,
+) -> WebviewUrl {
     let query = match kind {
         PomodoroOverlayKind::Break {
             ends_at_ms,
@@ -610,7 +629,25 @@ fn overlay_url(kind: PomodoroOverlayKind) -> WebviewUrl {
             )
         }
     };
-    WebviewUrl::App(query.into())
+    let mut url = tauri::Url::parse("http://localhost/").expect("constant overlay URL is valid");
+    url.set_query(query.split_once('?').map(|(_, query)| query));
+    {
+        let mut pairs = url.query_pairs_mut();
+        pairs.append_pair(
+            "focusVaultGeneration",
+            &context.vault_generation.to_string(),
+        );
+        if let Some(run_id) = &context.run_id {
+            pairs.append_pair("focusRunId", run_id);
+        }
+        if let Some(segment_id) = &context.segment_id {
+            pairs.append_pair("focusSegmentId", segment_id);
+        }
+        if let Some(detected_at_ms) = context.idle_detected_at_ms {
+            pairs.append_pair("focusIdleDetectedAtMs", &detected_at_ms.to_string());
+        }
+    }
+    WebviewUrl::App(format!("index.html?{}", url.query().unwrap_or_default()).into())
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -889,6 +926,7 @@ fn reconcile_overlay_windows(
     old_labels: &[String],
     monitors: &[tauri::window::Monitor],
     primary_idx: usize,
+    context: &crate::pomodoro::FocusNativeContext,
 ) -> Result<Vec<String>, String> {
     let background_color = visual_state.background_color();
     let primary_monitor = &monitors[primary_idx];
@@ -950,7 +988,7 @@ fn reconcile_overlay_windows(
             build_svelte_overlay_window(
                 app,
                 POMODORO_OVERLAY_MAIN_LABEL,
-                overlay_url(kind),
+                overlay_url(kind, context),
                 "Ganbaru AI pomodoro",
                 primary_monitor,
                 background_color,
@@ -963,7 +1001,7 @@ fn reconcile_overlay_windows(
             build_svelte_overlay_window(
                 app,
                 POMODORO_OVERLAY_MAIN_LABEL,
-                overlay_url(kind),
+                overlay_url(kind, context),
                 "Ganbaru AI pomodoro",
                 primary_monitor,
                 background_color,
@@ -982,18 +1020,34 @@ fn reconcile_overlay_windows(
     Ok(labels)
 }
 
-fn show_pomodoro_overlay(app: tauri::AppHandle, kind: PomodoroOverlayKind) -> Result<(), String> {
+fn show_pomodoro_overlay(
+    app: tauri::AppHandle,
+    kind: PomodoroOverlayKind,
+    scope: (u64, i64),
+) -> Result<(), String> {
+    let context = crate::pomodoro::capture_native_context(&app)
+        .map_err(|error| format!("Read native Focus overlay context: {error}"))?;
+    if context.vault_generation != scope.0 || context.revision != scope.1 {
+        return Err("Native Focus overlay context was superseded".to_owned());
+    }
     let overlay_state = app.state::<PomodoroOverlayState>();
     let _lifecycle = overlay_state
         .lifecycle
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let visual_state = kind.initial_visual_state();
-    overlay_state.begin_locked(&app, kind, visual_state)?;
+    overlay_state.begin_locked(&app, kind, visual_state, context.clone())?;
     let background_color = visual_state.background_color();
 
     let app_for_setup = app.clone();
     let setup_result = run_main_thread_setup(&app, move || {
+        if !crate::pomodoro::native_runtime::presentation_is_current(
+            &app_for_setup,
+            scope.0,
+            scope.1,
+        ) {
+            return Err("Native Focus window creation was superseded or expired".to_owned());
+        }
         let monitors = app_for_setup
             .available_monitors()
             .map_err(|e| e.to_string())?;
@@ -1037,7 +1091,7 @@ fn show_pomodoro_overlay(app: tauri::AppHandle, kind: PomodoroOverlayKind) -> Re
         if let Err(err) = build_svelte_overlay_window(
             &app_for_setup,
             POMODORO_OVERLAY_MAIN_LABEL,
-            overlay_url(kind),
+            overlay_url(kind, &context),
             "Ganbaru AI pomodoro",
             primary_monitor,
             background_color,
@@ -1064,16 +1118,80 @@ fn show_pomodoro_overlay(app: tauri::AppHandle, kind: PomodoroOverlayKind) -> Re
     Ok(())
 }
 
-#[tauri::command(async)]
-pub fn close_pomodoro_overlay(app: tauri::AppHandle, overlays: State<'_, PomodoroOverlayState>) {
+pub(crate) fn close_pomodoro_overlay(
+    app: tauri::AppHandle,
+    overlays: State<'_, PomodoroOverlayState>,
+) {
     overlays.close(&app);
 }
 
+/// Dismiss only the completion surface that supplied this native window's identity.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct PomodoroCompletionScope {
+    vault_generation: u64,
+    run_id: String,
+    segment_id: String,
+}
+
+impl PomodoroCompletionScope {
+    fn matches_retained(
+        &self,
+        generation: u64,
+        run_id: Option<&str>,
+        segment_id: Option<&str>,
+    ) -> bool {
+        self.vault_generation > 0
+            && self.vault_generation == generation
+            && !self.run_id.is_empty()
+            && self.run_id.len() <= 128
+            && Some(self.run_id.as_str()) == run_id
+            && !self.segment_id.is_empty()
+            && self.segment_id.len() <= 128
+            && Some(self.segment_id.as_str()) == segment_id
+    }
+}
+
+/// Completion dismissal cannot close an idle warning, break, or newer native run.
 #[tauri::command(async)]
-pub fn set_pomodoro_overlay_state(
+pub(crate) fn dismiss_pomodoro_completion(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    overlays: State<'_, PomodoroOverlayState>,
+    scope: PomodoroCompletionScope,
+) -> Result<(), String> {
+    if window.label() != POMODORO_OVERLAY_MAIN_LABEL {
+        return Err("Only the native completion window can dismiss its surface".to_owned());
+    }
+    let _lifecycle = overlays
+        .lifecycle
+        .lock()
+        .map_err(|error| format!("Lock native completion lifecycle: {error}"))?;
+    let allowed = overlays
+        .cleanup
+        .lock()
+        .map_err(|error| format!("Read native completion surface: {error}"))?
+        .as_ref()
+        .is_some_and(|cleanup| {
+            matches!(cleanup.kind, PomodoroOverlayKind::Completion { .. })
+                && scope.matches_retained(
+                    cleanup.context.vault_generation,
+                    cleanup.context.run_id.as_deref(),
+                    cleanup.context.segment_id.as_deref(),
+                )
+        });
+    if !allowed {
+        return Err("Native completion dismissal belongs to a superseded surface".to_owned());
+    }
+    overlays.close_locked(&app);
+    Ok(())
+}
+
+pub(crate) fn set_pomodoro_overlay_state(
     app: tauri::AppHandle,
     overlays: State<'_, PomodoroOverlayState>,
     state: String,
+    scope: (u64, i64),
 ) -> Result<(), String> {
     let _lifecycle = overlays
         .lifecycle
@@ -1089,7 +1207,14 @@ pub fn set_pomodoro_overlay_state(
     let labels_for_reinforce = labels.clone();
     let app_for_setup = app.clone();
 
-    if let Err(err) = run_main_thread_setup(&app, move || {
+    run_main_thread_setup(&app, move || {
+        if !crate::pomodoro::native_runtime::presentation_is_current(
+            &app_for_setup,
+            scope.0,
+            scope.1,
+        ) {
+            return Err("Native Focus window recoloring was superseded or expired".to_owned());
+        }
         #[cfg(target_os = "linux")]
         repaint_linux_native_blocker_windows(background_color);
 
@@ -1099,9 +1224,7 @@ pub fn set_pomodoro_overlay_state(
             }
         }
         Ok(())
-    }) {
-        eprintln!("failed to recolor pomodoro overlay windows: {err}");
-    }
+    })?;
     reinforce_overlay_windows(&app, &labels_for_reinforce, POMODORO_OVERLAY_MAIN_LABEL);
 
     app.emit(
@@ -1114,12 +1237,12 @@ pub fn set_pomodoro_overlay_state(
     Ok(())
 }
 
-#[tauri::command(async)]
-pub fn show_break_overlay(
+pub(crate) fn show_break_overlay(
     app: tauri::AppHandle,
     break_ends_at_ms: u64,
     break_end_esc_presses: Option<u32>,
     break_extension_limit: Option<u32>,
+    scope: (u64, i64),
 ) -> Result<(), String> {
     show_pomodoro_overlay(
         app,
@@ -1128,6 +1251,7 @@ pub fn show_break_overlay(
             end_esc_presses: normalize_break_end_esc_presses(break_end_esc_presses),
             extension_limit: normalize_break_extension_limit(break_extension_limit),
         },
+        scope,
     )
 }
 
@@ -1147,13 +1271,17 @@ fn normalize_break_extension_limit(value: Option<u32>) -> Option<u32> {
     }
 }
 
-#[tauri::command(async)]
-pub fn show_idle_overlay(app: tauri::AppHandle, idle_seconds: u32) -> Result<bool, String> {
+pub(crate) fn show_idle_overlay(
+    app: tauri::AppHandle,
+    idle_seconds: u32,
+    scope: (u64, i64),
+) -> Result<bool, String> {
     show_pomodoro_overlay(
         app,
         PomodoroOverlayKind::Idle {
             seconds: idle_seconds,
         },
+        scope,
     )?;
     Ok(true)
 }
@@ -1167,16 +1295,17 @@ fn completion_visual_state_from_kind(kind: &str) -> Result<PomodoroOverlayVisual
     }
 }
 
-#[tauri::command(async)]
-pub fn show_pomodoro_completion_overlay(
+pub(crate) fn show_pomodoro_completion_overlay(
     app: tauri::AppHandle,
     kind: String,
+    scope: (u64, i64),
 ) -> Result<bool, String> {
     show_pomodoro_overlay(
         app,
         PomodoroOverlayKind::Completion {
             visual_state: completion_visual_state_from_kind(&kind)?,
         },
+        scope,
     )?;
     Ok(true)
 }
@@ -1191,6 +1320,28 @@ mod tests {
     use super::*;
     use std::collections::{HashMap, HashSet};
     use std::path::PathBuf;
+
+    #[test]
+    fn native_completion_dismissal_requires_the_retained_generation_run_and_segment() {
+        let mut scope = PomodoroCompletionScope {
+            vault_generation: 3,
+            run_id: "run".into(),
+            segment_id: "segment".into(),
+        };
+        assert!(scope.matches_retained(3, Some("run"), Some("segment")));
+        assert!(!scope.matches_retained(4, Some("run"), Some("segment")));
+        assert!(!scope.matches_retained(3, Some("other-run"), Some("segment")));
+        assert!(!scope.matches_retained(3, Some("run"), Some("other-segment")));
+        assert!(!scope.matches_retained(3, None, Some("segment")));
+        assert!(!scope.matches_retained(3, Some("run"), None));
+        scope.vault_generation = 0;
+        assert!(!scope.matches_retained(0, Some("run"), Some("segment")));
+        scope.vault_generation = 3;
+        scope.segment_id.clear();
+        assert!(!scope.matches_retained(3, Some("run"), Some("")));
+        scope.segment_id = "x".repeat(129);
+        assert!(!scope.matches_retained(3, Some("run"), Some(&scope.segment_id)));
+    }
 
     fn known_keys() -> HashMap<String, HashSet<String>> {
         HashMap::from([(
@@ -1209,25 +1360,6 @@ mod tests {
                 "['<Alt>F4']".to_string(),
             )],
         }
-    }
-
-    #[test]
-    fn app_sound_ids_cover_wired_sounds() {
-        for id in [
-            "event-notification",
-            "idle-alert",
-            "focus-session-failed-long-idle",
-            "focus-ending-warning",
-            "break-start",
-            "break-finished",
-            "event-finished",
-            "pomodoro-day-complete",
-            "pomodoro-workweek-complete",
-        ] {
-            assert!(AppSound::from_id(id).is_ok(), "{id} should be wired");
-        }
-
-        assert!(AppSound::from_id("ai-response-finished").is_err());
     }
 
     #[test]

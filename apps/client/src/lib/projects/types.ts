@@ -17,7 +17,6 @@ import type { NotesHistoryRetentionDays } from "$lib/notes/history-retention";
 export const PROJECT_VIEW_IDS = ["dashboard", "list", "kanban", "calendar", "gantt"] as const;
 export type ProjectViewId = (typeof PROJECT_VIEW_IDS)[number];
 
-export const PROJECT_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
 export type ProjectPriority = string;
 export const PROJECT_TAG_DEFAULT_COLOR: EventColor = 13;
 
@@ -290,6 +289,8 @@ export interface ProjectPriorityConfig {
 }
 
 export interface ProjectTask {
+  /** Native monotonic row version. Local drafts can exist before persistence. */
+  revision?: number;
   id: string;
   projectId: string;
   sectionId: string;
@@ -435,6 +436,8 @@ export interface ProjectTaskTagLink {
 }
 
 export interface ProjectCustomField {
+  /** Canonical revision is available after native persistence. */
+  revision?: number;
   id: string;
   projectId: string;
   name: string;
@@ -445,6 +448,8 @@ export interface ProjectCustomField {
 }
 
 export interface ProjectCustomFieldOption {
+  /** Canonical revision is available after native persistence. */
+  revision?: number;
   id: string;
   fieldId: string;
   name: string;

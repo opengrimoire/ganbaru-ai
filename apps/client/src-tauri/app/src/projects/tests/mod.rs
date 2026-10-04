@@ -84,11 +84,14 @@ pub(super) fn task_update_from_row(task: &ProjectTaskRow) -> ProjectTaskUpdate {
 }
 
 mod custom_fields;
+mod dependency_cascade;
 mod emojis;
 mod project_lifecycle;
 mod project_working_folders;
 mod relationships;
+mod reorder;
 mod routine;
 mod structure;
+mod task_bulk;
 mod task_lifecycle;
 mod task_views;

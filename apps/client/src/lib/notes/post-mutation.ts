@@ -21,6 +21,8 @@ export interface NotesBlockPlacement {
 }
 
 export interface NotesPostMutationResult {
+  /** Project an accepted native operation without creating new local draft markers. */
+  canonical?: boolean;
   blocks?: readonly NotesBlock[];
   placements?: readonly NotesBlockPlacement[];
   removedBlockIds?: readonly string[];

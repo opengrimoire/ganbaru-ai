@@ -307,6 +307,18 @@
           "markdownDescription": "Denies the accessStatus command without any pre-configured scope."
         },
         {
+          "description": "Enables the accountingSnapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-accountingSnapshot",
+          "markdownDescription": "Enables the accountingSnapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the accountingSnapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-accountingSnapshot",
+          "markdownDescription": "Denies the accountingSnapshot command without any pre-configured scope."
+        },
+        {
           "description": "Enables the acknowledgeEvents command without any pre-configured scope.",
           "type": "string",
           "const": "allow-acknowledgeEvents",
@@ -329,6 +341,18 @@
           "type": "string",
           "const": "deny-applyRules",
           "markdownDescription": "Denies the applyRules command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the invalidateRules command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-invalidateRules",
+          "markdownDescription": "Enables the invalidateRules command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the invalidateRules command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-invalidateRules",
+          "markdownDescription": "Denies the invalidateRules command without any pre-configured scope."
         },
         {
           "description": "Enables the listLaunchableApps command without any pre-configured scope.",

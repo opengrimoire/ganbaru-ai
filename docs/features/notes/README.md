@@ -18,6 +18,7 @@ Working-folder Markdown never becomes a Notes page automatically. It does not ga
 | Pages, folders, navigation, project scoping, favorites, recents, archive, and Trash | Implemented |
 | Theme-aware designed covers, managed images, and responsive focal cropping | Implemented; manual platform acceptance pending |
 | Rich-text block editor, text and note-row selection, keyboard structure, undo/redo, comments, suggestions, and managed assets | Implemented |
+| Native atomic compound edits with canonical preconditions, retry receipts and scoped undo | Implemented; real editor interaction acceptance pending |
 | Broad local block catalog and imported unsupported placeholders | Implemented with documented limits |
 | Local databases with table, board, gallery, list, calendar, and timeline views | Implemented |
 | Database templates, relations, rollups, formulas, and typed buttons | Implemented with bounded action limits |

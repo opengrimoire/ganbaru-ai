@@ -7,11 +7,13 @@ import { createProvisionalNotesPage } from "$lib/notes/page-creation";
 import { parseNotesLinkHash } from "$lib/notes/block-link";
 import type { NotesBlockHydrationRequest, NotesBlockUpdate, NotesChildPageFromBlockCreate, NotesDataSourceTableView, NotesDatabaseCreateRequest, NotesDatabaseReference, NotesLocalUser, NotesPageCreate, NotesPageOpenResponse, NotesWorkspaceShell, NotesWorkspaceShellRequest } from "$lib/notes/types";
 import type { NotesPageOpenMode } from "$lib/notes/page-open-mode";
+import type { NotesCompoundEdit, NotesCompoundEditResult } from "$lib/api/notes/compound-edits";
+import type { NotesCreatedDatabase } from "$lib/notes/types";
 
 const backend = vi.hoisted(() => ({
   pages: new Map<string, NotesPageOpenResponse>(),
   open: vi.fn(), createChild: vi.fn(), createPage: vi.fn(), saveBlock: vi.fn(),
-  createDatabase: vi.fn(), databaseViews: vi.fn(), databaseTable: vi.fn(),
+  createDatabase: vi.fn<(request: NotesDatabaseCreateRequest) => Promise<NotesCreatedDatabase>>(), databaseViews: vi.fn(), databaseTable: vi.fn(),
   databaseReference: vi.fn(async (_blockId: string): Promise<NotesDatabaseReference> => { throw new Error("Missing database fixture"); }),
   renameDatabase: vi.fn(async (_databaseId: string, title: string) => title),
   mentionSources: vi.fn(async () => []),
@@ -20,6 +22,30 @@ const backend = vi.hoisted(() => ({
   otherProjectCursor: null as string | null,
   projectsLoaded: true,
   projectsReady: vi.fn(async (): Promise<void> => undefined),
+}));
+
+vi.mock("$lib/api/notes/compound-edits", () => ({
+  applyNotesCompoundEdit: async (request: NotesCompoundEdit): Promise<NotesCompoundEditResult> => {
+    const before = Object.keys(request.expected_blocks).map((id) => {
+      const block = [...backend.pages.values()].flatMap((page) => page.blocks.results).find((block) => block.id === id);
+      if (!block) throw new Error("Missing canonical block fixture");
+      return block;
+    });
+    const blocks: NotesCompoundEditResult["blocks"] = [];
+    const databases: NotesCreatedDatabase[] = [];
+    for (const operation of request.operations) {
+      if (operation.type === "create_database") {
+        const created = await backend.createDatabase(operation.request);
+        databases.push(created);
+        blocks.push(created.block);
+      } else if (operation.type === "update") {
+        blocks.push(await backend.saveBlock(operation.block_id, operation.update));
+      } else {
+        throw new Error(`Unsupported preview fixture operation ${operation.type}`);
+      }
+    }
+    return { operation_id: request.operation_id, page_id: request.page_id, blocks, databases, placements: [], before_blocks: before, before_placements: [] };
+  },
 }));
 
 vi.mock("$lib/api/notes", async (importOriginal) => ({
@@ -57,6 +83,7 @@ vi.mock("$lib/api/notes", async (importOriginal) => ({
     created_time: "2026-09-28T12:00:00Z", last_edited_time: "2026-09-28T12:00:00Z",
   }),
   saveNotesUndoState: async () => undefined,
+  clearNotesUndoState: async () => undefined,
   loadNotesUndoState: async () => null,
   listNotesWorkingMarkdown: async () => ({ roots: [], unavailableWorkingFolderIds: [] }),
   listNotesDestinationCandidates: backend.destinations,
@@ -100,7 +127,7 @@ function page(id: string, title: string, parentId?: string, projectId = "project
     parent: parentId ? { type: "page_id", page_id: parentId } : { type: "workspace", workspace: true },
     properties: { __ganbaru_project_id: projectId },
   });
-  loaded.blocks.results[0] = applyBlockUpdate(loaded.blocks.results[0], createBlockUpdate("paragraph", `${title} content`));
+  loaded.blocks.results[0] = { ...applyBlockUpdate(loaded.blocks.results[0], createBlockUpdate("paragraph", `${title} content`)), edit_revision: "1".padStart(64, "0") };
   return {
     ...loaded,
     outlines: loaded.blocks.results.map((block, index) => notesBlockOutlineFromBlock(block, id, index)),
@@ -216,7 +243,7 @@ describe("Notes preview ownership", () => {
       const owner = [...backend.pages.values()].find((page) => page.blocks.results.some((block) => block.id === id));
       if (!owner) throw new Error("Missing block");
       const index = owner.blocks.results.findIndex((block) => block.id === id);
-      const next = applyBlockUpdate(owner.blocks.results[index], update);
+      const next = { ...applyBlockUpdate(owner.blocks.results[index], update), edit_revision: "2".padStart(64, "0") };
       owner.blocks.results[index] = next;
       return next;
     });
@@ -261,12 +288,23 @@ describe("Notes preview ownership", () => {
       backend.databaseTable.mockImplementation(async () => { await rows; return table; });
       await creating;
       const index = parent.blocks.results.findIndex((block) => block.id === blockId);
-      const block = applyBlockUpdate(parent.blocks.results[index], {
+      const block = { ...applyBlockUpdate(parent.blocks.results[index], {
         type: "child_database",
         child_database: { title: request.title, database_id: request.id, data_source_id: request.data_source_id, view_id: request.view_id },
-      });
+      }), edit_revision: "2".padStart(64, "0") };
+      if (block.type !== "child_database") throw new Error("Expected a created database fixture");
       parent.blocks.results[index] = block;
-      return { block };
+      return {
+        block, data_source: table.data_source, view: table.view,
+        database: {
+          object: "database", id: request.id, parent: block.parent, title: request.title,
+          title_rich_text: [], description: [], icon: null, cover: null, in_trash: false,
+          is_inline: true, data_sources: [], url: null, public_url: null,
+          source_provider: null, source_object_id: null, source_workspace_id: null,
+          source_last_edited_time: null, created_time: table.data_source.created_time,
+          last_edited_time: table.data_source.last_edited_time,
+        },
+      };
     });
     await notes.updateBlockText(blockId, "/datab");
     const creation = notes.convertBlock(blockId, "child_database", true);

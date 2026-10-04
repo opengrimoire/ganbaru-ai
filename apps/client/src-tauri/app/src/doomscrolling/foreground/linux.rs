@@ -37,27 +37,6 @@ fn x11_property_u32<C: x11rb::connection::Connection>(
 }
 
 #[cfg(target_os = "linux")]
-fn x11_property_string<C: x11rb::connection::Connection>(
-    conn: &C,
-    window: u32,
-    property: u32,
-    type_: u32,
-) -> Option<String> {
-    use x11rb::protocol::xproto::ConnectionExt as _;
-
-    let reply = conn
-        .get_property(false, window, property, type_, 0, 4096)
-        .ok()?
-        .reply()
-        .ok()?;
-    let value = String::from_utf8_lossy(&reply.value)
-        .trim_matches('\0')
-        .trim()
-        .to_string();
-    normalize_app_candidate_name(&value)
-}
-
-#[cfg(target_os = "linux")]
 fn x11_wm_class<C: x11rb::connection::Connection>(conn: &C, window: u32) -> Vec<String> {
     use x11rb::protocol::xproto::{AtomEnum, ConnectionExt as _};
 
@@ -104,16 +83,6 @@ fn x11_window_status<C: x11rb::connection::Connection>(
 
     let pid_atom = x11_intern_atom(conn, b"_NET_WM_PID")?;
     let process_id = x11_property_u32(conn, window, pid_atom, AtomEnum::CARDINAL.into())?;
-    let utf8_atom = x11_intern_atom(conn, b"UTF8_STRING")?;
-    let wm_name_atom = x11_intern_atom(conn, b"_NET_WM_NAME")?;
-    let title = x11_property_string(conn, window, wm_name_atom, utf8_atom).or_else(|| {
-        x11_property_string(
-            conn,
-            window,
-            AtomEnum::WM_NAME.into(),
-            AtomEnum::STRING.into(),
-        )
-    });
     let wm_class_names = x11_wm_class(conn, window);
     let process_names = process_id
         .map(|id| read_linux_process_name(&PathBuf::from("/proc").join(id.to_string())))
@@ -121,22 +90,17 @@ fn x11_window_status<C: x11rb::connection::Connection>(
     let app_name = wm_class_names
         .last()
         .cloned()
-        .or_else(|| title.clone())
         .or_else(|| process_names.first().cloned())
         .ok_or_else(|| "active X11 window app name is unavailable".to_string())?;
     let process_name = process_names.first().cloned();
     let mut match_names = Vec::new();
     match_names.extend(wm_class_names);
     match_names.extend(process_names);
-    if let Some(title) = title {
-        match_names.push(title);
-    }
-    Ok(foreground_status_from_parts(
-        app_name,
-        process_name,
-        process_id,
-        match_names,
-    ))
+    let mut status = foreground_status_from_parts(app_name, process_name, process_id, match_names);
+    status.process_identity = process_id
+        .and_then(|id| observe_linux_process(&PathBuf::from("/proc").join(id.to_string()), id))
+        .map(|observed| observed.process_identity);
+    Ok(status)
 }
 
 #[cfg(target_os = "linux")]
@@ -185,7 +149,6 @@ fn x11_close_active_window(
 #[derive(Clone)]
 struct WaylandToplevelInfo {
     handle: wayland_protocols_wlr::foreign_toplevel::v1::client::zwlr_foreign_toplevel_handle_v1::ZwlrForeignToplevelHandleV1,
-    title: Option<String>,
     app_id: Option<String>,
     active: bool,
     closed: bool,
@@ -212,13 +175,10 @@ fn wayland_state_is_activated(state: &[u8]) -> bool {
 fn wayland_status_from_toplevel(
     info: &WaylandToplevelInfo,
 ) -> Option<DoomscrollingForegroundDesktopAppStatus> {
-    let app_name = info.app_id.clone().or_else(|| info.title.clone())?;
+    let app_name = info.app_id.clone()?;
     let mut match_names = Vec::new();
     if let Some(app_id) = &info.app_id {
         match_names.push(app_id.clone());
-    }
-    if let Some(title) = &info.title {
-        match_names.push(title.clone());
     }
     Some(foreground_status_from_parts(
         app_name,
@@ -231,9 +191,9 @@ fn wayland_status_from_toplevel(
 #[cfg(target_os = "linux")]
 impl WaylandToplevelState {
     fn active_toplevel(&self) -> Option<&WaylandToplevelInfo> {
-        self.toplevels.values().find(|info| {
-            info.active && !info.closed && (info.app_id.is_some() || info.title.is_some())
-        })
+        self.toplevels
+            .values()
+            .find(|info| info.active && !info.closed && info.app_id.is_some())
     }
 }
 
@@ -289,7 +249,6 @@ impl wayland_client::Dispatch<
                     toplevel.id(),
                     WaylandToplevelInfo {
                         handle: toplevel,
-                        title: None,
                         app_id: None,
                         active: false,
                         closed: false,
@@ -323,7 +282,6 @@ impl wayland_client::Dispatch<
             return;
         };
         match event {
-            Event::Title { title } => info.title = normalize_app_candidate_name(&title),
             Event::AppId { app_id } => info.app_id = normalize_app_candidate_name(&app_id),
             Event::State { state: raw_state } => {
                 info.active = wayland_state_is_activated(&raw_state);

@@ -896,12 +896,6 @@
           ? null : Math.max(...remaining.map((entry) => entry.endsAt ?? 0)));
       } else {
         audition.musicPlayer.applyQueueItemSnooze(queueIndex, endsAt);
-        if (queueIndex === audition.musicPlayer.currentQueueIndex) {
-          await audition.musicPlayer.playNextTrack();
-          if (audition.musicPlayer.activeQueueItemIds[audition.musicPlayer.currentQueueIndex] === item.id) {
-            await audition.musicPlayer.pausePlayback();
-          }
-        }
       }
     }
     await library.refreshAfterMutation();

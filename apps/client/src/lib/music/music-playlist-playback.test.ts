@@ -1,13 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { MusicPlaylistPlaybackEntry } from "$lib/music/library-contracts";
 import {
-  buildMusicShuffleCycle,
   evaluateMusicQueueEntry,
-  nextSequentialQueueIndex,
   projectMusicPlaylistPlayback,
-  selectFreshMusicQueueItem,
-  selectMusicMixIndex,
-  skipRangeTargetMs,
 } from "./music-playlist-playback";
 
 const entry = (patch: Partial<MusicPlaylistPlaybackEntry> = {}): MusicPlaylistPlaybackEntry => ({
@@ -80,90 +75,4 @@ describe("saved playlist playback policy", () => {
     expect(projection.skipped.offline).toBe(1);
   });
 
-  it("wraps sequential order only for the configured repeat mode", () => {
-    expect(nextSequentialQueueIndex([0, 2, 4], 2, "off")).toBe(4);
-    expect(nextSequentialQueueIndex([0, 2, 4], 4, "off")).toBeNull();
-    expect(nextSequentialQueueIndex([0, 2, 4], 4, "all")).toBe(0);
-    expect(nextSequentialQueueIndex([0, 2, 4], 2, "one")).toBe(2);
-  });
-
-  it("shuffles every eligible song once while avoiding the active item", () => {
-    const projection = projectMusicPlaylistPlayback([
-      entry({ itemId: "rare", membershipId: "rare", weight: "rarely" }),
-      entry({ itemId: "normal", membershipId: "normal", position: 1 }),
-      entry({ itemId: "frequent", membershipId: "frequent", position: 2, weight: "much-more-often" }),
-    ], [{ rootId: "root", folderPath: "/music", status: "available" }], context);
-    let seed = 17;
-    const random = () => ((seed = (seed * 48271) % 2147483647) / 2147483647);
-    const cycle = buildMusicShuffleCycle(projection.eligibleIndices, 1, random);
-    expect(cycle).toHaveLength(2);
-    expect(new Set(cycle)).toEqual(new Set([0, 2]));
-    expect(cycle).not.toContain(1);
-  });
-
-  it("advances sequentially at a phase boundary and wraps without resuming the interrupted item", () => {
-    const projection = projectMusicPlaylistPlayback([
-      entry({ itemId: "first", membershipId: "first" }),
-      entry({ itemId: "second", membershipId: "second", position: 1 }),
-      entry({ itemId: "third", membershipId: "third", position: 2 }),
-    ], [{ rootId: "root", folderPath: "/music", status: "available" }], context);
-    expect(selectFreshMusicQueueItem(projection.entries, projection.eligibleIndices, {
-      shuffle: false,
-      avoidItemId: "second",
-    }).index).toBe(2);
-    expect(selectFreshMusicQueueItem(projection.entries, projection.eligibleIndices, {
-      shuffle: false,
-      avoidItemId: "third",
-    }).index).toBe(0);
-  });
-
-  it("draws another eligible shuffle membership at a phase boundary", () => {
-    const projection = projectMusicPlaylistPlayback([
-      entry({ itemId: "first", membershipId: "first" }),
-      entry({ itemId: "second", membershipId: "second", position: 1 }),
-    ], [{ rootId: "root", folderPath: "/music", status: "available" }], context);
-    expect(selectFreshMusicQueueItem(projection.entries, projection.eligibleIndices, {
-      shuffle: true,
-      avoidItemId: "first",
-      random: () => 0.5,
-    }).index).toBe(1);
-  });
-
-  it("can start the only eligible Shuffle track at a phase boundary", () => {
-    const projection = projectMusicPlaylistPlayback([
-      entry({ itemId: "only", membershipId: "only" }),
-    ], [{ rootId: "root", folderPath: "/music", status: "available" }], context);
-    expect(selectFreshMusicQueueItem(projection.entries, projection.eligibleIndices, {
-      shuffle: true,
-      avoidItemId: "only",
-    }).index).toBe(0);
-  });
-
-  it("lets every eligible song lead a uniform Shuffle pass", () => {
-    const first = (draws: readonly number[]) => {
-      let index = 0;
-      return buildMusicShuffleCycle([0, 1, 2], -1, () => draws[index++])[0];
-    };
-    expect(new Set([first([0, 0]), first([0, 0.9]), first([0.5, 0.9])])).toEqual(new Set([0, 1, 2]));
-  });
-
-  it("mixes by preference but keeps a small chance of replaying the most recent song", () => {
-    const projection = projectMusicPlaylistPlayback([
-      entry({ itemId: "rare", membershipId: "rare", weight: "rarely" }),
-      entry({ itemId: "normal", membershipId: "normal", position: 1 }),
-      entry({ itemId: "favorite", membershipId: "favorite", position: 2, weight: "much-more-often" }),
-    ], [{ rootId: "root", folderPath: "/music", status: "available" }], context);
-    expect(selectMusicMixIndex(projection.entries, projection.eligibleIndices, [], () => 0)).toBe(0);
-    expect(selectMusicMixIndex(projection.entries, projection.eligibleIndices, [], () => 0.2)).toBe(1);
-    expect(selectMusicMixIndex(projection.entries, projection.eligibleIndices, [], () => 0.9)).toBe(2);
-    expect(selectMusicMixIndex(projection.entries, projection.eligibleIndices, ["favorite"], () => 0.9)).toBe(1);
-    expect(selectMusicMixIndex(projection.entries, projection.eligibleIndices, ["favorite"], () => 0.99)).toBe(2);
-    expect(selectMusicMixIndex(projection.entries, [], [], () => 0.5)).toBeNull();
-  });
-
-  it("seeks to the end of the active ordered skip range", () => {
-    const ranges = [{ id: "range", membershipId: "membership-1", startMs: 10_000, endMs: 15_000, sortOrder: 0 }];
-    expect(skipRangeTargetMs(12_000, ranges)).toBe(15_000);
-    expect(skipRangeTargetMs(15_000, ranges)).toBeNull();
-  });
 });

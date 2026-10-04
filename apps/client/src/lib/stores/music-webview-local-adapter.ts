@@ -46,11 +46,7 @@ interface MusicWebviewLocalAdapterContext {
   state: MusicWebviewLocalState;
   effectiveVolume(): number;
   updateExternalControls(): void;
-  updateNativeControls(): void;
-  updateTray(): void;
   persist(force?: boolean): Promise<void>;
-  playNext(): Promise<void>;
-  handlePosition(positionMs: number): void;
 }
 
 export interface MusicWebviewLocalAdapter {
@@ -252,7 +248,6 @@ export function createMusicWebviewLocalAdapter(
         status: "error",
         error: state.playerError,
       };
-      context.updateTray();
       return;
     }
     try {
@@ -274,7 +269,6 @@ export function createMusicWebviewLocalAdapter(
         error: state.playerError,
       };
     }
-    context.updateTray();
   }
 
   function pause(): void {
@@ -308,7 +302,6 @@ export function createMusicWebviewLocalAdapter(
     }
     seekElement(element, position);
     state.snapshot = snapshotFromElement(element, state.snapshot.status);
-    context.handlePosition(state.snapshot.positionMs);
   }
 
   function elementFromEvent(event: Event): HTMLMediaElement | null {
@@ -333,7 +326,6 @@ export function createMusicWebviewLocalAdapter(
     state.playerError = null;
     context.updateExternalControls();
     void context.persist(true);
-    context.updateTray();
   }
 
   function handleLoadedData(event: Event): void {
@@ -349,7 +341,6 @@ export function createMusicWebviewLocalAdapter(
     const element = elementFromEvent(event);
     if (!element || state.currentSource?.kind !== "local-file") return;
     state.snapshot = snapshotFromElement(element, state.snapshot.status);
-    context.updateNativeControls();
     void context.persist();
   }
 
@@ -363,7 +354,6 @@ export function createMusicWebviewLocalAdapter(
     state.playerError = null;
     context.updateExternalControls();
     void context.persist();
-    context.updateTray();
   }
 
   function handlePause(event: Event): void {
@@ -377,7 +367,6 @@ export function createMusicWebviewLocalAdapter(
     state.snapshot = snapshotFromElement(element, "paused");
     context.updateExternalControls();
     void context.persist();
-    context.updateTray();
   }
 
   async function handleEnded(event: Event): Promise<void> {
@@ -386,8 +375,6 @@ export function createMusicWebviewLocalAdapter(
     state.snapshot = snapshotFromElement(element, "ended");
     context.updateExternalControls();
     await context.persist(true);
-    context.updateTray();
-    await context.playNext();
   }
 
   function errorMessage(element: HTMLMediaElement): string {
@@ -410,7 +397,6 @@ export function createMusicWebviewLocalAdapter(
     };
     context.updateExternalControls();
     void context.persist(true);
-    context.updateTray();
   }
 
   function reset(): void {

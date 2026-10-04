@@ -28,6 +28,5 @@ export function createMusicExternalControls(
     isInitialized: () => initialized,
     update: browser.update,
     updateBrowser: browser.update,
-    updateNative: () => undefined,
   };
 }

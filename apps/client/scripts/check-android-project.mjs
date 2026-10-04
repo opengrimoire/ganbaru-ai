@@ -139,13 +139,21 @@ for (const expected of [
   "ganbaru-mobile-notifications:allow-pendingCalendarNotifications",
   "ganbaru-mobile-notifications:allow-cancelCalendarNotifications",
   "ganbaru-mobile-notifications:allow-takeCalendarNotificationAction",
-  "ganbaru-mobile-notifications:allow-updatePomodoroNotification",
-  "ganbaru-mobile-notifications:allow-pomodoroNotificationState",
   "ganbaru-mobile-notifications:allow-reconcilePomodoroSchedule",
-  "ganbaru-mobile-notifications:allow-cancelPomodoroNotification",
 ]) {
   if (!androidCapabilityPermissions.includes(expected)) {
     failures.push(`Android capability must include ${JSON.stringify(expected)}`);
+  }
+}
+for (const nativeOnly of [
+  "ganbaru-mobile-notifications:allow-updatePomodoroNotification",
+  "ganbaru-mobile-notifications:allow-pomodoroNotificationState",
+  "ganbaru-mobile-notifications:allow-cancelPomodoroNotification",
+  "ganbaru-mobile-notifications:allow-completeFocusNotification",
+  "ganbaru-mobile-notifications:allow-attachFocusLifecycle",
+]) {
+  if (androidCapabilityPermissions.includes(nativeOnly)) {
+    failures.push(`Android capability must keep native Focus authority private: ${nativeOnly}`);
   }
 }
 for (const expected of [

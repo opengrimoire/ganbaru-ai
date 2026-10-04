@@ -1,3 +1,5 @@
+import { createNotesCompoundTestAdapter } from "./notes-compound-test-adapter";
+import type { NotesCompoundEdit } from "$lib/api/notes/compound-edits";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createBlockWrite } from "$lib/notes/block-factory";
 import {
@@ -31,6 +33,8 @@ const notesApi = vi.hoisted(() => ({
 }));
 
 vi.mock("$lib/api/notes", () => notesApi);
+let compoundAdapter = createNotesCompoundTestAdapter(notesApi);
+vi.mock("$lib/api/notes/compound-edits", () => ({ applyNotesCompoundEdit: (request: NotesCompoundEdit) => compoundAdapter(request) }));
 
 const pageId = "00000000-0000-4000-8000-000000000001";
 const firstBlockId = "00000000-0000-4000-8000-000000000002";
@@ -41,7 +45,7 @@ const now = "2026-07-10T12:00:00.000Z";
 function blockFromWrite(write: NotesBlockWrite): NotesBlock {
   if (write.type !== "paragraph") throw new Error("expected paragraph fixture");
   return {
-    object: "block",
+    object: "block", edit_revision: "0".repeat(64),
     id: write.id,
     parent,
     created_time: now,

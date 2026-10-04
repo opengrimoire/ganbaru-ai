@@ -35,24 +35,6 @@ export async function openNotesExternalUrl(url: string): Promise<void> {
   await invoke<void>("notes_open_external_url", { url });
 }
 
-export async function rebuildNotesBacklinkIndex(): Promise<number> {
-  const dbUrl = await ensureDbUrl();
-  const count = await invoke<unknown>("notes_rebuild_backlink_index", { dbUrl });
-  if (typeof count !== "number") {
-    throw new Error("notes_rebuild_backlink_index returned a non-number payload");
-  }
-  return count;
-}
-
-export async function rebuildNotesLinkFacts(): Promise<number> {
-  const dbUrl = await ensureDbUrl();
-  const count = await invoke<unknown>("notes_rebuild_link_facts", { dbUrl });
-  if (typeof count !== "number") {
-    throw new Error("notes_rebuild_link_facts returned a non-number payload");
-  }
-  return count;
-}
-
 export async function listNotesPageAliases(pageId: string): Promise<NotesPageAlias[]> {
   const dbUrl = await ensureDbUrl();
   const rows = await invoke<unknown>("notes_list_page_aliases", { dbUrl, pageId });
@@ -143,13 +125,4 @@ export async function searchNotes(
     }),
     next_cursor: shellNullableString(record.next_cursor, "notes_search.next_cursor"),
   };
-}
-
-export async function rebuildNotesSearchIndex(): Promise<number> {
-  const dbUrl = await ensureDbUrl();
-  const count = await invoke<unknown>("notes_rebuild_search_index", { dbUrl });
-  if (typeof count !== "number") {
-    throw new Error("notes_rebuild_search_index returned a non-number payload");
-  }
-  return count;
 }

@@ -361,41 +361,15 @@ export default defineConfig({
           ? "src/lib/window-sync-transport.mobile.ts"
           : "src/lib/window-sync-transport.ts",
       ),
-      "$lib/stores/pomodoro-effects.svelte": path.resolve(
-        configDir,
-        mobileBuild
-          ? "src/lib/stores/pomodoro-effects.mobile.svelte.ts"
-          : "src/lib/stores/pomodoro-effects.svelte.ts",
-      ),
       "$lib/stores/zoom.svelte": path.resolve(
         configDir,
         mobileBuild
           ? "src/lib/stores/zoom.mobile.svelte.ts"
           : "src/lib/stores/zoom.svelte.ts",
       ),
-      "$lib/stores/pomodoro-doomscrolling-controller": path.resolve(
-        configDir,
-        mobileBuild
-          ? "src/lib/stores/pomodoro-doomscrolling-controller.mobile.ts"
-          : "src/lib/stores/pomodoro-doomscrolling-controller.ts",
-      ),
       "$lib/stores/doomscrolling-usage.svelte": path.resolve(
         configDir,
-        mobileBuild
-          ? "src/lib/stores/doomscrolling-usage.mobile.svelte.ts"
-          : "src/lib/stores/doomscrolling-usage.svelte.ts",
-      ),
-      "$lib/stores/pomodoro-window-coordinator": path.resolve(
-        configDir,
-        mobileBuild
-          ? "src/lib/stores/pomodoro-window-coordinator.mobile.ts"
-          : "src/lib/stores/pomodoro-window-coordinator.ts",
-      ),
-      "$lib/stores/pomodoro-runtime-environment": path.resolve(
-        configDir,
-        mobileBuild
-          ? "src/lib/stores/pomodoro-runtime-environment.mobile.ts"
-          : "src/lib/stores/pomodoro-runtime-environment.ts",
+        "src/lib/stores/doomscrolling-usage.svelte.ts",
       ),
       "$lib/stores/mobile-back-stack.svelte": path.resolve(
         configDir,

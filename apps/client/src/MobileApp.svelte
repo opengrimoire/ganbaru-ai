@@ -53,13 +53,6 @@
   type ProjectViewComponents = import("$lib/components/projects/project-view-components").ProjectViewComponents;
   type NotesStore = ReturnType<typeof import("$lib/stores/notes.svelte").getNotes>;
   type DeferredSurface = Exclude<View, "calendar"> | "settings" | "quickNotes" | "music";
-  interface PomodoroCalendarScheduler {
-    setEnabled(enabled: boolean): void;
-    invalidate(): void;
-    resume(): void;
-    dispose(): void;
-    isEnabled(): boolean;
-  }
   interface CalendarNotificationScheduler {
     reconcile(): Promise<void>;
     takeAction(): Promise<string | null>;
@@ -126,9 +119,6 @@
   let removeSettingsBackLayer = (): void => undefined;
   let removeQuickNotesBackLayer = (): void => undefined;
   let removeMusicBackLayer = (): void => undefined;
-  let activeBlockScheduler = $state.raw<PomodoroCalendarScheduler | null>(null);
-  let activeBlockSchedulerLoad: Promise<void> | null = null;
-  let activeBlockSchedulerDisposed = false;
   let calendarNotificationScheduler = $state.raw<CalendarNotificationScheduler | null>(null);
   let calendarNotificationSchedulerLoad: Promise<void> | null = null;
   let calendarNotificationSchedulerDisposed = false;
@@ -241,28 +231,6 @@
       (panelWidth) => mobileMusicPlayerChromeHeight
         + (panelWidth * mobileMusicMediaHeightRatio) / mobileMusicStackedMediaShare,
     );
-  }
-
-  async function ensureActiveBlockScheduler(): Promise<void> {
-    if (activeBlockScheduler) return;
-    if (activeBlockSchedulerLoad) return activeBlockSchedulerLoad;
-    activeBlockSchedulerLoad = (async () => {
-      const { createPomodoroCalendarScheduler } = await import(
-        "$lib/stores/pomodoro-calendar-scheduler"
-      );
-      if (activeBlockSchedulerDisposed) return;
-      activeBlockScheduler = createPomodoroCalendarScheduler({
-        calendar,
-        pomodoro,
-        isBlocked: () => suspendDecisionOpen || pomodoro.idlePaused !== null,
-        onError: (error) => {
-          console.warn("active mobile pomodoro block check failed", error);
-        },
-      });
-    })().finally(() => {
-      activeBlockSchedulerLoad = null;
-    });
-    return activeBlockSchedulerLoad;
   }
 
   async function ensureCalendarNotificationScheduler(): Promise<void> {
@@ -505,7 +473,6 @@
         calendar.load(),
       ]);
       perfMark("boot.mobile-calendar-data-ready");
-      await ensureActiveBlockScheduler();
       backendReady = true;
       perfMark("boot.mobile-shell-ready");
       void prepareDeferredSurfacesAfterPaint();
@@ -582,7 +549,6 @@
   }
 
   function stopSuspendedSession(): void {
-    pomodoro.dismissedBlockId = pomodoro.activeBlockId;
     void pomodoro.dismissSuspend(false);
   }
 
@@ -698,7 +664,6 @@
       if (document.visibilityState !== "visible" || !backendReady || schedulerResume) return;
       schedulerResume = (async () => {
         await pomodoro.recoverMobileRun();
-        activeBlockScheduler?.resume();
         await Promise.all([
           calendarNotificationScheduler?.reconcile(),
           pomodoroScheduleScheduler?.reconcile(),
@@ -743,9 +708,6 @@
       stopMusicPreload();
       void persistenceLifecycle.flush();
       void backListenerController.dispose();
-      activeBlockSchedulerDisposed = true;
-      activeBlockScheduler?.dispose();
-      activeBlockScheduler = null;
       calendarNotificationSchedulerDisposed = true;
       calendarNotificationScheduler = null;
       pomodoroScheduleScheduler = null;
@@ -758,23 +720,10 @@
 
   $effect(() => {
     const _calendarVersion = calendar.indexVersion;
+    const _notificationLocale = localization.locale;
     if (!backendReady || !calendar.loaded) return;
     void calendarNotificationScheduler?.reconcile();
     void pomodoroScheduleScheduler?.reconcile();
-  });
-
-  $effect(() => {
-    const _calendarVersion = calendar.indexVersion;
-    const _expired = pomodoro.blockExpired;
-    const _suspended = suspendDecisionOpen;
-    const _idle = pomodoro.idlePaused;
-    const _suppressed = pomodoro.autoStartSuppressed;
-    const scheduler = activeBlockScheduler;
-    if (!scheduler) return;
-    const enabled = backendReady && calendar.loaded;
-    const wasEnabled = scheduler.isEnabled();
-    scheduler.setEnabled(enabled);
-    if (enabled && wasEnabled) scheduler.invalidate();
   });
 
   $effect(() => {

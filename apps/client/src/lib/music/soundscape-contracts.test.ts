@@ -27,6 +27,9 @@ describe("soundscape boundary contracts", () => {
     const state = { activeSoundscapeId: null, activeIds: [], multipleEnabled: false, generatedLevel: null, localLevel: null, desiredPlaying: false, volume: 0.1, updatedAt: 1, version: 1 };
     expect(() => parseMusicSoundscapeState({ ...state, volume: Number.NaN })).toThrow("volume");
     expect(parseMusicSoundscapeState({ ...state, generatedLevel: 1.25 }).generatedLevel).toBe(1.25);
+    expect(parseMusicSoundscapeState({ ...state, automaticIntent: true }).automaticIntent).toBe(true);
+    expect(parseMusicSoundscapeState(state).automaticIntent).toBe(false);
+    expect(() => parseMusicSoundscapeState({ ...state, automaticIntent: "true" })).toThrow("automaticIntent");
     expect(() => parseMusicSoundscapeState({ ...state, localLevel: 2.1 })).toThrow("section level");
   });
 

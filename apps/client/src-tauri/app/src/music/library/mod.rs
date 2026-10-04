@@ -13,6 +13,7 @@ pub(crate) mod local_refresh;
 mod mobile_refresh;
 mod models;
 mod playback;
+pub(crate) use playback::record_listening_in_transaction;
 mod playlist_edits;
 mod queries;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -24,6 +25,10 @@ pub(crate) mod soundscape_groups;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) mod soundscapes;
 mod source_lifecycle;
+mod transfer;
+mod transfer_codec;
+mod transfer_export;
+mod transfer_read;
 mod validation;
 mod writes;
 mod youtube;
@@ -33,6 +38,10 @@ pub use error::MusicLibraryErrorCode;
 pub use error::{MusicLibraryError, MusicLibraryResult};
 pub use models::*;
 pub(crate) use rows::*;
+pub use transfer::{
+    MusicTransferCommit, MusicTransferExport, MusicTransferFormat, MusicTransferPreview,
+    MusicTransferSource,
+};
 pub(crate) use validation::*;
 
 #[cfg(test)]
@@ -49,3 +58,5 @@ mod relink_tests;
 mod source_lifecycle_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod transfer_tests;

@@ -8,8 +8,6 @@ use crate::db_path::connect_sqlite;
 
 mod tags;
 
-#[cfg(test)]
-use tags::delete_tag_from_pool;
 pub use tags::{QuickNoteTagRead, QuickNoteTagWrite};
 
 const DEFAULT_PAGE_SIZE: i64 = 60;
@@ -984,15 +982,6 @@ pub async fn quick_note_tags_create<R: Runtime>(
     tag: QuickNoteTagWrite,
 ) -> Result<QuickNoteTagRead, String> {
     tags::create(app, db_url, tag).await
-}
-
-#[tauri::command]
-pub async fn quick_note_tags_delete<R: Runtime>(
-    app: AppHandle<R>,
-    db_url: String,
-    id: String,
-) -> Result<(), String> {
-    tags::delete(app, db_url, id).await
 }
 
 #[cfg(test)]

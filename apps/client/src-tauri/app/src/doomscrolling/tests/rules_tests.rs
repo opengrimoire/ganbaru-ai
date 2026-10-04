@@ -1,6 +1,32 @@
 use super::*;
 
 #[test]
+fn foreground_close_rejects_reused_processes_changed_apps_and_protected_aliases() {
+    let mut status =
+        foreground_status_from_parts("Game", Some("game".into()), Some(42), vec!["game".into()]);
+    status.process_identity = Some("process-start-1".into());
+    let expected = DoomscrollingForegroundDesktopAppExpectation {
+        app_name: status.app_name.clone(),
+        process_name: status.process_name.clone(),
+        process_id: status.process_id,
+        process_identity: status.process_identity.clone(),
+        match_names: status.match_names.clone(),
+    };
+    assert!(foreground_expectation_matches(&status, &expected));
+    status.process_identity = Some("process-start-2".into());
+    assert!(!foreground_expectation_matches(&status, &expected));
+    status.process_identity = expected.process_identity.clone();
+    status.app_name = Some("Other game".into());
+    assert!(!foreground_expectation_matches(&status, &expected));
+    status.app_name = expected.app_name.clone();
+    status.match_names.push("bash".into());
+    assert!(validate_foreground_status_is_closeable(&status).is_err());
+    let protected =
+        foreground_status_from_parts("Game", Some("bash".into()), Some(42), vec!["game".into()]);
+    assert!(validate_foreground_status_is_closeable(&protected).is_err());
+}
+
+#[test]
 fn normalizes_desktop_app_candidate_names() {
     assert_eq!(
         normalize_app_candidate_name("  Visual   Studio Code  ").as_deref(),
@@ -41,6 +67,7 @@ fn limit_state_requires_a_local_date() {
         week_start_local_date: "2026-05-25".to_string(),
         updated_at: "2026-05-28T00:00:00.000Z".to_string(),
         database_path: Some("/tmp/ganbaru-ai-vault/ganbaru-ai.sqlite".to_string()),
+        configuration_digest: None,
         limits: vec![DoomscrollingLimitStateItem {
             id: "youtube".to_string(),
             period: "day".to_string(),

@@ -352,14 +352,9 @@
 
   const pomodoroStore = getPomodoro();
 
-  function activePomodoroDate(): string | undefined {
-    return pomodoroStore.segments.find((segment) => segment.status === "active")?.eventDate;
-  }
-
   function isActiveCalendarEvent(event: CalendarEvent): boolean {
     return eventMatchesActiveOccurrence(event, {
       blockId: pomodoroStore.activeBlockId,
-      eventDate: activePomodoroDate(),
     });
   }
 

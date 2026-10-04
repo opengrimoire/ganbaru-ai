@@ -171,17 +171,6 @@ fn source_removal_preserves_referenced_items_and_prunes_only_reviewed_orphans() 
                 .unwrap();
         assert_eq!(membership_count, 1);
 
-        let restored = source_lifecycle::restore_source(&pool, "source-1", 2, 200)
-            .await
-            .unwrap();
-        assert_eq!(restored.version, 3);
-        let enabled: i64 = sqlx::query_scalar(
-            "SELECT discovery_enabled FROM music_source_collections WHERE id = 'source-1'",
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-        assert_eq!(enabled, 1);
         fs::remove_dir_all(media_folder).unwrap();
     });
 }
@@ -222,7 +211,7 @@ fn source_removal_rejects_stale_impact_without_partial_changes() {
 }
 
 #[test]
-fn source_projection_updates_for_review_health_relink_removal_and_restore() {
+fn source_projection_updates_for_review_health_relink_and_removal() {
     tauri::async_runtime::block_on(async {
         let pool = pool().await;
         seed(&pool).await;
@@ -309,15 +298,5 @@ fn source_projection_updates_for_review_health_relink_removal_and_restore() {
             .find(|source| source.id == "source-1")
             .unwrap();
         assert_eq!(disabled.health, MusicSourceHealth::Disabled);
-        source_lifecycle::restore_source(&pool, "source-1", 2, 2_100)
-            .await
-            .unwrap();
-        let restored = queries::source_summaries(&pool, 2_100, 0, 20)
-            .await
-            .unwrap()
-            .into_iter()
-            .find(|source| source.id == "source-1")
-            .unwrap();
-        assert_eq!(restored.health, MusicSourceHealth::Issues);
     });
 }

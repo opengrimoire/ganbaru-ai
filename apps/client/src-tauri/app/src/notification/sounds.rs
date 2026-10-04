@@ -1,4 +1,6 @@
-use rodio::{ChannelCount, Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, SampleRate};
+use rodio::{
+    ChannelCount, Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, SampleRate, Source,
+};
 use std::io::Cursor;
 use std::sync::{
     Arc, Mutex,
@@ -6,6 +8,8 @@ use std::sync::{
     mpsc::{self, Receiver, SyncSender, TrySendError},
 };
 use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
+use tokio::sync::oneshot;
 
 const APP_SOUND_COMMAND_QUEUE_LIMIT: usize = 32;
 const APP_SOUND_PLAYER_QUEUE_LIMIT: usize = 8;
@@ -26,21 +30,6 @@ pub(crate) enum AppSound {
 }
 
 impl AppSound {
-    pub(crate) fn from_id(id: &str) -> Result<Self, String> {
-        match id {
-            "event-notification" => Ok(Self::EventNotification),
-            "idle-alert" => Ok(Self::IdleAlert),
-            "focus-session-failed-long-idle" => Ok(Self::FocusSessionFailedLongIdle),
-            "focus-ending-warning" => Ok(Self::FocusEndingWarning),
-            "break-start" => Ok(Self::BreakStart),
-            "break-finished" => Ok(Self::BreakFinished),
-            "event-finished" => Ok(Self::EventFinished),
-            "pomodoro-day-complete" => Ok(Self::PomodoroDayComplete),
-            "pomodoro-workweek-complete" => Ok(Self::PomodoroWorkweekComplete),
-            _ => Err(format!("unknown app sound: {id}")),
-        }
-    }
-
     fn id(self) -> &'static str {
         match self {
             Self::EventNotification => "event-notification",
@@ -112,6 +101,28 @@ impl Default for AppSoundState {
 impl AppSoundState {
     pub(crate) fn play(&self, sound: AppSound) {
         self.handle().play(sound);
+    }
+
+    /// Reports actual source completion without sleeping on the audio worker or guessing asset lengths.
+    pub(crate) fn play_focus_completion(
+        &self,
+        sound: AppSound,
+        app: tauri::AppHandle,
+        scope: (u64, i64),
+        expires_at: Instant,
+    ) -> Result<oneshot::Receiver<Result<(), String>>, String> {
+        let (reply, response) = oneshot::channel();
+        self.handle()
+            .sender
+            .try_send(AppSoundMessage::FocusCompletion {
+                sound,
+                app,
+                scope,
+                expires_at,
+                reply,
+            })
+            .map_err(|error| format!("Enqueue Focus completion audio: {error}"))?;
+        Ok(response)
     }
 
     fn handle(&self) -> AppSoundHandle {
@@ -214,7 +225,62 @@ impl Drop for AppSoundController {
 
 enum AppSoundMessage {
     Play(AppSound),
+    FocusCompletion {
+        sound: AppSound,
+        app: tauri::AppHandle,
+        scope: (u64, i64),
+        expires_at: Instant,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
     Shutdown,
+}
+
+/// The mixer drops this source on completion, interruption, or output replacement.
+struct CompletionSource<S: Source> {
+    source: S,
+    reply: Option<oneshot::Sender<Result<(), String>>>,
+}
+
+impl<S: Source> Iterator for CompletionSource<S> {
+    type Item = f32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let sample = self.source.next();
+        if sample.is_none()
+            && let Some(reply) = self.reply.take()
+        {
+            let _ = reply.send(Ok(()));
+        }
+        sample
+    }
+}
+
+impl<S: Source> Source for CompletionSource<S> {
+    fn current_span_len(&self) -> Option<usize> {
+        self.source.current_span_len()
+    }
+    fn channels(&self) -> ChannelCount {
+        self.source.channels()
+    }
+    fn sample_rate(&self) -> SampleRate {
+        self.source.sample_rate()
+    }
+    fn total_duration(&self) -> Option<Duration> {
+        self.source.total_duration()
+    }
+}
+
+impl<S: Source> Drop for CompletionSource<S> {
+    fn drop(&mut self) {
+        if let Some(reply) = self.reply.take() {
+            let result = if self.source.is_exhausted() {
+                Ok(())
+            } else {
+                Err("Focus completion audio was interrupted".into())
+            };
+            let _ = reply.send(result);
+        }
+    }
 }
 
 struct AppSoundOutput {
@@ -263,6 +329,47 @@ fn app_sound_worker(receiver: Receiver<AppSoundMessage>) {
                     eprintln!("Failed to play app sound: {e}");
                 }
             }
+            AppSoundMessage::FocusCompletion {
+                sound,
+                app,
+                scope,
+                expires_at,
+                reply,
+            } => {
+                let prepared = (|| {
+                    if Instant::now() >= expires_at
+                        || !crate::pomodoro::native_runtime::presentation_is_current(
+                            &app, scope.0, scope.1,
+                        )
+                    {
+                        return Err("Focus completion audio was superseded or expired".into());
+                    }
+                    if output.as_ref().is_some_and(AppSoundOutput::should_reopen) {
+                        output = None;
+                    }
+                    if output.is_none() {
+                        output = Some(AppSoundOutput::open()?);
+                    }
+                    let decoder = Decoder::try_from(Cursor::new(sound.bytes()))
+                        .map_err(|error| format!("Decode Focus completion audio: {error}"))?;
+                    Ok::<_, String>(decoder)
+                })();
+                match prepared {
+                    Ok(source) => {
+                        let player = &output.as_ref().expect("prepared audio output").player;
+                        // Completion replaces queued reminders instead of waiting behind them.
+                        player.clear();
+                        player.append(CompletionSource {
+                            source,
+                            reply: Some(reply),
+                        });
+                    }
+                    Err(error) => {
+                        eprintln!("Focus completion audio: {error}");
+                        let _ = reply.send(Err(error));
+                    }
+                }
+            }
             AppSoundMessage::Shutdown => break,
         }
     }
@@ -300,4 +407,58 @@ fn nonzero_sample_rate(value: u32) -> SampleRate {
 
 fn nonzero_channels(value: u16) -> ChannelCount {
     ChannelCount::new(value).expect("channel count must be greater than zero")
+}
+
+#[cfg(test)]
+mod completion_tests {
+    use super::*;
+
+    fn source() -> (
+        CompletionSource<rodio::buffer::SamplesBuffer>,
+        oneshot::Receiver<Result<(), String>>,
+    ) {
+        let (reply, response) = oneshot::channel();
+        (
+            CompletionSource {
+                source: rodio::buffer::SamplesBuffer::new(
+                    nonzero_channels(1),
+                    nonzero_sample_rate(2),
+                    vec![0.0, 0.5],
+                ),
+                reply: Some(reply),
+            },
+            response,
+        )
+    }
+
+    #[test]
+    fn completion_audio_signals_actual_exhaustion_once_and_preserves_source_metadata() {
+        let (mut source, mut response) = source();
+        assert_eq!(source.total_duration(), Some(Duration::from_secs(1)));
+        assert_eq!(source.channels().get(), 1);
+        assert_eq!(source.sample_rate().get(), 2);
+        assert_eq!(source.next(), Some(0.0));
+        assert!(matches!(
+            response.try_recv(),
+            Err(oneshot::error::TryRecvError::Empty)
+        ));
+        assert_eq!(source.next(), Some(0.5));
+        assert_eq!(source.next(), None);
+        assert_eq!(response.try_recv(), Ok(Ok(())));
+        assert_eq!(source.next(), None);
+    }
+
+    #[test]
+    fn output_replacement_reports_interruption_instead_of_leaving_music_silent() {
+        let (mut source, mut response) = source();
+        source.next();
+        drop(source);
+        assert!(
+            response
+                .try_recv()
+                .unwrap()
+                .unwrap_err()
+                .contains("interrupted")
+        );
+    }
 }

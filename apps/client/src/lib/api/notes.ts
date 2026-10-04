@@ -6,4 +6,5 @@ export * from "./notes/transfer";
 export * from "./notes/databases";
 export * from "./notes/row-hierarchy";
 export * from "./notes/content";
+export * from "./notes/compound-edits";
 export * from "./notes/working-markdown";

@@ -28,12 +28,12 @@ pub fn mobile_notification_background_execution_status<R: Runtime>(
         use ganbaru_mobile_notifications::MobileNotificationsExt;
 
         let status = app.mobile_notifications().background_execution_status()?;
-        return Ok(MobileBackgroundExecutionStatus {
+        Ok(MobileBackgroundExecutionStatus {
             manufacturer: status.manufacturer,
             autostart_settings_available: status.autostart_settings_available,
             background_restricted: status.background_restricted,
             battery_optimization_exempt: status.battery_optimization_exempt,
-        });
+        })
     }
 
     #[cfg(not(target_os = "android"))]
@@ -57,9 +57,8 @@ pub fn mobile_notification_open_background_execution_settings<R: Runtime>(
     {
         use ganbaru_mobile_notifications::MobileNotificationsExt;
 
-        return app
-            .mobile_notifications()
-            .open_background_execution_settings(&destination);
+        app.mobile_notifications()
+            .open_background_execution_settings(&destination)
     }
 
     #[cfg(not(target_os = "android"))]
@@ -87,9 +86,8 @@ pub fn mobile_notification_ensure_calendar_channel<R: Runtime>(
     {
         use ganbaru_mobile_notifications::MobileNotificationsExt;
 
-        return app
-            .mobile_notifications()
-            .ensure_calendar_channel(name.trim(), description.trim());
+        app.mobile_notifications()
+            .ensure_calendar_channel(name.trim(), description.trim())
     }
 
     #[cfg(not(target_os = "android"))]
@@ -109,11 +107,11 @@ pub fn mobile_notification_exact_alarm_status<R: Runtime>(
         use ganbaru_mobile_notifications::MobileNotificationsExt;
 
         let status = app.mobile_notifications().exact_alarm_status()?;
-        return Ok(MobileExactAlarmStatus {
+        Ok(MobileExactAlarmStatus {
             api_level: status.api_level,
             required: status.required,
             granted: status.granted,
-        });
+        })
     }
 
     #[cfg(not(target_os = "android"))]
@@ -132,7 +130,7 @@ pub fn mobile_notification_open_exact_alarm_settings<R: Runtime>(
     {
         use ganbaru_mobile_notifications::MobileNotificationsExt;
 
-        return app.mobile_notifications().open_exact_alarm_settings();
+        app.mobile_notifications().open_exact_alarm_settings()
     }
 
     #[cfg(not(target_os = "android"))]
@@ -149,7 +147,7 @@ pub fn mobile_notification_open_settings<R: Runtime>(app: AppHandle<R>) -> Resul
     {
         use ganbaru_mobile_notifications::MobileNotificationsExt;
 
-        return app.mobile_notifications().open_notification_settings();
+        app.mobile_notifications().open_notification_settings()
     }
 
     #[cfg(not(target_os = "android"))]

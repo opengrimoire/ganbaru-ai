@@ -25,6 +25,16 @@ function upsertById<T extends Identified>(current: readonly T[], changed: readon
   return upsertByKey(current, changed, (value) => value.id);
 }
 
+/** A delayed command or receipt must not replace a newer native revision. */
+function upsertRevisioned<T extends Identified & { revision?: number }>(current: readonly T[], changed: readonly T[]): T[] {
+  const currentById = new Map(current.map((task) => [task.id, task]));
+  return upsertById(current, changed.filter((task) => {
+    const existing = currentById.get(task.id);
+    return existing?.revision === undefined
+      || (task.revision !== undefined && task.revision >= existing.revision);
+  }));
+}
+
 function removeProject(snapshot: ProjectsSnapshot, projectId: string): ProjectsSnapshot {
   const taskIds = new Set(snapshot.tasks.filter((task) => task.projectId === projectId).map((task) => task.id));
   const tagIds = new Set(snapshot.tags.filter((tag) => tag.projectId === projectId).map((tag) => tag.id));
@@ -171,7 +181,7 @@ export function applyProjectMutation(
     sections: upsertById(removed.sections, changed.sections),
     statuses: upsertById(removed.statuses, changed.statuses),
     priorities: upsertById(removed.priorities, changed.priorities),
-    tasks: upsertById(removed.tasks, changed.tasks),
+    tasks: upsertRevisioned(removed.tasks, changed.tasks),
     checklistItems: upsertById(removed.checklistItems, changed.checklistItems),
     tags: upsertById(removed.tags, changed.tags),
     taskTagLinks: upsertByKey(
@@ -179,8 +189,8 @@ export function applyProjectMutation(
       changed.taskTagLinks,
       (link) => `${link.taskId}\u0000${link.tagId}`,
     ),
-    customFields: upsertById(removed.customFields, changed.customFields),
-    customFieldOptions: upsertById(removed.customFieldOptions, changed.customFieldOptions),
+    customFields: upsertRevisioned(removed.customFields, changed.customFields),
+    customFieldOptions: upsertRevisioned(removed.customFieldOptions, changed.customFieldOptions),
     customFieldValues: upsertByKey(
       removed.customFieldValues,
       changed.customFieldValues,

@@ -12,7 +12,7 @@ import type {
 import type { NotesBlockOutlineItem } from "$lib/notes/block-outline";
 
 const BLOCK_VIRTUALIZATION_THRESHOLD = 120;
-const BLOCK_HYDRATION_LIMIT = 200;
+export const BLOCK_HYDRATION_LIMIT = 200;
 
 interface NotesHydrationControllerContext {
   readPageGeneration: () => number;

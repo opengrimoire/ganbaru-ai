@@ -1,12 +1,11 @@
 //! Authorized Tauri commands for the local Git workspace service.
 
-use super::git_service::{self, GitBranchRead, GitRemoteRead, GitStatusRead, GitWorktreeRead};
+use super::git_service::{self, GitStatusRead};
 use super::models::{ChatError, ChatErrorCode, ChatResult, ProjectWorkingFolderId};
 use super::workspace::WorkingFolderAuthorizationOperation;
 use super::workspace_mutation::ChatWorkspaceMutationRegistry;
 use crate::db_path;
 use serde::Deserialize;
-use tauri::Manager;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,29 +33,6 @@ pub async fn chat_git_status(
     )
     .await?;
     git_service::status(&root).await
-}
-
-#[tauri::command]
-pub async fn chat_git_diff(
-    app: tauri::AppHandle,
-    db_url: String,
-    working_folder_id: ProjectWorkingFolderId,
-    staged: bool,
-    relative_path: Option<String>,
-    execution_environment_id: Option<String>,
-) -> ChatResult<String> {
-    let path = relative_path
-        .as_deref()
-        .map(validate_relative_path)
-        .transpose()?;
-    let root = authorized_root(
-        &app,
-        &db_url,
-        &working_folder_id,
-        execution_environment_id.as_deref(),
-    )
-    .await?;
-    git_service::diff(&root, staged, path).await
 }
 
 #[tauri::command]
@@ -214,63 +190,6 @@ pub async fn chat_git_push(
 }
 
 #[tauri::command]
-pub async fn chat_git_remotes(
-    app: tauri::AppHandle,
-    db_url: String,
-    working_folder_id: ProjectWorkingFolderId,
-    execution_environment_id: Option<String>,
-) -> ChatResult<Vec<GitRemoteRead>> {
-    git_service::remotes(
-        &authorized_root(
-            &app,
-            &db_url,
-            &working_folder_id,
-            execution_environment_id.as_deref(),
-        )
-        .await?,
-    )
-    .await
-}
-
-#[tauri::command]
-pub async fn chat_git_branches(
-    app: tauri::AppHandle,
-    db_url: String,
-    working_folder_id: ProjectWorkingFolderId,
-    execution_environment_id: Option<String>,
-) -> ChatResult<Vec<GitBranchRead>> {
-    git_service::branches(
-        &authorized_root(
-            &app,
-            &db_url,
-            &working_folder_id,
-            execution_environment_id.as_deref(),
-        )
-        .await?,
-    )
-    .await
-}
-
-#[tauri::command]
-pub async fn chat_git_worktrees(
-    app: tauri::AppHandle,
-    db_url: String,
-    working_folder_id: ProjectWorkingFolderId,
-    execution_environment_id: Option<String>,
-) -> ChatResult<Vec<GitWorktreeRead>> {
-    git_service::worktrees(
-        &authorized_root(
-            &app,
-            &db_url,
-            &working_folder_id,
-            execution_environment_id.as_deref(),
-        )
-        .await?,
-    )
-    .await
-}
-
-#[tauri::command]
 pub async fn chat_git_initialize(
     app: tauri::AppHandle,
     mutations: tauri::State<'_, ChatWorkspaceMutationRegistry>,
@@ -408,38 +327,6 @@ pub async fn chat_git_discard(
     }
     git_service::discard_paths(&root, &tracked, &untracked).await?;
     git_service::status(&root).await
-}
-
-#[tauri::command]
-pub async fn chat_git_delete_branch(
-    app: tauri::AppHandle,
-    db_url: String,
-    working_folder_id: ProjectWorkingFolderId,
-    branch: String,
-    force: bool,
-    destructive_confirmed: bool,
-    execution_environment_id: Option<String>,
-) -> ChatResult<Vec<GitBranchRead>> {
-    if !destructive_confirmed {
-        return Err(ChatError::new(
-            ChatErrorCode::Permission,
-            "Branch deletion requires explicit confirmation",
-            true,
-        ));
-    }
-    let branch = validate_ref_name(&branch)?;
-    let root = authorized_root(
-        &app,
-        &db_url,
-        &working_folder_id,
-        execution_environment_id.as_deref(),
-    )
-    .await?;
-    let _guard = app
-        .state::<ChatWorkspaceMutationRegistry>()
-        .try_mutation(&root)?;
-    git_service::delete_branch(&root, branch, force).await?;
-    git_service::branches(&root).await
 }
 
 async fn authorized_root(

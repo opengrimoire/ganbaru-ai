@@ -1,3 +1,5 @@
+import { createNotesCompoundTestAdapter } from "./notes-compound-test-adapter";
+import type { NotesCompoundEdit } from "$lib/api/notes/compound-edits";
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyBlockUpdate, blockIndent, blockEditableRichText, blockPlainText, blockUpdateWithIndent, createBlockUpdate, createBlockWrite } from "$lib/notes/block-factory";
@@ -17,6 +19,8 @@ const api = vi.hoisted(() => ({
   createNotesDatabase: vi.fn(),
 }));
 vi.mock("$lib/api/notes", () => api);
+let compoundAdapter = createNotesCompoundTestAdapter(api);
+vi.mock("$lib/api/notes/compound-edits", () => ({ applyNotesCompoundEdit: (request: NotesCompoundEdit) => compoundAdapter(request) }));
 const pageId = "00000000-0000-4000-8000-000000000001";
 const firstId = "00000000-0000-4000-8000-000000000002";
 const lastId = "00000000-0000-4000-8000-000000000003";
@@ -25,7 +29,7 @@ const parent: NotesParent = { type: "page_id", page_id: pageId };
 /** Creates persisted block fixtures using the production payload factory. */
 function fromWrite(write: NotesBlockWrite): NotesBlock {
   return {
-    object: "block", parent, created_time: "2026-09-24T00:00:00Z", last_edited_time: "2026-09-24T00:00:00Z",
+    object: "block", edit_revision: "0".repeat(64), parent, created_time: "2026-09-24T00:00:00Z", last_edited_time: "2026-09-24T00:00:00Z",
     has_children: false, in_trash: false, source_provider: null, source_object_id: null, source_last_edited_time: null,
     ...write,
   } as NotesBlock;
@@ -43,6 +47,10 @@ function editor(
   const last = fromWrite(createBlockWrite(lastId, "paragraph", "Last"));
   const blocks = initialBlocks ?? [first, last];
   const stored = new Map(blocks.map((block) => [block.id, block]));
+  compoundAdapter = createNotesCompoundTestAdapter(api, () => [...stored.values()], (original) => {
+    stored.clear();
+    for (const block of original) stored.set(block.id, block);
+  });
   api.createNotesDatabase.mockImplementation(async (request: NotesDatabaseCreateRequest) => {
     await gate;
     const source = request.replace_block_id ? stored.get(request.replace_block_id) : undefined;
@@ -95,11 +103,15 @@ function editor(
   const restoreSelection = vi.fn();
   const error = vi.fn();
   const persistence = createNotesBlockPersistence({
+    reconcileCanonicalBlocks: (blocks) => undo.reconcileCanonicalBlocks(blocks),
     readBlock: (id) => projection.blocksById[id], beforeSave: async () => undefined,
     replaceBlock: (block) => projection.replaceBlock(block), setLoadError: error, debounceMs: 250,
   });
   projection.setLocalChangeMarker(persistence.markBlockLocallyChanged);
   const undo = createNotesUndoController({
+    applyPostMutation: (result) => projection.applyPostMutation(result),
+    readCanonicalRevision: persistence.readCanonicalRevision,
+    acknowledgeCanonicalBlocks: persistence.acknowledgeCanonicalBlocks,
     readSelectedPageId: () => pageId, readTreeState: () => projection.treeState(),
     loadPageTreeForUndo: async () => undefined, requestBlockFocus: focus,
     restoreDocumentSelection: restoreSelection,
@@ -107,6 +119,8 @@ function editor(
     applyLocalSnapshot: (target, source) => projection.applyLocalUndoSnapshot(target, source),
   });
   const actions = createNotesBlockActions({
+    reconcileCanonicalBlocks: undo.reconcileCanonicalBlocks,
+    reconcileCompoundUndo: undo.reconcileCompoundUndo,
     prepareIndentation,
     prepareBlockDeletion,
     readPageRootBlockIds: () => projection.blockOutlines.filter((outline) => outline.parent.type === "page_id" && outline.parent.page_id === pageId).map((outline) => outline.id),
@@ -321,7 +335,7 @@ describe("Notes editing with delayed persistence", () => {
     expect(h.error).not.toHaveBeenCalled();
   });
 
-  it("resumes a failed range deletion after its leading note is already in Trash", async () => {
+  it("retries a failed range replacement as one complete operation with its original identities", async () => {
     const h = editor([fromWrite(createBlockWrite(firstId, "child_page", "Child")), fromWrite(createBlockWrite(lastId, "paragraph", "Last"))]);
     const persistTrash = api.trashNotesBlock.getMockImplementation()!;
     let fail = true;
@@ -332,11 +346,11 @@ describe("Notes editing with delayed persistence", () => {
     await h.actions.replaceDocumentRange([firstId, lastId], 0, 4, "Replacement");
     h.release();
     await expect(h.persistence.flushPendingBlockSaves()).rejects.toThrow("Temporary failure");
-    expect(h.stored.get(firstId)?.in_trash).toBe(true);
+    expect(h.stored.get(firstId)?.in_trash).toBe(false);
     await h.persistence.retryEditorMutations();
     await h.persistence.flushPendingBlockSaves();
-    expect(api.appendNotesBlockChildren).toHaveBeenCalledTimes(1);
-    expect(api.moveNotesBlock).toHaveBeenCalledTimes(1);
+    expect(api.appendNotesBlockChildren).toHaveBeenCalledTimes(2);
+    expect(api.moveNotesBlock).toHaveBeenCalledTimes(2);
     expect(h.stored.get(lastId)?.in_trash).toBe(true);
     const [replacement] = h.projection.childIdsByParentId[pageId];
     expect(blockPlainText(h.stored.get(replacement)!)).toBe("Replacement");
@@ -1229,10 +1243,10 @@ describe("Notes editing with delayed persistence", () => {
     h.release();
     await expect(h.persistence.flushPendingBlockSaves()).rejects.toThrow("Placement unavailable");
     expect(api.appendNotesBlockChildren).toHaveBeenCalledTimes(1);
-    expect(h.stored.has(newId)).toBe(true);
+    expect(h.stored.has(newId)).toBe(false);
 
     await h.persistence.retryEditorMutations();
-    expect(api.appendNotesBlockChildren).toHaveBeenCalledTimes(1);
+    expect(api.appendNotesBlockChildren).toHaveBeenCalledTimes(2);
     expect(api.moveNotesBlock).toHaveBeenCalledTimes(2);
     expect(h.projection.childIdsByParentId[pageId]).toEqual([newId, firstId]);
     expect(h.error).toHaveBeenLastCalledWith(null);
@@ -1371,15 +1385,6 @@ describe("Notes editing with delayed persistence", () => {
     const inserted = fromWrite(createBlockWrite(crypto.randomUUID(), "paragraph", "New"));
     e.projection.insertBlockAfter(inserted, firstId);
     expect(e.projection.flatBlockOutlines.map((item) => item.outline.id)).toEqual([firstId, inserted.id, unloaded.id, lastId]);
-    e.release();
-  });
-  it("preserves position when reading older typing snapshots without sibling order", () => {
-    const e = editor();
-    const before = e.undo.snapshotBlocks(firstId, [firstId]);
-    if (!before) throw new Error("Expected snapshot");
-    const legacy = { ...before, childIdsByParentId: {} };
-    e.projection.applyLocalUndoSnapshot(legacy, legacy);
-    expect(e.projection.childIdsByParentId[pageId]).toEqual([firstId, lastId]);
     e.release();
   });
 

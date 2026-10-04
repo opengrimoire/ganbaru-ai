@@ -1,133 +1,111 @@
 import { describe, expect, it, vi } from "vitest";
+import { Temporal } from "@js-temporal/polyfill";
+import { dismissCalendarDeleteUndo, type CalendarEditPreview, type CalendarCommitReceipt } from "$lib/api/calendar-edit";
+import type { CalendarEditDraft } from "./native-edit-controller.svelte";
 import type { CalendarEvent } from "./types";
-import type { CalendarDeleteArchivePlan } from "./delete-archive-plan";
-import type { getCalendar } from "$lib/stores/calendar.svelte";
-import type { getPomodoro } from "$lib/stores/pomodoro.svelte";
-import type { createCalendarViewToastController } from "./calendar-view-toasts.svelte";
 import { CalendarViewDeleteController } from "./calendar-view-delete-controller";
 
-type CalendarStore = ReturnType<typeof getCalendar>;
-type PomodoroStore = ReturnType<typeof getPomodoro>;
-type ToastController = ReturnType<typeof createCalendarViewToastController>;
+vi.mock("$lib/api/calendar-edit", () => ({ dismissCalendarDeleteUndo: vi.fn(async () => {}) }));
 
-function event(id: string, overrides: Partial<CalendarEvent> = {}): CalendarEvent {
-  return {
-    id,
-    title: id,
-    start: "2026-07-12 09:00",
-    end: "2026-07-12 10:00",
-    timezone: "UTC",
-    calendarId: "calendar-a",
-    ...overrides,
-  };
+function event(id: string, recurringParentId?: string): CalendarEvent {
+  return { id, recurringParentId, title: id, start: "2026-07-12 09:00", end: "2026-07-12 10:00",
+    timezone: "UTC", calendarId: "local" };
 }
 
-function plan(snapshot: CalendarEvent): CalendarDeleteArchivePlan {
-  return {
-    affectedVisibleIds: new Set([snapshot.id]),
-    finalVisibleEvents: [],
-    outcome: "delete",
-    requiresActiveStop: true,
-    operations: [],
-    restore: {
-      archivedEvents: [],
-      snapshots: [{ event: snapshot, restoreMode: "insert" }],
-    },
+function fixture() {
+  const input: CalendarEditDraft = { vaultId: "vault", vaultGeneration: 2, sessionKey: 7,
+    edit: { kind: "delete", selection: { templateId: "source", recurrenceDate: "2026-07-12", scope: "all" }, stopActive: false },
+    window: { windowStartDate: "2026-07-11", windowEndDate: "2026-07-18", renderZone: "UTC", includeTotalEventCount: false } };
+  const review: CalendarEditPreview = { vaultId: "vault", vaultGeneration: 2, commandId: "delete",
+    sourceId: "source", editedId: "source", reviewRevision: "a".repeat(64), changed: true,
+    scope: { effectiveScope: "all", selectedStarted: false, selectedHasHistory: false, selectedActive: false },
+    deletion: { outcome: "mixed", requiresActiveStop: true, historyOnly: false },
+    window: { rawBlocks: [], windowEvents: [event("survivor", "source")], diagnostics: [], totalEventCount: null },
+    previewedIds: new Set(), editingId: undefined };
+  const receipt: CalendarCommitReceipt = { commandId: "delete", editedId: "selected", changed: true, preservedIds: [],
+    undoReviewRevision: "b".repeat(64), undoAvailableForMs: 4_000 };
+  const nativeEditor = {
+    commitReviewed: vi.fn(async () => receipt), undoDeletion: vi.fn(async () => ({ ...receipt, commandId: "undo" })),
+    pendingKind: "delete" as "delete" | "undo_delete", retainedPreview: review,
+    retryPending: vi.fn(async () => receipt), acceptedResultAgeMs: 1_000, acknowledgeResult: vi.fn(),
+    acceptsContext: vi.fn(() => true),
   };
+  const calendarStore = { acceptNativeEdit: vi.fn(), refreshWindow: vi.fn(async () => {}) };
+  const toasts = { showDeletePendingToast: vi.fn(() => "toast"), showDeleteUndoToast: vi.fn(),
+    dismissDeleteToastIfPending: vi.fn(), dismissDeleteUndoToast: vi.fn(),
+    showSavePendingToast: vi.fn(() => "error"), showSaveErrorToast: vi.fn() };
+  const setCommitState = vi.fn(), closeSession = vi.fn();
+  let mounted = true, current = true;
+  const controller = new CalendarViewDeleteController({ calendarStore, nativeEditor, toasts,
+    getWindow: () => ({ start: Temporal.PlainDate.from("2026-07-11"), end: Temporal.PlainDate.from("2026-07-18") }),
+    getEvents: () => [event("source"), event("removed", "source"), event("unrelated")],
+    canPresent: () => mounted, isCurrent: () => current, setCommitState, closeSession,
+    pendingLabel: () => "pending", outcomeLabel: () => "completed", errorLabel: (error) => String(error) });
+  return { input, review, receipt, nativeEditor, calendarStore, toasts, setCommitState, closeSession, controller,
+    unmount: () => { mounted = false; }, changeSelection: () => { current = false; } };
 }
 
-describe("CalendarViewDeleteController", () => {
-  it("hydrates restore data before stopping the active session and committing", async () => {
-    const order: string[] = [];
-    const snapshot = event("event-a", { exceptions: ["2026-07-14"] });
-    const loadFullEvent = vi.fn(async () => {
-      order.push("hydrate");
-      return event("event-a", { description: "full", exceptions: ["2026-07-15"] });
-    });
-    const addBlock = vi.fn(async (restored: Partial<CalendarEvent>) => {
-      expect(restored.description).toBe("full");
-      expect(restored.exceptions).toEqual(["2026-07-14"]);
-    });
-    const calendarStore = {
-      loadFullEvent,
-      applyDeleteArchivePlan: vi.fn(async () => { order.push("apply"); }),
-      refreshWindow: vi.fn(async () => { order.push("refresh"); }),
-      restoreArchivedBlock: vi.fn(),
-      updateBlock: vi.fn(),
-      addBlock,
-    } as unknown as CalendarStore;
-    const pomodoro = {
-      isActive: true,
-      activeBlockId: "event-a",
-      dismissedBlockId: null,
-      stopSession: vi.fn(async () => { order.push("stop"); }),
-    } as unknown as PomodoroStore;
-    let toast: { id: string; pending: boolean; restore?: () => Promise<void>; label: string } | null = null;
-    const showDeleteUndoToast = vi.fn(
-      (_id: string, label: string, restore?: () => Promise<void>) => {
-        toast = { id: "toast-a", pending: false, label, restore };
-      },
-    );
-    const toasts = {
-      get deleteUndoToast() { return toast; },
-      showDeletePendingToast: vi.fn(() => {
-        toast = { id: "toast-a", pending: true, label: "pending" };
-        return "toast-a";
-      }),
-      showDeleteUndoToast,
-      dismissDeleteToastIfCurrent: vi.fn(),
-      dismissDeleteUndoToast: vi.fn(),
-    } as unknown as ToastController;
-    const setCommitState = vi.fn();
-    const closeSession = vi.fn(() => { order.push("close"); });
-    const controller = new CalendarViewDeleteController({
-      calendarStore,
-      pomodoro,
-      toasts,
-      getWindow: () => ({ start: {} as never, end: {} as never }),
-      setCommitState,
-      closeSession,
-      pendingLabel: () => "pending",
-      outcomeLabel: () => "deleted",
-    });
-
-    await controller.execute(plan(snapshot), true);
-    expect(order).toEqual(["hydrate", "stop", "apply", "refresh", "close"]);
-    await showDeleteUndoToast.mock.calls[0]?.[2]?.();
-    expect(addBlock).toHaveBeenCalledOnce();
-    expect(setCommitState).toHaveBeenLastCalledWith({
-      hidden: false,
-      suppressPreview: false,
-      frozenEvents: null,
-    });
+describe("native Calendar deletion presentation", () => {
+  it("freezes only the native family and uses the remaining native opportunity for semantic Undo", async () => {
+    const f = fixture();
+    await f.controller.execute(f.input, f.review, true);
+    expect(f.nativeEditor.commitReviewed).toHaveBeenCalledExactlyOnceWith(f.input, f.review, true);
+    expect(f.setCommitState.mock.calls[0][0].frozenEvents.map((row: CalendarEvent) => row.id)).toEqual(["unrelated", "survivor"]);
+    expect(f.calendarStore.acceptNativeEdit).toHaveBeenCalledOnce();
+    expect(f.calendarStore.refreshWindow).toHaveBeenCalledOnce();
+    expect(f.closeSession).toHaveBeenCalledOnce();
+    expect(f.toasts.showDeleteUndoToast).toHaveBeenCalledWith("toast", "completed", expect.any(Function), 3_000);
+    await f.controller.undoCurrent();
+    expect(f.nativeEditor.undoDeletion).toHaveBeenCalledExactlyOnceWith(f.review, f.receipt);
+    expect(f.calendarStore.refreshWindow).toHaveBeenCalledTimes(2);
+    expect(f.nativeEditor.acknowledgeResult.mock.calls.map(([id]) => id)).toEqual(["delete", "undo"]);
   });
 
-  it("does not stop or mutate when restore hydration fails", async () => {
-    const stopSession = vi.fn();
-    const applyDeleteArchivePlan = vi.fn();
-    const controller = new CalendarViewDeleteController({
-      calendarStore: {
-        loadFullEvent: vi.fn(async () => { throw new Error("hydrate failed"); }),
-        applyDeleteArchivePlan,
-      } as unknown as CalendarStore,
-      pomodoro: {
-        isActive: true,
-        activeBlockId: "event-a",
-        stopSession,
-      } as unknown as PomodoroStore,
-      toasts: {
-        deleteUndoToast: { id: "toast-a", pending: true, label: "pending" },
-        showDeletePendingToast: () => "toast-a",
-        dismissDeleteToastIfCurrent: vi.fn(),
-      } as unknown as ToastController,
-      getWindow: () => ({ start: {} as never, end: {} as never }),
-      setCommitState: vi.fn(),
-      closeSession: vi.fn(),
-      pendingLabel: () => "pending",
-      outcomeLabel: () => "deleted",
+  it("retains acceptance after refresh failure and acknowledges only a successful refresh retry", async () => {
+    const f = fixture();
+    f.calendarStore.refreshWindow.mockRejectedValueOnce(new Error("refresh unavailable"));
+    await f.controller.execute(f.input, f.review, false);
+    expect(f.nativeEditor.acknowledgeResult).not.toHaveBeenCalled();
+    expect(f.toasts.showDeleteUndoToast).not.toHaveBeenCalled();
+    expect(f.toasts.showSaveErrorToast).toHaveBeenCalledWith("error", expect.stringContaining("refresh unavailable"));
+    await f.controller.retry();
+    expect(f.nativeEditor.commitReviewed).toHaveBeenCalledOnce();
+    expect(f.nativeEditor.retryPending).toHaveBeenCalledOnce();
+    expect(f.nativeEditor.acknowledgeResult).toHaveBeenCalledExactlyOnceWith("delete");
+  });
+
+  it("keeps a changed selection open and does not renew an expired opportunity after delayed refresh", async () => {
+    const f = fixture();
+    f.calendarStore.refreshWindow.mockImplementationOnce(async () => {
+      f.changeSelection(); f.nativeEditor.acceptedResultAgeMs = 5_000;
     });
-    await expect(controller.execute(plan(event("event-a")), true)).rejects.toThrow("hydrate failed");
-    expect(stopSession).not.toHaveBeenCalled();
-    expect(applyDeleteArchivePlan).not.toHaveBeenCalled();
+    await f.controller.execute(f.input, f.review, false);
+    expect(f.closeSession).not.toHaveBeenCalled();
+    expect(f.toasts.showDeleteUndoToast).toHaveBeenCalledWith("toast", "completed", undefined, -1_000);
+    await f.controller.undoCurrent();
+    expect(f.nativeEditor.undoDeletion).not.toHaveBeenCalled();
+  });
+
+  it("leaves an unmounted accepted operation available for receipt and refresh recovery", async () => {
+    const f = fixture();
+    f.nativeEditor.commitReviewed.mockImplementationOnce(async () => { f.unmount(); return f.receipt; });
+    await f.controller.execute(f.input, f.review, false);
+    expect(f.calendarStore.refreshWindow).not.toHaveBeenCalled();
+    expect(f.nativeEditor.acknowledgeResult).not.toHaveBeenCalled();
+    expect(f.toasts.showDeleteUndoToast).not.toHaveBeenCalled();
+  });
+
+  it("dismisses only the accepted deletion and presents Undo failure explicitly", async () => {
+    const f = fixture();
+    await f.controller.execute(f.input, f.review, false);
+    await f.controller.dismissUndo();
+    expect(dismissCalendarDeleteUndo).toHaveBeenCalledWith({ vaultId: "vault", vaultGeneration: 2, deleteCommandId: "delete" });
+    await f.controller.undoCurrent();
+    expect(f.nativeEditor.undoDeletion).not.toHaveBeenCalled();
+    const another = fixture();
+    another.nativeEditor.undoDeletion.mockRejectedValueOnce(new Error("Undo expired"));
+    await another.controller.execute(another.input, another.review, false);
+    await another.controller.undoCurrent();
+    expect(another.toasts.showSaveErrorToast).toHaveBeenCalledWith("error", expect.stringContaining("Undo expired"));
   });
 });

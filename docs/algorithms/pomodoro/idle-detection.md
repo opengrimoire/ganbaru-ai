@@ -77,6 +77,10 @@ Backdating prevents the threshold interval from being counted as focus merely be
 
 If the idle overlay remains unresolved for 60 seconds, current behavior marks the active focus segment interrupted with focus-failed reason at the pause start boundary and appends a focus-failure run event. The overlay may then offer a fresh focus restart if the calendar block remains eligible.
 
+The native owner starts that grace period only after the matching warning reports paint completion and a visible window. The primary native overlay or its main-window fallback can acknowledge one run, segment, idle-detection timestamp, and vault generation. Rust records the first accepted acknowledgement using its own clock. Duplicate delivery cannot extend the deadline, and stale episodes cannot acknowledge a newer warning. Slow loading or failed presentation leaves the pause recoverable; the Calendar event deadline still applies. Persistence failure rejects the acknowledgement and permits a bounded retry.
+
+The live owner measures grace with a monotonic clock. Civil clock corrections cannot shorten or extend it. The core accepts elapsed-grace evidence only for the current run, segment, and committed visibility marker, with at least the required elapsed duration. Recovery discards an older controller's visibility marker; it preserves accepted idle pause history without treating a previous process or device's display as a current warning. Android does not run the desktop idle grace timer.
+
 Restart after failure creates a new active focus segment with the configured duration, capped by the event boundary. It does not reopen or extend the interrupted segment.
 
 This 60-second delay is user-visible policy, not a persistence encoding. A future product change must update feature copy and focused tests.
@@ -113,6 +117,8 @@ Required coverage includes:
 - threshold-aware delay bounds;
 - repeated idle periods in one segment;
 - focus failure at exactly 60 seconds;
+- delayed or absent warning paint, acknowledgement rollback, stale episode identities, and duplicate delivery;
+- monotonic grace through civil clock corrections, generation invalidation, and controller recovery;
 - resume, stop, event expiry, and fresh restart;
 - suspend and cold-recovery precedence;
 - platform parser failures and bounded output;

@@ -1,16 +1,18 @@
-import type { CalendarEvent, EventSurfaceStatus, RecurringScope } from "./types";
+import type { CalendarEvent, EventSurfaceStatus } from "./types";
+import type { CalendarEditPreview } from "$lib/api/calendar-edit";
 import type { EditSessionState } from "./edit-session.svelte";
 import type { CreatePreview } from "./edit-session.svelte";
 import {
   buildCreateDisplay,
   closedDisplay,
-  computeEditDisplay,
+  PENDING_CREATE_ID,
 } from "./display-events";
 import { getEventSurfaceStatusForIdentity } from "./utils";
 import type { computeViewWindow } from "./utils";
 
 type ViewWindow = ReturnType<typeof computeViewWindow>;
 
+/** Apply route and calendar visibility to already projected occurrences. */
 export function visibleCalendarEvents(input: {
   events: CalendarEvent[];
   visibleCalendarIds: ReadonlySet<string>;
@@ -20,25 +22,35 @@ export function visibleCalendarEvents(input: {
   return input.filter ? visible.filter(input.filter) : visible;
 }
 
+/** Merge native source-family review with cached occurrences and immediate card feedback. */
 export function projectCalendarDisplay(input: {
-  rawBlocks: CalendarEvent[];
   storeEvents: CalendarEvent[];
   frozenEvents: CalendarEvent[] | null;
   state: EditSessionState;
   createPreview: CreatePreview | null;
   changes: Partial<CalendarEvent>;
   dirty: boolean;
-  scope: RecurringScope;
+  nativePreview: CalendarEditPreview | null;
   window: ViewWindow;
   suppressEditPreview: boolean;
-  activeDate: string | undefined;
-  currentDate: string;
-  currentTime: string;
-  activeBlockId: string | undefined;
 }) {
   if (input.frozenEvents) return closedDisplay(input.frozenEvents);
   if (input.state.mode === "closed") return closedDisplay(input.storeEvents);
   if (input.state.mode === "create") {
+    if (input.nativePreview) {
+      const preview = input.nativePreview;
+      // A cached native identity proves creation was accepted. Coincident time
+      // ranges are unrelated and cannot resolve an uncertain Save.
+      if (input.storeEvents.some((event) => (event.recurringParentId ?? event.id) === preview.editedId)) {
+        return closedDisplay(input.storeEvents);
+      }
+      const pendingId = (id: string) => id === preview.editingId
+        ? PENDING_CREATE_ID : `${PENDING_CREATE_ID}::${id}`;
+      return { events: [...input.storeEvents, ...preview.window.windowEvents.map((event) =>
+        ({ ...event, id: pendingId(event.id) }))],
+        previewedIds: new Set([...preview.previewedIds].map(pendingId)),
+        editingId: preview.editingId ? pendingId(preview.editingId) : undefined };
+    }
     return buildCreateDisplay(
       input.storeEvents,
       input.createPreview,
@@ -47,43 +59,29 @@ export function projectCalendarDisplay(input: {
     );
   }
   if (input.suppressEditPreview) return closedDisplay(input.storeEvents);
-  return computeEditDisplay(
-    input.rawBlocks,
-    input.storeEvents,
-    {
-      originalEvent: input.state.originalEvent,
-      instanceEvent: input.state.instanceEvent,
-      templateId: input.state.templateId,
-    },
-    input.dirty ? input.changes : {},
-    input.scope,
-    input.window,
-    input.activeDate,
-    input.currentDate,
-    input.currentTime,
-    input.activeBlockId,
-  );
+  if (input.nativePreview) {
+    const preview = input.nativePreview;
+    const unrelated = input.storeEvents.filter((event) =>
+      (event.recurringParentId ?? event.id) !== preview.sourceId);
+    return { events: [...unrelated, ...preview.window.windowEvents],
+      previewedIds: new Set(preview.previewedIds), editingId: preview.editingId };
+  }
+  // Immediate selected-card interaction is presentation. Native review owns series expansion.
+  const selectedId = input.state.instanceEvent.id;
+  const events = input.storeEvents.map((event) => {
+    if (event.id !== selectedId || !input.dirty) return event;
+    const overlay = { ...event };
+    for (const field of ["title", "start", "end", "color", "allDay"] as const) {
+      if (Object.hasOwn(input.changes, field)) Object.assign(overlay, { [field]: input.changes[field] });
+    }
+    return overlay;
+  });
+  return { events, previewedIds: new Set([selectedId]), editingId: selectedId };
 }
 
-export function buildCalendarSaveFreeze(input: {
-  rawBlocks: CalendarEvent[];
-  storeEvents: CalendarEvent[];
-  state: EditSessionState;
-  createPreview: CreatePreview | null;
-  changes: Partial<CalendarEvent>;
-  scope: RecurringScope;
-  window: ViewWindow;
-  activeDate: string | undefined;
-  currentDate: string;
-  currentTime: string;
-  activeBlockId: string | undefined;
-}): CalendarEvent[] {
-  return projectCalendarDisplay({
-    ...input,
-    frozenEvents: null,
-    dirty: true,
-    suppressEditPreview: false,
-  }).events.map((event) => ({ ...event }));
+/** Freeze the last visible projection while its durable commit is in flight. */
+export function buildCalendarSaveFreeze(events: CalendarEvent[]): CalendarEvent[] {
+  return events.map((event) => ({ ...event }));
 }
 
 export function projectCalendarSurfaceStatuses(input: {

@@ -1,10 +1,12 @@
 import type { CalendarEvent } from "./types";
 import type { EditSessionState, PanelAnchor } from "./edit-session.svelte";
-import { PENDING_CREATE_ID } from "./display-events";
+import { isPendingCreateEventId } from "./display-events";
+import { Temporal } from "@js-temporal/polyfill";
 
 interface CalendarDragSession {
   readonly state: EditSessionState;
   readonly dirty: boolean;
+  readonly changes?: Partial<CalendarEvent>;
   openEdit(
     event: CalendarEvent,
     anchor: PanelAnchor,
@@ -43,8 +45,27 @@ export class CalendarViewDragController {
     if (this.options.isCommitHidden()) return;
     this.markInteractionEnd();
 
-    if (event.id === PENDING_CREATE_ID) {
-      if (this.options.session.state.mode === "create") this.applyTimes(event);
+    if (isPendingCreateEventId(event.id)) {
+      if (this.options.session.state.mode === "create") {
+        const selectedId = this.options.editingId();
+        const original = this.options.visibleEvents().find((candidate) => candidate.id === event.id);
+        if (!original && selectedId !== event.id) return;
+        if (original && selectedId !== event.id) {
+          const state = this.options.session.state;
+          const changes = this.options.session.changes;
+          const shift = (base: string, before: string, after: string): string => {
+            const civil = (value: string) => Temporal.PlainDateTime.from(value.replace(" ", "T"));
+            return civil(base).add(civil(before).until(civil(after), { largestUnit: "days" }))
+              .toString({ smallestUnit: "minute" }).replace("T", " ");
+          };
+          this.options.session.updateChanges({
+            start: shift(changes?.start ?? state.start, original.start, event.start),
+            end: shift(changes?.end ?? state.end, original.end, event.end),
+          });
+        } else {
+          this.applyTimes(event);
+        }
+      }
       return;
     }
 

@@ -282,7 +282,7 @@ impl<R: Runtime> CoordinatorState<R> {
                 self.commit_uploaded_ownership(metadata, source_device_id)
                     .await
             }
-            CoordinatorOperation::Cancel { transfer_id } => self.cancel(transfer_id),
+            CoordinatorOperation::Cancel { transfer_id } => self.cancel(transfer_id).await,
             CoordinatorOperation::Shutdown => unreachable!("shutdown is handled by the run loop"),
         }
     }
@@ -406,16 +406,23 @@ impl<R: Runtime> CoordinatorState<R> {
                 "Doomscrolling exchange does not match the current vault owner".to_string(),
             );
         }
-        crate::doomscrolling_linked::acknowledge(
-            &self.app,
-            &vault_id,
-            &status.device_id,
-            &acknowledged_peer_sample_ids,
-        )
-        .await?;
         if !owner_snapshot.is_empty() {
-            crate::doomscrolling_linked::replace_accepted(&self.app, &vault_id, &owner_snapshot)
-                .await?;
+            crate::doomscrolling_linked::apply_owner_snapshot(
+                &self.app,
+                &vault_id,
+                &status.device_id,
+                &acknowledged_peer_sample_ids,
+                &owner_snapshot,
+            )
+            .await?;
+        } else {
+            crate::doomscrolling_linked::acknowledge(
+                &self.app,
+                &vault_id,
+                &status.device_id,
+                &acknowledged_peer_sample_ids,
+            )
+            .await?;
         }
         let peer_samples =
             crate::doomscrolling_linked::pending(&self.app, &vault_id, &status.device_id).await?;
@@ -444,9 +451,13 @@ impl<R: Runtime> CoordinatorState<R> {
     }
 
     fn shutdown(&mut self) {
-        self.prepared
+        if let Some(quiescence) = self
+            .prepared
             .as_mut()
-            .and_then(|prepared| prepared.quiescence.take());
+            .and_then(|prepared| prepared.quiescence.take())
+        {
+            quiescence.retain_outgoing();
+        }
     }
 
     fn reload_shell(&self) -> Result<(), String> {
@@ -504,7 +515,6 @@ mod tests {
     use super::*;
     use crate::vault::handoff::protocol::PROTOCOL_VERSION;
     use crate::vault::handoff::state::{StoredOutgoingTransfer, random_token};
-    use std::path::PathBuf;
 
     #[test]
     fn owner_reachability_requires_a_recent_poll_from_the_current_owner() {
@@ -561,7 +571,7 @@ mod tests {
             .unwrap();
         let prepared = restore_prepared(&restarted).unwrap().unwrap();
         assert_eq!(prepared.metadata, metadata);
-        assert_eq!(prepared.archive_path, PathBuf::from(archive_path));
+        assert_eq!(prepared.archive_path, archive_path);
         assert!(!prepared.committed);
         assert_eq!(
             restarted.outgoing_bundle(transfer_id).unwrap().metadata,

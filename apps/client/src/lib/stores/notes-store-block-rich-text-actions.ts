@@ -1,4 +1,4 @@
-import { updateNotesBlock } from "$lib/api/notes";
+import { createNotesCompoundPersistence, type NotesCompoundEditContext } from "./notes-store-compound-edits";
 import {
   blockPlainText,
   blockWithDateMention,
@@ -28,7 +28,7 @@ import type {
   NotesUndoSnapshot,
 } from "$lib/notes/undo-history";
 
-interface NotesRichTextBlockActionsContext {
+interface NotesRichTextBlockActionsContext extends NotesCompoundEditContext {
   enqueueEditorMutation: (mutation: () => Promise<void>) => Promise<void>;
   blockById: (blockId: string) => NotesBlock | undefined;
   localApplyBlockUpdate: (blockId: string, update: NotesBlockUpdate) => void;
@@ -161,8 +161,9 @@ export function createNotesRichTextBlockActions(
     const before = snapshot(blockId);
     const update = build(block);
     context.localApplyBlockUpdate(blockId, update);
+    const persist = createNotesCompoundPersistence(context, "format_selection", [{ type: "update", block_id: blockId, update }]);
     void context.enqueueEditorMutation(async () => {
-      await updateNotesBlock(blockId, update);
+      await persist();
       if (refreshLinks) await context.refreshOpenLinks();
     }).catch((error: unknown) => console.warn("Notes formatting persistence failed", error));
     context.recordUndo({

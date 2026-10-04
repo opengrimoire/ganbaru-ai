@@ -366,23 +366,6 @@ export function savedTaskViewsForProject(
   return copy(projectLoadedDataIndex(source).savedTaskViewsByProject.get(projectId));
 }
 
-export function taskClosure(source: ProjectLoadedDataIndexSource, tasks: ProjectTask[]): ProjectTask[] {
-  const index = projectLoadedDataIndex(source);
-  const visited = new Set<string>();
-  const pending = tasks.map((task) => task.id);
-  const result: ProjectTask[] = [];
-  while (pending.length > 0) {
-    const taskId = pending.pop();
-    if (!taskId || visited.has(taskId)) continue;
-    visited.add(taskId);
-    const task = index.taskById.get(taskId);
-    if (!task) continue;
-    result.push(task);
-    for (const child of index.tasksByParentSourceOrder.get(task.id) ?? []) pending.push(child.id);
-  }
-  return result;
-}
-
 export function nextGroupSortOrder(source: ProjectLoadedDataIndexSource): number {
   return projectLoadedDataIndex(source).maxGroupSortOrder + 1000;
 }

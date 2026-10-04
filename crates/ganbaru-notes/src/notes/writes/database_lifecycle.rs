@@ -153,7 +153,8 @@ async fn set_graph_trash(
             validate_journal(&journal)?;
             restore_journal(tx, &journal).await?;
         } else {
-            // Older deletions have no ownership journal. Restore their root without guessing at independently trashed records.
+            // History restoration and page moves can trash individual records without a graph journal.
+            // Restore only that record, preserving independently trashed descendants.
             sqlx::query(&format!(
                 "UPDATE {table} SET in_trash = 0,
                 last_edited_time = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
@@ -161,7 +162,7 @@ async fn set_graph_trash(
             .bind(id)
             .execute(&mut **tx)
             .await
-            .map_err(|e| format!("restore legacy Notes trash root: {e}"))?;
+            .map_err(|e| format!("restore individual Notes trash root: {e}"))?;
             if table == "notes_pages" {
                 sqlx::query("UPDATE notes_pages SET trashed_time = NULL WHERE id = ?")
                     .bind(id)

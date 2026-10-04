@@ -6,7 +6,6 @@ import {
   mapNotesDatabaseViewDto,
   mapNotesDataSourceBoardViewDto,
   mapNotesDataSourceCalendarViewDto,
-  mapNotesDataSourceCsvExportDto,
   mapNotesDataSourceCsvExportSaveDto,
   mapNotesDataSourceCsvImportDto,
   mapNotesDataSourceGalleryViewDto,
@@ -28,7 +27,6 @@ import type {
   NotesDataSourceCalendarView,
   NotesDataSourceCalendarViewUpdate,
   NotesDataSourceCsvExportRequest,
-  NotesDataSourceCsvExportResult,
   NotesDataSourceCsvExportSaveResult,
   NotesDataSourceCsvImportRequest,
   NotesDataSourceCsvImportResult,
@@ -54,8 +52,6 @@ import type {
   NotesDataSourceTemplate,
   NotesDataSourceTemplateApplyRequest,
   NotesDataSourceTemplateCreateFromRowRequest,
-  NotesDataSourceTemplateDuplicateRequest,
-  NotesDataSourceTemplateUpdateRequest,
   NotesDataSourceTimelineView,
   NotesDataSourceTimelineViewUpdate,
   NotesLinkedDatabaseCreateRequest,
@@ -64,7 +60,7 @@ import type {
 } from "$lib/notes/types";
 import { invokeNotesMutation } from "./mutation";
 import { isNotesUuid } from "$lib/notes/block-link";
-import type { NotesDatabaseDuplicateRequest, NotesDatabaseReference } from "$lib/notes/types";
+import type { NotesDatabaseReference } from "$lib/notes/types";
 
 /** Read a database reference's destination and ownership without fetching its rows. */
 export async function getNotesDatabaseReference(blockId: string): Promise<NotesDatabaseReference> {
@@ -112,12 +108,6 @@ function parseDatabaseReference(value: unknown): NotesDatabaseReference {
   return { block_id: dto.source_block_id, page_id: dto.page_id,
     source_block_id: dto.canonical_source_block_id, source_page_id: dto.canonical_source_page_id,
     title: dto.title, is_linked: dto.is_linked, editing_locked: dto.editing_locked, owned_data_source_count: dto.owned_data_source_count };
-}
-
-/** Copy a database's source data and presentation into independent local identities. */
-export async function duplicateNotesDatabase(request: NotesDatabaseDuplicateRequest): Promise<NotesCreatedDatabase> {
-  const dbUrl = await ensureDbUrl();
-  return mapNotesCreatedDatabaseDto(await invokeNotesMutation("notes_duplicate_database", { dbUrl, request }));
 }
 
 function databaseViewScopeArgs(scope?: NotesDatabaseViewScope | null): {
@@ -275,16 +265,6 @@ export async function importNotesDataSourceCsv(
   );
 }
 
-export async function exportNotesDataSourceCsv(
-  dataSourceId: string,
-  request: NotesDataSourceCsvExportRequest,
-): Promise<NotesDataSourceCsvExportResult> {
-  const dbUrl = await ensureDbUrl();
-  return mapNotesDataSourceCsvExportDto(
-    await invoke<unknown>("notes_export_data_source_csv", { dbUrl, dataSourceId, request }),
-  );
-}
-
 export async function saveNotesDataSourceCsv(
   dataSourceId: string,
   request: NotesDataSourceCsvExportRequest,
@@ -328,38 +308,6 @@ export async function applyNotesDataSourceTemplate(
   const dbUrl = await ensureDbUrl();
   return mapNotesLoadedPageDto(
     await invokeNotesMutation("notes_apply_data_source_template", {
-      dbUrl,
-      dataSourceId,
-      templateId,
-      request,
-    }),
-  );
-}
-
-export async function updateNotesDataSourceTemplate(
-  dataSourceId: string,
-  templateId: string,
-  update: NotesDataSourceTemplateUpdateRequest,
-): Promise<NotesDataSourceTemplate> {
-  const dbUrl = await ensureDbUrl();
-  return mapNotesDataSourceTemplateDto(
-    await invokeNotesMutation("notes_update_data_source_template", {
-      dbUrl,
-      dataSourceId,
-      templateId,
-      update,
-    }),
-  );
-}
-
-export async function duplicateNotesDataSourceTemplate(
-  dataSourceId: string,
-  templateId: string,
-  request: NotesDataSourceTemplateDuplicateRequest,
-): Promise<NotesDataSourceTemplate> {
-  const dbUrl = await ensureDbUrl();
-  return mapNotesDataSourceTemplateDto(
-    await invokeNotesMutation("notes_duplicate_data_source_template", {
       dbUrl,
       dataSourceId,
       templateId,

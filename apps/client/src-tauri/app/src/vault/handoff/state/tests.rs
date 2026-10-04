@@ -348,7 +348,7 @@ fn several_peers_survive_restart_and_can_be_unlinked_individually() {
 }
 
 #[test]
-fn schema_one_peer_migrates_to_membership() {
+fn obsolete_pairing_schema_is_rejected_without_rewriting_state() {
     let temp = TestDirectory::new("schema-one-migration");
     let manager = PairingManager::default();
     manager
@@ -378,24 +378,16 @@ fn schema_one_peer_migrates_to_membership() {
     )
     .expect("write legacy state");
 
-    let migrated = PairingManager::default();
-    migrated
+    let original = fs::read(&state_path).expect("read unsupported state");
+    let manager = PairingManager::default();
+    let error = manager
         .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
-        .expect("migrate legacy state");
+        .expect_err("reject obsolete pairing schema");
+    assert_eq!(error, "pairing state schema version is unsupported");
     assert_eq!(
-        migrated
-            .linked_peers()
-            .expect("migrated peers")
-            .into_iter()
-            .map(|peer| peer.device_id)
-            .collect::<Vec<_>>(),
-        vec!["device-phone"]
+        fs::read(state_path).expect("read unchanged state"),
+        original
     );
-    let persisted: serde_json::Value =
-        serde_json::from_slice(&fs::read(state_path).expect("read migrated state"))
-            .expect("decode migrated state");
-    assert_eq!(persisted["schemaVersion"], PAIRING_STATE_SCHEMA_VERSION);
-    assert!(persisted.get("linkedPeer").is_none());
 }
 
 #[test]

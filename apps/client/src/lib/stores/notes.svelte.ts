@@ -230,5 +230,3 @@ const notes = createNotesWorkspace();
 
 /** Shared workspace controls and the live editor that currently owns input focus. */
 export function getNotes() { return notes; }
-
-export type NotesStoreFacade = ReturnType<typeof getNotes>;

@@ -21,6 +21,8 @@ internal const val POMODORO_NOTIFICATION_ID = 1_500_000_001
 internal const val POMODORO_ALERT_NOTIFICATION_ID = 1_500_000_002
 private const val POMODORO_NOTIFICATION_STORE = "GANBARU_POMODORO_NOTIFICATION_STORE"
 private const val POMODORO_NOTIFICATION_KEY = "acceptedPhaseV2"
+private const val POMODORO_COPY_KEY = "notificationCopyV1"
+private const val POMODORO_COMPLETION_KEY = "lastCompletedPhaseV1"
 private const val POMODORO_ALARM_REQUEST_CODE = 1_500_000_003
 private const val EXTRA_RUN_ID = "ganbaruPomodoroRunId"
 private const val EXTRA_PHASE_ID = "ganbaruPomodoroPhaseId"
@@ -82,6 +84,46 @@ internal fun acceptedPomodoroPhase(
 }
 
 internal object PomodoroNotificationScheduler {
+  fun configureCopy(context: Context, copy: PomodoroNotificationCopy) {
+    validateCopy(copy)
+    check(store(context).edit().putString(POMODORO_COPY_KEY, encodeCopy(copy).toString()).commit()) {
+      "Focus notification language could not be persisted"
+    }
+  }
+
+  fun copy(context: Context): PomodoroNotificationCopy? {
+    val encoded = store(context).getString(POMODORO_COPY_KEY, null)
+      ?: return current(context)?.copy
+    return decodeCopy(JSONObject(encoded))
+  }
+
+  internal fun encodeCopy(copy: PomodoroNotificationCopy): JSONObject = JSONObject()
+    .put("channelName", copy.channelName)
+    .put("channelDescription", copy.channelDescription)
+    .put("alertsChannelName", copy.alertsChannelName)
+    .put("alertsChannelDescription", copy.alertsChannelDescription)
+    .put("focusTitle", copy.focusTitle)
+    .put("shortBreakTitle", copy.shortBreakTitle)
+    .put("longBreakTitle", copy.longBreakTitle)
+    .put("pausedText", copy.pausedText)
+    .put("focusCompleteTitle", copy.focusCompleteTitle)
+    .put("breakCompleteTitle", copy.breakCompleteTitle)
+    .put("sessionCompleteText", copy.sessionCompleteText)
+
+  internal fun decodeCopy(copy: JSONObject): PomodoroNotificationCopy = PomodoroNotificationCopy(
+    channelName = copy.getString("channelName"),
+    channelDescription = copy.getString("channelDescription"),
+    alertsChannelName = copy.getString("alertsChannelName"),
+    alertsChannelDescription = copy.getString("alertsChannelDescription"),
+    focusTitle = copy.getString("focusTitle"),
+    shortBreakTitle = copy.getString("shortBreakTitle"),
+    longBreakTitle = copy.getString("longBreakTitle"),
+    pausedText = copy.getString("pausedText"),
+    focusCompleteTitle = copy.getString("focusCompleteTitle"),
+    breakCompleteTitle = copy.getString("breakCompleteTitle"),
+    sessionCompleteText = copy.getString("sessionCompleteText"),
+  ).also(::validateCopy)
+
   fun update(context: Context, projection: PomodoroNotificationProjection) {
     validate(projection)
     save(context, projection)
@@ -94,16 +136,48 @@ internal object PomodoroNotificationScheduler {
     return decode(encoded)
   }
 
-  fun cancel(context: Context) {
+  fun cancel(context: Context, keepBoundaryAlert: Boolean = false) {
+    // Preserve language from older accepted-phase records before revoking them.
+    if (!store(context).contains(POMODORO_COPY_KEY)) {
+      current(context)?.copy?.let { copy -> configureCopy(context, copy) }
+    }
     alarmManager(context).cancel(boundaryIntent(context, null, null))
     check(store(context).edit().remove(POMODORO_NOTIFICATION_KEY).commit()) {
       "Pomodoro notification state could not be cleared"
     }
     context.stopService(Intent(context, PomodoroNotificationService::class.java))
     notificationManager(context).cancel(POMODORO_NOTIFICATION_ID)
-    notificationManager(context).cancel(POMODORO_ALERT_NOTIFICATION_ID)
+    if (!keepBoundaryAlert) notificationManager(context).cancel(POMODORO_ALERT_NOTIFICATION_ID)
     DoomscrollingPhaseBridge.clear(context)
   }
+
+  /** A committed closed phase supplies its own reminder input, independently of alarm delivery. */
+  fun complete(context: Context, projection: PomodoroNotificationProjection) {
+    validate(projection)
+    val phase = projection.phases.single()
+    require(!projection.isRunning && projection.remainingSeconds == 0) {
+      "Focus completion must describe a committed closed phase"
+    }
+    require(phase.endsAtEpochMs <= System.currentTimeMillis()) {
+      "Focus completion cannot describe a future boundary"
+    }
+    val receipt = completionReceipt(projection.runId, phase.id)
+    val previous = current(context)
+    if (store(context).getString(POMODORO_COMPLETION_KEY, null) == receipt) {
+      if (previous != null && previous.runId == projection.runId && previous.phases.single().id == phase.id) {
+        cancel(context, keepBoundaryAlert = true)
+      }
+      return
+    }
+    require(previous == null || (previous.runId == projection.runId && previous.phases.single().id == phase.id)) {
+      "Focus completion belongs to a superseded notification phase"
+    }
+    cancel(context, keepBoundaryAlert = true)
+    postBoundaryAlert(context, projection, phase, null)
+  }
+
+  internal fun completionReceipt(runId: String, phaseId: String): String =
+    "${runId.length}:$runId${phaseId.length}:$phaseId"
 
   fun restore(context: Context) {
     val projection = current(context) ?: return
@@ -223,6 +297,9 @@ internal object PomodoroNotificationScheduler {
     completedPhase: PomodoroNotificationPhase?,
     nextPhase: PomodoroNotificationPhase?,
   ) {
+    val phase = completedPhase ?: projection.phases.single()
+    val receipt = completionReceipt(projection.runId, phase.id)
+    if (store(context).getString(POMODORO_COMPLETION_KEY, null) == receipt) return
     val title = if (completedPhase?.phase == "focus") {
       projection.copy.focusCompleteTitle
     } else {
@@ -237,9 +314,13 @@ internal object PomodoroNotificationScheduler {
       .setCategory(Notification.CATEGORY_ALARM)
       .setVisibility(Notification.VISIBILITY_PRIVATE)
       .setContentIntent(launchIntent(context))
+      .setOnlyAlertOnce(true)
       .setAutoCancel(true)
       .build()
     notificationManager(context).notify(POMODORO_ALERT_NOTIFICATION_ID, notification)
+    check(store(context).edit().putString(POMODORO_COMPLETION_KEY, receipt).commit()) {
+      "Focus completion receipt could not be persisted"
+    }
   }
 
   private fun scheduleBoundary(
@@ -403,18 +484,7 @@ internal object PomodoroNotificationScheduler {
           .put("endsAtEpochMs", phase.endsAtEpochMs))
       }
     })
-    .put("copy", JSONObject()
-      .put("channelName", projection.copy.channelName)
-      .put("channelDescription", projection.copy.channelDescription)
-      .put("alertsChannelName", projection.copy.alertsChannelName)
-      .put("alertsChannelDescription", projection.copy.alertsChannelDescription)
-      .put("focusTitle", projection.copy.focusTitle)
-      .put("shortBreakTitle", projection.copy.shortBreakTitle)
-      .put("longBreakTitle", projection.copy.longBreakTitle)
-      .put("pausedText", projection.copy.pausedText)
-      .put("focusCompleteTitle", projection.copy.focusCompleteTitle)
-      .put("breakCompleteTitle", projection.copy.breakCompleteTitle)
-      .put("sessionCompleteText", projection.copy.sessionCompleteText))
+    .put("copy", encodeCopy(projection.copy))
     .toString()
 
   internal fun decode(encoded: String): PomodoroNotificationProjection? = try {
@@ -447,19 +517,7 @@ internal object PomodoroNotificationScheduler {
       totalSeconds = value.getInt("totalSeconds"),
       configJson = value.getString("configJson"),
       phases = phases,
-      copy = PomodoroNotificationCopy(
-        channelName = copy.getString("channelName"),
-        channelDescription = copy.getString("channelDescription"),
-        alertsChannelName = copy.getString("alertsChannelName"),
-        alertsChannelDescription = copy.getString("alertsChannelDescription"),
-        focusTitle = copy.getString("focusTitle"),
-        shortBreakTitle = copy.getString("shortBreakTitle"),
-        longBreakTitle = copy.getString("longBreakTitle"),
-        pausedText = copy.getString("pausedText"),
-        focusCompleteTitle = copy.getString("focusCompleteTitle"),
-        breakCompleteTitle = copy.getString("breakCompleteTitle"),
-        sessionCompleteText = copy.getString("sessionCompleteText"),
-      ),
+      copy = decodeCopy(copy),
     ).also(::validate)
   } catch (_: Exception) {
     null

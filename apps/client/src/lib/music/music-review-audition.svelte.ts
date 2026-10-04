@@ -1,5 +1,4 @@
 import type { LocalRootBinding, MusicInspectorDetail } from "$lib/music/library-contracts";
-import { musicReviewSource } from "$lib/music/music-review";
 import {
   getMusicPlayer,
   type MusicReviewPlaybackCheckpoint,
@@ -32,18 +31,13 @@ export class MusicReviewAuditionController {
 
   async preview(
     detail: MusicInspectorDetail,
-    bindings: readonly LocalRootBinding[],
+    _bindings: readonly LocalRootBinding[],
     autoplay: boolean,
   ): Promise<boolean> {
     if (this.restoreTask) await this.restoreTask;
     if (this.ownsPlayback && this.reviewItemId === detail.item.id) return true;
-    const source = musicReviewSource(detail, bindings);
-    if (!source) {
-      this.error = "No playable location is available for this item.";
-      return false;
-    }
     const generation = ++this.operationGeneration;
-    if (!this.active) {
+    if (!this.returnPlayback) {
       this.enter();
       try {
         const checkpoint = await this.player.suspendForReview();
@@ -63,7 +57,7 @@ export class MusicReviewAuditionController {
     if (generation !== this.operationGeneration) return false;
     this.error = null;
     try {
-      await this.player.loadSource(source, { autoplay, resume: false, preserveQueue: true });
+      await this.player.loadReviewItem(detail.item.id, autoplay);
       if (generation !== this.operationGeneration) return false;
       this.player.contextOwner = "review";
       this.reviewItemId = detail.item.id;

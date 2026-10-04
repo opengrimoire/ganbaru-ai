@@ -25,9 +25,13 @@ Current repository setup automates Chromium native-host registration on Linux an
 
 ## Connection and stale state
 
+Phase snapshots expire at their accepted validity deadline even when their heartbeat timestamp remains fresh. Running snapshots from older app versions without that field expire when their published remaining time reaches zero. A paused snapshot can retain its work allowance, but a native owner lease still expires independently. Phase expiry leaves independent usage-budget rules under their own validity contract.
+
 If the local host is unavailable, the extension shows a disconnected state and stops enforcing after the applicable snapshot expires. It does not guess whether the browser, extension, host registration, app process, or active vault caused the failure.
 
 When a browser starts during focus, it requests a fresh state. When the app starts after the browser, reconnection refreshes current rules. A manual `Recheck now` action flushes active usage, refreshes native state, and reevaluates open tabs.
+
+Budget snapshots are published from native accounting. The host rejects an exhausted result if its persisted limit configuration changed, its local day ended, its timestamp is in the future, or its budget arithmetic is inconsistent. An older snapshot without a configuration fingerprint stops budget enforcement until a fresh native result arrives. Phase rules keep their independent freshness contract.
 
 ## Block page
 

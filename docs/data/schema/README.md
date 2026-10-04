@@ -15,15 +15,15 @@ The authoritative schema is the ordered migration set in apps/client/src-tauri/m
 
 ## Migration policy
 
-Persisted data is a user-owned contract. The baseline migration 20260830173211_baseline_schema.sql represents the final maintainer-approved pre-user reset from 2026-08-30. Earlier development databases are intentionally unsupported and must be recreated. Once a user-capable release can have applied this baseline, it is immutable. Every later change uses a new UTC timestamped migration named YYYYMMDDHHMMSS_description.sql.
+The app has no external users yet. The baseline migration 20260830173211_baseline_schema.sql starts the current schema construction chain. Older development databases, internal exports, and device state are unsupported when their contracts change and must be explicitly recreated. Do not retain compatibility readers or upgrade shims solely for those formats. Current SQL migrations remain necessary to construct a fresh vault. Once a user-capable release can have applied a migration, it is immutable; subsequent schema changes use a new UTC timestamped migration named YYYYMMDDHHMMSS_description.sql.
 
-Do not rewrite an applied migration, manually register a migration, or silently drop obsolete values. A removal or rename needs an explicit migration, cleanup, validator rule, and documentation of why existing user data remains meaningful or is safe to delete.
+Do not manually register migrations or silently delete local development vaults. Remove obsolete readers and writers together, document unsupported formats, and test current schema creation. A schema squash remains a separate explicit maintainer decision.
 
 Before changing persistent state, inspect:
 
-- existing installs and partially populated rows;
-- older imports and exports;
-- config and JSON fallback behavior;
+- current-format partially populated rows;
+- supported external imports and current internal exports;
+- config and JSON validation;
 - seed and repair paths;
 - stale rows and derived indexes;
 - rollback or downgrade behavior where supported;

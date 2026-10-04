@@ -1,16 +1,11 @@
 pub(super) use super::super::{
-    CalendarActiveEventReferenceTransfer, CalendarDeleteArchiveOperation, CalendarDetachInstance,
-    CalendarEventCreate, CalendarEventMutationContext, CalendarEventMutationTarget,
-    CalendarEventUpdate, CalendarEventUpdateField, CalendarGuestPermissions,
-    CalendarPomodoroConfig, CalendarPomodoroConfigPatch, CalendarPomodoroRhythm,
-    CalendarPomodoroSequenceStep, CalendarRecurrenceCommitOperation, CalendarSplitSeries,
-    apply_delete_archive_operations_tx, apply_recurrence_commit_operations_tx, apply_update_field,
-    archive_calendar_event_tx, cap_calendar_series_tx, delete_calendar_event_tx,
-    filter_excluded_dates, insert_calendar_event_row, insert_pomodoro_config,
-    protected_active_event_end_update_allowed, replace_pomodoro_config,
-    restore_archived_calendar_event_tx, sanitize_stored_event_description,
-    split_calendar_series_tx, update_calendar_event_tx, validate_color, validate_event_create,
-    validate_non_negative, validate_positive, validate_priority, validate_update_field,
+    CalendarEventCreate, CalendarEventMutationTarget, CalendarEventUpdateField,
+    CalendarPomodoroConfig, CalendarPomodoroRhythm, CalendarPomodoroSequenceStep,
+    apply_update_field, archive_calendar_event_tx, delete_calendar_event_tx,
+    insert_calendar_event_row, insert_pomodoro_config, replace_pomodoro_config,
+    restore_archived_calendar_event_tx, sanitize_stored_event_description, validate_color,
+    validate_event_create, validate_non_negative, validate_positive, validate_priority,
+    validate_update_field,
 };
 
 pub(super) fn event_create() -> CalendarEventCreate {
@@ -53,8 +48,6 @@ pub(super) fn event_create() -> CalendarEventCreate {
         updated_at: "2026-05-09 10:00:00".to_string(),
         pomodoro_config: None,
         attendees: Vec::new(),
-        music_snapshot_assignments: Vec::new(),
-        music_override_assignments: Vec::new(),
     }
 }
 
@@ -190,33 +183,30 @@ pub(super) async fn insert_test_active_pomodoro_segment(pool: &sqlx::SqlitePool)
     .unwrap();
 }
 
-pub(super) async fn insert_test_pomodoro_config(pool: &sqlx::SqlitePool, event_id: &str) {
-    sqlx::query(
-        "INSERT INTO pomodoro_configs
-            (event_id, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes)
-         VALUES (?, 'count', 'preset', 'adaptive', 3)",
-    )
-    .bind(event_id)
-    .execute(pool)
-    .await
-    .unwrap();
-    sqlx::query(
-        "INSERT INTO pomodoro_config_count_rhythms
-            (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes,
-             long_break_after_focus_count)
-         VALUES (?, 40, 5, 10, 4)",
-    )
-    .bind(event_id)
-    .execute(pool)
-    .await
-    .unwrap();
-}
-
 pub(super) async fn insert_test_completed_pomodoro_history(
     pool: &sqlx::SqlitePool,
     event_id: &str,
     original_event_id: &str,
     event_date: &str,
+) {
+    insert_completed_history_with_ids(
+        pool,
+        event_id,
+        original_event_id,
+        event_date,
+        "run-1",
+        "segment-1",
+    )
+    .await;
+}
+
+pub(super) async fn insert_completed_history_with_ids(
+    pool: &sqlx::SqlitePool,
+    event_id: &str,
+    original_event_id: &str,
+    event_date: &str,
+    run_id: &str,
+    segment_id: &str,
 ) {
     let planned_start = format!("{event_date}T10:00:00Z");
     let segment_end = format!("{event_date}T10:40:00Z");
@@ -227,9 +217,10 @@ pub(super) async fn insert_test_completed_pomodoro_history(
              started_at, ended_at, end_reason, rhythm_kind, rhythm_source, preset_key,
              last_heartbeat,
              start_trigger)
-         VALUES ('run-1', ?, ?, ?, ?, ?, ?, ?, 'completed',
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'completed',
                  'count', 'preset', 'adaptive', ?, 'manual')",
     )
+    .bind(run_id)
     .bind(event_id)
     .bind(original_event_id)
     .bind(event_date)
@@ -246,11 +237,13 @@ pub(super) async fn insert_test_completed_pomodoro_history(
         "INSERT INTO pomodoro_segments
             (id, event_id, event_date, run_id, rhythm_position, phase,
              planned_start, planned_end, actual_start, actual_end, status, end_reason)
-         VALUES ('segment-1', ?, ?, 'run-1', 1, 'focus',
+         VALUES (?, ?, ?, ?, 1, 'focus',
                  ?, ?, ?, ?, 'completed', 'completed')",
     )
+    .bind(segment_id)
     .bind(event_id)
     .bind(event_date)
+    .bind(run_id)
     .bind(&planned_start)
     .bind(&segment_end)
     .bind(&planned_start)

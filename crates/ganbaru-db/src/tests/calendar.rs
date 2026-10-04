@@ -19,6 +19,9 @@ fn schema_creates_normalized_calendar_archive_tables() {
             "calendar_event_archive_alarms",
             "calendar_event_archive_overrides",
             "calendar_event_archive_override_extended_properties",
+            "calendar_event_archive_task_links",
+            "calendar_event_archive_music_assignments",
+            "calendar_event_archive_import_objects",
         ];
         for table in archive_tables {
             let exists: Option<i64> =
@@ -29,6 +32,69 @@ fn schema_creates_normalized_calendar_archive_tables() {
                     .unwrap();
             assert_eq!(exists, Some(1), "{table} should exist");
         }
+    });
+}
+
+#[test]
+fn archive_metadata_migration_preserves_older_rows_and_historical_reference_values() {
+    super::block_on(async {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::query("PRAGMA foreign_keys=ON")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let boundary = crate::MIGRATOR
+            .iter()
+            .position(|migration| migration.description == "calendar archive metadata")
+            .expect("archive migration is embedded");
+        let previous = sqlx::migrate::Migrator {
+            migrations: std::borrow::Cow::Borrowed(&crate::MIGRATOR.migrations[..boundary]),
+            ..sqlx::migrate::Migrator::DEFAULT
+        };
+        previous.run(&pool).await.unwrap();
+        sqlx::query("INSERT INTO calendar_events_archive (id, source_event_id, archived_at, title, start_time, end_time, calendar_id, created_at, updated_at)
+            VALUES ('older', 'removed-source', '2026-05-23T11:00:00Z', 'Historical event', '2026-05-23T09:00:00Z', '2026-05-23T10:00:00Z', 'local', '2026-05-23T08:00:00Z', '2026-05-23T08:00:00Z')")
+            .execute(&pool).await.unwrap();
+        crate::run_migrations(&pool).await.unwrap();
+        crate::run_migrations(&pool).await.unwrap();
+        let older: (String, Option<String>, Option<String>) = sqlx::query_as(
+            "SELECT title, original_occurrence_id, recurrence_date FROM calendar_events_archive WHERE id='older'",
+        ).fetch_one(&pool).await.unwrap();
+        assert_eq!(older, ("Historical event".into(), None, None));
+        // Historical identities survive without their former live task/library.
+        sqlx::raw_sql("INSERT INTO calendar_event_archive_task_links VALUES ('older', 'removed-task', 'reference', '2026-05-23T08:00:00Z');
+            INSERT INTO calendar_event_archive_music_assignments
+                VALUES ('older', 'event-override', 'short-break', 'play-automatically', 'removed-playlist', 'removed-soundscape', 'copied-project', 'removed-project', 9, 7, 'play-selected');")
+            .execute(&pool).await.unwrap();
+        let historical: (String, i64) = sqlx::query_as("SELECT playlist_id, version FROM calendar_event_archive_music_assignments WHERE archive_event_id='older'")
+            .fetch_one(&pool).await.unwrap();
+        assert_eq!(historical, ("removed-playlist".into(), 7));
+        for sql in [
+            "UPDATE calendar_event_archive_task_links SET link_kind='unknown'",
+            "UPDATE calendar_event_archive_music_assignments SET version=0",
+            "UPDATE calendar_event_archive_music_assignments SET phase='short_break'",
+            "UPDATE calendar_events_archive SET recurrence_date='invalid'",
+            "INSERT INTO calendar_event_archive_import_objects VALUES ('older', 'missing-object')",
+        ] {
+            assert!(sqlx::query(sql).execute(&pool).await.is_err(), "{sql}");
+        }
+        sqlx::query("DELETE FROM calendar_events_archive WHERE id='older'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let children: (i64, i64) = sqlx::query_as(
+            "SELECT
+            (SELECT COUNT(*) FROM calendar_event_archive_task_links),
+            (SELECT COUNT(*) FROM calendar_event_archive_music_assignments)",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(children, (0, 0));
     });
 }
 

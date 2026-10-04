@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, SqlitePool};
+use sqlx::FromRow;
 use tauri::{AppHandle, Runtime};
 
 use super::validate_id;
@@ -81,16 +81,6 @@ pub(super) async fn create<R: Runtime>(
     .map_err(|error| format!("load created quick note tag: {error}"))
 }
 
-pub(super) async fn delete<R: Runtime>(
-    app: AppHandle<R>,
-    db_url: String,
-    id: String,
-) -> Result<(), String> {
-    validate_id(&id)?;
-    let pool = connect_sqlite(app, db_url).await?;
-    delete_tag_from_pool(&pool, &id).await
-}
-
 fn validate_tag_name(name: &str) -> Result<&str, String> {
     let trimmed = name.trim();
     let count = trimmed.chars().count();
@@ -100,33 +90,4 @@ fn validate_tag_name(name: &str) -> Result<&str, String> {
         ));
     }
     Ok(trimmed)
-}
-
-pub(super) async fn delete_tag_from_pool(pool: &SqlitePool, id: &str) -> Result<(), String> {
-    let mut tx = pool
-        .begin()
-        .await
-        .map_err(|error| format!("begin quick note tag delete: {error}"))?;
-    sqlx::query(
-        "UPDATE quick_notes
-         SET tag_id = NULL,
-             revision = revision + 1,
-             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-         WHERE tag_id = ?",
-    )
-    .bind(id)
-    .execute(&mut *tx)
-    .await
-    .map_err(|error| format!("clear deleted quick note tag: {error}"))?;
-    let result = sqlx::query("DELETE FROM quick_note_tags WHERE id = ?")
-        .bind(id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|error| format!("delete quick note tag: {error}"))?;
-    if result.rows_affected() != 1 {
-        return Err("quick note tag not found".to_string());
-    }
-    tx.commit()
-        .await
-        .map_err(|error| format!("commit quick note tag delete: {error}"))
 }

@@ -36,6 +36,7 @@ export interface MusicSoundscapeWrite {
 }
 
 export interface MusicSoundscapeState {
+  automaticIntent?: boolean;
   activeSoundscapeId: string | null;
   activeIds: string[];
   multipleEnabled: boolean;
@@ -159,6 +160,7 @@ export function parseMusicSoundscapeState(value: unknown): MusicSoundscapeState 
   const activeIds = textArray(row.activeIds, "soundscape state.activeIds");
   const multipleEnabled = boolean(row.multipleEnabled, "soundscape state.multipleEnabled");
   const desiredPlaying = boolean(row.desiredPlaying, "soundscape state.desiredPlaying");
+  const automaticIntent = row.automaticIntent === undefined ? false : boolean(row.automaticIntent, "soundscape state.automaticIntent");
   const volume = number(row.volume, "soundscape state.volume");
   const generatedLevel = row.generatedLevel === null ? null : number(row.generatedLevel, "soundscape state.generatedLevel");
   const localLevel = row.localLevel === null ? null : number(row.localLevel, "soundscape state.localLevel");
@@ -166,7 +168,7 @@ export function parseMusicSoundscapeState(value: unknown): MusicSoundscapeState 
   if ((!multipleEnabled && activeIds.length > 1) || (desiredPlaying && activeIds.length === 0)) throw new Error("soundscape state has an invalid playback mode");
   if (volume < 0 || volume > 1) throw new Error("soundscape state.volume is out of range");
   if ([generatedLevel, localLevel].some((level) => level !== null && (level < 0 || level > 2))) throw new Error("soundscape state.section level is out of range");
-  return { activeSoundscapeId, activeIds, multipleEnabled, generatedLevel, localLevel, desiredPlaying, volume, updatedAt: integer(row.updatedAt, "soundscape state.updatedAt"), version: integer(row.version, "soundscape state.version") };
+  return { activeSoundscapeId, activeIds, multipleEnabled, generatedLevel, localLevel, desiredPlaying, automaticIntent, volume, updatedAt: integer(row.updatedAt, "soundscape state.updatedAt"), version: integer(row.version, "soundscape state.version") };
 }
 export function parseMusicSoundscapeSnapshot(value: unknown): MusicSoundscapeSnapshot {
   const row = record(value, "soundscape snapshot");

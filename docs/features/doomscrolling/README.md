@@ -41,6 +41,8 @@ Doomscrolling adds calm, explainable friction when a selected website or applica
 
 Current rules, schedules, selected apps, categories, allowlists, and usage-limit definitions are active-vault configuration stored in `config.json`. Usage samples and normalized block history are canonical SQLite data. Small device-local runtime snapshots allow extension and Android enforcement while the main UI is absent; they expire or reconcile and never become rule authority.
 
+Desktop observation, interval accounting, totals, and close attempts now share one native owner. Settings read compact cached totals and adapter status. Pomodoro-dependent rules require a fresh committed native Focus phase and cannot infer a later phase from elapsed time. Android Guardian keeps its native observation and enforcement lifecycle, while Rust owns shared accounting and rule publication. Real platform acceptance remains open. See [Usage limits](usage-limits.md) for these current ownership boundaries.
+
 A future migration of configuration into SQLite requires a separate data-architecture decision and migration. It is not implied by planned work environments.
 
 ## Documentation map

@@ -26,9 +26,9 @@ fn hot_domain_queries_use_expected_indexes() {
                 "idx_notes_blocks_parent_block",
             ),
             (
-                "Music playback state",
-                "SELECT source_identity FROM music_playback_states WHERE source_identity = 'local:a'",
-                "sqlite_autoindex_music_playback_states_1",
+                "Music session checkpoint",
+                "SELECT device_id FROM music_session_checkpoints WHERE device_id = 'device:a'",
+                "sqlite_autoindex_music_session_checkpoints_1",
             ),
             (
                 "Doomscrolling usage window",

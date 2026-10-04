@@ -34,5 +34,4 @@ export interface MusicExternalControls {
   isInitialized(): boolean;
   update(): void;
   updateBrowser(): void;
-  updateNative(): void;
 }

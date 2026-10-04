@@ -5,6 +5,8 @@ use super::{
     write_text_file_atomically,
 };
 use std::fs;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use std::io::Read;
 use tauri::Runtime;
 
 const MAX_CONFIG_PATCH_DEPTH: usize = 16;
@@ -37,6 +39,31 @@ pub fn vault_read_config(app: tauri::AppHandle) -> Result<String, String> {
     fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
+/// Read native runtime preferences with a limit that also covers concurrent growth.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub(crate) fn read_active_config_bounded(
+    app: &tauri::AppHandle,
+    max_bytes: usize,
+) -> Result<String, String> {
+    let _guard = CONFIG_LOCK
+        .lock()
+        .map_err(|_| "vault config lock is unavailable".to_owned())?;
+    let path = config_path(&active_vault_path(app)?);
+    let file = match fs::File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok("{}".into()),
+        Err(error) => return Err(format!("Open runtime preferences: {error}")),
+    };
+    let mut bytes = Vec::new();
+    file.take(max_bytes.saturating_add(1) as u64)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("Read runtime preferences: {error}"))?;
+    if bytes.len() > max_bytes {
+        return Err("Runtime preferences exceed the native read limit".into());
+    }
+    String::from_utf8(bytes).map_err(|error| format!("Runtime preferences are not UTF-8: {error}"))
+}
+
 pub(crate) fn mutate_active_vault_config<R: Runtime, T, E>(
     app: &tauri::AppHandle<R>,
     mutate: impl FnOnce(&mut serde_json::Value) -> Result<T, E>,
@@ -59,12 +86,34 @@ pub(crate) fn mutate_active_vault_config<R: Runtime, T, E>(
             "config payload root must be an object".to_string(),
         ));
     }
+    #[cfg(not(target_os = "ios"))]
+    let previous_doomscrolling = root.get("doomscrolling").cloned();
+    let previous_preferences = root.get("preferences").cloned();
     let result = mutate(&mut root)?;
     crate::chat::config::parse_chat_config_branch(&root)
         .map_err(|error| map_storage_error(format!("config Chat branch is invalid: {error}")))?;
     let serialized = serde_json::to_string_pretty(&root)
         .map_err(|error| map_storage_error(error.to_string()))?;
-    write_text_file_atomically(&path, &serialized).map_err(map_storage_error)?;
+    let write = || write_text_file_atomically(&path, &serialized);
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let write_result = if previous_doomscrolling.as_ref() != root.get("doomscrolling") {
+        crate::doomscrolling::runtime::commit_configuration(app, write)
+    } else {
+        write()
+    };
+    #[cfg(target_os = "android")]
+    let write_result = if previous_doomscrolling.as_ref() != root.get("doomscrolling") {
+        crate::doomscrolling_mobile::runtime::commit_configuration(app, write)
+    } else {
+        write()
+    };
+    #[cfg(target_os = "ios")]
+    let write_result = write();
+    write_result.map_err(map_storage_error)?;
+    // Native Focus reads only the preferences branch, so other patches leave it current.
+    if previous_preferences.as_ref() != root.get("preferences") {
+        crate::pomodoro::invalidate_calendar(app);
+    }
     Ok(result)
 }
 
@@ -115,7 +164,7 @@ fn apply_config_patch(root: &mut serde_json::Value, patch: VaultConfigPatch) -> 
 /// Applies bounded key-level mutations without replacing unrelated config
 /// branches that another feature may have updated since the frontend loaded.
 #[tauri::command]
-pub fn vault_patch_config(
+pub async fn vault_patch_config(
     app: tauri::AppHandle,
     patches: Vec<VaultConfigPatch>,
 ) -> Result<(), String> {
@@ -130,16 +179,20 @@ pub fn vault_patch_config(
     {
         return Err("vault config patch batch is too large".to_string());
     }
-    mutate_active_vault_config(
-        &app,
-        |root| {
-            for patch in patches {
-                apply_config_patch(root, patch)?;
-            }
-            Ok(())
-        },
-        |error| error,
-    )
+    tauri::async_runtime::spawn_blocking(move || {
+        mutate_active_vault_config(
+            &app,
+            |root| {
+                for patch in patches {
+                    apply_config_patch(root, patch)?;
+                }
+                Ok(())
+            },
+            |error| error,
+        )
+    })
+    .await
+    .map_err(|error| format!("vault configuration worker failed: {error}"))?
 }
 
 #[cfg(test)]

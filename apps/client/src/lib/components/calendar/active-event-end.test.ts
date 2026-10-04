@@ -79,9 +79,10 @@ describe("active event end helpers", () => {
     )).toBe(true);
   });
 
-  it("treats a template first occurrence and synthetic occurrence on the same date as the same concrete event", () => {
+  it("matches first-occurrence aliases using their native recurrence identity", () => {
     const template = event({
       id: "template-1",
+      recurrenceDate: "2026-05-24",
       recurrence: { frequency: "daily", interval: 1, end: { type: "never" } },
     });
     const firstSynthetic = event({

@@ -338,26 +338,6 @@ pub struct MusicListeningStatistics {
     pub updated_at: i64,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MusicLibraryItemWrite {
-    pub id: String,
-    pub identity_key: String,
-    pub source_kind: MusicLibrarySourceKind,
-    pub media_kind: MusicMediaKind,
-    pub youtube_video_id: Option<String>,
-    pub original_title: String,
-    pub original_artist: String,
-    pub original_album: String,
-    pub original_track_number: Option<i64>,
-    pub original_artwork_identity: Option<String>,
-    pub youtube_resolution_state: Option<MusicYouTubeResolutionState>,
-    pub duration_ms: Option<i64>,
-    pub availability: MusicItemAvailability,
-    pub discovered_at: i64,
-    pub updated_at: i64,
-}
-
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicLocalRefreshRequest {
@@ -447,23 +427,6 @@ pub struct MusicRefreshJobProgress {
     pub requested_at: i64,
     pub started_at: Option<i64>,
     pub finished_at: Option<i64>,
-    pub updated_at: i64,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MusicLocalLocationWrite {
-    pub id: String,
-    pub item_id: String,
-    pub root_id: String,
-    pub relative_path: String,
-    pub file_size_bytes: Option<i64>,
-    pub modified_at_ms: Option<i64>,
-    pub lightweight_fingerprint: Option<String>,
-    pub strong_fingerprint: Option<String>,
-    pub availability: MusicLocationAvailability,
-    pub last_seen_generation: Option<i64>,
-    pub first_seen_at: i64,
     pub updated_at: i64,
 }
 
@@ -680,6 +643,7 @@ pub struct MusicListeningUpdate {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg(test)]
 pub struct MusicRecentSelection {
     pub item_id: String,
     pub selected_at: i64,
@@ -747,6 +711,8 @@ pub struct MusicSoundscapeGroupWrite {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicSoundscapeState {
+    /// An automatic selection requires fresh native phase admission after restart.
+    pub automatic_intent: bool,
     pub active_soundscape_id: Option<String>,
     pub active_ids: Vec<String>,
     pub multiple_enabled: bool,
@@ -813,19 +779,6 @@ pub struct MusicReviewSelectionResult {
 pub struct MusicBulkSnoozeWrite {
     pub action_id: String,
     pub item_ids: Vec<String>,
-    pub scope: MusicSnoozeScope,
-    pub playlist_id: Option<String>,
-    pub starts_at: i64,
-    pub ends_at: Option<i64>,
-    pub reason: String,
-    pub created_at: i64,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MusicSnoozeWrite {
-    pub id: String,
-    pub item_id: String,
     pub scope: MusicSnoozeScope,
     pub playlist_id: Option<String>,
     pub starts_at: i64,
@@ -935,14 +888,6 @@ pub struct MusicAdvancedMembershipWrite {
 #[serde(rename_all = "camelCase")]
 pub struct MusicSnoozeRemove {
     pub snooze_id: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MusicStatisticsReset {
-    pub item_ids: Vec<String>,
-    pub reset_aggregates: bool,
-    pub reset_recent_selections: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -1242,7 +1187,6 @@ pub struct MusicInterchangePlaylist {
     pub name: String,
     pub icon: String,
     pub shuffle_enabled: bool,
-    #[serde(default)]
     pub mix_enabled: bool,
     pub repeat_mode: MusicRepeatMode,
     pub intended_uses: Vec<MusicIntendedUse>,

@@ -201,17 +201,6 @@ pub async fn chat_delete_unused_teammate(
 }
 
 #[tauri::command]
-pub async fn chat_list_channel_memberships(
-    app: tauri::AppHandle,
-    db_url: String,
-    channel_id: ChatChannelId,
-) -> ChatResult<Vec<ChatConversationMembershipRead>> {
-    let pool = chat_pool(app, db_url).await?;
-    let channel = super::channel_commands::read_channel(&pool, &channel_id).await?;
-    read_memberships_for_conversation(&pool, &channel.conversation_id, false).await
-}
-
-#[tauri::command]
 #[cfg(any(test, target_os = "android", target_os = "ios"))]
 pub async fn chat_read_mobile_channel_roster(
     app: tauri::AppHandle,

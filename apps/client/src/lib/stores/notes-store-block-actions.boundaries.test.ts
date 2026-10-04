@@ -1,3 +1,5 @@
+import { createNotesCompoundTestAdapter } from "./notes-compound-test-adapter";
+import type { NotesCompoundEdit } from "$lib/api/notes/compound-edits";
 import { describe, expect, it, vi } from "vitest";
 import { createBlockWrite } from "$lib/notes/block-factory";
 import { createManagedMediaPayload } from "$lib/notes/media";
@@ -15,6 +17,8 @@ const notesApi = vi.hoisted(() => ({ trashNotesBlock: vi.fn(), updateNotesBlock:
 
 vi.mock("$lib/api/asset-url-cache", () => assetCache);
 vi.mock("$lib/api/notes", () => notesApi);
+let compoundAdapter = createNotesCompoundTestAdapter(notesApi);
+vi.mock("$lib/api/notes/compound-edits", () => ({ applyNotesCompoundEdit: (request: NotesCompoundEdit) => compoundAdapter(request) }));
 
 const pageId = "00000000-0000-4000-8000-000000000001";
 const parent: NotesParent = { type: "page_id", page_id: pageId };
@@ -23,7 +27,7 @@ function paragraph(id: string, text: string): NotesBlock {
   const write = createBlockWrite(id, "paragraph", text);
   if (write.type !== "paragraph") throw new Error("expected paragraph fixture");
   return {
-    object: "block",
+    object: "block", edit_revision: "0".repeat(64),
     id,
     parent,
     created_time: "2026-07-12T00:00:00Z",
@@ -172,6 +176,7 @@ describe("Notes block action boundaries", () => {
       childIdsByParentId: { [pageId]: [parentBlock.id], [parentBlock.id]: [child.id] },
     };
     const trashAndApply = vi.fn();
+    compoundAdapter = createNotesCompoundTestAdapter({ ...notesApi, moveNotesBlock: async () => { throw new Error("move failed"); } }, () => Object.values(state.blocksById));
     const actions = createNotesBlockMovementActions({
       ensurePageBody: () => null,
       enqueueEditorMutation: (mutation) => mutation(),

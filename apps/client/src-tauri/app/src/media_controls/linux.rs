@@ -517,8 +517,10 @@ mod tests {
 
     #[test]
     fn signal_shape_ignores_position_only_changes() {
-        let mut first = MprisState::default();
-        first.title = Some("Focus track".to_string());
+        let first = MprisState {
+            title: Some("Focus track".to_string()),
+            ..MprisState::default()
+        };
         let mut second = first.clone();
         second.position_us = 30_000_000;
 

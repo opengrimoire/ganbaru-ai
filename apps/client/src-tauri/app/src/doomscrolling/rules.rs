@@ -206,6 +206,7 @@ pub(super) fn unavailable_foreground_desktop_app_status(
         app_name: None,
         process_name: None,
         process_id: None,
+        process_identity: None,
         match_names: Vec::new(),
         reason: Some(reason.into()),
     }
@@ -232,13 +233,24 @@ pub(super) fn foreground_status_from_parts(
         raw_match_names.push(process_name.clone());
     }
     DoomscrollingForegroundDesktopAppStatus {
-        match_names: normalize_process_match_names(&app_name, raw_match_names),
+        match_names: observed_match_names(&app_name, raw_match_names),
         available: true,
         app_name: Some(app_name),
         process_name,
         process_id,
+        process_identity: None,
         reason: None,
     }
+}
+
+/// Retain protected aliases in observations so the close boundary can reject the whole identity.
+fn observed_match_names(name: &str, names: Vec<String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    std::iter::once(name.to_owned())
+        .chain(names)
+        .flat_map(|name| normalize_process_match_name_aliases(&name))
+        .filter(|name| seen.insert(app_name_key(name)))
+        .collect()
 }
 
 pub(super) fn foreground_status_match_names(
@@ -252,7 +264,7 @@ pub(super) fn foreground_status_match_names(
         names.push(process_name.clone());
     }
     names.extend(status.match_names.iter().cloned());
-    normalize_process_match_names(status.app_name.as_deref().unwrap_or(""), names)
+    observed_match_names(status.app_name.as_deref().unwrap_or(""), names)
 }
 
 pub(super) fn foreground_expectation_matches(
@@ -262,10 +274,24 @@ pub(super) fn foreground_expectation_matches(
     if !status.available {
         return false;
     }
-    if let (Some(status_process_id), Some(expected_process_id)) =
-        (status.process_id, expected.process_id)
+    if status.process_id != expected.process_id
+        || status.process_identity != expected.process_identity
     {
-        return status_process_id == expected_process_id;
+        return false;
+    }
+    #[cfg(target_os = "linux")]
+    if status.process_id.is_some() && status.process_identity.is_none() {
+        return false;
+    }
+    if status.app_name.as_ref().map(|name| app_name_key(name))
+        != expected.app_name.as_ref().map(|name| app_name_key(name))
+        || status.process_name.as_ref().map(|name| app_name_key(name))
+            != expected
+                .process_name
+                .as_ref()
+                .map(|name| app_name_key(name))
+    {
+        return false;
     }
     let status_names = foreground_status_match_names(status)
         .into_iter()
@@ -298,7 +324,7 @@ pub(super) fn validate_foreground_status_is_closeable(
     {
         return Err("refusing to close protected foreground app".to_string());
     }
-    if names.iter().all(|name| is_protected_desktop_app_name(name)) {
+    if names.iter().any(|name| is_protected_desktop_app_name(name)) {
         return Err("refusing to close protected foreground app".to_string());
     }
     Ok(())

@@ -52,7 +52,7 @@ import { createNotesSidebarController } from "./notes-store-sidebar.svelte";
 import { createNotesPageTemplatesController } from "./notes-store-page-templates.svelte";
 import { createNotesFoldersController } from "./notes-store-folders.svelte";
 import { createNotesPageActions } from "./notes-store-page-actions";
-import { createNotesHydrationController } from "./notes-store-hydration";
+import { BLOCK_HYDRATION_LIMIT, createNotesHydrationController } from "./notes-store-hydration";
 import { createNotesWorkspaceController } from "./notes-store-workspace.svelte";
 import {
   createNotesOptionalSubsystemController,
@@ -922,6 +922,8 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
   let editorSaveError = $state<string | null>(null);
 
   const {
+    readCanonicalRevision,
+    acknowledgeCanonicalBlocks,
     retryEditorMutations,
     enqueueEditorMutation: queueEditorMutation,
     hasLocalChanges,
@@ -933,6 +935,7 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
     flushPendingBlockSaves,
     discardPendingEditorWrites,
   } = createNotesBlockPersistence({
+    reconcileCanonicalBlocks: (blocks) => undoController.reconcileCanonicalBlocks(blocks),
     readBlock: (blockId) => treeProjection.blocksById[blockId],
     beforeSave: () => pageCreationController.awaitReady(pageSession.selectedPageId),
     replaceBlock,
@@ -966,6 +969,16 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
   treeProjection.setLocalChangeMarker(markBlockLocallyChanged);
 
   const undoController = createNotesUndoController({
+    loadUndoReferences: async (pageId, ids) => {
+      const blocks: NotesBlock[] = [];
+      for (let offset = 0; offset < ids.length; offset += BLOCK_HYDRATION_LIMIT) {
+        blocks.push(...await hydrateNotesBlocks({ page_id: pageId, block_ids: ids.slice(offset, offset + BLOCK_HYDRATION_LIMIT) }));
+      }
+      return blocks;
+    },
+    readCanonicalRevision,
+    acknowledgeCanonicalBlocks,
+    applyPostMutation,
     restoreDocumentSelection: (pageId, selection) => { documentSelectionRestore = { pageId, selection }; },
     enqueueEditorMutation,
     readSelectedPageId: () => pageSession.selectedPageId,
@@ -1088,6 +1101,9 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
   });
 
   const blockActions = createNotesBlockActions({
+    readCanonicalRevision,
+    reconcileCanonicalBlocks: undoController.reconcileCanonicalBlocks,
+    reconcileCompoundUndo: undoController.reconcileCompoundUndo,
     retryEditorMutations,
     reconcileDatabaseIdentity: undoController.reconcileDatabaseIdentity,
     readPageGeneration: () => pageSession.generation,

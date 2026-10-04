@@ -263,8 +263,8 @@ pub(crate) async fn remove(
 }
 
 pub(crate) async fn state(pool: &SqlitePool) -> MusicLibraryResult<MusicSoundscapeState> {
-    let row = sqlx::query_as::<_, (Option<String>, bool, Option<f64>, Option<f64>, bool, f64, i64, i64)>(
-        "SELECT active_soundscape_id, multiple_enabled, generated_level, local_level, desired_playing, volume, updated_at, version
+    let row = sqlx::query_as::<_, (Option<String>, bool, Option<f64>, Option<f64>, bool, f64, i64, i64, bool)>(
+        "SELECT active_soundscape_id, multiple_enabled, generated_level, local_level, desired_playing, volume, updated_at, version, automatic_intent
          FROM music_soundscape_state WHERE singleton_id = 1",
     )
     .fetch_one(pool)
@@ -277,6 +277,7 @@ pub(crate) async fn state(pool: &SqlitePool) -> MusicLibraryResult<MusicSoundsca
     .await
     .map_err(|error| MusicLibraryError::database("load selected background sounds", error))?;
     Ok(MusicSoundscapeState {
+        automatic_intent: row.8,
         active_soundscape_id: row.0,
         active_ids,
         multiple_enabled: row.1,
@@ -368,7 +369,7 @@ pub(crate) async fn update_state(
     let result = sqlx::query(
         "UPDATE music_soundscape_state
          SET active_soundscape_id = ?, multiple_enabled = ?, generated_level = ?, local_level = ?, desired_playing = ?, volume = ?,
-             updated_at = ?, version = version + 1
+             updated_at = ?, version = version + 1, automatic_intent = 0
          WHERE singleton_id = 1 AND version = ?",
     )
     .bind(request.active_soundscape_id)

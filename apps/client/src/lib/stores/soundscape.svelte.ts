@@ -60,10 +60,11 @@ class SoundscapeStore {
     this.error = null;
     try {
       const deviceId = await getDeviceId();
-      const [definitions, persisted, groups] = await Promise.all([
+      const [definitions, persisted, groups, snapshot] = await Promise.all([
         getMusicSoundscapes(deviceId),
         getMusicSoundscapeState(),
         getMusicSoundscapeGroups(),
+        getSoundscapeSnapshot(),
       ]);
       if (generation !== this.generation) return;
       this.deviceId = deviceId;
@@ -71,8 +72,8 @@ class SoundscapeStore {
       this.groups = groups;
       this.persisted = persisted;
       this.sectionLevels = { generated: persisted.generatedLevel, local: persisted.localLevel };
-      this.snapshot = { status: "idle", sourceId: null, volume: persisted.volume, errorCode: null };
-      if (persisted.desiredPlaying) {
+      this.snapshot = snapshot;
+      if (persisted.desiredPlaying && !persisted.automaticIntent && snapshot.status !== "playing") {
         const available = persisted.activeIds.filter((id) => definitions.some((definition) => definition.id === id && definition.availability === "available"));
         if (available.length > 0) await this.startSelection(available, available.length !== persisted.activeIds.length);
         else {
@@ -84,6 +85,24 @@ class SoundscapeStore {
       if (generation === this.generation) this.error = message(error);
     } finally {
       if (generation === this.generation) this.loading = false;
+    }
+  }
+
+  /** Refreshes presentation after an accepted native effect without issuing playback commands. */
+  async refreshAcceptedOutput(): Promise<void> {
+    const generation = this.generation;
+    try {
+      const [persisted, snapshot] = await Promise.all([
+        getMusicSoundscapeState(),
+        getSoundscapeSnapshot(),
+      ]);
+      if (generation !== this.generation || this.playbackPending || this.modePending
+        || (this.persisted && this.persisted.version > persisted.version)) return;
+      this.persisted = persisted;
+      this.snapshot = snapshot;
+      this.sectionLevels = { generated: persisted.generatedLevel, local: persisted.localLevel };
+    } catch (error) {
+      if (generation === this.generation) this.error = message(error);
     }
   }
 
@@ -249,7 +268,7 @@ class SoundscapeStore {
       this.volumePersistTimer = null;
     }
     if (this.levelsPersistTimer !== null) { window.clearTimeout(this.levelsPersistTimer); this.levelsPersistTimer = null; }
-    try { this.snapshot = await stopSoundscape(); } catch { this.snapshot = { status: "idle", sourceId: null, volume: INITIAL_SOUNDSCAPE_VOLUME, errorCode: null }; }
+    this.snapshot = { status: "idle", sourceId: null, volume: INITIAL_SOUNDSCAPE_VOLUME, errorCode: null };
     this.definitions = [];
     this.groups = [];
     this.persisted = null;

@@ -14,9 +14,12 @@ pub(crate) mod catalog;
 pub(crate) mod commands;
 mod contracts;
 mod foreground;
+pub(crate) use crate::doomscrolling_limits as limits;
+pub(crate) mod limits_read;
 mod process_control;
 mod processes;
 mod rules;
+pub(crate) mod runtime;
 pub(crate) mod state;
 pub(crate) mod usage;
 
@@ -24,19 +27,17 @@ pub(crate) mod usage;
 use contracts::{DesktopRuleMatcher, ObservedDesktopProcess};
 #[allow(unused_imports)]
 pub use contracts::{
-    DoomscrollingCloseDesktopAppRequest, DoomscrollingCloseForegroundDesktopAppRequest,
-    DoomscrollingDesktopAppCandidate, DoomscrollingDesktopAppRuleInput,
-    DoomscrollingDesktopBlockEventInput, DoomscrollingDesktopRuleIdentity,
-    DoomscrollingExtensionStatus, DoomscrollingForegroundDesktopAppExpectation,
-    DoomscrollingForegroundDesktopAppStatus, DoomscrollingLimitState, DoomscrollingLimitStateItem,
-    DoomscrollingRunningDesktopAppMatch, DoomscrollingRuntimeState, DoomscrollingUsageSampleInput,
-    DoomscrollingUsageSampleRow,
+    DoomscrollingCloseDesktopAppRequest, DoomscrollingDesktopAppCandidate,
+    DoomscrollingDesktopAppRuleInput, DoomscrollingDesktopBlockEventInput,
+    DoomscrollingDesktopRuleIdentity, DoomscrollingExtensionStatus,
+    DoomscrollingForegroundDesktopAppExpectation, DoomscrollingForegroundDesktopAppStatus,
+    DoomscrollingLimitState, DoomscrollingLimitStateItem, DoomscrollingRunningDesktopAppMatch,
+    DoomscrollingRuntimeState, DoomscrollingUsageSampleInput, DoomscrollingUsageSampleRow,
 };
 use contracts::{DoomscrollingExtensionConnectionFile, NormalizedDesktopBlockEvent};
 
 use authorization::{load_close_authorization, validate_names_authorized};
 use foreground::{close_current_foreground_desktop_app, foreground_desktop_app_status};
-use process_control::close_desktop_process;
 use processes::list_blocked_desktop_app_matches;
 #[cfg(target_os = "linux")]
 use processes::{observe_linux_process, read_linux_process_name};
@@ -92,8 +93,6 @@ const LIMIT_STATE_STALE_SECONDS: i64 = 20;
 const EXTENSION_CONNECTION_STALE_SECONDS: i64 = 60;
 const ACTIVE_STATE_STALE_SECONDS: i64 = 45;
 static DESKTOP_APP_LIST_GENERATION: AtomicU64 = AtomicU64::new(0);
-static PROCESS_SCAN_GENERATION: AtomicU64 = AtomicU64::new(0);
-static FOREGROUND_OBSERVATION_GENERATION: AtomicU64 = AtomicU64::new(0);
 const EXTENSION_INSTALL_README_URL: &str =
     "https://github.com/opengrimoire/ganbaru-ai/blob/dev/extensions/chrome/README.md";
 

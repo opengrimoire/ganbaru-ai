@@ -41,6 +41,13 @@ ganbaru-mobile-doomscrolling = { path = "crates/ganbaru-mobile-doomscrolling" }
 ganbaru-mobile-media = { path = "crates/ganbaru-mobile-media" }
 ganbaru-mobile-notifications = { path = "crates/ganbaru-mobile-notifications" }
 gtk = "0.18"
+jiff = { version = "0.2.37", default-features = false, features = [
+  "std",
+  "tz-system",
+  "tzdb-zoneinfo",
+  "tzdb-concatenated",
+  "tzdb-bundle-platform",
+] }
 keyring = "4.1.5"
 libc = "0.2"
 notify = "=8.2.0"

@@ -8,6 +8,8 @@ Every provider adapter must support the subset its metadata advertises. Unsuppor
 
 All transports apply bounded parsing, payload limits, timeouts, cancellation, process-tree cleanup, redaction, and stable error categories. Provider output is untrusted input. Unknown events may be preserved for diagnostics but cannot become typed application state without validation.
 
+Desktop startup preloads cached Chat history and settings without launching provider discovery processes. Opening Chat or Chat settings starts automatic discovery once for the active vault, independently of local history loading. Explicit provider refresh remains available. Workspace prewarming after a vault reset also leaves provider discovery dormant.
+
 ## Codex
 
 Codex uses its native app-server protocol. Ganbaru AI owns the process, thread association, event ingestion, interaction requests, cancellation, and workspace authority. App-server thread identity is an execution detail and does not replace the Chat conversation or teammate identity.

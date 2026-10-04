@@ -689,6 +689,11 @@ async fn insert_template_blocks_as_page_blocks(
     let mut databases = Vec::new();
     let mut page_copies = Vec::new();
     let mut copied_child_pages = HashSet::new();
+    let mut budget = writes::copy_budget::CopyBudget::default();
+    let mut copy_context = writes::copy_budget::CopyContext {
+        reserved_ids,
+        budget: &mut budget,
+    };
     for block in blocks {
         let id = &block_ids[&block.id];
         let payload: Value = serde_json::from_str(&block.payload)
@@ -700,7 +705,7 @@ async fn insert_template_blocks_as_page_blocks(
                     tx,
                     &source,
                     id,
-                    reserved_ids,
+                    &mut copy_context,
                     project_id.as_deref(),
                     false,
                 )
@@ -735,7 +740,7 @@ async fn insert_template_blocks_as_page_blocks(
                         id,
                         parent,
                         false,
-                        reserved_ids,
+                        &mut copy_context,
                         project_id.as_deref(),
                     )
                     .await?,

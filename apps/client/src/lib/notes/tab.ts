@@ -30,8 +30,6 @@ export const NOTES_TAB_NATIVE_ICON_CHOICES = [
 ] as const;
 
 export type NotesTabMoveDirection = "left" | "right";
-export type NotesTabEmojiIconChoice = (typeof NOTES_TAB_EMOJI_ICON_CHOICES)[number];
-export type NotesTabNativeIconChoice = (typeof NOTES_TAB_NATIVE_ICON_CHOICES)[number];
 
 export interface NotesTabIconOption {
   id: string;

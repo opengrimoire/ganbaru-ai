@@ -15,6 +15,7 @@ import android.content.pm.PackageManager
 import android.os.Process
 import android.provider.Settings
 import android.telecom.TelecomManager
+import android.util.Log
 import android.view.accessibility.AccessibilityManager
 import java.time.Instant
 import java.time.ZoneId
@@ -29,6 +30,7 @@ internal const val ACTION_DOOMSCROLLING_RULES_CHANGED =
 private const val RUNTIME_STORE = "GANBARU_DOOMSCROLLING_RUNTIME"
 private const val RULES_KEY = "rules"
 private const val RULES_VAULT_ID_KEY = "rulesVaultId"
+private const val NOTIFICATION_COPY_KEY = "notificationCopy"
 private const val PHASE_ACTIVE_KEY = "phaseActive"
 private const val PHASE_RUN_ID_KEY = "phaseRunId"
 private const val PHASE_KIND_KEY = "phaseKind"
@@ -46,30 +48,31 @@ internal object DoomscrollingRuntimeStore {
     val previousVaultId = prefs.getString(RULES_VAULT_ID_KEY, null)
     val incompletePreviousRules = prefs.contains(RULES_KEY) && previousVaultId == null
     if (incompletePreviousRules || (previousVaultId != null && previousVaultId != next.vaultId)) {
-      DoomscrollingJournal(context).clearTotalsAndCheckpoints()
+      DoomscrollingJournal(context).use { it.clearTotalsAndCheckpoints() }
     }
     val baselines = JSONObject().apply {
       put("revision", next.revision)
       put("items", JSONArray().apply {
-        val journal = DoomscrollingJournal(context)
-        for (limit in next.limits) {
-          for ((period, accepted) in listOf(
-            "day" to limit.acceptedDailyUsage,
-            "week" to limit.acceptedWeeklyUsage,
-          )) {
-            if (accepted == null) continue
-            put(JSONObject().apply {
-              put("limitId", limit.id)
-              put("period", period)
-              put("windowStartLocalDate", accepted.windowStartLocalDate)
-              put("windowEndLocalDate", accepted.windowEndLocalDate)
-              put("acceptedUsedSeconds", accepted.usedSeconds)
-              put("localUsedSeconds", journal.usedSeconds(
-                limit.packages,
-                accepted.windowStartLocalDate,
-                accepted.windowEndLocalDate,
-              ))
-            })
+        DoomscrollingJournal(context).use { journal ->
+          for (limit in next.limits) {
+            for ((period, accepted) in listOf(
+              "day" to limit.acceptedDailyUsage,
+              "week" to limit.acceptedWeeklyUsage,
+            )) {
+              if (accepted == null) continue
+              put(JSONObject().apply {
+                put("limitId", limit.id)
+                put("period", period)
+                put("windowStartLocalDate", accepted.windowStartLocalDate)
+                put("windowEndLocalDate", accepted.windowEndLocalDate)
+                put("acceptedUsedSeconds", accepted.usedSeconds)
+                put("localUsedSeconds", accepted.localUsedSecondsAtCapture ?: journal.usedSeconds(
+                  limit.packages,
+                  accepted.windowStartLocalDate,
+                  accepted.windowEndLocalDate,
+                ))
+              })
+            }
           }
         }
       })
@@ -77,9 +80,57 @@ internal object DoomscrollingRuntimeStore {
     check(prefs.edit()
       .putString(RULES_KEY, encoded)
       .putString(RULES_VAULT_ID_KEY, next.vaultId)
+      .putString(NOTIFICATION_COPY_KEY, JSONObject(mapOf(
+        "channelName" to next.copy.channelName, "channelDescription" to next.copy.channelDescription,
+        "blockedMessage" to next.copy.blockedMessage, "limitMessage" to next.copy.limitMessage,
+      )).toString())
       .putString(COMBINED_USAGE_BASELINES_KEY, baselines.toString())
       .commit()) { "Doomscrolling rule snapshot could not be persisted" }
   }
+
+  /** Revoke enforcement while retaining vault attribution and localized text for reactivation. */
+  fun invalidateRules(context: Context) {
+    val prefs = preferences(context)
+    val retainedCopy = notificationCopy(context)
+    val edit = prefs.edit().remove(RULES_KEY).remove(COMBINED_USAGE_BASELINES_KEY)
+    if (retainedCopy != null) edit.putString(NOTIFICATION_COPY_KEY, retainedCopy.toString())
+    check(edit.commit()) {
+      "Doomscrolling rules could not be invalidated"
+    }
+  }
+
+  fun notificationCopy(context: Context): JSONObject? {
+    val prefs = preferences(context)
+    val encoded = prefs.getString(NOTIFICATION_COPY_KEY, null)
+    if (encoded != null) {
+      try {
+        val copy = JSONObject(encoded)
+        val validated = JSONObject()
+        for ((key, maximum) in listOf(
+          "channelName" to 80, "channelDescription" to 160,
+          "blockedMessage" to 120, "limitMessage" to 120,
+        )) {
+          val text = copy.getString(key)
+          require(text.isNotBlank() && text.codePointCount(0, text.length) <= maximum) {
+            "Invalid retained Doomscrolling notification text"
+          }
+          validated.put(key, text)
+        }
+        return validated
+      } catch (error: Exception) {
+        Log.w("DoomscrollingRuntime", "Discarding invalid retained notification text", error)
+        check(prefs.edit().remove(NOTIFICATION_COPY_KEY).commit()) {
+          "Invalid Doomscrolling notification text could not be cleared"
+        }
+      }
+    }
+    return rules(context)?.copy?.let { copy -> JSONObject(mapOf(
+      "channelName" to copy.channelName, "channelDescription" to copy.channelDescription,
+      "blockedMessage" to copy.blockedMessage, "limitMessage" to copy.limitMessage,
+    )) }
+  }
+
+  fun journalVaultId(context: Context): String? = preferences(context).getString(RULES_VAULT_ID_KEY, null)
 
   fun rules(context: Context): DoomscrollingRulesSnapshot? {
     val encoded = preferences(context).getString(RULES_KEY, null) ?: return null
@@ -96,8 +147,8 @@ internal object DoomscrollingRuntimeStore {
     limit: MobileLimit,
     period: String,
     accepted: AcceptedUsage,
-    currentLocalUsedSeconds: Int,
-  ): Int {
+    currentLocalUsedSeconds: Long,
+  ): Long {
     val encoded = preferences(context).getString(COMBINED_USAGE_BASELINES_KEY, null)
       ?: return currentLocalUsedSeconds
     val baseline = runCatching {
@@ -113,8 +164,8 @@ internal object DoomscrollingRuntimeStore {
             it.getString("windowEndLocalDate") == accepted.windowEndLocalDate
         }
     }.getOrNull() ?: return currentLocalUsedSeconds
-    val acceptedUsed = baseline.getInt("acceptedUsedSeconds")
-    val localAtAcceptance = baseline.getInt("localUsedSeconds")
+    val acceptedUsed = baseline.getLong("acceptedUsedSeconds")
+    val localAtAcceptance = baseline.getLong("localUsedSeconds")
     return combinedUsageSinceAcceptance(acceptedUsed, localAtAcceptance, currentLocalUsedSeconds)
   }
 
@@ -474,7 +525,7 @@ internal class DoomscrollingEngine(private val context: Context) {
               localUsed,
             )
           } ?: localUsed
-        combinedUsed >= it * 60
+        combinedUsed >= it * 60L
       } ?: false
       val weeklyExhausted = limit.minutesPerWeek?.let {
         val localUsed = journal.usedSeconds(limit.packages, weekStart, localDate)
@@ -492,7 +543,7 @@ internal class DoomscrollingEngine(private val context: Context) {
               localUsed,
             )
           } ?: localUsed
-        combinedUsed >= it * 60
+        combinedUsed >= it * 60L
       } ?: false
       if (dailyExhausted || weeklyExhausted) {
         return BlockDecision(true, "usage_limit", limit.id)

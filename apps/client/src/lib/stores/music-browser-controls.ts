@@ -15,6 +15,8 @@ export function createMusicBrowserControls(
   context: MusicExternalControlsContext,
 ): MusicBrowserControls {
   let initialized = false;
+  let ownsMediaSession = false;
+  const unsupportedActions = new Set<MediaSessionAction>();
 
   const handleHardwareKeydown = (event: KeyboardEvent): void => {
     const action = musicHardwareActionFromKey(event);
@@ -45,12 +47,27 @@ export function createMusicBrowserControls(
       window.removeEventListener("keydown", handleHardwareKeydown, { capture: true });
     }
     initialized = false;
+    clearMediaSession();
+  }
+
+  function clearMediaSession(): void {
+    if (!ownsMediaSession) return;
+    ownsMediaSession = false;
     if (typeof navigator !== "undefined" && "mediaSession" in navigator) {
       navigator.mediaSession.metadata = null;
       navigator.mediaSession.playbackState = "none";
       for (const action of ["play", "pause", "previoustrack", "nexttrack", "stop"] as const) {
-        navigator.mediaSession.setActionHandler(action, null);
+        setMediaAction(action, null);
       }
+    }
+  }
+
+  function setMediaAction(action: MediaSessionAction, handler: (() => void) | null): void {
+    if (unsupportedActions.has(action)) return;
+    try { navigator.mediaSession.setActionHandler(action, handler); }
+    catch (error) {
+      unsupportedActions.add(action);
+      console.warn("Browser media action is unavailable:", action, error);
     }
   }
 
@@ -77,9 +94,10 @@ export function createMusicBrowserControls(
     const source = context.currentSource();
     const snapshot = context.snapshot();
     if (!source) {
-      navigator.mediaSession.playbackState = "none";
+      clearMediaSession();
       return;
     }
+    ownsMediaSession = true;
     if (typeof MediaMetadata !== "undefined") {
       const artworkUrl = context.artworkUrl();
       navigator.mediaSession.metadata = new MediaMetadata({
@@ -94,17 +112,17 @@ export function createMusicBrowserControls(
         ? "paused"
         : "none";
     updatePosition(snapshot);
-    navigator.mediaSession.setActionHandler("play", () => { void context.play(); });
-    navigator.mediaSession.setActionHandler("pause", () => { void context.pause(); });
-    navigator.mediaSession.setActionHandler(
+    setMediaAction("play", () => { void context.play(); });
+    setMediaAction("pause", () => { void context.pause(); });
+    setMediaAction(
       "previoustrack",
       context.canPrevious() ? () => { void context.previous(); } : null,
     );
-    navigator.mediaSession.setActionHandler(
+    setMediaAction(
       "nexttrack",
       context.canNext() ? () => { void context.next(); } : null,
     );
-    navigator.mediaSession.setActionHandler("stop", () => { void context.stop(); });
+    setMediaAction("stop", () => { void context.stop(); });
   }
 
   return { init, destroy, update };

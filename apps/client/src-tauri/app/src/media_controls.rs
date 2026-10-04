@@ -35,7 +35,6 @@ struct MusicHardwareControlPayload {
     shuffle_enabled: Option<bool>,
 }
 
-#[tauri::command]
 pub fn update_media_controls(update: MediaControlsUpdate) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     linux::update_mpris_state(update);
@@ -74,9 +73,73 @@ fn clamp_playback_rate(value: f64) -> f64 {
 }
 
 fn emit_control(app: &tauri::AppHandle, payload: MusicHardwareControlPayload) {
-    use tauri::Emitter;
+    use crate::music::session::{PlaybackOrder, SessionIntent, dispatch_control};
+    let intent = match payload.action {
+        "play" => SessionIntent::Play,
+        "pause" => SessionIntent::Pause,
+        "playPause" => SessionIntent::Toggle,
+        "stop" => SessionIntent::Stop,
+        "previousTrack" => SessionIntent::Previous,
+        "nextTrack" => SessionIntent::Next,
+        "seekBy" => SessionIntent::SeekBy {
+            delta_ms: payload.delta_ms.unwrap_or(0),
+        },
+        "seekTo" => SessionIntent::Seek {
+            position_ms: payload.position_ms.unwrap_or(0),
+        },
+        "setVolume" => SessionIntent::Volume {
+            volume: payload.volume.unwrap_or(1.0),
+        },
+        "setRate" => SessionIntent::Rate {
+            rate: payload.rate.unwrap_or(1.0),
+        },
+        "setShuffle" => SessionIntent::Order {
+            order: if payload.shuffle_enabled == Some(true) {
+                PlaybackOrder::Shuffle
+            } else {
+                PlaybackOrder::InOrder
+            },
+        },
+        _ => {
+            eprintln!("unknown native media action: {}", payload.action);
+            return;
+        }
+    };
+    if let Err(error) = dispatch_control(app, intent) {
+        eprintln!("native media control failed: {error}");
+    }
+}
 
-    let _ = app.emit("music-hardware-control", payload);
+/// Projects accepted native state to operating-system transport controls.
+pub(crate) fn publish_session(
+    session: &crate::music::session::SessionProjection,
+) -> Result<(), String> {
+    use crate::music::session::{PlaybackOrder, SourceKind};
+    update_media_controls(MediaControlsUpdate {
+        status: session.status.as_ref().into(),
+        title: session
+            .current_source
+            .as_ref()
+            .map(|source| source.title.clone()),
+        source_kind_label: session.current_source.as_ref().map(|source| {
+            match source.kind {
+                SourceKind::LocalFile => "Local file",
+                SourceKind::YoutubeVideo | SourceKind::YoutubePlaylist => "YouTube",
+            }
+            .into()
+        }),
+        artwork_url: None,
+        can_play_pause: session.current_source.is_some(),
+        can_previous: session.can_previous,
+        can_next: session.can_next,
+        can_seek: session.current_source.is_some(),
+        position_ms: session.position_ms,
+        duration_ms: session.duration_ms,
+        volume: session.volume,
+        muted: session.muted,
+        rate: session.rate,
+        shuffle_enabled: session.order != PlaybackOrder::InOrder,
+    })
 }
 
 #[cfg(any(target_os = "windows", test))]

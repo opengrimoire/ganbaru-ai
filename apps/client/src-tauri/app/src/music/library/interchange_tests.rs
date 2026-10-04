@@ -18,7 +18,7 @@ fn item(identity: &str) -> MusicInterchangeItem {
     }
 }
 
-fn request(conflict: MusicImportPlaylistConflict) -> MusicInterchangeImportRequest {
+pub(super) fn request(conflict: MusicImportPlaylistConflict) -> MusicInterchangeImportRequest {
     MusicInterchangeImportRequest {
         document: MusicInterchangeDocument {
             format: "ganbaru-ai/music-playlists".to_string(),

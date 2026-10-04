@@ -101,7 +101,8 @@ pub struct MusicContextAssignmentSet {
     pub updated_at: i64,
 }
 
-type AssignmentRow = (
+/// Canonical assignment fields shared by context reads and bounded transfers.
+pub(crate) type AssignmentRow = (
     String,
     String,
     String,
@@ -136,29 +137,7 @@ pub(crate) async fn assignments(
     rows.into_iter().map(decode).collect()
 }
 
-pub(crate) async fn assignments_for_playlists(
-    pool: &SqlitePool,
-    playlist_ids: Vec<String>,
-) -> MusicLibraryResult<Vec<MusicContextAssignment>> {
-    validate_bounded_unique_ids(&playlist_ids, "playlistIds")?;
-    let mut query = sqlx::QueryBuilder::<Sqlite>::new(
-        "SELECT owner_kind, owner_id, phase, behavior, playlist_id, soundscape_id, soundscape_behavior,
-                provenance_kind, provenance_id, updated_at, version
-         FROM music_context_assignments WHERE playlist_id IN (",
-    );
-    let mut separated = query.separated(", ");
-    for playlist_id in &playlist_ids {
-        separated.push_bind(playlist_id);
-    }
-    separated.push_unseparated(") ORDER BY owner_kind, owner_id, phase");
-    let rows = query
-        .build_query_as::<AssignmentRow>()
-        .fetch_all(pool)
-        .await
-        .map_err(|error| MusicLibraryError::database("load exported music assignments", error))?;
-    rows.into_iter().map(decode).collect()
-}
-
+#[cfg(test)]
 pub(crate) async fn replace_assignments(
     pool: &SqlitePool,
     request: MusicContextAssignmentSet,
@@ -243,7 +222,7 @@ pub(crate) async fn replace_assignments_in_transaction(
     Ok(())
 }
 
-fn validate_set(request: &MusicContextAssignmentSet) -> MusicLibraryResult<()> {
+pub(crate) fn validate_set(request: &MusicContextAssignmentSet) -> MusicLibraryResult<()> {
     validate_id(&request.owner_id, "ownerId")?;
     if request.updated_at <= 0 {
         return Err(MusicLibraryError::validation(
@@ -251,14 +230,22 @@ fn validate_set(request: &MusicContextAssignmentSet) -> MusicLibraryResult<()> {
             "must be positive",
         ));
     }
-    if request.assignments.len() > 3 {
+    validate_drafts(request.owner_kind, &request.assignments)
+}
+
+/// Validate portable assignment intent before an owner or timestamp is allocated.
+pub(crate) fn validate_drafts(
+    owner_kind: MusicAssignmentOwnerKind,
+    assignments: &[MusicContextAssignmentDraft],
+) -> MusicLibraryResult<()> {
+    if assignments.len() > 3 {
         return Err(MusicLibraryError::validation(
             "assignments",
             "cannot contain more than three phases",
         ));
     }
     let mut phases = HashSet::new();
-    for assignment in &request.assignments {
+    for assignment in assignments {
         if !phases.insert(assignment.phase) {
             return Err(MusicLibraryError::validation(
                 "assignments",
@@ -268,7 +255,7 @@ fn validate_set(request: &MusicContextAssignmentSet) -> MusicLibraryResult<()> {
         validate_optional_id(&assignment.playlist_id, "playlistId")?;
         validate_optional_id(&assignment.soundscape_id, "soundscapeId")?;
         validate_optional_id(&assignment.provenance_id, "provenanceId")?;
-        let expected_provenance = match request.owner_kind {
+        let expected_provenance = match owner_kind {
             MusicAssignmentOwnerKind::EventSnapshot => MusicAssignmentProvenanceKind::CopiedProject,
             MusicAssignmentOwnerKind::WorkEnvironment => {
                 MusicAssignmentProvenanceKind::WorkEnvironment
@@ -282,7 +269,7 @@ fn validate_set(request: &MusicContextAssignmentSet) -> MusicLibraryResult<()> {
                 "provenanceKind",
                 format!(
                     "{} assignments require {} provenance",
-                    request.owner_kind.as_ref(),
+                    owner_kind.as_ref(),
                     expected_provenance.as_ref()
                 ),
             ));
@@ -306,33 +293,6 @@ fn validate_id(value: &str, field: &str) -> MusicLibraryResult<()> {
     Ok(())
 }
 
-fn validate_bounded_unique_ids(values: &[String], field: &str) -> MusicLibraryResult<()> {
-    const MAX_IDS: usize = 500;
-    if values.is_empty() {
-        return Err(MusicLibraryError::validation(
-            field,
-            "must contain at least one id",
-        ));
-    }
-    if values.len() > MAX_IDS {
-        return Err(MusicLibraryError::validation(
-            field,
-            format!("exceeds the {MAX_IDS} item limit"),
-        ));
-    }
-    let mut unique = HashSet::new();
-    for value in values {
-        validate_id(value, field)?;
-        if !unique.insert(value.as_str()) {
-            return Err(MusicLibraryError::validation(
-                field,
-                format!("contains duplicate id '{value}'"),
-            ));
-        }
-    }
-    Ok(())
-}
-
 fn validate_optional_id(value: &Option<String>, field: &str) -> MusicLibraryResult<()> {
     if let Some(value) = value {
         validate_id(value, field)?;
@@ -340,7 +300,8 @@ fn validate_optional_id(value: &Option<String>, field: &str) -> MusicLibraryResu
     Ok(())
 }
 
-fn decode(row: AssignmentRow) -> MusicLibraryResult<MusicContextAssignment> {
+/// Decode persisted assignment variants consistently at both native boundaries.
+pub(crate) fn decode(row: AssignmentRow) -> MusicLibraryResult<MusicContextAssignment> {
     Ok(MusicContextAssignment {
         owner_kind: MusicAssignmentOwnerKind::try_from(row.0.as_str())
             .map_err(|message| MusicLibraryError::runtime("decode assignment owner", message))?,

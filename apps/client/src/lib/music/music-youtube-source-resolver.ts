@@ -128,7 +128,7 @@ export async function resolveMusicYouTubeSource(
     baseUrl,
     generation,
     source,
-    persisted: null,
+    positionMs: null,
     autoplay: false,
     volume: 0,
     rate: 1,

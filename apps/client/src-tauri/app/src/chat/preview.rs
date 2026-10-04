@@ -37,7 +37,6 @@ pub(crate) use webview::evaluate_script;
 use webview::{create_child_preview, eval_fixed, navigate_existing, owned_tab, resize_existing};
 
 const MAX_PREVIEW_URL_BYTES: usize = 8_192;
-const MAX_PREVIEW_SCRIPT_BYTES: usize = 256 * 1024;
 const MAX_PREVIEW_RESULT_BYTES: usize = 2 * 1024 * 1024;
 const PREVIEW_EVALUATION_TIMEOUT: Duration = Duration::from_secs(15);
 const PREVIEW_CAPTURE_TIMEOUT: Duration = Duration::from_secs(20);
@@ -708,30 +707,6 @@ pub async fn chat_preview_recording_stop(
         },
     )
     .await
-}
-
-#[tauri::command]
-pub async fn chat_preview_evaluate(
-    app: tauri::AppHandle,
-    thread_id: ChatThreadId,
-    tab_id: String,
-    script: String,
-    approved: bool,
-) -> ChatResult<String> {
-    if !approved {
-        return Err(ChatError::new(
-            ChatErrorCode::Permission,
-            "Browser JavaScript evaluation requires approval",
-            true,
-        ));
-    }
-    if script.is_empty() || script.len() > MAX_PREVIEW_SCRIPT_BYTES || script.contains('\0') {
-        return Err(ChatError::validation(
-            "script",
-            "Browser JavaScript is invalid",
-        ));
-    }
-    evaluate_script(&app, &thread_id, &tab_id, &script).await
 }
 
 #[tauri::command]

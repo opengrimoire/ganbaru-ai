@@ -1,18 +1,18 @@
+import { notesUndoSnapshotOperations } from "$lib/notes/undo-operations";
+import { createNotesCompoundPersistence, notesEditReferences } from "./notes-store-compound-edits";
+import type { NotesCompoundEditResult } from "$lib/api/notes/compound-edits";
+import { reconcileNotesUndoSnapshot } from "$lib/notes/undo-compound";
+import type { NotesPostMutationResult } from "$lib/notes/post-mutation";
 import {
   clearNotesUndoState,
   loadNotesUndoState,
-  moveNotesBlock,
   saveNotesUndoState,
-  trashNotesBlock,
-  updateNotesBlock,
 } from "$lib/api/notes";
-import { blockUpdateFromBlock } from "$lib/notes/block-factory";
-import { parentIdForBlock, type NotesTreeState } from "$lib/notes/block-tree";
+import type { NotesTreeState } from "$lib/notes/block-tree";
 import type { NotesDocumentSelection, NotesTextSelection } from "$lib/notes/editor-selection";
 import {
   createNotesUndoSnapshot,
   createNotesUndoSnapshotForBlocks,
-  parentIdsByDepth,
   parseNotesUndoStateJson,
   recordNotesUndoEntry,
   serializeNotesUndoState,
@@ -27,6 +27,10 @@ import type { NotesBlock, NotesChildDatabaseBlock } from "$lib/notes/types";
 const EMPTY_UNDO_STATE: NotesUndoState = { undo: [], redo: [] };
 
 export interface NotesUndoControllerContext {
+  loadUndoReferences?: (pageId: string, blockIds: readonly string[]) => Promise<NotesBlock[]>;
+  readCanonicalRevision?: (id: string) => string | undefined;
+  acknowledgeCanonicalBlocks?: (blocks: readonly NotesBlock[]) => void;
+  applyPostMutation: (result: NotesPostMutationResult) => void;
   enqueueEditorMutation: (mutation: () => Promise<void>) => Promise<void>;
   readSelectedPageId: () => string | null;
   readTreeState: () => NotesTreeState;
@@ -58,74 +62,16 @@ export interface NotesUndoController {
   ) => NotesUndoSnapshot | null;
   record: (options: Omit<NotesUndoRecordOptions, "id">) => void;
   reconcileDatabaseIdentity: (block: NotesChildDatabaseBlock) => void;
+  reconcileCanonicalBlocks: (blocks: readonly NotesBlock[]) => void;
+  reconcileCompoundUndo: (result: NotesCompoundEditResult) => void;
   undo: () => Promise<boolean>;
   redo: () => Promise<boolean>;
   canUndo: () => boolean;
   canRedo: () => boolean;
 }
 
-function entryIdsByPresence(
-  target: NotesUndoSnapshot,
-  source: NotesUndoSnapshot,
-): { targetOnlyRoots: NotesBlock[]; sourceOnlyRoots: NotesBlock[] } {
-  const targetIds = new Set(target.blocks.map((block) => block.id));
-  const sourceIds = new Set(source.blocks.map((block) => block.id));
-  const targetOnlyIds = new Set([...targetIds].filter((blockId) => !sourceIds.has(blockId)));
-  const sourceOnlyIds = new Set([...sourceIds].filter((blockId) => !targetIds.has(blockId)));
-  return {
-    targetOnlyRoots: target.blocks.filter((block) => {
-      if (!targetOnlyIds.has(block.id)) return false;
-      return !targetOnlyIds.has(parentIdForBlock(block));
-    }),
-    sourceOnlyRoots: source.blocks.filter((block) => {
-      if (!sourceOnlyIds.has(block.id)) return false;
-      return !sourceOnlyIds.has(parentIdForBlock(block));
-    }),
-  };
-}
-
-function snapshotBlocksById(snapshot: NotesUndoSnapshot): Map<string, NotesBlock> {
-  return new Map(snapshot.blocks.map((block) => [block.id, block]));
-}
-
 function stackWithLimit(entries: readonly NotesUndoEntry[]): NotesUndoEntry[] {
   return entries.slice(-40);
-}
-
-async function applyUndoSnapshot(
-  target: NotesUndoSnapshot,
-  source: NotesUndoSnapshot,
-): Promise<void> {
-  const { targetOnlyRoots, sourceOnlyRoots } = entryIdsByPresence(target, source);
-  for (const block of targetOnlyRoots) {
-    await trashNotesBlock(block.id, false);
-  }
-
-  for (const block of target.blocks) {
-    await updateNotesBlock(block.id, blockUpdateFromBlock(block));
-  }
-
-  const targetById = snapshotBlocksById(target);
-  for (const parentId of parentIdsByDepth(target)) {
-    if (JSON.stringify(target.childIdsByParentId[parentId]) === JSON.stringify(source.childIdsByParentId[parentId])) continue;
-    let before: string | null = null;
-    const childIds = [...(target.childIdsByParentId[parentId] ?? [])]
-      .reverse();
-    for (const childId of childIds) {
-      const block = targetById.get(childId);
-      if (!block) { before = childId; continue; }
-      await moveNotesBlock(childId, {
-        parent: block.parent,
-        after: null,
-        before,
-      });
-      before = childId;
-    }
-  }
-  // Move surviving descendants before trashing a removed parent.
-  for (const block of sourceOnlyRoots) {
-    await trashNotesBlock(block.id, true);
-  }
 }
 
 /**
@@ -139,6 +85,11 @@ export function createNotesUndoController(
   let hydrateRequestId = 0;
   let persistTimer: ReturnType<typeof setTimeout> | null = null;
   let mutationChain = Promise.resolve();
+  const pendingEntries = new Map<NotesUndoEntry, number>();
+
+  function retainedEntries(): NotesUndoEntry[] {
+    return [...new Set([...state.undo, ...state.redo, ...pendingEntries.keys()])];
+  }
 
   function persistPageId(): string | null {
     return state.undo.at(-1)?.after.pageId
@@ -198,6 +149,7 @@ export function createNotesUndoController(
     hydrateRequestId += 1;
     hydratedPageId = pageId;
     state = EMPTY_UNDO_STATE;
+    pendingEntries.clear();
   }
 
   function snapshot(
@@ -242,16 +194,69 @@ export function createNotesUndoController(
   function applyEntry(entry: NotesUndoEntry, direction: "undo" | "redo"): void {
     const target = direction === "undo" ? entry.before : entry.after;
     const source = direction === "undo" ? entry.after : entry.before;
+    const operations = notesUndoSnapshotOperations(target, source);
+    const anchorRevisions = new Map<string, string>();
+    const expectedRevision = (id: string) => source.blocks.find((block) => block.id === id)?.edit_revision
+      ?? target.blocks.find((block) => block.id === id)?.edit_revision
+      ?? anchorRevisions.get(id)
+      ?? context.readCanonicalRevision?.(id)
+      ?? context.readTreeState().blocksById[id]?.edit_revision;
+    const persist = operations.length === 0 ? async () => undefined : createNotesCompoundPersistence({
+      readSelectedPageId: context.readSelectedPageId,
+      blockById: (id) => context.readTreeState().blocksById[id],
+      readBlocksById: () => context.readTreeState().blocksById,
+      applyPostMutation: context.applyPostMutation,
+      readCanonicalRevision: expectedRevision,
+      reconcileCanonicalBlocks,
+    }, direction, operations, [...target.blocks, ...source.blocks], () => notesUndoSnapshotOperations(target, source));
     context.applyLocalSnapshot(target, source);
     context.requestBlockFocus(target.focusBlockId, target.focusSelection);
     context.restoreDocumentSelection?.(target.pageId, target.documentSelection ?? null);
-    const persistence = context.enqueueEditorMutation(() => applyUndoSnapshot(target, source));
+    pendingEntries.set(entry, (pendingEntries.get(entry) ?? 0) + 1);
+    const persistence = context.enqueueEditorMutation(async () => {
+      const missing = notesEditReferences(notesUndoSnapshotOperations(target, source)).filter((id) => !expectedRevision(id));
+      if (missing.length && context.loadUndoReferences) {
+        for (const block of await context.loadUndoReferences(target.pageId, missing)) {
+          if (block.edit_revision) anchorRevisions.set(block.id, block.edit_revision);
+        }
+      }
+      await persist();
+      const remaining = (pendingEntries.get(entry) ?? 1) - 1;
+      if (remaining > 0) pendingEntries.set(entry, remaining);
+      else pendingEntries.delete(entry);
+    });
     mutationChain = persistence;
     void persistence
       .then(() => mutationChain === persistence ? persistNow() : undefined)
       .catch((error: unknown) => {
         console.warn(`notes ${direction} persistence failed`, error);
       });
+  }
+
+  /** Refresh only concurrency tokens, retaining each historical payload for undo. */
+  function reconcileCanonicalBlocks(blocks: readonly NotesBlock[]): void {
+    context.acknowledgeCanonicalBlocks?.(blocks);
+    const revisions = new Map(blocks.map((block) => [block.id, block.edit_revision]));
+    for (const entry of retainedEntries()) {
+      for (const snapshot of [entry.before, entry.after]) {
+        for (const block of snapshot.blocks) {
+          const revision = revisions.get(block.id);
+          if (revision) block.edit_revision = revision;
+        }
+      }
+    }
+    schedulePersist();
+  }
+
+  /** Complete only the historical boundaries associated with this committed native edit. */
+  function reconcileCompoundUndo(result: NotesCompoundEditResult): void {
+    const revisions = new Map(result.blocks.map((block) => [block.id, block.edit_revision]));
+    const readRevision = (id: string) => revisions.get(id);
+    for (const entry of retainedEntries()) {
+      if (entry.before.nativeEditId === result.operation_id) reconcileNotesUndoSnapshot(entry.before, result.before_blocks ?? [], result.before_placements ?? [], readRevision);
+      if (entry.after.nativeEditId === result.operation_id) reconcileNotesUndoSnapshot(entry.after, result.blocks, result.placements, readRevision);
+    }
+    schedulePersist();
   }
 
   /** Attach canonical database identities without changing historical titles. */
@@ -265,7 +270,7 @@ export function createNotesUndoController(
         } } : block);
     };
     // Queued undo writes reference these internal snapshots until persistence finishes.
-    for (const entry of [...state.undo, ...state.redo]) {
+    for (const entry of retainedEntries()) {
       reconcile(entry.before);
       reconcile(entry.after);
     }
@@ -300,6 +305,7 @@ export function createNotesUndoController(
       if (persistTimer) clearTimeout(persistTimer);
       persistTimer = null;
       hydrateRequestId += 1;
+      pendingEntries.clear();
     },
     reset,
     hydrate,
@@ -307,6 +313,8 @@ export function createNotesUndoController(
     snapshotBlocks,
     record,
     reconcileDatabaseIdentity,
+    reconcileCanonicalBlocks,
+    reconcileCompoundUndo,
     undo,
     redo,
     canUndo: () => state.undo.length > 0,

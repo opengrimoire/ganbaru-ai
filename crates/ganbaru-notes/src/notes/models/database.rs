@@ -13,7 +13,7 @@ pub struct NoteDatabaseReferenceDto {
     pub is_linked: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct NoteCreatedDatabaseDto {
     database: NoteDatabaseDto,
     data_source: NoteDataSourceDto,
@@ -317,7 +317,7 @@ impl NoteDataSourceTimelineViewDto {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct NoteDatabaseDataSourceSummaryDto {
     id: String,
     name: String,
@@ -329,9 +329,9 @@ impl NoteDatabaseDataSourceSummaryDto {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct NoteDatabaseDto {
-    object: &'static str,
+    object: String,
     id: String,
     parent: NoteParent,
     title: String,
@@ -359,7 +359,7 @@ impl NoteDatabaseDto {
     ) -> Result<Self, String> {
         let parent = block_parent_from_database_row(&row)?;
         Ok(Self {
-            object: "database",
+            object: "database".to_string(),
             id: row.id,
             parent,
             title: row.title,
@@ -382,16 +382,16 @@ impl NoteDatabaseDto {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct NoteDataSourceParentDto {
     #[serde(rename = "type")]
-    parent_type: &'static str,
+    parent_type: String,
     database_id: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct NoteDataSourceDto {
-    object: &'static str,
+    object: String,
     id: String,
     parent: NoteDataSourceParentDto,
     database_parent: NoteParent,
@@ -412,10 +412,10 @@ pub struct NoteDataSourceDto {
 impl NoteDataSourceDto {
     pub fn new(row: NoteDataSourceRow, database_parent: NoteParent) -> Result<Self, String> {
         Ok(Self {
-            object: "data_source",
+            object: "data_source".to_string(),
             id: row.id,
             parent: NoteDataSourceParentDto {
-                parent_type: "database_id",
+                parent_type: "database_id".to_string(),
                 database_id: row.database_id,
             },
             database_parent,
@@ -435,16 +435,16 @@ impl NoteDataSourceDto {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct NoteDatabaseViewParentDto {
     #[serde(rename = "type")]
-    parent_type: &'static str,
+    parent_type: String,
     database_id: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct NoteDatabaseViewDto {
-    object: &'static str,
+    object: String,
     id: String,
     parent: NoteDatabaseViewParentDto,
     data_source_id: String,
@@ -466,10 +466,10 @@ pub struct NoteDatabaseViewDto {
 impl NoteDatabaseViewDto {
     pub fn new(row: NoteDatabaseViewRow) -> Result<Self, String> {
         Ok(Self {
-            object: "view",
+            object: "view".to_string(),
             id: row.id,
             parent: NoteDatabaseViewParentDto {
-                parent_type: "database_id",
+                parent_type: "database_id".to_string(),
                 database_id: row.database_id,
             },
             data_source_id: row.data_source_id,

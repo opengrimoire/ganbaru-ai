@@ -1,3 +1,6 @@
+import { createNotesCompoundPersistence } from "./notes-store-compound-edits";
+import { reconcileNotesCompoundUndo } from "$lib/notes/undo-compound";
+import type { NotesPostMutationResult } from "$lib/notes/post-mutation";
 import {
   createNotesTableRowWrite,
   notesTableCanAddColumn,
@@ -18,9 +21,12 @@ import type {
   NotesRichText,
   NotesTableRowBlock,
 } from "$lib/notes/types";
-import type { NotesUndoSnapshot } from "$lib/notes/undo-history";
+import type { NotesUndoSnapshot, NotesUndoRecordOptions } from "$lib/notes/undo-history";
 
 interface NotesTableBlockActionsContext {
+  recordUndo: (options: Omit<NotesUndoRecordOptions, "id">) => void;
+  enqueueEditorMutation: (mutation: () => Promise<void>) => Promise<void>;
+  applyPostMutation: (result: NotesPostMutationResult) => void;
   readSelectedPageId: () => string | null;
   blockById: (blockId: string) => NotesBlock | undefined;
   tableRowsForBlock: (blockId: string) => NotesTableRowBlock[];
@@ -135,21 +141,22 @@ export function createNotesTableBlockActions(
     const insertIndex = tableInsertIndex(afterColumnIndex + 1, width);
     await context.flushPendingBlockSaves();
     const before = context.undoSnapshot(tableBlockId);
-    await context.replaceBlockWithUpdate(tableBlockId, notesTableWithWidth(table, width + 1));
+    const emptyRowId = crypto.randomUUID();
+    const persist = createNotesCompoundPersistence(context, "table_columns", [{ type: "table_column", table_id: tableBlockId, index: insertIndex, insert: true, empty_row_id: emptyRowId }], rows);
+    context.localApplyBlockUpdate(tableBlockId, notesTableWithWidth(table, width + 1));
     for (const row of rows) {
       const update = notesTableRowWithInsertedColumn(row, insertIndex, width);
       context.localApplyBlockUpdate(row.id, update);
-      await context.saveBlockNow(row.id, update);
     }
-    if (rows.length === 0) {
-      await context.appendAndApply({
-        parent: { type: "block_id", block_id: tableBlockId },
-        after: null,
-        children: [createNotesTableRowWrite(crypto.randomUUID(), width + 1)],
-      });
-    }
+    await context.enqueueEditorMutation(async () => {
+      const result = await persist();
+      const created = result.blocks.find((block) => block.id === emptyRowId);
+      if (created) context.applyPostMutation({ blocks: [created], placements: [{ blockId: created.id, parent: created.parent, after: null }], canonical: true });
+      const after = context.undoSnapshot(tableBlockId);
+      reconcileNotesCompoundUndo(before, after, result);
+      context.recordUndo({ kind: "update", before, after });
+    });
     context.requestBlockFocus(tableBlockId);
-    context.recordUndoAfter("update", before, tableBlockId);
   }
 
   async function removeTableColumn(tableBlockId: string, columnIndex: number): Promise<void> {
@@ -161,14 +168,19 @@ export function createNotesTableBlockActions(
     const removeIndex = tableRemoveIndex(columnIndex, width);
     await context.flushPendingBlockSaves();
     const before = context.undoSnapshot(tableBlockId);
-    await context.replaceBlockWithUpdate(tableBlockId, notesTableWithWidth(table, width - 1));
+    const persist = createNotesCompoundPersistence(context, "table_columns", [{ type: "table_column", table_id: tableBlockId, index: removeIndex, insert: false, empty_row_id: crypto.randomUUID() }], rows);
+    context.localApplyBlockUpdate(tableBlockId, notesTableWithWidth(table, width - 1));
     for (const row of rows) {
       const update = notesTableRowWithRemovedColumn(row, removeIndex, width);
       context.localApplyBlockUpdate(row.id, update);
-      await context.saveBlockNow(row.id, update);
     }
+    await context.enqueueEditorMutation(async () => {
+      const result = await persist();
+      const after = context.undoSnapshot(tableBlockId);
+      reconcileNotesCompoundUndo(before, after, result);
+      context.recordUndo({ kind: "update", before, after });
+    });
     context.requestBlockFocus(tableBlockId);
-    context.recordUndoAfter("update", before, tableBlockId);
   }
 
   return {

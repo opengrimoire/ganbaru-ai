@@ -92,12 +92,6 @@ struct PairingStateFile {
     linked_peers: BTreeMap<String, LinkedPeer>,
     #[serde(default)]
     revoked_peers: BTreeMap<String, RevokedPeer>,
-    #[serde(
-        default,
-        rename = "linkedPeer",
-        skip_serializing_if = "Option::is_none"
-    )]
-    legacy_linked_peer: Option<LinkedPeer>,
     coordinator: Option<CoordinatorPin>,
     #[serde(default)]
     revoked_by_coordinator: bool,
@@ -221,22 +215,13 @@ impl PairingManager {
             .map_err(|error| format!("create handoff staging directory: {error}"))?;
 
         let state = if state_path.exists() {
-            let mut state = read_state(&state_path)?;
-            if state.schema_version == 1 {
-                if let Some(peer) = state.legacy_linked_peer.take() {
-                    state.linked_peers.insert(peer.device_id.clone(), peer);
-                }
-                state.schema_version = PAIRING_STATE_SCHEMA_VERSION;
-                persist_state(&state_path, &state)?;
-            }
-            state
+            read_state(&state_path)?
         } else {
             let state = PairingStateFile {
                 schema_version: PAIRING_STATE_SCHEMA_VERSION,
                 identity: create_identity(device_id.clone())?,
                 linked_peers: BTreeMap::new(),
                 revoked_peers: BTreeMap::new(),
-                legacy_linked_peer: None,
                 coordinator: None,
                 revoked_by_coordinator: false,
                 replica_ready: false,

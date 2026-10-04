@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::BTreeMap;
 
 pub use ganbaru_working_folders::RepositoryKind;
 
@@ -288,7 +287,3 @@ pub struct TurnModeSnapshot {
     pub safety_mode: SafetyMode,
     pub interaction_mode: InteractionMode,
 }
-
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[serde(transparent)]
-pub struct ExtensionFields(pub BTreeMap<String, Value>);

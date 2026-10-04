@@ -195,49 +195,6 @@ async fn prune_orphaned_items(
     Ok(())
 }
 
-pub(crate) async fn restore_source(
-    pool: &SqlitePool,
-    collection_id: &str,
-    expected_version: i64,
-    restored_at: i64,
-) -> MusicLibraryResult<MusicWriteReceipt> {
-    if collection_id.trim().is_empty() || expected_version <= 0 || restored_at <= 0 {
-        return Err(MusicLibraryError::validation(
-            "collectionId",
-            "a collection id, expected version, and restored timestamp are required",
-        ));
-    }
-    let result = sqlx::query(
-        "UPDATE music_source_collections
-         SET discovery_enabled = 1, removed_at = NULL, updated_at = ?, version = version + 1
-         WHERE id = ? AND version = ?",
-    )
-    .bind(restored_at)
-    .bind(collection_id)
-    .bind(expected_version)
-    .execute(pool)
-    .await
-    .map_err(|error| MusicLibraryError::database("restore music source", error))?;
-    if result.rows_affected() != 1 {
-        let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM music_source_collections WHERE id = ?)",
-        )
-        .bind(collection_id)
-        .fetch_one(pool)
-        .await
-        .map_err(|error| MusicLibraryError::database("verify music source restore", error))?;
-        return Err(if exists {
-            MusicLibraryError::stale("music source collection", collection_id)
-        } else {
-            MusicLibraryError::not_found("music source collection", collection_id)
-        });
-    }
-    Ok(MusicWriteReceipt {
-        id: collection_id.to_string(),
-        version: expected_version + 1,
-    })
-}
-
 fn validate_request(request: &MusicSourceRemovalRequest) -> MusicLibraryResult<()> {
     if request.collection_id.trim().is_empty()
         || request.expected_version <= 0

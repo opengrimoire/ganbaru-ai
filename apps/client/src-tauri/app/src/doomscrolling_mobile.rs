@@ -1,20 +1,67 @@
+#[cfg(target_os = "android")]
 use crate::db_path::connect_sqlite;
 #[cfg(target_os = "android")]
 use crate::vault::{self, handoff::state::PairingManager, ownership::VaultOwnershipManager};
 use chrono::{DateTime, SecondsFormat, Utc};
 #[cfg(target_os = "android")]
 use ganbaru_mobile_doomscrolling::{MobileDoomscrollingExt, PendingEvent};
+#[cfg(not(target_os = "android"))]
+use serde::Deserialize;
 use serde::Serialize;
-use sqlx::{Row, SqlitePool};
+use sqlx::SqlitePool;
 #[cfg(target_os = "android")]
 use tauri::Manager;
 use tauri::Runtime;
 
 const ACTIVE_DB_URL: &str = "sqlite:ganbaru-ai.sqlite";
 const MAX_BATCH: usize = 200;
+const MAX_JOURNAL_EVENTS: usize = 2_000;
+#[cfg(target_os = "android")]
+const MAX_DRAIN_BATCHES: usize = MAX_JOURNAL_EVENTS / MAX_BATCH + 1;
+
+mod projection;
+#[cfg(target_os = "android")]
+pub(crate) mod runtime;
+
+/// Update localized notification text without accepting frontend enforcement policy.
+#[tauri::command]
+pub fn doomscrolling_mobile_update_copy<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    copy: projection::NotificationCopy,
+) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        runtime::update_copy(app, copy)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (app, copy);
+        Err("Guardian is available only on Android".into())
+    }
+}
+
+/// Read the independent native owner's last accepted, bounded usage projection.
+#[tauri::command]
+pub fn doomscrolling_mobile_load_usage_projection<R: Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<serde_json::Value, String> {
+    #[cfg(target_os = "android")]
+    {
+        runtime::usage_projection(app)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        Err("Guardian is available only on Android".into())
+    }
+}
+
+#[cfg(target_os = "android")]
+static GUARDIAN_SYNC: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[cfg(not(target_os = "android"))]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct PendingEvent {
     id: String,
     kind: String,
@@ -36,19 +83,6 @@ struct PendingEvent {
 pub struct MobileDoomscrollingSyncResult {
     imported: usize,
     full_batch: bool,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MobileDoomscrollingUsageSample {
-    id: String,
-    source_type: String,
-    source_key: String,
-    display_name: Option<String>,
-    started_at: i64,
-    elapsed_seconds: i64,
-    local_date: String,
-    created_at: i64,
 }
 
 fn valid_package_name(value: &str) -> bool {
@@ -74,9 +108,12 @@ fn valid_package_name(value: &str) -> bool {
 }
 
 fn normalize_event(mut event: PendingEvent) -> Result<PendingEvent, String> {
-    event.id = event.id.trim().chars().take(120).collect();
-    if event.id.is_empty() {
-        return Err("mobile Doomscrolling event ID is required".to_string());
+    if event.id.is_empty()
+        || event.id.len() > 120
+        || event.id.trim() != event.id
+        || event.id.chars().any(char::is_control)
+    {
+        return Err("mobile Doomscrolling event ID is invalid".to_string());
     }
     if event.kind != "usage" && event.kind != "block" {
         return Err("mobile Doomscrolling event kind is invalid".to_string());
@@ -96,7 +133,7 @@ fn normalize_event(mut event: PendingEvent) -> Result<PendingEvent, String> {
     if event.display_name.is_empty() {
         return Err("mobile Doomscrolling display name is required".to_string());
     }
-    if chrono::NaiveDate::parse_from_str(&event.local_date, "%Y-%m-%d").is_err() {
+    if !crate::doomscrolling_limits::validate_local_date(&event.local_date) {
         return Err("mobile Doomscrolling local date is invalid".to_string());
     }
     if event.started_at < 0 || event.occurred_at < 0 {
@@ -126,9 +163,12 @@ fn normalize_event(mut event: PendingEvent) -> Result<PendingEvent, String> {
         .run_id
         .map(|value| value.trim().chars().take(128).collect())
         .filter(|value: &String| !value.is_empty());
-    event.vault_id = event.vault_id.trim().chars().take(128).collect();
-    if event.vault_id.is_empty() {
-        return Err("mobile Doomscrolling vault ID is required".to_string());
+    if event.vault_id.is_empty()
+        || event.vault_id.len() > 128
+        || event.vault_id.trim() != event.vault_id
+        || event.vault_id.chars().any(char::is_control)
+    {
+        return Err("mobile Doomscrolling vault ID is invalid".to_string());
     }
     Ok(event)
 }
@@ -227,35 +267,98 @@ async fn import_events(pool: &SqlitePool, events: &[PendingEvent]) -> Result<(),
         .map_err(|error| format!("commit mobile Doomscrolling import: {error}"))
 }
 
-#[tauri::command]
+/// Exclude both canonical local identities and peer receipts retained across ownership transfer.
+#[cfg(any(target_os = "android", test))]
+async fn canonical_pending_ids(
+    connection: &mut sqlx::SqliteConnection,
+    capture: &projection::GuardianCapture,
+    retained: Vec<String>,
+) -> Result<std::collections::HashSet<String>, String> {
+    let mut ids: std::collections::HashSet<_> = retained.into_iter().collect();
+    for batch in capture.pending.chunks(MAX_BATCH) {
+        let mut query = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
+            "SELECT id FROM doomscrolling_usage_samples WHERE id IN (",
+        );
+        let mut values = query.separated(",");
+        for event in batch {
+            values.push_bind(&event.id);
+        }
+        values.push_unseparated(")");
+        let imported: Vec<String> = query
+            .build_query_scalar()
+            .fetch_all(&mut *connection)
+            .await
+            .map_err(|error| format!("deduplicate Guardian canonical usage: {error}"))?;
+        ids.extend(imported);
+    }
+    Ok(ids)
+}
+
 #[cfg(target_os = "android")]
-pub async fn doomscrolling_mobile_sync_events<R: Runtime>(
+/// Drain the bounded native journal before a canonical vault snapshot, without a frontend command.
+pub(crate) async fn synchronize_for_snapshot<R: Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<(), String> {
+    let _sync = GUARDIAN_SYNC.lock().await;
+    for _ in 0..MAX_DRAIN_BATCHES {
+        if !synchronize_locked(app.clone()).await?.full_batch {
+            return Ok(());
+        }
+    }
+    Err("Guardian journal still has a full batch; retry the vault snapshot".into())
+}
+
+#[cfg(target_os = "android")]
+async fn synchronize_locked<R: Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<MobileDoomscrollingSyncResult, String> {
-    let events = app.mobile_doomscrolling().pending_events()?;
+    let active_vault_id = vault::active_vault_id(&app)?;
+    let ownership = app
+        .state::<VaultOwnershipManager>()
+        .status(&active_vault_id)?;
+    let retained = crate::doomscrolling_linked::guardian_acknowledgements(
+        &app,
+        &active_vault_id,
+        &ownership.device_id,
+    )
+    .await?;
+    for ids in retained.chunks(MAX_BATCH) {
+        acknowledge_guardian(&app, ids).await?;
+        crate::doomscrolling_linked::forget_guardian_acknowledgements(
+            &app,
+            &active_vault_id,
+            &ownership.device_id,
+            ids,
+        )
+        .await?;
+    }
+    let pending_app = app.clone();
+    let pending_vault = active_vault_id.clone();
+    let usage_only = !ownership.can_write;
+    let events = tauri::async_runtime::spawn_blocking(move || {
+        pending_app
+            .mobile_doomscrolling()
+            .pending_events(&pending_vault, usage_only)
+    })
+    .await
+    .map_err(|error| format!("Guardian pending worker: {error}"))??;
     if events.len() > MAX_BATCH {
         return Err("mobile Doomscrolling journal batch is too large".to_string());
     }
-    let active_vault_id = vault::active_vault_id(&app)?;
     let normalized_events = events
         .into_iter()
         .map(normalize_event)
         .collect::<Result<Vec<_>, _>>()?;
-    let stale_ids = normalized_events
+    if normalized_events
         .iter()
-        .filter(|event| event.vault_id != active_vault_id)
-        .map(|event| event.id.clone())
-        .collect::<Vec<_>>();
-    if !stale_ids.is_empty() {
-        app.mobile_doomscrolling().acknowledge_events(&stale_ids)?;
+        .any(|event| event.vault_id != active_vault_id)
+    {
+        return Err("Guardian returned events from a different vault".into());
     }
     let normalized = normalized_events
         .into_iter()
         .filter(|event| event.vault_id == active_vault_id)
         .collect::<Vec<_>>();
-    let ownership = app
-        .state::<VaultOwnershipManager>()
-        .status(&active_vault_id)?;
     let pairing = app.state::<PairingManager>().inner().clone();
     let linked = pairing.coordinator_pin()?.is_some();
     let mut imported = 0;
@@ -264,14 +367,22 @@ pub async fn doomscrolling_mobile_sync_events<R: Runtime>(
     if ownership.can_write {
         full_batch = normalized.len() == MAX_BATCH;
         if !normalized.is_empty() {
+            let _permit = app
+                .state::<VaultOwnershipManager>()
+                .acquire_managed_write(&active_vault_id)?;
+            if vault::active_vault_id(&app)? != active_vault_id {
+                return Err("mobile Doomscrolling vault changed before import".into());
+            }
             let pool = connect_sqlite(app.clone(), ACTIVE_DB_URL.to_string()).await?;
+            if vault::active_vault_id(&app)? != active_vault_id {
+                return Err("mobile Doomscrolling vault changed while connecting".into());
+            }
             import_events(&pool, &normalized).await?;
             let processed_ids = normalized
                 .iter()
                 .map(|event| event.id.clone())
                 .collect::<Vec<_>>();
-            app.mobile_doomscrolling()
-                .acknowledge_events(&processed_ids)?;
+            acknowledge_guardian(&app, &processed_ids).await?;
             imported += normalized.len();
         }
         if linked {
@@ -298,10 +409,23 @@ pub async fn doomscrolling_mobile_sync_events<R: Runtime>(
         .await
         {
             Ok((acknowledged, _, combined)) => {
-                app.mobile_doomscrolling()
-                    .acknowledge_events(&acknowledged)?;
-                crate::doomscrolling_linked::replace_accepted(&app, &active_vault_id, &combined)
-                    .await?;
+                validate_guardian_acknowledgements(&usage_events, &acknowledged)?;
+                crate::doomscrolling_linked::apply_guardian_owner_snapshot(
+                    &app,
+                    &active_vault_id,
+                    &ownership.device_id,
+                    &acknowledged,
+                    &combined,
+                )
+                .await?;
+                acknowledge_guardian(&app, &acknowledged).await?;
+                crate::doomscrolling_linked::forget_guardian_acknowledgements(
+                    &app,
+                    &active_vault_id,
+                    &ownership.device_id,
+                    &acknowledged,
+                )
+                .await?;
                 imported += acknowledged.len();
                 full_batch = acknowledged.len() == MAX_BATCH;
             }
@@ -314,13 +438,58 @@ pub async fn doomscrolling_mobile_sync_events<R: Runtime>(
     })
 }
 
+/// Await one blocking Guardian acknowledgement without occupying an async runtime worker.
+#[cfg(target_os = "android")]
+async fn acknowledge_guardian<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    ids: &[String],
+) -> Result<(), String> {
+    let app = app.clone();
+    let ids = ids.to_vec();
+    tauri::async_runtime::spawn_blocking(move || {
+        app.mobile_doomscrolling().acknowledge_events(&ids)
+    })
+    .await
+    .map_err(|error| format!("Guardian acknowledgement worker: {error}"))?
+}
+
+/// An owner may acknowledge only identities in this immutable outgoing batch.
+#[cfg(any(target_os = "android", test))]
+fn validate_guardian_acknowledgements(
+    events: &[PendingEvent],
+    ids: &[String],
+) -> Result<(), String> {
+    let sent: std::collections::HashSet<&str> =
+        events.iter().map(|event| event.id.as_str()).collect();
+    let mut seen = std::collections::HashSet::new();
+    if ids.len() > MAX_BATCH
+        || ids
+            .iter()
+            .any(|id| !sent.contains(id.as_str()) || !seen.insert(id.as_str()))
+    {
+        return Err("owner acknowledged an unknown or repeated Guardian usage identity".into());
+    }
+    Ok(())
+}
+
 #[cfg(target_os = "android")]
 async fn exchange_as_owner<R: Runtime>(
     app: &tauri::AppHandle<R>,
     pairing: &PairingManager,
     vault_id: &str,
 ) -> Result<(), String> {
+    let _permit = app
+        .state::<VaultOwnershipManager>()
+        .acquire_managed_write(vault_id)?;
+    if vault::active_vault_id(app)? != vault_id {
+        return Err("mobile Doomscrolling vault changed before owner exchange".into());
+    }
     let pool = connect_sqlite(app.clone(), ACTIVE_DB_URL.to_string()).await?;
+    if vault::active_vault_id(app)? != vault_id {
+        return Err(
+            "mobile Doomscrolling vault changed while connecting for owner exchange".into(),
+        );
+    }
     let snapshot = owner_snapshot(&pool).await?;
     let (_, peer_samples, combined) = crate::vault::handoff::transport::exchange_doomscrolling(
         pairing,
@@ -330,7 +499,18 @@ async fn exchange_as_owner<R: Runtime>(
     )
     .await?;
     if peer_samples.is_empty() {
-        return crate::doomscrolling_linked::replace_accepted(app, vault_id, &combined).await;
+        let device = app
+            .state::<VaultOwnershipManager>()
+            .status(vault_id)?
+            .device_id;
+        return crate::doomscrolling_linked::apply_owner_snapshot(
+            app,
+            vault_id,
+            &device,
+            &[],
+            &combined,
+        )
+        .await;
     }
     let acknowledged =
         crate::doomscrolling_linked::import_linked_samples(&pool, &peer_samples).await?;
@@ -342,7 +522,11 @@ async fn exchange_as_owner<R: Runtime>(
         refreshed,
     )
     .await?;
-    crate::doomscrolling_linked::replace_accepted(app, vault_id, &combined).await
+    let device = app
+        .state::<VaultOwnershipManager>()
+        .status(vault_id)?
+        .device_id;
+    crate::doomscrolling_linked::apply_owner_snapshot(app, vault_id, &device, &[], &combined).await
 }
 
 #[cfg(target_os = "android")]
@@ -370,113 +554,45 @@ fn pending_event_message(
     }
 }
 
-#[tauri::command]
-#[cfg(not(target_os = "android"))]
-pub async fn doomscrolling_mobile_sync_events<R: Runtime>(
-    _app: tauri::AppHandle<R>,
-) -> Result<MobileDoomscrollingSyncResult, String> {
-    Err("mobile Doomscrolling is available only on Android".to_string())
-}
-
-#[tauri::command]
-pub async fn doomscrolling_mobile_list_usage_samples<R: Runtime>(
-    app: tauri::AppHandle<R>,
-    start_local_date: String,
-    end_local_date: String,
-) -> Result<Vec<MobileDoomscrollingUsageSample>, String> {
-    if chrono::NaiveDate::parse_from_str(&start_local_date, "%Y-%m-%d").is_err()
-        || chrono::NaiveDate::parse_from_str(&end_local_date, "%Y-%m-%d").is_err()
-        || start_local_date > end_local_date
-    {
-        return Err("mobile Doomscrolling date window is invalid".to_string());
-    }
-    #[cfg(target_os = "android")]
-    {
-        let vault_id = vault::active_vault_id(&app)?;
-        let ownership = app.state::<VaultOwnershipManager>().status(&vault_id)?;
-        if !ownership.can_write {
-            let mut samples = crate::doomscrolling_linked::accepted(&app, &vault_id).await?;
-            let pending = app.mobile_doomscrolling().pending_events()?;
-            samples.extend(
-                pending
-                    .into_iter()
-                    .map(normalize_event)
-                    .collect::<Result<Vec<_>, _>>()?
-                    .into_iter()
-                    .filter(|event| event.kind == "usage" && event.vault_id == vault_id)
-                    .map(|event| pending_event_message(&event, &ownership.device_id)),
-            );
-            samples.retain(|sample| {
-                sample.local_date.as_str() >= start_local_date.as_str()
-                    && sample.local_date.as_str() <= end_local_date.as_str()
-            });
-            samples.sort_by(|left, right| {
-                left.started_at_unix_ms
-                    .cmp(&right.started_at_unix_ms)
-                    .then_with(|| left.sample_id.cmp(&right.sample_id))
-            });
-            return Ok(samples
-                .into_iter()
-                .map(crate::doomscrolling_linked::message_to_row)
-                .map(|row| MobileDoomscrollingUsageSample {
-                    id: row.id,
-                    source_type: row.source_type,
-                    source_key: row.source_key,
-                    display_name: row.display_name,
-                    started_at: row.started_at,
-                    elapsed_seconds: row.elapsed_seconds,
-                    local_date: row.local_date,
-                    created_at: row.created_at,
-                })
-                .collect());
-        }
-    }
-    let pool = connect_sqlite(app, ACTIVE_DB_URL.to_string()).await?;
-    let rows = sqlx::query(
-        "SELECT id, source_type, source_key, display_name, started_at,
-                elapsed_seconds, local_date, created_at
-         FROM doomscrolling_usage_samples
-         WHERE local_date BETWEEN ? AND ?
-         ORDER BY started_at ASC, id ASC",
-    )
-    .bind(start_local_date)
-    .bind(end_local_date)
-    .fetch_all(&pool)
-    .await
-    .map_err(|error| format!("list mobile Doomscrolling usage: {error}"))?;
-    rows.into_iter()
-        .map(|row| {
-            Ok(MobileDoomscrollingUsageSample {
-                id: row.try_get("id").map_err(|error| error.to_string())?,
-                source_type: row
-                    .try_get("source_type")
-                    .map_err(|error| error.to_string())?,
-                source_key: row
-                    .try_get("source_key")
-                    .map_err(|error| error.to_string())?,
-                display_name: row
-                    .try_get("display_name")
-                    .map_err(|error| error.to_string())?,
-                started_at: row
-                    .try_get("started_at")
-                    .map_err(|error| error.to_string())?,
-                elapsed_seconds: row
-                    .try_get("elapsed_seconds")
-                    .map_err(|error| error.to_string())?,
-                local_date: row
-                    .try_get("local_date")
-                    .map_err(|error| error.to_string())?,
-                created_at: row
-                    .try_get("created_at")
-                    .map_err(|error| error.to_string())?,
-            })
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
-    use super::valid_package_name;
+    use super::*;
+
+    fn event(id: &str) -> PendingEvent {
+        PendingEvent {
+            id: id.into(),
+            kind: "usage".into(),
+            package_name: "com.example.video".into(),
+            display_name: "Video".into(),
+            started_at: 1_000,
+            elapsed_seconds: 1,
+            local_date: "2026-10-02".into(),
+            occurred_at: 2_000,
+            reason: None,
+            rule_id: None,
+            run_id: None,
+            phase: None,
+            vault_id: "vault".into(),
+        }
+    }
+
+    #[test]
+    fn invalid_identities_are_rejected_instead_of_truncated_into_another_receipt() {
+        assert!(normalize_event(event(&"a".repeat(121))).is_err());
+        assert!(normalize_event(event(" accepted ")).is_err());
+        let mut invalid_vault = event("one");
+        invalid_vault.vault_id = "v".repeat(129);
+        assert!(normalize_event(invalid_vault).is_err());
+        assert_eq!(normalize_event(event("one")).unwrap().id, "one");
+    }
+
+    #[test]
+    fn owner_acknowledgements_are_unique_and_belong_to_the_sent_batch() {
+        let sent = vec![event("one"), event("two")];
+        assert!(validate_guardian_acknowledgements(&sent, &["two".into()]).is_ok());
+        assert!(validate_guardian_acknowledgements(&sent, &["unknown".into()]).is_err());
+        assert!(validate_guardian_acknowledgements(&sent, &["one".into(), "one".into()]).is_err());
+    }
 
     #[test]
     fn package_validation_requires_bounded_java_segments() {
@@ -485,5 +601,129 @@ mod tests {
         assert!(!valid_package_name("android"));
         assert!(!valid_package_name("1com.example"));
         assert!(!valid_package_name("com.example-app"));
+    }
+
+    #[tokio::test]
+    async fn writable_accounting_retains_peer_receipt_exclusions_after_ownership_transfer() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::query("CREATE TABLE doomscrolling_usage_samples (id TEXT PRIMARY KEY)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO doomscrolling_usage_samples VALUES ('local'), ('linked-peer')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let now = "2026-10-02T12:00:00Z"
+            .parse::<jiff::Timestamp>()
+            .unwrap()
+            .as_millisecond();
+        let pending: Vec<_> = ["local", "peer", "new"].into_iter().map(|id| serde_json::json!({
+            "id": id, "kind": "usage", "packageName": "com.example.video", "displayName": "Video",
+            "startedAt": now - 1_000, "elapsedSeconds": 1, "occurredAt": now,
+            "localDate": "2026-10-02", "vaultId": "vault",
+        })).collect();
+        let capture = projection::GuardianCapture::decode(&serde_json::json!({
+            "vaultId": "vault", "journalVaultId": "vault", "observedAtEpochMs": now,
+            "utcOffsetSeconds": 0, "localDate": "2026-10-02", "weekStartLocalDate": "2026-09-28",
+            "localSources": [], "pending": pending,
+        }).to_string(), "vault", now).unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        let excluded = canonical_pending_ids(&mut tx, &capture, vec!["peer".into()])
+            .await
+            .unwrap();
+        assert_eq!(
+            excluded,
+            std::collections::HashSet::from(["local".into(), "peer".into()])
+        );
+        let sources = projection::include_pending(
+            vec![crate::doomscrolling_limits::UsageSourceDay {
+                source_type: "mobile-app".into(),
+                source_key: "com.example.video".into(),
+                local_date: "2026-10-02".into(),
+                elapsed_seconds: 30,
+            }],
+            &capture,
+            &excluded,
+        )
+        .unwrap();
+        assert_eq!(sources[0].elapsed_seconds, 31);
+        tx.commit().await.unwrap();
+        sqlx::query("DROP TABLE doomscrolling_usage_samples")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let mut connection = pool.acquire().await.unwrap();
+        assert!(
+            canonical_pending_ids(&mut connection, &capture, vec!["peer".into()])
+                .await
+                .is_err()
+        );
+        drop(connection);
+        pool.close().await;
+    }
+
+    #[tokio::test]
+    async fn journal_import_rolls_back_usage_and_block_history_when_rule_snapshot_fails() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&pool)
+            .await
+            .unwrap();
+        crate::db::run_migrations(&pool).await.unwrap();
+        let usage = event("usage-one");
+        let mut block = event("block-one");
+        block.kind = "block".into();
+        block.elapsed_seconds = 0;
+        block.reason = Some("usage_limit".into());
+        let batch = vec![usage, block];
+        sqlx::raw_sql("CREATE TRIGGER reject_mobile_rule_snapshot BEFORE INSERT ON doomscrolling_block_event_rule_snapshots
+            BEGIN SELECT RAISE(ABORT, 'rule snapshot failure'); END")
+            .execute(&pool).await.unwrap();
+        assert!(import_events(&pool, &batch).await.is_err());
+        for table in [
+            "doomscrolling_usage_samples",
+            "doomscrolling_block_events",
+            "doomscrolling_block_event_rule_snapshots",
+        ] {
+            let count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}"))
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            assert_eq!(
+                count, 0,
+                "{table} must roll back with the rejected journal batch"
+            );
+        }
+        sqlx::query("DROP TRIGGER reject_mobile_rule_snapshot")
+            .execute(&pool)
+            .await
+            .unwrap();
+        for _ in 0..2 {
+            import_events(&pool, &batch).await.unwrap();
+            for table in [
+                "doomscrolling_usage_samples",
+                "doomscrolling_block_events",
+                "doomscrolling_block_event_rule_snapshots",
+            ] {
+                let count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}"))
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    count, 1,
+                    "{table} must preserve identity on a lost-response retry"
+                );
+            }
+        }
+        pool.close().await;
     }
 }

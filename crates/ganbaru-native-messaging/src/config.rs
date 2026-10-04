@@ -2,7 +2,9 @@
 
 use serde::Deserialize;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::collections::HashSet;
+use std::io::Read;
 use std::sync::OnceLock;
 
 #[derive(Debug, Deserialize)]
@@ -101,11 +103,20 @@ pub(super) struct DoomscrollingConfig {
     pub(super) exception_hosts: Vec<String>,
     pub(super) allowed_hosts: Vec<String>,
     pub(super) limits: UsageLimitsConfig,
+    pub(super) limit_configuration_digest: Option<String>,
 }
 
 pub(super) fn read_config(path: &std::path::Path) -> Option<DoomscrollingConfig> {
-    let contents = std::fs::read_to_string(path).ok()?;
-    let value: Value = serde_json::from_str(&contents).ok()?;
+    let mut contents = Vec::new();
+    std::fs::File::open(path)
+        .ok()?
+        .take(MAX_CONFIG_BYTES + 1)
+        .read_to_end(&mut contents)
+        .ok()?;
+    if contents.len() as u64 > MAX_CONFIG_BYTES {
+        return None;
+    }
+    let value: Value = serde_json::from_slice(&contents).ok()?;
     let doomscrolling = value.get("doomscrolling")?;
     let mode = read_mode(doomscrolling)?;
     Some(DoomscrollingConfig {
@@ -138,7 +149,20 @@ pub(super) fn read_config(path: &std::path::Path) -> Option<DoomscrollingConfig>
         exception_hosts: read_host_array(doomscrolling.get("exceptionHosts")),
         allowed_hosts: read_host_array(doomscrolling.get("allowedHosts")),
         limits: read_usage_limits_config(doomscrolling.get("limits")),
+        limit_configuration_digest: Some(limit_configuration_digest(&value)?),
     })
+}
+
+const MAX_CONFIG_BYTES: u64 = 1024 * 1024;
+
+/// Bind derived budget exhaustion to the exact persisted limit branch.
+pub(super) fn limit_configuration_digest(root: &Value) -> Option<String> {
+    let bytes = serde_json::to_vec(
+        root.pointer("/doomscrolling/limits")
+            .unwrap_or(&Value::Null),
+    )
+    .ok()?;
+    Some(format!("{:x}", Sha256::digest(bytes)))
 }
 
 pub(super) fn read_mode(doomscrolling: &Value) -> Option<DoomscrollingMode> {
@@ -494,6 +518,7 @@ pub(super) fn default_config() -> DoomscrollingConfig {
             enabled: true,
             items: Vec::new(),
         },
+        limit_configuration_digest: None,
     }
 }
 

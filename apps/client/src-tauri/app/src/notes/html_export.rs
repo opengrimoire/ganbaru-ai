@@ -1,6 +1,6 @@
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use super::NoteHtmlArchiveSaveDto;
-use super::{NoteHtmlExportDto, NoteHtmlExportRequest};
+use super::NoteHtmlExportRequest;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::vault;
 use sqlx::SqlitePool;
@@ -10,13 +10,6 @@ use std::path::PathBuf;
 use tauri::{AppHandle, Runtime};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tauri_plugin_dialog::{DialogExt, FilePath};
-
-pub async fn export_page(
-    pool: &SqlitePool,
-    request: NoteHtmlExportRequest,
-) -> Result<NoteHtmlExportDto, String> {
-    ganbaru_notes::notes::html_export::export_page(pool, request).await
-}
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub async fn pick_and_write_archive<R: Runtime>(

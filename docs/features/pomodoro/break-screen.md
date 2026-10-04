@@ -30,6 +30,8 @@ The screen does not expose a stop-session action. Stopping remains a deliberate 
 
 Terminal completion screens accept one key or click to acknowledge. They do not offer extension, skip, restart, or stop because the run has already reached its terminal state.
 
+Desktop acceptance must check ending warnings and manual-pause reminders while main-window JavaScript is suspended, including an extension, persisted reminder dismissal, and an action clicked after the displayed phase changes. Check completion audio with native local Music and a browser playback host. Change volume, pause, or choose another track during the sound; the latest manual choice must survive restoration. Also check unavailable audio output and a vault handoff during completion. Unit tests cover timing, identities, source completion, interruption, and bounds; they do not establish operating-system notification or audio behavior.
+
 ## Sounds
 
 Settings control an optional warning before break end and the reminder cadence after end. `None` for repeat still permits the immediate break-finished cue. A warning that is already in the past does not fire late.

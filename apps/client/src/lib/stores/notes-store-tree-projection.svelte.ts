@@ -2,6 +2,7 @@ import { blockIndent } from "$lib/notes/block-queries";
 import { flattenNotesBlockOutlines, notesBlockOutlineFromBlock, type NotesBlockOutlineItem } from "$lib/notes/block-outline";
 import { blockChildrenAreVisible, buildNotesChildIdsByParent, parentIdForBlock, type NotesTreeState } from "$lib/notes/block-tree";
 import type { NotesUndoSnapshot } from "$lib/notes/undo-history";
+import { notesUndoSnapshotOperations } from "$lib/notes/undo-operations";
 import { applyNotesPostMutationToTree, type NotesPostMutationResult } from "$lib/notes/post-mutation";
 import { notesPageTitle } from "$lib/notes/page-title";
 import type { NotesBlock, NotesBlockOutline, NotesLoadedPage, NotesPage } from "$lib/notes/types";
@@ -53,7 +54,14 @@ export class NotesTreeProjectionController {
   applyLocalUndoSnapshot(target: NotesUndoSnapshot, source: NotesUndoSnapshot): void {
     const targetIds = new Set(target.blocks.map((block) => block.id));
     const sourceIds = new Set(source.blocks.map((block) => block.id));
-    const affectedIds = new Set([...targetIds, ...sourceIds]);
+    const operations = notesUndoSnapshotOperations(target, source);
+    const payloadIds = new Set(operations.flatMap((operation) => operation.type === "update" ? [operation.block_id] : []));
+    const placementIds = new Set([
+      ...operations.flatMap((operation) => operation.type === "move" || operation.type === "move_between_pages" ? [operation.block_id] : []),
+      ...[...targetIds].filter((id) => !sourceIds.has(id)),
+      ...[...sourceIds].filter((id) => !targetIds.has(id)),
+    ]);
+    const affectedIds = new Set([...payloadIds, ...placementIds]);
     const nextBlocksById = { ...this.blocksById };
     for (const blockId of sourceIds) {
       if (!targetIds.has(blockId)) {
@@ -62,34 +70,27 @@ export class NotesTreeProjectionController {
       }
     }
     for (const block of target.blocks) {
-      nextBlocksById[block.id] = block;
-      this.rememberChildVisibility(block);
+      if (!affectedIds.has(block.id)) continue;
+      const current = this.blocksById[block.id];
+      const restored = { ...(payloadIds.has(block.id) || !current ? block : current),
+        parent: placementIds.has(block.id) || !current ? block.parent : current.parent,
+        edit_revision: current?.edit_revision ?? block.edit_revision,
+      } as NotesBlock;
+      nextBlocksById[block.id] = restored;
+      this.rememberChildVisibility(restored);
     }
     for (const blockId of affectedIds) this.markLocallyChanged(blockId);
     this.blocksById = nextBlocksById;
-    const targetById = new Map(target.blocks.map((block) => [block.id, block]));
     const children = Object.fromEntries(Object.entries(this.childIdsByParentId)
-      .map(([parentId, ids]) => [parentId, ids.filter((id) => {
-        if (!affectedIds.has(id)) return true;
-        const targetBlock = targetById.get(id);
-        return !target.childIdsByParentId[parentId] && targetBlock !== undefined
-          && parentIdForBlock(targetBlock) === parentId;
-      })]));
+      .map(([parentId, ids]) => [parentId, ids.filter((id) => !placementIds.has(id))]));
     for (const [parentId, ids] of Object.entries(target.childIdsByParentId)) {
       const siblings = children[parentId] ?? [];
       for (let index = ids.length - 1; index >= 0; index -= 1) {
         const id = ids[index];
-        if (!targetIds.has(id)) continue;
+        if (!targetIds.has(id) || !placementIds.has(id)) continue;
         const nextIndex = siblings.indexOf(ids[index + 1]);
         siblings.splice(nextIndex < 0 ? siblings.length : nextIndex, 0, id);
       }
-      children[parentId] = siblings;
-    }
-    // Older recovery snapshots may not carry sibling order.
-    for (const block of target.blocks) {
-      const parentId = parentIdForBlock(block);
-      const siblings = children[parentId] ?? [];
-      if (!siblings.includes(block.id)) siblings.push(block.id);
       children[parentId] = siblings;
     }
     this.childIdsByParentId = children;
@@ -252,8 +253,10 @@ export class NotesTreeProjectionController {
       this.childIdsByParentId = Object.fromEntries(
         Object.entries(next.childIdsByParentId).map(([parentId, childIds]) => [parentId, [...childIds]]),
       );
-      for (const block of result.blocks ?? []) this.markLocallyChanged(block.id);
-      for (const blockId of result.removedBlockIds ?? []) this.markLocallyChanged(blockId);
+      if (!result.canonical) {
+        for (const block of result.blocks ?? []) this.markLocallyChanged(block.id);
+        for (const blockId of result.removedBlockIds ?? []) this.markLocallyChanged(blockId);
+      }
     }
     for (const page of result.pages ?? []) {
       const childPageBlock = this.blocksById[page.id];

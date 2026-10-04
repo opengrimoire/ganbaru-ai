@@ -1,5 +1,6 @@
 import { cloneNotesJson } from "$lib/notes/json-clone";
-import { moveNotesBlock, trashNotesBlock, updateNotesBlock } from "$lib/api/notes";
+import { createNotesCompoundPersistence } from "./notes-store-compound-edits";
+import type { NotesEditOperation } from "$lib/api/notes/compound-edits";
 import { collectLoadedBlockSubtreeIds } from "$lib/notes/block-duplicate";
 import { blockPlainText, canBlockHaveChildren, blockEditableRichText, blockWithRichText, blockIndent, blockUpdateWithIndent, blockUpdateFromBlock, blockWithToggleOpen, blockWithHeadingToggleOpen, headingIsToggleable, headingToggleOpen, createBlockUpdate, isTextEditableBlock } from "$lib/notes/block-factory";
 import { planNotesBlockDrop, type NotesBlockDropIntent } from "$lib/notes/block-drag";
@@ -44,7 +45,7 @@ interface NotesBlockMovementActionsContext {
   enqueueEditorMutation: (mutation: () => Promise<void>) => Promise<void>;
   localApplyBlockUpdate: (blockId: string, update: NotesBlockUpdate) => void;
   readSelectedPageId: () => string | null;
-  ensurePageBody: (pageId: string) => string | null;
+  ensurePageBody: (pageId: string, operations?: NotesEditOperation[]) => string | null;
   treeState: () => NotesTreeState;
   blockById: (blockId: string) => NotesBlock | undefined;
   flatBlockItemsForBlockContext: (blockId: string) => NotesBlockTreeItem[];
@@ -135,18 +136,6 @@ export function createNotesBlockMovementActions(
     });
   }
 
-  async function moveReparentedChildren(plan: NotesChildReparentPlan): Promise<boolean> {
-    if (plan.childIds.length === 0) return true;
-    const parent = parentFromMoveParentId(plan.parentId);
-    if (!parent) return false;
-    let after = plan.after;
-    for (const childId of plan.childIds) {
-      await context.moveAndApply(childId, { parent, after, before: null });
-      after = childId;
-    }
-    return true;
-  }
-
   async function deleteBlock(blockId: string): Promise<void> {
     const pageId = context.readSelectedPageId();
     const generation = context.readPageGeneration?.();
@@ -167,7 +156,8 @@ export function createNotesBlockMovementActions(
       context.localApplyBlockUpdate(blockId, update);
       context.requestBlockFocus(blockId, { start: 0, end: 0 });
       context.recordUndoAfter("delete", before, blockId);
-      const persistence = context.enqueueEditorMutation(async () => { await updateNotesBlock(blockId, update); });
+      const persist = createNotesCompoundPersistence(context, "delete_selection", [{ type: "update", block_id: blockId, update }]);
+      const persistence = context.enqueueEditorMutation(async () => { await persist(); });
       context.trackOptimisticBlockWrites([blockId], persistence);
       return;
     }
@@ -189,14 +179,23 @@ export function createNotesBlockMovementActions(
           context.createUndoSnapshot(plan.focusBlockId, [], focusSelection),
         );
         const deletedId = plan.deleteBlockId;
-        const persistence = context.enqueueEditorMutation(async () => { await trashNotesBlock(deletedId, true); });
+        const persist = createNotesCompoundPersistence(context, "delete_selection", [{ type: "trash", block_id: deletedId, in_trash: true }], deletedBlock ? [deletedBlock] : []);
+        const persistence = context.enqueueEditorMutation(async () => { await persist(); });
         context.trackOptimisticBlockWrites([plan.deleteBlockId], persistence);
         void persistence;
         return;
       }
+      const parent = parentFromMoveParentId(childPlan.parentId);
+      if (!parent) return;
+      const persist = createNotesCompoundPersistence(context, "delete_selection", [
+        { type: "move_children", source_block_id: plan.deleteBlockId, parent, after: childPlan.after },
+        { type: "trash", block_id: plan.deleteBlockId, in_trash: true },
+      ]);
       await context.enqueueEditorMutation(async () => {
-        if (!(await moveReparentedChildren(childPlan))) return;
-        await context.trashAndApply([plan.deleteBlockId!]);
+        const result = await persist();
+        let after = childPlan.after;
+        const placements = childPlan.childIds.map((id) => { const placement = { blockId: id, parent, after }; after = id; return placement; });
+        context.applyPostMutation({ blocks: result.blocks.filter((block) => !block.in_trash), placements, removedBlockIds: [plan.deleteBlockId!], canonical: true });
       });
     }
     context.requestBlockFocus(plan.focusBlockId);
@@ -208,6 +207,7 @@ export function createNotesBlockMovementActions(
     if (!pageId) return;
     const roots = notesSelectionRootBlockIds(context.treeState(), blockIds);
     if (roots.length === 0) return;
+    const state = context.treeState();
     const before = context.undoSnapshot(roots[0] ?? null);
     const focus = focusAfterDeletingSelection(roots);
     const removed = [...new Set([
@@ -215,13 +215,13 @@ export function createNotesBlockMovementActions(
       ...(context.outlineSubtreeIds?.(roots) ?? []),
     ])];
     context.applyPostMutation({ removedBlockIds: removed });
-    const bodyId = context.ensurePageBody(pageId);
+    const operations: NotesEditOperation[] = roots.map((id) => ({ type: "trash", block_id: id, in_trash: true }));
+    const bodyId = context.ensurePageBody(pageId, operations);
     const nextFocus = focus ?? bodyId;
     context.requestBlockFocus(nextFocus, nextFocus === bodyId && !focus ? { start: 0, end: 0 } : null);
     context.recordUndoAfter("delete", before, nextFocus);
-    const persistence = context.enqueueEditorMutation(async () => {
-      for (const root of roots) await trashNotesBlock(root, true);
-    });
+    const persist = createNotesCompoundPersistence(context, "delete_selection", operations, Object.values(state.blocksById));
+    const persistence = context.enqueueEditorMutation(async () => { await persist(); });
     context.trackOptimisticBlockWrites(removed, persistence);
   }
 
@@ -235,6 +235,7 @@ export function createNotesBlockMovementActions(
     if (!childPlan) return;
     const parent = parentFromMoveParentId(childPlan.parentId);
     if (!parent) return;
+    const originalBlocks = Object.values(context.treeState().blocksById);
     const before = context.createUndoSnapshot(blockId, [], { start: 0, end: 0 });
     const update = blockWithRichText(target, plan.mergedRichText);
     const children = childPlan.childIds.map((id) => context.blockById(id))
@@ -250,14 +251,16 @@ export function createNotesBlockMovementActions(
     context.applyPostMutation({ blocks: children, placements, removedBlockIds: [blockId] });
     const selection = { start: plan.targetCursorOffset, end: plan.targetCursorOffset };
     context.requestBlockFocus(target.id, selection);
-    context.recordUndo("delete", before, context.createUndoSnapshot(target.id, [], selection));
-    const persistence = context.enqueueEditorMutation(async () => {
-      await updateNotesBlock(target.id, update);
-      for (const placement of placements) {
-        await moveNotesBlock(placement.blockId, { parent, after: placement.after, before: null });
-      }
-      await trashNotesBlock(blockId, true);
-    });
+    const persist = createNotesCompoundPersistence(context, "merge", [
+      { type: "update", block_id: target.id, update },
+      { type: "move_children", source_block_id: blockId, parent, after: childPlan.after },
+      { type: "trash", block_id: blockId, in_trash: true },
+    ], originalBlocks);
+    const afterSnapshot = context.createUndoSnapshot(target.id, [], selection);
+    if (before) before.nativeEditId = persist.operationId;
+    if (afterSnapshot) afterSnapshot.nativeEditId = persist.operationId;
+    context.recordUndo("delete", before, afterSnapshot);
+    const persistence = context.enqueueEditorMutation(async () => { await persist(); });
     context.trackOptimisticBlockWrites([blockId, target.id, ...childPlan.childIds], persistence);
   }
 
@@ -267,6 +270,7 @@ export function createNotesBlockMovementActions(
     direction: "nest" | "outdent",
     selection?: NotesTextSelection,
     record = true,
+    batch?: NotesEditOperation[],
   ): boolean {
     if (!context.readSelectedPageId()) return false;
     const block = context.blockById(blockId);
@@ -293,10 +297,13 @@ export function createNotesBlockMovementActions(
         context.requestBlockFocus(blockId, caret);
         context.recordUndo("move", before, context.createUndoSnapshot(blockId, [], caret));
       }
-      const persistence = context.enqueueEditorMutation(async () => {
-        await moveNotesBlock(blockId, placement);
-      });
-      context.trackOptimisticBlockWrites([blockId], persistence);
+      const operations: NotesEditOperation[] = [{ type: "move", block_id: blockId, request: placement }];
+      if (batch) batch.push(...operations);
+      else {
+        const persist = createNotesCompoundPersistence(context, "indent_selection", operations);
+        const persistence = context.enqueueEditorMutation(async () => { await persist(); });
+        context.trackOptimisticBlockWrites([blockId], persistence);
+      }
       return true;
     }
     const nextIndent = plan
@@ -359,20 +366,24 @@ export function createNotesBlockMovementActions(
       context.requestBlockFocus(blockId, caret);
       context.recordUndo("move", before, context.createUndoSnapshot(blockId, [], caret));
     }
-    const persistence = context.enqueueEditorMutation(async () => {
-      if (parentBlock && openUpdate) await updateNotesBlock(parentBlock.id, openUpdate);
-      await updateNotesBlock(blockId, indentUpdate);
-      if (plan) await moveNotesBlock(blockId, request);
-      for (const entry of children) {
-        await updateNotesBlock(entry.child.id, entry.update);
-        if (entry.placement) await moveNotesBlock(entry.child.id, { parent, after: entry.placement.after, before: null });
-      }
-      for (const entry of following) {
-        if (entry.update) await updateNotesBlock(entry.sibling.id, entry.update);
-        await moveNotesBlock(entry.sibling.id, { parent: entry.placement.parent, after: entry.placement.after, before: null });
-      }
-    });
-    context.trackOptimisticBlockWrites([blockId, ...children.map(({ child }) => child.id), ...followingIds, ...(parentBlock && openUpdate ? [parentBlock.id] : [])], persistence);
+    const operations: NotesEditOperation[] = [];
+    if (parentBlock && openUpdate) operations.push({ type: "update", block_id: parentBlock.id, update: openUpdate });
+    operations.push({ type: "update", block_id: blockId, update: indentUpdate });
+    if (plan) operations.push({ type: "move", block_id: blockId, request });
+    for (const entry of children) {
+      operations.push({ type: "update", block_id: entry.child.id, update: entry.update });
+      if (entry.placement) operations.push({ type: "move", block_id: entry.child.id, request: { parent, after: entry.placement.after, before: null } });
+    }
+    for (const entry of following) {
+      if (entry.update) operations.push({ type: "update", block_id: entry.sibling.id, update: entry.update });
+      operations.push({ type: "move", block_id: entry.sibling.id, request: { parent: entry.placement.parent, after: entry.placement.after, before: null } });
+    }
+    if (batch) batch.push(...operations);
+    else {
+      const persist = createNotesCompoundPersistence(context, "indent_selection", operations);
+      const persistence = context.enqueueEditorMutation(async () => { await persist(); });
+      context.trackOptimisticBlockWrites([blockId, ...children.map(({ child }) => child.id), ...followingIds, ...(parentBlock && openUpdate ? [parentBlock.id] : [])], persistence);
+    }
     return true;
   }
 
@@ -405,11 +416,15 @@ export function createNotesBlockMovementActions(
     const before = context.createUndoSnapshot(selected[0]);
     if (before && selection) before.documentSelection = selection;
     let changed = false;
+    const operations: NotesEditOperation[] = [];
     const ordered = direction === "outdent" ? [...selected].reverse() : selected;
     for (const id of ordered) {
-      changed = applyKeyboardIndent(id, direction, undefined, false) || changed;
+      changed = applyKeyboardIndent(id, direction, undefined, false, operations) || changed;
     }
     if (!changed) return;
+    const persist = createNotesCompoundPersistence(context, "indent_selection", operations);
+    const persistence = context.enqueueEditorMutation(async () => { await persist(); });
+    context.trackOptimisticBlockWrites(selected, persistence);
     const after = context.createUndoSnapshot(selected[0]);
     if (after && selection) after.documentSelection = selection;
     context.recordUndo("move", before, after);

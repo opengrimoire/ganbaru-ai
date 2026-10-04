@@ -4,15 +4,15 @@
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
-    buildProjectDependencyCascadeProposal,
     buildProjectGanttDatePatch,
     buildProjectGanttTimeline,
-    type ProjectDependencyCascadeItem,
     type ProjectGanttDateInteraction,
     type ProjectGanttDependencyEdge,
     type ProjectGanttRow,
     type ProjectGanttTick,
   } from "$lib/projects/gantt";
+  import type { ProjectDependencyCascadeItem } from "$lib/api/project-cascade";
+  import { ProjectDependencyCascadeController } from "$lib/projects/dependency-cascade-controller.svelte";
   import type { ProjectSection, ProjectStatus, ProjectTask } from "$lib/projects/types";
   import { getProjects } from "$lib/stores/projects.svelte";
   import { cn } from "$lib/utils";
@@ -36,9 +36,11 @@
   const projects = getProjects();
   const { t } = getLocalization();
 
-  let dependencyCascadeOpen = $state(false);
-  let dependencyCascadeApplying = $state(false);
-  let dependencyCascadeError = $state<string | null>(null);
+  const cascade = new ProjectDependencyCascadeController(() => projects.selectedProjectId, (preview) => projects.applyDependencyCascade(preview));
+  $effect(() => {
+    projects.selectedProjectId;
+    cascade.reset();
+  });
   let ganttDateDrag = $state<{
     taskId: string;
     interaction: ProjectGanttDateInteraction;
@@ -63,10 +65,7 @@
     dependencyBlockedTaskIds,
     today: todayDate,
   }));
-  const dependencyCascadeProposal = $derived.by(() => buildProjectDependencyCascadeProposal({
-    tasks,
-    dependencies: projects.dependencies,
-  }));
+  const dependencyCascadeProposal = $derived(cascade.preview);
 
   function taskById(taskId: string): ProjectTask | undefined {
     return tasks.find((task) => task.id === taskId);
@@ -204,6 +203,19 @@
     return t("projects.gantt.cascadeShiftDays", item.shiftDays);
   }
 
+  async function openCascadeTask(taskId: string): Promise<void> {
+    const projectId = dependencyCascadeProposal?.projectId;
+    if (!projectId) return;
+    try {
+      await projects.ensureTaskDetailData(projectId, taskId);
+      if (projects.selectedProjectId !== projectId) return;
+      const task = projects.taskById(taskId);
+      if (task) onOpenTask(task);
+    } catch (error) {
+      if (projects.selectedProjectId === projectId) cascade.error = error instanceof Error ? error.message : String(error);
+    }
+  }
+
   function ganttRowTone(row: ProjectGanttRow): string {
     if (row.overdue) return "border-destructive bg-destructive text-destructive-foreground";
     if (row.blocked) return "border-amber-600 bg-amber-500 text-black";
@@ -236,33 +248,6 @@
       : t("projects.gantt.dependencyOk", edge.blockingTitle, edge.blockedTitle);
   }
 
-  async function applyDependencyCascadeProposal(): Promise<void> {
-    if (dependencyCascadeProposal.items.length === 0) return;
-    const itemsByTaskId = new Map(dependencyCascadeProposal.items.map((item) => [item.taskId, item]));
-    const tasksToUpdate = tasks.filter((task) => itemsByTaskId.has(task.id));
-    dependencyCascadeApplying = true;
-    dependencyCascadeError = null;
-    try {
-      await projects.updateTasks(tasksToUpdate, (task) => {
-        const item = itemsByTaskId.get(task.id);
-        if (!item) return {};
-        return {
-          startDate: item.nextStartDate,
-          dueDate: item.nextDueDate,
-          targetEndDate: item.nextTargetEndDate,
-        };
-      });
-      dependencyCascadeOpen = false;
-    } catch (error) {
-      dependencyCascadeError = t(
-        "projects.gantt.cascadeApplyFailed",
-        error instanceof Error ? error.message : String(error),
-      );
-    } finally {
-      dependencyCascadeApplying = false;
-    }
-  }
-
   function openGanttDependencyTarget(edge: ProjectGanttDependencyEdge): void {
     const blockedTask = taskById(edge.blockedTaskId);
     if (blockedTask) onOpenTask(blockedTask);
@@ -288,27 +273,19 @@
                   <span class="rounded border border-destructive/40 bg-destructive/10 px-1.5 py-0.5 text-destructive">{t("projects.gantt.lateCount", ganttTimeline.rows.filter((row) => row.overdue).length)}</span>
                   <span class="rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-amber-700 dark:text-amber-300">{t("projects.gantt.blockedCount", ganttTimeline.rows.filter((row) => row.blocked).length)}</span>
                   <span class="rounded border border-destructive/40 bg-destructive/10 px-1.5 py-0.5 text-destructive">{t("projects.gantt.dependencyConflictCount", ganttTimeline.dependencyEdges.filter((edge) => edge.violated).length)}</span>
-                  {#if dependencyCascadeProposal.items.length > 0}
-                    <button
-                      type="button"
-                      class={cn(
-                        "rounded border px-1.5 py-0.5 font-medium",
-                        dependencyCascadeOpen
-                          ? "border-primary/50 bg-primary/10 text-primary"
-                          : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground",
-                      )}
-                      onclick={() => {
-                        dependencyCascadeOpen = !dependencyCascadeOpen;
-                      }}
-                    >
-                      {t("projects.gantt.cascadeReview", dependencyCascadeProposal.items.length)}
-                    </button>
-                  {/if}
                 </div>
               {/if}
+              <button
+                type="button"
+                class="rounded border border-border bg-card px-2 py-1 text-[0.733333rem] font-medium hover:bg-accent disabled:opacity-60"
+                disabled={cascade.loading || cascade.applying || !projects.selectedProjectId}
+                onclick={() => { void cascade.review(); }}
+              >
+                {cascade.loading ? t("common.loading") : t("projects.gantt.cascadeTitle")}
+              </button>
             </div>
 
-            {#if dependencyCascadeOpen && dependencyCascadeProposal.items.length > 0}
+            {#if cascade.open}
               <section class="grid gap-2 rounded-md border border-border bg-card p-2">
                 <div class="flex flex-wrap items-center justify-between gap-2">
                   <div>
@@ -322,7 +299,7 @@
                       type="button"
                       class="rounded-md border border-border bg-background px-2 py-1 text-[0.766667rem] hover:bg-accent"
                       onclick={() => {
-                        dependencyCascadeOpen = false;
+                        cascade.reset();
                       }}
                     >
                       {t("common.cancel")}
@@ -330,22 +307,19 @@
                     <button
                       type="button"
                       class="rounded-md bg-primary px-2 py-1 text-[0.766667rem] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={dependencyCascadeApplying}
-                      onclick={() => { void applyDependencyCascadeProposal(); }}
+                      disabled={cascade.loading || cascade.applying || !dependencyCascadeProposal?.items.length || (dependencyCascadeProposal?.conflicts.length ?? 0) > 0}
+                      onclick={() => { void cascade.apply(); }}
                     >
-                      {dependencyCascadeApplying ? t("common.loading") : t("projects.gantt.cascadeApply")}
+                      {cascade.applying ? t("common.loading") : t("projects.gantt.cascadeApply")}
                     </button>
                   </div>
                 </div>
                 <div class="grid gap-1">
-                  {#each dependencyCascadeProposal.items as item (item.taskId)}
+                  {#each dependencyCascadeProposal?.items ?? [] as item (item.taskId)}
                     <button
                       type="button"
                       class="grid gap-1 rounded border border-border bg-background px-2 py-1.5 text-left hover:bg-accent"
-                      onclick={() => {
-                        const task = taskById(item.taskId);
-                        if (task) onOpenTask(task);
-                      }}
+                      onclick={() => { void openCascadeTask(item.taskId); }}
                     >
                       <span class="flex min-w-0 flex-wrap items-center gap-1">
                         <span class="min-w-0 flex-1 truncate text-[0.8rem] font-medium">{item.title}</span>
@@ -365,9 +339,19 @@
                     </button>
                   {/each}
                 </div>
-                {#if dependencyCascadeError}
+                {#if cascade.loading}
+                  <p class="text-[0.766667rem] text-muted-foreground">{t("common.loading")}</p>
+                {:else if dependencyCascadeProposal && !dependencyCascadeProposal.items.length && !dependencyCascadeProposal.conflicts.length}
+                  <p class="text-[0.766667rem] text-muted-foreground">{t("projects.gantt.cascadeNoChanges")}</p>
+                {/if}
+                {#each dependencyCascadeProposal?.conflicts ?? [] as conflict (conflict.dependencyId)}
+                  <p class="rounded border border-destructive/30 bg-destructive/10 px-2 py-1 text-[0.766667rem] text-destructive">
+                    {conflict.title}: {t(`projects.gantt.cascadeConflicts.${conflict.reason}`)}
+                  </p>
+                {/each}
+                {#if cascade.error}
                   <div class="rounded border border-destructive/30 bg-destructive/10 px-2 py-1 text-[0.766667rem] text-destructive">
-                    {dependencyCascadeError}
+                    {cascade.error}
                   </div>
                 {/if}
               </section>

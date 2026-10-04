@@ -6,7 +6,8 @@ use crate::vault::handoff::state::{PendingAcknowledgement, StoredOutgoingTransfe
 use crate::vault::handoff::{current_compatibility, sha256_file};
 use crate::vault::ownership::VaultOwnershipManager;
 use crate::vault::quiescence::{
-    SnapshotQuiescence, SourceQuiescence, begin_snapshot_quiescence, begin_source_quiescence,
+    SnapshotQuiescence, SourceQuiescence, abort_source_preparation, begin_snapshot_quiescence,
+    begin_source_quiescence,
 };
 use std::fs;
 use std::time::Instant;
@@ -94,7 +95,7 @@ impl<R: Runtime> CoordinatorState<R> {
                 .ok_or_else(|| "vault ownership generation is exhausted".to_string())?,
             BundlePurpose::Refresh => status.generation,
         };
-        let (quiescence, snapshot_quiescence): (
+        let (mut quiescence, snapshot_quiescence): (
             Option<SourceQuiescence>,
             Option<SnapshotQuiescence>,
         ) = match purpose {
@@ -116,19 +117,13 @@ impl<R: Runtime> CoordinatorState<R> {
             match self.pairing.outgoing_snapshot_paths(&transfer_id) {
                 Ok(paths) => paths,
                 Err(error) => {
-                    if let Some(quiescence) = quiescence {
-                        let _ = quiescence.abort(&self.app);
-                    }
-                    return Err(error);
+                    return Err(abort_source_preparation(quiescence, error).await);
                 }
             };
         let vault_root = match crate::vault::active_vault_path(&self.app) {
             Ok(path) => path,
             Err(error) => {
-                if let Some(quiescence) = quiescence {
-                    let _ = quiescence.abort(&self.app);
-                }
-                return Err(error);
+                return Err(abort_source_preparation(quiescence, error).await);
             }
         };
         let snapshot_result = crate::vault::backup::create_handoff_archive(
@@ -140,11 +135,8 @@ impl<R: Runtime> CoordinatorState<R> {
         drop(snapshot_quiescence);
         let _ = fs::remove_file(&database_snapshot);
         if let Err(error) = snapshot_result {
-            if let Some(quiescence) = quiescence {
-                let _ = quiescence.abort(&self.app);
-            }
             let _ = fs::remove_file(&archive_path);
-            return Err(error);
+            return Err(abort_source_preparation(quiescence, error).await);
         }
         let metadata_result: Result<BundleMetadata, String> = (|| {
             Ok(BundleMetadata {
@@ -164,22 +156,16 @@ impl<R: Runtime> CoordinatorState<R> {
         let metadata = match metadata_result {
             Ok(metadata) => metadata,
             Err(error) => {
-                if let Some(quiescence) = quiescence {
-                    let _ = quiescence.abort(&self.app);
-                }
                 let _ = fs::remove_file(&archive_path);
-                return Err(error);
+                return Err(abort_source_preparation(quiescence, error).await);
             }
         };
         if let Err(error) = self
             .pairing
             .register_outgoing_bundle(metadata.clone(), archive_path.clone())
         {
-            if let Some(quiescence) = quiescence {
-                let _ = quiescence.abort(&self.app);
-            }
             let _ = fs::remove_file(&archive_path);
-            return Err(error);
+            return Err(abort_source_preparation(quiescence, error).await);
         }
         if let Err(error) = self
             .pairing
@@ -192,11 +178,11 @@ impl<R: Runtime> CoordinatorState<R> {
             let _ = self
                 .pairing
                 .unregister_outgoing_bundle(&metadata.transfer_id);
-            if let Some(quiescence) = quiescence {
-                let _ = quiescence.abort(&self.app);
-            }
             let _ = fs::remove_file(&archive_path);
-            return Err(error);
+            return Err(abort_source_preparation(quiescence, error).await);
+        }
+        if let Some(quiescence) = quiescence.as_mut() {
+            quiescence.retain_for_retry();
         }
         self.prepared = Some(PreparedTransfer {
             metadata: metadata.clone(),
@@ -223,10 +209,12 @@ impl<R: Runtime> CoordinatorState<R> {
             .app
             .state::<VaultOwnershipManager>()
             .commit_outgoing(&metadata.vault_id, &metadata.transfer_id)?;
+        if let Some(quiescence) = prepared.quiescence.take() {
+            quiescence.retain_outgoing();
+        }
         self.pairing
             .mark_outgoing_committed(&metadata.transfer_id)?;
         prepared.committed = true;
-        prepared.quiescence.take();
         Ok(CoordinatorResponse::OwnershipGrant {
             vault_id: metadata.vault_id,
             transfer_id: metadata.transfer_id,
@@ -289,7 +277,10 @@ impl<R: Runtime> CoordinatorState<R> {
         Ok(CoordinatorResponse::ActivationAcknowledged { transfer_id })
     }
 
-    pub(super) fn cancel(&mut self, transfer_id: String) -> Result<CoordinatorResponse, String> {
+    pub(super) async fn cancel(
+        &mut self,
+        transfer_id: String,
+    ) -> Result<CoordinatorResponse, String> {
         let prepared = self
             .prepared
             .as_ref()
@@ -305,7 +296,7 @@ impl<R: Runtime> CoordinatorState<R> {
             .as_mut()
             .and_then(|prepared| prepared.quiescence.take())
         {
-            quiescence.abort(&self.app)?;
+            quiescence.abort().await?;
         }
         self.cleanup_prepared();
         Ok(CoordinatorResponse::Cancelled { transfer_id })

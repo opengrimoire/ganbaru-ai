@@ -17,7 +17,9 @@ import {
   type RhythmState,
 } from "$lib/pomodoro/rhythm";
 import { selectFocusOwner } from "$lib/pomodoro/ownership";
-import { BREAK_OVERTIME_RAIL_GRACE_SECONDS } from "$lib/stores/pomodoro-machine";
+
+/** Visual overtime allowance never extends native execution or the Calendar deadline. */
+const BREAK_OVERTIME_RAIL_GRACE_SECONDS = 10;
 
 /**
  * Compute the planned sequence of focus and break segments for a pomodoro

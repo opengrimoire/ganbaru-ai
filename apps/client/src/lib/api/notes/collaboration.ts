@@ -35,16 +35,6 @@ export async function updateNotesLocalUser(
   );
 }
 
-export async function refreshNotesMentionNotifications(): Promise<number> {
-  const dbUrl = await ensureDbUrl();
-  const refreshed = await invoke<unknown>("notes_refresh_mention_notifications", { dbUrl });
-  if (typeof refreshed !== "number" || !Number.isInteger(refreshed)) {
-    throw new Error("notes_refresh_mention_notifications returned an invalid count");
-  }
-  invalidateNotesNotificationSchedule();
-  return refreshed;
-}
-
 export async function listPendingNotesMentionNotifications():
   Promise<NotesMentionNotification[]> {
   const dbUrl = await ensureDbUrl();

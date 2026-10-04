@@ -10,19 +10,6 @@ use super::validation::{
 };
 use super::*;
 
-pub(super) struct SegmentEventContext {
-    run_id: String,
-    phase: String,
-    status: String,
-    planned_end: String,
-}
-
-pub(super) struct ExistingPause {
-    started_at: String,
-    ended_at: Option<String>,
-    reason: String,
-}
-
 pub(super) struct RunEventInsert<'a> {
     pub(super) run_id: &'a str,
     pub(super) segment_id: Option<&'a str>,

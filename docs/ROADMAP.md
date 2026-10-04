@@ -30,9 +30,9 @@ These domains already have useful implementations but still need hardening or mi
 
 ### Calendar and Pomodoro correctness
 
-- Move live Calendar transition and reconfiguration decisions into Rust. Scheduler and rail selection now share an active-first policy with stable tie-breakers.
-- Align TypeScript and Rust recurrence behavior through shared fixtures, then resolve COUNT with exclusions and the relationship between RDATE and RRULE termination.
-- Expose idle-source availability and apply bounded retry or backoff instead of silently treating adapter errors as zero idle duration.
+- Complete real desktop/Android acceptance of native Calendar scope, deletion/Undo and transactional Focus transitions. Scheduler and rail selection share an active-first policy with stable tie-breakers.
+- Verify installed-app navigation and editing latency after the sole native recurrence engine cutover. Native shared fixtures cover COUNT before exclusions and independent RDATE; unsupported imported rules retain explicit preservation limits.
+- Complete physical idle/suspend and notification delivery acceptance. Native execution reports source unavailability, applies bounded observation retries, and grants idle grace only after acknowledged warning visibility.
 
 See [Calendar](features/calendar/README.md), [Pomodoro](features/pomodoro/README.md), [recurrence expansion](algorithms/calendar/recurrence-expansion.md), and [time-conflict detection](algorithms/calendar/time-conflict-detection.md).
 
@@ -55,6 +55,7 @@ See [Android](platforms/android/README.md).
 
 - Finish incomplete planning, database, editor, transfer, and history workflows without weakening the current source-of-truth model.
 - Keep large collections bounded through pagination, visible-window queries, and measured bundle boundaries.
+- Complete real editor and planning interaction acceptance for native atomic Notes edits, Project bulk mutations and reviewed dependency cascades.
 - Refine project-to-Calendar and project-to-Notes transitions around accepted commitments rather than duplicated state.
 
 See [Projects](features/projects/README.md) and [Notes](features/notes/README.md).
@@ -69,7 +70,7 @@ See [Chat](features/chat/README.md), [AI integration](features/ai/README.md), an
 
 ### Music and Doomscrolling
 
-- Complete local library repair, assignment, and Android queue behavior where the current UI still exposes partial workflows.
+- Complete local library repair and assignment workflows, and verify native Android queue behavior across background and service lifecycles.
 - Redesign YouTube interaction so no Ganbaru element overlays or disables required embedded-player interaction.
 - Complete browser and desktop rule coverage, diagnostics, false-positive recovery, and cross-platform reliability.
 - Treat any future Firefox or content-aware blocking as a separate reviewed capability.

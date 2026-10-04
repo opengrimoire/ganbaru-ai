@@ -179,7 +179,7 @@ fn canonical_music_schema_enforces_identity_membership_and_snooze_invariants() {
 }
 
 #[test]
-fn default_playlists_without_memberships_do_not_block_playback_state_persistence() {
+fn default_playlists_have_a_complete_order_without_memberships_or_obsolete_resume_storage() {
     super::block_on(async {
         let pool = migrated_memory_pool().await;
 
@@ -201,35 +201,9 @@ fn default_playlists_without_memberships_do_not_block_playback_state_persistence
         assert_eq!(memberships, 0);
         assert_eq!(sort_orders, (0..11).collect::<Vec<_>>());
 
-        sqlx::query(
-            "INSERT INTO music_playback_states
-                (source_identity, source_kind, position_ms, duration_ms, status, updated_at)
-             VALUES ('local:/music/focus.flac', 'local-file', 42000, 180000, 'paused', 1700000000000)",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
-
-        let restored: (i64, Option<i64>, String) = sqlx::query_as(
-            "SELECT position_ms, duration_ms, status
-             FROM music_playback_states
-             WHERE source_identity = 'local:/music/focus.flac'",
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-        assert_eq!(restored, (42_000, Some(180_000), "paused".to_string()));
-
-        let playlists_after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM music_playlists")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        let memberships_after: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM music_playlist_memberships")
-                .fetch_one(&pool)
-                .await
-                .unwrap();
-        assert_eq!(playlists_after, 11);
-        assert_eq!(memberships_after, 0);
+        let obsolete_tables: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'music_playback_states'",
+        ).fetch_one(&pool).await.unwrap();
+        assert_eq!(obsolete_tables, 0);
     });
 }

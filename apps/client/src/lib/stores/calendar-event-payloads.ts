@@ -9,7 +9,6 @@ import type {
 import { recurrenceToRrule } from "$lib/components/calendar/rrule";
 import { sanitizeCalendarTime } from "$lib/components/calendar/utils";
 import { sanitizeCalendarDescriptionHtml } from "$lib/calendar/description-sanitizer";
-import { configEquals } from "$lib/pomodoro/rhythm";
 import { toDbTime } from "./map-row";
 import type { MusicContextAssignmentDraft } from "$lib/music/music-context-assignment";
 
@@ -81,144 +80,12 @@ export interface CalendarEventUpdatePayload {
   pomodoroConfig: PomodoroConfigPatch | null;
 }
 
-export interface CalendarDetachInstancePayload {
-  parentId: string;
-  instanceDate: string;
-  exceptions: string;
-  newId: string;
-  title: string;
-  startTime: string;
-  endTime: string;
-  timezone: string;
-  calendarId: string;
-  projectId: string | null;
-  environmentId: string | null;
-  playlistId: string | null;
-  color: number | null;
-  notifications: string | null;
-  allDay: boolean;
-  location: string;
-  transparency: EventTransparency;
-  status: EventStatus;
-  now: string;
-  musicSnapshotAssignments: MusicContextAssignmentDraft[];
-  musicOverrideAssignments: MusicContextAssignmentDraft[];
-}
-
-export interface CalendarSplitSeriesPayload {
-  parentId: string;
-  dayBefore: string;
-  cappedRrule: string | null;
-  newId: string;
-  title: string;
-  startTime: string;
-  endTime: string;
-  timezone: string;
-  calendarId: string;
-  projectId: string | null;
-  environmentId: string | null;
-  playlistId: string | null;
-  color: number | null;
-  notifications: string | null;
-  exceptions: string | null;
-  rrule: string | null;
-  allDay: boolean;
-  location: string;
-  transparency: EventTransparency;
-  status: EventStatus;
-  descriptionPatch: string | null;
-  urlPatch: string | null;
-  localRsvpStatus: AttendeeStatus | null;
-  meetingEnabled: boolean;
-  copyPomodoroConfig: boolean;
-  pomodoroConfig: PomodoroConfig | null;
-  now: string;
-  musicSnapshotAssignments: MusicContextAssignmentDraft[];
-  musicOverrideAssignments: MusicContextAssignmentDraft[];
-}
-
-export type CalendarRecurrenceCommitOperationPayload =
-  | { type: "update_event"; patch: CalendarEventUpdatePayload }
-  | { type: "detach_instance"; input: CalendarDetachInstancePayload }
-  | { type: "split_series"; input: CalendarSplitSeriesPayload }
-  | {
-      type: "transfer_active_event_reference";
-      transfer: {
-        newEventId: string;
-        newEventDate: string | null;
-        plannedEnd: string | null;
-      };
-    };
-
 export function nowIso(): string {
   return new Date().toISOString();
 }
 
 export function localTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
-}
-
-export function hasEventPatchKey<K extends keyof CalendarEvent>(
-  changes: Partial<CalendarEvent>,
-  key: K,
-): boolean {
-  return Object.prototype.hasOwnProperty.call(changes, key);
-}
-
-export function resolvedPomodoroConfigForTimedEvent(
-  parent: CalendarEvent,
-  changes: Partial<CalendarEvent>,
-  allDay: boolean | undefined,
-): {
-  copyFromParent: boolean;
-  finalConfig: PomodoroConfig | undefined;
-  payloadConfig: PomodoroConfig | null;
-} {
-  if (allDay) {
-    return { copyFromParent: false, finalConfig: undefined, payloadConfig: null };
-  }
-  if (hasEventPatchKey(changes, "pomodoroConfig")) {
-    return {
-      copyFromParent: false,
-      finalConfig: changes.pomodoroConfig,
-      payloadConfig: changes.pomodoroConfig ?? null,
-    };
-  }
-  return {
-    copyFromParent: true,
-    finalConfig: parent.pomodoroConfig,
-    payloadConfig: null,
-  };
-}
-
-/**
- * Detect whether changes affect event timing or pomodoro structure
- * (which would invalidate existing pomodoro segments) vs. purely cosmetic fields.
- */
-export function hasStructuralChanges(
-  template: CalendarEvent,
-  changes: Partial<CalendarEvent>,
-): boolean {
-  if (changes.start) {
-    const oldTime = template.start.split(" ")[1];
-    const newTime = String(changes.start).split(" ")[1];
-    if (oldTime !== newTime) return true;
-  }
-  if (changes.end) {
-    const oldTime = template.end.split(" ")[1];
-    const newTime = String(changes.end).split(" ")[1];
-    if (oldTime !== newTime) return true;
-  }
-  if (changes.pomodoroConfig !== undefined) {
-    const oldCfg = template.pomodoroConfig;
-    const newCfg = changes.pomodoroConfig;
-    if (!oldCfg && newCfg) return true;
-    if (oldCfg && !newCfg) return true;
-    if (oldCfg && newCfg) {
-      if (!configEquals(oldCfg, newCfg)) return true;
-    }
-  }
-  return false;
 }
 
 export function prepareUpdateBlockPayload(

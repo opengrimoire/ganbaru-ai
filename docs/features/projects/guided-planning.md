@@ -72,7 +72,7 @@ Accepted plan snapshots can support comparison and review, while current Project
 
 ## Replanning
 
-Date or dependency changes can produce a proposal for affected tasks and milestones. The user reviews the complete cascade before applying it. Locked dates, completed work, archived work, and external commitments remain protected unless explicitly included.
+Date or dependency changes can produce a proposal for affected tasks and milestones. The implemented Gantt workflow reviews the complete canonical cascade and protects completed work, archived work, and scheduled Calendar commitments. Explicit date locks and user-selected protection overrides remain planned for guided replanning; the current cascade cannot override these protections. See [Dependency date proposals](settings-and-scheduling.md#dependency-date-proposals).
 
 ## Reports and attention
 

@@ -36,13 +36,9 @@ describe("Music YouTube adapter", () => {
       state,
       loadRuntime,
       effectiveVolume: () => 1,
-      loadSource: vi.fn(async () => undefined),
+      resolvePlaylist: vi.fn(async () => undefined),
       persist: vi.fn(async () => undefined),
       updateExternalControls: vi.fn(),
-      updateTray: vi.fn(),
-      canPlayNext: () => false,
-      playNext: vi.fn(async () => undefined),
-      handlePosition: vi.fn(),
       onDurationKnown,
       setPlaybackStarting,
       getHostUrl: vi.fn(async () => "http://127.0.0.1:1234/player?token=test-token"),
@@ -87,7 +83,7 @@ describe("Music YouTube adapter", () => {
     expect(setPlaybackStarting).toHaveBeenLastCalledWith(false);
   });
 
-  it("expands a current YouTube playlist and loads its first video", async () => {
+  it("reports a resolved YouTube playlist for native queue selection", async () => {
     const parsed = parseMusicSourceInput(
       "https://www.youtube.com/playlist?list=PL1234567890",
     );
@@ -117,13 +113,9 @@ describe("Music YouTube adapter", () => {
       state,
       loadRuntime,
       effectiveVolume: () => 1,
-      loadSource,
+      resolvePlaylist: loadSource,
       persist: vi.fn(async () => undefined),
       updateExternalControls: vi.fn(),
-      updateTray: vi.fn(),
-      canPlayNext: () => false,
-      playNext: vi.fn(async () => undefined),
-      handlePosition: vi.fn(),
       onDurationKnown: vi.fn(),
       setPlaybackStarting: vi.fn(),
       getHostUrl: vi.fn(async () => "http://127.0.0.1:1234/player?token=test-token"),
@@ -146,14 +138,13 @@ describe("Music YouTube adapter", () => {
     } as unknown as MessageEvent<unknown>);
     await vi.waitFor(() => expect(loadSource).toHaveBeenCalled());
 
-    expect(state.queue.map((source) => source.identity)).toEqual([
-      "youtube:video:video-a",
-      "youtube:video:video-b",
-      "youtube:video:video-c",
-    ]);
-    expect(state.queueHistory).toEqual([]);
-    expect(state.pendingQueueIndex).toBe(0);
-    expect(loadSource).toHaveBeenCalledWith(state.queue[0], true);
+    expect(loadSource).toHaveBeenCalledWith([
+      expect.objectContaining({ identity: "youtube:video:video-a" }),
+      expect.objectContaining({ identity: "youtube:video:video-b" }),
+      expect.objectContaining({ identity: "youtube:video:video-c" }),
+    ], null, true);
+    expect(state.queue).toEqual([parsed.source]);
+    expect(state.pendingQueueIndex).toBeNull();
     expect(persistYouTubePlaylist).toHaveBeenCalledWith(expect.objectContaining({
       playlistId: parsed.source.playlistId,
       videoIds: ["video-a", "video-b", "video-c"],
@@ -185,13 +176,9 @@ describe("Music YouTube adapter", () => {
       state,
       loadRuntime,
       effectiveVolume: () => 1,
-      loadSource: vi.fn(async () => undefined),
+      resolvePlaylist: vi.fn(async () => undefined),
       persist: vi.fn(async () => undefined),
       updateExternalControls: vi.fn(),
-      updateTray: vi.fn(),
-      canPlayNext: () => false,
-      playNext: vi.fn(async () => undefined),
-      handlePosition: vi.fn(),
       onDurationKnown: vi.fn(),
       setPlaybackStarting: vi.fn(),
       getHostUrl: vi.fn(async () => "http://127.0.0.1:1234/player?token=test-token"),
@@ -263,13 +250,9 @@ describe("Music YouTube adapter", () => {
       state,
       loadRuntime,
       effectiveVolume: () => 1,
-      loadSource,
+      resolvePlaylist: loadSource,
       persist: vi.fn(async () => undefined),
       updateExternalControls: vi.fn(),
-      updateTray: vi.fn(),
-      canPlayNext: () => false,
-      playNext: vi.fn(async () => undefined),
-      handlePosition: vi.fn(),
       onDurationKnown: vi.fn(),
       setPlaybackStarting: vi.fn(),
       getHostUrl: vi.fn(async () => "http://127.0.0.1:1234/player?token=test-token"),
@@ -321,13 +304,9 @@ describe("Music YouTube adapter", () => {
       state,
       loadRuntime,
       effectiveVolume: () => 1,
-      loadSource: vi.fn(async () => undefined),
+      resolvePlaylist: vi.fn(async () => undefined),
       persist: vi.fn(async () => undefined),
       updateExternalControls: vi.fn(),
-      updateTray: vi.fn(),
-      canPlayNext: () => false,
-      playNext: vi.fn(async () => undefined),
-      handlePosition: vi.fn(),
       onDurationKnown: vi.fn(),
       setPlaybackStarting: vi.fn(),
       getHostUrl: vi.fn(async () => "http://127.0.0.1:1234/player?token=test-token"),
@@ -378,13 +357,9 @@ describe("Music YouTube adapter", () => {
       state,
       loadRuntime,
       effectiveVolume: () => 1,
-      loadSource: vi.fn(async () => undefined),
+      resolvePlaylist: vi.fn(async () => undefined),
       persist: vi.fn(async () => undefined),
       updateExternalControls: vi.fn(),
-      updateTray: vi.fn(),
-      canPlayNext: () => false,
-      playNext: vi.fn(async () => undefined),
-      handlePosition: vi.fn(),
       onDurationKnown: vi.fn(),
       setPlaybackStarting: vi.fn(),
       getHostUrl: vi.fn(async () => "http://127.0.0.1:1234/player?token=test-token"),

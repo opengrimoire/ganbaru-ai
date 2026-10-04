@@ -55,82 +55,6 @@ fn validate_name(value: &str) -> MusicLibraryResult<()> {
     validate_optional_text(value, "name", MAX_NAME_CHARS)
 }
 
-pub(crate) fn validate_library_item_write(item: &MusicLibraryItemWrite) -> MusicLibraryResult<()> {
-    validate_id(&item.id, "id")?;
-    validate_id(&item.identity_key, "identityKey")?;
-    validate_timestamp(item.discovered_at, "discoveredAt")?;
-    validate_timestamp(item.updated_at, "updatedAt")?;
-    if item.duration_ms.is_some_and(|duration| duration < 0) {
-        return Err(MusicLibraryError::validation(
-            "durationMs",
-            "must be zero or greater",
-        ));
-    }
-    if item
-        .original_track_number
-        .is_some_and(|track_number| track_number <= 0)
-    {
-        return Err(MusicLibraryError::validation(
-            "originalTrackNumber",
-            "must be greater than zero",
-        ));
-    }
-    match item.source_kind {
-        MusicLibrarySourceKind::LocalFile
-            if item.youtube_video_id.is_some() || item.youtube_resolution_state.is_some() =>
-        {
-            Err(MusicLibraryError::validation(
-                "youtubeVideoId",
-                "YouTube fields must be empty for a local item",
-            ))
-        }
-        MusicLibrarySourceKind::YouTubeVideo
-            if item
-                .youtube_video_id
-                .as_deref()
-                .is_none_or(|value| value.trim().is_empty()) =>
-        {
-            Err(MusicLibraryError::validation(
-                "youtubeVideoId",
-                "is required for a YouTube item",
-            ))
-        }
-        MusicLibrarySourceKind::YouTubeVideo if item.youtube_resolution_state.is_none() => {
-            Err(MusicLibraryError::validation(
-                "youtubeResolutionState",
-                "is required for a YouTube item",
-            ))
-        }
-        _ => Ok(()),
-    }
-}
-
-pub(crate) fn validate_local_location_write(
-    location: &MusicLocalLocationWrite,
-) -> MusicLibraryResult<()> {
-    validate_id(&location.id, "id")?;
-    validate_id(&location.item_id, "itemId")?;
-    validate_id(&location.root_id, "rootId")?;
-    validate_timestamp(location.first_seen_at, "firstSeenAt")?;
-    validate_timestamp(location.updated_at, "updatedAt")?;
-    if location.file_size_bytes.is_some_and(|size| size < 0) {
-        return Err(MusicLibraryError::validation(
-            "fileSizeBytes",
-            "must be zero or greater",
-        ));
-    }
-    if location
-        .last_seen_generation
-        .is_some_and(|generation| generation < 0)
-    {
-        return Err(MusicLibraryError::validation(
-            "lastSeenGeneration",
-            "must be zero or greater",
-        ));
-    }
-    validate_relative_path(&location.relative_path)
-}
-
 fn validate_relative_path(value: &str) -> MusicLibraryResult<()> {
     if value.trim().is_empty() {
         return Err(MusicLibraryError::validation("relativePath", "is required"));
@@ -544,29 +468,6 @@ pub(crate) fn validate_bulk_snooze_write(request: &MusicBulkSnoozeWrite) -> Musi
     }
 }
 
-pub(crate) fn validate_snooze_write(snooze: &MusicSnoozeWrite) -> MusicLibraryResult<()> {
-    validate_id(&snooze.id, "id")?;
-    validate_id(&snooze.item_id, "itemId")?;
-    validate_timestamp(snooze.starts_at, "startsAt")?;
-    validate_timestamp(snooze.created_at, "createdAt")?;
-    validate_optional_text(&snooze.reason, "reason", MAX_REASON_CHARS)?;
-    if snooze.ends_at.is_some_and(|end| end <= snooze.starts_at) {
-        return Err(MusicLibraryError::validation(
-            "endsAt",
-            "must be later than startsAt",
-        ));
-    }
-    match snooze.scope {
-        MusicSnoozeScope::Playlist if snooze.playlist_id.is_none() => Err(
-            MusicLibraryError::validation("playlistId", "is required for playlist scope"),
-        ),
-        MusicSnoozeScope::AllPlaylists if snooze.playlist_id.is_some() => Err(
-            MusicLibraryError::validation("playlistId", "must be empty for all-playlists scope"),
-        ),
-        _ => Ok(()),
-    }
-}
-
 pub(crate) fn validate_playlist_duplicate(
     request: &MusicPlaylistDuplicate,
 ) -> MusicLibraryResult<()> {
@@ -744,17 +645,6 @@ pub(crate) fn validate_advanced_membership_write(
 
 pub(crate) fn validate_snooze_remove(request: &MusicSnoozeRemove) -> MusicLibraryResult<()> {
     validate_id(&request.snooze_id, "snoozeId")
-}
-
-pub(crate) fn validate_statistics_reset(request: &MusicStatisticsReset) -> MusicLibraryResult<()> {
-    validate_bounded_unique_ids(&request.item_ids, "itemIds")?;
-    if !request.reset_aggregates && !request.reset_recent_selections {
-        return Err(MusicLibraryError::validation(
-            "reset",
-            "must select aggregates, recent selections, or both",
-        ));
-    }
-    Ok(())
 }
 
 pub(crate) fn validate_bounded_unique_ids(

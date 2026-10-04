@@ -22,7 +22,7 @@ The repository review on 2026-08-30 found no first-party unsafe code in build sc
 - Add focused tests for the safe wrapper's success, failure, cleanup, and race-sensitive behavior. Tests support a proof but do not replace one. Platform-gated boundaries require compilation and relevant validation on the owning target.
 - Update this inventory when adding, removing, or materially changing a boundary. Record the safe replacement trigger so temporary native workarounds do not become permanent by accident.
 
-The three libraries that currently own retained boundaries, `ganbaru-tauri-app`, `ganbaru-chat`, and `ganbaru-chat-providers`, deny `clippy::undocumented_unsafe_blocks` and `unsafe_op_in_unsafe_fn`. These lints enforce useful local structure but do not establish that a safety proof is correct.
+The five libraries that currently own retained boundaries, `ganbaru-tauri-app`, `ganbaru-chat`, `ganbaru-chat-providers`, `ganbaru-mobile-notifications`, and `ganbaru-mobile-media`, deny `clippy::undocumented_unsafe_blocks` and `unsafe_op_in_unsafe_fn`. These lints enforce useful local structure but do not establish that a safety proof is correct.
 
 ## Review method
 
@@ -35,6 +35,28 @@ An unsafe review must combine structural inventory and manual contract analysis:
 5. Compare the code with primary Rust, operating-system, library, and framework contracts. Classify each mechanism as removed, retained, or replaceable when a named upstream capability becomes stable.
 
 ## Retained boundary inventory
+
+### Android cached Focus authority callback
+
+**Owned module:** `crates/ganbaru-mobile-notifications/src/authority.rs`.
+
+The Android adapter exports two private JNI symbols matching the Kotlin static `NativeFocusAuthority.isCurrent(long, long, long)` and `NativeFocusAuthority.isProcessCurrent(long)` methods. Tauri notification invocations and the app-private, read-only authority provider use the first check to reject superseded native revisions before Guardian phase or completion publication. Revocation and language-copy updates use the process check, which remains available after phase authority is cleared. An older process cannot cancel a newer accepted phase or overwrite newer copy. A WebView, notification record, or Guardian service does not supply authoritative execution. The primary-process provider is not exported and additionally requires the application's UID. Guardian passes only the native process nonce and, for phase admission, publication generation and execution revision. The app generates the positive signed nonce through its existing Rustls secure-random source before registration. Unavailable randomness prevents owner startup and reports the failure. An earlier process cannot reuse coincident publication counters after restart. This nonce is an identity fence, not a credential.
+
+The unsafe attributes fix the foreign symbol names. Both function bodies use safe Rust: the two JNI pointers are opaque, never dereferenced or retained, and no JNI reference crosses the boundary. Signed 64-bit inputs and the unsigned 8-bit Boolean follow the [JNI primitive types](https://docs.oracle.com/en/java/javase/21/docs/specs/jni/types.html), while the symbols follow [JNI naming](https://docs.oracle.com/en/java/javase/21/docs/specs/jni/design.html). One process-lifetime checker is installed before delivery starts. Invalid inputs, absent registration, revoked ownership, expired leases, and phase callback panics fail closed. The process check is total, invokes no application callback, and cannot unwind. Kotlin reports unloaded native callbacks as unavailable.
+
+Focused Rust tests cover invalid input, absent registration, revision replacement, process identity mismatch, duplicate registration, and revocation without an active phase. Guardian admission tests cover queued supersession, revocation, source failure, invalid scope, restarted processes with coincident publication counters, and late old-process cancellation. ARM64 compilation, final shared-library export inspection, and Kotlin static method signature inspection are required for both callbacks. Consumer shrinker rules preserve the exact JNI class and method names. Physical cross-process notification acceptance remains a separate Android check. Replace the manually named exports if the existing Tauri mobile bridge gains equivalent synchronous, native-source checks at the Guardian publication boundary with verified callback and lifecycle semantics.
+
+### Android cached Music delivery callback
+
+**Owned module:** `crates/ganbaru-mobile-media/src/authority.rs`.
+
+**Contract and disposition:** The private JNI symbol matches Kotlin's static `NativeMusicAuthority.isCurrent(long)` method. The Media3 bridge checks the native owner immediately before consuming a queued decoder effect and again after asynchronous document resolution. Tauri's asynchronous plugin invocation cannot provide a synchronous check at either consumption boundary. The native registry retains one pending delivery and the latest load scope; it installs the checker before attaching the service. These deliveries are volatile and live only in the same process as the registry, so process exit destroys both the queue and its authority. Unlike persistent Focus alarm envelopes, no Music delivery survives into another process. Positive delivery IDs never repeat during that process.
+
+**Safety invariants:** The unique exported name follows [JNI naming](https://docs.oracle.com/en/java/javase/21/docs/specs/jni/design.html) and the [Rust export contract](https://doc.rust-lang.org/reference/abi.html#the-export_name-attribute). Two opaque JNI pointers are neither accessed nor retained. The signed 64-bit input and unsigned 8-bit Boolean follow [JNI primitive types](https://docs.oracle.com/en/java/javase/21/docs/specs/jni/types.html). Cached checks perform no vault filesystem IO and fail closed on unavailable ownership locks, expired wall or original monotonic leases, changed Focus phase/mode, canceled delivery, or newer vault lifecycle revision. All checker panics are contained, and caught panic payloads are intentionally leaked because their destructors may also panic. No JNI reference crosses the callback. Shrinker rules preserve the exact class and static method names.
+
+**Replacement trigger:** Remove the manually named callback if the existing Tauri mobile bridge supplies an equivalent synchronous native-authority check at actual SDK consumption and asynchronous source admission, with verified lifecycle and callback containment.
+
+**Required validation:** Cover absent or duplicate registration, invalid IDs, live revocation, panic-on-drop payload containment, late acknowledgement, cancellation during SDK execution, delayed source lookup, phase changes, ownership IO contention, and freeze/resume replacement. Compile for Android ARM64 and inspect the exported shared-library symbol and Kotlin static signature. Physical stalled-main-thread, slow-provider, service destruction, and vault handoff acceptance remains separate from source and JVM verification.
 
 ### Descriptor-relative Unix filesystem operations
 

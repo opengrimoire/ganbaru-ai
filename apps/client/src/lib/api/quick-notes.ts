@@ -192,7 +192,3 @@ export async function createQuickNoteTag(id: string, name: string): Promise<Quic
     tag: { id, name },
   }));
 }
-
-export async function deleteQuickNoteTag(id: string): Promise<void> {
-  await invoke("quick_note_tags_delete", { dbUrl: await ensureDbUrl(), id });
-}

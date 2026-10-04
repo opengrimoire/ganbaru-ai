@@ -1,12 +1,10 @@
 <script lang="ts">
   import { Temporal } from "@js-temporal/polyfill";
-  import {
-    formatProjectScheduleWindowStart,
-    projectCalendarCreateDefaults,
-    projectDefaultScheduleStart,
-    type ProjectScheduleWindow,
-  } from "$lib/projects/project-scheduling";
-  import { projectEffectiveDurationMinutes } from "$lib/projects/project-settings-duration";
+  import { projectDefaultScheduleStart } from "$lib/projects/project-scheduling";
+  import { getProjectSchedulingController } from "$lib/projects/project-scheduling-controller";
+  import { localTimezone } from "$lib/stores/calendar-event-payloads";
+  import { requireActiveVaultIdentity } from "$lib/vault/active-vault";
+  import { PROJECT_MAX_DURATION_MINUTES, projectEffectiveDurationMinutes } from "$lib/projects/project-settings-duration";
   import type {
     Project,
     ProjectPriority,
@@ -18,7 +16,6 @@
   import { getCalendar } from "$lib/stores/calendar.svelte";
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import { getProjects } from "$lib/stores/projects.svelte";
-  import type { CalendarEvent } from "$lib/components/calendar/types";
   import ProjectBulkActionBar from "./ProjectBulkActionBar.svelte";
 
   let {
@@ -48,6 +45,7 @@
   const projects = getProjects();
   const calendar = getCalendar();
   const preferences = getPreferences();
+  const scheduling = getProjectSchedulingController();
   const { t } = getLocalization();
 
   let bulkTaskActionPending = $state(false);
@@ -56,6 +54,7 @@
   let bulkScheduleDate = $state("");
   let bulkScheduleStartTime = $state("");
   let bulkScheduleDurationMinutes = $state(60);
+  let scheduleRecovery = $state(scheduling.recoverable);
 
   const selectedSchedulableTasks = $derived(selectedTasks.filter((task) => !task.archivedAt));
 
@@ -122,63 +121,50 @@
     bulkTaskError = null;
   }
 
-  async function createScheduledTaskBlock(
-    task: ProjectTask,
-    project: Project,
-    scheduledWindow: ProjectScheduleWindow,
-  ): Promise<CalendarEvent> {
-    let createdEventId: string | null = null;
-    const defaults = projectCalendarCreateDefaults({
-      project,
-      start: scheduledWindow.start,
-      end: scheduledWindow.end,
-      globalIdleDefaults: {
-        idlePauseEnabled: preferences.focusIdlePauseOnEventCreate,
-        idleThresholdMinutes: preferences.focusIdleThresholdMinutes,
-      },
-    });
-    const start = defaults.start ?? scheduledWindow.start;
-    const end = defaults.end ?? scheduledWindow.end;
-    const scheduledDate = start.slice(0, 10);
+  /** Reconcile both projections before acknowledging an accepted scheduling receipt. */
+  async function refreshScheduledTasks(vaultId: string, commandId: string): Promise<void> {
+    if (requireActiveVaultIdentity() !== vaultId) throw new Error("Scheduling vault changed before refresh");
+    calendar.acceptNativeEdit();
+    await projects.load();
+    if (projects.loadError) throw new Error(projects.loadError);
+    if (requireActiveVaultIdentity() !== vaultId) throw new Error("Scheduling vault changed during refresh");
+    await calendar.refreshCurrentWindow();
+    if (requireActiveVaultIdentity() !== vaultId) throw new Error("Scheduling vault changed during refresh");
+    scheduling.acknowledge(commandId);
+    scheduleRecovery = false;
+    clearTaskSelection();
+    projects.activeView = "calendar";
+  }
+
+  /** Resolve the retained batch even after its original selection or view disappeared. */
+  async function retryScheduledTasks(): Promise<void> {
+    if (bulkTaskActionPending) return;
+    bulkTaskActionPending = true;
+    bulkTaskError = null;
     try {
-      const event = await calendar.addBlock({
-        title: task.title,
-        start,
-        end,
-        projectId: defaults.projectId,
-        color: defaults.color,
-        environmentId: defaults.environmentId,
-        playlistId: defaults.playlistId,
-        allDay: defaults.allDay,
-        pomodoroConfig: defaults.pomodoroConfig,
-      });
-      createdEventId = event.id;
-      await projects.linkTaskEvent(task.id, event.id, "scheduled");
-      await projects.updateTask(task, {
-        startDate: scheduledDate,
-        targetEndDate: scheduledDate,
-        dueDate: task.dueDate ?? scheduledDate,
-      });
-      return event;
+      const vaultId = requireActiveVaultIdentity();
+      const receipt = await scheduling.retry();
+      await refreshScheduledTasks(vaultId, receipt.commandId);
     } catch (error) {
-      if (createdEventId) {
-        await calendar.deleteBlock(createdEventId).catch((deleteError) => {
-          console.error("delete failed scheduled event after task link error", deleteError);
-        });
-      }
-      throw error;
+      bulkTaskError = t("projects.bulk.actionFailed", error instanceof Error ? error.message : String(error));
+    } finally {
+      scheduleRecovery = scheduling.recoverable;
+      bulkTaskActionPending = false;
     }
   }
 
+  /** Submit semantic selection and authored timing through the shared native owner. */
   async function bulkScheduleSelectedTasks(): Promise<void> {
     const duration = Math.round(Number(bulkScheduleDurationMinutes));
-    if (selectedSchedulableTasks.length === 0 || duration <= 0 || !bulkScheduleDate || !bulkScheduleStartTime) {
+    if (selectedSchedulableTasks.length === 0 || !Number.isSafeInteger(duration) || duration <= 0
+      || duration > PROJECT_MAX_DURATION_MINUTES || !bulkScheduleDate || !bulkScheduleStartTime) {
       bulkTaskError = t("projects.schedule.invalid");
       return;
     }
-    let cursor: Temporal.PlainDateTime;
+    if (bulkTaskActionPending || scheduling.recoverable) return;
+    let start: Temporal.PlainDateTime;
     try {
-      cursor = Temporal.PlainDateTime.from(`${bulkScheduleDate}T${bulkScheduleStartTime}`);
+      start = Temporal.PlainDateTime.from(`${bulkScheduleDate}T${bulkScheduleStartTime}`);
     } catch {
       bulkTaskError = t("projects.schedule.invalid");
       return;
@@ -186,28 +172,35 @@
 
     bulkTaskActionPending = true;
     bulkTaskError = null;
-    let scheduledCount = 0;
     try {
-      for (const task of selectedSchedulableTasks) {
-        const scheduledWindow = formatProjectScheduleWindowStart(cursor, duration);
-        await createScheduledTaskBlock(task, selectedProject, scheduledWindow);
-        scheduledCount += 1;
-        cursor = cursor.add({ minutes: duration });
-      }
-      bulkScheduleOpen = false;
-      clearTaskSelection();
-      projects.activeView = "calendar";
+      const vaultId = requireActiveVaultIdentity();
+      const timezone = localTimezone();
+      const receipt = await scheduling.schedule({
+        kind: "schedule_tasks", projectId: selectedProject.id,
+        tasks: selectedSchedulableTasks.map((task) => {
+          if (task.revision === undefined) throw new Error("Refresh the task selection before scheduling");
+          return { id: task.id, revision: task.revision };
+        }),
+        startTime: start.toString(), timezone, durationMinutes: duration,
+        globalIdleTimeoutMinutes: preferences.focusIdlePauseOnEventCreate ? preferences.focusIdleThresholdMinutes : null,
+      }, { windowStartDate: bulkScheduleDate, windowEndDate: bulkScheduleDate, renderZone: timezone, includeTotalEventCount: false });
+      await refreshScheduledTasks(vaultId, receipt.commandId);
     } catch (error) {
-      bulkTaskError = t(
-        "projects.bulk.scheduleFailed",
-        scheduledCount,
-        error instanceof Error ? error.message : String(error),
-      );
+      bulkTaskError = t("projects.bulk.actionFailed", error instanceof Error ? error.message : String(error));
     } finally {
       bulkTaskActionPending = false;
+      scheduleRecovery = scheduling.recoverable;
     }
   }
 </script>
+
+{#if scheduleRecovery}
+  <div class="mx-3 my-2 flex items-center gap-2 rounded-md border border-border bg-card px-2 py-1">
+    <span class="text-sm">{t("projects.bulk.schedule")}</span>
+    <button type="button" class="min-h-8 rounded px-2 text-primary hover:bg-accent" disabled={bulkTaskActionPending} onclick={() => { void retryScheduledTasks(); }}>{t("common.retry")}</button>
+    {#if bulkTaskError}<span class="text-sm text-destructive">{bulkTaskError}</span>{/if}
+  </div>
+{/if}
 
 {#if selectedTasks.length > 0}
   <ProjectBulkActionBar
@@ -216,7 +209,7 @@
     {selectedActiveTaskCount}
     {selectedArchivedTaskCount}
     bulkSchedulableCount={selectedSchedulableTasks.length}
-    {bulkTaskActionPending}
+    bulkTaskActionPending={bulkTaskActionPending || scheduleRecovery}
     {bulkScheduleOpen}
     {bulkScheduleDate}
     {bulkScheduleStartTime}

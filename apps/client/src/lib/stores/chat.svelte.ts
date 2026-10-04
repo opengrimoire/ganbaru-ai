@@ -325,9 +325,19 @@ class ChatStore {
       : null;
   }
 
+  private providerDiscoveryStarted = false;
+
+  /** Opens Chat from cached history and discovers providers without delaying that history. */
   async ensureLoaded(): Promise<void> {
+    const vaultGeneration = this.vaultGeneration;
+    await this.ensureCachedLoaded();
+    if (vaultGeneration === this.vaultGeneration && this.loaded) this.startProviderDiscovery();
+  }
+
+  /** Shares workspace hydration without starting provider discovery during prewarming. */
+  private async ensureCachedLoaded(): Promise<void> {
     if (this.loaded) return;
-    this.loadPromise ??= this.reload().finally(() => {
+    this.loadPromise ??= this.reload(false).finally(() => {
       this.loadPromise = null;
     });
     await this.loadPromise;
@@ -335,7 +345,7 @@ class ChatStore {
 
   /** Starts the bounded Chat working set before the route is opened. */
   async prewarmForProject(projectId: string | null): Promise<void> {
-    await this.ensureLoaded();
+    await this.ensureCachedLoaded();
     if (projectId && this.selectedChannel?.projectId !== projectId) {
       await this.syncProjectSelection(projectId);
     }
@@ -358,6 +368,7 @@ class ChatStore {
     this.channelReadPromise = null;
     this.sessionMessageReactions = {};
     this.configurationController.reset();
+    this.providerDiscoveryStarted = false;
     this.selectedChannelId = null;
     this.teammates = [];
     this.archivedTeammates = [];
@@ -371,7 +382,8 @@ class ChatStore {
     this.composerRuntimeController.reset();
   }
 
-  async reload(): Promise<void> {
+  /** Refreshes local Chat data; background prewarming leaves provider CLIs dormant. */
+  async reload(discoverProviders = true): Promise<void> {
     const request = ++this.loadRequest;
     const vaultGeneration = this.vaultGeneration;
     this.loading = true;
@@ -393,16 +405,7 @@ class ChatStore {
       this.archivedTeammates = archivedTeammates;
       this.channelNavigationController.hydrateNavigation(navigationChannels);
       this.threadCollectionController.resetWindow();
-      const isCurrentLoad = () => request === this.loadRequest && vaultGeneration === this.vaultGeneration;
-      void this.configurationController.discoverProviders(isCurrentLoad).catch(async (error: unknown) => {
-        if (!isCurrentLoad()) return;
-        console.error("Automatic Chat provider discovery failed", error);
-        try {
-          await this.configurationController.refreshSettings(isCurrentLoad);
-        } catch (refreshError: unknown) {
-          if (isCurrentLoad()) console.error("Chat settings refresh after discovery failed", refreshError);
-        }
-      });
+      if (discoverProviders) this.startProviderDiscovery();
       if (localExecutionAvailable) {
         void chatApi.recoverChatAssignmentDispatchJobs().catch((error: unknown) => {
           console.error("Chat assignment recovery failed", error);
@@ -443,6 +446,23 @@ class ChatStore {
     } finally {
       if (request === this.loadRequest) this.loading = false;
     }
+  }
+
+  /** Starts at most one automatic discovery per vault, without delaying local history. */
+  private startProviderDiscovery(): void {
+    if (this.providerDiscoveryStarted) return;
+    this.providerDiscoveryStarted = true;
+    const vaultGeneration = this.vaultGeneration;
+    const isCurrentVault = () => vaultGeneration === this.vaultGeneration;
+    void this.configurationController.discoverProviders(isCurrentVault).catch(async (error: unknown) => {
+      if (!isCurrentVault()) return;
+      console.error("Automatic Chat provider discovery failed", error);
+      try {
+        await this.configurationController.refreshSettings(isCurrentVault);
+      } catch (refreshError: unknown) {
+        if (isCurrentVault()) console.error("Chat settings refresh after discovery failed", refreshError);
+      }
+    });
   }
 
   private async prefetchRememberedProjectChannels(

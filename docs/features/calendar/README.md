@@ -2,7 +2,7 @@
 
 Calendar is the time anchor for Ganbaru AI. Focus sessions, project scheduling, music automation, notifications, and future work environments attach to calendar events, so correctness and durable history take priority over feature breadth.
 
-**Status: Partial.** The principal views and event workflows are implemented. Recurrence conformance and equivalence, plus shared ownership of overlapping Pomodoro events, still need correctness hardening.
+**Status: Partial.** The principal views, native canonical recurrence, reviewed scoped editing, deletion and Undo are implemented. Shared fixtures and transaction tests cover supported recurrence and Focus reference behavior. Real desktop/Android acceptance remains required; unsupported imported recurrence keeps its explicit preservation limits.
 
 ## Current scope
 
@@ -12,7 +12,7 @@ Calendar is the time anchor for Ganbaru AI. Focus sessions, project scheduling, 
 | Timed and all-day event creation and editing | Implemented |
 | Multiple calendars, visibility, colors, and deletion safeguards | Implemented |
 | Notifications and platform delivery | Implemented |
-| Recurrence expansion and scoped editing | Partial, with documented conformance gaps |
+| Native recurrence expansion and reviewed scoped editing | Implemented with documented supported-rule limits; physical acceptance pending |
 | iCalendar import, export, preservation, and recurrence interop | Implemented with documented limits |
 | Project, task, Pomodoro, and music linkage | Implemented |
 | Shared-calendar identity and attendee write permissions | Planned |

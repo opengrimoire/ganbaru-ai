@@ -32,15 +32,22 @@ internal data class MobileLimit(
 internal data class AcceptedUsage(
   val windowStartLocalDate: String,
   val windowEndLocalDate: String,
-  val usedSeconds: Int,
+  val usedSeconds: Long,
+  val localUsedSecondsAtCapture: Long? = null,
 )
 
+/** Count observations after capture even when publication arrives later. */
 internal fun combinedUsageSinceAcceptance(
-  acceptedUsedSeconds: Int,
-  localUsedAtAcceptance: Int,
-  currentLocalUsedSeconds: Int,
-): Int = acceptedUsedSeconds +
-  (currentLocalUsedSeconds - localUsedAtAcceptance).coerceAtLeast(0)
+  acceptedUsedSeconds: Long,
+  localUsedAtAcceptance: Long,
+  currentLocalUsedSeconds: Long,
+): Long {
+  require(acceptedUsedSeconds >= 0 && localUsedAtAcceptance >= 0 && currentLocalUsedSeconds >= 0) {
+    "Doomscrolling usage counters must be nonnegative"
+  }
+  return Math.addExact(acceptedUsedSeconds,
+    (currentLocalUsedSeconds - localUsedAtAcceptance).coerceAtLeast(0L))
+}
 
 internal data class DoomscrollingCopy(
   val channelName: String,
@@ -165,13 +172,20 @@ internal object DoomscrollingRuleCodec {
       runCatching { LocalDate.parse(end) }.isSuccess && start <= end) {
       "Accepted Doomscrolling usage window is invalid"
     }
-    val usedSeconds = accepted.getInt("usedSeconds")
+    val usedSeconds = accepted.getLong("usedSeconds")
     require(usedSeconds >= 0) { "Accepted Doomscrolling usage is invalid" }
-    return AcceptedUsage(start, end, usedSeconds)
+    val captured = if (accepted.has("localUsedSecondsAtCapture")) {
+      accepted.getLong("localUsedSecondsAtCapture").also {
+        require(it >= 0) { "Captured local Doomscrolling usage is invalid" }
+      }
+    } else null
+    return AcceptedUsage(start, end, usedSeconds, captured)
   }
 
   private fun bounded(value: String, minimum: Int, maximum: Int, label: String): String =
-    value.trim().also { require(it.length in minimum..maximum) { "$label is invalid" } }
+    value.trim().also {
+      require(it.codePointCount(0, it.length) in minimum..maximum) { "$label is invalid" }
+    }
 
   private fun packageName(value: String): String = value.trim().also {
     require(it.length in 3..255 && PACKAGE_PATTERN.matches(it)) {

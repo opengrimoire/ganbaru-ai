@@ -1,5 +1,5 @@
 import { createTextRichText, richTextPlainText } from "./rich-text";
-import type { NotesBlockType, NotesMediaBlockPayload } from "./types";
+import type { NotesMediaBlockPayload } from "./types";
 
 export const NOTES_IMAGE_EXTENSIONS = [
   ".bmp",
@@ -53,10 +53,6 @@ export interface NotesFileAssetMetadata {
   byteSize: number;
   sha256: string;
   kind: NotesMediaBlockType;
-}
-
-export function isMediaBlockType(type: NotesBlockType): type is NotesMediaBlockType {
-  return MEDIA_BLOCK_TYPES.includes(type as NotesMediaBlockType);
 }
 
 export function mediaCaptionPlainText(media: NotesMediaBlockPayload): string {

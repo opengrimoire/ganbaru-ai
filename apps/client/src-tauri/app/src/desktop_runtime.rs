@@ -118,6 +118,7 @@ fn force_quit(
 #[tauri::command]
 async fn reset_database(app: tauri::AppHandle) -> Result<(), String> {
     let writable_vault = vault::active_writable_vault_path(&app)?;
+    doomscrolling::runtime::stop_for_vault_handoff(&app).await?;
     doomscrolling::clear_doomscrolling_enforcement_state(&app)?;
     db_path::close_all_sqlite_pools(&app).await?;
     let db_path = writable_vault.as_ref().join(vault::APP_SQLITE_FILE);
@@ -703,51 +704,6 @@ fn get_memory_report() -> MemoryReport {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn delayed_relaunch_delay_is_bounded() {
-        assert_eq!(parse_delayed_relaunch_ms("250"), Some(250));
-        assert_eq!(
-            parse_delayed_relaunch_ms(&(DELAYED_RELAUNCH_MAX_MS + 1).to_string()),
-            Some(DELAYED_RELAUNCH_MAX_MS)
-        );
-        assert_eq!(parse_delayed_relaunch_ms("not-a-number"), None);
-    }
-
-    #[test]
-    fn relaunch_target_validation_requires_existing_absolute_path() {
-        assert!(!is_valid_relaunch_target(std::path::Path::new(
-            "relative-binary"
-        )));
-        assert!(!is_valid_relaunch_target(std::path::Path::new(
-            "/definitely/not/ganbaru-ai"
-        )));
-        let current_exe = std::env::current_exe().expect("test executable path should exist");
-        assert!(is_valid_relaunch_target(&current_exe));
-    }
-
-    #[test]
-    fn project_history_commands_are_registered_at_defining_modules() {
-        let handlers = include_str!("desktop_runtime.rs");
-        for command in [
-            "notes::project_history::schedule::notes_initialize_project_history",
-            "notes::project_history::schedule::notes_flush_due_project_history",
-            "notes::project_history::reads::notes_list_project_history_versions",
-            "notes::project_history::reads::notes_load_project_history_tree",
-            "notes::project_history::reads::notes_load_project_history_page",
-            "notes::project_history::retention::notes_get_history_retention_impact",
-            "notes::project_history::retention::notes_prune_project_history",
-            "notes::project_history::commands::notes_preview_project_history_restore",
-            "notes::project_history::commands::notes_restore_project_history_version",
-        ] {
-            assert!(handlers.contains(command), "missing handler {command}");
-        }
-    }
-}
-
 pub fn run(context: tauri::Context<tauri::Wry>) {
     crate::install_default_tls_crypto_provider();
 
@@ -820,11 +776,8 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             chat::workspace_observer::chat_unwatch_workspace,
             chat::execution_environment::chat_list_execution_environments,
             chat::execution_environment::chat_create_worktree_environment,
-            chat::execution_environment::chat_select_thread_execution_environment,
             chat::execution_environment::chat_read_thread_execution_environment,
             chat::execution_environment::chat_remove_worktree_environment,
-            chat::resource_commands::chat_resource_list,
-            chat::resource_commands::chat_resource_read,
             chat::review_commands::chat_list_review_comments,
             chat::review_commands::chat_create_review_comment,
             chat::review_commands::chat_set_review_comment_resolved,
@@ -840,7 +793,6 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             chat::terminal_commands::chat_terminal_input,
             chat::terminal_commands::chat_terminal_resize,
             chat::terminal_commands::chat_terminal_close,
-            chat::terminal_commands::chat_terminal_import_context,
             chat::checkpoint_commands::chat_run_checkpoint_cleanup,
             chat::diagnostics_commands::chat_read_diagnostics,
             chat::diagnostics_commands::chat_update_diagnostic_preferences,
@@ -873,7 +825,6 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             chat::provider_files::chat_save_provider_file,
             chat::channel_commands::chat_list_channels,
             chat::channel_commands::chat_list_navigation_channels,
-            chat::channel_commands::chat_search_channels,
             chat::channel_commands::chat_read_channel,
             chat::channel_commands::chat_create_channel,
             chat::channel_commands::chat_update_channel_details,
@@ -902,7 +853,6 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             chat::scratch_commands::chat_promote_scratch_file,
             chat::scratch_commands::chat_preview_scratch_cleanup,
             chat::scratch_commands::chat_cleanup_scratch,
-            chat::coordination_commands::chat_list_channel_memberships,
             chat::coordination_commands::chat_read_project_primary_working_folder,
             chat::coordination_commands::chat_set_project_primary_working_folder,
             chat::coordination_commands::chat_post_message,
@@ -918,11 +868,8 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             chat::coordination_commands::chat_cancel_assignment,
             chat::coordination_commands::chat_retry_assignment,
             chat::coordination_commands::chat_recover_assignment_dispatch_jobs,
-            chat::thread_commands::chat_list_project_shells,
-            chat::thread_commands::chat_list_threads,
             chat::thread_commands::chat_list_thread_window,
             chat::thread_commands::chat_read_thread_shell,
-            chat::thread_commands::chat_search_thread_titles,
             chat::thread_commands::chat_read_timeline_page,
             chat::thread_commands::chat_read_timeline_turn,
             chat::thread_commands::chat_fork_thread,
@@ -932,22 +879,16 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             chat::thread_commands::chat_archive_thread,
             chat::thread_commands::chat_restore_thread,
             chat::thread_commands::chat_delete_thread_permanently,
-            chat::thread_commands::chat_list_provider_cleanup_jobs,
             chat::git_commands::chat_git_status,
-            chat::git_commands::chat_git_diff,
             chat::git_commands::chat_git_stage,
             chat::git_commands::chat_git_unstage,
             chat::git_commands::chat_git_commit,
             chat::git_commands::chat_git_fetch,
             chat::git_commands::chat_git_pull,
             chat::git_commands::chat_git_push,
-            chat::git_commands::chat_git_remotes,
-            chat::git_commands::chat_git_branches,
-            chat::git_commands::chat_git_worktrees,
             chat::git_commands::chat_git_initialize,
             chat::git_commands::chat_git_clone,
             chat::git_commands::chat_git_discard,
-            chat::git_commands::chat_git_delete_branch,
             chat::source_control::chat_discover_source_control,
             chat::source_control::chat_list_hosted_change_requests,
             chat::source_control::chat_create_hosted_change_request,
@@ -967,7 +908,6 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             chat::preview::chat_preview_screenshot,
             chat::preview::chat_preview_recording_start,
             chat::preview::chat_preview_recording_stop,
-            chat::preview::chat_preview_evaluate,
             chat::preview::chat_preview_click,
             chat::preview::chat_preview_type,
             chat::preview::chat_preview_press,
@@ -1000,30 +940,17 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             chat::send_commands::chat_steer_turn,
             chat::send_commands::chat_resolve_approval,
             chat::send_commands::chat_resolve_user_input,
-            notification::commands::show_pomodoro_notification,
-            notification::commands::show_paused_focus_notification,
             notification::commands::show_event_notification,
             notification::commands::show_notes_notification,
             notification::commands::show_benchmark_notification,
             notification::commands::show_doomscrolling_desktop_block_notification,
             notification::commands::show_doomscrolling_desktop_limit_notification,
-            notification::show_break_overlay,
-            notification::close_pomodoro_overlay,
-            notification::set_pomodoro_overlay_state,
+            notification::dismiss_pomodoro_completion,
             notification::idle::get_idle_status,
-            pomodoro::pomodoro_can_start_automatically,
-            notification::commands::play_app_sound,
-            notification::commands::play_alert_sound,
-            notification::show_idle_overlay,
-            notification::show_pomodoro_completion_overlay,
-            music::music_get_playback_state,
             music::music_pick_artwork_file,
             music::music_pick_and_read_interchange_file,
-            music::music_pick_and_write_interchange_file,
             music::music_artwork_data_url,
             music::music_embedded_artwork_data_url,
-            music::library::commands::music_library_upsert_item,
-            music::library::commands::music_library_upsert_local_location,
             music::library::commands::music_library_start_local_refresh,
             music::library::commands::music_library_refresh_progress,
             music::library::commands::music_library_cancel_refresh,
@@ -1037,7 +964,6 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             music::library::commands::music_library_cancel_relink_plan,
             music::library::commands::music_library_source_removal_impact,
             music::library::commands::music_library_remove_source,
-            music::library::commands::music_library_restore_source,
             music::library::commands::music_library_create_playlist,
             music::library::commands::music_library_update_playlist,
             music::library::commands::music_library_reorder_playlists,
@@ -1052,26 +978,21 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             music::library::commands::music_library_membership_matrix,
             music::library::commands::music_library_reorder_playlist,
             music::library::commands::music_library_playlist_playback_entries,
-            music::library::commands::music_library_record_listening,
-            music::library::commands::music_library_recent_selections,
             music::library::commands::music_library_context_assignments,
-            music::library::commands::music_library_context_assignments_for_playlists,
-            music::library::commands::music_library_replace_context_assignments,
             music::library::commands::music_library_bulk_set_review_state,
             music::library::commands::music_library_apply_review_selection,
             music::library::commands::music_library_bulk_snooze,
             music::library::commands::music_library_save_advanced_membership,
             music::library::commands::music_library_remove_memberships,
-            music::library::commands::music_library_upsert_snooze,
             music::library::commands::music_library_remove_snooze,
-            music::library::commands::music_library_reset_statistics,
-            music::library::commands::music_library_import_interchange,
+            music::library::commands::music_library_preview_transfer,
+            music::library::commands::music_library_commit_transfer,
+            music::library::commands::music_library_export_transfer,
             music::library::commands::music_library_item_window,
             music::library::commands::music_library_playlist_summaries,
             music::library::commands::music_library_source_summaries,
             music::library::commands::music_library_issues,
             music::library::commands::music_library_inspector_detail,
-            music::library::commands::music_library_rebuild_search_index,
             music::library::commands::music_library_local_roots,
             music::library::commands::music_library_create_local_root,
             music::library::commands::music_library_preview_item_repair,
@@ -1101,21 +1022,19 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             music::host::music_retain_hosted_media,
             music::host::music_unregister_hosted_media,
             music::music_reveal_local_file,
-            music::music_save_playback_state,
+            music::session::runtime::music_session_start,
+            music::session::runtime::music_session_command,
+            music::session::runtime::music_session_snapshot,
+            music::session::runtime::music_session_observe,
+            music::session::runtime::music_session_host,
+            music::session::runtime::music_session_subscribe,
+            music::session::runtime::music_session_read_frame,
+            music::session::runtime::music_session_acknowledge,
+            music::session::runtime::music_session_unsubscribe,
             music::host::music_youtube_host_url,
             music::youtube_metadata::music_youtube_metadata,
             music::youtube_thumbnail::music_youtube_thumbnail,
-            media_controls::update_media_controls,
             media_player::media_player_probe,
-            media_player::media_player_load,
-            media_player::media_player_play,
-            media_player::media_player_pause,
-            media_player::media_player_stop,
-            media_player::media_player_seek,
-            media_player::media_player_set_volume,
-            media_player::media_player_set_muted,
-            media_player::media_player_set_rate,
-            media_player::media_player_snapshot,
             soundscape::soundscape_start,
             soundscape::soundscape_pause,
             soundscape::soundscape_resume,
@@ -1125,7 +1044,6 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             soundscape::soundscape_recover,
             soundscape::soundscape_snapshot,
             tray::update_music_tray,
-            tray::update_tray,
             force_quit,
             reset_database,
             read_benchmark_state,
@@ -1164,7 +1082,6 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             vault::handoff::receiver::handoff_cancel_receive,
             vault::vault_pick_create,
             vault::vault_pick_open,
-            vault::vault_select_recent,
             vault::vault_reveal_active,
             vault::vault_read_config,
             vault::vault_patch_config,
@@ -1173,26 +1090,15 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             vault::vault_pick_and_read_theme_json,
             vault::vault_pick_and_write_theme_json,
             calendar_reads::calendar_load_window,
-            calendar_reads::calendar_load_pomodoro_scheduler_window,
+            calendar_reads::calendar_load_native_window,
+            calendar_reads::calendar_load_native_focus_window,
+            calendar_reads::calendar_load_native_notification_window,
             calendar_reads::calendar_load_panel_event,
             calendar_reads::calendar_load_full_event,
-            calendar_reads::calendar_list_event_ids_for_calendar,
-            calendar_reads::calendar_load_icalendar_timezones_for_calendar,
-            calendar_reads::calendar_load_icalendar_passthrough_components_for_calendar,
-            calendar_reads::calendar_load_icalendar_export_metadata_for_calendar,
-            recurrence::calendar_expand_render_events,
-            calendar_events::commands::calendar_add_event,
-            calendar_events::commands::calendar_delete_event,
-            calendar_events::commands::calendar_archive_event,
-            calendar_events::commands::calendar_apply_delete_archive_plan,
-            calendar_events::commands::calendar_apply_recurrence_commit_plan,
-            calendar_events::commands::calendar_restore_archived_event,
-            calendar_events::commands::calendar_clear_events,
-            calendar_events::commands::calendar_update_event,
-            calendar_events::commands::calendar_detach_instance,
-            calendar_events::commands::calendar_split_series,
-            calendar_events::progress::calendar_has_progress_segments,
-            calendar_events::progress::calendar_progress_dates_before,
+            calendar_reads::calendar_load_export_snapshot,
+            calendar_events::preview::calendar_preview_edit,
+            calendar_events::commit::calendar_commit_edit,
+            pomodoro::native_runtime::calendar_edit::calendar_dismiss_delete_undo,
             calendar_import::calendar_bulk_import,
             calendars::calendar_list_calendars,
             calendars::calendar_find_imported_calendar,
@@ -1202,19 +1108,13 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             calendars::calendar_remove_calendar,
             themes::theme_load_all,
             pomodoro::pomodoro_load_segments_for_events,
-            pomodoro::pomodoro_load_adaptive_history,
-            pomodoro::pomodoro_load_adaptive_replay_dataset,
-            pomodoro::pomodoro_start_run,
-            pomodoro::pomodoro_transition_run,
-            pomodoro::pomodoro_insert_segment_with_adaptive_decision,
-            pomodoro::pomodoro_insert_segments,
-            pomodoro::pomodoro_update_segments,
-            pomodoro::pomodoro_close_run,
-            pomodoro::pomodoro_update_run_window,
-            pomodoro::pomodoro_transfer_active_event_reference,
-            pomodoro::pomodoro_heartbeat,
-            pomodoro::pomodoro_record_run_event,
-            pomodoro::pomodoro_recover_open_runs,
+            pomodoro::native_runtime::focus_snapshot,
+            pomodoro::native_runtime::focus_command,
+            pomodoro::native_runtime::focus_idle_overlay_visible,
+            pomodoro::native_runtime::focus_subscribe,
+            pomodoro::native_runtime::focus_renew_subscription,
+            pomodoro::native_runtime::focus_unsubscribe,
+            pomodoro::native_runtime::focus_notification_copy,
             projects::workspace::projects_load_workspace,
             projects::workspace::projects_refresh_workspace,
             projects::workspace::projects_load_task_view,
@@ -1257,6 +1157,10 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             projects::relationship_commands::projects_create_task_dependency,
             projects::relationship_commands::projects_delete_task_dependency,
             projects::task_commands::projects_update_task,
+            projects::task_bulk::projects_apply_task_bulk,
+            projects::reorder::projects_reorder_item,
+            projects::dependency_cascade::projects_preview_dependency_cascade,
+            projects::dependency_cascade::projects_apply_dependency_cascade,
             projects::preferences::projects_upsert_view_preference,
             projects::preferences::projects_delete_view_preference,
             projects::emojis::projects_create_custom_emoji,
@@ -1277,24 +1181,16 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             notes::external_links::notes_open_external_url,
             notes::notes_get_page_breadcrumb,
             notes::notes_search,
-            notes::notes_rebuild_search_index,
-            notes::notes_rebuild_backlink_index,
-            notes::notes_rebuild_link_facts,
             notes::notes_list_page_aliases,
             notes::notes_add_page_alias,
             notes::notes_delete_page_alias,
             notes::notes_list_unresolved_links,
             notes::notes_resolve_unresolved_link,
-            notes::notes_import_markdown_page,
             notes::notes_import_html_page,
             notes::notes_import_notion_api,
             notes::notes_import_notion_export_folder,
-            notes::notes_export_markdown_page,
-            notes::notes_export_html_page,
             notes::notes_pick_and_write_html_archive,
-            notes::notes_export_json_graph,
             notes::notes_pick_and_write_json_graph,
-            notes::notes_export_agent_bridge,
             notes::notes_pick_and_write_agent_bridge,
             notes::notes_get_local_user,
             notes::notes_update_local_user,
@@ -1329,7 +1225,6 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             notes::notes_create_suggestion,
             notes::notes_accept_suggestion,
             notes::notes_reject_suggestion,
-            notes::notes_refresh_mention_notifications,
             notes::notes_list_pending_mention_notifications,
             notes::notes_mark_mention_notifications_delivered,
             notes::notes_create_page,
@@ -1353,13 +1248,10 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             notes::notes_list_data_source_row_pages,
             notes::notes_create_data_source_row_page,
             notes::notes_import_data_source_csv,
-            notes::notes_export_data_source_csv,
             notes::notes_pick_and_write_data_source_csv,
             notes::notes_list_data_source_templates,
             notes::notes_create_data_source_template_from_row,
             notes::notes_apply_data_source_template,
-            notes::notes_update_data_source_template,
-            notes::notes_duplicate_data_source_template,
             notes::notes_delete_data_source_template,
             notes::notes_get_data_source_table_view,
             notes::notes_update_data_source_table_view,
@@ -1401,12 +1293,10 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             notes::notes_get_block_children,
             notes::notes_append_block_children,
             notes::notes_update_block,
+            notes::notes_apply_compound_edit,
             notes::notes_trash_block,
             notes::notes_trash_blocks,
             notes::notes_move_block,
-            notes::notes_move_blocks,
-            notes::notes_duplicate_block,
-            notes::notes_duplicate_blocks,
             notes::notes_load_undo_state,
             notes::notes_save_undo_state,
             notes::notes_clear_undo_state,
@@ -1424,7 +1314,6 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             quick_notes::quick_notes_empty_trash,
             quick_notes::quick_note_tags_list,
             quick_notes::quick_note_tags_create,
-            quick_notes::quick_note_tags_delete,
             profile_images::profile_image_pick_file,
             profile_images::profile_image_save_data_url,
             profile_images::profile_image_asset_data_url,
@@ -1435,34 +1324,17 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             project_icons::project_icon_asset_path,
             project_icons::project_icon_asset_data_url,
             project_icons::project_icon_delete_assets_if_unreferenced,
-            doomscrolling::commands::doomscrolling_close_desktop_app,
-            doomscrolling::commands::doomscrolling_close_current_foreground_desktop_app,
-            doomscrolling::commands::doomscrolling_get_foreground_desktop_app,
             doomscrolling::state::doomscrolling_get_extension_status,
-            doomscrolling::usage::doomscrolling_list_usage_samples,
+            doomscrolling::limits_read::doomscrolling_load_usage_projection,
             doomscrolling::catalog::doomscrolling_list_desktop_apps,
-            doomscrolling::commands::doomscrolling_list_blocked_desktop_app_matches,
             doomscrolling::commands::doomscrolling_open_extension_install_docs,
-            doomscrolling::usage::doomscrolling_record_desktop_block_event,
-            doomscrolling::usage::doomscrolling_record_usage_sample,
-            doomscrolling::usage::doomscrolling_record_usage_samples,
-            doomscrolling::state::doomscrolling_write_limit_state,
-            doomscrolling::state::doomscrolling_write_state,
             themes::theme_insert,
             themes::theme_replace_content,
             themes::theme_delete,
             themes::theme_record_dismissal,
             themes::theme_load_dismissals,
             themes::theme_rename,
-            themes::theme_update_token_value,
-            themes::theme_update_token_isolated,
-            themes::theme_update_token_value_and_isolated,
-            themes::theme_update_source_cascade,
-            themes::theme_update_palette_slot,
-            themes::theme_update_blend_canvas,
-            themes::theme_rebake_non_isolated,
             themes::theme_reset_token_to_seed,
-            themes::theme_reset_palette_slot_to_seed,
             themes::theme_reset_to_seed,
         ])
         .setup(|app| {
@@ -1475,11 +1347,14 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             schedule_main_window_reveal_fallback(app.handle());
             chat::revocation::start_startup_recovery(app.handle());
             music::setup_youtube_host(app.handle())?;
+            music::session::setup(app.handle());
+            doomscrolling::runtime::setup(app.handle());
             media_controls::setup_media_controls(app.handle())?;
             if let Err(err) = notification::restore_stale_shortcuts(app.handle()) {
                 eprintln!("failed to restore stale Linux shortcuts: {err}");
             }
             tray::setup_tray(app.handle())?;
+            pomodoro::setup(app.handle());
             Ok(())
         })
         .build(context)
@@ -1543,6 +1418,56 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
                 .state::<vault::handoff::CoordinatorLifecycle>()
                 .stop();
             clear_doomscrolling_enforcement_state_best_effort(app_handle, "before app exit");
+            if let Err(error) = tauri::async_runtime::block_on(
+                doomscrolling::runtime::stop_for_vault_handoff(app_handle),
+            ) {
+                eprintln!("Doomscrolling shutdown flush failed: {error}");
+            }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn delayed_relaunch_delay_is_bounded() {
+        assert_eq!(parse_delayed_relaunch_ms("250"), Some(250));
+        assert_eq!(
+            parse_delayed_relaunch_ms(&(DELAYED_RELAUNCH_MAX_MS + 1).to_string()),
+            Some(DELAYED_RELAUNCH_MAX_MS)
+        );
+        assert_eq!(parse_delayed_relaunch_ms("not-a-number"), None);
+    }
+
+    #[test]
+    fn relaunch_target_validation_requires_existing_absolute_path() {
+        assert!(!is_valid_relaunch_target(std::path::Path::new(
+            "relative-binary"
+        )));
+        assert!(!is_valid_relaunch_target(std::path::Path::new(
+            "/definitely/not/ganbaru-ai"
+        )));
+        let current_exe = std::env::current_exe().expect("test executable path should exist");
+        assert!(is_valid_relaunch_target(&current_exe));
+    }
+
+    #[test]
+    fn project_history_commands_are_registered_at_defining_modules() {
+        let handlers = include_str!("desktop_runtime.rs");
+        for command in [
+            "notes::project_history::schedule::notes_initialize_project_history",
+            "notes::project_history::schedule::notes_flush_due_project_history",
+            "notes::project_history::reads::notes_list_project_history_versions",
+            "notes::project_history::reads::notes_load_project_history_tree",
+            "notes::project_history::reads::notes_load_project_history_page",
+            "notes::project_history::retention::notes_get_history_retention_impact",
+            "notes::project_history::retention::notes_prune_project_history",
+            "notes::project_history::commands::notes_preview_project_history_restore",
+            "notes::project_history::commands::notes_restore_project_history_version",
+        ] {
+            assert!(handlers.contains(command), "missing handler {command}");
+        }
+    }
 }

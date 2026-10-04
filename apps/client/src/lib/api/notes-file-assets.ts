@@ -4,8 +4,6 @@ import { invalidateAssetUrl, loadAssetUrl } from "$lib/api/asset-url-cache";
 import type { NotesFileAssetMetadata, NotesMediaBlockType } from "$lib/notes/media";
 import type {
   NotesImportFileDiagnostic,
-  NotesImportFileReferenceRequest,
-  NotesImportFileReferenceResult,
   NotesImportFileAction,
 } from "$lib/notes/import-file-policy";
 
@@ -46,26 +44,6 @@ export async function pickNotesFileAsset(
     blockType,
   });
   return asset ? mapNotesFileAssetDto(asset) : null;
-}
-
-/** Prepare a user-approved import file reference for safe Notes persistence. */
-export async function prepareNotesImportFileReference(
-  request: NotesImportFileReferenceRequest,
-): Promise<NotesImportFileReferenceResult> {
-  const dbUrl = await ensureDbUrl();
-  const result = await invoke<NotesImportFileReferenceDto>(
-    "notes_prepare_import_file_reference",
-    {
-      dbUrl,
-      request,
-    },
-  );
-  return {
-    action: result.action,
-    asset: result.asset ? mapNotesFileAssetDto(result.asset) : null,
-    externalUrl: result.externalUrl,
-    diagnostics: result.diagnostics,
-  };
 }
 
 /** Load a managed Notes file asset as a data URL for local preview rendering. */

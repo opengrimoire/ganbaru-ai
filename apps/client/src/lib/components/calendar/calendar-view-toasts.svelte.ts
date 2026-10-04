@@ -45,10 +45,15 @@ export function createCalendarViewToastController() {
     if (deleteUndoToast?.id === id) dismissDeleteUndoToast();
   }
 
+  function dismissDeleteToastIfPending(id: string): void {
+    if (deleteUndoToast?.id === id && deleteUndoToast.pending) dismissDeleteUndoToast();
+  }
+
   function showDeleteUndoToast(
     id: string,
     label: string,
     restore?: () => Promise<void>,
+    lifetimeMs = DELETE_UNDO_TIMEOUT_MS,
   ): void {
     clearDeleteUndoTimer();
     if (deleteUndoToast?.id !== id) return;
@@ -56,7 +61,7 @@ export function createCalendarViewToastController() {
     deleteUndoTimer = setTimeout(() => {
       if (deleteUndoToast?.id === id) deleteUndoToast = null;
       deleteUndoTimer = undefined;
-    }, DELETE_UNDO_TIMEOUT_MS);
+    }, restore ? Math.max(0, Math.min(DELETE_UNDO_TIMEOUT_MS, lifetimeMs)) : SAVE_SUCCESS_TOAST_TIMEOUT_MS);
   }
 
   function clearSaveSuccessTimer(): void {
@@ -117,6 +122,7 @@ export function createCalendarViewToastController() {
     dismissDeleteUndoToast,
     showDeletePendingToast,
     dismissDeleteToastIfCurrent,
+    dismissDeleteToastIfPending,
     showDeleteUndoToast,
     dismissSaveToastIfCurrent,
     showSavePendingToast,

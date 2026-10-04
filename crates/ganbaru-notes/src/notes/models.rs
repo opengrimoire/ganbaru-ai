@@ -179,10 +179,11 @@ impl NoteFolderDto {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct NoteBlockDto {
-    object: &'static str,
+    object: String,
     id: String,
+    edit_revision: String,
     parent: NoteParent,
     created_time: String,
     last_edited_time: String,
@@ -272,11 +273,13 @@ pub struct NoteBlockDto {
 
 impl NoteBlockDto {
     pub fn new(row: NoteBlockRow) -> Result<Self, String> {
+        let edit_revision = row.edit_revision()?;
         let payload = parse_json(row.payload, "block payload")?;
         let in_trash = row.in_trash != 0;
         let mut block = Self {
-            object: "block",
+            object: "block".to_string(),
             id: row.id,
+            edit_revision,
             parent: parent_from_row(
                 &row.parent_type,
                 row.parent_page_id,

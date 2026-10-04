@@ -641,14 +641,6 @@ pub struct ChatAiTeammateRead {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ChatWorkingFolderGrantRead {
-    pub working_folder_id: ProjectWorkingFolderId,
-    pub display_name: String,
-    pub is_default: bool,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct ChatConversationMembershipRead {
     pub conversation_id: ChatConversationId,
     pub participant: ChatParticipantRead,

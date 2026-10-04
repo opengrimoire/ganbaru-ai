@@ -1,4 +1,6 @@
+mod aggregate_budget;
 mod assignments;
+mod calendar_history;
 mod close_outcomes;
 mod helpers;
 mod history_replay;

@@ -333,7 +333,7 @@ function applyStyleAnnotations(
   if (decoration.includes("line-through")) annotations.strikethrough = true;
 }
 
-/** Treat reference metadata as untrusted input; retain legacy page hyperlinks when no markers exist. */
+/** Treat reference metadata as untrusted input; retain ordinary page hyperlinks when no markers exist. */
 function inlineReferenceForElement(
   element: Element,
   linkUrl: string | null,
@@ -1004,7 +1004,6 @@ export function planNotesRichHtmlPaste(
       : richTextPlainText(visibleSegment.richText).length,
   };
 }
-
 
 /** Flatten portable blocks into an inline field while retaining supported text annotations. */
 export function notesInlineClipboardRichText(html: string): NotesRichText[] | null {

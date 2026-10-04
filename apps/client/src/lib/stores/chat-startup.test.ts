@@ -90,6 +90,16 @@ afterEach(() => {
 });
 
 describe("Chat startup", () => {
+  it("prewarms cached history without launching providers, then discovers once when opened", async () => {
+    await chat.prewarmForProject("project");
+    expect(chat.loaded).toBe(true);
+    expect(chat.channelMessages).toEqual([message("general")]);
+    expect(chatApi.discoverDefaultChatProviders).not.toHaveBeenCalled();
+    await Promise.all([chat.ensureLoaded(), chat.ensureLoaded()]);
+    expect(chatApi.discoverDefaultChatProviders).toHaveBeenCalledOnce();
+    expect(chat.providerDiscoveryLoading).toBe(true);
+  });
+
   it("loads the selected channel while provider discovery remains unresolved", async () => {
     await chat.ensureLoaded();
     expect(chat.loaded).toBe(true);

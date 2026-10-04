@@ -26,7 +26,7 @@ Organizational Chat is also structured data. A project channel can outlive any p
 
 ### Device-local state
 
-The platform application config directory stores state that is meaningful only on one installation, including the active-vault pointer, device identity, external folder bindings, executable paths, provider homes, process state, probe caches, benchmark state, and transient runtime snapshots.
+The platform application config directory stores state that is meaningful only on one installation, including the active-vault pointer, device identity, external folder bindings, executable paths, provider homes, process state, probe caches, benchmark state, and transient runtime snapshots. When a vault is selected and every recent vault folder is reachable, settings scoped to vault IDs that none of those folders hold are forgotten, so deleted or replaced vaults do not leave device-local residue. While any recent folder is unreachable, such as a vault on a disconnected drive, nothing is forgotten.
 
 Portable rows may refer to a logical working-folder ID. Resolving that ID to an external absolute path requires a current device-local binding and filesystem identity check. A portable database must never acquire authority merely because it contains a path copied from another device.
 
@@ -37,6 +37,10 @@ The active folder contains the vault marker, portable configuration, SQLite data
 Production and development builds use separate default folders and separate platform config directories. A user may choose another folder or import a valid existing vault. Folder validation must reject an unrelated non-empty folder, an invalid marker, unsupported schema versions, permission failures, and a database that cannot be opened. The application must never delete or silently recreate a configured vault to recover from one of these errors.
 
 Music bytes remain wherever the user stores them. The vault owns playlist definitions, canonical library metadata, source identities, and managed playback state, not the external music library itself. Backups are written to a user-selected location outside the active folder.
+
+Selection, whole-vault snapshots, ownership handoff, and replacement share one native operation guard. A concurrent request returns a retry error rather than queuing another operation. Before changing the active pointer, closing pools, or replacing active files, the operation drains Focus, Music, and the platform Doomscrolling owner, fences managed file writes, and excludes new SQLite connections. A stalled managed writer cancels the operation after ten seconds and leaves the active pointer unchanged. Database and file-write gates release before native reactivation. Awaited blocking workers retain those guards through cancellation until their work actually finishes.
+
+Android backup restore reserves the operation during document preparation, without keeping a managed write permit across the exclusive fence. It rechecks the original active path, vault identity, writable role, and ownership generation after quiescence and before replacement. Archive validation precedes creating any missing skeleton files. Reactivation and cleanup failures are explicit errors; a successful file replacement does not imply successful runtime reactivation. Physical switching and restore acceptance remains separate from automated guard and archive tests.
 
 ## Portable configuration
 
@@ -81,6 +85,8 @@ Search indexes, projections, thumbnails, diagnostic summaries, and exported Mark
 Chat projections and Notes search indexes may be persisted for speed, but canonical events and canonical Notes rows remain authoritative. Rebuilding a projection must preserve authorization and audience filtering.
 
 ## Storage decision checklist
+
+Domain records remain normalized in SQLite. Native command receipts and bounded runtime control checkpoints are explicit JSON-envelope exceptions: they retain typed retry results, accepted Focus control state or device-keyed Music queue state. They do not replace normalized event metadata, task graphs, Notes content, library relationships or execution history. Their owning services bound and validate encoding on reads and writes; immutable receipts bind the complete semantic request to its accepted transaction. The schema invariant test permits only the named envelope columns and continues to reject other JSON storage.
 
 Before adding persisted data, answer:
 

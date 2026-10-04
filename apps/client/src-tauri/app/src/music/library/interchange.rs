@@ -1,5 +1,7 @@
 use super::*;
-use sqlx::{Sqlite, SqlitePool, Transaction};
+#[cfg(test)]
+use sqlx::SqlitePool;
+use sqlx::{Sqlite, Transaction};
 use std::collections::{HashMap, HashSet};
 
 const INTERCHANGE_FORMAT: &str = "ganbaru-ai/music-playlists";
@@ -8,6 +10,7 @@ const MAX_PLAYLISTS: usize = 500;
 const MAX_MEMBERSHIPS: usize = 10_000;
 type ImportedSnoozeKey = (String, String, Option<String>, i64, Option<i64>, String);
 
+#[cfg(test)]
 pub(crate) async fn import(
     pool: &SqlitePool,
     request: MusicInterchangeImportRequest,
@@ -17,6 +20,19 @@ pub(crate) async fn import(
         .begin()
         .await
         .map_err(|error| MusicLibraryError::database("begin music playlist import", error))?;
+    let result =
+        import_in_transaction(&mut transaction, &request, &request.imported_at.to_string()).await?;
+    super::writes::commit(transaction, "commit music playlist import").await?;
+    Ok(result)
+}
+
+/// Applies a validated document within its caller's transaction, including search changes.
+pub(super) async fn import_in_transaction(
+    transaction: &mut Transaction<'_, Sqlite>,
+    request: &MusicInterchangeImportRequest,
+    operation_id: &str,
+) -> MusicLibraryResult<MusicInterchangeImportResult> {
+    validate_import(request)?;
     let mut item_ids = HashMap::<String, String>::new();
     let mut playlist_ids = HashMap::<String, String>::new();
     let mut changed_items = HashSet::<String>::new();
@@ -28,10 +44,10 @@ pub(crate) async fn import(
         assignment_count: 0,
     };
 
-    import_roots(&mut transaction, &request).await?;
+    import_roots(transaction, request).await?;
     for (playlist_index, playlist) in request.document.playlists.iter().enumerate() {
         let Some(target_playlist_id) =
-            import_playlist(&mut transaction, playlist, playlist_index, &request).await?
+            import_playlist(transaction, playlist, playlist_index, request, operation_id).await?
         else {
             continue;
         };
@@ -40,24 +56,25 @@ pub(crate) async fn import(
         let mut playlist_item_ids = HashSet::<String>::new();
         for (membership_index, membership) in playlist.memberships.iter().enumerate() {
             let item_id = import_item(
-                &mut transaction,
+                transaction,
                 &membership.item,
                 &mut item_ids,
                 &mut changed_items,
-                &request,
+                request,
+                operation_id,
             )
             .await?;
             if !playlist_item_ids.insert(item_id.clone()) {
                 continue;
             }
             import_membership(
-                &mut transaction,
+                transaction,
                 &target_playlist_id,
                 &item_id,
                 membership,
-                (playlist_index, membership_index),
+                (playlist_index, membership_index, operation_id),
                 &mut imported_snoozes,
-                &request,
+                request,
             )
             .await?;
             result.membership_count += 1;
@@ -66,7 +83,7 @@ pub(crate) async fn import(
     result.item_count = item_ids.len() as i64;
     if request.import_context_assignments {
         result.assignment_count = import_assignments(
-            &mut transaction,
+            transaction,
             &request.document.context_assignments,
             &playlist_ids,
             request.imported_at,
@@ -74,13 +91,12 @@ pub(crate) async fn import(
         .await?;
     }
     for item_id in changed_items {
-        super::search::refresh_item(&mut transaction, &item_id).await?;
+        super::search::refresh_item(transaction, &item_id).await?;
     }
-    super::writes::commit(transaction, "commit music playlist import").await?;
     Ok(result)
 }
 
-fn validate_import(request: &MusicInterchangeImportRequest) -> MusicLibraryResult<()> {
+pub(super) fn validate_import(request: &MusicInterchangeImportRequest) -> MusicLibraryResult<()> {
     if request.document.format != INTERCHANGE_FORMAT
         || request.document.version != INTERCHANGE_VERSION
     {
@@ -203,7 +219,7 @@ fn validate_item(
     Ok(())
 }
 
-fn safe_relative_path(value: &str) -> bool {
+pub(super) fn safe_relative_path(value: &str) -> bool {
     !value.trim().is_empty()
         && !value.starts_with(['/', '\\'])
         && !value.contains([':', '\0'])
@@ -238,6 +254,7 @@ async fn import_playlist(
     playlist: &MusicInterchangePlaylist,
     playlist_index: usize,
     request: &MusicInterchangeImportRequest,
+    operation_id: &str,
 ) -> MusicLibraryResult<Option<String>> {
     let exists: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM music_playlists WHERE id = ?)")
@@ -250,10 +267,7 @@ async fn import_playlist(
     }
     let target_id =
         if exists && request.playlist_conflict == MusicImportPlaylistConflict::ImportCopy {
-            format!(
-                "music-import:{}:playlist:{playlist_index}",
-                request.imported_at
-            )
+            format!("music-import:{operation_id}:playlist:{playlist_index}")
         } else {
             playlist.id.clone()
         };
@@ -326,6 +340,7 @@ async fn import_item(
     item_ids: &mut HashMap<String, String>,
     changed_items: &mut HashSet<String>,
     request: &MusicInterchangeImportRequest,
+    operation_id: &str,
 ) -> MusicLibraryResult<String> {
     if let Some(item_id) = item_ids.get(&item.identity_key) {
         return Ok(item_id.clone());
@@ -337,13 +352,8 @@ async fn import_item(
             .await
             .map_err(|error| MusicLibraryError::database("match imported music item", error))?;
     let is_new = existing.is_none();
-    let item_id = existing.unwrap_or_else(|| {
-        format!(
-            "music-import:{}:item:{}",
-            request.imported_at,
-            item_ids.len()
-        )
-    });
+    let item_id = existing
+        .unwrap_or_else(|| format!("music-import:{}:item:{}", operation_id, item_ids.len()));
     if is_new {
         sqlx::query(
             "INSERT INTO music_library_items
@@ -411,7 +421,7 @@ async fn import_item(
         )
         .bind(format!(
             "music-import:{}:location:{}:{location_index}",
-            request.imported_at,
+            operation_id,
             item_ids.len()
         ))
         .bind(&item_id)
@@ -433,14 +443,14 @@ async fn import_membership(
     playlist_id: &str,
     item_id: &str,
     membership: &MusicInterchangeMembership,
-    position: (usize, usize),
+    position: (usize, usize, &str),
     imported_snoozes: &mut HashSet<ImportedSnoozeKey>,
     request: &MusicInterchangeImportRequest,
 ) -> MusicLibraryResult<()> {
-    let (playlist_index, membership_index) = position;
+    let (playlist_index, membership_index, operation_id) = position;
     let membership_id = format!(
         "music-import:{}:membership:{playlist_index}:{membership_index}",
-        request.imported_at
+        operation_id
     );
     sqlx::query(
         "INSERT INTO music_playlist_memberships

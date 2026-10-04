@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyProjectMutation } from "$lib/projects/project-snapshot-mutations";
-import type { ProjectMutation, ProjectsSnapshot } from "$lib/projects/types";
+import type { ProjectCustomField, ProjectMutation, ProjectsSnapshot, ProjectTask } from "$lib/projects/types";
 
 function emptySnapshot(): ProjectsSnapshot {
   return {
@@ -20,6 +20,31 @@ function mutation(changed: Partial<ProjectsSnapshot>, removals: ProjectMutation[
 }
 
 describe("applyProjectMutation", () => {
+  it("preserves renamed schema rows when an older reorder receipt arrives", () => {
+    const field: ProjectCustomField = { id: "field-1", projectId: "project-1", name: "Renamed",
+      fieldType: "select", sortOrder: 2000, revision: 2, createdAt: "same", updatedAt: "same" };
+    const option = { id: "option-1", fieldId: field.id, name: "Renamed option", sortOrder: 2000,
+      revision: 2, createdAt: "same", updatedAt: "same" };
+    const initial = { ...emptySnapshot(), customFields: [field], customFieldOptions: [option] };
+    const next = applyProjectMutation(initial, mutation({
+      customFields: [{ ...field, revision: 1, name: "Old" }],
+      customFieldOptions: [{ ...option, revision: 1, name: "Old option" }],
+    }));
+    expect(next.customFields).toEqual([field]);
+    expect(next.customFieldOptions).toEqual([option]);
+  });
+  it("keeps newer task revisions when an old command receipt arrives with the same timestamp", () => {
+    const task: ProjectTask = {
+      id: "task-1", projectId: "project-1", sectionId: "section-1", statusId: "status-1",
+      title: "Newer", description: "", priority: "normal", taskType: "task", sectionSortOrder: 1000,
+      statusSortOrder: 1000, milestone: false, createdAt: "same", updatedAt: "same", revision: 2,
+    };
+    const snapshot = { ...emptySnapshot(), tasks: [task] };
+    const result = applyProjectMutation(snapshot, mutation({ tasks: [{ ...task, title: "Old", revision: 1 }] }));
+    expect(result.tasks).toEqual([task]);
+    const next = applyProjectMutation(result, mutation({ tasks: [{ ...task, title: "Newest", revision: 3 }] }));
+    expect(next.tasks[0].title).toBe("Newest");
+  });
   it("immutably upserts authoritative rows for simple and composite collections", () => {
     const initial = emptySnapshot();
     const result = applyProjectMutation(initial, mutation({

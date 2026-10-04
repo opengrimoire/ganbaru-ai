@@ -9,18 +9,14 @@ import {
   type ChatReviewCommentRead,
   type ChatRestorePreviewRead,
   type ChatRestoreResultRead,
-  type ChatTerminalContextRead,
   type ChatTerminalLayoutRead,
   type ChatTerminalPanelLayout,
   type ChatTerminalCloseResult,
   type ChatTerminalOutputChunk,
   type ChatTerminalRead,
   type ChatTerminalSnapshotRead,
-  type GitBranchRead,
   type GitChangedPathRead,
-  type GitRemoteRead,
   type GitStatusRead,
-  type GitWorktreeRead,
   type HostedChangeRequestRead,
   type HostedSourceControlRead,
   type ProjectWorkingFolderDirectoryRead,
@@ -513,20 +509,6 @@ export function parseChatRestoreResult(value: unknown): ChatRestoreResultRead {
   };
 }
 
-export function parseChatTerminalContext(value: unknown): ChatTerminalContextRead {
-  const record = readRecord(value, "terminalContext");
-  return {
-    attachmentId: readIdentifier(record.attachmentId, "terminalContext.attachmentId"),
-    terminalId: readIdentifier(record.terminalId, "terminalContext.terminalId"),
-    terminalName: readString(record.terminalName, "terminalContext.terminalName"),
-    capturedAt: readUtcTimestamp(record.capturedAt, "terminalContext.capturedAt"),
-    byteSize: readNonNegativeSafeInteger(record.byteSize, "terminalContext.byteSize"),
-    lineCount: readNonNegativeSafeInteger(record.lineCount, "terminalContext.lineCount"),
-    preview: readString(record.preview, "terminalContext.preview"),
-    truncated: readBoolean(record.truncated, "terminalContext.truncated"),
-  };
-}
-
 function parseGitChangedPath(value: unknown, label: string): GitChangedPathRead {
   const record = readRecord(value, label);
   return {
@@ -549,45 +531,6 @@ export function parseGitStatus(value: unknown): GitStatusRead {
     behind: readNonNegativeSafeInteger(record.behind, "gitStatus.behind"),
     files: array(record.files, "gitStatus.files", parseGitChangedPath),
   };
-}
-
-export function parseGitRemotes(value: unknown): GitRemoteRead[] {
-  return array(value, "gitRemotes", (entry, label) => {
-    const record = readRecord(entry, label);
-    return {
-      name: readString(record.name, `${label}.name`),
-      fetchUrl: readNullable(record.fetchUrl, `${label}.fetchUrl`, readString),
-      pushUrl: readNullable(record.pushUrl, `${label}.pushUrl`, readString),
-    };
-  });
-}
-
-export function parseGitBranches(value: unknown): GitBranchRead[] {
-  return array(value, "gitBranches", (entry, label) => {
-    const record = readRecord(entry, label);
-    return {
-      name: readString(record.name, `${label}.name`),
-      current: readBoolean(record.current, `${label}.current`),
-      upstream: readNullable(record.upstream, `${label}.upstream`, readString),
-      ahead: readNonNegativeSafeInteger(record.ahead, `${label}.ahead`),
-      behind: readNonNegativeSafeInteger(record.behind, `${label}.behind`),
-    };
-  });
-}
-
-export function parseGitWorktrees(value: unknown): GitWorktreeRead[] {
-  return array(value, "gitWorktrees", (entry, label) => {
-    const record = readRecord(entry, label);
-    return {
-      path: readString(record.path, `${label}.path`),
-      head: readString(record.head, `${label}.head`),
-      branch: readNullable(record.branch, `${label}.branch`, readString),
-      bare: readBoolean(record.bare, `${label}.bare`),
-      detached: readBoolean(record.detached, `${label}.detached`),
-      locked: readBoolean(record.locked, `${label}.locked`),
-      prunable: readBoolean(record.prunable, `${label}.prunable`),
-    };
-  });
 }
 
 export function parseChatExecutionEnvironment(

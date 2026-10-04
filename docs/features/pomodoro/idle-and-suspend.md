@@ -2,6 +2,8 @@
 
 Idle detection prevents away time from being recorded as focus. Suspend detection handles a sleeping operating system separately because it carries different evidence and recovery expectations.
 
+**Migration status: Partial.** Native accepted state drives desktop idle overlays and failure sounds. The primary overlay or its main-window fallback acknowledges a painted, visible warning; Rust records the first accepted visibility time and owns the 60-second grace deadline. The frontend never declares failure from its own timer. Automated persistence and retry checks exist; real window visibility and platform acceptance remain pending.
+
 ## Idle threshold
 
 Idle detection applies only to focus phases. An event can disable it or store a threshold initialized from global or project defaults. Supported settings are 1, 2, 3, 4, 5, 10, or 15 minutes, with 3 minutes as the default.
@@ -31,6 +33,8 @@ When idle is declared:
 5. A full-screen idle overlay appears on the primary display, with secondary blockers where supported.
 
 The pause is backdated to the operating system's evidence so threshold time is not counted as focus. The overlay's user-visible failure window starts when the overlay is actually visible.
+
+Rust commits the first scoped visibility acknowledgement and measures the live grace period with a monotonic clock. Civil clock corrections cannot shorten or extend that grace. A restarted controller must show and acknowledge its own warning; it cannot reuse another process or device's visibility marker as current display evidence.
 
 ## Return before focus failure
 

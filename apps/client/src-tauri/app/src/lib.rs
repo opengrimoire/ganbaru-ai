@@ -21,6 +21,10 @@ mod db;
 mod db_path;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod doomscrolling;
+#[path = "doomscrolling/limits.rs"]
+pub(crate) mod doomscrolling_limits;
+#[path = "doomscrolling/limits_store.rs"]
+mod doomscrolling_limits_store;
 mod doomscrolling_linked;
 #[cfg(any(target_os = "android", all(test, not(target_os = "ios"))))]
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
@@ -97,14 +101,21 @@ mod composition_tests {
             "calendar_reads::calendar_load_notification_scheduler_window",
             "projects::workspace::projects_load_workspace",
             "notes::notes_load_workspace_shell",
-            "pomodoro::pomodoro_start_run",
-            "pomodoro::pomodoro_recover_mobile_run",
-            "crate::doomscrolling_mobile::doomscrolling_mobile_sync_events",
-            "crate::doomscrolling_mobile::doomscrolling_mobile_list_usage_samples",
+            "pomodoro::native_runtime::focus_snapshot",
+            "pomodoro::native_runtime::focus_command",
+            "pomodoro::native_runtime::focus_notification_copy",
+            "pomodoro::native_runtime::focus_subscribe",
+            "pomodoro::native_runtime::focus_renew_subscription",
+            "pomodoro::native_runtime::focus_unsubscribe",
+            "crate::doomscrolling_mobile::doomscrolling_mobile_update_copy",
+            "crate::doomscrolling_mobile::doomscrolling_mobile_load_usage_projection",
+            "music::session::runtime::music_session_subscribe",
+            "music::session::runtime::music_session_read_frame",
+            "music::session::runtime::music_session_acknowledge",
+            "music::session::runtime::music_session_unsubscribe",
             "quick_notes::quick_notes_list",
             "themes::theme_load_all",
-            "media_player::media_player_load",
-            "music::music_get_playback_state",
+            "music::session::runtime::music_session_command",
             "music::library::commands::music_library_playlist_summaries",
             "music::root_bindings::music_get_local_root_bindings",
             "profile_images::profile_image_asset_data_url",
@@ -139,7 +150,10 @@ mod composition_tests {
             "doomscrolling::commands::",
             "doomscrolling::state::",
             "doomscrolling::usage::",
+            "doomscrolling::limits_read::",
             "doomscrolling::catalog::",
+            "doomscrolling_mobile::doomscrolling_mobile_sync_events",
+            "doomscrolling_mobile::doomscrolling_mobile_list_usage_samples",
             "notification::show_event_notification",
             "soundscape::",
             "tray::",
@@ -154,7 +168,6 @@ mod composition_tests {
             "project_icons::project_icon_pick_image_file",
             "project_icons::project_icon_download_image_url",
             "project_icons::project_icon_asset_path",
-            "pomodoro::pomodoro_recover_open_runs",
             "music::music_pick_soundscape_file",
             "music::music_reveal_local_file",
             "music::library::commands::music_library_create_relink_plan",

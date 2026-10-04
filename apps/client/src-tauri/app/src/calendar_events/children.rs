@@ -1,11 +1,16 @@
+#[cfg(test)]
 use crate::calendar_description::sanitize_calendar_description_html;
 
+#[cfg(test)]
 use super::types::{
-    CalendarEventCreate, CalendarEventUpdateField, CalendarGeoPayload, CalendarOrganizerPayload,
-    CalendarPomodoroConfig, CalendarPomodoroRhythm,
+    CalendarEventCreate, CalendarEventUpdateField, CalendarPomodoroConfig, CalendarPomodoroRhythm,
 };
-use super::validation::{require_non_empty, validate_pomodoro_config};
+use super::types::{CalendarGeoPayload, CalendarOrganizerPayload};
+use super::validation::require_non_empty;
+#[cfg(test)]
+use super::validation::validate_pomodoro_config;
 
+#[cfg(test)]
 pub(super) async fn insert_calendar_event_row(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     event: &CalendarEventCreate,
@@ -68,51 +73,7 @@ pub(super) async fn insert_calendar_event_row(
     .map_err(|e| format!("insert calendar event: {e}"))?;
     Ok(())
 }
-pub(super) async fn copy_pomodoro_config(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    source_event_id: &str,
-    target_event_id: &str,
-) -> Result<(), String> {
-    sqlx::query(
-        "INSERT INTO pomodoro_configs
-           (event_id, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes)
-         SELECT ?, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes
-         FROM pomodoro_configs WHERE event_id = ?",
-    )
-    .bind(target_event_id)
-    .bind(source_event_id)
-    .execute(&mut **tx)
-    .await
-    .map_err(|e| format!("copy pomodoro config: {e}"))?;
-
-    sqlx::query(
-        "INSERT INTO pomodoro_config_count_rhythms
-           (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes,
-            long_break_after_focus_count)
-         SELECT ?, focus_duration_minutes, short_break_minutes, long_break_minutes,
-                long_break_after_focus_count
-         FROM pomodoro_config_count_rhythms WHERE event_id = ?",
-    )
-    .bind(target_event_id)
-    .bind(source_event_id)
-    .execute(&mut **tx)
-    .await
-    .map_err(|e| format!("copy count pomodoro rhythm: {e}"))?;
-
-    sqlx::query(
-        "INSERT INTO pomodoro_config_sequence_steps
-           (event_id, step_index, focus_duration_minutes, break_phase, break_duration_minutes)
-         SELECT ?, step_index, focus_duration_minutes, break_phase, break_duration_minutes
-         FROM pomodoro_config_sequence_steps WHERE event_id = ?
-         ORDER BY step_index ASC",
-    )
-    .bind(target_event_id)
-    .bind(source_event_id)
-    .execute(&mut **tx)
-    .await
-    .map_err(|e| format!("copy sequence pomodoro rhythm: {e}"))?;
-    Ok(())
-}
+#[cfg(test)]
 pub(super) async fn replace_pomodoro_config(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     event_id: &str,
@@ -126,6 +87,7 @@ pub(super) async fn replace_pomodoro_config(
         .map_err(|e| format!("delete previous pomodoro config: {e}"))?;
     insert_pomodoro_config(tx, event_id, config).await
 }
+#[cfg(test)]
 pub(super) async fn insert_pomodoro_config(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     event_id: &str,
@@ -192,63 +154,7 @@ pub(super) async fn insert_pomodoro_config(
     }
     Ok(())
 }
-pub(super) async fn copy_attendees(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    source_event_id: &str,
-    target_event_id: &str,
-) -> Result<(), String> {
-    sqlx::query(
-        "INSERT INTO calendar_event_attendees
-           (id, event_id, name, email, role, status, rsvp, sort_order)
-         SELECT lower(hex(randomblob(16))), ?, name, email, role, status, rsvp, sort_order
-         FROM calendar_event_attendees WHERE event_id = ?",
-    )
-    .bind(target_event_id)
-    .bind(source_event_id)
-    .execute(&mut **tx)
-    .await
-    .map_err(|e| format!("copy attendees: {e}"))?;
-    Ok(())
-}
-pub(super) async fn copy_calendar_metadata(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    source_event_id: &str,
-    target_event_id: &str,
-) -> Result<(), String> {
-    sqlx::query(
-        "INSERT INTO calendar_event_categories (id, event_id, category, sort_order)
-         SELECT lower(hex(randomblob(16))), ?, category, sort_order
-         FROM calendar_event_categories WHERE event_id = ?",
-    )
-    .bind(target_event_id)
-    .bind(source_event_id)
-    .execute(&mut **tx)
-    .await
-    .map_err(|e| format!("copy calendar categories: {e}"))?;
-
-    sqlx::query(
-        "INSERT INTO calendar_event_extended_properties
-            (id, event_id, property_key, property_value, sort_order)
-         SELECT lower(hex(randomblob(16))), ?, property_key, property_value, sort_order
-         FROM calendar_event_extended_properties WHERE event_id = ?",
-    )
-    .bind(target_event_id)
-    .bind(source_event_id)
-    .execute(&mut **tx)
-    .await
-    .map_err(|e| format!("copy calendar extended properties: {e}"))?;
-
-    sqlx::query(
-        "INSERT INTO calendar_event_organizers (event_id, name, email)
-         SELECT ?, name, email FROM calendar_event_organizers WHERE event_id = ?",
-    )
-    .bind(target_event_id)
-    .bind(source_event_id)
-    .execute(&mut **tx)
-    .await
-    .map_err(|e| format!("copy calendar organizer: {e}"))?;
-    Ok(())
-}
+#[cfg(test)]
 pub(super) async fn apply_update_field(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     id: &str,
@@ -456,6 +362,7 @@ pub(super) fn parse_organizer(
     require_non_empty(&organizer.email, "organizer.email")?;
     Ok(Some(organizer))
 }
+#[cfg(test)]
 pub(super) async fn replace_i64_list(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     event_id: &str,
@@ -484,6 +391,7 @@ pub(super) async fn replace_i64_list(
     }
     Ok(())
 }
+#[cfg(test)]
 pub(super) async fn replace_string_list(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     event_id: &str,
@@ -512,6 +420,7 @@ pub(super) async fn replace_string_list(
     }
     Ok(())
 }
+#[cfg(test)]
 pub(super) async fn replace_extended_properties(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     owner_id: &str,
@@ -541,6 +450,7 @@ pub(super) async fn replace_extended_properties(
     }
     Ok(())
 }
+#[cfg(test)]
 pub(super) async fn replace_organizer(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     event_id: &str,
@@ -565,6 +475,7 @@ pub(super) async fn replace_organizer(
     }
     Ok(())
 }
+#[cfg(test)]
 pub(super) async fn update_text(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     id: &str,
@@ -580,6 +491,7 @@ pub(super) async fn update_text(
         .map_err(|e| format!("update calendar column {column}: {e}"))?;
     Ok(())
 }
+#[cfg(test)]
 pub(super) async fn update_optional_text(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     id: &str,
@@ -595,6 +507,7 @@ pub(super) async fn update_optional_text(
         .map_err(|e| format!("update calendar column {column}: {e}"))?;
     Ok(())
 }
+#[cfg(test)]
 pub(super) async fn update_i64(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     id: &str,
@@ -610,6 +523,7 @@ pub(super) async fn update_i64(
         .map_err(|e| format!("update calendar column {column}: {e}"))?;
     Ok(())
 }
+#[cfg(test)]
 pub(super) async fn update_optional_i64(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     id: &str,
@@ -625,6 +539,7 @@ pub(super) async fn update_optional_i64(
         .map_err(|e| format!("update calendar column {column}: {e}"))?;
     Ok(())
 }
+#[cfg(test)]
 pub(super) async fn sanitize_stored_event_description(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     id: &str,

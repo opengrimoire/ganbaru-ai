@@ -19,8 +19,6 @@ import type {
   NotesBlock,
   NotesChildPageFromBlockCreate,
   NotesDuplicatePageRequest,
-  NotesDuplicateBlockRequest,
-  NotesDuplicateBlocksRequest,
   NotesBlockUpdate,
   NotesLoadedPage,
   NotesPageOpenResponse,
@@ -29,7 +27,6 @@ import type {
   NotesBlockHydrationRequest,
   NotesMovePageRequest,
   NotesMoveBlockRequest,
-  NotesMoveBlocksRequest,
   NotesPage,
   NotesPageCreate,
   NotesPageUpdate,
@@ -231,40 +228,6 @@ export async function moveNotesBlock(
   );
   invalidateNotesNotificationSchedule();
   return block;
-}
-
-export async function moveNotesBlocks(
-  request: NotesMoveBlocksRequest,
-): Promise<NotesPaginatedBlockList> {
-  const dbUrl = await ensureDbUrl();
-  const blocks = mapNotesBlockListDto(
-    await invokeNotesMutation("notes_move_blocks", { dbUrl, request }),
-  );
-  invalidateNotesNotificationSchedule();
-  return blocks;
-}
-
-export async function duplicateNotesBlock(
-  blockId: string,
-  request: NotesDuplicateBlockRequest,
-): Promise<NotesBlock> {
-  const dbUrl = await ensureDbUrl();
-  const block = mapNotesBlockDto(
-    await invokeNotesMutation("notes_duplicate_block", { dbUrl, blockId, request }),
-  );
-  invalidateNotesNotificationSchedule();
-  return block;
-}
-
-export async function duplicateNotesBlocks(
-  request: NotesDuplicateBlocksRequest,
-): Promise<NotesPaginatedBlockList> {
-  const dbUrl = await ensureDbUrl();
-  const blocks = mapNotesBlockListDto(
-    await invokeNotesMutation("notes_duplicate_blocks", { dbUrl, request }),
-  );
-  invalidateNotesNotificationSchedule();
-  return blocks;
 }
 
 export async function loadNotesUndoState(pageId: string): Promise<string | null> {

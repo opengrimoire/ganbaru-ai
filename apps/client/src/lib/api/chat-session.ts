@@ -40,17 +40,6 @@ import {
   parseChatTimelinePage,
 } from "$lib/chat/validation";
 
-export async function listChatThreads(
-  workingFolderId: ProjectWorkingFolderId | null,
-  archived: boolean,
-): Promise<ChatThreadShellRead[]> {
-  return parseChatThreadShells(await invoke<unknown>("chat_list_threads", {
-    dbUrl: await ensureDbUrl(),
-    workingFolderId,
-    archived,
-  }));
-}
-
 export async function listChatThreadWindow(
   workingFolderId: ProjectWorkingFolderId | null,
   archived: boolean,
@@ -68,15 +57,6 @@ export async function readChatThreadShell(threadId: ChatThreadId): Promise<ChatT
   return parseChatThreadShell(await invoke<unknown>("chat_read_thread_shell", {
     dbUrl: await ensureDbUrl(),
     threadId,
-  }));
-}
-
-export async function searchChatThreadTitles(query: string, archived: boolean | null, limit = 100): Promise<ChatThreadShellRead[]> {
-  return parseChatThreadShells(await invoke<unknown>("chat_search_thread_titles", {
-    dbUrl: await ensureDbUrl(),
-    query,
-    archived,
-    limit,
   }));
 }
 

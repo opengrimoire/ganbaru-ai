@@ -2,7 +2,14 @@
 
 This file records reviewed Rust advisory exceptions and the most recent known audit snapshot. Lockfiles and current command output are authoritative. Re-run the audits before relying on this snapshot.
 
-Audits checked on 2026-09-28:
+Audits checked on 2026-10-04 UTC:
+
+- pnpm -w run audit:deps reports no known npm vulnerabilities after updating devalue to 5.9.3 and DOMPurify to 3.4.16. These compatible patches resolve six devalue advisories and [GHSA-p98j-92pf-mc4p](https://github.com/cure53/DOMPurify/security/advisories/GHSA-p98j-92pf-mc4p). Existing package maintainers and upstream repositories were reviewed. Release-age restrictions and install-script controls remain enabled.
+- pnpm -w run audit:rust exits successfully with the same seven allowed warnings and existing conditional vulnerability ignores after adding Jiff for native timezone conversion. No new advisory exception or security-policy change was introduced.
+- The browser native messaging host reuses the approved workspace Jiff and SHA-256 dependencies for local-date freshness and configuration fingerprints. This adds direct edges to already locked packages, with no additional package or version. The Rust audit passed again after those manifest and lockfile changes with the same seven warnings and existing exceptions.
+- All 22 focused Calendar description, Chat Markdown, and Notes HTML paste tests passed after the sanitizer update. The complete `pnpm -w run validate:full` dependency and code gate passed on 2026-10-04 UTC, including workspace tests, frontend checks, editor diagnostics and both production bundle contracts.
+
+Previous snapshot checked on 2026-09-28:
 
 - pnpm -w run audit:deps reports no known npm vulnerabilities after updating the workspace override and lockfile to undici 7.29.1. This fixes [GHSA-3wwx-pv8p-q78v](https://github.com/nodejs/undici/security/advisories/GHSA-3wwx-pv8p-q78v), reached through jsdom and Vitest. Release-age restrictions, install-script controls, and audit protections remain unchanged.
 - pnpm -w run audit:rust exits successfully with the existing seven allowed warnings. Using the existing Tokio workspace dependency for database initialization adds no package or version to Cargo.lock.

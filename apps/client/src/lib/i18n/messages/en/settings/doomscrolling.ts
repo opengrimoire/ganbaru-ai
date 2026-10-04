@@ -105,6 +105,7 @@ export const doomscrolling = {
     disabledLabel: (name: string) => `${name} disabled`,
     usedOfLimit: (used: string, limit: string, period: string) =>
       `${used} used of ${limit} ${period}`,
+    totalsUnavailable: "Usage totals are not available yet",
     usageLimitConfigurationHeading: "Usage limit configuration",
     enableUsageLimits: "Enable usage limits",
     enableUsageLimitsDescription:

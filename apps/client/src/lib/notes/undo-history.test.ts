@@ -81,7 +81,7 @@ function entry(
 }
 
 describe("notes undo history", () => {
-  it("clones and persists directional document selection without changing legacy history", () => {
+  it("clones and persists directional document selection alongside block-local history", () => {
     const before = pageSnapshot("before");
     const selection = { anchor: { blockId: blockB, offset: Number.MAX_SAFE_INTEGER }, focus: { blockId: blockA, offset: 2 } };
     before.documentSelection = selection;

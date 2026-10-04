@@ -1,5 +1,4 @@
 import type {
-  ChatAttachmentId,
   ChatCheckpointId,
   ChatThreadId,
   ChatTurnId,
@@ -432,15 +431,4 @@ export interface ChatTerminalSnapshotRead {
 export interface ChatTerminalCloseResult {
   closed: boolean;
   confirmationRequired: boolean;
-}
-
-export interface ChatTerminalContextRead {
-  attachmentId: ChatAttachmentId;
-  terminalId: string;
-  terminalName: string;
-  capturedAt: UtcTimestamp;
-  byteSize: number;
-  lineCount: number;
-  preview: string;
-  truncated: boolean;
 }

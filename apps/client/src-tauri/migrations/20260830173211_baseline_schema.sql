@@ -2209,15 +2209,6 @@ CREATE TABLE music_membership_skip_ranges (
     UNIQUE (membership_id, sort_order)
 );
 
-CREATE TABLE music_playback_states (
-    source_identity TEXT PRIMARY KEY,
-    source_kind TEXT NOT NULL CHECK (source_kind IN ('local-file', 'youtube-video', 'youtube-playlist')),
-    position_ms INTEGER NOT NULL CHECK (position_ms >= 0),
-    duration_ms INTEGER CHECK (duration_ms IS NULL OR duration_ms >= 0),
-    status TEXT NOT NULL CHECK (status IN ('idle', 'loading', 'ready', 'playing', 'paused', 'ended', 'error')),
-    updated_at INTEGER NOT NULL
-);
-
 CREATE TABLE music_playlist_intended_uses (
     playlist_id TEXT NOT NULL REFERENCES music_playlists(id) ON DELETE CASCADE,
     intended_use TEXT NOT NULL

@@ -1,8 +1,8 @@
+import { createNotesCompoundPersistence, enqueueNotesCompoundEdit } from "./notes-store-compound-edits";
+import { reconcileNotesCompoundUndo } from "$lib/notes/undo-compound";
+import type { NotesEditOperation } from "$lib/api/notes/compound-edits";
 import {
-  appendNotesBlockChildren,
   moveNotesBlock,
-  moveNotesBlocks,
-  trashNotesBlock,
 } from "$lib/api/notes";
 import { collectLoadedBlockSubtreeIds } from "$lib/notes/block-duplicate";
 import { createBlockWrite } from "$lib/notes/block-factory";
@@ -18,7 +18,6 @@ import {
 } from "$lib/notes/column";
 import type {
   NotesBlock,
-  NotesAppendBlockChildrenRequest,
   NotesBlockUpdate,
   NotesColumnBlock,
   NotesColumnBlockItems,
@@ -30,14 +29,12 @@ import type {
 } from "$lib/notes/undo-history";
 import type { NotesTreeState } from "$lib/notes/block-tree";
 import {
-  notesPostAppendResult,
-  notesPostMoveManyResult,
   notesPostMoveResult,
-  notesPostTrashResult,
   type NotesPostMutationResult,
 } from "$lib/notes/post-mutation";
 
 export interface NotesColumnActionsContext {
+  enqueueEditorMutation: (mutation: () => Promise<void>) => Promise<void>;
   readSelectedPageId: () => string | null;
   readChildIdsByParentId: () => Record<string, string[]>;
   treeState: () => NotesTreeState;
@@ -114,133 +111,70 @@ export function createNotesColumnActions(
     });
   }
 
-  async function saveColumnWidths(
-    columns: readonly NotesColumnBlock[],
-    widths: readonly number[],
-  ): Promise<void> {
-    for (const [index, column] of columns.entries()) {
-      const width = widths[index];
-      if (width === undefined) continue;
-      const update = notesColumnWithWidthRatio(width);
-      context.localApplyBlockUpdate(column.id, update);
-      await context.saveBlockNow(column.id, update);
-    }
+  function widthOperations(columns: readonly NotesColumnBlock[], widths: readonly number[]): NotesEditOperation[] {
+    return columns.flatMap((column, index) => widths[index] === undefined ? [] : [{ type: "update" as const, block_id: column.id, update: notesColumnWithWidthRatio(widths[index]) }]);
   }
 
   async function addColumn(columnListBlockId: string, afterColumnIndex: number): Promise<void> {
-    const selectedPageId = context.readSelectedPageId();
     const columnList = context.blockById(columnListBlockId);
-    if (!selectedPageId || !columnList || columnList.type !== "column_list") return;
+    if (!context.readSelectedPageId() || !columnList || columnList.type !== "column_list") return;
     const columns = columnBlocksForList(columnListBlockId);
     if (!notesColumnCanAdd(columns.length)) return;
     await context.flushPendingBlockSaves();
     const before = undoSnapshot(columnListBlockId);
-
+    const operations: NotesEditOperation[] = [];
+    let focusId: string;
     if (columns.length === 0) {
-      const leftColumnId = crypto.randomUUID();
-      const rightColumnId = crypto.randomUUID();
-      const leftBlockId = crypto.randomUUID();
-      const rightBlockId = crypto.randomUUID();
-      const columnsRequest = {
-        parent: { type: "block_id", block_id: columnListBlockId },
-        after: null,
-        children: [
-          createNotesColumnWrite(leftColumnId, 0.5),
-          createNotesColumnWrite(rightColumnId, 0.5),
-        ],
-      } satisfies NotesAppendBlockChildrenRequest;
-      context.applyPostMutation(notesPostAppendResult(
-        columnsRequest,
-        await appendNotesBlockChildren(columnsRequest),
-      ));
-      const leftBlockRequest = {
-        parent: { type: "block_id", block_id: leftColumnId },
-        after: null,
-        children: [createBlockWrite(leftBlockId, "paragraph")],
-      } satisfies NotesAppendBlockChildrenRequest;
-      context.applyPostMutation(notesPostAppendResult(
-        leftBlockRequest,
-        await appendNotesBlockChildren(leftBlockRequest),
-      ));
-      const rightBlockRequest = {
-        parent: { type: "block_id", block_id: rightColumnId },
-        after: null,
-        children: [createBlockWrite(rightBlockId, "paragraph")],
-      } satisfies NotesAppendBlockChildrenRequest;
-      context.applyPostMutation(notesPostAppendResult(
-        rightBlockRequest,
-        await appendNotesBlockChildren(rightBlockRequest),
-      ));
-      context.requestBlockFocus(leftBlockId);
-      recordUndoAfter("create", before, leftBlockId);
-      return;
+      // A partially loaded layout must be hydrated before inserting its initial columns.
+      if (columnList.has_children) throw new Error("Notes columns are not loaded");
+      const left = crypto.randomUUID(), right = crypto.randomUUID();
+      focusId = crypto.randomUUID();
+      operations.push(
+        { type: "append", request: { parent: { type: "block_id", block_id: columnListBlockId }, after: null, children: [createNotesColumnWrite(left, 0.5), createNotesColumnWrite(right, 0.5)] } },
+        { type: "append", request: { parent: { type: "block_id", block_id: left }, after: null, children: [createBlockWrite(focusId, "paragraph")] } },
+        { type: "append", request: { parent: { type: "block_id", block_id: right }, after: null, children: [createBlockWrite(crypto.randomUUID(), "paragraph")] } },
+      );
+    } else {
+      const plan = planNotesColumnInsertion(columns, afterColumnIndex);
+      if (!plan) return;
+      const id = crypto.randomUUID();
+      focusId = crypto.randomUUID();
+      operations.push(...widthOperations(columns, columns.map((_, index) => plan.widths[index < plan.insertIndex ? index : index + 1])));
+      operations.push(
+        { type: "append", request: { parent: { type: "block_id", block_id: columnListBlockId }, after: columns[Math.max(0, plan.insertIndex - 1)]?.id ?? columns.at(-1)?.id ?? null, children: [createNotesColumnWrite(id, plan.widths[plan.insertIndex] ?? 1)] } },
+        { type: "append", request: { parent: { type: "block_id", block_id: id }, after: null, children: [createBlockWrite(focusId, "paragraph")] } },
+      );
     }
-
-    const plan = planNotesColumnInsertion(columns, afterColumnIndex);
-    if (!plan) return;
-    const newColumnId = crypto.randomUUID();
-    const newBlockId = crypto.randomUUID();
-    const existingWidths = columns.map((_, index) => {
-      const plannedIndex = index < plan.insertIndex ? index : index + 1;
-      return plan.widths[plannedIndex] ?? 1 / (columns.length + 1);
-    });
-    await saveColumnWidths(columns, existingWidths);
-    const columnRequest = {
-      parent: { type: "block_id", block_id: columnListBlockId },
-      after: columns[Math.max(0, plan.insertIndex - 1)]?.id ?? columns.at(-1)?.id ?? null,
-      children: [
-        createNotesColumnWrite(newColumnId, plan.widths[plan.insertIndex] ?? 1),
-      ],
-    } satisfies NotesAppendBlockChildrenRequest;
-    context.applyPostMutation(notesPostAppendResult(
-      columnRequest,
-      await appendNotesBlockChildren(columnRequest),
-    ));
-    const blockRequest = {
-      parent: { type: "block_id", block_id: newColumnId },
-      after: null,
-      children: [createBlockWrite(newBlockId, "paragraph")],
-    } satisfies NotesAppendBlockChildrenRequest;
-    context.applyPostMutation(notesPostAppendResult(
-      blockRequest,
-      await appendNotesBlockChildren(blockRequest),
-    ));
-    context.requestBlockFocus(newBlockId);
-    recordUndoAfter("create", before, newBlockId);
+    await enqueueNotesCompoundEdit(context, "column_layout", operations);
+    context.requestBlockFocus(focusId);
+    recordUndoAfter("create", before, focusId);
   }
 
   async function removeColumn(columnListBlockId: string, columnBlockId: string): Promise<void> {
-    const selectedPageId = context.readSelectedPageId();
     const columnList = context.blockById(columnListBlockId);
-    if (!selectedPageId || !columnList || columnList.type !== "column_list") return;
+    if (!context.readSelectedPageId() || !columnList || columnList.type !== "column_list") return;
     const columns = columnBlocksForList(columnListBlockId);
     const plan = planNotesColumnRemoval(columns, columnBlockId);
     if (!plan) return;
-    const removedColumn = columns[plan.removeIndex];
-    const targetColumn = columns[plan.targetIndex];
-    if (!removedColumn || !targetColumn) return;
+    const removed = columns[plan.removeIndex], target = columns[plan.targetIndex];
+    if (!removed || !target) return;
     await context.flushPendingBlockSaves();
     const before = undoSnapshot(columnListBlockId);
-    const movedChildIds = activeChildBlockIds(removedColumn.id);
-    const targetChildIds = activeChildBlockIds(targetColumn.id);
-    if (movedChildIds.length > 0) {
-      const moveRequest = {
-        block_ids: movedChildIds,
-        parent: { type: "block_id", block_id: targetColumn.id },
-        after: targetChildIds.at(-1) ?? null,
-      } as const;
-      context.applyPostMutation(notesPostMoveManyResult(
-        moveRequest,
-        await moveNotesBlocks(moveRequest),
-      ));
-    }
-    await trashNotesBlock(removedColumn.id, true);
-    context.applyPostMutation(notesPostTrashResult(context.treeState(), [removedColumn.id]));
-    const remainingColumns = columns.filter((column) => column.id !== removedColumn.id);
-    await saveColumnWidths(remainingColumns, plan.widths);
-    const focusBlockId = movedChildIds[0] ?? targetChildIds.at(-1) ?? columnListBlockId;
-    context.requestBlockFocus(focusBlockId);
-    recordUndoAfter("delete", before, focusBlockId);
+    const targetIds = activeChildBlockIds(target.id);
+    const persist = createNotesCompoundPersistence(context, "column_layout", [
+      { type: "move_children", source_block_id: removed.id, parent: { type: "block_id", block_id: target.id }, after: targetIds.at(-1) ?? null },
+      { type: "trash", block_id: removed.id, in_trash: true },
+      ...widthOperations(columns.filter((column) => column.id !== removed.id), plan.widths),
+    ], Object.values(context.treeState().blocksById));
+    await context.enqueueEditorMutation(async () => {
+      const result = await persist();
+      context.applyPostMutation({ blocks: result.blocks.filter((block) => !block.in_trash), placements: result.placements, removedBlockIds: [removed.id] });
+      const after = undoSnapshot(columnListBlockId);
+      reconcileNotesCompoundUndo(before, after, result);
+      context.recordUndo({ kind: "delete", before, after });
+    });
+    const focusId = activeChildBlockIds(target.id)[0] ?? columnListBlockId;
+    context.requestBlockFocus(focusId);
   }
 
   async function moveColumn(
@@ -283,7 +217,7 @@ export function createNotesColumnActions(
     if (!widths) return;
     await context.flushPendingBlockSaves();
     const before = undoSnapshot(columnListBlockId);
-    await saveColumnWidths(columns, widths);
+    await enqueueNotesCompoundEdit(context, "column_layout", widthOperations(columns, widths));
     context.requestBlockFocus(columnListBlockId);
     recordUndoAfter("update", before, columnListBlockId, `update:${columnListBlockId}:columns`);
   }

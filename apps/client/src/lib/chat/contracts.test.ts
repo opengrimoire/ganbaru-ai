@@ -18,10 +18,10 @@ import {
   parseProjectWorkingFolderRead,
   parseProviderFamilyMetadata,
   parseProviderInstanceConfig,
+  parseProviderInstanceRead,
   parseProviderModelCatalog,
   parseProviderRefreshResult,
   parseProviderFiles,
-  normalizeProviderModelCatalogForFamily,
 } from "./validation";
 
 const timestamp = "2026-07-20T12:00:00Z";
@@ -383,8 +383,8 @@ describe("Chat provider contracts", () => {
     expect(parsed.models).toEqual([]);
   });
 
-  it("replaces cached Claude default aliases with the concrete model entry", () => {
-    const catalog = parseProviderModelCatalog({
+  it.each([false, true])("preserves native Claude routes and capabilities with stale=%s", (stale) => {
+    const catalog = {
       instanceId: "claude",
       models: [
         {
@@ -394,7 +394,13 @@ describe("Chat provider contracts", () => {
           contextLimit: null,
           availability: "available",
           capabilities: [],
-          options: [],
+          options: [{
+            kind: "boolean",
+            key: "fastMode",
+            label: "Fast mode",
+            description: null,
+            defaultValue: false,
+          }],
           custom: false,
         },
         {
@@ -408,29 +414,52 @@ describe("Chat provider contracts", () => {
           custom: false,
         },
         {
-          id: "sonnet",
-          displayName: "Sonnet 5",
+          id: "claude-opus-9",
+          displayName: "Opus 4.8",
           description: null,
           contextLimit: null,
           availability: "available",
           capabilities: [],
           options: [],
-          custom: false,
+          custom: true,
+        },
+        {
+          id: "custom-unicode",
+          displayName: "Default (研究用 Opus 9)",
+          description: "Opus 9",
+          contextLimit: null,
+          availability: "unknown",
+          capabilities: [],
+          options: [],
+          custom: true,
         },
       ],
       source: "provider",
       discoveredAt: timestamp,
-      stale: false,
+      stale,
+    };
+    const provider = parseProviderInstanceRead({
+      configuration: {
+        schemaVersion: 1,
+        instanceId: "claude",
+        familyId: "claude",
+        label: "Claude",
+        enabled: true,
+        executable: "claude",
+        providerHome: null,
+        launchArguments: [],
+        environment: {},
+        credentialReferences: {},
+        visibleModelIds: [],
+        favoriteModelIds: [],
+        providerConfig: { schemaVersion: 1, value: {} },
+      },
+      lastProbe: null,
+      lastSuccessfulProbeAt: null,
+      modelCatalog: catalog,
     });
 
-    expect(normalizeProviderModelCatalogForFamily(catalog, "claude").models.map((model) => ({
-      id: model.id,
-      displayName: model.displayName,
-      optionKeys: model.options.map((option) => option.key),
-    }))).toEqual([
-      { id: "opus", displayName: "Opus 4.8", optionKeys: ["fastMode"] },
-      { id: "sonnet", displayName: "Sonnet 5", optionKeys: [] },
-    ]);
+    expect(provider.modelCatalog).toEqual(catalog);
   });
 
   it("rejects partial metadata and unsupported capability values", () => {

@@ -83,7 +83,3 @@ export function musicEmbeddedArtworkDataUrl(path: string, identity = path): Prom
   }
   return request;
 }
-
-export function invalidateMusicArtwork(path: string): void {
-  artworkCache.delete(path);
-}

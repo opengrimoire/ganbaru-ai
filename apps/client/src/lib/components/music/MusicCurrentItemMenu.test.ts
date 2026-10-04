@@ -39,15 +39,18 @@ describe("MusicCurrentItemMenu", () => {
     player.currentSource = null;
     player.queue = [];
     player.activeQueueItemIds = [];
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
-  async function render(onOpenBuilder = vi.fn()): Promise<HTMLDivElement> {
+  async function render(onOpenBuilder = vi.fn(), nativeSelectedIndex = 0): Promise<HTMLDivElement> {
     const player = getMusicPlayer();
     const source = localFileSourceFromPath("/music/song.flac", "Song");
     player.currentSource = source;
     player.queue = [source];
     player.activeQueueItemIds = ["song"];
+    // The accepted native projection supplies selection independently of display rows.
+    vi.spyOn(player, "currentQueueIndex", "get").mockReturnValue(nativeSelectedIndex);
     api.getMusicPlaylistSummaries.mockResolvedValue([playlist("a", "Morning"), playlist("b", "Evening")]);
     target = document.createElement("div");
     document.body.append(target);
@@ -94,5 +97,14 @@ describe("MusicCurrentItemMenu", () => {
       .find((button) => button.textContent?.includes("Open in playlist builder"));
     builder?.click();
     expect(onOpenBuilder).toHaveBeenCalledExactlyOnceWith("song");
+  });
+
+  it("opens the builder without a selected item when native selection is absent", async () => {
+    const onOpenBuilder = vi.fn();
+    const view = await render(onOpenBuilder, -1);
+    view.querySelector<HTMLButtonElement>("button[aria-label='Playlist builder']")?.click();
+    expect(onOpenBuilder).toHaveBeenCalledExactlyOnceWith(null);
+    expect(api.getMusicMembershipMatrix).not.toHaveBeenCalled();
+    expect(api.bulkEditMusicMemberships).not.toHaveBeenCalled();
   });
 });

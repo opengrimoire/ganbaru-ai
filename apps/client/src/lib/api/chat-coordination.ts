@@ -12,7 +12,6 @@ import type {
   ChatAccessProfileImpactPreviewRead,
   ChatTeammateAccessPreviewRead,
   ChatTeammateAccessRead,
-  ChatConversationMembershipRead,
   ChatChannelRosterRead,
   ChatChannelMembershipRemovalPreview,
   PreviewChatChannelMembershipRemovalRequest,
@@ -45,11 +44,9 @@ import type {
   ChatScheduledMessageRead,
   CreateChatChannelRequest,
   UpdateChatChannelDetailsRequest,
-  ChatProjectShellRead,
   ProjectWorkingFolderId,
 } from "$lib/chat/contracts";
 import {
-  parseChatProjectShells,
   parseChatChannel,
   parseChatChannels,
   parseChatAiTeammate,
@@ -59,7 +56,6 @@ import {
   parseChatAccessProfileImpactPreview,
   parseChatTeammateAccess,
   parseChatTeammateAccessPreview,
-  parseChatConversationMemberships,
   parseChatChannelRoster,
   parseChatChannelMembershipRemovalPreview,
   parseChatAssignmentTargets,
@@ -84,10 +80,6 @@ const localExecutionAvailable = platformHasCapability(
   "chat.local-execution",
 );
 
-export async function listChatProjectShells(): Promise<ChatProjectShellRead[]> {
-  return parseChatProjectShells(await invoke<unknown>("chat_list_project_shells", { dbUrl: await ensureDbUrl() }));
-}
-
 export async function listChatChannels(projectId: string, archived = false): Promise<ChatChannelRead[]> {
   return parseChatChannels(await invoke<unknown>("chat_list_channels", {
     dbUrl: await ensureDbUrl(), projectId, archived,
@@ -97,17 +89,6 @@ export async function listChatChannels(projectId: string, archived = false): Pro
 export async function listChatNavigationChannels(): Promise<ChatChannelRead[]> {
   return parseChatChannels(await invoke<unknown>("chat_list_navigation_channels", {
     dbUrl: await ensureDbUrl(),
-  }));
-}
-
-export async function searchChatChannels(
-  projectId: string,
-  query: string,
-  archived = false,
-  limit = 100,
-): Promise<ChatChannelRead[]> {
-  return parseChatChannels(await invoke<unknown>("chat_search_channels", {
-    dbUrl: await ensureDbUrl(), projectId, query, archived, limit,
   }));
 }
 
@@ -261,14 +242,6 @@ export async function deleteUnusedChatTeammate(
   await invoke("chat_delete_unused_teammate", {
     dbUrl: await ensureDbUrl(), teammateId, expectedRevision,
   });
-}
-
-export async function listChatChannelMemberships(
-  channelId: ChatChannelId,
-): Promise<ChatConversationMembershipRead[]> {
-  return parseChatConversationMemberships(await invoke<unknown>("chat_list_channel_memberships", {
-    dbUrl: await ensureDbUrl(), channelId,
-  }));
 }
 
 export async function readChatChannelRoster(channelId: ChatChannelId): Promise<ChatChannelRosterRead> {

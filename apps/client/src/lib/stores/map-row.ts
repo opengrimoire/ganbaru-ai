@@ -27,7 +27,7 @@ import {
  * Only the columns the slim in-memory `CalendarEvent` reads. Heavy columns
  * (description, organizer, geo, extendedProperties, categories, priority,
  * sequence, sourceUid, visibility, guest_can_*) stay in the DB and are loaded
- * on demand by `loadFullEvent` when the EventPanel or ICS export needs them.
+ * on demand by `loadFullEvent` for the EventPanel or a native snapshot for export.
  * The call link URL stays in the DB; window rows only expose whether it exists.
  * Window loads may attach `surfaceAttendees` separately for RSVP rendering.
  */

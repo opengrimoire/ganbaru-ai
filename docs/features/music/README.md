@@ -7,7 +7,9 @@ Music provides persistent local and YouTube playback, playlist organization, rev
 | Capability | Status |
 | --- | --- |
 | Persistent app-level player, transport, queue, shuffle, repeat, volume, rate, and resume | Implemented |
+| Native queue progression, committed Focus/desktop Calendar automation and bounded WebView projections | Implemented; physical platform acceptance pending |
 | Canonical local and YouTube library, source refresh, repair, artwork, search, and import/export | Implemented |
+| Native bounded JSON/M3U8 previews, consistent export snapshots, and retry-safe transactional imports | Implemented |
 | Playlist membership settings, review, snooze, and playlist management | Implemented |
 | Desktop local audio, local video, YouTube, soundscapes, tray, title-bar, and hardware controls | Implemented with platform codec limits |
 | Android selected-folder local audio through Media3 | Implemented in source, broader release validation pending |
@@ -20,6 +22,8 @@ Music provides persistent local and YouTube playback, playlist organization, rev
 Ganbaru AI supports local media selected by the user and YouTube through an embedded player. Music files remain in the user's own library. The vault stores structured library identity, playlist membership, settings, and playback state, not duplicate music files.
 
 Spotify is unsupported because the available integration model does not fit this local open-source product. This is a product boundary, not a promise tied to volatile quota numbers.
+
+Native JSON playlist imports require the current exported fields, including `mixEnabled`. Earlier development exports that omit it are unsupported. M3U8 support and diagnostics for unsupported membership kinds remain part of the current import contract.
 
 ## Player model
 

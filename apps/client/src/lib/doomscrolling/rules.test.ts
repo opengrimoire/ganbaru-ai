@@ -1,12 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  computeDoomscrollingLimitDailyTotals,
   DEFAULT_DOOMSCROLLING_CONFIG,
-  doomscrollingWebsiteUsageSampleFromUrl,
-  evaluateDoomscrollingWebsiteLimit,
   evaluateDoomscrollingUrl,
   isProtectedDoomscrollingDesktopAppName,
-  matchesDoomscrollingLimitEntry,
   normalizeDoomscrollingAppName,
   normalizeDoomscrollingConfig,
   normalizeDoomscrollingHost,
@@ -17,7 +13,6 @@ import {
   type DoomscrollingConfig,
   type DoomscrollingHostRule,
   type DoomscrollingUsageLimit,
-  type DoomscrollingUsageSample,
 } from "./rules";
 
 function appRule(name: string, enabled = true): DoomscrollingAppRule {
@@ -77,28 +72,6 @@ function limit(partial: Partial<DoomscrollingUsageLimit>): DoomscrollingUsageLim
       desktopAppMatchNames: [],
     }],
     ...partial,
-  };
-}
-
-function websiteSample(host: string, elapsedSeconds: number, localDate = "2026-05-28"): DoomscrollingUsageSample {
-  return {
-    sourceType: "website",
-    sourceKey: host,
-    displayName: host,
-    elapsedSeconds,
-    startedAt: 1_779_923_600_000,
-    localDate,
-  };
-}
-
-function desktopSample(appName: string, elapsedSeconds: number, localDate = "2026-05-28"): DoomscrollingUsageSample {
-  return {
-    sourceType: "desktop-app",
-    sourceKey: appName,
-    displayName: appName,
-    elapsedSeconds,
-    startedAt: 1_779_923_600_000,
-    localDate,
   };
 }
 
@@ -448,195 +421,6 @@ describe("normalizeDoomscrollingConfig", () => {
     });
 
     expect(normalized.limits.items).toEqual([]);
-  });
-});
-
-describe("Doomscrolling usage limit matching", () => {
-  it("matches website hosts, subdomains, mobile apps, and desktop app names", () => {
-    expect(matchesDoomscrollingLimitEntry(
-      {
-        id: "youtube",
-        name: null,
-        websiteHost: "youtube.com",
-        mobileAppName: null,
-        desktopAppName: null,
-        desktopAppMatchNames: [],
-      },
-      websiteSample("music.youtube.com", 60),
-    )).toBe(true);
-    expect(matchesDoomscrollingLimitEntry(
-      {
-        id: "youtube",
-        name: null,
-        websiteHost: null,
-        mobileAppName: "YouTube",
-        mobileAppPackage: "com.google.android.youtube",
-        desktopAppName: null,
-        desktopAppMatchNames: [],
-      },
-      {
-        sourceType: "mobile-app",
-        sourceKey: "com.google.android.youtube",
-        displayName: "YouTube",
-        elapsedSeconds: 60,
-        startedAt: 1_779_923_600_000,
-        localDate: "2026-05-28",
-      },
-    )).toBe(true);
-    expect(matchesDoomscrollingLimitEntry(
-      {
-        id: "youtube-name-only",
-        name: null,
-        websiteHost: null,
-        mobileAppName: "YouTube",
-        desktopAppName: null,
-        desktopAppMatchNames: [],
-      },
-      {
-        sourceType: "mobile-app",
-        sourceKey: "youtube",
-        displayName: "YouTube",
-        elapsedSeconds: 60,
-        startedAt: 1_779_923_600_000,
-        localDate: "2026-05-28",
-      },
-    )).toBe(true);
-    expect(matchesDoomscrollingLimitEntry(
-      {
-        id: "youtube",
-        name: null,
-        websiteHost: null,
-        mobileAppName: null,
-        desktopAppName: "FreeTube",
-        desktopAppMatchNames: ["FreeTube"],
-      },
-      desktopSample("freetube", 60),
-    )).toBe(true);
-  });
-
-  it("sums linked sources into one daily limit", () => {
-    const cfg = config({
-      limits: {
-        enabled: true,
-        items: [
-          limit({
-            id: "youtube",
-            name: "YouTube",
-            minutesPerDay: 10,
-            entries: [
-              {
-                id: "youtube-main",
-                name: null,
-                websiteHost: "youtube.com",
-                mobileAppName: null,
-                desktopAppName: "FreeTube",
-                desktopAppMatchNames: ["FreeTube"],
-              },
-            ],
-          }),
-        ],
-      },
-    });
-
-    const totals = computeDoomscrollingLimitDailyTotals(cfg, [
-      websiteSample("youtube.com", 120),
-      websiteSample("music.youtube.com", 60),
-      desktopSample("freetube", 180),
-    ], "2026-05-28");
-
-    expect(totals).toMatchObject([{ limitId: "youtube", usedSeconds: 360 }]);
-  });
-
-  it("sums several sources into one daily limit", () => {
-    const cfg = config({
-      limits: {
-        enabled: true,
-        items: [
-          limit({
-            id: "social",
-            name: "Social media",
-            minutesPerDay: 60,
-            entries: [
-              {
-                id: "reddit",
-                name: "Reddit",
-                websiteHost: "reddit.com",
-                mobileAppName: null,
-                desktopAppName: null,
-                desktopAppMatchNames: [],
-              },
-              {
-                id: "discord",
-                name: "Discord",
-                websiteHost: "discord.com",
-                mobileAppName: null,
-                desktopAppName: null,
-                desktopAppMatchNames: [],
-              },
-            ],
-          }),
-        ],
-      },
-    });
-
-    const totals = computeDoomscrollingLimitDailyTotals(cfg, [
-      websiteSample("old.reddit.com", 300),
-      websiteSample("discord.com", 120),
-    ], "2026-05-28");
-
-    expect(totals).toMatchObject([{ limitId: "social", usedSeconds: 420 }]);
-  });
-
-  it("resets totals by local date", () => {
-    const cfg = config({
-      limits: {
-        enabled: true,
-        items: [limit({ id: "youtube", minutesPerDay: 10 })],
-      },
-    });
-
-    const totals = computeDoomscrollingLimitDailyTotals(cfg, [
-      websiteSample("youtube.com", 600, "2026-05-27"),
-      websiteSample("youtube.com", 120, "2026-05-28"),
-    ], "2026-05-28");
-
-    expect(totals).toMatchObject([{ limitId: "youtube", usedSeconds: 120 }]);
-  });
-
-  it("blocks websites whose matching limit is exhausted", () => {
-    const cfg = config({
-      limits: {
-        enabled: true,
-        items: [limit({ id: "youtube", name: "YouTube", minutesPerDay: 10 })],
-      },
-    });
-
-    const decision = evaluateDoomscrollingWebsiteLimit("https://music.youtube.com/watch", cfg, [
-      {
-        limitId: "youtube",
-        usedSeconds: 600,
-        limitSeconds: 600,
-        remainingSeconds: 0,
-        exhausted: true,
-      },
-    ]);
-
-    expect(decision).toEqual({
-      blocked: true,
-      host: "music.youtube.com",
-      limitId: "youtube",
-      limitName: "YouTube",
-      matchedRule: "daily limit: YouTube",
-    });
-  });
-
-  it("does not count blocked extension pages as website usage", () => {
-    expect(doomscrollingWebsiteUsageSampleFromUrl(
-      "chrome-extension://abcdefghijklmnopabcdefghijklmnop/blocked.html",
-      30,
-      1_779_923_600_000,
-      "2026-05-28",
-    )).toBeNull();
   });
 });
 

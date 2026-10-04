@@ -14,11 +14,6 @@ export type ReviewResolvedLayout = Exclude<ReviewLayoutPreference, "auto">;
 export type ReviewDiffPreference = "auto" | "unified" | "split";
 export type ReviewResolvedDiffStyle = Exclude<ReviewDiffPreference, "auto">;
 
-export interface ReviewOpenIntent {
-  source: ReviewDiffSource;
-  relativePath: string | null;
-}
-
 export interface ReviewSearchMatch {
   fileId: string;
   relativePath: string;

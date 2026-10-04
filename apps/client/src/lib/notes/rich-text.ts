@@ -359,25 +359,6 @@ export function richTextPlainText(richText: readonly NotesRichText[]): string {
   return richText.map((item) => item.plain_text).join("");
 }
 
-export function isPageMentionRichText(item: NotesRichText): item is NotesPageMentionRichText {
-  return item.type === "mention" && item.mention.type === "page";
-}
-
-export function isDateMentionRichText(item: NotesRichText): item is NotesDateMentionRichText {
-  return item.type === "mention" && item.mention.type === "date";
-}
-
-export function isObjectMentionRichText(
-  item: NotesRichText,
-): item is NotesObjectMentionRichText {
-  return item.type === "mention"
-    && (
-      item.mention.type === "user"
-      || item.mention.type === "database"
-      || item.mention.type === "ganbaru_object"
-    );
-}
-
 function cloneRichText(item: NotesRichText): NotesRichText {
   return cloneNotesJson(item);
 }

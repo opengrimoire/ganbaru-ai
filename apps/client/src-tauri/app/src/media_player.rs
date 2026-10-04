@@ -2,14 +2,15 @@ use std::{
     fs::File,
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
-    sync::{Mutex, mpsc},
-    thread::{self, JoinHandle},
+    sync::Arc,
     time::Duration,
 };
 
 use rodio::{Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, SampleRate, Source};
 use serde::{Deserialize, Serialize};
-use tauri::State;
+
+mod worker;
+use worker::{DeliveryAuthority, PlaybackController};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -152,6 +153,18 @@ impl MediaPlayerError {
             message: "The Rust media player backend is temporarily unavailable.".to_string(),
         }
     }
+
+    fn delivery_revoked() -> Self {
+        Self {
+            code: "deliveryRevoked".into(),
+            message: "Native Music delivery expired or its authority changed.".into(),
+        }
+    }
+
+    /// Source failures can advance the queue; transport and device failures cannot.
+    pub(crate) fn is_source_failure(&self) -> bool {
+        matches!(self.code.as_str(), "invalidSource" | "decodeFailed")
+    }
 }
 
 trait LocalAudioBackend: Send {
@@ -287,16 +300,30 @@ impl PlayerCore {
         }
     }
 
+    #[cfg(test)]
     fn handle(&mut self, command: BackendCommand) -> Result<PlayerSnapshot, MediaPlayerError> {
+        self.handle_authorized(command, &DeliveryAuthority::unrestricted())
+    }
+
+    fn handle_authorized(
+        &mut self,
+        command: BackendCommand,
+        authority: &DeliveryAuthority,
+    ) -> Result<PlayerSnapshot, MediaPlayerError> {
         match command {
+            BackendCommand::Session(effect) => self.apply_session_effect(*effect, authority),
+            #[cfg(test)]
             BackendCommand::Load { request, probe } => self.load(*request, *probe),
+            #[cfg(test)]
             BackendCommand::Play => self.play(),
+            #[cfg(test)]
             BackendCommand::Pause => Ok(self.pause()),
+            #[cfg(test)]
             BackendCommand::Stop => Ok(self.stop()),
+            #[cfg(test)]
             BackendCommand::Seek(position_ms) => self.seek(position_ms),
-            BackendCommand::SetVolume(volume) => Ok(self.set_volume(volume)),
+            #[cfg(test)]
             BackendCommand::SetMuted(muted) => Ok(self.set_muted(muted)),
-            BackendCommand::SetRate(rate) => Ok(self.set_rate(rate)),
             BackendCommand::Snapshot => Ok(self.current_snapshot()),
         }
     }
@@ -355,17 +382,27 @@ impl PlayerCore {
         Ok(self.snapshot.clone())
     }
 
+    #[cfg(test)]
     fn play(&mut self) -> Result<PlayerSnapshot, MediaPlayerError> {
+        self.play_authorized(&DeliveryAuthority::unrestricted())
+    }
+
+    fn play_authorized(
+        &mut self,
+        authority: &DeliveryAuthority,
+    ) -> Result<PlayerSnapshot, MediaPlayerError> {
         if !self.loaded {
             self.snapshot.status = PlayerStatus::Error;
             self.snapshot.error = Some("Load a local media file before playing.".to_string());
-            return Err(MediaPlayerError::invalid_source(
-                "Load a local media file before playing.",
-            ));
+            return Err(MediaPlayerError {
+                code: "noPreparedSource".into(),
+                message: "Load a local media file before playing.".into(),
+            });
         }
         if self.snapshot.status == PlayerStatus::Ended {
             self.seek(0)?;
         }
+        authority.require_current()?;
         if self.audio.is_none() {
             let err = MediaPlayerError::backend_unavailable();
             self.snapshot.status = PlayerStatus::Error;
@@ -462,20 +499,26 @@ impl PlayerCore {
 
 #[derive(Debug)]
 enum BackendCommand {
+    Session(Box<crate::music::session::SessionEffect>),
+    #[cfg(test)]
     Load {
         request: Box<LoadRequest>,
         probe: Box<MediaProbe>,
     },
+    #[cfg(test)]
     Play,
+    #[cfg(test)]
     Pause,
+    #[cfg(test)]
     Stop,
+    #[cfg(test)]
     Seek(u64),
-    SetVolume(f64),
+    #[cfg(test)]
     SetMuted(bool),
-    SetRate(f64),
     Snapshot,
 }
 
+#[cfg(test)]
 impl BackendCommand {
     fn load(request: LoadRequest, probe: MediaProbe) -> Self {
         Self::Load {
@@ -485,167 +528,96 @@ impl BackendCommand {
     }
 }
 
-enum BackendMessage {
-    Command(
-        Box<BackendCommand>,
-        mpsc::Sender<Result<PlayerSnapshot, MediaPlayerError>>,
-    ),
-    Shutdown,
-}
-
-struct PlaybackController {
-    sender: mpsc::Sender<BackendMessage>,
-    worker: Mutex<Option<JoinHandle<()>>>,
-}
-
-impl std::fmt::Debug for PlaybackController {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PlaybackController").finish_non_exhaustive()
-    }
-}
-
-impl PlaybackController {
-    fn new() -> Self {
-        Self::with_core(PlayerCore::default())
-    }
-
-    fn with_core(core: PlayerCore) -> Self {
-        let (sender, receiver) = mpsc::channel::<BackendMessage>();
-        let worker = thread::Builder::new()
-            .name("ganbaru-ai-media-player".to_string())
-            .spawn(move || playback_worker(receiver, core))
-            .expect("failed to start media player worker thread");
-        Self {
-            sender,
-            worker: Mutex::new(Some(worker)),
-        }
-    }
-
-    fn dispatch(&self, command: BackendCommand) -> Result<PlayerSnapshot, MediaPlayerError> {
-        let (reply_sender, reply_receiver) = mpsc::channel();
-        self.sender
-            .send(BackendMessage::Command(Box::new(command), reply_sender))
-            .map_err(|_| MediaPlayerError::backend_thread())?;
-        reply_receiver
-            .recv()
-            .map_err(|_| MediaPlayerError::backend_thread())?
-    }
-}
-
-impl Default for PlaybackController {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Drop for PlaybackController {
-    fn drop(&mut self) {
-        let _ = self.sender.send(BackendMessage::Shutdown);
-        if let Ok(mut worker) = self.worker.lock() {
-            if let Some(worker) = worker.take() {
-                let _ = worker.join();
-            }
-        }
-    }
-}
-
-fn playback_worker(receiver: mpsc::Receiver<BackendMessage>, mut core: PlayerCore) {
-    while let Ok(message) = receiver.recv() {
-        match message {
-            BackendMessage::Command(command, reply) => {
-                let result = core.handle(*command);
-                let _ = reply.send(result);
-            }
-            BackendMessage::Shutdown => break,
-        }
-    }
-}
-
 #[derive(Debug, Default)]
 pub(crate) struct MediaPlayerState {
     controller: PlaybackController,
 }
 
-#[allow(dead_code)] // Used by the H04 source-freeze flow.
-pub(crate) fn stop_for_vault_handoff(state: &MediaPlayerState) -> Result<(), MediaPlayerError> {
-    state.controller.dispatch(BackendCommand::Stop).map(|_| ())
+/// Executes a committed application-session effect on the decoder worker.
+pub(crate) fn apply_session_effect(
+    state: &MediaPlayerState,
+    effect: &crate::music::session::SessionEffect,
+    authority: Arc<dyn Fn() -> bool + Send + Sync>,
+) -> Result<PlayerSnapshot, MediaPlayerError> {
+    state
+        .controller
+        .dispatch_authorized(BackendCommand::Session(Box::new(effect.clone())), authority)
+}
+
+impl PlayerCore {
+    /// Applies one effect on the existing decoder worker, including blocking preparation.
+    fn apply_session_effect(
+        &mut self,
+        effect: crate::music::session::SessionEffect,
+        authority: &DeliveryAuthority,
+    ) -> Result<PlayerSnapshot, MediaPlayerError> {
+        use crate::music::session::SessionEffect;
+        match effect {
+            SessionEffect::Load {
+                source,
+                position_ms,
+                volume,
+                muted,
+                rate,
+                autoplay,
+                ..
+            } => {
+                let request = LoadRequest {
+                    source: LocalMediaSource {
+                        kind: "local-file".into(),
+                        path: source.path.ok_or_else(|| {
+                            MediaPlayerError::invalid_source(
+                                "Local session source has no resolved path",
+                            )
+                        })?,
+                        identity: source.identity,
+                        title: Some(source.title),
+                    },
+                    start_ms: Some(position_ms),
+                    volume: Some(volume),
+                    rate: Some(rate),
+                };
+                validate_load_request(&request)?;
+                self.stop();
+                let probe = probe_local_file(&request.source.path)?;
+                authority.require_current()?;
+                self.load(request, probe)?;
+                authority.require_current()?;
+                self.set_muted(muted);
+                if autoplay {
+                    self.play_authorized(authority)
+                } else {
+                    Ok(self.current_snapshot())
+                }
+            }
+            SessionEffect::Play { .. } => self.play_authorized(authority),
+            SessionEffect::Pause { .. } => Ok(self.pause()),
+            SessionEffect::Stop { .. } => Ok(self.stop()),
+            SessionEffect::Seek { position_ms, .. } => self.seek(position_ms),
+            SessionEffect::Settings {
+                volume,
+                muted,
+                rate,
+                ..
+            } => {
+                self.set_volume(volume);
+                self.set_muted(muted);
+                Ok(self.set_rate(rate))
+            }
+        }
+    }
+}
+
+/// Samples the decoder from the native session scheduler, independently of the WebView.
+pub(crate) fn session_snapshot(
+    state: &MediaPlayerState,
+) -> Result<PlayerSnapshot, MediaPlayerError> {
+    state.controller.dispatch(BackendCommand::Snapshot)
 }
 
 #[tauri::command]
 pub(crate) fn media_player_probe(path: String) -> Result<MediaProbe, MediaPlayerError> {
     probe_local_file(&path)
-}
-
-#[tauri::command]
-pub(crate) fn media_player_load(
-    state: State<'_, MediaPlayerState>,
-    request: LoadRequest,
-) -> Result<PlayerSnapshot, MediaPlayerError> {
-    validate_load_request(&request)?;
-    let probe = probe_local_file(&request.source.path)?;
-    state
-        .controller
-        .dispatch(BackendCommand::load(request, probe))
-}
-
-#[tauri::command]
-pub(crate) fn media_player_play(
-    state: State<'_, MediaPlayerState>,
-) -> Result<PlayerSnapshot, MediaPlayerError> {
-    state.controller.dispatch(BackendCommand::Play)
-}
-
-#[tauri::command]
-pub(crate) fn media_player_pause(
-    state: State<'_, MediaPlayerState>,
-) -> Result<PlayerSnapshot, MediaPlayerError> {
-    state.controller.dispatch(BackendCommand::Pause)
-}
-
-#[tauri::command]
-pub(crate) fn media_player_stop(
-    state: State<'_, MediaPlayerState>,
-) -> Result<PlayerSnapshot, MediaPlayerError> {
-    state.controller.dispatch(BackendCommand::Stop)
-}
-
-#[tauri::command]
-pub(crate) fn media_player_seek(
-    state: State<'_, MediaPlayerState>,
-    position_ms: u64,
-) -> Result<PlayerSnapshot, MediaPlayerError> {
-    state.controller.dispatch(BackendCommand::Seek(position_ms))
-}
-
-#[tauri::command]
-pub(crate) fn media_player_set_volume(
-    state: State<'_, MediaPlayerState>,
-    volume: f64,
-) -> Result<PlayerSnapshot, MediaPlayerError> {
-    state.controller.dispatch(BackendCommand::SetVolume(volume))
-}
-
-#[tauri::command]
-pub(crate) fn media_player_set_muted(
-    state: State<'_, MediaPlayerState>,
-    muted: bool,
-) -> Result<PlayerSnapshot, MediaPlayerError> {
-    state.controller.dispatch(BackendCommand::SetMuted(muted))
-}
-
-#[tauri::command]
-pub(crate) fn media_player_set_rate(
-    state: State<'_, MediaPlayerState>,
-    rate: f64,
-) -> Result<PlayerSnapshot, MediaPlayerError> {
-    state.controller.dispatch(BackendCommand::SetRate(rate))
-}
-
-#[tauri::command]
-pub(crate) fn media_player_snapshot(
-    state: State<'_, MediaPlayerState>,
-) -> Result<PlayerSnapshot, MediaPlayerError> {
-    state.controller.dispatch(BackendCommand::Snapshot)
 }
 
 fn validate_load_request(request: &LoadRequest) -> Result<(), MediaPlayerError> {
@@ -1140,6 +1112,260 @@ mod tests {
         assert_eq!(snapshot.position_ms, 42_000);
     }
 
+    #[test]
+    fn revoked_delivery_cannot_start_after_blocking_decode() {
+        use std::sync::{
+            atomic::{AtomicBool, Ordering},
+            mpsc,
+        };
+        let directory = TestMediaDirectory::new();
+        let path = directory.path().join("song.mp3");
+        std::fs::write(&path, b"fake decoder input").unwrap();
+        let recorded = Arc::new(Mutex::new(Vec::new()));
+        let (started, admission) = mpsc::sync_channel(1);
+        let (release, blocked) = mpsc::sync_channel(1);
+        let mut core = PlayerCore::with_audio_factory(Box::new(RecordingAudioFactory {
+            loaded_backends: recorded.clone(),
+        }));
+        core.handle(BackendCommand::load(
+            local_load_request(None),
+            audio_probe(),
+        ))
+        .unwrap();
+        core.handle(BackendCommand::Play).unwrap();
+        core.audio_factory = Box::new(BlockingAudioFactory {
+            started,
+            blocked,
+            recorded: recorded.clone(),
+        });
+        let controller = Arc::new(PlaybackController::with_core(core));
+        let current = Arc::new(AtomicBool::new(true));
+        let guard = current.clone();
+        let task_controller = controller.clone();
+        let effect = native_load_effect(&path);
+        let task = std::thread::spawn(move || {
+            task_controller.dispatch_authorized(
+                BackendCommand::Session(Box::new(effect)),
+                Arc::new(move || guard.load(Ordering::Acquire)),
+            )
+        });
+        admission.recv_timeout(Duration::from_secs(2)).unwrap();
+        let prior = recorded.lock().unwrap()[0].clone();
+        assert!(prior.lock().unwrap().stopped);
+        current.store(false, Ordering::Release);
+        release.send(()).unwrap();
+        assert_eq!(task.join().unwrap().unwrap_err().code, "deliveryRevoked");
+        let backend = recorded.lock().unwrap()[1].clone();
+        let backend = backend.lock().unwrap();
+        assert_eq!(backend.play_count, 0);
+        assert!(backend.stopped);
+        drop(backend);
+        assert_eq!(
+            controller
+                .dispatch(BackendCommand::Snapshot)
+                .unwrap()
+                .status,
+            PlayerStatus::Idle
+        );
+    }
+
+    #[test]
+    fn decoder_timeout_retains_admission_until_actual_completion() {
+        use std::sync::mpsc;
+        let directory = TestMediaDirectory::new();
+        let path = directory.path().join("song.mp3");
+        std::fs::write(&path, b"fake decoder input").unwrap();
+        let recorded = Arc::new(Mutex::new(Vec::new()));
+        let (started, admission) = mpsc::sync_channel(1);
+        let (release, blocked) = mpsc::sync_channel(1);
+        let controller = Arc::new(PlaybackController::with_core(
+            PlayerCore::with_audio_factory(Box::new(BlockingAudioFactory {
+                started,
+                blocked,
+                recorded: recorded.clone(),
+            })),
+        ));
+        let task_controller = controller.clone();
+        let effect = native_load_effect(&path);
+        let task = std::thread::spawn(move || {
+            task_controller.dispatch_with_timeout(
+                BackendCommand::Session(Box::new(effect)),
+                Arc::new(|| true),
+                Duration::from_millis(100),
+            )
+        });
+        admission.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert_eq!(task.join().unwrap().unwrap_err().code, "backendTimeout");
+        for _ in 0..100 {
+            assert_eq!(
+                controller.dispatch(BackendCommand::Stop).unwrap_err().code,
+                "backendBusy"
+            );
+        }
+        assert!(recorded.lock().unwrap().is_empty());
+        release.send(()).unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        loop {
+            match controller.dispatch(BackendCommand::Snapshot) {
+                Ok(snapshot) => {
+                    assert_eq!(snapshot.status, PlayerStatus::Idle);
+                    break;
+                }
+                Err(error)
+                    if error.code == "backendBusy" && std::time::Instant::now() < deadline =>
+                {
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                result => panic!("Decoder did not finish cancellation: {result:?}"),
+            }
+        }
+        let backend = recorded.lock().unwrap()[0].clone();
+        let backend = backend.lock().unwrap();
+        assert_eq!(backend.play_count, 0);
+        assert!(backend.stopped);
+        drop(backend);
+        assert_eq!(
+            controller.dispatch(BackendCommand::Stop).unwrap().status,
+            PlayerStatus::Idle
+        );
+    }
+
+    #[test]
+    fn dropping_controller_does_not_wait_for_a_stalled_source() {
+        use std::sync::mpsc;
+        let recorded = Arc::new(Mutex::new(Vec::new()));
+        let (started, admission) = mpsc::sync_channel(1);
+        let (release, blocked) = mpsc::sync_channel(1);
+        let controller = Arc::new(PlaybackController::with_core(
+            PlayerCore::with_audio_factory(Box::new(BlockingAudioFactory {
+                started,
+                blocked,
+                recorded: recorded.clone(),
+            })),
+        ));
+        let task_controller = controller.clone();
+        let task = std::thread::spawn(move || {
+            task_controller.dispatch_with_timeout(
+                BackendCommand::load(local_load_request(None), audio_probe()),
+                Arc::new(|| true),
+                Duration::from_millis(100),
+            )
+        });
+        admission.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert_eq!(task.join().unwrap().unwrap_err().code, "backendTimeout");
+        let (dropped, completion) = mpsc::sync_channel(1);
+        let task = std::thread::spawn(move || {
+            drop(controller);
+            dropped.send(()).unwrap();
+        });
+        let result = completion.recv_timeout(Duration::from_secs(2));
+        release.send(()).unwrap();
+        result.unwrap();
+        task.join().unwrap();
+    }
+
+    #[test]
+    fn committed_settings_apply_together_without_starting_a_paused_decoder() {
+        use crate::music::session::SessionEffect;
+        let mut core = loaded_core();
+        let result = core
+            .handle(BackendCommand::Session(Box::new(SessionEffect::Settings {
+                generation: 1,
+                volume: 0.5,
+                muted: true,
+                rate: 0.75,
+            })))
+            .unwrap();
+        assert_eq!(result.status, PlayerStatus::Ready);
+        assert_eq!(result.volume, 0.5);
+        assert!(result.muted);
+        assert_eq!(result.rate, 0.75);
+    }
+
+    fn native_load_effect(path: &Path) -> crate::music::session::SessionEffect {
+        use crate::music::session::{SessionBackend, SessionEffect, SessionSource, SourceKind};
+        SessionEffect::Load {
+            session_id: "session".into(),
+            generation: 1,
+            source: Box::new(SessionSource {
+                kind: SourceKind::LocalFile,
+                identity: "local:song".into(),
+                original_input: "song".into(),
+                title: "Song".into(),
+                path: Some(path.to_string_lossy().into_owned()),
+                artwork_path: None,
+                video_id: None,
+                playlist_id: None,
+                start_ms: None,
+                end_ms: None,
+            }),
+            backend: SessionBackend::NativeAudio,
+            position_ms: 0,
+            autoplay: true,
+            volume: 0.75,
+            muted: false,
+            rate: 1.0,
+        }
+    }
+
+    struct BlockingAudioFactory {
+        started: std::sync::mpsc::SyncSender<()>,
+        blocked: std::sync::mpsc::Receiver<()>,
+        recorded: Arc<Mutex<Vec<Arc<Mutex<FakeAudioState>>>>>,
+    }
+
+    struct TestMediaDirectory(PathBuf);
+
+    impl TestMediaDirectory {
+        fn new() -> Self {
+            static SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let sequence = SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "ganbaru-music-worker-{}-{timestamp}-{sequence}",
+                std::process::id(),
+            ));
+            std::fs::create_dir(&path).unwrap();
+            Self(path)
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TestMediaDirectory {
+        fn drop(&mut self) {
+            if let Err(error) = std::fs::remove_dir_all(&self.0) {
+                eprintln!("Remove Music test directory {}: {error}", self.0.display());
+            }
+        }
+    }
+
+    impl LocalAudioFactory for BlockingAudioFactory {
+        fn load(
+            &mut self,
+            request: &LoadRequest,
+            volume: f64,
+            muted: bool,
+            rate: f64,
+        ) -> Result<Box<dyn LocalAudioBackend>, MediaPlayerError> {
+            self.started
+                .send(())
+                .map_err(|_| MediaPlayerError::backend_thread())?;
+            self.blocked
+                .recv()
+                .map_err(|_| MediaPlayerError::backend_thread())?;
+            RecordingAudioFactory {
+                loaded_backends: self.recorded.clone(),
+            }
+            .load(request, volume, muted, rate)
+        }
+    }
+
     fn test_core() -> PlayerCore {
         PlayerCore::with_audio_factory(Box::new(FakeAudioFactory))
     }
@@ -1239,6 +1465,7 @@ mod tests {
                     muted,
                     rate,
                     playing: false,
+                    play_count: 0,
                     stopped: false,
                     empty: false,
                 })),
@@ -1265,6 +1492,7 @@ mod tests {
                 muted,
                 rate,
                 playing: false,
+                play_count: 0,
                 stopped: false,
                 empty: false,
             }));
@@ -1287,6 +1515,7 @@ mod tests {
         muted: bool,
         rate: f64,
         playing: bool,
+        play_count: usize,
         stopped: bool,
         empty: bool,
     }
@@ -1295,6 +1524,7 @@ mod tests {
         fn play(&mut self) {
             let mut state = self.state.lock().unwrap();
             state.playing = true;
+            state.play_count += 1;
         }
 
         fn pause(&mut self) {

@@ -6,6 +6,41 @@ import { localFileSourceFromPath } from "$lib/music/sources";
 import { emptyMusicSkipBreakdown } from "$lib/music/music-playlist-playback";
 import { getMusicPlayer } from "$lib/stores/music-player.svelte";
 import { getMusicSourcesController } from "$lib/music/music-sources-controller.svelte";
+import type { NativeMusicCommand, NativeMusicSnapshot } from "$lib/music/native-session";
+
+const sessionApi = vi.hoisted(() => ({
+  command: vi.fn(), start: vi.fn(), subscribe: vi.fn().mockResolvedValue(undefined),
+  host: vi.fn().mockResolvedValue(undefined), acknowledge: vi.fn().mockResolvedValue(undefined),
+  unsubscribe: vi.fn().mockResolvedValue(undefined), readFrame: vi.fn(), observe: vi.fn(),
+}));
+
+vi.mock("$lib/api/music-session", () => ({
+  musicSessionCommand: sessionApi.command, musicSessionStart: sessionApi.start,
+  musicSessionSubscribe: sessionApi.subscribe, musicSessionHost: sessionApi.host,
+  musicSessionAcknowledge: sessionApi.acknowledge, musicSessionUnsubscribe: sessionApi.unsubscribe,
+  musicSessionReadFrame: sessionApi.readFrame, musicSessionObserve: sessionApi.observe,
+}));
+
+vi.mock("@tauri-apps/api/core", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@tauri-apps/api/core")>(),
+  Channel: class {
+    constructor(public onmessage: (value: unknown) => void) {}
+  },
+}));
+
+let nativeRevision = 0;
+function nativeSnapshot(patch: Partial<NativeMusicSnapshot> = {}): NativeMusicSnapshot {
+  nativeRevision += 1;
+  return { sessionId: "panel-session", revision: nativeRevision, generation: 1, queueRevision: nativeRevision,
+    currentIndex: null, currentSource: null, backend: null, status: "idle", positionMs: 0, durationMs: null,
+    volume: 0.8, muted: false, rate: 1, order: "shuffle", repeatMode: "off", owner: "manual", context: null,
+    playlistId: null, queueName: "", canPrevious: false, canNext: false, issue: null, error: null,
+    reviewCheckpointId: null, queue: [], ...patch };
+}
+
+sessionApi.command.mockImplementation(async (request: NativeMusicCommand) => nativeSnapshot({
+  order: request.intent.kind === "order" ? request.intent.order : "shuffle",
+}));
 
 const snoozeApi = vi.hoisted(() => ({
   getMusicInspectorDetail: vi.fn(),
@@ -63,7 +98,8 @@ describe("MusicPanel", () => {
     player.activePlaylistName = null;
     player.activeSourceQueueId = null;
     player.savedQueueSkipBreakdown = emptyMusicSkipBreakdown();
-    player.setPlaybackMode("shuffle");
+    player.shuffleEnabled = true;
+    player.mixEnabled = false;
     vi.restoreAllMocks();
     vi.clearAllMocks();
   });
@@ -145,7 +181,8 @@ describe("MusicPanel", () => {
     expect(player.playbackMode).toBe("shuffle");
     [...target.querySelectorAll<HTMLButtonElement>("[role='menuitemradio']")]
       .find((option) => option.textContent?.includes("Mix"))?.click();
-    expect(player.playbackMode).toBe("mix");
+    await vi.waitFor(() => expect(player.playbackMode).toBe("mix"));
+    expect(sessionApi.command).toHaveBeenLastCalledWith(expect.objectContaining({ intent: { kind: "order", order: "mix" } }));
   });
 
   it("places the side playlist summary in the desktop player header", async () => {
@@ -186,6 +223,12 @@ describe("MusicPanel", () => {
     player.activeQueueItemIds = ["snoozed"];
     player.activeSourceQueueId = "source:music";
     player.sourceQueueSnoozedItemIds = ["snoozed"];
+    sessionApi.command.mockResolvedValueOnce(nativeSnapshot({ queue: [{
+      itemId: "snoozed", membershipId: null, source: player.queue[0]!, backend: "native-audio",
+      availability: "available", enabled: true, weight: "normal", snoozedUntil: null,
+      snoozedIndefinitely: false, embeddingBlocked: false, bound: true, phaseAllowed: true,
+      skipRanges: [], volume: null, rate: null,
+    }] }));
     const play = vi.spyOn(player, "playQueueItem").mockResolvedValue(undefined);
     const now = Date.now();
     snoozeApi.getMusicInspectorDetail.mockResolvedValue({ snoozes: [{
@@ -203,6 +246,8 @@ describe("MusicPanel", () => {
     button?.click();
     await vi.waitFor(() => expect(snoozeApi.removeMusicSnooze).toHaveBeenCalledWith("active-snooze"));
     await vi.waitFor(() => expect(player.sourceQueueSnoozedItemIds).toEqual([]));
+    expect(sessionApi.command).toHaveBeenLastCalledWith(expect.objectContaining({ intent: { kind: "refresh" } }));
+    expect(player.queue.map((source) => source.title)).toEqual(["Snoozed"]);
     expect(play).not.toHaveBeenCalled();
   });
 

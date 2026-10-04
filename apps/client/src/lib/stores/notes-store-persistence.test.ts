@@ -37,6 +37,22 @@ function paragraph(text: string): NotesBlock {
 }
 
 describe("notes block persistence", () => {
+  it.each([false, true])("releases committed dirtiness for absent blocks while preserving a later edit (%s)", async (laterEdit) => {
+    let complete!: () => void;
+    const nativeCommit = vi.fn(() => new Promise<void>((resolve) => { complete = resolve; }));
+    const persistence = createNotesBlockPersistence({
+      readBlock: () => undefined, beforeSave: async () => undefined,
+      replaceBlock: vi.fn(), setLoadError: vi.fn(), debounceMs: 250,
+    });
+    persistence.markBlockLocallyChanged(blockId);
+    const commit = persistence.enqueueEditorMutation(nativeCommit);
+    await vi.waitFor(() => expect(nativeCommit).toHaveBeenCalledOnce());
+    if (laterEdit) persistence.markBlockLocallyChanged(blockId);
+    complete();
+    await commit;
+    expect(persistence.hasLocalChanges(blockId)).toBe(laterEdit);
+  });
+
   it("does not restore a locally deleted block when an earlier save finishes", async () => {
     let current: NotesBlock | undefined = paragraph("");
     let finishSave!: (block: NotesBlock) => void;

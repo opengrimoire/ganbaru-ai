@@ -60,8 +60,8 @@ Preservation objects are replaced by target calendar, source kind, and source na
 
 ## Export flow
 
-1. Load projected rows for the target calendar.
-2. Load preserved components only for events or components included in the export.
+1. Request one native export snapshot for the target calendar. Rust reads the current calendar header, full projected events, related rows, export metadata, and selected preservation in one SQLite read transaction.
+2. Read normalized children and preservation in bounded batches. After releasing the transaction, reconstruct preserved components on a native blocking worker. Include live event and override components, timezone definitions, and top-level non-event components. Preserved event components without a live projected event or override do not reappear in the export.
 3. For linked projected events, generate supported fields from current projection data and overlay them onto the preserved source component in memory.
 4. For local events without preserved components, generate clean iCalendar components from projection data.
 5. Include preserved unsupported components that belong to the exported calendar.
@@ -71,6 +71,8 @@ Preservation objects are replaced by target calendar, source kind, and source na
 
 The exporter must not blindly concatenate stale raw text with edited projected fields. It must operate on structured component data or a controlled regenerated representation.
 
+The frontend validates the typed snapshot, hydrates its full event rows with one captured render timezone, and retains the existing `ical.js` serializer and preservation merge policy. Export performs one application IPC read regardless of the event count. Concurrent writes can commit during the read, but every row and metadata value in that export comes from the same SQLite snapshot. Oversized or malformed snapshots fail explicitly; the frontend does not export a partial fallback. The native export file writer remains responsible for approved destinations, output limits, and atomic replacement.
+
 ## Edit merge flow
 
 Current behavior:
@@ -79,6 +81,9 @@ Current behavior:
 - The imported relational component remains source provenance and is not rewritten at edit time.
 - Export reconstructs that source component and replaces generated-owned fields with values from the current projection.
 - Unsupported properties, parameters, and nested components remain in the reconstructed component where the merge path supports them.
+- Native detach and split copy the master event's preservation into a separate object and component graph, including the import envelope and timezone definitions. Attendee and alarm references point to the copied graph. Unrelated VEVENT siblings are excluded. Copies survive deletion of the original import object, and moving the copied event into another calendar retains its timezone definitions there. Raw imported values remain provenance; export replaces UID and recurrence identity from the current projection.
+
+Edit snapshots admit exact relational metadata under the same source row and byte allowance as recurrence and execution evidence. Component traversal proceeds in bounded layers using the parent-component index instead of repeated scans of unrelated imports. Cycles, missing or inconsistent value owners, non-finite numbers, and excessive source size fail explicitly. The returned metadata revision includes imported children and diagnostics, but complete reviewed semantic Save and planned override/materialization copying are still in progress.
 
 The current implementation does not automatically change preservation status or add a user-visible export warning after structural edits.
 
